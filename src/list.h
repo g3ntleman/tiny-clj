@@ -41,7 +41,7 @@ static inline bool is_list_like(ID obj) {
 }
 
 static inline CljList* list_like_as_list_or_null(ID obj) {
-    return is_list_like(obj) ? as_list(obj) : NULL;
+    return is_list_like(obj) ? (CljList*)obj : NULL;
 }
 
 // Check if a list is empty (only the empty list singleton is truly empty)
