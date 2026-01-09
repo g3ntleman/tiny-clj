@@ -89,6 +89,12 @@ static inline CljList* list_rest_safe(CljList *l) {
     return l && l->rest ? as_list(l->rest) : NULL;
 }
 
+// Get rest of list, normalized to NULL for empty lists
+// Replaces: list_normalize_empty_to_null(as_list(LIST_REST(list)))
+static inline CljList* list_rest_normalized(CljList *list) {
+    return list ? list_normalize_empty_to_null(as_list(LIST_REST(list))) : NULL;
+}
+
 ID list_nth(CljList *list, int n);
 // NOTE: `list_count` is O(n) for linked lists.
 // Avoid calling it just to drive iteration; prefer `LIST_FOR_EACH` / `LIST_REST` traversal when possible.

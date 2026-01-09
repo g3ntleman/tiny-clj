@@ -355,6 +355,7 @@ DEFINE_EXTERN_SYMBOL(sym_keyword_data, "keyword");
 DEFINE_EXTERN_SYMBOL(sym_name_data, "name");
 DEFINE_EXTERN_SYMBOL(sym_symbol_p_data, "symbol?");
 DEFINE_EXTERN_SYMBOL(sym_fn_p_data, "fn?");
+DEFINE_EXTERN_SYMBOL(sym_atom_p_data, "atom?");
 DEFINE_EXTERN_SYMBOL(sym_char_p_data, "char?");
 DEFINE_EXTERN_SYMBOL(sym_list_p_data, "list?");
 DEFINE_EXTERN_SYMBOL(sym_sleep_data, "sleep");
