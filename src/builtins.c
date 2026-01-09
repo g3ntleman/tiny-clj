@@ -202,6 +202,38 @@ static bool validate_builtin_args(unsigned int argc, unsigned int expected, cons
     return true;
 }
 
+static bool list_try_nth_value(CljList *list, int index, ID *out_value)
+{
+    if (!out_value) return false;
+    if (!list || index < 0) return false;
+    if (list_empty(list)) return false;
+
+    CljObject *current = (CljObject *)list;
+    for (int j = 0; j < index; j++)
+    {
+        if (!current || !list_type_matches(TAG(current)))
+        {
+            return false;
+        }
+
+        CljList *current_list = as_list(current);
+        current = LIST_REST(current_list);
+
+        if (current && !list_type_matches(TAG(current)))
+        {
+            return false;
+        }
+    }
+
+    if (!current || !list_type_matches(TAG(current)))
+    {
+        return false;
+    }
+
+    *out_value = LIST_FIRST(as_list(current));
+    return true;
+}
+
 ID nth2(ID *args, unsigned int argc)
 {
     if (argc != 2 && argc != 3)
@@ -270,11 +302,12 @@ ID nth2(ID *args, unsigned int argc)
         // For the 3-arg form, return not-found instead of throwing.
         if (has_not_found)
         {
-            int count = list_count(list);
-            if (i >= count)
+            ID value = NULL;
+            if (!list_try_nth_value(list, i, &value))
             {
                 return not_found;
             }
+            return value;
         }
         return list_nth(list, i);
     }
