@@ -1550,7 +1550,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   vector_conj_inplace(&param_vec, percent_sym);
 
   // Create (fn [%] body)
-  return AUTORELEASE(make_ast_list(fn_sym, make_ast_list((ID)param_vec, make_ast_list(body, NULL))));
+  return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(param_vec, make_ast_list(body, NULL))));
 }
 
 /**

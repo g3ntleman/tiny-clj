@@ -780,10 +780,6 @@ static INLINE bool sym_cname_eq(ID obj, const char *name) {
     return strcmp(simple, name) == 0;
 }
 
-static INLINE CljList *normalize_list_node(CljList *node) {
-    return (node && list_empty(node)) ? NULL : node;
-}
-
 
 // Try/Catch-Implementierung using TRY/CATCH macros
 CljObject* eval_try(CljObject *form, EvalState *st) {
@@ -799,10 +795,10 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
         // We arrived here via eval_error
         // Search for catch clauses
         CljList *form_list = as_list(form);
-        CljList *args = normalize_list_node(as_list(LIST_REST(form_list)));
-        CljList *clause_node = args ? normalize_list_node(as_list(LIST_REST(args))) : NULL;
+        CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(form_list)));
+        CljList *clause_node = args ? list_normalize_empty_to_null(as_list(LIST_REST(args))) : NULL;
 
-        for (CljList *node = clause_node; node; node = normalize_list_node(as_list(LIST_REST(node)))) {
+        for (CljList *node = clause_node; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
             CljObject *clause = LIST_FIRST(node);
             if (!is_list(clause)) continue;
 
@@ -810,7 +806,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
             if (!clause_list) continue;
 
             ID first_elem = LIST_FIRST(clause_list);
-            if (first_elem != (ID)SYM_CATCH && !sym_cname_eq(first_elem, "catch")) {
+            if (first_elem != SYM_CATCH && !sym_cname_eq(first_elem, "catch")) {
                 continue;
             }
 
@@ -820,11 +816,11 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
             ID binding_sym = NULL;
             CljList *body_node = NULL;
 
-            CljList *cargs = normalize_list_node(as_list(LIST_REST(clause_list)));
+            CljList *cargs = list_normalize_empty_to_null(as_list(LIST_REST(clause_list)));
             if (!cargs) continue;
 
             ID arg1 = LIST_FIRST(cargs);
-            CljList *after1 = normalize_list_node(as_list(LIST_REST(cargs)));
+            CljList *after1 = list_normalize_empty_to_null(as_list(LIST_REST(cargs)));
             if (arg1 && TAG(arg1) == CLJ_SYMBOL) {
                 binding_sym = arg1;
                 body_node = after1;
@@ -832,7 +828,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
                 ID arg2 = LIST_FIRST(after1);
                 if (arg2 && TAG(arg2) == CLJ_SYMBOL) {
                     binding_sym = arg2;
-                    body_node = normalize_list_node(as_list(LIST_REST(after1)));
+                    body_node = list_normalize_empty_to_null(as_list(LIST_REST(after1)));
                 }
             }
 
@@ -841,11 +837,11 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
 
             // Bind variable (sym = err) - simplified
             // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-            CljMap *updated_mappings = map_assoc(st->current_ns->mappings, binding_sym, (ID)ex);
+            CljMap *updated_mappings = map_assoc(st->current_ns->mappings, binding_sym, ex);
             ASSIGN(st->current_ns->mappings, updated_mappings);
 
             // Evaluate catch body (support multiple expressions)
-            for (CljList *b = body_node; b; b = normalize_list_node(as_list(LIST_REST(b)))) {
+            for (CljList *b = body_node; b; b = list_normalize_empty_to_null(as_list(LIST_REST(b)))) {
                 CljObject *body_expr = LIST_FIRST(b);
                 if (!body_expr) continue;
                 result = eval_parsed(body_expr, st, NULL);

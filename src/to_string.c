@@ -305,8 +305,8 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
                 int index = temp_iter.state.map.index;
                 int count = temp_iter.state.map.count;
                 while (map && index < count) {
-                    ID key = (ID)map->data[index * 2];
-                    ID value = (ID)map->data[index * 2 + 1];
+                    ID key = map->data[index * 2];
+                    ID value = map->data[index * 2 + 1];
 
                     if (!first) len += 1; // space between seq elements
 
@@ -388,7 +388,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
 
         case CLJ_UUID: {
             char uuid[37];
-            clj_uuid_to_cstring((ID)v, uuid);
+            clj_uuid_to_cstring(v, uuid);
             return 7 + strlen(uuid) + 1; // "#uuid \"" + uuid + "\""
         }
 
@@ -632,8 +632,8 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                 int index = temp_iter.state.map.index;
                 int count = temp_iter.state.map.count;
                 while (map && index < count) {
-                    ID key = (ID)map->data[index * 2];
-                    ID value = (ID)map->data[index * 2 + 1];
+                    ID key = map->data[index * 2];
+                    ID value = map->data[index * 2 + 1];
 
                     if (!first) {
                         buffer[*offset] = ' ';
@@ -682,7 +682,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
 
         case CLJ_UUID: {
             char uuid[37];
-            clj_uuid_to_cstring((ID)v, uuid);
+            clj_uuid_to_cstring(v, uuid);
             append_cstr(buffer, offset, "#uuid \"");
             append_cstr(buffer, offset, uuid);
             append_char(buffer, offset, '"');

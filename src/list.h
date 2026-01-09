@@ -32,12 +32,16 @@ typedef struct CljList {
          _lfe.cur = list_normalize_empty_to_null(as_list(LIST_REST(_lfe.cur)))) \
         for (ID elem_var = _lfe.elem; _lfe.once; _lfe.once = 0)
 
-static inline bool list_type_matches(CljType type) {
+static inline bool is_list_type(CljType type) {
     return type == CLJ_LIST || type == CLJ_AST_NODE;
 }
 
+// Backwards-compatible alias.
+// Prefer `is_list_type()` in new/modified code.
+#define list_type_matches is_list_type
+
 static inline bool is_list_like(ID obj) {
-    return obj && list_type_matches(TAG(obj));
+    return obj && is_list_type(TAG(obj));
 }
 
 static inline CljList* list_like_as_list_or_null(ID obj) {
@@ -55,6 +59,9 @@ static inline bool list_empty(CljList *list) {
 }
 
 static inline CljList* list_normalize_empty_to_null(CljList *list) {
+    // Legacy call sites sometimes used a small local helper that normalized the
+    // empty-list singleton to NULL.
+    // Prefer using this shared helper (or `LIST_FOR_EACH`) instead.
     return list_empty(list) ? NULL : list;
 }
 

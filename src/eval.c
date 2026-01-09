@@ -136,10 +136,6 @@ static INLINE ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) {
     return cached;
 }
 
-static INLINE CljList *normalize_list_node(CljList *node) {
-    return (node && list_empty(node)) ? NULL : node;
-}
-
 static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
     if (!ns_key || !g_runtime.resolve_cache) {
         return;
@@ -350,7 +346,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
 // DRY: Central symbol resolution function with environment stack support
 // Resolves symbol by searching through environment stack (list of maps)
 static INLINE CljMap* env_stack_head(CljList *stack) {
-    if (stack && list_type_matches(TAG(stack))) {
+    if (is_list_like(stack)) {
         ID first = LIST_FIRST(stack);
         if (first && TAG(first) == CLJ_MAP) {
             return (CljMap*)first;
@@ -474,9 +470,9 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
 
     // Search env_stack (for let bindings, closure captures)
     CljList *current_stack = env_stack;
-    while (current_stack && list_type_matches(TAG(current_stack))) {
+    while (list_type_matches(TAG(current_stack))) {
         ID env_obj_id = LIST_FIRST(current_stack);
-        if (env_obj_id && TAG(env_obj_id) == CLJ_MAP) {
+        if (TAG(env_obj_id) == CLJ_MAP) {
             CljMap *env = (CljMap*)env_obj_id;
             ID resolved = map_get(env, sym);
             if (resolved != NOT_FOUND) {
@@ -485,7 +481,7 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
         }
 
         ID rest_obj_id = LIST_REST(current_stack);
-        if (rest_obj_id && list_type_matches(TAG(rest_obj_id))) {
+        if (list_type_matches(TAG(rest_obj_id))) {
             current_stack = (CljList*)rest_obj_id;
         } else {
             break;
@@ -1046,7 +1042,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
     if (resolve_stack) {
         ID stack_rest = LIST_REST(resolve_stack);
         ID stack_head = LIST_FIRST(resolve_stack);
-        bool has_captures = stack_rest && list_type_matches(TAG(stack_rest));
+        bool has_captures = is_list_like(stack_rest);
         bool has_different_env = stack_head && stack_head != resolve_env;
         if (!has_captures && !has_different_env) {
             resolve_stack = NULL;
@@ -1072,7 +1068,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
     // Check env_stack only if not qualified and stack exists
     if (!is_qualified && resolve_stack) {
         CljList *current = resolve_stack;
-        while (current && list_type_matches(TAG(current))) {
+        while (is_list_like(current)) {
             ID env_obj = LIST_FIRST(current);
             if (env_obj && TAG(env_obj) == CLJ_MAP) {
                 ID found = map_get((CljMap*)env_obj, op);
@@ -1082,7 +1078,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
                 }
             }
             ID rest = LIST_REST(current);
-            current = (rest && list_type_matches(TAG(rest))) ? (CljList*)rest : NULL;
+            current = list_like_as_list_or_null(rest);
         }
     }
 
@@ -1284,7 +1280,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
     // CRITICAL: Pass ctx to preserve RecurContext
-    if (op && list_type_matches(TAG(op))) {
+    if (is_list_like(op)) {
         op = eval_list(as_list(op), effective_env, effective_st, ctx);
         if (!op) {
             // Evaluation returned nil (NULL) - cannot call nil as a function
@@ -1628,9 +1624,9 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
 
     // Process :require clauses: (ns name (:require [ns :as alias]))
     // Avoid list_nth in a loop (linked lists would make this O(n^2)).
-    CljList *args = normalize_list_node(as_list(LIST_REST(list)));
-    CljList *clause_node = args ? normalize_list_node(as_list(LIST_REST(args))) : NULL;
-    for (CljList *node = clause_node; node; node = normalize_list_node(as_list(LIST_REST(node)))) {
+    CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(list)));
+    CljList *clause_node = args ? list_normalize_empty_to_null(as_list(LIST_REST(args))) : NULL;
+    for (CljList *node = clause_node; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
         CljObject *clause = LIST_FIRST(node);
         if (!clause || !list_type_matches(TAG(clause))) continue;
 
@@ -1646,8 +1642,8 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
         // Check if this is a :require clause
         if (clause_sym->cname[0] == ':' && strcmp(clause_sym->cname, ":require") == 0) {
             // Process require specs: (:require [ns :as alias] [ns2 :as alias2])
-            CljList *spec_node = normalize_list_node(as_list(LIST_REST(clause_list)));
-            for (CljList *s = spec_node; s; s = normalize_list_node(as_list(LIST_REST(s)))) {
+            CljList *spec_node = list_normalize_empty_to_null(as_list(LIST_REST(clause_list)));
+            for (CljList *s = spec_node; s; s = list_normalize_empty_to_null(as_list(LIST_REST(s)))) {
                 CljObject *spec = LIST_FIRST(s);
                 if (!spec) continue;
 
@@ -1865,10 +1861,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         fn_env_stack = RETAIN(ctx->env_stack);
     } else {
         // Fallback: Create env_stack from env if provided, otherwise use namespace mappings
-        CljMap *env_source = env;
-        if (!env_source && st && st->current_ns) {
-            env_source = st->current_ns->mappings;
-        }
+        CljMap *env_source = eval_env_or_ns_mappings(env, st);
         fn_env_stack = env_source ? make_list(env_source, NULL) : NULL;
     }
 
@@ -2437,9 +2430,9 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     ID result = NULL;
     CljMap *body_env = let_ctx.env ? let_ctx.env : env;
-    CljList *args = normalize_list_node(as_list(LIST_REST(list)));
-    CljList *body_node = args ? normalize_list_node(as_list(LIST_REST(args))) : NULL;
-    for (CljList *node = body_node; node; node = normalize_list_node(as_list(LIST_REST(node)))) {
+    CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(list)));
+    CljList *body_node = args ? list_normalize_empty_to_null(as_list(LIST_REST(args))) : NULL;
+    for (CljList *node = body_node; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
         ID body_expr = LIST_FIRST(node);
         if (!body_expr) continue;
 
@@ -2719,7 +2712,7 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
 
         WITH_AUTORELEASE_POOL({
             ID body_result = NULL;
-            if (body_list && list_type_matches(TAG(body_list))) {
+            if (is_list_like(body_list)) {
                 CljList *body_items = as_list(body_list);
                 LIST_FOR_EACH(body_items, body_expr) {
                     if (!body_expr) continue;
@@ -2764,10 +2757,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     gettimeofday(&start, NULL);
 
     // Use provided env or fall back to current_ns->mappings (like eval_parsed does)
-    CljMap *eval_env = env;
-    if (!eval_env && st && st->current_ns) {
-        eval_env = (CljMap*)st->current_ns->mappings;
-    }
+    CljMap *eval_env = eval_env_or_ns_mappings(env, st);
 
     // Evaluate the expression in the current lexical context.
     // Use eval_env so namespace-bound symbols (e.g. +) are available.
