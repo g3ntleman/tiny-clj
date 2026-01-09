@@ -136,6 +136,10 @@ static INLINE ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) {
     return cached;
 }
 
+static INLINE CljList *normalize_list_node(CljList *node) {
+    return (node && list_empty(node)) ? NULL : node;
+}
+
 static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
     if (!ns_key || !g_runtime.resolve_cache) {
         return;
@@ -1623,9 +1627,11 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
     evalstate_set_ns(st, ns_sym->cname);
 
     // Process :require clauses: (ns name (:require [ns :as alias]))
-    int list_len = list_count(list);
-    for (int i = 2; i < list_len; i++) {
-        CljObject *clause = list_nth(list, i);
+    // Avoid list_nth in a loop (linked lists would make this O(n^2)).
+    CljList *args = normalize_list_node(as_list(LIST_REST(list)));
+    CljList *clause_node = args ? normalize_list_node(as_list(LIST_REST(args))) : NULL;
+    for (CljList *node = clause_node; node; node = normalize_list_node(as_list(LIST_REST(node)))) {
+        CljObject *clause = LIST_FIRST(node);
         if (!clause || !list_type_matches(TAG(clause))) continue;
 
         CljList *clause_list = as_list(clause);
@@ -1640,9 +1646,9 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
         // Check if this is a :require clause
         if (clause_sym->cname[0] == ':' && strcmp(clause_sym->cname, ":require") == 0) {
             // Process require specs: (:require [ns :as alias] [ns2 :as alias2])
-            int clause_len = list_count(clause_list);
-            for (int j = 1; j < clause_len; j++) {
-                CljObject *spec = list_nth(clause_list, j);
+            CljList *spec_node = normalize_list_node(as_list(LIST_REST(clause_list)));
+            for (CljList *s = spec_node; s; s = normalize_list_node(as_list(LIST_REST(s)))) {
+                CljObject *spec = LIST_FIRST(s);
                 if (!spec) continue;
 
                 // Process require spec using native_require
@@ -1803,11 +1809,33 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     ID params_stack[16];
     ID *params = alloc_obj_array(param_count, params_stack);
 
-    for (int i = 0; i < param_count; i++) {
-        params[i] = is_vector_params
-            ? vector_nth(as_vector(params_list), i)
-            : list_nth(as_list(params_list), i);
-        if (TAG(params[i]) != CLJ_SYMBOL) {
+    if (is_vector_params) {
+        for (int i = 0; i < param_count; i++) {
+            params[i] = vector_nth(as_vector(params_list), i);
+            if (!params[i] || TAG(params[i]) != CLJ_SYMBOL) {
+                free_obj_array(params, params_stack);
+                return NULL;
+            }
+        }
+    } else {
+        int i = 0;
+        CljList *p = as_list(params_list);
+        while (p && i < param_count) {
+            params[i] = LIST_FIRST(p);
+            if (!params[i] || TAG(params[i]) != CLJ_SYMBOL) {
+                free_obj_array(params, params_stack);
+                return NULL;
+            }
+            i++;
+
+            CljObject *rest = LIST_REST(p);
+            if (!rest || !list_type_matches(TAG(rest))) {
+                break;
+            }
+            p = as_list(rest);
+        }
+
+        if (i != param_count) {
             free_obj_array(params, params_stack);
             return NULL;
         }
@@ -2408,20 +2436,19 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     }
 
     ID result = NULL;
-    int list_len = list_count(list);
-    if (list_len > 2) {
-        CljMap *body_env = let_ctx.env ? let_ctx.env : env;
-        for (int i = 2; i < list_len; i++) {
-            ID body_expr = list_nth(list, i);
-            if (!body_expr) continue;
+    CljMap *body_env = let_ctx.env ? let_ctx.env : env;
+    CljList *args = normalize_list_node(as_list(LIST_REST(list)));
+    CljList *body_node = args ? normalize_list_node(as_list(LIST_REST(args))) : NULL;
+    for (CljList *node = body_node; node; node = normalize_list_node(as_list(LIST_REST(node)))) {
+        ID body_expr = LIST_FIRST(node);
+        if (!body_expr) continue;
 
-            RELEASE(result);
-                if (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr)) {
-                    result = body_expr;
-                RETAIN(result);
-                } else {
-                result = eval_body(body_expr, body_env, st, &let_ctx);
-            }
+        RELEASE(result);
+        if (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr)) {
+            result = body_expr;
+            RETAIN(result);
+        } else {
+            result = eval_body(body_expr, body_env, st, &let_ctx);
         }
     }
 

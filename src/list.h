@@ -27,9 +27,9 @@ typedef struct CljList {
 // For REST: LIST_FOR_EACH(LIST_REST(list), elem) { ... }
 // Note: break and continue work correctly
 #define LIST_FOR_EACH(list, elem_var) \
-    for (struct { CljList *cur; ID elem; int once; } _lfe = { is_list_like(list) ? as_list(list) : NULL, NULL, 0 }; \
+    for (struct { CljList *cur; ID elem; int once; } _lfe = { list_normalize_empty_to_null(list_like_as_list_or_null(list)), NULL, 0 }; \
          _lfe.cur && (_lfe.elem = LIST_FIRST(_lfe.cur), _lfe.once = 1); \
-         _lfe.cur = as_list(LIST_REST(_lfe.cur))) \
+         _lfe.cur = list_normalize_empty_to_null(as_list(LIST_REST(_lfe.cur)))) \
         for (ID elem_var = _lfe.elem; _lfe.once; _lfe.once = 0)
 
 static inline bool list_type_matches(CljType type) {
@@ -40,6 +40,10 @@ static inline bool is_list_like(ID obj) {
     return obj && list_type_matches(TAG(obj));
 }
 
+static inline CljList* list_like_as_list_or_null(ID obj) {
+    return is_list_like(obj) ? as_list(obj) : NULL;
+}
+
 // Check if a list is empty (only the empty list singleton is truly empty)
 // A list with (nil . nil) is NOT empty - it has one nil element
 // Use is_singleton() to distinguish between empty list singleton and list with nil element
@@ -48,6 +52,10 @@ static inline bool list_empty(CljList *list) {
     // Only the empty list singleton is empty (has SINGLETON_RC)
     // A newly created list with (nil . NULL) is NOT empty - it has one nil element
     return LIST_FIRST(list) == NULL && LIST_REST(list) == NULL && is_singleton((CljObject*)list);
+}
+
+static inline CljList* list_normalize_empty_to_null(CljList *list) {
+    return list_empty(list) ? NULL : list;
 }
 
 // List creation and operations
