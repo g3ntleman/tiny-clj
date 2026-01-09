@@ -7,6 +7,11 @@
 extern "C" {
 #endif
 
+// DRY helper: get env or fallback to namespace mappings
+static INLINE CljMap *eval_env_or_ns_mappings(CljMap *env, EvalState *st) {
+    return env ? env : (st && st->current_ns ? st->current_ns->mappings : NULL);
+}
+
 ID eval_special_form_dispatch(CljList *list,
                               CljMap *env,
                               EvalState *st,

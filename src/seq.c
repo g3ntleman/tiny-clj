@@ -90,7 +90,7 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
             // nil, native_first returns NULL. Store SYM_NIL internally so we
             // can distinguish (nil) from an empty sequence.
             if (!first_val) {
-                first_val = (ID)SYM_NIL;
+                first_val = SYM_NIL;
             }
         }
     }
