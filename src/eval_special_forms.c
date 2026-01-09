@@ -390,12 +390,12 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
                 // If there are >= 3 args after `catch`, treat as (catch Type sym body...).
                 // Otherwise treat as (catch sym body...).
                 if (after2) {
-                    if (arg2 && TAG(arg2) == CLJ_SYMBOL) {
+                    if (is_symbol(arg2)) {
                         binding_sym = arg2;
                         body_node = after2;
                     }
                 } else {
-                    if (arg1 && TAG(arg1) == CLJ_SYMBOL) {
+                    if (is_symbol(arg1)) {
                         binding_sym = arg1;
                         body_node = after1;
                     }
@@ -408,7 +408,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
             }
 
             CljMap *catch_env = NULL;
-            if (base_env && TAG(base_env) == CLJ_MAP) {
+            if (is_map(base_env)) {
                 catch_env = RETAIN(map_assoc(base_env, binding_sym, ex_obj));
             } else {
                 catch_env = (CljMap*)make_map(4);
@@ -685,7 +685,7 @@ ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const Eval
     if (!g_quasiquote_fn) {
         CljSymbol *sym = intern_symbol_global("quasiquote-fn");
         CljObject *resolved = sym ? ns_resolve(st, sym) : NULL;
-        if (resolved != NOT_FOUND && resolved && TAG(resolved) == CLJ_CLOSURE) {
+        if (resolved != NOT_FOUND && is_closure(resolved)) {
             g_quasiquote_fn = as_function(resolved);
         }
     }
@@ -760,13 +760,13 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
 
     // Skip docstring if present (string as second element)
     ID params_obj = LIST_FIRST(node);
-    if (params_obj && TAG(params_obj) == CLJ_STRING) {
+    if (is_string((CljObject*)params_obj)) {
         node = list_normalize_empty_to_null(as_list(LIST_REST(node)));
         params_obj = node ? LIST_FIRST(node) : NULL;
     }
 
     // Get params vector
-    if (!params_obj || TAG(params_obj) != CLJ_VECTOR) {
+    if (!is_vector(params_obj)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
             "defmacro params must be a vector",
             __FILE__, __LINE__, 0);

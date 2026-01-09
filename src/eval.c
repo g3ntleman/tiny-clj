@@ -176,7 +176,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     // for Clojure functions. For native functions, env is not used.
     (void)env; // Suppress unused parameter warning
 
-    CLJ_ASSERT(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+    CLJ_ASSERT(is_callable(fn));
 
     // Check if it's a native function (CljCFunc) or Clojure function (CljFunction)
     if (is_native_fn(fn)) {
@@ -348,7 +348,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
 static INLINE CljMap* env_stack_head(CljList *stack) {
     if (is_list_like(stack)) {
         ID first = LIST_FIRST(stack);
-        if (first && TAG(first) == CLJ_MAP) {
+        if (is_map(first)) {
             return (CljMap*)first;
         }
     }
@@ -472,7 +472,7 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
     CljList *current_stack = env_stack;
     while (list_type_matches(TAG(current_stack))) {
         ID env_obj_id = LIST_FIRST(current_stack);
-        if (TAG(env_obj_id) == CLJ_MAP) {
+        if (is_map(env_obj_id)) {
             CljMap *env = (CljMap*)env_obj_id;
             ID resolved = map_get(env, sym);
             if (resolved != NOT_FOUND) {
@@ -593,7 +593,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         return NULL;
     }
 
-    if (body && TAG(body) == CLJ_SYMBOL) {
+    if (is_symbol(body)) {
         // CRITICAL: Check if symbol is a keyword FIRST - keywords evaluate to themselves
         // This must come BEFORE symbol resolution attempts
         if (IS_KEYWORD(body)) {
@@ -601,7 +601,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         }
 
         CljSymbol *body_sym = as_symbol(body);
-        CLJ_ASSERT(body_sym != NULL && "TAG(body)==CLJ_SYMBOL but as_symbol returned NULL");
+        CLJ_ASSERT(body_sym != NULL && "is_symbol(body) but as_symbol returned NULL");
 
         // Use central symbol resolution function (DRY: handles environment stack and frames)
         if (ctx) {
@@ -614,9 +614,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 }
                 // CRITICAL: If resolved_id is still a symbol (not a value), throw exception
                 // This prevents infinite loops where a symbol resolves to itself
-                if (!IS_IMMEDIATE(resolved_id) &&
-                    TAG(resolved_id) == CLJ_SYMBOL &&
-                    !IS_KEYWORD(resolved_id)) {
+                if (is_symbol(resolved_id) && !IS_KEYWORD(resolved_id)) {
                     bool resolves_to_self = (resolved_id == body);
                     if (!resolves_to_self && resolved_id && body) {
                         bool structural_equal = clj_equal(resolved_id, body);
@@ -643,7 +641,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 }
                 // This can happen if a symbol is stored in namespace instead of its value
                 // In this case, we should throw an exception instead of returning the symbol
-                if (!IS_IMMEDIATE(resolved_id) && TAG(resolved_id) == CLJ_SYMBOL) {
+                if (is_symbol(resolved_id)) {
                     // Symbol found in namespace but value is also a symbol - this is an error
                     CljSymbol *sym = as_symbol(body);
                     const char *sym_name = sym && sym->cname ? sym->cname : "unknown";
@@ -816,7 +814,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // Resolve symbol - first try local environment, then namespace
             // Note: We need to check if key exists, not just if value is non-NULL,
             // because nil (NULL) is a valid value
-            if (env && TAG(env) == CLJ_MAP) {
+            if (is_map(env)) {
                 // Use sentinel to distinguish "key not found" from "value is nil"
                 ID result_id = map_get((CljMap*)env, body);
                 if (result_id != NOT_FOUND) {
@@ -882,7 +880,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 ID eval_elem = NULL;
                 
                 // Check for SYM_NIL before calling eval_body
-                if (elem && TAG(elem) == CLJ_SYMBOL && elem == SYM_NIL) {
+                if (is_symbol(elem) && elem == SYM_NIL) {
                     eval_elem = NULL;  // nil evaluates to NULL
                 } else if (elem) {
                     eval_elem = eval_body(elem, env, st, ctx);
@@ -1070,7 +1068,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         CljList *current = resolve_stack;
         while (is_list_like(current)) {
             ID env_obj = LIST_FIRST(current);
-            if (env_obj && TAG(env_obj) == CLJ_MAP) {
+            if (is_map(env_obj)) {
                 ID found = map_get((CljMap*)env_obj, op);
                 if (found != NOT_FOUND) {
                     resolved = found;
@@ -1114,19 +1112,19 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
     if (!op) return NULL;
 
     // Handle keywords as functions (for map lookup)
-    if (TAG(op) == CLJ_SYMBOL && IS_KEYWORD(op)) {
+    if (is_keyword(op)) {
         int total_count = list_count(list);
         int argc = total_count - 1;
         if (argc == 1) {
             ID arg = eval_arg_with_context(list, 1, env, st, ctx);
-            if (arg && TAG(arg) == CLJ_SYMBOL) {
+            if (is_symbol(arg)) {
                 ID resolved = eval_symbol(as_symbol((CljObject*)arg), st);
                 if (resolved) {
                     RELEASE(arg);
                     arg = resolved;
                 }
             }
-            if (arg && TAG(arg) == CLJ_MAP) {
+            if (is_map(arg)) {
                 ID result = map_get_sentinel((CljValue)arg, (CljValue)op, NULL);
                 RELEASE(arg);
                 return RETAIN(result);
@@ -1209,7 +1207,7 @@ static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljMa
     CljList *arg2 = arg1 ? as_list(LIST_REST(arg1)) : NULL;
 
     // 1 branch into slowpath: anything unusual (non-map env or >2 args)
-    if (LIKELY(env && TAG(env) == CLJ_MAP && !arg2)) {
+    if (LIKELY(is_map(env) && !arg2)) {
         if (arg0) {
             args[0] = eval_arg_from_expr_with_context(LIST_FIRST(arg0), env, st, ctx);
             argc = 1;
@@ -1218,7 +1216,7 @@ static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljMa
                 argc = 2;
             }
         }
-    } else if (env && TAG(env) == CLJ_MAP) {
+    } else if (is_map(env)) {
         // Slow path: 3+ args (rare) - keep the generic loop
         CljList *current = arg0;
         while (current && argc < 16) {
@@ -1296,7 +1294,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     }
 
     // Handle maps as functions (for key lookup) - must be first
-    if (op && TAG(op) == CLJ_MAP) {
+    if (is_map(op)) {
         return eval_map_lookup(list, effective_env, effective_st, ctx, op);
     }
 
@@ -1372,7 +1370,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     op = resolved_op;
 
     // After resolution: check if resolved to arithmetic symbol (e.g., clojure.core/+ → SYM_PLUS)
-    if (op && TAG(op) == CLJ_SYMBOL) {
+    if (is_symbol(op)) {
         CljSymbol *resolved_sym = (CljSymbol*)op;
         if (resolved_sym->base.flags & CLJ_FLAG_ARITHMETIC) {
             ArithOp arith_op = (resolved_sym->base.flags >> CLJ_ARITH_OP_SHIFT) & 0x03;
@@ -1530,7 +1528,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     
     // If the value is a function, set its name and rewrite recursive calls
     // CRITICAL: Only for CLJ_CLOSURE (Clojure functions), not CLJ_FUNC (native functions)
-    if (TAG(value) == CLJ_CLOSURE) {
+    if (is_closure(value)) {
         CljFunction *func = as_function(value);
         if (func && sym && sym->cname[0]) {
             if (!func->name) func->name = strdup(sym->cname);
@@ -1559,7 +1557,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
         // Optimized: Only process metadata for functions (most common case)
         // For non-functions, just copy form metadata if present
         if (value_tag == CLJ_CLOSURE || value_tag == CLJ_FUNC) {
-            if (form_meta && TAG(form_meta) == CLJ_MAP) {
+            if (is_map(form_meta)) {
                 CljMap *meta_map = (CljMap*)RETAIN(form_meta);
                 // Add :name and :ns directly (map_assoc overwrites if present, :name/:ns are rare)
                 if (SYM_KW_NAME && sym && sym->cname && sym->cname[0] != '\0') {
@@ -1729,7 +1727,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     // Check if second element is a symbol (named fn) but NOT a keyword
     // Also check it's not a vector (anonymous fn case)
     CljList *body_rest = NULL;  // Rest of body expressions (for multiple bodies)
-    if (TAG(second) == CLJ_SYMBOL && !IS_KEYWORD(second)) {
+    if (is_symbol(second) && !IS_KEYWORD(second)) {
         // Named fn: (fn name [params] body...)
         fn_name = (CljSymbol*)second;
         CljList *rest2 = as_list(LIST_REST(rest1));   // nach name
@@ -1751,7 +1749,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     }
 
     // Parameters can be a vector [a b] or a list (a b)
-    bool is_vector_params = TAG(params_list) == CLJ_VECTOR;
+    bool is_vector_params = is_vector(params_list);
     if (!params_list || (!list_type_matches(TAG(params_list)) && !is_vector_params)) {
         return NULL;
     }
@@ -2404,7 +2402,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
             let_ctx.frame = let_frame;
 
             ID stored_value = binding_values[binding_index];
-            if (stored_value && TAG(stored_value) == CLJ_CLOSURE) {
+            if (is_closure(stored_value)) {
                 CljList *frame_env_stack = frame_chain_to_env_stack(let_frame, parent_stack);
                 CljFunction *func = as_function(stored_value);
                 if (func) {
@@ -2517,9 +2515,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
                 }
                 // CRITICAL: If resolved_id is still a symbol (not a value), throw exception
                 // This prevents infinite loops where a symbol resolves to itself
-                if (!IS_IMMEDIATE(resolved_id) &&
-                    TAG(resolved_id) == CLJ_SYMBOL &&
-                    !IS_KEYWORD(resolved_id)) {
+                if (is_symbol(resolved_id) && !IS_KEYWORD(resolved_id)) {
                     bool resolves_to_self = (resolved_id == expr);
                     if (!resolves_to_self && resolved_id && expr) {
                         resolves_to_self = clj_equal(resolved_id, expr);
@@ -2537,7 +2533,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
             // Not found in env_stack or still a symbol, fall through to namespace resolution
         }
         
-        if (!resolved_value && env && TAG(env) == CLJ_MAP) {
+        if (!resolved_value && is_map(env)) {
             // Use sentinel to distinguish "key not found" from "value is nil"
             ID resolved_id = map_get(env, expr);
             if (resolved_id != NOT_FOUND) {
@@ -2663,7 +2659,7 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
     ID var = NULL;
     ID n_obj = NULL;
 
-    if (TAG(binding_list) == CLJ_VECTOR) {
+    if (is_vector(binding_list)) {
         CljVector *vec = as_vector(binding_list);
         if (!vec || vector_count(vec) < 2) return NULL;
         var = vector_nth(vec, 0);

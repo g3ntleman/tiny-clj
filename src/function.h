@@ -29,6 +29,22 @@ typedef struct {
 CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *cname, struct CljNamespace *ns);
 
 
+// Type predicates
+static inline bool is_closure(ID obj) {
+    return obj && !IS_IMMEDIATE(obj) && TAG(obj) == CLJ_CLOSURE;
+}
+
+static inline bool is_func(ID obj) {
+    return obj && !IS_IMMEDIATE(obj) && TAG(obj) == CLJ_FUNC;
+}
+
+// True for both native (CLJ_FUNC) and interpreted (CLJ_CLOSURE) functions
+static inline bool is_callable(ID obj) {
+    if (!obj || IS_IMMEDIATE(obj)) return false;
+    CljType tag = TAG(obj);
+    return tag == CLJ_FUNC || tag == CLJ_CLOSURE;
+}
+
 // Type-safe casting
 static inline CljFunction* as_function(ID obj) {
     return (CljFunction*)assert_type((CljObject*)obj, CLJ_CLOSURE);
