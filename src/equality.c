@@ -6,17 +6,17 @@
  */
 
 #include <string.h>
-#include <subjective-c/object.h>
-#include <subjective-c/value.h>
+#include "object.h"
+#include "value.h"
 #include "symbol.h"
-#include <subjective-c/vector.h>
-#include <subjective-c/map.h>
-#include <subjective-c/strings.h>
-#include <subjective-c/kv_macros.h>
+#include "vector.h"
+#include "map.h"
+#include "strings.h"
+#include "kv_macros.h"
 #include "list.h"
 
-#include <subjective-c/instant.h>
-#include <subjective-c/uuid.h>
+#include "instant.h"
+#include "uuid.h"
 
 // Forward declaration for string_empty_singleton
 extern CljString* string_empty_singleton;

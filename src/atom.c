@@ -1,8 +1,8 @@
 #include "atom.h"
-#include <subjective-c/memory.h>
-#include <subjective-c/value.h>
+#include "memory.h"
+#include "value.h"
 #include "eval.h"
-#include <subjective-c/exception.h>
+#include "exception.h"
 #include "runtime.h"
 #include "namespace.h"
 #include <stdlib.h>

@@ -5,7 +5,7 @@
  */
 
 #include "tests_common.h"
-#include <subjective-c/exception.h>
+#include "exception.h"
 
 // ============================================================================
 // FIXED-POINT ARITHMETIC TESTS

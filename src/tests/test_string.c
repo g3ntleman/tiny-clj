@@ -7,9 +7,9 @@
 #include "tests_common.h"
 #include "namespace.h"
 #include "symbol.h"
-#include <subjective-c/map.h>
-#include <subjective-c/object.h>
-#include <subjective-c/kv_macros.h>
+#include "map.h"
+#include "object.h"
+#include "kv_macros.h"
 
 // Forward declaration
 int load_clojure_core(EvalState *st);

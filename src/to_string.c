@@ -15,29 +15,29 @@
 #include <stdint.h>
 
 #include "to_string.h"
-#include <subjective-c/object.h>
-#include <subjective-c/strings.h>
+#include "object.h"
+#include "strings.h"
 #include "namespace.h"
-#include <subjective-c/value.h>
+#include "value.h"
 #include "symbol.h"
-#include <subjective-c/vector.h>
+#include "vector.h"
 #include "list.h"
-#include <subjective-c/map.h>
+#include "map.h"
 #include "function.h"
 #include "seq.h"
-#include <subjective-c/exception.h>
+#include "exception.h"
 #include "atom.h"
-#include <subjective-c/byte_array.h>
-#include <subjective-c/memory.h>
-#include <subjective-c/kv_macros.h>
-#include <subjective-c/types.h>
+#include "byte_array.h"
+#include "memory.h"
+#include "kv_macros.h"
+#include "types.h"
 #include "runtime.h"
-#include <subjective-c/regex.h>
+#include "regex.h"
 
-#include <subjective-c/instant.h>
-#include <subjective-c/uuid.h>
+#include "instant.h"
+#include "uuid.h"
 
-#include <subjective-c/datetime_utc.h>
+#include "datetime_utc.h"
 
 #include "numeric_utils.h"
 

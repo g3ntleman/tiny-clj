@@ -7,13 +7,13 @@
 #include "tests_common.h"
 #include "namespace.h"
 #include "symbol.h"
-#include <subjective-c/map.h>
-#include <subjective-c/object.h>
-#include <subjective-c/kv_macros.h>
-#include <subjective-c/value.h>
+#include "map.h"
+#include "object.h"
+#include "kv_macros.h"
+#include "value.h"
 #include "eval.h"
-#include <subjective-c/strings.h>
-#include <subjective-c/vector.h>
+#include "strings.h"
+#include "vector.h"
 #include "../to_string.h"
 #include "../repl.h"
 

@@ -1,15 +1,15 @@
-#include <subjective-c/object.h>
+#include "object.h"
 #include "eval.h"
 #include "symbol.h"
 #include <stdio.h>
-#include <subjective-c/exception.h>
+#include "exception.h"
 #include "function.h"
 #include "validation.h"
 #include "builtins.h"
 #include "optimize.h"
 #include "parser.h"  // For eval_parsed
 #include "reader.h"  // For Reader API (used by eval_string)
-#include <subjective-c/common.h>
+#include "common.h"
 
 // Branch prediction hints for hot paths
 #define LIKELY(x)   __builtin_expect(!!(x), 1)
@@ -21,16 +21,16 @@
 #include <string.h>
 #include "seq.h"
 #include "namespace.h"
-#include <subjective-c/memory.h>
+#include "memory.h"
 #include "meta.h"
 #include "list.h"
-#include <subjective-c/value.h>
+#include "value.h"
 #include "environment.h"
 #include "ast.h"
-#include <subjective-c/vector.h>
+#include "vector.h"
 #include "event_loop.h"
 #include "channel.h"
-#include <subjective-c/strings.h>  // For pr_str
+#include "strings.h"  // For pr_str
 #include "to_string.h"  // For is_special_symbol
 #include "numeric_utils.h"
 #include "format_utils.h"
@@ -96,7 +96,7 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
 
 // Evaluation context structures are defined in function_call.h
 
-#include <subjective-c/map.h>
+#include "map.h"
 #include "runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -991,9 +991,9 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
     CljSymbol *op_sym = as_symbol(op);
     bool op_is_dynamic = is_dynamic_var_symbol(op_sym);
 
-    // === HOT PATH: ctx vorhanden (typisch für fib und andere rekursive Funktionen) ===
+    // === HOT PATH: ctx present (typical for fib and other recursive functions) ===
     if (ctx) {
-        // 1) Frame-Lookup (Parameter wie n) - schnellster Pfad
+        // 1) Frame lookup (parameters like n) - fastest path
         if (ctx->frame) {
             ID frame_value = NULL;
             if (frame_lookup(ctx->frame, op, &frame_value)) {
@@ -1001,7 +1001,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
             }
         }
         
-        // 2) Callsite-Cache (gecachte Funktionen wie fib selbst)
+        // 2) Callsite cache (cached functions like fib itself)
         // IMPORTANT: Dynamic vars must never use callsite caches.
         if (!op_is_dynamic && call_node && g_runtime.resolve_cache_epoch != 0) {
             ID cached_call = ast_node_get_cached_resolution(call_node, op_sym, g_runtime.resolve_cache_epoch);
@@ -1010,7 +1010,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
             }
         }
         
-        // 3) Resolve-Cache (globaler Cache für Namespace-Symbole)
+        // 3) Resolve cache (global cache for namespace symbols)
         // IMPORTANT: Dynamic vars must never use the resolve cache.
         EvalState *ctx_st = get_eval_state(ctx, st);
         if (!op_is_dynamic && g_runtime.resolve_cache && ctx_st) {
@@ -1111,6 +1111,14 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
 static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx) {
     if (!op) return NULL;
 
+    // Fast path: op already resolved to a callable (common with callsite cache).
+    unsigned char op_tag = TAG(op);
+    if (op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE) {
+        ID result = call_function_with_args_and_context(op, list, env, st, ctx);
+        // Convert SYM_NIL to NULL (nil representation)
+        return (result == SYM_NIL) ? NULL : result;
+    }
+
     // Handle keywords as functions (for map lookup)
     if (is_keyword(op)) {
         int total_count = list_count(list);
@@ -1134,7 +1142,6 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
     }
 
     // Resolve symbol to get function
-    unsigned char op_tag = op ? TAG(op) : 0;
     if (op_tag == CLJ_SYMBOL) {
         CljObject *fn = eval_symbol(as_symbol(op), st);
         if (!fn) return NULL;
@@ -1183,13 +1190,6 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Cannot call object of type %d as a function", fn_tag);
         return NULL;
-    }
-
-    // Direct function call
-    if (op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE) {
-        ID result = call_function_with_args_and_context(op, list, env, st, ctx);
-        // Convert SYM_NIL to NULL (nil representation)
-        return (result == SYM_NIL) ? NULL : result;
     }
 
     return NULL; // Not a function
@@ -1314,17 +1314,16 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 #endif
     CljSymbol *original_op_sym = (original_op_tag == CLJ_SYMBOL) ? as_symbol(op) : NULL;
 
-    // === HOT PATH: Callsite-Cache für gecachte Funktionen (fib, etc.) ===
-    // Prüfe Cache VOR allen anderen Checks - überspringt komplette Resolution
+    // === HOT PATH: Callsite cache for cached functions (fib, etc.) ===
+    // Check cache BEFORE all other checks to skip symbol resolution entirely.
     if (call_node && original_op_sym && g_runtime.resolve_cache_epoch != 0) {
         ID cached_fn = ast_node_get_cached_resolution(call_node, original_op_sym, 
                                                        g_runtime.resolve_cache_epoch);
         if (cached_fn) {
             unsigned char cached_tag = TAG(cached_fn);
             if (cached_tag == CLJ_FUNC || cached_tag == CLJ_CLOSURE) {
-                // DIREKT zum Funktionsaufruf - komplette Resolution übersprungen!
-                return eval_function_call_from_list(list, effective_env, effective_st, 
-                                                    cached_fn, ctx);
+                // Direct call: skip keyword/symbol resolution.
+                return call_function_with_args_and_context(cached_fn, list, effective_env, effective_st, ctx);
             }
         }
     }
@@ -1622,9 +1621,9 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
 
     // Process :require clauses: (ns name (:require [ns :as alias]))
     // Avoid list_nth in a loop (linked lists would make this O(n^2)).
-    CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(list)));
-    CljList *clause_node = args ? list_normalize_empty_to_null(as_list(LIST_REST(args))) : NULL;
-    for (CljList *node = clause_node; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+    CljList *args = list_or_null(as_list(LIST_REST(list)));
+    CljList *clause_node = args ? list_or_null(as_list(LIST_REST(args))) : NULL;
+    for (CljList *node = clause_node; node; node = list_or_null(as_list(LIST_REST(node)))) {
         CljObject *clause = LIST_FIRST(node);
         if (!clause || !list_type_matches(TAG(clause))) continue;
 
@@ -1640,8 +1639,8 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
         // Check if this is a :require clause
         if (clause_sym->cname[0] == ':' && strcmp(clause_sym->cname, ":require") == 0) {
             // Process require specs: (:require [ns :as alias] [ns2 :as alias2])
-            CljList *spec_node = list_normalize_empty_to_null(as_list(LIST_REST(clause_list)));
-            for (CljList *s = spec_node; s; s = list_normalize_empty_to_null(as_list(LIST_REST(s)))) {
+            CljList *spec_node = list_or_null(as_list(LIST_REST(clause_list)));
+            for (CljList *s = spec_node; s; s = list_or_null(as_list(LIST_REST(s)))) {
                 CljObject *spec = LIST_FIRST(s);
                 if (!spec) continue;
 
@@ -2428,9 +2427,9 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     ID result = NULL;
     CljMap *body_env = let_ctx.env ? let_ctx.env : env;
-    CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(list)));
-    CljList *body_node = args ? list_normalize_empty_to_null(as_list(LIST_REST(args))) : NULL;
-    for (CljList *node = body_node; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+    CljList *args = list_or_null(as_list(LIST_REST(list)));
+    CljList *body_node = args ? list_or_null(as_list(LIST_REST(args))) : NULL;
+    for (CljList *node = body_node; node; node = list_or_null(as_list(LIST_REST(node)))) {
         ID body_expr = LIST_FIRST(node);
         if (!body_expr) continue;
 

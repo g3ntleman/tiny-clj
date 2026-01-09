@@ -1,7 +1,7 @@
 // Tests for history persistence (Vector<String>) via to-string/Parser
 #include "tests_common.h"
 #include "../to_string.h"
-#include "../vector.h"
+#include "vector.h"
 #include <unistd.h>
 
 // Forward declarations from repl.c
@@ -274,7 +274,7 @@ TEST(test_history_save_escapes_quotes) {
  * Test-First implementation for slurp function.
  */
 
-#include "../strings.h"
+#include "strings.h"
 #include "../file_utils.h"
 #include "tests_common.h"
 #include <stdio.h>

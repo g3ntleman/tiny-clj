@@ -1,8 +1,8 @@
 #include "line_editor.h"
-#include <subjective-c/memory.h>  // For RELEASE
-#include <subjective-c/value.h>  // For make_string, fixnum, CljString
+#include "memory.h"  // For RELEASE
+#include "value.h"  // For make_string, fixnum, CljString
 #include "builtins.h"  // For nth2
-#include <subjective-c/strings.h>  // For to_cstring and string functions
+#include "strings.h"  // For to_cstring and string functions
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdlib.h>

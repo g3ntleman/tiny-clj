@@ -1,17 +1,17 @@
 #include "eval_special_forms.h"
 #include "eval.h"
-#include <subjective-c/common.h>
+#include "common.h"
 #include "channel.h"
 #include "event_loop.h"
-#include <subjective-c/vector.h>
-#include <subjective-c/exception.h>
+#include "vector.h"
+#include "exception.h"
 #include "environment.h"
 #include "runtime.h"
 #include "function.h"
 #include "macro.h"
 #include "meta.h"
 #include "ast.h"
-#include <subjective-c/strings.h>
+#include "strings.h"
 
 #include <string.h>
 
@@ -365,7 +365,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
         ID handler_result = NULL;
         bool handled = false;
 
-        for (CljList *node = clause_node; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+        for (CljList *node = clause_node; node; node = list_rest_normalized(node)) {
             ID elem = LIST_FIRST(node);
             if (!elem || !list_type_matches(TAG(elem))) continue;
 
@@ -378,14 +378,14 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
             // - (catch Type sym body...)
             ID binding_sym = NULL;
             CljList *body_node = NULL;
-            CljList *cargs = list_normalize_empty_to_null(as_list(LIST_REST(clause)));
+            CljList *cargs = list_rest_normalized(clause);
             if (!cargs) continue;
 
             ID arg1 = LIST_FIRST(cargs);
-            CljList *after1 = list_normalize_empty_to_null(as_list(LIST_REST(cargs)));
+            CljList *after1 = list_rest_normalized(cargs);
             if (after1) {
                 ID arg2 = LIST_FIRST(after1);
-                CljList *after2 = list_normalize_empty_to_null(as_list(LIST_REST(after1)));
+                CljList *after2 = list_rest_normalized(after1);
 
                 // If there are >= 3 args after `catch`, treat as (catch Type sym body...).
                 // Otherwise treat as (catch sym body...).
@@ -421,7 +421,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
                 continue;
             }
 
-            for (CljList *b = body_node; b; b = list_normalize_empty_to_null(as_list(LIST_REST(b)))) {
+            for (CljList *b = body_node; b; b = list_rest_normalized(b)) {
                 ID body_expr = LIST_FIRST(b);
                 if (!body_expr) continue;
                 ASSIGN(handler_result, eval_body(body_expr, catch_env, st, ctx));
@@ -453,7 +453,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
 ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_binding: list must not be NULL");
 
-    CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(list)));
+    CljList *args = list_rest_normalized(list);
     if (!args) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding expects a bindings vector", __FILE__, __LINE__, 0);
         return NULL;
@@ -468,7 +468,7 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
     CljMap *base_env = eval_env_or_ns_mappings(env, st);
 
     ID bindings_obj = LIST_FIRST(args);
-    if (!bindings_obj || TAG(bindings_obj) != CLJ_VECTOR) {
+    if (!is_vector(bindings_obj)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding expects a vector of bindings", __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -497,7 +497,7 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
         ID sym_id = vector_nth(bindings_vec, i);
         ID expr_id = vector_nth(bindings_vec, i + 1);
 
-        if (!sym_id || TAG(sym_id) != CLJ_SYMBOL) {
+        if (!is_symbol(sym_id)) {
             RELEASE(frame);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding keys must be symbols", __FILE__, __LINE__, 0);
             return NULL;
@@ -563,8 +563,7 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
 
     ID result = NULL;
     TRY {
-        for (CljList *node = list_normalize_empty_to_null(as_list(LIST_REST(args))); node; 
-             node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+        for (CljList *node = list_rest_normalized(args); node; node = list_rest_normalized(node)) {
             ID expr = LIST_FIRST(node);
             if (!expr) {
                 ASSIGN(result, NULL);
@@ -731,7 +730,7 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
     
     // Parse: (defmacro name [params] body) or (defmacro name docstring [params] body)
     // Avoid list_count() + indexed access: lists are O(n) per index.
-    CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(list)));
+    CljList *args = list_rest_normalized(list);
     if (!args) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
             "defmacro requires at least a name and body",
@@ -741,7 +740,7 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
 
     // Get macro name
     ID name_obj = LIST_FIRST(args);
-    if (!name_obj || TAG(name_obj) != CLJ_SYMBOL) {
+    if (!is_symbol(name_obj)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
             "defmacro name must be a symbol",
             __FILE__, __LINE__, 0);
@@ -750,7 +749,7 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
     CljSymbol *name = as_symbol(name_obj);
 
     // Position after name
-    CljList *node = list_normalize_empty_to_null(as_list(LIST_REST(args)));
+    CljList *node = list_rest_normalized(args);
     if (!node) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
             "defmacro requires at least a name and body",
@@ -761,7 +760,7 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
     // Skip docstring if present (string as second element)
     ID params_obj = LIST_FIRST(node);
     if (is_string((CljObject*)params_obj)) {
-        node = list_normalize_empty_to_null(as_list(LIST_REST(node)));
+        node = list_rest_normalized(node);
         params_obj = node ? LIST_FIRST(node) : NULL;
     }
 
@@ -775,10 +774,10 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
 
     // Build fn form: (fn [params] body...)
     // Single-pass traversal over body forms.
-    CljList *body_node = node ? list_normalize_empty_to_null(as_list(LIST_REST(node))) : NULL;
+    CljList *body_node = list_rest_normalized(node);
     CljList *fn_body = NULL;
     CljList *fn_body_tail = NULL;
-    for (CljList *b = body_node; b; b = list_normalize_empty_to_null(as_list(LIST_REST(b)))) {
+    for (CljList *b = body_node; b; b = list_rest_normalized(b)) {
         ID body_expr = LIST_FIRST(b);
         CljList *new_node = make_ast_list(body_expr, NULL);
         if (!new_node) {

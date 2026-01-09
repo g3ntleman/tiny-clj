@@ -150,12 +150,6 @@ CljVector* vector_set_nth(CljVector* vec, unsigned int index, ID value) {
     if (!vec) {
         return NULL;
     }
-
-    if (value == NULL) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "vector_set_nth: value cannot be NULL");
-        return NULL;
-    }
     
     CljVector *v = as_vector(vec);
     if (!v) {

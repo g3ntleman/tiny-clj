@@ -1,11 +1,11 @@
 #include "debug.h"
-#include <subjective-c/object.h>
-#include <subjective-c/strings.h>
+#include "object.h"
+#include "strings.h"
 #include "list.h"
 #include "symbol.h"
-#include <subjective-c/value.h>
-#include <subjective-c/memory.h>
-#include <subjective-c/types.h>
+#include "value.h"
+#include "memory.h"
+#include "types.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>

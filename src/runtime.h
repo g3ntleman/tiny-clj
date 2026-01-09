@@ -12,10 +12,10 @@
 #ifndef TINY_CLJ_RUNTIME_H
 #define TINY_CLJ_RUNTIME_H
 
-#include <subjective-c/object.h>
-#include <subjective-c/memory.h>
-#include <subjective-c/vector.h>
-#include <subjective-c/hashmap.h>
+#include "object.h"
+#include "memory.h"
+#include "vector.h"
+#include "hashmap.h"
 #include "namespace.h"
 #include <alloca.h>
 #include <stdlib.h>

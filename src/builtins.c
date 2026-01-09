@@ -10,25 +10,25 @@
 #include <stdbool.h>
 #include <math.h>
 #include <ctype.h>
-#include <subjective-c/object.h>
-#include <subjective-c/vector.h>
-#include <subjective-c/map.h>
+#include "object.h"
+#include "vector.h"
+#include "map.h"
 #include "atom.h"
-#include <subjective-c/kv_macros.h>
+#include "kv_macros.h"
 #include "numeric_utils.h"
 #include "format_utils.h"
 #include "runtime.h"
-#include <subjective-c/memory.h>
-#include <subjective-c/value.h>
+#include "memory.h"
+#include "value.h"
 #include "error_messages.h"
 #include "symbol.h" // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include "seq.h"
-#include <subjective-c/byte_array.h>
-#include <subjective-c/exception.h>
+#include "byte_array.h"
+#include "exception.h"
 #include "list.h"
 #include "function.h"
-#include <subjective-c/strings.h>
+#include "strings.h"
 #include "to_string.h"
 #include "event_loop.h"
 #include "reader.h"
@@ -36,8 +36,8 @@
 #include "meta.h"
 #include "eval.h"
 #include "macro.h"
-#include <subjective-c/instant.h>
-#include <subjective-c/datetime_utc.h>
+#include "instant.h"
+#include "datetime_utc.h"
 #ifdef DEBUG
 #include "debug.h"
 #endif

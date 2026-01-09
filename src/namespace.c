@@ -1,19 +1,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <subjective-c/common.h>  // For CLJ_ASSERT
+#include "common.h"  // For CLJ_ASSERT
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
-#include <subjective-c/object.h>
-#include <subjective-c/map.h>
+#include "object.h"
+#include "map.h"
 #include "list.h"
-#include <subjective-c/exception.h>
+#include "exception.h"
 #include "runtime.h"
 #include "tiny_clj.h"
-#include <subjective-c/memory.h>
+#include "memory.h"
 #include "parser.h"  // For eval_parsed
-#include <subjective-c/vector.h>
-#include <subjective-c/kv_macros.h>  // For KV_KEY, KV_VALUE
+#include "vector.h"
+#include "kv_macros.h"  // For KV_KEY, KV_VALUE
 
 // Helper context for namespace search in ns_resolve()
 struct ns_search_ctx {
@@ -795,10 +795,10 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
         // We arrived here via eval_error
         // Search for catch clauses
         CljList *form_list = as_list(form);
-        CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(form_list)));
-        CljList *clause_node = args ? list_normalize_empty_to_null(as_list(LIST_REST(args))) : NULL;
+        CljList *args = list_or_null(as_list(LIST_REST(form_list)));
+        CljList *clause_node = args ? list_or_null(as_list(LIST_REST(args))) : NULL;
 
-        for (CljList *node = clause_node; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+        for (CljList *node = clause_node; node; node = list_or_null(as_list(LIST_REST(node)))) {
             CljObject *clause = LIST_FIRST(node);
             if (!is_list(clause)) continue;
 
@@ -816,11 +816,11 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
             ID binding_sym = NULL;
             CljList *body_node = NULL;
 
-            CljList *cargs = list_normalize_empty_to_null(as_list(LIST_REST(clause_list)));
+            CljList *cargs = list_or_null(as_list(LIST_REST(clause_list)));
             if (!cargs) continue;
 
             ID arg1 = LIST_FIRST(cargs);
-            CljList *after1 = list_normalize_empty_to_null(as_list(LIST_REST(cargs)));
+            CljList *after1 = list_or_null(as_list(LIST_REST(cargs)));
             if (arg1 && TAG(arg1) == CLJ_SYMBOL) {
                 binding_sym = arg1;
                 body_node = after1;
@@ -828,7 +828,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
                 ID arg2 = LIST_FIRST(after1);
                 if (arg2 && TAG(arg2) == CLJ_SYMBOL) {
                     binding_sym = arg2;
-                    body_node = list_normalize_empty_to_null(as_list(LIST_REST(after1)));
+                    body_node = list_or_null(as_list(LIST_REST(after1)));
                 }
             }
 
@@ -841,7 +841,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
             ASSIGN(st->current_ns->mappings, updated_mappings);
 
             // Evaluate catch body (support multiple expressions)
-            for (CljList *b = body_node; b; b = list_normalize_empty_to_null(as_list(LIST_REST(b)))) {
+            for (CljList *b = body_node; b; b = list_or_null(as_list(LIST_REST(b)))) {
                 CljObject *body_expr = LIST_FIRST(b);
                 if (!body_expr) continue;
                 result = eval_parsed(body_expr, st, NULL);

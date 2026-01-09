@@ -1,9 +1,9 @@
 #include "eval_arithmetic.h"
 #include "builtins.h"
-#include <subjective-c/exception.h>
+#include "exception.h"
 #include "error_messages.h"
 #include "numeric_utils.h"
-#include <subjective-c/strings.h>
+#include "strings.h"
 
 static inline bool is_numeric_type(ID value) {
     if (!value) return false;

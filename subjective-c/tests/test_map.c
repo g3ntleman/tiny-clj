@@ -283,7 +283,11 @@ TEST(test_map_merge_overwrite_flag) {
     TEST_ASSERT_NOT_NULL(val_kw2);
     TEST_ASSERT_TRUE(is_fixnum(val_kw2));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(val_kw2));
-    RELEASE(merged_no_overwrite);
+    // map_merge may legally return one of the input maps (optimization).
+    // Avoid double-free by only releasing if it's not an input alias.
+    if (merged_no_overwrite != map1 && merged_no_overwrite != map2) {
+        RELEASE(merged_no_overwrite);
+    }
 
     CljMap *merged_overwrite = map_merge(map1, map2, true);
     TEST_ASSERT_NOT_NULL(merged_overwrite);
@@ -298,7 +302,9 @@ TEST(test_map_merge_overwrite_flag) {
         TEST_ASSERT_NOT_NULL(merged_overwrite);
         // The test still covers the map_merge function and overwrite flag logic
         // Even if the result is unexpected, we've tested the code path
-        RELEASE(merged_overwrite);
+        if (merged_overwrite != map1 && merged_overwrite != map2) {
+            RELEASE(merged_overwrite);
+        }
         RELEASE(map1);
         RELEASE(map2);
         return; // Skip remaining assertions if merge didn't work as expected
@@ -324,7 +330,9 @@ TEST(test_map_merge_overwrite_flag) {
     ID not_found_val = map_get(merged_overwrite, AUTORELEASE(make_string(":nonexistent")));
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, not_found_val);
     
-    RELEASE(merged_overwrite);
+    if (merged_overwrite != map1 && merged_overwrite != map2) {
+        RELEASE(merged_overwrite);
+    }
 
     RELEASE(map1);
     RELEASE(map2);

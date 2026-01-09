@@ -12,13 +12,13 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <math.h>
-#include <subjective-c/object.h>
+#include "object.h"
 #include "builtins_strings.h"
-#include <subjective-c/value.h>
-#include <subjective-c/memory.h>
-#include <subjective-c/strings.h>
+#include "value.h"
+#include "memory.h"
+#include "strings.h"
 #include "to_string.h"
-#include <subjective-c/exception.h>
+#include "exception.h"
 #include "builtins.h"
 #include "symbol.h"
 

@@ -2,39 +2,53 @@ cmake_minimum_required(VERSION 3.10)
 
 project(subjective-c C)
 
+# Disallow in-source builds for the subjective-c subproject to prevent CMake
+# artifacts from polluting the source tree (CMakeCache.txt, CMakeFiles/, etc.).
+# Use: cmake -S subjective-c -B subjective-c/build
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+    message(FATAL_ERROR "In-source builds are not supported for subjective-c. Please run: cmake -S subjective-c -B subjective-c/build")
+endif()
+
 # Set C standard consistently with main project
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # -----------------------------------------------------------------------------
-# Subjective-C static library (currently placeholder, real sources follow later)
+# Subjective-C static library
 # -----------------------------------------------------------------------------
 
 set(SUBJECTIVE_C_SOURCES
-    subjective_c_init.c
-    value.c
-    types.c
-    memory.c
-    strings.c
-    vector.c
-    exception.c
-    map.c
-    byte_array.c
-    hashmap.c
-    callbacks.c
-    datetime_utc.c
-    instant.c
-    uuid.c
-        regex.c
+    src/value.c
+    src/types.c
+    src/memory.c
+    src/strings.c
+    src/vector.c
+    src/exception.c
+    src/map.c
+    src/byte_array.c
+    src/hashmap.c
+    src/callbacks.c
+    src/datetime_utc.c
+    src/instant.c
+    src/uuid.c
+    src/regex.c
 
         # Regex engine (tiny-regex-c) compiled into subjective-c
         ${CMAKE_SOURCE_DIR}/external/tiny_regex.c
 )
 
 add_library(subjective-c STATIC ${SUBJECTIVE_C_SOURCES})
+set(SUBJECTIVE_C_PUBLIC_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/subjective-c/src")
+set(SUBJECTIVE_C_PRIVATE_INCLUDE_DIR "${SUBJECTIVE_C_PUBLIC_INCLUDE_DIR}/subjective-c")
+
 target_include_directories(subjective-c
     PUBLIC
-        ${CMAKE_SOURCE_DIR}               # For <subjective-c/...> includes
+        # Provides <subjective-c/...> includes to consumers (headers live in src/subjective-c/)
+        ${SUBJECTIVE_C_PUBLIC_INCLUDE_DIR}
+    PRIVATE
+        # Allows subjective-c sources/tests to include "types.h", "subjective-c.h", etc.
+        ${SUBJECTIVE_C_PRIVATE_INCLUDE_DIR}
+        # subjective-c test runner compiles some tiny-clj sources (memory_profiler, ast, etc.)
         ${CMAKE_SOURCE_DIR}/src
 )
 target_compile_features(subjective-c PUBLIC c_std_99)
@@ -80,7 +94,6 @@ endif()
 set(SUBJECTIVE_C_TEST_SOURCES
     tests/test_runner.c
     tests/test_registry.c
-    tests/test_placeholder.c
     tests/test_strings.c
     tests/test_vectors.c
     tests/test_map.c
@@ -99,7 +112,7 @@ set(SUBJECTIVE_C_TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/equality.c
     ${CMAKE_SOURCE_DIR}/src/error_messages.c
     ${CMAKE_SOURCE_DIR}/src/object.c
-    ${CMAKE_SOURCE_DIR}/subjective-c/types.c
+    ${CMAKE_SOURCE_DIR}/subjective-c/src/types.c
     ${CMAKE_SOURCE_DIR}/src/list.c
 )
 
@@ -109,6 +122,8 @@ target_include_directories(subjective-c-tests
         ${CMAKE_SOURCE_DIR}/external/unity/src
         ${CMAKE_SOURCE_DIR}               # For <subjective-c/...> includes
         ${CMAKE_CURRENT_SOURCE_DIR}       # For "subjective-c.h" in tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/src   # For subjective-c sources
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/subjective-c  # For "common.h", "subjective-c.h"
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_BINARY_DIR}                # For build_info.h
 )

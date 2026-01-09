@@ -1,8 +1,8 @@
 #ifndef TINY_CLJ_CHANNEL_H
 #define TINY_CLJ_CHANNEL_H
 
-#include <subjective-c/object.h>
-#include <subjective-c/map.h>
+#include "object.h"
+#include "map.h"
 
 // Channel API - Channels are implemented as transient maps (mutable)
 // A channel is a transient map with :value and :closed keys

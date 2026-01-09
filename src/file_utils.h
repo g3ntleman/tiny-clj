@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_FILE_UTILS_H
 #define TINY_CLJ_FILE_UTILS_H
 
-#include <subjective-c/strings.h>
+#include "strings.h"
 
 /**
  * @brief Read entire file content as CljString

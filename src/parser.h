@@ -11,12 +11,12 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-#include <subjective-c/object.h>
-#include <subjective-c/exception.h>
+#include "object.h"
+#include "exception.h"
 #include "reader.h"
-#include <subjective-c/value.h>  // Must be included before namespace.h (value.h includes symbol.h)
+#include "value.h"  // Must be included before namespace.h (value.h includes symbol.h)
 #include "namespace.h"
-#include <subjective-c/map.h>  // For CljMap
+#include "map.h"  // For CljMap
 
 
 // === Legacy API (deprecated - use ID API) ===

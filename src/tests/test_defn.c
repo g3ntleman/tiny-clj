@@ -6,14 +6,14 @@
 
 #include "tests_common.h"
 #include "../tiny_clj.h"
-#include "../memory.h"
+#include "memory.h"
 #include "../namespace.h"
 #include "../symbol.h"
 #include "../reader.h"
 #include "../eval.h"
 #include "../list.h"
-#include <subjective-c/map.h>
-#include "../kv_macros.h"
+#include "map.h"
+#include "kv_macros.h"
 #include "../runtime.h"
 #include "../object.h"
 #include "../builtins.h"

@@ -1,9 +1,9 @@
 #ifndef TINY_CLJ_LIST_H
 #define TINY_CLJ_LIST_H
 
-#include <subjective-c/object.h>
-#include <subjective-c/value.h>
-#include <subjective-c/exception.h>
+#include "object.h"
+#include "value.h"
+#include "exception.h"
 #include "ast.h"
 #include <stdbool.h>
 
@@ -27,9 +27,9 @@ typedef struct CljList {
 // For REST: LIST_FOR_EACH(LIST_REST(list), elem) { ... }
 // Note: break and continue work correctly
 #define LIST_FOR_EACH(list, elem_var) \
-    for (struct { CljList *cur; ID elem; int once; } _lfe = { list_normalize_empty_to_null(list_like_as_list_or_null(list)), NULL, 0 }; \
+    for (struct { CljList *cur; ID elem; int once; } _lfe = { list_or_null(list_like_as_list_or_null(list)), NULL, 0 }; \
          _lfe.cur && (_lfe.elem = LIST_FIRST(_lfe.cur), _lfe.once = 1); \
-         _lfe.cur = list_normalize_empty_to_null(as_list(LIST_REST(_lfe.cur)))) \
+         _lfe.cur = list_or_null(as_list(LIST_REST(_lfe.cur)))) \
         for (ID elem_var = _lfe.elem; _lfe.once; _lfe.once = 0)
 
 static inline bool is_list_type(CljType type) {
@@ -58,7 +58,7 @@ static inline bool list_empty(CljList *list) {
     return LIST_FIRST(list) == NULL && LIST_REST(list) == NULL && is_singleton((CljObject*)list);
 }
 
-static inline CljList* list_normalize_empty_to_null(CljList *list) {
+static inline CljList* list_or_null(CljList *list) {
     // Legacy call sites sometimes used a small local helper that normalized the
     // empty-list singleton to NULL.
     // Prefer using this shared helper (or `LIST_FOR_EACH`) instead.
@@ -90,9 +90,9 @@ static inline CljList* list_rest_safe(CljList *l) {
 }
 
 // Get rest of list, normalized to NULL for empty lists
-// Replaces: list_normalize_empty_to_null(as_list(LIST_REST(list)))
+// Replaces: list_or_null(as_list(LIST_REST(list)))
 static inline CljList* list_rest_normalized(CljList *list) {
-    return list ? list_normalize_empty_to_null(as_list(LIST_REST(list))) : NULL;
+    return list ? list_or_null(as_list(LIST_REST(list))) : NULL;
 }
 
 ID list_nth(CljList *list, int n);

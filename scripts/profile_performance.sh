@@ -20,9 +20,11 @@ BUILD_DIR="build"
 RESULTS_DIR="benchmark_results"
 HISTORY_FILE="$RESULTS_DIR/performance_history.csv"
 BENCHMARK_FILE="benchmarks/fibonacci.clj"
-WARMUP_SECONDS=4
-ITERATIONS=100
-FIB_N=20
+# Allow overriding these via environment.
+# Note: Default ITERATIONS is set high to reduce run-to-run noise (esp. on laptops with turbo/thermal throttling).
+WARMUP_SECONDS=${WARMUP_SECONDS:-4}
+ITERATIONS=${ITERATIONS:-1000}
+FIB_N=${FIB_N:-20}
 # Number of measurement runs per system (median is reported)
 RUNS=${RUNS:-5}
 
@@ -532,3 +534,71 @@ fi
 echo ""
 echo -e "${GREEN}✅ Results saved to: $HISTORY_FILE${NC}"
 echo ""
+
+# ============================================================================
+# 7. Compare against previous run (last two timestamps in CSV)
+# ============================================================================
+
+get_last_two_timestamps() {
+    # Print: "<prev> <last>" (space-separated). Empty if not enough data.
+    if [ ! -f "$HISTORY_FILE" ]; then
+        echo ""
+        return 1
+    fi
+    # Skip CSV header, take timestamp column, unique-sort, then last 2.
+    local ts
+    ts=$(tail -n +2 "$HISTORY_FILE" | awk -F',' '{print $1}' | sort -n | uniq | tail -2)
+    if [ "$(echo "$ts" | wc -l | tr -d ' ')" -ne 2 ]; then
+        echo ""
+        return 1
+    fi
+    echo "$ts" | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+}
+
+get_time_per_iter_ms() {
+    local ts="$1"
+    local sys="$2"
+    awk -F',' -v t="$ts" -v s="$sys" '$1==t && $2==s {print $6; exit}' "$HISTORY_FILE"
+}
+
+fmt_delta_pct() {
+    # Inputs: old new -> prints "+X.XX%"/"-X.XX%"/"-" if not computable
+    local old="$1"
+    local new="$2"
+    if [ -z "$old" ] || [ -z "$new" ] || [ "$old" = "0" ]; then
+        echo "-"
+        return
+    fi
+    awk -v o="$old" -v n="$new" 'BEGIN { printf "%+.2f%%", ((n - o) / o) * 100.0 }'
+}
+
+TS_PAIR=$(get_last_two_timestamps || true)
+if [ -n "$TS_PAIR" ]; then
+    PREV_TS=$(echo "$TS_PAIR" | awk '{print $1}')
+    LAST_TS=$(echo "$TS_PAIR" | awk '{print $2}')
+
+    echo -e "${BLUE}📈 Change vs previous run${NC}"
+    echo "=========================================="
+    echo "Previous: $PREV_TS"
+    echo "Current : $LAST_TS"
+    echo ""
+    printf "%-15s %12s %12s %12s %12s\n" "System" "prev ms/iter" "now ms/iter" "delta" "% change"
+    echo "--------------------------------------------------------------------------"
+
+    SYSTEMS=("clojure-jvm" "clojurescript" "python3" "tiny-clj")
+    LABELS=("Clojure/JVM" "ClojureScript" "Python3" "tiny-clj")
+
+    for i in "${!SYSTEMS[@]}"; do
+        sys="${SYSTEMS[$i]}"
+        label="${LABELS[$i]}"
+        prev=$(get_time_per_iter_ms "$PREV_TS" "$sys")
+        now=$(get_time_per_iter_ms "$LAST_TS" "$sys")
+        if [ -z "$prev" ] || [ -z "$now" ]; then
+            continue
+        fi
+        delta=$(awk -v o="$prev" -v n="$now" 'BEGIN { printf "%+.6f", (n - o) }')
+        pct=$(fmt_delta_pct "$prev" "$now")
+        printf "%-15s %12.6f %12.6f %12s %12s\n" "$label" "$prev" "$now" "$delta" "$pct"
+    done
+    echo ""
+fi

@@ -1,10 +1,10 @@
 // Copy-on-Write (COW) Tests for Maps and Vectors
 // Tests RC-based COW behavior: RC=1 → in-place mutation, RC>1 → Copy-on-Write
 #include "tests_common.h"
-#include <subjective-c/map.h>
-#include "../vector.h"
+#include "map.h"
+#include "vector.h"
 #include "../symbol.h"
-#include "../kv_macros.h"
+#include "kv_macros.h"
 
 // ============================================================================
 // COW ASSUMPTIONS TESTS

@@ -8,11 +8,11 @@
 #include "seq.h"
 #include "builtins.h"  // builtin_get_eval_state, builtin_set_eval_state, native_first/rest/seq
 #include "eval.h"      // eval_function_call
-#include <subjective-c/value.h>
+#include "value.h"
 #include "list.h"
-#include <subjective-c/vector.h>
-#include <subjective-c/strings.h>
-#include <subjective-c/map.h>
+#include "vector.h"
+#include "strings.h"
+#include "map.h"
 #include "symbol.h"
 #include <string.h>
 #include <stdlib.h>

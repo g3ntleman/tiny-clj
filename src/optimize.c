@@ -6,12 +6,12 @@
  */
 
 #include "optimize.h"
-#include <subjective-c/common.h>
-#include <subjective-c/object.h>
+#include "common.h"
+#include "object.h"
 #include "symbol.h"
-#include <subjective-c/exception.h>
+#include "exception.h"
 #include "list.h"
-#include <subjective-c/memory.h>
+#include "memory.h"
 #include <string.h>
 #include <stdio.h>
 

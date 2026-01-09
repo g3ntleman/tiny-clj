@@ -5,7 +5,7 @@
  */
 
 #include "tests_common.h"
-#include "../strings.h"
+#include "strings.h"
 
 TEST(test_utf8_emoji_in_string) {
     EvalState *st = g_test_eval_state;

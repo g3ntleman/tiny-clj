@@ -1,9 +1,9 @@
 #ifndef TINY_CLJ_FUNCTION_H
 #define TINY_CLJ_FUNCTION_H
 
-#include <subjective-c/object.h>
-#include <subjective-c/map.h>
-#include <subjective-c/vector.h>
+#include "object.h"
+#include "map.h"
+#include "vector.h"
 #include "list.h"
 #include <stdint.h>
 

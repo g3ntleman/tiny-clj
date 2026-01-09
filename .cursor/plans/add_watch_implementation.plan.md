@@ -2,9 +2,7 @@
 
 ## Overview
 
-Implement Clojure-compatible `add-watch` and `remove-watch` functions for atoms using **Test-First** approach. Functions are defined directly in `src/clojure.core.clj` to match Clojure's namespace structure.
-
-**Reference Implementations** (from source code analysis):
+Implement Clojure-compatible `add-watch` and `remove-watch` functions for atoms using **Test-First** approach. Functions are defined directly in `src/clojure.core.clj` to match Clojure's namespace structure.**Reference Implementations** (from source code analysis):
 
 - **Clojure (JVM)**: `(.addWatch reference key fn)` - Delegates to Java `IRef` interface
 - **ClojureScript**: `(-add-watch iref key f)` - Uses `IWatchable` protocol, returns `iref`
@@ -21,7 +19,7 @@ Implement Clojure-compatible `add-watch` and `remove-watch` functions for atoms 
 
 ## Architecture
 
-```
+```javascript
 ┌─────────────────┐
 │  Clojure API     │
 │  add-watch       │  ← Pure Clojure (~10 lines)
@@ -121,17 +119,19 @@ TEST(test_watcher_registry_starts_empty) {
 }
 ```
 
+
+
 ### 1.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
 
+
+
 ### 1.3 Implement Registry
 
-**File**: `src/clojure.core.clj`
-
-Add to end of file:
+**File**: `src/clojure.core.clj`Add to end of file:
 
 ```clojure
 ; Watcher registry: Atom -> Map of Key -> WatchFn
@@ -147,19 +147,21 @@ Add to end of file:
   (swap! watcher-registry update atom (fnil f {})))
 ```
 
+
+
 ### 1.4 Run Tests (should pass)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
 
+
+
 ## Step 2: Add-Watch Function
 
 ### 2.1 Write Tests
 
-**File**: `src/tests/test_atom_watch.c`
-
-Add:
+**File**: `src/tests/test_atom_watch.c`Add:
 
 ```c
 // Test: add-watch adds a watcher
@@ -225,19 +227,19 @@ TEST(test_add_watch_validates_function) {
 }
 ```
 
+
+
 ### 2.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
 
+
+
 ### 2.3 Implement add-watch
 
-**File**: `src/clojure.core.clj`
-
-**Reference**: ClojureScript's `add-watch` returns `iref` for threading. Clojure's docstring describes the behavior.
-
-Add:
+**File**: `src/clojure.core.clj`**Reference**: ClojureScript's `add-watch` returns `iref` for threading. Clojure's docstring describes the behavior.Add:
 
 ```clojure
 (defn add-watch [atom key watch-fn]
@@ -253,9 +255,9 @@ Add:
    by the watch mechanism.
   
    Arguments:
-   - atom: The atom to watch
-   - key: Any unique value to identify this watcher
-   - watch-fn: Function of 4 args [key atom old-value new-value]
+    - atom: The atom to watch
+    - key: Any unique value to identify this watcher
+    - watch-fn: Function of 4 args [key atom old-value new-value]
   
    Returns: The atom (for threading with ->)
   
@@ -286,19 +288,21 @@ Add:
   atom)
 ```
 
+
+
 ### 2.4 Run Tests (should pass)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
 
+
+
 ## Step 3: Remove-Watch Function
 
 ### 3.1 Write Tests
 
-**File**: `src/tests/test_atom_watch.c`
-
-Add:
+**File**: `src/tests/test_atom_watch.c`Add:
 
 ```c
 // Test: remove-watch removes a watcher
@@ -356,17 +360,19 @@ TEST(test_remove_watch_cleans_up_empty) {
 }
 ```
 
+
+
 ### 3.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
 
+
+
 ### 3.3 Implement remove-watch
 
-**File**: `src/clojure.core.clj`
-
-Add:
+**File**: `src/clojure.core.clj`Add:
 
 ```clojure
 (defn remove-watch [atom key]
@@ -386,19 +392,21 @@ Add:
   atom)
 ```
 
+
+
 ### 3.4 Run Tests (should pass)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
 
+
+
 ## Step 4: Notify Watchers (Clojure)
 
 ### 4.1 Write Tests
 
-**File**: `src/tests/test_atom_watch.c`
-
-Add:
+**File**: `src/tests/test_atom_watch.c`Add:
 
 ```c
 // Test: notify-watchers function exists
@@ -438,17 +446,19 @@ TEST(test_notify_watchers_calls_watcher) {
 }
 ```
 
+
+
 ### 4.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
 
+
+
 ### 4.3 Implement notify-watchers
 
-**File**: `src/clojure.core.clj`
-
-**Reference Implementation** (from ClojureScript sources):
+**File**: `src/clojure.core.clj`**Reference Implementation** (from ClojureScript sources):
 
 - **ClojureScript**: `(-notify-watches [this oldval newval] (doseq [[key f] watches] (f key this oldval newval)))`
 - **Tiny-CLJ**: Similar approach using `doseq` over watcher map
@@ -472,19 +482,21 @@ Add:
             (println "Watcher error:" e)))))))
 ```
 
+
+
 ### 4.4 Run Tests (should pass)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
 
+
+
 ## Step 5: C Hook (Minimal)
 
 ### 5.1 Write Tests
 
-**File**: `src/tests/test_atom_watch.c`
-
-Add:
+**File**: `src/tests/test_atom_watch.c`Add:
 
 ```c
 // Test: atom_notify_watchers function exists
@@ -526,17 +538,19 @@ TEST(test_atom_notify_watchers_calls_clojure) {
 }
 ```
 
+
+
 ### 5.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
 
+
+
 ### 5.3 Implement C Hook
 
-**File**: `src/atom.c`
-
-Add before `atom_reset()`:
+**File**: `src/atom.c`Add before `atom_reset()`:
 
 ```c
 // Cached function reference (lazy initialization)
@@ -573,13 +587,13 @@ void atom_notify_watchers(CljAtom *atom, ID old_value, ID new_value) {
 }
 ```
 
-**File**: `src/atom.h`
-
-Add declaration:
+**File**: `src/atom.h`Add declaration:
 
 ```c
 void atom_notify_watchers(CljAtom *atom, ID old_value, ID new_value);
 ```
+
+
 
 ### 5.4 Run Tests (should pass)
 
@@ -587,13 +601,13 @@ void atom_notify_watchers(CljAtom *atom, ID old_value, ID new_value);
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
 
+
+
 ## Step 6: Integration into atom_reset and atom_swap
 
 ### 6.1 Write Tests
 
-**File**: `src/tests/test_atom_watch.c`
-
-Add:
+**File**: `src/tests/test_atom_watch.c`Add:
 
 ```c
 // Test: reset! triggers watchers
@@ -694,17 +708,19 @@ TEST(test_watcher_exception_handled) {
 }
 ```
 
+
+
 ### 6.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
 
+
+
 ### 6.3 Integrate into atom_reset
 
-**File**: `src/atom.c`
-
-Modify `atom_reset()`:
+**File**: `src/atom.c`Modify `atom_reset()`:
 
 ```c
 ID atom_reset(CljAtom *atom, ID new_value) {
@@ -721,17 +737,19 @@ ID atom_reset(CljAtom *atom, ID new_value) {
 }
 ```
 
+
+
 ### 6.4 Run Tests (should pass for reset!)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/test_reset_triggers_watchers
 ```
 
+
+
 ### 6.5 Integrate into atom_swap
 
-**File**: `src/atom.c`
-
-Modify `atom_swap()` - find where `atom->value` is updated and add notification:
+**File**: `src/atom.c`Modify `atom_swap()` - find where `atom->value` is updated and add notification:
 
 ```c
 ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
@@ -753,11 +771,15 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
 }
 ```
 
+
+
 ### 6.6 Run All Tests
 
 ```bash
 ./scripts/run_unit_tests.sh
 ```
+
+
 
 ## Step 7: Final Verification and Cleanup
 
@@ -767,12 +789,16 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
 ./scripts/run_unit_tests.sh
 ```
 
+
+
 ### 7.2 Memory Profiling
 
 ```bash
 # Check for memory leaks
 ./build/unit-tests --test atom_watch/*
 ```
+
+
 
 ### 7.3 Code Review Checklist
 
@@ -819,5 +845,3 @@ Key points:
 - **Watcher functions receive the atom as an argument** - they should NOT capture it in their closure
 - **If a watcher captures the atom**, the user MUST call `remove-watch` before releasing the atom
 - **Best practice**: Always use the `atom` parameter, never capture it
-
-The `remove-watch` docstring also mentions the retain cycle issue for consistency.

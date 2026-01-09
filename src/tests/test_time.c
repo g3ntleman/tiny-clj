@@ -1,10 +1,10 @@
 #include "tests_common.h"
-#include <subjective-c/object.h>
+#include "object.h"
 #include "list.h"
-#include <subjective-c/value.h>
-#include <subjective-c/strings.h>
-#include <subjective-c/types.h>
-#include <subjective-c/vector.h>
+#include "value.h"
+#include "strings.h"
+#include "types.h"
+#include "vector.h"
 #include "eval.h"
 #include "symbol.h"
 

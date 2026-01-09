@@ -2,9 +2,9 @@
 #define TINY_CLJ_LINE_EDITOR_H
 
 #include <stdbool.h>
-#include <subjective-c/object.h>
-#include <subjective-c/vector.h>
-#include <subjective-c/strings.h>  // For CljString
+#include "object.h"
+#include "vector.h"
+#include "strings.h"  // For CljString
 
 // Forward declarations
 typedef struct LineEditor LineEditor;

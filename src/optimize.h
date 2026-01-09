@@ -8,12 +8,12 @@
 #ifndef OPTIMIZE_H
 #define OPTIMIZE_H
 
-#include <subjective-c/common.h>
-#include <subjective-c/object.h>
+#include "common.h"
+#include "object.h"
 #include "symbol.h"
-#include <subjective-c/exception.h>
+#include "exception.h"
 #include "list.h"
-#include <subjective-c/memory.h>
+#include "memory.h"
 
 // Check if an expression is in tail position within a body
 bool is_tail_position(CljObject *expr, CljObject *body);

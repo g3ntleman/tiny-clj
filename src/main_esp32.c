@@ -1,13 +1,13 @@
 #include "platform.h"
-#include <subjective-c/object.h>
+#include "object.h"
 #include "parser.h"
 #include "namespace.h"
 #include "builtins.h"
 #include "runtime.h"
-#include <subjective-c/memory.h>
+#include "memory.h"
 #include "eval.h"
 #include "reader.h"
-#include <subjective-c/value.h>
+#include "value.h"
 #include "debug.h"
 #include <stdio.h>
 #include <stdlib.h>

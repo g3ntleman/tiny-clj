@@ -4,18 +4,18 @@
 // It's not directly used in runtime.c, but namespace.h needs it for CljSymbol definition
 #include "namespace.h"
 #include "meta.h"
-#include <subjective-c/vector.h>
-#include <subjective-c/memory.h>
+#include "vector.h"
+#include "memory.h"
 #include "eval.h"  // For reset_eval_arg_depth()
 #include "event_loop.h"     // For event_loop_clear()
 #include "macro.h"          // For macro_cache_reset()
-#include <subjective-c/map.h>            // For make_map()
-#include <subjective-c/hashmap.h>        // For hashmap_register_release_fn()
+#include "map.h"            // For make_map()
+#include "hashmap.h"        // For hashmap_register_release_fn()
 #include "hash.h"           // For clj_hash_full()
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
 #include "to_string.h"      // For to_string()
-#include <subjective-c/callbacks.h>  // For clj_set_callbacks
+#include "callbacks.h"  // For clj_set_callbacks
 
 // Statisch alloziertes globales Runtime-Struct (alle Zeiger mit NULL vorbelegt)
 TinyClJRuntime g_runtime = {

@@ -1,15 +1,15 @@
 #include "event_loop.h"
 #include "eval.h"
 #include "symbol.h"
-#include <subjective-c/memory.h>
-#include <subjective-c/exception.h>
+#include "memory.h"
+#include "exception.h"
 #include "channel.h"
-#include <subjective-c/types.h>  // For ZOMBIE_RC, clj_type_name
+#include "types.h"  // For ZOMBIE_RC, clj_type_name
 #include "runtime.h"
-#include <subjective-c/vector.h>
-#include <subjective-c/map.h>
-#include <subjective-c/value.h>  // For as_fixnum, clj_true
-#include <subjective-c/kv_macros.h>  // For KV_VALUE
+#include "vector.h"
+#include "map.h"
+#include "value.h"  // For as_fixnum, clj_true
+#include "kv_macros.h"  // For KV_VALUE
 #include "to_string.h"  // For to_string
 #include <stdbool.h>
 #include <sys/time.h>

@@ -1,8 +1,8 @@
 #include "tests_common.h"
 #include "../channel.h"
 #include "../symbol.h"
-#include "../kv_macros.h"
-#include <subjective-c/map.h>
+#include "kv_macros.h"
+#include "map.h"
 
 // Basic map behavior tests migrated to subjective-c/tests/test_map.c for\n+// interpreter-independent coverage.
 
