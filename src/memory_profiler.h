@@ -48,7 +48,8 @@
 #define MEMORY_PROFILING_ENABLED 0
 #endif
 
-#include <subjective-c/object.h>
+#include "object.h"
+#include <stddef.h>  // size_t
 #include <stdbool.h>
 
 // Forward declaration to avoid circular include

@@ -5,8 +5,8 @@
 #define TINY_CLJ_VERSION "0.2"
 
 #include <stdbool.h>
-#include <subjective-c/object.h>
-#include <subjective-c/exception.h>
+#include "object.h"
+#include "exception.h"
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 

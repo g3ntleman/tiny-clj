@@ -1,7 +1,7 @@
 // Vector-spezifische Tests
 #include "tests_common.h"
-#include "../vector.h"
-#include "../types.h"
+#include "vector.h"
+#include "types.h"
 
 TEST_SHARED(test_vector_builtin_basic) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -1413,14 +1413,18 @@ TEST_SHARED(test_vector_set_nth_edge_cases) {
     CljVector *result2 = vector_set_nth(vec, 2, fixnum(30));
     TEST_ASSERT_NULL(result2);
     
-    // Test 3: NULL value should throw exception
+    // Test 3: NULL value is allowed (represents nil) and should succeed
     CLJException *exception_caught = NULL;
+    CljVector *result3 = NULL;
     TRY {
-        vector_set_nth(vec, 0, NULL);
+        result3 = vector_set_nth(vec, 0, NULL);
     } CATCH(ex) {
         exception_caught = ex;
     } END_TRY
-    TEST_ASSERT_NOT_NULL(exception_caught);
+    TEST_ASSERT_NULL(exception_caught);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_EQUAL_PTR(vec, result3);
+    TEST_ASSERT_NULL(vector_nth(result3, 0));
     
     AUTORELEASE(vec);
 }

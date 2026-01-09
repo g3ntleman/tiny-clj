@@ -5,9 +5,9 @@
  * This file is only compiled when *_ENABLED=0 feature flags are set.
  */
 
-#include <subjective-c/object.h>
-#include <subjective-c/value.h>
-#include <subjective-c/memory.h>
+#include "object.h"
+#include "value.h"
+#include "memory.h"
 
 #if defined(ERROR_MESSAGES_ENABLED) && !ERROR_MESSAGES_ENABLED
 // Stub implementations for error messages when disabled

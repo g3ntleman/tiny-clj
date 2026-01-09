@@ -1147,7 +1147,7 @@ R"CLOJURE(
            (let [wm (f (get registry a {}))]
              (if (or (nil? wm) (empty? wm))
                (dissoc registry a)
-               (assoc registry a wm)))))))
+               (assoc registry a wm))))))
 
 ^#^{:doc "Adds a watch function to an atom. Returns the atom (for threading).
 

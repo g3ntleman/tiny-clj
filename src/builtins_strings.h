@@ -8,7 +8,7 @@
 #ifndef TINY_CLJ_BUILTINS_STRINGS_H
 #define TINY_CLJ_BUILTINS_STRINGS_H
 
-#include <subjective-c/object.h>
+#include "object.h"
 #include "runtime.h"  // BuiltinFn
 
 struct CljSymbol;

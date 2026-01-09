@@ -20,18 +20,18 @@
 
 // Tiny-CLJ Core Headers
 #include "../object.h"
-#include "../exception.h"  // Must be included before memory.h for WITH_AUTORELEASE_POOL
-#include "../memory.h"
+#include "exception.h"  // Must be included before memory.h for WITH_AUTORELEASE_POOL
+#include "memory.h"
 #include "../memory_profiler.h"
-#include "../value.h"
+#include "value.h"
 #include "../builtins.h"
 #include "../symbol.h"
-#include <subjective-c/map.h>
+#include "map.h"
 #include "../list.h"
-#include "../vector.h"
+#include "vector.h"
 #include "../function.h"
 #include "../eval.h"
-#include "../byte_array.h"
+#include "byte_array.h"
 #include "../meta.h"
 #include "../runtime.h"
 #include "../parser.h"
@@ -39,11 +39,11 @@
 #include "../namespace.h"
 #include "../symbol_token.h"
 #include "../seq.h"
-#include "../strings.h"
+#include "strings.h"
 #include "../tiny_clj.h"
 
 // Test Registry - use subjective-c test infrastructure
-#include <subjective-c/tests/test_registry.h>
+#include "test_registry.h"
 
 // Compatibility aliases for tiny-clj tests
 #define test_registry_add subjective_c_test_registry_add

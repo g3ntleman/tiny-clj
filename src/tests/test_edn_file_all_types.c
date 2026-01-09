@@ -3,8 +3,8 @@
 #include "../to_string.h"
 
 #include <errno.h>
-#include <subjective-c/instant.h>
-#include <subjective-c/uuid.h>
+#include "instant.h"
+#include "uuid.h"
 
 static char *read_entire_file(const char *path, size_t *out_len)
 {

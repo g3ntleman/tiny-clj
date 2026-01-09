@@ -2,8 +2,8 @@
 #include "symbol.h"
 #include "namespace.h"
 #include "runtime.h"
-#include <subjective-c/map.h>
-#include <subjective-c/kv_macros.h>
+#include "map.h"
+#include "kv_macros.h"
 #include "reader.h"
 #include "eval.h"
 #include "list.h"

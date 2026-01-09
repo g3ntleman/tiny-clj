@@ -8,7 +8,7 @@
 #include "symbol.h"
 #include "namespace.h"
 #include "builtins.h"
-#include <subjective-c/vector.h>
+#include "vector.h"
 
 // Forward declaration - we need to access process_require_spec
 // Since it's static, we'll test through native_require instead

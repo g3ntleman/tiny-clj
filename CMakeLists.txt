@@ -84,7 +84,30 @@ endif()
 include_directories(${CMAKE_SOURCE_DIR} include src external)
 
 # Subjective-C subproject (static library + early tests)
-add_subdirectory(subjective-c)
+#
+# IMPORTANT:
+# - Build subjective-c in its own binary directory (not inside the subjective-c source dir)
+# - Keep all subjective-c artifacts grouped under the top-level build tree
+set(TINYCLJ_SUBJECTIVE_C_SOURCE_DIR "${CMAKE_SOURCE_DIR}/subjective-c")
+set(TINYCLJ_SUBJECTIVE_C_BINARY_DIR "${CMAKE_BINARY_DIR}/subjective-c-build")
+set(TINYCLJ_SUBJECTIVE_C_PUBLIC_INCLUDE_DIR "${TINYCLJ_SUBJECTIVE_C_SOURCE_DIR}/src")
+# Subjective-c public headers are under: subjective-c/src/subjective-c/*.h
+set(TINYCLJ_SUBJECTIVE_C_HEADERS_DIR "${TINYCLJ_SUBJECTIVE_C_PUBLIC_INCLUDE_DIR}/subjective-c")
+
+# Compatibility anchor for tiny-clj unit tests: src/tests/tests_common.h uses
+# relative includes like "../exception.h". Keep includes unchanged and provide
+# an include-dir where ".." resolves into the subjective-c header directory.
+set(TINYCLJ_SUBJECTIVE_C_TESTS_COMMON_ANCHOR_DIR "${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR}/include_anchor")
+
+add_subdirectory(subjective-c "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}")
+
+# Ensure Subjective-C artifacts appear in its own build directory.
+set_target_properties(subjective-c PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}/lib"
+)
+set_target_properties(subjective-c-tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}/bin"
+)
 
 # Set output directory for all executables to "build"
 if(NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY OR CMAKE_RUNTIME_OUTPUT_DIRECTORY STREQUAL "")
@@ -350,7 +373,9 @@ target_link_libraries(unit-tests PRIVATE subjective-c)
 target_include_directories(unit-tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/subjective-c/tests
-        ${CMAKE_SOURCE_DIR}/subjective-c
+        ${TINYCLJ_SUBJECTIVE_C_PUBLIC_INCLUDE_DIR}
+        ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR}
+        ${TINYCLJ_SUBJECTIVE_C_TESTS_COMMON_ANCHOR_DIR}
         ${CMAKE_SOURCE_DIR}
 )
 

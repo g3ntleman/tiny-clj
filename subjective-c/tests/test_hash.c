@@ -1,5 +1,5 @@
 #include "test_common.h"
-#include <subjective-c/callbacks.h>
+#include "callbacks.h"
 #include "strings.h"
 #include "value.h"
 

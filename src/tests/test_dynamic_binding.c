@@ -6,7 +6,7 @@
  */
 
 #include "tests_common.h"
-#include <subjective-c/vector.h>
+#include "vector.h"
 
 TEST(test_dynamic_binding_basic_value) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);

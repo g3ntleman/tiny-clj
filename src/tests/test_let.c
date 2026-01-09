@@ -6,13 +6,13 @@
 
 #include "tests_common.h"
 #include "../tiny_clj.h"
-#include "../memory.h"
+#include "memory.h"
 #include "../namespace.h"
 #include "../symbol.h"
 #include "../atom.h"
 #include "../list.h"
 #include "../to_string.h"  // for pr_str
-#include "../strings.h"    // for string_data
+#include "strings.h"    // for string_data
 #include "../function.h"   // for as_function, CljFunction
 #include <string.h>        // for strstr
 

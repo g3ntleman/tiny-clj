@@ -1,16 +1,16 @@
 #include "symbol.h"
-#include <subjective-c/object.h>
+#include "object.h"
 #include "runtime.h"
-#include <subjective-c/value.h>
-#include <subjective-c/exception.h>
+#include "value.h"
+#include "exception.h"
 #include "namespace.h"
-#include <subjective-c/types.h>  // For SINGLETON_RC
-#include <subjective-c/memory.h> // For ASSIGN
-#include <subjective-c/vector.h>  // For vector operations
-#include <subjective-c/hashmap.h> // For HashMap symbol table (O(1) lookup)
+#include "types.h"  // For SINGLETON_RC
+#include "memory.h" // For ASSIGN
+#include "vector.h"  // For vector operations
+#include "hashmap.h" // For HashMap symbol table (O(1) lookup)
 #include "symbol_token.h"  // For CljSymbolToken
-#include <subjective-c/common.h>  // For CLJ_ASSERT
-#include <subjective-c/strings.h>  // For string_data()
+#include "common.h"  // For CLJ_ASSERT
+#include "strings.h"  // For string_data()
 #include "eval.h"  // For SpecialFormEvalFn type
 #include "eval_special_forms.h"  // For eval_special_* functions
 #include <stdbool.h>

@@ -16,22 +16,22 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <stdarg.h>
-#include <subjective-c/object.h>
-#include <subjective-c/memory.h>
+#include "object.h"
+#include "memory.h"
 #include "runtime.h"
 #include "seq.h"
-#include <subjective-c/map.h>
+#include "map.h"
 #include "atom.h"
-#include <subjective-c/kv_macros.h>
+#include "kv_macros.h"
 #include "namespace.h"
-#include <subjective-c/exception.h>  // For ExceptionHandler definition
-#include <subjective-c/strings.h>
+#include "exception.h"  // For ExceptionHandler definition
+#include "strings.h"
 #include "function.h"
 #include "list.h"
 #include "symbol.h"
-#include <subjective-c/vector.h>
-#include <subjective-c/byte_array.h>
-#include <subjective-c/value.h>  // For string_empty_singleton
+#include "vector.h"
+#include "byte_array.h"
+#include "value.h"  // For string_empty_singleton
 
 // release_object_deep() function moved to memory.c
 

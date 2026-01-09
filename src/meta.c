@@ -9,16 +9,16 @@
 
 #include <stdlib.h>
 #include "meta.h"
-#include <subjective-c/object.h>
+#include "object.h"
 #include "runtime.h"
-#include <subjective-c/map.h>
-#include <subjective-c/memory.h>
-#include <subjective-c/kv_macros.h>
+#include "map.h"
+#include "memory.h"
+#include "kv_macros.h"
 #include "reader.h"
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
-#include <subjective-c/value.h>
-#include <subjective-c/common.h>  // For CLJ_ASSERT
+#include "value.h"
+#include "common.h"  // For CLJ_ASSERT
 #include "function.h" // For CljCFunc
 #include "list.h"
 // clj_equal is available via map.h -> equality.h

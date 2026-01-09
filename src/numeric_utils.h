@@ -1,8 +1,8 @@
 #ifndef NUMERIC_UTILS_H
 #define NUMERIC_UTILS_H
 
-#include <subjective-c/value.h>
-#include <subjective-c/object.h>
+#include "value.h"
+#include "object.h"
 #include <stddef.h>
 #include <stdint.h>
 

@@ -3,9 +3,9 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <subjective-c/object.h>
-#include <subjective-c/value.h>
-#include <subjective-c/map.h>
+#include "object.h"
+#include "value.h"
+#include "map.h"
 #include "list.h"
 #include "symbol.h"
 

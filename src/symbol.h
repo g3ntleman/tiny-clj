@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_SYMBOLS_H
 #define TINY_CLJ_SYMBOLS_H
 
-#include <subjective-c/object.h>
+#include "object.h"
 #include <stdbool.h>
 
 // Forward declaration for CljSymbol (needed for self-reference)

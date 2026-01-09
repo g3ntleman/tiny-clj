@@ -8,11 +8,11 @@
  * re-pattern, re-find, re-matches, re-seq, regex?
  */
 
-#include <subjective-c/regex.h>
+#include "regex.h"
 
-#include <subjective-c/common.h>
-#include <subjective-c/memory.h>
-#include <subjective-c/value.h>
+#include "common.h"
+#include "memory.h"
+#include "value.h"
 
 #include <external/tiny_regex.h>
 

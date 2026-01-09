@@ -1,12 +1,12 @@
-#include <subjective-c/callbacks.h>
-#include <subjective-c/value.h>
-#include <subjective-c/strings.h>
-#include <subjective-c/vector.h>
-#include <subjective-c/map.h>
-#include <subjective-c/byte_array.h>
-#include <subjective-c/hashmap.h>
-#include <subjective-c/kv_macros.h>
-#include <subjective-c/exception.h>
+#include "callbacks.h"
+#include "value.h"
+#include "strings.h"
+#include "vector.h"
+#include "map.h"
+#include "byte_array.h"
+#include "hashmap.h"
+#include "kv_macros.h"
+#include "exception.h"
 #include <string.h>
 #include <stdio.h>
 

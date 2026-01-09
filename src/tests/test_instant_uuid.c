@@ -3,8 +3,8 @@
 #include "../hash.h"
 #include "../to_string.h"
 
-#include <subjective-c/instant.h>
-#include <subjective-c/uuid.h>
+#include "instant.h"
+#include "uuid.h"
 
 TEST(test_now_returns_instant) {
     ID result = eval_string("(now)", g_test_eval_state);

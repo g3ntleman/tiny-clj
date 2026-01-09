@@ -1,7 +1,7 @@
 // List-spezifische Tests
 #include "tests_common.h"
 #include "../list.h"
-#include "../types.h"
+#include "types.h"
 #include "../parser.h"
 #include "../symbol.h"
 

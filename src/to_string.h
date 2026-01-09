@@ -1,8 +1,8 @@
 #ifndef TINY_CLJ_TO_STRING_H
 #define TINY_CLJ_TO_STRING_H
 
-#include <subjective-c/strings.h>
-#include <subjective-c/value.h>
+#include "strings.h"
+#include "value.h"
 #include "symbol.h"
 
 /**

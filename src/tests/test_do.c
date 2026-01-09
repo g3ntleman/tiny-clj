@@ -1,8 +1,8 @@
 #include "tests_common.h"
 #include "../tiny_clj.h"
-#include "../memory.h"
+#include "memory.h"
 #include "../symbol.h"
-#include "../value.h"
+#include "value.h"
 
 // Test empty do returns nil
 TEST_SHARED(test_do_empty) {

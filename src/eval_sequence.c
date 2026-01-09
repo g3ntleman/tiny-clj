@@ -1,12 +1,12 @@
 #include "eval_sequence.h"
 #include "eval.h"
 #include "builtins.h"
-#include <subjective-c/exception.h>
+#include "exception.h"
 #include "event_loop.h"
 #include "error_messages.h"
-#include <subjective-c/map.h>
+#include "map.h"
 #include "seq.h"
-#include <subjective-c/strings.h>
+#include "strings.h"
 
 ID eval_and_call_native_with_context(CljList *list,
                                      CljMap *env,

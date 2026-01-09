@@ -1,10 +1,10 @@
 #include "list.h"
-#include <subjective-c/memory.h>
-#include <subjective-c/value.h>
+#include "memory.h"
+#include "value.h"
 #include "symbol.h"
-#include <subjective-c/object.h>
-#include <subjective-c/exception.h>
-#include <subjective-c/types.h>  // For SINGLETON_RC
+#include "object.h"
+#include "exception.h"
+#include "types.h"  // For SINGLETON_RC
 #include <stdio.h>   // For snprintf
 #ifdef __GNUC__
 #include <execinfo.h> // For backtrace and backtrace_symbols

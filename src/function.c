@@ -7,11 +7,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "function.h"
-#include <subjective-c/value.h>  // For IS_IMMEDIATE macro
-#include <subjective-c/memory.h>
+#include "value.h"  // For IS_IMMEDIATE macro
+#include "memory.h"
 #include "runtime.h"
-#include <subjective-c/object.h>
-#include <subjective-c/vector.h>
+#include "object.h"
+#include "vector.h"
 #include "symbol.h"  // For SYM_AMP
 
 /**

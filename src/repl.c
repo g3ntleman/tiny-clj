@@ -1,23 +1,23 @@
 #include "platform.h"
-#include <subjective-c/common.h>
+#include "common.h"
 #include "tiny_clj.h"
 #include "repl.h"
 #include "parser.h"
 #include "eval.h"  // For eval_parsed_value
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
-#include <subjective-c/object.h>
-#include <subjective-c/exception.h>
+#include "object.h"
+#include "exception.h"
 #include "builtins.h"
 #include "memory_profiler.h"
 #include "line_editor.h"
-#include <subjective-c/strings.h>
+#include "strings.h"
 #include "to_string.h"
 #include "reader.h"
 #include "runtime.h"
-#include <subjective-c/vector.h>
-#include <subjective-c/memory.h>
-#include <subjective-c/value.h>
+#include "vector.h"
+#include "memory.h"
+#include "value.h"
 #include "event_loop.h"
 #include "file_utils.h"
 #include "meta.h"

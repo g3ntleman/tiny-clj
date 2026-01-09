@@ -1,9 +1,9 @@
 #ifndef TINY_CLJ_META_H
 #define TINY_CLJ_META_H
 
-#include <subjective-c/object.h>
-#include <subjective-c/value.h>
-#include <subjective-c/map.h>
+#include "object.h"
+#include "value.h"
+#include "map.h"
 
 // Meta registry for metadata (only when META_ENABLED is enabled)
 #if defined(META_ENABLED) && META_ENABLED

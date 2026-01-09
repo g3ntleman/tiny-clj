@@ -22,7 +22,7 @@
 #include "namespace.h"  // For CljNamespace
 #include "hashmap.h"  // For CljHashMap
 #include "seq.h"  // For CljLazySeq
-#include <subjective-c/thread_local.h>
+#include "thread_local.h"
 #include <string.h>
 #include <execinfo.h>
 #include <stdlib.h>

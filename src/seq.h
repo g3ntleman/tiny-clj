@@ -8,8 +8,8 @@
 #ifndef TINY_CLJ_SEQ_H
 #define TINY_CLJ_SEQ_H
 
-#include <subjective-c/common.h>  // For CLJ_ASSERT
-#include <subjective-c/object.h>
+#include "common.h"  // For CLJ_ASSERT
+#include "object.h"
 #include <stdbool.h>
 
 struct CljMap;  // Forward declaration to avoid including map.h here

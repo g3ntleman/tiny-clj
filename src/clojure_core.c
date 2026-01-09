@@ -1,15 +1,15 @@
 // clojure.core.c
 
-#include <subjective-c/exception.h>
+#include "exception.h"
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include "tiny_clj.h"
 #include "reader.h"
-#include <subjective-c/value.h>  // For IS_IMMEDIATE macro
+#include "value.h"  // For IS_IMMEDIATE macro
 #include "runtime.h" // For g_runtime
 #include "list.h"    // For LIST_FIRST
 #include "eval.h"  // For SYM_DEF, SYM_NS
-#include <subjective-c/map.h>     // For map_get
+#include "map.h"     // For map_get
 #include "parser.h"  // For eval_parsed
 #include "to_string.h" // For pr_str debug printing
 #include <stdbool.h>
@@ -148,6 +148,7 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
 #ifdef PROFILE_STARTUP
       clock_t parse_start = clock();
 #endif
+      size_t parse_offset_before = reader_offset(&reader);
       CljValue form = NULL;
       bool parse_ok = true;
       TRY {
@@ -159,6 +160,12 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
             fprintf(stderr, "[%s] ParseError at form #%d: %s - %s\n",
                     label, expr_count + 1, ex->type, ex->message);
           }
+        }
+        // IMPORTANT: Ensure forward progress on parse errors.
+        // Some parse errors (e.g., unexpected delimiter) leave the reader at the same offset,
+        // which would otherwise cause an infinite loop and repeated error spam.
+        if (!reader_is_eof(&reader) && reader_offset(&reader) == parse_offset_before) {
+          reader_advance(&reader);
         }
         parse_ok = false;
       } END_TRY

@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_HASH_H
 #define TINY_CLJ_HASH_H
 
-#include <subjective-c/object.h>
+#include "object.h"
 #include <stdint.h>
 
 // Complete hash implementation for all Clojure types
