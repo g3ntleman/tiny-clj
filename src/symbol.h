@@ -276,6 +276,7 @@ extern StaticSymbolData sym_keyword_data;
 extern StaticSymbolData sym_name_data;
 extern StaticSymbolData sym_symbol_p_data;
 extern StaticSymbolData sym_fn_p_data;
+extern StaticSymbolData sym_atom_p_data;
 extern StaticSymbolData sym_char_p_data;
 extern StaticSymbolData sym_list_p_data;
 extern StaticSymbolData sym_sleep_data;

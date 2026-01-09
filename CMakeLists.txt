@@ -323,6 +323,7 @@ add_executable(unit-tests
     src/tests/test_repl.c
     src/tests/test_file_io.c
     src/tests/test_atom.c
+    src/tests/test_atom_watch.c
     src/tests/test_timer.c
     src/tests/test_meta.c
     src/tests/test_hashmap_highlevel.c

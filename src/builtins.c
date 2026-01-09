@@ -126,6 +126,7 @@ ID native_keyword(ID *args, unsigned int argc);
 ID native_name(ID *args, unsigned int argc);
 ID native_symbol_p(ID *args, unsigned int argc);
 ID native_fn_p(ID *args, unsigned int argc);
+ID native_atom_p(ID *args, unsigned int argc);
 ID native_char_p(ID *args, unsigned int argc);
 ID native_list_p(ID *args, unsigned int argc);
 ID native_sleep(ID *args, unsigned int argc);
@@ -2980,6 +2981,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_name_data.sym, native_name},
     {&sym_symbol_p_data.sym, native_symbol_p},
     {&sym_fn_p_data.sym, native_fn_p},
+    {&sym_atom_p_data.sym, native_atom_p},
     {&sym_char_p_data.sym, native_char_p},
     {&sym_list_p_data.sym, native_list_p},
     {&sym_sleep_data.sym, native_sleep},
@@ -5620,6 +5622,12 @@ ID native_fn_p(ID *args, unsigned int argc)
         return clj_false;
     unsigned char tag = TAG(args[0]);
     return (tag == CLJ_FUNC || tag == CLJ_CLOSURE) ? clj_true : clj_false;
+}
+
+ID native_atom_p(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "atom?");
+    return (args[0] && TAG(args[0]) == CLJ_ATOM) ? clj_true : clj_false;
 }
 
 ID native_char_p(ID *args, unsigned int argc)

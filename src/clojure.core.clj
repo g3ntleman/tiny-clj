@@ -219,12 +219,6 @@ R"CLOJURE(
           (cons (first coll)
                 (interleave-repeat val (rest coll))))))
 
-^#^{:doc "Internal helper for (repeat n x): builds a finite list."}
-(defn repeat-n-list [n x]
-  (if (<= n 0)
-    (list)
-    (cons x (repeat-n-list (dec n) x))))
-
 ^#^{:doc "Returns a lazy (infinite!, or length n if supplied) sequence of xs."}
 (defn repeat [& args]
   (if (= (count args) 1)
@@ -234,7 +228,11 @@ R"CLOJURE(
     (if (= (count args) 2)
       (let [n (first args)
             x (second args)]
-        (vec (repeat-n-list n x)))
+        (let [build (fn build [n]
+                      (if (<= n 0)
+                        (list)
+                        (cons x (build (dec n)))))]
+          (vec (build n))))
       (throw "repeat requires 1 or 2 arguments"))))
 
 ^#^{:doc "Returns a lazy sequence of lists of n items each."}
@@ -1127,5 +1125,66 @@ R"CLOJURE(
         ; Symbols, keywords, and other atoms - quote them
         :else
           (list 'quote form)))))
+
+; ============================================================================
+; Atom Watchers
+; ============================================================================
+
+; Watcher registry: Atom -> Map of Key -> WatchFn
+(def watcher-registry (atom {}))
+
+^#^{:doc "Returns true if x is an Atom."}
+(defn atom? [x] :native)
+
+; Helper: Get watcher map for an atom (single lookup point)
+(defn get-watcher-map [a]
+  (get (deref watcher-registry) a))
+
+; Helper: Update watcher map for an atom (single update point)
+(defn update-watcher-map [a f]
+  (swap! watcher-registry
+         (fn [registry]
+           (let [wm (f (get registry a {}))]
+             (if (or (nil? wm) (empty? wm))
+               (dissoc registry a)
+               (assoc registry a wm)))))))
+
+^#^{:doc "Adds a watch function to an atom. Returns the atom (for threading).
+
+The watch function will be called with 4 arguments: key, atom, old-value, new-value."}
+(defn add-watch [a key watch-fn]
+  (if (not (atom? a))
+    (throw "add-watch requires an atom")
+    nil)
+  (if (not (fn? watch-fn))
+    (throw "add-watch requires a function as third argument")
+    nil)
+  (clojure.core/update-watcher-map a (fn [m] (assoc m key watch-fn)))
+  a)
+
+^#^{:doc "Removes a watch function from an atom. Returns the atom (for threading)."}
+(defn remove-watch [a key]
+  (if (not (atom? a))
+    (throw "remove-watch requires an atom")
+    nil)
+  (clojure.core/update-watcher-map a (fn [m] (dissoc m key)))
+  a)
+
+^#^{:doc "Notifies all watchers registered on atom a.
+
+This is called synchronously from atom operations (reset!/swap!)."}
+(defn notify-watchers [a old-value new-value]
+  (let [wm (clojure.core/get-watcher-map a)]
+    (if wm
+      (reduce-kv
+        (fn [acc k f]
+          (try
+            (f k a old-value new-value)
+            (catch Exception e
+              (println "Watcher error:" e)))
+          acc)
+        nil
+        wm)
+      nil)))
 
 )CLOJURE"

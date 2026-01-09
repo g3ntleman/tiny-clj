@@ -29,14 +29,14 @@ static void eval_finally_clause(CljList *finally_clause,
                                 EvalState *st,
                                 const EvalContext *ctx) {
     if (!finally_clause) return;
-    CljList *node = list_normalize_empty_to_null(as_list(LIST_REST(finally_clause)));
+    CljList *node = list_rest_normalized(finally_clause);
     while (node) {
         ID expr = LIST_FIRST(node);
         if (expr) {
             ID r = eval_body(expr, env, st, ctx);
             RELEASE(r);
         }
-        node = list_normalize_empty_to_null(as_list(LIST_REST(node)));
+        node = list_rest_normalized(node);
     }
 }
 
@@ -47,7 +47,7 @@ ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContex
     // `cond` expects pairs: test expr test expr ...
     // Validate at runtime (must be an even number of forms after `cond`, even if it would short-circuit)
     // and traverse the list once (avoid O(n^2) list_get_element walks).
-    CljList *node = list_normalize_empty_to_null(as_list(LIST_REST(list)));
+    CljList *node = list_rest_normalized(list);
     if (!node) return NULL;
 
     int forms = list_count(node);
@@ -60,9 +60,9 @@ ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContex
 
     while (node) {
         ID test = LIST_FIRST(node);
-        node = list_normalize_empty_to_null(as_list(LIST_REST(node)));
+        node = list_rest_normalized(node);
         ID expr = LIST_FIRST(node);
-        node = list_normalize_empty_to_null(as_list(LIST_REST(node)));
+        node = list_rest_normalized(node);
 
         // `test` and `expr` may legitimately be NULL (nil literal).
         // `eval_body` and `RELEASE` are nil-safe.
@@ -109,15 +109,15 @@ ID eval_special_when(CljList *list, CljMap *env, EvalState *st, const EvalContex
     RELEASE(cond_val);
     if (!truthy) return NULL;
 
-    CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(list)));
+    CljList *args = list_rest_normalized(list);
     if (!args) return NULL;
 
-    CljList *body_node = list_normalize_empty_to_null(as_list(LIST_REST(args)));
+    CljList *body_node = list_rest_normalized(args);
 
     ID result = NULL;
-    for (CljList *node = body_node; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+    for (CljList *node = body_node; node; node = list_rest_normalized(node)) {
         ID body_expr = LIST_FIRST(node);
-        CljList *next = list_normalize_empty_to_null(as_list(LIST_REST(node)));
+        CljList *next = list_rest_normalized(node);
 
         if (body_expr) {
             ASSIGN(result, eval_body(body_expr, env, st, ctx));
@@ -130,11 +130,11 @@ ID eval_special_when(CljList *list, CljMap *env, EvalState *st, const EvalContex
 ID eval_special_while(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_while: list must not be NULL");
 
-    CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(list)));
+    CljList *args = list_rest_normalized(list);
     if (!args) return NULL;
 
     ID cond_expr = LIST_FIRST(args);
-    CljList *body_node = list_normalize_empty_to_null(as_list(LIST_REST(args)));
+    CljList *body_node = list_rest_normalized(args);
 
     while (true) {
         bool should_exit = false;
@@ -149,9 +149,9 @@ ID eval_special_while(CljList *list, CljMap *env, EvalState *st, const EvalConte
                 RELEASE(cond_val);
 
                 ID result = NULL;
-                for (CljList *node = body_node; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+                for (CljList *node = body_node; node; node = list_rest_normalized(node)) {
                     ID body_expr = LIST_FIRST(node);
-                    CljList *next = list_normalize_empty_to_null(as_list(LIST_REST(node)));
+                    CljList *next = list_rest_normalized(node);
 
                     if (body_expr) {
                         ASSIGN(result, eval_body(body_expr, env, st, ctx));
@@ -178,8 +178,8 @@ ID eval_special_while(CljList *list, CljMap *env, EvalState *st, const EvalConte
 ID eval_special_do(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_do: list must not be NULL");
     ID result = NULL;
-    for (CljList *node = list_normalize_empty_to_null(as_list(LIST_REST(list))); node; 
-         node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+    for (CljList *node = list_rest_normalized(list); node; 
+         node = list_rest_normalized(node)) {
         ID expr = LIST_FIRST(node);
         if (expr) {
             ASSIGN(result, eval_body(expr, env, st, ctx));
@@ -191,11 +191,11 @@ ID eval_special_do(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 ID eval_special_and(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_and: list must not be NULL");
 
-    CljList *node = list_normalize_empty_to_null(as_list(LIST_REST(list)));
+    CljList *node = list_rest_normalized(list);
     if (!node) return clj_true;
 
     ID result = clj_true;
-    for (; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+    for (; node; node = list_rest_normalized(node)) {
         ID arg = LIST_FIRST(node);
         if (arg) {
             result = eval_body(arg, env, st, ctx);
@@ -210,11 +210,11 @@ ID eval_special_and(CljList *list, CljMap *env, EvalState *st, const EvalContext
 ID eval_special_or(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_or: list must not be NULL");
 
-    CljList *node = list_normalize_empty_to_null(as_list(LIST_REST(list)));
+    CljList *node = list_rest_normalized(list);
     if (!node) return NULL;
 
     ID result = NULL;
-    for (; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+    for (; node; node = list_rest_normalized(node)) {
         ID arg = LIST_FIRST(node);
         if (arg) {
             result = eval_body(arg, env, st, ctx);
@@ -238,11 +238,11 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
     CLJ_ASSERT(list != NULL && "eval_special_go: list must not be NULL");
     (void)ctx;  // Unused
     CljList *do_list = NULL;
-    CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(list)));
+    CljList *args = list_rest_normalized(list);
     if (args) {
         do_list = make_list((CljObject*)SYM_DO, NULL);
         CljList *tail = do_list;
-        for (CljList *node = args; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+        for (CljList *node = args; node; node = list_rest_normalized(node)) {
             ID expr_i = LIST_FIRST(node);
             CljList *new_node = make_list(expr_i, NULL);
             if (tail) {
@@ -311,7 +311,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
     int argc = list_count(list);
     if (argc < 2) return NULL;
 
-    CljList *args = list_normalize_empty_to_null(as_list(LIST_REST(list)));
+    CljList *args = list_rest_normalized(list);
     if (!args) return NULL;
 
     // Establish base env (match other wrappers: fall back to current namespace mappings).
@@ -322,7 +322,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
     int clause_start = argc;
     CljList *clause_node = NULL;
     int index = 1;
-    for (CljList *node = args; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node))), index++) {
+    for (CljList *node = args; node; node = list_rest_normalized(node), index++) {
         ID elem = LIST_FIRST(node);
         if (!elem || !list_type_matches(TAG(elem))) continue;
         CljList *clause = as_list(elem);
@@ -337,7 +337,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
 
     // Find optional finally clause.
     CljList *finally_clause = NULL;
-    for (CljList *node = clause_node; node; node = list_normalize_empty_to_null(as_list(LIST_REST(node)))) {
+    for (CljList *node = clause_node; node; node = list_rest_normalized(node)) {
         ID elem = LIST_FIRST(node);
         if (!elem || !list_type_matches(TAG(elem))) continue;
         CljList *clause = as_list(elem);
@@ -351,7 +351,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
     ID result = NULL;
     TRY {
         int i = 1;
-        for (CljList *node = args; node && i < clause_start; node = list_normalize_empty_to_null(as_list(LIST_REST(node))), i++) {
+        for (CljList *node = args; node && i < clause_start; node = list_rest_normalized(node), i++) {
             ID expr = LIST_FIRST(node);
             if (!expr) continue;
             ASSIGN(result, eval_body(expr, base_env, st, ctx));
