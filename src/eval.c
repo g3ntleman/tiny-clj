@@ -1121,9 +1121,8 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
 
     // Handle keywords as functions (for map lookup)
     if (is_keyword(op)) {
-        int total_count = list_count(list);
-        int argc = total_count - 1;
-        if (argc == 1) {
+        CljList *args = list_rest_normalized(list);
+        if (args && !list_rest_normalized(args)) {
             ID arg = eval_arg_with_context(list, 1, env, st, ctx);
             if (is_symbol(arg)) {
                 ID resolved = eval_symbol(as_symbol((CljObject*)arg), st);

@@ -13,11 +13,20 @@ ID eval_and_call_native_with_context(CljList *list,
                                      ID (*native_func)(ID*, unsigned int),
                                      unsigned int max_args,
                                      const EvalContext *ctx) {
-    int total_count = list_count(list);
-    unsigned int argc = total_count > 0 ? (unsigned int)(total_count - 1) : 0;
-    if (argc > max_args) {
-        return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-            "Wrong number of args (%u) passed to: %s", argc, native_func ? "sequence-op" : "unknown");
+    unsigned int argc = 0;
+    CljList *node = list_rest_normalized(list);
+    while (node) {
+        argc++;
+        if (argc > max_args) {
+            node = list_rest_normalized(node);
+            while (node) {
+                argc++;
+                node = list_rest_normalized(node);
+            }
+            return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                "Wrong number of args (%u) passed to: %s", argc, native_func ? "sequence-op" : "unknown");
+        }
+        node = list_rest_normalized(node);
     }
 
     ID args_stack[16];
@@ -39,10 +48,12 @@ ID eval_and_call_native_with_context(CljList *list,
 }
 
 ID eval_map_lookup(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx, ID map) {
-    int total_count = list_count(list);
-    int argc = total_count - 1;
-
-    if (argc != 1) {
+    CljList *args = list_rest_normalized(list);
+    if (!args || list_rest_normalized(args)) {
+        int argc = 0;
+        for (CljList *node = args; node; node = list_rest_normalized(node)) {
+            argc++;
+        }
         return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
             "Wrong number of args (%d) passed to: clojure.lang.PersistentArrayMap", argc);
     }

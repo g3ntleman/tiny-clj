@@ -68,6 +68,7 @@ extern void set_unity_test_file_info(const SubjectiveCTestEntry *entry);
 extern void run_test_with_exception_handling(const SubjectiveCTestEntry *entry);
 extern void run_tests_by_registry_impl(void);
 extern void run_specific_test_impl(const char *test_name_or_pattern);
+extern void tiny_clj_tests_set_quiet_output(bool quiet);
 #else
 // Simple setup/teardown for subjective-c tests
 void setUp(void) {}
@@ -175,7 +176,7 @@ static void print_usage(const char *program_name) {
     printf("  -h, --help              Show this help message\n");
     printf("  --list                  List all available tests\n");
     printf("  --test <test_name>      Run a specific test (supports wildcards)\n");
-    printf("  --quiet                 Reduce memory leak reporting for cleaner output\n");
+    printf("  --quiet                 Suppress PASS lines and stdout from passing tests. Only show FAIL lines and final summary.\n");
 #ifdef TINY_CLJ_TEST_RUNNER
     printf("  --memory-summary        Show memory profiler summary after all tests\n");
 #endif
@@ -186,27 +187,10 @@ static void print_usage(const char *program_name) {
 }
 
 int main(int argc, char **argv) {
-    // Print build information at startup
-    print_build_info();
-    
-    // Initialize autorelease pool before running tests
-    autorelease_pool_init();
-    
-    // Register signal handlers to print summary on crash
-    signal(SIGSEGV, signal_handler);
-    signal(SIGABRT, signal_handler);
-    atexit(print_summary_on_exit);
-    
-#if MEMORY_PROFILING_ENABLED
-    enable_memory_profiling(true);
-    set_memory_leak_reporting_enabled(false);
-    set_memory_verbose_mode(false);
-#endif
-
-    // Parse command-line args (supports multiple options in any order).
+    // Parse command-line args early to check for --quiet before printing build info
+    bool quiet = false;
     bool show_help = false;
     bool list_tests = false;
-    bool quiet = false;
     bool show_memory_summary = false;
     const char **test_patterns = NULL;
     int test_pattern_count = 0;
@@ -271,6 +255,25 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // Print build information at startup (skip in quiet mode)
+    if (!quiet) {
+        print_build_info();
+    }
+    
+    // Initialize autorelease pool before running tests
+    autorelease_pool_init();
+    
+    // Register signal handlers to print summary on crash
+    signal(SIGSEGV, signal_handler);
+    signal(SIGABRT, signal_handler);
+    atexit(print_summary_on_exit);
+    
+#if MEMORY_PROFILING_ENABLED
+    enable_memory_profiling(true);
+    set_memory_leak_reporting_enabled(false);
+    set_memory_verbose_mode(false);
+#endif
+
 #if MEMORY_PROFILING_ENABLED
     if (quiet && !show_memory_summary) {
         set_memory_leak_reporting_enabled(false);
@@ -281,6 +284,13 @@ int main(int argc, char **argv) {
     if (show_memory_summary) {
         set_memory_verbose_mode(false);
         set_memory_leak_reporting_enabled(true);
+    }
+#endif
+
+#ifdef TINY_CLJ_TEST_RUNNER
+    // Set quiet output mode if --quiet was specified
+    if (quiet) {
+        tiny_clj_tests_set_quiet_output(true);
     }
 #endif
 

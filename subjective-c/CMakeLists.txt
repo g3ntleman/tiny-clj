@@ -132,6 +132,7 @@ target_include_directories(subjective-c-tests
 target_compile_definitions(subjective-c-tests PRIVATE
     DEBUG
     UNITY_TESTS
+    UNITY_USE_COMMAND_LINE_ARGS
     MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE}
     META_ENABLED=${TINYCLJ_META_ENABLED_VALUE}
     UNITY_INCLUDE_EXEC_TIME
