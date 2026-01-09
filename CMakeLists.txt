@@ -368,7 +368,10 @@ add_executable(unit-tests
     src/platform_macos.c
     src/line_editor.c
 )
-target_compile_definitions(unit-tests PRIVATE TINY_CLJ_TEST_RUNNER)
+target_compile_definitions(unit-tests PRIVATE
+    TINY_CLJ_TEST_RUNNER
+    UNITY_USE_COMMAND_LINE_ARGS
+)
 target_link_libraries(unit-tests PRIVATE subjective-c)
 target_include_directories(unit-tests
     PRIVATE

@@ -58,7 +58,7 @@
 ;; High-level API
 ;; =============================================================================
 
-^#^{:doc "Converts a raw timestamp {:days d :ms m} to a full date-time map with :year :month :day :hour :minute :second :millis. Original :days and :ms are preserved."}
+^#^{:doc "Converts an Instant to a full date-time map with :year :month :day :hour :minute :second :millis. Also includes :days (days since Unix epoch) and :ms (milliseconds within the day). Throws if input is not an Instant."}
 (defn date-time [t]
   (if (inst? t)
     (let [days (instant-days t)

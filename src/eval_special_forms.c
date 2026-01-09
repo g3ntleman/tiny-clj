@@ -308,9 +308,6 @@ ID eval_special_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalCon
 
 ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_try: list must not be NULL");
-    int argc = list_count(list);
-    if (argc < 2) return NULL;
-
     CljList *args = list_rest_normalized(list);
     if (!args) return NULL;
 
@@ -319,17 +316,14 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
 
     // Split body expressions from catch/finally clauses.
     // Avoid list_nth in a loop (linked lists would make this O(n^2)).
-    int clause_start = argc;
     CljList *clause_node = NULL;
-    int index = 1;
-    for (CljList *node = args; node; node = list_rest_normalized(node), index++) {
+    for (CljList *node = args; node; node = list_rest_normalized(node)) {
         ID elem = LIST_FIRST(node);
         if (!elem || !list_type_matches(TAG(elem))) continue;
         CljList *clause = as_list(elem);
         ID first = clause ? LIST_FIRST(clause) : NULL;
         if (first == (ID)SYM_CATCH || first == (ID)SYM_FINALLY ||
             sym_name_eq(first, "catch") || sym_name_eq(first, "finally")) {
-            clause_start = index;
             clause_node = node;
             break;
         }
@@ -350,8 +344,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
 
     ID result = NULL;
     TRY {
-        int i = 1;
-        for (CljList *node = args; node && i < clause_start; node = list_rest_normalized(node), i++) {
+        for (CljList *node = args; node && node != clause_node; node = list_rest_normalized(node)) {
             ID expr = LIST_FIRST(node);
             if (!expr) continue;
             ASSIGN(result, eval_body(expr, base_env, st, ctx));

@@ -12,6 +12,10 @@
 #include "unity/src/unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
 #include "build_info.h"
 #include <time.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <string.h>
 
 // Forward declaration for clojure_core_set_quiet
 extern void clojure_core_set_quiet(bool quiet);
@@ -28,6 +32,9 @@ static bool g_special_symbols_initialized = false;
 
 // Batch mode: skip heavy setUp between tests in same batch (for TEST_SHARED)
 static bool g_batch_mode = false;
+
+// Quiet output mode: suppress PASS lines and stdout from passing tests
+static bool g_quiet_output = false;
 
 // Global test EvalState (available in all tests via tests_common.h)
 EvalState *g_test_eval_state = NULL;
@@ -167,14 +174,63 @@ static void set_unity_test_file_info(const SubjectiveCTestEntry *entry) {
 
 // Helper function to run a single test with exception handling
 static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) {
+    int stdout_fd = -1;
+    int saved_stdout = -1;
+    char tmpfile_template[] = "/tmp/tiny_clj_test_stdout_XXXXXX";
+    char *tmpfile_path = NULL;
+    bool test_failed = false;
+
+    // In quiet mode, capture stdout to a temporary file
+    if (g_quiet_output) {
+        // Create temporary file
+        stdout_fd = mkstemp(tmpfile_template);
+        if (stdout_fd < 0) {
+            // If we can't create temp file, just run test normally
+            fprintf(stderr, "Warning: Could not create temporary file for stdout capture, running test normally\n");
+        } else {
+            tmpfile_path = strdup(tmpfile_template);
+            // Save original stdout
+            saved_stdout = dup(STDOUT_FILENO);
+            if (saved_stdout < 0) {
+                close(stdout_fd);
+                unlink(tmpfile_path);
+                free(tmpfile_path);
+                fprintf(stderr, "Warning: Could not save stdout, running test normally\n");
+            } else {
+                // Redirect stdout to temp file
+                if (dup2(stdout_fd, STDOUT_FILENO) < 0) {
+                    close(stdout_fd);
+                    close(saved_stdout);
+                    unlink(tmpfile_path);
+                    free(tmpfile_path);
+                    fprintf(stderr, "Warning: Could not redirect stdout, running test normally\n");
+                    stdout_fd = -1;
+                    saved_stdout = -1;
+                    tmpfile_path = NULL;
+                } else {
+                    close(stdout_fd);  // Close the original fd, we use STDOUT_FILENO now
+                }
+            }
+        }
+    }
+
+    // Save initial failure count to detect if this test failed
+    UNITY_COUNTER_TYPE initial_failures = Unity.TestFailures;
+    
     TRY {
         // Call Unity directly with the line number from the test registry.
         // This avoids using RUN_TEST(__LINE__) from this file, so that the
         // reported line matches the TEST() macro in the test source file.
         const char *cname = entry->qualified_name ? entry->qualified_name : entry->name;
         UnityDefaultTestRun(entry->fn, cname, (UNITY_LINE_TYPE)entry->line);
+        
+        // Check if test failed by comparing failure count
+        // UnityConcludeTest() is called inside UnityDefaultTestRun() and increments
+        // Unity.TestFailures if the test failed
+        test_failed = (Unity.TestFailures > initial_failures);
     } CATCH(ex) {
         // Unhandled exception caught - mark test as failed
+        test_failed = true;
         if (ex) {
             fprintf(stderr, "Unhandled exception in %s: %s - %s\n", 
                     entry->qualified_name, ex->type, ex->message);
@@ -194,6 +250,32 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
 
         UnityConcludeTest();
     } END_TRY
+
+    // Restore stdout if we captured it
+    if (saved_stdout >= 0) {
+        fflush(stdout);  // Flush any remaining output to temp file
+        dup2(saved_stdout, STDOUT_FILENO);
+        close(saved_stdout);
+    }
+
+    // In quiet mode, replay captured output only if test failed
+    if (g_quiet_output && tmpfile_path != NULL) {
+        if (test_failed) {
+            // Test failed - replay captured stdout
+            FILE *captured = fopen(tmpfile_path, "r");
+            if (captured) {
+                char buffer[4096];
+                size_t bytes_read;
+                while ((bytes_read = fread(buffer, 1, sizeof(buffer), captured)) > 0) {
+                    fwrite(buffer, 1, bytes_read, stdout);
+                }
+                fclose(captured);
+            }
+        }
+        // Clean up temp file
+        unlink(tmpfile_path);
+        free(tmpfile_path);
+    }
 }
 
 // Run shared tests in batches (one setUp/tearDown per batch)
@@ -330,6 +412,11 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
             Unity.TestFailures++;
         }
     }
+}
+
+// Set quiet output mode (suppress PASS lines and stdout from passing tests)
+void tiny_clj_tests_set_quiet_output(bool quiet) {
+    g_quiet_output = quiet;
 }
 
 // Tiny-CLJ specific cleanup function (called from test_runner.c)
