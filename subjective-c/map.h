@@ -13,6 +13,13 @@ typedef struct {
     CljObject *data[];
 } CljMap;
 
+// Type predicate - O(1) check if object is a map
+static inline bool is_map(ID obj) {
+    if (!obj) return false;
+    CljType tag = TAG(obj);
+    return tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT;
+}
+
 // Type-safe casting
 static inline CljMap* as_map(ID obj) {
     // NULL is valid (nil)

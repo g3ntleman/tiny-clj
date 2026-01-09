@@ -25,6 +25,11 @@ struct CljSymbol {
 // Implemented in symbol.c to avoid duplicating code in every translation unit.
 bool is_earmuffed_dynamic_symbol(const CljSymbol *sym);
 
+// Type predicate - O(1) check if object is a symbol
+static inline bool is_symbol(ID obj) {
+    return obj && TAG(obj) == CLJ_SYMBOL;
+}
+
 // Type-safe casting
 static inline CljSymbol* as_symbol(ID obj) {
     return (CljSymbol*)assert_type((CljObject*)obj, CLJ_SYMBOL);
@@ -32,7 +37,7 @@ static inline CljSymbol* as_symbol(ID obj) {
 
 // Check if an object is a keyword (symbol starting with ':')
 static inline bool is_keyword(ID obj) {
-    if (!obj || TAG(obj) != CLJ_SYMBOL) return false;
+    if (!is_symbol(obj)) return false;
     CljSymbol *sym = as_symbol(obj);
     return sym->cname && sym->cname[0] == ':';
 }
