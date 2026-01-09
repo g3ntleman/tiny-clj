@@ -26,6 +26,7 @@
 - **CljObject-centered API:** Most subsystems accept and return CljObject instances; prefer using helper constructors for types (strings, vectors, maps) instead of manually populating structs.
 - **Limited macro expansion args:** At compile-time macroexpansion the project caps passed args at 20 — code that expects variable-arity macros should account for this limitation.
 - **Single build directory:** All builds use a `build/` directory configured via CMake. Don't scatter artifacts into source tree.
+- **Commit messages:** Prefer ~20 lines (subject + short context + key bullets + test/verification line).
 
 **Integration Points & External Dependencies**
 - **ESP32 toolchain:** ESP-specific targets assume cross-compiler and flashing/debugging tools (OpenOCD/GDB). See tiny-clj-esp32 docs.
