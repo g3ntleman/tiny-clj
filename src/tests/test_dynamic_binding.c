@@ -21,7 +21,7 @@ TEST(test_dynamic_binding_allows_nil_value) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     CljObject *result = eval_string("(binding [*x* nil] *x*)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NIL(result);
 }
 
 TEST(test_dynamic_binding_nested_restores_outer_value) {

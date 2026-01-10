@@ -11,6 +11,15 @@
 // Unity Test Framework
 #include "unity/src/unity.h"
 
+// Convenience alias: Clojure-style "nil" in C tests.
+// Unity uses "NULL", many tiny-clj tests talk about "nil".
+#ifndef TEST_ASSERT_NIL
+#define TEST_ASSERT_NIL TEST_ASSERT_NULL
+#endif
+#ifndef TEST_ASSERT_NIL_MESSAGE
+#define TEST_ASSERT_NIL_MESSAGE TEST_ASSERT_NULL_MESSAGE
+#endif
+
 // Standard C Library Headers
 #include <stdio.h>
 #include <stdlib.h>

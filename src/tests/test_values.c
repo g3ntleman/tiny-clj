@@ -31,7 +31,7 @@ TEST(test_cljvalue_immediate_helpers) {
         TEST_ASSERT_TRUE(bool_val == clj_true);
         
         CljValue nil_val = SPECIAL_NIL;
-        TEST_ASSERT_NULL(nil_val);  // nil is NULL in our system
+        TEST_ASSERT_NIL(nil_val);  // nil is NULL in our system
     });
 }
 
@@ -183,7 +183,7 @@ TEST(test_cljvalue_immediates_special) {
     WITH_AUTORELEASE_POOL({
         // Test special immediates
         CljValue nil_val = SPECIAL_NIL;
-        TEST_ASSERT_NULL(nil_val);  // nil is NULL in our system
+        TEST_ASSERT_NIL(nil_val);  // nil is NULL in our system
         
         CljValue true_val = clj_true;
         TEST_ASSERT_TRUE(is_bool(true_val));
@@ -244,7 +244,7 @@ TEST(test_cljvalue_parser_immediates) {
         
         // Test parsing nil
         CljObject *nil_obj = eval_string("nil", g_test_eval_state);
-        TEST_ASSERT_NULL(nil_obj);  // nil is NULL in our system
+        TEST_ASSERT_NIL(nil_obj);  // nil is NULL in our system
         
     });
 }
@@ -268,7 +268,7 @@ TEST(test_cljvalue_memory_efficiency) {
         // TEST_ASSERT_TRUE(IS_IMMEDIATE(bool_val)); // Disabled due to implementation issues
         
         CljValue nil_val = SPECIAL_NIL;
-        TEST_ASSERT_NULL(nil_val);  // nil is NULL in our system
+        TEST_ASSERT_NIL(nil_val);  // nil is NULL in our system
         // TEST_ASSERT_TRUE(IS_IMMEDIATE(nil_val)); // Disabled due to implementation issues
     });
 }
@@ -310,7 +310,7 @@ TEST(test_cljvalue_immediates_high_level) {
         TEST_ASSERT_TRUE(bool_val == clj_true);
         
         CljValue nil_val = SPECIAL_NIL;
-        TEST_ASSERT_NULL(nil_val);  // nil is NULL in our system
+        TEST_ASSERT_NIL(nil_val);  // nil is NULL in our system
     });
 }
 
@@ -418,7 +418,7 @@ TEST(test_truthiness_comprehensive) {
         // ===== EDGE CASES =====
         // Test with eval_string for high-level truthiness checks
         CljObject *nil_result = eval_string("nil", g_test_eval_state);
-        TEST_ASSERT_NULL(nil_result);
+        TEST_ASSERT_NIL(nil_result);
         TEST_ASSERT_FALSE(clj_is_truthy(nil_result));
         
         CljObject *false_result = eval_string("false", g_test_eval_state);

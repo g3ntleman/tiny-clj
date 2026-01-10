@@ -142,7 +142,7 @@ TEST(test_threading_some_first_stops_at_nil) {
     
     // Stops at nil: (some-> {:a 1} :b inc) => nil
     ID result = eval_string("(some-> {:a 1} :b inc)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // nil
+    TEST_ASSERT_NIL(result);  // nil
 }
 
 TEST(test_threading_some_first_continues_when_not_nil) {
@@ -160,7 +160,7 @@ TEST(test_threading_some_first_nil_expr) {
     
     // Nil expr: (some-> nil inc) => nil
     ID result = eval_string("(some-> nil inc)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // nil
+    TEST_ASSERT_NIL(result);  // nil
 }
 
 // ============================================================================
@@ -181,7 +181,7 @@ TEST(test_threading_some_last_nil_expr) {
     
     // Nil expr: (some->> nil (map inc)) => nil
     ID result = eval_string("(some->> nil (map inc))", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // nil
+    TEST_ASSERT_NIL(result);  // nil
 }
 
 // ============================================================================
@@ -256,7 +256,7 @@ TEST(test_threading_source_thread_first) {
     // Use qualified name: clojure.repl/source
     ID result = eval_string("(clojure.repl/source '->)", g_test_eval_state);
     // source returns nil, so result should be NULL
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NIL(result);
 }
 
 TEST(test_threading_source_thread_last) {
@@ -268,7 +268,7 @@ TEST(test_threading_source_thread_last) {
     // Verify that ->> macro is defined and has source
     // Use qualified name: clojure.repl/source
     ID result = eval_string("(clojure.repl/source '->>)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NIL(result);
 }
 
 TEST(test_threading_source_as) {
@@ -280,7 +280,7 @@ TEST(test_threading_source_as) {
     // Verify that as-> macro is defined and has source
     // Use qualified name: clojure.repl/source
     ID result = eval_string("(clojure.repl/source 'as->)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NIL(result);
 }
 
 TEST(test_threading_source_some_first) {
@@ -292,7 +292,7 @@ TEST(test_threading_source_some_first) {
     // Verify that some-> macro is defined and has source
     // Use qualified name: clojure.repl/source
     ID result = eval_string("(clojure.repl/source 'some->)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NIL(result);
 }
 
 TEST(test_threading_source_some_last) {
@@ -304,7 +304,7 @@ TEST(test_threading_source_some_last) {
     // Verify that some->> macro is defined and has source
     // Use qualified name: clojure.repl/source
     ID result = eval_string("(clojure.repl/source 'some->>)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NIL(result);
 }
 
 TEST(test_threading_source_cond_first) {
@@ -316,7 +316,7 @@ TEST(test_threading_source_cond_first) {
     // Verify that cond-> macro is defined and has source
     // Use qualified name: clojure.repl/source
     ID result = eval_string("(clojure.repl/source 'cond->)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NIL(result);
 }
 
 TEST(test_threading_source_cond_last) {
@@ -328,7 +328,7 @@ TEST(test_threading_source_cond_last) {
     // Verify that cond->> macro is defined and has source
     // Use qualified name: clojure.repl/source
     ID result = eval_string("(clojure.repl/source 'cond->>)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NIL(result);
 }
 
 // ============================================================================

@@ -198,7 +198,7 @@ TEST(test_go_nil_value_in_channel) {
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
     CljValue val_before = map_get_sentinel(chan, kw_value, NULL);
-    TEST_ASSERT_NULL(val_before);  // Should be nil initially
+    TEST_ASSERT_NIL(val_before);  // Should be nil initially
     
     // Run next task - should write nil to channel
     CljObject *ran_result = NULL;
@@ -219,7 +219,7 @@ TEST(test_go_nil_value_in_channel) {
     CljValue val_after = map_get_sentinel(chan, kw_value, NULL);
     // Note: map_get returns NULL for nil values, but map_contains confirms the key exists
     TEST_ASSERT_TRUE(map_contains(chan, kw_value));  // Key should exist
-    TEST_ASSERT_NULL(val_after);  // Value should be nil (NULL)
+    TEST_ASSERT_NIL(val_after);  // Value should be nil (NULL)
     
     CljValue closed_val = map_get_sentinel(chan, kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_val);
