@@ -72,7 +72,11 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_st
     func->base.type = CLJ_CLOSURE;  // Interpreted functions use CLJ_CLOSURE type
     func->base.rc = 1;
     func->body = RETAIN(body);
-    func->env_stack = RETAIN(env_stack);
+    // IMPORTANT: env_stack may be stack-backed for lazy closure capture.
+    // Never RETAIN stack pointers (retain() would dereference invalid object headers).
+    func->env_stack = (env_stack && is_pointer_on_stack(env_stack))
+        ? env_stack
+        : (CljList*)RETAIN(env_stack);
     func->name = cname ? strdup(cname) : NULL;
     func->ns = ns ? (struct CljNamespace*)RETAIN(ns) : NULL;
     func->variadic_index = variadic_index;

@@ -256,13 +256,21 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     frame_init(call_frame, NULL);
     frame_set_bindings_init(call_frame, NULL, effective_params, current_args, current_argc);
 
-    // Legacy: Keep env_stack for closure environment (func->env_stack)
-    // This is only used for closure bindings, not function parameters
-    // NOTE: func->env_stack is borrowed (not retained) - func lives during the entire call
-    CljList *call_env_stack = func->env_stack;
+    // Stack-backed env_stack head for current parameters.
 
     // TCO Loop - iterate on recur
     ID result = NULL;
+    // Stack-backed map that is layout-compatible with CljMap, but with a fixed data[] array.
+    // Avoid embedding CljMap directly (it has a flexible array member).
+    typedef struct {
+        CljObject base;
+        int count;
+        int capacity;
+        CljObject *data[CALLFRAME_MAX_PARAMS * 2];
+    } StackEnvMap;
+    StackEnvMap stack_env_map;
+    CljList stack_env_list;
+    CljList *call_env_stack = &stack_env_list;
     do {
         // Reset recur state for each iteration
         recur_arg_count = -1;  // -1 = no tail call
@@ -276,6 +284,23 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         }
         used_recur_slots = 0;
         }
+
+        // Refresh stack-backed env_stack for the current frame (important for recur loops).
+        stack_env_map.base.type = CLJ_MAP;
+        stack_env_map.base.flags = 0;
+        stack_env_map.base.rc = SINGLETON_RC;  // Never retain/release stack env maps
+        stack_env_map.count = current_argc;
+        stack_env_map.capacity = current_argc;
+        for (int i = 0; i < current_argc; i++) {
+            stack_env_map.data[2*i] = (CljObject*)effective_params[i];
+            stack_env_map.data[2*i + 1] = (CljObject*)frame_decode_value(call_frame->values[i]);
+        }
+
+        stack_env_list.base.type = CLJ_LIST;
+        stack_env_list.base.flags = 0;
+        stack_env_list.base.rc = SINGLETON_RC;  // Never retain/release stack env lists
+        stack_env_list.first = (CljObject*)&stack_env_map;
+        stack_env_list.rest = (CljObject*)func->env_stack;  // Tail may be heap, borrowed
 
         // Evaluate function body with context (stack-only, no allocations)
         EvalContext eval_ctx = {
@@ -321,6 +346,16 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         break;
     } while (true);
 
+    // If the returned value is a closure capturing a stack-backed env_stack,
+    // force promotion before leaving this call frame.
+    if (is_closure(result)) {
+        CljFunction *rf = as_function(result);
+        if (rf && rf->env_stack && is_pointer_on_stack(rf->env_stack)) {
+            RETAIN(result);
+            RELEASE(result);
+        }
+    }
+
     // current_args[i] is stored in call_env, and call_env holds a reference to it.
     // If we release current_args[i] here, the object might be freed, but call_env
     // still holds a pointer to it. When call_env is released later, RELEASE will
@@ -337,7 +372,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     // Cleanup call frame (stack-allocated, but may contain retained values)
     frame_release(call_frame);
     
-    // NOTE: call_env_stack is borrowed from func->env_stack, no release needed
+    // NOTE: call_env_stack is stack-backed and must not be released.
 
     return result;
 }
@@ -525,33 +560,8 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
     return NOT_FOUND;
 }
 
-// Convert a CallFrame chain into a heap-based env_stack for closures
-static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack) {
-    if (!frame) {
-        return RETAIN(parent_stack);
-    }
-
-    CljList *parent_with_frames = frame_chain_to_env_stack(frame->parent, parent_stack);
-
-    int initial_capacity = frame->param_count > 0 ? frame->param_count : 4;
-    CljMap *frame_map = make_map(initial_capacity);
-
-    if (frame->params) {
-    for (int i = 0; i < frame->param_count; i++) {
-            ID key = frame->params[i];
-        if (!key) continue;
-
-            ID value = frame_decode_value(frame->values[i]);
-        CljMap *new_map = map_assoc(frame_map, key, value);
-        ASSIGN(frame_map, new_map);
-        }
-    }
-
-    CljList *new_stack = make_list(frame_map, parent_with_frames);
-    RELEASE(frame_map);
-    RELEASE(parent_with_frames);
-    return new_stack;
-}
+// NOTE: CallFrame→env_stack materialization was previously eager.
+// The closure capture path now uses lazy stack-backed env_stack + promotion.
 
 // Helper: Add namespace mappings to environment
 
@@ -1842,19 +1852,14 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         }
     }
 
-    // CRITICAL: Use env_stack from context if available (for closures)
-    // This ensures that nested functions can access outer function parameters
-    // OPTIMIZATION: Only create env_stack if we have a frame (lazy evaluation)
-    // Most functions don't need env_stack, so we avoid the expensive frame_chain_to_env_stack call
+    // Capture env_stack from context if available.
+    //
+    // IMPORTANT: ctx->env_stack may be stack-backed for lazy capture.
+    // Never RETAIN stack env_stack pointers here. make_function will RETAIN
+    // heap env_stacks, and will leave stack env_stacks as-is for lazy promotion.
     CljList *fn_env_stack = NULL;
-    if (ctx && ctx->frame) {
-        // Only create env_stack if we have a frame (indicates closure might be needed)
-        // NOTE: This is a conservative approach - we create env_stack even if not strictly needed
-        // A more aggressive optimization would analyze the body to detect outer scope references
-        fn_env_stack = frame_chain_to_env_stack(ctx->frame, ctx->env_stack);
-    } else if (ctx && ctx->env_stack) {
-        // No frame, but we have env_stack (from outer closure)
-        fn_env_stack = RETAIN(ctx->env_stack);
+    if (ctx && ctx->env_stack) {
+        fn_env_stack = ctx->env_stack;
     } else {
         // Fallback: Create env_stack from env if provided, otherwise use namespace mappings
         CljMap *env_source = eval_env_or_ns_mappings(env, st);
@@ -1866,6 +1871,13 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
 
     // If this is a named function, bind it to its own name in closure for recursion
     if (fn_name) {
+        // Named recursion requires a stable env_stack (can't point to stack frames that will unwind).
+        // Force promotion before prepending the self-binding map.
+        if (fn && fn->env_stack && is_pointer_on_stack(fn->env_stack)) {
+            RETAIN(fn);
+            RELEASE(fn);
+        }
+
         CljMap *self_binding = map_assoc(map_empty(), fn_name, fn);
         RELEASE(fn);  // Balance map_assoc's RETAIN
         
@@ -2365,6 +2377,31 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     }
 
     int binding_index = 0;
+    // Stack-backed env_stack for let locals (updated incrementally).
+    // Stack-backed map that is layout-compatible with CljMap, but with a fixed data[] array.
+    typedef struct {
+        CljObject base;
+        int count;
+        int capacity;
+        CljObject *data[CALLFRAME_MAX_PARAMS * 2];
+    } StackEnvMap;
+    StackEnvMap let_stack_map;
+    CljList let_stack_list;
+    bool let_stack_active = false;
+    if (has_frame) {
+        let_stack_map.base.type = CLJ_MAP;
+        let_stack_map.base.flags = 0;
+        let_stack_map.base.rc = SINGLETON_RC;
+        let_stack_map.count = 0;
+        let_stack_map.capacity = pair_count;
+
+        let_stack_list.base.type = CLJ_LIST;
+        let_stack_list.base.flags = 0;
+        let_stack_list.base.rc = SINGLETON_RC;
+        let_stack_list.first = (CljObject*)&let_stack_map;
+        let_stack_list.rest = (CljObject*)parent_stack;
+    }
+
     for (int i = 0; i < binding_count; i += 2) {
         CljValue sym_val = (CljValue)vector_nth(bindings, i);
         CljValue init_val = (CljValue)vector_nth(bindings, i + 1);
@@ -2398,15 +2435,53 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
             // Make newly created bindings visible to subsequent initializers
             let_ctx.frame = let_frame;
+            // Also expose bindings via a stack-backed env_stack (so closures can capture locals lazily).
+            // Update incrementally (avoid O(n^2) rebuilding).
+            let_stack_map.data[2*binding_index] = (CljObject*)binding_params[binding_index];
+            let_stack_map.data[2*binding_index + 1] = (CljObject*)binding_values[binding_index];
+            let_stack_map.count = binding_index + 1;
+            let_ctx.env_stack = &let_stack_list;
+            let_stack_active = true;
 
+            // Let recursion support:
+            // If the bound value is a closure, make the binding visible to the closure body
+            // by prepending a self-binding frame (only if it's not already present).
+            //
+            // This supports patterns like:
+            //   (let [step (fn [n] (if ... (step ...)))] (step 5))
+            //
+            // IMPORTANT: Never overwrite an existing captured env_stack (that breaks valid closures).
+            // We only *prepend* a binding frame.
             ID stored_value = binding_values[binding_index];
             if (is_closure(stored_value)) {
-                CljList *frame_env_stack = frame_chain_to_env_stack(let_frame, parent_stack);
-                CljFunction *func = as_function(stored_value);
-                if (func) {
-                    ASSIGN(func->env_stack, frame_env_stack);
+                CljFunction *f = as_function(stored_value);
+                if (f) {
+                    // Avoid creating heap->stack hybrid env_stack chains.
+                    if (f->env_stack && is_pointer_on_stack(f->env_stack)) {
+                        RETAIN((ID)f);
+                        RELEASE((ID)f);
+                    }
+
+                    bool already_bound = false;
+                    for (CljList *s = list_like_as_list_or_null((ID)f->env_stack);
+                         s;
+                         s = list_like_as_list_or_null(LIST_REST(s))) {
+                        ID env_obj = LIST_FIRST(s);
+                        if (is_map(env_obj)) {
+                            ID found = map_get((CljMap*)env_obj, sym_val);
+                            if (found != NOT_FOUND) {
+                                already_bound = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!already_bound) {
+                        CljMap *self_bind = map_assoc(map_empty(), sym_val, stored_value);
+                        f->env_stack = make_list(self_bind, f->env_stack);
+                        RELEASE(self_bind);
+                    }
                 }
-                RELEASE(frame_env_stack);
             }
         }
 
@@ -2419,9 +2494,13 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     if (has_frame) {
         // Keep frame for direct symbol resolution; avoid materializing a heap env_stack for the let body.
-        // Closures created inside let still get a captured env_stack via frame_chain_to_env_stack at bind time.
+        // Closures created inside let capture via stack-backed env_stack + promotion.
         let_ctx.frame = let_frame;
-        let_ctx.env_stack = parent_stack;
+        // If we built a stack-backed env_stack for the bindings, keep using it.
+        // Otherwise fall back to parent_stack.
+        if (!let_stack_active) {
+            let_ctx.env_stack = parent_stack;
+        }
     }
 
     ID result = NULL;
@@ -2438,6 +2517,15 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
             RETAIN(result);
         } else {
             result = eval_body(body_expr, body_env, st, &let_ctx);
+        }
+    }
+
+    // If let returns a closure capturing stack-backed locals, force promotion before leaving.
+    if (is_closure(result)) {
+        CljFunction *rf = as_function(result);
+        if (rf && rf->env_stack && is_pointer_on_stack(rf->env_stack)) {
+            RETAIN(result);
+            RELEASE(result);
         }
     }
 
