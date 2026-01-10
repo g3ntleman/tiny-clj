@@ -27,6 +27,9 @@ ITERATIONS=${ITERATIONS:-1000}
 FIB_N=${FIB_N:-20}
 # Number of measurement runs per system (median is reported)
 RUNS=${RUNS:-5}
+# Cooldown pause (seconds) between measurement runs to reduce thermal throttling noise.
+# Defaults to 0 (disabled).
+COOLDOWN_SECONDS=${COOLDOWN_SECONDS:-0}
 
 # Create results directory
 mkdir -p "$RESULTS_DIR"
@@ -39,7 +42,7 @@ median_value() {
     local n=${#values[@]}
     if [ "$n" -eq 0 ]; then
         echo ""
-        return 1
+        return 0
     fi
     local sorted
     sorted=$(printf '%s\n' "${values[@]}" | sort -n)
@@ -59,7 +62,7 @@ min_value() {
     local values=("$@")
     if [ "${#values[@]}" -eq 0 ]; then
         echo ""
-        return 1
+        return 0
     fi
     printf '%s\n' "${values[@]}" | sort -n | head -1
 }
@@ -68,7 +71,7 @@ max_value() {
     local values=("$@")
     if [ "${#values[@]}" -eq 0 ]; then
         echo ""
-        return 1
+        return 0
     fi
     printf '%s\n' "${values[@]}" | sort -n | tail -1
 }
