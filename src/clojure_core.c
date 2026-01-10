@@ -129,6 +129,16 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
   // - TINYCLJ_DEBUG_CORE_STOP_AFTER=N returns after completing form N (useful to avoid crashes).
   const int debug_form = getenv_int("TINYCLJ_DEBUG_CORE_FORM", 0);
   const int stop_after_form = getenv_int("TINYCLJ_DEBUG_CORE_STOP_AFTER", 0);
+  // Autorelease diagnostics (compile-time gated):
+  // Build with -DTINYCLJ_AUTORELEASE_DIAGNOSTICS=1 to enable.
+#if defined(DEBUG) && defined(TINYCLJ_AUTORELEASE_DIAGNOSTICS) && TINYCLJ_AUTORELEASE_DIAGNOSTICS
+  // - TINYCLJ_DEBUG_AUTORELEASE_THRESHOLD=N prints a line when a single top-level form
+  //   causes the autorelease pool peak to exceed N.
+  const int ar_threshold = getenv_int("TINYCLJ_DEBUG_AUTORELEASE_THRESHOLD", 0);
+#else
+  const int ar_threshold = 0;
+  (void)ar_threshold;
+#endif
   
   // Wrap entire parsing loop in TRY/CATCH to catch any unhandled ParseErrors
   TRY {
@@ -144,6 +154,12 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
       // NOTE: We intentionally use AUTORELEASE_POOL_BEGIN/END (not WITH_AUTORELEASE_POOL)
       // so loop control flow stays obvious and we don't accidentally "continue" a do/while(0).
       AUTORELEASE_POOL_BEGIN();
+#if defined(DEBUG) && defined(TINYCLJ_AUTORELEASE_DIAGNOSTICS) && TINYCLJ_AUTORELEASE_DIAGNOSTICS
+      if (ar_threshold > 0) {
+        // Track peak strictly within this top-level form scope.
+        autorelease_pool_peak_reset();
+      }
+#endif
       
 #ifdef PROFILE_STARTUP
       clock_t parse_start = clock();
@@ -263,6 +279,15 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     // value_by_parsing_expr returns AUTORELEASE object
     
     AUTORELEASE_POOL_END();
+#if defined(DEBUG) && defined(TINYCLJ_AUTORELEASE_DIAGNOSTICS) && TINYCLJ_AUTORELEASE_DIAGNOSTICS
+    if (ar_threshold > 0) {
+      uint32_t peak = autorelease_pool_peak_count();
+      if ((int)peak > ar_threshold) {
+        fprintf(stderr, "[%s] Autorelease peak in core form #%d: %u (threshold=%d)\n",
+                label, expr_count + 1, peak, ar_threshold);
+      }
+    }
+#endif
     expr_count++;
 
     if (stop_after_form > 0 && expr_count >= stop_after_form) {

@@ -662,6 +662,9 @@ void init_special_symbols() {
     if (is_special_symbol(SYM_RECUR)) {
         ((CljSpecialSymbol*)SYM_RECUR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_recur;
     }
+    if (is_special_symbol(SYM_THROW)) {
+        ((CljSpecialSymbol*)SYM_THROW)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_throw;
+    }
     if (is_special_symbol(SYM_GO)) {
         ((CljSpecialSymbol*)SYM_GO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_go;
     }

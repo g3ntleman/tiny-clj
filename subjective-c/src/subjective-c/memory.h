@@ -119,7 +119,8 @@ bool is_autoreleased(CljObject *obj);
 
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
-        if (_id && !IS_IMMEDIATE(_id)) { \
+        /* Skip immediates, NULL, and singletons (SINGLETON_RC) */ \
+        if (_id && !IS_IMMEDIATE(_id) && !is_singleton((CljObject*)_id)) { \
             autorelease((CljObject*)_id); \
         } \
         _id; \
@@ -160,7 +161,8 @@ bool is_autoreleased(CljObject *obj);
 
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
-        if (_id && !IS_IMMEDIATE(_id)) { \
+        /* Skip immediates, NULL, and singletons (SINGLETON_RC) */ \
+        if (_id && !IS_IMMEDIATE(_id) && !is_singleton((CljObject*)_id)) { \
             autorelease((CljObject*)_id); \
         } \
         _id; \

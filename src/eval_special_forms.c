@@ -12,6 +12,7 @@
 #include "meta.h"
 #include "ast.h"
 #include "strings.h"
+#include "to_string.h"
 
 #include <string.h>
 
@@ -232,6 +233,38 @@ ID eval_special_quote(CljList *list, CljMap *env, EvalState *st, const EvalConte
     ID quoted_expr = list_get_element(list, 1);
     if (!quoted_expr) return NULL;
     return RETAIN(quoted_expr);
+}
+
+ID eval_special_throw(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_throw: list must not be NULL");
+
+    // Shape: (throw expr)
+    ID expr = list_get_element(list, 1);
+    if (!expr || list_get_element(list, 2) != NULL) {
+        throw_exception(EXCEPTION_ARITY, "throw requires 1 argument", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    // Evaluate the thrown expression in the current environment.
+    ID thrown = eval_body(expr, eval_env_or_ns_mappings(env, st), st, ctx);
+
+    // Rethrow exception objects directly.
+    if (thrown && TAG(thrown) == CLJ_EXCEPTION) {
+        throw_exception_object((CLJException*)thrown);
+        return NULL;
+    }
+
+    // Otherwise throw a RuntimeException with a readable message.
+    const char *msg = "nil";
+    if (thrown) {
+        msg = "throw";
+        CljString *s = pr_str(thrown);
+        if (s) {
+            msg = string_data(s);
+        }
+    }
+    throw_exception(EXCEPTION_RUNTIME, msg, __FILE__, __LINE__, 0);
+    return NULL;
 }
 
 ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
