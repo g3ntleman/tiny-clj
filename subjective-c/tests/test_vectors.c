@@ -93,7 +93,7 @@ TEST(test_vector_nil_as_value_conj) {
     
     // Verify nil is still there
     CljValue nil_result = vector_nth(vec, 0);
-    TEST_ASSERT_NULL(nil_result);
+    TEST_ASSERT_NIL(nil_result);
     
     // Verify non-nil value
     CljValue non_nil_result = vector_nth(vec, 1);

@@ -419,21 +419,21 @@ TEST(test_meta_symbol_has_metadata) {
 TEST(test_meta_string_returns_nil) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljObject *meta_result = eval_string("(meta \"hello\")", g_test_eval_state);
-    TEST_ASSERT_NULL_MESSAGE(meta_result, "(meta \"hello\") should return nil - strings don't support metadata");
+    TEST_ASSERT_NIL_MESSAGE(meta_result, "(meta \"hello\") should return nil - strings don't support metadata");
 }
 
 // Numbers cannot have metadata in Clojure (not IMeta)
 TEST(test_meta_number_returns_nil) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljObject *meta_result = eval_string("(meta 42)", g_test_eval_state);
-    TEST_ASSERT_NULL_MESSAGE(meta_result, "(meta 42) should return nil - numbers don't support metadata");
+    TEST_ASSERT_NIL_MESSAGE(meta_result, "(meta 42) should return nil - numbers don't support metadata");
 }
 
 // Keywords cannot have metadata in Clojure (not IMeta)
 TEST(test_meta_keyword_returns_nil) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljObject *meta_result = eval_string("(meta :foo)", g_test_eval_state);
-    TEST_ASSERT_NULL_MESSAGE(meta_result, "(meta :foo) should return nil - keywords don't support metadata");
+    TEST_ASSERT_NIL_MESSAGE(meta_result, "(meta :foo) should return nil - keywords don't support metadata");
 }
 
 // Collections CAN have metadata in Clojure

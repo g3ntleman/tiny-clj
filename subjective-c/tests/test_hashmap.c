@@ -518,7 +518,7 @@ TEST(test_hashmap_nil_key_and_value_together) {
     // Verify nil key with nil value
     ID nil_result = hashmap_get(map, NULL);
     TEST_ASSERT_TRUE(nil_result != NOT_FOUND);
-    TEST_ASSERT_NULL(nil_result);
+    TEST_ASSERT_NIL(nil_result);
     
     // Verify non-nil key
     ID other_result = hashmap_get(map, non_nil_key);

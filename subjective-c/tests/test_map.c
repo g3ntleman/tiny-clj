@@ -739,7 +739,7 @@ TEST(test_map_nil_key_and_value_together) {
     // Verify nil key with nil value
     CljValue nil_result = map_get(map, NULL);
     TEST_ASSERT_TRUE(nil_result != NOT_FOUND);
-    TEST_ASSERT_NULL(nil_result);
+    TEST_ASSERT_NIL(nil_result);
     
     // Verify non-nil key
     CljValue other_result = map_get(map, non_nil_key);

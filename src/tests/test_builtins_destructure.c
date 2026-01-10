@@ -86,7 +86,7 @@ TEST(test_builtins_some) {
     
     // Test: (some even? [1 3 5]) => nil (no even numbers)
     CljObject *result2 = eval_string("(some even? [1 3 5])", g_test_eval_state);
-    TEST_ASSERT_NULL(result2);  // nil
+    TEST_ASSERT_NIL(result2);  // nil
     
     // Test: (some #(> % 5) [1 2 3 4 5 6]) => true (6 > 5)
     CljObject *result3 = eval_string("(some #(> % 5) [1 2 3 4 5 6])", g_test_eval_state);
@@ -127,7 +127,7 @@ TEST(test_builtins_some_nil_elements) {
     
     // Test: (some identity [nil nil]) => nil (all nil, identity returns nil)
     CljObject *result5 = eval_string("(some identity [nil nil])", g_test_eval_state);
-    TEST_ASSERT_NULL(result5);
+    TEST_ASSERT_NIL(result5);
     
     // Test: (some #(not (nil? %)) [nil nil 1]) => true (1 is not nil)
     CljObject *result6 = eval_string("(some #(not (nil? %)) [nil nil 1])", g_test_eval_state);
@@ -144,7 +144,7 @@ TEST(test_builtins_partition_nil_elements) {
     
     // Test: (partition 2 [nil 1 nil 2]) - first element of first partition should be nil
     CljObject *elem1 = eval_string("(let [p (partition 2 [nil 1 nil 2])] (first (first p)))", g_test_eval_state);
-    TEST_ASSERT_NULL(elem1);  // nil
+    TEST_ASSERT_NIL(elem1);  // nil
     
     // Second element of first partition should be 1
     CljObject *elem2 = eval_string("(let [p (partition 2 [nil 1 nil 2])] (second (first p)))", g_test_eval_state);
@@ -159,7 +159,7 @@ TEST(test_builtins_partition_nil_elements) {
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(result2_elem1));
     
     CljObject *result2_elem2 = eval_string("(let [p (partition 2 [1 nil])] (second (first p)))", g_test_eval_state);
-    TEST_ASSERT_NULL(result2_elem2);  // nil
+    TEST_ASSERT_NIL(result2_elem2);  // nil
 }
 
 // ============================================================================
@@ -304,7 +304,7 @@ TEST(test_vector_nth_nil_element) {
     
     // Check that nth element at index 1 is NULL (nil)
     ID elem1 = vector_nth(v, 1);
-    TEST_ASSERT_NULL(elem1);  // nil element should be NULL
+    TEST_ASSERT_NIL(elem1);  // nil element should be NULL
 }
 
 // ============================================================================
@@ -320,7 +320,7 @@ TEST(test_native_first_nil_element) {
     
     // Test: (first [nil]) should return NULL
     CljObject *result = eval_string("(first [nil])", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // Should be NULL (nil)!
+    TEST_ASSERT_NIL(result);  // Should be NULL (nil)!
 }
 
 TEST(test_native_first_direct_call) {
@@ -335,7 +335,7 @@ TEST(test_native_first_direct_call) {
     ID result = native_first(args, 1);
     
     // Should return NULL for nil element
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NIL(result);
 }
 
 TEST(test_eval_string_nil_handling) {
@@ -343,7 +343,7 @@ TEST(test_eval_string_nil_handling) {
     
     // Test what eval_string returns for nil
     CljObject *result = eval_string("nil", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // eval_string should return NULL for nil
+    TEST_ASSERT_NIL(result);  // eval_string should return NULL for nil
 }
 
 TEST(test_eval_function_call_first_nil) {
@@ -362,7 +362,7 @@ TEST(test_eval_function_call_first_nil) {
     ID result = eval_function_call(first_fn, args, 1, NULL, g_test_eval_state);
     
     // Should return NULL for nil element
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NIL(result);
 }
 
 TEST(test_eval_list_first_nil) {
@@ -370,7 +370,7 @@ TEST(test_eval_list_first_nil) {
     
     // Test: (first [nil]) should return NULL
     CljObject *result = eval_string("(first [nil])", g_test_eval_state);
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NIL(result);
     
     // Test: (nil? (first [nil])) should return true
     CljObject *result2 = eval_string("(nil? (first [nil]))", g_test_eval_state);
@@ -410,7 +410,7 @@ TEST(test_native_some_simulation) {
             found_nil = true;
             // For nil element (index 1), elem should be NULL
             if (iteration == 2) {
-                TEST_ASSERT_NULL(elem);  // elem should be NULL for nil
+                TEST_ASSERT_NIL(elem);  // elem should be NULL for nil
                 TEST_ASSERT_TRUE(result == clj_true);  // nil? should return true
             }
             break;

@@ -1330,7 +1330,7 @@ TEST(test_find_ns_returns_nil_for_nonexistent) {
 
     // Test find-ns with non-existent namespace
     CljObject *result = eval_string("(find-ns 'does.not.exist)", g_test_eval_state);
-    TEST_ASSERT_NULL(result); // Should return nil (NULL)
+    TEST_ASSERT_NIL(result); // Should return nil (NULL)
 }
 
 // Test: Verify find-ns with string argument
@@ -1357,7 +1357,7 @@ TEST(test_find_ns_with_nil) {
 
     // Test find-ns with nil
     CljObject *result = eval_string("(find-ns nil)", g_test_eval_state);
-    TEST_ASSERT_NULL(result); // Should return nil (NULL)
+    TEST_ASSERT_NIL(result); // Should return nil (NULL)
 }
 
 // ============================================================================

@@ -865,7 +865,7 @@ TEST(test_get_nil_key_from_map_literal) {
         
         // Verify the key is stored as NULL (not SYM_NIL)
         ID stored_key = KV_KEY(map->data, 0);
-        TEST_ASSERT_NULL_MESSAGE(stored_key, "nil key should be stored as NULL, not SYM_NIL");
+        TEST_ASSERT_NIL_MESSAGE(stored_key, "nil key should be stored as NULL, not SYM_NIL");
         
         // Now test get: (get {nil "nil-value"} nil) should return "nil-value"
         CljObject *result = eval_string("(get {nil \"nil-value\"} nil)", g_test_eval_state);
@@ -913,7 +913,7 @@ TEST(test_map_get_not_found_sentinel_edge_cases) {
         
         // Test 2: Key exists with nil value -> should return NULL, not NOT_FOUND
         ID result2 = map_get(map, key2);
-        TEST_ASSERT_NULL_MESSAGE(result2, "key2 should return NULL (nil value), not NOT_FOUND");
+        TEST_ASSERT_NIL_MESSAGE(result2, "key2 should return NULL (nil value), not NOT_FOUND");
         TEST_ASSERT_TRUE_MESSAGE(result2 != NOT_FOUND, "key2 should not return NOT_FOUND (key exists)");
         
         // Test 3: Key exists with non-nil value -> should return value, not NOT_FOUND
@@ -1088,7 +1088,7 @@ TEST(test_map_for_each_with_null_keys_and_values) {
 
 #define ASSERT_NIL_RESULT(expr) do { \
     CljObject *r = eval_string(expr, g_test_eval_state); \
-    TEST_ASSERT_NULL_MESSAGE(r, expr " should be nil"); \
+    TEST_ASSERT_NIL_MESSAGE(r, expr " should be nil"); \
 } while(0)
 
 // ============================================================================

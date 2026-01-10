@@ -127,7 +127,7 @@ TEST(test_go_exception_closes_channel_without_value) {
     // When no value is set (error case), :value key exists but value is NULL
     // make_result_channel sets :value to NULL, so map_get returns NULL
     // After error, we don't update :value, so it remains NULL
-    TEST_ASSERT_NULL(val);
+    TEST_ASSERT_NIL(val);
 
     // Cleanup
     RELEASE(chan);
@@ -352,7 +352,7 @@ TEST(test_direct_channel_creation_and_mutation) {
     CljValue val = map_get_sentinel(chan, kw_value, NULL);
     CljValue closed = map_get_sentinel(chan, kw_closed, NULL);
     
-    TEST_ASSERT_NULL(val);  // Should be NULL initially
+    TEST_ASSERT_NIL(val);  // Should be NULL initially
     TEST_ASSERT_NOT_NULL((CljObject*)closed);
     TEST_ASSERT_TRUE(is_special(closed));
     TEST_ASSERT_TRUE(as_special(closed) == SPECIAL_FALSE);  // Should be false initially

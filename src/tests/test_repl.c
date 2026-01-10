@@ -106,7 +106,7 @@ TEST(test_repl_doc_extracts_metadata) {
 #else
     // With metadata compiled out, meta should return nil
     CljObject *meta_meta = eval_string("(meta meta)", g_test_eval_state);
-    TEST_ASSERT_NULL_MESSAGE(meta_meta, "meta should return nil when META_ENABLED=0");
+    TEST_ASSERT_NIL_MESSAGE(meta_meta, "meta should return nil when META_ENABLED=0");
 #endif
     
     // Now test that doc can be called on meta and doesn't throw an error
@@ -134,7 +134,7 @@ TEST(test_repl_doc_with_function_with_metadata) {
 #if defined(META_ENABLED) && META_ENABLED
     TEST_ASSERT_NOT_NULL_MESSAGE(fn_meta, "function should have metadata");
 #else
-    TEST_ASSERT_NULL_MESSAGE(fn_meta, "function metadata should be nil when META_ENABLED=0");
+    TEST_ASSERT_NIL_MESSAGE(fn_meta, "function metadata should be nil when META_ENABLED=0");
 #endif
     
     // Call doc on the function

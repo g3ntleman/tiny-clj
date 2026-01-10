@@ -78,7 +78,7 @@ TEST(test_variadic_fn_empty_rest) {
     
     // ((fn [a & rest] rest) 1) should return nil (no rest args)
     CljObject *result = eval_string("((fn [a & rest] rest) 1)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // nil
+    TEST_ASSERT_NIL(result);  // nil
 }
 
 TEST(test_variadic_fn_many_args) {
