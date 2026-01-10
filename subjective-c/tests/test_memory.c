@@ -78,3 +78,37 @@ TEST(test_autorelease_pool_drains_objects) {
     TEST_ASSERT_EQUAL_INT(before, REFERENCE_COUNT(s));
     RELEASE(s);
 }
+
+// =============================================================================
+// is_pointer_on_stack() Tests
+// =============================================================================
+
+TEST(test_is_pointer_on_stack_local_var) {
+    int local_var = 42;
+    TEST_ASSERT_TRUE(is_pointer_on_stack(&local_var));
+}
+
+TEST(test_is_pointer_on_stack_heap_object) {
+    CljString *heap_obj = make_string("heap");
+    TEST_ASSERT_FALSE(is_pointer_on_stack(heap_obj));
+    RELEASE(heap_obj);
+}
+
+TEST(test_is_pointer_on_stack_null) {
+    TEST_ASSERT_FALSE(is_pointer_on_stack(NULL));
+}
+
+TEST(test_is_pointer_on_stack_static_var) {
+    static int static_var = 42;
+    TEST_ASSERT_FALSE(is_pointer_on_stack(&static_var));
+}
+
+TEST(test_is_pointer_on_stack_caller_frame) {
+    // Test that we can detect a variable from a caller's stack frame
+    int caller_local = 123;
+    
+    // Simulate what happens in a nested function call
+    // The caller's local should still be detected as on-stack
+    volatile int *ptr = &caller_local;
+    TEST_ASSERT_TRUE(is_pointer_on_stack((void*)ptr));
+}

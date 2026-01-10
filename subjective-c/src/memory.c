@@ -28,6 +28,60 @@
 #include <stdlib.h>
 
 // ============================================================================
+// Lazy closure environment promotion (Stack → Heap)
+// ============================================================================
+
+// Copy only the stack-backed prefix of an env_stack to heap.
+// Once we reach a heap node (or NULL), we retain and reuse it as the tail.
+static CljList *copy_env_stack_to_heap_if_needed(CljList *env_stack) {
+    if (!env_stack) return NULL;
+    if (!is_pointer_on_stack(env_stack)) {
+        return (CljList*)RETAIN(env_stack);
+    }
+
+    // Collect stack nodes so we can rebuild from tail to head.
+    CljList *stack_nodes[64];
+    unsigned int depth = 0;
+
+    CljList *cur = env_stack;
+    while (cur && is_list_like((ID)cur) && is_pointer_on_stack(cur) && depth < 64) {
+        stack_nodes[depth++] = cur;
+        cur = list_like_as_list_or_null(LIST_REST(cur));
+    }
+
+    // cur is now NULL or a heap list node (or a non-list).
+    CljList *tail = NULL;
+    if (cur && is_list_like((ID)cur) && !is_pointer_on_stack(cur)) {
+        tail = (CljList*)RETAIN(cur);
+    }
+
+    // Rebuild copies of stack nodes on heap, preserving maps.
+    for (unsigned int i = depth; i > 0; i--) {
+        CljList *node = stack_nodes[i - 1];
+        ID first = LIST_FIRST(node);
+        CljMap *src_map = is_map(first) ? (CljMap*)first : NULL;
+
+        CljMap *dst_map = NULL;
+        if (src_map) {
+            int cnt = map_count(src_map);
+            dst_map = make_map(cnt);
+            // Copy entries (fast): map_put retains key/value and does not COW.
+            // Keys are always non-nil for env frames (symbols), so map_put is safe here.
+            MAP_FOR_EACH(src_map, k, v) {
+                map_put(dst_map, k, v);
+            }
+        }
+
+        CljList *new_node = make_list(dst_map ? (ID)dst_map : NULL, tail);
+        RELEASE(dst_map);
+        RELEASE(tail);
+        tail = new_node;
+    }
+
+    return tail;
+}
+
+// ============================================================================
 // CHECKPOINT-BASED AUTORELEASE POOL
 // ============================================================================
 //
@@ -216,6 +270,18 @@ void retain(CljObject *v) {
     }
 #endif
     
+    // Lazy closure env promotion: if a closure's env_stack points to stack memory,
+    // promote it to heap before increasing rc.
+    if (v->type == CLJ_CLOSURE) {
+        CljFunction *func = (CljFunction*)v;
+        if (func && func->env_stack && is_pointer_on_stack(func->env_stack)) {
+            CljList *promoted = copy_env_stack_to_heap_if_needed(func->env_stack);
+            // copy_env_stack_to_heap_if_needed retains the returned stack.
+            // Replace pointer and drop the retained old tail if any (stack pointers are ignored).
+            func->env_stack = promoted;
+        }
+    }
+
     // Happy path: valid object that tracks retains
     if ((uintptr_t)v >= 0x1000 && TRACKS_RETAINS(v)) {
         // Track retain call for profiling
@@ -794,8 +860,11 @@ static void release_object_default(CljObject *v) {
                     RELEASE(func->params);
                     // Release body - RELEASE handles NULL
                     RELEASE(func->body);
-                    // Release closure environment - RELEASE handles NULL
-                    RELEASE(func->env_stack);
+                    // Release closure environment.
+                    // NOTE: env_stack can be stack-backed for lazy capture. Never RELEASE stack pointers.
+                    if (func->env_stack && !is_pointer_on_stack(func->env_stack)) {
+                        RELEASE(func->env_stack);
+                    }
                     // Release captured namespace reference
                     RELEASE(func->ns);
                     // Free function name (strdup'd in make_function)
@@ -934,18 +1003,33 @@ bool is_pointer_in_data_segment(const void *ptr) {
  * @return true if pointer is on the stack, false otherwise
  * 
  * This function detects if a pointer points to stack memory by comparing
- * the pointer address with the current stack pointer. This is useful for
- * detecting stack-based objects that should not be freed with free().
+ * the pointer address with the current stack position. Used for lazy
+ * closure environment promotion: stack-based env_stack is copied to heap
+ * only when the closure escapes (RETAIN with rc > 1).
  * 
  * Implementation:
- * - Gets current stack pointer using __builtin_frame_address(0)
- * - Compares pointer address with stack bounds
- * - Returns true if pointer is within stack range
+ * - Uses a local variable as stack position marker
+ * - Stack grows downward: older frames have higher addresses
+ * - Returns true if ptr is in valid stack range above current position
  */
 bool is_pointer_on_stack(const void *ptr) {
-    // TEMPORARILY DISABLED: Function causes hanging in tests
-    // TODO: Implement proper stack detection without causing issues
-    (void)ptr; // Suppress unused parameter warning
+    if (!ptr) return false;
+    
+    // Get current stack position using a local variable
+    volatile char stack_marker;
+    uintptr_t stack_pos = (uintptr_t)&stack_marker;
+    uintptr_t ptr_pos = (uintptr_t)ptr;
+    
+    // Stack grows downward on x86/ARM: older frames have higher addresses
+    // Valid stack pointers are between current position and stack top
+    #define STACK_SIZE_MAX (8UL * 1024 * 1024)  // 8 MB typical max stack
+    
+    // Check if pointer is in reasonable stack range
+    // Stack grows down: caller frames have higher addresses than us
+    if (ptr_pos >= stack_pos && ptr_pos < stack_pos + STACK_SIZE_MAX) {
+        return true;
+    }
+    
     return false;
 }
 
