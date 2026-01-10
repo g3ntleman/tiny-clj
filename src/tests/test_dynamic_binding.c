@@ -153,3 +153,19 @@ TEST(test_dynamic_binding_unwinds_on_exception) {
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
 }
+
+TEST(test_get_thread_bindings_snapshot_contains_dynamic_binding) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    CljObject *snapshot = eval_string("(binding [*x* 42] (get-thread-bindings))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(snapshot);
+    TEST_ASSERT_TRUE(is_map(snapshot));
+
+    CljSymbol *x = intern_symbol_global("*x*");
+    TEST_ASSERT_NOT_NULL(x);
+
+    ID val = map_get((CljMap*)snapshot, (ID)x);
+    TEST_ASSERT_NOT_NULL(val);
+    TEST_ASSERT_TRUE(is_fixnum(val));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
+}

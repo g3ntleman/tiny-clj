@@ -2818,6 +2818,36 @@ ID native_retain_count(ID *args, unsigned int argc)
     return fixnum(rc);
 }
 
+// clojure.core/get-thread-bindings: snapshot current dynamic bindings
+// Returns a map of dynamic var symbols (e.g. *x*) to their current values (may be nil/NULL).
+ID native_get_thread_bindings(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 0, "get-thread-bindings");
+    (void)args;
+
+    // Prefer the current eval state when running inside evaluation.
+    EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+
+    CljMap *out = map_empty();
+    RETAIN(out);
+
+    if (st && st->dynamic_bindings) {
+        unsigned int depth = vector_count(st->dynamic_bindings);
+        for (unsigned int i = 0; i < depth; i++) {
+            ID frame_id = vector_nth(st->dynamic_bindings, i);
+            if (!frame_id || TAG(frame_id) != CLJ_MAP) continue;
+            ASSIGN(out, map_merge(out, (CljMap*)frame_id, true));
+        }
+    }
+
+    // Include *ns* as a dynamic binding snapshot (implemented as EvalState.current_ns).
+    if (st && st->current_ns) {
+        ASSIGN(out, map_assoc(out, (ID)SYM_NS_STAR, (ID)st->current_ns));
+    }
+
+    return AUTORELEASE(out);
+}
+
 #if defined(DEBUG) && !defined(ESP32_BUILD)
 // clojure.stacktrace/stacktrace-str: return native (C) backtrace string captured in CLJException
 // Intended to be used by libs/clojure/stacktrace.clj to build vector-of-frames on demand.
@@ -2882,6 +2912,13 @@ static StaticSymbolData sym_tinyclj_datetime_format_iso_qualified_data = {
             .unqualified = NULL,
             .cname = "tinyclj.datetime/format-iso"}};
 
+// Unqualified clojure.core entry: get-thread-bindings
+static StaticSymbolData sym_get_thread_bindings_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "get-thread-bindings"}};
+
 // Compile-time initialized lookup table (DRY: avoids runtime initialization)
 // Uses static symbol data structures (&sym_*_data.sym) for compile-time references
 static const NativeFunctionEntry native_function_table[] = {
@@ -2899,6 +2936,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_tinyclj_datetime_format_iso_qualified_data.sym, native_datetime_format_iso},
 
     // clojure.core functions
+    {&sym_get_thread_bindings_data.sym, native_get_thread_bindings},
     {&sym_meta_data.sym, native_meta},
     {&sym_with_meta_data.sym, native_with_meta},
     {&sym_reduce_data.sym, native_reduce},
@@ -3508,68 +3546,77 @@ static bool eval_source_in_current_state(const char *src, const char *src_name, 
     if (!src || !st)
         return false;
     int success_count = 0;
-    WITH_AUTORELEASE_POOL({
-        Reader reader;
-        reader_init(&reader, src);
-        if (src_name && src_name[0])
-        {
-            reader_set_source_name(&reader, src_name);
-        }
-        else if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname)
-        {
-            reader_set_source_name(&reader, st->current_ns->name->cname);
-        }
-        else
-        {
-            reader_set_source_name(&reader, "<namespace>");
-        }
-        while (!reader_is_eof(&reader))
-        {
-            reader_skip_all(&reader);
-            if (reader_is_eof(&reader))
-                break;
+    Reader reader;
+    reader_init(&reader, src);
+    if (src_name && src_name[0])
+    {
+        reader_set_source_name(&reader, src_name);
+    }
+    else if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname)
+    {
+        reader_set_source_name(&reader, st->current_ns->name->cname);
+    }
+    else
+    {
+        reader_set_source_name(&reader, "<namespace>");
+    }
 
-            // Save reader position before parsing to detect if we're stuck
-            size_t pos_before = reader_offset(&reader);
+    // Bound autorelease tracking per top-level form.
+    // This prevents a single (ns ... (:require ...)) from accumulating thousands of
+    // autoreleased temporaries while loading dependencies.
+    while (!reader_is_eof(&reader))
+    {
+        reader_skip_all(&reader);
+        if (reader_is_eof(&reader))
+            break;
 
-            CljValue form = NULL;
-            TRY
+        // Save reader position before parsing to detect if we're stuck
+        size_t pos_before = reader_offset(&reader);
+
+        AUTORELEASE_POOL_BEGIN();
+        CljValue form = NULL;
+        TRY
+        {
+            form = value_by_parsing_expr(&reader, st);
+            if (!form)
             {
-                form = value_by_parsing_expr(&reader, st);
-                if (!form)
+                if (reader_is_eof(&reader))
                 {
-                    if (reader_is_eof(&reader))
-                        break;
-                    // Parse failed - skip to next line to avoid infinite loop
-                    while (!reader_is_eof(&reader) && reader_current(&reader) != '\n')
-                        reader_next(&reader);
-                    if (!reader_is_eof(&reader))
-                        reader_next(&reader);
-                    continue;
+                    AUTORELEASE_POOL_END();
+                    break;
                 }
-                (void)eval_parsed(form, st, NULL);
-                // value_by_parsing_expr returns AUTORELEASE object
-                success_count++;
-
-                // Check if reader advanced (to detect infinite loops)
-                size_t pos_after = reader_offset(&reader);
-                if (pos_after == pos_before && !reader_is_eof(&reader))
-                {
-                    // Reader didn't advance - skip character to avoid infinite loop
-                    reader_next(&reader);
-                }
-            }
-            CATCH(ex)
-            {
-                // Skip to next line to avoid infinite loop
+                // Parse failed - skip to next line to avoid infinite loop
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n')
                     reader_next(&reader);
                 if (!reader_is_eof(&reader))
                     reader_next(&reader);
+                AUTORELEASE_POOL_END();
+                continue;
             }
-            END_TRY
+
+            (void)eval_parsed(form, st, NULL);
+            // value_by_parsing_expr returns AUTORELEASE object
+            success_count++;
+
+            // Check if reader advanced (to detect infinite loops)
+            size_t pos_after = reader_offset(&reader);
+            if (pos_after == pos_before && !reader_is_eof(&reader))
+            {
+                // Reader didn't advance - skip character to avoid infinite loop
+                reader_next(&reader);
+            }
         }
-    });
+        CATCH(ex)
+        {
+            // Skip to next line to avoid infinite loop
+            while (!reader_is_eof(&reader) && reader_current(&reader) != '\n')
+                reader_next(&reader);
+            if (!reader_is_eof(&reader))
+                reader_next(&reader);
+        }
+        END_TRY
+        AUTORELEASE_POOL_END();
+    }
     // Return true if at least some expressions succeeded (partial loading is OK)
     return success_count > 0;
 }

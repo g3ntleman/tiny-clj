@@ -28,8 +28,19 @@ void register_macro(CljNamespace *ns, CljSymbol *name, CljFunction *macro_fn) {
         RETAIN(ns->macro_mappings);
     }
 
-    // Store macro in namespace's macro registry
+    // Store macro in namespace's macro registry.
+    //
+    // IMPORTANT:
+    // - For clojure.core, unqualified symbols are used as keys (Clojure-like).
+    // - For other namespaces, additionally store the qualified symbol key, because
+    //   macro call sites are typically namespace-qualified (e.g. clojure.core.async/go).
     ASSIGN(ns->macro_mappings, map_assoc(ns->macro_mappings, (CljObject*)name, (CljObject*)macro_fn));
+    if (ns->name && ns->name != SYM_CLOJURE_CORE && name->cname) {
+        CljSymbol *qualified = intern_symbol(ns->name, name->cname);
+        if (qualified) {
+            ASSIGN(ns->macro_mappings, map_assoc(ns->macro_mappings, (CljObject*)qualified, (CljObject*)macro_fn));
+        }
+    }
 }
 
 // Cached namespace pointers for faster lookup
@@ -44,6 +55,24 @@ void macro_cache_reset(void) {
 
 CljFunction* lookup_macro_resolve(EvalState *st, CljSymbol *name) {
     if (!st || !name) return NULL;
+
+    // If the symbol is namespace-qualified (e.g. clojure.core.async/go),
+    // resolve macro in that target namespace.
+    if (name->ns_name && name->ns_name->cname && name->cname) {
+        CljNamespace *target = ns_find(name->ns_name->cname);
+        if (target) {
+            // First try the qualified key as-is.
+            CljFunction *macro = lookup_macro(target, name);
+            if (macro) return macro;
+
+            // Then fall back to unqualified lookup.
+            CljSymbol *unqualified = intern_symbol_global(name->cname);
+            if (unqualified) {
+                macro = lookup_macro(target, unqualified);
+                if (macro) return macro;
+            }
+        }
+    }
 
     // Check current namespace first (fast path - no lookup needed)
     CljFunction *macro = lookup_macro(st->current_ns, name);

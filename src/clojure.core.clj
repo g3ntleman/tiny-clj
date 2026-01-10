@@ -318,12 +318,15 @@ R"CLOJURE(
 ^#^{:doc "When expr is not nil, threads it into the first form (via ->>), and when that result is not nil, through the next etc"}
 (defmacro some->> [expr & forms]
   (let [g (gensym)
-        steps (map (fn [step] (list 'if (list 'nil? g) 'nil (list '->> g step)))
-                   forms)]
-    (list 'let (vec (concat (list g expr) (interleave (repeat g) (butlast steps))))
-          (if (empty? steps)
-            g
-            (last steps)))))
+        build-bindings (fn build-bindings [fs]
+                         (if (empty? fs)
+                           (list)
+                           (let [step (first fs)
+                                 threaded (list '->> g step)
+                                 guarded (list 'if (list 'nil? g) 'nil threaded)]
+                             (cons g (cons guarded (build-bindings (rest fs)))))))]
+    (list 'let (vec (cons g (cons expr (build-bindings forms))))
+          g)))
 
 ^#^{:doc "Takes an expression and a set of test/form pairs. Threads expr (via ->) through each form for which the corresponding test expression is true. Note that, unlike cond branching, cond-> threading does not short circuit after the first true test expression."}
 (defmacro cond-> [expr & clauses]
@@ -362,6 +365,9 @@ R"CLOJURE(
 (defn meta [x] :native)
 ^#^{:doc "Returns an object of the same type and value as obj, with map m as its metadata."}
 (defn with-meta [obj m] :native)
+
+^#^{:doc "Returns a snapshot map of current dynamic bindings (symbol -> value)."}
+(defn get-thread-bindings [] :native)
 
 ; ============================================================================
 ; Reduce Functions
