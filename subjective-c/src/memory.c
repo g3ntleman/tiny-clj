@@ -28,58 +28,12 @@
 #include <stdlib.h>
 
 // ============================================================================
-// Lazy closure environment promotion (Stack → Heap)
+// Closure environment promotion (Stack → Heap)
 // ============================================================================
-
-// Copy only the stack-backed prefix of an env_stack to heap.
-// Once we reach a heap node (or NULL), we retain and reuse it as the tail.
-static CljList *copy_env_stack_to_heap_if_needed(CljList *env_stack) {
-    if (!env_stack) return NULL;
-    if (!is_pointer_on_stack(env_stack)) {
-        return (CljList*)RETAIN(env_stack);
-    }
-
-    // Collect stack nodes so we can rebuild from tail to head.
-    CljList *stack_nodes[64];
-    unsigned int depth = 0;
-
-    CljList *cur = env_stack;
-    while (cur && is_list_like((ID)cur) && is_pointer_on_stack(cur) && depth < 64) {
-        stack_nodes[depth++] = cur;
-        cur = list_like_as_list_or_null(LIST_REST(cur));
-    }
-
-    // cur is now NULL or a heap list node (or a non-list).
-    CljList *tail = NULL;
-    if (cur && is_list_like((ID)cur) && !is_pointer_on_stack(cur)) {
-        tail = (CljList*)RETAIN(cur);
-    }
-
-    // Rebuild copies of stack nodes on heap, preserving maps.
-    for (unsigned int i = depth; i > 0; i--) {
-        CljList *node = stack_nodes[i - 1];
-        ID first = LIST_FIRST(node);
-        CljMap *src_map = is_map(first) ? (CljMap*)first : NULL;
-
-        CljMap *dst_map = NULL;
-        if (src_map) {
-            int cnt = map_count(src_map);
-            dst_map = make_map(cnt);
-            // Copy entries (fast): map_put retains key/value and does not COW.
-            // Keys are always non-nil for env frames (symbols), so map_put is safe here.
-            MAP_FOR_EACH(src_map, k, v) {
-                map_put(dst_map, k, v);
-            }
-        }
-
-        CljList *new_node = make_list(dst_map ? (ID)dst_map : NULL, tail);
-        RELEASE(dst_map);
-        RELEASE(tail);
-        tail = new_node;
-    }
-
-    return tail;
-}
+//
+// NOTE: tiny-clj closure environments (`CljFunction.env_stack`) are now backed by
+// persistent COW vectors (heap-managed). The previous "stack-backed list prefix"
+// promotion mechanism is no longer used.
 
 // ============================================================================
 // CHECKPOINT-BASED AUTORELEASE POOL
@@ -270,17 +224,7 @@ void retain(CljObject *v) {
     }
 #endif
     
-    // Lazy closure env promotion: if a closure's env_stack points to stack memory,
-    // promote it to heap before increasing rc.
-    if (v->type == CLJ_CLOSURE) {
-        CljFunction *func = (CljFunction*)v;
-        if (func && func->env_stack && is_pointer_on_stack(func->env_stack)) {
-            CljList *promoted = copy_env_stack_to_heap_if_needed(func->env_stack);
-            // copy_env_stack_to_heap_if_needed retains the returned stack.
-            // Replace pointer and drop the retained old tail if any (stack pointers are ignored).
-            func->env_stack = promoted;
-        }
-    }
+    // Note: closure environments are heap-managed (vector). No stack promotion needed.
 
     // Happy path: valid object that tracks retains
     if ((uintptr_t)v >= 0x1000 && TRACKS_RETAINS(v)) {
@@ -359,7 +303,7 @@ void release(CljObject *v) {
         if (g_debug_output_active) {
             printf("🔍 release: Object %p will be freed (rc=0)\n", v);
         }
-        
+
         // Release contained values (for containers)
         // Note: rc is already 0 at this point (after decrement).
         // In zombie mode, rc=0 means the object is a zombie (freed but not DEALLOCed).

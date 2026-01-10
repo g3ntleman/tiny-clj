@@ -95,3 +95,27 @@ TEST(test_eval_body_with_params_ctx_not_null) {
     
     frame_release(&call_frame);
 }
+
+// Regression test: closures must capture the correct lexical binding under shadowing.
+// (let [x 1] (let [f (fn [] x)] (let [x 2] (f)))) => 1
+TEST(test_closure_capture_shadowing) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    CljObject *result = NULL;
+    TRY {
+        result = eval_string(
+            "(let [x 1]"
+            "  (let [f (fn [] x)]"
+            "    (let [x 2]"
+            "      (f))))",
+            g_test_eval_state);
+        TEST_ASSERT_NOT_NULL_MESSAGE(result, "expression should return a result");
+        TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result), "result should be a fixnum");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, as_fixnum(result), "closure must see captured x=1, not inner x=2");
+    } CATCH(ex) {
+        char msg[512];
+        snprintf(msg, sizeof(msg), "test_closure_capture_shadowing threw exception: %s - %s",
+                 ex ? ex->type : "unknown", ex ? ex->message : "no message");
+        TEST_FAIL_MESSAGE(msg);
+    } END_TRY
+}

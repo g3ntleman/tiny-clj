@@ -131,6 +131,23 @@ TEST(test_let_shadowing) {
 }
 
 // ============================================================================
+// TEST: Closure capture must be stable under shadowing
+// ============================================================================
+TEST(test_let_shadowing_closure_capture) {
+    // Test:
+    // (let [x 1]
+    //   (let [f (fn [] x)]
+    //     (let [x 2]
+    //       (f))))  => 1
+    const char *code = "(let [x 1] (let [f (fn [] x)] (let [x 2] (f))))";
+    CljValue result = eval_string(code, g_test_eval_state);
+
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
+}
+
+// ============================================================================
 // TEST: Let symbol in arithmetic operation
 // ============================================================================
 TEST(test_let_symbol_in_arithmetic) {

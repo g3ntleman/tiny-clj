@@ -45,6 +45,15 @@ CljVector* vector_transient(CljVector *vec);
 CljVector* clj_conj(CljVector *tvec, ID item);
 ID vector_persistent(CljVector *tvec);
 
+// ----------------------------------------------------------------------------
+// Debug/test instrumentation
+// ----------------------------------------------------------------------------
+// Count how often the vector implementation had to copy backing storage
+// (make_vector_copy). Useful to ensure we don't accidentally force copies via
+// persistent(transient(...)) patterns in hot paths.
+size_t vector_make_copy_count(void);
+void vector_make_copy_count_reset(void);
+
 // In-place helpers for long-lived slots (no AUTORELEASE + releases old vector on replacement).
 // These functions update the pointer stored in *vec_slot and RELEASE the old vector
 // if a new vector instance is produced (grow/COW).

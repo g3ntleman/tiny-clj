@@ -16,6 +16,7 @@
 #include <stdbool.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <execinfo.h>
 
 // Flag to track if summary was already printed
 static bool g_summary_printed = false;
@@ -50,6 +51,11 @@ static void print_summary_on_exit(void) {
 static void signal_handler(int sig) {
     // Print summary immediately
     print_summary_on_exit();
+    // Also print a backtrace for debugging.
+    void *trace[64];
+    int trace_count = backtrace(trace, (int)(sizeof(trace) / sizeof(trace[0])));
+    fprintf(stderr, "\n[crash] signal=%d\n", sig);
+    backtrace_symbols_fd(trace, trace_count, fileno(stderr));
     fflush(stdout);
     fflush(stderr);
     // Reset to default handler and re-raise

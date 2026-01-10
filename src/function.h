@@ -20,13 +20,13 @@ typedef struct {
     CljObject base;
     CljVector *params;  // Parameter vector (can be NULL if no parameters)
     ID body;  // Function body (AST to evaluate)
-    CljList *env_stack;  // Environment stack (list of maps) - idiomatic Clojure-style
+    CljVector *env_stack;  // Environment stack (vector of maps), COW-optimized
     const char *name; // could we reference a symbol here instead?
     struct CljNamespace *ns;  // could we reference a symbol here instead?
     int8_t variadic_index;  // -1 = not variadic, >= 0 = index of & in params
 } CljFunction;
 
-CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *cname, struct CljNamespace *ns);
+CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_stack, const char *cname, struct CljNamespace *ns);
 
 
 // Type predicates

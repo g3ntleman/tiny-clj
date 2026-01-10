@@ -178,6 +178,14 @@ CljVector* vector_set_nth(CljVector* vec, unsigned int index, ID value) {
 // Counter for make_vector_copy calls
 static size_t g_make_vector_copy_count = 0;
 
+size_t vector_make_copy_count(void) {
+    return g_make_vector_copy_count;
+}
+
+void vector_make_copy_count_reset(void) {
+    g_make_vector_copy_count = 0;
+}
+
 CljVector* make_vector_copy(CljVector* vec, unsigned capacity) {
     g_make_vector_copy_count++;
     
