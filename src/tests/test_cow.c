@@ -4,6 +4,7 @@
 #include "map.h"
 #include "vector.h"
 #include "../symbol.h"
+#include "../env_stack.h"
 #include "kv_macros.h"
 
 // ============================================================================
@@ -536,6 +537,70 @@ TEST(test_vector_conj_cow_capacity_growth) {
         // Cleanup
         RELEASE(vec);
         RELEASE(new_vec);
+    });
+}
+
+// Ensure we don't accidentally force full copies via persistent(transient(pv)).
+// The vector implementation exposes a copy counter (make_vector_copy) for this.
+TEST(test_vector_copy_counter_detects_forced_copy_patterns) {
+    WITH_AUTORELEASE_POOL({
+        // Setup: a small persistent vector with enough capacity for a conj without growth.
+        CljVector *pv = make_vector(8, CLJ_VECTOR);
+        TEST_ASSERT_NOT_NULL(pv);
+
+        vector_make_copy_count_reset();
+
+        // Pure persistent conj with RC=1 should not need to copy backing storage.
+        CljVector *pv2 = vector_conj(pv, fixnum(1));
+        TEST_ASSERT_EQUAL_PTR(pv, pv2);
+        TEST_ASSERT_EQUAL_UINT64_MESSAGE(0, (uint64_t)vector_make_copy_count(),
+                                        "vector_conj on RC=1 (no growth) should not call make_vector_copy");
+
+        // Converting persistent -> transient should copy backing storage (by design).
+        CljVector *tv = vector_transient(pv);
+        TEST_ASSERT_NOT_NULL(tv);
+        TEST_ASSERT_TRUE(TAG(tv) == CLJ_VECTOR_TRANSIENT || TAG(tv) == CLJ_VECTOR_TRANSIENT_WEAK);
+        TEST_ASSERT_TRUE_MESSAGE(vector_make_copy_count() > 0,
+                                 "vector_transient should copy backing storage (make_vector_copy_count must increase)");
+
+        // Cleanup
+        RELEASE(tv);
+        RELEASE(pv);
+    });
+}
+
+// Ensure env-stack helpers keep rc=1 fast-paths viable:
+// - no accidental RETAIN of the stack (rc must stay 1)
+// - no accidental forced copies (make_vector_copy_count stays 0 for typical push/pop)
+TEST(test_env_stack_helpers_do_not_break_cow_fast_path) {
+    WITH_AUTORELEASE_POOL({
+        CljVector *stack = NULL;
+
+        vector_make_copy_count_reset();
+
+        CljMap *m1 = (CljMap*)make_map(4);
+        CljMap *m2 = (CljMap*)make_map(4);
+
+        env_stack_push_inplace(&stack, m1);
+        env_stack_push_inplace(&stack, m2);
+
+        TEST_ASSERT_NOT_NULL(stack);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, ((CljObject*)stack)->rc,
+                                      "env_stack must not RETAIN the stack; rc must remain 1");
+        TEST_ASSERT_EQUAL_UINT64_MESSAGE(0, (uint64_t)vector_make_copy_count(),
+                                         "env_stack push should not force make_vector_copy in the rc=1 / no-growth case");
+
+        // Pop once; should remain rc=1 and still not force copies.
+        env_stack_pop_inplace(&stack);
+        TEST_ASSERT_NOT_NULL(stack);
+        TEST_ASSERT_EQUAL_INT(1, ((CljObject*)stack)->rc);
+        TEST_ASSERT_EQUAL_UINT64_MESSAGE(0, (uint64_t)vector_make_copy_count(),
+                                         "env_stack pop should not force make_vector_copy in the rc=1 case");
+
+        // Balance retains: vectors retain their elements on insert.
+        RELEASE(m1);
+        RELEASE(m2);
+        RELEASE(stack);
     });
 }
 

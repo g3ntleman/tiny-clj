@@ -4,6 +4,7 @@
 #include "channel.h"
 #include "event_loop.h"
 #include "vector.h"
+#include "env_stack.h"
 #include "exception.h"
 #include "environment.h"
 #include "runtime.h"
@@ -447,12 +448,26 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
                 continue;
             }
 
+            // When ctx is provided, eval_body() uses eval_body_with_params(ctx) and ignores the
+            // explicit env argument. Make the catch binding visible by extending env_stack.
+            EvalContext catch_ctx_storage;
+            const EvalContext *catch_ctx = ctx;
+            CljVector *catch_stack = NULL;
+            if (ctx) {
+                catch_ctx_storage = *ctx;
+                catch_stack = ctx->env_stack ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
+                env_stack_push_inplace(&catch_stack, catch_env);
+                catch_ctx_storage.env_stack = catch_stack;
+                catch_ctx = &catch_ctx_storage;
+            }
+
             for (CljList *b = body_node; b; b = list_rest_normalized(b)) {
                 ID body_expr = LIST_FIRST(b);
                 if (!body_expr) continue;
-                ASSIGN(handler_result, eval_body(body_expr, catch_env, st, ctx));
+                ASSIGN(handler_result, eval_body(body_expr, catch_env, st, catch_ctx));
             }
 
+            RELEASE(catch_stack);
             RELEASE(catch_env);
             handled = true;
             break;
