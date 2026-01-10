@@ -174,6 +174,9 @@ add_executable(tiny-clj EXCLUDE_FROM_ALL
     src/platform_macos.c
 )
 target_link_libraries(tiny-clj PRIVATE subjective-c)
+target_include_directories(tiny-clj PRIVATE
+    ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
+)
 # Main Build - Meta only in Debug builds
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(tiny-clj PRIVATE)
@@ -223,6 +226,9 @@ add_executable(tiny-clj-esp32
     src/macro.c
 )
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
+target_include_directories(tiny-clj-esp32 PRIVATE
+    ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
+)
 
 
 # ESP32 Ultra-Minimal Build (only core features for <150KB) - DISABLED
@@ -262,6 +268,9 @@ add_executable(tiny-clj-repl
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-repl PRIVATE subjective-c)
+target_include_directories(tiny-clj-repl PRIVATE
+    ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
+)
 # Output directory is set globally to "build"
 # REPL Build
 # Debug in Debug mode, Release in Release mode
@@ -288,6 +297,9 @@ add_executable(tiny-clj-profile
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
+target_include_directories(tiny-clj-profile PRIVATE
+    ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
+)
 target_compile_definitions(tiny-clj-profile PRIVATE PROFILING_ENABLED=1 META_ENABLED=${TINYCLJ_META_ENABLED_VALUE} MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE} DEBUG)
 set_target_properties(tiny-clj-profile PROPERTIES
     COMPILE_FLAGS "-g -O2 -DDEBUG -DMEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE} -fno-omit-frame-pointer"
@@ -305,6 +317,7 @@ add_executable(unit-tests
     src/tests/unity_test_runner.c
     subjective-c/tests/test_registry.c
     src/tests/test_memory_macros.c
+    src/tests/test_closure_capture_minimal.c
     src/tests/test_parser.c
     src/tests/test_utf8_emoji.c
     src/tests/test_exception.c
