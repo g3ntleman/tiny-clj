@@ -18,7 +18,7 @@ TEST(test_nth_list_nil_at_index_1) {
         TEST_FAIL_MESSAGE("nth should not throw exception for nil element");
     } END_TRY
     // nil is represented as NULL
-    TEST_ASSERT_NULL_MESSAGE(nil_elem, 
+    TEST_ASSERT_NIL_MESSAGE(nil_elem, 
         "nth should return NULL for nil element");
 }
 
@@ -44,7 +44,7 @@ TEST(test_nth_list_nil_at_index_0) {
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("nth should not throw exception for nil element at index 0");
     } END_TRY
-    TEST_ASSERT_NULL_MESSAGE(nil_first,
+    TEST_ASSERT_NIL_MESSAGE(nil_first,
         "nth should return NULL for nil element at index 0");
 }
 
@@ -57,7 +57,7 @@ TEST(test_nth_list_all_nil) {
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("nth should not throw exception for nil element");
     } END_TRY
-    TEST_ASSERT_NULL_MESSAGE(all_nil,
+    TEST_ASSERT_NIL_MESSAGE(all_nil,
         "nth should return NULL for nil element");
 }
 
@@ -87,7 +87,7 @@ TEST(test_nth_list_nil_with_default_problem) {
         TEST_FAIL_MESSAGE("nth should not throw exception for nil element with default");
     } END_TRY
     // This should be NULL (nil element), not :default
-    TEST_ASSERT_NULL_MESSAGE(nil_with_default,
+    TEST_ASSERT_NIL_MESSAGE(nil_with_default,
         "nth should return NULL for nil element, not return default");
 
     // Out-of-bounds with default should return default (not throw exception)

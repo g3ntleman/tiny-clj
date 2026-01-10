@@ -187,7 +187,7 @@ TEST(test_nil_creation) {
 
     // Test nil literal - nil is represented as NULL in our system
     CljObject *nil_obj = eval_string("nil", g_test_eval_state);
-    TEST_ASSERT_NULL(nil_obj);  // nil is NULL in our system
+    TEST_ASSERT_NIL(nil_obj);  // nil is NULL in our system
 
     // Test nil in expressions - (count nil) => 0 (Clojure-compatible)
     CljObject *count_nil_result = eval_string("(count nil)", g_test_eval_state);
@@ -253,7 +253,7 @@ TEST(test_special_form_or) {
 
     // Test direct nil check first
     CljValue nil_val = NULL;
-    TEST_ASSERT_NULL(nil_val);
+    TEST_ASSERT_NIL(nil_val);
     // clj_is_truthy expects CljObject*, not CljValue
     TEST_ASSERT_FALSE(clj_is_truthy(nil_val));
 
@@ -293,11 +293,11 @@ TEST(test_special_form_when) {
 
     // (when false expr) => nil
     ID result2 = eval_string("(when false 42)", g_test_eval_state);
-    TEST_ASSERT_NULL(result2); // nil is NULL in our system
+    TEST_ASSERT_NIL(result2); // nil is NULL in our system
 
     // (when nil expr) => nil
     ID result3 = eval_string("(when nil 42)", g_test_eval_state);
-    TEST_ASSERT_NULL(result3); // nil is NULL in our system
+    TEST_ASSERT_NIL(result3); // nil is NULL in our system
 
     // (when true expr1 expr2) => expr2 (last expression)
     ID result4 = eval_string("(when true 1 2)", g_test_eval_state);
@@ -313,7 +313,7 @@ TEST(test_special_form_when) {
 
     // (when true) => nil (no body expressions)
     ID result6 = eval_string("(when true)", g_test_eval_state);
-    TEST_ASSERT_NULL(result6); // nil is NULL in our system
+    TEST_ASSERT_NIL(result6); // nil is NULL in our system
 
     // (when true (do expr1 expr2)) => last result of do
     ID result7 = eval_string("(when true (do 10 20))", g_test_eval_state);
@@ -334,22 +334,22 @@ TEST(test_special_form_when) {
 
     // (when false with multiple expressions) => nil (condition false, body not evaluated)
     ID result10 = eval_string("(when false 1 2 3)", g_test_eval_state);
-    TEST_ASSERT_NULL(result10); // nil is NULL in our system
+    TEST_ASSERT_NIL(result10); // nil is NULL in our system
 
     // REGRESSION TEST: when with nil condition should return nil (not throw error)
     // This tests the fix for the bug where when returned NULL immediately for nil
     // instead of checking truthiness. nil should be treated as falsy, not as an error.
     ID result_when_nil_regression1 = eval_string("(when nil 42)", g_test_eval_state);
-    TEST_ASSERT_NULL_MESSAGE(result_when_nil_regression1, "when with nil condition should return nil");
+    TEST_ASSERT_NIL_MESSAGE(result_when_nil_regression1, "when with nil condition should return nil");
 
     // REGRESSION TEST: when with nil condition and multiple expressions should return nil
     ID result_when_nil_regression2 = eval_string("(when nil 1 2 3)", g_test_eval_state);
-    TEST_ASSERT_NULL_MESSAGE(result_when_nil_regression2, "when with nil condition and multiple expressions should return nil");
+    TEST_ASSERT_NIL_MESSAGE(result_when_nil_regression2, "when with nil condition and multiple expressions should return nil");
 
     // REGRESSION TEST: when with nil condition should not evaluate body
     // This ensures that the body is not evaluated when condition is nil
     ID result_when_nil_regression3 = eval_string("(when nil (throw (Exception. \"should not be evaluated\")))", g_test_eval_state);
-    TEST_ASSERT_NULL_MESSAGE(result_when_nil_regression3, "when with nil condition should not evaluate body and return nil");
+    TEST_ASSERT_NIL_MESSAGE(result_when_nil_regression3, "when with nil condition should not evaluate body and return nil");
 
     // result1-10 and regression test results are automatically managed by eval_string
 }
@@ -404,7 +404,7 @@ TEST(test_if_nil_in_function_regression) {
     TRY {
         result3 = eval_string("((fn [x] (if x 42)) nil)", g_test_eval_state);
         // When condition is falsy and no else branch, if returns nil
-        TEST_ASSERT_NULL_MESSAGE(result3, "((fn [x] (if x 42)) nil) should return nil when no else branch");
+        TEST_ASSERT_NIL_MESSAGE(result3, "((fn [x] (if x 42)) nil) should return nil when no else branch");
     } CATCH(ex) {
         char msg[256];
         snprintf(msg, sizeof(msg), "if without else should not throw exception, got: %s", ex->message);
@@ -448,7 +448,7 @@ TEST(test_nil_in_function_environment_debug) {
     // ((fn [x] x) nil) => nil (NULL)
     CljObject *result = eval_string("((fn [x] x) nil)", g_test_eval_state);
     // nil should be returned as NULL
-    TEST_ASSERT_NULL_MESSAGE(result, "((fn [x] x) nil) should return nil (NULL)");
+    TEST_ASSERT_NIL_MESSAGE(result, "((fn [x] x) nil) should return nil (NULL)");
 
     // Test: Check if nil parameter is correctly evaluated as falsy
     // ((fn [x] (if x :truthy :falsy)) nil) => :falsy
@@ -531,7 +531,7 @@ TEST(test_identity_function) {
 
     // Test with nil
     CljObject *result4 = eval_string("(identity nil)", g_test_eval_state);
-    TEST_ASSERT_NULL(result4);  // nil is represented as NULL
+    TEST_ASSERT_NIL(result4);  // nil is represented as NULL
 
     // Test with vector
     CljObject *result5 = eval_string("(identity [1 2 3])", g_test_eval_state);
@@ -1039,7 +1039,7 @@ TEST(test_type_check_all_types) {
     // Test heap object types
     // Note: parse("()") returns nil (Clojure behavior: () is nil)
     ID empty_list_val = parse("()", g_test_eval_state);
-    TEST_ASSERT_NULL(empty_list_val);  // () is nil in Clojure
+    TEST_ASSERT_NIL(empty_list_val);  // () is nil in Clojure
     TEST_ASSERT_EQUAL_INT(CLJ_NIL, TAG(empty_list_val));
 
     ID vector_val = parse("[]", g_test_eval_state);

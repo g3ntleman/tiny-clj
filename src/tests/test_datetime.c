@@ -51,7 +51,7 @@ TEST_SHARED(test_time_no_double_evaluation) {
 TEST_SHARED(test_time_with_dotimes) {
     // Simpler: use eval_string instead of manual AST construction
     ID result = eval_string("(time (dotimes [i 1000] (+ 1 2 3 4 5)))", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // dotimes returns nil
+    TEST_ASSERT_NIL(result);  // dotimes returns nil
 }
 
 TEST_SHARED(test_time_returns_expression_result) {
@@ -94,7 +94,7 @@ TEST(test_now_has_ms_value) {
 TEST(test_datetime_require) {
     // Load the datetime library
     ID result = eval_string("(require 'tinyclj.datetime)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // require returns nil on success
+    TEST_ASSERT_NIL(result);  // require returns nil on success
 }
 
 // --- days-from-civil / civil-from-days roundtrip tests ---

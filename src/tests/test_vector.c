@@ -120,7 +120,7 @@ TEST_SHARED(test_nth_with_lists) {
     if (nil_elem) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(nil_elem), "nth should return nil (NULL or CLJ_NIL) for nil element");
     } else {
-        TEST_ASSERT_NULL(nil_elem);  // NULL is correct for nil
+        TEST_ASSERT_NIL(nil_elem);  // NULL is correct for nil
     }
 
     // (nth '(nil 2 nil) 0) => nil
@@ -128,7 +128,7 @@ TEST_SHARED(test_nth_with_lists) {
     if (nil_first) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(nil_first), "nth should return nil (NULL or CLJ_NIL) for nil element");
     } else {
-        TEST_ASSERT_NULL(nil_first);  // NULL is correct for nil
+        TEST_ASSERT_NIL(nil_first);  // NULL is correct for nil
     }
 
     // (nth '(nil 2 nil) 1) => 2
@@ -310,7 +310,7 @@ TEST_SHARED(test_nth_nil_elements) {
     if (vec_nil) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(vec_nil), "nth should return nil (NULL or CLJ_NIL) for nil element");
     } else {
-        TEST_ASSERT_NULL(vec_nil);  // NULL is correct for nil
+        TEST_ASSERT_NIL(vec_nil);  // NULL is correct for nil
     }
 
     // (nth [nil 2 nil] 0) => nil
@@ -318,7 +318,7 @@ TEST_SHARED(test_nth_nil_elements) {
     if (vec_nil_first) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(vec_nil_first), "nth should return nil (NULL or CLJ_NIL) for nil element");
     } else {
-        TEST_ASSERT_NULL(vec_nil_first);  // NULL is correct for nil
+        TEST_ASSERT_NIL(vec_nil_first);  // NULL is correct for nil
     }
 
     // (nth [nil 2 nil] 1) => 2
@@ -332,7 +332,7 @@ TEST_SHARED(test_nth_nil_elements) {
     if (vec_nil_third) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(vec_nil_third), "nth should return nil (NULL or CLJ_NIL) for nil element");
     } else {
-        TEST_ASSERT_NULL(vec_nil_third);  // NULL is correct for nil
+        TEST_ASSERT_NIL(vec_nil_third);  // NULL is correct for nil
     }
 
     // List with nil elements (already tested in test_nth_with_lists, but adding more)
@@ -341,7 +341,7 @@ TEST_SHARED(test_nth_nil_elements) {
     if (list_all_nil) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(list_all_nil), "nth should return nil (NULL or CLJ_NIL) for nil element");
     } else {
-        TEST_ASSERT_NULL(list_all_nil);  // NULL is correct for nil
+        TEST_ASSERT_NIL(list_all_nil);  // NULL is correct for nil
     }
 
     // Distinguish between nil element and out-of-bounds
@@ -350,7 +350,7 @@ TEST_SHARED(test_nth_nil_elements) {
     if (nil_at_index) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(nil_at_index), "nth should return nil (NULL or CLJ_NIL) for nil element");
     } else {
-        TEST_ASSERT_NULL(nil_at_index);  // NULL is correct for nil
+        TEST_ASSERT_NIL(nil_at_index);  // NULL is correct for nil
     }
 
     // (nth [1 nil 3] 3) => exception (out-of-bounds)
@@ -369,7 +369,7 @@ TEST_SHARED(test_nth_nil_elements) {
     if (nil_with_default) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(nil_with_default), "nth should return nil (NULL or CLJ_NIL) for nil element, not default");
     } else {
-        TEST_ASSERT_NULL(nil_with_default);  // nil element, not default
+        TEST_ASSERT_NIL(nil_with_default);  // nil element, not default
     }
 
     // Out-of-bounds with default => default value (no exception)
@@ -655,7 +655,7 @@ TEST_SHARED(test_vec_with_nil_elements) {
     if (second) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(second), "nth should return nil (NULL or CLJ_NIL) for nil element");
     } else {
-        TEST_ASSERT_NULL(second);  // NULL is correct for nil
+        TEST_ASSERT_NIL(second);  // NULL is correct for nil
     }
     
     // Check third element (should be 3)
@@ -679,7 +679,7 @@ TEST_SHARED(test_vec_with_nil_elements) {
     if (first2) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(first2), "nth should return nil (NULL or CLJ_NIL) for nil element");
     } else {
-        TEST_ASSERT_NULL(first2);  // NULL is correct for nil
+        TEST_ASSERT_NIL(first2);  // NULL is correct for nil
     }
     
     // Check second element (should be 2)
@@ -694,7 +694,7 @@ TEST_SHARED(test_vec_with_nil_elements) {
     if (third2) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(third2), "nth should return nil (NULL or CLJ_NIL) for nil element");
     } else {
-        TEST_ASSERT_NULL(third2);  // NULL is correct for nil
+        TEST_ASSERT_NIL(third2);  // NULL is correct for nil
     }
 
 }

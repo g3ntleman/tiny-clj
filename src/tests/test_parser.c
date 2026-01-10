@@ -71,7 +71,7 @@ TEST(test_parse_empty_list) {
 
     // Test: () is nil in Clojure (Clojure-compatible behavior)
     CljObject *empty_list_result = parse("()", eval_state);
-    TEST_ASSERT_NULL(empty_list_result);  // () is nil (NULL)
+    TEST_ASSERT_NIL(empty_list_result);  // () is nil (NULL)
     // Note: TAG(NULL) is undefined, so we only check that result is NULL
 
     // Test: (list) creates an empty list (different from ())

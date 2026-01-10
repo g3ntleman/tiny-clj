@@ -178,22 +178,22 @@ TEST_SHARED(test_native_print_functions) {
         // Use global st from setUp
         const char *code1 = "(print \"Hello\")";
         CljValue result1 = eval_string(code1, st);
-        TEST_ASSERT_NULL(result1);  // print returns nil
+        TEST_ASSERT_NIL(result1);  // print returns nil
         
         // Test: (println "Hello") should print without quotes, with newline
         const char *code2 = "(println \"Hello\")";
         CljValue result2 = eval_string(code2, st);
-        TEST_ASSERT_NULL(result2);  // println returns nil
+        TEST_ASSERT_NIL(result2);  // println returns nil
         
         // Test: (pr "Hello") should print with quotes, without newline
         const char *code3 = "(pr \"Hello\")";
         CljValue result3 = eval_string(code3, st);
-        TEST_ASSERT_NULL(result3);  // pr returns nil
+        TEST_ASSERT_NIL(result3);  // pr returns nil
         
         // Test: (prn "Hello") should print with quotes, with newline
         const char *code4 = "(prn \"Hello\")";
         CljValue result4 = eval_string(code4, st);
-        TEST_ASSERT_NULL(result4);  // prn returns nil
+        TEST_ASSERT_NIL(result4);  // prn returns nil
     });
 }
 
@@ -206,11 +206,11 @@ TEST_SHARED(test_native_print_multiple_args) {
         // Use global st from setUp
         const char *code = "(println \"a\" \"b\" \"c\")";
         CljValue result = eval_string(code, st);
-        TEST_ASSERT_NULL(result);  // println returns nil
+        TEST_ASSERT_NIL(result);  // println returns nil
         
         // Test: (print 1 2 3) should print "1 2 3" without newline
         const char *code2 = "(print 1 2 3)";
         CljValue result2 = eval_string(code2, st);
-        TEST_ASSERT_NULL(result2);  // print returns nil
+        TEST_ASSERT_NIL(result2);  // print returns nil
     });
 }
