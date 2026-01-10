@@ -7,9 +7,10 @@
 # - Keep defaults safe (no sudo/admin rights needed)
 set -euo pipefail
 
-BUILD_DIR="build"
-OUTPUT_DIR="benchmark_results"
-OUTPUT_FILE="$OUTPUT_DIR/sample_fib30_$(date +%Y%m%d_%H%M%S).txt"
+BUILD_DIR="${BUILD_DIR:-build}"
+# Default output dir is ignored by git; allow overriding to a tracked location.
+OUTPUT_DIR="${OUTPUT_DIR:-benchmark_results}"
+OUTPUT_FILE="${OUTPUT_FILE:-$OUTPUT_DIR/sample_fib30_$(date +%Y%m%d_%H%M%S).txt}"
 
 # Tuning knobs (override via env vars)
 SAMPLE_DURATION_SECONDS="${SAMPLE_DURATION_SECONDS:-30}"   # sample runtime
