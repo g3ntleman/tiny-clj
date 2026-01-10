@@ -96,6 +96,7 @@ tags
 
 # Local docs / OCR artifacts (do not commit)
 docs/Lisp in Small Pieces.pdf
+docs/Lisp in Small Pieces.ocr.txt
 docs/lisp-in-small-pieces.pdf
 docs/lisp-in-small-pieces-*.png
 docs/lisp-in-small-pieces-*.jpg
