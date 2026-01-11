@@ -68,6 +68,12 @@ void set_suppress_time_output(bool suppress);
 // Reset eval arg depth (for test isolation)
 void reset_eval_arg_depth(void);
 
+// Control pretreated AST execution (primarily for tests/benchmarks).
+// - enabled = 0: force disabled
+// - enabled = 1: force enabled
+// - enabled = -1: reset to "read from env on next use"
+void eval_set_use_compiled_ast(int enabled);
+
 // Convenience functions for string evaluation
 /**
  * @brief Evaluate a parsed CljValue (handles immediate values and heap objects)

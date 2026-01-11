@@ -9,7 +9,6 @@
 #include "vector.h"
 
 static const CljCompiledPayload k_payload_none = { .kind = CLJ_COMPILED_KIND_NONE, .eval = NULL };
-static const CljCompiledPayload k_payload_call = { .kind = CLJ_COMPILED_KIND_CALL, .eval = eval_compiled_call };
 static const CljCompiledPayload k_payload_if   = { .kind = CLJ_COMPILED_KIND_IF,   .eval = eval_compiled_if };
 static const CljCompiledPayload k_payload_do   = { .kind = CLJ_COMPILED_KIND_DO,   .eval = eval_compiled_do };
 static const CljCompiledPayload k_payload_let  = { .kind = CLJ_COMPILED_KIND_LET,  .eval = eval_compiled_let };
@@ -18,7 +17,7 @@ static const CljCompiledPayload k_payload_fn   = { .kind = CLJ_COMPILED_KIND_FN,
 static const CljCompiledPayload* pick_payload_for_ast_node(const CljASTNode *node) {
     if (!node) return &k_payload_none;
     ID head = node->first;
-    if (!head || TAG(head) != CLJ_SYMBOL) return &k_payload_call;
+    if (!head || TAG(head) != CLJ_SYMBOL) return &k_payload_none;
 
     CljSymbol *sym = as_symbol(head);
     if (sym == SYM_IF)  return &k_payload_if;
@@ -26,7 +25,15 @@ static const CljCompiledPayload* pick_payload_for_ast_node(const CljASTNode *nod
     if (sym == SYM_LET) return &k_payload_let;
     if (sym == SYM_FN)  return &k_payload_fn;
 
-    return &k_payload_call;
+    // Unsupported special forms must fall back to the existing evaluator for correctness.
+                if (is_special_symbol(sym)) return &k_payload_none;
+
+    // Non-callable builtins that are handled directly inside eval_list (not via eval_function_call).
+    if (sym == SYM_FOR || sym == SYM_DOSEQ || sym == SYM_DOTIMES) return &k_payload_none;
+
+    // For now, leave generic calls on the existing eval_list fast-path (callsite caches, arithmetic
+    // fast-paths, etc.). We'll re-enable a compiled call path once it preserves these optimizations.
+    return &k_payload_none;
 }
 
 static void ast_compile_expr_inplace(ID expr, EvalState *st);
