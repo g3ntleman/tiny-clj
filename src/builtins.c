@@ -3913,6 +3913,16 @@ static bool process_require_spec(ID spec, EvalState *st)
         CljSymbol *sym = as_symbol(spec);
         if (!sym || !sym->cname)
             return false;
+        // Clojure-compatible strictness: require expects a *namespace* symbol like foo.bar,
+        // not a qualified symbol like foo/bar.
+        if (sym->ns_name && sym->ns_name->cname) {
+            throw_exception_formatted(
+                EXCEPTION_ILLEGAL_ARGUMENT,
+                __FILE__, __LINE__, 0,
+                "require expects a namespace symbol like 'foo.bar', got qualified symbol '%s/%s'",
+                sym->ns_name->cname, sym->cname);
+            return false;
+        }
         ns_name = sym->cname;
     }
     // Handle Vector case: [namespace :as alias] or [namespace :refer [syms]]
@@ -3933,6 +3943,14 @@ static bool process_require_spec(ID spec, EvalState *st)
             if (!ns_sym || !ns_sym->cname)
             {
                 RELEASE(ns_obj);
+                return false;
+            }
+            if (ns_sym->ns_name && ns_sym->ns_name->cname) {
+                throw_exception_formatted(
+                    EXCEPTION_ILLEGAL_ARGUMENT,
+                    __FILE__, __LINE__, 0,
+                    "require expects a namespace symbol like 'foo.bar', got qualified symbol '%s/%s'",
+                    ns_sym->ns_name->cname, ns_sym->cname);
                 return false;
             }
             ns_name = ns_sym->cname;
