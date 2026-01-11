@@ -896,12 +896,12 @@ ID canonicalize_ast(ID parsed_expr, EvalState *st) {
         result = canonicalize_expr(parsed_expr, st, false);
 
         if (result && !IS_IMMEDIATE(result) && result != parsed_expr) {
-            unsigned char tag = TAG(result);
-            if (list_type_matches(tag) || tag == CLJ_VECTOR || tag == CLJ_MAP) {
-                needs_escape = true;
-                RETAIN(result);
-                rc_after_retain = retain_count(result);
-            }
+            // IMPORTANT: canonicalize_expr can produce freshly allocated non-container objects too
+            // (e.g. CLJ_SLOT_REF). If the pool drains on pop, those would be freed unless we
+            // retain them here.
+            needs_escape = true;
+            RETAIN(result);
+            rc_after_retain = retain_count(result);
         }
     });
 
