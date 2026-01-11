@@ -1,3 +1,9 @@
+# STATUS: IN_PROGRESS
+# When this plan is fully implemented, change this header to:
+#   STATUS: DONE (YYYY-MM-DD) — <commit>
+#
+# Rule: If a plan is completely implemented, mark it clearly at the top.
+#
 # ESP32 Serial REPL + core.async (current plan) and go/state-machine (later)
 
 This plan captures two tracks:
