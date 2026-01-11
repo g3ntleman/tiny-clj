@@ -33,6 +33,8 @@ benchmark_history.csv
 benchmark_output.txt
 progress.marks
 *.csv
+profile_outputs/
+tmp_fib_profile.clj
 
 # Sample output artifacts
 /sample_*.txt
