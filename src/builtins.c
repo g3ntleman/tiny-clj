@@ -3461,7 +3461,7 @@ ID native_symbol(ID *args, unsigned int argc)
         ID name_arg = args[1];
 
         // Namespace can be nil (NULL) or a string
-        if (TAG(ns_arg) != CLJ_STRING)
+        if (ns_arg && TAG(ns_arg) != CLJ_STRING)
         {
             throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                       "symbol namespace must be a string or nil");
