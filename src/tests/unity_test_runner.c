@@ -13,9 +13,6 @@
 #include "build_info.h"
 #include <time.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <string.h>
 
 // Forward declaration for clojure_core_set_quiet
 extern void clojure_core_set_quiet(bool quiet);
@@ -174,41 +171,31 @@ static void set_unity_test_file_info(const SubjectiveCTestEntry *entry) {
 
 // Helper function to run a single test with exception handling
 static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) {
-    int stdout_fd = -1;
+    FILE *captured_stdout = NULL;
     int saved_stdout = -1;
-    char tmpfile_template[] = "/tmp/tiny_clj_test_stdout_XXXXXX";
-    char *tmpfile_path = NULL;
+    bool capturing_stdout = false;
     bool test_failed = false;
 
     // In quiet mode, capture stdout to a temporary file
     if (g_quiet_output) {
-        // Create temporary file
-        stdout_fd = mkstemp(tmpfile_template);
-        if (stdout_fd < 0) {
-            // If we can't create temp file, just run test normally
+        captured_stdout = tmpfile();
+        if (!captured_stdout) {
             fprintf(stderr, "Warning: Could not create temporary file for stdout capture, running test normally\n");
         } else {
-            tmpfile_path = strdup(tmpfile_template);
-            // Save original stdout
             saved_stdout = dup(STDOUT_FILENO);
             if (saved_stdout < 0) {
-                close(stdout_fd);
-                unlink(tmpfile_path);
-                free(tmpfile_path);
+                fclose(captured_stdout);
+                captured_stdout = NULL;
                 fprintf(stderr, "Warning: Could not save stdout, running test normally\n");
             } else {
-                // Redirect stdout to temp file
-                if (dup2(stdout_fd, STDOUT_FILENO) < 0) {
-                    close(stdout_fd);
+                if (dup2(fileno(captured_stdout), STDOUT_FILENO) < 0) {
                     close(saved_stdout);
-                    unlink(tmpfile_path);
-                    free(tmpfile_path);
-                    fprintf(stderr, "Warning: Could not redirect stdout, running test normally\n");
-                    stdout_fd = -1;
                     saved_stdout = -1;
-                    tmpfile_path = NULL;
+                    fclose(captured_stdout);
+                    captured_stdout = NULL;
+                    fprintf(stderr, "Warning: Could not redirect stdout, running test normally\n");
                 } else {
-                    close(stdout_fd);  // Close the original fd, we use STDOUT_FILENO now
+                    capturing_stdout = true;
                 }
             }
         }
@@ -252,29 +239,83 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
     } END_TRY
 
     // Restore stdout if we captured it
-    if (saved_stdout >= 0) {
+    if (capturing_stdout && saved_stdout >= 0) {
         fflush(stdout);  // Flush any remaining output to temp file
         dup2(saved_stdout, STDOUT_FILENO);
         close(saved_stdout);
+        saved_stdout = -1;
     }
 
     // In quiet mode, replay captured output only if test failed
-    if (g_quiet_output && tmpfile_path != NULL) {
+    if (g_quiet_output && capturing_stdout && captured_stdout != NULL) {
         if (test_failed) {
             // Test failed - replay captured stdout
-            FILE *captured = fopen(tmpfile_path, "r");
-            if (captured) {
-                char buffer[4096];
-                size_t bytes_read;
-                while ((bytes_read = fread(buffer, 1, sizeof(buffer), captured)) > 0) {
-                    fwrite(buffer, 1, bytes_read, stdout);
+            fflush(captured_stdout);
+            fseek(captured_stdout, 0, SEEK_SET);
+
+            char buffer[4096];
+            size_t bytes_read;
+            size_t bytes_total = 0;
+
+            // Detect if we saw a FAIL token in the replayed output.
+            // This matters for failures that don't trigger a Unity assertion line
+            // (e.g. exceptions). In that case we emit a minimal FAIL line.
+            int fail_match = 0; // matches "FAIL"
+            while ((bytes_read = fread(buffer, 1, sizeof(buffer), captured_stdout)) > 0) {
+                bytes_total += bytes_read;
+                fwrite(buffer, 1, bytes_read, stdout);
+
+                for (size_t i = 0; i < bytes_read; i++) {
+                    char c = buffer[i];
+                    if ((fail_match == 0 && c == 'F') ||
+                        (fail_match == 1 && c == 'A') ||
+                        (fail_match == 2 && c == 'I') ||
+                        (fail_match == 3 && c == 'L')) {
+                        fail_match++;
+                        if (fail_match == 4) {
+                            break;
+                        }
+                    } else {
+                        fail_match = (c == 'F') ? 1 : 0;
+                    }
                 }
-                fclose(captured);
+                if (fail_match == 4) {
+                    // keep draining, but we already know we saw FAIL
+                }
+            }
+
+            if (fail_match != 4) {
+                const char *file = (entry && entry->file) ? entry->file : "unknown";
+                int line = (entry && entry->line > 0) ? entry->line : 0;
+                const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
+
+                if (line > 0) {
+                    fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
+                } else {
+                    fprintf(stdout, "%s:%s:FAIL\n", file, name);
+                }
+            }
+
+            // If absolutely nothing was captured, still ensure a FAIL line exists.
+            // (The FAIL token detection above covers most cases.)
+            if (bytes_total == 0) {
+                const char *file = (entry && entry->file) ? entry->file : "unknown";
+                int line = (entry && entry->line > 0) ? entry->line : 0;
+                const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
+                if (line > 0) {
+                    fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
+                } else {
+                    fprintf(stdout, "%s:%s:FAIL\n", file, name);
+                }
             }
         }
-        // Clean up temp file
-        unlink(tmpfile_path);
-        free(tmpfile_path);
+
+        fclose(captured_stdout);
+        captured_stdout = NULL;
+    } else if (captured_stdout) {
+        // Not capturing_stdout (or not quiet): close any tmpfile we opened.
+        fclose(captured_stdout);
+        captured_stdout = NULL;
     }
 }
 
@@ -407,7 +448,11 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
             run_test_with_exception_handling(test);
             // Summary will be printed at end of main()
         } else {
-            // Test not found - silently fail (no printf output in tests)
+            // Test not found - fail without noisy output.
+            // In quiet mode, still emit a single FAIL line so CI can surface the reason.
+            if (g_quiet_output) {
+                fprintf(stdout, "unknown:0:%s:FAIL: Test not found\n", test_name_or_pattern);
+            }
             Unity.NumberOfTests++;
             Unity.TestFailures++;
         }
