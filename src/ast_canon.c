@@ -86,7 +86,11 @@ static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, boo
 static bool vector_needs_destructuring(CljVector *vec, bool pairs_only) {
     int i = 0;
     VECTOR_FOR_EACH(vec, elem) {
-        if ((!pairs_only || (i++ & 1) == 0) && TAG(elem) != CLJ_SYMBOL) return true;
+        if ((!pairs_only || (i++ & 1) == 0)) {
+            unsigned char tag = TAG(elem);
+            // Symbol tokens behave like symbols before canonicalization.
+            if (tag != CLJ_SYMBOL && tag != CLJ_SYMBOL_TOKEN) return true;
+        }
     }
     return false;
 }
@@ -326,15 +330,36 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     // to avoid infinite recursion when metadata objects have their own metadata.
     
     unsigned char tag = TAG(expr);
+
+#if defined(META_ENABLED) && META_ENABLED
+    // Metadata must be canonicalized too (e.g., keyword keys inside ^{:k :v}).
+    // Treat metadata as data (no macroexpansion / lexical rewrite), but do convert symbol tokens.
+    //
+    // IMPORTANT: Guard against infinite recursion (metadata objects can have metadata).
+    static _Thread_local bool g_canon_meta_active = false;
+    if (!g_canon_meta_active) {
+        ID meta = meta_get(expr);
+        if (meta) {
+            g_canon_meta_active = true;
+            ID canon_meta = canonicalize_expr_with_scope(meta, st, true, NULL);
+            g_canon_meta_active = false;
+            if (canon_meta && canon_meta != meta) {
+                meta_set(expr, canon_meta);
+            }
+        }
+    }
+#endif
     
-    // Convert symbol tokens (stored as special strings) to CljSymbol - always, even in quote
+    // Convert symbol tokens (stored as special strings) to CljSymbol - always, even in quote.
+    // IMPORTANT: Do NOT return early here; the converted symbol may still need lexical rewrite.
     if (tag == CLJ_SYMBOL_TOKEN) {
         CljSymbolToken *token = (CljSymbolToken*)expr;
         CljSymbol *sym = canonicalize_symbol_token(token, st);
-        if (sym) {
-            return sym;
+        if (!sym) {
+            return expr;  // Conversion failed (invalid symbol) - leave as token
         }
-        return expr;  // Conversion failed (invalid symbol) - leave as token
+        expr = (ID)sym;
+        tag = CLJ_SYMBOL;
     }
 
     if (tag == CLJ_STRING) {
@@ -380,7 +405,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         // ========== MACRO EXPANSION (compile-time) ==========
         // Expand macros before destructuring and other transformations
         // Skip macro lookup for special forms and native functions (they can't be macros)
-        if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
+        if (!in_quote && TAG(first) == CLJ_SYMBOL) {
             CljSymbol *head_sym = as_symbol(first);
             CljFunction *macro = NULL;
             if (!is_special_symbol(head_sym) && !is_native_symbol(head_sym)) {
@@ -395,7 +420,14 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 for (CljList *cur = list->rest ? as_list(list->rest) : NULL;
                      cur && argc < 16;
                      cur = cur->rest ? as_list(cur->rest) : NULL) {
-                    args[argc++] = cur->first;
+                    // Macros operate on "raw forms", but those forms must already contain
+                    // real symbols/keywords (not CLJ_SYMBOL_TOKEN) so macro code can inspect them.
+                    //
+                    // Use in_quote=true to:
+                    // - convert symbol tokens → symbols (and recurse into vectors/maps)
+                    // - keep list structure as CLJ_LIST (no ASTNode conversion)
+                    // - avoid nested macroexpansion / lexical rewrites
+                    args[argc++] = canonicalize_expr_with_scope(cur->first, st, true, NULL);
                 }
                 
                 // Call macro function to expand the form
@@ -429,14 +461,17 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         
         // ========== DESTRUCTURING TRANSFORMATION (compile-time) ==========
         // Transform let/loop bindings and fn/defn params
-        if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
+        if (!in_quote && TAG(first) == CLJ_SYMBOL) {
             CljSymbol *head_sym = as_symbol(first);
 
             // (let [bindings] body...) - expand bindings using Clojure destructure
             if (head_sym == SYM_LET) {
                 CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
-                    CljVector *bindings = as_vector(rest1->first);
+                if (rest1 && TAG(rest1->first) == CLJ_VECTOR) {
+                    // IMPORTANT: destructure() expects real symbols, not CLJ_SYMBOL_TOKEN.
+                    // Canonicalize the bindings as data (no macroexpansion) to convert tokens → symbols.
+                    ID canon_bindings = canonicalize_expr_with_scope(rest1->first, st, true, NULL);
+                    CljVector *bindings = as_vector(canon_bindings);
                     if (bindings_need_destructuring(bindings)) {
                         CljVector *expanded = destructure(st, bindings);
                         if (expanded) {
@@ -455,8 +490,10 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             //       To: (loop [loop__1 init, sum 0] (let [expanded-bindings] body))
             if (head_sym == SYM_LOOP) {
                 CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
-                    CljVector *bindings = as_vector(rest1->first);
+                if (rest1 && TAG(rest1->first) == CLJ_VECTOR) {
+                    // Canonicalize loop bindings as data to convert symbol tokens → symbols.
+                    ID canon_bindings = canonicalize_expr_with_scope(rest1->first, st, true, NULL);
+                    CljVector *bindings = as_vector(canon_bindings);
                     if (bindings_need_destructuring(bindings)) {
                         static unsigned long gensym_counter = 0;
                         unsigned int count = vector_count(bindings);
@@ -524,17 +561,21 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     CljList *body_rest = NULL;
                     bool named = false;
                     
-                    if (second && TAG(second) == CLJ_SYMBOL && !IS_KEYWORD(second)) {
+                    if (TAG(second) == CLJ_SYMBOL && !IS_KEYWORD(second)) {
                         // Named fn: (fn name [params] body)
                         named = true;
                         CljList *rest2 = rest1->rest ? as_list(rest1->rest) : NULL;
-                        if (rest2 && rest2->first && TAG(rest2->first) == CLJ_VECTOR) {
-                            params = as_vector(rest2->first);
+                        if (rest2 && TAG(rest2->first) == CLJ_VECTOR) {
+                            // Canonicalize params as data to convert symbol tokens → symbols.
+                            ID canon_params = canonicalize_expr_with_scope(rest2->first, st, true, NULL);
+                            params = as_vector(canon_params);
                             body_rest = rest2->rest ? as_list(rest2->rest) : NULL;
                         }
-                    } else if (second && TAG(second) == CLJ_VECTOR) {
+                    } else if (TAG(second) == CLJ_VECTOR) {
                         // Anonymous fn: (fn [params] body)
-                        params = as_vector(second);
+                        // Canonicalize params as data to convert symbol tokens → symbols.
+                        ID canon_params = canonicalize_expr_with_scope(second, st, true, NULL);
+                        params = as_vector(canon_params);
                         body_rest = rest1->rest ? as_list(rest1->rest) : NULL;
                     }
                     
@@ -565,7 +606,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         // then push a scope of the let binding names for the body.
         if (!in_quote && first == SYM_LET && scope_stack) {
             CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+            if (rest1 && TAG(rest1->first) == CLJ_VECTOR) {
                 // Canonicalize bindings vector without lexical rewrite.
                 ID canon_bindings = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
 
@@ -580,7 +621,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                         for (unsigned int i = 0; i + 1 < bc; i += 2) {
                             ID k = data[i];
                         // Destructuring should already have been expanded; keys should be symbols.
-                        if (k && TAG(k) == CLJ_SYMBOL && !IS_KEYWORD(k) && !is_special_symbol((CljSymbol*)k)) {
+                        if (TAG(k) == CLJ_SYMBOL && !IS_KEYWORD(k) && !is_special_symbol((CljSymbol*)k)) {
                             vector_conj_inplace(&let_scope, k);
                         } else {
                             // If key isn't a plain symbol, keep a placeholder so slot indices stay aligned.
@@ -615,7 +656,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         // then push a scope with just the loop var for the body.
         if (!in_quote && first == SYM_DOTIMES && scope_stack) {
             CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+            if (rest1 && TAG(rest1->first) == CLJ_VECTOR) {
                 ID canon_binding_vec = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
                 CljVector *binding_vec = as_vector(canon_binding_vec);
 
@@ -626,7 +667,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 
                 // Push scope [i] for the dotimes body so `i` can become a SlotRef.
                 CljVector *dotimes_scope = make_vector(1, CLJ_VECTOR);
-                if (loop_var && TAG(loop_var) == CLJ_SYMBOL && !IS_KEYWORD(loop_var)) {
+                if (TAG(loop_var) == CLJ_SYMBOL && !IS_KEYWORD(loop_var)) {
                     vector_conj_inplace(&dotimes_scope, loop_var);
                 } else {
                     vector_conj_inplace(&dotimes_scope, NULL);
@@ -660,7 +701,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 CljList *body_rest = NULL;        // list of body forms
                 bool named = false;
 
-                if (second && TAG(second) == CLJ_SYMBOL && !IS_KEYWORD(second)) {
+                if (TAG(second) == CLJ_SYMBOL && !IS_KEYWORD(second)) {
                     named = true;
                     CljList *rest2 = rest1->rest ? as_list(rest1->rest) : NULL;
                     params_form = rest2 ? rest2->first : NULL;
@@ -670,7 +711,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     body_rest = rest1->rest ? as_list(rest1->rest) : NULL;
                 }
 
-                if (params_form && TAG(params_form) == CLJ_VECTOR) {
+                if (TAG(params_form) == CLJ_VECTOR) {
                     // Canonicalize fn-name/params with lexical rewrite disabled.
                     ID name_canon = named ? canonicalize_expr_with_scope(second, st, child_in_quote, NULL) : NULL;
                     ID params_canon_id = canonicalize_expr_with_scope(params_form, st, child_in_quote, NULL);
@@ -785,7 +826,8 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         // Create new vector with canonicalized elements
         CljVector *new_vec = make_vector(count, CLJ_VECTOR);
         for (int i = 0; i < count; i++) {
-            ASSIGN(new_vec, vector_conj(new_vec, canon_elems[i]));
+            // Use in-place conj to avoid vector_conj()'s unconditional AUTORELEASE churn.
+            vector_conj_inplace(&new_vec, canon_elems[i]);
         }
         move_meta(vec, new_vec);
         
@@ -814,7 +856,8 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             if (canon_key != key || canon_value != value) {
                 changed = true;
             }
-            ASSIGN(new_map, map_assoc(new_map, canon_key, canon_value));
+            // Use in-place update to avoid map_assoc()'s unconditional AUTORELEASE churn.
+            map_assoc_inplace(&new_map, canon_key, canon_value);
         }
 
         if (changed) {

@@ -8,6 +8,7 @@
 #include "symbol.h"
 #include "namespace.h"
 #include "eval.h"
+#include "ast_canon.h"
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
@@ -317,8 +318,9 @@ TEST(test_parser_resolves_symbol_alias) {
     eval_string("(ns test-parser-alias (:require [clojure.string :as str]))", g_test_eval_state);
     
     // Test: Parse str/blank? - should resolve alias in parser
-    CljObject *parsed = parse("str/blank?", g_test_eval_state);
+    ID parsed = parse("str/blank?", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
+    parsed = canonicalize_ast(parsed, g_test_eval_state);
     TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
     
     CljSymbol *sym = as_symbol(parsed);
@@ -339,12 +341,14 @@ TEST(test_common_alias_resolution_for_keywords_and_symbols) {
     eval_string("(ns test-common (:require [clojure.string :as str]))", g_test_eval_state);
     
     // Test: Both keyword and symbol should resolve to same namespace
-    CljObject *kw_parsed = parse(":str/trim", g_test_eval_state);
-    CljObject *sym_parsed = parse("str/blank?", g_test_eval_state);
+    ID kw_parsed = parse(":str/trim", g_test_eval_state);
+    ID sym_parsed = parse("str/blank?", g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(kw_parsed);
     TEST_ASSERT_NOT_NULL(sym_parsed);
     
+    kw_parsed = canonicalize_ast(kw_parsed, g_test_eval_state);
+    sym_parsed = canonicalize_ast(sym_parsed, g_test_eval_state);
     CljSymbol *kw = as_symbol(kw_parsed);
     CljSymbol *sym = as_symbol(sym_parsed);
     
@@ -358,9 +362,10 @@ TEST(test_no_runtime_fallback_for_alias) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Setup: Parse symbol BEFORE alias is set (simulating require outside ns)
-    CljObject *parsed = parse("str/blank?", g_test_eval_state);
+    ID parsed = parse("str/blank?", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
     
+    parsed = canonicalize_ast(parsed, g_test_eval_state);
     CljSymbol *sym = as_symbol(parsed);
     TEST_ASSERT_NOT_NULL(sym);
     

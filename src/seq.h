@@ -188,7 +188,7 @@ static inline CljLazySeq* as_lazy_seq(ID obj) {
 }
 
 static inline bool is_lazy_seq(ID obj) {
-    return obj && TAG((CljObject*)obj) == CLJ_LAZY_SEQ;
+    return TAG((CljObject*)obj) == CLJ_LAZY_SEQ;
 }
 
 #ifdef __cplusplus

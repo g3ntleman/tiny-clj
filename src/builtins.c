@@ -781,7 +781,7 @@ ID native_next(ID *args, unsigned int argc)
     // For CLJ_LIST, seq_next returns AUTORELEASE(RETAIN(...)) - already in pool
     // For other types, seq_next returns new CljSeqIterator objects (rc=1) - need AUTORELEASE
     // Note: seq_next never returns immediate values, only NULL or heap objects (CLJ_LIST or CLJ_SEQ)
-    if (result && TAG(result) == CLJ_SEQ)
+    if (TAG(result) == CLJ_SEQ)
     {
         // Only seq_next results that are freshly allocated seq iterators
         // (TAG == CLJ_SEQ) still need to be autoreleased. LIST results that
@@ -1845,7 +1845,7 @@ ID native_get(ID *args, unsigned int argc)
         return NULL;
 
     // Convert SYM_NIL to NULL for key lookup
-    ID key = (key_obj && TAG(key_obj) == CLJ_SYMBOL && key_obj == SYM_NIL)
+    ID key = (TAG(key_obj) == CLJ_SYMBOL && key_obj == SYM_NIL)
                  ? NULL
                  : key_obj;
 
@@ -2845,7 +2845,7 @@ ID native_source(ID *args, unsigned int argc)
     }
 
     // If we have a function, print its full definition AST: (fn [params*] body)
-    if (target_func != NOT_FOUND && target_func && TAG(target_func) == CLJ_CLOSURE)
+    if (target_func != NOT_FOUND && TAG(target_func) == CLJ_CLOSURE)
     {
         CljFunction *fn = as_function(target_func);
         if (fn)
@@ -2916,7 +2916,7 @@ ID native_repl_dir(ID *args, unsigned int argc)
     int entry_count = 0;
     MAP_FOR_EACH(target_ns->mappings, key, value)
     {
-        if (key && TAG(key) == CLJ_SYMBOL)
+        if (TAG(key) == CLJ_SYMBOL)
         {
             entry_count++;
         }
@@ -2937,7 +2937,7 @@ ID native_repl_dir(ID *args, unsigned int argc)
     int idx_names = 0;
     MAP_FOR_EACH(target_ns->mappings, key, value)
     {
-        if (key && TAG(key) == CLJ_SYMBOL)
+        if (TAG(key) == CLJ_SYMBOL)
         {
             CljSymbol *sym = as_symbol(key);
             if (sym && sym->cname)
@@ -3461,7 +3461,7 @@ ID native_symbol(ID *args, unsigned int argc)
         ID name_arg = args[1];
 
         // Namespace can be nil (NULL) or a string
-        if (ns_arg && TAG(ns_arg) != CLJ_STRING)
+        if (TAG(ns_arg) != CLJ_STRING)
         {
             throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                       "symbol namespace must be a string or nil");
@@ -3927,7 +3927,7 @@ static bool process_require_spec(ID spec, EvalState *st)
         if (!ns_obj)
             return false;
 
-        if (ns_obj && TAG(ns_obj) == CLJ_SYMBOL)
+        if (TAG(ns_obj) == CLJ_SYMBOL)
         {
             CljSymbol *ns_sym = as_symbol(ns_obj);
             if (!ns_sym || !ns_sym->cname)
@@ -3958,7 +3958,7 @@ static bool process_require_spec(ID spec, EvalState *st)
                 continue;
 
             // Check if it's a keyword (Symbol starting with :)
-            if (elem && TAG(elem) == CLJ_SYMBOL)
+            if (TAG(elem) == CLJ_SYMBOL)
             {
                 CljSymbol *kw = as_symbol(elem);
                 if (!kw || !kw->cname)
@@ -3985,7 +3985,7 @@ static bool process_require_spec(ID spec, EvalState *st)
                     if (i + 1 < vec_count)
                     {
                         CljObject *refer_arg = vector_nth(vec, i + 1);
-                        if (refer_arg && TAG(refer_arg) == CLJ_SYMBOL)
+                        if (TAG(refer_arg) == CLJ_SYMBOL)
                         {
                             CljSymbol *refer_sym = as_symbol(refer_arg);
                             if (refer_sym && refer_sym->cname && strcmp(refer_sym->cname, ":all") == 0)
@@ -3998,7 +3998,7 @@ static bool process_require_spec(ID spec, EvalState *st)
                                 RELEASE(refer_arg);
                             }
                         }
-                        else if (refer_arg && TAG(refer_arg) == CLJ_VECTOR)
+                        else if (TAG(refer_arg) == CLJ_VECTOR)
                         {
                             refer_syms = refer_arg;
                             // Don't release refer_syms - it's stored for later use
@@ -4048,7 +4048,7 @@ static bool process_require_spec(ID spec, EvalState *st)
                 // NOTE: alias_sym is extracted from vector in lines 2227-2234
                 // It should be set by the time we reach here if :as was in the vector
                 // CRITICAL: Use same logic as the working case (line 2412) for consistency
-                if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL)
+                if (TAG(alias_sym) == CLJ_SYMBOL)
                 {
                     ID ns_name_sym = intern_symbol_global(ns_name);
                     if (ns_name_sym)
@@ -4179,7 +4179,7 @@ static bool process_require_spec(ID spec, EvalState *st)
     CljNamespace *loaded_ns = ns_find(ns_name);
     if (loaded_ns)
     {
-        if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL)
+        if (TAG(alias_sym) == CLJ_SYMBOL)
         {
             ID ns_name_sym = intern_symbol_global(ns_name);
             if (ns_name_sym)
@@ -4228,7 +4228,7 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
 
         // Handle (quote symbol) => symbol
         ID first = LIST_FIRST(list);
-        if (first && TAG(first) == CLJ_SYMBOL)
+        if (TAG(first) == CLJ_SYMBOL)
         {
             CljSymbol *first_sym = as_symbol(first);
             if (first_sym == SYM_QUOTE)

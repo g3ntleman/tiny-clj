@@ -64,7 +64,7 @@ TEST(test_hypothesis_ns_require_sets_alias) {
     CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)str_alias);
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name, "Alias 'str' should be set when using (ns ... (:require ...))");
     
-    if (ns_name && TAG(ns_name) == CLJ_SYMBOL) {
+    if (TAG(ns_name) == CLJ_SYMBOL) {
         CljSymbol *ns_sym = as_symbol(ns_name);
         TEST_ASSERT_NOT_NULL(ns_sym);
         TEST_ASSERT_NOT_NULL(ns_sym->cname);
@@ -96,7 +96,7 @@ TEST(test_hypothesis_require_direct_sets_alias) {
     CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)str_alias);
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name, "Alias 'str' should be set when using (require ...) directly");
     
-    if (ns_name && TAG(ns_name) == CLJ_SYMBOL) {
+    if (TAG(ns_name) == CLJ_SYMBOL) {
         CljSymbol *ns_sym = as_symbol(ns_name);
         TEST_ASSERT_NOT_NULL(ns_sym);
         TEST_ASSERT_EQUAL_STRING_MESSAGE("clojure.string", ns_sym->cname,
@@ -194,7 +194,7 @@ TEST(test_hypothesis_resolve_alias_in_namespace_function) {
     CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)str_alias);
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name, "ns_get_alias should return namespace name");
     
-    if (ns_name && TAG(ns_name) == CLJ_SYMBOL) {
+    if (TAG(ns_name) == CLJ_SYMBOL) {
         CljSymbol *ns_sym = as_symbol(ns_name);
         TEST_ASSERT_EQUAL_STRING_MESSAGE("clojure.string", ns_sym->cname,
             "ns_get_alias should return correct namespace name");
@@ -248,7 +248,7 @@ TEST(test_hypothesis_alias_resolution_when_namespace_already_loaded) {
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name,
         "Alias should be set even when namespace is already loaded");
     
-    if (ns_name && TAG(ns_name) == CLJ_SYMBOL) {
+    if (TAG(ns_name) == CLJ_SYMBOL) {
         CljSymbol *ns_sym = as_symbol(ns_name);
         TEST_ASSERT_EQUAL_STRING_MESSAGE("clojure.string", ns_sym->cname,
             "Alias should resolve correctly when namespace already loaded");

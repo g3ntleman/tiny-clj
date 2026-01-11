@@ -71,8 +71,8 @@ static bool task_from_map(CljMap *task_map, CljObject **fn, CljMap **result_chan
     
     if (fn) *fn = (CljObject*)fn_val;
     if (result_chan) *result_chan = result_chan_val ? (CljMap*)result_chan_val : NULL;
-    if (args_vec) *args_vec = (args_val && TAG(args_val) == CLJ_VECTOR) ? (CljVector*)args_val : NULL;
-    if (argc_out) *argc_out = (argc_val && TAG(argc_val) == CLJ_INT) ? (int)as_fixnum(argc_val) : 0;
+    if (args_vec) *args_vec = (TAG(args_val) == CLJ_VECTOR) ? (CljVector*)args_val : NULL;
+    if (argc_out) *argc_out = (TAG(argc_val) == CLJ_INT) ? (int)as_fixnum(argc_val) : 0;
     
     return true;
 }

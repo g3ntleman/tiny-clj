@@ -94,7 +94,7 @@ TEST(test_update_basic) {
     // Test: (update {:a 1} :a inc) => {:a 2}
     CljObject *result = eval_string("(update {:a 1} :a inc)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
     
     // Verify the updated value
     CljSymbol *key = intern_symbol(NULL, ":a");
@@ -108,7 +108,7 @@ TEST(test_update_with_function) {
     // Test: (update {:count 5} :count (fn [x] (* x 2))) => {:count 10}
     CljObject *result = eval_string("(update {:count 5} :count (fn [x] (* x 2)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
     
     // Verify the updated value
     CljSymbol *key = intern_symbol(NULL, ":count");
@@ -139,7 +139,7 @@ TEST(test_update_missing_key_simple) {
     // Step 4: Use map_assoc to add the new key
     CljMap *result = map_assoc(map, (CljValue)key_b, (CljValue)new_val_b);
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "map_assoc should return a map");
-    TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)result) == CLJ_MAP);
     
     CljMap *result_map = result;
     TEST_ASSERT_EQUAL_INT(2, result_map->count);
@@ -190,7 +190,7 @@ TEST(test_update_missing_key) {
         return;
     }
     
-    TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_MAP, "update result should be a map");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(result) == CLJ_MAP, "update result should be a map");
     
     CljMap *result_map = as_map((CljObject*)result);
     TEST_ASSERT_EQUAL_INT(2, result_map->count);
@@ -233,7 +233,7 @@ TEST(test_assoc_map_isolated) {
         return;
     }
 
-    TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_MAP, "assoc result should be a map");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(result) == CLJ_MAP, "assoc result should be a map");
 
     // Verify the new key was added
     CljSymbol *key_b = intern_symbol(NULL, ":b");
@@ -305,7 +305,7 @@ TEST(test_map_transient_comprehensive) {
     TEST_ASSERT_EQUAL_INT(0, empty_map->count);
     CljMap *empty_transient = AUTORELEASE(map_transient(empty_map));
     TEST_ASSERT_NOT_NULL(empty_transient);
-    TEST_ASSERT_TRUE((CljObject*)empty_transient && TAG((CljObject*)empty_transient) == CLJ_MAP_TRANSIENT);
+    TEST_ASSERT_TRUE(TAG((CljObject*)empty_transient) == CLJ_MAP_TRANSIENT);
     TEST_ASSERT_EQUAL_INT(0, empty_transient->count);
     
     // Test 3: Map with entries - conversion and data preservation
@@ -318,19 +318,19 @@ TEST(test_map_transient_comprehensive) {
         persistent_map = map_assoc(persistent_map, (CljValue)keys[i], fixnum(i * 10));
     }
     TEST_ASSERT_EQUAL_INT(5, persistent_map->count);
-    TEST_ASSERT_TRUE((CljObject*)persistent_map && TAG((CljObject*)persistent_map) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)persistent_map) == CLJ_MAP);
     
     // Convert to transient
     CljMap *transient_map = map_transient(persistent_map);
     TEST_ASSERT_NOT_NULL(transient_map);
-    TEST_ASSERT_TRUE((CljObject*)transient_map && TAG((CljObject*)transient_map) == CLJ_MAP_TRANSIENT);
+    TEST_ASSERT_TRUE(TAG((CljObject*)transient_map) == CLJ_MAP_TRANSIENT);
     TEST_ASSERT_EQUAL_INT(5, transient_map->count);
     
     // Verify it's a different pointer (new map created)
     TEST_ASSERT_NOT_EQUAL((CljValue)persistent_map, (CljValue)transient_map);
     
     // Verify original map is unchanged
-    TEST_ASSERT_TRUE((CljObject*)persistent_map && TAG((CljObject*)persistent_map) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)persistent_map) == CLJ_MAP);
     TEST_ASSERT_EQUAL_INT(5, persistent_map->count);
     
     // Verify all entries are preserved

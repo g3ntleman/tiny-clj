@@ -36,7 +36,7 @@ TEST(test_core_initialization_inc_loaded) {
     
     MAP_FOR_EACH(map, key, value) {
         (void)value;  // unused
-        if (key && TAG(key) == CLJ_SYMBOL) {
+        if (TAG(key) == CLJ_SYMBOL) {
             CljSymbol *sym = as_symbol(key);
             symbol_count++;
             if (!first_symbol_name && sym->cname) {
@@ -66,7 +66,7 @@ TEST(test_core_initialization_inc_loaded) {
     
     TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, 
                                 "inc should be in clojure.core mappings after initialization");
-    TEST_ASSERT_TRUE_MESSAGE(inc_value && TAG(inc_value) == CLJ_FUNC || inc_value && TAG(inc_value) == CLJ_CLOSURE,
+    TEST_ASSERT_TRUE_MESSAGE(TAG(inc_value) == CLJ_FUNC || TAG(inc_value) == CLJ_CLOSURE,
                              "inc should be a function");
 }
 
@@ -156,7 +156,7 @@ TEST(test_clojure_core_loads_inc) {
             
             MAP_FOR_EACH(map, key, value) {
                 (void)value;  // unused
-                if (key && TAG(key) == CLJ_SYMBOL) {
+                if (TAG(key) == CLJ_SYMBOL) {
                     CljSymbol *sym = as_symbol(key);
                     symbol_count++;
                     if (!first_symbol && sym->cname) {
@@ -188,7 +188,7 @@ TEST(test_clojure_core_loads_inc) {
         
         TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, 
                                     "inc should be in clojure.core mappings after load");
-        TEST_ASSERT_TRUE_MESSAGE(inc_value && TAG(inc_value) == CLJ_FUNC || inc_value && TAG(inc_value) == CLJ_CLOSURE,
+        TEST_ASSERT_TRUE_MESSAGE(TAG(inc_value) == CLJ_FUNC || TAG(inc_value) == CLJ_CLOSURE,
                                 "inc should be a function");
     }
 }
@@ -269,7 +269,7 @@ TEST(test_def_inc_evaluation_during_load) {
         CljObject *fn_expr = (CljObject*)list_nth(list, 2);
         
         TEST_ASSERT_NOT_NULL(inc_sym);
-        TEST_ASSERT_TRUE(inc_sym && TAG(inc_sym) == CLJ_SYMBOL);
+        TEST_ASSERT_TRUE(TAG(inc_sym) == CLJ_SYMBOL);
         TEST_ASSERT_NOT_NULL(fn_expr);
         
         // Verify that inc_sym is the same as intern_symbol_global("inc")
@@ -298,7 +298,7 @@ TEST(test_def_inc_evaluation_during_load) {
                 const char *first_symbol = NULL;
                 MAP_FOR_EACH(map, key, value) {
                     (void)value;  // unused
-                    if (key && TAG(key) == CLJ_SYMBOL) {
+                    if (TAG(key) == CLJ_SYMBOL) {
                         CljSymbol *sym = as_symbol(key);
                         symbol_count++;
                         if (!first_symbol && sym->cname) {
@@ -319,7 +319,7 @@ TEST(test_def_inc_evaluation_during_load) {
                                         "inc should be in mappings after def evaluation");
             
             // Verify that inc_value is a function
-            TEST_ASSERT_TRUE_MESSAGE(inc_value && TAG(inc_value) == CLJ_FUNC || inc_value && TAG(inc_value) == CLJ_CLOSURE,
+            TEST_ASSERT_TRUE_MESSAGE(TAG(inc_value) == CLJ_FUNC || TAG(inc_value) == CLJ_CLOSURE,
                                     "inc should be a function");
             
             // Don't RELEASE result - eval_string returns autoreleased object
@@ -371,7 +371,7 @@ TEST(test_plus_available_during_fn_evaluation) {
         CljValue result = eval_list(as_list(canonical_form), env, g_test_eval_state, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(result, 
                                     "fn expression should evaluate to a function");
-        TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_FUNC || result && TAG(result) == CLJ_CLOSURE,
+        TEST_ASSERT_TRUE_MESSAGE(TAG(result) == CLJ_FUNC || TAG(result) == CLJ_CLOSURE,
                                 "fn expression should return a function");
         
         // Don't RELEASE result - eval_string returns autoreleased object

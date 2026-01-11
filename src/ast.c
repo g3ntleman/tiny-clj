@@ -14,6 +14,7 @@ CljASTNode* make_ast_node(ID first, ID rest) {
     node->first = RETAIN(first);
     node->rest = RETAIN(rest);
     node->callsite_cache = NULL;
+    node->compiled = NULL;
 
     return node;
 }
@@ -45,7 +46,7 @@ CljASTNode* as_ast_node(ID obj) {
 }
 
 bool is_ast_node(ID obj) {
-    return obj && TAG(obj) == CLJ_AST_NODE;
+    return TAG(obj) == CLJ_AST_NODE;
 }
 
 void ast_node_set_callsite_cache(CljASTNode *node, ID cache) {
@@ -56,6 +57,16 @@ void ast_node_set_callsite_cache(CljASTNode *node, ID cache) {
 ID ast_node_get_callsite_cache(const CljASTNode *node) {
     if (!node) return NULL;
     return node->callsite_cache;
+}
+
+void ast_node_set_compiled(CljASTNode *node, void *compiled) {
+    if (!node) return;
+    node->compiled = compiled;
+}
+
+void* ast_node_get_compiled(const CljASTNode *node) {
+    if (!node) return NULL;
+    return node->compiled;
 }
 
 CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint64_t epoch) {

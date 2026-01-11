@@ -8,6 +8,8 @@
 #include "tests_common.h"
 #include "../to_string.h"
 #include "../symbol.h"
+#include "../symbol_token.h"
+#include "../ast_canon.h"
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -38,9 +40,9 @@ TEST(test_parse_basic_types) {
     TEST_ASSERT_EQUAL_INT(CLJ_STRING, str_result->type);
 
     // Test symbol parsing
-    CljObject *sym_result = parse("test-symbol", eval_state);
+    ID sym_result = parse("test-symbol", eval_state);
     TEST_ASSERT_NOT_NULL(sym_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym_result->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL_TOKEN, TAG(sym_result));
 
     evalstate_free(eval_state);
 }
@@ -97,15 +99,16 @@ TEST(test_parse_metadata) {
     EvalState *eval_state = evalstate_new(false);
 
     // Test metadata parsing with keywords - use string (not fixnum, immediates can't have metadata)
-    CljObject *result = parse("^{:key :value} \"test\"", eval_state);
+    ID result = parse("^{:key :value} \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #if defined(META_ENABLED) && META_ENABLED
+    result = canonicalize_ast(result, eval_state);
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
 
     // Test that metadata contains the key-value pair
     CljSymbol *kw_key = intern_symbol_global(":key");
@@ -125,15 +128,16 @@ TEST(test_parse_metadata_keyword_shorthand) {
     EvalState *eval_state = evalstate_new(false);
 
     // Test ^:private syntax (shorthand for ^{:private true}) - use string (not fixnum)
-    CljObject *result = parse("^:private \"test\"", eval_state);
+    ID result = parse("^:private \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #if defined(META_ENABLED) && META_ENABLED
+    result = canonicalize_ast(result, eval_state);
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
 
     // Test that metadata contains :private -> true
     CljSymbol *kw_private = intern_symbol_global(":private");
@@ -152,15 +156,16 @@ TEST(test_parse_metadata_hash_caret) {
     EvalState *eval_state = evalstate_new(false);
 
     // Test #^{:key :value} syntax - use string (not fixnum, immediates can't have metadata)
-    CljObject *result = parse("#^{:key :value} \"test\"", eval_state);
+    ID result = parse("#^{:key :value} \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #if defined(META_ENABLED) && META_ENABLED
+    result = canonicalize_ast(result, eval_state);
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
 
     // Test that metadata contains the key-value pair
     CljSymbol *kw_key = intern_symbol_global(":key");
@@ -180,15 +185,16 @@ TEST(test_parse_metadata_combined) {
     EvalState *eval_state = evalstate_new(false);
 
     // Test ^#^{:key :value} syntax (combination of ^ and #^) - use string
-    CljObject *result = parse("^#^{:key :value} \"test\"", eval_state);
+    ID result = parse("^#^{:key :value} \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #if defined(META_ENABLED) && META_ENABLED
+    result = canonicalize_ast(result, eval_state);
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
 
     // Test that metadata contains the key-value pair
     CljSymbol *kw_key = intern_symbol_global(":key");
@@ -208,15 +214,16 @@ TEST(test_parse_metadata_multiple_keywords) {
     EvalState *eval_state = evalstate_new(false);
 
     // Test multiple keyword metadata (should merge) - use string
-    CljObject *result = parse("^:private ^:dynamic \"test\"", eval_state);
+    ID result = parse("^:private ^:dynamic \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #if defined(META_ENABLED) && META_ENABLED
+    result = canonicalize_ast(result, eval_state);
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
 
     // Test that metadata contains both :private and :dynamic
     CljSymbol *kw_private = intern_symbol_global(":private");
@@ -239,15 +246,16 @@ TEST(test_parse_metadata_mixed) {
     EvalState *eval_state = evalstate_new(false);
 
     // Test mixed keyword and map metadata - use string
-    CljObject *result = parse("^:private ^{:doc \"test\"} \"test\"", eval_state);
+    ID result = parse("^:private ^{:doc \"test\"} \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #if defined(META_ENABLED) && META_ENABLED
+    result = canonicalize_ast(result, eval_state);
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
 
     // Test that metadata contains both :private and :doc
     CljSymbol *kw_private = intern_symbol_global(":private");
@@ -259,7 +267,7 @@ TEST(test_parse_metadata_mixed) {
         TEST_ASSERT_NOT_NULL(doc_value);
         TEST_ASSERT_TRUE(private_value == clj_true);
         // doc_value should be a string "test"
-        TEST_ASSERT_TRUE((CljObject*)doc_value && TAG((CljObject*)doc_value) == CLJ_STRING);
+        TEST_ASSERT_TRUE(TAG((CljObject*)doc_value) == CLJ_STRING);
     }
 #endif // META_ENABLED
 
@@ -271,9 +279,9 @@ TEST(test_parse_utf8_symbols) {
 
     // Test UTF-8 symbol parsing
     const char *src = "äöü✓"; // UTF-8 multibyte incl. checkmark
-    CljObject *sym = parse(src, eval_state);
+    ID sym = parse(src, eval_state);
     TEST_ASSERT_NOT_NULL(sym);
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL_TOKEN, TAG(sym));
 
     evalstate_free(eval_state);
 }
@@ -282,15 +290,15 @@ TEST(test_keyword_evaluation) {
     EvalState *eval_state = evalstate_new(false);
 
     // Test keyword parsing - use simple approach
-    CljObject *keyword = parse(":test", eval_state);
+    ID keyword = parse(":test", eval_state);
     if (keyword) {
-        TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, keyword->type);
+        keyword = canonicalize_ast(keyword, eval_state);
+        TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(keyword));
 
         // Test that keyword has ':' prefix
         CljSymbol *sym = as_symbol(keyword);
-        if (sym) {
-            TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
-        }
+        TEST_ASSERT_NOT_NULL(sym);
+        TEST_ASSERT_TRUE(sym->cname && sym->cname[0] == ':');
     } else {
         // If parsing fails, that's also a valid test result
         // Keywords might not be fully supported in test context
@@ -472,7 +480,7 @@ TEST(test_parse_from_reader_multiple_expressions) {
     // Parse second expression (keyword)
     CljValue keyword_result = parse_from_reader(&reader2, eval_state);
     TEST_ASSERT_NOT_NULL(keyword_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, ((CljObject*)keyword_result)->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL_TOKEN, TAG((CljObject*)keyword_result));
 
     // Parse third expression (vector)
     CljValue vec_result = parse_from_reader(&reader2, eval_state);
@@ -595,13 +603,13 @@ TEST(test_meta_set_and_get) {
     // Get metadata
     ID retrieved_meta = meta_get(obj);
     TEST_ASSERT_NOT_NULL(retrieved_meta);
-    TEST_ASSERT_TRUE((CljObject*)retrieved_meta && TAG((CljObject*)retrieved_meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)retrieved_meta) == CLJ_MAP);
 
     // Verify metadata content
     if (kw_doc) {
         CljValue doc_value = map_get_sentinel((CljMap*)retrieved_meta, (CljValue)kw_doc, NULL);
         TEST_ASSERT_NOT_NULL(doc_value);
-        TEST_ASSERT_TRUE((CljObject*)doc_value && TAG((CljObject*)doc_value) == CLJ_STRING);
+        TEST_ASSERT_TRUE(TAG((CljObject*)doc_value) == CLJ_STRING);
     }
 
     RELEASE(obj);
@@ -625,7 +633,7 @@ TEST(test_meta_automatic_sourcecode_references) {
     // Get metadata
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
 
     // Check for automatic source code references
     if (SYM_KW_LINE) {
@@ -651,7 +659,7 @@ TEST(test_meta_automatic_sourcecode_references) {
         CljValue ns_value = map_get_sentinel((CljMap*)meta, (CljValue)SYM_KW_NS, NULL);
         TEST_ASSERT_NOT_NULL(ns_value);
         // Namespace name should be a symbol
-        TEST_ASSERT_TRUE((CljObject*)ns_value && TAG((CljObject*)ns_value) == CLJ_SYMBOL);
+        TEST_ASSERT_TRUE(TAG((CljObject*)ns_value) == CLJ_SYMBOL);
     }
 
     // Don't RELEASE result - parse_from_reader returns autoreleased object

@@ -1,6 +1,7 @@
 #include "tests_common.h"
 
 #include "../to_string.h"
+#include "../ast_canon.h"
 
 #include <errno.h>
 #include "instant.h"
@@ -111,6 +112,14 @@ TEST(test_edn_file_all_supported_types)
 
     ID parsed = parse_expr(&reader, g_test_eval_state);
 
+    TEST_ASSERT_NOT_NULL(parsed);
+    // Parser returns symbol/keyword tokens; canonicalize before inspecting map keys/values.
+    parsed = canonicalize_ast(parsed, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(parsed));
+
+    // Parser returns symbol/keyword tokens; canonicalize so map keys are interned keywords.
+    parsed = canonicalize_ast(parsed, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(parsed));
 

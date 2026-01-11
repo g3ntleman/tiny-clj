@@ -69,7 +69,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     
     // Resolve symbol to function if necessary (Clojure/JVM behavior)
     // ns_resolve automatically searches clojure.core, so we don't need to set current_ns
-    if (fn && TAG(fn) == CLJ_SYMBOL) {
+    if (TAG(fn) == CLJ_SYMBOL) {
         // ns_resolve searches clojure.core even if current_ns is different
         // Pass NULL for st to use default namespace - ns_resolve will still search clojure.core
         ID resolved = ns_resolve(NULL, as_symbol(fn));

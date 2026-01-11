@@ -31,7 +31,7 @@ TEST(test_namespace_lookup_core_functions) {
     CljObject *resolved = ns_resolve(g_test_eval_state, map_sym);
     // For now, just test that we can resolve something (may be NULL if clojure.core not fully loaded)
     if (resolved) {
-        TEST_ASSERT_TRUE(resolved && TAG(resolved) == CLJ_CLOSURE);
+        TEST_ASSERT_TRUE(TAG(resolved) == CLJ_CLOSURE);
     }
 
     // Cleanup
@@ -175,7 +175,7 @@ TEST(test_inc_symbol_interning_during_load) {
             const char *first_symbol = NULL;
             MAP_FOR_EACH(map, key, value) {
                 (void)value;  // unused
-                if (key && TAG(key) == CLJ_SYMBOL) {
+                if (TAG(key) == CLJ_SYMBOL) {
                     CljSymbol *sym = as_symbol(key);
                     symbol_count++;
                     if (!first_symbol && sym->cname) {
@@ -225,16 +225,20 @@ TEST(test_inc_symbol_pointer_consistency) {
     // Parse "(def inc (fn [x] (+ x 1)))"
     Reader reader;
     reader_init(&reader, "(def inc (fn [x] (+ x 1)))");
-    CljValue form = value_by_parsing_expr(&reader, g_test_eval_state);
+    ID form = value_by_parsing_expr(&reader, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(form);
+
+    // Parser produces symbol tokens; canonicalize so symbols are interned and comparable by pointer.
+    form = canonicalize_ast(form, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(form);
     
     // Extract the symbol from the parsed form
     if (form && list_type_matches(TAG(form))) {
         CljList *list = as_list(form);
-        CljObject *inc_sym_in_form = (CljObject*)list_nth(list, 1);
+        ID inc_sym_in_form = list_nth(list, 1);
         
         TEST_ASSERT_NOT_NULL(inc_sym_in_form);
-        TEST_ASSERT_TRUE(inc_sym_in_form && TAG(inc_sym_in_form) == CLJ_SYMBOL);
+        TEST_ASSERT_TRUE(TAG(inc_sym_in_form) == CLJ_SYMBOL);
         
         // Get inc symbol after parsing
         CljSymbol *inc_sym_after = intern_symbol_global("inc");
@@ -465,7 +469,7 @@ TEST(test_symbol_resolution_fallback) {
     CljObject *resolved = eval_symbol(plus_sym, g_test_eval_state);
 
     TEST_ASSERT_NOT_NULL(resolved);
-    TEST_ASSERT_TRUE(resolved && TAG(resolved) == CLJ_FUNC); // Should be a native function
+    TEST_ASSERT_TRUE(TAG(resolved) == CLJ_FUNC); // Should be a native function
 
     // Cleanup
     RELEASE(resolved);
@@ -904,7 +908,7 @@ TEST(test_require_with_alias) {
     TEST_ASSERT_NOT_NULL(ta_alias);
     CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)ta_alias);
     TEST_ASSERT_NOT_NULL(ns_name);
-    TEST_ASSERT_TRUE(ns_name && TAG(ns_name) == CLJ_SYMBOL);
+    TEST_ASSERT_TRUE(TAG(ns_name) == CLJ_SYMBOL);
     CljSymbol *ns_sym = as_symbol(ns_name);
     TEST_ASSERT_EQUAL_STRING("test.alias", ns_sym->cname);
 
@@ -1000,8 +1004,8 @@ TEST(test_require_multiple_namespaces) {
     CljObject *m2_ns = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)m2_alias);
     TEST_ASSERT_NOT_NULL(m1_ns);
     TEST_ASSERT_NOT_NULL(m2_ns);
-    TEST_ASSERT_TRUE(m1_ns && TAG(m1_ns) == CLJ_SYMBOL);
-    TEST_ASSERT_TRUE(m2_ns && TAG(m2_ns) == CLJ_SYMBOL);
+    TEST_ASSERT_TRUE(TAG(m1_ns) == CLJ_SYMBOL);
+    TEST_ASSERT_TRUE(TAG(m2_ns) == CLJ_SYMBOL);
     CljSymbol *m1_sym = as_symbol(m1_ns);
     CljSymbol *m2_sym = as_symbol(m2_ns);
     TEST_ASSERT_EQUAL_STRING("test.multi1", m1_sym->cname);
@@ -1032,6 +1036,8 @@ TEST(test_require_alias_resolution) {
     // Test namespace-qualified symbol resolution: tar/resvar
     CljObject *parsed = parse("tar/resvar", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL_TOKEN);
+    parsed = canonicalize_ast(parsed, g_test_eval_state);
     TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
 
     CljSymbol *sym = as_symbol(parsed);
@@ -1521,7 +1527,7 @@ TEST(test_ns_find_by_symbol_null) {
         
         MAP_FOR_EACH(clojure_core->mappings, key, value) {
             (void)value; // unused
-            if (key && TAG(key) == CLJ_SYMBOL) {
+            if (TAG(key) == CLJ_SYMBOL) {
                 CljSymbol *sym = as_symbol(key);
                 if (sym && sym->cname && symbol_count < max_symbols) {
                     symbol_names[symbol_count] = sym->cname;
@@ -1590,7 +1596,7 @@ TEST(test_core_namespace_find_inc) {
             bool found_by_iteration = false;
             CljSymbol *found_key = NULL;
             MAP_FOR_EACH(core_ns->mappings, key, value) {
-                if (key && TAG(key) == CLJ_SYMBOL) {
+                if (TAG(key) == CLJ_SYMBOL) {
                     CljSymbol *sym = as_symbol(key);
                     if (sym && sym->cname && strcmp(sym->cname, "inc") == 0) {
                         found_by_iteration = true;

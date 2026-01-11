@@ -283,7 +283,7 @@ TEST(test_let_verify_step_binding) {
     // (let [step (fn [x] (+ x 1))] step) should return the function itself
     CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] step)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_FUNC || result && TAG(result) == CLJ_CLOSURE);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_FUNC || TAG(result) == CLJ_CLOSURE);
 }
 
 TEST(test_let_verify_step_callable) {
@@ -327,7 +327,7 @@ TEST(test_let_filter_function_call) {
     // Test if filter function exists and can be called
     CljObject *filter_fn = eval_string("filter", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(filter_fn);
-    TEST_ASSERT_TRUE(filter_fn && TAG(filter_fn) == CLJ_FUNC || filter_fn && TAG(filter_fn) == CLJ_CLOSURE);
+    TEST_ASSERT_TRUE(TAG(filter_fn) == CLJ_FUNC || TAG(filter_fn) == CLJ_CLOSURE);
     
     // Test a simple filter call
     CljObject *result = eval_string("(filter (fn [x] true) (list 1 2 3))", g_test_eval_state);
@@ -479,7 +479,7 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         
         CljValue found = map_get_sentinel((CljMap*)let_env, (CljValue)i_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(found, "map_get should find symbol 'i' in let_env");
-        TEST_ASSERT_TRUE(found && TAG(found) == CLJ_ATOM);
+        TEST_ASSERT_TRUE(TAG(found) == CLJ_ATOM);
         
         CljSymbol *i_sym2 = intern_symbol_global("i");
         TEST_ASSERT_EQUAL_PTR_MESSAGE(i_sym, i_sym2, "Symbol 'i' should be interned (same pointer)");

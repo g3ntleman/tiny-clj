@@ -37,9 +37,9 @@ TEST(test_history_roundtrip_basic) {
   ID elem0 = vector_nth(v, 0);
   ID elem1 = vector_nth(v, 1);
   ID elem2 = vector_nth(v, 2);
-  TEST_ASSERT_TRUE(elem0 && TAG(elem0) == CLJ_STRING);
-  TEST_ASSERT_TRUE(elem1 && TAG(elem1) == CLJ_STRING);
-  TEST_ASSERT_TRUE(elem2 && TAG(elem2) == CLJ_STRING);
+  TEST_ASSERT_TRUE(TAG(elem0) == CLJ_STRING);
+  TEST_ASSERT_TRUE(TAG(elem1) == CLJ_STRING);
+  TEST_ASSERT_TRUE(TAG(elem2) == CLJ_STRING);
   RELEASE(elem0);
   RELEASE(elem1);
   RELEASE(elem2);
@@ -336,7 +336,7 @@ TEST(test_slurp_reads_file) {
 
   // Verify result is a string
   TEST_ASSERT_NOT_NULL(result);
-  TEST_ASSERT_TRUE(result && TAG(result) == CLJ_STRING);
+  TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
   // Verify content
   CljString *str = as_clj_string(result);
@@ -381,7 +381,7 @@ TEST(test_slurp_empty_file) {
 
   // Verify result is empty string
   TEST_ASSERT_NOT_NULL(result);
-  TEST_ASSERT_TRUE(result && TAG(result) == CLJ_STRING);
+  TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
   CljString *str = as_clj_string(result);
   TEST_ASSERT_EQUAL_INT(0, string_length(str));
@@ -423,7 +423,7 @@ TEST(test_slurp_multiline_content) {
 
   // Verify result contains all lines
   TEST_ASSERT_NOT_NULL(result);
-  TEST_ASSERT_TRUE(result && TAG(result) == CLJ_STRING);
+  TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
   CljString *str = as_clj_string(result);
   TEST_ASSERT_EQUAL_STRING(content, clj_string_data(str));
@@ -454,7 +454,7 @@ TEST(test_spit_writes_file) {
   CljObject *read_result = eval_string(expr, g_test_eval_state);
 
   TEST_ASSERT_NOT_NULL(read_result);
-  TEST_ASSERT_TRUE(read_result && TAG(read_result) == CLJ_STRING);
+  TEST_ASSERT_TRUE(TAG(read_result) == CLJ_STRING);
 
   CljString *str = as_clj_string(read_result);
   TEST_ASSERT_EQUAL_STRING("Hello from spit!", clj_string_data(str));
@@ -480,7 +480,7 @@ TEST(test_spit_overwrites_file) {
   CljObject *read_result = eval_string(expr, g_test_eval_state);
 
   TEST_ASSERT_NOT_NULL(read_result);
-  TEST_ASSERT_TRUE(read_result && TAG(read_result) == CLJ_STRING);
+  TEST_ASSERT_TRUE(TAG(read_result) == CLJ_STRING);
 
   CljString *str = as_clj_string(read_result);
   TEST_ASSERT_EQUAL_STRING("New content", clj_string_data(str));
@@ -510,7 +510,7 @@ TEST(test_spit_multiline_content) {
   CljObject *read_result = eval_string(expr, g_test_eval_state);
 
   TEST_ASSERT_NOT_NULL(read_result);
-  TEST_ASSERT_TRUE(read_result && TAG(read_result) == CLJ_STRING);
+  TEST_ASSERT_TRUE(TAG(read_result) == CLJ_STRING);
 
   CljString *str = as_clj_string(read_result);
   TEST_ASSERT_EQUAL_STRING(content, clj_string_data(str));
@@ -536,7 +536,7 @@ TEST(test_spit_empty_string) {
   CljObject *read_result = eval_string(expr, g_test_eval_state);
 
   TEST_ASSERT_NOT_NULL(read_result);
-  TEST_ASSERT_TRUE(read_result && TAG(read_result) == CLJ_STRING);
+  TEST_ASSERT_TRUE(TAG(read_result) == CLJ_STRING);
 
   CljString *str = as_clj_string(read_result);
   TEST_ASSERT_EQUAL_INT(0, string_length(str));
@@ -566,7 +566,7 @@ TEST(test_spit_slurp_roundtrip) {
   CljObject *read_result = eval_string(expr, g_test_eval_state);
 
   TEST_ASSERT_NOT_NULL(read_result);
-  TEST_ASSERT_TRUE(read_result && TAG(read_result) == CLJ_STRING);
+  TEST_ASSERT_TRUE(TAG(read_result) == CLJ_STRING);
 
   CljString *str = as_clj_string(read_result);
   TEST_ASSERT_EQUAL_STRING(original_content, clj_string_data(str));
@@ -593,7 +593,7 @@ TEST(test_parse_vector_strings_inner_pool) {
     // eval_string creates inner pool
     CljObject *result = eval_string(expr, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
 
     CljVector *v = as_vector(result);
     TEST_ASSERT_NOT_NULL(v);
@@ -675,7 +675,7 @@ TEST(test_history_load_from_file_scenario) {
       bool all_strings = count > 0;
       for (int i = 0; i < count && all_strings; i++) {
         ID elem = vector_nth(v, i);
-        if (elem && TAG(elem) != CLJ_STRING) {
+        if (TAG(elem) != CLJ_STRING) {
           all_strings = false;
         }
         RELEASE(elem);

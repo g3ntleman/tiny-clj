@@ -24,7 +24,7 @@ TEST(test_function_registered_before_body_evaluation) {
     CljObject *fn_value = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     
     TEST_ASSERT_TRUE(fn_value && fn_value != NOT_FOUND);
-    TEST_ASSERT_TRUE(fn_value && TAG(fn_value) == CLJ_FUNC || fn_value && TAG(fn_value) == CLJ_CLOSURE);
+    TEST_ASSERT_TRUE(TAG(fn_value) == CLJ_FUNC || TAG(fn_value) == CLJ_CLOSURE);
     
 }
 
@@ -46,7 +46,7 @@ TEST(test_recursive_function_name_resolvable) {
     CljObject *fn_value = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     
     TEST_ASSERT_TRUE(fn_value && fn_value != NOT_FOUND);
-    TEST_ASSERT_TRUE(fn_value && TAG(fn_value) == CLJ_FUNC || fn_value && TAG(fn_value) == CLJ_CLOSURE);
+    TEST_ASSERT_TRUE(TAG(fn_value) == CLJ_FUNC || TAG(fn_value) == CLJ_CLOSURE);
     
 }
 
@@ -68,7 +68,7 @@ TEST(test_ns_resolve_during_definition) {
     // After evaluation, function should be in namespace
     CljObject *fn_value_after = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     TEST_ASSERT_TRUE(fn_value_after && fn_value_after != NOT_FOUND);
-    TEST_ASSERT_TRUE(fn_value_after && TAG(fn_value_after) == CLJ_FUNC || fn_value_after && TAG(fn_value_after) == CLJ_CLOSURE);
+    TEST_ASSERT_TRUE(TAG(fn_value_after) == CLJ_FUNC || TAG(fn_value_after) == CLJ_CLOSURE);
     
 }
 
@@ -121,7 +121,7 @@ TEST(test_eval_body_with_params_symbol_in_arithmetic) {
     
     // Should find the function
     TEST_ASSERT_TRUE(resolved && resolved != NOT_FOUND);
-    TEST_ASSERT_TRUE(resolved && TAG(resolved) == CLJ_FUNC || resolved && TAG(resolved) == CLJ_CLOSURE);
+    TEST_ASSERT_TRUE(TAG(resolved) == CLJ_FUNC || TAG(resolved) == CLJ_CLOSURE);
     
 }
 

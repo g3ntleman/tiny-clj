@@ -34,6 +34,7 @@
 #include "runtime.h"
 #include "regex.h"
 
+#include "symbol_token.h"
 #include "instant.h"
 #include "uuid.h"
 
@@ -182,6 +183,12 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             return s->length;
         }
 
+        case CLJ_SYMBOL_TOKEN: {
+            const char *s = symbol_token_data((const CljSymbolToken*)v);
+            // Print the raw token spelling (e.g. "foo", ":kw", "ns/name", "::kw").
+            return s ? strlen(s) : 9; // "#<token>"
+        }
+
         case CLJ_SYMBOL: {
             CljSymbol *sym = as_symbol(v);
             if (!sym->cname) return 3; // "nil" if no name
@@ -194,7 +201,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             // Only show namespace if explicitly set (not NULL = implicit clojure.core)
             // This matches Clojure's behavior: core symbols print without namespace
             // CRITICAL: Use exact same logic as to_string_build_string to ensure consistency
-            if (sym->ns_name && TAG(sym->ns_name) == CLJ_SYMBOL) {
+            if (TAG(sym->ns_name) == CLJ_SYMBOL) {
                 CljSymbol *ns_sym = as_symbol(sym->ns_name);
                 if (ns_sym && ns_sym->cname) {
                     return strlen(ns_sym->cname) + 1 + strlen(sym->cname); // "ns/name"
@@ -452,6 +459,21 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             return;
         }
 
+        case CLJ_SYMBOL_TOKEN: {
+            const char *s = symbol_token_data((const CljSymbolToken*)v);
+            if (s) {
+                size_t n = strlen(s);
+                memcpy(buffer + *offset, s, n);
+                *offset += n;
+            } else {
+                const char *tok = "#<token>";
+                size_t n = strlen(tok);
+                memcpy(buffer + *offset, tok, n);
+                *offset += n;
+            }
+            return;
+        }
+
         case CLJ_SYMBOL: {
             CljSymbol *sym = as_symbol(v);
             if (!sym->cname) {
@@ -473,7 +495,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             // Only show namespace if explicitly set (not NULL = implicit clojure.core)
             // This matches Clojure's behavior: core symbols print without namespace
             // CRITICAL: Use exact same logic as to_string_calc_length to ensure consistency
-            if (sym->ns_name && TAG(sym->ns_name) == CLJ_SYMBOL) {
+            if (TAG(sym->ns_name) == CLJ_SYMBOL) {
                 CljSymbol *ns_sym = as_symbol(sym->ns_name);
                 if (ns_sym && ns_sym->cname) {
                     size_t ns_len = strlen(ns_sym->cname);

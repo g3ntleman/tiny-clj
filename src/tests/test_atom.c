@@ -206,7 +206,7 @@ TEST(test_atom_builtin_creates_atom) {
     ID args[] = {fixnum(42)};
     ID result = native_atom(args, 1);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_ATOM);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_ATOM);
     RELEASE(result);
 }
 
