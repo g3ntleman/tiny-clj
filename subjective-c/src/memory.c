@@ -820,6 +820,8 @@ static void release_object_default(CljObject *v) {
                     if (func->env_stack && !is_pointer_on_stack(func->env_stack)) {
                         RELEASE(func->env_stack);
                     }
+                    // Release captured CallFrame chain (vector-of-vectors, heap-managed).
+                    RELEASE(func->captured_frames);
                     // Release captured namespace reference
                     RELEASE(func->ns);
                     // Free function name (strdup'd in make_function)

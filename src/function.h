@@ -21,6 +21,10 @@ typedef struct {
     CljVector *params;  // Parameter vector (can be NULL if no parameters)
     ID body;  // Function body (AST to evaluate)
     CljVector *env_stack;  // Environment stack (vector of maps), COW-optimized
+    // Captured CallFrame chain for lexical SlotRefs with depth>0.
+    // Dogfooded via persistent vectors: Vector<frame_values>, where frame_values is
+    // a Vector<encoded_slot_value> (see frame_encode_value/frame_decode_value).
+    CljVector *captured_frames;  // May be NULL
     const char *name; // could we reference a symbol here instead?
     struct CljNamespace *ns;  // could we reference a symbol here instead?
     int8_t variadic_index;  // -1 = not variadic, >= 0 = index of & in params

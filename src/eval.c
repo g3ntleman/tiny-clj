@@ -48,6 +48,103 @@
 #include <signal.h>
 extern __attribute__((weak)) volatile sig_atomic_t g_clojure_core_last_form;
 
+// ============================================================================
+// SlotRef resolution (CallFrame fast-path + captured frames)
+// ============================================================================
+static INLINE ID resolve_slot_ref_value(const EvalContext *ctx, const CljSlotRef *ref) {
+    if (!ctx || !ref || !ctx->frame) return NOT_FOUND;
+
+    uint8_t depth = ref->depth;
+    uint8_t slot = ref->slot;
+
+    // Fast-path: current CallFrame (fib, most calls)
+    if (depth == 0) {
+        return frame_get_slot(ctx->frame, 0, slot);
+    }
+
+    // Walk up the live CallFrame chain, but do NOT walk past the top.
+    CallFrame *cur = ctx->frame;
+    while (cur && depth > 0 && cur->parent) {
+        cur = cur->parent;
+        depth--;
+    }
+
+    // Resolved within the live CallFrame chain.
+    if (cur && depth == 0) {
+        if (slot >= (uint8_t)cur->param_count) return NOT_FOUND;
+        return frame_decode_value(cur->values[slot]);
+    }
+
+    // Otherwise, we're at the top live frame (cur->parent == NULL) and still need to go up.
+    if (!cur || depth == 0) return NOT_FOUND;
+    if (!ctx->captured_frames) return NOT_FOUND;
+
+    unsigned int idx = (unsigned int)(depth - 1);  // 1 hop above top frame is captured_frames[0]
+    unsigned int cnt = vector_count(ctx->captured_frames);
+    if (idx >= cnt) return NOT_FOUND;
+
+    ID frame_values_id = vector_nth(ctx->captured_frames, idx);
+    if (!frame_values_id || TAG(frame_values_id) != CLJ_VECTOR) return NOT_FOUND;
+    CljVector *frame_values = as_vector(frame_values_id);
+
+    unsigned int sc = vector_count(frame_values);
+    if ((unsigned int)slot >= sc) return NOT_FOUND;
+
+    ID encoded = vector_nth(frame_values, (unsigned int)slot);
+    return frame_decode_value(encoded);
+}
+
+// Capture a CallFrame parent chain into persistent vectors so closures can resolve SlotRefs
+// with depth>0 after the defining call returns. Result is:
+//   Vector<frame_values>, where frame_values is Vector<encoded_slot_value>.
+static INLINE CljVector* capture_visible_frames(const EvalContext *ctx) {
+    if (!ctx || !ctx->frame) return NULL;
+
+    CallFrame *frames[32];
+    int depth = 0;
+    for (CallFrame *f = ctx->frame; f && depth < 32; f = f->parent) {
+        frames[depth++] = f;
+    }
+
+    unsigned int outer_cnt = ctx->captured_frames ? vector_count(ctx->captured_frames) : 0;
+    CljVector *captured = make_vector((unsigned int)depth + outer_cnt, CLJ_VECTOR);
+    if (!captured) return NULL;
+
+    // 1) Materialize the live CallFrame chain (must retain values to outlive the call).
+    for (int di = 0; di < depth; di++) {
+        CallFrame *f = frames[di];
+        unsigned int pc = (unsigned int)(f ? f->param_count : 0);
+        CljVector *frame_values = make_vector(pc, CLJ_VECTOR);
+        if (!frame_values) {
+            RELEASE(captured);
+            return NULL;
+        }
+        for (unsigned int i = 0; i < pc; i++) {
+            // Preserve CallFrame encoding (nil as NOT_FOUND sentinel).
+            vector_conj_inplace(&frame_values, f->values[i]);
+        }
+        vector_conj_inplace(&captured, frame_values);
+        RELEASE(frame_values);
+    }
+
+    // 2) Reuse (RETAIN) outer captured frames from the defining closure context.
+    if (outer_cnt > 0) {
+        ID *outer = vector_as_array(ctx->captured_frames);
+        if (outer) {
+            for (unsigned int i = 0; i < outer_cnt; i++) {
+                vector_conj_inplace(&captured, outer[i]);
+            }
+        } else {
+            // Fallback: safe but slightly slower.
+            for (unsigned int i = 0; i < outer_cnt; i++) {
+                vector_conj_inplace(&captured, vector_nth(ctx->captured_frames, i));
+            }
+        }
+    }
+
+    return captured;
+}
+
 static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, CljSymbol *qualified) {
     if (!slot || !unqualified || !qualified) {
         return;
@@ -284,6 +381,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
             .env = NULL,
             .env_stack = call_env_stack,  // Closure environment stack (vector of maps)
             .frame = call_frame,          // Stack-based frame for parameters
+            .captured_frames = func->captured_frames, // SlotRef(depth>0) resolution for closures
             .st = st,
             .recur_args = recur_args,
             .recur_arg_count = &recur_arg_count,
@@ -380,6 +478,7 @@ static const EvalContext* ensure_eval_context(CljMap *env,
             .env = env,
             .env_stack = NULL,
             .frame = NULL,
+            .captured_frames = NULL,
             .st = st,
             .recur_args = NULL,
             .recur_arg_count = NULL,
@@ -566,11 +665,11 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
 
     unsigned char body_tag = TAG(body);
 
-    // Lexical addressing fast-path: (depth, slot) reference into CallFrame chain.
+    // Lexical addressing fast-path: (depth, slot) reference into CallFrame chain (+ captured frames).
     if (body_tag == CLJ_SLOT_REF) {
         const CljSlotRef *ref = (const CljSlotRef*)body;
         if (!ctx || !ctx->frame) return NULL;
-        ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+        ID v = resolve_slot_ref_value(ctx, ref);
         if (v == NOT_FOUND || !v) return NULL;
         if (IS_IMMEDIATE(v)) return v;
         return AUTORELEASE(RETAIN(v));
@@ -961,7 +1060,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         const CljSlotRef *ref = (const CljSlotRef*)op;
         if (ctx && ctx->frame) {
             // NOTE: NULL means nil; NOT_FOUND means invalid slot/depth.
-            ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+            ID v = resolve_slot_ref_value(ctx, ref);
             return (v == NOT_FOUND) ? NULL : v;
         }
         return NULL;
@@ -1889,6 +1988,11 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     if (fn_env_stack_owned) {
         RELEASE(fn_env_stack);
     }
+    // Capture the visible CallFrame chain for SlotRef(depth>0) in nested closures.
+    // This is separate from env_stack (which remains for non-lexicalized symbol resolution).
+    if (ctx && ctx->frame) {
+        fn->captured_frames = capture_visible_frames(ctx);
+    }
 
     // If this is a named function, bind it to its own name in closure for recursion
     if (fn_name) {
@@ -2557,7 +2661,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     if (expr_tag == CLJ_SLOT_REF) {
         const CljSlotRef *ref = (const CljSlotRef*)expr;
         if (!ctx || !ctx->frame) return NULL;
-        ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+        ID v = resolve_slot_ref_value(ctx, ref);
         if (v == NOT_FOUND || !v) return NULL;
         if (IS_IMMEDIATE(v)) return v;
         return AUTORELEASE(RETAIN(v));

@@ -657,6 +657,7 @@ ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
         .env = ctx->env,
         .env_stack = ctx->env_stack,
         .frame = ctx->frame,
+        .captured_frames = ctx->captured_frames,
         .st = ctx->st,
         .recur_args = NULL,
         .recur_arg_count = NULL

@@ -366,8 +366,8 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         return expr;  // Actual string literal, leave unchanged
     }
 
-    // Lexical addressing: rewrite *current-scope* symbol references to (depth=0, slot).
-    // NOTE: We intentionally do NOT rewrite depth>0 here yet (closure-capture comes later).
+    // Lexical addressing: rewrite symbol references to (depth, slot) into the current scope stack.
+    // depth=0 refers to the current (top) scope; depth>0 refers to outer scopes.
     if (!in_quote && tag == CLJ_SYMBOL && scope_stack && *scope_stack) {
         // Keywords evaluate to themselves and must never be rewritten.
         if (!IS_KEYWORD(expr)) {
@@ -380,10 +380,8 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             if (!(sym->base.flags & CLJ_FLAG_DYNAMIC)) {
                 uint8_t depth = 0, slot = 0;
                 if (lexical_lookup(*scope_stack, sym, &depth, &slot)) {
-                    if (depth == 0) {
-                        ID ref = (ID)make_slot_ref(sym, 0, slot);
-                        if (ref) return AUTORELEASE(ref);
-                    }
+                    ID ref = (ID)make_slot_ref(sym, depth, slot);
+                    if (ref) return AUTORELEASE(ref);
                 }
             }
         }
@@ -735,20 +733,17 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                             vector_conj_inplace(&param_scope, p);
                         }
 
-                        // IMPORTANT: Each fn gets its own scope stack for now (depth=0 only).
-                        // This prevents accidentally rewriting free variables (depth>0) before
-                        // closure-capture support exists.
-                        CljVector *fn_scope_stack = NULL;
-                        scope_stack_push_inplace(&fn_scope_stack, param_scope);
+                        // Push fn params as the current scope so body symbols can be rewritten to SlotRefs.
+                        // Outer scopes remain visible (depth>0) for closure capture.
+                        scope_stack_push_inplace(scope_stack, param_scope);
                         RELEASE(param_scope);
 
                         // Canonicalize body with param scope active.
                         CljList *canon_body = body_rest
-                            ? canonicalize_rest_to_plain_list((ID)body_rest, st, child_in_quote, &fn_scope_stack)
+                            ? canonicalize_rest_to_plain_list((ID)body_rest, st, child_in_quote, scope_stack)
                             : NULL;
 
-                        scope_stack_pop_inplace(&fn_scope_stack);
-                        RELEASE(fn_scope_stack);
+                        scope_stack_pop_inplace(scope_stack);
 
                         // Rebuild rest list: (name? params body...)
                         CljList *tail = NULL;

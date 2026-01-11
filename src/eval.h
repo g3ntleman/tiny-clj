@@ -16,6 +16,7 @@ typedef struct {
     CljMap *env;           // Current environment map (can be NULL)
     CljVector *env_stack;  // Environment stack for closures (can be NULL)
     CallFrame *frame;      // Stack-based call frame for parameters (can be NULL)
+    CljVector *captured_frames; // Closure-captured CallFrame chain for SlotRef depth>0 (can be NULL)
 
     // Evaluation state
     EvalState *st;         // Evaluation state (can be NULL)
