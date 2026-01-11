@@ -228,8 +228,8 @@ void retain(CljObject *v) {
 
     // Happy path: valid object that tracks retains
     if ((uintptr_t)v >= 0x1000 && TRACKS_RETAINS(v)) {
-        // Track retain call for profiling
-        memory_profiler_track_retain(v);
+        // Track retain call for profiling (compile-time no-op in release builds)
+        MEMORY_PROFILER_TRACK_RETAIN(v);
         v->rc++;
     }
 }
@@ -501,9 +501,9 @@ void autorelease_pool_push() {
  * 
  * @return void (no parameters)
  * 
- * Removes the checkpoint. Objects are NOT released (weak reference semantics).
- * This matches the original CLJ_VECTOR_TRANSIENT_WEAK behavior where the pool
- * only tracks objects but doesn't own them.
+ * Removes the checkpoint. Objects are NOT released (weak/track-only semantics).
+ *
+ * The pool is used for debug/profiling visibility, but does not own objects.
  */
 void autorelease_pool_pop(void) {
     
@@ -531,15 +531,11 @@ void autorelease_pool_pop(void) {
     uint32_t checkpoint = g_pool.checkpoints[--g_pool.cp_count];
     
     if (g_debug_output_active) {
-        printf("🔍 autorelease_pool_pop: clearing %u objects (checkpoint=%u, count=%u)\n", 
+        printf("🔍 autorelease_pool_pop: clearing %u objects (checkpoint=%u, count=%u)\n",
                g_pool.count - checkpoint, checkpoint, g_pool.count);
     }
     
-    // NOTE: We do NOT release objects here (weak reference semantics)
-    // Objects are tracked for debugging/profiling but not owned by the pool.
-    // This matches the original CLJ_VECTOR_TRANSIENT_WEAK behavior.
-    
-    // Reset count to checkpoint (objects are forgotten, not released)
+    // Weak semantics: forget items, do not release them.
     g_pool.count = checkpoint;
 }
 
