@@ -27,6 +27,8 @@ typedef struct {
 // - These are return values of line_editor_process_input().
 // - "No input available" is signaled by GetCharFunc returning LINE_EDITOR_GETCHAR_NO_INPUT.
 typedef enum {
+    // Generic error (e.g. feature compiled out, invalid state)
+    LINE_EDITOR_ERROR = -3,
     LINE_EDITOR_EOF = -1,
     LINE_EDITOR_SUCCESS = 0,
     LINE_EDITOR_LINE_READY = 1,
