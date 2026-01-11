@@ -90,7 +90,8 @@ int platform_readline_nb(char *buf, int max) {
 }
 
 // Line editor platform functions
-int platform_get_char(void) {
+int platform_get_char(void *ctx) {
+    (void)ctx;
     char c;
     int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
     bool was_nonblocking = (flags & O_NONBLOCK) != 0;
@@ -102,17 +103,27 @@ int platform_get_char(void) {
         fcntl(STDIN_FILENO, F_SETFL, flags);
     }
     if (n <= 0) {
-        return (n == 0 || (n < 0 && errno == EAGAIN)) ? -2 : -1;
+        // Contract:
+        // - return -1 for EOF
+        // - return -2 for "no input available" (non-blocking EAGAIN)
+        // NOTE: In raw mode with VMIN=0, a TTY read can return 0 to mean "no data yet".
+        // Treat that as "no input", not EOF. For non-TTY (pipes/files), 0 means EOF.
+        if (n == 0) {
+            return isatty(STDIN_FILENO) ? -2 : -1;
+        }
+        return (n < 0 && errno == EAGAIN) ? -2 : -1;
     }
     return (unsigned char)c;
 }
 
-void platform_put_char(char c) {
+void platform_put_char(void *ctx, char c) {
+    (void)ctx;
     putchar(c);
     fflush(stdout);
 }
 
-void platform_put_string(const char *s) {
+void platform_put_string(void *ctx, const char *s) {
+    (void)ctx;
     printf("%s", s);
     fflush(stdout);
 }

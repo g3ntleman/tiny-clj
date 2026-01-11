@@ -248,6 +248,30 @@ set_target_properties(tiny-clj-esp32 PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
 
+#
+# ESP32 UART REPL build (optional; uses weak UART hooks in platform_esp32_uart.c)
+#
+add_executable(tiny-clj-esp32-repl EXCLUDE_FROM_ALL
+    src/repl.c
+    src/line_editor.c
+    src/platform_esp32_uart.c
+    ${SOURCES}
+)
+target_link_libraries(tiny-clj-esp32-repl PRIVATE subjective-c)
+target_include_directories(tiny-clj-esp32-repl PRIVATE
+    ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR}
+)
+target_compile_definitions(tiny-clj-esp32-repl PRIVATE
+    ESP32_BUILD
+    REPL_ENABLED=1
+    LINE_EDITING_ENABLED=1
+    MEMORY_PROFILING_ENABLED=0
+    META_ENABLED=0
+)
+set_target_properties(tiny-clj-esp32-repl PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+)
+
 
 # ESP32 Ultra-Minimal Build Configuration - DISABLED
 # This target has linker issues on macOS and is not needed for development

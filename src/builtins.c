@@ -143,6 +143,9 @@ ID native_run_next_task(ID *args, unsigned int argc);
 ID native_schedule(ID *args, unsigned int argc);
 ID native_schedule_periodic(ID *args, unsigned int argc);
 ID native_cancel_timer(ID *args, unsigned int argc);
+ID native_gpio_watch(ID *args, unsigned int argc);
+ID native_gpio_unwatch(ID *args, unsigned int argc);
+ID native_gpio_simulate_bang(ID *args, unsigned int argc);
 ID native_atom(ID *args, unsigned int argc);
 ID native_deref(ID *args, unsigned int argc);
 ID native_reset_bang(ID *args, unsigned int argc);
@@ -179,6 +182,44 @@ static EvalState *g_current_eval_state = NULL;
 EvalState *builtin_get_eval_state(void)
 {
     return g_current_eval_state;
+}
+
+// -----------------------------------------------------------------------------
+// GPIO Watchers (macOS: simulated, ESP32: platform integration later)
+// -----------------------------------------------------------------------------
+typedef struct {
+    int id;
+    int pin;
+    ID fn; // retained
+} GpioWatcher;
+
+static GpioWatcher *g_gpio_watchers = NULL;
+static int g_gpio_watchers_count = 0;
+static int g_gpio_watchers_cap = 0;
+static int g_gpio_next_watch_id = 1;
+
+void gpio_watchers_clear_all(void) {
+    for (int i = 0; i < g_gpio_watchers_count; i++) {
+        if (g_gpio_watchers[i].fn && !IS_IMMEDIATE(g_gpio_watchers[i].fn)) {
+            RELEASE(g_gpio_watchers[i].fn);
+        }
+        g_gpio_watchers[i].fn = NULL;
+    }
+    free(g_gpio_watchers);
+    g_gpio_watchers = NULL;
+    g_gpio_watchers_count = 0;
+    g_gpio_watchers_cap = 0;
+    g_gpio_next_watch_id = 1;
+}
+
+static bool gpio_watchers_grow_if_needed(void) {
+    if (g_gpio_watchers_count < g_gpio_watchers_cap) return true;
+    int new_cap = (g_gpio_watchers_cap == 0) ? 8 : (g_gpio_watchers_cap * 2);
+    GpioWatcher *nw = (GpioWatcher*)realloc(g_gpio_watchers, (size_t)new_cap * sizeof(GpioWatcher));
+    if (!nw) return false;
+    g_gpio_watchers = nw;
+    g_gpio_watchers_cap = new_cap;
+    return true;
 }
 
 // Helper function to validate builtin arguments (DRY principle)
@@ -2130,7 +2171,10 @@ ID native_run_next_task(ID *args, unsigned int argc)
     (void)args;
     if (argc != 0)
         return NULL;
-    EvalState *st = get_global_eval_state();
+    // IMPORTANT: Use the current EvalState if available.
+    // Using a fresh get_global_eval_state() here breaks resolution for closures/tasks
+    // because clojure.core may not be loaded in that fresh state.
+    EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
     CljMap *env = NULL;
     bool ran = false;
     TRY
@@ -2309,6 +2353,121 @@ ID native_cancel_timer(ID *args, unsigned int argc)
 
     // Return true if cancelled, false if not found
     return cancelled ? clj_true : clj_false;
+}
+
+// GPIO: gpio-watch
+ID native_gpio_watch(ID *args, unsigned int argc)
+{
+    if (!validate_builtin_args(argc, 2, "gpio-watch"))
+        return NULL;
+
+    ID pin_obj = args[0];
+    if (!pin_obj || TAG(pin_obj) != CLJ_INT)
+    {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "gpio-watch pin must be an integer",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    int pin = as_fixnum(pin_obj);
+
+    ID fn_obj = args[1];
+    unsigned char fn_tag = fn_obj ? TAG(fn_obj) : 0;
+    if (!fn_obj || (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE))
+    {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "gpio-watch requires a function as second argument",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    if (!gpio_watchers_grow_if_needed()) {
+        throw_oom();
+        return NULL;
+    }
+
+    int id = g_gpio_next_watch_id++;
+    g_gpio_watchers[g_gpio_watchers_count++] = (GpioWatcher){
+        .id = id,
+        .pin = pin,
+        .fn = RETAIN(fn_obj)
+    };
+
+    return fixnum(id);
+}
+
+// GPIO: gpio-unwatch
+ID native_gpio_unwatch(ID *args, unsigned int argc)
+{
+    if (!validate_builtin_args(argc, 1, "gpio-unwatch"))
+        return NULL;
+
+    ID id_obj = args[0];
+    if (!id_obj || TAG(id_obj) != CLJ_INT)
+    {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "gpio-unwatch id must be an integer",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    int id = as_fixnum(id_obj);
+    if (id <= 0) return clj_false;
+
+    for (int i = 0; i < g_gpio_watchers_count; i++) {
+        if (g_gpio_watchers[i].id == id) {
+            if (g_gpio_watchers[i].fn && !IS_IMMEDIATE(g_gpio_watchers[i].fn)) {
+                RELEASE(g_gpio_watchers[i].fn);
+            }
+            // remove by swap-with-last
+            g_gpio_watchers[i] = g_gpio_watchers[g_gpio_watchers_count - 1];
+            g_gpio_watchers_count--;
+            return clj_true;
+        }
+    }
+    return clj_false;
+}
+
+// GPIO: gpio-simulate! (macOS-only helper; ESP32 implementation will be platform-backed)
+ID native_gpio_simulate_bang(ID *args, unsigned int argc)
+{
+    if (!validate_builtin_args(argc, 2, "gpio-simulate!"))
+        return NULL;
+
+#ifdef ESP32_BUILD
+    throw_exception(EXCEPTION_RUNTIME,
+                    "gpio-simulate! is not available on ESP32 builds",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+#endif
+
+    ID pin_obj = args[0];
+    if (!pin_obj || TAG(pin_obj) != CLJ_INT)
+    {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "gpio-simulate! pin must be an integer",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    int pin = as_fixnum(pin_obj);
+
+    ID value = args[1];
+
+    // Event payload: [pin value]
+    CljVector *ev = make_vector(2, CLJ_VECTOR);
+    if (!ev) return NULL;
+    ASSIGN(ev, vector_conj(ev, fixnum(pin)));
+    ASSIGN(ev, vector_conj(ev, value));
+
+    // Enqueue one task per watcher
+    for (int i = 0; i < g_gpio_watchers_count; i++) {
+        if (g_gpio_watchers[i].pin == pin) {
+            ID argv[1] = { (ID)ev };
+            event_loop_enqueue_call((CljObject*)g_gpio_watchers[i].fn, argv, 1);
+        }
+    }
+
+    RELEASE(ev);
+    return NULL;
 }
 
 // Legacy builtin table and apply_builtin removed - all builtins now use namespace registration
@@ -3036,6 +3195,9 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_schedule_data.sym, native_schedule},
     {&sym_schedule_periodic_data.sym, native_schedule_periodic},
     {&sym_cancel_timer_data.sym, native_cancel_timer},
+    {&sym_gpio_watch_data.sym, native_gpio_watch},
+    {&sym_gpio_unwatch_data.sym, native_gpio_unwatch},
+    {&sym_gpio_simulate_bang_data.sym, native_gpio_simulate_bang},
     {&sym_atom_data.sym, native_atom},
     {&sym_deref_data.sym, native_deref},
     {&sym_reset_bang_data.sym, native_reset_bang},

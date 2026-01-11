@@ -168,17 +168,19 @@
                     (reset! captured (get st :deliveries))
                     (assoc st :deliveries (vector)))))
       (let [ds (deref captured)
-            n (count ds)]
-        (let [run-at (fn run-at [i]
-                       (if (< i n)
-                         (let [entry (nth ds i)
-                               f (nth entry 0)
-                               arg (nth entry 1)]
-                           (do
-                             (f arg)
-                             (run-at (+ i 1))))
-                         nil))]
-          (run-at 0))))))
+            n (count ds)
+            sched (fn sched [i]
+                    (if (< i n)
+                      (let [entry (nth ds i)
+                            f (nth entry 0)
+                            arg (nth entry 1)]
+                        (do
+                          ;; Use event loop for fairness.
+                          ;; Closure-capture works in tiny-clj now, so we can schedule directly.
+                          (clojure.core/schedule 0 (fn [] (f arg)))
+                          (sched (+ i 1))))
+                      nil))]
+        (sched 0)))))
 
 (defn buf-size [st]
   (- (count (get st :items)) (get st :head)))

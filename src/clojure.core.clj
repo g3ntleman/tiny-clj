@@ -689,6 +689,16 @@ R"CLOJURE(
 (defn cancel-timer [timer-id] :native)
 
 ; ============================================================================
+; GPIO Functions (Native)
+; ============================================================================
+^#^{:doc "Registers a callback f for a GPIO pin. Returns a watcher-id."}
+(defn gpio-watch [pin f] :native)
+^#^{:doc "Unregisters a GPIO watcher by id. Returns true if removed."}
+(defn gpio-unwatch [watcher-id] :native)
+^#^{:doc "macOS/test helper: simulate a GPIO event (pin, value). Returns nil."}
+(defn gpio-simulate! [pin value] :native)
+
+; ============================================================================
 ; Atom Functions (Native)
 ; ============================================================================
 ^#^{:doc "Creates an atom with an initial value val and returns it."}

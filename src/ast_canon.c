@@ -796,29 +796,33 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     if (tag == CLJ_MAP) {
         CljMap *map = (CljMap*)expr;
         CLJ_ASSERT(map != NULL);
-        CljMap *new_map = NULL;
+        int count = map_count(map);
+        if (count == 0) {
+            return expr;
+        }
+
+        // IMPORTANT:
+        // If any entry changes during canonicalization (e.g. a value becomes a slot-ref),
+        // we must preserve *all* earlier entries too. The previous "allocate only on first change"
+        // approach dropped earlier unchanged entries.
+        CljMap *new_map = make_map(count);
         bool changed = false;
-        
-        // Canonicalize keys and values
+
         MAP_FOR_EACH(map, key, value) {
             ID canon_key = canonicalize_expr_with_scope(key, st, in_quote, scope_stack);
             ID canon_value = canonicalize_expr_with_scope(value, st, in_quote, scope_stack);
             if (canon_key != key || canon_value != value) {
-                if (!new_map) {
-                    new_map = make_map(map_count(map));
-                }
-                ASSIGN(new_map, map_assoc(new_map, canon_key, canon_value));
                 changed = true;
-            } else if (new_map) {
-                ASSIGN(new_map, map_assoc(new_map, key, value));
             }
+            ASSIGN(new_map, map_assoc(new_map, canon_key, canon_value));
         }
-        
-        if (changed && new_map) {
+
+        if (changed) {
             move_meta(map, new_map);
             return AUTORELEASE(new_map);
         }
-        
+
+        RELEASE(new_map);
         return expr;  // No changes needed
     }
     
