@@ -35,6 +35,7 @@ const char* clj_type_name(CljType type) {
         case CLJ_LAZY_SEQ: return "LazySeq";
         case CLJ_INSTANT: return "Instant";
         case CLJ_UUID: return "UUID";
+        case CLJ_SLOT_REF: return "SlotRef";
         case CLJ_NIL: return "Nil";
         default: return "Unknown";
     }

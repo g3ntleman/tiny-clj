@@ -332,6 +332,7 @@ add_executable(unit-tests
     src/tests/test_let.c
     src/tests/test_let_performance.c
     src/tests/test_call_frame.c
+    src/tests/test_slot_ref.c
     src/tests/test_do.c
     src/tests/test_defn.c
     src/tests/test_native_lookup.c

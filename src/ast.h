@@ -10,18 +10,31 @@ struct CljList;
 
 typedef struct CljASTNode {
     CljObject base;
-    CljObject *first;
-    CljObject *rest;
-    CljObject *callsite_cache;
+    ID first;
+    ID rest;
+    ID callsite_cache;
 } CljASTNode;
 
-CljASTNode* make_ast_node(ID first, CljObject *rest);
+CljASTNode* make_ast_node(ID first, ID rest);
 struct CljList* make_ast_list(ID first, struct CljList *rest);
 
 CljASTNode* as_ast_node(ID obj);
 bool is_ast_node(ID obj);
-void ast_node_set_callsite_cache(CljASTNode *node, CljObject *cache);
-CljObject* ast_node_get_callsite_cache(const CljASTNode *node);
+void ast_node_set_callsite_cache(CljASTNode *node, ID cache);
+ID ast_node_get_callsite_cache(const CljASTNode *node);
+
+// Lexical addressing: direct reference to a local variable via (depth, slot).
+// - depth=0: current CallFrame
+// - depth=1: parent CallFrame, etc.
+typedef struct CljSlotRef {
+    CljObject base;
+    CljSymbol *symbol;  // For debugging/errors only (symbols are interned)
+    uint8_t depth;
+    uint8_t slot;
+} CljSlotRef;
+
+CljSlotRef* make_slot_ref(CljSymbol *symbol, uint8_t depth, uint8_t slot);
+static inline bool is_slot_ref(ID obj) { return obj && TAG(obj) == CLJ_SLOT_REF; }
 
 typedef struct CljCallsiteCache {
     CljObject base;

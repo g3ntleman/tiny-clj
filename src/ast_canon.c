@@ -49,18 +49,19 @@ static INLINE void move_meta(ID src, ID dst) {
 #endif
 }
 
+static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, CljVector **scope_stack);
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
 
 // Canonicalize a list tail (rest chain) into plain CLJ_LIST cons cells.
 // Important: This must NOT run macro expansion / destructuring on the tail itself.
 // It only canonicalizes each element (which may itself be a list expression).
-static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, bool in_quote) {
+static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, bool in_quote, CljVector **scope_stack) {
     if (!rest_expr) return NULL;
     if (!list_type_matches(TAG(rest_expr))) return NULL;
 
     CljList *src = as_list(rest_expr);
-    ID first = canonicalize_expr(src->first, st, in_quote);
-    CljList *rest = src->rest ? canonicalize_rest_to_plain_list(src->rest, st, in_quote) : NULL;
+    ID first = canonicalize_expr_with_scope(src->first, st, in_quote, scope_stack);
+    CljList *rest = src->rest ? canonicalize_rest_to_plain_list(src->rest, st, in_quote, scope_stack) : NULL;
 
     // Fast path: already a plain list and nothing changed.
     if (TAG(rest_expr) == CLJ_LIST && first == src->first && (ID)rest == src->rest) {
@@ -92,6 +93,53 @@ static bool vector_needs_destructuring(CljVector *vec, bool pairs_only) {
 
 #define bindings_need_destructuring(v) vector_needs_destructuring(v, true)
 #define params_need_destructuring(v)   vector_needs_destructuring(v, false)
+
+// ============================================================================
+// LEXICAL ADDRESSING (compile-time): scope stack + (depth, slot) lookup
+// ============================================================================
+
+static inline CljVector* scope_stack_get_from_top(CljVector *stack, unsigned int depth) {
+    unsigned int cnt = vector_count(stack);
+    if (cnt == 0 || depth >= cnt) return NULL;
+    return (CljVector*)vector_nth(stack, (cnt - 1) - depth);
+}
+
+static inline void scope_stack_push_inplace(CljVector **stack_slot, CljVector *scope_vec) {
+    if (!stack_slot) return;
+    if (!*stack_slot) {
+        *stack_slot = make_vector(4, CLJ_VECTOR);
+    }
+    vector_conj_inplace(stack_slot, scope_vec);
+}
+
+static inline void scope_stack_pop_inplace(CljVector **stack_slot) {
+    if (!stack_slot || !*stack_slot) return;
+    if (vector_count(*stack_slot) == 0) return;
+    vector_pop_inplace(stack_slot);
+}
+
+static bool lexical_lookup(CljVector *scope_stack, CljSymbol *sym, uint8_t *out_depth, uint8_t *out_slot) {
+    if (!scope_stack || !sym || !out_depth || !out_slot) return false;
+    unsigned int cnt = vector_count(scope_stack);
+    for (unsigned int d = 0; d < cnt && d < 255; d++) {
+        CljVector *scope = scope_stack_get_from_top(scope_stack, d);
+        if (!scope) continue;
+        unsigned int sc = vector_count(scope);
+        ID *data = vector_as_array(scope);
+        if (!data) continue;
+        // Shadowing semantics: later bindings win, so scan from the end.
+        for (unsigned int s = sc; s > 0; s--) {
+            unsigned int idx = s - 1;
+            if (idx >= 255) continue;
+            if (data[idx] == (ID)sym) {
+                *out_depth = (uint8_t)d;
+                *out_slot = (uint8_t)idx;
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 // Cached destructure function (resolved once after bootstrap)
 static ID destructure_fn = NULL;
@@ -263,7 +311,7 @@ static CljSymbol* canonicalize_symbol_token(CljSymbolToken *token, EvalState *st
  * @param in_quote If true, lists stay as CljList (not converted to ASTNode)
  * @return Canonicalized expression (CljSymbol for strings, ASTNode for lists) or original if unchanged
  */
-static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
+static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, CljVector **scope_stack) {
     CLJ_ASSERT(st != NULL);
     
     if (!expr) {
@@ -292,6 +340,29 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
     if (tag == CLJ_STRING) {
         return expr;  // Actual string literal, leave unchanged
     }
+
+    // Lexical addressing: rewrite *current-scope* symbol references to (depth=0, slot).
+    // NOTE: We intentionally do NOT rewrite depth>0 here yet (closure-capture comes later).
+    if (!in_quote && tag == CLJ_SYMBOL && scope_stack && *scope_stack) {
+        // Keywords evaluate to themselves and must never be rewritten.
+        if (!IS_KEYWORD(expr)) {
+            CljSymbol *sym = (CljSymbol*)expr;
+            // Special forms are not shadowable; keep them as symbols so eval can dispatch.
+            if (is_special_symbol(sym)) {
+                return expr;
+            }
+            // Dynamic vars are late-bound and must not be lexicalized.
+            if (!(sym->base.flags & CLJ_FLAG_DYNAMIC)) {
+                uint8_t depth = 0, slot = 0;
+                if (lexical_lookup(*scope_stack, sym, &depth, &slot)) {
+                    if (depth == 0) {
+                        ID ref = (ID)make_slot_ref(sym, 0, slot);
+                        if (ref) return AUTORELEASE(ref);
+                    }
+                }
+            }
+        }
+    }
     
     // Handle lists and ASTNodes: Convert to ASTNode unless in_quote
     // NOTE: Parser produces ASTNodes, but we handle both for robustness
@@ -299,7 +370,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         CljList *list = as_list(expr);
         CLJ_ASSERT(list != NULL);
         
-        ID first = canonicalize_expr(list->first, st, in_quote);
+        ID first = canonicalize_expr_with_scope(list->first, st, in_quote, scope_stack);
         
         // Check if we're entering a quote expression
         // Compare against SYM_QUOTE to detect (quote ...) forms
@@ -338,7 +409,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                 // Immediate values don't need wrapping and should be returned directly
                 if (IS_IMMEDIATE(expanded)) {
                     // Return immediate value directly (canonicalize_expr handles this)
-                    return canonicalize_expr(expanded, st, in_quote);
+                    return canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
                 }
                 
                 // CRITICAL: Ensure expanded form is a list-like type (CLJ_LIST or CLJ_AST_NODE)
@@ -352,7 +423,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                 
                 // Recursively canonicalize the expanded form
                 // This will convert CLJ_LIST to CLJ_AST_NODE and canonicalize all elements
-                return canonicalize_expr(expanded, st, in_quote);
+                return canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
             }
         }
         
@@ -372,7 +443,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                             // Rebuild: (let expanded-bindings body...)
                             ID new_rest = AUTORELEASE(make_list(expanded, rest1->rest ? as_list(rest1->rest) : NULL));
                             ID new_list = AUTORELEASE(make_list(first, as_list(new_rest)));
-                            return canonicalize_expr(new_list, st, in_quote);
+                            return canonicalize_expr_with_scope(new_list, st, in_quote, scope_stack);
                         }
                         // destructure not available (bootstrap) - skip transformation
                     }
@@ -439,7 +510,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                         ID loop_form = AUTORELEASE(make_list(first,
                                                             make_list(loop_bindings,
                                                                       make_list(new_body, NULL))));
-                        return canonicalize_expr(loop_form, st, in_quote);
+                        return canonicalize_expr_with_scope(loop_form, st, in_quote, scope_stack);
                     }
                 }
             }
@@ -479,7 +550,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                             ID new_form = named
                                 ? (ID)make_list(first, make_list(second, make_list(new_params, make_list(let_form, NULL))))
                                 : (ID)make_list(first, make_list(new_params, make_list(let_form, NULL)));
-                            return canonicalize_expr(AUTORELEASE(new_form), st, in_quote);
+                            return canonicalize_expr_with_scope(AUTORELEASE(new_form), st, in_quote, scope_stack);
                         }
                     }
                 }
@@ -488,10 +559,179 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
             // so fn's destructuring handler above covers defn as well
         }
         // ========== END DESTRUCTURING TRANSFORMATION ==========
+
+        // Lexical addressing for `let`: the body runs with a fresh CallFrame containing the let-bindings.
+        // We canonicalize the bindings vector without lexical rewrite (init exprs should not see later bindings),
+        // then push a scope of the let binding names for the body.
+        if (!in_quote && first == SYM_LET && scope_stack) {
+            CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
+            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+                // Canonicalize bindings vector without lexical rewrite.
+                ID canon_bindings = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
+
+                // Build let-scope from binding names (even indices): [x expr y expr] -> scope [x y]
+                CljVector *bindings_vec = as_vector(canon_bindings);
+                unsigned int bc = bindings_vec ? vector_count(bindings_vec) : 0;
+                unsigned int pair_count = (bc / 2);
+                CljVector *let_scope = make_vector((int)pair_count, CLJ_VECTOR);
+                if (bindings_vec && let_scope) {
+                    ID *data = vector_as_array(bindings_vec);
+                    if (data) {
+                        for (unsigned int i = 0; i + 1 < bc; i += 2) {
+                            ID k = data[i];
+                        // Destructuring should already have been expanded; keys should be symbols.
+                        if (k && TAG(k) == CLJ_SYMBOL && !IS_KEYWORD(k) && !is_special_symbol((CljSymbol*)k)) {
+                            vector_conj_inplace(&let_scope, k);
+                        } else {
+                            // If key isn't a plain symbol, keep a placeholder so slot indices stay aligned.
+                            // (This should be rare; primarily defensive.)
+                            vector_conj_inplace(&let_scope, NULL);
+                        }
+                    }
+                    }
+                }
+
+                scope_stack_push_inplace(scope_stack, let_scope);
+                RELEASE(let_scope);
+
+                CljList *canon_body = rest1->rest
+                    ? canonicalize_rest_to_plain_list((ID)rest1->rest, st, child_in_quote, scope_stack)
+                    : NULL;
+
+                scope_stack_pop_inplace(scope_stack);
+
+                CljList *tail = (CljList*)AUTORELEASE(make_list(canon_bindings, canon_body));
+                ID result = in_quote
+                    ? AUTORELEASE(make_list(first, tail))
+                    : AUTORELEASE(make_ast_node(first, (ID)tail));
+                if (!result) return expr;
+                move_meta(expr, result);
+                return result;
+            }
+        }
+
+        // Lexical addressing for `dotimes`: the body runs with a fresh CallFrame binding the loop var.
+        // We canonicalize the binding vector without lexical rewrite (name + count expr),
+        // then push a scope with just the loop var for the body.
+        if (!in_quote && first == SYM_DOTIMES && scope_stack) {
+            CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
+            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+                ID canon_binding_vec = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
+                CljVector *binding_vec = as_vector(canon_binding_vec);
+
+                // Extract loop var (first element in [i n]).
+                ID loop_var = (binding_vec && vector_count(binding_vec) >= 1)
+                    ? vector_nth(binding_vec, 0)
+                    : NULL;
+
+                // Push scope [i] for the dotimes body so `i` can become a SlotRef.
+                CljVector *dotimes_scope = make_vector(1, CLJ_VECTOR);
+                if (loop_var && TAG(loop_var) == CLJ_SYMBOL && !IS_KEYWORD(loop_var)) {
+                    vector_conj_inplace(&dotimes_scope, loop_var);
+                } else {
+                    vector_conj_inplace(&dotimes_scope, NULL);
+                }
+                scope_stack_push_inplace(scope_stack, dotimes_scope);
+                RELEASE(dotimes_scope);
+
+                CljList *canon_body = rest1->rest
+                    ? canonicalize_rest_to_plain_list((ID)rest1->rest, st, child_in_quote, scope_stack)
+                    : NULL;
+
+                scope_stack_pop_inplace(scope_stack);
+
+                CljList *tail = (CljList*)AUTORELEASE(make_list(canon_binding_vec, canon_body));
+                ID result = in_quote
+                    ? AUTORELEASE(make_list(first, tail))
+                    : AUTORELEASE(make_ast_node(first, (ID)tail));
+                if (!result) return expr;
+                move_meta(expr, result);
+                return result;
+            }
+        }
+
+        // Lexical addressing (step 1): rewrite references to fn-parameters inside the fn body.
+        // IMPORTANT: Do NOT lexicalize the fn name or parameter declarations themselves.
+        if (!in_quote && first == SYM_FN) {
+            CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
+            if (rest1) {
+                ID second = rest1->first;          // name OR params
+                ID params_form = NULL;            // params vector
+                CljList *body_rest = NULL;        // list of body forms
+                bool named = false;
+
+                if (second && TAG(second) == CLJ_SYMBOL && !IS_KEYWORD(second)) {
+                    named = true;
+                    CljList *rest2 = rest1->rest ? as_list(rest1->rest) : NULL;
+                    params_form = rest2 ? rest2->first : NULL;
+                    body_rest = (rest2 && rest2->rest) ? as_list(rest2->rest) : NULL;
+                } else {
+                    params_form = second;
+                    body_rest = rest1->rest ? as_list(rest1->rest) : NULL;
+                }
+
+                if (params_form && TAG(params_form) == CLJ_VECTOR) {
+                    // Canonicalize fn-name/params with lexical rewrite disabled.
+                    ID name_canon = named ? canonicalize_expr_with_scope(second, st, child_in_quote, NULL) : NULL;
+                    ID params_canon_id = canonicalize_expr_with_scope(params_form, st, child_in_quote, NULL);
+                    CljVector *params_vec = as_vector(params_canon_id);
+
+                    // Only handle non-variadic, simple-symbol parameter vectors for now.
+                    bool ok = params_vec != NULL;
+                    bool variadic = false;
+                    if (ok) {
+                        VECTOR_FOR_EACH(params_vec, p) {
+                            if (p == SYM_AMP) { variadic = true; break; }
+                            if (!p || TAG(p) != CLJ_SYMBOL || IS_KEYWORD(p)) { ok = false; break; }
+                        }
+                    }
+
+                    if (ok && !variadic) {
+                        // Build a scope-vector where index == CallFrame slot index.
+                        unsigned int pc = vector_count(params_vec);
+                        CljVector *param_scope = make_vector((int)pc, CLJ_VECTOR);
+                        VECTOR_FOR_EACH(params_vec, p) {
+                            vector_conj_inplace(&param_scope, p);
+                        }
+
+                        // IMPORTANT: Each fn gets its own scope stack for now (depth=0 only).
+                        // This prevents accidentally rewriting free variables (depth>0) before
+                        // closure-capture support exists.
+                        CljVector *fn_scope_stack = NULL;
+                        scope_stack_push_inplace(&fn_scope_stack, param_scope);
+                        RELEASE(param_scope);
+
+                        // Canonicalize body with param scope active.
+                        CljList *canon_body = body_rest
+                            ? canonicalize_rest_to_plain_list((ID)body_rest, st, child_in_quote, &fn_scope_stack)
+                            : NULL;
+
+                        scope_stack_pop_inplace(&fn_scope_stack);
+                        RELEASE(fn_scope_stack);
+
+                        // Rebuild rest list: (name? params body...)
+                        CljList *tail = NULL;
+                        if (named) {
+                            CljList *params_and_body = (CljList*)AUTORELEASE(make_list(params_canon_id, canon_body));
+                            tail = (CljList*)AUTORELEASE(make_list(name_canon, params_and_body));
+                        } else {
+                            tail = (CljList*)AUTORELEASE(make_list(params_canon_id, canon_body));
+                        }
+
+                        ID result = in_quote
+                            ? AUTORELEASE(make_list(first, tail))
+                            : AUTORELEASE(make_ast_node(first, (ID)tail));
+                        if (!result) return expr;
+                        move_meta(expr, result);
+                        return result;
+                    }
+                }
+            }
+        }
         
         // Canonicalize rest of list into plain CLJ_LIST cons cells.
         // This ensures only the callsite head becomes CLJ_AST_NODE.
-        CljList *rest_list = list->rest ? canonicalize_rest_to_plain_list(list->rest, st, child_in_quote) : NULL;
+        CljList *rest_list = list->rest ? canonicalize_rest_to_plain_list(list->rest, st, child_in_quote, scope_stack) : NULL;
 
         // Early exit if nothing changed AND representation is already correct.
         // - in_quote: entire list must be CLJ_LIST
@@ -530,7 +770,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         bool changed = false;
         int i = 0;
         VECTOR_FOR_EACH(vec, elem) {
-            canon_elems[i] = canonicalize_expr(elem, st, in_quote);
+            canon_elems[i] = canonicalize_expr_with_scope(elem, st, in_quote, scope_stack);
             if (canon_elems[i] != elem) {
                 changed = true;
             }
@@ -561,8 +801,8 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         
         // Canonicalize keys and values
         MAP_FOR_EACH(map, key, value) {
-            ID canon_key = canonicalize_expr(key, st, in_quote);
-            ID canon_value = canonicalize_expr(value, st, in_quote);
+            ID canon_key = canonicalize_expr_with_scope(key, st, in_quote, scope_stack);
+            ID canon_value = canonicalize_expr_with_scope(value, st, in_quote, scope_stack);
             if (canon_key != key || canon_value != value) {
                 if (!new_map) {
                     new_map = make_map(map_count(map));
@@ -584,6 +824,13 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
     
     // Other types don't need canonicalization
     return expr;
+}
+
+static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
+    CljVector *scope_stack = NULL;
+    ID out = canonicalize_expr_with_scope(expr, st, in_quote, &scope_stack);
+    RELEASE(scope_stack);
+    return out;
 }
 
 /**
