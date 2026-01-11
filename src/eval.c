@@ -552,7 +552,28 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         return NULL;
     }
 
-    if (is_symbol(body)) {
+    // Immediate values don't need retain/release and must not be treated as pointers.
+    if (IS_IMMEDIATE(body)) {
+        return body;
+    }
+    // Defensive: avoid dereferencing obviously invalid pointers.
+    if ((uintptr_t)body < 0x1000) {
+        return NULL;
+    }
+
+    unsigned char body_tag = TAG(body);
+
+    // Lexical addressing fast-path: (depth, slot) reference into CallFrame chain.
+    if (body_tag == CLJ_SLOT_REF) {
+        const CljSlotRef *ref = (const CljSlotRef*)body;
+        if (!ctx || !ctx->frame) return NULL;
+        ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+        if (v == NOT_FOUND || !v) return NULL;
+        if (IS_IMMEDIATE(v)) return v;
+        return AUTORELEASE(RETAIN(v));
+    }
+
+    if (body_tag == CLJ_SYMBOL) {
         // CRITICAL: Check if symbol is a keyword FIRST - keywords evaluate to themselves
         // This must come BEFORE symbol resolution attempts
         if (IS_KEYWORD(body)) {
@@ -623,35 +644,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         return NULL;
     }
 
-    // body is guaranteed non-NULL beyond this point
-
-    // Check if body is an immediate value first
-    // This must come BEFORE the pointer validation check, because immediate values
-    // have small numeric values (e.g., 1 = 0x9) that would fail the pointer check
-    if (IS_IMMEDIATE(body)) {
-        // Immediate values don't need retain/release
-        // CRITICAL: Return body directly as ID (void*), not as CljObject*
-        // This ensures fixnum literals are returned correctly
-        return body;
-    }
-
-    // Check if body is a valid pointer (not pointing to invalid memory)
-    // NOTE: This check must come AFTER IS_IMMEDIATE, because immediate values
-    // have small numeric values that would fail this check
-    if ((uintptr_t)body < 0x1000 && !IS_IMMEDIATE(body)) {
-        return NULL;
-    }
-
-    // For lists, evaluate them with parameter substitution
-    // CRITICAL: Before casting to CljObject*, check if body is an immediate value
-    // This prevents undefined behavior when accessing body_obj->type for fixnum literals
-    if (IS_IMMEDIATE(body)) {
-        // This should have been caught earlier, but as a safety check, return body directly
-        return body;
-    }
-
-    CljObject *body_obj = (CljObject*)body;
-    switch (body_obj->type) {
+    // For non-symbol, non-slotref objects, dispatch on the already computed tag.
+    switch (body_tag) {
         case CLJ_LIST:
         case CLJ_AST_NODE: {
             // Evaluate list with context (ctx preserves recur)
@@ -943,7 +937,20 @@ static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
 // Resolve operator symbol from environment or namespace
 // DRY: Uses central resolve_symbol_in_env function
 static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx, CljASTNode *call_node) {
-    if (!op || TAG(op) != CLJ_SYMBOL) {
+    if (!op) return op;
+
+    // Lexical addressing: operator can be a SlotRef (e.g. higher-order calls like (pred x)).
+    if (!IS_IMMEDIATE(op) && TAG(op) == CLJ_SLOT_REF) {
+        const CljSlotRef *ref = (const CljSlotRef*)op;
+        if (ctx && ctx->frame) {
+            // NOTE: NULL means nil; NOT_FOUND means invalid slot/depth.
+            ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+            return (v == NOT_FOUND) ? NULL : v;
+        }
+        return NULL;
+    }
+
+    if (TAG(op) != CLJ_SYMBOL) {
         return op;
     }
 
@@ -1248,13 +1255,8 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
 #ifdef DEBUG
     if (original_op_tag == CLJ_SYMBOL) {
-        // Cache getenv() result to avoid repeated libc + lock overhead in hot paths.
-        static int s_dbg_eval_list_op = -1;
-        if (s_dbg_eval_list_op < 0) {
-            const char *dbg = getenv("TINYCLJ_DEBUG_EVAL_LIST_OP");
-            s_dbg_eval_list_op = (dbg && dbg[0] == '1') ? 1 : 0;
-        }
-        if (s_dbg_eval_list_op == 1 && (&g_clojure_core_last_form != NULL) && g_clojure_core_last_form == 210) {
+        const char *dbg = getenv("TINYCLJ_DEBUG_EVAL_LIST_OP");
+        if (dbg && dbg[0] == '1' && (&g_clojure_core_last_form != NULL) && g_clojure_core_last_form == 210) {
             fprintf(stderr, "[debug] eval_list: form=%d list=%p op=%p tag=%u\n",
                     (int)g_clojure_core_last_form, (void*)list, (void*)op, (unsigned)original_op_tag);
             fflush(stderr);
@@ -2511,6 +2513,15 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     unsigned char expr_tag = TAG(expr);
 
     CLJ_ASSERT(expr_tag != CLJ_SYMBOL_TOKEN && "Symbol tokens must be canonicalized before evaluation");
+
+    if (expr_tag == CLJ_SLOT_REF) {
+        const CljSlotRef *ref = (const CljSlotRef*)expr;
+        if (!ctx || !ctx->frame) return NULL;
+        ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+        if (v == NOT_FOUND || !v) return NULL;
+        if (IS_IMMEDIATE(v)) return v;
+        return AUTORELEASE(RETAIN(v));
+    }
 
     if (expr_tag == CLJ_SYMBOL) {
         // NOTE: SYM_NIL already checked at function entry

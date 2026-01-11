@@ -5,28 +5,14 @@
 #include "namespace.h"
 #include "symbol.h"
 #include "runtime.h"
-#include "tests/test_api.h"
+#include "meta.h"
 #include "memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-static int run_all_tests_main(void) {
-    platform_print("[main] Running unit tests...");
-    if (run_unit_tests() != 0) return -1;
-    platform_print("[main] Running integration tests...");
-    if (run_integration_tests() != 0) return -1;
-    platform_print("[main] Running parser tests...");
-    if (run_parser_tests() != 0) return -1;
-    platform_print("[main] All tests passed.");
-    return 0;
-}
-
 int main() {
     platform_init();
-    // 1) Run all tests first; abort if any fail
-    if (run_all_tests_main() != 0) {
-        return 1;
-    }
+    runtime_init(&g_runtime);
     
     const char *cname = platform_name();
     char message[128];
@@ -51,6 +37,7 @@ int main() {
     
     // Initialize global structures
     meta_registry_init(); // Enable meta functionality
+    init_special_symbols();
     // Singletons are automatically initialized on first call
     
     // Demo output removed; everything should be covered by unit tests

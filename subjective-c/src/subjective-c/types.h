@@ -46,10 +46,12 @@ typedef enum {
     CLJ_LAZY_SEQ = 52,
     // New tiny-clj runtime types
     CLJ_INSTANT = 54,
-    CLJ_UUID = 56
+    CLJ_UUID = 56,
+    // Lexical addressing: (depth, slot) references for locals
+    CLJ_SLOT_REF = 58
 } CljType;
 
-#define CLJ_TYPE_COUNT (CLJ_UUID + 1)
+#define CLJ_TYPE_COUNT (CLJ_SLOT_REF + 1)
 
 const char* clj_type_name(CljType type);
 

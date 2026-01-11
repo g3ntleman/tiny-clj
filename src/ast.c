@@ -2,7 +2,7 @@
 #include "memory.h"
 #include "list.h"
 
-CljASTNode* make_ast_node(ID first, CljObject *rest) {
+CljASTNode* make_ast_node(ID first, ID rest) {
     CljASTNode *node = ALLOC(CljASTNode, 1);
     if (!node) {
         throw_oom();
@@ -18,8 +18,22 @@ CljASTNode* make_ast_node(ID first, CljObject *rest) {
     return node;
 }
 
+CljSlotRef* make_slot_ref(CljSymbol *symbol, uint8_t depth, uint8_t slot) {
+    // Can't use ALLOC(CljSlotRef, ...) because TYPE_OF_CljSlotRef isn't defined in subjective-c.
+    CljSlotRef *ref = (CljSlotRef*)alloc(sizeof(CljSlotRef), 1, CLJ_SLOT_REF);
+    if (!ref) throw_oom();
+
+    // alloc() sets type, but keep this explicit for robustness.
+    ref->base.type = CLJ_SLOT_REF;
+    ref->base.rc = 1;
+    ref->symbol = symbol;
+    ref->depth = depth;
+    ref->slot = slot;
+    return ref;
+}
+
 CljList* make_ast_list(ID first, CljList *rest) {
-    return (CljList*)make_ast_node(first, (CljObject*)rest);
+    return (CljList*)make_ast_node(first, (ID)rest);
 }
 
 CljASTNode* as_ast_node(ID obj) {
@@ -34,12 +48,12 @@ bool is_ast_node(ID obj) {
     return obj && TAG(obj) == CLJ_AST_NODE;
 }
 
-void ast_node_set_callsite_cache(CljASTNode *node, CljObject *cache) {
+void ast_node_set_callsite_cache(CljASTNode *node, ID cache) {
     if (!node) return;
     ASSIGN(node->callsite_cache, cache);
 }
 
-CljObject* ast_node_get_callsite_cache(const CljASTNode *node) {
+ID ast_node_get_callsite_cache(const CljASTNode *node) {
     if (!node) return NULL;
     return node->callsite_cache;
 }
@@ -86,7 +100,7 @@ void ast_node_update_callsite_cache(CljASTNode *node, CljSymbol *symbol, ID reso
     if (!node || !symbol || !resolved) return;
     CljCallsiteCache *cache = as_callsite_cache(node->callsite_cache);
     if (!cache) {
-        ast_node_set_callsite_cache(node, (CljObject*)make_callsite_cache(symbol, resolved, epoch));
+        ast_node_set_callsite_cache(node, (ID)make_callsite_cache(symbol, resolved, epoch));
         return;
     }
     cache->symbol = symbol;

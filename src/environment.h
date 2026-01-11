@@ -60,6 +60,19 @@ static inline void frame_set_bindings_init(CallFrame *frame, CallFrame *parent, 
 /** Look up a symbol in the frame chain (returns true if binding exists, even if value is nil) */
 bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value);
 
+// O(1) lexical addressing: get (depth, slot) value from frame chain.
+// Returns NOT_FOUND only when out-of-range; otherwise returns decoded value (may be NULL for nil).
+static inline ID frame_get_slot(CallFrame *frame, uint8_t depth, uint8_t slot) {
+    CallFrame *cur = frame;
+    while (cur && depth > 0) {
+        cur = cur->parent;
+        depth--;
+    }
+    if (!cur) return NOT_FOUND;
+    if (slot >= (uint8_t)cur->param_count) return NOT_FOUND;
+    return frame_decode_value(cur->values[slot]);
+}
+
 /** Release all values in a frame (for cleanup) */
 void frame_release(CallFrame *frame);
 

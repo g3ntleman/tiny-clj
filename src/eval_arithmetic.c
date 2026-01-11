@@ -17,14 +17,20 @@ static inline CljObject* throw_non_numeric_argument(ID value) {
         "String cannot be used as a Number");
 }
 
+typedef ID (*ArithVariadicFn)(ID *args, unsigned int argc);
+
+static ArithVariadicFn g_arith_variadic_fns[] = {
+    native_add_variadic,
+    native_sub_variadic,
+    native_mul_variadic,
+    native_div_variadic,
+};
+
 static inline ID apply_arith_op(ID *args, unsigned int argc, ArithOp op) {
-    switch (op) {
-        case ARITH_ADD: return native_add_variadic(args, argc);
-        case ARITH_SUB: return native_sub_variadic(args, argc);
-        case ARITH_MUL: return native_mul_variadic(args, argc);
-        case ARITH_DIV: return native_div_variadic(args, argc);
+    if ((unsigned int)op >= (sizeof(g_arith_variadic_fns) / sizeof(g_arith_variadic_fns[0]))) {
+        return NULL;
     }
-    return NULL;
+    return g_arith_variadic_fns[op](args, argc);
 }
 
 CljObject* eval_arithmetic_generic_with_context(CljList *list,
@@ -127,20 +133,7 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list,
     }
 
     ID result = NULL;
-    switch (op) {
-        case ARITH_ADD:
-            result = native_add_variadic(args, argc);
-            break;
-        case ARITH_SUB:
-            result = native_sub_variadic(args, argc);
-            break;
-        case ARITH_MUL:
-            result = native_mul_variadic(args, argc);
-            break;
-        case ARITH_DIV:
-            result = native_div_variadic(args, argc);
-            break;
-    }
+    result = apply_arith_op(args, (unsigned int)argc, op);
 
     free_obj_array(args, args_stack);
     return AUTORELEASE(result);
