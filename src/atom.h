@@ -13,7 +13,7 @@ typedef struct {
 // Type-safe casting
 static inline CljAtom* as_atom(ID obj) {
     // Happy path: obj is not NULL and has correct type
-    if (obj && TAG(obj) == CLJ_ATOM) {
+    if (TAG(obj) == CLJ_ATOM) {
         return (CljAtom*)obj;  // Direct return, no jumps
     }
     CLJ_ASSERT(0 && "Expected Atom type");

@@ -12,6 +12,7 @@
 #include "map.h"     // For map_get
 #include "parser.h"  // For eval_parsed
 #include "to_string.h" // For pr_str debug printing
+#include "symbol_token.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -32,6 +33,19 @@ static int getenv_int(const char *name, int default_value) {
   long n = strtol(v, &end, 10);
   if (end == v) return default_value;
   return (int)n;
+}
+
+static bool head_is_symbol_or_token(ID head, CljSymbol *sym, const char *token_name) {
+  if (!head || !sym || !token_name) return false;
+  unsigned char tag = TAG(head);
+  if (tag == CLJ_SYMBOL) {
+    return as_symbol(head) == sym;
+  }
+  if (tag == CLJ_SYMBOL_TOKEN) {
+    const char *s = symbol_token_data((const CljSymbolToken*)head);
+    return (s && strcmp(s, token_name) == 0);
+  }
+  return false;
 }
 
 
@@ -219,17 +233,14 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
         // Check if this was a def or ns expression that might have stored something
         if (form && list_type_matches(TAG(form))) {
           CljList *list = as_list(form);
-          CljObject *first = LIST_FIRST(list);
-          if (first && TAG(first) == CLJ_SYMBOL) {
-            CljSymbol *first_sym = as_symbol(first);
-            if (first_sym == SYM_DEF) {
-              // def returns the symbol, not the value
-              // Even if value evaluation failed, def might have stored nil
-              success_count++;
-            } else if (first_sym == SYM_NS) {
-              // ns returns nil, which is a valid result
-              success_count++;
-            }
+          ID first = LIST_FIRST(list);
+          if (head_is_symbol_or_token(first, SYM_DEF, "def")) {
+            // def returns the symbol, not the value
+            // Even if value evaluation failed, def might have stored nil
+            success_count++;
+          } else if (head_is_symbol_or_token(first, SYM_NS, "ns")) {
+            // ns returns nil, which is a valid result
+            success_count++;
           }
         }
       }
@@ -237,10 +248,10 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
       // Exception occurred during evaluation
       // Log the exception for debugging (always log for def expressions to catch silent failures)
       bool is_def_expr = false;
-        if (form && list_type_matches(TAG(form))) {
-          CljList *list = as_list(form);
-          CljObject *first = LIST_FIRST(list);
-          if (first && TAG(first) == CLJ_SYMBOL && as_symbol(first) == SYM_DEF) {
+      if (form && list_type_matches(TAG(form))) {
+        CljList *list = as_list(form);
+        ID first = LIST_FIRST(list);
+        if (head_is_symbol_or_token(first, SYM_DEF, "def")) {
           is_def_expr = true;
         }
       }

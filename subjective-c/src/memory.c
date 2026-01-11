@@ -367,7 +367,13 @@ CljObject *autorelease(CljObject *v) {
     // Grow items array if needed
     if (g_pool.count >= g_pool.capacity) {
         uint32_t new_capacity = g_pool.capacity * 2;
-        g_pool.items = (CljObject**)realloc(g_pool.items, sizeof(CljObject*) * new_capacity);
+        CljObject **new_items = (CljObject**)realloc(g_pool.items, sizeof(CljObject*) * new_capacity);
+        if (!new_items) {
+            // Out of memory: stop tracking rather than crashing.
+            // NOTE: pool has weak semantics (debug/profiling only), so leaking tracking is acceptable.
+            return v;
+        }
+        g_pool.items = new_items;
         g_pool.capacity = new_capacity;
 #ifdef DEBUG
         fprintf(stderr, "⚠️  AutoreleasePool: items grew %u -> %u\n", new_capacity / 2, new_capacity);
@@ -450,7 +456,12 @@ static inline void autorelease_pool_grow(void) {
     uint32_t old_capacity = g_pool.cp_capacity;
 #endif
     uint32_t new_capacity = g_pool.cp_capacity * 2;
-    g_pool.checkpoints = (uint32_t*)realloc(g_pool.checkpoints, sizeof(uint32_t) * new_capacity);
+    uint32_t *new_cps = (uint32_t*)realloc(g_pool.checkpoints, sizeof(uint32_t) * new_capacity);
+    if (!new_cps) {
+        // Out of memory: keep existing checkpoints (best-effort).
+        return;
+    }
+    g_pool.checkpoints = new_cps;
     g_pool.cp_capacity = new_capacity;
 #ifdef DEBUG
     fprintf(stderr, "⚠️  AutoreleasePool: checkpoints grew %u -> %u\n", old_capacity, new_capacity);

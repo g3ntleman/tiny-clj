@@ -170,14 +170,14 @@ TEST(test_string_capitalize_after_require) {
     // Test: (clojure.string/capitalize "hello") => "Hello"
     CljObject *result1 = eval_string("(clojure.string/capitalize \"hello\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 && TAG(result1) == CLJ_STRING);
+    TEST_ASSERT_TRUE(TAG(result1) == CLJ_STRING);
     CljString *str1 = as_clj_string(result1);
     TEST_ASSERT_EQUAL_STRING("Hello", clj_string_data(str1));
     
     // Test: (clojure.string/capitalize "HELLO") => "Hello"
     CljObject *result2 = eval_string("(clojure.string/capitalize \"HELLO\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 && TAG(result2) == CLJ_STRING);
+    TEST_ASSERT_TRUE(TAG(result2) == CLJ_STRING);
     CljString *str2 = as_clj_string(result2);
     TEST_ASSERT_EQUAL_STRING("Hello", clj_string_data(str2));
 }
@@ -238,7 +238,7 @@ TEST(test_string_reverse_after_require) {
     // Test: (clojure.string/reverse "abc") => "cba"
     CljObject *result1 = eval_string("(clojure.string/reverse \"abc\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 && TAG(result1) == CLJ_STRING);
+    TEST_ASSERT_TRUE(TAG(result1) == CLJ_STRING);
     CljString *str1 = as_clj_string(result1);
     TEST_ASSERT_EQUAL_STRING("cba", clj_string_data(str1));
 }
@@ -277,7 +277,7 @@ TEST(test_require_reverse_conflict_clojure_string) {
     // This tests if clojure.string/reverse works for strings
     CljObject *result = eval_string("(clojure.string/reverse \"abc\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_STRING);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
     CljString *str = as_clj_string(result);
     TEST_ASSERT_EQUAL_STRING("cba", clj_string_data(str));
 }
@@ -337,7 +337,7 @@ TEST(test_require_both_reverse_functions) {
     // clojure.string/reverse for strings
     CljObject *string_result = eval_string("(clojure.string/reverse \"abc\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(string_result);
-    TEST_ASSERT_TRUE(string_result && TAG(string_result) == CLJ_STRING);
+    TEST_ASSERT_TRUE(TAG(string_result) == CLJ_STRING);
     CljString *str = as_clj_string(string_result);
     TEST_ASSERT_EQUAL_STRING("cba", clj_string_data(str));
 }

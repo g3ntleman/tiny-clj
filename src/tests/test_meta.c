@@ -385,7 +385,7 @@ TEST(test_meta_qualified_symbol) {
                                  "metadata should contain :ns key");
     
     // :name should be "trim" (string)
-    if (name_value && TAG(name_value) == CLJ_STRING) {
+    if (TAG(name_value) == CLJ_STRING) {
         CljString *name_str = as_clj_string(name_value);
         TEST_ASSERT_EQUAL_STRING_MESSAGE("trim", clj_string_data(name_str), 
                                         ":name should be \"trim\"");

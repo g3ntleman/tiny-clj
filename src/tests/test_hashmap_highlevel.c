@@ -93,7 +93,7 @@ TEST(test_symbol_table_namespace_aliases) {
     CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)str_alias);
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name, "Alias 'str' should be set in symbol table");
     
-    if (ns_name && TAG(ns_name) == CLJ_SYMBOL) {
+    if (TAG(ns_name) == CLJ_SYMBOL) {
         CljSymbol *ns_sym = as_symbol(ns_name);
         TEST_ASSERT_NOT_NULL(ns_sym);
         TEST_ASSERT_EQUAL_STRING_MESSAGE("clojure.string", ns_sym->cname,

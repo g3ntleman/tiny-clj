@@ -28,7 +28,7 @@ TEST(test_recursive_function_ctx_propagation) {
         // If ctx is NULL when resolve_list_operator is called, the assertion will fail
         result = eval_string("(my-join \",\" [\"a\" \"b\" \"c\"])", g_test_eval_state);
         TEST_ASSERT_NOT_NULL_MESSAGE(result, "my-join should return a result");
-        TEST_ASSERT_TRUE(result && TAG(result) == CLJ_STRING);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
         CljString *str = as_clj_string(result);
         TEST_ASSERT_EQUAL_STRING_MESSAGE("a,b,c", clj_string_data(str), "my-join should concatenate strings");
     } CATCH(ex) {

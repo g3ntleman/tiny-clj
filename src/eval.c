@@ -2391,11 +2391,17 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         if (has_frame) {
             binding_params[binding_index] = sym_val;
             binding_values[binding_index] = value;
-            if (value && !IS_IMMEDIATE(value)) {
-                RETAIN(value);
+
+            // Incrementally extend the frame without releasing earlier bindings.
+            // NOTE: frame_set_bindings() calls frame_release(), which is unsafe here because
+            // binding_values[] does not own retains for prior values (the frame does).
+            if (binding_index == 0) {
+                let_frame->parent = ctx ? ctx->frame : NULL;
+                let_frame->params = binding_params; // borrowed
             }
-            frame_set_bindings(let_frame, ctx ? ctx->frame : NULL,
-                               binding_params, binding_values, binding_index + 1);
+            let_frame->param_count = binding_index + 1;
+            RETAIN(value);
+            let_frame->values[binding_index] = frame_encode_value(value);
 
             // Make newly created bindings visible to subsequent initializers
             let_ctx.frame = let_frame;

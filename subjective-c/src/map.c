@@ -84,7 +84,7 @@ ID map_get_sentinel(CljMap *map, ID key, ID not_found) {
  * Returns owned object (rc=1, no AUTORELEASE).
  */
 static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
-  if (map && TAG(map) == CLJ_MAP) {
+  if (TAG(map) == CLJ_MAP) {
     CljObject *key_obj = (CljObject*)key;
     CljObject *value_obj = (CljObject*)value;
     // Note: key can be NULL (nil) - that's a valid key in Clojure!

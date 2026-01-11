@@ -20,7 +20,7 @@ TEST(test_list_in_namespace) {
     TEST_ASSERT_TRUE_MESSAGE(list_value && list_value != NOT_FOUND, "list should be resolvable from namespace");
     
     // Check if it's a function
-    TEST_ASSERT_TRUE_MESSAGE(list_value && TAG(list_value) == CLJ_FUNC || list_value && TAG(list_value) == CLJ_CLOSURE,
+    TEST_ASSERT_TRUE_MESSAGE(TAG(list_value) == CLJ_FUNC || TAG(list_value) == CLJ_CLOSURE,
                             "list should be a function");
 }
 
@@ -76,7 +76,7 @@ TEST(test_list_via_symbol_resolution) {
     TEST_ASSERT_NOT_NULL_MESSAGE(resolved, "list should be resolvable via eval_symbol");
     
     // Check if it's a function
-    TEST_ASSERT_TRUE_MESSAGE(resolved && TAG(resolved) == CLJ_FUNC || resolved && TAG(resolved) == CLJ_CLOSURE,
+    TEST_ASSERT_TRUE_MESSAGE(TAG(resolved) == CLJ_FUNC || TAG(resolved) == CLJ_CLOSURE,
                             "resolved list should be a function");
 }
 
@@ -91,11 +91,11 @@ TEST(test_list_available_in_evalstate) {
     TEST_ASSERT_TRUE_MESSAGE(list_func && list_func != NOT_FOUND, "list should be resolvable via ns_resolve(st, list_sym)");
     
     // Verify it's a function (builtin)
-    TEST_ASSERT_TRUE_MESSAGE(list_func && TAG(list_func) == CLJ_FUNC || list_func && TAG(list_func) == CLJ_CLOSURE,
+    TEST_ASSERT_TRUE_MESSAGE(TAG(list_func) == CLJ_FUNC || TAG(list_func) == CLJ_CLOSURE,
                             "list should be a function (CLJ_FUNC or CLJ_CLOSURE)");
     
     // Verify it's actually the list function by checking it's a builtin
-    if (list_func && TAG(list_func) == CLJ_FUNC) {
+    if (TAG(list_func) == CLJ_FUNC) {
         // It's a native builtin function - this is correct
         TEST_ASSERT_TRUE_MESSAGE(true, "list is a native builtin function");
     }

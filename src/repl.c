@@ -349,7 +349,7 @@ CljVector* history_load_from_file(const char *path) {
                 ID parsed = value_by_parsing_expr(&rd, st);
 
                 // Validate it's a vector
-                if (parsed && TAG(parsed) == CLJ_VECTOR) {
+                if (TAG(parsed) == CLJ_VECTOR) {
                     string_history = as_vector((CljObject*)parsed);
 
                     // RETAIN before pool pop to keep it alive
@@ -459,7 +459,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         TRY {
             CljObject *loaded = line_editor_history_load_default();
             // Only use loaded history if it has content
-            if (loaded && TAG(loaded) == CLJ_VECTOR && vector_count((CljVector*)loaded) > 0) {
+            if (TAG(loaded) == CLJ_VECTOR && vector_count((CljVector*)loaded) > 0) {
                 // loaded is already retained from history_load_from_file, transfer to outer pool
                 ASSIGN(history_vec, AUTORELEASE(loaded));
             }
@@ -471,7 +471,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     });
     // Verwende die geladene History
     // line_editor_set_history_from_vector ruft clj_conj auf, das AUTORELEASE verwendet
-    if (history_vec && TAG(history_vec) == CLJ_VECTOR) {
+    if (TAG(history_vec) == CLJ_VECTOR) {
         WITH_AUTORELEASE_POOL({
             line_editor_set_history_from_vector(editor, (CljVector*)history_vec);
         });

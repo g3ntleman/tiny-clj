@@ -16,7 +16,7 @@ CljSymbolToken* make_symbol_token(const char *str);
 CljSymbolToken* make_symbol_token_with_loc(const char *str, uint16_t line, uint16_t col);
 
 static inline bool is_symbol_token(ID obj) {
-    return obj && TAG(obj) == CLJ_SYMBOL_TOKEN;
+    return TAG(obj) == CLJ_SYMBOL_TOKEN;
 }
 
 static inline const char* symbol_token_data(const CljSymbolToken *token) {

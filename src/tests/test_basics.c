@@ -374,7 +374,7 @@ TEST(test_if_nil_in_function_regression) {
     } END_TRY
 
     TEST_ASSERT_NOT_NULL_MESSAGE(result1, "((fn [x] (if x :then :else)) nil) should return :else, not NULL");
-    TEST_ASSERT_TRUE_MESSAGE(result1 && TAG(result1) == CLJ_SYMBOL, "Result should be a symbol");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(result1) == CLJ_SYMBOL, "Result should be a symbol");
     CljSymbol *sym1 = as_symbol(result1);
     TEST_ASSERT_NOT_NULL(sym1);
     TEST_ASSERT_EQUAL_CHAR(':', sym1->cname[0]);
@@ -431,7 +431,7 @@ TEST(test_if_nil_in_function_regression) {
     TRY {
         result5 = eval_string("((fn [x] (if x :truthy :falsy)) false)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL_MESSAGE(result5, "if with false should return :falsy, not NULL");
-        TEST_ASSERT_TRUE_MESSAGE(result5 && TAG(result5) == CLJ_SYMBOL, "Result should be a symbol");
+        TEST_ASSERT_TRUE_MESSAGE(TAG(result5) == CLJ_SYMBOL, "Result should be a symbol");
         CljSymbol *sym5 = as_symbol(result5);
         TEST_ASSERT_NOT_NULL(sym5);
         TEST_ASSERT_EQUAL_CHAR(':', sym5->cname[0]);
@@ -454,7 +454,7 @@ TEST(test_nil_in_function_environment_debug) {
     // ((fn [x] (if x :truthy :falsy)) nil) => :falsy
     CljObject *result2 = eval_string("((fn [x] (if x :truthy :falsy)) nil)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(result2, "if with nil should return :falsy, not NULL");
-    TEST_ASSERT_TRUE_MESSAGE(result2 && TAG(result2) == CLJ_SYMBOL, "Result should be a symbol");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(result2) == CLJ_SYMBOL, "Result should be a symbol");
     CljSymbol *sym = as_symbol(result2);
     TEST_ASSERT_NOT_NULL(sym);
     TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
@@ -522,7 +522,7 @@ TEST(test_identity_function) {
     // Test with string
     CljObject *result2 = eval_string("(identity \"hello\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 && TAG(result2) == CLJ_STRING);
+    TEST_ASSERT_TRUE(TAG(result2) == CLJ_STRING);
 
     // Test with list
     CljObject *result3 = eval_string("(identity (list 1 2 3))", g_test_eval_state);
@@ -536,12 +536,12 @@ TEST(test_identity_function) {
     // Test with vector
     CljObject *result5 = eval_string("(identity [1 2 3])", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result5);
-    TEST_ASSERT_TRUE(result5 && TAG(result5) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result5) == CLJ_VECTOR);
 
     // Test with map
     CljObject *result6 = eval_string("(identity {:a 1 :b 2})", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result6);
-    TEST_ASSERT_TRUE(result6 && TAG(result6) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result6) == CLJ_MAP);
 }
 
 // Count function tests moved to test_core.c
@@ -698,19 +698,19 @@ TEST(test_is_type_function) {
     CljObject *list = eval_string("(list 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_TRUE(list && list_type_matches(TAG(list)));
-    TEST_ASSERT_FALSE(list && TAG(list) == CLJ_SYMBOL);
+    TEST_ASSERT_FALSE(TAG(list) == CLJ_SYMBOL);
 
     // Test with symbol - use a defined symbol
     CljObject *symbol = eval_string("'test-symbol", g_test_eval_state);  // Quote the symbol to avoid evaluation
     TEST_ASSERT_NOT_NULL(symbol);
-    TEST_ASSERT_TRUE(symbol && TAG(symbol) == CLJ_SYMBOL);
+    TEST_ASSERT_TRUE(TAG(symbol) == CLJ_SYMBOL);
     TEST_ASSERT_FALSE(symbol && list_type_matches(TAG(symbol)));
 
     // Test with number
     CljObject *number = eval_string("42", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(number);
     TEST_ASSERT_TRUE(IS_IMMEDIATE(number));
-    TEST_ASSERT_FALSE(number && TAG(number) == CLJ_SYMBOL);
+    TEST_ASSERT_FALSE(TAG(number) == CLJ_SYMBOL);
 
 }
 
@@ -771,7 +771,7 @@ TEST(test_def_isolated_problem) {
     // Step 4: Use the symbol returned by def (should be the same as what was stored)
     CljObject *test_value_sym = def_result;  // def returns the symbol
     TEST_ASSERT_NOT_NULL(test_value_sym);
-    TEST_ASSERT_TRUE(test_value_sym && TAG(test_value_sym) == CLJ_SYMBOL);
+    TEST_ASSERT_TRUE(TAG(test_value_sym) == CLJ_SYMBOL);
 
     CljObject *resolved = ns_resolve(g_test_eval_state, (CljSymbol*)test_value_sym);
     if (resolved && resolved != NOT_FOUND) {
@@ -842,7 +842,7 @@ TEST(test_def_function_isolated_problem) {
     // Step 3: Use the symbol returned by def (should be the same as what was stored)
     CljObject *test_fn_sym = def_result;  // def returns the symbol
     TEST_ASSERT_NOT_NULL(test_fn_sym);
-    TEST_ASSERT_TRUE(test_fn_sym && TAG(test_fn_sym) == CLJ_SYMBOL);
+    TEST_ASSERT_TRUE(TAG(test_fn_sym) == CLJ_SYMBOL);
 
     // Step 4: Check if mappings map exists and has entries
     if (!g_test_eval_state->current_ns->mappings) {
@@ -854,7 +854,7 @@ TEST(test_def_function_isolated_problem) {
     // Step 5: Try to get the value directly from the map
     CljObject *direct_map_value = map_get_sentinel(g_test_eval_state->current_ns->mappings, test_fn_sym, NULL);
     if (direct_map_value) {
-        TEST_ASSERT_TRUE_MESSAGE(direct_map_value && TAG(direct_map_value) == CLJ_FUNC || direct_map_value && TAG(direct_map_value) == CLJ_CLOSURE,
+        TEST_ASSERT_TRUE_MESSAGE(TAG(direct_map_value) == CLJ_FUNC || TAG(direct_map_value) == CLJ_CLOSURE,
                                  "Direct map lookup should return a function");
     } else {
         TEST_FAIL_MESSAGE("Direct map_get should find test-fn after def");
@@ -863,7 +863,7 @@ TEST(test_def_function_isolated_problem) {
     // Step 6: Try to resolve the symbol directly via ns_resolve
     CljObject *resolved = ns_resolve(g_test_eval_state, as_symbol(test_fn_sym));
     if (resolved && resolved != NOT_FOUND) {
-        TEST_ASSERT_TRUE_MESSAGE(resolved && TAG(resolved) == CLJ_FUNC || resolved && TAG(resolved) == CLJ_CLOSURE,
+        TEST_ASSERT_TRUE_MESSAGE(TAG(resolved) == CLJ_FUNC || TAG(resolved) == CLJ_CLOSURE,
                                  "Resolved value should be a function");
     } else {
         TEST_FAIL_MESSAGE("ns_resolve should find test-fn after def (direct map lookup succeeded)");
@@ -1056,6 +1056,9 @@ TEST(test_type_check_all_types) {
 
     ID symbol_val = parse("foo", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(symbol_val);
+    // Parser returns symbol tokens; canonicalization interns them as real symbols.
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL_TOKEN, TAG(symbol_val));
+    symbol_val = canonicalize_ast(symbol_val, g_test_eval_state);
     TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(symbol_val));
 
     // Test with non-empty collections

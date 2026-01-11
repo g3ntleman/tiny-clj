@@ -455,7 +455,7 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
     // Convert transient to persistent temporarily for checking
     CljVector *history_vec = editor->history;
     CljVector *temp_persistent = NULL;
-    if (history_vec && TAG(history_vec) == CLJ_VECTOR_TRANSIENT) {
+    if (TAG(history_vec) == CLJ_VECTOR_TRANSIENT) {
         temp_persistent = (CljVector*)vector_persistent(history_vec);
         if (temp_persistent) {
             int count = vector_count(temp_persistent);
@@ -545,7 +545,7 @@ void line_editor_set_history_from_vector(LineEditor *editor, CljVector *vec) {
     for (int i = 0; i < count; i++) {
         nth_args[1] = fixnum(i);
         ID elem = nth2(nth_args, 2);
-        if (elem && TAG(elem) == CLJ_STRING) {
+        if (TAG(elem) == CLJ_STRING) {
             // elem is already a CljString - use string_data directly (no to_string needed)
             // elem lifetime is tied to vector - no release needed
             CljString *str = (CljString*)elem;
@@ -579,6 +579,11 @@ void line_editor_reset_history_index(LineEditor *editor) {
 
 // Optional: Default-Persistenzpfad (~/.tiny-clj/history.edn)
 static void build_default_history_path(char *out, size_t out_sz) {
+#ifdef ESP32_BUILD
+    // No filesystem assumptions on ESP32 builds.
+    if (out && out_sz > 0) out[0] = '\0';
+    return;
+#endif
     const char *home = getenv("HOME") ? getenv("HOME") : ".";
     snprintf(out, out_sz, "%s/.tiny-clj", home);
     // Ensure directory exists
@@ -593,6 +598,10 @@ extern CljObject* history_load_from_file(const char *path);
 
 // Laden der History an Default-Pfad, Ergebnis als persistent Vector<String>
 CljObject* line_editor_history_load_default(void) {
+#ifdef ESP32_BUILD
+    // No persistent history on embedded targets.
+    return (CljObject*)empty_vector();
+#endif
     char path[512];
     build_default_history_path(path, sizeof(path));
     return history_load_from_file(path);
@@ -600,6 +609,11 @@ CljObject* line_editor_history_load_default(void) {
 
 // Speichern der History an Default-Pfad; akzeptiert Vector<String> (persistent/transient ok)
 bool line_editor_history_save_default(CljObject *vec) {
+#ifdef ESP32_BUILD
+    (void)vec;
+    // No persistent history on embedded targets.
+    return false;
+#endif
     char path[512];
     build_default_history_path(path, sizeof(path));
     // history_save_to_file handles transient to persistent conversion

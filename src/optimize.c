@@ -217,7 +217,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
     bool is_recursive = is_recursive_call(body, func_name);
     bool is_tail = is_tail_position(body, context);
     if (is_recursive && is_tail) {
-        CljSymbol *func_sym = func_name && TAG(func_name) == CLJ_SYMBOL ? as_symbol(func_name) : NULL;
+        CljSymbol *func_sym = TAG(func_name) == CLJ_SYMBOL ? as_symbol(func_name) : NULL;
         return transform_to_recur(body_list, func_sym);
     }
 
@@ -364,7 +364,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
     if (is_tail_position(body, context)) {
         // The entire expression is in tail position - check if it's a recursive call
         if (is_recursive_call(body, func_name)) {
-            CljSymbol *func_sym = func_name && TAG(func_name) == CLJ_SYMBOL ? as_symbol(func_name) : NULL;
+            CljSymbol *func_sym = TAG(func_name) == CLJ_SYMBOL ? as_symbol(func_name) : NULL;
             return transform_to_recur(body_list, func_sym);
         }
         // Not a recursive call, but in tail position - don't transform nested calls
