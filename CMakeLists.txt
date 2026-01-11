@@ -360,6 +360,7 @@ add_executable(unit-tests
     src/tests/test_let_performance.c
     src/tests/test_call_frame.c
     src/tests/test_slot_ref.c
+    src/tests/test_compiled_ast.c
     src/tests/test_line_editor_serial.c
     src/tests/test_do.c
     src/tests/test_defn.c

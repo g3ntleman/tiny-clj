@@ -27,6 +27,8 @@
 #include "value.h"
 #include "environment.h"
 #include "ast.h"
+#include "ast_compile.h"
+#include "compiled_ast.h"
 #include "vector.h"
 #include "env_stack.h"
 #include "event_loop.h"
@@ -37,6 +39,7 @@
 #include "format_utils.h"
 #include "eval_arithmetic.h"
 #include "eval_comparison.h"
+#include <stdlib.h>
 #include <time.h>
 
 #include "eval_sequence.h"
@@ -899,6 +902,20 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
 // Thread-local recursion depth tracking for eval_arg and eval_list
 static _Thread_local int g_eval_arg_depth = 0;
 
+// Optional pretreated AST execution (disabled by default).
+static int g_use_compiled_ast = -1;
+static INLINE bool compiled_ast_enabled(void) {
+    if (g_use_compiled_ast < 0) {
+        const char *v = getenv("TINYCLJ_USE_COMPILED_AST");
+        g_use_compiled_ast = (v && v[0] == '1') ? 1 : 0;
+    }
+    return g_use_compiled_ast == 1;
+}
+
+void eval_set_use_compiled_ast(int enabled) {
+    g_use_compiled_ast = enabled;
+}
+
 // Reset eval arg depth (for test isolation)
 void reset_eval_arg_depth(void) {
     g_eval_arg_depth = 0;
@@ -1217,6 +1234,18 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Prefer the current head of env_stack (closures/let frames), fall back to env parameter
     CljMap *effective_env = ctx ? get_closure_env(ctx) : NULL;
     if (!effective_env) effective_env = env;
+
+    // Optional pretreated AST execution: if the node has a compiled payload with an eval fn,
+    // call it directly (fallback stays the existing evaluator).
+    if (call_node && compiled_ast_enabled()) {
+        if (!ast_node_get_compiled(call_node)) {
+            ast_compile_inplace((ID)call_node, effective_st);
+        }
+        const CljCompiledPayload *payload = compiled_payload_from_ptr(ast_node_get_compiled(call_node));
+        if (payload && payload->eval) {
+            return payload->eval(call_node, effective_env, effective_st, ctx);
+        }
+    }
 
     ID head = LIST_FIRST(list);
 
@@ -1792,6 +1821,11 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         if (transformed) {
             body = transformed;
         }
+    }
+
+    // Optional: precompile the function body AST once at definition time.
+    if (compiled_ast_enabled() && body) {
+        ast_compile_inplace(body, st);
     }
 
     // Capture env_stack from context if available (vector of maps).
