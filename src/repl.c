@@ -447,7 +447,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Initialize line editor
-    LineEditor *editor = line_editor_new(platform_get_char, platform_put_char, platform_put_string);
+    LineEditor *editor = line_editor_new(platform_get_char, platform_put_char, platform_put_string, NULL);
     if (!editor) {
         fprintf(stderr, "Failed to initialize line editor\n");
         return false;

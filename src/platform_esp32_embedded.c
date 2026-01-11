@@ -12,7 +12,8 @@ void platform_print(const char *message) {
     fputc('\n', stdout);
 }
 
-void platform_put_string(const char *s) {
+void platform_put_string(void *ctx, const char *s) {
+    (void)ctx;
     if (s) fputs(s, stdout);
 }
 

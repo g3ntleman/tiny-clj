@@ -11,6 +11,10 @@
 (do
   (require 'clojure.core.async)
   (def out (atom (vector)))
+  (defn drain-events! []
+    (if (run-next-task)
+      (drain-events!)
+      nil))
   (defn push! [x]
     (do
       (swap! out (fn [s] (conj s x)))
@@ -35,6 +39,7 @@
         (assert-eq (vector) (deref out) "unbuffered: no value yet")
         (assert-eq true (clojure.core.async/put! ch :x (fn [ok] (push! (vector :put ok))))
                    "unbuffered: put! returns true")
+        (drain-events!)
         (assert-eq (vector (vector :take :x) (vector :put true))
                    (deref out)
                    "unbuffered: callbacks fired in order")))
@@ -44,6 +49,10 @@
 (do
   (require 'clojure.core.async)
   (def out (atom (vector)))
+  (defn drain-events! []
+    (if (run-next-task)
+      (drain-events!)
+      nil))
   (defn push! [x]
     (do
       (swap! out (fn [s] (conj s x)))
@@ -66,14 +75,17 @@
       (do
         (assert-eq true (clojure.core.async/put! ch :a (fn [ok] (push! (vector :put-a ok))))
                    "buffered: put a accepted")
+        (drain-events!)
         (assert-eq true (clojure.core.async/put! ch :b (fn [ok] (push! (vector :put-b ok))))
                    "buffered: put b parked (returns true)")
+        (drain-events!)
         ;; b callback should not have fired yet (buffer full).
         (assert-eq (vector (vector :put-a true))
                    (deref out)
                    "buffered: only put-a callback fired")
         ;; take one: should deliver a, and then b should be committed (put-b callback fires).
         (clojure.core.async/take! ch (fn [v] (push! (vector :take-1 v))))
+        (drain-events!)
         (assert-eq (vector (vector :put-a true)
                            (vector :take-1 :a)
                            (vector :put-b true))
@@ -81,6 +93,7 @@
                    "buffered: take frees capacity -> put-b proceeds")
         ;; take second: should deliver b
         (clojure.core.async/take! ch (fn [v] (push! (vector :take-2 v))))
+        (drain-events!)
         (assert-eq (vector (vector :put-a true)
                            (vector :take-1 :a)
                            (vector :put-b true)
@@ -93,6 +106,10 @@
 (do
   (require 'clojure.core.async)
   (def out (atom (vector)))
+  (defn drain-events! []
+    (if (run-next-task)
+      (drain-events!)
+      nil))
   (defn push! [x]
     (do
       (swap! out (fn [s] (conj s x)))
@@ -122,6 +139,7 @@
       (do
         (clojure.core.async/take! ch (fn [v] (push! (vector :take v))))
         (clojure.core.async/close! ch)
+        (drain-events!)
         (assert-eq (vector (vector :take nil)) (deref out) "close flushes taker with nil")))
 
     ;; close! flushes parked put with false
@@ -131,6 +149,7 @@
         (assert-eq true (clojure.core.async/put! ch :x (fn [ok] (push! (vector :put ok))))
                    "put returns true (parked)")
         (clojure.core.async/close! ch)
+        (drain-events!)
         (assert-eq (vector (vector :put false)) (deref out) "close flushes put with false")))
 
     ;; unsupported: on-caller? = false

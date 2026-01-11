@@ -10,9 +10,9 @@
 typedef struct LineEditor LineEditor;
 
 // Platform abstraction functions
-typedef int (*GetCharFunc)(void);
-typedef void (*PutCharFunc)(char);
-typedef void (*PutStringFunc)(const char*);
+typedef int (*GetCharFunc)(void *ctx);
+typedef void (*PutCharFunc)(void *ctx, char);
+typedef void (*PutStringFunc)(void *ctx, const char*);
 
 // Line editor state structure for reduced API
 typedef struct {
@@ -23,13 +23,23 @@ typedef struct {
 } LineEditorState;
 
 // Return codes for line editor operations
-#define LINE_EDITOR_SUCCESS    0
-#define LINE_EDITOR_EOF       -1
-#define LINE_EDITOR_ERROR     -2
-#define LINE_EDITOR_LINE_READY 1
+// NOTE:
+// - These are return values of line_editor_process_input().
+// - "No input available" is signaled by GetCharFunc returning LINE_EDITOR_GETCHAR_NO_INPUT.
+typedef enum {
+    LINE_EDITOR_EOF = -1,
+    LINE_EDITOR_SUCCESS = 0,
+    LINE_EDITOR_LINE_READY = 1,
+} LineEditorResult;
+
+// Return value contract for GetCharFunc:
+// - >= 0: a byte/character
+// - -1: EOF
+// - -2: no input available (non-blocking)
+#define LINE_EDITOR_GETCHAR_NO_INPUT (-2)
 
 // Line editor API
-LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStringFunc put_string);
+LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStringFunc put_string, void *ctx);
 void line_editor_free(LineEditor *editor);
 
 // Process input and return status
