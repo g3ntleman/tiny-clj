@@ -86,6 +86,17 @@ extern CljObject g_not_found_sentinel;
 
 static inline CljType TAG(ID obj)
 {
+#ifndef DEBUG
+    // Max-performance release build: minimal checks.
+    if (!obj) return CLJ_NIL;
+
+    // Immediate values (tagged pointers with LSB set)
+    if ((uintptr_t)obj & 0x1) {
+        return (CljType)((uintptr_t)obj & 0x7);
+    }
+
+    return ((CljObject*)obj)->type;
+#else
     // Early NULL check - must come before any pointer dereference
     // Check both NULL and zero pointer explicitly
     if (!obj || (uintptr_t)obj == 0)
@@ -142,10 +153,15 @@ static inline CljType TAG(ID obj)
 
     // Return the type we already accessed
     return type;
+#endif
 }
 
 static inline bool is_singleton(CljObject *obj)
 {
+#ifndef DEBUG
+    // Max-performance release build: assume valid object pointer.
+    return obj->rc == SINGLETON_RC;
+#else
     if (!obj || (uintptr_t)obj < 0x1000)
     {
         return true;
@@ -157,6 +173,7 @@ static inline bool is_singleton(CljObject *obj)
     }
 #endif
     return obj->rc == SINGLETON_RC;
+#endif
 }
 
 bool clj_equal(ID a, ID b);

@@ -513,6 +513,49 @@ static const EvalContext* ensure_eval_context(CljMap *env,
 static INLINE bool is_dynamic_var_symbol(const CljSymbol *symbol);
 static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol);
 
+// Local-only resolution: CallFrame + env_stack + fallback_env.
+// Does NOT consult namespaces/dynamic bindings.
+// Returns:
+// - NOT_FOUND when unbound
+// - SYM_NIL when bound to nil
+// - otherwise the bound value (may be immediate or heap object)
+static INLINE ID resolve_symbol_local_with_frame(CljVector *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym) {
+    if (!sym || TAG(sym) != CLJ_SYMBOL) {
+        return NOT_FOUND;
+    }
+
+    // Fast-path: Check frame first (most common case for parameters)
+    if (frame) {
+        ID frame_value = NOT_FOUND;
+        if (frame_lookup(frame, sym, &frame_value)) {
+            if (frame_value == NOT_FOUND) {
+                return (ID)SYM_NIL;
+            }
+            return frame_value;
+        }
+    }
+
+    // Search env_stack (for let bindings, closure captures)
+    ENV_STACK_FOR_EACH_REVERSE(env_stack, env_obj_id) {
+        if (is_map(env_obj_id)) {
+            CljMap *env = (CljMap*)env_obj_id;
+            ID resolved = map_get(env, sym);
+            if (resolved != NOT_FOUND) {
+                return resolved ? resolved : (ID)SYM_NIL;
+            }
+        }
+    }
+
+    if (fallback_env) {
+        ID resolved = map_get(fallback_env, sym);
+        if (resolved != NOT_FOUND) {
+            return resolved ? resolved : (ID)SYM_NIL;
+        }
+    }
+
+    return NOT_FOUND;
+}
+
 // Extended version that also searches in CallFrame
 static INLINE ID resolve_symbol_in_env_with_frame(CljVector *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
     if (!sym || TAG(sym) != CLJ_SYMBOL) {
@@ -685,10 +728,24 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         CljSymbol *body_sym = as_symbol(body);
         CLJ_ASSERT(body_sym != NULL && "is_symbol(body) but as_symbol returned NULL");
 
+        // Dynamic vars are resolved at call-time (must not be captured via env_stack).
+        EvalState *ctx_state_for_dyn = get_eval_state(ctx, NULL);
+        if (!ctx_state_for_dyn) {
+            ctx_state_for_dyn = builtin_get_eval_state();
+        }
+        if (ctx_state_for_dyn && is_dynamic_var_symbol(body_sym)) {
+            ID bound = dynamic_binding_lookup(ctx_state_for_dyn, body_sym);
+            if (bound != NOT_FOUND) {
+                if (!bound || bound == SYM_NIL) return NULL;
+                if (IS_IMMEDIATE(bound)) return bound;
+                return AUTORELEASE(RETAIN(bound));
+            }
+        }
+
         // Use central symbol resolution function (DRY: handles environment stack and frames)
         if (ctx) {
             CljMap *ctx_env_map = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
-            ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, ctx_env_map, ctx->frame, body, get_eval_state(ctx, NULL));
+            ID resolved_id = resolve_symbol_local_with_frame(ctx->env_stack, ctx_env_map, ctx->frame, body);
             const char *log_sym = (body_sym && body_sym->cname) ? body_sym->cname : "<anon>";
             if (resolved_id != NOT_FOUND) {
                 if (!resolved_id || resolved_id == SYM_NIL) {
@@ -708,6 +765,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                         return NULL;
                     }
                 }
+                if (IS_IMMEDIATE(resolved_id)) return resolved_id;
+                // Local scopes (frame/let env) can end before caller pool pops.
                 return AUTORELEASE(RETAIN(resolved_id));
             }
         }
@@ -772,7 +831,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             
             // Create new vector with evaluated elements
             CljVector *result = make_vector(count, CLJ_VECTOR);
-            RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
@@ -782,8 +840,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                     eval_elem = eval_body_with_params(elem, ctx);
                 }
                 
-                // Add evaluated element to result vector
-                ASSIGN(result, vector_conj(result, eval_elem));
+                // Add evaluated element to result vector (keep rc==1 for COW/in-place).
+                vector_conj_inplace(&result, eval_elem);
             }
             
             return AUTORELEASE(result);
@@ -792,14 +850,15 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         case CLJ_MAP: {
             // Map literals need to have their keys and values evaluated
             CljMap *map = (CljMap*)body;
-            CljMap *result = map_empty();
-            RETAIN(result);
+            int count = map_count(map);
+            CljMap *result = make_map(count > 0 ? count : 4);
             
             MAP_FOR_EACH(map, key, value) {
                 ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
                 ID eval_value = value ? eval_body_with_params(value, ctx) : NULL;
-                
-                ASSIGN(result, map_assoc(result, eval_key, eval_value));
+
+                // Keep rc==1 for COW/in-place.
+                map_assoc_inplace(&result, eval_key, eval_value);
             }
             
             return AUTORELEASE(result);
@@ -873,7 +932,10 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 // Use sentinel to distinguish "key not found" from "value is nil"
                 ID result_id = map_get((CljMap*)env, body);
                 if (result_id != NOT_FOUND) {
-                    return (CljObject*)result_id;
+                    if (!result_id) return NULL;
+                    if (IS_IMMEDIATE(result_id)) return result_id;
+                    // Local env can end before caller pool pops.
+                    return AUTORELEASE(RETAIN(result_id));
                 }
             }
 
@@ -882,7 +944,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 // Use sentinel to distinguish "key not found" from "value is nil"
                 ID result_id = map_get(st->current_ns->mappings, body);
                 if (result_id != NOT_FOUND) {
-                    return (CljObject*)result_id;
+                    return result_id; // Namespace-owned (stable), may be NULL for nil
                 }
             }
 
@@ -929,7 +991,6 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             
             // Create new vector with evaluated elements
             CljVector *result = make_vector(count, CLJ_VECTOR);
-            RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
@@ -941,8 +1002,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     eval_elem = eval_body(elem, env, st, ctx);
                 }
                 
-                // Add evaluated element to result vector
-                ASSIGN(result, vector_conj(result, eval_elem));
+                // Add evaluated element to result vector (keep rc==1 for COW/in-place).
+                vector_conj_inplace(&result, eval_elem);
             }
             
             return AUTORELEASE(result);
@@ -952,8 +1013,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // Map literals need to have their keys and values evaluated
             // This is necessary for cases like {nil "value"} where nil should be evaluated to NULL
             CljMap *map = (CljMap*)body;
-            CljMap *result = map_empty();
-            RETAIN(result);
+            int count = map_count(map);
+            CljMap *result = make_map(count > 0 ? count : 4);
 
             MAP_FOR_EACH(map, key, value) {
                 // Cache tags for performance
@@ -976,12 +1037,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     eval_value = eval_body(value, env, st, ctx);
                 }
 
-                // Add evaluated key-value pair to result map
-                ASSIGN(result, map_assoc(result, eval_key, eval_value));
-
-                // Release evaluated key and value if they were retained
-                if (eval_key && eval_key != key) RELEASE(eval_key);
-                if (eval_value && eval_value != value) RELEASE(eval_value);
+                // Add evaluated key-value pair to result map (keep rc==1 for COW/in-place).
+                map_assoc_inplace(&result, eval_key, eval_value);
             }
 
             return AUTORELEASE(result);
@@ -1039,10 +1096,23 @@ static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
         if (!frame_id || TAG(frame_id) != CLJ_MAP) {
             continue;
         }
-        ID v = map_get((CljMap*)frame_id, (ID)symbol);
+        CljMap *frame = (CljMap*)frame_id;
+        ID v = map_get(frame, (ID)symbol);
         if (v != NOT_FOUND) {
             // v may be NULL (nil) - that's a valid binding value.
             return v;
+        }
+
+        // Fallback: dynamic bindings must behave even if symbol pointers differ.
+        // This should be cold (dynamic vars are relatively rare), so linear scan is acceptable.
+        if (symbol->cname) {
+            MAP_FOR_EACH(frame, k, val) {
+                if (!k || TAG(k) != CLJ_SYMBOL) continue;
+                CljSymbol *ks = (CljSymbol*)k;
+                if (ks->cname && strcmp(ks->cname, symbol->cname) == 0) {
+                    return val;
+                }
+            }
         }
     }
 
@@ -2309,7 +2379,7 @@ ID eval_for(CljList *list, CljMap *env) {
                 if (new_env) {
                     // Evaluate body with new binding
                     ID body_result = eval_body_with_env(body, new_env, NULL);
-                    RELEASE(body_result);
+                    (void)body_result;
 
                     // Clean up environment
                     RELEASE(new_env);
@@ -2377,7 +2447,7 @@ ID eval_doseq(CljList *list, CljMap *env) {
                 if (new_env) {
                     // Evaluate body with new binding
                     ID body_result = eval_body_with_env(body, new_env, NULL);
-                    RELEASE(body_result);
+                    (void)body_result;
 
                     // Clean up environment
                     RELEASE(new_env);
@@ -2488,8 +2558,6 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     if (has_frame) {
         let_env_map = make_map(pair_count);
         env_stack_push_inplace(&let_stack, let_env_map);
-        // env_stack retains its elements; keep a borrowed pointer for updates.
-        RELEASE(let_env_map);
     }
 
     EvalContext let_ctx = ctx ? *ctx : (EvalContext){0};
@@ -2546,14 +2614,13 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // Also expose bindings via the top env_stack map for closures and symbol resolution.
             // Update the single let_env_map incrementally (avoid rebuilding env_stack).
             if (let_env_map) {
-                // Use map_assoc (COW-aware) instead of map_put (deprecated, no growth/duplicate checks).
-                // This should remain in-place for rc=1 + sufficient capacity, but we still
-                // handle the "new pointer" case defensively to keep env_stack consistent.
-                CljMap *updated = map_assoc(let_env_map, sym_val, value);
-                if (updated && updated != let_env_map && let_ctx.env_stack) {
+                // Keep let_env_map owned and mutate via in-place helper.
+                // If COW produces a new map, update env_stack top to match.
+                CljMap *old_env = let_env_map;
+                map_assoc_inplace(&let_env_map, sym_val, value);
+                if (let_env_map != old_env && let_ctx.env_stack) {
                     unsigned int top_idx = vector_count(let_ctx.env_stack) - 1;
-                    vector_assoc_inplace(&let_ctx.env_stack, top_idx, (ID)updated);
-                    let_env_map = updated;
+                    vector_assoc_inplace(&let_ctx.env_stack, top_idx, (ID)let_env_map);
                 }
             }
 
@@ -2582,16 +2649,13 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     }
 
                     if (!already_bound) {
-                        CljMap *self_bind = map_assoc(map_empty(), sym_val, stored_value);
+                        CljMap *self_bind = make_map(1);
+                        map_assoc_inplace(&self_bind, sym_val, stored_value);
                         env_stack_push_inplace(&f->env_stack, self_bind);
                         RELEASE(self_bind);
                     }
                 }
             }
-        }
-
-        if (value && !IS_IMMEDIATE(value)) {
-            RELEASE(value);
         }
 
         binding_index++;
@@ -2610,10 +2674,8 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         ID body_expr = LIST_FIRST(node);
         if (!body_expr) continue;
 
-        RELEASE(result);
         if (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr)) {
             result = body_expr;
-            RETAIN(result);
         } else {
             result = eval_body(body_expr, body_env, st, &let_ctx);
         }
@@ -2623,6 +2685,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         frame_release(let_frame);
     }
     if (let_stack_owned) RELEASE(let_stack);
+    if (let_env_map) RELEASE(let_env_map);
     return result;
 }
 
@@ -2672,6 +2735,19 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         if (IS_KEYWORD(expr)) {
             return expr;
         }
+
+        // Dynamic vars are resolved at call-time (must not be captured via env_stack/frame).
+        if (st) {
+            CljSymbol *sym = as_symbol(expr);
+            if (sym && is_dynamic_var_symbol(sym)) {
+                ID bound = dynamic_binding_lookup(st, sym);
+                if (bound != NOT_FOUND) {
+                    if (!bound) return NULL;
+                    if (IS_IMMEDIATE(bound)) return bound;
+                    return AUTORELEASE(RETAIN(bound));
+                }
+            }
+        }
         
         // Use frame_lookup for O(1) parameter resolution (symbols are interned)
         if (ctx && ctx->frame) {
@@ -2686,85 +2762,35 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
             }
         }
         
-        ID resolved_value = NULL;
-        bool resolved_found = false;
-        
-        // If context is provided with env_stack, use resolve_symbol_in_env
-        // to search through the entire environment stack (for nested let blocks)
+        // Local scopes (frame/let env_stack/env map) next.
         if (ctx) {
-            EvalState *eval_st = get_eval_state(ctx, st);
-            ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, env, ctx->frame, expr, eval_st);
-            if (resolved_id != NOT_FOUND) {
-                if (!resolved_id || resolved_id == SYM_NIL) {
-                    return NULL;
-                }
-                // CRITICAL: If resolved_id is still a symbol (not a value), throw exception
-                // This prevents infinite loops where a symbol resolves to itself
-                if (is_symbol(resolved_id) && !IS_KEYWORD(resolved_id)) {
-                    bool resolves_to_self = (resolved_id == expr);
-                    if (!resolves_to_self && resolved_id && expr) {
-                        resolves_to_self = clj_equal(resolved_id, expr);
-                    }
-                    if (resolves_to_self) {
-                        CljSymbol *sym_obj = as_symbol(expr);
-                        const char *sym_name = sym_obj && sym_obj->cname ? sym_obj->cname : "unknown";
-                        throw_unresolved_symbol_exception(sym_name);
-                        return NULL;
-                    }
-                }
-                resolved_value = resolved_id;
-                resolved_found = true;
+            ID local_id = resolve_symbol_local_with_frame(ctx->env_stack, env, ctx->frame, expr);
+            if (local_id != NOT_FOUND) {
+                if (!local_id || local_id == SYM_NIL) return NULL;
+                if (IS_IMMEDIATE(local_id)) return local_id;
+                return AUTORELEASE(RETAIN(local_id));
             }
-            // Not found in env_stack or still a symbol, fall through to namespace resolution
-        }
-        
-        if (!resolved_value && is_map(env)) {
-            // Use sentinel to distinguish "key not found" from "value is nil"
-            ID resolved_id = map_get(env, expr);
-            if (resolved_id != NOT_FOUND) {
-                // Key exists in map (value may be NULL/nil)
-                // map_get returns retained value, eval_arg should return AUTORELEASE
-                if (!resolved_id) return NULL; // nil
-                resolved_value = resolved_id;
-                resolved_found = true;
+        } else if (is_map(env)) {
+            ID local_id = map_get(env, expr);
+            if (local_id != NOT_FOUND) {
+                if (!local_id) return NULL;
+                if (IS_IMMEDIATE(local_id)) return local_id;
+                return AUTORELEASE(RETAIN(local_id));
             }
         }
 
-        if (!resolved_value) {
-            // Dynamic vars may be bound to nil; allow use in argument position.
-            if (st) {
-                CljSymbol *sym = as_symbol(expr);
-                if (sym && is_dynamic_var_symbol(sym)) {
-                    ID bound = dynamic_binding_lookup(st, sym);
-                    if (bound != NOT_FOUND) {
-                        if (!bound) return NULL;
-                        if (IS_IMMEDIATE(bound)) return bound;
-                        return AUTORELEASE(RETAIN(bound));
-                    }
-                }
-            }
-
-            ID resolved = ns_resolve(st, as_symbol(expr));
-            if (resolved != NOT_FOUND) {
-                resolved_found = true;
-                if (!resolved || resolved == SYM_NIL) {
-                    return NULL;
-                }
-                resolved_value = resolved;
-            }
-        }
-
-        if (resolved_found) {
-            if (!resolved_value) {
+        // Namespace resolution (stable/long-lived): do NOT retain/autorelease.
+        ID resolved = ns_resolve(st, as_symbol(expr));
+        if (resolved != NOT_FOUND) {
+            if (!resolved || resolved == SYM_NIL) return NULL;
+            if (IS_IMMEDIATE(resolved)) return resolved;
+            if (is_symbol(resolved) && !IS_KEYWORD(resolved)) {
+                CljSymbol *sym_obj = as_symbol(expr);
+                const char *sym_name = sym_obj && sym_obj->cname ? sym_obj->cname : "unknown";
+                throw_unresolved_symbol_exception(sym_name);
                 return NULL;
             }
-            if (IS_IMMEDIATE(resolved_value)) {
-                return resolved_value;
-            }
-            // resolved_value can come from map_get (pointer) or ns_resolve (safe)
-            // map_get returns only pointer, ns_resolve returns safe value
-            // Since we can't distinguish, use RETAIN+AUTORELEASE for safety
-            return AUTORELEASE(RETAIN(resolved_value)); // question this!!
+            return resolved;
         }
 
         // Only call as_symbol when needed (error paths)
@@ -2789,14 +2815,15 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
 
     if (expr_tag == CLJ_MAP) {
         CljMap *map = (CljMap*)expr;
-        CljMap *result = map_empty();
+        int count = map_count(map);
+        CljMap *result = make_map(count > 0 ? count : 4);
 
         MAP_FOR_EACH(map, key, value) {
             ID key_id = key;
             ID value_id = value;
             ID eval_key = (key_id == SYM_NIL) ? NULL : eval_body(key_id, env, st, NULL);
             ID eval_value = (value_id == SYM_NIL) ? NULL : eval_body(value_id, env, st, NULL);
-            ASSIGN(result, map_assoc(result, eval_key, eval_value));
+            map_assoc_inplace(&result, eval_key, eval_value);
         }
 
         return AUTORELEASE(result);
@@ -2808,10 +2835,9 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         if (count == 0) return expr;
         
         CljVector *result = make_vector(count, CLJ_VECTOR);
-        RETAIN(result);
         VECTOR_FOR_EACH(vec, elem) {
             ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, env, st, ctx) : NULL;
-            ASSIGN(result, vector_conj(result, eval_elem));
+            vector_conj_inplace(&result, eval_elem);
         }
         return AUTORELEASE(result);
     }
@@ -2897,13 +2923,12 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
                 CljList *body_items = as_list(body_list);
                 LIST_FOR_EACH(body_items, body_expr) {
                     if (!body_expr) continue;
-                    RELEASE(body_result);
                     body_result = eval_body(body_expr, env, eval_st, &dotimes_ctx);
                 }
             } else if (body_list) {
                 body_result = eval_body(body_list, env, eval_st, &dotimes_ctx);
             }
-            RELEASE(body_result);
+            (void)body_result;
         });
     }
 
