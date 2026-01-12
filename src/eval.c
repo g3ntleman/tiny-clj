@@ -770,9 +770,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 return RETAIN(body);
             }
             
-            // Create new vector with evaluated elements
+            // Create new vector with evaluated elements (rc=1 for COW/in-place)
             CljVector *result = make_vector(count, CLJ_VECTOR);
-            RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
@@ -782,8 +781,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                     eval_elem = eval_body_with_params(elem, ctx);
                 }
                 
-                // Add evaluated element to result vector
-                ASSIGN(result, vector_conj(result, eval_elem));
+                // Add evaluated element to result vector (keep rc==1 for COW/in-place)
+                vector_conj_inplace(&result, eval_elem);
             }
             
             return AUTORELEASE(result);
@@ -792,14 +791,15 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         case CLJ_MAP: {
             // Map literals need to have their keys and values evaluated
             CljMap *map = (CljMap*)body;
-            CljMap *result = map_empty();
-            RETAIN(result);
+            int count = map_count(map);
+            CljMap *result = make_map(count > 0 ? count : 4);
             
             MAP_FOR_EACH(map, key, value) {
                 ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
                 ID eval_value = value ? eval_body_with_params(value, ctx) : NULL;
                 
-                ASSIGN(result, map_assoc(result, eval_key, eval_value));
+                // Keep rc==1 for COW/in-place
+                map_assoc_inplace(&result, eval_key, eval_value);
             }
             
             return AUTORELEASE(result);
@@ -927,9 +927,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 return body;
             }
             
-            // Create new vector with evaluated elements
+            // Create new vector with evaluated elements (rc=1 for COW/in-place)
             CljVector *result = make_vector(count, CLJ_VECTOR);
-            RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
@@ -941,8 +940,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     eval_elem = eval_body(elem, env, st, ctx);
                 }
                 
-                // Add evaluated element to result vector
-                ASSIGN(result, vector_conj(result, eval_elem));
+                // Add evaluated element to result vector (keep rc==1 for COW/in-place)
+                vector_conj_inplace(&result, eval_elem);
             }
             
             return AUTORELEASE(result);
@@ -952,8 +951,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // Map literals need to have their keys and values evaluated
             // This is necessary for cases like {nil "value"} where nil should be evaluated to NULL
             CljMap *map = (CljMap*)body;
-            CljMap *result = map_empty();
-            RETAIN(result);
+            int count = map_count(map);
+            CljMap *result = make_map(count > 0 ? count : 4);
 
             MAP_FOR_EACH(map, key, value) {
                 // Cache tags for performance
@@ -976,12 +975,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     eval_value = eval_body(value, env, st, ctx);
                 }
 
-                // Add evaluated key-value pair to result map
-                ASSIGN(result, map_assoc(result, eval_key, eval_value));
-
-                // Release evaluated key and value if they were retained
-                if (eval_key && eval_key != key) RELEASE(eval_key);
-                if (eval_value && eval_value != value) RELEASE(eval_value);
+                // Add evaluated key-value pair to result map (keep rc==1 for COW/in-place)
+                map_assoc_inplace(&result, eval_key, eval_value);
             }
 
             return AUTORELEASE(result);
@@ -2789,14 +2784,15 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
 
     if (expr_tag == CLJ_MAP) {
         CljMap *map = (CljMap*)expr;
-        CljMap *result = map_empty();
+        int count = map_count(map);
+        CljMap *result = make_map(count > 0 ? count : 4);
 
         MAP_FOR_EACH(map, key, value) {
             ID key_id = key;
             ID value_id = value;
             ID eval_key = (key_id == SYM_NIL) ? NULL : eval_body(key_id, env, st, NULL);
             ID eval_value = (value_id == SYM_NIL) ? NULL : eval_body(value_id, env, st, NULL);
-            ASSIGN(result, map_assoc(result, eval_key, eval_value));
+            map_assoc_inplace(&result, eval_key, eval_value);
         }
 
         return AUTORELEASE(result);
@@ -2808,10 +2804,9 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         if (count == 0) return expr;
         
         CljVector *result = make_vector(count, CLJ_VECTOR);
-        RETAIN(result);
         VECTOR_FOR_EACH(vec, elem) {
             ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, env, st, ctx) : NULL;
-            ASSIGN(result, vector_conj(result, eval_elem));
+            vector_conj_inplace(&result, eval_elem);
         }
         return AUTORELEASE(result);
     }
