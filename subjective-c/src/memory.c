@@ -199,14 +199,12 @@ static void init_release_dispatch(void) {
  */
 void retain(CljObject *v) {
     if (!v) return;
-
-#ifdef DEBUG
+    
     // Safety check: ensure the pointer is valid
     if ((uintptr_t)v < 0x1000) {
         return;
     }
-#endif
-
+    
 #ifdef DEBUG
     // Check for zombie object
     if (v->rc == 0) {
@@ -228,8 +226,8 @@ void retain(CljObject *v) {
     
     // Note: closure environments are heap-managed (vector). No stack promotion needed.
 
-    // Happy path: object that tracks retains
-    if (TRACKS_RETAINS(v)) {
+    // Happy path: valid object that tracks retains
+    if ((uintptr_t)v >= 0x1000 && TRACKS_RETAINS(v)) {
         // Track retain call for profiling (compile-time no-op in release builds)
         MEMORY_PROFILER_TRACK_RETAIN(v);
         v->rc++;
@@ -246,22 +244,7 @@ void retain(CljObject *v) {
  */
 void release(CljObject *v) {
     if (!v) return;
-
-#ifndef DEBUG
-    // Max-performance release build: no pointer-safety checks.
-    if (v->rc == SINGLETON_RC) return;
-    v->rc--;
-    MEMORY_PROFILER_TRACK_RELEASE(v);
-    if (v->rc == 0) {
-        release_object_deep(v);
-#ifdef ZOMBIE_ENABLED
-        // Zombie mode not supported in release builds, but keep compile-time guard.
-#else
-        DEALLOC(v);
-#endif
-    }
-    return;
-#else
+    
     // Safety check: ensure the pointer is valid and points to a valid object
     // Check if the pointer is in a reasonable memory range (not in zero page)
     if ((uintptr_t)v < 0x1000) {
@@ -273,7 +256,6 @@ void release(CljObject *v) {
     if (is_singleton(v)) {
         return;
     }
-#endif
     
     // Only show debug output if memory profiling is enabled and verbose mode is on
     // AND debug output is enabled (after initialization)
@@ -287,8 +269,8 @@ void release(CljObject *v) {
     // Note: CLJ_FUNC (native functions) are static and don't need release
     // CLJ_CLOSURE (interpreted functions) need to be released and will be handled by release_object_deep
     
-#ifdef DEBUG
-    // Check for double-free BEFORE decrementing (DEBUG only)
+    // Check for double-free BEFORE decrementing (ALWAYS, not just in DEBUG)
+    // This detects attempts to release already-freed objects
     if (v->rc == 0) {
         fprintf(stderr, "❌ DOUBLE-FREE! Object %p (type=%s) already freed\n", v, clj_type_name(v->type));
         fprintf(stderr, "🔍 Backtrace (most recent call first):\n");
@@ -311,7 +293,6 @@ void release(CljObject *v) {
             v, clj_type_name(v->type));
         return;
     }
-#endif
 
     v->rc--;
     
@@ -520,11 +501,9 @@ void autorelease_pool_push() {
  * 
  * @return void (no parameters)
  * 
- * Removes the checkpoint and releases all objects added since that checkpoint.
+ * Removes the checkpoint. Objects are NOT released (weak/track-only semantics).
  *
- * Classic autorelease semantics:
- * - AUTORELEASE() adds to the pool without retaining
- * - pop() performs the matching release() calls
+ * The pool is used for debug/profiling visibility, but does not own objects.
  */
 void autorelease_pool_pop(void) {
     
@@ -552,18 +531,11 @@ void autorelease_pool_pop(void) {
     uint32_t checkpoint = g_pool.checkpoints[--g_pool.cp_count];
     
     if (g_debug_output_active) {
-        printf("🔍 autorelease_pool_pop: draining %u objects (checkpoint=%u, count=%u)\n",
+        printf("🔍 autorelease_pool_pop: clearing %u objects (checkpoint=%u, count=%u)\n",
                g_pool.count - checkpoint, checkpoint, g_pool.count);
     }
     
-    // Drain: release everything added since checkpoint.
-    // Reverse order better matches nested container lifetimes.
-    for (uint32_t i = g_pool.count; i > checkpoint; --i) {
-        CljObject *obj = g_pool.items[i - 1];
-        release(obj);
-    }
-
-    // Forget drained items.
+    // Weak semantics: forget items, do not release them.
     g_pool.count = checkpoint;
 }
 
