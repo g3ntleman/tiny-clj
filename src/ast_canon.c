@@ -885,22 +885,35 @@ ID canonicalize_ast(ID parsed_expr, EvalState *st) {
     CLJ_ASSERT(st != NULL);
     ID result = NULL;
     bool needs_escape = false;
+    int rc_after_retain = 0;
 
     // Canonicalization can allocate a lot of temporary AUTORELEASE containers.
     // Scope that churn to a nested pool so it doesn't inflate the caller's pool.
-    // Pool is draining: retain the result inside the pool so it survives pop,
-    // then transfer it to the caller's outer pool via AUTORELEASE (if any).
+    // If the pool implementation ever becomes draining again, retain the result
+    // inside the pool so it survives pop, then re-autorelease it into the
+    // caller's pool.
     WITH_AUTORELEASE_POOL({
         result = canonicalize_expr(parsed_expr, st, false);
 
         if (result && !IS_IMMEDIATE(result) && result != parsed_expr) {
+            // IMPORTANT: canonicalize_expr can produce freshly allocated non-container objects too
+            // (e.g. CLJ_SLOT_REF). If the pool drains on pop, those would be freed unless we
+            // retain them here.
             needs_escape = true;
             RETAIN(result);
+            rc_after_retain = retain_count(result);
         }
     });
 
     if (needs_escape) {
-        // Only transfer if there is an outer pool. Otherwise return owned (rc=1).
+        // Current implementation uses weak pool semantics (pop doesn't release).
+        // If the pool didn't drain, balance our retain to avoid leaking.
+        int rc_after_pop = retain_count(result);
+        if (rc_after_pop == rc_after_retain) {
+            RELEASE(result);
+        }
+
+        // Only re-autorelease if there is an outer pool.
         if (is_autorelease_pool_active()) {
             AUTORELEASE(result);
         }
