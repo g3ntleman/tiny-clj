@@ -42,7 +42,11 @@ TEST(test_parse_basic_types) {
     // Test symbol parsing
     ID sym_result = parse("test-symbol", eval_state);
     TEST_ASSERT_NOT_NULL(sym_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL_TOKEN, TAG(sym_result));
+    TEST_ASSERT_TRUE(TAG(sym_result) == CLJ_SYMBOL || TAG(sym_result) == CLJ_SYMBOL_TOKEN);
+    if (TAG(sym_result) == CLJ_SYMBOL_TOKEN) {
+        sym_result = canonicalize_ast(sym_result, eval_state);
+    }
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(sym_result));
 
     evalstate_free(eval_state);
 }

@@ -272,6 +272,9 @@ int main(int argc, char **argv) {
     // Register signal handlers to print summary on crash
     signal(SIGSEGV, signal_handler);
     signal(SIGABRT, signal_handler);
+#ifdef SIGTRAP
+    signal(SIGTRAP, signal_handler);
+#endif
     atexit(print_summary_on_exit);
     
 #if MEMORY_PROFILING_ENABLED

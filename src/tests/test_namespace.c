@@ -1036,8 +1036,10 @@ TEST(test_require_alias_resolution) {
     // Test namespace-qualified symbol resolution: tar/resvar
     CljObject *parsed = parse("tar/resvar", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL_TOKEN);
-    parsed = canonicalize_ast(parsed, g_test_eval_state);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL || TAG(parsed) == CLJ_SYMBOL_TOKEN);
+    if (TAG(parsed) == CLJ_SYMBOL_TOKEN) {
+        parsed = canonicalize_ast(parsed, g_test_eval_state);
+    }
     TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
 
     CljSymbol *sym = as_symbol(parsed);

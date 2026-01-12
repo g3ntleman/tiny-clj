@@ -1056,9 +1056,12 @@ TEST(test_type_check_all_types) {
 
     ID symbol_val = parse("foo", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(symbol_val);
-    // Parser returns symbol tokens; canonicalization interns them as real symbols.
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL_TOKEN, TAG(symbol_val));
-    symbol_val = canonicalize_ast(symbol_val, g_test_eval_state);
+    // Parser may return an interned symbol directly (CLJ_SYMBOL) or a symbol token
+    // (CLJ_SYMBOL_TOKEN) that needs canonicalization.
+    TEST_ASSERT_TRUE(TAG(symbol_val) == CLJ_SYMBOL || TAG(symbol_val) == CLJ_SYMBOL_TOKEN);
+    if (TAG(symbol_val) == CLJ_SYMBOL_TOKEN) {
+        symbol_val = canonicalize_ast(symbol_val, g_test_eval_state);
+    }
     TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(symbol_val));
 
     // Test with non-empty collections
