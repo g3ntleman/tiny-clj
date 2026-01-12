@@ -272,19 +272,11 @@ void release(CljObject *v) {
     // Check for double-free BEFORE decrementing (ALWAYS, not just in DEBUG)
     // This detects attempts to release already-freed objects
     if (v->rc == 0) {
-        fprintf(stderr, "❌ DOUBLE-FREE! Object %p (type=%s) already freed\n", v, clj_type_name(v->type));
-        fprintf(stderr, "🔍 Backtrace (most recent call first):\n");
-        void *trace[64];
+        // Keep diagnostics short: zombie/debug builds can otherwise flood output.
+        fprintf(stderr, "DOUBLE-FREE: object=%p type=%s (rc=0)\n", v, clj_type_name(v->type));
+        void *trace[32];
         int trace_count = backtrace(trace, (int)(sizeof(trace) / sizeof(trace[0])));
-        char **symbols = backtrace_symbols(trace, trace_count);
-        if (symbols) {
-            for (int i = 0; i < trace_count; i++) {
-                fprintf(stderr, "  %s\n", symbols[i]);
-            }
-            free(symbols);
-        } else {
-            fprintf(stderr, "  <backtrace_symbols failed>\n");
-        }
+        backtrace_symbols_fd(trace, trace_count, fileno(stderr));
         fflush(stderr);
         throw_exception_formatted("UseAfterFreeError", __FILE__, __LINE__, 0,
             "Double-free detected! Object %p (type=%s) was already freed (rc=0). "
