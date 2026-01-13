@@ -3069,7 +3069,7 @@ static inline ID fixnum_from_size_clamped(size_t n)
 
 static inline bool size_available(size_t n)
 {
-    return n != (size_t)-1;
+    return n != SIZE_MAX;
 }
 
 ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
@@ -3118,56 +3118,18 @@ ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     RELEASE(ver_str);
 
     // :build-time (Instant)
-    // Prefer BUILD_EPOCH_SECONDS (set by CMake at configure-time). If unavailable,
-    // fall back to parsing the compiler's __DATE__/__TIME__ (via BUILD_DATE/BUILD_TIME).
+    // Build time from CMake-generated epoch seconds (see build_info.h.in).
 #ifndef BUILD_EPOCH_SECONDS
 #define BUILD_EPOCH_SECONDS 0
 #endif
-    int32_t build_days = 0;
-    uint32_t build_millis = 0;
     int64_t epoch = (int64_t)BUILD_EPOCH_SECONDS;
-    if (epoch > 0) {
-        build_days = (int32_t)(epoch / 86400);
-        int32_t sec_in_day = (int32_t)(epoch % 86400);
-        build_millis = (uint32_t)sec_in_day * 1000u;
-    } else {
-        // BUILD_DATE is typically "Mmm dd yyyy" and BUILD_TIME is "hh:mm:ss".
-        // We interpret this timestamp as UTC for a stable #inst.
-        const char *date_s = BUILD_DATE;
-        const char *time_s = BUILD_TIME;
+    if (epoch < 0) epoch = 0;
+    int32_t days = (int32_t)(epoch / 86400);
+    int32_t sec_in_day = (int32_t)(epoch % 86400);
+    if (sec_in_day < 0) sec_in_day = 0;
+    uint32_t millis = (uint32_t)sec_in_day * 1000u;
 
-        char mon[4] = {0};
-        int day = 0, year = 0;
-        int hour = 0, minute = 0, second = 0;
-
-        if (date_s && time_s &&
-            (sscanf(date_s, "%3s %d %d", mon, &day, &year) == 3) &&
-            (sscanf(time_s, "%d:%d:%d", &hour, &minute, &second) == 3))
-        {
-            int month = 0;
-            if (strcmp(mon, "Jan") == 0) month = 1;
-            else if (strcmp(mon, "Feb") == 0) month = 2;
-            else if (strcmp(mon, "Mar") == 0) month = 3;
-            else if (strcmp(mon, "Apr") == 0) month = 4;
-            else if (strcmp(mon, "May") == 0) month = 5;
-            else if (strcmp(mon, "Jun") == 0) month = 6;
-            else if (strcmp(mon, "Jul") == 0) month = 7;
-            else if (strcmp(mon, "Aug") == 0) month = 8;
-            else if (strcmp(mon, "Sep") == 0) month = 9;
-            else if (strcmp(mon, "Oct") == 0) month = 10;
-            else if (strcmp(mon, "Nov") == 0) month = 11;
-            else if (strcmp(mon, "Dec") == 0) month = 12;
-
-            if (month >= 1 && day >= 1 && day <= 31 && year >= 1970 &&
-                hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 60)
-            {
-                build_days = clj_days_from_civil_utc(year, month, day);
-                build_millis = (uint32_t)(((hour * 60 + minute) * 60 + second) * 1000);
-            }
-        }
-    }
-
-    ID build_inst = make_instant(build_days, build_millis);
+    ID build_inst = make_instant(days, millis);
     if (!build_inst) return NULL;
     ASSIGN(m, map_assoc(m, kw_build_time, build_inst));
     RELEASE(build_inst);

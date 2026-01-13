@@ -10,6 +10,7 @@
 // NOTE: Keep this stable once persisted; for now it's test-only.
 #define FT_LOG_MAGIC 0x474C5446u /* 'F''T''L''G' */
 #define FT_LOG_VERSION 1u
+#define FT_LOG_MAX_PAYLOAD 256u
 
 typedef struct __attribute__((packed)) ft_log_hdr {
     uint32_t magic;
@@ -19,6 +20,26 @@ typedef struct __attribute__((packed)) ft_log_hdr {
     uint64_t seqno;
     uint32_t crc32; // over hdr (crc32=0) + payload
 } ft_log_hdr_t;
+
+static ft_status_t ft_log_crc32(const ft_log_hdr_t* hdr_in, const void* payload, uint32_t payload_len, uint32_t* out_crc)
+{
+    if (!hdr_in || (!payload && payload_len != 0) || !out_crc) return FT_ERR_INVALID_ARG;
+    if (payload_len > FT_LOG_MAX_PAYLOAD) return FT_ERR_UNSUPPORTED;
+
+    ft_log_hdr_t hdr = *hdr_in;
+    hdr.crc32 = 0;
+
+    if (payload_len == 0) {
+        *out_crc = ft_crc32_ieee(&hdr, sizeof(hdr), 0);
+        return FT_OK;
+    }
+
+    uint8_t buf[sizeof(hdr) + FT_LOG_MAX_PAYLOAD];
+    memcpy(buf, &hdr, sizeof(hdr));
+    memcpy(buf + sizeof(hdr), payload, payload_len);
+    *out_crc = ft_crc32_ieee(buf, sizeof(hdr) + payload_len, 0);
+    return FT_OK;
+}
 
 static ft_status_t read_bytes(const ft_blockdev_t* bdev, uint32_t off, void* out, size_t len) {
     return ft_blockdev_read(bdev, off, out, len);
@@ -71,20 +92,9 @@ ft_status_t ft_log_append(ft_log_t* log, ft_log_rec_type_t type,
     hdr.seqno = log->next_seqno;
     hdr.crc32 = 0;
 
-    // CRC over header (crc32=0) concatenated with payload bytes.
-    // Use a single-pass buffer to avoid incremental-CRC pitfalls.
-    uint8_t tmp[sizeof(hdr) + 1u + 0u]; // anchor for static analyzers
-    (void)tmp;
     uint32_t crc = 0;
-    if (payload_len == 0) {
-        crc = ft_crc32_ieee(&hdr, sizeof(hdr), 0);
-    } else {
-        uint8_t buf[sizeof(hdr) + 256];
-        if (payload_len > 256) return FT_ERR_UNSUPPORTED;
-        memcpy(buf, &hdr, sizeof(hdr));
-        memcpy(buf + sizeof(hdr), payload, payload_len);
-        crc = ft_crc32_ieee(buf, sizeof(hdr) + payload_len, 0);
-    }
+    st = ft_log_crc32(&hdr, payload, payload_len, &crc);
+    if (st != FT_OK) return st;
     hdr.crc32 = crc;
 
     st = write_bytes(log->bdev, rec_off, &hdr, sizeof(hdr));
@@ -131,7 +141,7 @@ ft_status_t ft_log_recover_last_checkpoint(const ft_blockdev_t* bdev, ft_log_che
         if ((uint64_t)off + sizeof(ft_log_hdr_t) + hdr.payload_len > bdev->geom.total_size_bytes) break;
 
         // Read payload (small in tests).
-        uint8_t payload_buf[256];
+        uint8_t payload_buf[FT_LOG_MAX_PAYLOAD];
         const void* payload_ptr = NULL;
         if (hdr.payload_len) {
             if (hdr.payload_len > sizeof(payload_buf)) return FT_ERR_UNSUPPORTED;
@@ -142,17 +152,9 @@ ft_status_t ft_log_recover_last_checkpoint(const ft_blockdev_t* bdev, ft_log_che
 
         // Validate CRC.
         uint32_t saved_crc = hdr.crc32;
-        hdr.crc32 = 0;
         uint32_t crc = 0;
-        if (hdr.payload_len == 0) {
-            crc = ft_crc32_ieee(&hdr, sizeof(hdr), 0);
-        } else {
-            uint8_t buf[sizeof(hdr) + 256];
-            if (hdr.payload_len > 256) return FT_ERR_UNSUPPORTED;
-            memcpy(buf, &hdr, sizeof(hdr));
-            memcpy(buf + sizeof(hdr), payload_ptr, hdr.payload_len);
-            crc = ft_crc32_ieee(buf, sizeof(hdr) + hdr.payload_len, 0);
-        }
+        st = ft_log_crc32(&hdr, payload_ptr, hdr.payload_len, &crc);
+        if (st != FT_OK) return st;
         if (crc != saved_crc) break; // power loss / torn write
 
         if (hdr.type == FT_LOG_REC_CHECKPOINT && hdr.payload_len == sizeof(ft_log_checkpoint_t)) {

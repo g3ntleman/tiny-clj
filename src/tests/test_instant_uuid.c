@@ -12,6 +12,40 @@ TEST(test_now_returns_instant) {
     TEST_ASSERT_EQUAL_INT(CLJ_INSTANT, TAG(result));
 }
 
+TEST(test_inst_literal_evaluates_to_instant) {
+    ID result = eval_string("#inst \"1970-01-02T00:00:00.002Z\"", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_INSTANT, TAG(result));
+
+    // Spot-check the internal representation matches the literal.
+    TEST_ASSERT_EQUAL_INT(1, clj_instant_days(result));
+    TEST_ASSERT_EQUAL_INT(2, (int)clj_instant_ms(result));
+}
+
+TEST(test_inst_literal_equal_true) {
+    ID result = eval_string("(= #inst \"1970-01-02T00:00:00.002Z\" #inst \"1970-01-02T00:00:00.002Z\")",
+                            g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result),
+                             "(= #inst \"...\" #inst \"...\") should be truthy for identical instants");
+}
+
+TEST(test_inst_literal_equal_false) {
+    ID result = eval_string("(= #inst \"1970-01-02T00:00:00.002Z\" #inst \"1970-01-02T00:00:00.003Z\")",
+                            g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result),
+                              "(= #inst \"...002Z\" #inst \"...003Z\") should be falsy for different instants");
+}
+
+TEST(test_inst_literal_not_eq_true) {
+    ID result = eval_string("(not= #inst \"1970-01-02T00:00:00.002Z\" #inst \"1970-01-02T00:00:00.003Z\")",
+                            g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result),
+                             "(not= #inst \"...\" #inst \"...\") should be truthy for different instants");
+}
+
 TEST(test_instant_equality_and_hash) {
     ID a = AUTORELEASE(make_instant(123, 456));
     ID b = AUTORELEASE(make_instant(123, 456));
