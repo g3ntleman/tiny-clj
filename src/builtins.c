@@ -38,6 +38,7 @@
 #include "macro.h"
 #include "instant.h"
 #include "datetime_utc.h"
+#include "fs_layer.h"
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -3032,6 +3033,18 @@ ID native_stacktrace_str(ID *args, unsigned int argc)
 
 ID native_meta(ID *args, unsigned int argc);
 
+// tinyclj.fs and tinyclj.kv native bindings (Phase: tinyclj-bindings)
+ID native_tinyclj_fs_mkdir(ID *args, unsigned int argc);
+ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc);
+ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc);
+ID native_tinyclj_fs_stat(ID *args, unsigned int argc);
+ID native_tinyclj_fs_list(ID *args, unsigned int argc);
+ID native_tinyclj_fs_delete(ID *args, unsigned int argc);
+
+ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc);
+ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc);
+ID native_tinyclj_kv_delete(ID *args, unsigned int argc);
+
 // ============================================================================
 // Native function lookup table for stubs
 // Uses CljSymbol* for efficient pointer comparison (symbols are interned)
@@ -3071,6 +3084,54 @@ static StaticSymbolData sym_tinyclj_datetime_format_iso_qualified_data = {
             .unqualified = NULL,
             .cname = "tinyclj.datetime/format-iso"}};
 
+// Qualified-name entries for tinyclj.fs / tinyclj.kv native stubs.
+static StaticSymbolData sym_tinyclj_fs_mkdir_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.fs/mkdir"}};
+static StaticSymbolData sym_tinyclj_fs_spit_bytes_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.fs/spit-bytes"}};
+static StaticSymbolData sym_tinyclj_fs_slurp_bytes_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.fs/slurp-bytes"}};
+static StaticSymbolData sym_tinyclj_fs_stat_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.fs/stat"}};
+static StaticSymbolData sym_tinyclj_fs_list_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.fs/list"}};
+static StaticSymbolData sym_tinyclj_fs_delete_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.fs/delete!"}};
+
+static StaticSymbolData sym_tinyclj_kv_put_bytes_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.kv/put-bytes"}};
+static StaticSymbolData sym_tinyclj_kv_get_bytes_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.kv/get-bytes"}};
+static StaticSymbolData sym_tinyclj_kv_delete_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.kv/delete!"}};
+
 // Unqualified clojure.core entry: get-thread-bindings
 static StaticSymbolData sym_get_thread_bindings_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
@@ -3093,6 +3154,17 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_tinyclj_datetime_civil_from_days_qualified_data.sym, native_datetime_civil_from_days},
     {&sym_tinyclj_datetime_days_from_civil_qualified_data.sym, native_datetime_days_from_civil},
     {&sym_tinyclj_datetime_format_iso_qualified_data.sym, native_datetime_format_iso},
+
+    // tinyclj.fs / tinyclj.kv
+    {&sym_tinyclj_fs_mkdir_qualified_data.sym, native_tinyclj_fs_mkdir},
+    {&sym_tinyclj_fs_spit_bytes_qualified_data.sym, native_tinyclj_fs_spit_bytes},
+    {&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes},
+    {&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat},
+    {&sym_tinyclj_fs_list_qualified_data.sym, native_tinyclj_fs_list},
+    {&sym_tinyclj_fs_delete_qualified_data.sym, native_tinyclj_fs_delete},
+    {&sym_tinyclj_kv_put_bytes_qualified_data.sym, native_tinyclj_kv_put_bytes},
+    {&sym_tinyclj_kv_get_bytes_qualified_data.sym, native_tinyclj_kv_get_bytes},
+    {&sym_tinyclj_kv_delete_qualified_data.sym, native_tinyclj_kv_delete},
 
     // clojure.core functions
     {&sym_get_thread_bindings_data.sym, native_get_thread_bindings},
@@ -4465,6 +4537,158 @@ ID native_spit(ID *args, unsigned int argc)
     return NULL;
 }
 #endif // ESP32_BUILD
+
+// ----------------------------------------------------------------------------
+// tinyclj.fs and tinyclj.kv native bindings (host + embedded)
+// ----------------------------------------------------------------------------
+
+static const char *require_c_string_arg(ID v, const char *fn_name, const char *what)
+{
+    CljString *s = to_string(v);
+    if (!s) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "%s expects %s", fn_name, what);
+        return NULL;
+    }
+    return string_data(s);
+}
+
+ID native_tinyclj_fs_mkdir(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.fs/mkdir");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/mkdir", "a path string");
+    if (!path) return NULL;
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    fs_err_t e = fs_mkdir(st, path, NULL, NULL);
+    return (e == FS_NO_ERR) ? (ID)clj_true : (ID)clj_false;
+}
+
+ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 2, "tinyclj.fs/spit-bytes");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/spit-bytes", "a path string");
+    if (!path) return NULL;
+    if (!args[1] || TAG(args[1]) != CLJ_BYTE_ARRAY) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/spit-bytes expects a byte-array");
+    }
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+    CljByteArray *ba = as_byte_array(args[1]);
+    fs_err_t e = fs_write_bytes(st, es, path, ba->data, (size_t)ba->length);
+    if (e != FS_NO_ERR) {
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/spit-bytes failed (err=%d)", (int)e);
+    }
+    return NULL;
+}
+
+ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.fs/slurp-bytes");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/slurp-bytes", "a path string");
+    if (!path) return NULL;
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+    return fs_read_bytes(st, es, path);
+}
+
+ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.fs/stat");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/stat", "a path string");
+    if (!path) return NULL;
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+    return fs_stat(st, es, path);
+}
+
+ID native_tinyclj_fs_list(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.fs/list");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/list", "a dir path string");
+    if (!path) return NULL;
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+    return fs_list_dir(st, es, path);
+}
+
+ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.fs/delete!");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/delete!", "a path string");
+    if (!path) return NULL;
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    return fs_delete(st, path) ? (ID)clj_true : (ID)clj_false;
+}
+
+ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 2, "tinyclj.kv/put-bytes");
+    const char *key = require_c_string_arg(args[0], "tinyclj.kv/put-bytes", "a key string");
+    if (!key) return NULL;
+    if (key[0] == '/') {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv keys must not start with '/'");
+    }
+    if (!args[1] || TAG(args[1]) != CLJ_BYTE_ARRAY) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/put-bytes expects a byte-array");
+    }
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    CljByteArray *ba = as_byte_array(args[1]);
+    bool ok = fs_kv_put(st, key, ba->data, (size_t)ba->length);
+    if (!ok) {
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/put-bytes failed");
+    }
+    return NULL;
+}
+
+ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.kv/get-bytes");
+    const char *key = require_c_string_arg(args[0], "tinyclj.kv/get-bytes", "a key string");
+    if (!key) return NULL;
+    if (key[0] == '/') {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv keys must not start with '/'");
+    }
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+
+    size_t saved = 0;
+    (void)fs_kv_get(st, key, NULL, 0, &saved);
+    if (saved == 0) {
+        return NULL;
+    }
+    ID arr = (ID)make_byte_array((int)saved);
+    if (!arr) return NULL;
+    CljByteArray *ba = as_byte_array(arr);
+    (void)fs_kv_get(st, key, ba->data, (size_t)ba->length, &saved);
+    return AUTORELEASE(arr);
+}
+
+ID native_tinyclj_kv_delete(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.kv/delete!");
+    const char *key = require_c_string_arg(args[0], "tinyclj.kv/delete!", "a key string");
+    if (!key) return NULL;
+    if (key[0] == '/') {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv keys must not start with '/'");
+    }
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    return fs_kv_del(st, key) ? (ID)clj_true : (ID)clj_false;
+}
 
 // Binary operations (inline for performance)
 // Variadische Number-Reducer mit Single-Pass und Float-Promotion
