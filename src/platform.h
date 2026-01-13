@@ -1,6 +1,9 @@
 #ifndef TINY_CLJ_PLATFORM_H
 #define TINY_CLJ_PLATFORM_H
 
+// For size_t in stats APIs
+#include <stddef.h>
+
 void platform_init();
 void platform_print(const char *message);
 const char *platform_name();
@@ -17,5 +20,13 @@ int platform_get_char(void *ctx);
 void platform_put_char(void *ctx, char c);
 void platform_put_string(void *ctx, const char *s);
 void platform_set_raw_mode(int enable);
+
+// -----------------------------------------------------------------------------
+// Optional runtime stats (return SIZE_MAX if unavailable)
+// -----------------------------------------------------------------------------
+size_t platform_heap_bytes_free(void);
+size_t platform_heap_bytes_total(void);
+size_t platform_flash_bytes_free(void);
+size_t platform_flash_bytes_total(void);
 
 #endif // TINY_CLJ_PLATFORM_H

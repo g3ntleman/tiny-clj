@@ -4,6 +4,8 @@
 #include "object.h"
 #include "namespace.h" /* EvalState */
 
+#include "flash_tree.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -11,8 +13,7 @@
 /* Minimal KV-backed "filesystem-like" layer (Phase 2.2).
  *
  * This is intentionally small and deterministic. The backing store is a KV
- * database (later: flashdb-reloaded). For now we provide an in-memory KV store
- * for host unit tests.
+ * database (Flash-Tree). For host unit tests we use a small RAM-backed blockdev.
  */
 
 typedef struct FsKvStore FsKvStore;
@@ -28,6 +29,11 @@ void fs_global_store_reset(void);
 bool fs_kv_put(FsKvStore *st, const char *key, const uint8_t *data, size_t len);
 size_t fs_kv_get(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out);
 bool fs_kv_del(FsKvStore *st, const char *key);
+
+/* Status-returning variants (for native bindings: nil only on NOT_FOUND). */
+ft_status_t fs_kv_put_status(FsKvStore *st, const char *key, const uint8_t *data, size_t len);
+ft_status_t fs_kv_get_status(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out);
+ft_status_t fs_kv_del_status(FsKvStore *st, const char *key);
 
 /* -------------------------------------------------------------------------- */
 /* FS layer (paths -> meta + versioned chunks)                                */

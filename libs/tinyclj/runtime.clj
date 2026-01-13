@@ -3,6 +3,24 @@
 
 (ns tinyclj.runtime)
 
+;; stats - Return runtime stats map
+^#^{:doc "Returns runtime stats as a map.
+
+Keys (always present):
+- :host-os (string)
+- :host-os-version (string)
+- :tiny-clj-version (string)
+- :build-time (#inst ...)
+
+Optional keys (only present when the platform provides the value):
+- :heap-bytes-free (integer, bytes)
+- :heap-bytes-total (integer, bytes)
+- :flash-bytes-free (integer, bytes; Flash-Tree partition, app-usable)
+- :flash-bytes-total (integer, bytes; Flash-Tree partition total, app-usable)
+
+Missing values are omitted (the key will not be present)."}
+(defn stats [] :native)
+
 ;; print-ast - Print AST structure with internals for debugging
 ;; Only available in DEBUG builds
 ^#^{:doc "Prints the AST (Abstract Syntax Tree) structure of an object with internal type information. Only available in DEBUG builds. Usage: (print-ast obj)"}

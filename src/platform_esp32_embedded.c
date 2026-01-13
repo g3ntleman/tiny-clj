@@ -1,6 +1,7 @@
 // ESP32 Platform functions for embedded execution (no REPL, no Line Editor)
 #include "platform.h"
 #include <stdio.h>
+#include <stddef.h>
 
 void platform_init(void) {
     // ESP32-specific initialization
@@ -18,6 +19,25 @@ void platform_put_string(void *ctx, const char *s) {
 }
 
 // No line editor functions needed for embedded execution
+
+// -----------------------------------------------------------------------------
+// Optional runtime stats hooks (override in ESP32/ESP-IDF integration).
+// Return SIZE_MAX if unknown/unavailable.
+// -----------------------------------------------------------------------------
+__attribute__((weak)) size_t tinyclj_esp32_heap_bytes_free(void) { return (size_t)-1; }
+__attribute__((weak)) size_t tinyclj_esp32_heap_bytes_total(void) { return (size_t)-1; }
+__attribute__((weak)) size_t tinyclj_esp32_flash_bytes_free(void) { return (size_t)-1; }
+__attribute__((weak)) size_t tinyclj_esp32_flash_bytes_total(void) { return (size_t)-1; }
+
+/*
+ * ESP-IDF Beispiel: siehe Kommentarblock in src/platform_esp32_uart.c
+ * (die gleichen vier Funktionen kannst du für embedded builds überschreiben).
+ */
+
+size_t platform_heap_bytes_free(void) { return tinyclj_esp32_heap_bytes_free(); }
+size_t platform_heap_bytes_total(void) { return tinyclj_esp32_heap_bytes_total(); }
+size_t platform_flash_bytes_free(void) { return tinyclj_esp32_flash_bytes_free(); }
+size_t platform_flash_bytes_total(void) { return tinyclj_esp32_flash_bytes_total(); }
 
 
 

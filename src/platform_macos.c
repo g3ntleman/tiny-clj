@@ -5,6 +5,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #ifdef ESP32_BUILD
 #include "termios_stub.h"
@@ -24,6 +25,14 @@ void platform_print(const char *message) {
 const char *platform_name() {
     return "macOS";
 }
+
+// -----------------------------------------------------------------------------
+// Optional runtime stats (not available on host builds)
+// -----------------------------------------------------------------------------
+size_t platform_heap_bytes_free(void) { return (size_t)-1; }
+size_t platform_heap_bytes_total(void) { return (size_t)-1; }
+size_t platform_flash_bytes_free(void) { return (size_t)-1; }
+size_t platform_flash_bytes_total(void) { return (size_t)-1; }
 
 int platform_set_stdin_nonblocking(int enable) {
     int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
