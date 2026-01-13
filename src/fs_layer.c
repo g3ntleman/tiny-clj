@@ -17,8 +17,184 @@
 #include <string.h>
 #include <sys/time.h>
 
-#define FS_CHUNK_SIZE 256u
+#define FS_APP_MAX_CHUNK_SIZE 4096u
+// Internal storage chunk size. This is NOT an app-facing limit.
+// App-facing streaming APIs (future) must cap chunks to FS_APP_MAX_CHUNK_SIZE.
+#define FS_STORE_CHUNK_SIZE 4096u
 #define FS_KEY_MAX 64u
+
+// Lightweight integer formatting helpers (avoid snprintf/printf dependencies).
+static size_t fs_u32_to_dec_rev(uint32_t v, uint8_t out_rev[10])
+{
+    size_t n = 0;
+    do {
+        out_rev[n++] = (uint8_t)('0' + (v % 10u));
+        v /= 10u;
+    } while (v && n < 10);
+    return n;
+}
+
+static size_t fs_append_u32_dec(uint8_t* out, size_t pos, size_t cap, uint32_t v)
+{
+    uint8_t rev[10];
+    size_t n = fs_u32_to_dec_rev(v, rev);
+    if (pos + n >= cap) return cap + 1;
+    for (size_t i = 0; i < n; i++) {
+        out[pos + i] = rev[n - 1 - i];
+    }
+    return pos + n;
+}
+
+static size_t fs_append_u32_dec_zeropad(uint8_t* out, size_t pos, size_t cap, uint32_t v, size_t width)
+{
+    uint8_t rev[10];
+    size_t n = fs_u32_to_dec_rev(v, rev);
+    if (n < width) {
+        size_t pad = width - n;
+        if (pos + pad >= cap) return cap + 1;
+        for (size_t i = 0; i < pad; i++) out[pos++] = '0';
+    }
+    if (pos + n >= cap) return cap + 1;
+    for (size_t i = 0; i < n; i++) out[pos + i] = rev[n - 1 - i];
+    return pos + n;
+}
+
+// -----------------------------------------------------------------------------
+// tinyclj.kv long-value storage (chunked) using blob keys (no C-strings).
+// -----------------------------------------------------------------------------
+#define FS_KV_META_MAGIC 0x4D564B46u /* 'F''K''V''M' */
+#define FS_KV_CHUNK_KEY_SUFFIX_MAX 24u
+#define FS_KV_KEY_MAX 1024u
+
+typedef struct __attribute__((packed)) FsKvMeta {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t total_len;
+    uint32_t chunks;
+} FsKvMeta;
+
+static ft_status_t fs_kv_make_chunk_key_bytes(const uint8_t* key, size_t key_len,
+                                              uint32_t version, uint32_t chunk_idx,
+                                              uint8_t* out, size_t out_cap, size_t* out_len)
+{
+    if (out_len) *out_len = 0;
+    if (!key || key_len == 0 || !out || !out_len) return FT_ERR_INVALID_ARG;
+    if (key_len > FS_KV_KEY_MAX) return FT_ERR_INVALID_ARG;
+
+    size_t pos = 0;
+    if (pos + key_len >= out_cap) return FT_ERR_INVALID_ARG;
+    memcpy(out + pos, key, key_len);
+    pos += key_len;
+
+    if (pos + 1 >= out_cap) return FT_ERR_INVALID_ARG;
+    out[pos++] = (uint8_t)'@';
+    pos = fs_append_u32_dec(out, pos, out_cap, version);
+    if (pos > out_cap) return FT_ERR_INVALID_ARG;
+    if (pos + 1 >= out_cap) return FT_ERR_INVALID_ARG;
+    out[pos++] = (uint8_t)'#';
+    pos = fs_append_u32_dec(out, pos, out_cap, chunk_idx);
+    if (pos > out_cap) return FT_ERR_INVALID_ARG;
+
+    *out_len = pos;
+    return FT_OK;
+}
+
+static ft_status_t fs_kv_read_meta_bytes(ft_db_t* db, const uint8_t* key, size_t key_len,
+                                        FsKvMeta* out_meta, int* out_has_meta)
+{
+    if (out_has_meta) *out_has_meta = 0;
+    if (!db || !key || key_len == 0 || !out_meta || !out_has_meta) return FT_ERR_INVALID_ARG;
+
+    FsKvMeta meta = {0};
+    size_t saved = 0;
+    ft_status_t stc = ft_get_into(db, key, key_len, &meta, sizeof(meta), &saved);
+    if (stc != FT_OK) return stc;
+
+    if (saved == sizeof(meta) && meta.magic == FS_KV_META_MAGIC) {
+        *out_meta = meta;
+        *out_has_meta = 1;
+    }
+    return FT_OK;
+}
+
+static ft_status_t fs_kv_put_chunked_bytes(ft_db_t* db, const uint8_t* key, size_t key_len,
+                                          const uint8_t* data, size_t len)
+{
+    if (!db || !key || key_len == 0 || (!data && len != 0)) return FT_ERR_INVALID_ARG;
+    if (key_len > FS_KV_KEY_MAX) return FT_ERR_INVALID_ARG;
+    if (len > UINT32_MAX) return FT_ERR_INVALID_ARG;
+
+    FsKvMeta old_meta = {0};
+    int has_meta = 0;
+    ft_status_t stc = fs_kv_read_meta_bytes(db, key, key_len, &old_meta, &has_meta);
+    if (stc != FT_OK && stc != FT_ERR_NOT_FOUND) return stc;
+
+    uint32_t new_ver = has_meta ? (old_meta.version + 1u) : 1u;
+    if (new_ver == 0) new_ver = 1u;
+
+    uint32_t chunks = (len == 0) ? 0u : (uint32_t)((len + FS_STORE_CHUNK_SIZE - 1) / FS_STORE_CHUNK_SIZE);
+    uint8_t ckey[FS_KV_KEY_MAX + FS_KV_CHUNK_KEY_SUFFIX_MAX];
+    size_t ckey_len = 0;
+
+    for (uint32_t i = 0; i < chunks; i++) {
+        size_t off = (size_t)i * FS_STORE_CHUNK_SIZE;
+        size_t remaining = len - off;
+        size_t chunk_len = remaining > FS_STORE_CHUNK_SIZE ? FS_STORE_CHUNK_SIZE : remaining;
+
+        stc = fs_kv_make_chunk_key_bytes(key, key_len, new_ver, i, ckey, sizeof(ckey), &ckey_len);
+        if (stc != FT_OK) return stc;
+
+        stc = ft_put(db, ckey, ckey_len, data + off, chunk_len);
+        if (stc != FT_OK) return stc;
+    }
+
+    FsKvMeta meta = {
+        .magic = FS_KV_META_MAGIC,
+        .version = new_ver,
+        .total_len = (uint32_t)len,
+        .chunks = chunks,
+    };
+    return ft_put(db, key, key_len, &meta, sizeof(meta));
+}
+
+static ft_status_t fs_kv_get_chunked_bytes(ft_db_t* db, const uint8_t* key, size_t key_len,
+                                          uint8_t* out, size_t out_len, size_t* saved_len_out)
+{
+    if (saved_len_out) *saved_len_out = 0;
+    if (!db || !key || key_len == 0) return FT_ERR_INVALID_ARG;
+    if (key_len > FS_KV_KEY_MAX) return FT_ERR_INVALID_ARG;
+
+    FsKvMeta meta = {0};
+    int has_meta = 0;
+    ft_status_t stc = fs_kv_read_meta_bytes(db, key, key_len, &meta, &has_meta);
+    if (stc != FT_OK) return stc;
+    if (!has_meta) return FT_ERR_CORRUPT;
+
+    if (saved_len_out) *saved_len_out = (size_t)meta.total_len;
+    if (!out || out_len == 0 || meta.total_len == 0) return FT_OK;
+
+    size_t want_total = (size_t)meta.total_len;
+    size_t copied = 0;
+    uint8_t ckey[FS_KV_KEY_MAX + FS_KV_CHUNK_KEY_SUFFIX_MAX];
+    size_t ckey_len = 0;
+
+    for (uint32_t i = 0; i < meta.chunks && copied < want_total; i++) {
+        stc = fs_kv_make_chunk_key_bytes(key, key_len, meta.version, i, ckey, sizeof(ckey), &ckey_len);
+        if (stc != FT_OK) return stc;
+
+        size_t remaining = want_total - copied;
+        size_t want = remaining > FS_STORE_CHUNK_SIZE ? FS_STORE_CHUNK_SIZE : remaining;
+        if (want > out_len - copied) want = out_len - copied;
+
+        size_t saved_chunk = 0;
+        stc = ft_get_into(db, ckey, ckey_len, out + copied, want, &saved_chunk);
+        if (stc != FT_OK) return stc;
+        if (saved_chunk < want && copied + saved_chunk < want_total) return FT_ERR_CORRUPT;
+        copied += (saved_chunk < want ? saved_chunk : want);
+    }
+
+    return FT_OK;
+}
 
 typedef struct {
     uint8_t* buf;
@@ -122,8 +298,8 @@ void fs_global_store_reset(void)
 static bool fs_kv_exists(FsKvStore *st, const char *key)
 {
     if (!st || !st->db || !key) return false;
-    ft_blob_t blob = {0};
-    return ft_get(st->db, key, strlen(key), &blob) == FT_OK;
+    size_t saved = 0;
+    return fs_kv_get_status(st, key, NULL, 0, &saved) == FT_OK;
 }
 
 FsKvStore *fs_kv_store_new(void)
@@ -212,16 +388,44 @@ ft_status_t fs_kv_get_status(FsKvStore *st, const char *key, uint8_t *out, size_
 {
     if (saved_len_out) *saved_len_out = 0;
     if (!st || !st->db || !key) return FT_ERR_INVALID_ARG;
-    size_t saved = 0;
-    ft_status_t stc = ft_get_into(st->db, key, strlen(key), out, out_len, &saved);
-    if (saved_len_out) *saved_len_out = saved;
-    return stc;
+    return ft_get_into(st->db, key, strlen(key), out, out_len, saved_len_out);
 }
 
 ft_status_t fs_kv_del_status(FsKvStore *st, const char *key)
 {
     if (!st || !st->db || !key) return FT_ERR_INVALID_ARG;
     return ft_del(st->db, key, strlen(key));
+}
+
+ft_status_t fs_kv_put_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, const uint8_t *data, size_t len)
+{
+    if (!st || !st->db || !key || key_len == 0) return FT_ERR_INVALID_ARG;
+    if (len > (size_t)INT32_MAX) return FT_ERR_INVALID_ARG;
+    return fs_kv_put_chunked_bytes(st->db, key, key_len, data, len);
+}
+
+ft_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, uint8_t *out, size_t out_len, size_t *saved_len_out)
+{
+    if (saved_len_out) *saved_len_out = 0;
+    if (!st || !st->db || !key || key_len == 0) return FT_ERR_INVALID_ARG;
+
+    FsKvMeta meta = {0};
+    int has_meta = 0;
+    ft_status_t stc = fs_kv_read_meta_bytes(st->db, key, key_len, &meta, &has_meta);
+    if (stc == FT_OK && has_meta) {
+        return fs_kv_get_chunked_bytes(st->db, key, key_len, out, out_len, saved_len_out);
+    }
+    // Legacy inline value.
+    if (stc == FT_OK && !has_meta) {
+        return ft_get_into(st->db, key, key_len, out, out_len, saved_len_out);
+    }
+    return stc;
+}
+
+ft_status_t fs_kv_del_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len)
+{
+    if (!st || !st->db || !key || key_len == 0) return FT_ERR_INVALID_ARG;
+    return ft_del(st->db, key, key_len);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -377,10 +581,26 @@ static ID fs_meta_mtime(ID meta_map)
 
 static fs_err_t fs_make_chunk_key(char out[FS_KEY_MAX], const char *path, uint32_t version, uint32_t chunk_idx)
 {
-    int n = snprintf(out, FS_KEY_MAX, "%s@%u#%04u", path, version, chunk_idx);
-    if (n <= 0 || (size_t)n >= FS_KEY_MAX) {
-        return FS_ERR_INVALID_PATH;
-    }
+    if (!out || !path) return FS_ERR_INVALID_PATH;
+    size_t path_len = strlen(path);
+    if (path_len == 0 || path_len >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
+
+    size_t pos = 0;
+    if (pos + path_len >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
+    memcpy(out + pos, path, path_len);
+    pos += path_len;
+
+    if (pos + 1 >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
+    out[pos++] = '@';
+    pos = fs_append_u32_dec((uint8_t*)out, pos, FS_KEY_MAX, version);
+    if (pos > FS_KEY_MAX) return FS_ERR_INVALID_PATH;
+
+    if (pos + 1 >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
+    out[pos++] = '#';
+    pos = fs_append_u32_dec_zeropad((uint8_t*)out, pos, FS_KEY_MAX, chunk_idx, 4);
+    if (pos > FS_KEY_MAX) return FS_ERR_INVALID_PATH;
+
+    out[pos] = '\0';
     return FS_NO_ERR;
 }
 
@@ -415,14 +635,14 @@ fs_err_t fs_write_bytes(FsKvStore *st, EvalState *eval, const char *path, const 
     if (!ctime) ctime = fs_now_instant();
     ID mtime = fs_now_instant();
 
-    uint32_t chunks = (uint32_t)((len + FS_CHUNK_SIZE - 1) / FS_CHUNK_SIZE);
+    uint32_t chunks = (uint32_t)((len + FS_STORE_CHUNK_SIZE - 1) / FS_STORE_CHUNK_SIZE);
     if (chunks == 0) chunks = 1;
 
     /* Write chunk keys first (new version). */
     for (uint32_t i = 0; i < chunks; i++) {
-        size_t off = (size_t)i * FS_CHUNK_SIZE;
+        size_t off = (size_t)i * FS_STORE_CHUNK_SIZE;
         size_t remaining = len > off ? (len - off) : 0;
-        size_t chunk_len = remaining > FS_CHUNK_SIZE ? FS_CHUNK_SIZE : remaining;
+        size_t chunk_len = remaining > FS_STORE_CHUNK_SIZE ? FS_STORE_CHUNK_SIZE : remaining;
 
         char ckey[FS_KEY_MAX];
         fs_err_t e = fs_make_chunk_key(ckey, path, new_ver, i);
@@ -469,7 +689,7 @@ ID fs_read_bytes(FsKvStore *st, EvalState *eval, const char *path)
 
         size_t saved = 0;
         size_t want = total - copied;
-        if (want > FS_CHUNK_SIZE) want = FS_CHUNK_SIZE;
+        if (want > FS_STORE_CHUNK_SIZE) want = FS_STORE_CHUNK_SIZE;
 
         size_t got = fs_kv_get(st, ckey, ba->data + copied, want, &saved);
         copied += got;

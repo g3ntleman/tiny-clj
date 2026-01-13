@@ -3128,6 +3128,7 @@ ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     int32_t sec_in_day = (int32_t)(epoch % 86400);
     if (sec_in_day < 0) sec_in_day = 0;
     uint32_t millis = (uint32_t)sec_in_day * 1000u;
+    
 
     ID build_inst = make_instant(days, millis);
     if (!build_inst) return NULL;
@@ -4762,9 +4763,18 @@ static ID tinyclj_kv_throw_ft(const char* op, ft_status_t stc);
 ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
 {
     CHECK_ARITY(argc, 2, "tinyclj.kv/put-bytes");
-    const char *key = require_c_string_arg(args[0], "tinyclj.kv/put-bytes", "a key string");
-    if (!key) return NULL;
-    if (key[0] == '/') {
+    CljString *key_str = to_string(args[0]);
+    if (!key_str) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/put-bytes expects a key string");
+    }
+    const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
+    size_t key_len = (size_t)string_length(key_str);
+    if (!key_bytes || key_len == 0) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/put-bytes key must not be empty");
+    }
+    if (key_bytes[0] == '/') {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "tinyclj.kv keys must not start with '/'");
     }
@@ -4775,7 +4785,7 @@ ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
     CljByteArray *ba = as_byte_array(args[1]);
-    ft_status_t stc = fs_kv_put_status(st, key, ba->data, (size_t)ba->length);
+    ft_status_t stc = fs_kv_put_key_bytes_status(st, key_bytes, key_len, ba->data, (size_t)ba->length);
     if (stc != FT_OK) {
         return tinyclj_kv_throw_ft("tinyclj.kv/put-bytes", stc);
     }
@@ -4798,9 +4808,18 @@ static ID tinyclj_kv_throw_ft(const char* op, ft_status_t stc)
 ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
 {
     CHECK_ARITY(argc, 1, "tinyclj.kv/get-bytes");
-    const char *key = require_c_string_arg(args[0], "tinyclj.kv/get-bytes", "a key string");
-    if (!key) return NULL;
-    if (key[0] == '/') {
+    CljString *key_str = to_string(args[0]);
+    if (!key_str) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/get-bytes expects a key string");
+    }
+    const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
+    size_t key_len = (size_t)string_length(key_str);
+    if (!key_bytes || key_len == 0) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/get-bytes key must not be empty");
+    }
+    if (key_bytes[0] == '/') {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "tinyclj.kv keys must not start with '/'");
     }
@@ -4808,7 +4827,7 @@ ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
     if (!st) return NULL;
 
     size_t saved = 0;
-    ft_status_t stc = fs_kv_get_status(st, key, NULL, 0, &saved);
+    ft_status_t stc = fs_kv_get_key_bytes_status(st, key_bytes, key_len, NULL, 0, &saved);
     if (stc == FT_ERR_NOT_FOUND) {
         return NULL;
     }
@@ -4818,7 +4837,7 @@ ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
     ID arr = (ID)make_byte_array((int)saved);
     if (!arr) return NULL;
     CljByteArray *ba = as_byte_array(arr);
-    stc = fs_kv_get_status(st, key, ba->data, (size_t)ba->length, &saved);
+    stc = fs_kv_get_key_bytes_status(st, key_bytes, key_len, ba->data, (size_t)ba->length, &saved);
     if (stc != FT_OK) {
         return tinyclj_kv_throw_ft("tinyclj.kv/get-bytes", stc);
     }
@@ -4828,15 +4847,24 @@ ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
 ID native_tinyclj_kv_delete(ID *args, unsigned int argc)
 {
     CHECK_ARITY(argc, 1, "tinyclj.kv/delete!");
-    const char *key = require_c_string_arg(args[0], "tinyclj.kv/delete!", "a key string");
-    if (!key) return NULL;
-    if (key[0] == '/') {
+    CljString *key_str = to_string(args[0]);
+    if (!key_str) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/delete! expects a key string");
+    }
+    const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
+    size_t key_len = (size_t)string_length(key_str);
+    if (!key_bytes || key_len == 0) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/delete! key must not be empty");
+    }
+    if (key_bytes[0] == '/') {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "tinyclj.kv keys must not start with '/'");
     }
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
-    ft_status_t stc = fs_kv_del_status(st, key);
+    ft_status_t stc = fs_kv_del_key_bytes_status(st, key_bytes, key_len);
     if (stc == FT_OK) return (ID)clj_true;
     if (stc == FT_ERR_NOT_FOUND) return (ID)clj_false;
     return tinyclj_kv_throw_ft("tinyclj.kv/delete!", stc);
