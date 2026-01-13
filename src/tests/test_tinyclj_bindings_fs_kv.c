@@ -56,3 +56,29 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
     TEST_ASSERT_EQUAL_UINT8(8, kba->data[1]);
 }
 
+TEST(test_tinyclj_kv_supports_large_values)
+{
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    fs_global_store_reset();
+    eval_string("(require 'tinyclj.kv)", g_test_eval_state);
+
+    // 600 bytes -> forces chunking in fs_layer kv backend.
+    eval_string(
+        "(let [a (byte-array 600)]"
+        "  (dotimes [i 600]"
+        "    (aset a i (mod i 256)))"
+        "  (tinyclj.kv/put-bytes \"big\" a))",
+        g_test_eval_state);
+
+    CljObject *kvb = eval_string("(tinyclj.kv/get-bytes \"big\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(kvb);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(kvb));
+    CljByteArray *ba = as_byte_array(kvb);
+    TEST_ASSERT_EQUAL_INT(600, ba->length);
+    TEST_ASSERT_EQUAL_UINT8(0, ba->data[0]);
+    TEST_ASSERT_EQUAL_UINT8(1, ba->data[1]);
+    TEST_ASSERT_EQUAL_UINT8(255, ba->data[255]);
+    TEST_ASSERT_EQUAL_UINT8(0, ba->data[256]);
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)(599 % 256), ba->data[599]);
+}
+

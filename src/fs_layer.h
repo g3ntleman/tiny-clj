@@ -35,6 +35,11 @@ ft_status_t fs_kv_put_status(FsKvStore *st, const char *key, const uint8_t *data
 ft_status_t fs_kv_get_status(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out);
 ft_status_t fs_kv_del_status(FsKvStore *st, const char *key);
 
+/* Blob-key variants used by tinyclj.kv (avoid C-string/strlen/snprintf). */
+ft_status_t fs_kv_put_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, const uint8_t *data, size_t len);
+ft_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, uint8_t *out, size_t out_len, size_t *saved_len_out);
+ft_status_t fs_kv_del_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len);
+
 /* -------------------------------------------------------------------------- */
 /* FS layer (paths -> meta + versioned chunks)                                */
 /* -------------------------------------------------------------------------- */
