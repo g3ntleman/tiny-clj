@@ -89,6 +89,7 @@ endif()
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR} include src external)
+include_directories(${CMAKE_SOURCE_DIR}/external/flash-tree/inc ${CMAKE_SOURCE_DIR}/external/flash-tree/src)
 
 # Subjective-C subproject (static library + early tests)
 #
@@ -114,6 +115,9 @@ endif()
 
 add_subdirectory(subjective-c "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}")
 
+# Flash-Tree subproject (new C-only storage stack)
+add_subdirectory(external/flash-tree)
+
 # Ensure Subjective-C artifacts appear in its own build directory.
 set_target_properties(subjective-c PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}/lib"
@@ -126,6 +130,10 @@ set_target_properties(subjective-c-tests PROPERTIES
 if(NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY OR CMAKE_RUNTIME_OUTPUT_DIRECTORY STREQUAL "")
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
 endif()
+
+# Build time as Unix epoch seconds (UTC) for reproducible #inst in runtime stats
+# NOTE: This is evaluated at configure-time.
+string(TIMESTAMP BUILD_EPOCH_SECONDS "%s" UTC)
 
 # Generate build_info.h from template
 configure_file(
@@ -179,6 +187,7 @@ list(APPEND SOURCES
     src/eval_compiled.c
     src/to_string.c
     src/macro.c
+    src/fs_layer.c
     
 )
 
@@ -189,6 +198,7 @@ add_executable(tiny-clj EXCLUDE_FROM_ALL
     src/platform_macos.c
 )
 target_link_libraries(tiny-clj PRIVATE subjective-c)
+target_link_libraries(tiny-clj PRIVATE flash-tree)
 target_include_directories(tiny-clj PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -241,6 +251,7 @@ add_executable(tiny-clj-esp32
     src/macro.c
 )
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
+target_link_libraries(tiny-clj-esp32 PRIVATE flash-tree)
 target_include_directories(tiny-clj-esp32 PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -273,6 +284,7 @@ add_executable(tiny-clj-esp32-repl EXCLUDE_FROM_ALL
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-esp32-repl PRIVATE subjective-c)
+target_link_libraries(tiny-clj-esp32-repl PRIVATE flash-tree)
 target_include_directories(tiny-clj-esp32-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR}
 )
@@ -307,6 +319,7 @@ add_executable(tiny-clj-repl
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-repl PRIVATE subjective-c)
+target_link_libraries(tiny-clj-repl PRIVATE flash-tree)
 target_include_directories(tiny-clj-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -336,6 +349,7 @@ add_executable(tiny-clj-profile
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
+target_link_libraries(tiny-clj-profile PRIVATE flash-tree)
 target_include_directories(tiny-clj-profile PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -352,7 +366,6 @@ set_target_properties(tiny-clj-profile PROPERTIES
 # Unity Test Framework (central runner with separate test files)
 add_executable(unit-tests
     ${SOURCES}
-    src/fs_layer.c
     src/line_editor.c
     subjective-c/tests/test_runner.c
     src/tests/unity_test_runner.c
@@ -419,6 +432,7 @@ add_executable(unit-tests
     src/tests/test_string.c
     src/tests/test_vector.c
     src/tests/test_time.c
+    src/tests/test_runtime_stats.c
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
@@ -433,6 +447,7 @@ target_compile_definitions(unit-tests PRIVATE
     LINE_EDITING_ENABLED=1
 )
 target_link_libraries(unit-tests PRIVATE subjective-c)
+target_link_libraries(unit-tests PRIVATE flash-tree)
 target_include_directories(unit-tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/subjective-c/tests

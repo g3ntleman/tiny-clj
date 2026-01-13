@@ -1,7 +1,6 @@
 #include "fs_layer.h"
 
 #include "byte_array.h"
-#include "hashmap.h"
 #include "instant.h"
 #include "map.h"
 #include "memory.h"
@@ -12,11 +11,90 @@
 #include "value.h"
 #include "vector.h"
 
+#include "flash_tree.h"
+#include "ft_blockdev.h"
+
 #include <string.h>
 #include <sys/time.h>
 
+#define FS_CHUNK_SIZE 256u
+#define FS_KEY_MAX 64u
+
+typedef struct {
+    uint8_t* buf;
+    size_t len;
+} FsRamBdev;
+
+static ft_status_t fs_ram_read(void* ctx, uint32_t addr, void* out, size_t len) {
+    FsRamBdev* r = (FsRamBdev*)ctx;
+    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    memcpy(out, r->buf + addr, len);
+    return FT_OK;
+}
+
+static ft_status_t fs_ram_prog(void* ctx, uint32_t addr, const void* data, size_t len) {
+    FsRamBdev* r = (FsRamBdev*)ctx;
+    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    const uint8_t* in = (const uint8_t*)data;
+    for (size_t i = 0; i < len; i++) {
+        r->buf[addr + i] = (uint8_t)(r->buf[addr + i] & in[i]);
+    }
+    return FT_OK;
+}
+
+static ft_status_t fs_ram_erase(void* ctx, uint32_t addr, size_t len) {
+    FsRamBdev* r = (FsRamBdev*)ctx;
+    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    memset(r->buf + addr, 0xFF, len);
+    return FT_OK;
+}
+
+typedef struct {
+    FsKvStore* st;
+    EvalState* eval;
+    const char* dir_path;
+    size_t prefix_len;
+    ID vec;
+} FsListDirCtx;
+
+static ft_status_t fs_list_dir_cb(const void* key, size_t key_len,
+                                 const void* val, size_t val_len,
+                                 void* arg) {
+    (void)val;
+    (void)val_len;
+    FsListDirCtx* c = (FsListDirCtx*)arg;
+    if (!c || !c->st || !c->eval || !c->dir_path) return FT_ERR_INVALID_ARG;
+    if (key_len == c->prefix_len) return FT_OK; // skip dir itself
+    if (key_len <= c->prefix_len) return FT_OK;
+
+    // Keys are path strings; make a temporary NUL-terminated view for existing helpers.
+    if (key_len >= FS_KEY_MAX) return FT_OK;
+    char kstr[FS_KEY_MAX];
+    memcpy(kstr, key, key_len);
+    kstr[key_len] = '\0';
+
+    const char* rest = kstr + c->prefix_len;
+    if (!rest || rest[0] == '\0') return FT_OK;
+
+    // Skip chunk keys (versioned "@v#NNNN").
+    const char* at = strchr(rest, '@');
+    if (at && strchr(at, '#')) return FT_OK;
+
+    // Only direct children: allow at most one '/' at end.
+    const char* slash = strchr(rest, '/');
+    if (slash && slash[1] != '\0') return FT_OK;
+
+    ID entry = fs_stat(c->st, c->eval, kstr);
+    if (entry) {
+        c->vec = (ID)vector_conj((CljVector*)c->vec, entry);
+    }
+    return FT_OK;
+}
+
 struct FsKvStore {
-    CljHashMap *map; /* key: CljString, value: CljByteArray */
+    ft_db_t* db;
+    ft_blockdev_t bdev;
+    FsRamBdev ram;
 };
 
 static FsKvStore *g_fs_global_store = NULL;
@@ -43,11 +121,9 @@ void fs_global_store_reset(void)
 
 static bool fs_kv_exists(FsKvStore *st, const char *key)
 {
-    if (!st || !st->map || !key) return false;
-    CljString *k = make_string(key);
-    int ok = hashmap_contains(st->map, (ID)k);
-    RELEASE(k);
-    return ok != 0;
+    if (!st || !st->db || !key) return false;
+    ft_blob_t blob = {0};
+    return ft_get(st->db, key, strlen(key), &blob) == FT_OK;
 }
 
 FsKvStore *fs_kv_store_new(void)
@@ -57,76 +133,100 @@ FsKvStore *fs_kv_store_new(void)
         throw_oom();
         return NULL;
     }
-    st->map = make_hashmap(16);
+    memset(st, 0, sizeof(*st));
+
+    // Host default: RAM-backed block device for flash-tree.
+    // Note: flash-tree KV is currently in-memory; the bdev is an integration anchor.
+    const size_t ram_bytes = 128 * 1024;
+    st->ram.buf = (uint8_t*)malloc(ram_bytes);
+    if (!st->ram.buf) {
+        free(st);
+        throw_oom();
+        return NULL;
+    }
+    st->ram.len = ram_bytes;
+    memset(st->ram.buf, 0xFF, ram_bytes);
+
+    st->bdev.ctx = &st->ram;
+    st->bdev.ops.read = fs_ram_read;
+    st->bdev.ops.prog = fs_ram_prog;
+    st->bdev.ops.erase = fs_ram_erase;
+    st->bdev.geom.total_size_bytes = (uint32_t)ram_bytes;
+    st->bdev.geom.read_granularity = 1;
+    st->bdev.geom.prog_granularity = 1;
+    st->bdev.geom.erase_granularity = 16;
+
+    ft_status_t fst = ft_db_init(&st->db, &st->bdev, NULL);
+    if (fst != FT_OK) {
+        free(st->ram.buf);
+        free(st);
+        throw_exception(EXCEPTION_RUNTIME,
+                        "fs_kv_store_new: flash-tree init failed",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
     return st;
 }
 
 void fs_kv_store_free(FsKvStore *st)
 {
     if (!st) return;
-    if (st->map) {
-        RELEASE(st->map);
-        st->map = NULL;
+    if (st->db) {
+        ft_db_deinit(st->db);
+        st->db = NULL;
     }
+    free(st->ram.buf);
+    st->ram.buf = NULL;
+    st->ram.len = 0;
     free(st);
 }
 
 bool fs_kv_put(FsKvStore *st, const char *key, const uint8_t *data, size_t len)
 {
-    if (!st || !st->map || !key) return false;
-    if (len > (size_t)INT32_MAX) return false;
-
-    CljString *k = make_string(key);
-    ID v = (ID)make_byte_array_from_bytes(data, (int)len);
-
-    hashmap_assoc_inplace(&st->map, (ID)k, v);
-
-    RELEASE(k);
-    RELEASE(v);
-    return true;
+    return fs_kv_put_status(st, key, data, len) == FT_OK;
 }
 
 size_t fs_kv_get(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out)
 {
-    if (saved_len_out) *saved_len_out = 0;
-    if (!st || !st->map || !key) return 0;
-
-    CljString *k = make_string(key);
-    ID v = hashmap_get(st->map, (ID)k);
-    RELEASE(k);
-
-    if (!v || TAG(v) != CLJ_BYTE_ARRAY) {
-        return 0;
-    }
-
-    CljByteArray *ba = as_byte_array(v);
-    size_t saved = (size_t)ba->length;
-    if (saved_len_out) *saved_len_out = saved;
-
-    if (!out || out_len == 0) {
-        return 0;
-    }
-
-    size_t n = saved < out_len ? saved : out_len;
-    memcpy(out, ba->data, n);
-    return n;
+    ft_status_t stc = fs_kv_get_status(st, key, out, out_len, saved_len_out);
+    if (stc != FT_OK) return 0;
+    if (!out || out_len == 0 || !saved_len_out) return 0;
+    return (*saved_len_out < out_len) ? *saved_len_out : out_len;
 }
 
 bool fs_kv_del(FsKvStore *st, const char *key)
 {
-    if (!st || !st->map || !key) return false;
-    CljString *k = make_string(key);
-    hashmap_remove_inplace(&st->map, (ID)k);
-    RELEASE(k);
+    if (!st || !key) return false;
+    (void)fs_kv_del_status(st, key);
     return true;
+}
+
+ft_status_t fs_kv_put_status(FsKvStore *st, const char *key, const uint8_t *data, size_t len)
+{
+    if (!st || !st->db || !key) return FT_ERR_INVALID_ARG;
+    if (len > (size_t)INT32_MAX) return FT_ERR_INVALID_ARG;
+    return ft_put(st->db, key, strlen(key), data, len);
+}
+
+ft_status_t fs_kv_get_status(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out)
+{
+    if (saved_len_out) *saved_len_out = 0;
+    if (!st || !st->db || !key) return FT_ERR_INVALID_ARG;
+    size_t saved = 0;
+    ft_status_t stc = ft_get_into(st->db, key, strlen(key), out, out_len, &saved);
+    if (saved_len_out) *saved_len_out = saved;
+    return stc;
+}
+
+ft_status_t fs_kv_del_status(FsKvStore *st, const char *key)
+{
+    if (!st || !st->db || !key) return FT_ERR_INVALID_ARG;
+    return ft_del(st->db, key, strlen(key));
 }
 
 /* -------------------------------------------------------------------------- */
 /* FS layer                                                                   */
 /* -------------------------------------------------------------------------- */
-
-#define FS_CHUNK_SIZE 256u
-#define FS_KEY_MAX 64u
 
 static bool fs_is_valid_path(const char *path)
 {
@@ -420,39 +520,14 @@ bool fs_delete(FsKvStore *st, const char *path)
 ID fs_list_dir(FsKvStore *st, EvalState *eval, const char *dir_path)
 {
     if (!fs_is_valid_path(dir_path) || !fs_is_dir_path(dir_path)) return NULL;
-    if (!st || !st->map || !eval) return NULL;
+    if (!st || !st->db || !eval) return NULL;
 
     size_t prefix_len = strlen(dir_path);
     ID vec = (ID)make_vector(8, CLJ_VECTOR);
     if (!vec) return NULL;
 
-    ID key;
-    ID val;
-    HASHMAP_FOR_EACH(st->map, key, val) {
-        if (!key || TAG(key) != CLJ_STRING) continue;
-        const char *kstr = string_data((CljString *)key);
-        if (!kstr) continue;
-
-        if (strncmp(kstr, dir_path, prefix_len) != 0) continue;
-        if (strcmp(kstr, dir_path) == 0) continue; /* skip the dir itself */
-
-        const char *rest = kstr + prefix_len;
-        if (!rest || rest[0] == '\0') continue;
-
-        /* Skip chunk keys (versioned "@v#NNNN"). */
-        const char *at = strchr(rest, '@');
-        if (at && strchr(at, '#')) continue;
-
-        /* Only direct children: allow at most one '/' at end. */
-        const char *slash = strchr(rest, '/');
-        if (slash && slash[1] != '\0') continue;
-
-        ID entry = fs_stat(st, eval, kstr);
-        if (entry) {
-            vec = (ID)vector_conj((CljVector *)vec, entry);
-        }
-    }
-
-    return AUTORELEASE(vec);
+    FsListDirCtx ctx = {.st = st, .eval = eval, .dir_path = dir_path, .prefix_len = prefix_len, .vec = vec};
+    (void)ft_iter_prefix(st->db, dir_path, prefix_len, fs_list_dir_cb, &ctx);
+    return AUTORELEASE(ctx.vec);
 }
 

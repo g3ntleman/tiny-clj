@@ -10,6 +10,9 @@
 #include <stdbool.h>
 #include <math.h>
 #include <ctype.h>
+#ifndef ESP32_BUILD
+#include <sys/utsname.h>
+#endif
 #include "object.h"
 #include "vector.h"
 #include "map.h"
@@ -39,6 +42,9 @@
 #include "instant.h"
 #include "datetime_utc.h"
 #include "fs_layer.h"
+#include "platform.h"
+#include "tiny_clj.h"
+#include "build_info.h"
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -3045,6 +3051,155 @@ ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_kv_delete(ID *args, unsigned int argc);
 
+// tinyclj.runtime native bindings
+ID native_tinyclj_runtime_stats(ID *args, unsigned int argc);
+
+// ----------------------------------------------------------------------------
+// tinyclj.runtime native bindings (implementation)
+// ----------------------------------------------------------------------------
+
+static inline ID fixnum_from_size_clamped(size_t n)
+{
+    if (n > (size_t)FIXNUM_MAX)
+    {
+        return fixnum((int32_t)FIXNUM_MAX);
+    }
+    return fixnum((int32_t)n);
+}
+
+static inline bool size_available(size_t n)
+{
+    return n != (size_t)-1;
+}
+
+ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
+{
+    (void)args;
+    CHECK_ARITY(argc, 0, "tinyclj.runtime/stats");
+
+    // Keyword keys (interning is idempotent).
+    ID kw_host_os = (ID)intern_symbol_global(":host-os");
+    ID kw_host_os_version = (ID)intern_symbol_global(":host-os-version");
+    ID kw_tiny_clj_version = (ID)intern_symbol_global(":tiny-clj-version");
+    ID kw_build_time = (ID)intern_symbol_global(":build-time");
+
+    ID kw_heap_free = (ID)intern_symbol_global(":heap-bytes-free");
+    ID kw_heap_total = (ID)intern_symbol_global(":heap-bytes-total");
+    ID kw_flash_free = (ID)intern_symbol_global(":flash-bytes-free");
+    ID kw_flash_total = (ID)intern_symbol_global(":flash-bytes-total");
+
+    CljMap *m = map_empty();
+
+    // :host-os
+    const char *os_name = platform_name();
+    CljString *os_name_str = make_string(os_name ? os_name : "unknown");
+    if (!os_name_str) return NULL;
+    ASSIGN(m, map_assoc(m, kw_host_os, (ID)os_name_str));
+    RELEASE(os_name_str);
+
+    // :host-os-version
+    const char *os_ver = "unknown";
+#ifndef ESP32_BUILD
+    struct utsname u;
+    if (uname(&u) == 0 && u.release[0] != '\0')
+    {
+        os_ver = u.release;
+    }
+#endif
+    CljString *os_ver_str = make_string(os_ver);
+    if (!os_ver_str) return NULL;
+    ASSIGN(m, map_assoc(m, kw_host_os_version, (ID)os_ver_str));
+    RELEASE(os_ver_str);
+
+    // :tiny-clj-version
+    CljString *ver_str = make_string(TINY_CLJ_VERSION);
+    if (!ver_str) return NULL;
+    ASSIGN(m, map_assoc(m, kw_tiny_clj_version, (ID)ver_str));
+    RELEASE(ver_str);
+
+    // :build-time (Instant)
+    // Prefer BUILD_EPOCH_SECONDS (set by CMake at configure-time). If unavailable,
+    // fall back to parsing the compiler's __DATE__/__TIME__ (via BUILD_DATE/BUILD_TIME).
+#ifndef BUILD_EPOCH_SECONDS
+#define BUILD_EPOCH_SECONDS 0
+#endif
+    int32_t build_days = 0;
+    uint32_t build_millis = 0;
+    int64_t epoch = (int64_t)BUILD_EPOCH_SECONDS;
+    if (epoch > 0) {
+        build_days = (int32_t)(epoch / 86400);
+        int32_t sec_in_day = (int32_t)(epoch % 86400);
+        build_millis = (uint32_t)sec_in_day * 1000u;
+    } else {
+        // BUILD_DATE is typically "Mmm dd yyyy" and BUILD_TIME is "hh:mm:ss".
+        // We interpret this timestamp as UTC for a stable #inst.
+        const char *date_s = BUILD_DATE;
+        const char *time_s = BUILD_TIME;
+
+        char mon[4] = {0};
+        int day = 0, year = 0;
+        int hour = 0, minute = 0, second = 0;
+
+        if (date_s && time_s &&
+            (sscanf(date_s, "%3s %d %d", mon, &day, &year) == 3) &&
+            (sscanf(time_s, "%d:%d:%d", &hour, &minute, &second) == 3))
+        {
+            int month = 0;
+            if (strcmp(mon, "Jan") == 0) month = 1;
+            else if (strcmp(mon, "Feb") == 0) month = 2;
+            else if (strcmp(mon, "Mar") == 0) month = 3;
+            else if (strcmp(mon, "Apr") == 0) month = 4;
+            else if (strcmp(mon, "May") == 0) month = 5;
+            else if (strcmp(mon, "Jun") == 0) month = 6;
+            else if (strcmp(mon, "Jul") == 0) month = 7;
+            else if (strcmp(mon, "Aug") == 0) month = 8;
+            else if (strcmp(mon, "Sep") == 0) month = 9;
+            else if (strcmp(mon, "Oct") == 0) month = 10;
+            else if (strcmp(mon, "Nov") == 0) month = 11;
+            else if (strcmp(mon, "Dec") == 0) month = 12;
+
+            if (month >= 1 && day >= 1 && day <= 31 && year >= 1970 &&
+                hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 60)
+            {
+                build_days = clj_days_from_civil_utc(year, month, day);
+                build_millis = (uint32_t)(((hour * 60 + minute) * 60 + second) * 1000);
+            }
+        }
+    }
+
+    ID build_inst = make_instant(build_days, build_millis);
+    if (!build_inst) return NULL;
+    ASSIGN(m, map_assoc(m, kw_build_time, build_inst));
+    RELEASE(build_inst);
+
+    // Optional memory stats (only include if platform reports available).
+    size_t heap_free = platform_heap_bytes_free();
+    if (size_available(heap_free))
+    {
+        ASSIGN(m, map_assoc(m, kw_heap_free, fixnum_from_size_clamped(heap_free)));
+    }
+
+    size_t heap_total = platform_heap_bytes_total();
+    if (size_available(heap_total))
+    {
+        ASSIGN(m, map_assoc(m, kw_heap_total, fixnum_from_size_clamped(heap_total)));
+    }
+
+    size_t flash_free = platform_flash_bytes_free();
+    if (size_available(flash_free))
+    {
+        ASSIGN(m, map_assoc(m, kw_flash_free, fixnum_from_size_clamped(flash_free)));
+    }
+
+    size_t flash_total = platform_flash_bytes_total();
+    if (size_available(flash_total))
+    {
+        ASSIGN(m, map_assoc(m, kw_flash_total, fixnum_from_size_clamped(flash_total)));
+    }
+
+    return AUTORELEASE(m);
+}
+
 // ============================================================================
 // Native function lookup table for stubs
 // Uses CljSymbol* for efficient pointer comparison (symbols are interned)
@@ -3132,6 +3287,14 @@ static StaticSymbolData sym_tinyclj_kv_delete_qualified_data = {
             .unqualified = NULL,
             .cname = "tinyclj.kv/delete!"}};
 
+// Qualified-name entry for tinyclj.runtime/stats native stub.
+// Stored as pseudo-qualified cname and rely on native_function_lookup's qualified-name fallback.
+static StaticSymbolData sym_tinyclj_runtime_stats_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.runtime/stats"}};
+
 // Unqualified clojure.core entry: get-thread-bindings
 static StaticSymbolData sym_get_thread_bindings_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
@@ -3165,6 +3328,9 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_tinyclj_kv_put_bytes_qualified_data.sym, native_tinyclj_kv_put_bytes},
     {&sym_tinyclj_kv_get_bytes_qualified_data.sym, native_tinyclj_kv_get_bytes},
     {&sym_tinyclj_kv_delete_qualified_data.sym, native_tinyclj_kv_delete},
+
+    // tinyclj.runtime
+    {&sym_tinyclj_runtime_stats_qualified_data.sym, native_tinyclj_runtime_stats},
 
     // clojure.core functions
     {&sym_get_thread_bindings_data.sym, native_get_thread_bindings},
@@ -4628,6 +4794,9 @@ ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
     return fs_delete(st, path) ? (ID)clj_true : (ID)clj_false;
 }
 
+// Shared Flash-Tree error mapping for tinyclj.kv bindings.
+static ID tinyclj_kv_throw_ft(const char* op, ft_status_t stc);
+
 ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
 {
     CHECK_ARITY(argc, 2, "tinyclj.kv/put-bytes");
@@ -4644,12 +4813,24 @@ ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
     CljByteArray *ba = as_byte_array(args[1]);
-    bool ok = fs_kv_put(st, key, ba->data, (size_t)ba->length);
-    if (!ok) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/put-bytes failed");
+    ft_status_t stc = fs_kv_put_status(st, key, ba->data, (size_t)ba->length);
+    if (stc != FT_OK) {
+        return tinyclj_kv_throw_ft("tinyclj.kv/put-bytes", stc);
     }
     return NULL;
+}
+
+static ID tinyclj_kv_throw_ft(const char* op, ft_status_t stc)
+{
+    if (stc == FT_ERR_NO_MEMORY) {
+        throw_oom();
+        return NULL;
+    }
+    return throw_exception_formatted(
+        stc == FT_ERR_INVALID_ARG ? EXCEPTION_ILLEGAL_ARGUMENT : EXCEPTION_RUNTIME,
+        __FILE__, __LINE__, 0,
+        "%s failed (err=%d)", op, (int)stc
+    );
 }
 
 ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
@@ -4665,14 +4846,20 @@ ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
     if (!st) return NULL;
 
     size_t saved = 0;
-    (void)fs_kv_get(st, key, NULL, 0, &saved);
-    if (saved == 0) {
+    ft_status_t stc = fs_kv_get_status(st, key, NULL, 0, &saved);
+    if (stc == FT_ERR_NOT_FOUND) {
         return NULL;
+    }
+    if (stc != FT_OK) {
+        return tinyclj_kv_throw_ft("tinyclj.kv/get-bytes", stc);
     }
     ID arr = (ID)make_byte_array((int)saved);
     if (!arr) return NULL;
     CljByteArray *ba = as_byte_array(arr);
-    (void)fs_kv_get(st, key, ba->data, (size_t)ba->length, &saved);
+    stc = fs_kv_get_status(st, key, ba->data, (size_t)ba->length, &saved);
+    if (stc != FT_OK) {
+        return tinyclj_kv_throw_ft("tinyclj.kv/get-bytes", stc);
+    }
     return AUTORELEASE(arr);
 }
 
@@ -4687,7 +4874,10 @@ ID native_tinyclj_kv_delete(ID *args, unsigned int argc)
     }
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
-    return fs_kv_del(st, key) ? (ID)clj_true : (ID)clj_false;
+    ft_status_t stc = fs_kv_del_status(st, key);
+    if (stc == FT_OK) return (ID)clj_true;
+    if (stc == FT_ERR_NOT_FOUND) return (ID)clj_false;
+    return tinyclj_kv_throw_ft("tinyclj.kv/delete!", stc);
 }
 
 // Binary operations (inline for performance)
