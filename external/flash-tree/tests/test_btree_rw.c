@@ -35,10 +35,12 @@ static ft_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
 }
 
 static ft_db_t* make_db(void) {
-    static uint8_t storage[4096];
+    static uint8_t storage[8192];
     static ramdev_t rd;
     rd.buf = storage;
     rd.len = sizeof(storage);
+    /* Fresh flash starts erased (0xFF). */
+    memset(storage, 0xFF, sizeof(storage));
 
     static ft_blockdev_t bdev;
     bdev.ctx = &rd;
@@ -48,7 +50,8 @@ static ft_db_t* make_db(void) {
     bdev.geom.total_size_bytes = (uint32_t)sizeof(storage);
     bdev.geom.read_granularity = 1;
     bdev.geom.prog_granularity = 1;
-    bdev.geom.erase_granularity = 16;
+    /* FlashDB KVDB uses erase granularity as its "sector size". */
+    bdev.geom.erase_granularity = 4096;
 
     ft_db_t* db = NULL;
     TEST_ASSERT_EQUAL_INT(FT_OK, ft_db_init(&db, &bdev, NULL));
@@ -123,8 +126,77 @@ static void test_cursor_snapshot_is_stable(void) {
     ft_db_deinit(db);
 }
 
+static void test_two_cursors_are_independent_snapshots(void) {
+    ft_db_t* db = make_db();
+
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_put(db, "a", 1, "1", 1));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_put(db, "aa", 2, "2", 1));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_put(db, "ab", 2, "3", 1));
+
+    ft_cursor_t* a = NULL;
+    ft_cursor_t* b = NULL;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_open_prefix(db, "a", 1, &a));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_open_prefix(db, "a", 1, &b));
+    TEST_ASSERT_NOT_NULL(a);
+    TEST_ASSERT_NOT_NULL(b);
+
+    // Mutate after opening cursors; both snapshots must remain unchanged.
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_put(db, "aa0", 3, "X", 1));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_del(db, "ab", 2));
+
+    int has_a = 0, has_b = 0;
+    ft_blob_t ka = {0}, kb = {0};
+
+    // Advance A once, then B twice, then A to completion (interleaved).
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(a, &has_a));
+    TEST_ASSERT_TRUE(has_a);
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_key(a, &ka));
+    TEST_ASSERT_EQUAL_UINT32(1, (uint32_t)ka.len);
+    TEST_ASSERT_EQUAL_MEMORY("a", ka.data, 1);
+
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(b, &has_b));
+    TEST_ASSERT_TRUE(has_b);
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_key(b, &kb));
+    TEST_ASSERT_EQUAL_MEMORY("a", kb.data, 1);
+
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(b, &has_b));
+    TEST_ASSERT_TRUE(has_b);
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_key(b, &kb));
+    TEST_ASSERT_EQUAL_UINT32(2, (uint32_t)kb.len);
+    TEST_ASSERT_EQUAL_MEMORY("aa", kb.data, 2);
+
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(a, &has_a));
+    TEST_ASSERT_TRUE(has_a);
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_key(a, &ka));
+    TEST_ASSERT_EQUAL_UINT32(2, (uint32_t)ka.len);
+    TEST_ASSERT_EQUAL_MEMORY("aa", ka.data, 2);
+
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(a, &has_a));
+    TEST_ASSERT_TRUE(has_a);
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_key(a, &ka));
+    TEST_ASSERT_EQUAL_UINT32(2, (uint32_t)ka.len);
+    TEST_ASSERT_EQUAL_MEMORY("ab", ka.data, 2); // still present in snapshot
+
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(a, &has_a));
+    TEST_ASSERT_FALSE(has_a);
+
+    // B should still have one remaining item: "ab".
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(b, &has_b));
+    TEST_ASSERT_TRUE(has_b);
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_key(b, &kb));
+    TEST_ASSERT_EQUAL_MEMORY("ab", kb.data, 2);
+
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(b, &has_b));
+    TEST_ASSERT_FALSE(has_b);
+
+    ft_cursor_close(a);
+    ft_cursor_close(b);
+    ft_db_deinit(db);
+}
+
 void ft_register_tests_btree_rw(void) {
     RUN_TEST(test_put_get_overwrite_del);
     RUN_TEST(test_cursor_snapshot_is_stable);
+    RUN_TEST(test_two_cursors_are_independent_snapshots);
 }
 

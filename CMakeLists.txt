@@ -88,7 +88,10 @@ else()
 endif()
 
 # Include directories
-include_directories(${CMAKE_SOURCE_DIR} include src external)
+# NOTE: Avoid adding the whole 'external/' tree to include paths, so that
+# template/reference subprojects (e.g. external/flashdb-reloaded) can't be
+# accidentally picked up by includes.
+include_directories(${CMAKE_SOURCE_DIR} include src)
 include_directories(${CMAKE_SOURCE_DIR}/external/flash-tree/inc ${CMAKE_SOURCE_DIR}/external/flash-tree/src)
 
 # Subjective-C subproject (static library + early tests)
@@ -418,6 +421,7 @@ add_executable(unit-tests
     src/tests/test_file_io.c
     src/tests/test_fs_layer.c
     src/tests/test_tinyclj_bindings_fs_kv.c
+    src/tests/test_streaming_kv_fs.c
     src/tests/test_atom.c
     src/tests/test_atom_watch.c
     src/tests/test_timer.c
