@@ -352,6 +352,7 @@ set_target_properties(tiny-clj-profile PROPERTIES
 # Unity Test Framework (central runner with separate test files)
 add_executable(unit-tests
     ${SOURCES}
+    src/fs_layer.c
     src/line_editor.c
     subjective-c/tests/test_runner.c
     src/tests/unity_test_runner.c
@@ -401,6 +402,8 @@ add_executable(unit-tests
     src/tests/test_qualified_symbol_resolution.c
     src/tests/test_repl.c
     src/tests/test_file_io.c
+    src/tests/test_fs_layer.c
+    src/tests/test_tinyclj_bindings_fs_kv.c
     src/tests/test_atom.c
     src/tests/test_atom_watch.c
     src/tests/test_timer.c
