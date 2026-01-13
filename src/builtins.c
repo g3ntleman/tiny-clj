@@ -3128,7 +3128,7 @@ ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     int32_t sec_in_day = (int32_t)(epoch % 86400);
     if (sec_in_day < 0) sec_in_day = 0;
     uint32_t millis = (uint32_t)sec_in_day * 1000u;
-    
+
 
     ID build_inst = make_instant(days, millis);
     if (!build_inst) return NULL;

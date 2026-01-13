@@ -41,6 +41,57 @@ ft_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t
 ft_status_t fs_kv_del_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len);
 
 /* -------------------------------------------------------------------------- */
+/* Streaming APIs (C-only)                                                    */
+/* -------------------------------------------------------------------------- */
+
+typedef ft_status_t (*fs_stream_sink_cb)(const uint8_t* data, size_t len, void* arg);
+typedef ft_status_t (*fs_stream_source_cb)(uint8_t* out, size_t out_cap, size_t* out_len, void* arg);
+
+typedef struct FsStreamStats {
+    uint64_t blocks_read;    /* number of stored chunk-keys read (not app slices, not meta) */
+    uint64_t blocks_written; /* number of stored chunk-keys written (not meta) */
+} FsStreamStats;
+
+ft_status_t fs_stream_stats_reset(FsKvStore* st);
+ft_status_t fs_stream_stats_get(const FsKvStore* st, FsStreamStats* out);
+
+/* KV blob-key streaming */
+ft_status_t fs_kv_stream_read_key_bytes(FsKvStore* st,
+                                        const uint8_t* key, size_t key_len,
+                                        size_t max_chunk,
+                                        fs_stream_sink_cb cb, void* arg);
+
+/* Optional: start streaming from an offset (seek-by-chunk arithmetic). */
+ft_status_t fs_kv_stream_read_key_bytes_from(FsKvStore* st,
+                                             const uint8_t* key, size_t key_len,
+                                             size_t offset,
+                                             size_t max_chunk,
+                                             fs_stream_sink_cb cb, void* arg);
+
+ft_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
+                                         const uint8_t* key, size_t key_len,
+                                         fs_stream_source_cb next, void* arg,
+                                         size_t* out_total_len);
+
+/* File streaming (path is still string key) */
+ft_status_t fs_file_stream_read(FsKvStore* st,
+                                const char* path,
+                                size_t max_chunk,
+                                fs_stream_sink_cb cb, void* arg);
+
+/* Optional: start streaming from an offset (seek-by-chunk arithmetic). */
+ft_status_t fs_file_stream_read_from(FsKvStore* st,
+                                     const char* path,
+                                     size_t offset,
+                                     size_t max_chunk,
+                                     fs_stream_sink_cb cb, void* arg);
+
+ft_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
+                                 const char* path,
+                                 fs_stream_source_cb next, void* arg,
+                                 size_t* out_total_len);
+
+/* -------------------------------------------------------------------------- */
 /* FS layer (paths -> meta + versioned chunks)                                */
 /* -------------------------------------------------------------------------- */
 

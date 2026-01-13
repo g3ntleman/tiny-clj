@@ -67,7 +67,7 @@ ft_status_t ft_cursor_key(const ft_cursor_t* cur, ft_blob_t* out_key);
 ft_status_t ft_cursor_val(const ft_cursor_t* cur, ft_blob_t* out_val);
 void ft_cursor_close(ft_cursor_t* cur);
 
-// GC/compaction step (optional, no-op for now). Must not run with open cursors.
+// GC/compaction step. Safe with open cursors: cursors pin a snapshot generation.
 ft_status_t ft_gc_step(ft_db_t* db, size_t budget_bytes);
 
 // TSDB (v1 - minimal).
