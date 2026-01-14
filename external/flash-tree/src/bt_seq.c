@@ -77,10 +77,7 @@ static int	 bt_seqset __P((BTREE *, EPG *, DBT *, int));
  *	RET_ERROR, RET_SUCCESS or RET_SPECIAL if there's no next key.
  */
 int
-__bt_seq(dbp, key, data, flags)
-	const DB *dbp;
-	DBT *key, *data;
-	u_int flags;
+__bt_seq(const DB *dbp, DBT *key, DBT *data, u_int flags)
 {
 	BTREE *t;
 	EPG e;
@@ -153,11 +150,7 @@ __bt_seq(dbp, key, data, flags)
  *	RET_ERROR, RET_SUCCESS or RET_SPECIAL if there's no next key.
  */
 static int
-bt_seqset(t, ep, key, flags)
-	BTREE *t;
-	EPG *ep;
-	DBT *key;
-	int flags;
+bt_seqset(BTREE *t, EPG *ep, DBT *key, int flags)
 {
 	EPG *e;
 	PAGE *h;
@@ -283,10 +276,7 @@ bt_seqset(t, ep, key, flags)
  *	RET_ERROR, RET_SUCCESS or RET_SPECIAL if there's no next key.
  */
 static int
-bt_seqadv(t, e, flags)
-	BTREE *t;
-	EPG *e;
-	int flags;
+bt_seqadv(BTREE *t, EPG *e, int flags)
 {
 	EPGNO *c, delc;
 	PAGE *h;
@@ -364,9 +354,7 @@ bt_seqadv(t, e, flags)
  *	RET_ERROR, RET_SUCCESS
  */
 int
-__bt_crsrdel(t, c)
-	BTREE *t;
-	EPGNO *c;
+__bt_crsrdel(BTREE *t, EPGNO *c)
 {
 	PAGE *h;
 	int status;

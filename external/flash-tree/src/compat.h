@@ -151,7 +151,8 @@ static int __sigtemp;		/* For the use of sigprocmask */
 #define	bcopy(a, b, n)		memmove(b, a, n)
 #endif
 
-#if defined(BSD) || defined(BSD4_3)
+/* Legacy BSD compat macros - not needed on modern systems */
+#if defined(BSD4_3) && !defined(__APPLE__)
 #define	strchr(a, b)		index(a, b)
 #define	strrchr(a, b)		rindex(a, b)
 #define	memcmp(a, b, n)		bcmp(a, b, n)

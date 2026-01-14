@@ -1,135 +1,149 @@
-/*-
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)mpool.h	8.1 (Berkeley) 6/2/93
- */
-
 /*
- * The memory pool scheme is a simple one.  Each in memory page is referenced
- * by a bucket which is threaded in three ways.  All active pages are threaded
- * on a hash chain (hashed by the page number) and an lru chain.  Inactive
- * pages are threaded on a free chain.  Each reference to a memory pool is
- * handed an MPOOL which is the opaque cookie passed to all of the memory
- * routines.
+ * mpool.h - Copy-on-Write Memory Pool for Log-Structured B-Tree
+ *
+ * Replaces BSD mpool with flash-friendly append-only writes.
+ * API-compatible with original mpool for bt_*.c integration.
+ *
+ * Design:
+ * - Pages written append-only to log (no Read-Modify-Write)
+ * - In-memory page-map tracks pgno → log_offset
+ * - Single-page cache for current working page
+ * - Recovery scans log to rebuild page-map
  */
-#define	HASHSIZE	128
-#define	HASHKEY(pgno)	((pgno - 1) % HASHSIZE)
 
-/* The BKT structures are the elements of the lists. */
-typedef struct BKT {
-	struct BKT	*hnext;		/* next hash bucket */
-	struct BKT	*hprev;		/* previous hash bucket */
-	struct BKT	*cnext;		/* next free/lru bucket */
-	struct BKT	*cprev;		/* previous free/lru bucket */
-	void		*page;		/* page */
-	pgno_t		pgno;		/* page number */
+#pragma once
 
-#define	MPOOL_DIRTY	0x01		/* page needs to be written */
-#define	MPOOL_PINNED	0x02		/* page is pinned into memory */
-	unsigned long	flags;		/* flags */
-} BKT;
+#include "flash_tree.h"
+#include "ft_blockdev.h"
+#include <stdint.h>
 
-/* The BKTHDR structures are the heads of the lists. */
-typedef struct BKTHDR {
-	struct BKT	*hnext;		/* next hash bucket */
-	struct BKT	*hprev;		/* previous hash bucket */
-	struct BKT	*cnext;		/* next free/lru bucket */
-	struct BKT	*cprev;		/* previous free/lru bucket */
-} BKTHDR;
+/* Configuration */
+#define FT_MPOOL_MAX_PAGES    64    /* Max pages in page-map */
+#define FT_MPOOL_PAGE_SIZE   512    /* Page size (matches flash sector) */
+#define FT_MPOOL_CACHE_PAGES   2    /* Pages in RAM cache */
 
+/* Page number type (compatible with BSD btree) */
+typedef uint32_t pgno_t;
+
+/* On-flash page header (prepended to each page in log) */
+typedef struct __attribute__((packed)) ft_page_hdr {
+    uint32_t magic;       /* FT_PAGE_MAGIC */
+    uint32_t pgno;        /* Logical page number */
+    uint32_t crc32;       /* CRC of header + page data */
+    uint32_t flags;       /* Reserved */
+} ft_page_hdr_t;
+
+#define FT_PAGE_MAGIC 0x50475446u  /* 'FTGP' */
+
+/* Invalid page number sentinel (page 0 is the valid B-Tree meta page!) */
+#define PGNO_INVALID  0xFFFFFFFF
+
+/* Page-map entry: tracks where each logical page lives in log */
+typedef struct ft_page_map_entry {
+    uint32_t pgno;        /* Logical page number (PGNO_INVALID = unused) */
+    uint32_t log_offset;  /* Offset in log where page data starts */
+} ft_page_map_entry_t;
+
+/* Cached page buffer */
+typedef struct ft_cache_slot {
+    pgno_t pgno;          /* Page number (PGNO_INVALID = empty) */
+    uint32_t log_offset;  /* Where this version came from */
+    int dirty;            /* Needs to be written */
+    int pinned;           /* Currently in use */
+    uint8_t data[FT_MPOOL_PAGE_SIZE];
+} ft_cache_slot_t;
+
+/* Memory pool handle */
 typedef struct MPOOL {
-	BKTHDR	free;			/* The free list. */
-	BKTHDR	lru;			/* The LRU list. */
-	BKTHDR	hashtable[HASHSIZE];	/* Hashed list by page number. */
-	pgno_t	curcache;		/* Current number of cached pages. */
-	pgno_t	maxcache;		/* Max number of cached pages. */
-	pgno_t	npages;			/* Number of pages in the file. */
-	u_long	pagesize;		/* File page size. */
-	int	fd;			/* File descriptor. */
-					/* Page in conversion routine. */
-	void    (*pgin) __P((void *, pgno_t, void *));
-					/* Page out conversion routine. */
-	void    (*pgout) __P((void *, pgno_t, void *));
-	void	*pgcookie;		/* Cookie for page in/out routines. */
-#ifdef STATISTICS
-	unsigned long	cachehit;
-	unsigned long	cachemiss;
-	unsigned long	pagealloc;
-	unsigned long	pageflush;
-	unsigned long	pageget;
-	unsigned long	pagenew;
-	unsigned long	pageput;
-	unsigned long	pageread;
-	unsigned long	pagewrite;
-#endif
+    ft_blockdev_t* bdev;
+    uint32_t data_base;           /* Start offset for mpool data (after header region) */
+    uint32_t write_off;           /* Next write offset in log (absolute) */
+    uint32_t pagesize;            /* Page size (without header) */
+    pgno_t npages;                /* Highest allocated page number */
+    
+    /* Page-map: logical pgno → log offset */
+    ft_page_map_entry_t page_map[FT_MPOOL_MAX_PAGES];
+    size_t page_map_count;
+    
+    /* RAM cache */
+    ft_cache_slot_t cache[FT_MPOOL_CACHE_PAGES];
+    
+    /* Byte-swap callbacks (for B-tree) */
+    void (*pgin)(void*, pgno_t, void*);
+    void (*pgout)(void*, pgno_t, void*);
+    void* pgcookie;
+    
+    /* GC state (ping-pong between two halves) */
+    uint32_t gc_half_size;        /* Size of each half */
+    int gc_active_half;           /* 0 or 1 - which half is active */
+    int gc_in_progress;           /* GC is running */
+    size_t gc_next_page_idx;      /* Next page to copy during incremental GC */
 } MPOOL;
 
-#ifdef __MPOOLINTERFACE_PRIVATE
-/* Macros to insert/delete into/from hash chain. */
-#define rmhash(bp) { \
-        (bp)->hprev->hnext = (bp)->hnext; \
-        (bp)->hnext->hprev = (bp)->hprev; \
-}
-#define inshash(bp, pg) { \
-	hp = &mp->hashtable[HASHKEY(pg)]; \
-        (bp)->hnext = hp->hnext; \
-        (bp)->hprev = (struct BKT *)hp; \
-        hp->hnext->hprev = (bp); \
-        hp->hnext = (bp); \
-}
+/*
+ * Garbage collection - compact the log by copying live pages.
+ * Call incrementally with budget_bytes to limit work per call.
+ * Returns 0 when GC is complete, 1 when more work remains.
+ */
+int mpool_gc_step(MPOOL* mp, size_t budget_bytes);
 
-/* Macros to insert/delete into/from lru and free chains. */
-#define	rmchain(bp) { \
-        (bp)->cprev->cnext = (bp)->cnext; \
-        (bp)->cnext->cprev = (bp)->cprev; \
-}
-#define inschain(bp, dp) { \
-        (bp)->cnext = (dp)->cnext; \
-        (bp)->cprev = (struct BKT *)(dp); \
-        (dp)->cnext->cprev = (bp); \
-        (dp)->cnext = (bp); \
-}
-#endif
+/* Flags for mpool_put */
+#define MPOOL_DIRTY   0x01
 
-__BEGIN_DECLS
-MPOOL	*mpool_open __P((DBT *, int, pgno_t, pgno_t));
-void	 mpool_filter __P((MPOOL *, void (*)(void *, pgno_t, void *),
-	    void (*)(void *, pgno_t, void *), void *));
-void	*mpool_new __P((MPOOL *, pgno_t *));
-void	*mpool_get __P((MPOOL *, pgno_t, u_int));
-int	 mpool_put __P((MPOOL *, void *, u_int));
-int	 mpool_sync __P((MPOOL *));
-int	 mpool_close __P((MPOOL *));
-#ifdef STATISTICS
-void	 mpool_stat __P((MPOOL *));
-#endif
-__END_DECLS
+/* BSD-compatible API */
+
+/*
+ * Open a memory pool.
+ * @param key       Unused (compatibility)
+ * @param fd        Unused (we use bdev directly)
+ * @param pagesize  Page size
+ * @param maxcache  Unused (fixed cache size)
+ * @return          Pool handle or NULL
+ */
+MPOOL* mpool_open(void* key, int fd, pgno_t pagesize, pgno_t maxcache);
+
+/*
+ * Set byte-swap filter callbacks.
+ */
+void mpool_filter(MPOOL* mp,
+                  void (*pgin)(void*, pgno_t, void*),
+                  void (*pgout)(void*, pgno_t, void*),
+                  void* pgcookie);
+
+/*
+ * Allocate a new page.
+ * @param mp        Pool handle
+ * @param pgnoaddr  Output: new page number
+ * @return          Pointer to page buffer (in cache)
+ */
+void* mpool_new(MPOOL* mp, pgno_t* pgnoaddr);
+
+/*
+ * Get an existing page.
+ * @param mp    Pool handle
+ * @param pgno  Page number
+ * @param flags Unused
+ * @return      Pointer to page buffer (in cache)
+ */
+void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags);
+
+/*
+ * Release a page (and optionally mark dirty).
+ * @param mp    Pool handle
+ * @param page  Page buffer pointer
+ * @param flags MPOOL_DIRTY to mark for write
+ * @return      0 on success
+ */
+int mpool_put(MPOOL* mp, void* page, unsigned int flags);
+
+/*
+ * Flush all dirty pages to log.
+ * @return 0 on success
+ */
+int mpool_sync(MPOOL* mp);
+
+/*
+ * Close the pool.
+ * @return 0 on success
+ */
+int mpool_close(MPOOL* mp);

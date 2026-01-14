@@ -1,6 +1,9 @@
 // ft_btree.c - Minimal sorted-key index helpers.
+//
+// Provides lexicographic comparison and prefix iteration for key-value pairs.
 
 #include "ft_btree.h"
+#include "ft_utils.h"
 
 #include <string.h>
 
@@ -30,20 +33,25 @@ size_t ft_lower_bound_kv(const ft_kv_ref_t* entries, size_t n,
     return lo;
 }
 
-static int has_prefix(const void* key, size_t key_len, const void* prefix, size_t prefix_len) {
-    if (prefix_len == 0) return 1;
-    if (key_len < prefix_len) return 0;
-    return memcmp(key, prefix, prefix_len) == 0;
-}
-
+/**
+ * Iterate over all entries with the given prefix.
+ * Entries must be sorted in lexicographic order.
+ */
 ft_status_t ft_iter_prefix_kv(const ft_kv_ref_t* entries, size_t n,
                               const void* prefix, size_t prefix_len,
                               ft_key_cb cb, void* arg) {
     if (!entries || (!prefix && prefix_len != 0) || !cb) return FT_ERR_INVALID_ARG;
+    
+    /* Find first entry with prefix */
     size_t i = ft_lower_bound_kv(entries, n, prefix, prefix_len);
+    
+    /* Iterate while keys have the prefix */
     for (; i < n; i++) {
-        if (!has_prefix(entries[i].key, entries[i].key_len, prefix, prefix_len)) break;
-        ft_status_t st = cb(entries[i].key, entries[i].key_len, entries[i].val, entries[i].val_len, arg);
+        if (!ft_has_prefix(entries[i].key, entries[i].key_len, prefix, prefix_len)) {
+            break;
+        }
+        ft_status_t st = cb(entries[i].key, entries[i].key_len, 
+                           entries[i].val, entries[i].val_len, arg);
         if (st != FT_OK) return st;
     }
     return FT_OK;

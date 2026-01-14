@@ -53,9 +53,7 @@ static char sccsid[] = "@(#)bt_page.c	8.2 (Berkeley) 2/21/94";
  *	RET_ERROR, RET_SUCCESS
  */
 int
-__bt_free(t, h)
-	BTREE *t;
-	PAGE *h;
+__bt_free(BTREE *t, PAGE *h)
 {
 	/* Insert the page at the start of the free list. */
 	h->prevpg = P_INVALID;
@@ -77,9 +75,7 @@ __bt_free(t, h)
  *	Pointer to a page, NULL on error.
  */
 PAGE *
-__bt_new(t, npg)
-	BTREE *t;
-	pgno_t *npg;
+__bt_new(BTREE *t, pgno_t *npg)
 {
 	PAGE *h;
 

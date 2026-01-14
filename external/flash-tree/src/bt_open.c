@@ -60,6 +60,7 @@ static char sccsid[] = "@(#)bt_open.c	8.5 (Berkeley) 2/21/94";
 
 #include <db.h>
 #include "btree.h"
+#include "ft_bsd_blockfile.h"
 
 static int byteorder __P((void));
 static int nroot __P((BTREE *));
@@ -82,10 +83,7 @@ static int tmp __P((void));
  *
  */
 DB *
-__bt_open(fname, flags, mode, openinfo, dflags)
-	const char *fname;
-	int flags, mode, dflags;
-	const BTREEINFO *openinfo;
+__bt_open(const char *fname, int flags, int mode, const BTREEINFO *openinfo, int dflags)
 {
 	struct stat sb;
 	BTMETA m;
@@ -208,10 +206,10 @@ __bt_open(fname, flags, mode, openinfo, dflags)
 		SET(t, B_INMEM);
 	}
 
-	if (fcntl(t->bt_fd, F_SETFD, 1) == -1)
+	if (ft_bsd_fcntl(t->bt_fd, F_SETFD, 1) == -1)
 		goto err;
 
-	if (fstat(t->bt_fd, &sb))
+	if (ft_bsd_fstat(t->bt_fd, &sb))
 		goto err;
 	if (sb.st_size) {
 		nr = read(t->bt_fd, &m, sizeof(BTMETA));
@@ -347,8 +345,7 @@ err:	if (t) {
  *	RET_ERROR, RET_SUCCESS
  */
 static int
-nroot(t)
-	BTREE *t;
+nroot(BTREE *t)
 {
 	PAGE *meta, *root;
 	pgno_t npg;
@@ -380,7 +377,7 @@ nroot(t)
 }
 
 static int
-tmp()
+tmp(void)
 {
 	sigset_t set, oset;
 	int fd;
@@ -400,7 +397,7 @@ tmp()
 }
 
 static int
-byteorder()
+byteorder(void)
 {
 	u_int32_t x;
 	u_char *p;
@@ -418,8 +415,7 @@ byteorder()
 }
 
 int
-__bt_fd(dbp)
-        const DB *dbp;
+__bt_fd(const DB *dbp)
 {
 	BTREE *t;
 

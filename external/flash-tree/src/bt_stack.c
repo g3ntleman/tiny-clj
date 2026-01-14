@@ -71,10 +71,7 @@ static char sccsid[] = "@(#)bt_stack.c	8.3 (Berkeley) 2/21/94";
  * 	RET_ERROR, RET_SUCCESS
  */
 int
-__bt_push(t, pgno, index)
-	BTREE *t;
-	pgno_t pgno;
-	indx_t index;
+__bt_push(BTREE *t, pgno_t pgno, int index)
 {
 	if (t->bt_sp == t->bt_maxstack) {
 		t->bt_maxstack += 50;
