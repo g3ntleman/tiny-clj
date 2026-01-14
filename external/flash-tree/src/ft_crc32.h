@@ -6,4 +6,3 @@
 #include <stdint.h>
 
 uint32_t ft_crc32_ieee(const void* data, size_t len, uint32_t seed);
-

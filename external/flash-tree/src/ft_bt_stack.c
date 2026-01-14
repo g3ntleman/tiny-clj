@@ -70,20 +70,17 @@ static char sccsid[] = "@(#)bt_stack.c	8.3 (Berkeley) 2/21/94";
  * Returns:
  * 	RET_ERROR, RET_SUCCESS
  */
-int
-__bt_push(BTREE *t, pgno_t pgno, int index)
-{
-	if (t->bt_sp == t->bt_maxstack) {
-		t->bt_maxstack += 50;
-		if ((t->bt_stack = (EPGNO *)realloc(t->bt_stack,
-		    t->bt_maxstack * sizeof(EPGNO))) == NULL) {
-			t->bt_maxstack -= 50;
-			return (RET_ERROR);
-		}
-	}
+int __bt_push(BTREE* t, pgno_t pgno, int index) {
+    if (t->bt_sp == t->bt_maxstack) {
+        t->bt_maxstack += 50;
+        if ((t->bt_stack = (EPGNO*)realloc(t->bt_stack, t->bt_maxstack * sizeof(EPGNO))) == NULL) {
+            t->bt_maxstack -= 50;
+            return (RET_ERROR);
+        }
+    }
 
-	t->bt_stack[t->bt_sp].pgno = pgno;
-	t->bt_stack[t->bt_sp].index = index;
-	++t->bt_sp;
-	return (RET_SUCCESS);
+    t->bt_stack[t->bt_sp].pgno = pgno;
+    t->bt_stack[t->bt_sp].index = index;
+    ++t->bt_sp;
+    return (RET_SUCCESS);
 }

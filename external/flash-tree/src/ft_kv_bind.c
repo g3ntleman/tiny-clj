@@ -22,4 +22,3 @@ ft_blockdev_t* ft_kv_bound_bdev(void) {
 uint32_t ft_kv_bound_base_offset(void) {
     return g_ft_kv_base_offset;
 }
-

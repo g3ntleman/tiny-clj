@@ -14,22 +14,26 @@ typedef struct {
 
 static ft_status_t ram_read(void* ctx, uint32_t addr, void* out, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     memcpy(out, r->buf + addr, len);
     return FT_OK;
 }
 
 static ft_status_t ram_prog(void* ctx, uint32_t addr, const void* data, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     const uint8_t* in = (const uint8_t*)data;
-    for (size_t i = 0; i < len; i++) r->buf[addr + i] = (uint8_t)(r->buf[addr + i] & in[i]);
+    for (size_t i = 0; i < len; i++)
+        r->buf[addr + i] = (uint8_t)(r->buf[addr + i] & in[i]);
     return FT_OK;
 }
 
 static ft_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     memset(r->buf + addr, 0xFF, len);
     return FT_OK;
 }
@@ -42,7 +46,10 @@ static void test_two_kv_dbs_on_different_pages_are_independent(void) {
     ft_blockdev_t bdev = {
         .ctx = &rd,
         .ops = {.read = ram_read, .prog = ram_prog, .erase = ram_erase},
-        .geom = {.total_size_bytes = (uint32_t)sizeof(storage), .read_granularity = 1, .prog_granularity = 1, .erase_granularity = 4096},
+        .geom = {.total_size_bytes = (uint32_t)sizeof(storage),
+                 .read_granularity = 1,
+                 .prog_granularity = 1,
+                 .erase_granularity = 4096},
     };
     TEST_ASSERT_EQUAL_INT(FT_OK, ft_blockdev_validate(&bdev));
 
@@ -50,7 +57,7 @@ static void test_two_kv_dbs_on_different_pages_are_independent(void) {
     ft_kv_t* kv1 = NULL;
 
     ft_kv_cfg_t cfg0 = {.start_page = FT_KV_ROOT_PAGE};
-    ft_kv_cfg_t cfg1 = {.start_page = 16};  // 16 * 4096 = 65536
+    ft_kv_cfg_t cfg1 = {.start_page = 16}; // 16 * 4096 = 65536
 
     TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_open(&kv0, &bdev, &cfg0));
     TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_open(&kv1, &bdev, &cfg1));
@@ -85,4 +92,3 @@ static void test_two_kv_dbs_on_different_pages_are_independent(void) {
 void ft_register_tests_multi_kv(void) {
     RUN_TEST(test_two_kv_dbs_on_different_pages_are_independent);
 }
-

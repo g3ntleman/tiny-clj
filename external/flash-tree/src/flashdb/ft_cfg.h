@@ -28,8 +28,9 @@
 
 /* Disable FlashDB logging to keep tiny-clj output quiet and reduce deps. */
 #ifndef FDB_PRINT
-#define FDB_PRINT(...) do { } while (0)
+#define FDB_PRINT(...)                                                                             \
+    do {                                                                                           \
+    } while (0)
 #endif
 
 #endif /* FDB_CFG_H */
-

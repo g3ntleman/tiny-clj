@@ -14,7 +14,8 @@ typedef struct {
 
 static ft_status_t ram_read(void* ctx, uint32_t addr, void* out, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     memcpy(out, r->buf + addr, len);
     return FT_OK;
 }
@@ -22,7 +23,8 @@ static ft_status_t ram_read(void* ctx, uint32_t addr, void* out, size_t len) {
 // Simulate NOR flash programming: bits can only go from 1 -> 0.
 static ft_status_t ram_prog(void* ctx, uint32_t addr, const void* data, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     const uint8_t* in = (const uint8_t*)data;
     for (size_t i = 0; i < len; i++) {
         r->buf[addr + i] = (uint8_t)(r->buf[addr + i] & in[i]);
@@ -32,13 +34,14 @@ static ft_status_t ram_prog(void* ctx, uint32_t addr, const void* data, size_t l
 
 static ft_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     memset(r->buf + addr, 0xFF, len);
     return FT_OK;
 }
 
-static ft_blockdev_t make_ram_bdev(uint8_t* storage, size_t storage_len,
-                                  uint32_t read_g, uint32_t prog_g, uint32_t erase_g) {
+static ft_blockdev_t make_ram_bdev(uint8_t* storage, size_t storage_len, uint32_t read_g,
+                                   uint32_t prog_g, uint32_t erase_g) {
     ramdev_t* ctx = (ramdev_t*)malloc(sizeof(ramdev_t));
     ctx->buf = storage;
     ctx->len = storage_len;
@@ -46,7 +49,10 @@ static ft_blockdev_t make_ram_bdev(uint8_t* storage, size_t storage_len,
     ft_blockdev_t bdev = {
         .ctx = ctx,
         .ops = {.read = ram_read, .prog = ram_prog, .erase = ram_erase},
-        .geom = {.total_size_bytes = (uint32_t)storage_len, .read_granularity = read_g, .prog_granularity = prog_g, .erase_granularity = erase_g},
+        .geom = {.total_size_bytes = (uint32_t)storage_len,
+                 .read_granularity = read_g,
+                 .prog_granularity = prog_g,
+                 .erase_granularity = erase_g},
     };
     return bdev;
 }
@@ -111,4 +117,3 @@ void ft_register_tests_blockdev(void) {
     RUN_TEST(test_prog_is_one_to_zero_only);
     RUN_TEST(test_granularity_enforced);
 }
-

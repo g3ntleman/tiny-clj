@@ -21,11 +21,8 @@ typedef struct ft_kv_ref {
 int ft_lex_bytes_cmp(const void* a, size_t a_len, const void* b, size_t b_len);
 
 // Return the first index i where entries[i].key >= key (lex order).
-size_t ft_lower_bound_kv(const ft_kv_ref_t* entries, size_t n,
-                         const void* key, size_t key_len);
+size_t ft_lower_bound_kv(const ft_kv_ref_t* entries, size_t n, const void* key, size_t key_len);
 
 // Iterate all entries whose key has the given prefix (in lex order).
-ft_status_t ft_iter_prefix_kv(const ft_kv_ref_t* entries, size_t n,
-                              const void* prefix, size_t prefix_len,
-                              ft_key_cb cb, void* arg);
-
+ft_status_t ft_iter_prefix_kv(const ft_kv_ref_t* entries, size_t n, const void* prefix,
+                              size_t prefix_len, ft_key_cb cb, void* arg);
