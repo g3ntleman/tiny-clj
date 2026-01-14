@@ -60,10 +60,7 @@ static char sccsid[] = "@(#)bt_utils.c	8.4 (Berkeley) 2/21/94";
  *	RET_SUCCESS, RET_ERROR.
  */
 int
-__bt_ret(t, e, key, data)
-	BTREE *t;
-	EPG *e;
-	DBT *key, *data;
+__bt_ret(BTREE *t, EPG *e, DBT *key, DBT *data)
 {
 	register BLEAF *bl;
 	register void *p;
@@ -137,10 +134,7 @@ __bt_ret(t, e, key, data)
  *	> 0 if k1 is > record
  */
 int
-__bt_cmp(t, k1, e)
-	BTREE *t;
-	const DBT *k1;
-	EPG *e;
+__bt_cmp(BTREE *t, const DBT *k1, EPG *e)
 {
 	BINTERNAL *bi;
 	BLEAF *bl;
@@ -200,10 +194,9 @@ __bt_cmp(t, k1, e)
  *	> 0 if a is > b
  */
 int
-__bt_defcmp(a, b)
-	const DBT *a, *b;
+__bt_defcmp(const DBT *a, const DBT *b)
 {
-	register size_t len;
+	size_t len;
 	register u_char *p1, *p2;
 
 	/*
@@ -230,8 +223,7 @@ __bt_defcmp(a, b)
  *	Number of bytes needed to distinguish b from a.
  */
 size_t
-__bt_defpfx(a, b)
-	const DBT *a, *b;
+__bt_defpfx(const DBT *a, const DBT *b)
 {
 	register u_char *p1, *p2;
 	register size_t cnt, len;

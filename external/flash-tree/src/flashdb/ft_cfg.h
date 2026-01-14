@@ -13,9 +13,6 @@
 /* Enable TSDB module. */
 #define FDB_USING_TSDB
 
-/* Enable KVDB module (crash-safe KV + GC/compaction). */
-#define FDB_USING_KVDB
-
 /* Use 64-bit timestamps (Flash-Tree uses uint64_t for ft_time_t). */
 #define FDB_USING_TIMESTAMP_64BIT
 
@@ -28,11 +25,6 @@
  * matches typical NOR byte programming used in host RAM backends.
  */
 #define FDB_WRITE_GRAN 8
-
-/* Allow reasonably long path-like keys from tiny-clj/fs_layer. */
-#ifndef FDB_KV_NAME_MAX
-#define FDB_KV_NAME_MAX 255
-#endif
 
 /* Disable FlashDB logging to keep tiny-clj output quiet and reduce deps. */
 #ifndef FDB_PRINT

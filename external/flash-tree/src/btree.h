@@ -39,7 +39,7 @@
 #include <mpool.h>
 
 #define	DEFMINKEYPAGE	(2)		/* Minimum keys per page */
-#define	MINCACHE	(5)		/* Minimum cached pages */
+#define	MINCACHE	(2)		/* Minimum cached pages (reduced for embedded) */
 #define	MINPSIZE	(512)		/* Minimum page size */
 
 /*

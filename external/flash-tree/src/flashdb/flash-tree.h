@@ -29,11 +29,6 @@ extern "C" {
 #endif
 
 /* FlashDB database API */
-fdb_err_t fdb_kvdb_init   (fdb_kvdb_t db, const char *name, const char *path, struct fdb_default_kv *default_kv,
-        void *user_data);
-void      fdb_kvdb_control(fdb_kvdb_t db, int cmd, void *arg);
-fdb_err_t fdb_kvdb_check(fdb_kvdb_t db);
-fdb_err_t fdb_kvdb_deinit(fdb_kvdb_t db);
 fdb_err_t fdb_tsdb_init   (fdb_tsdb_t db, const char *name, const char *path, fdb_get_time get_time, size_t max_len,
         void *user_data);
 void      fdb_tsdb_control(fdb_tsdb_t db, int cmd, void *arg);
@@ -42,19 +37,6 @@ fdb_err_t fdb_tsdb_deinit(fdb_tsdb_t db);
 /* blob API */
 fdb_blob_t fdb_blob_make     (fdb_blob_t blob, const void *value_buf, size_t buf_len);
 size_t     fdb_blob_read     (fdb_db_t db, fdb_blob_t blob);
-
-/* Key-Value API (binary keys; no NUL terminators). */
-fdb_err_t         fdb_kv_set_blob_ex  (fdb_kvdb_t db, const void *key, size_t key_len, fdb_blob_t blob);
-size_t            fdb_kv_get_blob_ex  (fdb_kvdb_t db, const void *key, size_t key_len, fdb_blob_t blob);
-fdb_err_t         fdb_kv_del_ex       (fdb_kvdb_t db, const void *key, size_t key_len);
-fdb_kv_t          fdb_kv_get_obj_ex   (fdb_kvdb_t db, const void *key, size_t key_len, fdb_kv_t kv);
-/* Trigger KVDB GC/compaction (Flash-Tree maps this to ft_gc_step). */
-fdb_err_t         fdb_kvdb_gc_ex      (fdb_kvdb_t db, size_t free_size);
-fdb_blob_t        fdb_kv_to_blob      (fdb_kv_t   kv, fdb_blob_t blob);
-fdb_err_t         fdb_kv_set_default  (fdb_kvdb_t db);
-void              fdb_kv_print        (fdb_kvdb_t db);
-fdb_kv_iterator_t fdb_kv_iterator_init(fdb_kvdb_t db, fdb_kv_iterator_t itr);
-bool              fdb_kv_iterate      (fdb_kvdb_t db, fdb_kv_iterator_t itr);
 
 /* Time series log API like a TSDB */
 fdb_err_t  fdb_tsl_append      (fdb_tsdb_t db, fdb_blob_t blob);

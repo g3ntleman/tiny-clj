@@ -1,534 +1,520 @@
-/*-
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+/*
+ * mpool.c - Copy-on-Write Memory Pool for Log-Structured B-Tree
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ * Flash-friendly implementation: all writes are append-only.
+ * No Read-Modify-Write, no in-place updates.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * Design:
+ * - Pages stored with headers in append-only log
+ * - In-memory page-map tracks logical page -> physical offset
+ * - Small RAM cache for active pages
+ * - CRC32 checksums for integrity
  */
 
-#if defined(LIBC_SCCS) && !defined(lint)
-static char sccsid[] = "@(#)mpool.c	8.2 (Berkeley) 2/21/94";
-#endif /* LIBC_SCCS and not lint */
-
-#include <sys/param.h>
-#include <sys/stat.h>
-
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
-#include <db.h>
-#define	__MPOOLINTERFACE_PRIVATE
 #include "mpool.h"
+#include "ft_utils.h"
+#include "ft_bsd_blockfile.h"
 
-static BKT *mpool_bkt __P((MPOOL *));
-static BKT *mpool_look __P((MPOOL *, pgno_t));
-static int  mpool_write __P((MPOOL *, BKT *));
-#ifdef DEBUG
-static void __mpoolerr __P((const char *fmt, ...));
-#endif
+#include <string.h>
+#include <stdlib.h>
+#include <errno.h>
+
+/* CRC32 from ft_crc32.c */
+extern uint32_t ft_crc32_ieee(const void* data, size_t len, uint32_t seed);
+
+/**
+ * Calculate the data region start offset.
+ * 
+ * This must match ft_bsd_blockfile's header region calculation
+ * to avoid collision between B-Tree metadata and mpool pages.
+ */
+static uint32_t ft_calc_data_base(ft_blockdev_t* bdev) {
+    uint32_t eg = bdev->geom.erase_granularity ? bdev->geom.erase_granularity : 1;
+    /* Header region: at least 64 bytes, aligned to erase granularity */
+    return ft_align_up_u32(ft_max_u32(64u, eg), eg);
+}
+
+/* ============== Page-Map Operations ============== */
+
+/**
+ * Find page-map entry for a given logical page number.
+ * @return Pointer to entry, or NULL if not found
+ */
+static ft_page_map_entry_t* ft_pagemap_find(MPOOL* mp, pgno_t pgno) {
+    for (size_t i = 0; i < mp->page_map_count; i++) {
+        if (mp->page_map[i].pgno == pgno) {
+            return &mp->page_map[i];
+        }
+    }
+    return NULL;
+}
+
+/**
+ * Insert or update page-map entry.
+ * @return 0 on success, -1 if page-map is full
+ */
+static int ft_pagemap_insert(MPOOL* mp, pgno_t pgno, uint32_t log_offset) {
+    /* Update existing entry */
+    ft_page_map_entry_t* e = ft_pagemap_find(mp, pgno);
+    if (e) {
+        e->log_offset = log_offset;
+        return 0;
+    }
+    
+    /* Insert new entry */
+    if (mp->page_map_count >= FT_MPOOL_MAX_PAGES) {
+        return -1;  /* Page-map full */
+    }
+    
+    mp->page_map[mp->page_map_count].pgno = pgno;
+    mp->page_map[mp->page_map_count].log_offset = log_offset;
+    mp->page_map_count++;
+    return 0;
+}
+
+/* ============== Cache Operations ============== */
+
+/**
+ * Find cache slot containing a specific page.
+ * @return Pointer to slot, or NULL if page not in cache
+ */
+static ft_cache_slot_t* ft_cache_find(MPOOL* mp, pgno_t pgno) {
+    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+        if (mp->cache[i].pgno == pgno) {
+            return &mp->cache[i];
+        }
+    }
+    return NULL;
+}
+
+/**
+ * Find a free cache slot for loading a page.
+ * Evicts clean, unpinned pages if necessary.
+ * @return Pointer to available slot, or NULL if all slots are busy
+ */
+static ft_cache_slot_t* ft_cache_find_free(MPOOL* mp) {
+    /* Find empty slot */
+    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+        if (mp->cache[i].pgno == PGNO_INVALID) {
+            return &mp->cache[i];
+        }
+    }
+    
+    /* Find unpinned, non-dirty slot (evict) */
+    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+        if (!mp->cache[i].pinned && !mp->cache[i].dirty) {
+            mp->cache[i].pgno = PGNO_INVALID;
+            return &mp->cache[i];
+        }
+    }
+    
+    return NULL;  /* All slots busy */
+}
+
+/**
+ * Flush a dirty cache slot to the log.
+ * @return 0 on success, -1 on error
+ */
+static int ft_cache_flush_slot(MPOOL* mp, ft_cache_slot_t* slot) {
+    if (!slot->dirty) return 0;
+    
+    /* Prepare page header */
+    ft_page_hdr_t hdr = {0};
+    hdr.magic = FT_PAGE_MAGIC;
+    hdr.pgno = slot->pgno;
+    hdr.flags = 0;
+    
+    /* Calculate CRC over header (with crc=0) + data */
+    hdr.crc32 = 0;
+    uint32_t crc = ft_crc32_ieee(&hdr, sizeof(hdr), 0);
+    crc = ft_crc32_ieee(slot->data, mp->pagesize, crc);
+    hdr.crc32 = crc;
+    
+    /* Call pgout filter if set */
+    if (mp->pgout) {
+        mp->pgout(mp->pgcookie, slot->pgno, slot->data);
+    }
+    
+    /* Check space */
+    uint32_t total = sizeof(hdr) + mp->pagesize;
+    if ((uint64_t)mp->write_off + total > mp->bdev->geom.total_size_bytes) {
+        return -1;  /* Log full */
+    }
+    
+    /* Write header */
+    ft_status_t st = ft_blockdev_prog(mp->bdev, mp->write_off, &hdr, sizeof(hdr));
+    if (st != FT_OK) return -1;
+    
+    /* Write page data */
+    st = ft_blockdev_prog(mp->bdev, mp->write_off + sizeof(hdr), slot->data, mp->pagesize);
+    if (st != FT_OK) return -1;
+    
+    /* Update page-map with new location */
+    uint32_t new_offset = mp->write_off;
+    mp->write_off += total;
+    
+    ft_pagemap_insert(mp, slot->pgno, new_offset);
+    slot->log_offset = new_offset;
+    slot->dirty = 0;
+    
+    return 0;
+}
+
+/* ============== Recovery ============== */
+
+/**
+ * Recover page-map by scanning the log from the beginning.
+ * Rebuilds the page-map by reading all page headers in the log.
+ * Later entries for the same page number override earlier ones.
+ * @return 0 on success, non-zero on error
+ */
+static int ft_mpool_recover(MPOOL* mp) {
+    mp->page_map_count = 0;
+    mp->npages = 0;
+    
+    /* Start scanning from data_base (after header region) */
+    uint32_t offset = mp->data_base;
+    ft_page_hdr_t hdr;
+    
+    while (offset + sizeof(hdr) + mp->pagesize <= mp->bdev->geom.total_size_bytes) {
+        ft_status_t st = ft_blockdev_read(mp->bdev, offset, &hdr, sizeof(hdr));
+        if (st != FT_OK) break;
+        
+        /* Check for end of log (erased = 0xFF) */
+        if (ft_is_all_erased(&hdr, sizeof(hdr))) break;
+        
+        if (hdr.magic != FT_PAGE_MAGIC) break;
+        
+        /* Valid page header - update page-map (later entries override earlier) */
+        ft_pagemap_insert(mp, hdr.pgno, offset);
+        
+        /* Track highest page number seen (+1 for next allocation) */
+        if (hdr.pgno >= mp->npages) {
+            mp->npages = hdr.pgno + 1;
+        }
+        
+        offset += sizeof(hdr) + mp->pagesize;
+    }
+    
+    mp->write_off = offset;
+    return 0;
+}
+
+/* ============== Public API ============== */
+
+MPOOL* mpool_open(void* key, int fd, pgno_t pagesize, pgno_t maxcache) {
+    (void)key;
+    (void)fd;
+    (void)maxcache;
+    
+    ft_blockdev_t* bdev = ft_bsd_blockfile_get_bdev();
+    if (!bdev) return NULL;
+    if (pagesize == 0) pagesize = FT_MPOOL_PAGE_SIZE;
+    if (pagesize > FT_MPOOL_PAGE_SIZE) return NULL;  /* Page too large for cache */
+    
+    MPOOL* mp = (MPOOL*)calloc(1, sizeof(MPOOL));
+    if (!mp) return NULL;
+    
+    mp->bdev = bdev;
+    mp->pagesize = pagesize;
+    
+    /* Calculate data region start (after ft_bsd_blockfile header region) */
+    mp->data_base = ft_calc_data_base(bdev);
+    mp->write_off = mp->data_base;
+    
+    /* GC: Split remaining space into two halves for ping-pong */
+    uint32_t total_data = bdev->geom.total_size_bytes - mp->data_base;
+    mp->gc_half_size = total_data / 2;
+    mp->gc_active_half = 0;
+    mp->gc_in_progress = 0;
+    mp->gc_next_page_idx = 0;
+    
+    mp->npages = 0;
+    mp->page_map_count = 0;
+    
+    /* Clear cache - mark all slots as empty */
+    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+        mp->cache[i].pgno = PGNO_INVALID;
+        mp->cache[i].log_offset = 0;
+        mp->cache[i].dirty = 0;
+        mp->cache[i].pinned = 0;
+    }
+    
+    /* Recover page-map from existing log */
+    if (ft_mpool_recover(mp) != 0) {
+        free(mp);
+        return NULL;
+    }
+    
+    return mp;
+}
+
+void mpool_filter(MPOOL* mp,
+                  void (*pgin)(void*, pgno_t, void*),
+                  void (*pgout)(void*, pgno_t, void*),
+                  void* pgcookie) {
+    if (!mp) return;
+    mp->pgin = pgin;
+    mp->pgout = pgout;
+    mp->pgcookie = pgcookie;
+}
+
+void* mpool_new(MPOOL* mp, pgno_t* pgnoaddr) {
+    if (!mp || !pgnoaddr) return NULL;
+    
+    /* Allocate new page number (first page is 0) */
+    pgno_t pgno = mp->npages++;  /* post-increment: first call returns 0 */
+    
+    /* Find cache slot */
+    ft_cache_slot_t* slot = ft_cache_find_free(mp);
+    if (!slot) {
+        /* Need to flush a dirty page first */
+        for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+            if (mp->cache[i].dirty && !mp->cache[i].pinned) {
+                ft_cache_flush_slot(mp, &mp->cache[i]);
+                mp->cache[i].pgno = PGNO_INVALID;
+                slot = &mp->cache[i];
+                break;
+            }
+        }
+    }
+    if (!slot) return NULL;
+    
+    /* Initialize new page */
+    slot->pgno = pgno;
+    slot->log_offset = 0xFFFFFFFF;  /* Not yet in log */
+    slot->dirty = 1;                 /* Will need to be written */
+    slot->pinned = 1;
+    memset(slot->data, 0, mp->pagesize);
+    
+    *pgnoaddr = pgno;
+    return slot->data;
+}
+
+void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags) {
+    (void)flags;
+    if (!mp) return NULL;
+    
+    /* Check cache first */
+    ft_cache_slot_t* slot = ft_cache_find(mp, pgno);
+    if (slot) {
+        slot->pinned = 1;
+        return slot->data;
+    }
+    
+    /* Find in page-map */
+    ft_page_map_entry_t* e = ft_pagemap_find(mp, pgno);
+    if (!e) {
+        errno = EINVAL;  /* Page doesn't exist - B-Tree checks this! */
+        return NULL;
+    }
+    
+    /* Allocate cache slot */
+    slot = ft_cache_find_free(mp);
+    if (!slot) {
+        /* Flush a dirty page to make room */
+        for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+            if (mp->cache[i].dirty && !mp->cache[i].pinned) {
+                ft_cache_flush_slot(mp, &mp->cache[i]);
+                mp->cache[i].pgno = PGNO_INVALID;
+                slot = &mp->cache[i];
+                break;
+            }
+        }
+    }
+    if (!slot) return NULL;
+    
+    /* Read page from log */
+    ft_page_hdr_t hdr;
+    ft_status_t st = ft_blockdev_read(mp->bdev, e->log_offset, &hdr, sizeof(hdr));
+    if (st != FT_OK) return NULL;
+    
+    st = ft_blockdev_read(mp->bdev, e->log_offset + sizeof(hdr), slot->data, mp->pagesize);
+    if (st != FT_OK) return NULL;
+    
+    /* Verify CRC */
+    uint32_t saved_crc = hdr.crc32;
+    hdr.crc32 = 0;
+    uint32_t crc = ft_crc32_ieee(&hdr, sizeof(hdr), 0);
+    crc = ft_crc32_ieee(slot->data, mp->pagesize, crc);
+    if (crc != saved_crc) return NULL;  /* Corrupt */
+    
+    /* Call pgin filter if set */
+    if (mp->pgin) {
+        mp->pgin(mp->pgcookie, pgno, slot->data);
+    }
+    
+    slot->pgno = pgno;
+    slot->log_offset = e->log_offset;
+    slot->dirty = 0;
+    slot->pinned = 1;
+    
+    return slot->data;
+}
+
+int mpool_put(MPOOL* mp, void* page, unsigned int flags) {
+    if (!mp || !page) return -1;
+    
+    /* Find cache slot containing this page */
+    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+        if (mp->cache[i].data == page || 
+            (page >= (void*)mp->cache[i].data && 
+             page < (void*)(mp->cache[i].data + mp->pagesize))) {
+            
+            if (flags & MPOOL_DIRTY) {
+                mp->cache[i].dirty = 1;
+            }
+            mp->cache[i].pinned = 0;
+            return 0;
+        }
+    }
+    
+    return -1;  /* Page not found in cache */
+}
+
+int mpool_sync(MPOOL* mp) {
+    if (!mp) return -1;
+    
+    /* Flush all dirty pages */
+    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+        if (mp->cache[i].dirty) {
+            if (ft_cache_flush_slot(mp, &mp->cache[i]) != 0) {
+                return -1;
+            }
+        }
+    }
+    
+    return 0;
+}
+
+int mpool_close(MPOOL* mp) {
+    if (!mp) return -1;
+    
+    /* Sync before close */
+    mpool_sync(mp);
+    
+    free(mp);
+    return 0;
+}
+
+/* ============== Garbage Collection ============== */
 
 /*
- * MPOOL_OPEN -- initialize a memory pool.
- *
- * Parameters:
- *	key:		Shared buffer key.
- *	fd:		File descriptor.
- *	pagesize:	File page size.
- *	maxcache:	Max number of cached pages.
- *
- * Returns:
- *	MPOOL pointer, NULL on error.
+ * Get the start offset for a given half (0 or 1).
  */
-MPOOL *
-mpool_open(key, fd, pagesize, maxcache)
-	DBT *key;
-	int fd;
-	pgno_t pagesize, maxcache;
-{
-	struct stat sb;
-	MPOOL *mp;
-	int entry;
-
-	if (fstat(fd, &sb))
-		return (NULL);
-	/* XXX
-	 * We should only set st_size to 0 for pipes -- 4.4BSD has the fix so
-	 * that stat(2) returns true for ISSOCK on pipes.  Until then, this is
-	 * fairly close.
-	 */
-	if (!S_ISREG(sb.st_mode)) {
-		errno = ESPIPE;
-		return (NULL);
-	}
-
-	if ((mp = (MPOOL *)malloc(sizeof(MPOOL))) == NULL)
-		return (NULL);
-	mp->free.cnext = mp->free.cprev = (BKT *)&mp->free;
-	mp->lru.cnext = mp->lru.cprev = (BKT *)&mp->lru;
-	for (entry = 0; entry < HASHSIZE; ++entry)
-		mp->hashtable[entry].hnext = mp->hashtable[entry].hprev = 
-		    mp->hashtable[entry].cnext = mp->hashtable[entry].cprev =
-		    (BKT *)&mp->hashtable[entry];
-	mp->curcache = 0;
-	mp->maxcache = maxcache;
-	mp->pagesize = pagesize;
-	mp->npages = sb.st_size / pagesize;
-	mp->fd = fd;
-	mp->pgcookie = NULL;
-	mp->pgin = mp->pgout = NULL;
-
-#ifdef STATISTICS
-	mp->cachehit = mp->cachemiss = mp->pagealloc = mp->pageflush = 
-	    mp->pageget = mp->pagenew = mp->pageput = mp->pageread = 
-	    mp->pagewrite = 0;
-#endif
-	return (mp);
+static uint32_t gc_half_start(MPOOL* mp, int half) {
+    return mp->data_base + (half * mp->gc_half_size);
 }
 
 /*
- * MPOOL_FILTER -- initialize input/output filters.
- *
- * Parameters:
- *	pgin:		Page in conversion routine.
- *	pgout:		Page out conversion routine.
- *	pgcookie:	Cookie for page in/out routines.
+ * Check if GC is needed (active half is more than 75% full).
  */
-void
-mpool_filter(mp, pgin, pgout, pgcookie)
-	MPOOL *mp;
-	void (*pgin) __P((void *, pgno_t, void *));
-	void (*pgout) __P((void *, pgno_t, void *));
-	void *pgcookie;
-{
-	mp->pgin = pgin;
-	mp->pgout = pgout;
-	mp->pgcookie = pgcookie;
-}
-	
-/*
- * MPOOL_NEW -- get a new page
- *
- * Parameters:
- *	mp:		mpool cookie
- *	pgnoadddr:	place to store new page number
- * Returns:
- *	RET_ERROR, RET_SUCCESS
- */
-void *
-mpool_new(mp, pgnoaddr)
-	MPOOL *mp;
-	pgno_t *pgnoaddr;
-{
-	BKT *b;
-	BKTHDR *hp;
-
-#ifdef STATISTICS
-	++mp->pagenew;
-#endif
-	/*
-	 * Get a BKT from the cache.  Assign a new page number, attach it to
-	 * the hash and lru chains and return.
-	 */
-	if ((b = mpool_bkt(mp)) == NULL)
-		return (NULL);
-	*pgnoaddr = b->pgno = mp->npages++;
-	b->flags = MPOOL_PINNED;
-	inshash(b, b->pgno);
-	inschain(b, &mp->lru);
-	return (b->page);
+static int gc_needed(MPOOL* mp) {
+    uint32_t half_start = gc_half_start(mp, mp->gc_active_half);
+    uint32_t used = mp->write_off - half_start;
+    return used > (mp->gc_half_size * 3 / 4);
 }
 
 /*
- * MPOOL_GET -- get a page from the pool
- *
- * Parameters:
- *	mp:	mpool cookie
- *	pgno:	page number
- *	flags:	not used
- *
- * Returns:
- *	RET_ERROR, RET_SUCCESS
+ * Copy a page from old location to new location in the other half.
  */
-void *
-mpool_get(mp, pgno, flags)
-	MPOOL *mp;
-	pgno_t pgno;
-	u_int flags;		/* XXX not used? */
-{
-	BKT *b;
-	BKTHDR *hp;
-	off_t off;
-	int nr;
-
-	/*
-	 * If asking for a specific page that is already in the cache, find
-	 * it and return it.
-	 */
-	if (b = mpool_look(mp, pgno)) {
-#ifdef STATISTICS
-		++mp->pageget;
-#endif
-#ifdef DEBUG
-		if (b->flags & MPOOL_PINNED)
-			__mpoolerr("mpool_get: page %d already pinned",
-			    b->pgno);
-#endif
-		rmchain(b);
-		inschain(b, &mp->lru);
-		b->flags |= MPOOL_PINNED;
-		return (b->page);
-	}
-
-	/* Not allowed to retrieve a non-existent page. */
-	if (pgno >= mp->npages) {
-		errno = EINVAL;
-		return (NULL);
-	}
-
-	/* Get a page from the cache. */
-	if ((b = mpool_bkt(mp)) == NULL)
-		return (NULL);
-	b->pgno = pgno;
-	b->flags = MPOOL_PINNED;
-
-#ifdef STATISTICS
-	++mp->pageread;
-#endif
-	/* Read in the contents. */
-	off = mp->pagesize * pgno;
-	if (lseek(mp->fd, off, SEEK_SET) != off)
-		return (NULL);
-	if ((nr = read(mp->fd, b->page, mp->pagesize)) != mp->pagesize) {
-		if (nr >= 0)
-			errno = EFTYPE;
-		return (NULL);
-	}
-	if (mp->pgin)
-		(mp->pgin)(mp->pgcookie, b->pgno, b->page);
-
-	inshash(b, b->pgno);
-	inschain(b, &mp->lru);
-#ifdef STATISTICS
-	++mp->pageget;
-#endif
-	return (b->page);
+static int gc_copy_page(MPOOL* mp, size_t page_idx) {
+    if (page_idx >= mp->page_map_count) return 0;
+    
+    ft_page_map_entry_t* e = &mp->page_map[page_idx];
+    if (e->pgno == PGNO_INVALID) return 0;  /* Empty slot */
+    
+    /* Read page from old location */
+    ft_page_hdr_t hdr;
+    ft_status_t st = ft_blockdev_read(mp->bdev, e->log_offset, &hdr, sizeof(hdr));
+    if (st != FT_OK) return -1;
+    
+    uint8_t page_data[FT_MPOOL_PAGE_SIZE];
+    st = ft_blockdev_read(mp->bdev, e->log_offset + sizeof(hdr), page_data, mp->pagesize);
+    if (st != FT_OK) return -1;
+    
+    /* Verify CRC */
+    uint32_t saved_crc = hdr.crc32;
+    hdr.crc32 = 0;
+    uint32_t crc = ft_crc32_ieee(&hdr, sizeof(hdr), 0);
+    crc = ft_crc32_ieee(page_data, mp->pagesize, crc);
+    if (crc != saved_crc) return -1;  /* Corrupt, skip */
+    
+    /* Write to new location */
+    hdr.crc32 = saved_crc;
+    uint32_t new_off = mp->write_off;
+    uint32_t total = sizeof(hdr) + mp->pagesize;
+    
+    st = ft_blockdev_prog(mp->bdev, new_off, &hdr, sizeof(hdr));
+    if (st != FT_OK) return -1;
+    
+    st = ft_blockdev_prog(mp->bdev, new_off + sizeof(hdr), page_data, mp->pagesize);
+    if (st != FT_OK) return -1;
+    
+    /* Update page-map entry */
+    e->log_offset = new_off;
+    mp->write_off += total;
+    
+    return 0;
 }
 
-/*
- * MPOOL_PUT -- return a page to the pool
- *
- * Parameters:
- *	mp:	mpool cookie
- *	page:	page pointer
- *	pgno:	page number
- *
- * Returns:
- *	RET_ERROR, RET_SUCCESS
- */
-int
-mpool_put(mp, page, flags)
-	MPOOL *mp;
-	void *page;
-	u_int flags;
-{
-	BKT *baddr;
-#ifdef DEBUG
-	BKT *b;
-#endif
-
-#ifdef STATISTICS
-	++mp->pageput;
-#endif
-	baddr = (BKT *)((char *)page - sizeof(BKT));
-#ifdef DEBUG
-	if (!(baddr->flags & MPOOL_PINNED))
-		__mpoolerr("mpool_put: page %d not pinned", b->pgno);
-	for (b = mp->lru.cnext; b != (BKT *)&mp->lru; b = b->cnext) {
-		if (b == (BKT *)&mp->lru)
-			__mpoolerr("mpool_put: %0x: bad address", baddr);
-		if (b == baddr)
-			break;
-	}
-#endif
-	baddr->flags &= ~MPOOL_PINNED;
-	baddr->flags |= flags & MPOOL_DIRTY;
-	return (RET_SUCCESS);
+int mpool_gc_step(MPOOL* mp, size_t budget_bytes) {
+    if (!mp) return -1;
+    
+    /* Start GC if not in progress and needed */
+    if (!mp->gc_in_progress) {
+        if (!gc_needed(mp)) {
+            return 0;  /* GC not needed */
+        }
+        
+        /* Sync all dirty pages first */
+        if (mpool_sync(mp) != 0) return -1;
+        
+        /* Switch to other half */
+        int new_half = 1 - mp->gc_active_half;
+        uint32_t new_start = gc_half_start(mp, new_half);
+        
+        /* Erase new half (align to erase granularity) */
+        uint32_t eg = mp->bdev->geom.erase_granularity;
+        uint32_t erase_start = (new_start / eg) * eg;
+        uint32_t erase_len = ((mp->gc_half_size + eg - 1) / eg) * eg;
+        
+        ft_status_t st = ft_blockdev_erase(mp->bdev, erase_start, erase_len);
+        if (st != FT_OK) return -1;
+        
+        /* Start writing to new half */
+        mp->write_off = new_start;
+        mp->gc_active_half = new_half;
+        mp->gc_in_progress = 1;
+        mp->gc_next_page_idx = 0;
+    }
+    
+    /* Copy pages incrementally based on budget */
+    size_t bytes_copied = 0;
+    size_t page_total = sizeof(ft_page_hdr_t) + mp->pagesize;
+    
+    while (mp->gc_next_page_idx < mp->page_map_count) {
+        if (budget_bytes > 0 && bytes_copied >= budget_bytes) {
+            return 1;  /* More work to do */
+        }
+        
+        if (gc_copy_page(mp, mp->gc_next_page_idx) == 0) {
+            bytes_copied += page_total;
+        }
+        mp->gc_next_page_idx++;
+    }
+    
+    /* GC complete */
+    mp->gc_in_progress = 0;
+    
+    /* Erase old half */
+    int old_half = 1 - mp->gc_active_half;
+    uint32_t old_start = gc_half_start(mp, old_half);
+    uint32_t eg = mp->bdev->geom.erase_granularity;
+    uint32_t erase_start = (old_start / eg) * eg;
+    uint32_t erase_len = ((mp->gc_half_size + eg - 1) / eg) * eg;
+    
+    ft_blockdev_erase(mp->bdev, erase_start, erase_len);
+    
+    return 0;  /* GC complete */
 }
-
-/*
- * MPOOL_CLOSE -- close the buffer pool
- *
- * Parameters:
- *	mp:	mpool cookie
- *
- * Returns:
- *	RET_ERROR, RET_SUCCESS
- */
-int
-mpool_close(mp)
-	MPOOL *mp;
-{
-	BKT *b, *next;
-
-	/* Free up any space allocated to the lru pages. */
-	for (b = mp->lru.cprev; b != (BKT *)&mp->lru; b = next) {
-		next = b->cprev;
-		free(b);
-	}
-	free(mp);
-	return (RET_SUCCESS);
-}
-
-/*
- * MPOOL_SYNC -- sync the file to disk.
- *
- * Parameters:
- *	mp:	mpool cookie
- *
- * Returns:
- *	RET_ERROR, RET_SUCCESS
- */
-int
-mpool_sync(mp)
-	MPOOL *mp;
-{
-	BKT *b;
-
-	for (b = mp->lru.cprev; b != (BKT *)&mp->lru; b = b->cprev)
-		if (b->flags & MPOOL_DIRTY && mpool_write(mp, b) == RET_ERROR)
-			return (RET_ERROR);
-	return (fsync(mp->fd) ? RET_ERROR : RET_SUCCESS);
-}
-
-/*
- * MPOOL_BKT -- get/create a BKT from the cache
- *
- * Parameters:
- *	mp:	mpool cookie
- *
- * Returns:
- *	NULL on failure and a pointer to the BKT on success	
- */
-static BKT *
-mpool_bkt(mp)
-	MPOOL *mp;
-{
-	BKT *b;
-
-	if (mp->curcache < mp->maxcache)
-		goto new;
-
-	/*
-	 * If the cache is maxxed out, search the lru list for a buffer we
-	 * can flush.  If we find one, write it if necessary and take it off
-	 * any lists.  If we don't find anything we grow the cache anyway.
-	 * The cache never shrinks.
-	 */
-	for (b = mp->lru.cprev; b != (BKT *)&mp->lru; b = b->cprev)
-		if (!(b->flags & MPOOL_PINNED)) {
-			if (b->flags & MPOOL_DIRTY &&
-			    mpool_write(mp, b) == RET_ERROR)
-				return (NULL);
-			rmhash(b);
-			rmchain(b);
-#ifdef STATISTICS
-			++mp->pageflush;
-#endif
-#ifdef DEBUG
-			{
-				void *spage;
-				spage = b->page;
-				memset(b, 0xff, sizeof(BKT) + mp->pagesize);
-				b->page = spage;
-			}
-#endif
-			return (b);
-		}
-
-new:	if ((b = (BKT *)malloc(sizeof(BKT) + mp->pagesize)) == NULL)
-		return (NULL);
-#ifdef STATISTICS
-	++mp->pagealloc;
-#endif
-#ifdef DEBUG
-	memset(b, 0xff, sizeof(BKT) + mp->pagesize);
-#endif
-	b->page = (char *)b + sizeof(BKT);
-	++mp->curcache;
-	return (b);
-}
-
-/*
- * MPOOL_WRITE -- sync a page to disk
- *
- * Parameters:
- *	mp:	mpool cookie
- *
- * Returns:
- *	RET_ERROR, RET_SUCCESS
- */
-static int
-mpool_write(mp, b)
-	MPOOL *mp;
-	BKT *b;
-{
-	off_t off;
-
-	if (mp->pgout)
-		(mp->pgout)(mp->pgcookie, b->pgno, b->page);
-
-#ifdef STATISTICS
-	++mp->pagewrite;
-#endif
-	off = mp->pagesize * b->pgno;
-	if (lseek(mp->fd, off, SEEK_SET) != off)
-		return (RET_ERROR);
-	if (write(mp->fd, b->page, mp->pagesize) != mp->pagesize)
-		return (RET_ERROR);
-	b->flags &= ~MPOOL_DIRTY;
-	return (RET_SUCCESS);
-}
-
-/*
- * MPOOL_LOOK -- lookup a page
- *
- * Parameters:
- *	mp:	mpool cookie
- *	pgno:	page number
- *
- * Returns:
- *	NULL on failure and a pointer to the BKT on success
- */
-static BKT *
-mpool_look(mp, pgno)
-	MPOOL *mp;
-	pgno_t pgno;
-{
-	register BKT *b;
-	register BKTHDR *tb;
-
-	/* XXX
-	 * If find the buffer, put it first on the hash chain so can
-	 * find it again quickly.
-	 */
-	tb = &mp->hashtable[HASHKEY(pgno)];
-	for (b = tb->hnext; b != (BKT *)tb; b = b->hnext)
-		if (b->pgno == pgno) {
-#ifdef STATISTICS
-			++mp->cachehit;
-#endif
-			return (b);
-		}
-#ifdef STATISTICS
-	++mp->cachemiss;
-#endif
-	return (NULL);
-}
-
-#ifdef STATISTICS
-/*
- * MPOOL_STAT -- cache statistics
- *
- * Parameters:
- *	mp:	mpool cookie
- */
-void
-mpool_stat(mp)
-	MPOOL *mp;
-{
-	BKT *b;
-	int cnt;
-	char *sep;
-
-	(void)fprintf(stderr, "%lu pages in the file\n", mp->npages);
-	(void)fprintf(stderr,
-	    "page size %lu, cacheing %lu pages of %lu page max cache\n",
-	    mp->pagesize, mp->curcache, mp->maxcache);
-	(void)fprintf(stderr, "%lu page puts, %lu page gets, %lu page new\n",
-	    mp->pageput, mp->pageget, mp->pagenew);
-	(void)fprintf(stderr, "%lu page allocs, %lu page flushes\n",
-	    mp->pagealloc, mp->pageflush);
-	if (mp->cachehit + mp->cachemiss)
-		(void)fprintf(stderr,
-		    "%.0f%% cache hit rate (%lu hits, %lu misses)\n", 
-		    ((double)mp->cachehit / (mp->cachehit + mp->cachemiss))
-		    * 100, mp->cachehit, mp->cachemiss);
-	(void)fprintf(stderr, "%lu page reads, %lu page writes\n",
-	    mp->pageread, mp->pagewrite);
-
-	sep = "";
-	cnt = 0;
-	for (b = mp->lru.cnext; b != (BKT *)&mp->lru; b = b->cnext) {
-		(void)fprintf(stderr, "%s%d", sep, b->pgno);
-		if (b->flags & MPOOL_DIRTY)
-			(void)fprintf(stderr, "d");
-		if (b->flags & MPOOL_PINNED)
-			(void)fprintf(stderr, "P");
-		if (++cnt == 10) {
-			sep = "\n";
-			cnt = 0;
-		} else
-			sep = ", ";
-			
-	}
-	(void)fprintf(stderr, "\n");
-}
-#endif
-
-#ifdef DEBUG
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
-static void
-#if __STDC__
-__mpoolerr(const char *fmt, ...)
-#else
-__mpoolerr(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
-{
-	va_list ap;
-#if __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	(void)vfprintf(stderr, fmt, ap);
-	va_end(ap);
-	(void)fprintf(stderr, "\n");
-	abort();
-	/* NOTREACHED */
-}
-#endif
