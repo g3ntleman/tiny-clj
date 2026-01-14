@@ -5,7 +5,7 @@ add_library(flash-tree STATIC
     src/flash_tree.c
     src/ft_blockdev.c
     src/ft_crc32.c
-    src/ft_tsdb_flashdb.c
+    src/ft_tsdb.c
     src/flashdb/ft_port.c
     src/flashdb/ft_tsdb.c
     src/flashdb/ft_utils.c
@@ -14,23 +14,23 @@ add_library(flash-tree STATIC
 # 4.4BSD btree/mpool (reference build target)
 # Not linked into flash-tree by default; built on demand.
 add_library(bsd-btree STATIC
-    src/bt_close.c
-    src/bt_conv.c
-    src/bt_debug.c
-    src/bt_delete.c
-    src/bt_get.c
-    src/bt_open.c
-    src/bt_overflow.c
-    src/bt_page.c
-    src/bt_put.c
-    src/bt_search.c
-    src/bt_seq.c
-    src/bt_split.c
-    src/bt_stack.c
-    src/bt_utils.c
-    src/db_panic.c
+    src/ft_bt_close.c
+    src/ft_bt_conv.c
+    src/ft_bt_debug.c
+    src/ft_bt_delete.c
+    src/ft_bt_get.c
+    src/ft_bt_open.c
+    src/ft_bt_overflow.c
+    src/ft_bt_page.c
+    src/ft_bt_put.c
+    src/ft_bt_search.c
+    src/ft_bt_seq.c
+    src/ft_bt_split.c
+    src/ft_bt_stack.c
+    src/ft_bt_utils.c
+    src/ft_bsd_db_panic.c
     src/ft_bsd_blockfile.c
-    src/mpool.c
+    src/ft_bsd_mpool.c
 )
 
 target_include_directories(bsd-btree PRIVATE

@@ -39,8 +39,8 @@ static char sccsid[] = "@(#)bt_page.c	8.2 (Berkeley) 2/21/94";
 
 #include <stdio.h>
 
-#include <db.h>
-#include "btree.h"
+#include "ft_bsd_db.h"
+#include "ft_bsd_btree.h"
 
 /*
  * __BT_FREE -- Put a page on the freelist.

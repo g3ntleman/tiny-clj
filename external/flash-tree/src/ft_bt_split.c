@@ -45,8 +45,8 @@ static char sccsid[] = "@(#)bt_split.c	8.4 (Berkeley) 1/9/95";
 #include <stdlib.h>
 #include <string.h>
 
-#include <db.h>
-#include "btree.h"
+#include "ft_bsd_db.h"
+#include "ft_bsd_btree.h"
 
 static int	 bt_broot __P((BTREE *, PAGE *, PAGE *, PAGE *));
 static PAGE	*bt_page

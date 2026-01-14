@@ -58,8 +58,8 @@ static char sccsid[] = "@(#)bt_open.c	8.5 (Berkeley) 2/21/94";
 #include <string.h>
 #include <unistd.h>
 
-#include <db.h>
-#include "btree.h"
+#include "ft_bsd_db.h"
+#include "ft_bsd_btree.h"
 #include "ft_bsd_blockfile.h"
 
 static int byteorder __P((void));

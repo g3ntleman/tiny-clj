@@ -1,6 +1,6 @@
 #include <stdlib.h>
 
-#include "db.h"
+#include "ft_bsd_db.h"
 
 void __dbpanic(DB *dbp) {
     (void)dbp;

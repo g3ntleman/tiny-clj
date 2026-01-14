@@ -45,8 +45,8 @@ static char sccsid[] = "@(#)bt_seq.c	8.2 (Berkeley) 9/7/93";
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <db.h>
-#include "btree.h"
+#include "ft_bsd_db.h"
+#include "ft_bsd_btree.h"
 
 static int	 bt_seqadv __P((BTREE *, EPG *, int));
 static int	 bt_seqset __P((BTREE *, EPG *, DBT *, int));
