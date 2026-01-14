@@ -35,7 +35,8 @@ static inline uint32_t ft_min_u32(uint32_t a, uint32_t b) {
  * @return Aligned value, or 0 if align is 0
  */
 static inline uint32_t ft_align_up_u32(uint32_t x, uint32_t align) {
-    if (align == 0) return 0;
+    if (align == 0)
+        return 0;
     uint32_t r = x % align;
     return r ? (x + (align - r)) : x;
 }
@@ -67,15 +68,18 @@ static inline int ft_is_len_aligned(size_t len, uint32_t gran) {
  * Check if key has the given prefix (byte-wise comparison).
  * @return 1 if key starts with prefix, 0 otherwise
  */
-static inline int ft_has_prefix(const void* key, size_t key_len,
-                                  const void* prefix, size_t prefix_len) {
-    if (prefix_len == 0) return 1;
-    if (key_len < prefix_len) return 0;
+static inline int ft_has_prefix(const void* key, size_t key_len, const void* prefix,
+                                size_t prefix_len) {
+    if (prefix_len == 0)
+        return 1;
+    if (key_len < prefix_len)
+        return 0;
     // Use compiler builtin if available, otherwise falls back to loop
     const unsigned char* k = (const unsigned char*)key;
     const unsigned char* p = (const unsigned char*)prefix;
     for (size_t i = 0; i < prefix_len; i++) {
-        if (k[i] != p[i]) return 0;
+        if (k[i] != p[i])
+            return 0;
     }
     return 1;
 }
@@ -89,7 +93,8 @@ static inline int ft_has_prefix(const void* key, size_t key_len,
 static inline int ft_is_all_erased(const void* buf, size_t len) {
     const uint8_t* p = (const uint8_t*)buf;
     for (size_t i = 0; i < len; i++) {
-        if (p[i] != 0xFF) return 0;
+        if (p[i] != 0xFF)
+            return 0;
     }
     return 1;
 }

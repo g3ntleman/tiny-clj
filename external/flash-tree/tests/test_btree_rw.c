@@ -14,22 +14,26 @@ typedef struct {
 
 static ft_status_t ram_read(void* ctx, uint32_t addr, void* out, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     memcpy(out, r->buf + addr, len);
     return FT_OK;
 }
 
 static ft_status_t ram_prog(void* ctx, uint32_t addr, const void* data, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     const uint8_t* in = (const uint8_t*)data;
-    for (size_t i = 0; i < len; i++) r->buf[addr + i] = (uint8_t)(r->buf[addr + i] & in[i]);
+    for (size_t i = 0; i < len; i++)
+        r->buf[addr + i] = (uint8_t)(r->buf[addr + i] & in[i]);
     return FT_OK;
 }
 
 static ft_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     memset(r->buf + addr, 0xFF, len);
     return FT_OK;
 }
@@ -201,4 +205,3 @@ void ft_register_tests_btree_rw(void) {
     RUN_TEST(test_cursor_snapshot_is_stable);
     RUN_TEST(test_two_cursors_are_independent_snapshots);
 }
-

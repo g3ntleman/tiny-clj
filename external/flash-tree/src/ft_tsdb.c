@@ -26,7 +26,8 @@ static fdb_time_t tsdb_get_time_stub(void) {
 
 static ft_status_t ft_from_fdb_err(fdb_err_t e) {
     switch (e) {
-    case FDB_NO_ERR: return FT_OK;
+    case FDB_NO_ERR:
+        return FT_OK;
     case FDB_READ_ERR:
     case FDB_WRITE_ERR:
     case FDB_ERASE_ERR:
@@ -45,21 +46,26 @@ static ft_tsl_status_t ft_from_fdb_tsl_status(fdb_tsl_status_t s) {
 }
 
 ft_status_t ft_tsdb_init(ft_tsdb_t** out_tsdb, ft_blockdev_t* bdev, const ft_tsdb_cfg_t* cfg) {
-    if (!out_tsdb || !bdev) return FT_ERR_INVALID_ARG;
+    if (!out_tsdb || !bdev)
+        return FT_ERR_INVALID_ARG;
     *out_tsdb = NULL;
 
     // Default max_len (must be < sector size). Allow override via cfg->reserved.
     size_t max_len = 256;
-    if (cfg && cfg->reserved) max_len = (size_t)cfg->reserved;
-    if (max_len == 0) return FT_ERR_INVALID_ARG;
+    if (cfg && cfg->reserved)
+        max_len = (size_t)cfg->reserved;
+    if (max_len == 0)
+        return FT_ERR_INVALID_ARG;
 
     ft_tsdb_t* tsdb = (ft_tsdb_t*)calloc(1, sizeof(ft_tsdb_t));
-    if (!tsdb) return FT_ERR_NO_MEMORY;
+    if (!tsdb)
+        return FT_ERR_NO_MEMORY;
     tsdb->bdev = bdev;
     tsdb->max_len = max_len;
 
     // Initialize FlashDB TSDB. "name/path" are only for logging in our port.
-    fdb_err_t r = fdb_tsdb_init(&tsdb->inner, "flash-tree", "ft", tsdb_get_time_stub, max_len, bdev);
+    fdb_err_t r =
+        fdb_tsdb_init(&tsdb->inner, "flash-tree", "ft", tsdb_get_time_stub, max_len, bdev);
     ft_status_t st = ft_from_fdb_err(r);
     if (st != FT_OK) {
         free(tsdb);
@@ -71,14 +77,17 @@ ft_status_t ft_tsdb_init(ft_tsdb_t** out_tsdb, ft_blockdev_t* bdev, const ft_tsd
 }
 
 void ft_tsdb_deinit(ft_tsdb_t* tsdb) {
-    if (!tsdb) return;
+    if (!tsdb)
+        return;
     (void)fdb_tsdb_deinit(&tsdb->inner);
     free(tsdb);
 }
 
 ft_status_t ft_tsl_append(ft_tsdb_t* tsdb, const void* data, size_t len, ft_time_t t) {
-    if (!tsdb || (!data && len != 0)) return FT_ERR_INVALID_ARG;
-    if (len > tsdb->max_len) return FT_ERR_INVALID_ARG;
+    if (!tsdb || (!data && len != 0))
+        return FT_ERR_INVALID_ARG;
+    if (len > tsdb->max_len)
+        return FT_ERR_INVALID_ARG;
     struct fdb_blob blob;
     memset(&blob, 0, sizeof(blob));
     fdb_blob_make(&blob, data, len);
@@ -97,8 +106,12 @@ typedef struct ft_fdb_iter_ctx {
 
 static bool ft_fdb_iter_cb(fdb_tsl_t tsl, void* arg) {
     ft_fdb_iter_ctx_t* c = (ft_fdb_iter_ctx_t*)arg;
-    if (!c || !c->tsdb || !c->cb) return true; /* stop */
-    if (!tsl) { c->st = FT_ERR_CORRUPT; return true; }
+    if (!c || !c->tsdb || !c->cb)
+        return true; /* stop */
+    if (!tsl) {
+        c->st = FT_ERR_CORRUPT;
+        return true;
+    }
 
     struct fdb_blob blob;
     memset(&blob, 0, sizeof(blob));
@@ -120,24 +133,30 @@ static bool ft_fdb_iter_cb(fdb_tsl_t tsl, void* arg) {
     return false; /* continue */
 }
 
-ft_status_t ft_tsl_iter_by_time(ft_tsdb_t* tsdb, ft_time_t from, ft_time_t to, ft_tsl_cb cb, void* arg) {
-    if (!tsdb || !cb) return FT_ERR_INVALID_ARG;
+ft_status_t ft_tsl_iter_by_time(ft_tsdb_t* tsdb, ft_time_t from, ft_time_t to, ft_tsl_cb cb,
+                                void* arg) {
+    if (!tsdb || !cb)
+        return FT_ERR_INVALID_ARG;
 
     uint8_t* buf = NULL;
     if (tsdb->max_len) {
         buf = (uint8_t*)malloc(tsdb->max_len);
-        if (!buf) return FT_ERR_NO_MEMORY;
+        if (!buf)
+            return FT_ERR_NO_MEMORY;
     }
 
-    ft_fdb_iter_ctx_t ctx = {.tsdb = tsdb, .cb = cb, .arg = arg, .buf = buf, .cap = tsdb->max_len, .st = FT_OK};
+    ft_fdb_iter_ctx_t ctx = {
+        .tsdb = tsdb, .cb = cb, .arg = arg, .buf = buf, .cap = tsdb->max_len, .st = FT_OK};
     fdb_tsl_iter_by_time(&tsdb->inner, (fdb_time_t)from, (fdb_time_t)to, ft_fdb_iter_cb, &ctx);
 
     free(buf);
     return ctx.st;
 }
 
-ft_status_t ft_tsl_query_count(ft_tsdb_t* tsdb, ft_time_t from, ft_time_t to, ft_tsl_status_t status, uint64_t* out_count) {
-    if (!tsdb || !out_count) return FT_ERR_INVALID_ARG;
+ft_status_t ft_tsl_query_count(ft_tsdb_t* tsdb, ft_time_t from, ft_time_t to,
+                               ft_tsl_status_t status, uint64_t* out_count) {
+    if (!tsdb || !out_count)
+        return FT_ERR_INVALID_ARG;
     fdb_tsl_status_t want = (status == FT_TSL_STATUS_OK) ? FDB_TSL_WRITE : FDB_TSL_DELETED;
     size_t c = fdb_tsl_query_count(&tsdb->inner, (fdb_time_t)from, (fdb_time_t)to, want);
     *out_count = (uint64_t)c;
@@ -152,28 +171,42 @@ typedef struct ft_agg_ctx {
     float maxv;
 } ft_agg_ctx_t;
 
-static ft_status_t ft_agg_f32_cb(ft_time_t t, const void* data, size_t len, ft_tsl_status_t st, void* arg) {
+static ft_status_t ft_agg_f32_cb(ft_time_t t, const void* data, size_t len, ft_tsl_status_t st,
+                                 void* arg) {
     (void)t;
     ft_agg_ctx_t* aa = (ft_agg_ctx_t*)arg;
-    if (!aa) return FT_ERR_INVALID_ARG;
-    if (st != aa->want_status) return FT_OK;
-    if (len != sizeof(float)) return FT_ERR_INVALID_ARG;
+    if (!aa)
+        return FT_ERR_INVALID_ARG;
+    if (st != aa->want_status)
+        return FT_OK;
+    if (len != sizeof(float))
+        return FT_ERR_INVALID_ARG;
     float v = 0.0f;
     memcpy(&v, data, sizeof(v));
-    if (aa->count == 0) { aa->minv = v; aa->maxv = v; }
-    else { if (v < aa->minv) aa->minv = v; if (v > aa->maxv) aa->maxv = v; }
+    if (aa->count == 0) {
+        aa->minv = v;
+        aa->maxv = v;
+    } else {
+        if (v < aa->minv)
+            aa->minv = v;
+        if (v > aa->maxv)
+            aa->maxv = v;
+    }
     aa->sum += v;
     aa->count++;
     return FT_OK;
 }
 
-ft_status_t ft_tsl_aggregate_f32(ft_tsdb_t* tsdb, ft_time_t from, ft_time_t to, ft_tsl_status_t status, ft_agg_f32_t* out) {
-    if (!tsdb || !out) return FT_ERR_INVALID_ARG;
+ft_status_t ft_tsl_aggregate_f32(ft_tsdb_t* tsdb, ft_time_t from, ft_time_t to,
+                                 ft_tsl_status_t status, ft_agg_f32_t* out) {
+    if (!tsdb || !out)
+        return FT_ERR_INVALID_ARG;
     memset(out, 0, sizeof(*out));
 
     ft_agg_ctx_t a = {.want_status = status, .count = 0, .sum = 0.0f, .minv = 0.0f, .maxv = 0.0f};
     ft_status_t st = ft_tsl_iter_by_time(tsdb, from, to, ft_agg_f32_cb, &a);
-    if (st != FT_OK) return st;
+    if (st != FT_OK)
+        return st;
 
     out->count = a.count;
     out->sum = a.sum;
@@ -182,4 +215,3 @@ ft_status_t ft_tsl_aggregate_f32(ft_tsdb_t* tsdb, ft_time_t from, ft_time_t to, 
     out->avg = (a.count ? (a.sum / (float)a.count) : 0.0f);
     return FT_OK;
 }
-

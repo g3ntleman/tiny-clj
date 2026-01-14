@@ -23,4 +23,3 @@ uint32_t ft_kv_bound_base_offset(void);
 #ifdef __cplusplus
 } // extern "C"
 #endif
-

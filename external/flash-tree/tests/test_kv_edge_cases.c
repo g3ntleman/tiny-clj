@@ -16,28 +16,34 @@ typedef struct {
 
 static ft_status_t ram_read(void* ctx, uint32_t addr, void* out, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     memcpy(out, r->buf + addr, len);
     return FT_OK;
 }
 
 static ft_status_t ram_prog(void* ctx, uint32_t addr, const void* data, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     const uint8_t* in = (const uint8_t*)data;
-    for (size_t i = 0; i < len; i++) r->buf[addr + i] = (uint8_t)(r->buf[addr + i] & in[i]);
+    for (size_t i = 0; i < len; i++)
+        r->buf[addr + i] = (uint8_t)(r->buf[addr + i] & in[i]);
     return FT_OK;
 }
 
 static ft_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len)
+        return FT_ERR_IO;
     memset(r->buf + addr, 0xFF, len);
     return FT_OK;
 }
 
-static void make_bdev(ft_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size_t storage_len, int erase) {
-    if (erase) memset(storage, 0xFF, storage_len);
+static void make_bdev(ft_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size_t storage_len,
+                      int erase) {
+    if (erase)
+        memset(storage, 0xFF, storage_len);
     rd->buf = storage;
     rd->len = storage_len;
     bdev->ctx = rd;
@@ -216,47 +222,75 @@ static void test_get_len_and_get_into_truncation(void) {
     ft_db_deinit(db);
 }
 
-static void test_large_value_overflow_and_persistence(void) {
+static void test_large_value_is_rejected_without_overflow_pages(void) {
     static uint8_t storage[262144];
     ramdev_t rd = {0};
     ft_blockdev_t bdev = {0};
     make_bdev(&bdev, &rd, storage, sizeof(storage), 1);
 
-    // Create a large value which requires overflow pages.
+    // Create a large value which previously required overflow pages.
+    // flash-tree policy: values must fit inline (chunking is handled above this layer).
     const size_t n = 20000;
     uint8_t* val = (uint8_t*)malloc(n);
     TEST_ASSERT_NOT_NULL(val);
-    for (size_t i = 0; i < n; i++) val[i] = (uint8_t)(i * 131u + 7u);
+    for (size_t i = 0; i < n; i++)
+        val[i] = (uint8_t)(i * 131u + 7u);
 
     ft_db_t* db = NULL;
     TEST_ASSERT_EQUAL_INT(FT_OK, ft_db_init(&db, &bdev, NULL));
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_put(db, "big", 3, val, n));
-
-    size_t got_len = 0;
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_get_len(db, "big", 3, &got_len));
-    TEST_ASSERT_EQUAL_UINT32((uint32_t)n, (uint32_t)got_len);
-
-    uint8_t* out = (uint8_t*)malloc(n);
-    TEST_ASSERT_NOT_NULL(out);
-    size_t saved = 0;
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_get_into(db, "big", 3, out, n, &saved));
-    TEST_ASSERT_EQUAL_UINT32((uint32_t)n, (uint32_t)saved);
-    TEST_ASSERT_EQUAL_MEMORY(val, out, n);
+    TEST_ASSERT_EQUAL_INT(FT_ERR_INVALID_ARG, ft_put(db, "big", 3, val, n));
 
     ft_db_deinit(db);
-
-    // Re-open without erase and verify persistence.
-    db = NULL;
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_db_init(&db, &bdev, NULL));
-    memset(out, 0, n);
-    saved = 0;
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_get_into(db, "big", 3, out, n, &saved));
-    TEST_ASSERT_EQUAL_UINT32((uint32_t)n, (uint32_t)saved);
-    TEST_ASSERT_EQUAL_MEMORY(val, out, n);
-    ft_db_deinit(db);
-
-    free(out);
     free(val);
+}
+
+static void test_kv_max_val_len_matches_runtime_rejection(void) {
+    uint8_t storage[262144];
+    ramdev_t rd = {0};
+    ft_blockdev_t bdev = {0};
+    make_bdev(&bdev, &rd, storage, sizeof(storage), 1);
+
+    ft_kv_t* kv = NULL;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_open(&kv, &bdev, NULL));
+
+    const size_t key_len = 12;
+    size_t max_val = 0;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_max_val_len(kv, key_len, &max_val));
+    TEST_ASSERT_TRUE(max_val > 0);
+
+    uint8_t* key = (uint8_t*)malloc(key_len);
+    TEST_ASSERT_NOT_NULL(key);
+    memset(key, 'K', key_len);
+
+    uint8_t* v_ok = (uint8_t*)malloc(max_val);
+    TEST_ASSERT_NOT_NULL(v_ok);
+    memset(v_ok, 0xA5, max_val);
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_put(kv, key, key_len, v_ok, max_val));
+
+    uint8_t* v_too_big = (uint8_t*)malloc(max_val + 1);
+    TEST_ASSERT_NOT_NULL(v_too_big);
+    memset(v_too_big, 0x5A, max_val + 1);
+    TEST_ASSERT_EQUAL_INT(FT_ERR_INVALID_ARG, ft_kv_put(kv, key, key_len, v_too_big, max_val + 1));
+
+    free(v_too_big);
+    free(v_ok);
+    free(key);
+    ft_kv_close(kv);
+}
+
+static void test_kv_gc_step_more_reports_no_work_on_fresh_db(void) {
+    uint8_t storage[262144];
+    ramdev_t rd = {0};
+    ft_blockdev_t bdev = {0};
+    make_bdev(&bdev, &rd, storage, sizeof(storage), 1);
+
+    ft_kv_t* kv = NULL;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_open(&kv, &bdev, NULL));
+
+    int rc = ft_kv_gc_step_more(kv, 0);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+
+    ft_kv_close(kv);
 }
 
 void ft_register_tests_kv_edge_cases(void) {
@@ -265,6 +299,7 @@ void ft_register_tests_kv_edge_cases(void) {
     RUN_TEST(test_empty_db_and_empty_prefix_cursor);
     RUN_TEST(test_binary_keys_with_nul_bytes_roundtrip_and_prefix);
     RUN_TEST(test_get_len_and_get_into_truncation);
-    RUN_TEST(test_large_value_overflow_and_persistence);
+    RUN_TEST(test_large_value_is_rejected_without_overflow_pages);
+    RUN_TEST(test_kv_max_val_len_matches_runtime_rejection);
+    RUN_TEST(test_kv_gc_step_more_reports_no_work_on_fresh_db);
 }
-

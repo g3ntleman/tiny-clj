@@ -11,12 +11,13 @@ typedef struct {
     size_t n;
 } seen_keys_t;
 
-static ft_status_t collect_keys_cb(const void* key, size_t key_len,
-                                  const void* val, size_t val_len,
-                                  void* arg) {
-    (void)val; (void)val_len;
+static ft_status_t collect_keys_cb(const void* key, size_t key_len, const void* val, size_t val_len,
+                                   void* arg) {
+    (void)val;
+    (void)val_len;
     seen_keys_t* s = (seen_keys_t*)arg;
-    if (s->n >= 16) return FT_ERR_NO_MEMORY;
+    if (s->n >= 16)
+        return FT_ERR_NO_MEMORY;
     // keys are NUL-terminated in these tests
     TEST_ASSERT_EQUAL_UINT(strlen((const char*)key), key_len);
     s->keys[s->n++] = (const char*)key;
@@ -78,4 +79,3 @@ void ft_register_tests_btree_prefix(void) {
     RUN_TEST(test_lower_bound_basic);
     RUN_TEST(test_iter_prefix_order);
 }
-

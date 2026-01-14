@@ -6,6 +6,8 @@ set(FLASH_TREE_CORE_SRCS
     src/ft_kv_bind.c
     src/ft_blockdev.c
     src/ft_crc32.c
+    src/ft_page_policy.c
+    src/ft_blob.c
     src/ft_tsdb.c
 )
 
@@ -22,7 +24,6 @@ set(BSD_BTREE_SRCS
     src/ft_bt_delete.c
     src/ft_bt_get.c
     src/ft_bt_open.c
-    src/ft_bt_overflow.c
     src/ft_bt_page.c
     src/ft_bt_put.c
     src/ft_bt_search.c
@@ -121,6 +122,9 @@ if(UNITY_SRC)
         tests/test_tsdb_basic.c
         tests/test_tsdb_agg.c
         tests/test_gc.c
+        tests/test_page_policy.c
+        tests/test_chunk_stream.c
+        tests/test_blob.c
         src/ft_btree.c
         ${UNITY_SRC}
     )

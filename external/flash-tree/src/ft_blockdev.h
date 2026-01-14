@@ -31,6 +31,6 @@ ft_status_t ft_blockdev_validate(const ft_blockdev_t* bdev);
 
 // Convenience wrappers that enforce geometry (bounds + granularity).
 ft_status_t ft_blockdev_read(const ft_blockdev_t* bdev, uint32_t addr, void* out, size_t len);
-ft_status_t ft_blockdev_prog(const ft_blockdev_t* bdev, uint32_t addr, const void* data, size_t len);
+ft_status_t ft_blockdev_prog(const ft_blockdev_t* bdev, uint32_t addr, const void* data,
+                             size_t len);
 ft_status_t ft_blockdev_erase(const ft_blockdev_t* bdev, uint32_t addr, size_t len);
-

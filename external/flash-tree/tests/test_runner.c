@@ -15,6 +15,9 @@ void ft_register_tests_tsdb_basic(void);
 void ft_register_tests_tsdb_agg(void);
 void ft_register_tests_gc(void);
 void ft_register_tests_kv_edge_cases(void);
+void ft_register_tests_page_policy(void);
+void ft_register_tests_chunk_stream(void);
+void ft_register_tests_blob(void);
 
 int main(void) {
     UNITY_BEGIN();
@@ -28,7 +31,9 @@ int main(void) {
     ft_register_tests_tsdb_agg();
     ft_register_tests_gc();
     ft_register_tests_kv_edge_cases();
+    ft_register_tests_page_policy();
+    ft_register_tests_chunk_stream();
+    ft_register_tests_blob();
 
     return UNITY_END();
 }
-

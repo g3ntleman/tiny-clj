@@ -52,16 +52,14 @@ static char sccsid[] = "@(#)bt_page.c	8.2 (Berkeley) 2/21/94";
  * Returns:
  *	RET_ERROR, RET_SUCCESS
  */
-int
-__bt_free(BTREE *t, PAGE *h)
-{
-	/* Insert the page at the start of the free list. */
-	h->prevpg = P_INVALID;
-	h->nextpg = t->bt_free;
-	t->bt_free = h->pgno;
+int __bt_free(BTREE* t, PAGE* h) {
+    /* Insert the page at the start of the free list. */
+    h->prevpg = P_INVALID;
+    h->nextpg = t->bt_free;
+    t->bt_free = h->pgno;
 
-	/* Make sure the page gets written back. */
-	return (mpool_put(t->bt_mp, h, MPOOL_DIRTY));
+    /* Make sure the page gets written back. */
+    return (mpool_put(t->bt_mp, h, MPOOL_DIRTY));
 }
 
 /*
@@ -74,16 +72,13 @@ __bt_free(BTREE *t, PAGE *h)
  * Returns:
  *	Pointer to a page, NULL on error.
  */
-PAGE *
-__bt_new(BTREE *t, pgno_t *npg)
-{
-	PAGE *h;
+PAGE* __bt_new(BTREE* t, pgno_t* npg) {
+    PAGE* h;
 
-	if (t->bt_free != P_INVALID &&
-	    (h = mpool_get(t->bt_mp, t->bt_free, 0)) != NULL) {
-			*npg = t->bt_free;
-			t->bt_free = h->nextpg;
-			return (h);
-	}
-	return (mpool_new(t->bt_mp, npg));
+    if (t->bt_free != P_INVALID && (h = mpool_get(t->bt_mp, t->bt_free, 0)) != NULL) {
+        *npg = t->bt_free;
+        t->bt_free = h->nextpg;
+        return (h);
+    }
+    return (mpool_new(t->bt_mp, npg));
 }
