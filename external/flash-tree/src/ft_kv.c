@@ -1,13 +1,13 @@
 /*
- * flash_tree.c - B-Tree KV-DB with Copy-on-Write Log Storage
+ * ft_kv.c - B-Tree KV-DB with Copy-on-Write Log Storage
  *
  * Uses BSD B-Tree for sorted key storage with our custom mpool
  * that writes pages append-only to flash (no Read-Modify-Write).
  *
  * Architecture:
- *   flash_tree.c → BSD B-Tree (bt_*.c) → mpool.c → ft_blockdev → Flash
- *                                         ↑
- *                              Copy-on-Write, append-only
+ *   ft_kv.c → BSD B-Tree (bt_*.c) → mpool.c → ft_blockdev → Flash
+ *                                      ↑
+ *                           Copy-on-Write, append-only
  *
  * Key Features:
  * - Flash-friendly: no Read-Modify-Write operations
@@ -18,7 +18,7 @@
 
 #include "flash_tree.h"
 #include "ft_blockdev.h"
-#include "ft_bsd_blockfile.h"
+#include "ft_kv_bind.h"
 #include "ft_utils.h"
 
 #include <stdio.h>
@@ -32,9 +32,9 @@
 #include "ft_bsd_btree.h"
 #include "ft_bsd_mpool.h"
 
-/* ============== Database Handle ============== */
+/* ============== KV Handle ============== */
 
-struct ft_db {
+struct ft_kv {
     ft_blockdev_t* bdev;
     DB* bdb;                  /* BSD B-Tree handle */
     
@@ -43,8 +43,8 @@ struct ft_db {
     size_t get_cap;
 };
 
-struct ft_cursor {
-    ft_db_t* db;
+struct ft_kv_cursor {
+    ft_kv_t* kv;
     int started;              /* Has iteration begun? */
     int exhausted;
     int has_current;
@@ -72,19 +72,25 @@ static ft_status_t ft_from_bt_status(int rc) {
 
 /* ============== Public API ============== */
 
-ft_status_t ft_db_init(ft_db_t** out_db, ft_blockdev_t* bdev, const ft_cfg_t* cfg) {
-    (void)cfg;
-    if (!out_db || !bdev) return FT_ERR_INVALID_ARG;
+ft_status_t ft_kv_open(ft_kv_t** out_kv, ft_blockdev_t* bdev, const ft_kv_cfg_t* cfg) {
+    if (!out_kv || !bdev) return FT_ERR_INVALID_ARG;
     
     ft_status_t st = ft_blockdev_validate(bdev);
     if (st != FT_OK) return st;
     
-    ft_db_t* db = (ft_db_t*)calloc(1, sizeof(ft_db_t));
-    if (!db) return FT_ERR_NO_MEMORY;
-    db->bdev = bdev;
-    
-    /* Bind blockdev for mpool (stays bound for lifetime of db) */
-    ft_bsd_blockfile_bind(bdev);
+    uint32_t start_page = FT_KV_ROOT_PAGE;
+    if (cfg) start_page = cfg->start_page;
+    uint32_t eg = bdev->geom.erase_granularity ? bdev->geom.erase_granularity : 1u;
+    uint32_t base_offset = start_page * eg;
+    if (eg != 0 && start_page != 0 && base_offset / eg != start_page) return FT_ERR_INVALID_ARG;
+    if (base_offset >= bdev->geom.total_size_bytes) return FT_ERR_INVALID_ARG;
+
+    ft_kv_t* kv = (ft_kv_t*)calloc(1, sizeof(ft_kv_t));
+    if (!kv) return FT_ERR_NO_MEMORY;
+    kv->bdev = bdev;
+
+    /* Bind blockdev for btree/mpool open only (single-threaded). */
+    ft_kv_bind(bdev, base_offset);
     
     /* Open B-Tree with our log-based mpool */
     BTREEINFO bi;
@@ -92,82 +98,81 @@ ft_status_t ft_db_init(ft_db_t** out_db, ft_blockdev_t* bdev, const ft_cfg_t* cf
     bi.psize = 512;       /* Small pages for embedded */
     bi.cachesize = 1024;  /* Minimal cache (mpool handles this) */
     
-    db->bdb = __bt_open("ft_kv", O_RDWR | O_CREAT, 0600, &bi, 0);
-    /* Note: Don't unbind here - mpool needs bdev for all operations */
+    kv->bdb = __bt_open("ft_kv", O_RDWR | O_CREAT, 0600, &bi, 0);
+    ft_kv_unbind();
     
-    if (!db->bdb) {
-        ft_bsd_blockfile_unbind();
-        free(db);
+    if (!kv->bdb) {
+        ft_kv_unbind();
+        free(kv);
         return FT_ERR_IO;
     }
     
-    *out_db = db;
+    *out_kv = kv;
     return FT_OK;
 }
 
-void ft_db_deinit(ft_db_t* db) {
-    if (!db) return;
-    if (db->bdb) (void)db->bdb->close(db->bdb);
-    ft_bsd_blockfile_unbind();
-    free(db->get_buf);
-    free(db);
+void ft_kv_close(ft_kv_t* kv) {
+    if (!kv) return;
+    if (kv->bdb) (void)kv->bdb->close(kv->bdb);
+    free(kv->get_buf);
+    free(kv);
 }
 
-ft_status_t ft_put(ft_db_t* db, const void* key, size_t key_len,
+ft_status_t ft_kv_put(ft_kv_t* kv, const void* key, size_t key_len,
                    const void* val, size_t val_len) {
-    if (!db || (!key && key_len != 0) || (!val && val_len != 0)) {
+    if (!kv || (!key && key_len != 0) || (!val && val_len != 0)) {
         return FT_ERR_INVALID_ARG;
     }
     
     DBT k = {.data = (void*)key, .size = key_len};
     DBT d = {.data = (void*)val, .size = val_len};
-    int rc = db->bdb->put(db->bdb, &k, &d, 0);
+    int rc = kv->bdb->put(kv->bdb, &k, &d, 0);
     return ft_from_bt_status(rc);
 }
 
-ft_status_t ft_get(ft_db_t* db, const void* key, size_t key_len, ft_blob_t* out) {
-    if (!db || (!key && key_len != 0) || !out) return FT_ERR_INVALID_ARG;
+ft_status_t ft_kv_get(ft_kv_t* kv, const void* key, size_t key_len, ft_blob_t* out) {
+    if (!kv || (!key && key_len != 0) || !out) return FT_ERR_INVALID_ARG;
     
     DBT k = {.data = (void*)key, .size = key_len};
     DBT d = {0};
-    int rc = db->bdb->get(db->bdb, &k, &d, 0);
+    int rc = kv->bdb->get(kv->bdb, &k, &d, 0);
     if (rc != RET_SUCCESS) return ft_from_bt_status(rc);
     
     /* Copy to scratch buffer (B-Tree's buffer is volatile) */
-    if (d.size > db->get_cap) {
-        size_t new_cap = (db->get_cap == 0) ? 64 : db->get_cap;
+    if (d.size > kv->get_cap) {
+        size_t new_cap = (kv->get_cap == 0) ? 64 : kv->get_cap;
         while (new_cap < d.size) new_cap *= 2;
-        uint8_t* p = (uint8_t*)realloc(db->get_buf, new_cap);
+        uint8_t* p = (uint8_t*)realloc(kv->get_buf, new_cap);
         if (!p) return FT_ERR_NO_MEMORY;
-        db->get_buf = p;
-        db->get_cap = new_cap;
+        kv->get_buf = p;
+        kv->get_cap = new_cap;
     }
-    if (d.size) memcpy(db->get_buf, d.data, d.size);
-    out->data = db->get_buf;
+    if (d.size) memcpy(kv->get_buf, d.data, d.size);
+    out->data = kv->get_buf;
     out->len = d.size;
     return FT_OK;
 }
 
-ft_status_t ft_get_len(ft_db_t* db, const void* key, size_t key_len, size_t* out_len) {
+ft_status_t ft_kv_get_len(ft_kv_t* kv, const void* key, size_t key_len, size_t* out_len) {
     if (out_len) *out_len = 0;
-    if (!db || (!key && key_len != 0) || !out_len) return FT_ERR_INVALID_ARG;
+    if (!kv || (!key && key_len != 0) || !out_len) return FT_ERR_INVALID_ARG;
     
     DBT k = {.data = (void*)key, .size = key_len};
     DBT d = {0};
-    int rc = db->bdb->get(db->bdb, &k, &d, 0);
+    int rc = kv->bdb->get(kv->bdb, &k, &d, 0);
     if (rc != RET_SUCCESS) return ft_from_bt_status(rc);
     *out_len = d.size;
     return FT_OK;
 }
 
-ft_status_t ft_get_into(ft_db_t* db, const void* key, size_t key_len,
+ft_status_t ft_kv_get_into(ft_kv_t* kv, const void* key, size_t key_len,
                          void* out, size_t out_len, size_t* saved_len_out) {
     if (saved_len_out) *saved_len_out = 0;
-    if (!db || (!key && key_len != 0)) return FT_ERR_INVALID_ARG;
+    if (!kv || (!key && key_len != 0)) return FT_ERR_INVALID_ARG;
     
     DBT k = {.data = (void*)key, .size = key_len};
     DBT d = {0};
-    int rc = db->bdb->get(db->bdb, &k, &d, 0);
+    int rc = kv->bdb->get(kv->bdb, &k, &d, 0);
     if (rc != RET_SUCCESS) return ft_from_bt_status(rc);
     
     if (saved_len_out) *saved_len_out = d.size;
@@ -178,11 +183,11 @@ ft_status_t ft_get_into(ft_db_t* db, const void* key, size_t key_len,
     return FT_OK;
 }
 
-ft_status_t ft_del(ft_db_t* db, const void* key, size_t key_len) {
-    if (!db || (!key && key_len != 0)) return FT_ERR_INVALID_ARG;
+ft_status_t ft_kv_del(ft_kv_t* kv, const void* key, size_t key_len) {
+    if (!kv || (!key && key_len != 0)) return FT_ERR_INVALID_ARG;
     
     DBT k = {.data = (void*)key, .size = key_len};
-    int rc = db->bdb->del(db->bdb, &k, 0);
+    int rc = kv->bdb->del(kv->bdb, &k, 0);
     return ft_from_bt_status(rc);
 }
 
@@ -191,14 +196,14 @@ ft_status_t ft_del(ft_db_t* db, const void* key, size_t key_len) {
 /**
  * Open a cursor for iterating over keys with a given prefix.
  */
-ft_status_t ft_cursor_open_prefix(ft_db_t* db, const void* prefix, size_t prefix_len,
-                                   ft_cursor_t** out_cur) {
-    if (!db || (!prefix && prefix_len != 0) || !out_cur) return FT_ERR_INVALID_ARG;
+ft_status_t ft_kv_cursor_open_prefix(ft_kv_t* kv, const void* prefix, size_t prefix_len,
+                                   ft_kv_cursor_t** out_cur) {
+    if (!kv || (!prefix && prefix_len != 0) || !out_cur) return FT_ERR_INVALID_ARG;
     
-    ft_cursor_t* cur = (ft_cursor_t*)calloc(1, sizeof(*cur));
+    ft_kv_cursor_t* cur = (ft_kv_cursor_t*)calloc(1, sizeof(*cur));
     if (!cur) return FT_ERR_NO_MEMORY;
     
-    cur->db = db;
+    cur->kv = kv;
     cur->started = 0;
     cur->exhausted = 0;
     cur->has_current = 0;
@@ -217,7 +222,7 @@ ft_status_t ft_cursor_open_prefix(ft_db_t* db, const void* prefix, size_t prefix
     return FT_OK;
 }
 
-ft_status_t ft_cursor_next(ft_cursor_t* cur, int* out_has_item) {
+ft_status_t ft_kv_cursor_next(ft_kv_cursor_t* cur, int* out_has_item) {
     if (!cur || !out_has_item) return FT_ERR_INVALID_ARG;
     *out_has_item = 0;
     cur->has_current = 0;
@@ -230,14 +235,14 @@ ft_status_t ft_cursor_next(ft_cursor_t* cur, int* out_has_item) {
         if (cur->prefix_len) {
             cur->cur_key.data = cur->prefix;
             cur->cur_key.size = cur->prefix_len;
-            rc = cur->db->bdb->seq(cur->db->bdb, &cur->cur_key, &cur->cur_val, R_CURSOR);
+            rc = cur->kv->bdb->seq(cur->kv->bdb, &cur->cur_key, &cur->cur_val, R_CURSOR);
         } else {
-            rc = cur->db->bdb->seq(cur->db->bdb, &cur->cur_key, &cur->cur_val, R_FIRST);
+            rc = cur->kv->bdb->seq(cur->kv->bdb, &cur->cur_key, &cur->cur_val, R_FIRST);
         }
         cur->started = 1;
     } else {
         /* Subsequent calls: advance to next */
-        rc = cur->db->bdb->seq(cur->db->bdb, &cur->cur_key, &cur->cur_val, R_NEXT);
+        rc = cur->kv->bdb->seq(cur->kv->bdb, &cur->cur_key, &cur->cur_val, R_NEXT);
     }
     
     if (rc == RET_SPECIAL) {
@@ -263,7 +268,7 @@ ft_status_t ft_cursor_next(ft_cursor_t* cur, int* out_has_item) {
     return FT_OK;
 }
 
-ft_status_t ft_cursor_key(const ft_cursor_t* cur, ft_blob_t* out_key) {
+ft_status_t ft_kv_cursor_key(const ft_kv_cursor_t* cur, ft_blob_t* out_key) {
     if (!cur || !out_key) return FT_ERR_INVALID_ARG;
     if (!cur->has_current) return FT_ERR_NOT_FOUND;
     out_key->data = cur->cur_key.data;
@@ -271,7 +276,7 @@ ft_status_t ft_cursor_key(const ft_cursor_t* cur, ft_blob_t* out_key) {
     return FT_OK;
 }
 
-ft_status_t ft_cursor_val(const ft_cursor_t* cur, ft_blob_t* out_val) {
+ft_status_t ft_kv_cursor_val(const ft_kv_cursor_t* cur, ft_blob_t* out_val) {
     if (!cur || !out_val) return FT_ERR_INVALID_ARG;
     if (!cur->has_current) return FT_ERR_NOT_FOUND;
     out_val->data = cur->cur_val.data;
@@ -279,44 +284,44 @@ ft_status_t ft_cursor_val(const ft_cursor_t* cur, ft_blob_t* out_val) {
     return FT_OK;
 }
 
-void ft_cursor_close(ft_cursor_t* cur) {
+void ft_kv_cursor_close(ft_kv_cursor_t* cur) {
     if (!cur) return;
     free(cur->prefix);
     free(cur);
 }
 
-ft_status_t ft_iter_prefix(ft_db_t* db, const void* prefix, size_t prefix_len,
+ft_status_t ft_kv_iter_prefix(ft_kv_t* kv, const void* prefix, size_t prefix_len,
                             ft_key_cb cb, void* arg) {
-    if (!db || (!prefix && prefix_len != 0) || !cb) return FT_ERR_INVALID_ARG;
+    if (!kv || (!prefix && prefix_len != 0) || !cb) return FT_ERR_INVALID_ARG;
     
-    ft_cursor_t* cur = NULL;
-    ft_status_t st = ft_cursor_open_prefix(db, prefix, prefix_len, &cur);
+    ft_kv_cursor_t* cur = NULL;
+    ft_status_t st = ft_kv_cursor_open_prefix(kv, prefix, prefix_len, &cur);
     if (st != FT_OK) return st;
     
     int has = 0;
     ft_blob_t k, v;
-    while ((st = ft_cursor_next(cur, &has)) == FT_OK && has) {
-        st = ft_cursor_key(cur, &k);
+    while ((st = ft_kv_cursor_next(cur, &has)) == FT_OK && has) {
+        st = ft_kv_cursor_key(cur, &k);
         if (st != FT_OK) break;
-        st = ft_cursor_val(cur, &v);
+        st = ft_kv_cursor_val(cur, &v);
         if (st != FT_OK) break;
         st = cb(k.data, k.len, v.data, v.len, arg);
         if (st != FT_OK) break;
     }
     
-    ft_cursor_close(cur);
+    ft_kv_cursor_close(cur);
     return st;
 }
 
-ft_status_t ft_gc_step(ft_db_t* db, size_t budget_bytes) {
-    if (!db || !db->bdb) return FT_ERR_INVALID_ARG;
+ft_status_t ft_kv_gc_step(ft_kv_t* kv, size_t budget_bytes) {
+    if (!kv || !kv->bdb) return FT_ERR_INVALID_ARG;
 
     /* Sync B-Tree to flush all dirty pages to log */
-    int rc = db->bdb->sync(db->bdb, 0);
+    int rc = kv->bdb->sync(kv->bdb, 0);
     if (rc != RET_SUCCESS) return ft_from_bt_status(rc);
     
     /* Access mpool through B-Tree internal structure */
-    BTREE* t = (BTREE*)db->bdb->internal;
+    BTREE* t = (BTREE*)kv->bdb->internal;
     if (!t || !t->bt_mp) return FT_ERR_INVALID_ARG;
     
     /* Run incremental GC on mpool */
@@ -327,3 +332,4 @@ ft_status_t ft_gc_step(ft_db_t* db, size_t budget_bytes) {
 }
 
 /* (TSDB functions are implemented in ft_tsdb.c) */
+

@@ -60,11 +60,10 @@ static char sccsid[] = "@(#)bt_open.c	8.5 (Berkeley) 2/21/94";
 
 #include "ft_bsd_db.h"
 #include "ft_bsd_btree.h"
-#include "ft_bsd_blockfile.h"
 
 static int byteorder __P((void));
 static int nroot __P((BTREE *));
-static int tmp __P((void));
+/* tmp() is not used in flash-tree (no OS files). */
 
 /*
  * __BT_OPEN -- Open a btree.
@@ -91,7 +90,6 @@ __bt_open(const char *fname, int flags, int mode, const BTREEINFO *openinfo, int
 	BTREEINFO b;
 	DB *dbp;
 	pgno_t ncache;
-	ssize_t nr;
 	int machine_lorder;
 
 	t = NULL;
@@ -180,97 +178,31 @@ __bt_open(const char *fname, int flags, int mode, const BTREEINFO *openinfo, int
 	dbp->sync = __bt_sync;
 
 	/*
-	 * If no file name was supplied, this is an in-memory btree and we
-	 * open a backing temporary file.  Otherwise, it's a disk-based tree.
+	 * flash-tree: storage is provided by mpool on a bound block device.
+	 * We do not open OS files here.
 	 */
-	if (fname) {
-		switch(flags & O_ACCMODE) {
-		case O_RDONLY:
-			SET(t, B_RDONLY);
-			break;
-		case O_RDWR:
-			break;
-		case O_WRONLY:
-		default:
-			goto einval;
-		}
-		
-		if ((t->bt_fd = open(fname, flags, mode)) < 0)
-			goto err;
+	(void)fname;
+	(void)flags;
+	(void)mode;
 
-	} else {
-		if ((flags & O_ACCMODE) != O_RDWR)
-			goto einval;
-		if ((t->bt_fd = tmp()) == -1)
-			goto err;
-		SET(t, B_INMEM);
-	}
+	/* Choose page size (caller may override via openinfo->psize). */
+	if (b.psize == 0)
+		b.psize = MINPSIZE;
+	if (b.psize < MINPSIZE)
+		b.psize = MINPSIZE;
+	if (b.psize > MAX_PAGE_OFFSET + 1)
+		b.psize = MAX_PAGE_OFFSET + 1;
 
-	if (ft_bsd_fcntl(t->bt_fd, F_SETFD, 1) == -1)
-		goto err;
-
-	if (ft_bsd_fstat(t->bt_fd, &sb))
-		goto err;
-	if (sb.st_size) {
-		nr = read(t->bt_fd, &m, sizeof(BTMETA));
-		if (nr < 0)
-			goto err;
-		if (nr != sizeof(BTMETA))
-			goto eftype;
-
-		/*
-		 * Read in the meta-data.  This can change the notion of what
-		 * the lorder, page size and flags are, and, when the page size
-		 * changes, the cachesize value can change too.  If the user
-		 * specified the wrong byte order for an existing database, we
-		 * don't bother to return an error, we just clear the NEEDSWAP
-		 * bit.
-		 */
-		if (m.m_magic == BTREEMAGIC)
-			CLR(t, B_NEEDSWAP);
-		else {
-			SET(t, B_NEEDSWAP);
-			M_32_SWAP(m.m_magic);
-			M_32_SWAP(m.m_version);
-			M_32_SWAP(m.m_psize);
-			M_32_SWAP(m.m_free);
-			M_32_SWAP(m.m_nrecs);
-			M_32_SWAP(m.m_flags);
-		}
-		if (m.m_magic != BTREEMAGIC || m.m_version != BTREEVERSION)
-			goto eftype;
-		if (m.m_psize < MINPSIZE || m.m_psize > MAX_PAGE_OFFSET + 1 ||
-		    m.m_psize & sizeof(indx_t) - 1)
-			goto eftype;
-		if (m.m_flags & ~SAVEMETA)
-			goto eftype;
-		b.psize = m.m_psize;
-		t->bt_flags |= m.m_flags;
-		t->bt_free = m.m_free;
-		t->bt_nrecs = m.m_nrecs;
-	} else {
-		/*
-		 * Set the page size to the best value for I/O to this file.
-		 * Don't overflow the page offset type.
-		 */
-		if (b.psize == 0) {
-			b.psize = sb.st_blksize;
-			if (b.psize < MINPSIZE)
-				b.psize = MINPSIZE;
-			if (b.psize > MAX_PAGE_OFFSET + 1)
-				b.psize = MAX_PAGE_OFFSET + 1;
-		}
-
-		/* Set flag if duplicates permitted. */
-		if (!(b.flags & R_DUP))
-			SET(t, B_NODUPS);
-
-		t->bt_free = P_INVALID;
-		t->bt_nrecs = 0;
-		SET(t, B_METADIRTY);
-	}
+	/* Set flag if duplicates permitted. */
+	if (!(b.flags & R_DUP))
+		SET(t, B_NODUPS);
 
 	t->bt_psize = b.psize;
+
+	/* Fake stat for legacy code paths (unused after this point). */
+	memset(&sb, 0, sizeof(sb));
+	sb.st_blksize = b.psize;
+	sb.st_size = 0;
 
 	/* Set the cache size; must be a multiple of the page size. */
 	if (b.cachesize && b.cachesize & b.psize - 1)
@@ -302,8 +234,40 @@ __bt_open(const char *fname, int flags, int mode, const BTREEINFO *openinfo, int
 	if ((t->bt_mp =
 	    mpool_open(NULL, t->bt_fd, t->bt_psize, ncache)) == NULL)
 		goto err;
-	if (!ISSET(t, B_INMEM))
-		mpool_filter(t->bt_mp, __bt_pgin, __bt_pgout, t);
+	mpool_filter(t->bt_mp, __bt_pgin, __bt_pgout, t);
+
+	/*
+	 * Load meta-data from page 0 (P_META). If it doesn't exist yet, this is
+	 * a new tree.
+	 */
+	if ((void *)0 != (void *)0) {
+		/* dummy to keep patch context stable */
+	}
+	{
+		void *p = mpool_get(t->bt_mp, P_META, 0);
+		if (p) {
+			memmove(&m, p, sizeof(BTMETA));
+			(void)mpool_put(t->bt_mp, p, 0);
+
+			/* Meta is already in host order after mpool_filter+pgin. */
+			if (m.m_magic != BTREEMAGIC || m.m_version != BTREEVERSION)
+				goto eftype;
+			if (m.m_psize < MINPSIZE || m.m_psize > MAX_PAGE_OFFSET + 1 ||
+			    m.m_psize & sizeof(indx_t) - 1)
+				goto eftype;
+			if (m.m_flags & ~SAVEMETA)
+				goto eftype;
+
+			t->bt_flags |= m.m_flags;
+			t->bt_psize = m.m_psize;
+			t->bt_free = m.m_free;
+			t->bt_nrecs = m.m_nrecs;
+		} else {
+			t->bt_free = P_INVALID;
+			t->bt_nrecs = 0;
+			SET(t, B_METADIRTY);
+		}
+	}
 
 	/* Create a root page if new tree. */
 	if (nroot(t) == RET_ERROR)
@@ -374,26 +338,6 @@ nroot(BTREE *t)
 	mpool_put(t->bt_mp, meta, MPOOL_DIRTY);
 	mpool_put(t->bt_mp, root, MPOOL_DIRTY);
 	return (RET_SUCCESS);
-}
-
-static int
-tmp(void)
-{
-	sigset_t set, oset;
-	int fd;
-	char *envtmp;
-	char path[MAXPATHLEN];
-
-	envtmp = getenv("TMPDIR");
-	(void)snprintf(path,
-	    sizeof(path), "%s/bt.XXXXXX", envtmp ? envtmp : "/tmp");
-
-	(void)sigfillset(&set);
-	(void)sigprocmask(SIG_BLOCK, &set, &oset);
-	if ((fd = mkstemp(path)) != -1)
-		(void)unlink(path);
-	(void)sigprocmask(SIG_SETMASK, &oset, NULL);
-	return(fd);
 }
 
 static int

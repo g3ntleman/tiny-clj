@@ -2,9 +2,10 @@ cmake_minimum_required(VERSION 3.10)
 project(flash-tree C)
 
 add_library(flash-tree STATIC
-    src/flash_tree.c
+    src/ft_kv.c
     src/ft_blockdev.c
     src/ft_crc32.c
+    src/ft_kv_bind.c
     src/ft_tsdb.c
     src/flashdb/ft_port.c
     src/flashdb/ft_tsdb.c
@@ -29,7 +30,6 @@ add_library(bsd-btree STATIC
     src/ft_bt_stack.c
     src/ft_bt_utils.c
     src/ft_bsd_db_panic.c
-    src/ft_bsd_blockfile.c
     src/ft_bsd_mpool.c
 )
 
@@ -41,11 +41,6 @@ target_compile_features(bsd-btree PUBLIC c_std_99)
 target_compile_options(bsd-btree PRIVATE -Wall -Wextra)
 target_compile_definitions(bsd-btree PRIVATE
     __DBINTERFACE_PRIVATE
-    open=ft_bsd_open
-    close=ft_bsd_close
-    read=ft_bsd_read
-    write=ft_bsd_write
-    lseek=ft_bsd_lseek
 )
 
 target_link_libraries(flash-tree PUBLIC bsd-btree)
@@ -92,6 +87,7 @@ if(UNITY_SRC)
         tests/test_blockdev.c
         tests/test_btree_prefix.c
         tests/test_btree_rw.c
+        tests/test_multi_kv.c
         tests/test_kv_edge_cases.c
         tests/test_tsdb_basic.c
         tests/test_tsdb_agg.c

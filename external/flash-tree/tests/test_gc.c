@@ -55,44 +55,44 @@ static void test_gc_allows_open_cursor_and_preserves_snapshot(void) {
     ft_blockdev_t bdev = {0};
     make_bdev(&bdev, &rd, storage, sizeof(storage));
 
-    ft_db_t* db = NULL;
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_db_init(&db, &bdev, NULL));
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_put(db, "a", 1, "1", 1));
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_put(db, "aa", 2, "2", 1));
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_put(db, "ab", 2, "3", 1));
+    ft_kv_t* kv = NULL;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_open(&kv, &bdev, NULL));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_put(kv, "a", 1, "1", 1));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_put(kv, "aa", 2, "2", 1));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_put(kv, "ab", 2, "3", 1));
 
-    ft_cursor_t* cur = NULL;
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_open_prefix(db, "a", 1, &cur));
+    ft_kv_cursor_t* cur = NULL;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_cursor_open_prefix(kv, "a", 1, &cur));
     TEST_ASSERT_NOT_NULL(cur);
 
     /* GC must not disturb the active cursor. */
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_gc_step(db, 0));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_gc_step(kv, 0));
 
     int has = 0;
     ft_blob_t k = {0};
 
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_cursor_next(cur, &has));
     TEST_ASSERT_TRUE(has);
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_key(cur, &k));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_cursor_key(cur, &k));
     TEST_ASSERT_EQUAL_MEMORY("a", k.data, 1);
 
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_cursor_next(cur, &has));
     TEST_ASSERT_TRUE(has);
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_key(cur, &k));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_cursor_key(cur, &k));
     TEST_ASSERT_EQUAL_MEMORY("aa", k.data, 2);
 
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_cursor_next(cur, &has));
     TEST_ASSERT_TRUE(has);
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_key(cur, &k));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_cursor_key(cur, &k));
     TEST_ASSERT_EQUAL_MEMORY("ab", k.data, 2);
 
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_cursor_next(cur, &has));
     TEST_ASSERT_FALSE(has);
 
-    ft_cursor_close(cur);
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_gc_step(db, 0));
+    ft_kv_cursor_close(cur);
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_gc_step(kv, 0));
 
-    ft_db_deinit(db);
+    ft_kv_close(kv);
 }
 
 static void test_recovery_persists_across_reinit(void) {
@@ -101,19 +101,19 @@ static void test_recovery_persists_across_reinit(void) {
     ft_blockdev_t bdev = {0};
     make_bdev(&bdev, &rd, storage, sizeof(storage));
 
-    ft_db_t* db = NULL;
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_db_init(&db, &bdev, NULL));
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_put(db, "k", 1, "v", 1));
-    ft_db_deinit(db);
+    ft_kv_t* kv = NULL;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_open(&kv, &bdev, NULL));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_put(kv, "k", 1, "v", 1));
+    ft_kv_close(kv);
 
     /* Re-open on the same backing store, without erasing. */
-    db = NULL;
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_db_init(&db, &bdev, NULL));
+    kv = NULL;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_open(&kv, &bdev, NULL));
     ft_blob_t out = {0};
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_get(db, "k", 1, &out));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_get(kv, "k", 1, &out));
     TEST_ASSERT_EQUAL_UINT32(1, (uint32_t)out.len);
     TEST_ASSERT_EQUAL_MEMORY("v", out.data, 1);
-    ft_db_deinit(db);
+    ft_kv_close(kv);
 }
 
 static void test_gc_preserves_latest_value_after_many_updates(void) {
@@ -122,25 +122,25 @@ static void test_gc_preserves_latest_value_after_many_updates(void) {
     ft_blockdev_t bdev = {0};
     make_bdev(&bdev, &rd, storage, sizeof(storage));
 
-    ft_db_t* db = NULL;
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_db_init(&db, &bdev, NULL));
+    ft_kv_t* kv = NULL;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_open(&kv, &bdev, NULL));
 
     /* Create garbage by rewriting the same key many times. */
     for (int i = 0; i < 200; i++) {
         char v = (char)('A' + (i % 26));
-        TEST_ASSERT_EQUAL_INT(FT_OK, ft_put(db, "k", 1, &v, 1));
+        TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_put(kv, "k", 1, &v, 1));
     }
 
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_gc_step(db, 0));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_gc_step(kv, 0));
 
     ft_blob_t out = {0};
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_get(db, "k", 1, &out));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_get(kv, "k", 1, &out));
     TEST_ASSERT_EQUAL_UINT32(1, (uint32_t)out.len);
     /* Last written value (i=199). */
     char expect = (char)('A' + (199 % 26));
     TEST_ASSERT_EQUAL_MEMORY(&expect, out.data, 1);
 
-    ft_db_deinit(db);
+    ft_kv_close(kv);
 }
 
 void ft_register_tests_gc(void) {

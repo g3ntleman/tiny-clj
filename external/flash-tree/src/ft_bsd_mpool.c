@@ -13,7 +13,7 @@
 
 #include "ft_bsd_mpool.h"
 #include "ft_utils.h"
-#include "ft_bsd_blockfile.h"
+#include "ft_kv_bind.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -28,10 +28,9 @@ extern uint32_t ft_crc32_ieee(const void* data, size_t len, uint32_t seed);
  * This must match ft_bsd_blockfile's header region calculation
  * to avoid collision between B-Tree metadata and mpool pages.
  */
-static uint32_t ft_calc_data_base(ft_blockdev_t* bdev) {
-    uint32_t eg = bdev->geom.erase_granularity ? bdev->geom.erase_granularity : 1;
-    /* Header region: at least 64 bytes, aligned to erase granularity */
-    return ft_align_up_u32(ft_max_u32(64u, eg), eg);
+static uint32_t ft_calc_data_base(void) {
+    // Simplified: the mpool log starts exactly at the bound base offset.
+    return ft_kv_bound_base_offset();
 }
 
 /* ============== Page-Map Operations ============== */
@@ -172,7 +171,7 @@ static int ft_mpool_recover(MPOOL* mp) {
     mp->page_map_count = 0;
     mp->npages = 0;
     
-    /* Start scanning from data_base (after header region) */
+    /* Start scanning from data_base */
     uint32_t offset = mp->data_base;
     ft_page_hdr_t hdr;
     
@@ -207,7 +206,7 @@ MPOOL* mpool_open(void* key, int fd, pgno_t pagesize, pgno_t maxcache) {
     (void)fd;
     (void)maxcache;
     
-    ft_blockdev_t* bdev = ft_bsd_blockfile_get_bdev();
+    ft_blockdev_t* bdev = ft_kv_bound_bdev();
     if (!bdev) return NULL;
     if (pagesize == 0) pagesize = FT_MPOOL_PAGE_SIZE;
     if (pagesize > FT_MPOOL_PAGE_SIZE) return NULL;  /* Page too large for cache */
@@ -218,8 +217,8 @@ MPOOL* mpool_open(void* key, int fd, pgno_t pagesize, pgno_t maxcache) {
     mp->bdev = bdev;
     mp->pagesize = pagesize;
     
-    /* Calculate data region start (after ft_bsd_blockfile header region) */
-    mp->data_base = ft_calc_data_base(bdev);
+    /* Calculate data region start */
+    mp->data_base = ft_calc_data_base();
     mp->write_off = mp->data_base;
     
     /* GC: Split remaining space into two halves for ping-pong */
