@@ -44,8 +44,8 @@ static char sccsid[] = "@(#)bt_stack.c	8.3 (Berkeley) 2/21/94";
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <db.h>
-#include "btree.h"
+#include "ft_bsd_db.h"
+#include "ft_bsd_btree.h"
 
 /*
  * When a page splits, a new record has to be inserted into its parent page.

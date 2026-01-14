@@ -1,4 +1,4 @@
-// ft_tsdb_flashdb.c - FlashDB TSDB-backed implementation for flash-tree.
+// ft_tsdb.c - FlashDB TSDB-backed implementation for flash-tree.
 //
 // This adapts FlashDB's TSDB module to the flash-tree public API. The core TSDB
 // logic stays in upstream FlashDB sources; we provide glue + error mapping.

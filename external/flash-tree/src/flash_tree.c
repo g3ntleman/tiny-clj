@@ -28,9 +28,9 @@
 #include <errno.h>
 
 #define __DBINTERFACE_PRIVATE
-#include "db.h"
-#include "btree.h"
-#include "mpool.h"
+#include "ft_bsd_db.h"
+#include "ft_bsd_btree.h"
+#include "ft_bsd_mpool.h"
 
 /* ============== Database Handle ============== */
 
@@ -326,4 +326,4 @@ ft_status_t ft_gc_step(ft_db_t* db, size_t budget_bytes) {
     return FT_OK;
 }
 
-/* (TSDB functions are implemented in ft_tsdb_flashdb.c) */
+/* (TSDB functions are implemented in ft_tsdb.c) */

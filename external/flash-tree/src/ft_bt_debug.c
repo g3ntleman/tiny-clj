@@ -44,8 +44,8 @@ static char sccsid[] = "@(#)bt_debug.c	8.2 (Berkeley) 2/21/94";
 #include <stdlib.h>
 #include <string.h>
 
-#include <db.h>
-#include "btree.h"
+#include "ft_bsd_db.h"
+#include "ft_bsd_btree.h"
 
 #ifdef DEBUG
 /*

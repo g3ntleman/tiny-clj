@@ -46,8 +46,8 @@ static char sccsid[] = "@(#)bt_close.c	8.3 (Berkeley) 2/21/94";
 #include <string.h>
 #include <unistd.h>
 
-#include <db.h>
-#include "btree.h"
+#include "ft_bsd_db.h"
+#include "ft_bsd_btree.h"
 
 static int bt_meta __P((BTREE *));
 
