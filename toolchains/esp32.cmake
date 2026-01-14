@@ -5,27 +5,66 @@
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR xtensa)
 
-# ESP32 Toolchain Path (adjust as needed)
-# Must be set via environment variable ESP32_TOOLCHAIN_PATH
-set(ESP32_TOOLCHAIN_PATH "$ENV{ESP32_TOOLCHAIN_PATH}")
-if(NOT ESP32_TOOLCHAIN_PATH)
-    message(FATAL_ERROR "ESP32_TOOLCHAIN_PATH environment variable is not set. "
-            "Please set it to the path of your ESP32 toolchain installation. "
-            "Example: export ESP32_TOOLCHAIN_PATH=\$HOME/esp/xtensa-esp32-elf-clang")
+#
+# Toolchain discovery order:
+# 1) Prefer ESP-IDF environment (source scripts/esp_env.sh) which puts Xtensa tools in PATH.
+# 2) Fallback to explicit ESP32_TOOLCHAIN_PATH (legacy).
+#
+find_program(ESP32_GCC xtensa-esp32-elf-gcc)
+find_program(ESP32_GXX xtensa-esp32-elf-g++)
+find_program(ESP32_AR  xtensa-esp32-elf-ar)
+find_program(ESP32_RANLIB xtensa-esp32-elf-ranlib)
+find_program(ESP32_LD  xtensa-esp32-elf-ld)
+find_program(ESP32_STRIP xtensa-esp32-elf-strip)
+find_program(ESP32_OBJCOPY xtensa-esp32-elf-objcopy)
+find_program(ESP32_OBJDUMP xtensa-esp32-elf-objdump)
+
+if(ESP32_GCC)
+    # Set the cross compiler from PATH.
+    set(CMAKE_C_COMPILER "${ESP32_GCC}" CACHE FILEPATH "C compiler")
+    if(ESP32_GXX)
+        set(CMAKE_CXX_COMPILER "${ESP32_GXX}" CACHE FILEPATH "C++ compiler")
+    endif()
+    set(CMAKE_ASM_COMPILER "${ESP32_GCC}" CACHE FILEPATH "ASM compiler")
+
+    if(ESP32_LD)
+        set(CMAKE_LINKER "${ESP32_LD}" CACHE FILEPATH "Linker")
+    endif()
+    if(ESP32_AR)
+        set(CMAKE_AR "${ESP32_AR}" CACHE FILEPATH "Archiver")
+    endif()
+    if(ESP32_RANLIB)
+        set(CMAKE_RANLIB "${ESP32_RANLIB}" CACHE FILEPATH "Ranlib")
+    endif()
+    if(ESP32_STRIP)
+        set(CMAKE_STRIP "${ESP32_STRIP}" CACHE FILEPATH "Strip")
+    endif()
+    if(ESP32_OBJCOPY)
+        set(CMAKE_OBJCOPY "${ESP32_OBJCOPY}" CACHE FILEPATH "Objcopy")
+    endif()
+    if(ESP32_OBJDUMP)
+        set(CMAKE_OBJDUMP "${ESP32_OBJDUMP}" CACHE FILEPATH "Objdump")
+    endif()
+else()
+    # ESP32 Toolchain Path (legacy)
+    set(ESP32_TOOLCHAIN_PATH "$ENV{ESP32_TOOLCHAIN_PATH}")
+    if(NOT ESP32_TOOLCHAIN_PATH)
+        message(FATAL_ERROR "ESP32 toolchain not found in PATH and ESP32_TOOLCHAIN_PATH is not set. "
+                "If you use ESP-IDF submodule, run: source ./scripts/esp_env.sh "
+                "Otherwise set ESP32_TOOLCHAIN_PATH (e.g. export ESP32_TOOLCHAIN_PATH=$HOME/esp/xtensa-esp32-elf).")
+    endif()
+
+    set(CMAKE_C_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-gcc" CACHE FILEPATH "C compiler")
+    set(CMAKE_CXX_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-g++" CACHE FILEPATH "C++ compiler")
+    set(CMAKE_ASM_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-gcc" CACHE FILEPATH "ASM compiler")
+
+    set(CMAKE_LINKER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-ld" CACHE FILEPATH "Linker")
+    set(CMAKE_AR "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-ar" CACHE FILEPATH "Archiver")
+    set(CMAKE_RANLIB "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-ranlib" CACHE FILEPATH "Ranlib")
+    set(CMAKE_STRIP "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-strip" CACHE FILEPATH "Strip")
+    set(CMAKE_OBJCOPY "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-objcopy" CACHE FILEPATH "Objcopy")
+    set(CMAKE_OBJDUMP "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-objdump" CACHE FILEPATH "Objdump")
 endif()
-
-# Set the cross compiler
-set(CMAKE_C_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-gcc" CACHE FILEPATH "C compiler")
-set(CMAKE_CXX_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-g++" CACHE FILEPATH "C++ compiler")
-set(CMAKE_ASM_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-gcc" CACHE FILEPATH "ASM compiler")
-
-# Set the linker
-set(CMAKE_LINKER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-ld" CACHE FILEPATH "Linker")
-set(CMAKE_AR "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-ar" CACHE FILEPATH "Archiver")
-set(CMAKE_RANLIB "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-ranlib" CACHE FILEPATH "Ranlib")
-set(CMAKE_STRIP "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-strip" CACHE FILEPATH "Strip")
-set(CMAKE_OBJCOPY "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-objcopy" CACHE FILEPATH "Objcopy")
-set(CMAKE_OBJDUMP "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-objdump" CACHE FILEPATH "Objdump")
 
 # ESP32-specific compiler flags
 set(CMAKE_C_FLAGS_INIT "-mlongcalls -DNO_TERMIOS")
@@ -42,7 +81,7 @@ set(CMAKE_CXX_COMPILER_WORKS 1)
 # ESP32-specific definitions
 add_definitions(-DESP32_BUILD)
 add_definitions(-DXTENSA_CPU=esp32)
-add_definitions(-DIDF_VER="4.4.0")
+add_definitions(-DIDF_VER="5.3.4")
 
 # ESP32 memory layout
 set(ESP32_FLASH_SIZE_KB 4096 CACHE STRING "ESP32 Flash size in KB")
@@ -55,7 +94,7 @@ set(ESP32_PARTITION_TABLE_SIZE_KB 4 CACHE STRING "ESP32 partition table size in 
 math(EXPR ESP32_APP_SIZE_KB "${ESP32_FLASH_SIZE_KB} - ${ESP32_PARTITION_TABLE_SIZE_KB}")
 set(ESP32_APP_SIZE "${ESP32_APP_SIZE_KB}KB")
 
-message(STATUS "ESP32 Toolchain: ${ESP32_TOOLCHAIN_PATH}")
+message(STATUS "ESP32 Toolchain: ${CMAKE_C_COMPILER}")
 message(STATUS "ESP32 Flash: ${ESP32_FLASH_SIZE_KB}KB, RAM: ${ESP32_RAM_SIZE_KB}KB")
 message(STATUS "Available for app: ${ESP32_APP_SIZE}")
 

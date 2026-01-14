@@ -72,6 +72,9 @@ venv/
 .clj-kondo/
 .lsp/
 
+# Repo-local dependencies (do not commit)
+_deps/
+
 # System files
 .DS_Store
 *.DS_Store

@@ -77,6 +77,31 @@ For size comparisons, use a **Release** (or Embedded) build. Debug builds are mu
 ./scripts/measure_esp32_size.sh build-release
 ```
 
+### ESP-IDF (ESP32 toolchain) via git submodule
+
+This repo pins **ESP-IDF v5.3.x** as a git submodule under `external/esp-idf` so contributors can reproduce the ESP32 toolchain setup.
+
+```bash
+# 1) Fetch submodules (required once after clone)
+git submodule update --init --recursive external/esp-idf
+
+# 2) Download ESP-IDF tools/toolchains into a repo-local directory (./_deps/)
+./scripts/setup_esp_idf.sh
+
+# 3) Activate ESP-IDF environment (adds xtensa-esp32-elf-* tools to PATH)
+source ./scripts/esp_env.sh
+
+# Verify tools
+which xtensa-esp32-elf-gcc
+which xtensa-esp32-elf-size
+```
+
+With the ESP-IDF environment active, you can run the flash-tree size accounting script:
+
+```bash
+external/flash-tree/scripts/size_report_esp32.sh
+```
+
 ### Running
 
 ```bash
