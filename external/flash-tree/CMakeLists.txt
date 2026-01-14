@@ -1,20 +1,21 @@
 cmake_minimum_required(VERSION 3.10)
 project(flash-tree C)
 
-add_library(flash-tree STATIC
+set(FLASH_TREE_CORE_SRCS
     src/ft_kv.c
+    src/ft_kv_bind.c
     src/ft_blockdev.c
     src/ft_crc32.c
-    src/ft_kv_bind.c
     src/ft_tsdb.c
+)
+
+set(FLASHDB_SRCS
     src/flashdb/ft_port.c
     src/flashdb/ft_tsdb.c
     src/flashdb/ft_utils.c
 )
 
-# 4.4BSD btree/mpool (reference build target)
-# Not linked into flash-tree by default; built on demand.
-add_library(bsd-btree STATIC
+set(BSD_BTREE_SRCS
     src/ft_bt_close.c
     src/ft_bt_conv.c
     src/ft_bt_debug.c
@@ -33,36 +34,64 @@ add_library(bsd-btree STATIC
     src/ft_bsd_mpool.c
 )
 
-target_include_directories(bsd-btree PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/inc
+# Build as OBJECT libraries so we can:
+# - produce a monolithic libflash-tree.a (for existing consumers)
+# - also produce split archives for size accounting (flashdb vs flash-tree).
+add_library(flashdb-obj OBJECT ${FLASHDB_SRCS})
+add_library(flash-tree-obj OBJECT ${FLASH_TREE_CORE_SRCS})
+add_library(bsd-btree-obj OBJECT ${BSD_BTREE_SRCS})
+
+add_library(flashdb-core STATIC $<TARGET_OBJECTS:flashdb-obj>)
+add_library(flash-tree-core STATIC $<TARGET_OBJECTS:flash-tree-obj>)
+add_library(bsd-btree STATIC $<TARGET_OBJECTS:bsd-btree-obj>)
+
+# Monolithic archive (backwards compatible target name).
+add_library(flash-tree STATIC
+    $<TARGET_OBJECTS:flash-tree-obj>
+    $<TARGET_OBJECTS:flashdb-obj>
+    $<TARGET_OBJECTS:bsd-btree-obj>
 )
-target_compile_features(bsd-btree PUBLIC c_std_99)
-target_compile_options(bsd-btree PRIVATE -Wall -Wextra)
-target_compile_definitions(bsd-btree PRIVATE
+
+# 4.4BSD btree/mpool (reference build target)
+# Not linked into flash-tree by default; built on demand.
+# (The actual compilation is done by bsd-btree-obj above.)
+
+foreach(tgt flashdb-obj flash-tree-obj bsd-btree-obj flashdb-core flash-tree-core bsd-btree flash-tree)
+    target_include_directories(${tgt}
+        PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/inc
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/flashdb
+    )
+    target_compile_features(${tgt} PUBLIC c_std_99)
+endforeach()
+
+target_compile_options(flash-tree-obj PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_compile_options(flashdb-obj PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_compile_options(bsd-btree-obj PRIVATE -Wall -Wextra)
+
+target_compile_definitions(bsd-btree-obj PRIVATE
     __DBINTERFACE_PRIVATE
 )
 
-target_link_libraries(flash-tree PUBLIC bsd-btree)
-
-target_include_directories(flash-tree
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/inc
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/flashdb
+target_compile_definitions(flash-tree-obj PRIVATE
+    $<$<CONFIG:Debug>:DEBUG>
 )
-
-target_compile_features(flash-tree PUBLIC c_std_99)
-target_compile_options(flash-tree PRIVATE -Wall -Wextra -Wno-unused-parameter)
-target_compile_definitions(flash-tree PRIVATE
+target_compile_definitions(flashdb-obj PRIVATE
     $<$<CONFIG:Debug>:DEBUG>
 )
 
 # Single-config generators fallback (older CMake workflows).
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(flash-tree PRIVATE DEBUG)
+    target_compile_definitions(flash-tree-obj PRIVATE DEBUG)
+    target_compile_definitions(flashdb-obj PRIVATE DEBUG)
 endif()
+
+target_include_directories(bsd-btree PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/inc
+)
 
 # Host tests (Unity) - find Unity in various locations
 set(UNITY_SEARCH_PATHS
