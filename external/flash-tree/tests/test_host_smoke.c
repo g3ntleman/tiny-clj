@@ -49,10 +49,10 @@ static void test_db_init_deinit_smoke(void) {
     };
     TEST_ASSERT_EQUAL_INT(FT_OK, ft_blockdev_validate(&bdev));
 
-    ft_db_t* db = NULL;
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_db_init(&db, &bdev, NULL));
-    TEST_ASSERT_NOT_NULL(db);
-    ft_db_deinit(db);
+    ft_kv_t* kv = NULL;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_open(&kv, &bdev, NULL));
+    TEST_ASSERT_NOT_NULL(kv);
+    ft_kv_close(kv);
 }
 
 void ft_register_tests_host_smoke(void) {
