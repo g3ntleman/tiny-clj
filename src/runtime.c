@@ -85,10 +85,6 @@ void runtime_init(TinyClJRuntime *runtime) {
             ASSIGN(runtime->timer_queue, transient_timer);
         }
     }
-
-    // Initialize event loop interned keywords (idempotent).
-    // Without this, timers/tasks may fail because task maps use keyword keys like :fn.
-    event_loop_init();
     
     // Reset primitive fields
     runtime->builtins_registered = false;
@@ -125,9 +121,5 @@ void runtime_reset(TinyClJRuntime *runtime) {
     runtime->builtins_registered = false;
     runtime->timer_id_counter = 0;
     event_loop_clear();
-
-    // Clear simulated GPIO watchers (test isolation).
-    extern void gpio_watchers_clear_all(void);
-    gpio_watchers_clear_all();
 }
 

@@ -537,7 +537,7 @@ CljNamespace* ns_find_for_object(CljObject *obj) {
     if (!obj || !g_runtime.ns_registry) return NULL;
     
     MAP_FOR_EACH(g_runtime.ns_registry, ns_key, ns_val) {
-        if (TAG(ns_val) == CLJ_NAMESPACE) {
+        if (ns_val && TAG(ns_val) == CLJ_NAMESPACE) {
             CljNamespace *ns = (CljNamespace*)ns_val;
             if (ns->mappings) {
                 MAP_FOR_EACH(ns->mappings, key, value) {
@@ -821,12 +821,12 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
 
             ID arg1 = LIST_FIRST(cargs);
             CljList *after1 = list_or_null(as_list(LIST_REST(cargs)));
-            if (TAG(arg1) == CLJ_SYMBOL) {
+            if (arg1 && TAG(arg1) == CLJ_SYMBOL) {
                 binding_sym = arg1;
                 body_node = after1;
             } else if (after1) {
                 ID arg2 = LIST_FIRST(after1);
-                if (TAG(arg2) == CLJ_SYMBOL) {
+                if (arg2 && TAG(arg2) == CLJ_SYMBOL) {
                     binding_sym = arg2;
                     body_node = list_or_null(as_list(LIST_REST(after1)));
                 }

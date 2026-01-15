@@ -250,7 +250,7 @@ ID eval_special_throw(CljList *list, CljMap *env, EvalState *st, const EvalConte
     ID thrown = eval_body(expr, eval_env_or_ns_mappings(env, st), st, ctx);
 
     // Rethrow exception objects directly.
-    if (TAG(thrown) == CLJ_EXCEPTION) {
+    if (thrown && TAG(thrown) == CLJ_EXCEPTION) {
         throw_exception_object((CLJException*)thrown);
         return NULL;
     }
@@ -657,7 +657,6 @@ ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
         .env = ctx->env,
         .env_stack = ctx->env_stack,
         .frame = ctx->frame,
-        .captured_frames = ctx->captured_frames,
         .st = ctx->st,
         .recur_args = NULL,
         .recur_arg_count = NULL

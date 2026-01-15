@@ -25,7 +25,6 @@
 #include "utf8.h"
 #include "value.h"
 #include "symbol.h"
-#include "symbol_token.h"
 #include "meta.h"
 #include "strings.h"
 #include "ast_canon.h"
@@ -171,20 +170,11 @@ static ID parse_tagged_literal(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
 
   ID tag_obj = parse_symbol(reader, st);
-  if (!tag_obj) {
+  if (!tag_obj || TAG(tag_obj) != CLJ_SYMBOL) {
     throw_parser_exception("Invalid tagged literal: expected symbol tag", reader);
     return NULL;
   }
-  const char *tag = NULL;
-  if (TAG(tag_obj) == CLJ_SYMBOL) {
-    tag = as_symbol((CljValue)tag_obj)->cname;
-  } else if (TAG(tag_obj) == CLJ_SYMBOL_TOKEN) {
-    // Parser uses symbol tokens for performance; tagged literals still need a symbol tag.
-    tag = symbol_token_data((const CljSymbolToken*)tag_obj);
-  } else {
-    throw_parser_exception("Invalid tagged literal: expected symbol tag", reader);
-    return NULL;
-  }
+  const char *tag = as_symbol((CljValue)tag_obj)->cname;
   if (!tag) {
     throw_parser_exception("Invalid tagged literal: missing tag name", reader);
     return NULL;
@@ -314,7 +304,11 @@ ID parse_expr(Reader *reader, EvalState *st) {
         reader_consume(reader); // 'n'
         reader_consume(reader); // 'i'
         reader_consume(reader); // 'l'
-        return SYM_NIL;
+        CljSymbol *nil_sym = intern_symbol_global("nil");
+        if (nil_sym == SYM_NIL) {
+          return SYM_NIL;
+        }
+        return AUTORELEASE(nil_sym);
       }
       break;
 
@@ -450,11 +444,9 @@ ID parse_expr(Reader *reader, EvalState *st) {
       return parse_symbol(reader, st);
     }
     // Single character operator
-    uint16_t line = (uint16_t)reader_line(reader);
-    uint16_t col = (uint16_t)reader_column(reader);
     reader_consume(reader);
     char buf[2] = {c, '\0'};
-    return AUTORELEASE(make_symbol_token_with_loc(buf, line, col));
+    return intern_symbol_global(buf);
   }
 
   // Unknown character - throw exception with helpful message
@@ -527,11 +519,11 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
         }
         result = eval_list(as_list(parsed_expr), eval_env, eval_state, NULL);
         // eval_list returns AUTORELEASE objects
-    } else if (TAG(parsed_expr) == CLJ_SYMBOL) {
+    } else if (parsed_expr && TAG(parsed_expr) == CLJ_SYMBOL) {
         // For symbols, use eval_symbol (uses current_ns->mappings internally)
         result = eval_symbol(as_symbol(parsed_expr), eval_state);
         // eval_symbol already returns autoreleased object
-    } else if (TAG(parsed_expr) == CLJ_MAP) {
+    } else if (parsed_expr && TAG(parsed_expr) == CLJ_MAP) {
         // Map literals need to have their keys and values evaluated
         // Use provided env or fall back to current_ns->mappings
         CljMap *eval_env = env;
@@ -541,7 +533,7 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
         }
         result = eval_body(parsed_expr, eval_env, eval_state, NULL);
         // eval_body returns AUTORELEASE objects
-    } else if (TAG(parsed_expr) == CLJ_VECTOR) {
+    } else if (parsed_expr && TAG(parsed_expr) == CLJ_VECTOR) {
         // Vector literals need to have their elements evaluated
         // Use provided env or fall back to current_ns->mappings
         CljMap *eval_env = env;
@@ -670,18 +662,10 @@ static ID parse_list(Reader *reader, EvalState *st) {
   ID first = parse_expr_with_progress(reader, st);
   reader_skip_all(reader);
 
-  // Check if first element is if-let symbol for macro expansion.
-  // NOTE: Parser often produces CLJ_SYMBOL_TOKEN (canonicalized later), so handle both.
-  const unsigned char first_tag = TAG(first);
-  if (first_tag == CLJ_SYMBOL || first_tag == CLJ_SYMBOL_TOKEN) {
-    const char *head = NULL;
-    if (first_tag == CLJ_SYMBOL) {
-      CljSymbol *sym = as_symbol((CljValue)first);
-      head = (sym) ? sym->cname : NULL;
-    } else {
-      head = symbol_token_data((const CljSymbolToken*)first);
-    }
-    if (head && strcmp(head, "if-let") == 0) {
+  // Check if first element is if-let symbol for macro expansion
+  if (first && TAG(first) == CLJ_SYMBOL) {
+    CljSymbol *sym = as_symbol((CljValue)first);
+    if (sym && sym->cname && strcmp(sym->cname, "if-let") == 0) {
       // Macro expansion: (if-let [binding test] then else?)
       // => (let [binding test] (if binding then else?))
 
@@ -923,7 +907,7 @@ CljSymbol* resolve_alias_in_namespace(EvalState *st, const char *alias_str) {
     if (!alias_sym) return NULL;
     
     CljObject *resolved_ns_obj = ns_get_alias(st->current_ns, (CljObject*)alias_sym);
-    if (TAG(resolved_ns_obj) == CLJ_SYMBOL) {
+    if (resolved_ns_obj && TAG(resolved_ns_obj) == CLJ_SYMBOL) {
         return as_symbol(resolved_ns_obj);
     }
     
@@ -931,80 +915,198 @@ CljSymbol* resolve_alias_in_namespace(EvalState *st, const char *alias_str) {
 }
 
 /**
- * @brief Parse a raw symbol/keyword token (no interning).
+ * @brief Parse symbol literal (identifier) using Reader
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @return Parsed symbol CljObject (interned via intern_symbol_global) or NULL on error
  *
- * The parser returns a single `CLJ_SYMBOL_TOKEN` that preserves the exact reader
- * spelling, e.g. `foo`, `foo/bar`, `:kw`, `::kw`, `::alias/kw`.
- *
- * Splitting (`/`, `::`) and interning is done later during AST canonicalization.
+ * IMPORTANT: All symbols returned by the parser (directly or indirectly) are interned.
+ * This ensures pointer equality for the same symbol names, which is critical for
+ * map lookups and namespace resolution.
  */
 static ID parse_symbol(Reader *reader, EvalState *st) {
-  (void)st;
-
-  uint16_t line = (uint16_t)reader_line(reader);
-  uint16_t col = (uint16_t)reader_column(reader);
-
   char buffer[MAX_STACK_STRING_SIZE];
   int pos = 0;
+  int slash_pos = -1;
+  bool auto_qualify = false;  // Track if :: was detected
 
-  // Preserve keyword prefixes exactly (":" and "::") as part of the token.
+  // Handle keyword prefix
   if (reader_peek_char(reader) == ':') {
     buffer[pos++] = reader_next(reader);
-    if (pos < MAX_STACK_STRING_SIZE - 1 && reader_peek_char(reader) == ':') {
+    if (reader_peek_char(reader) == ':') {
       buffer[pos++] = reader_next(reader);
+      auto_qualify = true;  // :: detected - will auto-qualify with current namespace
     }
   }
 
   while (!reader_eof(reader) && pos < MAX_STACK_STRING_SIZE - 1) {
-    uint32_t cp = reader_peek_codepoint(reader);
-    if (cp == READER_EOF || cp == READER_UTF8_ERROR) break;
-    if (!utf8_is_symbol_char((int)cp)) break;
+    int cp = reader_peek_codepoint(reader);
+    if (cp < 0) break;
 
-    const char *current = reader->src + reader->index;
-    const char *next = utf8codepoint(current, NULL);
-    if (!next || next <= current) {
-      CLJ_ASSERT(next && next > current);
-      next = current + 1;
-    }
+    if (utf8_is_symbol_char(cp)) {
+      // Track position of '/' for namespace-qualified symbols
+      if (cp == '/') {
+        slash_pos = pos;
+      }
 
-    size_t bytes = (size_t)(next - current);
-    if (pos + (int)bytes >= MAX_STACK_STRING_SIZE) break;
+      // Get the UTF-8 bytes for this codepoint
+      const char *current = reader->src + reader->index;
+      const char *next = utf8codepoint(current, NULL);
+      if (!next || next <= current) {
+        // Notbremse: Fortschritt sicherstellen
+        CLJ_ASSERT(next && next > current);
+        // Fallback: advance one byte to avoid hanging
+        next = current + 1;
+      }
 
-    for (size_t i = 0; i < bytes; i++) {
-      buffer[pos++] = current[i];
-    }
+      size_t bytes_to_copy = next - current;
+      if (pos + bytes_to_copy >= MAX_STACK_STRING_SIZE) break;
 
+      // Copy UTF-8 bytes
+      for (size_t i = 0; i < bytes_to_copy; i++) {
+        buffer[pos++] = current[i];
+      }
+
+      // Advance reader by codepoint
 #if defined(DEBUG)
-    size_t before = reader_offset(reader);
+      size_t before = reader_offset(reader);
 #endif
-    reader_next_codepoint(reader);
+      reader_next_codepoint(reader);
 #if defined(DEBUG)
-    size_t after = reader_offset(reader);
-    CLJ_ASSERT(after > before);
+      size_t after = reader_offset(reader);
+      // Notbremse: Fortschritt garantiert
+      CLJ_ASSERT(after > before);
 #endif
+    } else {
+      break;
+    }
   }
 
   buffer[pos] = '\0';
-
+  // Empty symbols are invalid - fail gracefully instead of aborting
   if (pos == 0) {
     if (!reader_eof(reader)) {
+      // Ensure forward progress to avoid parser stalls
       reader_next_codepoint(reader);
     }
     throw_parser_exception("Expected symbol", reader);
     return NULL;
   }
-
-  if ((pos == 1 && buffer[0] == ':') || (pos == 2 && buffer[0] == ':' && buffer[1] == ':')) {
+  // Keywords must have at least one character after the colon
+  if (pos == 1 && buffer[0] == ':') {
     throw_parser_exception("Expected symbol after ':'", reader);
     return NULL;
   }
-
-  if (!utf8valid(buffer)) {
+  if (!utf8valid(buffer))
     throw_parser_exception("Invalid UTF-8 in symbol", reader);
-    return NULL;
+
+  // Handle auto-qualified keywords: ::keyword or ::alias/keyword
+  if (auto_qualify) {
+    if (slash_pos > 0 && slash_pos < pos - 1) {
+      // ::alias/keyword - auto-qualify with alias namespace
+      buffer[slash_pos] = '\0';
+      const char *alias_str = buffer + 2;  // Skip ::
+      const char *keyword_name = buffer + slash_pos + 1;
+      
+      if (alias_str[0] != '\0' && keyword_name[0] != '\0') {
+        CljSymbol *ns_name_sym = resolve_alias_in_namespace(st, alias_str);
+        if (ns_name_sym && ns_name_sym->cname) {
+          // For keywords, keep the ':' prefix in cname for IS_KEYWORD to work
+          char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
+          size_t kw_pos = 0;
+          kw_pos = format_append_char(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), ':');
+          (void)format_append(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), keyword_name);
+          CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
+          if (kw) {
+            return AUTORELEASE(kw);  // No location meta for atoms
+          }
+        }
+      }
+      // If alias resolution fails, fall through to treat as regular qualified keyword
+    } else {
+      // ::keyword - auto-qualify with current namespace
+      if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname) {
+        const char *current_ns_name = st->current_ns->name->cname;
+        const char *keyword_name = buffer + 2;  // Skip ::
+        
+        if (keyword_name[0] != '\0') {
+          CljSymbol *ns_name_sym = intern_symbol_global(current_ns_name);
+          if (ns_name_sym) {
+            // For keywords, keep the ':' prefix in cname for IS_KEYWORD to work
+            char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
+            size_t kw_pos = 0;
+            kw_pos = format_append_char(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), ':');
+            (void)format_append(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), keyword_name);
+            CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
+            if (kw) {
+              return AUTORELEASE(kw);  // No location meta for atoms
+            }
+          }
+        }
+      }
+      // If auto-qualification fails, fall through to return unqualified keyword
+    }
   }
 
-  return AUTORELEASE(make_symbol_token_with_loc(buffer, line, col));
+  // Check for namespace-qualified symbol: namespace/symbol or alias/symbol
+  if (slash_pos > 0 && slash_pos < pos - 1) {
+    // Split buffer at '/': namespace/alias and symbol
+    buffer[slash_pos] = '\0';
+    const char *ns_str = buffer;
+    const char *symbol_str = buffer + slash_pos + 1;
+
+    if (ns_str[0] != '\0' && symbol_str[0] != '\0') {
+      // CRITICAL: Create symbol with namespace set (not full string name)
+      // This allows eval_symbol to quickly check symbol->ns instead of parsing in hot-path
+      
+      // For keywords (ns_str starts with ':'), extract namespace name without ':'
+      // and keep ':' prefix in symbol_str for IS_KEYWORD to work
+      bool is_keyword_symbol = (ns_str[0] == ':');
+      
+      // Resolve alias if available (for both keywords and regular symbols)
+      CljSymbol *resolved_ns_name_sym = NULL;
+      if (is_keyword_symbol) {
+        // For keywords, skip ':' prefix before alias resolution
+        const char *actual_ns_str = ns_str + 1;
+        resolved_ns_name_sym = resolve_alias_in_namespace(st, actual_ns_str);
+      } else {
+        // For regular symbols, try alias resolution
+        resolved_ns_name_sym = resolve_alias_in_namespace(st, ns_str);
+      }
+      
+      // Use resolved namespace if found, otherwise use original ns_str
+      CljSymbol *ns_name_sym = resolved_ns_name_sym;
+      if (!ns_name_sym) {
+        if (is_keyword_symbol) {
+          ns_name_sym = (ns_str + 1) ? intern_symbol_global(ns_str + 1) : NULL;
+        } else {
+          ns_name_sym = ns_str ? intern_symbol_global(ns_str) : NULL;
+        }
+      }
+      
+      if (is_keyword_symbol) {
+        // Add ':' prefix to symbol name for IS_KEYWORD to work
+        char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
+        size_t kw_pos = 0;
+        kw_pos = format_append_char(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), ':');
+        (void)format_append(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), symbol_str);
+        CljSymbol *sym = intern_symbol(ns_name_sym, keyword_with_colon);
+        if (sym) {
+          return AUTORELEASE(sym);  // No location meta for atoms
+        }
+        // If intern fails, fall through to return unqualified symbol
+      } else {
+        // Regular qualified symbol (not a keyword)
+        CljSymbol *sym = intern_symbol(ns_name_sym, symbol_str);
+        if (sym) {
+          return AUTORELEASE(sym);  // No location meta for atoms
+        }
+        // If intern fails, fall through to return unqualified symbol
+      }
+    }
+  }
+
+  return AUTORELEASE(intern_symbol_global(buffer));  // No location meta for atoms
 }
 
 /**
@@ -1425,7 +1527,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
 
   if (!body) {
     // Empty function body - return (fn [] ())
-    CljSymbol *fn_sym = SYM_FN;
+    CljSymbol *fn_sym = intern_symbol_global("fn");
     CljValue empty_vec = make_vector(0, CLJ_VECTOR);
     ID empty_list_val = NULL; // () is nil in Clojure
     return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
@@ -1442,9 +1544,10 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // Simple approach: create (fn [%] body) for #(...)
   // This handles the most common case: #(+ % 1)
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
-  CljSymbol *fn_sym = SYM_FN;
+  CljSymbol *fn_sym = intern_symbol_global("fn");
+  CljSymbol *percent_sym = intern_symbol_global("%");
   CljVector *param_vec = make_vector(1, CLJ_VECTOR);
-  vector_conj_inplace(&param_vec, AUTORELEASE(make_symbol_token("%")));
+  vector_conj_inplace(&param_vec, percent_sym);
 
   // Create (fn [%] body)
   return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(param_vec, make_ast_list(body, NULL))));

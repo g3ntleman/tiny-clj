@@ -9,13 +9,14 @@
 #include "ft_blockdev.h"
 
 #include "flash-tree.h"
+#include "ft_port_ctx.h"
 
 #include <stdlib.h>
 #include <string.h>
 
 struct ft_tsdb {
     struct fdb_tsdb inner;
-    ft_blockdev_t* bdev;
+    ft_fdb_port_ctx_t* port_ctx;
     size_t max_len;
 };
 
@@ -46,28 +47,92 @@ static ft_tsl_status_t ft_from_fdb_tsl_status(fdb_tsl_status_t s) {
 }
 
 ft_status_t ft_tsdb_init(ft_tsdb_t** out_tsdb, ft_blockdev_t* bdev, const ft_tsdb_cfg_t* cfg) {
-    if (!out_tsdb || !bdev)
+    if (!out_tsdb || !bdev || !cfg)
         return FT_ERR_INVALID_ARG;
     *out_tsdb = NULL;
 
-    // Default max_len (must be < sector size). Allow override via cfg->reserved.
+    if (ft_blockdev_validate(bdev) != FT_OK)
+        return FT_ERR_INVALID_ARG;
+
+    const uint32_t read_gran = bdev->geom.read_granularity;
+    const uint32_t erase_gran = bdev->geom.erase_granularity;
+    if (read_gran == 0 || erase_gran == 0)
+        return FT_ERR_INVALID_ARG;
+
+    const uint32_t base = cfg->range.base_offset;
+    const uint32_t len_bytes = cfg->range.len;
+    if (len_bytes == 0)
+        return FT_ERR_INVALID_ARG;
+    if ((base % erase_gran) != 0 || (len_bytes % erase_gran) != 0)
+        return FT_ERR_INVALID_ARG;
+    if ((base % read_gran) != 0 || (len_bytes % read_gran) != 0)
+        return FT_ERR_INVALID_ARG;
+    if ((uint64_t)base + (uint64_t)len_bytes > (uint64_t)bdev->geom.total_size_bytes)
+        return FT_ERR_INVALID_ARG;
+    if ((len_bytes / erase_gran) < 2u)
+        return FT_ERR_INVALID_ARG;
+
+    // Default max_len (must be < sector size). Allow override via cfg->max_len.
     size_t max_len = 256;
-    if (cfg && cfg->reserved)
-        max_len = (size_t)cfg->reserved;
+    if (cfg->max_len)
+        max_len = (size_t)cfg->max_len;
     if (max_len == 0)
+        return FT_ERR_INVALID_ARG;
+    if (max_len >= (size_t)erase_gran)
         return FT_ERR_INVALID_ARG;
 
     ft_tsdb_t* tsdb = (ft_tsdb_t*)calloc(1, sizeof(ft_tsdb_t));
     if (!tsdb)
         return FT_ERR_NO_MEMORY;
-    tsdb->bdev = bdev;
     tsdb->max_len = max_len;
 
+    // Enforce empty-region policy: the caller must provide a fully erased range.
+    const size_t scratch_cap = (read_gran > 256u) ? (size_t)read_gran : 256u;
+    uint8_t* scratch = (uint8_t*)malloc(scratch_cap);
+    if (!scratch) {
+        free(tsdb);
+        return FT_ERR_NO_MEMORY;
+    }
+    uint32_t off = 0;
+    while (off < len_bytes) {
+        uint32_t want = len_bytes - off;
+        uint32_t chunk = (want > scratch_cap) ? (uint32_t)scratch_cap : want;
+        chunk = (chunk / read_gran) * read_gran;
+        if (chunk == 0)
+            chunk = read_gran;
+
+        ft_status_t rst = ft_blockdev_read(bdev, base + off, scratch, chunk);
+        if (rst != FT_OK) {
+            free(scratch);
+            free(tsdb);
+            return FT_ERR_IO;
+        }
+        for (uint32_t i = 0; i < chunk; i++) {
+            if (scratch[i] != 0xFFu) {
+                free(scratch);
+                free(tsdb);
+                return FT_ERR_INVALID_ARG;
+            }
+        }
+        off += chunk;
+    }
+    free(scratch);
+
+    tsdb->port_ctx = (ft_fdb_port_ctx_t*)calloc(1, sizeof(ft_fdb_port_ctx_t));
+    if (!tsdb->port_ctx) {
+        free(tsdb);
+        return FT_ERR_NO_MEMORY;
+    }
+    tsdb->port_ctx->bdev = bdev;
+    tsdb->port_ctx->base_offset = base;
+    tsdb->port_ctx->region_bytes = len_bytes;
+
     // Initialize FlashDB TSDB. "name/path" are only for logging in our port.
-    fdb_err_t r =
-        fdb_tsdb_init(&tsdb->inner, "flash-tree", "ft", tsdb_get_time_stub, max_len, bdev);
+    fdb_err_t r = fdb_tsdb_init(&tsdb->inner, "flash-tree", "ft", tsdb_get_time_stub, max_len,
+                                tsdb->port_ctx);
     ft_status_t st = ft_from_fdb_err(r);
     if (st != FT_OK) {
+        free(tsdb->port_ctx);
         free(tsdb);
         return st;
     }
@@ -80,6 +145,7 @@ void ft_tsdb_deinit(ft_tsdb_t* tsdb) {
     if (!tsdb)
         return;
     (void)fdb_tsdb_deinit(&tsdb->inner);
+    free(tsdb->port_ctx);
     free(tsdb);
 }
 

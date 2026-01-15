@@ -120,7 +120,7 @@ TEST(test_lowlevel_native_require_sets_alias_preloaded) {
     CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)str_alias);
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name, "Alias 'str' should be set after native_require");
     
-    if (TAG(ns_name) == CLJ_SYMBOL) {
+    if (ns_name && TAG(ns_name) == CLJ_SYMBOL) {
         CljSymbol *ns_sym_resolved = as_symbol(ns_name);
         TEST_ASSERT_EQUAL_STRING_MESSAGE("clojure.string", ns_sym_resolved->cname,
             "Alias should resolve to clojure.string");
@@ -152,7 +152,7 @@ TEST(test_lowlevel_ns_set_alias_stores) {
     CljObject *retrieved = ns_get_alias(test_ns, (CljObject *)alias_sym);
     TEST_ASSERT_NOT_NULL_MESSAGE(retrieved, "Alias should be retrievable after setting");
     
-    if (TAG(retrieved) == CLJ_SYMBOL) {
+    if (retrieved && TAG(retrieved) == CLJ_SYMBOL) {
         CljSymbol *retrieved_sym = as_symbol(retrieved);
         TEST_ASSERT_EQUAL_STRING_MESSAGE("test.target", retrieved_sym->cname,
             "Retrieved alias should match set value");

@@ -225,8 +225,18 @@ typedef enum ft_tsl_status {
     FT_TSL_STATUS_DROPPED = 1,
 } ft_tsl_status_t;
 
+/* Byte-based range for regions (must be erase_granularity-aligned). */
+typedef struct ft_range {
+    uint32_t base_offset; /* in bytes */
+    uint32_t len;         /* in bytes */
+} ft_range_t;
+
 typedef struct ft_tsdb_cfg {
-    uint32_t reserved;
+    /* Base offset and length of the TSDB region in bytes. */
+    ft_range_t range;
+
+    /* Maximum payload size per record (must be <= erase_granularity - overhead). 0 => default. */
+    uint32_t max_len;
 } ft_tsdb_cfg_t;
 
 typedef ft_status_t (*ft_tsl_cb)(ft_time_t t, const void* data, size_t len, ft_tsl_status_t status,

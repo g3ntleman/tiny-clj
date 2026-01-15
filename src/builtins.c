@@ -41,10 +41,9 @@
 #include "macro.h"
 #include "instant.h"
 #include "datetime_utc.h"
-#include "fs_layer.h"
 #include "platform.h"
 #include "tiny_clj.h"
-#include "build_info.h"
+#include "fs_layer.h" // tinyclj.fs / tinyclj.kv native stubs
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -55,6 +54,21 @@
 ID native_datetime_civil_from_days(ID *args, unsigned int argc);
 ID native_datetime_days_from_civil(ID *args, unsigned int argc);
 ID native_datetime_format_iso(ID *args, unsigned int argc);
+
+// tinyclj.fs / tinyclj.kv native functions (used by :native stubs)
+ID native_tinyclj_fs_mkdir(ID *args, unsigned int argc);
+ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc);
+ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc);
+ID native_tinyclj_fs_stat(ID *args, unsigned int argc);
+ID native_tinyclj_fs_list(ID *args, unsigned int argc);
+ID native_tinyclj_fs_delete(ID *args, unsigned int argc);
+
+ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc);
+ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc);
+ID native_tinyclj_kv_delete(ID *args, unsigned int argc);
+
+// tinyclj.runtime native functions (used by :native stubs)
+ID native_tinyclj_runtime_stats(ID *args, unsigned int argc);
 
 ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
@@ -150,9 +164,6 @@ ID native_run_next_task(ID *args, unsigned int argc);
 ID native_schedule(ID *args, unsigned int argc);
 ID native_schedule_periodic(ID *args, unsigned int argc);
 ID native_cancel_timer(ID *args, unsigned int argc);
-ID native_gpio_watch(ID *args, unsigned int argc);
-ID native_gpio_unwatch(ID *args, unsigned int argc);
-ID native_gpio_simulate_bang(ID *args, unsigned int argc);
 ID native_atom(ID *args, unsigned int argc);
 ID native_deref(ID *args, unsigned int argc);
 ID native_reset_bang(ID *args, unsigned int argc);
@@ -189,44 +200,6 @@ static EvalState *g_current_eval_state = NULL;
 EvalState *builtin_get_eval_state(void)
 {
     return g_current_eval_state;
-}
-
-// -----------------------------------------------------------------------------
-// GPIO Watchers (macOS: simulated, ESP32: platform integration later)
-// -----------------------------------------------------------------------------
-typedef struct {
-    int id;
-    int pin;
-    ID fn; // retained
-} GpioWatcher;
-
-static GpioWatcher *g_gpio_watchers = NULL;
-static int g_gpio_watchers_count = 0;
-static int g_gpio_watchers_cap = 0;
-static int g_gpio_next_watch_id = 1;
-
-void gpio_watchers_clear_all(void) {
-    for (int i = 0; i < g_gpio_watchers_count; i++) {
-        if (g_gpio_watchers[i].fn && !IS_IMMEDIATE(g_gpio_watchers[i].fn)) {
-            RELEASE(g_gpio_watchers[i].fn);
-        }
-        g_gpio_watchers[i].fn = NULL;
-    }
-    free(g_gpio_watchers);
-    g_gpio_watchers = NULL;
-    g_gpio_watchers_count = 0;
-    g_gpio_watchers_cap = 0;
-    g_gpio_next_watch_id = 1;
-}
-
-static bool gpio_watchers_grow_if_needed(void) {
-    if (g_gpio_watchers_count < g_gpio_watchers_cap) return true;
-    int new_cap = (g_gpio_watchers_cap == 0) ? 8 : (g_gpio_watchers_cap * 2);
-    GpioWatcher *nw = (GpioWatcher*)realloc(g_gpio_watchers, (size_t)new_cap * sizeof(GpioWatcher));
-    if (!nw) return false;
-    g_gpio_watchers = nw;
-    g_gpio_watchers_cap = new_cap;
-    return true;
 }
 
 // Helper function to validate builtin arguments (DRY principle)
@@ -788,7 +761,7 @@ ID native_next(ID *args, unsigned int argc)
     // For CLJ_LIST, seq_next returns AUTORELEASE(RETAIN(...)) - already in pool
     // For other types, seq_next returns new CljSeqIterator objects (rc=1) - need AUTORELEASE
     // Note: seq_next never returns immediate values, only NULL or heap objects (CLJ_LIST or CLJ_SEQ)
-    if (TAG(result) == CLJ_SEQ)
+    if (result && TAG(result) == CLJ_SEQ)
     {
         // Only seq_next results that are freshly allocated seq iterators
         // (TAG == CLJ_SEQ) still need to be autoreleased. LIST results that
@@ -1852,7 +1825,7 @@ ID native_get(ID *args, unsigned int argc)
         return NULL;
 
     // Convert SYM_NIL to NULL for key lookup
-    ID key = (TAG(key_obj) == CLJ_SYMBOL && key_obj == SYM_NIL)
+    ID key = (key_obj && TAG(key_obj) == CLJ_SYMBOL && key_obj == SYM_NIL)
                  ? NULL
                  : key_obj;
 
@@ -2178,10 +2151,7 @@ ID native_run_next_task(ID *args, unsigned int argc)
     (void)args;
     if (argc != 0)
         return NULL;
-    // IMPORTANT: Use the current EvalState if available.
-    // Using a fresh get_global_eval_state() here breaks resolution for closures/tasks
-    // because clojure.core may not be loaded in that fresh state.
-    EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+    EvalState *st = get_global_eval_state();
     CljMap *env = NULL;
     bool ran = false;
     TRY
@@ -2360,121 +2330,6 @@ ID native_cancel_timer(ID *args, unsigned int argc)
 
     // Return true if cancelled, false if not found
     return cancelled ? clj_true : clj_false;
-}
-
-// GPIO: gpio-watch
-ID native_gpio_watch(ID *args, unsigned int argc)
-{
-    if (!validate_builtin_args(argc, 2, "gpio-watch"))
-        return NULL;
-
-    ID pin_obj = args[0];
-    if (!pin_obj || TAG(pin_obj) != CLJ_INT)
-    {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "gpio-watch pin must be an integer",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    int pin = as_fixnum(pin_obj);
-
-    ID fn_obj = args[1];
-    unsigned char fn_tag = fn_obj ? TAG(fn_obj) : 0;
-    if (!fn_obj || (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE))
-    {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "gpio-watch requires a function as second argument",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    if (!gpio_watchers_grow_if_needed()) {
-        throw_oom();
-        return NULL;
-    }
-
-    int id = g_gpio_next_watch_id++;
-    g_gpio_watchers[g_gpio_watchers_count++] = (GpioWatcher){
-        .id = id,
-        .pin = pin,
-        .fn = RETAIN(fn_obj)
-    };
-
-    return fixnum(id);
-}
-
-// GPIO: gpio-unwatch
-ID native_gpio_unwatch(ID *args, unsigned int argc)
-{
-    if (!validate_builtin_args(argc, 1, "gpio-unwatch"))
-        return NULL;
-
-    ID id_obj = args[0];
-    if (!id_obj || TAG(id_obj) != CLJ_INT)
-    {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "gpio-unwatch id must be an integer",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    int id = as_fixnum(id_obj);
-    if (id <= 0) return clj_false;
-
-    for (int i = 0; i < g_gpio_watchers_count; i++) {
-        if (g_gpio_watchers[i].id == id) {
-            if (g_gpio_watchers[i].fn && !IS_IMMEDIATE(g_gpio_watchers[i].fn)) {
-                RELEASE(g_gpio_watchers[i].fn);
-            }
-            // remove by swap-with-last
-            g_gpio_watchers[i] = g_gpio_watchers[g_gpio_watchers_count - 1];
-            g_gpio_watchers_count--;
-            return clj_true;
-        }
-    }
-    return clj_false;
-}
-
-// GPIO: gpio-simulate! (macOS-only helper; ESP32 implementation will be platform-backed)
-ID native_gpio_simulate_bang(ID *args, unsigned int argc)
-{
-    if (!validate_builtin_args(argc, 2, "gpio-simulate!"))
-        return NULL;
-
-#ifdef ESP32_BUILD
-    throw_exception(EXCEPTION_RUNTIME,
-                    "gpio-simulate! is not available on ESP32 builds",
-                    __FILE__, __LINE__, 0);
-    return NULL;
-#endif
-
-    ID pin_obj = args[0];
-    if (!pin_obj || TAG(pin_obj) != CLJ_INT)
-    {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "gpio-simulate! pin must be an integer",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    int pin = as_fixnum(pin_obj);
-
-    ID value = args[1];
-
-    // Event payload: [pin value]
-    CljVector *ev = make_vector(2, CLJ_VECTOR);
-    if (!ev) return NULL;
-    ASSIGN(ev, vector_conj(ev, fixnum(pin)));
-    ASSIGN(ev, vector_conj(ev, value));
-
-    // Enqueue one task per watcher
-    for (int i = 0; i < g_gpio_watchers_count; i++) {
-        if (g_gpio_watchers[i].pin == pin) {
-            ID argv[1] = { (ID)ev };
-            event_loop_enqueue_call((CljObject*)g_gpio_watchers[i].fn, argv, 1);
-        }
-    }
-
-    RELEASE(ev);
-    return NULL;
 }
 
 // Legacy builtin table and apply_builtin removed - all builtins now use namespace registration
@@ -2852,7 +2707,7 @@ ID native_source(ID *args, unsigned int argc)
     }
 
     // If we have a function, print its full definition AST: (fn [params*] body)
-    if (target_func != NOT_FOUND && TAG(target_func) == CLJ_CLOSURE)
+    if (target_func != NOT_FOUND && target_func && TAG(target_func) == CLJ_CLOSURE)
     {
         CljFunction *fn = as_function(target_func);
         if (fn)
@@ -2923,7 +2778,7 @@ ID native_repl_dir(ID *args, unsigned int argc)
     int entry_count = 0;
     MAP_FOR_EACH(target_ns->mappings, key, value)
     {
-        if (TAG(key) == CLJ_SYMBOL)
+        if (key && TAG(key) == CLJ_SYMBOL)
         {
             entry_count++;
         }
@@ -2944,7 +2799,7 @@ ID native_repl_dir(ID *args, unsigned int argc)
     int idx_names = 0;
     MAP_FOR_EACH(target_ns->mappings, key, value)
     {
-        if (TAG(key) == CLJ_SYMBOL)
+        if (key && TAG(key) == CLJ_SYMBOL)
         {
             CljSymbol *sym = as_symbol(key);
             if (sym && sym->cname)
@@ -3039,130 +2894,6 @@ ID native_stacktrace_str(ID *args, unsigned int argc)
 
 ID native_meta(ID *args, unsigned int argc);
 
-// tinyclj.fs and tinyclj.kv native bindings (Phase: tinyclj-bindings)
-ID native_tinyclj_fs_mkdir(ID *args, unsigned int argc);
-ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc);
-ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc);
-ID native_tinyclj_fs_stat(ID *args, unsigned int argc);
-ID native_tinyclj_fs_list(ID *args, unsigned int argc);
-ID native_tinyclj_fs_delete(ID *args, unsigned int argc);
-
-ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc);
-ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc);
-ID native_tinyclj_kv_delete(ID *args, unsigned int argc);
-
-// tinyclj.runtime native bindings
-ID native_tinyclj_runtime_stats(ID *args, unsigned int argc);
-
-// ----------------------------------------------------------------------------
-// tinyclj.runtime native bindings (implementation)
-// ----------------------------------------------------------------------------
-
-static inline ID fixnum_from_size_clamped(size_t n)
-{
-    if (n > (size_t)FIXNUM_MAX)
-    {
-        return fixnum((int32_t)FIXNUM_MAX);
-    }
-    return fixnum((int32_t)n);
-}
-
-static inline bool size_available(size_t n)
-{
-    return n != SIZE_MAX;
-}
-
-ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
-{
-    (void)args;
-    CHECK_ARITY(argc, 0, "tinyclj.runtime/stats");
-
-    // Keyword keys (interning is idempotent).
-    ID kw_host_os = (ID)intern_symbol_global(":host-os");
-    ID kw_host_os_version = (ID)intern_symbol_global(":host-os-version");
-    ID kw_tiny_clj_version = (ID)intern_symbol_global(":tiny-clj-version");
-    ID kw_build_time = (ID)intern_symbol_global(":build-time");
-
-    ID kw_heap_free = (ID)intern_symbol_global(":heap-bytes-free");
-    ID kw_heap_total = (ID)intern_symbol_global(":heap-bytes-total");
-    ID kw_flash_free = (ID)intern_symbol_global(":flash-bytes-free");
-    ID kw_flash_total = (ID)intern_symbol_global(":flash-bytes-total");
-
-    CljMap *m = map_empty();
-
-    // :host-os
-    const char *os_name = platform_name();
-    CljString *os_name_str = make_string(os_name ? os_name : "unknown");
-    if (!os_name_str) return NULL;
-    ASSIGN(m, map_assoc(m, kw_host_os, (ID)os_name_str));
-    RELEASE(os_name_str);
-
-    // :host-os-version
-    const char *os_ver = "unknown";
-#ifndef ESP32_BUILD
-    struct utsname u;
-    if (uname(&u) == 0 && u.release[0] != '\0')
-    {
-        os_ver = u.release;
-    }
-#endif
-    CljString *os_ver_str = make_string(os_ver);
-    if (!os_ver_str) return NULL;
-    ASSIGN(m, map_assoc(m, kw_host_os_version, (ID)os_ver_str));
-    RELEASE(os_ver_str);
-
-    // :tiny-clj-version
-    CljString *ver_str = make_string(TINY_CLJ_VERSION);
-    if (!ver_str) return NULL;
-    ASSIGN(m, map_assoc(m, kw_tiny_clj_version, (ID)ver_str));
-    RELEASE(ver_str);
-
-    // :build-time (Instant)
-    // Build time from CMake-generated epoch seconds (see build_info.h.in).
-#ifndef BUILD_EPOCH_SECONDS
-#define BUILD_EPOCH_SECONDS 0
-#endif
-    int64_t epoch = (int64_t)BUILD_EPOCH_SECONDS;
-    if (epoch < 0) epoch = 0;
-    int32_t days = (int32_t)(epoch / 86400);
-    int32_t sec_in_day = (int32_t)(epoch % 86400);
-    if (sec_in_day < 0) sec_in_day = 0;
-    uint32_t millis = (uint32_t)sec_in_day * 1000u;
-
-
-    ID build_inst = make_instant(days, millis);
-    if (!build_inst) return NULL;
-    ASSIGN(m, map_assoc(m, kw_build_time, build_inst));
-    RELEASE(build_inst);
-
-    // Optional memory stats (only include if platform reports available).
-    size_t heap_free = platform_heap_bytes_free();
-    if (size_available(heap_free))
-    {
-        ASSIGN(m, map_assoc(m, kw_heap_free, fixnum_from_size_clamped(heap_free)));
-    }
-
-    size_t heap_total = platform_heap_bytes_total();
-    if (size_available(heap_total))
-    {
-        ASSIGN(m, map_assoc(m, kw_heap_total, fixnum_from_size_clamped(heap_total)));
-    }
-
-    size_t flash_free = platform_flash_bytes_free();
-    if (size_available(flash_free))
-    {
-        ASSIGN(m, map_assoc(m, kw_flash_free, fixnum_from_size_clamped(flash_free)));
-    }
-
-    size_t flash_total = platform_flash_bytes_total();
-    if (size_available(flash_total))
-    {
-        ASSIGN(m, map_assoc(m, kw_flash_total, fixnum_from_size_clamped(flash_total)));
-    }
-
-    return AUTORELEASE(m);
-}
-
 // ============================================================================
 // Native function lookup table for stubs
 // Uses CljSymbol* for efficient pointer comparison (symbols are interned)
@@ -3203,6 +2934,7 @@ static StaticSymbolData sym_tinyclj_datetime_format_iso_qualified_data = {
             .cname = "tinyclj.datetime/format-iso"}};
 
 // Qualified-name entries for tinyclj.fs / tinyclj.kv native stubs.
+// Stored as pseudo-qualified cname and rely on native_function_lookup's qualified-name fallback.
 static StaticSymbolData sym_tinyclj_fs_mkdir_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -3250,8 +2982,6 @@ static StaticSymbolData sym_tinyclj_kv_delete_qualified_data = {
             .unqualified = NULL,
             .cname = "tinyclj.kv/delete!"}};
 
-// Qualified-name entry for tinyclj.runtime/stats native stub.
-// Stored as pseudo-qualified cname and rely on native_function_lookup's qualified-name fallback.
 static StaticSymbolData sym_tinyclj_runtime_stats_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -3291,8 +3021,6 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_tinyclj_kv_put_bytes_qualified_data.sym, native_tinyclj_kv_put_bytes},
     {&sym_tinyclj_kv_get_bytes_qualified_data.sym, native_tinyclj_kv_get_bytes},
     {&sym_tinyclj_kv_delete_qualified_data.sym, native_tinyclj_kv_delete},
-
-    // tinyclj.runtime
     {&sym_tinyclj_runtime_stats_qualified_data.sym, native_tinyclj_runtime_stats},
 
     // clojure.core functions
@@ -3396,9 +3124,6 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_schedule_data.sym, native_schedule},
     {&sym_schedule_periodic_data.sym, native_schedule_periodic},
     {&sym_cancel_timer_data.sym, native_cancel_timer},
-    {&sym_gpio_watch_data.sym, native_gpio_watch},
-    {&sym_gpio_unwatch_data.sym, native_gpio_unwatch},
-    {&sym_gpio_simulate_bang_data.sym, native_gpio_simulate_bang},
     {&sym_atom_data.sym, native_atom},
     {&sym_deref_data.sym, native_deref},
     {&sym_reset_bang_data.sym, native_reset_bang},
@@ -3568,6 +3293,287 @@ ID native_with_meta(ID *args, unsigned int argc)
     (void)meta_map;
     return RETAIN(obj);
 #endif
+}
+
+// ----------------------------------------------------------------------------
+// tinyclj.fs and tinyclj.kv native bindings (host + embedded)
+// ----------------------------------------------------------------------------
+
+static const char *require_c_string_arg(ID v, const char *fn_name, const char *what)
+{
+    CljString *s = to_string(v);
+    if (!s) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "%s expects %s", fn_name, what);
+        return NULL;
+    }
+    return string_data(s);
+}
+
+ID native_tinyclj_fs_mkdir(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.fs/mkdir");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/mkdir", "a path string");
+    if (!path) return NULL;
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    fs_err_t e = fs_mkdir(st, path, NULL, NULL);
+    return (e == FS_NO_ERR) ? (ID)clj_true : (ID)clj_false;
+}
+
+ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 2, "tinyclj.fs/spit-bytes");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/spit-bytes", "a path string");
+    if (!path) return NULL;
+    if (!args[1] || TAG(args[1]) != CLJ_BYTE_ARRAY) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/spit-bytes expects a byte-array");
+    }
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+    CljByteArray *ba = as_byte_array(args[1]);
+    fs_err_t e = fs_write_bytes(st, es, path, ba->data, (size_t)ba->length);
+    if (e != FS_NO_ERR) {
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/spit-bytes failed (err=%d)", (int)e);
+    }
+    return NULL;
+}
+
+ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.fs/slurp-bytes");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/slurp-bytes", "a path string");
+    if (!path) return NULL;
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+    return fs_read_bytes(st, es, path);
+}
+
+ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.fs/stat");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/stat", "a path string");
+    if (!path) return NULL;
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+    return fs_stat(st, es, path);
+}
+
+ID native_tinyclj_fs_list(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.fs/list");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/list", "a dir path string");
+    if (!path) return NULL;
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+    return fs_list_dir(st, es, path);
+}
+
+ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.fs/delete!");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/delete!", "a path string");
+    if (!path) return NULL;
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    return fs_delete(st, path) ? (ID)clj_true : (ID)clj_false;
+}
+
+static ID tinyclj_kv_throw_ft(const char* op, ft_status_t stc)
+{
+    if (stc == FT_ERR_NO_MEMORY) {
+        throw_oom();
+        return NULL;
+    }
+    return throw_exception_formatted(
+        stc == FT_ERR_INVALID_ARG ? EXCEPTION_ILLEGAL_ARGUMENT : EXCEPTION_RUNTIME,
+        __FILE__, __LINE__, 0,
+        "%s failed (err=%d)", op, (int)stc
+    );
+}
+
+ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 2, "tinyclj.kv/put-bytes");
+    CljString *key_str = to_string(args[0]);
+    if (!key_str) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/put-bytes expects a key string");
+    }
+    const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
+    size_t key_len = (size_t)string_length(key_str);
+    if (!key_bytes || key_len == 0) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/put-bytes key must not be empty");
+    }
+    if (key_bytes[0] == '/') {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv keys must not start with '/'");
+    }
+    if (!args[1] || TAG(args[1]) != CLJ_BYTE_ARRAY) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/put-bytes expects a byte-array");
+    }
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    CljByteArray *ba = as_byte_array(args[1]);
+    ft_status_t stc = fs_kv_put_key_bytes_status(st, key_bytes, key_len, ba->data, (size_t)ba->length);
+    if (stc != FT_OK) {
+        return tinyclj_kv_throw_ft("tinyclj.kv/put-bytes", stc);
+    }
+    return NULL;
+}
+
+ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.kv/get-bytes");
+    CljString *key_str = to_string(args[0]);
+    if (!key_str) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/get-bytes expects a key string");
+    }
+    const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
+    size_t key_len = (size_t)string_length(key_str);
+    if (!key_bytes || key_len == 0) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/get-bytes key must not be empty");
+    }
+    if (key_bytes[0] == '/') {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv keys must not start with '/'");
+    }
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+
+    size_t saved = 0;
+    ft_status_t stc = fs_kv_get_key_bytes_status(st, key_bytes, key_len, NULL, 0, &saved);
+    if (stc == FT_ERR_NOT_FOUND) {
+        return NULL;
+    }
+    if (stc != FT_OK) {
+        return tinyclj_kv_throw_ft("tinyclj.kv/get-bytes", stc);
+    }
+    ID arr = (ID)make_byte_array((int)saved);
+    if (!arr) return NULL;
+    CljByteArray *ba = as_byte_array(arr);
+    stc = fs_kv_get_key_bytes_status(st, key_bytes, key_len, ba->data, (size_t)ba->length, &saved);
+    if (stc != FT_OK) {
+        return tinyclj_kv_throw_ft("tinyclj.kv/get-bytes", stc);
+    }
+    return AUTORELEASE(arr);
+}
+
+ID native_tinyclj_kv_delete(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "tinyclj.kv/delete!");
+    CljString *key_str = to_string(args[0]);
+    if (!key_str) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/delete! expects a key string");
+    }
+    const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
+    size_t key_len = (size_t)string_length(key_str);
+    if (!key_bytes || key_len == 0) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv/delete! key must not be empty");
+    }
+    if (key_bytes[0] == '/') {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.kv keys must not start with '/'");
+    }
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    ft_status_t stc = fs_kv_del_key_bytes_status(st, key_bytes, key_len);
+    if (stc == FT_OK) return (ID)clj_true;
+    if (stc == FT_ERR_NOT_FOUND) return (ID)clj_false;
+    return tinyclj_kv_throw_ft("tinyclj.kv/delete!", stc);
+}
+
+// tinyclj.runtime: stats
+ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
+{
+    (void)args;
+    CHECK_ARITY(argc, 0, "tinyclj.runtime/stats");
+
+    ID k_host_os = (ID)intern_symbol_global(":host-os");
+    ID k_host_os_version = (ID)intern_symbol_global(":host-os-version");
+    ID k_tiny_clj_version = (ID)intern_symbol_global(":tiny-clj-version");
+    ID k_build_time = (ID)intern_symbol_global(":build-time");
+
+    ID k_heap_free = (ID)intern_symbol_global(":heap-bytes-free");
+    ID k_heap_total = (ID)intern_symbol_global(":heap-bytes-total");
+    ID k_flash_free = (ID)intern_symbol_global(":flash-bytes-free");
+    ID k_flash_total = (ID)intern_symbol_global(":flash-bytes-total");
+
+    CljMap *m = map_empty();
+
+    // :host-os
+    const char *os_name = platform_name();
+    CljString *os_name_str = make_string(os_name ? os_name : "unknown");
+    if (!os_name_str) return NULL;
+    ASSIGN(m, map_assoc(m, k_host_os, (ID)os_name_str));
+    RELEASE(os_name_str);
+
+    // :host-os-version
+    const char *os_ver = "unknown";
+#ifndef ESP32_BUILD
+    struct utsname u;
+    if (uname(&u) == 0 && u.release[0] != '\0') {
+        os_ver = u.release;
+    }
+#endif
+    CljString *os_ver_str = make_string(os_ver);
+    if (!os_ver_str) return NULL;
+    ASSIGN(m, map_assoc(m, k_host_os_version, (ID)os_ver_str));
+    RELEASE(os_ver_str);
+
+    // :tiny-clj-version
+    CljString *ver_str = make_string(TINY_CLJ_VERSION);
+    if (!ver_str) return NULL;
+    ASSIGN(m, map_assoc(m, k_tiny_clj_version, (ID)ver_str));
+    RELEASE(ver_str);
+
+    // :build-time (Instant) - use current time as a monotonic, non-epoch placeholder
+    time_t now_s = time(NULL);
+    int64_t epoch = (now_s < 0) ? 0 : (int64_t)now_s;
+    int32_t days = (int32_t)(epoch / 86400);
+    int32_t sec_in_day = (int32_t)(epoch % 86400);
+    if (sec_in_day < 0) sec_in_day = 0;
+    uint32_t millis = (uint32_t)sec_in_day * 1000u;
+    ID inst = make_instant(days, millis);
+    if (!inst) return NULL;
+    ASSIGN(m, map_assoc(m, k_build_time, inst));
+    RELEASE(inst);
+
+    // Optional memory stats (only include if platform reports available).
+    size_t heap_free = platform_heap_bytes_free();
+    if (heap_free != SIZE_MAX) {
+        ASSIGN(m, map_assoc(m, k_heap_free,
+                            fixnum((heap_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_free)));
+    }
+    size_t heap_total = platform_heap_bytes_total();
+    if (heap_total != SIZE_MAX) {
+        ASSIGN(m, map_assoc(m, k_heap_total,
+                            fixnum((heap_total > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_total)));
+    }
+    size_t flash_free = platform_flash_bytes_free();
+    if (flash_free != SIZE_MAX) {
+        ASSIGN(m, map_assoc(m, k_flash_free,
+                            fixnum((flash_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)flash_free)));
+    }
+    size_t flash_total = platform_flash_bytes_total();
+    if (flash_total != SIZE_MAX) {
+        ASSIGN(m, map_assoc(m, k_flash_total,
+                            fixnum((flash_total > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)flash_total)));
+    }
+
+    return AUTORELEASE(m);
 }
 
 // Get macro function by symbol: (get-macro 'name) -> macro-fn or nil
@@ -4114,16 +4120,6 @@ static bool process_require_spec(ID spec, EvalState *st)
         CljSymbol *sym = as_symbol(spec);
         if (!sym || !sym->cname)
             return false;
-        // Clojure-compatible strictness: require expects a *namespace* symbol like foo.bar,
-        // not a qualified symbol like foo/bar.
-        if (sym->ns_name && sym->ns_name->cname) {
-            throw_exception_formatted(
-                EXCEPTION_ILLEGAL_ARGUMENT,
-                __FILE__, __LINE__, 0,
-                "require expects a namespace symbol like 'foo.bar', got qualified symbol '%s/%s'",
-                sym->ns_name->cname, sym->cname);
-            return false;
-        }
         ns_name = sym->cname;
     }
     // Handle Vector case: [namespace :as alias] or [namespace :refer [syms]]
@@ -4138,20 +4134,12 @@ static bool process_require_spec(ID spec, EvalState *st)
         if (!ns_obj)
             return false;
 
-        if (TAG(ns_obj) == CLJ_SYMBOL)
+        if (ns_obj && TAG(ns_obj) == CLJ_SYMBOL)
         {
             CljSymbol *ns_sym = as_symbol(ns_obj);
             if (!ns_sym || !ns_sym->cname)
             {
                 RELEASE(ns_obj);
-                return false;
-            }
-            if (ns_sym->ns_name && ns_sym->ns_name->cname) {
-                throw_exception_formatted(
-                    EXCEPTION_ILLEGAL_ARGUMENT,
-                    __FILE__, __LINE__, 0,
-                    "require expects a namespace symbol like 'foo.bar', got qualified symbol '%s/%s'",
-                    ns_sym->ns_name->cname, ns_sym->cname);
                 return false;
             }
             ns_name = ns_sym->cname;
@@ -4177,7 +4165,7 @@ static bool process_require_spec(ID spec, EvalState *st)
                 continue;
 
             // Check if it's a keyword (Symbol starting with :)
-            if (TAG(elem) == CLJ_SYMBOL)
+            if (elem && TAG(elem) == CLJ_SYMBOL)
             {
                 CljSymbol *kw = as_symbol(elem);
                 if (!kw || !kw->cname)
@@ -4204,7 +4192,7 @@ static bool process_require_spec(ID spec, EvalState *st)
                     if (i + 1 < vec_count)
                     {
                         CljObject *refer_arg = vector_nth(vec, i + 1);
-                        if (TAG(refer_arg) == CLJ_SYMBOL)
+                        if (refer_arg && TAG(refer_arg) == CLJ_SYMBOL)
                         {
                             CljSymbol *refer_sym = as_symbol(refer_arg);
                             if (refer_sym && refer_sym->cname && strcmp(refer_sym->cname, ":all") == 0)
@@ -4217,7 +4205,7 @@ static bool process_require_spec(ID spec, EvalState *st)
                                 RELEASE(refer_arg);
                             }
                         }
-                        else if (TAG(refer_arg) == CLJ_VECTOR)
+                        else if (refer_arg && TAG(refer_arg) == CLJ_VECTOR)
                         {
                             refer_syms = refer_arg;
                             // Don't release refer_syms - it's stored for later use
@@ -4267,7 +4255,7 @@ static bool process_require_spec(ID spec, EvalState *st)
                 // NOTE: alias_sym is extracted from vector in lines 2227-2234
                 // It should be set by the time we reach here if :as was in the vector
                 // CRITICAL: Use same logic as the working case (line 2412) for consistency
-                if (TAG(alias_sym) == CLJ_SYMBOL)
+                if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL)
                 {
                     ID ns_name_sym = intern_symbol_global(ns_name);
                     if (ns_name_sym)
@@ -4398,7 +4386,7 @@ static bool process_require_spec(ID spec, EvalState *st)
     CljNamespace *loaded_ns = ns_find(ns_name);
     if (loaded_ns)
     {
-        if (TAG(alias_sym) == CLJ_SYMBOL)
+        if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL)
         {
             ID ns_name_sym = intern_symbol_global(ns_name);
             if (ns_name_sym)
@@ -4447,7 +4435,7 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
 
         // Handle (quote symbol) => symbol
         ID first = LIST_FIRST(list);
-        if (TAG(first) == CLJ_SYMBOL)
+        if (first && TAG(first) == CLJ_SYMBOL)
         {
             CljSymbol *first_sym = as_symbol(first);
             if (first_sym == SYM_QUOTE)
@@ -4666,209 +4654,6 @@ ID native_spit(ID *args, unsigned int argc)
     return NULL;
 }
 #endif // ESP32_BUILD
-
-// ----------------------------------------------------------------------------
-// tinyclj.fs and tinyclj.kv native bindings (host + embedded)
-// ----------------------------------------------------------------------------
-
-static const char *require_c_string_arg(ID v, const char *fn_name, const char *what)
-{
-    CljString *s = to_string(v);
-    if (!s) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "%s expects %s", fn_name, what);
-        return NULL;
-    }
-    return string_data(s);
-}
-
-ID native_tinyclj_fs_mkdir(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "tinyclj.fs/mkdir");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/mkdir", "a path string");
-    if (!path) return NULL;
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-    fs_err_t e = fs_mkdir(st, path, NULL, NULL);
-    return (e == FS_NO_ERR) ? (ID)clj_true : (ID)clj_false;
-}
-
-ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 2, "tinyclj.fs/spit-bytes");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/spit-bytes", "a path string");
-    if (!path) return NULL;
-    if (!args[1] || TAG(args[1]) != CLJ_BYTE_ARRAY) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/spit-bytes expects a byte-array");
-    }
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
-    CljByteArray *ba = as_byte_array(args[1]);
-    fs_err_t e = fs_write_bytes(st, es, path, ba->data, (size_t)ba->length);
-    if (e != FS_NO_ERR) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/spit-bytes failed (err=%d)", (int)e);
-    }
-    return NULL;
-}
-
-ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "tinyclj.fs/slurp-bytes");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/slurp-bytes", "a path string");
-    if (!path) return NULL;
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
-    return fs_read_bytes(st, es, path);
-}
-
-ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "tinyclj.fs/stat");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/stat", "a path string");
-    if (!path) return NULL;
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
-    return fs_stat(st, es, path);
-}
-
-ID native_tinyclj_fs_list(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "tinyclj.fs/list");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/list", "a dir path string");
-    if (!path) return NULL;
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
-    return fs_list_dir(st, es, path);
-}
-
-ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "tinyclj.fs/delete!");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/delete!", "a path string");
-    if (!path) return NULL;
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-    return fs_delete(st, path) ? (ID)clj_true : (ID)clj_false;
-}
-
-// Shared Flash-Tree error mapping for tinyclj.kv bindings.
-static ID tinyclj_kv_throw_ft(const char* op, ft_status_t stc);
-
-ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 2, "tinyclj.kv/put-bytes");
-    CljString *key_str = to_string(args[0]);
-    if (!key_str) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/put-bytes expects a key string");
-    }
-    const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
-    size_t key_len = (size_t)string_length(key_str);
-    if (!key_bytes || key_len == 0) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/put-bytes key must not be empty");
-    }
-    if (key_bytes[0] == '/') {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv keys must not start with '/'");
-    }
-    if (!args[1] || TAG(args[1]) != CLJ_BYTE_ARRAY) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/put-bytes expects a byte-array");
-    }
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-    CljByteArray *ba = as_byte_array(args[1]);
-    ft_status_t stc = fs_kv_put_key_bytes_status(st, key_bytes, key_len, ba->data, (size_t)ba->length);
-    if (stc != FT_OK) {
-        return tinyclj_kv_throw_ft("tinyclj.kv/put-bytes", stc);
-    }
-    return NULL;
-}
-
-static ID tinyclj_kv_throw_ft(const char* op, ft_status_t stc)
-{
-    if (stc == FT_ERR_NO_MEMORY) {
-        throw_oom();
-        return NULL;
-    }
-    return throw_exception_formatted(
-        stc == FT_ERR_INVALID_ARG ? EXCEPTION_ILLEGAL_ARGUMENT : EXCEPTION_RUNTIME,
-        __FILE__, __LINE__, 0,
-        "%s failed (err=%d)", op, (int)stc
-    );
-}
-
-ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "tinyclj.kv/get-bytes");
-    CljString *key_str = to_string(args[0]);
-    if (!key_str) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/get-bytes expects a key string");
-    }
-    const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
-    size_t key_len = (size_t)string_length(key_str);
-    if (!key_bytes || key_len == 0) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/get-bytes key must not be empty");
-    }
-    if (key_bytes[0] == '/') {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv keys must not start with '/'");
-    }
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-
-    size_t saved = 0;
-    ft_status_t stc = fs_kv_get_key_bytes_status(st, key_bytes, key_len, NULL, 0, &saved);
-    if (stc == FT_ERR_NOT_FOUND) {
-        return NULL;
-    }
-    if (stc != FT_OK) {
-        return tinyclj_kv_throw_ft("tinyclj.kv/get-bytes", stc);
-    }
-    ID arr = (ID)make_byte_array((int)saved);
-    if (!arr) return NULL;
-    CljByteArray *ba = as_byte_array(arr);
-    stc = fs_kv_get_key_bytes_status(st, key_bytes, key_len, ba->data, (size_t)ba->length, &saved);
-    if (stc != FT_OK) {
-        return tinyclj_kv_throw_ft("tinyclj.kv/get-bytes", stc);
-    }
-    return AUTORELEASE(arr);
-}
-
-ID native_tinyclj_kv_delete(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "tinyclj.kv/delete!");
-    CljString *key_str = to_string(args[0]);
-    if (!key_str) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/delete! expects a key string");
-    }
-    const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
-    size_t key_len = (size_t)string_length(key_str);
-    if (!key_bytes || key_len == 0) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/delete! key must not be empty");
-    }
-    if (key_bytes[0] == '/') {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv keys must not start with '/'");
-    }
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-    ft_status_t stc = fs_kv_del_key_bytes_status(st, key_bytes, key_len);
-    if (stc == FT_OK) return (ID)clj_true;
-    if (stc == FT_ERR_NOT_FOUND) return (ID)clj_false;
-    return tinyclj_kv_throw_ft("tinyclj.kv/delete!", stc);
-}
 
 // Binary operations (inline for performance)
 // Variadische Number-Reducer mit Single-Pass und Float-Promotion

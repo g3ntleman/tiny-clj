@@ -2,9 +2,6 @@
 DartConfiguration.tcl
 /tiny-clj
 /build/
-/_build_out/
-/_build_flash_tree/
-_build_*/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
@@ -36,8 +33,6 @@ benchmark_history.csv
 benchmark_output.txt
 progress.marks
 *.csv
-profile_outputs/
-tmp_fib_profile.clj
 
 # Sample output artifacts
 /sample_*.txt

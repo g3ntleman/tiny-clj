@@ -27,8 +27,6 @@
 #include "value.h"
 #include "environment.h"
 #include "ast.h"
-#include "ast_compile.h"
-#include "compiled_ast.h"
 #include "vector.h"
 #include "env_stack.h"
 #include "event_loop.h"
@@ -39,7 +37,6 @@
 #include "format_utils.h"
 #include "eval_arithmetic.h"
 #include "eval_comparison.h"
-#include <stdlib.h>
 #include <time.h>
 
 #include "eval_sequence.h"
@@ -47,103 +44,6 @@
 
 #include <signal.h>
 extern __attribute__((weak)) volatile sig_atomic_t g_clojure_core_last_form;
-
-// ============================================================================
-// SlotRef resolution (CallFrame fast-path + captured frames)
-// ============================================================================
-static INLINE ID resolve_slot_ref_value(const EvalContext *ctx, const CljSlotRef *ref) {
-    if (!ctx || !ref || !ctx->frame) return NOT_FOUND;
-
-    uint8_t depth = ref->depth;
-    uint8_t slot = ref->slot;
-
-    // Fast-path: current CallFrame (fib, most calls)
-    if (depth == 0) {
-        return frame_get_slot(ctx->frame, 0, slot);
-    }
-
-    // Walk up the live CallFrame chain, but do NOT walk past the top.
-    CallFrame *cur = ctx->frame;
-    while (cur && depth > 0 && cur->parent) {
-        cur = cur->parent;
-        depth--;
-    }
-
-    // Resolved within the live CallFrame chain.
-    if (cur && depth == 0) {
-        if (slot >= (uint8_t)cur->param_count) return NOT_FOUND;
-        return frame_decode_value(cur->values[slot]);
-    }
-
-    // Otherwise, we're at the top live frame (cur->parent == NULL) and still need to go up.
-    if (!cur || depth == 0) return NOT_FOUND;
-    if (!ctx->captured_frames) return NOT_FOUND;
-
-    unsigned int idx = (unsigned int)(depth - 1);  // 1 hop above top frame is captured_frames[0]
-    unsigned int cnt = vector_count(ctx->captured_frames);
-    if (idx >= cnt) return NOT_FOUND;
-
-    ID frame_values_id = vector_nth(ctx->captured_frames, idx);
-    if (!frame_values_id || TAG(frame_values_id) != CLJ_VECTOR) return NOT_FOUND;
-    CljVector *frame_values = as_vector(frame_values_id);
-
-    unsigned int sc = vector_count(frame_values);
-    if ((unsigned int)slot >= sc) return NOT_FOUND;
-
-    ID encoded = vector_nth(frame_values, (unsigned int)slot);
-    return frame_decode_value(encoded);
-}
-
-// Capture a CallFrame parent chain into persistent vectors so closures can resolve SlotRefs
-// with depth>0 after the defining call returns. Result is:
-//   Vector<frame_values>, where frame_values is Vector<encoded_slot_value>.
-static INLINE CljVector* capture_visible_frames(const EvalContext *ctx) {
-    if (!ctx || !ctx->frame) return NULL;
-
-    CallFrame *frames[32];
-    int depth = 0;
-    for (CallFrame *f = ctx->frame; f && depth < 32; f = f->parent) {
-        frames[depth++] = f;
-    }
-
-    unsigned int outer_cnt = ctx->captured_frames ? vector_count(ctx->captured_frames) : 0;
-    CljVector *captured = make_vector((unsigned int)depth + outer_cnt, CLJ_VECTOR);
-    if (!captured) return NULL;
-
-    // 1) Materialize the live CallFrame chain (must retain values to outlive the call).
-    for (int di = 0; di < depth; di++) {
-        CallFrame *f = frames[di];
-        unsigned int pc = (unsigned int)(f ? f->param_count : 0);
-        CljVector *frame_values = make_vector(pc, CLJ_VECTOR);
-        if (!frame_values) {
-            RELEASE(captured);
-            return NULL;
-        }
-        for (unsigned int i = 0; i < pc; i++) {
-            // Preserve CallFrame encoding (nil as NOT_FOUND sentinel).
-            vector_conj_inplace(&frame_values, f->values[i]);
-        }
-        vector_conj_inplace(&captured, frame_values);
-        RELEASE(frame_values);
-    }
-
-    // 2) Reuse (RETAIN) outer captured frames from the defining closure context.
-    if (outer_cnt > 0) {
-        ID *outer = vector_as_array(ctx->captured_frames);
-        if (outer) {
-            for (unsigned int i = 0; i < outer_cnt; i++) {
-                vector_conj_inplace(&captured, outer[i]);
-            }
-        } else {
-            // Fallback: safe but slightly slower.
-            for (unsigned int i = 0; i < outer_cnt; i++) {
-                vector_conj_inplace(&captured, vector_nth(ctx->captured_frames, i));
-            }
-        }
-    }
-
-    return captured;
-}
 
 static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, CljSymbol *qualified) {
     if (!slot || !unqualified || !qualified) {
@@ -381,7 +281,6 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
             .env = NULL,
             .env_stack = call_env_stack,  // Closure environment stack (vector of maps)
             .frame = call_frame,          // Stack-based frame for parameters
-            .captured_frames = func->captured_frames, // SlotRef(depth>0) resolution for closures
             .st = st,
             .recur_args = recur_args,
             .recur_arg_count = &recur_arg_count,
@@ -478,7 +377,6 @@ static const EvalContext* ensure_eval_context(CljMap *env,
             .env = env,
             .env_stack = NULL,
             .frame = NULL,
-            .captured_frames = NULL,
             .st = st,
             .recur_args = NULL,
             .recur_arg_count = NULL,
@@ -665,11 +563,11 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
 
     unsigned char body_tag = TAG(body);
 
-    // Lexical addressing fast-path: (depth, slot) reference into CallFrame chain (+ captured frames).
+    // Lexical addressing fast-path: (depth, slot) reference into CallFrame chain.
     if (body_tag == CLJ_SLOT_REF) {
         const CljSlotRef *ref = (const CljSlotRef*)body;
         if (!ctx || !ctx->frame) return NULL;
-        ID v = resolve_slot_ref_value(ctx, ref);
+        ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
         if (v == NOT_FOUND || !v) return NULL;
         if (IS_IMMEDIATE(v)) return v;
         return AUTORELEASE(RETAIN(v));
@@ -770,8 +668,9 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 return RETAIN(body);
             }
             
-            // Create new vector with evaluated elements (rc=1 for COW/in-place)
+            // Create new vector with evaluated elements
             CljVector *result = make_vector(count, CLJ_VECTOR);
+            RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
@@ -781,8 +680,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                     eval_elem = eval_body_with_params(elem, ctx);
                 }
                 
-                // Add evaluated element to result vector (keep rc==1 for COW/in-place)
-                vector_conj_inplace(&result, eval_elem);
+                // Add evaluated element to result vector
+                ASSIGN(result, vector_conj(result, eval_elem));
             }
             
             return AUTORELEASE(result);
@@ -791,15 +690,14 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         case CLJ_MAP: {
             // Map literals need to have their keys and values evaluated
             CljMap *map = (CljMap*)body;
-            int count = map_count(map);
-            CljMap *result = make_map(count > 0 ? count : 4);
+            CljMap *result = map_empty();
+            RETAIN(result);
             
             MAP_FOR_EACH(map, key, value) {
                 ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
                 ID eval_value = value ? eval_body_with_params(value, ctx) : NULL;
                 
-                // Keep rc==1 for COW/in-place
-                map_assoc_inplace(&result, eval_key, eval_value);
+                ASSIGN(result, map_assoc(result, eval_key, eval_value));
             }
             
             return AUTORELEASE(result);
@@ -927,8 +825,9 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 return body;
             }
             
-            // Create new vector with evaluated elements (rc=1 for COW/in-place)
+            // Create new vector with evaluated elements
             CljVector *result = make_vector(count, CLJ_VECTOR);
+            RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
@@ -940,8 +839,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     eval_elem = eval_body(elem, env, st, ctx);
                 }
                 
-                // Add evaluated element to result vector (keep rc==1 for COW/in-place)
-                vector_conj_inplace(&result, eval_elem);
+                // Add evaluated element to result vector
+                ASSIGN(result, vector_conj(result, eval_elem));
             }
             
             return AUTORELEASE(result);
@@ -951,8 +850,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // Map literals need to have their keys and values evaluated
             // This is necessary for cases like {nil "value"} where nil should be evaluated to NULL
             CljMap *map = (CljMap*)body;
-            int count = map_count(map);
-            CljMap *result = make_map(count > 0 ? count : 4);
+            CljMap *result = map_empty();
+            RETAIN(result);
 
             MAP_FOR_EACH(map, key, value) {
                 // Cache tags for performance
@@ -975,8 +874,12 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     eval_value = eval_body(value, env, st, ctx);
                 }
 
-                // Add evaluated key-value pair to result map (keep rc==1 for COW/in-place)
-                map_assoc_inplace(&result, eval_key, eval_value);
+                // Add evaluated key-value pair to result map
+                ASSIGN(result, map_assoc(result, eval_key, eval_value));
+
+                // Release evaluated key and value if they were retained
+                if (eval_key && eval_key != key) RELEASE(eval_key);
+                if (eval_value && eval_value != value) RELEASE(eval_value);
             }
 
             return AUTORELEASE(result);
@@ -995,20 +898,6 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
 
 // Thread-local recursion depth tracking for eval_arg and eval_list
 static _Thread_local int g_eval_arg_depth = 0;
-
-// Optional pretreated AST execution (disabled by default).
-static int g_use_compiled_ast = -1;
-static INLINE bool compiled_ast_enabled(void) {
-    if (g_use_compiled_ast < 0) {
-        const char *v = getenv("TINYCLJ_USE_COMPILED_AST");
-        g_use_compiled_ast = (v && v[0] == '1') ? 1 : 0;
-    }
-    return g_use_compiled_ast == 1;
-}
-
-void eval_set_use_compiled_ast(int enabled) {
-    g_use_compiled_ast = enabled;
-}
 
 // Reset eval arg depth (for test isolation)
 void reset_eval_arg_depth(void) {
@@ -1055,7 +944,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         const CljSlotRef *ref = (const CljSlotRef*)op;
         if (ctx && ctx->frame) {
             // NOTE: NULL means nil; NOT_FOUND means invalid slot/depth.
-            ID v = resolve_slot_ref_value(ctx, ref);
+            ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
             return (v == NOT_FOUND) ? NULL : v;
         }
         return NULL;
@@ -1328,18 +1217,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Prefer the current head of env_stack (closures/let frames), fall back to env parameter
     CljMap *effective_env = ctx ? get_closure_env(ctx) : NULL;
     if (!effective_env) effective_env = env;
-
-    // Optional pretreated AST execution: if the node has a compiled payload with an eval fn,
-    // call it directly (fallback stays the existing evaluator).
-    if (call_node && compiled_ast_enabled()) {
-        if (!ast_node_get_compiled(call_node)) {
-            ast_compile_inplace((ID)call_node, effective_st);
-        }
-        const CljCompiledPayload *payload = compiled_payload_from_ptr(ast_node_get_compiled(call_node));
-        if (payload && payload->eval) {
-            return payload->eval(call_node, effective_env, effective_st, ctx);
-        }
-    }
 
     ID head = LIST_FIRST(list);
 
@@ -1917,11 +1794,6 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         }
     }
 
-    // Optional: precompile the function body AST once at definition time.
-    if (compiled_ast_enabled() && body) {
-        ast_compile_inplace(body, st);
-    }
-
     // Capture env_stack from context if available (vector of maps).
     CljVector *fn_env_stack = NULL;
     bool fn_env_stack_owned = false;
@@ -1982,11 +1854,6 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     CljFunction *fn = make_function(params, param_count, body, fn_env_stack, NULL, st ? st->current_ns : NULL);
     if (fn_env_stack_owned) {
         RELEASE(fn_env_stack);
-    }
-    // Capture the visible CallFrame chain for SlotRef(depth>0) in nested closures.
-    // This is separate from env_stack (which remains for non-lexicalized symbol resolution).
-    if (ctx && ctx->frame) {
-        fn->captured_frames = capture_visible_frames(ctx);
     }
 
     // If this is a named function, bind it to its own name in closure for recursion
@@ -2524,17 +2391,11 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         if (has_frame) {
             binding_params[binding_index] = sym_val;
             binding_values[binding_index] = value;
-
-            // Incrementally extend the frame without releasing earlier bindings.
-            // NOTE: frame_set_bindings() calls frame_release(), which is unsafe here because
-            // binding_values[] does not own retains for prior values (the frame does).
-            if (binding_index == 0) {
-                let_frame->parent = ctx ? ctx->frame : NULL;
-                let_frame->params = binding_params; // borrowed
+            if (value && !IS_IMMEDIATE(value)) {
+                RETAIN(value);
             }
-            let_frame->param_count = binding_index + 1;
-            RETAIN(value);
-            let_frame->values[binding_index] = frame_encode_value(value);
+            frame_set_bindings(let_frame, ctx ? ctx->frame : NULL,
+                               binding_params, binding_values, binding_index + 1);
 
             // Make newly created bindings visible to subsequent initializers
             let_ctx.frame = let_frame;
@@ -2656,7 +2517,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     if (expr_tag == CLJ_SLOT_REF) {
         const CljSlotRef *ref = (const CljSlotRef*)expr;
         if (!ctx || !ctx->frame) return NULL;
-        ID v = resolve_slot_ref_value(ctx, ref);
+        ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
         if (v == NOT_FOUND || !v) return NULL;
         if (IS_IMMEDIATE(v)) return v;
         return AUTORELEASE(RETAIN(v));
@@ -2784,15 +2645,14 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
 
     if (expr_tag == CLJ_MAP) {
         CljMap *map = (CljMap*)expr;
-        int count = map_count(map);
-        CljMap *result = make_map(count > 0 ? count : 4);
+        CljMap *result = map_empty();
 
         MAP_FOR_EACH(map, key, value) {
             ID key_id = key;
             ID value_id = value;
             ID eval_key = (key_id == SYM_NIL) ? NULL : eval_body(key_id, env, st, NULL);
             ID eval_value = (value_id == SYM_NIL) ? NULL : eval_body(value_id, env, st, NULL);
-            map_assoc_inplace(&result, eval_key, eval_value);
+            ASSIGN(result, map_assoc(result, eval_key, eval_value));
         }
 
         return AUTORELEASE(result);
@@ -2804,9 +2664,10 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         if (count == 0) return expr;
         
         CljVector *result = make_vector(count, CLJ_VECTOR);
+        RETAIN(result);
         VECTOR_FOR_EACH(vec, elem) {
             ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, env, st, ctx) : NULL;
-            vector_conj_inplace(&result, eval_elem);
+            ASSIGN(result, vector_conj(result, eval_elem));
         }
         return AUTORELEASE(result);
     }
@@ -3043,6 +2904,16 @@ void free_obj_array(ID *array, ID *stack_buffer) {
     if (array != stack_buffer) {
         free((void*)array);
     }
+}
+
+// ============================================================================
+// COMPILED AST CONTROL (primarily for tests/benchmarks)
+// ============================================================================
+
+static int g_use_compiled_ast_override = -1;
+
+void eval_set_use_compiled_ast(int enabled) {
+    g_use_compiled_ast_override = enabled;
 }
 
 

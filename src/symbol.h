@@ -27,7 +27,7 @@ bool is_earmuffed_dynamic_symbol(const CljSymbol *sym);
 
 // Type predicate - O(1) check if object is a symbol
 static inline bool is_symbol(ID obj) {
-    return TAG(obj) == CLJ_SYMBOL;
+    return obj && TAG(obj) == CLJ_SYMBOL;
 }
 
 // Type-safe casting
@@ -294,9 +294,6 @@ extern StaticSymbolData sym_run_next_task_data;
 extern StaticSymbolData sym_schedule_data;
 extern StaticSymbolData sym_schedule_periodic_data;
 extern StaticSymbolData sym_cancel_timer_data;
-extern StaticSymbolData sym_gpio_watch_data;
-extern StaticSymbolData sym_gpio_unwatch_data;
-extern StaticSymbolData sym_gpio_simulate_bang_data;
 extern StaticSymbolData sym_atom_data;
 extern StaticSymbolData sym_deref_data;
 extern StaticSymbolData sym_reset_bang_data;

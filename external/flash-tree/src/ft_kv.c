@@ -108,14 +108,16 @@ ft_status_t ft_kv_open(ft_kv_t** out_kv, ft_blockdev_t* bdev, const ft_kv_cfg_t*
     /* Open B-Tree with our log-based mpool */
     BTREEINFO bi;
     memset(&bi, 0, sizeof(bi));
-    ft_page_policy_t pol = {0};
-    ft_status_t pst = ft_page_policy_compute_variant_b(&bdev->geom, sizeof(ft_page_hdr_t), &pol);
-    if (pst != FT_OK) {
-        free(kv);
-        return pst;
-    }
-    bi.psize = pol.page_size;
-    bi.cachesize = 2u * pol.page_size; /* Still minimal; mpool has its own cache. */
+    /*
+     * BSD btree requires psize to be a power-of-two. Use erase granularity as
+     * the logical page size (mpool prepends its own header in the log).
+     *
+     * Note: overflow pages are not supported (see ft_bt_put.c). Keep minkeypage
+     * low so the overflow cutoff is large enough for 4KB chunk values.
+     */
+    bi.psize = bdev->geom.erase_granularity;
+    bi.cachesize = 2u * bi.psize; /* Still minimal; mpool has its own cache. */
+    bi.minkeypage = 1;
 
     kv->bdb = __bt_open("ft_kv", O_RDWR | O_CREAT, 0600, &bi, 0);
     ft_kv_unbind();

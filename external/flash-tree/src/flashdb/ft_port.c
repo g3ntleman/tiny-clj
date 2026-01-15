@@ -11,11 +11,27 @@
 
 #include "flash-tree.h"
 #include "ft_low_lvl.h"
+#include "ft_port_ctx.h"
 
 #include <string.h>
 
+static const ft_fdb_port_ctx_t* db_ctx(fdb_db_t db) {
+    return (const ft_fdb_port_ctx_t*)db->user_data;
+}
+
 static const ft_blockdev_t* db_bdev(fdb_db_t db) {
-    return (const ft_blockdev_t*)db->user_data;
+    const ft_fdb_port_ctx_t* c = db_ctx(db);
+    return c ? c->bdev : NULL;
+}
+
+static uint32_t db_base(fdb_db_t db) {
+    const ft_fdb_port_ctx_t* c = db_ctx(db);
+    return c ? c->base_offset : 0u;
+}
+
+static uint32_t db_region_bytes(fdb_db_t db) {
+    const ft_fdb_port_ctx_t* c = db_ctx(db);
+    return c ? c->region_bytes : 0u;
 }
 
 static uint32_t align_down_u32(uint32_t x, uint32_t a) {
@@ -55,8 +71,19 @@ fdb_err_t _fdb_init_ex(fdb_db_t db, const char* name, const char* path, fdb_db_t
     if (!is_pow2_u32(db->sec_size))
         return FDB_INIT_FAILED;
 
-    /* Max size is the largest erase-aligned region starting at 0. */
-    db->max_size = align_down_u32(bdev->geom.total_size_bytes, db->sec_size);
+    /* Max size is the largest erase-aligned region starting at base_offset. */
+    const uint32_t base = db_base(db);
+    if (base >= bdev->geom.total_size_bytes)
+        return FDB_INIT_FAILED;
+    uint32_t region = db_region_bytes(db);
+    if (region == 0u) {
+        region = bdev->geom.total_size_bytes - base;
+    } else {
+        /* region is relative to base_offset and must be within the blockdev. */
+        if (region > (bdev->geom.total_size_bytes - base))
+            return FDB_INIT_FAILED;
+    }
+    db->max_size = align_down_u32(region, db->sec_size);
     if (db->max_size == 0)
         return FDB_INIT_FAILED;
     if ((db->max_size / db->sec_size) < 2u)
@@ -90,10 +117,15 @@ const char* _fdb_db_path(fdb_db_t db) {
 fdb_err_t _fdb_file_read(fdb_db_t db, uint32_t addr, void* buf, size_t size) {
     if (!db || (!buf && size != 0))
         return FDB_READ_ERR;
+    if ((uint64_t)addr + (uint64_t)size > (uint64_t)db->max_size)
+        return FDB_READ_ERR;
     const ft_blockdev_t* bdev = db_bdev(db);
     if (!bdev)
         return FDB_READ_ERR;
-    ft_status_t st = ft_blockdev_read(bdev, addr, buf, size);
+    const uint32_t base = db_base(db);
+    if ((uint64_t)base + (uint64_t)addr + (uint64_t)size > (uint64_t)bdev->geom.total_size_bytes)
+        return FDB_READ_ERR;
+    ft_status_t st = ft_blockdev_read(bdev, base + addr, buf, size);
     return (st == FT_OK) ? FDB_NO_ERR : FDB_READ_ERR;
 }
 
@@ -101,19 +133,29 @@ fdb_err_t _fdb_file_write(fdb_db_t db, uint32_t addr, const void* buf, size_t si
     (void)sync;
     if (!db || (!buf && size != 0))
         return FDB_WRITE_ERR;
+    if ((uint64_t)addr + (uint64_t)size > (uint64_t)db->max_size)
+        return FDB_WRITE_ERR;
     const ft_blockdev_t* bdev = db_bdev(db);
     if (!bdev)
         return FDB_WRITE_ERR;
-    ft_status_t st = ft_blockdev_prog(bdev, addr, buf, size);
+    const uint32_t base = db_base(db);
+    if ((uint64_t)base + (uint64_t)addr + (uint64_t)size > (uint64_t)bdev->geom.total_size_bytes)
+        return FDB_WRITE_ERR;
+    ft_status_t st = ft_blockdev_prog(bdev, base + addr, buf, size);
     return (st == FT_OK) ? FDB_NO_ERR : FDB_WRITE_ERR;
 }
 
 fdb_err_t _fdb_file_erase(fdb_db_t db, uint32_t addr, size_t size) {
     if (!db)
         return FDB_ERASE_ERR;
+    if ((uint64_t)addr + (uint64_t)size > (uint64_t)db->max_size)
+        return FDB_ERASE_ERR;
     const ft_blockdev_t* bdev = db_bdev(db);
     if (!bdev)
         return FDB_ERASE_ERR;
-    ft_status_t st = ft_blockdev_erase(bdev, addr, size);
+    const uint32_t base = db_base(db);
+    if ((uint64_t)base + (uint64_t)addr + (uint64_t)size > (uint64_t)bdev->geom.total_size_bytes)
+        return FDB_ERASE_ERR;
+    ft_status_t st = ft_blockdev_erase(bdev, base + addr, size);
     return (st == FT_OK) ? FDB_NO_ERR : FDB_ERASE_ERR;
 }
