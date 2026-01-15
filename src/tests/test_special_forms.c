@@ -78,6 +78,44 @@ TEST(test_special_cond_else) {
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
 }
 
+TEST(test_special_case_basic_match) {
+    // (case expr 1 10 2 20 99) => 20
+    ID result = eval_string("(case 2 1 10 2 20 99)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)result));
+}
+
+TEST(test_special_case_default_used) {
+    // No match => default
+    ID result = eval_string("(case 3 1 10 2 20 99)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(99, as_fixnum((CljValue)result));
+}
+
+TEST(test_special_case_no_default_throws) {
+    bool did_throw = false;
+    TRY {
+        (void)eval_string("(case 3 1 10 2 20)", g_test_eval_state);
+    } CATCH(ex) {
+        did_throw = true;
+        TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE(did_throw);
+}
+
+TEST(test_special_case_multi_keys) {
+    // Support list-of-keys and vector-of-keys for one branch.
+    ID r1 = eval_string("(case 2 (1 2) 10 3 20 99)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r1);
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)r1));
+
+    ID r2 = eval_string("(case 2 [1 2] 10 3 20 99)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r2);
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)r2));
+}
+
 TEST(test_special_cond_allows_nil_expr_and_short_circuits) {
     // Regression: a previous implementation treated `nil` expr as “missing”
     // and continued evaluating later clauses.
@@ -123,6 +161,10 @@ TEST(test_all_special_symbols_have_eval_fn) {
     CljSpecialSymbol *sym_when = as_special_symbol(SYM_WHEN);
     TEST_ASSERT_NOT_NULL(sym_when);
     TEST_ASSERT_NOT_NULL(sym_when->eval_fn);
+
+    CljSpecialSymbol *sym_case = as_special_symbol(SYM_CASE);
+    TEST_ASSERT_NOT_NULL(sym_case);
+    TEST_ASSERT_NOT_NULL(sym_case->eval_fn);
     
     CljSpecialSymbol *sym_and = as_special_symbol(SYM_AND);
     TEST_ASSERT_NOT_NULL(sym_and);
@@ -155,6 +197,11 @@ TEST(test_special_form_not_shadowable) {
     ID result = eval_string("(if true 1 2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));  // if remains Special Form
+
+    eval_string("(def case 42)", g_test_eval_state);
+    ID result2 = eval_string("(case 2 1 10 2 20 99)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum(result2));  // case remains Special Form
 }
 
 // ============================================================================

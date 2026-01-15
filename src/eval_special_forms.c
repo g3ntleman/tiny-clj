@@ -79,6 +79,117 @@ ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContex
     return NULL;
 }
 
+static inline bool case_key_matches(ID test_val, ID key_form) {
+    // `case` keys are NOT evaluated (Clojure semantics). They are treated as literals.
+    // Support: single key, list of keys, vector of keys.
+
+    if (key_form == SYM_NIL || key_form == NULL) {
+        return test_val == NULL;
+    }
+
+    unsigned char tag = TAG(key_form);
+    if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+        CljVector *v = as_vector(key_form);
+        unsigned int n = v ? vector_count(v) : 0;
+        for (unsigned int i = 0; i < n; i++) {
+            ID elem = vector_nth(v, i);
+            if (elem == SYM_NIL || elem == NULL) {
+                if (test_val == NULL) return true;
+            } else if (test_val && clj_equal(test_val, elem)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    if (list_type_matches(tag)) {
+        for (CljList *node = as_list(key_form); node; node = list_rest_normalized(node)) {
+            ID elem = LIST_FIRST(node);
+            if (elem == SYM_NIL || elem == NULL) {
+                if (test_val == NULL) return true;
+            } else if (test_val && clj_equal(test_val, elem)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    if (!test_val) return false;
+    return clj_equal(test_val, key_form);
+}
+
+ID eval_special_case(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_case: list must not be NULL");
+    CLJ_ASSERT(st != NULL && "eval_special_case: st must not be NULL");
+    if (!list || !st) return NULL;
+
+    // Establish base env (match other special-form wrappers).
+    CljMap *base_env = eval_env_or_ns_mappings(env, st);
+
+    // Shape: (case expr key1 expr1 key2 expr2 ... default?)
+    CljList *args = list_rest_normalized(list);
+    if (!args) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "case requires an expression and at least one clause",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ID test_expr = LIST_FIRST(args);
+    CljList *clauses = list_rest_normalized(args);
+    if (!clauses) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "case requires at least one clause",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    int clause_forms = list_count(clauses);
+    if (clause_forms < 2) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "case requires pairs of clauses (key expr), with optional default",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    // Evaluate test expression exactly once.
+    ID test_val = eval_body(test_expr, base_env, st, ctx);
+
+    ID default_expr = NULL;
+    int pair_forms = clause_forms;
+    if ((clause_forms % 2) == 1) {
+        // Odd number of forms after expr => last is default.
+        default_expr = list_nth(clauses, clause_forms - 1);
+        pair_forms = clause_forms - 1;
+    }
+
+    CljList *node = clauses;
+    for (int i = 0; i < pair_forms; i += 2) {
+        ID key_form = node ? LIST_FIRST(node) : NULL;
+        node = node ? list_rest_normalized(node) : NULL;
+        ID expr_form = node ? LIST_FIRST(node) : NULL;
+        node = node ? list_rest_normalized(node) : NULL;
+
+        if (case_key_matches(test_val, key_form)) {
+            ID out = eval_body(expr_form, base_env, st, ctx);
+            RELEASE(test_val);
+            return out;
+        }
+    }
+
+    if (default_expr) {
+        ID out = eval_body(default_expr, base_env, st, ctx);
+        RELEASE(test_val);
+        return out;
+    }
+
+    RELEASE(test_val);
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                    "No matching case clause",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+}
+
 ID eval_special_if(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     // Hot-path: avoid repeated list_get_element/list_nth traversals.
     // Structure: (if cond then else?)

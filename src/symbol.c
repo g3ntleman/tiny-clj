@@ -30,6 +30,7 @@ CljSymbol *SYM_TRY = NULL;
 CljSymbol *SYM_CATCH = NULL;
 CljSymbol *SYM_IF = NULL;
 CljSymbol *SYM_COND = NULL;
+CljSymbol *SYM_CASE = NULL;
 CljSymbol *SYM_WHEN = NULL;
 CljSymbol *SYM_WHILE = NULL;
 CljSymbol *SYM_LET = NULL;
@@ -166,6 +167,7 @@ static struct {
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "catch" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "if" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "cond" }, .eval_fn = NULL } },
+    { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "case" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "when" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "while" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "let" }, .eval_fn = NULL } },
@@ -194,27 +196,28 @@ static struct {
 #define SYM_CATCH_IDX 1
 #define SYM_IF_IDX 2
 #define SYM_COND_IDX 3
-#define SYM_WHEN_IDX 4
-#define SYM_WHILE_IDX 5
-#define SYM_LET_IDX 6
-#define SYM_FN_IDX 7
-#define SYM_DEF_IDX 8
-#define SYM_DEFMACRO_IDX 9
-#define SYM_QUOTE_IDX 10
-#define SYM_QUASIQUOTE_IDX 11
-#define SYM_UNQUOTE_IDX 12
-#define SYM_UNQUOTE_SPLICE_IDX 13
-#define SYM_LOOP_IDX 14
-#define SYM_RECUR_IDX 15
-#define SYM_THROW_IDX 16
-#define SYM_FINALLY_IDX 17
-#define SYM_VAR_IDX 18
-#define SYM_NS_IDX 19
-#define SYM_BINDING_IDX 20
-#define SYM_TIME_IDX 21
-#define SYM_GO_IDX 22
-#define SYM_AND_IDX 23
-#define SYM_OR_IDX 24
+#define SYM_CASE_IDX 4
+#define SYM_WHEN_IDX 5
+#define SYM_WHILE_IDX 6
+#define SYM_LET_IDX 7
+#define SYM_FN_IDX 8
+#define SYM_DEF_IDX 9
+#define SYM_DEFMACRO_IDX 10
+#define SYM_QUOTE_IDX 11
+#define SYM_QUASIQUOTE_IDX 12
+#define SYM_UNQUOTE_IDX 13
+#define SYM_UNQUOTE_SPLICE_IDX 14
+#define SYM_LOOP_IDX 15
+#define SYM_RECUR_IDX 16
+#define SYM_THROW_IDX 17
+#define SYM_FINALLY_IDX 18
+#define SYM_VAR_IDX 19
+#define SYM_NS_IDX 20
+#define SYM_BINDING_IDX 21
+#define SYM_TIME_IDX 22
+#define SYM_GO_IDX 23
+#define SYM_AND_IDX 24
+#define SYM_OR_IDX 25
 
 #define G_SPECIAL_SYMBOLS_COUNT (sizeof(g_special_symbols) / sizeof(g_special_symbols[0]))
 
@@ -436,6 +439,7 @@ void init_special_symbols() {
     SYM_CATCH = (CljSymbol*)&g_special_symbols[SYM_CATCH_IDX].sym;
     SYM_IF = (CljSymbol*)&g_special_symbols[SYM_IF_IDX].sym;
     SYM_COND = (CljSymbol*)&g_special_symbols[SYM_COND_IDX].sym;
+    SYM_CASE = (CljSymbol*)&g_special_symbols[SYM_CASE_IDX].sym;
     SYM_WHEN = (CljSymbol*)&g_special_symbols[SYM_WHEN_IDX].sym;
     SYM_WHILE = (CljSymbol*)&g_special_symbols[SYM_WHILE_IDX].sym;
     SYM_LET = (CljSymbol*)&g_special_symbols[SYM_LET_IDX].sym;
@@ -637,6 +641,9 @@ void init_special_symbols() {
     }
     if (is_special_symbol(SYM_COND)) {
         ((CljSpecialSymbol*)SYM_COND)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_cond;
+    }
+    if (is_special_symbol(SYM_CASE)) {
+        ((CljSpecialSymbol*)SYM_CASE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_case;
     }
     if (is_special_symbol(SYM_DO)) {
         ((CljSpecialSymbol*)SYM_DO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_do;
