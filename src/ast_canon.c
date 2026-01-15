@@ -60,6 +60,12 @@ static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, boo
     if (!list_type_matches(TAG(rest_expr))) return NULL;
 
     CljList *src = as_list(rest_expr);
+    // IMPORTANT: normalize "empty list" sentinels to NULL.
+    // We may see:
+    // - the empty-list singleton (CLJ_LIST, rc=SINGLETON_RC)
+    // - an AST list terminator node (CLJ_AST_NODE) with first/rest == NULL
+    // In both cases, this represents end-of-list and must NOT become a list with a nil element.
+    if ((src->first == NULL && src->rest == NULL) || list_empty(src)) return NULL;
     ID first = canonicalize_expr_with_scope(src->first, st, in_quote, scope_stack);
     CljList *rest = src->rest ? canonicalize_rest_to_plain_list(src->rest, st, in_quote, scope_stack) : NULL;
 
@@ -398,10 +404,13 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 // The expanded form will be canonicalized recursively below
                 ID args[16];
                 int argc = 0;
-                for (CljList *cur = list->rest ? as_list(list->rest) : NULL;
+                // IMPORTANT: use normalized list traversal. Some list producers use an
+                // explicit empty-list terminator node (first/rest == NULL) or the empty-list
+                // singleton; treating those as an argument would add a spurious trailing nil.
+                for (CljList *cur = list_rest_normalized(list);
                      cur && argc < 16;
-                     cur = cur->rest ? as_list(cur->rest) : NULL) {
-                    args[argc++] = cur->first;
+                     cur = list_rest_normalized(cur)) {
+                    args[argc++] = LIST_FIRST(cur);
                 }
                 
                 // Call macro function to expand the form
