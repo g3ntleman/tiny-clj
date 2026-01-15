@@ -1074,22 +1074,49 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
     // Handle keywords as functions (for map lookup)
     if (is_keyword(op)) {
         CljList *args = list_rest_normalized(list);
-        if (args && !list_rest_normalized(args)) {
-            ID arg = eval_arg_with_context(list, 1, env, st, ctx);
-            if (is_symbol(arg)) {
-                ID resolved = eval_symbol(as_symbol((CljObject*)arg), st);
-                if (resolved) {
-                    RELEASE(arg);
-                    arg = resolved;
-                }
-            }
-            if (is_map(arg)) {
-                ID result = map_get_sentinel((CljValue)arg, (CljValue)op, NULL);
-                RELEASE(arg);
-                return RETAIN(result);
-            }
-            RELEASE(arg);
+        // Arity: (:kw coll) or (:kw coll not-found)
+        if (!args) {
+            return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                             "Wrong number of args (0) passed to: clojure.lang.Keyword");
         }
+
+        CljList *arg2_node = list_rest_normalized(args);
+        CljList *arg3_node = arg2_node ? list_rest_normalized(arg2_node) : NULL;
+        if (arg3_node) {
+            int argc = 0;
+            for (CljList *node = args; node; node = list_rest_normalized(node)) {
+                argc++;
+            }
+            return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                             "Wrong number of args (%d) passed to: clojure.lang.Keyword", argc);
+        }
+
+        ID coll = eval_arg_with_context(list, 1, env, st, ctx);
+        if (is_symbol(coll)) {
+            ID resolved = eval_symbol(as_symbol(coll), st);
+            if (resolved) {
+                RELEASE(coll);
+                coll = resolved;
+            }
+        }
+
+        ID not_found = NULL;
+        if (arg2_node) {
+            not_found = eval_arg_with_context(list, 2, env, st, ctx);
+        }
+
+        ID result = NULL;
+        if (coll && is_map(coll)) {
+            result = map_get_sentinel((CljValue)coll, (CljValue)op, (CljValue)not_found);
+        } else {
+            result = not_found ? not_found : NULL;
+        }
+
+        // IMPORTANT: retain result before releasing locals (result may alias not_found).
+        ID out = RETAIN(result);
+        if (not_found) RELEASE(not_found);
+        if (coll) RELEASE(coll);
+        return out;
     }
 
     // Resolve symbol to get function

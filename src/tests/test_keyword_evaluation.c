@@ -341,3 +341,63 @@ TEST(test_unqualified_keyword_still_works) {
     TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
 }
 
+// ============================================================================
+// TESTS: KEYWORDS AS FUNCTIONS (MAP LOOKUP + DEFAULT)
+// ============================================================================
+
+TEST(test_keyword_as_function_map_lookup_and_default) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // (:a {:a 1 :b 2}) => 1
+    CljValue v = eval_string("(:a {:a 1 :b 2})", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)v), "Expected fixnum result");
+    TEST_ASSERT_EQUAL_INT(1, AS_FIXNUM((CljValue)v));
+
+    // (:missing {:a 1}) => nil
+    v = eval_string("(:missing {:a 1})", g_test_eval_state);
+    TEST_ASSERT_NIL_MESSAGE(v, "Expected nil when key is missing and no default provided");
+
+    // (:a {:a 1} 9) => 1 (default ignored when present)
+    v = eval_string("(:a {:a 1} 9)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)v), "Expected fixnum result");
+    TEST_ASSERT_EQUAL_INT(1, AS_FIXNUM((CljValue)v));
+
+    // (:missing {:a 1} 9) => 9
+    v = eval_string("(:missing {:a 1} 9)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)v), "Expected fixnum default result");
+    TEST_ASSERT_EQUAL_INT(9, AS_FIXNUM((CljValue)v));
+
+    // Non-map: (:missing 42) => nil
+    v = eval_string("(:missing 42)", g_test_eval_state);
+    TEST_ASSERT_NIL_MESSAGE(v, "Expected nil when lookup target is not a map and no default provided");
+
+    // Non-map with default: (:missing 42 9) => 9
+    v = eval_string("(:missing 42 9)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)v), "Expected fixnum default result");
+    TEST_ASSERT_EQUAL_INT(9, AS_FIXNUM((CljValue)v));
+}
+
+TEST(test_keyword_as_function_arity_errors) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // 0 args: (:a) => arity exception
+    TRY {
+        (void)eval_string("(:a)", g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected arity exception for (:a)");
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+
+    // 3+ args: (:a {:a 1} 2 3) => arity exception
+    TRY {
+        (void)eval_string("(:a {:a 1} 2 3)", g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected arity exception for (:a {:a 1} 2 3)");
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+}
+
