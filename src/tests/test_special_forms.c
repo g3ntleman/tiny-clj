@@ -273,3 +273,30 @@ TEST(test_named_fn_with_two_params) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(1024, as_fixnum(result)); // 2^10 = 1024
 }
+
+TEST(test_named_fn_cond_multi_clause_regression) {
+    // Regression: TCO rewrite for named fns previously broke (cond ...) by nesting its rest list,
+    // causing "cond requires an even number of forms".
+    ID r1 = eval_string("((fn g [x] (cond (< x 0) -1 (= x 0) 0 :else 1)) 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r1);
+    TEST_ASSERT_TRUE(is_fixnum(r1));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(r1));
+
+    ID r2 = eval_string("((fn g [x] (cond (< x 0) -1 (= x 0) 0 :else 1)) 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r2);
+    TEST_ASSERT_TRUE(is_fixnum(r2));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(r2));
+
+    ID r3 = eval_string("((fn g [x] (cond (< x 0) -1 (= x 0) 0 :else 1)) -3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r3);
+    TEST_ASSERT_TRUE(is_fixnum(r3));
+    TEST_ASSERT_EQUAL_INT(-1, as_fixnum(r3));
+}
+
+TEST(test_defn_cond_multi_clause_regression) {
+    // Same regression, but through clojure.core/defn macro expansion.
+    ID r = eval_string("(do (defn g [x] (cond (< x 0) -1 (= x 0) 0 :else 1)) (g -3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(r);
+    TEST_ASSERT_TRUE(is_fixnum(r));
+    TEST_ASSERT_EQUAL_INT(-1, as_fixnum(r));
+}

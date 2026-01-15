@@ -172,6 +172,21 @@ R"CLOJURE(
 (defn ifn? [x] (or (fn? x) (keyword? x) (map? x) (vector? x)))
 
 ; ============================================================================
+; defn Macro (extended): accept optional docstring
+; ============================================================================
+; The bootstrap `defn` macro at the top of this file is intentionally minimal.
+; Once `string?` (and basic seq ops) exist, we can support:
+;   (defn f "doc" [x] body...)
+; by simply skipping the docstring in the expansion.
+(defmacro defn [name & decls]
+  (let [decls (if (and (seq decls) (string? (first decls)))
+                (rest decls)
+                decls)
+        params (first decls)
+        body   (rest decls)]
+    (list 'def name (cons 'fn (cons name (cons params body))))))
+
+; ============================================================================
 ; Sequence Helper Functions (needed by Threading Macros)
 ; ============================================================================
 ^#^{:doc "Internal 2-arity helper for concat (native)."}

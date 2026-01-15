@@ -654,3 +654,32 @@ TEST(test_defn_add_can_be_called) {
     });
 }
 
+// ============================================================================
+// TEST: defn supports optional docstring (regression)
+// ============================================================================
+TEST(test_defn_docstring_function_is_callable) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+        // Regression: (defn f "doc" [x] x) previously mis-parsed and produced nil / broken f.
+        ID r = eval_string("(do (defn f \"doc\" [x] x) (f 7))", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(r);
+        TEST_ASSERT_TRUE(is_fixnum(r));
+        TEST_ASSERT_EQUAL_INT(7, as_fixnum(r));
+    });
+}
+
+TEST(test_defn_docstring_native_stub_still_works) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+        init_special_symbols();
+
+        // Use a namespace where a :native stub is expected (clojure.string/trim).
+        eval_string("(ns clojure.string)", g_test_eval_state);
+
+        ID r = eval_string("(do (defn trim \"doc\" [s] :native) (trim \"  hello  \"))", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(r);
+        TEST_ASSERT_TRUE(TAG(r) == CLJ_STRING);
+    });
+}
+
