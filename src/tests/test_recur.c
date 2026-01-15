@@ -75,6 +75,95 @@ TEST(test_recur_arity_error) {
 
 }
 
+// ============================================================================
+// LOOP/RECUR TESTS
+// ============================================================================
+
+TEST(test_loop_basic_countdown) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+
+    // (loop [x 5] (if (> x 0) (recur (- x 1)) x)) => 0
+    CljObject *result = eval_string(
+        "(loop [x 5] (if (> x 0) (recur (- x 1)) x))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result));
+}
+
+TEST(test_loop_sum_accumulator) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+
+    // (loop [i 0 sum 0] (if (< i 5) (recur (+ i 1) (+ sum i)) sum)) => 10
+    CljObject *result = eval_string(
+        "(loop [i 0 sum 0] (if (< i 5) (recur (+ i 1) (+ sum i)) sum))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)result));
+}
+
+TEST(test_loop_no_recur) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+
+    // (loop [x 42] x) => 42
+    CljObject *result = eval_string("(loop [x 42] x)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+}
+
+TEST(test_loop_recur_arity_error) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+
+    // (loop [x 0 y 0] (recur 1)) => ArityException
+    bool exception_caught = false;
+    TRY {
+        eval_string("(loop [x 0 y 0] (recur 1))", g_test_eval_state);
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING(EXCEPTION_ARITY, ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Expected ArityException for loop recur arity mismatch");
+}
+
+TEST(test_loop_nested_in_fn) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+
+    // fn with inner loop - recur should target the loop
+    CljObject *def_result = eval_string(
+        "(def sum-to (fn [n] (loop [i 0 acc 0] (if (< i n) (recur (+ i 1) (+ acc i)) acc))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(def_result);
+
+    // Diagnostic: ensure loop can see outer fn parameter via parent frame.
+    CljObject *param_visible = eval_string("((fn [n] (loop [i 0 acc 0] n)) 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(param_visible);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)param_visible));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum((CljValue)param_visible));
+
+    CljObject *result = eval_string("(sum-to 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)result));
+}
+
 // Test that recur outside a function body throws
 TEST(test_recur_outside_function_throws) {
     if (!g_test_eval_state) {
