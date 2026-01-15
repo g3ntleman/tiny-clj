@@ -120,6 +120,7 @@ add_executable(subjective-c-tests ${SUBJECTIVE_C_TEST_SOURCES})
 target_include_directories(subjective-c-tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/external/unity/src
+        ${CMAKE_SOURCE_DIR}/external          # for "unity/src/..." includes
         ${CMAKE_SOURCE_DIR}               # For <subjective-c/...> includes
         ${CMAKE_CURRENT_SOURCE_DIR}       # For "subjective-c.h" in tests
         ${CMAKE_CURRENT_SOURCE_DIR}/src   # For subjective-c sources

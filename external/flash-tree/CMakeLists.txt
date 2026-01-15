@@ -8,13 +8,6 @@ set(FLASH_TREE_CORE_SRCS
     src/ft_crc32.c
     src/ft_page_policy.c
     src/ft_blob.c
-    src/ft_tsdb.c
-)
-
-set(FLASHDB_SRCS
-    src/flashdb/ft_port.c
-    src/flashdb/ft_tsdb.c
-    src/flashdb/ft_utils.c
 )
 
 set(BSD_BTREE_SRCS
@@ -37,19 +30,16 @@ set(BSD_BTREE_SRCS
 
 # Build as OBJECT libraries so we can:
 # - produce a monolithic libflash-tree.a (for existing consumers)
-# - also produce split archives for size accounting (flashdb vs flash-tree).
-add_library(flashdb-obj OBJECT ${FLASHDB_SRCS})
+# - also produce split archives for size accounting.
 add_library(flash-tree-obj OBJECT ${FLASH_TREE_CORE_SRCS})
 add_library(bsd-btree-obj OBJECT ${BSD_BTREE_SRCS})
 
-add_library(flashdb-core STATIC $<TARGET_OBJECTS:flashdb-obj>)
 add_library(flash-tree-core STATIC $<TARGET_OBJECTS:flash-tree-obj>)
 add_library(bsd-btree STATIC $<TARGET_OBJECTS:bsd-btree-obj>)
 
 # Monolithic archive (backwards compatible target name).
 add_library(flash-tree STATIC
     $<TARGET_OBJECTS:flash-tree-obj>
-    $<TARGET_OBJECTS:flashdb-obj>
     $<TARGET_OBJECTS:bsd-btree-obj>
 )
 
@@ -57,19 +47,17 @@ add_library(flash-tree STATIC
 # Not linked into flash-tree by default; built on demand.
 # (The actual compilation is done by bsd-btree-obj above.)
 
-foreach(tgt flashdb-obj flash-tree-obj bsd-btree-obj flashdb-core flash-tree-core bsd-btree flash-tree)
+foreach(tgt flash-tree-obj bsd-btree-obj flash-tree-core bsd-btree flash-tree)
     target_include_directories(${tgt}
         PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/inc
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/src
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/flashdb
     )
     target_compile_features(${tgt} PUBLIC c_std_99)
 endforeach()
 
 target_compile_options(flash-tree-obj PRIVATE -Wall -Wextra -Wno-unused-parameter)
-target_compile_options(flashdb-obj PRIVATE -Wall -Wextra -Wno-unused-parameter)
 target_compile_options(bsd-btree-obj PRIVATE -Wall -Wextra)
 
 target_compile_definitions(bsd-btree-obj PRIVATE
@@ -79,14 +67,10 @@ target_compile_definitions(bsd-btree-obj PRIVATE
 target_compile_definitions(flash-tree-obj PRIVATE
     $<$<CONFIG:Debug>:DEBUG>
 )
-target_compile_definitions(flashdb-obj PRIVATE
-    $<$<CONFIG:Debug>:DEBUG>
-)
 
 # Single-config generators fallback (older CMake workflows).
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(flash-tree-obj PRIVATE DEBUG)
-    target_compile_definitions(flashdb-obj PRIVATE DEBUG)
 endif()
 
 target_include_directories(bsd-btree PRIVATE
@@ -111,7 +95,8 @@ foreach(path ${UNITY_SEARCH_PATHS})
 endforeach()
 
 if(UNITY_SRC)
-    add_executable(flash-tree-tests
+    # Host tests are built on demand (not part of default 'all').
+    add_executable(flash-tree-tests EXCLUDE_FROM_ALL
         tests/test_runner.c
         tests/test_host_smoke.c
         tests/test_blockdev.c
@@ -119,8 +104,6 @@ if(UNITY_SRC)
         tests/test_btree_rw.c
         tests/test_multi_kv.c
         tests/test_kv_edge_cases.c
-        tests/test_tsdb_basic.c
-        tests/test_tsdb_agg.c
         tests/test_gc.c
         tests/test_page_policy.c
         tests/test_chunk_stream.c

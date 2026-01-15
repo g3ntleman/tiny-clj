@@ -109,15 +109,27 @@ ft_status_t ft_kv_open(ft_kv_t** out_kv, ft_blockdev_t* bdev, const ft_kv_cfg_t*
     BTREEINFO bi;
     memset(&bi, 0, sizeof(bi));
     /*
-     * BSD btree requires psize to be a power-of-two. Use erase granularity as
-     * the logical page size (mpool prepends its own header in the log).
+     * The mpool stores each B-Tree page in an append-only log record:
+     *   record_size == erase_granularity
+     *   record = header + page_payload
+     *
+     * Therefore the B-Tree page size must be (erase_granularity - header_size),
+     * so that the on-flash record stays erase-aligned.
      *
      * Note: overflow pages are not supported (see ft_bt_put.c). Keep minkeypage
-     * low so the overflow cutoff is large enough for 4KB chunk values.
+     * at the minimum allowed by BSD btree (2) so the overflow cutoff is as
+     * large as possible.
      */
-    bi.psize = bdev->geom.erase_granularity;
+    ft_page_policy_t pol = {0};
+    st = ft_page_policy_compute_variant_b(&bdev->geom, sizeof(ft_page_hdr_t), &pol);
+    if (st != FT_OK) {
+        ft_kv_unbind();
+        free(kv);
+        return st;
+    }
+    bi.psize = pol.page_size;
     bi.cachesize = 2u * bi.psize; /* Still minimal; mpool has its own cache. */
-    bi.minkeypage = 1;
+    bi.minkeypage = 2;
 
     kv->bdb = __bt_open("ft_kv", O_RDWR | O_CREAT, 0600, &bi, 0);
     ft_kv_unbind();
@@ -410,4 +422,4 @@ int ft_kv_gc_step_more(ft_kv_t* kv, size_t budget_bytes) {
     return (gc_rc > 0) ? 1 : 0;
 }
 
-/* (TSDB functions are implemented in ft_tsdb.c) */
+/* TSDB support removed (RRD supersedes it in tiny-clj). */

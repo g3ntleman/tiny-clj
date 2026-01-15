@@ -218,51 +218,6 @@ static inline ft_status_t ft_gc_step(ft_db_t* db, size_t budget_bytes) {
     return ft_kv_gc_step((ft_kv_t*)db, budget_bytes);
 }
 
-/* ============== TSDB (Time Series) ============== */
-
-typedef enum ft_tsl_status {
-    FT_TSL_STATUS_OK = 0,
-    FT_TSL_STATUS_DROPPED = 1,
-} ft_tsl_status_t;
-
-/* Byte-based range for regions (must be erase_granularity-aligned). */
-typedef struct ft_range {
-    uint32_t base_offset; /* in bytes */
-    uint32_t len;         /* in bytes */
-} ft_range_t;
-
-typedef struct ft_tsdb_cfg {
-    /* Base offset and length of the TSDB region in bytes. */
-    ft_range_t range;
-
-    /* Maximum payload size per record (must be <= erase_granularity - overhead). 0 => default. */
-    uint32_t max_len;
-} ft_tsdb_cfg_t;
-
-typedef ft_status_t (*ft_tsl_cb)(ft_time_t t, const void* data, size_t len, ft_tsl_status_t status,
-                                 void* arg);
-
-typedef struct ft_agg_f32 {
-    uint64_t count;
-    float sum;
-    float min;
-    float max;
-    float avg;
-} ft_agg_f32_t;
-
-typedef struct ft_tsdb ft_tsdb_t;
-
-ft_status_t ft_tsdb_init(ft_tsdb_t** out_tsdb, ft_blockdev_t* bdev, const ft_tsdb_cfg_t* cfg);
-void ft_tsdb_deinit(ft_tsdb_t* tsdb);
-
-ft_status_t ft_tsl_append(ft_tsdb_t* tsdb, const void* data, size_t len, ft_time_t t);
-ft_status_t ft_tsl_iter_by_time(ft_tsdb_t* tsdb, ft_time_t from, ft_time_t to, ft_tsl_cb cb,
-                                void* arg);
-ft_status_t ft_tsl_query_count(ft_tsdb_t* tsdb, ft_time_t from, ft_time_t to,
-                               ft_tsl_status_t status, uint64_t* out_count);
-ft_status_t ft_tsl_aggregate_f32(ft_tsdb_t* tsdb, ft_time_t from, ft_time_t to,
-                                 ft_tsl_status_t status, ft_agg_f32_t* out);
-
 #ifdef __cplusplus
 } // extern "C"
 #endif
