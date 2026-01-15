@@ -339,8 +339,10 @@ struct ft_blob_writer {
     uint16_t index_block_count;
     uint32_t block_i;
 
-    uint8_t* page_buf; /* chunk_size bytes */
-    size_t page_fill;
+    /* Current output page (pinned in mpool until flushed). */
+    uint8_t* cur_page; /* mp->pagesize bytes */
+    pgno_t cur_pgno;
+    size_t cur_fill;
 };
 
 static uint32_t ft_blob_next_generation(uint32_t old_gen) {
@@ -676,9 +678,7 @@ ft_status_t ft_blob_writer_init(ft_kv_t* kv, const void* key, size_t key_len,
 
     w->inline_pgnos = (uint32_t*)malloc((size_t)inline_cap * sizeof(uint32_t));
     w->idx_pgnos = (uint32_t*)malloc((size_t)idx_cap * sizeof(uint32_t));
-    w->page_buf = (uint8_t*)malloc((size_t)w->chunk_size);
-    if (!w->inline_pgnos || !w->idx_pgnos || !w->page_buf) {
-        free(w->page_buf);
+    if (!w->inline_pgnos || !w->idx_pgnos) {
         free(w->idx_pgnos);
         free(w->inline_pgnos);
         free(w->user_key);
@@ -689,28 +689,9 @@ ft_status_t ft_blob_writer_init(ft_kv_t* kv, const void* key, size_t key_len,
     return FT_OK;
 }
 
-static ft_status_t ft_blob_writer_flush_page(ft_blob_writer_t* w, const uint8_t* page_data,
-                                             size_t valid_len) {
+static ft_status_t ft_blob_writer_record_pgno(ft_blob_writer_t* w, pgno_t pgno) {
     if (!w)
         return FT_ERR_INVALID_ARG;
-    if (valid_len > w->chunk_size)
-        return FT_ERR_INVALID_ARG;
-
-    MPOOL* mp = ft_kv_get_mpool(w->kv);
-    if (!mp)
-        return FT_ERR_IO;
-
-    pgno_t pgno = PGNO_INVALID;
-    uint8_t* buf = (uint8_t*)mpool_new(mp, &pgno);
-    if (!buf || pgno == PGNO_INVALID) {
-        errno = ENOMEM;
-        return FT_ERR_NO_MEMORY;
-    }
-    memset(buf, 0, mp->pagesize);
-    if (valid_len)
-        memcpy(buf, page_data, valid_len);
-    if (mpool_put(mp, buf, MPOOL_DIRTY) != 0)
-        return FT_ERR_IO;
 
     /* Record pgno */
     if (w->inline_count < w->inline_cap) {
@@ -731,23 +712,76 @@ static ft_status_t ft_blob_writer_flush_page(ft_blob_writer_t* w, const uint8_t*
     return FT_OK;
 }
 
+static ft_status_t ft_blob_writer_flush_current_page(ft_blob_writer_t* w) {
+    if (!w)
+        return FT_ERR_INVALID_ARG;
+    if (!w->cur_page)
+        return FT_OK;
+
+    MPOOL* mp = ft_kv_get_mpool(w->kv);
+    if (!mp)
+        return FT_ERR_IO;
+
+    /* Zero padding is already present because we memset() the page on allocation. */
+    if (mpool_put(mp, w->cur_page, MPOOL_DIRTY) != 0)
+        return FT_ERR_IO;
+    w->cur_page = NULL;
+    w->cur_pgno = PGNO_INVALID;
+    w->cur_fill = 0;
+    return FT_OK;
+}
+
+static ft_status_t ft_blob_writer_ensure_page(ft_blob_writer_t* w) {
+    if (!w)
+        return FT_ERR_INVALID_ARG;
+    if (w->cur_page)
+        return FT_OK;
+
+    MPOOL* mp = ft_kv_get_mpool(w->kv);
+    if (!mp)
+        return FT_ERR_IO;
+
+    pgno_t pgno = PGNO_INVALID;
+    uint8_t* page = (uint8_t*)mpool_new(mp, &pgno);
+    if (!page || pgno == PGNO_INVALID) {
+        errno = ENOMEM;
+        return FT_ERR_NO_MEMORY;
+    }
+    memset(page, 0, mp->pagesize);
+
+    ft_status_t st = ft_blob_writer_record_pgno(w, pgno);
+    if (st != FT_OK) {
+        /* Best-effort: don't leak a pinned page on failure. */
+        (void)mpool_put(mp, page, 0);
+        return st;
+    }
+
+    w->cur_page = page;
+    w->cur_pgno = pgno;
+    w->cur_fill = 0;
+    return FT_OK;
+}
+
 ft_status_t ft_blob_write(ft_blob_writer_t* w, const void* data, size_t len) {
     if (!w || (!data && len != 0))
         return FT_ERR_INVALID_ARG;
     const uint8_t* p = (const uint8_t*)data;
     while (len) {
-        const size_t space = (size_t)w->chunk_size - w->page_fill;
+        ft_status_t st = ft_blob_writer_ensure_page(w);
+        if (st != FT_OK)
+            return st;
+
+        const size_t space = (size_t)w->chunk_size - w->cur_fill;
         const size_t take = (len < space) ? len : space;
-        memcpy(w->page_buf + w->page_fill, p, take);
-        w->page_fill += take;
+        memcpy(w->cur_page + w->cur_fill, p, take);
+        w->cur_fill += take;
         p += take;
         len -= take;
         w->logical_size += (uint32_t)take;
-        if (w->page_fill == (size_t)w->chunk_size) {
-            ft_status_t st = ft_blob_writer_flush_page(w, w->page_buf, w->page_fill);
+        if (w->cur_fill == (size_t)w->chunk_size) {
+            st = ft_blob_writer_flush_current_page(w);
             if (st != FT_OK)
                 return st;
-            w->page_fill = 0;
         }
     }
     return FT_OK;
@@ -756,7 +790,6 @@ ft_status_t ft_blob_write(ft_blob_writer_t* w, const void* data, size_t len) {
 static void ft_blob_writer_free(ft_blob_writer_t* w) {
     if (!w)
         return;
-    free(w->page_buf);
     free(w->idx_pgnos);
     free(w->inline_pgnos);
     free(w->user_key);
@@ -792,14 +825,13 @@ ft_status_t ft_blob_finish(ft_blob_writer_t* w) {
     }
 
     /* Flush tail page if needed. */
-    if (w->page_fill) {
-        ft_status_t st = ft_blob_writer_flush_page(w, w->page_buf, w->page_fill);
+    if (w->cur_page) {
+        ft_status_t st = ft_blob_writer_flush_current_page(w);
         if (st != FT_OK) {
             free(old_all);
             ft_blob_writer_free(w);
             return st;
         }
-        w->page_fill = 0;
     }
 
     /* Flush tail index block. */

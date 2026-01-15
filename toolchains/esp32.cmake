@@ -7,17 +7,20 @@ set(CMAKE_SYSTEM_PROCESSOR xtensa)
 
 #
 # Toolchain discovery order:
-# 1) Prefer ESP-IDF environment (source scripts/esp_env.sh) which puts Xtensa tools in PATH.
+# 1) Prefer an ESP-IDF environment (optionally sourced) which puts Xtensa tools in PATH.
 # 2) Fallback to explicit ESP32_TOOLCHAIN_PATH (legacy).
 #
-find_program(ESP32_GCC xtensa-esp32-elf-gcc)
-find_program(ESP32_GXX xtensa-esp32-elf-g++)
-find_program(ESP32_AR  xtensa-esp32-elf-ar)
-find_program(ESP32_RANLIB xtensa-esp32-elf-ranlib)
-find_program(ESP32_LD  xtensa-esp32-elf-ld)
-find_program(ESP32_STRIP xtensa-esp32-elf-strip)
-find_program(ESP32_OBJCOPY xtensa-esp32-elf-objcopy)
-find_program(ESP32_OBJDUMP xtensa-esp32-elf-objdump)
+# Note: Espressif toolchains may be installed with either prefix:
+# - xtensa-esp32-elf-* (older naming)
+# - xtensa-esp-elf-*   (current ESP-IDF tools naming)
+find_program(ESP32_GCC xtensa-esp32-elf-gcc xtensa-esp-elf-gcc)
+find_program(ESP32_GXX xtensa-esp32-elf-g++ xtensa-esp-elf-g++)
+find_program(ESP32_AR  xtensa-esp32-elf-ar  xtensa-esp-elf-ar)
+find_program(ESP32_RANLIB xtensa-esp32-elf-ranlib xtensa-esp-elf-ranlib)
+find_program(ESP32_LD  xtensa-esp32-elf-ld  xtensa-esp-elf-ld)
+find_program(ESP32_STRIP xtensa-esp32-elf-strip xtensa-esp-elf-strip)
+find_program(ESP32_OBJCOPY xtensa-esp32-elf-objcopy xtensa-esp-elf-objcopy)
+find_program(ESP32_OBJDUMP xtensa-esp32-elf-objdump xtensa-esp-elf-objdump)
 
 if(ESP32_GCC)
     # Set the cross compiler from PATH.
@@ -54,16 +57,23 @@ else()
                 "Otherwise set ESP32_TOOLCHAIN_PATH (e.g. export ESP32_TOOLCHAIN_PATH=$HOME/esp/xtensa-esp32-elf).")
     endif()
 
-    set(CMAKE_C_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-gcc" CACHE FILEPATH "C compiler")
-    set(CMAKE_CXX_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-g++" CACHE FILEPATH "C++ compiler")
-    set(CMAKE_ASM_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-gcc" CACHE FILEPATH "ASM compiler")
+    # Prefer current prefix; fall back to older prefix if needed.
+    if(EXISTS "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp-elf-gcc")
+        set(_XTENSA_PREFIX "xtensa-esp-elf")
+    else()
+        set(_XTENSA_PREFIX "xtensa-esp32-elf")
+    endif()
 
-    set(CMAKE_LINKER "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-ld" CACHE FILEPATH "Linker")
-    set(CMAKE_AR "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-ar" CACHE FILEPATH "Archiver")
-    set(CMAKE_RANLIB "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-ranlib" CACHE FILEPATH "Ranlib")
-    set(CMAKE_STRIP "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-strip" CACHE FILEPATH "Strip")
-    set(CMAKE_OBJCOPY "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-objcopy" CACHE FILEPATH "Objcopy")
-    set(CMAKE_OBJDUMP "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-objdump" CACHE FILEPATH "Objdump")
+    set(CMAKE_C_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/${_XTENSA_PREFIX}-gcc" CACHE FILEPATH "C compiler")
+    set(CMAKE_CXX_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/${_XTENSA_PREFIX}-g++" CACHE FILEPATH "C++ compiler")
+    set(CMAKE_ASM_COMPILER "${ESP32_TOOLCHAIN_PATH}/bin/${_XTENSA_PREFIX}-gcc" CACHE FILEPATH "ASM compiler")
+
+    set(CMAKE_LINKER "${ESP32_TOOLCHAIN_PATH}/bin/${_XTENSA_PREFIX}-ld" CACHE FILEPATH "Linker")
+    set(CMAKE_AR "${ESP32_TOOLCHAIN_PATH}/bin/${_XTENSA_PREFIX}-ar" CACHE FILEPATH "Archiver")
+    set(CMAKE_RANLIB "${ESP32_TOOLCHAIN_PATH}/bin/${_XTENSA_PREFIX}-ranlib" CACHE FILEPATH "Ranlib")
+    set(CMAKE_STRIP "${ESP32_TOOLCHAIN_PATH}/bin/${_XTENSA_PREFIX}-strip" CACHE FILEPATH "Strip")
+    set(CMAKE_OBJCOPY "${ESP32_TOOLCHAIN_PATH}/bin/${_XTENSA_PREFIX}-objcopy" CACHE FILEPATH "Objcopy")
+    set(CMAKE_OBJDUMP "${ESP32_TOOLCHAIN_PATH}/bin/${_XTENSA_PREFIX}-objdump" CACHE FILEPATH "Objdump")
 endif()
 
 # ESP32-specific compiler flags

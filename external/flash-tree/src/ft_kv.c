@@ -76,18 +76,6 @@ static const uint8_t FT_SYSKEY_GC_CURSOR[] = {0x00, 'g', 'c', '_', 'c', 'u', 'r'
 static const uint8_t FT_SYSKEY_FREE_HEAD[] = {0x00, 'f', 'r', 'e', 'e', '_', 'h', 'e', 'a', 'd'};
 static const uint8_t FT_SYSKEY_ALLOC_NEXT[] = {0x00, 'a', 'l', 'l', 'o', 'c', '_', 'n', 'e', 'x', 't'};
 
-static inline void ft_u32_le_write(uint8_t* p, uint32_t v) {
-    p[0] = (uint8_t)(v & 0xFFu);
-    p[1] = (uint8_t)((v >> 8) & 0xFFu);
-    p[2] = (uint8_t)((v >> 16) & 0xFFu);
-    p[3] = (uint8_t)((v >> 24) & 0xFFu);
-}
-
-static inline uint32_t ft_u32_le_read(const uint8_t* p) {
-    return ((uint32_t)p[0]) | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
-           ((uint32_t)p[3] << 24);
-}
-
 static ft_status_t ft_kv_sys_get_u32(ft_kv_t* kv, const uint8_t* key, size_t key_len,
                                      uint32_t* out) {
     if (out)

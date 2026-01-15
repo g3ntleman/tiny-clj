@@ -10,12 +10,36 @@
 ;; - Deterministic O(1) per-sample update cost (cooperative multitasking friendly)
 ;;
 ;; Storage: Uses tinyclj.kv for persistence (dogfooding flash-tree).
+;;
+;; Handler Registration:
+;; - RRA types beyond :classic require a handler registered via `register-handler!`
+;; - At create time, handler symbol names are stored in the RRD
+;; - At load time, handlers are resolved from the global registry
 
 ;; =============================================================================
 ;; Constants and Helpers
 ;; =============================================================================
 
-(def rrd-magic 0x52524431)  ;; "RRD1"
+(def rrd-magic 0x52524432)  ;; "RRD2" (bumped for handler-types)
+
+;; =============================================================================
+;; Global Handler Registry
+;; =============================================================================
+
+(def ^:private handler-registry (atom {}))
+
+(defn register-handler!
+  "Register an RRA handler under a symbol name.
+  
+  Called by handler namespaces at load time, e.g.:
+    (rrd/register-handler! 'tinyclj.rrd.spline/handler spline-rra-handler)"
+  [sym handler-map]
+  (swap! handler-registry assoc sym handler-map))
+
+(defn get-handler
+  "Look up a handler by its symbol name."
+  [sym]
+  (get @handler-registry sym))
 
 ;; Consolidation functions
 (defn cf-average
@@ -95,64 +119,59 @@
           (assoc :type t)
           (assoc :cdp-cf (or (:cdp-cf rra-def) :average))))))
 
-(defn require-handler
-  [handlers t]
-  (let [h (get handlers t)]
+(defn require-handler-by-sym
+  "Look up handler by symbol, throw if not found."
+  [sym]
+  (let [h (get-handler sym)]
     (when (nil? h)
-      (throw (Exception. (str "No RRA handler registered for type: " t))))
+      (throw (Exception. (str "No RRA handler registered for: " sym
+                              " (did you require the handler namespace?)"))))
     h))
 
 ;; =============================================================================
 ;; RRD Creation
 ;; =============================================================================
 
-;; Classic RRA handler (built-in).
-(def classic-rra-handler
-  {:init-state (fn [rra-def]
-                 {:cdp-prep {:value nil :count 0}
-                  :data (vec (repeat (:rows rra-def) nil))
-                  :ptr 0})
-   :on-cdp (fn [rra-state rra-def cdp-time cdp-value]
-             (let [result (push-to-ring (:data rra-state) (:ptr rra-state) cdp-value)
-                   new-data (first result)
-                   new-ptr (second result)]
-               (-> rra-state
-                   (assoc :data new-data)
-                   (assoc :ptr new-ptr))))
-   :fetch (fn [rrd rra-index rra-def rra-state]
-            (let [step (:step rrd)
-                  eff-step (* step (:steps rra-def))
-                  rows (:rows rra-def)
-                  ptr (:ptr rra-state)
-                  data (:data rra-state)
-                  ;; Reorder ring buffer: oldest first
-                  ordered (vec (concat (subvec data ptr) (subvec data 0 ptr)))
-                  ;; Calculate start time
-                  last-update (or (:last-update rrd) 0)
-                  end-time (normalize-to-step last-update eff-step)
-                  start-time (- end-time (* eff-step (dec rows)))]
-              {:start start-time
-               :step eff-step
-               :cf (:cf rra-def)
-               :data ordered}))
-   :info (fn [rra-def rra-state]
-           {:type :classic
-            :cf (:cf rra-def)
-            :steps (:steps rra-def)
-            :rows (:rows rra-def)
-            :filled (count (filter some? (:data rra-state)))})})
+(defn resolve-handler-types
+  "Build handler-types map from RRA definitions and opts.
+  
+  All RRA types must be provided via :handler-types in opts.
+  Example: {:handler-types {:classic 'tinyclj.rrd.classic/handler
+                            :spline 'tinyclj.rrd.spline/handler}}"
+  [rras opts]
+  (let [types (set (map :type rras))
+        custom (or (:handler-types opts) {})]
+    ;; Ensure all types have a symbol
+    (loop [ts (seq types)
+           m {}]
+      (if (nil? ts)
+        m
+        (let [t (first ts)
+              sym (get custom t)]
+          (when (nil? sym)
+            (throw (Exception. (str "No handler symbol for RRA type: " t
+                                    " - provide via :handler-types {" t " 'some.ns/handler}"))))
+          (recur (next ts) (assoc m t sym)))))))
 
-(defn resolve-rra-handlers
-  "Resolve effective RRA handlers from options."
-  [opts]
-  (merge {:classic classic-rra-handler}
-         (:rra-handlers opts)))
+(defn resolve-handlers-from-types
+  "Resolve handler maps from handler-types symbols via registry."
+  [handler-types]
+  (loop [ks (keys handler-types)
+         m {}]
+    (if (nil? ks)
+      m
+      (let [t (first ks)
+            sym (get handler-types t)
+            h (require-handler-by-sym sym)]
+        (recur (next ks) (assoc m t h))))))
 
 ;; Create initial state for an RRA (by type handler).
 (defn make-rra-state
   [handlers rra-def]
   (let [t (:type rra-def)
-        h (require-handler handlers t)]
+        h (get handlers t)]
+    (when (nil? h)
+      (throw (Exception. (str "No handler for RRA type: " t))))
     ((:init-state h) rra-def)))
 
 ;; Create initial state for an RRD.
@@ -168,7 +187,12 @@
   "Create a new RRD definition with initial state.
 
   Options:
-  - :rra-handlers {<type> {:init-state .. :on-cdp .. :fetch .. :info ..}}"
+  - :handler-types {<type> 'symbol.of/handler} for custom RRA types
+  
+  Example:
+    (create \"temp\" 60 [{:cf :average :steps 1 :rows 60}
+                         {:type :spline :steps 1 :rows 100 :epsilon 0.1}]
+            {:handler-types {:spline 'tinyclj.rrd.spline/handler}})"
   ([name step rras]
    (create name step rras {}))
   ([name step rras opts]
@@ -178,12 +202,14 @@
      (throw (Exception. "RRD step must be positive")))
    (when (or (nil? rras) (empty? rras))
      (throw (Exception. "RRD must have at least one RRA")))
-   (let [handlers (resolve-rra-handlers opts)
-         norm-rras (vec (map normalize-rra-def rras))
+   (let [norm-rras (vec (map normalize-rra-def rras))
+         handler-types (resolve-handler-types norm-rras opts)
+         handlers (resolve-handlers-from-types handler-types)
          rrd-def {:name name
                   :step step
                   :ds {:type :gauge :min nil :max nil}
                   :rras norm-rras
+                  :handler-types handler-types
                   :handlers handlers}]
      (merge rrd-def (make-rrd-state rrd-def)))))
 
@@ -253,7 +279,7 @@
     (if (>= (:count cdp-prep) steps)
       ;; Time to consolidate
       (let [t (:type rra-def)
-            h (require-handler handlers t)
+            h (get handlers t)
             cdp-value (finalize-cdp cdp-prep cdp-cf)
             updated ((:on-cdp h) rra-state rra-def pdp-time cdp-value)]
         (assoc updated :cdp-prep {:value nil :count 0}))
@@ -329,7 +355,7 @@
   (let [rra-def (nth (:rras rrd) rra-index)
         rra-state (nth (:rra-states rrd) rra-index)
         t (:type rra-def)
-        h (require-handler (:handlers rrd) t)]
+        h (get (:handlers rrd) t)]
     ((:fetch h) rrd rra-index rra-def rra-state)))
 
 ;; Fetch data from the RRD for a time range.
@@ -346,6 +372,7 @@
   (str "rrd:" name))
 
 ;; Serialize RRD to a byte array (as EDN string bytes).
+;; Stores :handler-types but not :handlers (runtime-only).
 (defn serialize-rrd [rrd]
   (let [rrd2 (dissoc rrd :handlers)
         s (pr-str (assoc rrd2 :magic rrd-magic))]
@@ -370,19 +397,17 @@
 (defn load-rrd
   "Load an RRD from storage.
 
-  Options:
-  - :rra-handlers {<type> handler-map} to attach runtime handlers."
-  ([name]
-   (load-rrd name {}))
-  ([name opts]
-   (let [key (rrd-key name)
-         bytes (kv/get-bytes key)]
-     (if (nil? bytes)
-       nil
-       (let [rrd0 (deserialize-rrd bytes)
-             handlers (resolve-rra-handlers opts)
-             norm-rras (vec (map normalize-rra-def (:rras rrd0)))]
-         (assoc rrd0 :rras norm-rras :handlers handlers))))))
+  Handlers are resolved from the global registry based on stored :handler-types.
+  Make sure to require the handler namespaces before loading."
+  [name]
+  (let [key (rrd-key name)
+        bytes (kv/get-bytes key)]
+    (if (nil? bytes)
+      nil
+      (let [rrd0 (deserialize-rrd bytes)
+            handler-types (:handler-types rrd0)
+            handlers (resolve-handlers-from-types handler-types)]
+        (assoc rrd0 :handlers handlers)))))
 
 ;; Delete an RRD from storage.
 (defn delete! [name]
@@ -409,7 +434,7 @@
    :last-update (:last-update rrd)
    :rras (map2 (fn [rra-def rra-state]
                  (let [t (:type rra-def)
-                       h (require-handler (:handlers rrd) t)]
+                       h (get (:handlers rrd) t)]
                    ((:info h) rra-def rra-state)))
                (:rras rrd)
                (:rra-states rrd))})

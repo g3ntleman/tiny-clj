@@ -13,7 +13,6 @@ set(FLASH_TREE_CORE_SRCS
 set(BSD_BTREE_SRCS
     src/ft_bt_close.c
     src/ft_bt_conv.c
-    src/ft_bt_debug.c
     src/ft_bt_delete.c
     src/ft_bt_get.c
     src/ft_bt_open.c

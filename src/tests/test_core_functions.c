@@ -196,6 +196,56 @@ TEST_SHARED(test_mapv_two_collections) {
     assert_eval_truthy("(= (mapv + [1 2] [10 20]) [11 22])");
 }
 
+TEST_SHARED(test_mapv_is_first_class_fn) {
+    // Clojure/JVM: mapv is a function (first-class), not a macro.
+    // If mapv is implemented as a macro, this will return an unevaluated form.
+    assert_eval_truthy("(let [f mapv] (= (f inc [1 2 3]) [2 3 4]))");
+}
+
+TEST_SHARED(test_mapv_arity_exception_mentions_mapv) {
+    bool exception_caught = false;
+    TRY {
+        // Wrong arity: (mapv inc) should throw ArityException mentioning mapv
+        eval_string("(mapv inc)", g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected ArityException for (mapv inc)");
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING(EXCEPTION_ARITY, ex->type);
+        TEST_ASSERT_NOT_NULL_MESSAGE(strstr(ex->message, "mapv"),
+                                     "ArityException message should mention mapv");
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Expected exception to be thrown");
+}
+
+TEST_SHARED(test_assoc_vector_wrong_key_type_throws) {
+    bool exception_caught = false;
+    TRY {
+        // Clojure/JVM: vector assoc requires numeric index
+        eval_string("(assoc [1 2] :k 3)", g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected IllegalArgumentException for (assoc [1 2] :k 3)");
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING(EXCEPTION_ILLEGAL_ARGUMENT, ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Expected exception to be thrown");
+}
+
+TEST_SHARED(test_assoc_vector_oob_throws) {
+    bool exception_caught = false;
+    TRY {
+        // Clojure/JVM: vector assoc throws IndexOutOfBoundsException on OOB index
+        eval_string("(assoc [1 2] 99 3)", g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected IndexOutOfBoundsException for (assoc [1 2] 99 3)");
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING(EXCEPTION_INDEX_OUT_OF_BOUNDS, ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Expected exception to be thrown");
+}
+
 // --- take-while ---
 
 TEST_SHARED(test_take_while_normal) {
