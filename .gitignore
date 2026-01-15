@@ -41,6 +41,9 @@ progress.marks
 # Local scratch
 tmp
 tmp/
+
+# Profiling outputs (do not commit)
+profile_outputs/
 # Test binaries
 test-*
 run-tests

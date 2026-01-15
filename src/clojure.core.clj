@@ -122,10 +122,11 @@ R"CLOJURE(
 ; Higher-Order Functions
 ; ============================================================================
 ^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Returns a transducer when no collection is provided."}
-(def map (fn [f coll]
-  (if (empty? coll)
-    (list)
-    (cons (f (first coll)) (map f (rest coll))))))
+(defn map [f & colls] :native)
+
+^#^{:doc "Returns a vector of the results of calling (map f colls...)."}
+(defmacro mapv [f & colls]
+  (list 'vec (cons 'map (cons f colls))))
 
 ^#^{:doc "Returns a lazy sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects. Returns a transducer when no collection is provided."}
 (def filter (fn [pred coll]
@@ -798,10 +799,7 @@ R"CLOJURE(
 ; Higher-Order Functions (using now-defined list, cons, first, rest, empty?)
 ; ============================================================================
 ^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Returns a transducer when no collection is provided."}
-(def map (fn [f coll]
-  (if (empty? coll)
-    (list)
-    (cons (f (first coll)) (map f (rest coll))))))
+(defn map [f & colls] :native)
 
 ^#^{:doc "Returns a lazy sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects. Returns a transducer when no collection is provided."}
 (def filter (fn [pred coll]

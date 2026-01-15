@@ -14,6 +14,7 @@
 #include "ft_bsd_mpool.h"
 #include "ft_crc32.h"
 #include "ft_kv_bind.h"
+#include "ft_kv_internal.h"
 #include "ft_utils.h"
 
 #include <errno.h>
@@ -254,16 +255,10 @@ static int ft_mpool_recover(MPOOL* mp) {
             break;
 
         const pgno_t pgno = (pgno_t)ft_page_hdr_get_pgno(hdrb);
-        const uint32_t flags = ft_page_hdr_get_flags(hdrb);
 
         /* Valid page header - update page-map (later entries override earlier). */
-        if (flags & FT_PAGE_FLAG_TOMBSTONE) {
-            if (ft_offsets_set(mp, pgno, FT_OFF_INVALID) != 0)
-                return -1;
-        } else {
-            if (ft_offsets_set(mp, pgno, offset) != 0)
-                return -1;
-        }
+        if (ft_offsets_set(mp, pgno, offset) != 0)
+            return -1;
 
         /* Track highest page number seen (+1 for next allocation) */
         if (pgno >= mp->npages) {
@@ -307,6 +302,8 @@ MPOOL* mpool_open(void* key, int fd, pgno_t pagesize, pgno_t maxcache) {
     mp->gc_active_half = 0;
     mp->gc_in_progress = 0;
     mp->gc_next_pgno = 0;
+    mp->free_head = PGNO_INVALID;
+    mp->owner_kv = NULL;
 
     mp->npages = 0;
     mp->page_offsets = NULL;
@@ -374,10 +371,39 @@ void* mpool_new(MPOOL* mp, pgno_t* pgnoaddr) {
     if (!mp || !pgnoaddr)
         return NULL;
 
-    /* Allocate new page number (first page is 0) */
-    pgno_t pgno = mp->npages++; /* post-increment: first call returns 0 */
-    if (ft_offsets_reserve(mp, (size_t)pgno + 1) != 0)
-        return NULL;
+    /* Prefer reusing a pgno freed via tombstone free-list. */
+    pgno_t pgno = PGNO_INVALID;
+    if (mp->free_head != PGNO_INVALID) {
+        const pgno_t head = mp->free_head;
+        uint32_t tomb_off = ft_offsets_get(mp, head);
+        if (tomb_off != FT_OFF_INVALID) {
+            const uint32_t total = ft_rec_size(mp);
+            uint8_t* rec = mp->scratch_rec;
+            uint8_t* hdrb = rec;
+            uint8_t* payload = rec + sizeof(ft_page_hdr_t);
+            ft_status_t st = ft_blockdev_read(mp->bdev, tomb_off, rec, total);
+            if (st == FT_OK && ft_page_hdr_get_magic(hdrb) == FT_PAGE_MAGIC &&
+                (pgno_t)ft_page_hdr_get_pgno(hdrb) == head &&
+                (ft_page_hdr_get_flags(hdrb) & FT_PAGE_FLAG_TOMBSTONE)) {
+                /* Next pointer is stored in payload[0..3] (LE u32). */
+                pgno_t next = (pgno_t)ft_u32_le_read(payload);
+                mp->free_head = next;
+                pgno = head;
+            } else {
+                /* Free-list head points to a bad record; drop the list. */
+                mp->free_head = PGNO_INVALID;
+            }
+        } else {
+            mp->free_head = PGNO_INVALID;
+        }
+    }
+
+    /* Fall back to allocating a fresh pgno (first page is 0). */
+    if (pgno == PGNO_INVALID) {
+        pgno = mp->npages++; /* post-increment: first call returns 0 */
+        if (ft_offsets_reserve(mp, (size_t)pgno + 1) != 0)
+            return NULL;
+    }
 
     /* Find cache slot */
     ft_cache_slot_t* slot = ft_cache_find_free(mp);
@@ -403,6 +429,12 @@ void* mpool_new(MPOOL* mp, pgno_t* pgnoaddr) {
     memset(slot->data, 0, mp->pagesize);
 
     *pgnoaddr = pgno;
+
+    if (mp->owner_kv) {
+        mp->owner_kv->gc_dirty = 1;
+        mp->owner_kv->free_head = (uint32_t)mp->free_head;
+        mp->owner_kv->alloc_next = (uint32_t)mp->npages;
+    }
     return slot->data;
 }
 
@@ -462,6 +494,12 @@ void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags) {
     const uint32_t crc = ft_page_hdr_crc_calc(hdrb, payload, mp->pagesize);
     if (crc != saved_crc)
         return NULL; /* Corrupt */
+
+    /* Tombstones are not readable as pages (treat as non-existent). */
+    if (ft_page_hdr_get_flags(hdrb) & FT_PAGE_FLAG_TOMBSTONE) {
+        errno = EINVAL;
+        return NULL;
+    }
 
     memcpy(slot->data, payload, mp->pagesize);
 
@@ -569,6 +607,9 @@ static int gc_copy_page(MPOOL* mp, pgno_t pgno) {
     if (crc != saved_crc)
         return -1; /* Corrupt, skip */
 
+    if (ft_page_hdr_get_flags(hdrb) & FT_PAGE_FLAG_TOMBSTONE)
+        return 1; /* Freed page - skip copy. */
+
     /* Write to new location */
     uint32_t new_off = mp->write_off;
     st = ft_blockdev_prog(mp->bdev, new_off, rec, total);
@@ -673,22 +714,33 @@ int mpool_free_pgno(MPOOL* mp, pgno_t pgno) {
     uint8_t* payload = rec + sizeof(ft_page_hdr_t);
     ft_page_hdr_encode(hdrb, FT_PAGE_MAGIC, pgno, 0u, FT_PAGE_FLAG_TOMBSTONE);
 
-    /* CRC covers header bytes (crc32=0) + a full pagesize data region (zeroed). */
+    /* CRC covers header bytes (crc32=0) + a full pagesize data region. */
     memset(payload, 0, mp->pagesize);
+    /* Store the current free-list head as next pointer (LE u32). */
+    ft_u32_le_write(payload, (uint32_t)mp->free_head);
     uint32_t crc = ft_page_hdr_crc_calc(hdrb, payload, mp->pagesize);
     ft_u32_le_write(&hdrb[8], crc);
     if ((uint64_t)mp->write_off + (uint64_t)total > mp->bdev->geom.total_size_bytes) {
         return -1;
     }
 
-    ft_status_t st = ft_blockdev_prog(mp->bdev, mp->write_off, rec, total);
+    const uint32_t tomb_off = mp->write_off;
+    ft_status_t st = ft_blockdev_prog(mp->bdev, tomb_off, rec, total);
     if (st != FT_OK)
         return -1;
 
     mp->write_off += total;
 
-    /* Invalidate map entry. */
-    if (ft_offsets_set(mp, pgno, FT_OFF_INVALID) != 0)
+    /* Point map entry at tombstone record (so we can read next pointers). */
+    if (ft_offsets_set(mp, pgno, tomb_off) != 0)
         return -1;
+
+    /* Push on free-list. */
+    mp->free_head = pgno;
+    if (mp->owner_kv) {
+        mp->owner_kv->gc_dirty = 1;
+        mp->owner_kv->free_head = (uint32_t)mp->free_head;
+        mp->owner_kv->alloc_next = (uint32_t)mp->npages;
+    }
     return 0;
 }

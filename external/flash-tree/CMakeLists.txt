@@ -105,6 +105,7 @@ if(UNITY_SRC)
         tests/test_multi_kv.c
         tests/test_kv_edge_cases.c
         tests/test_gc.c
+        tests/test_gc_syskeys.c
         tests/test_page_policy.c
         tests/test_chunk_stream.c
         tests/test_blob.c

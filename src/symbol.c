@@ -329,6 +329,7 @@ DEFINE_EXTERN_SYMBOL(sym_peek_data, "peek");
 DEFINE_EXTERN_SYMBOL(sym_pop_data, "pop");
 DEFINE_EXTERN_SYMBOL(sym_subvec_data, "subvec");
 DEFINE_EXTERN_SYMBOL(sym_reverse_data, "reverse");
+DEFINE_EXTERN_SYMBOL(sym_map_data, "map");
 DEFINE_EXTERN_SYMBOL(sym_assoc_data, "assoc");
 DEFINE_EXTERN_SYMBOL(sym_dissoc_data, "dissoc");
 DEFINE_EXTERN_SYMBOL(sym_merge_data, "merge");

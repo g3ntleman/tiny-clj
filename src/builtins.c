@@ -1227,44 +1227,165 @@ ID native_reverse(ID *args, unsigned int argc)
     return result ? AUTORELEASE(result) : empty_list();
 }
 
+// map: apply f across 1+ colls (zips to shortest)
+// Usage: (map f coll) (map f coll1 coll2 ...)
+ID native_map(ID *args, unsigned int argc)
+{
+    if (argc < 2)
+    {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                  "map expects at least 2 arguments, got %u", argc);
+        return NULL;
+    }
+
+    // Resolve EvalState for calling `f` (closures may need it).
+    EvalState *st = builtin_get_eval_state();
+    if (!st)
+    {
+        st = get_global_eval_state();
+    }
+    if (!st)
+    {
+        throw_exception(EXCEPTION_RUNTIME, "map requires EvalState", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ID f = args[0];
+    unsigned int collc = argc - 1;
+
+    // Initialize iterators for all input colls.
+    SeqIterator iters[8];
+    if (collc > (unsigned int)(sizeof(iters) / sizeof(iters[0])))
+    {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "map supports up to %u collections, got %u",
+                                  (unsigned int)(sizeof(iters) / sizeof(iters[0])), collc);
+        return NULL;
+    }
+
+    for (unsigned int i = 0; i < collc; i++)
+    {
+        if (!seq_iter_init(&iters[i], args[i + 1]))
+        {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                            "map expects seqable collections",
+                            __FILE__, __LINE__, 0);
+            return NULL;
+        }
+    }
+
+    // Build result by consing to front (safe), then reverse once at end.
+    CljList *rev = NULL;
+
+    while (true)
+    {
+        // Stop when any coll is exhausted.
+        for (unsigned int i = 0; i < collc; i++)
+        {
+            if (seq_iter_empty(&iters[i]))
+            {
+                if (!rev)
+                {
+                    return empty_list();
+                }
+                ID one[1] = {(ID)rev};
+                ID out = native_reverse(one, 1);
+                RELEASE(rev);
+                return out;
+            }
+        }
+
+        ID fn_args[8];
+        for (unsigned int i = 0; i < collc; i++)
+        {
+            fn_args[i] = seq_iter_first(&iters[i]);
+        }
+
+        ID mapped = eval_function_call(f, fn_args, collc, NULL, st);
+
+        // Prepend (reversed order).
+        CljList *node = make_list(mapped, rev);
+        if (!node)
+        {
+            RELEASE(rev);
+            return NULL;
+        }
+        rev = node;
+
+        for (unsigned int i = 0; i < collc; i++)
+        {
+            seq_iter_next(&iters[i]);
+        }
+    }
+}
+
 ID assoc3(ID *args, unsigned int argc)
 {
-    if (!validate_builtin_args(argc, 3, "assoc"))
+    // Clojure: (assoc m k v & kvs) => m with k/v pairs assoc'ed left-to-right.
+    if (argc < 3 || ((argc - 1) % 2) != 0)
+    {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                  "assoc expects 1 map and N key/value pairs, got %u args", argc);
         return NULL;
+    }
     ID coll = args[0];
-    ID key = args[1];
-    ID val = args[2];
 
     if (!coll)
         return NULL;
 
-    unsigned char coll_tag = TAG(coll);
+    ID out = coll;
+    bool out_owned = false; // only release intermediates we created
 
-    // Handle vectors
-    if (coll_tag == CLJ_VECTOR)
+    for (unsigned int i = 1; i < argc; i += 2)
     {
-        if (!key || TAG(key) != CLJ_INT)
-            return NULL;
-        int i = AS_FIXNUM(key);
-        CljVector *v = as_vector(coll);
-        if (i < 0 || (unsigned int)i >= vector_count(v))
-            return NULL;
-        // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
-        CljVector *result = vector_assoc(coll, i, val);
-        if (!result)
-            return NULL;
-        return result;
+        ID key = args[i];
+        ID val = args[i + 1];
+
+        unsigned char tag = TAG(out);
+
+        if (tag == CLJ_VECTOR)
+        {
+            if (!key || TAG(key) != CLJ_INT)
+                return NULL;
+            int idx = AS_FIXNUM(key);
+            CljVector *v = as_vector(out);
+            if (idx < 0 || (unsigned int)idx >= vector_count(v))
+                return NULL;
+
+            ID next = (ID)vector_assoc(out, idx, val);
+            if (!next)
+                return NULL;
+
+            if (next != out && out_owned)
+            {
+                RELEASE(out);
+            }
+            out_owned = (next != coll);
+            out = next;
+            continue;
+        }
+
+        if (tag == CLJ_MAP)
+        {
+            // Note: key can be NULL (nil) - that's a valid key in Clojure!
+            ID next = map_assoc(out, key, val);
+            if (!next)
+                return NULL;
+
+            if (next != out && out_owned)
+            {
+                RELEASE(out);
+            }
+            out_owned = (next != coll);
+            out = next;
+            continue;
+        }
+
+        // Unsupported collection type
+        return NULL;
     }
 
-    // Handle maps
-    if (coll_tag == CLJ_MAP)
-    {
-        // Note: key can be NULL (nil) - that's a valid key in Clojure!
-        return map_assoc(coll, key, val);
-    }
-
-    // Unsupported collection type
-    return NULL;
+    return out;
 }
 
 // dissoc: Remove keys from map (supports multiple keys like Clojure)
@@ -3071,6 +3192,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_count_data.sym, native_count},
     {&sym_nilp_data.sym, native_nilp},
     {&sym_reverse_data.sym, native_reverse},
+    {&sym_map_data.sym, native_map},
     {&sym_assoc_data.sym, assoc3},
     {&sym_dissoc_data.sym, native_dissoc},
     {&sym_merge_data.sym, native_merge},

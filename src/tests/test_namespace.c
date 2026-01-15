@@ -31,7 +31,8 @@ TEST(test_namespace_lookup_core_functions) {
     CljObject *resolved = ns_resolve(g_test_eval_state, map_sym);
     // For now, just test that we can resolve something (may be NULL if clojure.core not fully loaded)
     if (resolved) {
-        TEST_ASSERT_TRUE(TAG(resolved) == CLJ_CLOSURE);
+        // map may be a Clojure-level closure or a native function stub.
+        TEST_ASSERT_TRUE(TAG(resolved) == CLJ_CLOSURE || TAG(resolved) == CLJ_FUNC);
     }
 
     // Cleanup
@@ -1452,7 +1453,9 @@ TEST(test_clojure_core_only_symbol) {
     ID resolved = ns_resolve(g_test_eval_state, map_sym);
     // Should resolve (may be NULL if clojure.core not fully loaded, but should not throw)
     // Just verify it doesn't crash
-    TEST_ASSERT_TRUE(resolved == NULL || TAG((CljObject*)resolved) == CLJ_CLOSURE);
+    TEST_ASSERT_TRUE(resolved == NULL ||
+                     TAG((CljObject*)resolved) == CLJ_CLOSURE ||
+                     TAG((CljObject*)resolved) == CLJ_FUNC);
 }
 
 // Test: Symbol in clojure.core AND other namespace should throw error

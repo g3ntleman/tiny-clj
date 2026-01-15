@@ -60,12 +60,10 @@ static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, boo
     if (!list_type_matches(TAG(rest_expr))) return NULL;
 
     CljList *src = as_list(rest_expr);
-    // IMPORTANT: normalize "empty list" sentinels to NULL.
-    // We may see:
-    // - the empty-list singleton (CLJ_LIST, rc=SINGLETON_RC)
-    // - an AST list terminator node (CLJ_AST_NODE) with first/rest == NULL
-    // In both cases, this represents end-of-list and must NOT become a list with a nil element.
-    if ((src->first == NULL && src->rest == NULL) || list_empty(src)) return NULL;
+    // IMPORTANT: normalize only the empty-list singleton to NULL.
+    // A list/AST node may legitimately contain a nil element represented as NULL in `first`,
+    // so (first==NULL && rest==NULL) is not a reliable "end-of-list" sentinel here.
+    if (list_empty(src)) return NULL;
     ID first = canonicalize_expr_with_scope(src->first, st, in_quote, scope_stack);
     CljList *rest = src->rest ? canonicalize_rest_to_plain_list(src->rest, st, in_quote, scope_stack) : NULL;
 

@@ -53,17 +53,11 @@ static inline CljList* list_like_as_list_or_null(ID obj) {
 // Use is_singleton() to distinguish between empty list singleton and list with nil element
 static inline bool list_empty(CljList *list) {
     if (list == NULL) return true;
-    // Treat these as empty/end-of-list:
-    // - the empty list singleton (CLJ_LIST with SINGLETON_RC)
-    // - a parser/AST terminator node (CLJ_AST_NODE) with first/rest == NULL
-    //
-    // NOTE: In Tiny-CLJ source forms, the `nil` literal is represented as the symbol `nil`
-    // (SYM_NIL), not as a NULL pointer, so a node with first==NULL is effectively not used
-    // to represent an explicit `(nil)` element in user code.
-    if (LIST_FIRST(list) == NULL && LIST_REST(list) == NULL) {
-        return is_singleton((CljObject*)list) || TAG(list) == CLJ_AST_NODE;
-    }
-    return false;
+    // Only the empty list singleton is empty (rc == SINGLETON_RC).
+    // IMPORTANT: Lists/AST nodes may legitimately contain a nil element represented as NULL
+    // in `first`, so (first==NULL && rest==NULL) must NOT be treated as empty unless it's
+    // the singleton empty list.
+    return LIST_FIRST(list) == NULL && LIST_REST(list) == NULL && is_singleton((CljObject*)list);
 }
 
 static inline CljList* list_or_null(CljList *list) {
