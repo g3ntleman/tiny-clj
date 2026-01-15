@@ -255,6 +255,21 @@ TEST(test_assoc_map_isolated) {
 
 }
 
+// assoc: multiple kv pairs (Clojure semantics)
+TEST(test_assoc_multi_kv_pairs) {
+    WITH_AUTORELEASE_POOL({
+        ID ok = eval_string("(= (assoc {:a 1} :b 2 :c 3) {:a 1 :b 2 :c 3})", g_test_eval_state);
+        TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(ok), "assoc should support multiple kv pairs");
+    });
+}
+
+TEST(test_assoc_multi_kv_pairs_on_vector) {
+    WITH_AUTORELEASE_POOL({
+        ID ok = eval_string("(= (assoc [0 0 0] 0 1 2 3) [1 0 3])", g_test_eval_state);
+        TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(ok), "assoc should support multiple index/value pairs on vectors");
+    });
+}
+
 // Direct C test for map_assoc adding a new key
 TEST(test_map_assoc_direct) {
     

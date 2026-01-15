@@ -68,6 +68,127 @@ static ft_status_t ft_from_bt_status(int rc) {
     return FT_ERR_IO;
 }
 
+/* ============== Persistent GC state (system keys) ============== */
+
+#define FT_GC_PERSIST_INTERVAL 100u
+
+static const uint8_t FT_SYSKEY_GC_CURSOR[] = {0x00, 'g', 'c', '_', 'c', 'u', 'r', 's', 'o', 'r'};
+static const uint8_t FT_SYSKEY_FREE_HEAD[] = {0x00, 'f', 'r', 'e', 'e', '_', 'h', 'e', 'a', 'd'};
+static const uint8_t FT_SYSKEY_ALLOC_NEXT[] = {0x00, 'a', 'l', 'l', 'o', 'c', '_', 'n', 'e', 'x', 't'};
+
+static inline void ft_u32_le_write(uint8_t* p, uint32_t v) {
+    p[0] = (uint8_t)(v & 0xFFu);
+    p[1] = (uint8_t)((v >> 8) & 0xFFu);
+    p[2] = (uint8_t)((v >> 16) & 0xFFu);
+    p[3] = (uint8_t)((v >> 24) & 0xFFu);
+}
+
+static inline uint32_t ft_u32_le_read(const uint8_t* p) {
+    return ((uint32_t)p[0]) | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
+           ((uint32_t)p[3] << 24);
+}
+
+static ft_status_t ft_kv_sys_get_u32(ft_kv_t* kv, const uint8_t* key, size_t key_len,
+                                     uint32_t* out) {
+    if (out)
+        *out = 0;
+    if (!kv || !kv->bdb || !key || key_len == 0 || !out)
+        return FT_ERR_INVALID_ARG;
+
+    DBT k = {.data = (void*)key, .size = key_len};
+    DBT d = {0};
+    int rc = kv->bdb->get(kv->bdb, &k, &d, 0);
+    if (rc != RET_SUCCESS)
+        return ft_from_bt_status(rc);
+    if (d.size != 4)
+        return FT_ERR_CORRUPT;
+    *out = ft_u32_le_read((const uint8_t*)d.data);
+    return FT_OK;
+}
+
+static ft_status_t ft_kv_sys_put_u32(ft_kv_t* kv, const uint8_t* key, size_t key_len,
+                                     uint32_t v) {
+    if (!kv || !kv->bdb || !key || key_len == 0)
+        return FT_ERR_INVALID_ARG;
+    uint8_t tmp[4];
+    ft_u32_le_write(tmp, v);
+    DBT k = {.data = (void*)key, .size = key_len};
+    DBT d = {.data = (void*)tmp, .size = sizeof(tmp)};
+    int rc = kv->bdb->put(kv->bdb, &k, &d, 0);
+    return ft_from_bt_status(rc);
+}
+
+static ft_status_t ft_kv_load_gc_state(ft_kv_t* kv) {
+    if (!kv || !kv->bdb)
+        return FT_ERR_INVALID_ARG;
+
+    BTREE* t = (BTREE*)kv->bdb->internal;
+    MPOOL* mp = t ? t->bt_mp : NULL;
+    if (!mp)
+        return FT_ERR_INVALID_ARG;
+
+    /* Defaults */
+    kv->gc_cursor = 0;
+    kv->free_head = (uint32_t)PGNO_INVALID;
+    kv->alloc_next = (uint32_t)mp->npages;
+
+    uint32_t v = 0;
+    if (ft_kv_sys_get_u32(kv, FT_SYSKEY_GC_CURSOR, sizeof(FT_SYSKEY_GC_CURSOR), &v) == FT_OK) {
+        kv->gc_cursor = v;
+    }
+    if (ft_kv_sys_get_u32(kv, FT_SYSKEY_FREE_HEAD, sizeof(FT_SYSKEY_FREE_HEAD), &v) == FT_OK) {
+        kv->free_head = v;
+    }
+    if (ft_kv_sys_get_u32(kv, FT_SYSKEY_ALLOC_NEXT, sizeof(FT_SYSKEY_ALLOC_NEXT), &v) == FT_OK) {
+        kv->alloc_next = v;
+    }
+
+    /* Apply to mpool. */
+    mp->gc_next_pgno = (pgno_t)kv->gc_cursor;
+    mp->free_head = (pgno_t)kv->free_head;
+    if ((pgno_t)kv->alloc_next > mp->npages)
+        mp->npages = (pgno_t)kv->alloc_next;
+
+    kv->gc_dirty = 0;
+    kv->gc_persist_counter = 0;
+    return FT_OK;
+}
+
+static ft_status_t ft_kv_persist_gc_state(ft_kv_t* kv) {
+    if (!kv || !kv->bdb)
+        return FT_ERR_INVALID_ARG;
+
+    BTREE* t = (BTREE*)kv->bdb->internal;
+    MPOOL* mp = t ? t->bt_mp : NULL;
+    if (!mp)
+        return FT_ERR_INVALID_ARG;
+
+    /*
+     * Persist the KV handle's view of GC state. This is the canonical state
+     * for the higher layer (tests and periodic persistence).
+     *
+     * Keep mpool consistent with what we persist.
+     */
+    mp->gc_next_pgno = (pgno_t)kv->gc_cursor;
+    mp->free_head = (pgno_t)kv->free_head;
+    if ((pgno_t)kv->alloc_next > mp->npages)
+        mp->npages = (pgno_t)kv->alloc_next;
+
+    ft_status_t st = FT_OK;
+    st = ft_kv_sys_put_u32(kv, FT_SYSKEY_GC_CURSOR, sizeof(FT_SYSKEY_GC_CURSOR), kv->gc_cursor);
+    if (st != FT_OK)
+        return st;
+    st = ft_kv_sys_put_u32(kv, FT_SYSKEY_FREE_HEAD, sizeof(FT_SYSKEY_FREE_HEAD), kv->free_head);
+    if (st != FT_OK)
+        return st;
+    st = ft_kv_sys_put_u32(kv, FT_SYSKEY_ALLOC_NEXT, sizeof(FT_SYSKEY_ALLOC_NEXT), kv->alloc_next);
+    if (st != FT_OK)
+        return st;
+
+    kv->gc_dirty = 0;
+    return FT_OK;
+}
+
 /* ============== Public API ============== */
 
 MPOOL* ft_kv_get_mpool(ft_kv_t* kv) {
@@ -140,6 +261,24 @@ ft_status_t ft_kv_open(ft_kv_t** out_kv, ft_blockdev_t* bdev, const ft_kv_cfg_t*
         return FT_ERR_IO;
     }
 
+    /* Wire back-pointer for mpool -> kv dirty tracking, and load persisted GC state. */
+    {
+        BTREE* t = (BTREE*)kv->bdb->internal;
+        if (t && t->bt_mp) {
+            t->bt_mp->owner_kv = kv;
+            kv->alloc_next = (uint32_t)t->bt_mp->npages;
+            kv->free_head = (uint32_t)t->bt_mp->free_head;
+            kv->gc_cursor = (uint32_t)t->bt_mp->gc_next_pgno;
+        } else {
+            kv->alloc_next = 0;
+            kv->free_head = (uint32_t)PGNO_INVALID;
+            kv->gc_cursor = 0;
+        }
+        kv->gc_dirty = 0;
+        kv->gc_persist_counter = 0;
+        (void)ft_kv_load_gc_state(kv);
+    }
+
     *out_kv = kv;
     return FT_OK;
 }
@@ -147,6 +286,9 @@ ft_status_t ft_kv_open(ft_kv_t** out_kv, ft_blockdev_t* bdev, const ft_kv_cfg_t*
 void ft_kv_close(ft_kv_t* kv) {
     if (!kv)
         return;
+    if (kv->gc_dirty) {
+        (void)ft_kv_persist_gc_state(kv);
+    }
     if (kv->bdb)
         (void)kv->bdb->close(kv->bdb);
     free(kv->get_buf);
@@ -419,6 +561,23 @@ int ft_kv_gc_step_more(ft_kv_t* kv, size_t budget_bytes) {
     int gc_rc = mpool_gc_step(t->bt_mp, budget_bytes);
     if (gc_rc < 0)
         return FT_ERR_IO;
+
+    /* Track progress and persist periodically while GC is active. */
+    kv->gc_cursor = (uint32_t)t->bt_mp->gc_next_pgno;
+    kv->free_head = (uint32_t)t->bt_mp->free_head;
+    kv->alloc_next = (uint32_t)t->bt_mp->npages;
+    if (t->bt_mp->gc_in_progress || gc_rc > 0) {
+        kv->gc_dirty = 1;
+        kv->gc_persist_counter++;
+        if (kv->gc_persist_counter >= FT_GC_PERSIST_INTERVAL) {
+            (void)ft_kv_persist_gc_state(kv);
+            kv->gc_persist_counter = 0;
+        }
+    } else if (kv->gc_dirty) {
+        /* If GC just finished, persist once so reboot won't restart from scratch. */
+        (void)ft_kv_persist_gc_state(kv);
+        kv->gc_persist_counter = 0;
+    }
     return (gc_rc > 0) ? 1 : 0;
 }
 

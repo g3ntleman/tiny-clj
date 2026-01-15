@@ -15,14 +15,14 @@
 
 #include "flash_tree.h"
 #include "ft_blockdev.h"
+#include "ft_bsd_db.h"
 #include <stdint.h>
 
 /* Configuration */
 #define FT_MPOOL_DEFAULT_PAGE_SIZE 512 /* Used if caller passes pagesize==0 */
 #define FT_MPOOL_CACHE_PAGES 6         /* Pages in RAM cache (bt_split can pin up to ~5 pages) */
 
-/* Page number type (compatible with BSD btree) */
-typedef uint32_t pgno_t;
+struct ft_kv;
 
 /* On-flash page header (prepended to each page in log) */
 typedef struct __attribute__((packed)) ft_page_hdr {
@@ -75,6 +75,12 @@ typedef struct MPOOL {
     int gc_active_half;    /* 0 or 1 - which half is active */
     int gc_in_progress;    /* GC is running */
     pgno_t gc_next_pgno;   /* Next page to copy during incremental GC */
+
+    /* Tombstone free-list (for pages freed via mpool_free_pgno) */
+    pgno_t free_head; /* PGNO_INVALID when empty */
+
+    /* Back-pointer for marking KV GC state dirty (optional, may be NULL). */
+    struct ft_kv* owner_kv;
 } MPOOL;
 
 /*

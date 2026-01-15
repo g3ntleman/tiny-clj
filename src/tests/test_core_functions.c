@@ -174,6 +174,28 @@ TEST_SHARED(test_mapcat_expand) {
     assert_eval_truthy("(= (last (mapcat (fn [x] (list x (inc x))) '(1 3))) 4)");
 }
 
+// --- map / mapv (multi-coll + vector result) ---
+
+TEST_SHARED(test_map_two_collections_vector_zip) {
+    // (map + [1 2 3] [10 20 30]) => (11 22 33)
+    assert_eval_truthy("(= (map + [1 2 3] [10 20 30]) '(11 22 33))");
+}
+
+TEST_SHARED(test_map_two_collections_stops_at_shortest) {
+    // Stops at shortest: (map + [1 2 3] [10]) => (11)
+    assert_eval_truthy("(= (map + [1 2 3] [10]) '(11))");
+}
+
+TEST_SHARED(test_mapv_single_collection) {
+    // (mapv inc [1 2 3]) => [2 3 4]
+    assert_eval_truthy("(= (mapv inc [1 2 3]) [2 3 4])");
+}
+
+TEST_SHARED(test_mapv_two_collections) {
+    // (mapv + [1 2] [10 20]) => [11 22]
+    assert_eval_truthy("(= (mapv + [1 2] [10 20]) [11 22])");
+}
+
 // --- take-while ---
 
 TEST_SHARED(test_take_while_normal) {

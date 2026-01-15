@@ -5,14 +5,15 @@
 
 #include "flash_tree.h"
 
+/* Some compilation units set this via compiler flags; avoid macro-redefinition warnings. */
+#ifndef __DBINTERFACE_PRIVATE
+#define __DBINTERFACE_PRIVATE
+#endif
+
+#include "ft_bsd_mpool.h"
+
 #include <stddef.h>
 #include <stdint.h>
-
-/* Internal btree/db types (do not pull in unguarded btree headers here). */
-#define __DBINTERFACE_PRIVATE
-#include "ft_bsd_db.h"
-
-typedef struct MPOOL MPOOL;
 
 /* Keep the KV handle definition in one place for internal users. */
 struct ft_kv {
@@ -22,6 +23,15 @@ struct ft_kv {
     /* Scratch buffer for ft_get */
     uint8_t* get_buf;
     size_t get_cap;
+
+    /* Persistent GC state (stored as system keys) */
+    uint32_t gc_cursor;  /* Next page index for incremental GC */
+    uint32_t free_head;  /* Head of mpool tombstone free-list (pgno or PGNO_INVALID) */
+    uint32_t alloc_next; /* Next new pgno (monotonic) */
+
+    /* Periodic persistence */
+    uint32_t gc_persist_counter;
+    int gc_dirty;
 };
 
 /* Implemented in ft_kv.c (needs BTREE definition). */
