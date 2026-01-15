@@ -247,6 +247,7 @@ extern StaticSymbolData sym_pop_data;
 extern StaticSymbolData sym_subvec_data;
 extern StaticSymbolData sym_reverse_data;
 extern StaticSymbolData sym_map_data;
+extern StaticSymbolData sym_mapv_data;
 extern StaticSymbolData sym_assoc_data;
 extern StaticSymbolData sym_dissoc_data;
 extern StaticSymbolData sym_merge_data;

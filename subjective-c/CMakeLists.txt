@@ -60,7 +60,7 @@ target_compile_options(subjective-c PRIVATE
     $<$<CONFIG:Debug>:-g;-O0;-DDEBUG;-DZOMBIE_ENABLED;-fno-omit-frame-pointer>
     $<$<CONFIG:Release>:-O3;-DNDEBUG;-ffunction-sections;-fdata-sections;-fvisibility=hidden>
     $<$<CONFIG:MinSizeRel>:-Os;-DNDEBUG;-ffunction-sections;-fdata-sections;-fvisibility=hidden>
-    $<$<CONFIG:Embedded>:-Os;-DNDEBUG;-ffunction-sections;-fdata-sections;-fvisibility=hidden;-flto;-fno-unwind-tables;-fno-asynchronous-unwind-tables;-fno-stack-protector;-fomit-frame-pointer;-fno-ident;-fno-common>
+    $<$<CONFIG:Embedded>:-Os;-DNDEBUG;-ffunction-sections;-fdata-sections;-fvisibility=hidden;-flto;-fno-unwind-tables;-fno-asynchronous-unwind-tables;-fno-stack-protector;-fomit-frame-pointer;-fno-common>
 )
 
 # Ensure DEBUG is defined for Debug builds (critical for CLJException struct layout)
@@ -74,11 +74,11 @@ endif()
 # Unity compatibility: flush stdout for error messages
 target_compile_definitions(subjective-c PUBLIC UNITY_USE_FLUSH_STDOUT)
 
-# Size-focused embedded builds: avoid pulling in printf-style formatting code.
-# Enable this for the embedded configuration and when cross-compiling with the ESP32 toolchain.
-if(CMAKE_BUILD_TYPE STREQUAL "Embedded" OR (DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "esp32\\.cmake"))
+# Optional feature-strip for embedded builds: avoid pulling in printf-style formatting code.
+# This is gated behind the parent project's TINYCLJ_EMBEDDED_STRIP_FEATURES option.
+if(TINYCLJ_EMBEDDED_STRIP_FEATURES AND (CMAKE_BUILD_TYPE STREQUAL "Embedded" OR (DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "esp32\\.cmake")))
     target_compile_definitions(subjective-c PUBLIC STRING_FORMATTING_ENABLED=0)
-    message(STATUS "subjective-c: STRING_FORMATTING_ENABLED=0")
+    message(STATUS "subjective-c: STRING_FORMATTING_ENABLED=0 (feature-strip)")
 endif()
 
 # ESP32-specific linker flags (if using ESP32 toolchain)

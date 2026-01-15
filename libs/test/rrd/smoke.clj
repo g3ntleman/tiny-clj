@@ -4,6 +4,7 @@
 
 (do
   (load-file "libs/tinyclj/rrd.clj")
+  (load-file "libs/tinyclj/rrd/classic.clj")
 
   (let [assert-eq (fn [expected actual msg]
                     (when (not (= expected actual))
@@ -17,7 +18,8 @@
     (let [rrd (tinyclj.rrd/create "test-temp" 300
                 [{:cf :average :steps 1 :rows 12}
                  {:cf :average :steps 6 :rows 24}
-                 {:cf :max :steps 1 :rows 12}])]
+                 {:cf :max :steps 1 :rows 12}]
+                {:handler-types {:classic 'tinyclj.rrd.classic/handler}})]
       (assert-eq "test-temp" (get rrd :name) "rrd name")
       (assert-eq 300 (get rrd :step) "rrd step")
       (assert-eq 3 (count (get rrd :rras)) "rrd has 3 RRAs")

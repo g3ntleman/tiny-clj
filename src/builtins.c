@@ -1220,24 +1220,25 @@ ID native_reverse(ID *args, unsigned int argc)
     {
         ID elem = seq_iter_first(&iter);
         // nil elements are preserved (no if check)
-        result = make_list(elem, result);
+        CljList *old = result;
+        result = make_list(elem, old);
+        if (old)
+        {
+            // `make_list` retains `rest`; drop our previous reference to avoid leaking retains.
+            RELEASE(old);
+        }
         seq_iter_next(&iter);
     }
 
     return result ? AUTORELEASE(result) : empty_list();
 }
 
-// map: apply f across 1+ colls (zips to shortest)
-// Usage: (map f coll) (map f coll1 coll2 ...)
-ID native_map(ID *args, unsigned int argc)
-{
-    if (argc < 2)
-    {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "map expects at least 2 arguments, got %u", argc);
-        return NULL;
-    }
+// ----------------------------------------------------------------------------
+// map/mapv shared implementation (DRY)
+// ----------------------------------------------------------------------------
 
+static EvalState *map_require_eval_state(const char *fn_name)
+{
     // Resolve EvalState for calling `f` (closures may need it).
     EvalState *st = builtin_get_eval_state();
     if (!st)
@@ -1246,31 +1247,70 @@ ID native_map(ID *args, unsigned int argc)
     }
     if (!st)
     {
-        throw_exception(EXCEPTION_RUNTIME, "map requires EvalState", __FILE__, __LINE__, 0);
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                  "%s requires EvalState", fn_name);
         return NULL;
     }
+    return st;
+}
 
-    ID f = args[0];
-    unsigned int collc = argc - 1;
+static ID map_zip_apply_internal(const char *fn_name, bool to_vector, ID f, ID *colls, unsigned int collc)
+{
+    EvalState *st = map_require_eval_state(fn_name);
+    if (!st)
+        return NULL;
 
     // Initialize iterators for all input colls.
     SeqIterator iters[8];
     if (collc > (unsigned int)(sizeof(iters) / sizeof(iters[0])))
     {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "map supports up to %u collections, got %u",
-                                  (unsigned int)(sizeof(iters) / sizeof(iters[0])), collc);
-        return NULL;
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "%s supports up to %u collections, got %u",
+                                         fn_name,
+                                         (unsigned int)(sizeof(iters) / sizeof(iters[0])), collc);
     }
 
     for (unsigned int i = 0; i < collc; i++)
     {
-        if (!seq_iter_init(&iters[i], args[i + 1]))
+        if (!seq_iter_init(&iters[i], colls[i]))
         {
-            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                            "map expects seqable collections",
-                            __FILE__, __LINE__, 0);
-            return NULL;
+            return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                             "%s expects seqable collections",
+                                             fn_name);
+        }
+    }
+
+    if (to_vector)
+    {
+        // Build result in-order into a vector (Clojure/JVM: mapv is eager).
+        CljVector *out = make_vector(0, CLJ_VECTOR); // empty vector singleton
+
+        while (true)
+        {
+            // Stop when any coll is exhausted.
+            for (unsigned int i = 0; i < collc; i++)
+            {
+                if (seq_iter_empty(&iters[i]))
+                {
+                    return (out == vector_empty_singleton) ? (ID)vector_empty_singleton : AUTORELEASE(out);
+                }
+            }
+
+            ID fn_args[8];
+            for (unsigned int i = 0; i < collc; i++)
+            {
+                fn_args[i] = seq_iter_first(&iters[i]);
+            }
+
+            ID mapped = eval_function_call(f, fn_args, collc, NULL, st);
+
+            // Append.
+            vector_conj_inplace(&out, mapped);
+
+            for (unsigned int i = 0; i < collc; i++)
+            {
+                seq_iter_next(&iters[i]);
+            }
         }
     }
 
@@ -1304,13 +1344,19 @@ ID native_map(ID *args, unsigned int argc)
         ID mapped = eval_function_call(f, fn_args, collc, NULL, st);
 
         // Prepend (reversed order).
-        CljList *node = make_list(mapped, rev);
+        CljList *old = rev;
+        CljList *node = make_list(mapped, old);
         if (!node)
         {
-            RELEASE(rev);
+            RELEASE(old);
             return NULL;
         }
         rev = node;
+        if (old)
+        {
+            // `make_list` retains `rest`; drop our previous reference to avoid leaking retains.
+            RELEASE(old);
+        }
 
         for (unsigned int i = 0; i < collc; i++)
         {
@@ -1319,14 +1365,40 @@ ID native_map(ID *args, unsigned int argc)
     }
 }
 
+// map: apply f across 1+ colls (zips to shortest)
+// Usage: (map f coll) (map f coll1 coll2 ...)
+ID native_map(ID *args, unsigned int argc)
+{
+    if (argc < 2)
+    {
+        // JVM/Clojure-style arity message
+        return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                         "Wrong number of args (%u) passed to: map", argc);
+    }
+    return map_zip_apply_internal("map", false, args[0], &args[1], argc - 1);
+}
+
+// mapv: eager vector-returning map across 1+ colls (zips to shortest)
+// Usage: (mapv f coll) (mapv f coll1 coll2 ...)
+ID native_mapv(ID *args, unsigned int argc)
+{
+    if (argc < 2)
+    {
+        // JVM/Clojure-style arity message
+        return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                         "Wrong number of args (%u) passed to: mapv", argc);
+    }
+    return map_zip_apply_internal("mapv", true, args[0], &args[1], argc - 1);
+}
+
 ID assoc3(ID *args, unsigned int argc)
 {
     // Clojure: (assoc m k v & kvs) => m with k/v pairs assoc'ed left-to-right.
     if (argc < 3 || ((argc - 1) % 2) != 0)
     {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "assoc expects 1 map and N key/value pairs, got %u args", argc);
-        return NULL;
+        // JVM/Clojure-style arity message
+        return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                         "Wrong number of args (%u) passed to: assoc", argc);
     }
     ID coll = args[0];
 
@@ -1346,11 +1418,28 @@ ID assoc3(ID *args, unsigned int argc)
         if (tag == CLJ_VECTOR)
         {
             if (!key || TAG(key) != CLJ_INT)
-                return NULL;
+            {
+                // Clojure/JVM: (assoc [..] :k v) => IllegalArgumentException: Key must be integer
+                return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                                 "Key must be integer");
+            }
             int idx = AS_FIXNUM(key);
             CljVector *v = as_vector(out);
-            if (idx < 0 || (unsigned int)idx >= vector_count(v))
-                return NULL;
+            unsigned int cnt = vector_count(v);
+            if (idx < 0)
+            {
+                // JVM-style message
+                return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                                 "Index %d out of bounds for length %u",
+                                                 idx, cnt);
+            }
+            if ((unsigned int)idx >= cnt)
+            {
+                // JVM-style message
+                return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                                 "Index %d out of bounds for length %u",
+                                                 idx, cnt);
+            }
 
             ID next = (ID)vector_assoc(out, idx, val);
             if (!next)
@@ -1382,7 +1471,8 @@ ID assoc3(ID *args, unsigned int argc)
         }
 
         // Unsupported collection type
-        return NULL;
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "assoc expects a map or vector");
     }
 
     return out;
@@ -3193,6 +3283,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_nilp_data.sym, native_nilp},
     {&sym_reverse_data.sym, native_reverse},
     {&sym_map_data.sym, native_map},
+    {&sym_mapv_data.sym, native_mapv},
     {&sym_assoc_data.sym, assoc3},
     {&sym_dissoc_data.sym, native_dissoc},
     {&sym_merge_data.sym, native_merge},

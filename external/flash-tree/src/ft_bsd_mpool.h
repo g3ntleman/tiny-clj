@@ -19,8 +19,45 @@
 #include <stdint.h>
 
 /* Configuration */
+#ifndef FT_MPOOL_DEFAULT_PAGE_SIZE
 #define FT_MPOOL_DEFAULT_PAGE_SIZE 512 /* Used if caller passes pagesize==0 */
-#define FT_MPOOL_CACHE_PAGES 6         /* Pages in RAM cache (bt_split can pin up to ~5 pages) */
+#endif
+
+/*
+ * Pages in RAM cache.
+ * Note: bt_split can pin up to ~5 pages, so do not set this below 5.
+ */
+#ifndef FT_MPOOL_CACHE_PAGES
+#define FT_MPOOL_CACHE_PAGES 6
+#endif
+
+/*
+ * Initial capacity for the in-memory pgno->offset map.
+ *
+ * This directly affects mount-time RAM. Large storages must not pre-reserve
+ * proportional to partition size on embedded targets.
+ */
+#ifndef FT_MPOOL_PAGE_OFFSETS_INIT_CAP
+#define FT_MPOOL_PAGE_OFFSETS_INIT_CAP 64
+#endif
+
+/*
+ * O(1)-RAM mode for pgno->offset mapping:
+ * - Use a small fixed cache + scan-on-demand in the data log.
+ * - Avoids a pgno-sized array and therefore avoids OOM on large partitions.
+ */
+#ifndef FT_MPOOL_O1_RAM
+#ifdef ESP32_BUILD
+#define FT_MPOOL_O1_RAM 1
+#else
+#define FT_MPOOL_O1_RAM 0
+#endif
+#endif
+
+/* Fixed cache size (only used when FT_MPOOL_O1_RAM=1). */
+#ifndef FT_MPOOL_PG_CACHE_ENTRIES
+#define FT_MPOOL_PG_CACHE_ENTRIES 32
+#endif
 
 struct ft_kv;
 
@@ -48,6 +85,13 @@ typedef struct ft_cache_slot {
     uint8_t* data;       /* Owned by MPOOL (cache_mem), size = mp->pagesize */
 } ft_cache_slot_t;
 
+#if FT_MPOOL_O1_RAM
+typedef struct ft_pg_cache_entry {
+    pgno_t pgno;
+    uint32_t log_offset; /* FT_OFF_INVALID means empty */
+} ft_pg_cache_entry_t;
+#endif
+
 /* Memory pool handle */
 typedef struct MPOOL {
     ft_blockdev_t* bdev;
@@ -56,9 +100,17 @@ typedef struct MPOOL {
     uint32_t pagesize;  /* Page size (without header) */
     pgno_t npages;      /* Highest allocated page number */
 
+#if !FT_MPOOL_O1_RAM
     /* Page-map: direct index by pgno (O(1) lookup). */
     uint32_t* page_offsets; /* size = page_offsets_cap, value = log offset or 0xFFFFFFFF */
     size_t page_offsets_cap;
+#endif
+
+#if FT_MPOOL_O1_RAM
+    /* Small fixed cache for hot pages. */
+    ft_pg_cache_entry_t pg_cache[FT_MPOOL_PG_CACHE_ENTRIES];
+    uint32_t pg_cache_rr; /* round-robin eviction index */
+#endif
 
     /* RAM cache */
     ft_cache_slot_t cache[FT_MPOOL_CACHE_PAGES];

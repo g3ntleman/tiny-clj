@@ -64,6 +64,26 @@ static inline int ft_is_len_aligned(size_t len, uint32_t gran) {
 
 /* ============== Memory/String Utilities ============== */
 
+/* ============== Fixed byte order encoding (little-endian) ============== */
+
+/**
+ * Write a uint32_t in little-endian order.
+ */
+static inline void ft_u32_le_write(uint8_t* p, uint32_t v) {
+    p[0] = (uint8_t)(v & 0xFFu);
+    p[1] = (uint8_t)((v >> 8) & 0xFFu);
+    p[2] = (uint8_t)((v >> 16) & 0xFFu);
+    p[3] = (uint8_t)((v >> 24) & 0xFFu);
+}
+
+/**
+ * Read a uint32_t in little-endian order.
+ */
+static inline uint32_t ft_u32_le_read(const uint8_t* p) {
+    return ((uint32_t)p[0]) | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
+           ((uint32_t)p[3] << 24);
+}
+
 /**
  * Check if key has the given prefix (byte-wise comparison).
  * @return 1 if key starts with prefix, 0 otherwise
