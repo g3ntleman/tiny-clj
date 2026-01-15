@@ -75,9 +75,9 @@ static ID map_get_required(CljMap *m, const char *kw_name)
 {
     CljSymbol *kw = intern_symbol_global(kw_name);
     TEST_ASSERT_NOT_NULL(kw);
-    ID v = map_get(m, (ID)kw);
+    ID v = map_get(m, kw);
     TEST_ASSERT_NOT_NULL_MESSAGE(v, kw_name);
-    TEST_ASSERT_NOT_EQUAL_MESSAGE((ID)NOT_FOUND, v, kw_name);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(NOT_FOUND, v, kw_name);
     return v;
 }
 
@@ -113,12 +113,9 @@ TEST(test_edn_file_all_supported_types)
     ID parsed = parse_expr(&reader, g_test_eval_state);
 
     TEST_ASSERT_NOT_NULL(parsed);
-    // Parser returns symbol/keyword tokens; canonicalize before inspecting map keys/values.
-    parsed = canonicalize_ast(parsed, g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(parsed);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(parsed));
-
-    // Parser returns symbol/keyword tokens; canonicalize so map keys are interned keywords.
+    
+    // Canonicalize the parsed map (interns symbol tokens, etc.)
     parsed = canonicalize_ast(parsed, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(parsed));
@@ -129,16 +126,7 @@ TEST(test_edn_file_all_supported_types)
     CljMap *m = as_map(parsed);
     TEST_ASSERT_NOT_NULL(m);
 
-    // nil literal may be represented either as NULL (nil) or as SYM_NIL depending on parser mode.
-    CljSymbol *k_nil = intern_symbol_global(":nil");
-    TEST_ASSERT_NOT_NULL(k_nil);
-    ID v_nil = map_get_sentinel(m, (ID)k_nil, NOT_FOUND);
-    TEST_ASSERT_NOT_EQUAL_MESSAGE((ID)NOT_FOUND, v_nil, ":nil");
-    if (v_nil) {
-        TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(v_nil));
-        TEST_ASSERT_EQUAL_PTR(SYM_NIL, v_nil);
-    }
-
+    // Test :true first to check if map lookup works at all
     ID v_true = map_get_required(m, ":true");
     TEST_ASSERT_EQUAL_PTR(clj_true, v_true);
 

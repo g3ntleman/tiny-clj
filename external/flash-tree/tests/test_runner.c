@@ -11,8 +11,6 @@ void ft_register_tests_blockdev(void);
 void ft_register_tests_btree_prefix(void);
 void ft_register_tests_btree_rw(void);
 void ft_register_tests_multi_kv(void);
-void ft_register_tests_tsdb_basic(void);
-void ft_register_tests_tsdb_agg(void);
 void ft_register_tests_gc(void);
 void ft_register_tests_kv_edge_cases(void);
 void ft_register_tests_page_policy(void);
@@ -27,8 +25,6 @@ int main(void) {
     ft_register_tests_btree_prefix();
     ft_register_tests_btree_rw();
     ft_register_tests_multi_kv();
-    ft_register_tests_tsdb_basic();
-    ft_register_tests_tsdb_agg();
     ft_register_tests_gc();
     ft_register_tests_kv_edge_cases();
     ft_register_tests_page_policy();

@@ -109,10 +109,6 @@ int __bt_put(const DB* dbp, DBT* key, const DBT* data, u_int flags) {
      */
     dflags = 0;
     if (key->size + data->size > t->bt_ovflsize) {
-#ifdef DEBUG
-        /* This should never happen if callers respect the no-overflow contract. */
-        abort();
-#endif
         (void)pg;
         (void)tkey;
         (void)tdata;

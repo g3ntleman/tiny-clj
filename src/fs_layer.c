@@ -349,9 +349,10 @@ FsKvStore *fs_kv_store_new(void)
     st->bdev.geom.total_size_bytes = (uint32_t)ram_bytes;
     st->bdev.geom.read_granularity = 1;
     st->bdev.geom.prog_granularity = 1;
-    // FlashDB KVDB uses erase granularity as its "sector size" (must be power-of-two).
-    // Must be > FS_STORE_CHUNK_SIZE (4096) so a 4KB value + header/key fits.
-    st->bdev.geom.erase_granularity = 8192;
+    // flash-tree stores B-Tree pages in erase-sized log records (must be power-of-two).
+    // To reliably fit 4KB chunk values inline (no overflow pages), use a larger logical erase
+    // granularity than the chunk size.
+    st->bdev.geom.erase_granularity = 16384;
 
     ft_status_t fst = ft_db_init(&st->db, &st->bdev, NULL);
     if (fst != FT_OK) {

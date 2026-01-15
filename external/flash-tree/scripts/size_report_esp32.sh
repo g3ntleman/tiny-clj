@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 #
-# Report ESP32 Release code size for flash-tree vs flashdb.
+# Report ESP32 Release code size for flash-tree.
 #
 # This builds split archives:
-#   - libflashdb-core.a     (FlashDB implementation: src/flashdb/*.c)
-#   - libflash-tree-core.a  (flash-tree glue/core: src/ft_*.c excluding src/flashdb)
+#   - libflash-tree-core.a  (flash-tree glue/core: src/ft_*.c)
 #   - libbsd-btree.a        (BSD btree/mpool implementation)
 #
 # And prints section totals and ratios using xtensa-esp32-elf-size.
@@ -62,13 +61,12 @@ cmake -S "${FT_DIR}" -B "${BUILD_DIR}" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}"
 
-cmake --build "${BUILD_DIR}" -j --target flashdb-core flash-tree-core bsd-btree
+cmake --build "${BUILD_DIR}" -j --target flash-tree-core bsd-btree
 
-FLASHDB_A="${BUILD_DIR}/libflashdb-core.a"
 FLASH_TREE_A="${BUILD_DIR}/libflash-tree-core.a"
 BSD_A="${BUILD_DIR}/libbsd-btree.a"
 
-for a in "${FLASHDB_A}" "${FLASH_TREE_A}" "${BSD_A}"; do
+for a in "${FLASH_TREE_A}" "${BSD_A}"; do
   if [ ! -f "${a}" ]; then
     echo "ERROR: missing archive: ${a}"
     exit 1
@@ -108,7 +106,6 @@ sum_sections_for_archive() {
   printf "%d %d\n" "${flash}" "${bss}"
 }
 
-read -r flashdb_flash flashdb_bss < <(sum_sections_for_archive "${FLASHDB_A}" "flashdb-core")
 read -r ftcore_flash ftcore_bss     < <(sum_sections_for_archive "${FLASH_TREE_A}" "flash-tree-core")
 read -r bsd_flash bsd_bss           < <(sum_sections_for_archive "${BSD_A}" "bsd-btree")
 

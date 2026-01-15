@@ -89,7 +89,7 @@ endif()
 
 # Include directories
 # NOTE: Avoid adding the whole 'external/' tree to include paths, so that
-# template/reference subprojects (e.g. external/flashdb-reloaded) can't be
+# template/reference subprojects can't be
 # accidentally picked up by includes.
 include_directories(${CMAKE_SOURCE_DIR} include src)
 include_directories(${CMAKE_SOURCE_DIR}/external/flash-tree/inc ${CMAKE_SOURCE_DIR}/external/flash-tree/src)
@@ -214,7 +214,8 @@ else()
 endif()
 
 # ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
-add_executable(tiny-clj-esp32
+# Not built by default on host platforms (requires ESP32 toolchain / libs).
+add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/main_esp32.c
     src/platform_esp32_embedded.c
     src/event_loop.c
@@ -253,6 +254,8 @@ add_executable(tiny-clj-esp32
     src/eval_special_forms.c
     src/to_string.c
     src/macro.c
+    src/file_utils.c
+    src/fs_layer.c
 )
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
 target_link_libraries(tiny-clj-esp32 PRIVATE flash-tree)

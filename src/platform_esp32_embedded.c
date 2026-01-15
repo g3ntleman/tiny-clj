@@ -18,6 +18,10 @@ void platform_put_string(void *ctx, const char *s) {
     if (s) fputs(s, stdout);
 }
 
+const char *platform_name(void) {
+    return "esp32";
+}
+
 // No line editor functions needed for embedded execution
 
 // -----------------------------------------------------------------------------
