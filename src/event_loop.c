@@ -17,8 +17,6 @@
 // Task Map keys (static keywords, similar to SYM_IF etc.)
 static CljSymbol *KW_FN;
 static CljSymbol *KW_RESULT_CHAN;
-static CljSymbol *KW_ARGS;
-static CljSymbol *KW_ARGC;
 static CljSymbol *KW_SCHEDULED_SEC;
 static CljSymbol *KW_SCHEDULED_MSEC;
 static CljSymbol *KW_PERIODIC;
@@ -40,7 +38,7 @@ enum {
 };
 
 // Helper functions for normal Tasks as Maps
-// Task Map keys: :fn, :result-chan, :args, :argc
+// Task Map keys: :fn, :result-chan
 static CljMap* task_to_map(CljObject *fn, CljMap *result_chan) {
     CljMap *task_map = make_map(2);
     if (!task_map) return NULL;
@@ -59,43 +57,18 @@ static CljMap* task_to_map(CljObject *fn, CljMap *result_chan) {
     return pmap;
 }
 
-static bool task_from_map(CljMap *task_map, CljObject **fn, CljMap **result_chan, CljVector **args_vec, int *argc_out) {
+static bool task_from_map(CljMap *task_map, CljObject **fn, CljMap **result_chan) {
     if (!task_map) return false;
     
     ID fn_val = map_get_sentinel(task_map, KW_FN, NULL);
     ID result_chan_val = map_get_sentinel(task_map, KW_RESULT_CHAN, NULL);
-    ID args_val = KW_ARGS ? map_get_sentinel(task_map, KW_ARGS, NULL) : NULL;
-    ID argc_val = KW_ARGC ? map_get_sentinel(task_map, KW_ARGC, NULL) : NULL;
     
     if (!fn_val) return false;
     
     if (fn) *fn = (CljObject*)fn_val;
     if (result_chan) *result_chan = result_chan_val ? (CljMap*)result_chan_val : NULL;
-    if (args_vec) *args_vec = (TAG(args_val) == CLJ_VECTOR) ? (CljVector*)args_val : NULL;
-    if (argc_out) *argc_out = (TAG(argc_val) == CLJ_INT) ? (int)as_fixnum(argc_val) : 0;
     
     return true;
-}
-
-static CljMap* task_call_to_map(CljObject *fn, CljVector *args_vec, unsigned int argc) {
-    // Store args as persistent vector + argc for safe call later.
-    // :result-chan intentionally omitted (fire-and-forget).
-    CljMap *task_map = make_map(3);
-    if (!task_map) return NULL;
-
-    CljMap *tmap = map_transient(task_map);
-    RELEASE(task_map);
-    if (!tmap) return NULL;
-
-    map_conj(tmap, KW_FN, fn);
-    if (args_vec) {
-        map_conj(tmap, KW_ARGS, args_vec);
-    }
-    map_conj(tmap, KW_ARGC, fixnum((int32_t)argc));
-
-    CljMap *pmap = map_persistent(tmap);
-    RELEASE(tmap);
-    return pmap;
 }
 
 // Helper functions for Timer-Tasks as Maps
@@ -221,8 +194,6 @@ void event_loop_init(void) {
     // Initialize keywords
     KW_FN = intern_symbol_global(":fn");
     KW_RESULT_CHAN = intern_symbol_global(":result-chan");
-    KW_ARGS = intern_symbol_global(":args");
-    KW_ARGC = intern_symbol_global(":argc");
     KW_SCHEDULED_SEC = intern_symbol_global(":scheduled-sec");
     KW_SCHEDULED_MSEC = intern_symbol_global(":scheduled-msec");
     KW_PERIODIC = intern_symbol_global(":periodic");
@@ -309,42 +280,6 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljMap *result_channel) {
     RELEASE(task_map);
 }
 
-void event_loop_enqueue_call(CljObject *fn, ID *args, unsigned int argc) {
-    if (!fn) return;
-
-    CljVector *task_vec = task_queue_get();
-    if (!task_vec) return;
-
-    // Build args vector (persistent) so we can safely call later.
-    CljVector *args_vec = NULL;
-    if (argc > 0) {
-        CljVector *v = make_vector((int)argc, CLJ_VECTOR);
-        if (!v) return;
-        for (unsigned int i = 0; i < argc; i++) {
-            ASSIGN(v, vector_conj(v, args[i]));
-        }
-        args_vec = v;
-    }
-
-    CljMap *task_map = task_call_to_map(RETAIN(fn), args_vec ? (CljVector*)RETAIN(args_vec) : NULL, argc);
-    if (args_vec) RELEASE(args_vec);
-    if (!task_map) {
-        RELEASE(fn);
-        return;
-    }
-
-    CljVector *new_vec = clj_conj(task_vec, task_map);
-    if (!new_vec) {
-        RELEASE(task_map);
-        return;
-    }
-    if (new_vec != task_vec) {
-        RELEASE(task_vec);
-        g_runtime.task_queue = new_vec;
-    }
-    RELEASE(task_map);
-}
-
 
 /**
  * @brief Execute the next enqueued go-block task
@@ -389,9 +324,7 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
     
     CljObject *fn;
     CljMap *result_chan;
-    CljVector *args_vec = NULL;
-    int argc = 0;
-    if (!task_from_map(task_map, &fn, &result_chan, &args_vec, &argc)) {
+    if (!task_from_map(task_map, &fn, &result_chan)) {
         RELEASE(task_map);
         return false;
     }
@@ -424,21 +357,15 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         return false;
     }
     
-    // Retain map-backed values before releasing task_map, since it's part of the map
-    if (result_chan) RETAIN(result_chan);
-    if (args_vec) RETAIN(args_vec);
+    // Retain result_chan before releasing task_map, since it's part of the map
+    RETAIN(result_chan);
     RELEASE(task_map);
     
     CljObject *result = NULL;
     bool ok = true;
     TRY {
         WITH_AUTORELEASE_POOL({
-            if (argc > 0 && args_vec) {
-                ID *argv = vector_as_array(args_vec);
-                result = eval_function_call(fn, argv, (unsigned int)argc, env, st);
-            } else {
-                result = eval_function_call(fn, NULL, 0, env, st);
-            }
+            result = eval_function_call(fn, NULL, 0, env, st);
         });
     } CATCH(ex) {
         ok = false;
@@ -479,12 +406,13 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         CLJ_ASSERT(is_special(closed_val));
         CLJ_ASSERT(as_special(closed_val) == SPECIAL_TRUE);
 #endif
+    } else {
+        CLJ_ASSERT(0 && "event_loop_run_next: task.result_chan is NULL");
     }
 
     if (!IS_IMMEDIATE(result)) RELEASE(result);
     RELEASE(fn);
-    if (args_vec) RELEASE(args_vec);
-    if (result_chan) RELEASE(result_chan);
+    RELEASE(result_chan);
     return true;
 }
 

@@ -1,5 +1,6 @@
 #include "callbacks.h"
 #include "value.h"
+#include "symbol.h"
 #include "strings.h"
 #include "vector.h"
 #include "map.h"
@@ -95,6 +96,29 @@ uint32_t clj_hash_default(ID value) {
             uint32_t first_byte = arr->length > 0 ? arr->data[0] : 0;
             return hash_container((uint32_t)arr->length, first_byte);
         }
+
+        case CLJ_SYMBOL: {
+            // Symbols are equal by (ns_name, cname) content, not identity.
+            // This keeps map/hashmap semantics correct even if symbols are not perfectly interned.
+            const CljSymbol *s = (const CljSymbol*)value;
+            const char *name = (s && s->cname) ? s->cname : "";
+            const char *ns = NULL;
+            if (s && s->ns_name) {
+                const CljSymbol *nss = (const CljSymbol*)s->ns_name;
+                if (nss && nss->cname && nss->cname[0] != '\0') ns = nss->cname;
+            }
+            if (!ns) {
+                return fnv1a(name);
+            }
+            // Hash "ns/name" without allocating.
+            uint32_t h = fnv1a(ns);
+            h ^= (uint8_t)'/'; h *= 16777619u;
+            for (const char *p = name; *p; p++) {
+                h ^= (uint8_t)*p;
+                h *= 16777619u;
+            }
+            return h;
+        }
         
         default:
             // Identity-based types: use pointer
@@ -175,6 +199,25 @@ bool clj_equal_default(ID a, ID b) {
                 if (!clj_equal(val_a, val_b)) return false;
             }
             return true;
+        }
+
+        case CLJ_SYMBOL: {
+            const CljSymbol *sa = (const CljSymbol*)a;
+            const CljSymbol *sb = (const CljSymbol*)b;
+            if (!sa || !sb) return false;
+            if (sa->cname == sb->cname) {
+                // Fast path: names share pointer (common for interned symbols)
+            } else {
+                if (!sa->cname || !sb->cname) return false;
+                if (strcmp(sa->cname, sb->cname) != 0) return false;
+            }
+
+            const CljSymbol *nsa = (const CljSymbol*)sa->ns_name;
+            const CljSymbol *nsb = (const CljSymbol*)sb->ns_name;
+            if (nsa == nsb) return true; // includes both NULL
+            if (!nsa || !nsb) return false;
+            if (!nsa->cname || !nsb->cname) return false;
+            return strcmp(nsa->cname, nsb->cname) == 0;
         }
         
         case CLJ_EXCEPTION:

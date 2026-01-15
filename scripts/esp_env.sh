@@ -7,7 +7,15 @@
 #
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Cross-shell (bash/zsh) repo root detection:
+# - When sourced from zsh, BASH_SOURCE is not set.
+# - Prefer git, fall back to current working directory heuristics.
+REPO_ROOT="$(
+  git rev-parse --show-toplevel 2>/dev/null || true
+)"
+if [ -z "${REPO_ROOT}" ]; then
+  REPO_ROOT="$(pwd)"
+fi
 
 export IDF_PATH="${IDF_PATH:-${REPO_ROOT}/external/esp-idf}"
 export IDF_TOOLS_PATH="${IDF_TOOLS_PATH:-${REPO_ROOT}/_deps/espressif-tools}"

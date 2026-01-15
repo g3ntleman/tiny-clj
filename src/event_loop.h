@@ -15,11 +15,6 @@ void event_loop_clear(void);
 // Enqueue go task for later execution. Takes ownership via RETAIN; releases after run.
 void event_loop_enqueue(CljObject *fn_zero_arity, CljMap *result_channel);
 
-// Enqueue an arbitrary function call for later execution (argc may be 0).
-// This is a fire-and-forget task (no result channel).
-// Takes ownership via RETAIN on fn and args; releases after run.
-void event_loop_enqueue_call(CljObject *fn, ID *args, unsigned int argc);
-
 // Run next enqueued task. Returns true if a task was executed, false if queue empty.
 bool event_loop_run_next(CljMap *env, EvalState *st);
 

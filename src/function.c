@@ -75,7 +75,6 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_
     // Persistent env_stack is always heap-managed (vector of maps).
     // It may be shared across closures; RETAIN is required for correctness.
     func->env_stack = env_stack ? (CljVector*)RETAIN(env_stack) : NULL;
-    func->captured_frames = NULL;
     func->name = cname ? strdup(cname) : NULL;
     func->ns = ns ? (struct CljNamespace*)RETAIN(ns) : NULL;
     func->variadic_index = variadic_index;

@@ -55,7 +55,11 @@ static void test_tsdb_aggregate_f32(void) {
                  .erase_granularity = 4096},
     };
     TEST_ASSERT_EQUAL_INT(FT_OK, ft_blockdev_validate(&bdev));
-    TEST_ASSERT_EQUAL_INT(FT_OK, ft_tsdb_init(&tsdb, &bdev, NULL));
+    ft_tsdb_cfg_t cfg = {
+        .range = {.base_offset = 0u, .len = (uint32_t)sizeof(storage)},
+        .max_len = 0,
+    };
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_tsdb_init(&tsdb, &bdev, &cfg));
 
     float v1 = 1.0f;
     float v2 = 2.5f;

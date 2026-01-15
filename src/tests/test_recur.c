@@ -248,7 +248,7 @@ TEST(test_if_in_function_simple) {
     // nil is NULL, so result2 should be :no (not :yes), which is truthy
     // So result2 should NOT be NULL, but should be :no
     TEST_ASSERT_NOT_NULL_MESSAGE(result2, "(test-if-simple nil) should return :no, not NULL");
-    TEST_ASSERT_TRUE_MESSAGE(TAG(result2) == CLJ_SYMBOL, "Result should be a symbol");
+    TEST_ASSERT_TRUE_MESSAGE(result2 && TAG(result2) == CLJ_SYMBOL, "Result should be a symbol");
     CljSymbol *sym2 = as_symbol(result2);
     TEST_ASSERT_NOT_NULL(sym2);
     TEST_ASSERT_EQUAL_CHAR(':', sym2->cname[0]);

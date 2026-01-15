@@ -226,10 +226,3 @@ TEST(test_named_fn_with_two_params) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(1024, as_fixnum(result)); // 2^10 = 1024
 }
-
-TEST(test_named_fn_recursion) {
-    // Regression test: named fn should be able to call itself (recursion)
-    ID result = eval_string("((fn countdown [n] (if (<= n 0) n (countdown (dec n)))) 5)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
-}

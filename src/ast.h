@@ -13,10 +13,8 @@ typedef struct CljASTNode {
     ID first;
     ID rest;
     ID callsite_cache;
-    // Pretreated AST execution payload (set by a compile pass; optional at runtime).
-    // Kept as an untyped pointer so we can evolve the compiled representation without
-    // inflating the object graph or forcing refcounting yet.
-    void *compiled;
+    // Optional pointer to a static compiled payload (see compiled_ast.h). Not reference-counted.
+    const void *compiled;
 } CljASTNode;
 
 CljASTNode* make_ast_node(ID first, ID rest);
@@ -27,8 +25,14 @@ bool is_ast_node(ID obj);
 void ast_node_set_callsite_cache(CljASTNode *node, ID cache);
 ID ast_node_get_callsite_cache(const CljASTNode *node);
 
-void ast_node_set_compiled(CljASTNode *node, void *compiled);
-void* ast_node_get_compiled(const CljASTNode *node);
+static inline void ast_node_set_compiled(CljASTNode *node, const void *payload) {
+    if (!node) return;
+    node->compiled = payload;
+}
+
+static inline const void* ast_node_get_compiled(const CljASTNode *node) {
+    return node ? node->compiled : NULL;
+}
 
 // Lexical addressing: direct reference to a local variable via (depth, slot).
 // - depth=0: current CallFrame
@@ -41,7 +45,7 @@ typedef struct CljSlotRef {
 } CljSlotRef;
 
 CljSlotRef* make_slot_ref(CljSymbol *symbol, uint8_t depth, uint8_t slot);
-static inline bool is_slot_ref(ID obj) { return TAG(obj) == CLJ_SLOT_REF; }
+static inline bool is_slot_ref(ID obj) { return obj && TAG(obj) == CLJ_SLOT_REF; }
 
 typedef struct CljCallsiteCache {
     CljObject base;

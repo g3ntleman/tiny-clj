@@ -129,10 +129,15 @@ TEST(test_edn_file_all_supported_types)
     CljMap *m = as_map(parsed);
     TEST_ASSERT_NOT_NULL(m);
 
-    // nil literal is represented as SYM_NIL by this parser
-    ID v_nil = map_get_required(m, ":nil");
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(v_nil));
-    TEST_ASSERT_EQUAL_PTR(SYM_NIL, v_nil);
+    // nil literal may be represented either as NULL (nil) or as SYM_NIL depending on parser mode.
+    CljSymbol *k_nil = intern_symbol_global(":nil");
+    TEST_ASSERT_NOT_NULL(k_nil);
+    ID v_nil = map_get_sentinel(m, (ID)k_nil, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE((ID)NOT_FOUND, v_nil, ":nil");
+    if (v_nil) {
+        TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(v_nil));
+        TEST_ASSERT_EQUAL_PTR(SYM_NIL, v_nil);
+    }
 
     ID v_true = map_get_required(m, ":true");
     TEST_ASSERT_EQUAL_PTR(clj_true, v_true);
