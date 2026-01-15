@@ -3539,9 +3539,8 @@ ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     ASSIGN(m, map_assoc(m, k_tiny_clj_version, (ID)ver_str));
     RELEASE(ver_str);
 
-    // :build-time (Instant) - use current time as a monotonic, non-epoch placeholder
-    time_t now_s = time(NULL);
-    int64_t epoch = (now_s < 0) ? 0 : (int64_t)now_s;
+    // :build-time (Instant) - use compile-time BUILD_EPOCH_SECONDS
+    int64_t epoch = (int64_t)BUILD_EPOCH_SECONDS;
     int32_t days = (int32_t)(epoch / 86400);
     int32_t sec_in_day = (int32_t)(epoch % 86400);
     if (sec_in_day < 0) sec_in_day = 0;

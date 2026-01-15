@@ -50,6 +50,7 @@
 #include "../seq.h"
 #include "strings.h"
 #include "../tiny_clj.h"
+#include "instant.h"
 
 // Test Registry - use subjective-c test infrastructure
 #include "test_registry.h"
