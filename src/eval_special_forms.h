@@ -25,6 +25,7 @@ ID eval_special_if(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 ID eval_special_when(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_while(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_special_case(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_do(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_and(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_or(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
