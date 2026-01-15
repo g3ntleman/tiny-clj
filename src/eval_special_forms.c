@@ -329,6 +329,223 @@ ID eval_special_recur(CljList *list, CljMap *env, EvalState *st, const EvalConte
     return eval_handle_recur(list, ctx);
 }
 
+ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_loop: list must not be NULL");
+    CLJ_ASSERT(st != NULL && "eval_special_loop: st must not be NULL");
+    if (!list || !st) return NULL;
+
+    // Establish base env (match other special-form wrappers).
+    CljMap *base_env = eval_env_or_ns_mappings(env, st);
+    CallFrame *parent_frame = ctx ? ctx->frame : NULL;
+
+    // IMPORTANT: Keep ctx->frame intact so CLJ_SLOT_REF (lexical addressing) continues to work
+    // for outer function parameters. Loop bindings live in env_stack (like let), not in CallFrame.
+
+    // Shape: (loop [sym1 init1 sym2 init2 ...] body...)
+    CljList *args = list_rest_normalized(list);
+    if (!args) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "loop requires a vector for bindings",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ID bindings_obj = LIST_FIRST(args);
+    if (!bindings_obj || TAG(bindings_obj) != CLJ_VECTOR) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "loop requires a vector for bindings",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    CljVector *bindings = as_vector(bindings_obj);
+    unsigned int binding_count = bindings ? vector_count(bindings) : 0;
+    if ((binding_count % 2) != 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "loop requires an even number of forms in binding vector",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    int param_count = (int)(binding_count / 2);
+    if (param_count > CALLFRAME_MAX_PARAMS) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "Too many loop bindings",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    CljList *body = list_rest_normalized(args);
+
+    // Own an env_stack for the loop and push a map for loop locals.
+    CljVector *loop_stack = (ctx && ctx->env_stack) ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
+    CljMap *loop_env_map = (param_count > 0) ? make_map((unsigned int)param_count) : NULL;
+    if (param_count > 0 && loop_env_map) {
+        env_stack_push_inplace(&loop_stack, loop_env_map);
+        // env_stack retains its elements; keep a borrowed pointer for incremental updates.
+        RELEASE(loop_env_map);
+        loop_env_map = loop_stack ? (CljMap*)vector_nth(loop_stack, vector_count(loop_stack) - 1) : loop_env_map;
+    }
+
+    // Extract binding symbols + evaluate initial values sequentially (let-like).
+    ID params[CALLFRAME_MAX_PARAMS];
+    ID current_args[CALLFRAME_MAX_PARAMS];
+    ID recur_args[CALLFRAME_MAX_PARAMS];
+    for (int i = 0; i < CALLFRAME_MAX_PARAMS; i++) {
+        current_args[i] = NULL;
+        recur_args[i] = NULL;
+    }
+
+    // Temporary frame to make earlier loop bindings visible to later initializers.
+    CallFrame init_frame_storage;
+    CallFrame *init_frame = NULL;
+    ID init_params[CALLFRAME_MAX_PARAMS];
+    ID init_values[CALLFRAME_MAX_PARAMS];
+    if (param_count > 0) {
+        init_frame = &init_frame_storage;
+        frame_init(init_frame, parent_frame);
+    }
+
+    EvalContext init_ctx = ctx ? *ctx : (EvalContext){0};
+    init_ctx.env = init_ctx.env ? init_ctx.env : base_env;
+    init_ctx.st = init_ctx.st ? init_ctx.st : st;
+    init_ctx.env_stack = loop_stack;
+    init_ctx.frame = parent_frame;
+
+    for (int i = 0; i < param_count; i++) {
+        ID sym = vector_nth(bindings, (unsigned int)(i * 2));
+        ID init_expr = vector_nth(bindings, (unsigned int)(i * 2 + 1));
+        if (!sym || TAG(sym) != CLJ_SYMBOL) {
+            if (init_frame) frame_release(init_frame);
+            RELEASE(loop_stack);
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                            "loop binding name must be a symbol",
+                            __FILE__, __LINE__, 0);
+            return NULL;
+        }
+        params[i] = sym;
+
+        // Evaluate initializer in a context that can see prior loop bindings.
+        if (init_frame) {
+            init_ctx.frame = init_frame;
+        }
+        ID v = init_expr ? eval_body(init_expr, base_env, st, &init_ctx) : NULL;
+        current_args[i] = v;
+
+        // Update init_frame so subsequent initializers can reference this binding.
+        if (init_frame) {
+            init_params[i] = sym;
+            init_values[i] = v;
+            if (v && !IS_IMMEDIATE(v)) RETAIN(v);
+            frame_set_bindings(init_frame, parent_frame, init_params, init_values, i + 1);
+        }
+
+        // Also store binding into loop_env_map (top of env_stack) for body evaluation.
+        if (loop_env_map) {
+            CljMap *updated = map_assoc(loop_env_map, sym, v);
+            if (updated && updated != loop_env_map && loop_stack) {
+                unsigned int top_idx = vector_count(loop_stack) - 1;
+                vector_assoc_inplace(&loop_stack, top_idx, (ID)updated);
+                loop_env_map = updated;
+            }
+        }
+
+        if (v && !IS_IMMEDIATE(v)) {
+            RELEASE(v);
+        }
+        current_args[i] = NULL;
+    }
+
+    if (init_frame) {
+        frame_release(init_frame);
+    }
+
+    // TCO loop over recur (updates loop_env_map each iteration).
+    int recur_arg_count = -1;
+    int used_recur_slots = 0;
+    ID result = NULL;
+
+    do {
+        recur_arg_count = -1;
+
+        // Cleanup previous recur args (only needed if recur was used).
+        if (used_recur_slots > 0) {
+            for (int i = 0; i < used_recur_slots; i++) {
+                RELEASE(recur_args[i]);
+                recur_args[i] = NULL;
+            }
+            used_recur_slots = 0;
+        }
+
+        EvalContext loop_ctx = ctx ? *ctx : (EvalContext){0};
+        loop_ctx.env = loop_ctx.env ? loop_ctx.env : base_env;
+        loop_ctx.st = loop_ctx.st ? loop_ctx.st : st;
+        loop_ctx.env_stack = loop_stack;
+        loop_ctx.frame = parent_frame;  // keep parent frame for slot refs
+        loop_ctx.recur_args = recur_args;
+        loop_ctx.recur_arg_count = &recur_arg_count;
+        loop_ctx.recur_param_count = param_count;
+
+        ID new_result = NULL;
+        for (CljList *node = body; node; node = list_rest_normalized(node)) {
+            ID expr = LIST_FIRST(node);
+            CljList *next = list_rest_normalized(node);
+            ASSIGN(new_result, eval_body(expr, base_env, st, &loop_ctx));
+
+            // If recur happened but there are still forms, it's not tail position.
+            if (recur_arg_count >= 0 && next) {
+                RELEASE(new_result);
+                RELEASE(loop_stack);
+                throw_exception(EXCEPTION_RUNTIME,
+                                "recur must be in tail position",
+                                __FILE__, __LINE__, 0);
+                return NULL;
+            }
+        }
+
+        if (recur_arg_count >= 0) {
+            // Tail recur: update loop env bindings and continue.
+            RELEASE(new_result);
+
+            for (int i = 0; i < recur_arg_count; i++) {
+                current_args[i] = recur_args[i]; // retained by eval_handle_recur
+                recur_args[i] = NULL;
+            }
+            used_recur_slots = recur_arg_count;
+
+            // Update loop_env_map with new values (COW-aware).
+            for (int i = 0; i < recur_arg_count; i++) {
+                if (loop_env_map) {
+                    CljMap *updated = map_assoc(loop_env_map, params[i], current_args[i]);
+                    if (updated && updated != loop_env_map && loop_stack) {
+                        unsigned int top_idx = vector_count(loop_stack) - 1;
+                        vector_assoc_inplace(&loop_stack, top_idx, (ID)updated);
+                        loop_env_map = updated;
+                    }
+                }
+                // Balance retain from eval_handle_recur.
+                RELEASE(current_args[i]);
+                current_args[i] = NULL;
+            }
+
+            continue;
+        }
+
+        ASSIGN(result, new_result);
+        break;
+    } while (true);
+
+    // Cleanup
+    if (used_recur_slots > 0) {
+        for (int i = 0; i < used_recur_slots; i++) {
+            RELEASE(recur_args[i]);
+        }
+    }
+    RELEASE(loop_stack);
+
+    return result;
+}
+
 ID eval_special_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_time: list must not be NULL");
     return eval_time(list, eval_env_or_ns_mappings(env, st), st, ctx);

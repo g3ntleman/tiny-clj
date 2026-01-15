@@ -659,6 +659,9 @@ void init_special_symbols() {
     if (is_special_symbol(SYM_QUOTE)) {
         ((CljSpecialSymbol*)SYM_QUOTE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_quote;
     }
+    if (is_special_symbol(SYM_LOOP)) {
+        ((CljSpecialSymbol*)SYM_LOOP)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_loop;
+    }
     if (is_special_symbol(SYM_RECUR)) {
         ((CljSpecialSymbol*)SYM_RECUR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_recur;
     }
