@@ -47,13 +47,15 @@ int __bt_get(const DB*, const DBT*, DBT*, u_int);
 PAGE* __bt_new(BTREE*, pgno_t*);
 void __bt_pgin(void*, pgno_t, void*);
 void __bt_pgout(void*, pgno_t, void*);
-int __bt_push(BTREE*, pgno_t, int);
 int __bt_put(const DB* dbp, DBT*, const DBT*, u_int);
 int __bt_ret(BTREE*, EPG*, DBT*, DBT*);
 EPG* __bt_search(BTREE*, const DBT*, int*);
+EPG* __bt_search_insert(BTREE* t, const DBT* key, size_t insert_nbytes, int* exactp);
 int __bt_seq(const DB*, DBT*, DBT*, u_int);
-int __bt_split(BTREE*, PAGE*, const DBT*, const DBT*, int, size_t, indx_t);
 int __bt_sync(const DB*, u_int);
+int __bt_would_split(PAGE* h, size_t nbytes);
+int __bt_split_child(BTREE* t, PAGE* parent, indx_t parent_index, PAGE* child, pgno_t* out_right_pgno);
+int __bt_split_root(BTREE* t);
 
 #ifdef DEBUG
 void __bt_dnpage __P((DB*, pgno_t));

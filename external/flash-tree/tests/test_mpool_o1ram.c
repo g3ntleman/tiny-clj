@@ -1,4 +1,4 @@
-// test_mpool_o1ram.c - Dogfooding tests for FT_MPOOL_O1_RAM (scan-on-demand mapping).
+// test_mpool_o1ram.c - Tests for FT_MPOOL_O1_RAM (scan-on-demand mapping).
 
 #include "unity.h"
 
@@ -54,16 +54,6 @@ static void make_bdev(ft_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size_
     bdev->geom.prog_granularity = 1;
     bdev->geom.erase_granularity = 4096;
 }
-
-#if !FT_MPOOL_O1_RAM
-
-static void test_o1ram_is_enabled_for_dogfood_build(void) {
-    /* Silence unused warnings when FT_MPOOL_O1_RAM is disabled. */
-    (void)make_bdev;
-    TEST_IGNORE_MESSAGE("FT_MPOOL_O1_RAM is disabled in this build");
-}
-
-#else
 
 static void test_o1ram_scan_miss_roundtrip_two_pages(void) {
     static uint8_t storage[131072];
@@ -187,8 +177,6 @@ static void test_o1ram_is_enabled_for_dogfood_build(void) {
     /* This test just ensures the file is compiled+run in the dogfood build. */
     TEST_ASSERT_TRUE(FT_MPOOL_O1_RAM == 1);
 }
-
-#endif
 
 void ft_register_tests_mpool_o1ram(void) {
     RUN_TEST(test_o1ram_is_enabled_for_dogfood_build);

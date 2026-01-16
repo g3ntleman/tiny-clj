@@ -25,20 +25,14 @@
 
 /*
  * Pages in RAM cache.
- * Note: bt_split can pin up to ~5 pages, so do not set this below 5.
+ * Note: top-down split aims for a peak of 3 pinned pages.
  */
-#ifndef FT_MPOOL_CACHE_PAGES
-#define FT_MPOOL_CACHE_PAGES 5
+#ifndef FT_MPOOL_CACHE_PAGES_DEFAULT
+#define FT_MPOOL_CACHE_PAGES_DEFAULT 3
 #endif
 
-/*
- * Initial capacity for the in-memory pgno->offset map.
- *
- * This directly affects mount-time RAM. Large storages must not pre-reserve
- * proportional to partition size on embedded targets.
- */
-#ifndef FT_MPOOL_PAGE_OFFSETS_INIT_CAP
-#define FT_MPOOL_PAGE_OFFSETS_INIT_CAP 64
+#ifndef FT_MPOOL_CACHE_PAGES_MAX
+#define FT_MPOOL_CACHE_PAGES_MAX 32
 #endif
 
 /*
@@ -46,13 +40,7 @@
  * - Use a small fixed cache + scan-on-demand in the data log.
  * - Avoids a pgno-sized array and therefore avoids OOM on large partitions.
  */
-#ifndef FT_MPOOL_O1_RAM
-#ifdef ESP32_BUILD
 #define FT_MPOOL_O1_RAM 1
-#else
-#define FT_MPOOL_O1_RAM 0
-#endif
-#endif
 
 /* Fixed cache size (only used when FT_MPOOL_O1_RAM=1). */
 #ifndef FT_MPOOL_PG_CACHE_ENTRIES
@@ -100,11 +88,9 @@ typedef struct MPOOL {
     uint32_t pagesize;  /* Page size (without header) */
     pgno_t npages;      /* Highest allocated page number */
 
-#if !FT_MPOOL_O1_RAM
-    /* Page-map: direct index by pgno (O(1) lookup). */
-    uint32_t* page_offsets; /* size = page_offsets_cap, value = log offset or 0xFFFFFFFF */
-    size_t page_offsets_cap;
-#endif
+    /* Pin accounting (debug/testing): number of pinned cache slots now/peak. */
+    uint32_t pin_count;
+    uint32_t pin_peak;
 
 #if FT_MPOOL_O1_RAM
     /* Small fixed cache for hot pages. */
@@ -113,8 +99,9 @@ typedef struct MPOOL {
 #endif
 
     /* RAM cache */
-    ft_cache_slot_t cache[FT_MPOOL_CACHE_PAGES];
-    uint8_t* cache_mem;    /* FT_MPOOL_CACHE_PAGES * pagesize bytes */
+    uint32_t cache_pagecount;
+    ft_cache_slot_t cache[FT_MPOOL_CACHE_PAGES_MAX];
+    uint8_t* cache_mem; /* cache_pagecount * pagesize bytes */
 
     /* Byte-swap callbacks (for B-tree) */
     void (*pgin)(void*, pgno_t, void*);
@@ -209,3 +196,6 @@ int mpool_close(MPOOL* mp);
  * Note: This is flash-tree specific and not part of the BSD mpool API.
  */
 int mpool_free_pgno(MPOOL* mp, pgno_t pgno);
+
+/* Debug/testing helper: max simultaneously pinned pages observed. */
+uint32_t mpool_peak_pinned(const MPOOL* mp);

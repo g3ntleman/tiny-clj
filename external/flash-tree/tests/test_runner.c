@@ -18,6 +18,12 @@ void ft_register_tests_kv_edge_cases(void);
 void ft_register_tests_page_policy(void);
 void ft_register_tests_chunk_stream(void);
 void ft_register_tests_blob(void);
+void ft_register_tests_btree_pincount(void);
+void ft_register_tests_btree_split_helpers(void);
+void ft_register_tests_btree_split_child(void);
+void ft_register_tests_btree_topdown_insert(void);
+void ft_register_tests_mpool_cache_cfg(void);
+void ft_register_tests_mpool_cache_stress(void);
 
 int main(void) {
     UNITY_BEGIN();
@@ -34,6 +40,12 @@ int main(void) {
     ft_register_tests_page_policy();
     ft_register_tests_chunk_stream();
     ft_register_tests_blob();
+    ft_register_tests_btree_pincount();
+    ft_register_tests_btree_split_helpers();
+    ft_register_tests_btree_split_child();
+    ft_register_tests_btree_topdown_insert();
+    ft_register_tests_mpool_cache_cfg();
+    ft_register_tests_mpool_cache_stress();
 
     return UNITY_END();
 }

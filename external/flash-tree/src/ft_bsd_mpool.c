@@ -22,6 +22,44 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__has_include)
+#if __has_include(<esp_heap_caps.h>)
+#define FT_MPOOL_HAVE_ESP_IDF 1
+#include <esp_heap_caps.h>
+#else
+#define FT_MPOOL_HAVE_ESP_IDF 0
+#endif
+#else
+#define FT_MPOOL_HAVE_ESP_IDF 0
+#endif
+
+static uint32_t g_cache_pagecount = FT_MPOOL_CACHE_PAGES_DEFAULT;
+static int g_psram_autosize = 1;
+
+ft_status_t ft_mpool_set_cache_pagecount(uint32_t count) {
+    if (count < 3u || count > (uint32_t)FT_MPOOL_CACHE_PAGES_MAX)
+        return FT_ERR_INVALID_ARG;
+    g_cache_pagecount = count;
+    return FT_OK;
+}
+
+uint32_t ft_mpool_get_cache_pagecount(void) {
+    return g_cache_pagecount;
+}
+
+ft_status_t ft_mpool_enable_psram_autosize(int enable) {
+    g_psram_autosize = enable ? 1 : 0;
+    return FT_OK;
+}
+
+static int ft_mpool_have_psram(void) {
+#if FT_MPOOL_HAVE_ESP_IDF
+    return heap_caps_get_total_size(MALLOC_CAP_SPIRAM) > 0;
+#else
+    return 0;
+#endif
+}
+
 /* ============== On-wire header encoding (ESP32 byte order = little-endian) ============== */
 
 /*
@@ -156,8 +194,6 @@ static uint32_t gc_half_start(MPOOL* mp, int half);
 
 #define FT_OFF_INVALID 0xFFFFFFFFu
 
-#if FT_MPOOL_O1_RAM
-
 static void ft_pg_cache_init(MPOOL* mp) {
     if (!mp)
         return;
@@ -201,55 +237,35 @@ static void ft_pg_cache_insert(MPOOL* mp, pgno_t pgno, uint32_t off) {
     mp->pg_cache_rr++;
 }
 
-#else
-
-static int ft_offsets_reserve(MPOOL* mp, size_t want_cap) {
-    if (mp->page_offsets_cap >= want_cap)
-        return 0;
-    size_t new_cap = (mp->page_offsets_cap == 0) ? 64 : mp->page_offsets_cap;
-    while (new_cap < want_cap) {
-        new_cap *= 2;
-        if (new_cap < mp->page_offsets_cap)
-            return -1; /* overflow */
-    }
-    uint32_t* p = (uint32_t*)realloc(mp->page_offsets, new_cap * sizeof(*p));
-    if (!p)
-        return -1;
-    for (size_t i = mp->page_offsets_cap; i < new_cap; i++) {
-        p[i] = FT_OFF_INVALID;
-    }
-    mp->page_offsets = p;
-    mp->page_offsets_cap = new_cap;
-    return 0;
-}
-
-static inline uint32_t ft_offsets_get(MPOOL* mp, pgno_t pgno) {
-    if (!mp || pgno == PGNO_INVALID)
-        return FT_OFF_INVALID;
-    if ((size_t)pgno >= mp->page_offsets_cap)
-        return FT_OFF_INVALID;
-    return mp->page_offsets[pgno];
-}
-
-static int ft_offsets_set(MPOOL* mp, pgno_t pgno, uint32_t log_offset) {
-    if (!mp || pgno == PGNO_INVALID)
-        return -1;
-    if (ft_offsets_reserve(mp, (size_t)pgno + 1) != 0)
-        return -1;
-    mp->page_offsets[pgno] = log_offset;
-    return 0;
-}
-
-#endif /* FT_MPOOL_O1_RAM */
-
 /* ============== Cache Operations ============== */
+
+static inline void ft_pin_slot(MPOOL* mp, ft_cache_slot_t* slot) {
+    if (!mp || !slot)
+        return;
+    if (!slot->pinned) {
+        slot->pinned = 1;
+        mp->pin_count++;
+        if (mp->pin_count > mp->pin_peak)
+            mp->pin_peak = mp->pin_count;
+    }
+}
+
+static inline void ft_unpin_slot(MPOOL* mp, ft_cache_slot_t* slot) {
+    if (!mp || !slot)
+        return;
+    if (slot->pinned) {
+        slot->pinned = 0;
+        if (mp->pin_count)
+            mp->pin_count--;
+    }
+}
 
 /**
  * Find cache slot containing a specific page.
  * @return Pointer to slot, or NULL if page not in cache
  */
 static ft_cache_slot_t* ft_cache_find(MPOOL* mp, pgno_t pgno) {
-    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+    for (uint32_t i = 0; i < mp->cache_pagecount; i++) {
         if (mp->cache[i].pgno == pgno) {
             return &mp->cache[i];
         }
@@ -264,14 +280,14 @@ static ft_cache_slot_t* ft_cache_find(MPOOL* mp, pgno_t pgno) {
  */
 static ft_cache_slot_t* ft_cache_find_free(MPOOL* mp) {
     /* Find empty slot */
-    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+    for (uint32_t i = 0; i < mp->cache_pagecount; i++) {
         if (mp->cache[i].pgno == PGNO_INVALID) {
             return &mp->cache[i];
         }
     }
 
     /* Find unpinned, non-dirty slot (evict) */
-    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+    for (uint32_t i = 0; i < mp->cache_pagecount; i++) {
         if (!mp->cache[i].pinned && !mp->cache[i].dirty) {
             mp->cache[i].pgno = PGNO_INVALID;
             return &mp->cache[i];
@@ -319,11 +335,7 @@ static int ft_cache_flush_slot(MPOOL* mp, ft_cache_slot_t* slot) {
     uint32_t new_offset = mp->write_off;
     mp->write_off += total;
 
-#if FT_MPOOL_O1_RAM
     ft_pg_cache_insert(mp, slot->pgno, new_offset);
-#else
-    (void)ft_offsets_set(mp, slot->pgno, new_offset);
-#endif
     slot->log_offset = new_offset;
     slot->dirty = 0;
 
@@ -381,12 +393,7 @@ static int ft_mpool_scan_half(MPOOL* mp, uint32_t start, uint32_t end, uint32_t*
         if (pgno == 0 && !(flags & FT_PAGE_FLAG_TOMBSTONE) && out_last_meta)
             *out_last_meta = off;
 
-#if FT_MPOOL_O1_RAM
         (void)flags; /* Do not pre-populate the cache during recovery. */
-#else
-        if (ft_offsets_set(mp, pgno, off) != 0)
-            return -1;
-#endif
 
         off += total;
     }
@@ -404,7 +411,6 @@ static int ft_mpool_recover(MPOOL* mp) {
     pgno_t max_pgno = 0;
     int any = 0;
 
-#if FT_MPOOL_O1_RAM
     ft_pg_cache_init(mp);
 
     uint32_t end0 = 0, end1 = 0;
@@ -424,14 +430,7 @@ static int ft_mpool_recover(MPOOL* mp) {
         mp->gc_active_half = 0;
         mp->write_off = end0;
     }
-#else
-    uint32_t dummy_end = 0;
-    if (ft_mpool_scan_half(mp, mp->data_base, mp->bdev->geom.total_size_bytes, &dummy_end, NULL,
-                           &max_pgno, &any) != 0)
-        return -1;
-    mp->gc_active_half = 0;
-    mp->write_off = dummy_end;
-#endif
+ 
 
     mp->npages = any ? (max_pgno + 1) : 0;
     return 0;
@@ -456,6 +455,20 @@ MPOOL* mpool_open(void* key, int fd, pgno_t pagesize, pgno_t maxcache) {
 
     mp->bdev = bdev;
     mp->pagesize = pagesize;
+    mp->pin_count = 0;
+    mp->pin_peak = 0;
+
+    /* Cache pagecount: default 3, autosize when PSRAM is available. */
+    uint32_t want_cache = g_cache_pagecount;
+    if (g_psram_autosize && ft_mpool_have_psram()) {
+        if (want_cache < 16u)
+            want_cache = 16u;
+    }
+    if (want_cache < 3u)
+        want_cache = 3u;
+    if (want_cache > (uint32_t)FT_MPOOL_CACHE_PAGES_MAX)
+        want_cache = (uint32_t)FT_MPOOL_CACHE_PAGES_MAX;
+    mp->cache_pagecount = want_cache;
 
     /* Calculate data region start */
     mp->data_base = ft_calc_data_base();
@@ -471,40 +484,22 @@ MPOOL* mpool_open(void* key, int fd, pgno_t pagesize, pgno_t maxcache) {
     mp->owner_kv = NULL;
 
     mp->npages = 0;
-#if !FT_MPOOL_O1_RAM
-    mp->page_offsets = NULL;
-    mp->page_offsets_cap = 0;
-#endif
-
-#if !FT_MPOOL_O1_RAM
-    /* Heuristic initial reserve: reduce realloc churn in host mode. */
-    {
-        uint32_t data_bytes = bdev->geom.total_size_bytes - mp->data_base;
-        uint32_t rec_bytes = (uint32_t)(sizeof(ft_page_hdr_t) + mp->pagesize);
-        size_t est = (rec_bytes > 0) ? (size_t)(data_bytes / rec_bytes + 16) : 64;
-        if (est < 64)
-            est = 64;
-        if (ft_offsets_reserve(mp, est) != 0) {
-            free(mp);
-            return NULL;
-        }
-    }
-#endif
 
     /* Allocate cache backing store and scratch buffer sized to pagesize. */
-    mp->cache_mem = (uint8_t*)ft_alloc((size_t)FT_MPOOL_CACHE_PAGES * (size_t)mp->pagesize,
+    mp->cache_mem = (uint8_t*)ft_alloc((size_t)mp->cache_pagecount * (size_t)mp->pagesize,
                                        FT_ALLOC_KIND_CACHE);
     if (!mp->cache_mem) {
         free(mp);
         return NULL;
     }
     /* Clear cache - mark all slots as empty */
-    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+    for (uint32_t i = 0; i < (uint32_t)FT_MPOOL_CACHE_PAGES_MAX; i++) {
         mp->cache[i].pgno = PGNO_INVALID;
         mp->cache[i].log_offset = 0;
         mp->cache[i].dirty = 0;
         mp->cache[i].pinned = 0;
-        mp->cache[i].data = mp->cache_mem + ((size_t)i * (size_t)mp->pagesize);
+        mp->cache[i].data =
+            (i < mp->cache_pagecount) ? (mp->cache_mem + ((size_t)i * (size_t)mp->pagesize)) : NULL;
     }
 
     /* Recover page-map from existing log */
@@ -531,58 +526,15 @@ void* mpool_new(MPOOL* mp, pgno_t* pgnoaddr) {
         return NULL;
 
     pgno_t pgno = PGNO_INVALID;
-#if !FT_MPOOL_O1_RAM
-    /* Prefer reusing a pgno freed via tombstone free-list. */
-    if (mp->free_head != PGNO_INVALID) {
-        const pgno_t head = mp->free_head;
-        uint32_t tomb_off = ft_offsets_get(mp, head);
-        if (tomb_off != FT_OFF_INVALID) {
-            /*
-             * Fast-path: only read the header + 4 bytes of payload (next pointer).
-             * This avoids a full record read on every free-list pop.
-             */
-            uint8_t hdrb[sizeof(ft_page_hdr_t)];
-            ft_status_t st = ft_blockdev_read(mp->bdev, tomb_off, hdrb, sizeof(hdrb));
-            if (st == FT_OK && ft_page_hdr_get_magic(hdrb) == FT_PAGE_MAGIC &&
-                (pgno_t)ft_page_hdr_get_pgno(hdrb) == head &&
-                (ft_page_hdr_get_flags(hdrb) & FT_PAGE_FLAG_TOMBSTONE)) {
-                uint8_t nextb[4];
-                st = ft_blockdev_read(mp->bdev, tomb_off + (uint32_t)sizeof(ft_page_hdr_t), nextb,
-                                      sizeof(nextb));
-                if (st != FT_OK) {
-                    mp->free_head = PGNO_INVALID;
-                    goto done_pop;
-                }
-                pgno_t next = (pgno_t)ft_u32_le_read(nextb);
-                mp->free_head = next;
-                pgno = head;
-            } else {
-                /* Free-list head points to a bad record; drop the list. */
-                mp->free_head = PGNO_INVALID;
-            }
-        } else {
-            mp->free_head = PGNO_INVALID;
-        }
-    }
-done_pop:
-
-    /* Fall back to allocating a fresh pgno (first page is 0). */
-    if (pgno == PGNO_INVALID) {
-        pgno = mp->npages++; /* post-increment: first call returns 0 */
-        if (ft_offsets_reserve(mp, (size_t)pgno + 1) != 0)
-            return NULL;
-    }
-#else
     /* Simple O(1)-RAM policy: do not reuse freed pgno numbers. */
     mp->free_head = PGNO_INVALID;
     pgno = mp->npages++; /* post-increment: first call returns 0 */
-#endif
 
     /* Find cache slot */
     ft_cache_slot_t* slot = ft_cache_find_free(mp);
     if (!slot) {
         /* Need to flush a dirty page first */
-        for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+        for (uint32_t i = 0; i < mp->cache_pagecount; i++) {
             if (mp->cache[i].dirty && !mp->cache[i].pinned) {
                 ft_cache_flush_slot(mp, &mp->cache[i]);
                 mp->cache[i].pgno = PGNO_INVALID;
@@ -601,7 +553,7 @@ done_pop:
     slot->pgno = pgno;
     slot->log_offset = 0xFFFFFFFF; /* Not yet in log */
     slot->dirty = 1;               /* Will need to be written */
-    slot->pinned = 1;
+    ft_pin_slot(mp, slot);
     memset(slot->data, 0, mp->pagesize);
 
     *pgnoaddr = pgno;
@@ -614,7 +566,6 @@ done_pop:
     return slot->data;
 }
 
-#if FT_MPOOL_O1_RAM
 static uint32_t ft_scan_back_in_range(MPOOL* mp, uint32_t start_off_exclusive, uint32_t stop_off_inclusive,
                                       pgno_t want_pgno, int* out_is_tombstone) {
     if (out_is_tombstone)
@@ -679,7 +630,6 @@ static uint32_t ft_scan_back_find_offset(MPOOL* mp, pgno_t want_pgno, int* out_i
     uint32_t other_end = other_start + mp->gc_half_size;
     return ft_scan_back_in_range(mp, other_end, other_start, want_pgno, out_is_tombstone);
 }
-#endif
 
 void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags) {
     (void)flags;
@@ -689,12 +639,11 @@ void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags) {
     /* Check cache first */
     ft_cache_slot_t* slot = ft_cache_find(mp, pgno);
     if (slot) {
-        slot->pinned = 1;
+        ft_pin_slot(mp, slot);
         return slot->data;
     }
 
     uint32_t log_off = FT_OFF_INVALID;
-#if FT_MPOOL_O1_RAM
     if (!ft_pg_cache_lookup(mp, pgno, &log_off) || log_off == FT_OFF_INVALID) {
         int is_tomb = 0;
         log_off = ft_scan_back_find_offset(mp, pgno, &is_tomb);
@@ -706,20 +655,12 @@ void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags) {
         }
         ft_pg_cache_insert(mp, pgno, log_off);
     }
-#else
-    /* Find in page-map */
-    log_off = ft_offsets_get(mp, pgno);
-    if (log_off == FT_OFF_INVALID) {
-        errno = EINVAL; /* Page doesn't exist - B-Tree checks this! */
-        return NULL;
-    }
-#endif
 
     /* Allocate cache slot */
     slot = ft_cache_find_free(mp);
     if (!slot) {
         /* Flush a dirty page to make room */
-        for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+        for (uint32_t i = 0; i < mp->cache_pagecount; i++) {
             if (mp->cache[i].dirty && !mp->cache[i].pinned) {
                 ft_cache_flush_slot(mp, &mp->cache[i]);
                 mp->cache[i].pgno = PGNO_INVALID;
@@ -770,7 +711,7 @@ void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags) {
     slot->pgno = pgno;
     slot->log_offset = log_off;
     slot->dirty = 0;
-    slot->pinned = 1;
+    ft_pin_slot(mp, slot);
 
     return slot->data;
 }
@@ -780,14 +721,16 @@ int mpool_put(MPOOL* mp, void* page, unsigned int flags) {
         return -1;
 
     /* Find cache slot containing this page */
-    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+    for (uint32_t i = 0; i < mp->cache_pagecount; i++) {
+        if (!mp->cache[i].data)
+            continue;
         if (mp->cache[i].data == page || (page >= (void*)mp->cache[i].data &&
                                           page < (void*)(mp->cache[i].data + mp->pagesize))) {
 
             if (flags & MPOOL_DIRTY) {
                 mp->cache[i].dirty = 1;
             }
-            mp->cache[i].pinned = 0;
+            ft_unpin_slot(mp, &mp->cache[i]);
             return 0;
         }
     }
@@ -800,7 +743,7 @@ int mpool_sync(MPOOL* mp) {
         return -1;
 
     /* Flush all dirty pages */
-    for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
+    for (uint32_t i = 0; i < mp->cache_pagecount; i++) {
         if (mp->cache[i].dirty) {
             if (ft_cache_flush_slot(mp, &mp->cache[i]) != 0) {
                 return -1;
@@ -819,11 +762,12 @@ int mpool_close(MPOOL* mp) {
     mpool_sync(mp);
 
     ft_free(mp->cache_mem);
-#if !FT_MPOOL_O1_RAM
-    free(mp->page_offsets);
-#endif
     free(mp);
     return 0;
+}
+
+uint32_t mpool_peak_pinned(const MPOOL* mp) {
+    return mp ? mp->pin_peak : 0;
 }
 
 /* ============== Garbage Collection ============== */
@@ -844,190 +788,7 @@ static int gc_needed(MPOOL* mp) {
     return used > (mp->gc_half_size * 3 / 4);
 }
 
-#if !FT_MPOOL_O1_RAM
-
-/*
- * Copy a page from old location to new location in the other half.
- */
-static int gc_copy_page(MPOOL* mp, pgno_t pgno) {
-    uint32_t old_off = ft_offsets_get(mp, pgno);
-    if (old_off == FT_OFF_INVALID)
-        return 0;
-
-    const uint32_t total = ft_rec_size(mp);
-    uint8_t hdrb[sizeof(ft_page_hdr_t)];
-    ft_status_t st = ft_blockdev_read(mp->bdev, old_off, hdrb, sizeof(hdrb));
-    if (st != FT_OK)
-        return -1;
-    if (ft_page_hdr_get_magic(hdrb) != FT_PAGE_MAGIC)
-        return -1;
-    if ((pgno_t)ft_page_hdr_get_pgno(hdrb) != pgno)
-        return -1;
-
-    /* Verify CRC (stream payload). */
-    const uint32_t saved_crc = ft_page_hdr_get_crc(hdrb);
-    uint32_t crc = 0;
-    if (ft_page_hdr_crc_calc_from_flash(mp, old_off, hdrb, &crc) != FT_OK)
-        return -1;
-    if (crc != saved_crc)
-        return -1;
-
-    if (ft_page_hdr_get_flags(hdrb) & FT_PAGE_FLAG_TOMBSTONE)
-        return 1; /* Freed page - skip copy. */
-
-    /* Write to new location */
-    uint32_t new_off = mp->write_off;
-    st = ft_blockdev_prog(mp->bdev, new_off, hdrb, sizeof(hdrb));
-    if (st != FT_OK)
-        return -1;
-    {
-        uint32_t src = old_off + (uint32_t)sizeof(ft_page_hdr_t);
-        uint32_t dst = new_off + (uint32_t)sizeof(ft_page_hdr_t);
-        size_t remaining = mp->pagesize;
-        uint8_t buf[64];
-        while (remaining) {
-            const size_t take = (remaining < sizeof(buf)) ? remaining : sizeof(buf);
-            if (ft_blockdev_read(mp->bdev, src, buf, take) != FT_OK)
-                return -1;
-            if (ft_blockdev_prog(mp->bdev, dst, buf, take) != FT_OK)
-                return -1;
-            src += (uint32_t)take;
-            dst += (uint32_t)take;
-            remaining -= take;
-        }
-    }
-
-    /* Update page-map entry */
-    if (ft_offsets_set(mp, pgno, new_off) != 0)
-        return -1;
-    mp->write_off += total;
-
-    return 0;
-}
-
-int mpool_gc_step(MPOOL* mp, size_t budget_bytes) {
-    if (!mp)
-        return -1;
-
-    /* Start GC if not in progress and needed */
-    if (!mp->gc_in_progress) {
-        if (!gc_needed(mp)) {
-            return 0; /* GC not needed */
-        }
-
-        /* Sync all dirty pages first */
-        if (mpool_sync(mp) != 0)
-            return -1;
-
-        /* Switch to other half */
-        int new_half = 1 - mp->gc_active_half;
-        uint32_t new_start = gc_half_start(mp, new_half);
-
-        /* Erase new half (align to erase granularity) */
-        uint32_t eg = mp->bdev->geom.erase_granularity;
-        uint32_t erase_start = (new_start / eg) * eg;
-        uint32_t erase_len = ((mp->gc_half_size + eg - 1) / eg) * eg;
-
-        ft_status_t st = ft_blockdev_erase(mp->bdev, erase_start, erase_len);
-        if (st != FT_OK)
-            return -1;
-
-        /* Start writing to new half */
-        mp->write_off = new_start;
-        mp->gc_active_half = new_half;
-        mp->gc_in_progress = 1;
-        mp->gc_next_pgno = 0;
-    }
-
-    /* Copy pages incrementally based on budget */
-    size_t bytes_copied = 0;
-    size_t page_total = sizeof(ft_page_hdr_t) + mp->pagesize;
-
-    while (mp->gc_next_pgno < mp->npages) {
-        if (budget_bytes > 0 && bytes_copied >= budget_bytes) {
-            return 1; /* More work to do */
-        }
-
-        uint32_t off = ft_offsets_get(mp, mp->gc_next_pgno);
-        if (off != FT_OFF_INVALID) {
-            if (gc_copy_page(mp, mp->gc_next_pgno) == 0) {
-                bytes_copied += page_total;
-            }
-        }
-        mp->gc_next_pgno++;
-    }
-
-    /* GC complete */
-    mp->gc_in_progress = 0;
-
-    /* Erase old half */
-    int old_half = 1 - mp->gc_active_half;
-    uint32_t old_start = gc_half_start(mp, old_half);
-    uint32_t eg = mp->bdev->geom.erase_granularity;
-    uint32_t erase_start = (old_start / eg) * eg;
-    uint32_t erase_len = ((mp->gc_half_size + eg - 1) / eg) * eg;
-
-    ft_blockdev_erase(mp->bdev, erase_start, erase_len);
-
-    return 0; /* GC complete */
-}
-
-/* ============== flash-tree extension: freeing a pgno ============== */
-
-int mpool_free_pgno(MPOOL* mp, pgno_t pgno) {
-    if (!mp || pgno == PGNO_INVALID)
-        return -1;
-
-    /* If present in cache, invalidate (must not be pinned). */
-    ft_cache_slot_t* slot = ft_cache_find(mp, pgno);
-    if (slot) {
-        if (slot->pinned)
-            return -1;
-        slot->pgno = PGNO_INVALID;
-        slot->dirty = 0;
-        slot->log_offset = 0;
-    }
-
-    /* Append a tombstone record so recovery can restore the freed state. */
-    const uint32_t total = ft_rec_size(mp);
-    uint8_t hdrb[sizeof(ft_page_hdr_t)];
-    ft_page_hdr_encode(hdrb, FT_PAGE_MAGIC, pgno, 0u, FT_PAGE_FLAG_TOMBSTONE);
-
-    /* Tombstone payload: next_free (u32 LE) + remaining bytes left erased (0xFF). */
-    uint8_t nextb[4];
-    ft_u32_le_write(nextb, (uint32_t)mp->free_head);
-    const uint32_t crc = ft_page_hdr_crc_calc_tombstone_erased_tail(hdrb, nextb, mp->pagesize);
-    ft_u32_le_write(&hdrb[8], crc);
-    if ((uint64_t)mp->write_off + (uint64_t)total > mp->bdev->geom.total_size_bytes) {
-        return -1;
-    }
-
-    const uint32_t tomb_off = mp->write_off;
-    ft_status_t st = ft_blockdev_prog(mp->bdev, tomb_off, hdrb, sizeof(hdrb));
-    if (st != FT_OK)
-        return -1;
-    st = ft_blockdev_prog(mp->bdev, tomb_off + (uint32_t)sizeof(ft_page_hdr_t), nextb, sizeof(nextb));
-    if (st != FT_OK)
-        return -1;
-
-    mp->write_off += total;
-
-    /* Point map entry at tombstone record (so we can read next pointers). */
-    if (ft_offsets_set(mp, pgno, tomb_off) != 0)
-        return -1;
-
-    /* Push on free-list. */
-    mp->free_head = pgno;
-    if (mp->owner_kv) {
-        mp->owner_kv->gc_dirty = 1;
-        mp->owner_kv->free_head = (uint32_t)mp->free_head;
-        mp->owner_kv->alloc_next = (uint32_t)mp->npages;
-    }
-    return 0;
-}
-
-#else /* FT_MPOOL_O1_RAM */
-
+/* ============== Garbage Collection (O(1)-RAM) ============== */
 static uint32_t gc_half_end(MPOOL* mp, int half) {
     return gc_half_start(mp, half) + mp->gc_half_size;
 }
@@ -1201,4 +962,3 @@ int mpool_free_pgno(MPOOL* mp, pgno_t pgno) {
     return 0;
 }
 
-#endif /* FT_MPOOL_O1_RAM */

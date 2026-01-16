@@ -40,6 +40,7 @@ static char sccsid[] = "@(#)bt_split.c	8.4 (Berkeley) 1/9/95";
 
 #include <sys/types.h>
 
+#include <errno.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,10 +55,281 @@ static PAGE* bt_psplit __P((BTREE*, PAGE*, PAGE*, PAGE*, indx_t*, size_t));
 static PAGE* bt_root __P((BTREE*, PAGE*, PAGE**, PAGE**, indx_t*, size_t));
 static int bt_rroot __P((BTREE*, PAGE*, PAGE*, PAGE*));
 static recno_t rec_total __P((PAGE*));
+static void bt_psplit_noinsert __P((BTREE*, PAGE*, PAGE*, PAGE*));
+static PAGE* bt_page_noinsert __P((BTREE*, PAGE*, PAGE**, PAGE**));
 
 #ifdef STATISTICS
 u_long bt_rootsplit, bt_split, bt_sortsplit, bt_pfxsaved;
 #endif
+
+int __bt_would_split(PAGE* h, size_t nbytes) {
+    if (!h)
+        return 1;
+    return h->upper - h->lower < nbytes + sizeof(indx_t);
+}
+
+static void bt_psplit_noinsert(BTREE* t, PAGE* h, PAGE* l, PAGE* r) {
+    BINTERNAL* bi;
+    BLEAF* bl;
+    RLEAF* rl;
+    indx_t nxt, off, top;
+    size_t nbytes;
+
+    /* Split roughly in half by bytes used. Keep at least one item for the right page. */
+    const indx_t full = (indx_t)(t->bt_psize - BTDATAOFF);
+    const indx_t half = (indx_t)(full / 2);
+    indx_t used = 0;
+
+    top = NEXTINDEX(h);
+    nxt = 0;
+    for (off = 0; nxt < top; off++, nxt++) {
+        void* src = NULL;
+        switch (h->flags & P_TYPE) {
+        case P_BINTERNAL:
+            src = bi = GETBINTERNAL(h, nxt);
+            nbytes = NBINTERNAL(bi->ksize);
+            break;
+        case P_BLEAF:
+            src = bl = GETBLEAF(h, nxt);
+            nbytes = NBLEAF(bl);
+            break;
+        case P_RINTERNAL:
+            src = GETRINTERNAL(h, nxt);
+            nbytes = NRINTERNAL;
+            break;
+        case P_RLEAF:
+            src = rl = GETRLEAF(h, nxt);
+            nbytes = NRLEAF(rl);
+            break;
+        default:
+            abort();
+        }
+
+        /* Ensure at least one item ends up on the right page. */
+        if (nxt == top - 1 && off > 0) {
+            break;
+        }
+
+        /* Stop once we crossed half and have at least one item left for right. */
+        if (used >= half && off > 0 && nxt < top - 1) {
+            break;
+        }
+        /* Also stop if adding would overflow the left page (best effort). */
+        if (used + (indx_t)nbytes >= full && off > 0) {
+            break;
+        }
+
+        l->linp[off] = l->upper -= (indx_t)nbytes;
+        memmove((char*)l + l->upper, src, nbytes);
+        used += (indx_t)nbytes;
+    }
+
+    l->lower = (indx_t)(BTDATAOFF + off * sizeof(indx_t));
+
+    for (off = 0; nxt < top; off++, nxt++) {
+        void* src = NULL;
+        switch (h->flags & P_TYPE) {
+        case P_BINTERNAL:
+            src = bi = GETBINTERNAL(h, nxt);
+            nbytes = NBINTERNAL(bi->ksize);
+            break;
+        case P_BLEAF:
+            src = bl = GETBLEAF(h, nxt);
+            nbytes = NBLEAF(bl);
+            break;
+        case P_RINTERNAL:
+            src = GETRINTERNAL(h, nxt);
+            nbytes = NRINTERNAL;
+            break;
+        case P_RLEAF:
+            src = rl = GETRLEAF(h, nxt);
+            nbytes = NRLEAF(rl);
+            break;
+        default:
+            abort();
+        }
+        r->linp[off] = r->upper -= (indx_t)nbytes;
+        memmove((char*)r + r->upper, src, nbytes);
+    }
+    r->lower = (indx_t)(BTDATAOFF + off * sizeof(indx_t));
+}
+
+static PAGE* bt_page_noinsert(BTREE* t, PAGE* h, PAGE** lp, PAGE** rp) {
+    PAGE *l, *r;
+    pgno_t npg;
+
+    /* Put the new right page for the split into place. */
+    if ((r = __bt_new(t, &npg)) == NULL)
+        return NULL;
+    r->pgno = npg;
+    r->lower = BTDATAOFF;
+    r->upper = t->bt_psize;
+    r->nextpg = h->nextpg;
+    r->prevpg = h->pgno;
+    r->flags = h->flags & P_TYPE;
+
+    /* Put the new left page for the split into place. */
+    if ((l = (PAGE*)malloc(t->bt_psize)) == NULL) {
+        mpool_put(t->bt_mp, r, 0);
+        return NULL;
+    }
+    l->pgno = h->pgno;
+    l->nextpg = r->pgno;
+    l->prevpg = h->prevpg;
+    l->lower = BTDATAOFF;
+    l->upper = t->bt_psize;
+    l->flags = h->flags & P_TYPE;
+
+    /*
+     * Top-down split helper: avoid pinning the old right neighbor.
+     *
+     * We maintain forward links (h->nextpg and r->nextpg) so forward iteration works.
+     * The old right neighbor's prevpg is left stale and may be repaired lazily.
+     */
+
+    bt_psplit_noinsert(t, h, l, r);
+
+    /* Move the new left page onto the old left page. */
+    memmove(h, l, t->bt_psize);
+    free(l);
+
+    *lp = h;
+    *rp = r;
+    return h;
+}
+
+int __bt_split_child(BTREE* t, PAGE* parent, indx_t parent_index, PAGE* child, pgno_t* out_right_pgno) {
+    if (out_right_pgno)
+        *out_right_pgno = PGNO_INVALID;
+    if (!t || !parent || !child)
+        return RET_ERROR;
+    if (!(parent->flags & P_BINTERNAL))
+        return RET_ERROR;
+
+    PAGE* lchild = NULL;
+    PAGE* rchild = NULL;
+    if (bt_page_noinsert(t, child, &lchild, &rchild) == NULL)
+        return RET_ERROR;
+    if (!lchild || !rchild)
+        return RET_ERROR;
+
+    /* Insert separator into parent (one after the child index). */
+    indx_t skip = parent_index + 1;
+
+    size_t nbytes = 0;
+    size_t nksize = 0;
+    BINTERNAL* bi;
+    BLEAF *bl, *tbl;
+    DBT a, b;
+
+    switch (rchild->flags & P_TYPE) {
+    case P_BINTERNAL:
+        bi = GETBINTERNAL(rchild, 0);
+        nbytes = NBINTERNAL(bi->ksize);
+        break;
+    case P_BLEAF:
+        bl = GETBLEAF(rchild, 0);
+        nbytes = NBINTERNAL(bl->ksize);
+        if (t->bt_pfx && !(bl->flags & P_BIGKEY) && (parent->prevpg != P_INVALID || skip > 1)) {
+            tbl = GETBLEAF(lchild, NEXTINDEX(lchild) - 1);
+            a.size = tbl->ksize;
+            a.data = tbl->bytes;
+            b.size = bl->ksize;
+            b.data = bl->bytes;
+            nksize = t->bt_pfx(&a, &b);
+            size_t n = NBINTERNAL(nksize);
+            if (n < nbytes) {
+#ifdef STATISTICS
+                bt_pfxsaved += nbytes - n;
+#endif
+                nbytes = n;
+            } else {
+                nksize = 0;
+            }
+        } else {
+            nksize = 0;
+        }
+        break;
+    default:
+        /* Only btree leaf/internal supported for now. */
+        errno = EFTYPE;
+        return RET_ERROR;
+    }
+
+    /* Top-down split requires parent to have room for the new entry. */
+    if (__bt_would_split(parent, nbytes)) {
+        errno = ENOMEM;
+        return RET_ERROR;
+    }
+
+    indx_t nxtindex;
+    if (skip < (nxtindex = NEXTINDEX(parent)))
+        memmove(parent->linp + skip + 1, parent->linp + skip, (nxtindex - skip) * sizeof(indx_t));
+    parent->lower += sizeof(indx_t);
+
+    char* dest;
+    switch (rchild->flags & P_TYPE) {
+    case P_BINTERNAL:
+        bi = GETBINTERNAL(rchild, 0);
+        parent->linp[skip] = parent->upper -= (indx_t)nbytes;
+        dest = (char*)parent + parent->linp[skip];
+        memmove(dest, bi, nbytes);
+        ((BINTERNAL*)dest)->pgno = rchild->pgno;
+        break;
+    case P_BLEAF:
+        bl = GETBLEAF(rchild, 0);
+        parent->linp[skip] = parent->upper -= (indx_t)nbytes;
+        dest = (char*)parent + parent->linp[skip];
+        WR_BINTERNAL(dest, nksize ? nksize : bl->ksize, rchild->pgno, bl->flags & P_BIGKEY);
+        memmove(dest, bl->bytes, nksize ? nksize : bl->ksize);
+        break;
+    default:
+        abort();
+    }
+
+    if (out_right_pgno)
+        *out_right_pgno = rchild->pgno;
+    return RET_SUCCESS;
+}
+
+int __bt_split_root(BTREE* t) {
+    if (!t || !t->bt_mp) {
+        errno = EINVAL;
+        return RET_ERROR;
+    }
+
+    PAGE* h = mpool_get(t->bt_mp, P_ROOT, 0);
+    if (!h)
+        return RET_ERROR;
+
+    PAGE *l = NULL, *r = NULL;
+    pgno_t lnpg, rnpg;
+    if ((l = __bt_new(t, &lnpg)) == NULL || (r = __bt_new(t, &rnpg)) == NULL) {
+        (void)mpool_put(t->bt_mp, h, 0);
+        return RET_ERROR;
+    }
+    l->pgno = lnpg;
+    r->pgno = rnpg;
+    l->nextpg = r->pgno;
+    r->prevpg = l->pgno;
+    l->prevpg = r->nextpg = P_INVALID;
+    l->lower = r->lower = BTDATAOFF;
+    l->upper = r->upper = t->bt_psize;
+    l->flags = r->flags = h->flags & P_TYPE;
+
+    bt_psplit_noinsert(t, h, l, r);
+
+    /* Convert root page into internal page pointing at l/r. */
+    if (bt_broot(t, h, l, r) == RET_ERROR) {
+        (void)mpool_put(t->bt_mp, l, 0);
+        (void)mpool_put(t->bt_mp, r, 0);
+        return RET_ERROR;
+    }
+
+    (void)mpool_put(t->bt_mp, l, MPOOL_DIRTY);
+    (void)mpool_put(t->bt_mp, r, MPOOL_DIRTY);
+    return RET_SUCCESS;
+}
 
 /*
  * __BT_SPLIT -- Split the tree.
@@ -199,7 +471,7 @@ int __bt_split(BTREE* t, PAGE* sp, const DBT* key, const DBT* data, int flags, s
         }
 
         /* Split the parent page if necessary or shift the indices. */
-        if (h->upper - h->lower < nbytes + sizeof(indx_t)) {
+        if (__bt_would_split(h, nbytes)) {
             sp = h;
             h = h->pgno == P_ROOT ? bt_root(t, h, &l, &r, &skip, nbytes)
                                   : bt_page(t, h, &l, &r, &skip, nbytes);
