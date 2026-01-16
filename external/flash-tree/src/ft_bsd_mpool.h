@@ -28,7 +28,7 @@
  * Note: bt_split can pin up to ~5 pages, so do not set this below 5.
  */
 #ifndef FT_MPOOL_CACHE_PAGES
-#define FT_MPOOL_CACHE_PAGES 6
+#define FT_MPOOL_CACHE_PAGES 5
 #endif
 
 /*
@@ -115,7 +115,6 @@ typedef struct MPOOL {
     /* RAM cache */
     ft_cache_slot_t cache[FT_MPOOL_CACHE_PAGES];
     uint8_t* cache_mem;    /* FT_MPOOL_CACHE_PAGES * pagesize bytes */
-    uint8_t* scratch_rec;  /* sizeof(ft_page_hdr_t)+pagesize bytes (I/O helpers) */
 
     /* Byte-swap callbacks (for B-tree) */
     void (*pgin)(void*, pgno_t, void*);

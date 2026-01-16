@@ -26,7 +26,6 @@ ft_status_t ft_page_policy_compute_variant_b(const ft_blockdev_geom_t* geom, siz
     const uint32_t hs = (uint32_t)header_size;
     const uint32_t ps = eg - hs;
 
-    // Record is exactly one erase block.
     // Ensure each individual operation length is compatible with device wrappers:
     // - mpool writes header and page payload via separate prog() calls
     // - mpool reads header and page payload via separate read() calls

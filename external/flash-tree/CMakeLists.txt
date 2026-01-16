@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.10)
 project(flash-tree C)
 
+option(FLASH_TREE_DOGFOOD_O1_RAM "Build flash-tree with FT_MPOOL_O1_RAM for host dogfooding" OFF)
+
 set(FLASH_TREE_CORE_SRCS
     src/ft_kv.c
     src/ft_kv_bind.c
+    src/ft_alloc.c
     src/ft_blockdev.c
     src/ft_crc32.c
     src/ft_page_policy.c
@@ -67,6 +70,24 @@ target_compile_definitions(flash-tree-obj PRIVATE
     $<$<CONFIG:Debug>:DEBUG>
 )
 
+# Cross-compile with ESP32 toolchain: propagate ESP32_BUILD into flash-tree.
+if(DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "esp32\\.cmake")
+    foreach(tgt flash-tree-obj bsd-btree-obj flash-tree-core bsd-btree flash-tree)
+        if(TARGET ${tgt})
+            target_compile_definitions(${tgt} PRIVATE ESP32_BUILD)
+        endif()
+    endforeach()
+endif()
+
+# Host dogfooding: enable O(1)-RAM scan mode in mpool.
+if(FLASH_TREE_DOGFOOD_O1_RAM)
+    foreach(tgt flash-tree-obj bsd-btree-obj flash-tree-core bsd-btree flash-tree)
+        if(TARGET ${tgt})
+            target_compile_definitions(${tgt} PRIVATE FT_MPOOL_O1_RAM=1)
+        endif()
+    endforeach()
+endif()
+
 # Single-config generators fallback (older CMake workflows).
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(flash-tree-obj PRIVATE DEBUG)
@@ -105,6 +126,7 @@ if(UNITY_SRC)
         tests/test_kv_edge_cases.c
         tests/test_gc.c
         tests/test_gc_syskeys.c
+        tests/test_mpool_o1ram.c
         tests/test_page_policy.c
         tests/test_chunk_stream.c
         tests/test_blob.c
@@ -123,5 +145,10 @@ if(UNITY_SRC)
     target_compile_definitions(flash-tree-tests PRIVATE
         $<$<CONFIG:Debug>:DEBUG>
     )
+
+    if(FLASH_TREE_DOGFOOD_O1_RAM)
+        # Force scan-miss coverage in tests (small cache), while keeping library defaults intact.
+        target_compile_definitions(flash-tree-tests PRIVATE FT_MPOOL_O1_RAM=1 FT_MPOOL_PG_CACHE_ENTRIES=1)
+    endif()
 endif()
 

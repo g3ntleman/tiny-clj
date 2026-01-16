@@ -17,7 +17,7 @@
 #include <external/tiny_regex.h>
 
 #include <stdbool.h>
-#include <stdio.h>
+#include "mini_format.h"
 #include <string.h>
 
 // Maximum pattern length
@@ -70,7 +70,7 @@ static const char *validate_pattern(const char *pattern) {
 CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
     if (!pattern) {
         if (error && error_size > 0) {
-            snprintf(error, error_size, "Pattern cannot be null");
+            clj_mini_snprintf(error, error_size, "Pattern cannot be null");
         }
         return NULL;
     }
@@ -78,7 +78,7 @@ CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
     size_t len = strlen(pattern);
     if (len >= MAX_PATTERN_LEN) {
         if (error && error_size > 0) {
-            snprintf(error, error_size, "Pattern too long (max %d chars)", MAX_PATTERN_LEN - 1);
+            clj_mini_snprintf(error, error_size, "Pattern too long (max %d chars)", MAX_PATTERN_LEN - 1);
         }
         return NULL;
     }
@@ -87,7 +87,7 @@ CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
     const char *validation_error = validate_pattern(pattern);
     if (validation_error) {
         if (error && error_size > 0) {
-            snprintf(error, error_size, "%s", validation_error);
+            clj_mini_snprintf(error, error_size, "%s", validation_error);
         }
         return NULL;
     }
@@ -96,7 +96,7 @@ CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
     re_t compiled = re_compile(pattern);
     if (!compiled) {
         if (error && error_size > 0) {
-            snprintf(error, error_size, "Invalid regex pattern");
+            clj_mini_snprintf(error, error_size, "Invalid regex pattern");
         }
         return NULL;
     }

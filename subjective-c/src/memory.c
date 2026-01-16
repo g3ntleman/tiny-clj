@@ -23,8 +23,11 @@
 #include "hashmap.h"  // For CljHashMap
 #include "seq.h"  // For CljLazySeq
 #include "thread_local.h"
+#include "mini_format.h"
 #include <string.h>
+#if !defined(ESP32_BUILD)
 #include <execinfo.h>
+#endif
 #include <stdlib.h>
 
 // ============================================================================
@@ -211,7 +214,7 @@ void retain(CljObject *v) {
         // Zombie detected: throw exception with stacktrace and zombie object
         // Don't try to print object representation (may fail if object is corrupted)
         char message[512];
-        snprintf(message, sizeof(message),
+        (void)clj_mini_snprintf(message, sizeof(message),
             "Attempted to retain zombie object %p (type=%s). "
             "This object was already freed but marked as zombie for debugging.",
             v, clj_type_name(v->type));
@@ -262,8 +265,8 @@ void release(CljObject *v) {
     // Move this after the safety checks to avoid accessing v->type on invalid pointers
     // Use cached flag to avoid repeated function calls
     if (g_debug_output_active) {
-        printf("🔍 release: Object %p, type=%d (%s), rc=%d -> ", 
-               v, v->type, clj_type_name(v->type), v->rc);
+        LOGF(stdout, "🔍 release: Object %p, type=%d (%s), rc=%d -> ",
+             v, (int)v->type, clj_type_name(v->type), (int)v->rc);
     }
     
     // Note: CLJ_FUNC (native functions) are static and don't need release
@@ -273,10 +276,12 @@ void release(CljObject *v) {
     // This detects attempts to release already-freed objects
     if (v->rc == 0) {
         // Keep diagnostics short: zombie/debug builds can otherwise flood output.
-        fprintf(stderr, "DOUBLE-FREE: object=%p type=%s (rc=0)\n", v, clj_type_name(v->type));
+        LOGF(stderr, "DOUBLE-FREE: object=%p type=%s (rc=0)\n", v, clj_type_name(v->type));
         void *trace[32];
+#if !defined(ESP32_BUILD)
         int trace_count = backtrace(trace, (int)(sizeof(trace) / sizeof(trace[0])));
         backtrace_symbols_fd(trace, trace_count, fileno(stderr));
+#endif
         fflush(stderr);
         throw_exception_formatted("UseAfterFreeError", __FILE__, __LINE__, 0,
             "Double-free detected! Object %p (type=%s) was already freed (rc=0). "
@@ -293,7 +298,7 @@ void release(CljObject *v) {
     
     if (v->rc == 0) { 
         if (g_debug_output_active) {
-            printf("🔍 release: Object %p will be freed (rc=0)\n", v);
+            LOGF(stdout, "🔍 release: Object %p will be freed (rc=0)\n", v);
         }
 
         // Release contained values (for containers)
@@ -308,13 +313,13 @@ void release(CljObject *v) {
         // The object remains in memory so we can examine it later
         // rc is already 0, so no need to set it again
         if (g_debug_output_active) {
-            printf("🔍 release: Object %p marked as zombie (rc=0, not DEALLOCed)\n", v);
+            LOGF(stdout, "🔍 release: Object %p marked as zombie (rc=0, not DEALLOCed)\n", v);
         }
 #else
         // Normal mode: free the object
         DEALLOC(v);
         if (g_debug_output_active) {
-            printf("🔍 release: Object %p freed\n", v);
+            LOGF(stdout, "🔍 release: Object %p freed\n", v);
         }
 #endif
     }
@@ -368,7 +373,12 @@ CljObject *autorelease(CljObject *v) {
         g_pool.items = new_items;
         g_pool.capacity = new_capacity;
 #ifdef DEBUG
-        fprintf(stderr, "⚠️  AutoreleasePool: items grew %u -> %u\n", new_capacity / 2, new_capacity);
+        {
+            char buf[128];
+            (void)clj_mini_snprintf(buf, sizeof(buf), "⚠️  AutoreleasePool: items grew %u -> %u\n",
+                                    new_capacity / 2, new_capacity);
+            fputs(buf, stderr);
+        }
 #endif
     }
     
@@ -456,7 +466,7 @@ static inline void autorelease_pool_grow(void) {
     g_pool.checkpoints = new_cps;
     g_pool.cp_capacity = new_capacity;
 #ifdef DEBUG
-    fprintf(stderr, "⚠️  AutoreleasePool: checkpoints grew %u -> %u\n", old_capacity, new_capacity);
+    LOGF(stderr, "⚠️  AutoreleasePool: checkpoints grew %u -> %u\n", old_capacity, new_capacity);
 #endif
 }
 
@@ -483,8 +493,8 @@ void autorelease_pool_push() {
     g_pool.checkpoints[g_pool.cp_count++] = g_pool.count;
     
     if (g_debug_output_active) {
-        printf("🔍 autorelease_pool_push: checkpoint at %u (depth=%u)\n", 
-               g_pool.count, g_pool.cp_count);
+        LOGF(stdout, "🔍 autorelease_pool_push: checkpoint at %u (depth=%u)\n",
+             (unsigned)g_pool.count, (unsigned)g_pool.cp_count);
     }
 }
 
@@ -501,17 +511,22 @@ void autorelease_pool_pop(void) {
     
     // Check for stack underflow
     if (g_pool.cp_count == 0) {
-        printf("WARNING: autorelease_pool_pop() called on empty stack! "
-               "This indicates more pop() calls than push() calls.\n");
+        LOGF(stdout, "WARNING: autorelease_pool_pop() called on empty stack! "
+                     "This indicates more pop() calls than push() calls.\n");
 #ifdef DEBUG
         // Print stack trace for debugging
         void *trace[16];
+#if !defined(ESP32_BUILD)
         int trace_count = backtrace(trace, 16);
         char **symbols = backtrace_symbols(trace, trace_count);
+#else
+        int trace_count = 0;
+        char **symbols = NULL;
+#endif
         if (symbols) {
-            fprintf(stderr, "Stack trace:\n");
+            LOGF(stderr, "Stack trace:\n");
             for (int i = 0; i < trace_count; i++) {
-                fprintf(stderr, "  %s\n", symbols[i]);
+                LOGF(stderr, "  %s\n", symbols[i]);
             }
             free(symbols);
         }
@@ -523,8 +538,8 @@ void autorelease_pool_pop(void) {
     uint32_t checkpoint = g_pool.checkpoints[--g_pool.cp_count];
     
     if (g_debug_output_active) {
-        printf("🔍 autorelease_pool_pop: clearing %u objects (checkpoint=%u, count=%u)\n",
-               g_pool.count - checkpoint, checkpoint, g_pool.count);
+        LOGF(stdout, "🔍 autorelease_pool_pop: clearing %u objects (checkpoint=%u, count=%u)\n",
+             (unsigned)(g_pool.count - checkpoint), (unsigned)checkpoint, (unsigned)g_pool.count);
     }
     
     // Weak semantics: forget items, do not release them.
@@ -644,7 +659,7 @@ static void release_object_deep(CljObject *v) {
     
     if (!v) {
         if (g_debug_output_active) {
-            printf("🔍 release_object_deep: NULL object\n");
+            LOGF(stdout, "🔍 release_object_deep: NULL object\n");
         }
         return;
     }
@@ -656,8 +671,8 @@ static void release_object_deep(CljObject *v) {
 #endif
     
     if (g_debug_output_active) {
-        printf("🔍 release_object_deep: Object %p, type=%d (%s), rc=%d\n", 
-               v, v->type, clj_type_name(v->type), v->rc);
+        LOGF(stdout, "🔍 release_object_deep: Object %p, type=%d (%s), rc=%d\n",
+             v, (int)v->type, clj_type_name(v->type), (int)v->rc);
     }
     
     // Skip singletons (they don't need cleanup)
@@ -742,19 +757,20 @@ static void release_object_default(CljObject *v) {
                 // Using as_list() would call TAG() which fails when rc=0 (zombie mode)
                 CljList *list = (CljList*)v;
                 if (g_debug_output_active) {
-                    printf("🔍 release_object_deep: Freeing LIST object %p, first=%p, rest=%p\n", v, list ? list->first : NULL, list ? list->rest : NULL);
+                    LOGF(stdout, "🔍 release_object_deep: Freeing LIST object %p, first=%p, rest=%p\n",
+                         v, list ? list->first : NULL, list ? list->rest : NULL);
                 }
                 // Release head and tail elements - RELEASE handles NULL
                 if (list) {
                     if (g_debug_output_active) {
                         if (list->first) {
-                            printf("🔍 release_object_deep: Releasing list first element %p\n", list->first);
+                            LOGF(stdout, "🔍 release_object_deep: Releasing list first element %p\n", list->first);
                         }
                     }
                     RELEASE(list->first);
                     if (g_debug_output_active) {
                         if (list->rest) {
-                            printf("🔍 release_object_deep: Releasing list rest element %p\n", list->rest);
+                            LOGF(stdout, "🔍 release_object_deep: Releasing list rest element %p\n", list->rest);
                         }
                     }
                     RELEASE(list->rest);
@@ -771,8 +787,8 @@ static void release_object_default(CljObject *v) {
                     break;
                 }
                 if (g_debug_output_active) {
-                    printf("🔍 release_object_deep: Freeing AST node %p, first=%p, rest=%p, cache=%p\n",
-                           v, node->first, node->rest, node->callsite_cache);
+                    LOGF(stdout, "🔍 release_object_deep: Freeing AST node %p, first=%p, rest=%p, cache=%p\n",
+                         v, node->first, node->rest, node->callsite_cache);
                 }
                 RELEASE(node->first);
                 RELEASE(node->rest);

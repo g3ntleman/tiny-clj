@@ -11,10 +11,6 @@
 #define BUILD_CMAKE_VERSION "@CMAKE_VERSION@"
 #define BUILD_SOURCE_DIR "@CMAKE_SOURCE_DIR@"
 
-// Build timestamp as Unix epoch seconds (UTC) - set at configure time
-// Note: Also available as BUILD_EPOCH_SECONDS compile definition
-#define BUILD_EPOCH_SECONDS_STR "@BUILD_EPOCH_SECONDS@"
-
 // Build-Features
 #ifdef DEBUG
 #define BUILD_DEBUG_ENABLED 1

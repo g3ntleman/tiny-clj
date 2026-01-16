@@ -1,9 +1,30 @@
-#ifndef FORMAT_UTILS_H
-#define FORMAT_UTILS_H
+#ifndef SUBJECTIVE_C_MINI_FORMAT_H
+#define SUBJECTIVE_C_MINI_FORMAT_H
 
+#include <stdarg.h>
 #include <stddef.h>
-#include <stdint.h>
-#include "numeric_utils.h"
+
+/**
+ * Minimal snprintf/vsnprintf replacement designed for embedded size.
+ *
+ * Supported:
+ * - %% %s %c
+ * - %d %i %u (optionally with 'l' or 'z' length modifier)
+ * - %x %X (optionally with 'l' or 'z')
+ * - %p (prints 0x + lowercase hex)
+ * - %f with optional precision (e.g. %.2f). Default precision: 6.
+ *
+ * Not supported (left as literal "%<spec>"):
+ * - width, padding, alignment, scientific formats, etc.
+ */
+int clj_mini_vsnprintf(char *dst, size_t cap, const char *fmt, va_list ap);
+int clj_mini_snprintf(char *dst, size_t cap, const char *fmt, ...);
+
+// -----------------------------------------------------------------------------
+// Legacy tiny-clj "format_utils.h" helpers (now consolidated here)
+// -----------------------------------------------------------------------------
+// These are intentionally small, allocation-free string builders used for
+// composing error messages without depending on libc printf.
 
 static inline size_t format_append(char *dest, size_t offset, size_t capacity, const char *text) {
     if (!dest || offset >= capacity) {
@@ -47,29 +68,21 @@ static inline size_t format_append_char(char *dest, size_t offset, size_t capaci
 
 static inline size_t format_append_uint(char *dest, size_t offset, size_t capacity, unsigned int value) {
     char number[16];
-    clj_uitoa(value, number);
+    (void)clj_mini_snprintf(number, sizeof(number), "%u", value);
     return format_append(dest, offset, capacity, number);
 }
 
 static inline size_t format_append_int(char *dest, size_t offset, size_t capacity, int value) {
     char number[16];
-    clj_itoa(value, number);
+    (void)clj_mini_snprintf(number, sizeof(number), "%d", value);
     return format_append(dest, offset, capacity, number);
 }
 
 static inline size_t format_append_ulong(char *dest, size_t offset, size_t capacity, unsigned long value) {
-    char digits[21];
-    size_t index = 0;
-
-    do {
-        digits[index++] = (char)('0' + (value % 10UL));
-        value /= 10UL;
-    } while (value != 0UL && index < sizeof(digits));
-
-    while (index > 0) {
-        offset = format_append_char(dest, offset, capacity, digits[--index]);
-    }
-    return offset;
+    char number[32];
+    (void)clj_mini_snprintf(number, sizeof(number), "%lu", value);
+    return format_append(dest, offset, capacity, number);
 }
 
-#endif // FORMAT_UTILS_H
+#endif
+

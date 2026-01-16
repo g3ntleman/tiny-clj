@@ -1,7 +1,7 @@
 #include "datetime_utc.h"
 
 #include <stdbool.h>
-#include <stdio.h>
+#include "mini_format.h"
 #include <string.h>
 
 static bool parse_uint_n(const char *s, int n, int *out) {
@@ -111,6 +111,18 @@ const char *tinyclj_parse_iso8601_utc_instant(const char *iso, int32_t *out_days
   return NULL;
 }
 
+static size_t append_u_zeropad(char *buf, size_t off, size_t cap, unsigned v, unsigned width) {
+  char tmp2[16];
+  if (width >= sizeof(tmp2)) width = (unsigned)(sizeof(tmp2) - 1);
+  for (unsigned i = 0; i < width; i++) {
+    unsigned div = 1;
+    for (unsigned j = i + 1; j < width; j++) div *= 10u;
+    tmp2[i] = (char)('0' + ((v / div) % 10u));
+  }
+  tmp2[width] = '\0';
+  return format_append(buf, off, cap, tmp2);
+}
+
 size_t tinyclj_format_inst_literal_iso8601_utc(char *buf, size_t buf_size, int32_t days, uint32_t ms) {
   int year = 0, month = 0, day = 0;
   tinyclj_civil_from_days_utc(days, &year, &month, &day);
@@ -123,15 +135,30 @@ size_t tinyclj_format_inst_literal_iso8601_utc(char *buf, size_t buf_size, int32
   uint32_t second = tmp / 1000u;
   uint32_t millis = tmp % 1000u;
 
-  return (size_t)snprintf(
-      buf,
-      buf_size,
-      "#inst \"%04d-%02d-%02dT%02u:%02u:%02u.%03uZ\"",
-      year,
-      month,
-      day,
-      (unsigned)hour,
-      (unsigned)minute,
-      (unsigned)second,
-      (unsigned)millis);
+  // mini_format intentionally ignores width/zero-padding, so build the ISO-8601 form manually.
+  if (!buf || buf_size == 0) return 0;
+  buf[0] = '\0';
+
+  size_t off = 0;
+  off = format_append(buf, off, buf_size, "#inst \"");
+
+  // Year: clamp to [0..9999] for stable 4-digit printing.
+  unsigned y = (year < 0) ? 0u : (year > 9999 ? 9999u : (unsigned)year);
+  off = append_u_zeropad(buf, off, buf_size, y, 4);
+  off = format_append_char(buf, off, buf_size, '-');
+  off = append_u_zeropad(buf, off, buf_size, (unsigned)month, 2);
+  off = format_append_char(buf, off, buf_size, '-');
+  off = append_u_zeropad(buf, off, buf_size, (unsigned)day, 2);
+  off = format_append_char(buf, off, buf_size, 'T');
+  off = append_u_zeropad(buf, off, buf_size, (unsigned)hour, 2);
+  off = format_append_char(buf, off, buf_size, ':');
+  off = append_u_zeropad(buf, off, buf_size, (unsigned)minute, 2);
+  off = format_append_char(buf, off, buf_size, ':');
+  off = append_u_zeropad(buf, off, buf_size, (unsigned)second, 2);
+  off = format_append_char(buf, off, buf_size, '.');
+  off = append_u_zeropad(buf, off, buf_size, (unsigned)millis, 3);
+  off = format_append_char(buf, off, buf_size, 'Z');
+  off = format_append_char(buf, off, buf_size, '"');
+
+  return off;
 }

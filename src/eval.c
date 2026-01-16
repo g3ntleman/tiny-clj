@@ -2,6 +2,8 @@
 #include "eval.h"
 #include "symbol.h"
 #include <stdio.h>
+#include "platform.h"
+#include "mini_format.h"
 #include "exception.h"
 #include "function.h"
 #include "validation.h"
@@ -34,7 +36,6 @@
 #include "strings.h"  // For pr_str
 #include "to_string.h"  // For is_special_symbol
 #include "numeric_utils.h"
-#include "format_utils.h"
 #include "eval_arithmetic.h"
 #include "eval_comparison.h"
 #include <time.h>
@@ -1284,9 +1285,10 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (original_op_tag == CLJ_SYMBOL) {
         const char *dbg = getenv("TINYCLJ_DEBUG_EVAL_LIST_OP");
         if (dbg && dbg[0] == '1' && (&g_clojure_core_last_form != NULL) && g_clojure_core_last_form == 210) {
-            fprintf(stderr, "[debug] eval_list: form=%d list=%p op=%p tag=%u\n",
-                    (int)g_clojure_core_last_form, (void*)list, (void*)op, (unsigned)original_op_tag);
-            fflush(stderr);
+            char buf[160];
+            (void)clj_mini_snprintf(buf, sizeof(buf), "[debug] eval_list: form=%d list=%p op=%p tag=%u\n",
+                                    (int)g_clojure_core_last_form, (void*)list, (void*)op, (unsigned)original_op_tag);
+            fputs(buf, stderr);
         }
     }
 #endif
@@ -2838,7 +2840,9 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Print timing information (Clojure-compatible: "msecs" format)
     // Suppress output in test context
     if (!g_suppress_time_output) {
-        printf("Elapsed time: %.2f msecs\n", elapsed_ms);
+        char msg[96];
+        (void)clj_mini_snprintf(msg, sizeof(msg), "Elapsed time: %.2f msecs\n", elapsed_ms);
+        platform_put_string(NULL, msg);
     }
 
     // Return the result of the evaluated expression (Clojure-compatible: return the value)

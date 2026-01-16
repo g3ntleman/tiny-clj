@@ -14,9 +14,9 @@ static void test_variant_b_4k_erase_16b_header(void) {
 
     ft_page_policy_t pol = {0};
     TEST_ASSERT_EQUAL_INT(FT_OK, ft_page_policy_compute_variant_b(&geom, 16, &pol));
+    TEST_ASSERT_EQUAL_UINT32(16, pol.header_size);
     TEST_ASSERT_EQUAL_UINT32(4096, pol.record_size);
     TEST_ASSERT_EQUAL_UINT32(4080, pol.page_size);
-    TEST_ASSERT_EQUAL_UINT32(16, pol.header_size);
 }
 
 static void test_variant_b_rejects_header_ge_erase(void) {
@@ -46,6 +46,7 @@ static void test_variant_b_rejects_unaligned_header_or_payload(void) {
 
     // header 12 is aligned, but payload 4084 is also aligned, so this should pass.
     TEST_ASSERT_EQUAL_INT(FT_OK, ft_page_policy_compute_variant_b(&geom, 12, &pol));
+    TEST_ASSERT_EQUAL_UINT32(12, pol.header_size);
     TEST_ASSERT_EQUAL_UINT32(4084, pol.page_size);
 }
 

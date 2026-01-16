@@ -22,6 +22,7 @@
 #include "file_utils.h"
 #include "meta.h"
 #include "build_info.h"
+#include "mini_format.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -44,6 +45,24 @@ extern LineEditor* get_line_editor(void);
 extern CljVector* line_editor_get_history_vector(LineEditor *editor);
 extern int line_editor_get_history_size(const LineEditor *editor);
 extern void line_editor_clear_history(LineEditor *editor);
+
+static void repl_outf(const char *fmt, ...) {
+    char buf[512];
+    va_list ap;
+    va_start(ap, fmt);
+    (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    platform_put_string(NULL, buf);
+}
+
+static void repl_errf(const char *fmt, ...) {
+    char buf[512];
+    va_list ap;
+    va_start(ap, fmt);
+    (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    fputs(buf, stderr);
+}
 
 /** @brief Check the balance of parentheses, brackets, and braces.
  *  @param s String to check for delimiter balance
@@ -94,8 +113,7 @@ static void print_prompt(EvalState *st, bool balanced) {
             ns_name = st->current_ns->name->cname;
         }
     }
-    printf("%s%s ", ns_name, balanced ? "=>" : "...");
-    fflush(stdout);
+    repl_outf("%s%s ", ns_name, balanced ? "=>" : "...");
 }
 
 /** @brief Print a CljObject result to stdout with proper formatting.
@@ -103,12 +121,13 @@ static void print_prompt(EvalState *st, bool balanced) {
  */
 static void print_result(CljObject *v) {
     if (!v) {
-        printf("nil\n");
+        repl_outf("nil\n");
         return;
     }
     CljString *s = pr_str(v);
     if (s) {
-        printf("%s\n", string_data(s));
+        platform_put_string(NULL, string_data(s));
+        platform_put_string(NULL, "\n");
     }
 }
 
@@ -373,16 +392,16 @@ CljVector* history_load_from_file(const char *path) {
  *  @param prog Program name for usage display
  */
 static void __attribute__((unused)) usage(const char *prog) {
-    printf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [--no-core] [--repl] [--zombie] [--memory-debug]\n", prog);
-    printf("\nOptions:\n");
-    printf("  -n, --ns NS          Set namespace\n");
-    printf("  -e, --eval EXPR      Evaluate expression (can be used multiple times)\n");
-    printf("  -f, --file FILE      Evaluate file\n");
-    printf("  --no-core            Don't load clojure.core\n");
-    printf("  --repl               Start REPL after evaluating files/expressions\n");
-    printf("  --zombie             Enable zombie mode for memory debugging\n");
-    printf("  --memory-debug       Enable verbose memory debugging\n");
-    printf("  -h, --help           Show this help message\n");
+    repl_outf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [--no-core] [--repl] [--zombie] [--memory-debug]\n", prog);
+    repl_outf("\nOptions:\n");
+    repl_outf("  -n, --ns NS          Set namespace\n");
+    repl_outf("  -e, --eval EXPR      Evaluate expression (can be used multiple times)\n");
+    repl_outf("  -f, --file FILE      Evaluate file\n");
+    repl_outf("  --no-core            Don't load clojure.core\n");
+    repl_outf("  --repl               Start REPL after evaluating files/expressions\n");
+    repl_outf("  --zombie             Enable zombie mode for memory debugging\n");
+    repl_outf("  --memory-debug       Enable verbose memory debugging\n");
+    repl_outf("  -h, --help           Show this help message\n");
 }
 
 /** @brief Clean up resources and exit with specified code.
@@ -427,7 +446,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     }
 #endif
 
-    printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.2", platform_name());
+    repl_outf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.2", platform_name());
     print_build_info();
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Line editor needs blocking input for proper character handling
@@ -449,7 +468,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     // Initialize line editor
     LineEditor *editor = line_editor_new(platform_get_char, platform_put_char, platform_put_string, NULL);
     if (!editor) {
-        fprintf(stderr, "Failed to initialize line editor\n");
+        repl_errf("Failed to initialize line editor\n");
         return false;
     }
     set_line_editor(editor);
@@ -546,7 +565,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             continue;
         } else if (balance < 0) {
             // Too many closing parens - syntax error
-            printf("Error: Too many closing parentheses\n");
+            repl_outf("Error: Too many closing parentheses\n");
             // Add to history before clearing
             if (acc[0] != '\0') {
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
@@ -630,7 +649,7 @@ int main(int argc, char **argv) {
     init_special_symbols();  // Initialize special symbols like SYM_DEF
 #ifdef PROFILE_STARTUP
     clock_t t1 = clock();
-    fprintf(stderr, "[PROFILE] init: %.2f ms\n", (double)(t1 - t0) * 1000.0 / CLOCKS_PER_SEC);
+    repl_errf("[PROFILE] init: %.2f ms\n", (double)(t1 - t0) * 1000.0 / CLOCKS_PER_SEC);
 #endif
     EvalState *st = get_global_eval_state();
     // Note: set_global_eval_state() removed - Exception handling now independent
@@ -697,7 +716,7 @@ int main(int argc, char **argv) {
         register_builtins();
 #ifdef PROFILE_STARTUP
         clock_t t3 = clock();
-        fprintf(stderr, "[PROFILE] register_builtins: %.2f ms\n", (double)(t3 - t2) * 1000.0 / CLOCKS_PER_SEC);
+        repl_errf("[PROFILE] register_builtins: %.2f ms\n", (double)(t3 - t2) * 1000.0 / CLOCKS_PER_SEC);
 #endif
 
         if (!no_core) {
@@ -713,19 +732,19 @@ int main(int argc, char **argv) {
             load_clojure_core(st);
 #ifdef DEBUG
             if (memory_debug) {
-                fprintf(stderr, "[DEBUG] autorelease_pool peak during load_clojure_core: %u\n",
+                repl_errf("[DEBUG] autorelease_pool peak during load_clojure_core: %u\n",
                         (unsigned)autorelease_pool_peak_count());
             }
 #endif
 #ifdef PROFILE_STARTUP
             clock_t t5 = clock();
-            fprintf(stderr, "[PROFILE] load_clojure_core: %.2f ms\n", (double)(t5 - t4) * 1000.0 / CLOCKS_PER_SEC);
+            repl_errf("[PROFILE] load_clojure_core: %.2f ms\n", (double)(t5 - t4) * 1000.0 / CLOCKS_PER_SEC);
 #endif
             // Load clojure.repl namespace for REPL helper functions
             load_clojure_repl(st);
 #ifdef PROFILE_STARTUP
             clock_t t6 = clock();
-            fprintf(stderr, "[PROFILE] load_clojure_repl: %.2f ms\n", (double)(t6 - t5) * 1000.0 / CLOCKS_PER_SEC);
+            repl_errf("[PROFILE] load_clojure_repl: %.2f ms\n", (double)(t6 - t5) * 1000.0 / CLOCKS_PER_SEC);
 #endif
             // Require clojure.repl with :refer :all to make functions available in user namespace
             // This ensures functions like doc, source, dir, etc. are available without namespace prefix
@@ -734,8 +753,8 @@ int main(int argc, char **argv) {
             eval_multiform_string(require_code, st);
 #ifdef PROFILE_STARTUP
             clock_t t7 = clock();
-            fprintf(stderr, "[PROFILE] require clojure.repl: %.2f ms\n", (double)(t7 - t6) * 1000.0 / CLOCKS_PER_SEC);
-            fprintf(stderr, "[PROFILE] TOTAL startup: %.2f ms\n", (double)(t7 - t0) * 1000.0 / CLOCKS_PER_SEC);
+            repl_errf("[PROFILE] require clojure.repl: %.2f ms\n", (double)(t7 - t6) * 1000.0 / CLOCKS_PER_SEC);
+            repl_errf("[PROFILE] TOTAL startup: %.2f ms\n", (double)(t7 - t0) * 1000.0 / CLOCKS_PER_SEC);
 #endif
         }
     });
@@ -751,20 +770,20 @@ int main(int argc, char **argv) {
         // Load entire file into memory for proper parsing (handles metadata across lines)
         FILE *fp = fopen(file_arg, "r");
         if (!fp) {
-            printf("Error: Cannot open file '%s': %s\n", file_arg, strerror(errno));
+            repl_outf("Error: Cannot open file '%s': %s\n", file_arg, strerror(errno));
             cleanup_and_exit(eval_args, 1);
         }
 
         // Get file size
         if (fseek(fp, 0, SEEK_END) != 0) {
             fclose(fp);
-            printf("Error: Cannot seek in file '%s': %s\n", file_arg, strerror(errno));
+            repl_outf("Error: Cannot seek in file '%s': %s\n", file_arg, strerror(errno));
             cleanup_and_exit(eval_args, 1);
         }
         long sz = ftell(fp);
         if (sz < 0) {
             fclose(fp);
-            printf("Error: Cannot get file size for '%s': %s\n", file_arg, strerror(errno));
+            repl_outf("Error: Cannot get file size for '%s': %s\n", file_arg, strerror(errno));
             cleanup_and_exit(eval_args, 1);
         }
         rewind(fp);
@@ -773,7 +792,7 @@ int main(int argc, char **argv) {
         char *buffer = (char*)malloc((size_t)sz + 1);
         if (!buffer) {
             fclose(fp);
-            printf("Error: Out of memory\n");
+            repl_outf("Error: Out of memory\n");
             cleanup_and_exit(eval_args, 1);
         }
 
@@ -817,7 +836,7 @@ int main(int argc, char **argv) {
         size_t len = 0;
         char *buffer = (char*)malloc(capacity);
         if (!buffer) {
-            fprintf(stderr, "Error: Out of memory while reading stdin\n");
+            repl_errf("Error: Out of memory while reading stdin\n");
             cleanup_and_exit(eval_args, 1);
         }
 
@@ -828,7 +847,7 @@ int main(int argc, char **argv) {
                 char *tmp = (char*)realloc(buffer, new_cap);
                 if (!tmp) {
                     free(buffer);
-                    fprintf(stderr, "Error: Out of memory while reading stdin\n");
+                    repl_errf("Error: Out of memory while reading stdin\n");
                     cleanup_and_exit(eval_args, 1);
                 }
                 buffer = tmp;

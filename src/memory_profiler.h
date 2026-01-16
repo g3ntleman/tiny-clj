@@ -51,6 +51,8 @@
 #include "object.h"
 #include <stddef.h>  // size_t
 #include <stdbool.h>
+#include <stdio.h>
+#include "mini_format.h"
 
 // Forward declaration to avoid circular include
 typedef enum {
@@ -366,7 +368,11 @@ void memory_test_end(const char *test_name);
  */
 #define MEMORY_TEST_BENCHMARK_START(test_name) do { \
     MemoryStats before = memory_profiler_get_stats(); \
-    printf("🔍 Memory Benchmark: %s\n", test_name); \
+    do { \
+        char _buf[256]; \
+        (void)clj_mini_snprintf(_buf, sizeof(_buf), "🔍 Memory Benchmark: %s\n", test_name); \
+        fputs(_buf, stdout); \
+    } while(0); \
 } while(0)
 
 /**

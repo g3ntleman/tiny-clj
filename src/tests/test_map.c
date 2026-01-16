@@ -328,7 +328,7 @@ TEST(test_map_transient_comprehensive) {
     CljObject *keys[5];
     for (int i = 0; i < 5; i++) {
         char key_name[16];
-        snprintf(key_name, sizeof(key_name), ":key%d", i);
+        test_snprintf(key_name, sizeof(key_name), ":key%d", i);
         keys[i] = (CljObject*)intern_symbol(NULL, key_name);
         persistent_map = map_assoc(persistent_map, (CljValue)keys[i], fixnum(i * 10));
     }

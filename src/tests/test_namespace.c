@@ -188,7 +188,7 @@ TEST(test_inc_symbol_interning_during_load) {
                         CljSymbol *key_sym = (CljSymbol*)key;
                         if (key_sym != inc_sym_after) {
                             char msg[256];
-                            snprintf(msg, sizeof(msg),
+                            test_snprintf(msg, sizeof(msg),
                                     "Found 'inc' in mappings but with different symbol pointer! "
                                     "Stored: %p, Lookup: %p",
                                     key, inc_sym_after);
@@ -199,7 +199,7 @@ TEST(test_inc_symbol_interning_during_load) {
             }
             
             char msg[256];
-            snprintf(msg, sizeof(msg),
+            test_snprintf(msg, sizeof(msg),
                     "'inc' not found in clojure.core mappings using symbol pointer %p "
                     "(but %d other symbols exist, first: %s)",
                     inc_sym_after, symbol_count, first_symbol ? first_symbol : "unknown");
@@ -286,7 +286,7 @@ TEST(test_inc_symbol_pointer_consistency) {
             
             if (!inc_value) {
                 char msg[512];
-                snprintf(msg, sizeof(msg),
+                test_snprintf(msg, sizeof(msg),
                         "inc not found in mappings after def. "
                         "Form symbol: %p, Interned symbol: %p, Stored symbol: %p, Qualified symbol: %p, Equal: %d",
                         (void*)inc_sym_in_form, (void*)inc_sym_after, (void*)stored_symbol, (void*)qualified_inc_sym,
@@ -682,7 +682,7 @@ TEST(test_resolve_list_operator_uses_cache) {
     // Multiple calls to verify cache is being used
     for (int i = 0; i < 3; i++) {
         char expr[32];
-        snprintf(expr, sizeof(expr), "(inc %d)", i);
+        test_snprintf(expr, sizeof(expr), "(inc %d)", i);
         CljObject *result = eval_string(expr, g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
@@ -1195,7 +1195,7 @@ TEST(test_ns_registry_map_conj_handles_new_instance) {
     // Create enough to exceed initial capacity (16) and test map growth
     for (int i = 0; i < 18; i++) {
         char ns_name[32];
-        snprintf(ns_name, sizeof(ns_name), "growth-test-%d", i);
+        test_snprintf(ns_name, sizeof(ns_name), "growth-test-%d", i);
         CljNamespace *ns = ns_get_or_create(ns_name, NULL);
         TEST_ASSERT_NOT_NULL(ns);
 
@@ -1296,7 +1296,7 @@ TEST(test_ns_map_current_namespace) {
 
     // Test ns-map with namespace name
     char expr[256];
-    snprintf(expr, sizeof(expr), "(ns-map '%s)", current_ns_name);
+    test_snprintf(expr, sizeof(expr), "(ns-map '%s)", current_ns_name);
     CljObject *result = eval_string(expr, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
@@ -1544,18 +1544,18 @@ TEST(test_ns_find_by_symbol_null) {
         // Write all symbols to a file for inspection
         FILE *f = fopen("/tmp/clojure_core_symbols.txt", "w");
         if (f) {
-            fprintf(f, "=== Symbols in clojure.core mappings (total: %d) ===\n", symbol_count);
-            fprintf(f, "Namespace name: %s\n", clojure_core->name && clojure_core->name->cname ? clojure_core->name->cname : "NULL");
+            test_fprintf(f, "=== Symbols in clojure.core mappings (total: %d) ===\n", symbol_count);
+            test_fprintf(f, "Namespace name: %s\n", clojure_core->name && clojure_core->name->cname ? clojure_core->name->cname : "NULL");
             for (int i = 0; i < symbol_count; i++) {
-                fprintf(f, "%d: %s\n", i+1, symbol_names[i]);
+                test_fprintf(f, "%d: %s\n", i+1, symbol_names[i]);
             }
-            fprintf(f, "=== End of symbols list ===\n");
+            test_fprintf(f, "=== End of symbols list ===\n");
             fclose(f);
         }
         
         // Also print summary via TEST_ASSERT
         char msg[512];
-        snprintf(msg, sizeof(msg), "clojure.core has %d symbols (see /tmp/clojure_core_symbols.txt for full list)", symbol_count);
+        test_snprintf(msg, sizeof(msg), "clojure.core has %d symbols (see /tmp/clojure_core_symbols.txt for full list)", symbol_count);
         TEST_ASSERT_TRUE_MESSAGE(symbol_count > 0, msg);
     } else {
         TEST_ASSERT_TRUE_MESSAGE(false, "clojure.core namespace not found or has no mappings");
@@ -1586,7 +1586,7 @@ TEST(test_core_namespace_find_inc) {
     if (core_ns->mappings && inc_sym) {
         // Debug: Check inc_sym properties
         char debug_msg[512];
-        snprintf(debug_msg, sizeof(debug_msg), 
+        test_snprintf(debug_msg, sizeof(debug_msg),
                  "inc_sym: cname=%s, ns_name=%s", 
                  inc_sym->cname ? inc_sym->cname : "NULL",
                  inc_sym->ns_name && inc_sym->ns_name->cname ? inc_sym->ns_name->cname : "NULL");
@@ -1606,7 +1606,7 @@ TEST(test_core_namespace_find_inc) {
                     if (sym && sym->cname && strcmp(sym->cname, "inc") == 0) {
                         found_by_iteration = true;
                         found_key = sym;
-                        snprintf(debug_msg, sizeof(debug_msg),
+                        test_snprintf(debug_msg, sizeof(debug_msg),
                                 "Found inc by iteration: cname=%s, ns_name=%s, key_ptr=%p, inc_sym_ptr=%p",
                                 sym->cname ? sym->cname : "NULL",
                                 sym->ns_name && sym->ns_name->cname ? sym->ns_name->cname : "NULL",
@@ -1619,7 +1619,7 @@ TEST(test_core_namespace_find_inc) {
             if (!found_by_iteration) {
                 TEST_ASSERT_TRUE_MESSAGE(false, "inc not found even by iteration through mappings");
             } else {
-                snprintf(debug_msg, sizeof(debug_msg),
+                test_snprintf(debug_msg, sizeof(debug_msg),
                         "map_get failed but iteration found it - key pointer mismatch? found_key=%p, inc_sym=%p",
                         (void*)found_key, (void*)inc_sym);
                 TEST_ASSERT_TRUE_MESSAGE(false, debug_msg);

@@ -125,7 +125,8 @@ R"CLOJURE(
 (defn map [f & colls] :native)
 
 ^#^{:doc "Returns a vector of the results of calling (map f colls...)."}
-(defn mapv [f & colls] :native)
+(defmacro mapv [f & colls]
+  (list 'vec (cons 'map (cons f colls))))
 
 ^#^{:doc "Returns a lazy sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects. Returns a transducer when no collection is provided."}
 (def filter (fn [pred coll]

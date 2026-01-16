@@ -582,6 +582,18 @@ static ft_status_t ft_blob_collect_all_pgnos(ft_kv_t* kv, const void* user_key, 
 
 /* ============== Public API ============== */
 
+ft_status_t ft_blob_chunk_size(ft_kv_t* kv, size_t* out_chunk_size) {
+    if (out_chunk_size)
+        *out_chunk_size = 0;
+    if (!kv || !out_chunk_size)
+        return FT_ERR_INVALID_ARG;
+    MPOOL* mp = ft_kv_get_mpool(kv);
+    if (!mp)
+        return FT_ERR_IO;
+    *out_chunk_size = (size_t)mp->pagesize;
+    return (*out_chunk_size > 0) ? FT_OK : FT_ERR_IO;
+}
+
 ft_status_t ft_blob_writer_init(ft_kv_t* kv, const void* key, size_t key_len,
                                 ft_blob_writer_t** out_writer) {
     if (!out_writer)

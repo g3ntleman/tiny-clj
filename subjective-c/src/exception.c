@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <setjmp.h>
+#include "mini_format.h"
 #include "exception.h"
 #include "error_messages.h"
 #include "object.h"
@@ -15,6 +16,15 @@
 #include "strings.h"  // For to_cstring
 #include "value.h"  // For make_string
 #include "strings.h"  // For CljString
+
+static void errf(const char *fmt, ...) {
+    char buf[512];
+    va_list ap;
+    va_start(ap, fmt);
+    (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    fputs(buf, stderr);
+}
 
 // Stacktrace support
 #ifdef __APPLE__
@@ -160,30 +170,21 @@ void* throw_exception_formatted(const char *type, const char *file, int line, in
     const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
 
 #if defined(STRING_FORMATTING_ENABLED) && !STRING_FORMATTING_ENABLED
-    // Embedded size build: avoid pulling in printf/vsnprintf formatting code.
-    // Keep the callsites/API but sacrifice formatted messages.
+    // Size-focused builds: keep callsites/API but sacrifice formatted messages.
     const char *msg = (format != NULL) ? format : "Err";
     CLJException *exception = make_exception(exception_type, msg, file, line, code);
 #else
-    char message[512];  // Increased buffer size for longer messages
+    // Use mini_format everywhere (host + embedded) to keep formatter complexity low.
+    char message[512];
     va_list args;
-
     va_start(args, format);
-    int result = vsnprintf(message, sizeof(message), format, args);
+    (void)clj_mini_vsnprintf(message, sizeof(message), format, args);
     va_end(args);
-
-    // Additional safety: ensure null termination if message was truncated
-    if (result >= (int)sizeof(message)) {
-        // Message was truncated - ensure null termination
-        message[sizeof(message)-1] = '\0';
-    }
-
-    // Create exception and use the unified function (file path will be shortened in print_exception)
     CLJException *exception = make_exception(exception_type, message, file, line, code);
 #endif
     if (!exception) {
 #ifdef DEBUG
-        fprintf(stderr, "FAILED TO ALLOCATE FORMATTED EXCEPTION\n");
+        fputs("FAILED TO ALLOCATE FORMATTED EXCEPTION\n", stderr);
 #endif
         exit(1);
     }
@@ -198,7 +199,7 @@ void throw_exception(const char *type, const char *message, const char *file, in
     CLJException *exception = make_exception(type, message, file, line, col);
     if (!exception) {
 #ifdef DEBUG
-        fprintf(stderr, "FAILED TO ALLOCATE EXCEPTION\n");
+        fputs("FAILED TO ALLOCATE EXCEPTION\n", stderr);
 #endif
         exit(1);
     }
@@ -333,7 +334,7 @@ void exception_print_native_backtrace(void) {
 
     for (int i = 0; i < size; i++) {
         if (strings[i]) {
-            fprintf(stderr, "  %d: %s\n", i, strings[i]);
+            errf("  %d: %s\n", i, strings[i]);
         }
     }
 
@@ -351,19 +352,19 @@ void exception_print_native_backtrace(void) {
 /** @brief Print exception details including stacktrace and object (if available) */
 void print_exception(CLJException *ex) {
     if (!ex) return;
-    
-    // Print basic exception information (compact)
-    fprintf(stderr, "%s: %s at %s:%d:%d", 
-            ex->type, ex->message, shorten_file_path(ex->file), ex->line, ex->col);
+
+    // Print basic exception information (compact) using mini_format everywhere.
+    errf("%s: %s at %s:%d:%d",
+         ex->type, ex->message, shorten_file_path(ex->file), ex->line, ex->col);
     
 #ifdef DEBUG
     // Print object if available (but skip for zombie objects to avoid secondary errors)
     if (ex->object != 0) {
         // Address-only: never dereference here (may be a zombie/invalid pointer)
-        fprintf(stderr, " object: @%p", (void*)(uintptr_t)ex->object);
+        errf(" object: @%p", (void*)(uintptr_t)ex->object);
     }
     
-    fprintf(stderr, "\n");
+    fputc('\n', stderr);
     
     // Print stacktrace if available (compact)
     // Default: enabled (Clojure/JVM-like). Can be disabled via env var.
@@ -378,18 +379,18 @@ void print_exception(CLJException *ex) {
 #endif
 
     if (print_stacktrace && ex->stacktrace) {
-        fprintf(stderr, "Stack trace:\n");
+        fputs("Stack trace:\n", stderr);
         // Use string_data macro to get C-string from CljString
         const char *stacktrace_str = string_data((CljString*)ex->stacktrace);
         if (stacktrace_str) {
-            fprintf(stderr, "%s", stacktrace_str);
+            fputs(stacktrace_str, stderr);
         }
     }
     
-    fprintf(stderr, "\n");  // Empty line after exception for readability
+    fputs("\n", stderr);  // Empty line after exception for readability
 #else
     // Release builds: no stacktrace or object fields
-    fprintf(stderr, "\n");
+    fputs("\n", stderr);
 #endif
 }
 
@@ -397,14 +398,14 @@ void print_exception(CLJException *ex) {
 void throw_exception_object(CLJException *ex) {
     if (!ex) {
 #ifdef DEBUG
-        fprintf(stderr, "FAILED TO RE-THROW NULL EXCEPTION\n");
+        fputs("FAILED TO RE-THROW NULL EXCEPTION\n", stderr);
 #endif
         exit(1);
     }
     
     if (!global_exception_stack.top) {
         // No handler - unhandled exception
-        fprintf(stderr, "UNHANDLED: ");
+        fputs("UNHANDLED: ", stderr);
         print_exception(ex);
         
         // No handler - unhandled exception (exit as before)

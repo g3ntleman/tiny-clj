@@ -103,8 +103,8 @@ void setUp(void) {
     } CATCH(ex) {
         // ParseError during clojure.core loading - log but continue
         if (ex) {
-            fprintf(stderr, "Warning: Exception during clojure.core loading: %s - %s\n", 
-                    ex->type, ex->message);
+            test_fprintf(stderr, "Warning: Exception during clojure.core loading: %s - %s\n",
+                         ex->type, ex->message);
         }
         // Continue anyway - some tests may not need clojure.core
     } END_TRY
@@ -180,20 +180,20 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
     if (g_quiet_output) {
         captured_stdout = tmpfile();
         if (!captured_stdout) {
-            fprintf(stderr, "Warning: Could not create temporary file for stdout capture, running test normally\n");
+            test_fprintf(stderr, "Warning: Could not create temporary file for stdout capture, running test normally\n");
         } else {
             saved_stdout = dup(STDOUT_FILENO);
             if (saved_stdout < 0) {
                 fclose(captured_stdout);
                 captured_stdout = NULL;
-                fprintf(stderr, "Warning: Could not save stdout, running test normally\n");
+                test_fprintf(stderr, "Warning: Could not save stdout, running test normally\n");
             } else {
                 if (dup2(fileno(captured_stdout), STDOUT_FILENO) < 0) {
                     close(saved_stdout);
                     saved_stdout = -1;
                     fclose(captured_stdout);
                     captured_stdout = NULL;
-                    fprintf(stderr, "Warning: Could not redirect stdout, running test normally\n");
+                    test_fprintf(stderr, "Warning: Could not redirect stdout, running test normally\n");
                 } else {
                     capturing_stdout = true;
                 }
@@ -219,8 +219,8 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
         // Unhandled exception caught - mark test as failed
         test_failed = true;
         if (ex) {
-            fprintf(stderr, "Unhandled exception in %s: %s - %s\n", 
-                    entry->qualified_name, ex->type, ex->message);
+            test_fprintf(stderr, "Unhandled exception in %s: %s - %s\n",
+                         entry->qualified_name, ex->type, ex->message);
             if (ex->stacktrace) {
                 print_exception(ex);
             }
@@ -290,9 +290,9 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
                 const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
 
                 if (line > 0) {
-                    fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
+                    test_fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
                 } else {
-                    fprintf(stdout, "%s:%s:FAIL\n", file, name);
+                    test_fprintf(stdout, "%s:%s:FAIL\n", file, name);
                 }
             }
 
@@ -303,9 +303,9 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
                 int line = (entry && entry->line > 0) ? entry->line : 0;
                 const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
                 if (line > 0) {
-                    fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
+                    test_fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
                 } else {
-                    fprintf(stdout, "%s:%s:FAIL\n", file, name);
+                    test_fprintf(stdout, "%s:%s:FAIL\n", file, name);
                 }
             }
         }
@@ -366,8 +366,8 @@ void run_shared_tests_batched(void) {
         } CATCH(ex) {
             // Exception in setUp/tearDown - mark batch as failed
             if (ex) {
-                fprintf(stderr, "Exception in setUp/tearDown for shared batch %s: %s - %s\n", 
-                        shared_groups[g], ex->type, ex->message);
+                test_fprintf(stderr, "Exception in setUp/tearDown for shared batch %s: %s - %s\n",
+                             shared_groups[g], ex->type, ex->message);
             }
             Unity.TestFailures++;
             g_batch_mode = false;
@@ -451,7 +451,7 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
             // Test not found - fail without noisy output.
             // In quiet mode, still emit a single FAIL line so CI can surface the reason.
             if (g_quiet_output) {
-                fprintf(stdout, "unknown:0:%s:FAIL: Test not found\n", test_name_or_pattern);
+                test_fprintf(stdout, "unknown:0:%s:FAIL: Test not found\n", test_name_or_pattern);
             }
             Unity.NumberOfTests++;
             Unity.TestFailures++;

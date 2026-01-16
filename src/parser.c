@@ -31,7 +31,7 @@
 #include "instant.h"
 #include "uuid.h"
 #include <ctype.h>
-#include "format_utils.h"
+#include "mini_format.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -87,7 +87,7 @@ static void throw_parser_exceptionf(Reader *reader, const char *format, ...) {
     char buffer[MSG_LEN];
     va_list args;
     va_start(args, format);
-    vsnprintf(buffer, sizeof(buffer), format, args);
+    (void)clj_mini_vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     throw_parser_exception(buffer, reader);
 #endif
@@ -1268,9 +1268,76 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
     return NULL;
   }
 
-  if (strchr(buf, '.'))
-    return fixed((float)atof(buf));
-  return fixnum(atoi(buf));
+  // Parse number without pulling in libc strtod/atof (huge code-size on embedded).
+  if (strchr(buf, '.')) {
+    const char *p = buf;
+    bool neg = false;
+    if (*p == '-') { neg = true; p++; }
+
+    // integer part (at least one digit guaranteed by earlier checks)
+    int64_t int_part = 0;
+    while (*p >= '0' && *p <= '9') {
+      int_part = int_part * 10 + (*p - '0');
+      p++;
+    }
+
+    // fractional part
+    int64_t frac_part = 0;
+    int frac_digits = 0;
+    if (*p == '.') {
+      p++;
+      while (*p >= '0' && *p <= '9') {
+        // keep up to 9 digits (more are ignored, consistent with truncating fixed())
+        if (frac_digits < 9) {
+          frac_part = frac_part * 10 + (*p - '0');
+          frac_digits++;
+        }
+        p++;
+      }
+    }
+
+    if (*p != '\0') {
+      throw_parser_exception("Invalid number literal", reader);
+      return NULL;
+    }
+
+    // Convert to fixed-point (scale=8192) using integer arithmetic.
+    int64_t fixed_val = int_part * 8192;
+    if (frac_digits > 0) {
+      int64_t scale = 1;
+      for (int i = 0; i < frac_digits; i++) scale *= 10;
+      fixed_val += (frac_part * 8192) / scale;
+    }
+    if (neg) fixed_val = -fixed_val;
+
+    // Match fixed() bounds: [-32768.0, 32767.9998]
+    const int64_t FIXED_MIN = -(int64_t)32768 * 8192;
+    const int64_t FIXED_MAX = (int64_t)32767 * 8192 + 8191;
+    if (fixed_val < FIXED_MIN || fixed_val > FIXED_MAX) {
+      throw_parser_exception("Fixed-point value exceeds representable range", reader);
+      return NULL;
+    }
+
+    int32_t f32 = (int32_t)fixed_val;
+    return (CljObject*)(CljValue)(((uintptr_t)f32 << TAG_BITS) | TAG_FIXED);
+  }
+
+  // Integer (avoid atoi to keep behavior predictable)
+  const char *p = buf;
+  bool neg = false;
+  if (*p == '-') { neg = true; p++; }
+  int64_t v = 0;
+  while (*p >= '0' && *p <= '9') {
+    v = v * 10 + (*p - '0');
+    p++;
+  }
+  if (*p != '\0') {
+    throw_parser_exception("Invalid number literal", reader);
+    return NULL;
+  }
+  if (neg) v = -v;
+  // fixnum() range is enforced elsewhere; keep current behavior by truncating to int32_t
+  return fixnum((int32_t)v);
 }
 
 /**

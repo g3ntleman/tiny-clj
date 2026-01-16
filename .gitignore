@@ -44,6 +44,10 @@ tmp/
 
 # Profiling outputs (do not commit)
 profile_outputs/
+
+# Local build directories (do not commit)
+_build_*/
+external/flash-tree/_build/
 # Test binaries
 test-*
 run-tests

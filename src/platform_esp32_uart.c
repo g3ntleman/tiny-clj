@@ -107,6 +107,15 @@ const char *platform_name(void) {
 }
 
 // -----------------------------------------------------------------------------
+// Sleep hook (override in ESP32/ESP-IDF integration)
+// -----------------------------------------------------------------------------
+__attribute__((weak)) void tinyclj_esp32_sleep_ms(unsigned int ms) { (void)ms; }
+
+void platform_sleep_ms(unsigned int ms) {
+    tinyclj_esp32_sleep_ms(ms);
+}
+
+// -----------------------------------------------------------------------------
 // Optional runtime stats
 // -----------------------------------------------------------------------------
 size_t platform_heap_bytes_free(void) { return tinyclj_esp32_heap_bytes_free(); }

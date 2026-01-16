@@ -6,6 +6,7 @@
 #include "value.h"
 #include "memory.h"
 #include "types.h"
+#include "mini_format.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -14,7 +15,7 @@
 // Print AST as Clojure code for debugging
 static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int *offset) {
     if (!v) {
-        *offset += snprintf(buf + *offset, buf_size - *offset, "nil");
+        *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "nil");
         return;
     }
 
@@ -22,13 +23,13 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
     if (IS_IMMEDIATE(v)) {
         switch (TAG(v)) {
             case CLJ_INT:
-                *offset += snprintf(buf + *offset, buf_size - *offset, "%d", as_fixnum((CljValue)v));
+                *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "%d", as_fixnum((CljValue)v));
                 break;
             case CLJ_FLOAT:
-                *offset += snprintf(buf + *offset, buf_size - *offset, "%.2f", as_fixed((CljValue)v));
+                *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "%.2f", as_fixed((CljValue)v));
                 break;
             default:
-                *offset += snprintf(buf + *offset, buf_size - *offset, "#<immediate>");
+                *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "#<immediate>");
                 break;
         }
         return;
@@ -40,18 +41,18 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
             CljSymbol *sym = as_symbol(v);
             // Check if this is SYM_NIL (nil symbol) - distinguish from evaluated nil (NULL)
             if (v == SYM_NIL) {
-                *offset += snprintf(buf + *offset, buf_size - *offset, "SYM:nil");
+                *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "SYM:nil");
             } else if (sym && sym->cname) {
                 // Output symbol name with SYM: prefix to distinguish from evaluated values
                 // If symbol has namespace, output as "SYM:namespace/name"
                 if (sym->ns_name && sym->ns_name->cname) {
-                    *offset += snprintf(buf + *offset, buf_size - *offset, "SYM:%s/%s", 
+                    *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "SYM:%s/%s",
                                        sym->ns_name->cname, sym->cname);
                 } else {
-                    *offset += snprintf(buf + *offset, buf_size - *offset, "SYM:%s", sym->cname);
+                    *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "SYM:%s", sym->cname);
                 }
             } else {
-                *offset += snprintf(buf + *offset, buf_size - *offset, "SYM:?");
+                *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "SYM:?");
             }
             break;
         }
@@ -59,18 +60,18 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
         case CLJ_LIST: {
             CljList *list = as_list(v);
             // Output list with type indicator: [List: (element1 element2 ...)]
-            *offset += snprintf(buf + *offset, buf_size - *offset, "[List: (");
+            *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "[List: (");
             if (list) {
                 CljObject *current = list->first;
                 int count = 0;
                 bool first = true;
                 while (current && count < 20) {  // Limit to 20 elements for readability
                     if (!first) {
-                        *offset += snprintf(buf + *offset, buf_size - *offset, " ");
+                        *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, " ");
                     }
                     first = false;
                     if (depth > 5) {
-                        *offset += snprintf(buf + *offset, buf_size - *offset, "...");
+                        *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "...");
                         break;
                     }
                     print_ast_recursive(current, depth + 1, buf, buf_size, offset);
@@ -79,10 +80,10 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
                     count++;
                 }
                 if (current) {
-                    *offset += snprintf(buf + *offset, buf_size - *offset, " ...");
+                    *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, " ...");
                 }
             }
-            *offset += snprintf(buf + *offset, buf_size - *offset, ")]");
+            *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, ")]");
             break;
         }
 
@@ -90,36 +91,36 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
             CljString *str = as_clj_string(v);
             if (str && str->length > 0) {
                 size_t len = str->length < 20 ? str->length : 20;
-                *offset += snprintf(buf + *offset, buf_size - *offset, "\"%.*s%s\"",
+                *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "\"%.*s%s\"",
                                    (int)len, str->data, str->length > 20 ? "..." : "");
             } else {
-                *offset += snprintf(buf + *offset, buf_size - *offset, "\"\"");
+                *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "\"\"");
             }
             break;
         }
 
         case CLJ_FUNC:
-            *offset += snprintf(buf + *offset, buf_size - *offset, "#<func>");
+            *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "#<func>");
             break;
 
         case CLJ_CLOSURE:
-            *offset += snprintf(buf + *offset, buf_size - *offset, "#<closure>");
+            *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "#<closure>");
             break;
 
         case CLJ_MAP:
-            *offset += snprintf(buf + *offset, buf_size - *offset, "#<map>");
+            *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "#<map>");
             break;
 
         case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT:
-            *offset += snprintf(buf + *offset, buf_size - *offset, "#<vector>");
+            *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "#<vector>");
             break;
 
         case CLJ_AST_NODE: {
             CljASTNode *node = (CljASTNode*)v;
             // Output ASTNode with type indicator: [ASTNode: (element1 element2 ...)]
-            *offset += snprintf(buf + *offset, buf_size - *offset, "[ASTNode: (");
+            *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "[ASTNode: (");
             if (node) {
                 CljObject *current = node->first;
                 int count = 0;
@@ -127,11 +128,11 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
                 CljList *rest = node->rest ? as_list(node->rest) : NULL;
                 while (current && count < 20) {  // Limit to 20 elements for readability
                     if (!first) {
-                        *offset += snprintf(buf + *offset, buf_size - *offset, " ");
+                        *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, " ");
                     }
                     first = false;
                     if (depth > 5) {
-                        *offset += snprintf(buf + *offset, buf_size - *offset, "...");
+                        *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "...");
                         break;
                     }
                     print_ast_recursive(current, depth + 1, buf, buf_size, offset);
@@ -140,15 +141,15 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
                     count++;
                 }
                 if (current) {
-                    *offset += snprintf(buf + *offset, buf_size - *offset, " ...");
+                    *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, " ...");
                 }
             }
-            *offset += snprintf(buf + *offset, buf_size - *offset, ")]");
+            *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, ")]");
             break;
         }
 
         default:
-            *offset += snprintf(buf + *offset, buf_size - *offset, "#<type:%d>", obj->type);
+            *offset += clj_mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "#<type:%d>", obj->type);
             break;
     }
 }

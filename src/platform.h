@@ -8,6 +8,10 @@ void platform_init();
 void platform_print(const char *message);
 const char *platform_name();
 
+// Sleep/delay helper used by clojure.core/sleep builtin.
+// Contract: best-effort blocking delay for at least ms milliseconds.
+void platform_sleep_ms(unsigned int ms);
+
 // Non-blocking input support for cooperative multitasking
 // Enable/disable non-blocking mode for stdin (returns 0 on success)
 int platform_set_stdin_nonblocking(int enable);

@@ -14,7 +14,6 @@ CljASTNode* make_ast_node(ID first, ID rest) {
     node->first = RETAIN(first);
     node->rest = RETAIN(rest);
     node->callsite_cache = NULL;
-    node->compiled = NULL;
 
     return node;
 }

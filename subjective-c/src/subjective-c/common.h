@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include "mini_format.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,23 +20,27 @@ void exception_print_native_backtrace(void);
 
 // Custom assert with stack trace
 #ifdef DEBUG
-    #ifdef ESP32_BUILD
-    #define CLJ_ASSERT(expr) do { \
-        if (!(expr)) { \
-            fprintf(stderr, "\nASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
-            abort(); \
-        } \
-    } while(0)
+    #if defined(ESP32_BUILD)
+        #define CLJ_ASSERT(expr) do { \
+            if (!(expr)) { \
+                char _buf[256]; \
+                (void)clj_mini_snprintf(_buf, sizeof(_buf), "\nASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
+                fputs(_buf, stderr); \
+                abort(); \
+            } \
+        } while(0)
     #else
-    #define CLJ_ASSERT(expr) do { \
-        if (!(expr)) { \
-            fprintf(stderr, "\nASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
-            fprintf(stderr, "Stack Trace:\n"); \
-            exception_print_native_backtrace(); \
-            fprintf(stderr, "\n"); \
-            abort(); \
-        } \
-    } while(0)
+        #define CLJ_ASSERT(expr) do { \
+            if (!(expr)) { \
+                char _buf[256]; \
+                (void)clj_mini_snprintf(_buf, sizeof(_buf), "\nASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
+                fputs(_buf, stderr); \
+                fputs("Stack Trace:\n", stderr); \
+                exception_print_native_backtrace(); \
+                fputs("\n", stderr); \
+                abort(); \
+            } \
+        } while(0)
     #endif
 #else
     #define CLJ_ASSERT(expr) ((void)0)

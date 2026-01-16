@@ -3,11 +3,11 @@
 #include "value.h"  // For make_string, fixnum, CljString
 #include "builtins.h"  // For nth2
 #include "strings.h"  // For to_cstring and string functions
+#include "mini_format.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include <limits.h>  // For UINT_MAX
 
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
@@ -41,26 +41,16 @@ struct LineEditor {
     char temp_buffer[512];     // Backup of current line when browsing history
 };
 
-static inline int le_get_char(LineEditor *editor) {
-    return editor->get_char(editor->ctx);
-}
-static inline void le_put_char(LineEditor *editor, char c) {
-    editor->put_char(editor->ctx, c);
-}
-static inline void le_put_string(LineEditor *editor, const char *s) {
-    editor->put_string(editor->ctx, s);
-}
-
 // Generic cursor movement functions
 static void move_cursor_right(LineEditor *editor, int steps) {
     for (int i = 0; i < steps; i++) {
-        le_put_string(editor, ESC_RIGHT);
+        editor->put_string(editor->ctx, ESC_RIGHT);
     }
 }
 
 static void move_cursor_left(LineEditor *editor, int steps) {
     for (int i = 0; i < steps; i++) {
-        le_put_string(editor, ESC_LEFT);
+        editor->put_string(editor->ctx, ESC_LEFT);
     }
 }
 
@@ -100,7 +90,7 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
                 int history_size = line_editor_get_history_size(editor);
                 if (history_size == 0) {
                     // No history available - ring bell
-                    le_put_char(editor, '\a');
+                    editor->put_char(editor->ctx, '\a');
                     return 3;
                 }
                 if (editor->history_index == UINT_MAX) {
@@ -112,7 +102,7 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
                     editor->history_index--;
                 } else {
                     // Already at beginning of history - ring bell
-                    le_put_char(editor, '\a');  // Bell character
+                    editor->put_char(editor->ctx, '\a');  // Bell character
                     return 3;
                 }
                 
@@ -121,15 +111,15 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
                     if (history_line) {
                         // Move cursor to beginning of current input and clear to end of line
                         for (int i = 0; i < editor->cursor_pos; i++) {
-                            le_put_string(editor, ESC_LEFT);
+                            editor->put_string(editor->ctx, ESC_LEFT);
                         }
-                        le_put_string(editor, ESC_CLEAR);
+                        editor->put_string(editor->ctx, ESC_CLEAR);
                         const char *str_data = clj_string_data(history_line);
                         strncpy(editor->buffer, str_data, sizeof(editor->buffer) - 1);
                         editor->buffer[sizeof(editor->buffer) - 1] = '\0';
                         editor->length = strlen(editor->buffer);
                         editor->cursor_pos = editor->length;
-                        le_put_string(editor, editor->buffer);
+                        editor->put_string(editor->ctx, editor->buffer);
                         // Release the retained CljString
                         RELEASE(history_line);
                     } else {
@@ -147,61 +137,61 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
                     editor->history_index = UINT_MAX;
                     // Move cursor to beginning of current input and clear to end of line
                     for (int i = 0; i < editor->cursor_pos; i++) {
-                        le_put_string(editor, ESC_LEFT);
+                        editor->put_string(editor->ctx, ESC_LEFT);
                     }
-                    le_put_string(editor, ESC_CLEAR);
+                    editor->put_string(editor->ctx, ESC_CLEAR);
                     strncpy(editor->buffer, editor->temp_buffer, sizeof(editor->buffer) - 1);
                     editor->buffer[sizeof(editor->buffer) - 1] = '\0';
                     editor->length = strlen(editor->buffer);
                     editor->cursor_pos = editor->length;
-                    le_put_string(editor, editor->buffer);
+                    editor->put_string(editor->ctx, editor->buffer);
                 } else {
                     // Load next history item
                     CljString *history_line = line_editor_get_history_line(editor, editor->history_index);
                     if (history_line) {
                         // Move cursor to beginning of current input and clear to end of line
                         for (int i = 0; i < editor->cursor_pos; i++) {
-                            le_put_string(editor, ESC_LEFT);
+                            editor->put_string(editor->ctx, ESC_LEFT);
                         }
-                        le_put_string(editor, ESC_CLEAR);
+                        editor->put_string(editor->ctx, ESC_CLEAR);
                         const char *str_data = clj_string_data(history_line);
                         strncpy(editor->buffer, str_data, sizeof(editor->buffer) - 1);
                         editor->buffer[sizeof(editor->buffer) - 1] = '\0';
                         editor->length = strlen(editor->buffer);
                         editor->cursor_pos = editor->length;
-                        le_put_string(editor, editor->buffer);
+                        editor->put_string(editor->ctx, editor->buffer);
                         // Release the retained CljString
                         RELEASE(history_line);
                     }
                 }
             } else {
                 // Not in history mode - ring bell
-                le_put_char(editor, '\a');  // Bell character
+                editor->put_char(editor->ctx, '\a');  // Bell character
             }
             return 3;
         case 'C': // Right arrow
             if (editor->cursor_pos < editor->length) {
                 editor->cursor_pos++;
-                le_put_string(editor, ESC_RIGHT);
+                editor->put_string(editor->ctx, ESC_RIGHT);
             }
             return 3;
         case 'D': // Left arrow
             if (editor->cursor_pos > 0) {
                 editor->cursor_pos--;
-                le_put_string(editor, ESC_LEFT);
+                editor->put_string(editor->ctx, ESC_LEFT);
             }
             return 3;
         case 'H': // Home
             editor->cursor_pos = 0;
-            le_put_string(editor, ESC_HOME);
+            editor->put_string(editor->ctx, ESC_HOME);
             return 3;
         case 'F': // End
             editor->cursor_pos = editor->length;
-            le_put_string(editor, ESC_HOME);
+            editor->put_string(editor->ctx, ESC_HOME);
             move_cursor_right(editor, editor->length);
             return 3;
         case 'K': // Clear line from cursor
-            le_put_string(editor, ESC_CLEAR);
+            editor->put_string(editor->ctx, ESC_CLEAR);
             return 3;
         case '3': // Delete key
             if (len >= 4 && input[3] == '~') {
@@ -210,9 +200,9 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
                     shift_buffer_left(editor, editor->cursor_pos, 1);
                     editor->length--;
                     // Redraw from cursor position
-                    le_put_string(editor, ESC_CLEAR);
+                    editor->put_string(editor->ctx, ESC_CLEAR);
                     for (int i = editor->cursor_pos; i < editor->length; i++) {
-                        le_put_char(editor, editor->buffer[i]);
+                        editor->put_char(editor->ctx, editor->buffer[i]);
                     }
                     // Move cursor back to position
                     move_cursor_left(editor, editor->length - editor->cursor_pos);
@@ -240,16 +230,16 @@ static void insert_character(LineEditor *editor, char c) {
     editor->length++;
     
     // Display the character
-    le_put_char(editor, c);
+    editor->put_char(editor->ctx, c);
     
     // Redraw remaining characters
     for (int i = editor->cursor_pos; i < editor->length; i++) {
-        le_put_char(editor, editor->buffer[i]);
+        editor->put_char(editor->ctx, editor->buffer[i]);
     }
     
     // Move cursor back to correct position
     for (int i = editor->cursor_pos; i < editor->length; i++) {
-        le_put_string(editor, ESC_LEFT);
+        editor->put_string(editor->ctx, ESC_LEFT);
     }
 }
 
@@ -257,18 +247,18 @@ static void backspace_character(LineEditor *editor) {
     if (editor->cursor_pos > 0) {
         // Move cursor left
         editor->cursor_pos--;
-        le_put_string(editor, ESC_LEFT);
+        editor->put_string(editor->ctx, ESC_LEFT);
         
         // Delete character
         shift_buffer_left(editor, editor->cursor_pos, 1);
         editor->length--;
         
         // Clear from cursor to end of line
-        le_put_string(editor, ESC_CLEAR);
+        editor->put_string(editor->ctx, ESC_CLEAR);
         
         // Redraw remaining characters
         for (int i = editor->cursor_pos; i < editor->length; i++) {
-            le_put_char(editor, editor->buffer[i]);
+            editor->put_char(editor->ctx, editor->buffer[i]);
         }
         
         // Move cursor back to position
@@ -319,7 +309,7 @@ int line_editor_process_input(LineEditor *editor) {
     if (editor->in_escape_sequence) {
         // Read remaining characters of escape sequence
         while (editor->escape_pos < 8) {
-            int c = le_get_char(editor);
+            int c = editor->get_char(editor->ctx);
             if (c == -1) {
                 // EOF during escape sequence, reset
                 editor->in_escape_sequence = false;
@@ -352,9 +342,9 @@ int line_editor_process_input(LineEditor *editor) {
                     shift_buffer_left(editor, editor->cursor_pos, 1);
                     editor->length--;
                     // Redraw from cursor position
-                    le_put_string(editor, ESC_CLEAR);
+                    editor->put_string(editor->ctx, ESC_CLEAR);
                     for (int i = editor->cursor_pos; i < editor->length; i++) {
-                        le_put_char(editor, editor->buffer[i]);
+                        editor->put_char(editor->ctx, editor->buffer[i]);
                     }
                     // Move cursor back to position
                     move_cursor_left(editor, editor->length - editor->cursor_pos);
@@ -370,7 +360,7 @@ int line_editor_process_input(LineEditor *editor) {
     }
     
     // Read first character
-    int c = le_get_char(editor);
+    int c = editor->get_char(editor->ctx);
     if (c == -1) {
         return LINE_EDITOR_EOF;
     }
@@ -399,7 +389,7 @@ int line_editor_process_input(LineEditor *editor) {
         if (editor->length > 0) {
             editor->buffer[editor->length] = '\0';
             editor->line_ready = true;
-            le_put_char(editor, '\n');
+            editor->put_char(editor->ctx, '\n');
             // Reset history index when submitting a line
             editor->history_index = UINT_MAX;
             return LINE_EDITOR_LINE_READY;
@@ -579,10 +569,10 @@ void line_editor_reset_history_index(LineEditor *editor) {
 // Optional: Default-Persistenzpfad (~/.tiny-clj/history.edn)
 static void build_default_history_path(char *out, size_t out_sz) {
     const char *home = getenv("HOME") ? getenv("HOME") : ".";
-    snprintf(out, out_sz, "%s/.tiny-clj", home);
+    (void)clj_mini_snprintf(out, out_sz, "%s/.tiny-clj", home);
     // Ensure directory exists
     mkdir(out, 0700);
-    snprintf(out, out_sz, "%s/.tiny-clj/history.edn", home);
+    (void)clj_mini_snprintf(out, out_sz, "%s/.tiny-clj/history.edn", home);
 }
 
 // Externe Persistenz-Funktionen (in repl.c definiert)
