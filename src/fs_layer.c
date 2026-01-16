@@ -11,8 +11,8 @@
 #include "value.h"
 #include "vector.h"
 
-#include "flash_tree.h"
-#include "ft_blockdev.h"
+#include "tiny_db.h"
+#include "tdb_blockdev.h"
 
 #include <string.h>
 #include <sys/time.h>
@@ -95,17 +95,17 @@ typedef struct __attribute__((packed)) FsKvMeta {
     uint32_t chunks;
 } FsKvMeta;
 
-static ft_status_t fs_kv_make_chunk_key_bytes(const uint8_t* key, size_t key_len,
+static tdb_status_t fs_kv_make_chunk_key_bytes(const uint8_t* key, size_t key_len,
                                               uint32_t version, uint32_t chunk_idx,
                                               uint8_t* out, size_t out_cap, size_t* out_len)
 {
     if (out_len) *out_len = 0;
-    if (!key || key_len == 0 || !out || !out_len) return FT_ERR_INVALID_ARG;
-    if (key_len > FS_KV_KEY_MAX) return FT_ERR_INVALID_ARG;
+    if (!key || key_len == 0 || !out || !out_len) return TDB_ERR_INVALID_ARG;
+    if (key_len > FS_KV_KEY_MAX) return TDB_ERR_INVALID_ARG;
 
     // Chunk key: K || tag(1B) || ver_be32 || idx_be32
     const size_t need = key_len + 1 + 4 + 4;
-    if (need > out_cap) return FT_ERR_INVALID_ARG;
+    if (need > out_cap) return TDB_ERR_INVALID_ARG;
     size_t pos = 0;
     memcpy(out + pos, key, key_len);
     pos += key_len;
@@ -115,38 +115,38 @@ static ft_status_t fs_kv_make_chunk_key_bytes(const uint8_t* key, size_t key_len
     fs_write_be32(out + pos, chunk_idx);
     pos += 4;
     *out_len = pos;
-    return FT_OK;
+    return TDB_OK;
 }
 
-static ft_status_t fs_kv_read_meta_bytes(ft_db_t* db, const uint8_t* key, size_t key_len,
+static tdb_status_t fs_kv_read_meta_bytes(tdb_db_t* db, const uint8_t* key, size_t key_len,
                                         FsKvMeta* out_meta, int* out_has_meta)
 {
     if (out_has_meta) *out_has_meta = 0;
-    if (!db || !key || key_len == 0 || !out_meta || !out_has_meta) return FT_ERR_INVALID_ARG;
+    if (!db || !key || key_len == 0 || !out_meta || !out_has_meta) return TDB_ERR_INVALID_ARG;
 
     FsKvMeta meta = {0};
     size_t saved = 0;
-    ft_status_t stc = ft_get_into(db, key, key_len, &meta, sizeof(meta), &saved);
-    if (stc != FT_OK) return stc;
+    tdb_status_t stc = tdb_get_into(db, key, key_len, &meta, sizeof(meta), &saved);
+    if (stc != TDB_OK) return stc;
 
     if (saved == sizeof(meta) && meta.magic == FS_KV_META_MAGIC) {
         *out_meta = meta;
         *out_has_meta = 1;
     }
-    return FT_OK;
+    return TDB_OK;
 }
 
-static ft_status_t fs_kv_put_chunked_bytes(ft_db_t* db, const uint8_t* key, size_t key_len,
+static tdb_status_t fs_kv_put_chunked_bytes(tdb_db_t* db, const uint8_t* key, size_t key_len,
                                           const uint8_t* data, size_t len)
 {
-    if (!db || !key || key_len == 0 || (!data && len != 0)) return FT_ERR_INVALID_ARG;
-    if (key_len > FS_KV_KEY_MAX) return FT_ERR_INVALID_ARG;
-    if (len > UINT32_MAX) return FT_ERR_INVALID_ARG;
+    if (!db || !key || key_len == 0 || (!data && len != 0)) return TDB_ERR_INVALID_ARG;
+    if (key_len > FS_KV_KEY_MAX) return TDB_ERR_INVALID_ARG;
+    if (len > UINT32_MAX) return TDB_ERR_INVALID_ARG;
 
     FsKvMeta old_meta = {0};
     int has_meta = 0;
-    ft_status_t stc = fs_kv_read_meta_bytes(db, key, key_len, &old_meta, &has_meta);
-    if (stc != FT_OK && stc != FT_ERR_NOT_FOUND) return stc;
+    tdb_status_t stc = fs_kv_read_meta_bytes(db, key, key_len, &old_meta, &has_meta);
+    if (stc != TDB_OK && stc != TDB_ERR_NOT_FOUND) return stc;
 
     uint32_t new_ver = has_meta ? (old_meta.version + 1u) : 1u;
     if (new_ver == 0) new_ver = 1u;
@@ -161,10 +161,10 @@ static ft_status_t fs_kv_put_chunked_bytes(ft_db_t* db, const uint8_t* key, size
         size_t chunk_len = remaining > FS_STORE_CHUNK_SIZE ? FS_STORE_CHUNK_SIZE : remaining;
 
         stc = fs_kv_make_chunk_key_bytes(key, key_len, new_ver, i, ckey, sizeof(ckey), &ckey_len);
-        if (stc != FT_OK) return stc;
+        if (stc != TDB_OK) return stc;
 
-        stc = ft_put(db, ckey, ckey_len, data + off, chunk_len);
-        if (stc != FT_OK) return stc;
+        stc = tdb_put(db, ckey, ckey_len, data + off, chunk_len);
+        if (stc != TDB_OK) return stc;
     }
 
     FsKvMeta meta = {
@@ -173,24 +173,24 @@ static ft_status_t fs_kv_put_chunked_bytes(ft_db_t* db, const uint8_t* key, size
         .total_len = (uint32_t)len,
         .chunks = chunks,
     };
-    return ft_put(db, key, key_len, &meta, sizeof(meta));
+    return tdb_put(db, key, key_len, &meta, sizeof(meta));
 }
 
-static ft_status_t fs_kv_get_chunked_bytes(ft_db_t* db, const uint8_t* key, size_t key_len,
+static tdb_status_t fs_kv_get_chunked_bytes(tdb_db_t* db, const uint8_t* key, size_t key_len,
                                           uint8_t* out, size_t out_len, size_t* saved_len_out)
 {
     if (saved_len_out) *saved_len_out = 0;
-    if (!db || !key || key_len == 0) return FT_ERR_INVALID_ARG;
-    if (key_len > FS_KV_KEY_MAX) return FT_ERR_INVALID_ARG;
+    if (!db || !key || key_len == 0) return TDB_ERR_INVALID_ARG;
+    if (key_len > FS_KV_KEY_MAX) return TDB_ERR_INVALID_ARG;
 
     FsKvMeta meta = {0};
     int has_meta = 0;
-    ft_status_t stc = fs_kv_read_meta_bytes(db, key, key_len, &meta, &has_meta);
-    if (stc != FT_OK) return stc;
-    if (!has_meta) return FT_ERR_CORRUPT;
+    tdb_status_t stc = fs_kv_read_meta_bytes(db, key, key_len, &meta, &has_meta);
+    if (stc != TDB_OK) return stc;
+    if (!has_meta) return TDB_ERR_CORRUPT;
 
     if (saved_len_out) *saved_len_out = (size_t)meta.total_len;
-    if (!out || out_len == 0 || meta.total_len == 0) return FT_OK;
+    if (!out || out_len == 0 || meta.total_len == 0) return TDB_OK;
 
     size_t want_total = (size_t)meta.total_len;
     size_t copied = 0;
@@ -199,20 +199,20 @@ static ft_status_t fs_kv_get_chunked_bytes(ft_db_t* db, const uint8_t* key, size
 
     for (uint32_t i = 0; i < meta.chunks && copied < want_total; i++) {
         stc = fs_kv_make_chunk_key_bytes(key, key_len, meta.version, i, ckey, sizeof(ckey), &ckey_len);
-        if (stc != FT_OK) return stc;
+        if (stc != TDB_OK) return stc;
 
         size_t remaining = want_total - copied;
         size_t want = remaining > FS_STORE_CHUNK_SIZE ? FS_STORE_CHUNK_SIZE : remaining;
         if (want > out_len - copied) want = out_len - copied;
 
         size_t saved_chunk = 0;
-        stc = ft_get_into(db, ckey, ckey_len, out + copied, want, &saved_chunk);
-        if (stc != FT_OK) return stc;
-        if (saved_chunk < want && copied + saved_chunk < want_total) return FT_ERR_CORRUPT;
+        stc = tdb_get_into(db, ckey, ckey_len, out + copied, want, &saved_chunk);
+        if (stc != TDB_OK) return stc;
+        if (saved_chunk < want && copied + saved_chunk < want_total) return TDB_ERR_CORRUPT;
         copied += (saved_chunk < want ? saved_chunk : want);
     }
 
-    return FT_OK;
+    return TDB_OK;
 }
 
 typedef struct {
@@ -220,28 +220,28 @@ typedef struct {
     size_t len;
 } FsRamBdev;
 
-static ft_status_t fs_ram_read(void* ctx, uint32_t addr, void* out, size_t len) {
+static tdb_status_t fs_ram_read(void* ctx, uint32_t addr, void* out, size_t len) {
     FsRamBdev* r = (FsRamBdev*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len) return TDB_ERR_IO;
     memcpy(out, r->buf + addr, len);
-    return FT_OK;
+    return TDB_OK;
 }
 
-static ft_status_t fs_ram_prog(void* ctx, uint32_t addr, const void* data, size_t len) {
+static tdb_status_t fs_ram_prog(void* ctx, uint32_t addr, const void* data, size_t len) {
     FsRamBdev* r = (FsRamBdev*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len) return TDB_ERR_IO;
     const uint8_t* in = (const uint8_t*)data;
     for (size_t i = 0; i < len; i++) {
         r->buf[addr + i] = (uint8_t)(r->buf[addr + i] & in[i]);
     }
-    return FT_OK;
+    return TDB_OK;
 }
 
-static ft_status_t fs_ram_erase(void* ctx, uint32_t addr, size_t len) {
+static tdb_status_t fs_ram_erase(void* ctx, uint32_t addr, size_t len) {
     FsRamBdev* r = (FsRamBdev*)ctx;
-    if ((size_t)addr + len > r->len) return FT_ERR_IO;
+    if ((size_t)addr + len > r->len) return TDB_ERR_IO;
     memset(r->buf + addr, 0xFF, len);
-    return FT_OK;
+    return TDB_OK;
 }
 
 typedef struct {
@@ -252,43 +252,43 @@ typedef struct {
     ID vec;
 } FsListDirCtx;
 
-static ft_status_t fs_list_dir_cb(const void* key, size_t key_len,
+static tdb_status_t fs_list_dir_cb(const void* key, size_t key_len,
                                  const void* val, size_t val_len,
                                  void* arg) {
     (void)val;
     (void)val_len;
     FsListDirCtx* c = (FsListDirCtx*)arg;
-    if (!c || !c->st || !c->eval || !c->dir_path) return FT_ERR_INVALID_ARG;
-    if (key_len == c->prefix_len) return FT_OK; // skip dir itself
-    if (key_len <= c->prefix_len) return FT_OK;
+    if (!c || !c->st || !c->eval || !c->dir_path) return TDB_ERR_INVALID_ARG;
+    if (key_len == c->prefix_len) return TDB_OK; // skip dir itself
+    if (key_len <= c->prefix_len) return TDB_OK;
 
     // Keys are path strings; make a temporary NUL-terminated view for existing helpers.
-    if (key_len >= FS_KEY_MAX) return FT_OK;
+    if (key_len >= FS_KEY_MAX) return TDB_OK;
     char kstr[FS_KEY_MAX];
     memcpy(kstr, key, key_len);
     kstr[key_len] = '\0';
 
     const char* rest = kstr + c->prefix_len;
-    if (!rest || rest[0] == '\0') return FT_OK;
+    if (!rest || rest[0] == '\0') return TDB_OK;
 
     // Skip chunk keys (versioned "@v#NNNN").
     const char* at = strchr(rest, '@');
-    if (at && strchr(at, '#')) return FT_OK;
+    if (at && strchr(at, '#')) return TDB_OK;
 
     // Only direct children: allow at most one '/' at end.
     const char* slash = strchr(rest, '/');
-    if (slash && slash[1] != '\0') return FT_OK;
+    if (slash && slash[1] != '\0') return TDB_OK;
 
     ID entry = fs_stat(c->st, c->eval, kstr);
     if (entry) {
         c->vec = (ID)vector_conj((CljVector*)c->vec, entry);
     }
-    return FT_OK;
+    return TDB_OK;
 }
 
 struct FsKvStore {
-    ft_db_t* db;
-    ft_blockdev_t bdev;
+    tdb_db_t* db;
+    tdb_blockdev_t bdev;
     FsRamBdev ram;
     FsStreamStats stats;
 };
@@ -319,7 +319,7 @@ static bool fs_kv_exists(FsKvStore *st, const char *key)
 {
     if (!st || !st->db || !key) return false;
     size_t saved = 0;
-    return fs_kv_get_status(st, key, NULL, 0, &saved) == FT_OK;
+    return fs_kv_get_status(st, key, NULL, 0, &saved) == TDB_OK;
 }
 
 FsKvStore *fs_kv_store_new(void)
@@ -331,7 +331,7 @@ FsKvStore *fs_kv_store_new(void)
     }
     memset(st, 0, sizeof(*st));
 
-    // Host default: RAM-backed block device for flash-tree.
+    // Host default: RAM-backed block device for tiny-db.
     const size_t ram_bytes = 128 * 1024;
     st->ram.buf = (uint8_t*)malloc(ram_bytes);
     if (!st->ram.buf) {
@@ -349,17 +349,17 @@ FsKvStore *fs_kv_store_new(void)
     st->bdev.geom.total_size_bytes = (uint32_t)ram_bytes;
     st->bdev.geom.read_granularity = 1;
     st->bdev.geom.prog_granularity = 1;
-    // flash-tree stores B-Tree pages in erase-sized log records (must be power-of-two).
+    // tiny-db stores B-Tree pages in erase-sized log records (must be power-of-two).
     // To reliably fit 4KB chunk values inline (no overflow pages), use a larger logical erase
     // granularity than the chunk size.
     st->bdev.geom.erase_granularity = 16384;
 
-    ft_status_t fst = ft_db_init(&st->db, &st->bdev, NULL);
-    if (fst != FT_OK) {
+    tdb_status_t fst = tdb_db_init(&st->db, &st->bdev, NULL);
+    if (fst != TDB_OK) {
         free(st->ram.buf);
         free(st);
         throw_exception(EXCEPTION_RUNTIME,
-                        "fs_kv_store_new: flash-tree init failed",
+                        "fs_kv_store_new: tiny-db init failed",
                         __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -370,19 +370,19 @@ FsKvStore *fs_kv_store_new(void)
 /* Streaming stats (resettable)                                               */
 /* -------------------------------------------------------------------------- */
 
-ft_status_t fs_stream_stats_reset(FsKvStore* st)
+tdb_status_t fs_stream_stats_reset(FsKvStore* st)
 {
-    if (!st) return FT_ERR_INVALID_ARG;
+    if (!st) return TDB_ERR_INVALID_ARG;
     st->stats.blocks_read = 0;
     st->stats.blocks_written = 0;
-    return FT_OK;
+    return TDB_OK;
 }
 
-ft_status_t fs_stream_stats_get(const FsKvStore* st, FsStreamStats* out)
+tdb_status_t fs_stream_stats_get(const FsKvStore* st, FsStreamStats* out)
 {
-    if (!st || !out) return FT_ERR_INVALID_ARG;
+    if (!st || !out) return TDB_ERR_INVALID_ARG;
     *out = st->stats;
-    return FT_OK;
+    return TDB_OK;
 }
 
 static inline size_t fs_clamp_app_chunk(size_t max_chunk)
@@ -392,23 +392,23 @@ static inline size_t fs_clamp_app_chunk(size_t max_chunk)
     return max_chunk;
 }
 
-static ft_status_t fs_emit_sliced(const uint8_t* data, size_t len,
+static tdb_status_t fs_emit_sliced(const uint8_t* data, size_t len,
                                  size_t max_chunk,
                                  fs_stream_sink_cb cb, void* arg)
 {
-    if (!cb) return FT_ERR_INVALID_ARG;
-    if (!data && len != 0) return FT_ERR_INVALID_ARG;
-    if (len == 0) return FT_OK;
+    if (!cb) return TDB_ERR_INVALID_ARG;
+    if (!data && len != 0) return TDB_ERR_INVALID_ARG;
+    if (len == 0) return TDB_OK;
 
     size_t pos = 0;
     while (pos < len) {
         size_t n = len - pos;
         if (n > max_chunk) n = max_chunk;
-        ft_status_t st = cb(data + pos, n, arg);
-        if (st != FT_OK) return st;
+        tdb_status_t st = cb(data + pos, n, arg);
+        if (st != TDB_OK) return st;
         pos += n;
     }
-    return FT_OK;
+    return TDB_OK;
 }
 
 static int fs_parse_u32_field(const char* s, const char* needle, uint32_t* out)
@@ -437,25 +437,25 @@ static int fs_parse_u32_field(const char* s, const char* needle, uint32_t* out)
 /* Streaming read/write (KV + FS)                                             */
 /* -------------------------------------------------------------------------- */
 
-ft_status_t fs_kv_stream_read_key_bytes(FsKvStore* st,
+tdb_status_t fs_kv_stream_read_key_bytes(FsKvStore* st,
                                         const uint8_t* key, size_t key_len,
                                         size_t max_chunk,
                                         fs_stream_sink_cb cb, void* arg)
 {
-    if (!st || !st->db || !key || key_len == 0 || !cb) return FT_ERR_INVALID_ARG;
+    if (!st || !st->db || !key || key_len == 0 || !cb) return TDB_ERR_INVALID_ARG;
     const size_t chunk_cap = fs_clamp_app_chunk(max_chunk);
-    if (chunk_cap == 0) return FT_ERR_INVALID_ARG;
+    if (chunk_cap == 0) return TDB_ERR_INVALID_ARG;
 
     FsKvMeta meta = {0};
     int has_meta = 0;
-    ft_status_t stc = fs_kv_read_meta_bytes(st->db, key, key_len, &meta, &has_meta);
-    if (stc != FT_OK) return stc;
+    tdb_status_t stc = fs_kv_read_meta_bytes(st->db, key, key_len, &meta, &has_meta);
+    if (stc != TDB_OK) return stc;
 
     if (has_meta) {
         // Chunked value: enumerate chunk keys by prefix cursor (Option 3).
         // Prefix: K || tag || ver_be32
         uint8_t prefix[FS_KV_KEY_MAX + 1 + 4];
-        if (key_len + 1 + 4 > sizeof(prefix)) return FT_ERR_INVALID_ARG;
+        if (key_len + 1 + 4 > sizeof(prefix)) return TDB_ERR_INVALID_ARG;
         size_t pfx_len = 0;
         memcpy(prefix, key, key_len);
         pfx_len += key_len;
@@ -463,68 +463,68 @@ ft_status_t fs_kv_stream_read_key_bytes(FsKvStore* st,
         fs_write_be32(prefix + pfx_len, meta.version);
         pfx_len += 4;
 
-        ft_cursor_t* cur = NULL;
-        stc = ft_cursor_open_prefix(st->db, prefix, pfx_len, &cur);
-        if (stc != FT_OK) return stc;
+        tdb_cursor_t* cur = NULL;
+        stc = tdb_cursor_open_prefix(st->db, prefix, pfx_len, &cur);
+        if (stc != TDB_OK) return stc;
 
         size_t remaining_total = (size_t)meta.total_len;
         uint32_t seen_chunks = 0;
         while (seen_chunks < meta.chunks) {
             int has = 0;
-            stc = ft_cursor_next(cur, &has);
-            if (stc != FT_OK) { ft_cursor_close(cur); return stc; }
+            stc = tdb_cursor_next(cur, &has);
+            if (stc != TDB_OK) { tdb_cursor_close(cur); return stc; }
             if (!has) break;
 
-            ft_blob_t v = {0};
-            stc = ft_cursor_val(cur, &v);
-            if (stc != FT_OK) { ft_cursor_close(cur); return stc; }
+            tdb_blob_t v = {0};
+            stc = tdb_cursor_val(cur, &v);
+            if (stc != TDB_OK) { tdb_cursor_close(cur); return stc; }
 
-            if (v.len > (size_t)FS_STORE_CHUNK_SIZE) { ft_cursor_close(cur); return FT_ERR_CORRUPT; }
-            if (v.len > remaining_total) { ft_cursor_close(cur); return FT_ERR_CORRUPT; }
+            if (v.len > (size_t)FS_STORE_CHUNK_SIZE) { tdb_cursor_close(cur); return TDB_ERR_CORRUPT; }
+            if (v.len > remaining_total) { tdb_cursor_close(cur); return TDB_ERR_CORRUPT; }
 
             st->stats.blocks_read++;
             if (v.len) {
                 stc = fs_emit_sliced((const uint8_t*)v.data, v.len, chunk_cap, cb, arg);
-                if (stc != FT_OK) { ft_cursor_close(cur); return stc; }
+                if (stc != TDB_OK) { tdb_cursor_close(cur); return stc; }
             }
             remaining_total -= v.len;
             seen_chunks++;
             if (remaining_total == 0) break;
         }
 
-        ft_cursor_close(cur);
-        if (seen_chunks != meta.chunks) return FT_ERR_CORRUPT;
-        if (remaining_total != 0) return FT_ERR_CORRUPT;
-        return FT_OK;
+        tdb_cursor_close(cur);
+        if (seen_chunks != meta.chunks) return TDB_ERR_CORRUPT;
+        if (remaining_total != 0) return TDB_ERR_CORRUPT;
+        return TDB_OK;
     }
 
     // Legacy inline value: emit it in <= max_chunk slices.
-    ft_blob_t out = {0};
-    stc = ft_get(st->db, key, key_len, &out);
-    if (stc != FT_OK) return stc;
+    tdb_blob_t out = {0};
+    stc = tdb_get(st->db, key, key_len, &out);
+    if (stc != TDB_OK) return stc;
     st->stats.blocks_read++; // single stored value
     return fs_emit_sliced((const uint8_t*)out.data, out.len, chunk_cap, cb, arg);
 }
 
-ft_status_t fs_kv_stream_read_key_bytes_from(FsKvStore* st,
+tdb_status_t fs_kv_stream_read_key_bytes_from(FsKvStore* st,
                                              const uint8_t* key, size_t key_len,
                                              size_t offset,
                                              size_t max_chunk,
                                              fs_stream_sink_cb cb, void* arg)
 {
-    if (!st || !st->db || !key || key_len == 0 || !cb) return FT_ERR_INVALID_ARG;
+    if (!st || !st->db || !key || key_len == 0 || !cb) return TDB_ERR_INVALID_ARG;
     const size_t chunk_cap = fs_clamp_app_chunk(max_chunk);
-    if (chunk_cap == 0) return FT_ERR_INVALID_ARG;
+    if (chunk_cap == 0) return TDB_ERR_INVALID_ARG;
 
     FsKvMeta meta = {0};
     int has_meta = 0;
-    ft_status_t stc = fs_kv_read_meta_bytes(st->db, key, key_len, &meta, &has_meta);
-    if (stc != FT_OK) return stc;
+    tdb_status_t stc = fs_kv_read_meta_bytes(st->db, key, key_len, &meta, &has_meta);
+    if (stc != TDB_OK) return stc;
 
     if (has_meta) {
         const size_t total_len = (size_t)meta.total_len;
-        if (offset > total_len) return FT_ERR_INVALID_ARG;
-        if (offset == total_len) return FT_OK;
+        if (offset > total_len) return TDB_ERR_INVALID_ARG;
+        if (offset == total_len) return TDB_OK;
 
         const uint32_t start_idx = (uint32_t)(offset / (size_t)FS_STORE_CHUNK_SIZE);
         size_t start_off = offset % (size_t)FS_STORE_CHUNK_SIZE;
@@ -536,20 +536,20 @@ ft_status_t fs_kv_stream_read_key_bytes_from(FsKvStore* st,
 
         for (uint32_t i = start_idx; i < meta.chunks && remaining_total > 0; i++) {
             stc = fs_kv_make_chunk_key_bytes(key, key_len, meta.version, i, ckey, sizeof(ckey), &ckey_len);
-            if (stc != FT_OK) return stc;
+            if (stc != TDB_OK) return stc;
 
             size_t saved = 0;
-            stc = ft_get_into(st->db, ckey, ckey_len, buf, sizeof(buf), &saved);
-            if (stc != FT_OK) return stc;
-            if (saved == 0) return FT_ERR_CORRUPT;
-            if (start_off > saved) return FT_ERR_INVALID_ARG;
+            stc = tdb_get_into(st->db, ckey, ckey_len, buf, sizeof(buf), &saved);
+            if (stc != TDB_OK) return stc;
+            if (saved == 0) return TDB_ERR_CORRUPT;
+            if (start_off > saved) return TDB_ERR_INVALID_ARG;
 
             size_t avail = saved - start_off;
             size_t take = (remaining_total < avail) ? remaining_total : avail;
             if (take) {
                 st->stats.blocks_read++;
                 stc = fs_emit_sliced(buf + start_off, take, chunk_cap, cb, arg);
-                if (stc != FT_OK) return stc;
+                if (stc != TDB_OK) return stc;
                 remaining_total -= take;
             } else {
                 st->stats.blocks_read++;
@@ -557,34 +557,34 @@ ft_status_t fs_kv_stream_read_key_bytes_from(FsKvStore* st,
             start_off = 0;
         }
 
-        if (remaining_total != 0) return FT_ERR_CORRUPT;
-        return FT_OK;
+        if (remaining_total != 0) return TDB_ERR_CORRUPT;
+        return TDB_OK;
     }
 
     // Legacy inline: offset into single stored value.
-    ft_blob_t out = {0};
-    stc = ft_get(st->db, key, key_len, &out);
-    if (stc != FT_OK) return stc;
-    if (offset > out.len) return FT_ERR_INVALID_ARG;
-    if (offset == out.len) return FT_OK;
+    tdb_blob_t out = {0};
+    stc = tdb_get(st->db, key, key_len, &out);
+    if (stc != TDB_OK) return stc;
+    if (offset > out.len) return TDB_ERR_INVALID_ARG;
+    if (offset == out.len) return TDB_OK;
     st->stats.blocks_read++;
     return fs_emit_sliced((const uint8_t*)out.data + offset, out.len - offset, chunk_cap, cb, arg);
 }
 
-ft_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
+tdb_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
                                          const uint8_t* key, size_t key_len,
                                          fs_stream_source_cb next, void* arg,
                                          size_t* out_total_len)
 {
     if (out_total_len) *out_total_len = 0;
-    if (!st || !st->db || !key || key_len == 0 || !next) return FT_ERR_INVALID_ARG;
-    if (key_len > FS_KV_KEY_MAX) return FT_ERR_INVALID_ARG;
+    if (!st || !st->db || !key || key_len == 0 || !next) return TDB_ERR_INVALID_ARG;
+    if (key_len > FS_KV_KEY_MAX) return TDB_ERR_INVALID_ARG;
 
     // Determine new version (meta must be committed last).
     FsKvMeta old_meta = {0};
     int has_meta = 0;
-    ft_status_t stc = fs_kv_read_meta_bytes(st->db, key, key_len, &old_meta, &has_meta);
-    if (stc != FT_OK && stc != FT_ERR_NOT_FOUND) return stc;
+    tdb_status_t stc = fs_kv_read_meta_bytes(st->db, key, key_len, &old_meta, &has_meta);
+    if (stc != TDB_OK && stc != TDB_ERR_NOT_FOUND) return stc;
 
     uint32_t new_ver = has_meta ? (old_meta.version + 1u) : 1u;
     if (new_ver == 0) new_ver = 1u;
@@ -604,12 +604,12 @@ ft_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
     while (1) {
         size_t got = 0;
         stc = next(inbuf, sizeof(inbuf), &got, arg);
-        if (stc != FT_OK) return stc;
+        if (stc != TDB_OK) return stc;
         if (got == 0) break; // EOF
 
-        if (total > SIZE_MAX - got) return FT_ERR_INVALID_ARG;
+        if (total > SIZE_MAX - got) return TDB_ERR_INVALID_ARG;
         total += got;
-        if (total > (size_t)UINT32_MAX) return FT_ERR_INVALID_ARG;
+        if (total > (size_t)UINT32_MAX) return TDB_ERR_INVALID_ARG;
 
         size_t pos = 0;
         while (pos < got) {
@@ -622,9 +622,9 @@ ft_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
 
             if (chunk_fill == (size_t)FS_STORE_CHUNK_SIZE) {
                 stc = fs_kv_make_chunk_key_bytes(key, key_len, new_ver, chunks_written, ckey, sizeof(ckey), &ckey_len);
-                if (stc != FT_OK) return stc;
-                stc = ft_put(st->db, ckey, ckey_len, chunkbuf, chunk_fill);
-                if (stc != FT_OK) return stc;
+                if (stc != TDB_OK) return stc;
+                stc = tdb_put(st->db, ckey, ckey_len, chunkbuf, chunk_fill);
+                if (stc != TDB_OK) return stc;
                 st->stats.blocks_written++;
                 chunks_written++;
                 chunk_fill = 0;
@@ -635,9 +635,9 @@ ft_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
     // Write last partial chunk if any.
     if (chunk_fill != 0) {
         stc = fs_kv_make_chunk_key_bytes(key, key_len, new_ver, chunks_written, ckey, sizeof(ckey), &ckey_len);
-        if (stc != FT_OK) return stc;
-        stc = ft_put(st->db, ckey, ckey_len, chunkbuf, chunk_fill);
-        if (stc != FT_OK) return stc;
+        if (stc != TDB_OK) return stc;
+        stc = tdb_put(st->db, ckey, ckey_len, chunkbuf, chunk_fill);
+        if (stc != TDB_OK) return stc;
         st->stats.blocks_written++;
         chunks_written++;
     }
@@ -649,29 +649,29 @@ ft_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
         .total_len = (uint32_t)total,
         .chunks = chunks_written,
     };
-    stc = ft_put(st->db, key, key_len, &meta, sizeof(meta));
-    if (stc != FT_OK) return stc;
+    stc = tdb_put(st->db, key, key_len, &meta, sizeof(meta));
+    if (stc != TDB_OK) return stc;
 
     if (out_total_len) *out_total_len = total;
-    return FT_OK;
+    return TDB_OK;
 }
 
-ft_status_t fs_file_stream_read(FsKvStore* st,
+tdb_status_t fs_file_stream_read(FsKvStore* st,
                                 const char* path,
                                 size_t max_chunk,
                                 fs_stream_sink_cb cb, void* arg)
 {
-    if (!st || !st->db || !fs_is_valid_path(path) || fs_is_dir_path(path) || !cb) return FT_ERR_INVALID_ARG;
+    if (!st || !st->db || !fs_is_valid_path(path) || fs_is_dir_path(path) || !cb) return TDB_ERR_INVALID_ARG;
     const size_t chunk_cap = fs_clamp_app_chunk(max_chunk);
-    if (chunk_cap == 0) return FT_ERR_INVALID_ARG;
+    if (chunk_cap == 0) return TDB_ERR_INVALID_ARG;
 
     // Read file meta bytes (EDN) and parse only the numeric fields we need.
     size_t saved = 0;
     (void)fs_kv_get(st, path, NULL, 0, &saved);
-    if (saved == 0) return FT_ERR_NOT_FOUND;
+    if (saved == 0) return TDB_ERR_NOT_FOUND;
 
     char* meta = (char*)malloc(saved + 1);
-    if (!meta) return FT_ERR_NO_MEMORY;
+    if (!meta) return TDB_ERR_NO_MEMORY;
     size_t got = fs_kv_get(st, path, (uint8_t*)meta, saved, &saved);
     meta[got] = '\0';
 
@@ -683,8 +683,8 @@ ft_status_t fs_file_stream_read(FsKvStore* st,
     int ok_size = fs_parse_u32_field(meta, ":size", &size_u32);
     free(meta);
 
-    if (!ok_ver || !ok_chunks || !ok_size) return FT_ERR_CORRUPT;
-    if (ver == 0 || chunks == 0) return FT_ERR_CORRUPT;
+    if (!ok_ver || !ok_chunks || !ok_size) return TDB_ERR_CORRUPT;
+    if (ver == 0 || chunks == 0) return TDB_ERR_CORRUPT;
     size_t total = (size_t)size_u32;
 
     uint8_t buf[FS_STORE_CHUNK_SIZE];
@@ -692,20 +692,20 @@ ft_status_t fs_file_stream_read(FsKvStore* st,
 
     for (uint32_t i = 0; i < chunks; i++) {
         char ckey[FS_KEY_MAX];
-        if (fs_make_chunk_key(ckey, path, ver, i) != FS_NO_ERR) return FT_ERR_INVALID_ARG;
+        if (fs_make_chunk_key(ckey, path, ver, i) != FS_NO_ERR) return TDB_ERR_INVALID_ARG;
 
         size_t want = remaining_total;
         if (want > (size_t)FS_STORE_CHUNK_SIZE) want = (size_t)FS_STORE_CHUNK_SIZE;
 
         size_t saved_chunk = 0;
-        ft_status_t stc = fs_kv_get_status(st, ckey, buf, want, &saved_chunk);
-        if (stc != FT_OK) return stc;
-        if (saved_chunk < want && remaining_total != 0) return FT_ERR_CORRUPT;
+        tdb_status_t stc = fs_kv_get_status(st, ckey, buf, want, &saved_chunk);
+        if (stc != TDB_OK) return stc;
+        if (saved_chunk < want && remaining_total != 0) return TDB_ERR_CORRUPT;
 
         st->stats.blocks_read++; // count storage chunks, not app slices
         if (want) {
             stc = fs_emit_sliced(buf, want, chunk_cap, cb, arg);
-            if (stc != FT_OK) return stc;
+            if (stc != TDB_OK) return stc;
         }
 
         if (remaining_total >= want) remaining_total -= want;
@@ -714,27 +714,27 @@ ft_status_t fs_file_stream_read(FsKvStore* st,
         if (remaining_total == 0) break;
     }
 
-    if (remaining_total != 0) return FT_ERR_CORRUPT;
-    return FT_OK;
+    if (remaining_total != 0) return TDB_ERR_CORRUPT;
+    return TDB_OK;
 }
 
-ft_status_t fs_file_stream_read_from(FsKvStore* st,
+tdb_status_t fs_file_stream_read_from(FsKvStore* st,
                                      const char* path,
                                      size_t offset,
                                      size_t max_chunk,
                                      fs_stream_sink_cb cb, void* arg)
 {
-    if (!st || !st->db || !fs_is_valid_path(path) || fs_is_dir_path(path) || !cb) return FT_ERR_INVALID_ARG;
+    if (!st || !st->db || !fs_is_valid_path(path) || fs_is_dir_path(path) || !cb) return TDB_ERR_INVALID_ARG;
     const size_t chunk_cap = fs_clamp_app_chunk(max_chunk);
-    if (chunk_cap == 0) return FT_ERR_INVALID_ARG;
+    if (chunk_cap == 0) return TDB_ERR_INVALID_ARG;
 
     // Read meta bytes and parse fields (same as fs_file_stream_read).
     size_t saved = 0;
     (void)fs_kv_get(st, path, NULL, 0, &saved);
-    if (saved == 0) return FT_ERR_NOT_FOUND;
+    if (saved == 0) return TDB_ERR_NOT_FOUND;
 
     char* meta = (char*)malloc(saved + 1);
-    if (!meta) return FT_ERR_NO_MEMORY;
+    if (!meta) return TDB_ERR_NO_MEMORY;
     size_t got = fs_kv_get(st, path, (uint8_t*)meta, saved, &saved);
     meta[got] = '\0';
 
@@ -745,12 +745,12 @@ ft_status_t fs_file_stream_read_from(FsKvStore* st,
     int ok_chunks = fs_parse_u32_field(meta, ":chunks", &chunks);
     int ok_size = fs_parse_u32_field(meta, ":size", &size_u32);
     free(meta);
-    if (!ok_ver || !ok_chunks || !ok_size) return FT_ERR_CORRUPT;
-    if (ver == 0 || chunks == 0) return FT_ERR_CORRUPT;
+    if (!ok_ver || !ok_chunks || !ok_size) return TDB_ERR_CORRUPT;
+    if (ver == 0 || chunks == 0) return TDB_ERR_CORRUPT;
 
     const size_t total = (size_t)size_u32;
-    if (offset > total) return FT_ERR_INVALID_ARG;
-    if (offset == total) return FT_OK;
+    if (offset > total) return TDB_ERR_INVALID_ARG;
+    if (offset == total) return TDB_OK;
 
     const uint32_t start_idx = (uint32_t)(offset / (size_t)FS_STORE_CHUNK_SIZE);
     size_t start_off = offset % (size_t)FS_STORE_CHUNK_SIZE;
@@ -760,37 +760,37 @@ ft_status_t fs_file_stream_read_from(FsKvStore* st,
 
     for (uint32_t i = start_idx; i < chunks && remaining_total > 0; i++) {
         char ckey[FS_KEY_MAX];
-        if (fs_make_chunk_key(ckey, path, ver, i) != FS_NO_ERR) return FT_ERR_INVALID_ARG;
+        if (fs_make_chunk_key(ckey, path, ver, i) != FS_NO_ERR) return TDB_ERR_INVALID_ARG;
 
         size_t saved_chunk = 0;
-        ft_status_t stc = fs_kv_get_status(st, ckey, buf, sizeof(buf), &saved_chunk);
-        if (stc != FT_OK) return stc;
-        if (saved_chunk == 0 && total != 0) return FT_ERR_CORRUPT;
-        if (start_off > saved_chunk) return FT_ERR_INVALID_ARG;
+        tdb_status_t stc = fs_kv_get_status(st, ckey, buf, sizeof(buf), &saved_chunk);
+        if (stc != TDB_OK) return stc;
+        if (saved_chunk == 0 && total != 0) return TDB_ERR_CORRUPT;
+        if (start_off > saved_chunk) return TDB_ERR_INVALID_ARG;
 
         size_t avail = saved_chunk - start_off;
         size_t take = (remaining_total < avail) ? remaining_total : avail;
         st->stats.blocks_read++;
         if (take) {
             stc = fs_emit_sliced(buf + start_off, take, chunk_cap, cb, arg);
-            if (stc != FT_OK) return stc;
+            if (stc != TDB_OK) return stc;
             remaining_total -= take;
         }
         start_off = 0;
     }
 
-    if (remaining_total != 0) return FT_ERR_CORRUPT;
-    return FT_OK;
+    if (remaining_total != 0) return TDB_ERR_CORRUPT;
+    return TDB_OK;
 }
 
-ft_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
+tdb_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
                                  const char* path,
                                  fs_stream_source_cb next, void* arg,
                                  size_t* out_total_len)
 {
     if (out_total_len) *out_total_len = 0;
-    if (!st || !st->db || !eval || !fs_is_valid_path(path) || fs_is_dir_path(path) || !next) return FT_ERR_INVALID_ARG;
-    if (strlen(path) >= FS_KEY_MAX) return FT_ERR_INVALID_ARG;
+    if (!st || !st->db || !eval || !fs_is_valid_path(path) || fs_is_dir_path(path) || !next) return TDB_ERR_INVALID_ARG;
+    if (strlen(path) >= FS_KEY_MAX) return TDB_ERR_INVALID_ARG;
 
     ID old_meta = fs_meta_get_map(st, eval, path);
     uint32_t old_ver = fs_meta_version(old_meta);
@@ -809,13 +809,13 @@ ft_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
 
     while (1) {
         size_t got = 0;
-        ft_status_t stc = next(inbuf, sizeof(inbuf), &got, arg);
-        if (stc != FT_OK) return stc;
+        tdb_status_t stc = next(inbuf, sizeof(inbuf), &got, arg);
+        if (stc != TDB_OK) return stc;
         if (got == 0) break; // EOF
 
-        if (total > SIZE_MAX - got) return FT_ERR_INVALID_ARG;
+        if (total > SIZE_MAX - got) return TDB_ERR_INVALID_ARG;
         total += got;
-        if (total > (size_t)INT32_MAX) return FT_ERR_INVALID_ARG;
+        if (total > (size_t)INT32_MAX) return TDB_ERR_INVALID_ARG;
 
         size_t pos = 0;
         while (pos < got) {
@@ -829,8 +829,8 @@ ft_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
             if (chunk_fill == (size_t)FS_STORE_CHUNK_SIZE) {
                 char ckey[FS_KEY_MAX];
                 fs_err_t e = fs_make_chunk_key(ckey, path, new_ver, chunk_idx);
-                if (e != FS_NO_ERR) return FT_ERR_INVALID_ARG;
-                if (!fs_kv_put(st, ckey, chunkbuf, chunk_fill)) return FT_ERR_IO;
+                if (e != FS_NO_ERR) return TDB_ERR_INVALID_ARG;
+                if (!fs_kv_put(st, ckey, chunkbuf, chunk_fill)) return TDB_ERR_IO;
                 st->stats.blocks_written++;
                 chunk_idx++;
                 chunk_fill = 0;
@@ -842,8 +842,8 @@ ft_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
     if (chunk_fill != 0 || chunk_idx == 0) {
         char ckey[FS_KEY_MAX];
         fs_err_t e = fs_make_chunk_key(ckey, path, new_ver, chunk_idx);
-        if (e != FS_NO_ERR) return FT_ERR_INVALID_ARG;
-        if (!fs_kv_put(st, ckey, chunkbuf, chunk_fill)) return FT_ERR_IO;
+        if (e != FS_NO_ERR) return TDB_ERR_INVALID_ARG;
+        if (!fs_kv_put(st, ckey, chunkbuf, chunk_fill)) return TDB_ERR_IO;
         st->stats.blocks_written++;
         chunk_idx++;
         chunk_fill = 0;
@@ -861,10 +861,10 @@ ft_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
     }
 
     fs_err_t fe = fs_meta_put_map(st, path, (ID)m);
-    if (fe != FS_NO_ERR) return FT_ERR_IO;
+    if (fe != FS_NO_ERR) return TDB_ERR_IO;
 
     if (out_total_len) *out_total_len = total;
-    return FT_OK;
+    return TDB_OK;
 }
 
 
@@ -872,7 +872,7 @@ void fs_kv_store_free(FsKvStore *st)
 {
     if (!st) return;
     if (st->db) {
-        ft_db_deinit(st->db);
+        tdb_db_deinit(st->db);
         st->db = NULL;
     }
     free(st->ram.buf);
@@ -883,13 +883,13 @@ void fs_kv_store_free(FsKvStore *st)
 
 bool fs_kv_put(FsKvStore *st, const char *key, const uint8_t *data, size_t len)
 {
-    return fs_kv_put_status(st, key, data, len) == FT_OK;
+    return fs_kv_put_status(st, key, data, len) == TDB_OK;
 }
 
 size_t fs_kv_get(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out)
 {
-    ft_status_t stc = fs_kv_get_status(st, key, out, out_len, saved_len_out);
-    if (stc != FT_OK) return 0;
+    tdb_status_t stc = fs_kv_get_status(st, key, out, out_len, saved_len_out);
+    if (stc != TDB_OK) return 0;
     if (!out || out_len == 0 || !saved_len_out) return 0;
     return (*saved_len_out < out_len) ? *saved_len_out : out_len;
 }
@@ -901,55 +901,55 @@ bool fs_kv_del(FsKvStore *st, const char *key)
     return true;
 }
 
-ft_status_t fs_kv_put_status(FsKvStore *st, const char *key, const uint8_t *data, size_t len)
+tdb_status_t fs_kv_put_status(FsKvStore *st, const char *key, const uint8_t *data, size_t len)
 {
-    if (!st || !st->db || !key) return FT_ERR_INVALID_ARG;
-    if (len > (size_t)INT32_MAX) return FT_ERR_INVALID_ARG;
-    return ft_put(st->db, key, strlen(key), data, len);
+    if (!st || !st->db || !key) return TDB_ERR_INVALID_ARG;
+    if (len > (size_t)INT32_MAX) return TDB_ERR_INVALID_ARG;
+    return tdb_put(st->db, key, strlen(key), data, len);
 }
 
-ft_status_t fs_kv_get_status(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out)
+tdb_status_t fs_kv_get_status(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out)
 {
     if (saved_len_out) *saved_len_out = 0;
-    if (!st || !st->db || !key) return FT_ERR_INVALID_ARG;
-    return ft_get_into(st->db, key, strlen(key), out, out_len, saved_len_out);
+    if (!st || !st->db || !key) return TDB_ERR_INVALID_ARG;
+    return tdb_get_into(st->db, key, strlen(key), out, out_len, saved_len_out);
 }
 
-ft_status_t fs_kv_del_status(FsKvStore *st, const char *key)
+tdb_status_t fs_kv_del_status(FsKvStore *st, const char *key)
 {
-    if (!st || !st->db || !key) return FT_ERR_INVALID_ARG;
-    return ft_del(st->db, key, strlen(key));
+    if (!st || !st->db || !key) return TDB_ERR_INVALID_ARG;
+    return tdb_del(st->db, key, strlen(key));
 }
 
-ft_status_t fs_kv_put_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, const uint8_t *data, size_t len)
+tdb_status_t fs_kv_put_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, const uint8_t *data, size_t len)
 {
-    if (!st || !st->db || !key || key_len == 0) return FT_ERR_INVALID_ARG;
-    if (len > (size_t)INT32_MAX) return FT_ERR_INVALID_ARG;
+    if (!st || !st->db || !key || key_len == 0) return TDB_ERR_INVALID_ARG;
+    if (len > (size_t)INT32_MAX) return TDB_ERR_INVALID_ARG;
     return fs_kv_put_chunked_bytes(st->db, key, key_len, data, len);
 }
 
-ft_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, uint8_t *out, size_t out_len, size_t *saved_len_out)
+tdb_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, uint8_t *out, size_t out_len, size_t *saved_len_out)
 {
     if (saved_len_out) *saved_len_out = 0;
-    if (!st || !st->db || !key || key_len == 0) return FT_ERR_INVALID_ARG;
+    if (!st || !st->db || !key || key_len == 0) return TDB_ERR_INVALID_ARG;
 
     FsKvMeta meta = {0};
     int has_meta = 0;
-    ft_status_t stc = fs_kv_read_meta_bytes(st->db, key, key_len, &meta, &has_meta);
-    if (stc == FT_OK && has_meta) {
+    tdb_status_t stc = fs_kv_read_meta_bytes(st->db, key, key_len, &meta, &has_meta);
+    if (stc == TDB_OK && has_meta) {
         return fs_kv_get_chunked_bytes(st->db, key, key_len, out, out_len, saved_len_out);
     }
     // Legacy inline value.
-    if (stc == FT_OK && !has_meta) {
-        return ft_get_into(st->db, key, key_len, out, out_len, saved_len_out);
+    if (stc == TDB_OK && !has_meta) {
+        return tdb_get_into(st->db, key, key_len, out, out_len, saved_len_out);
     }
     return stc;
 }
 
-ft_status_t fs_kv_del_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len)
+tdb_status_t fs_kv_del_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len)
 {
-    if (!st || !st->db || !key || key_len == 0) return FT_ERR_INVALID_ARG;
-    return ft_del(st->db, key, key_len);
+    if (!st || !st->db || !key || key_len == 0) return TDB_ERR_INVALID_ARG;
+    return tdb_del(st->db, key, key_len);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1271,7 +1271,7 @@ ID fs_list_dir(FsKvStore *st, EvalState *eval, const char *dir_path)
     if (!vec) return NULL;
 
     FsListDirCtx ctx = {.st = st, .eval = eval, .dir_path = dir_path, .prefix_len = prefix_len, .vec = vec};
-    (void)ft_iter_prefix(st->db, dir_path, prefix_len, fs_list_dir_cb, &ctx);
+    (void)tdb_iter_prefix(st->db, dir_path, prefix_len, fs_list_dir_cb, &ctx);
     return AUTORELEASE(ctx.vec);
 }
 

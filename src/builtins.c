@@ -3509,14 +3509,14 @@ ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
     return fs_delete(st, path) ? (ID)clj_true : (ID)clj_false;
 }
 
-static ID tinyclj_kv_throw_ft(const char* op, ft_status_t stc)
+static ID tinyclj_kv_throw_ft(const char* op, tdb_status_t stc)
 {
-    if (stc == FT_ERR_NO_MEMORY) {
+    if (stc == TDB_ERR_NO_MEMORY) {
         throw_oom();
         return NULL;
     }
     return throw_exception_formatted(
-        stc == FT_ERR_INVALID_ARG ? EXCEPTION_ILLEGAL_ARGUMENT : EXCEPTION_RUNTIME,
+        stc == TDB_ERR_INVALID_ARG ? EXCEPTION_ILLEGAL_ARGUMENT : EXCEPTION_RUNTIME,
         __FILE__, __LINE__, 0,
         "%s failed (err=%d)", op, (int)stc
     );
@@ -3547,8 +3547,8 @@ ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
     CljByteArray *ba = as_byte_array(args[1]);
-    ft_status_t stc = fs_kv_put_key_bytes_status(st, key_bytes, key_len, ba->data, (size_t)ba->length);
-    if (stc != FT_OK) {
+    tdb_status_t stc = fs_kv_put_key_bytes_status(st, key_bytes, key_len, ba->data, (size_t)ba->length);
+    if (stc != TDB_OK) {
         return tinyclj_kv_throw_ft("tinyclj.kv/put-bytes", stc);
     }
     return NULL;
@@ -3576,18 +3576,18 @@ ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
     if (!st) return NULL;
 
     size_t saved = 0;
-    ft_status_t stc = fs_kv_get_key_bytes_status(st, key_bytes, key_len, NULL, 0, &saved);
-    if (stc == FT_ERR_NOT_FOUND) {
+    tdb_status_t stc = fs_kv_get_key_bytes_status(st, key_bytes, key_len, NULL, 0, &saved);
+    if (stc == TDB_ERR_NOT_FOUND) {
         return NULL;
     }
-    if (stc != FT_OK) {
+    if (stc != TDB_OK) {
         return tinyclj_kv_throw_ft("tinyclj.kv/get-bytes", stc);
     }
     ID arr = (ID)make_byte_array((int)saved);
     if (!arr) return NULL;
     CljByteArray *ba = as_byte_array(arr);
     stc = fs_kv_get_key_bytes_status(st, key_bytes, key_len, ba->data, (size_t)ba->length, &saved);
-    if (stc != FT_OK) {
+    if (stc != TDB_OK) {
         return tinyclj_kv_throw_ft("tinyclj.kv/get-bytes", stc);
     }
     return AUTORELEASE(arr);
@@ -3613,9 +3613,9 @@ ID native_tinyclj_kv_delete(ID *args, unsigned int argc)
     }
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
-    ft_status_t stc = fs_kv_del_key_bytes_status(st, key_bytes, key_len);
-    if (stc == FT_OK) return (ID)clj_true;
-    if (stc == FT_ERR_NOT_FOUND) return (ID)clj_false;
+    tdb_status_t stc = fs_kv_del_key_bytes_status(st, key_bytes, key_len);
+    if (stc == TDB_OK) return (ID)clj_true;
+    if (stc == TDB_ERR_NOT_FOUND) return (ID)clj_false;
     return tinyclj_kv_throw_ft("tinyclj.kv/delete!", stc);
 }
 

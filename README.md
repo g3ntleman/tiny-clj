@@ -96,10 +96,10 @@ which xtensa-esp32-elf-gcc
 which xtensa-esp32-elf-size
 ```
 
-With the ESP-IDF environment active, you can run the flash-tree size accounting script:
+With the ESP-IDF environment active, you can run the tiny-db size accounting script:
 
 ```bash
-external/flash-tree/scripts/size_report_esp32.sh
+external/tiny-db/scripts/size_report_esp32.sh
 ```
 
 ### Running
@@ -130,6 +130,12 @@ This helps identify which build configuration is currently active and how it was
 - **Parser:** Tokenization and AST parsing into `CljObject` structures
 - **Memory:** Manual reference counting with `retain`, `release`, and `autorelease` pools
 - **REPL:** Supports `--no-core`, `-e/--eval`, and `-f/--file` for scripted evaluation
+
+## tiny-db
+
+tiny-db is a small, embedded-friendly key/value storage engine used by Tiny-CLJ for its KV-backed filesystem layer and related tests. It is designed for flash-like block devices and favors deterministic behavior and simple integration over feature completeness.
+
+It supports basic KV operations (`put/get/del`), prefix iteration via cursors, and large-value storage via chunking/streaming helpers. The implementation is copy-on-write and append-only, which makes it resilient to resets and power-loss scenarios when used with appropriate block device geometry and recovery logic.
 
 ## Feature Flags
 

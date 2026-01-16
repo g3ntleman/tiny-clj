@@ -62,12 +62,12 @@ __attribute__((weak)) size_t tinyclj_esp32_flash_bytes_total(void) { return (siz
  *   return heap_caps_get_total_size(MALLOC_CAP_DEFAULT);
  * }
  *
- * // Flash-Tree Partition (Beispiel: feste Partition "flash-tree")
+ * // Tiny-DB Partition (Beispiel: feste Partition "tiny-db")
  * // Du kannst hier auch eine eigene Label-Konfiguration verwenden.
  * #include <esp_partition.h>
  *
  * static size_t flash_partition_total_bytes_app_usable(void) {
- *   const esp_partition_t *p = esp_partition_find_first(0x40, 0x00, "flash-tree");
+ *   const esp_partition_t *p = esp_partition_find_first(0x40, 0x00, "tiny-db");
  *   if (!p) return (size_t)-1;
  *   // TODO: Ziehe hier deinen festen Overhead/Reserve ab (GC-Reserve, Metadata, Tiny-CLJ Reservierungen).
  *   // return (p->size > overhead) ? (p->size - overhead) : 0;
@@ -82,7 +82,7 @@ __attribute__((weak)) size_t tinyclj_esp32_flash_bytes_total(void) { return (siz
  *   // TODO: Aus deinem Flash-Storage Glue-Code ermitteln.
  *   // Beispiele (je nach Integration):
  *   // - Partition total minus "bytes used" aus eigener Belegungstabelle
- *   // - Flash-Tree interne Statistiken (falls du sie pflegst/abfragst)
+ *   // - Tiny-DB interne Statistiken (falls du sie pflegst/abfragst)
  *   // - Eine conservative Schätzung, die GC-Reserve berücksichtigt
  *   return (size_t)-1; // unbekannt => tiny-clj liefert den Key nicht
  * }
