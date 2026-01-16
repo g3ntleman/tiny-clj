@@ -597,6 +597,17 @@ bool is_autorelease_pool_active(void) {
     return g_pool.cp_count > 0;
 }
 
+uint32_t autorelease_pool_depth(void) {
+    return g_pool.cp_count;
+}
+
+void autorelease_pool_cleanup_to_depth(uint32_t depth) {
+    // Drain pools until we reach the requested depth (or 0).
+    while (g_pool.cp_count > depth) {
+        autorelease_pool_pop();
+    }
+}
+
 /** @brief Cleanup pool state (call at program exit or runtime reset)
  */
 void autorelease_pool_destroy(void) {

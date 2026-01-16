@@ -94,14 +94,17 @@ TEST(test_autorelease_pool_cleanup_on_exception) {
     TEST_ASSERT_NOT_NULL(caught_ex);
     
     // Test cleanup function
+    uint32_t base_depth = autorelease_pool_depth();
     autorelease_pool_push();
-    TEST_ASSERT_TRUE(is_autorelease_pool_active());
+    TEST_ASSERT_TRUE(autorelease_pool_depth() == base_depth + 1);
     
     CljString *test_obj = (CljString*)AUTORELEASE(make_string("test"));
     (void)test_obj;
     
-    autorelease_pool_cleanup_after_exception();
-    TEST_ASSERT_FALSE(is_autorelease_pool_active());
+    // IMPORTANT: Do not drain below the outer test harness pool (which wraps every TEST).
+    // Restore exactly the depth we had before this test's manual push.
+    autorelease_pool_cleanup_to_depth(base_depth);
+    TEST_ASSERT_EQUAL_UINT32(base_depth, autorelease_pool_depth());
 }
 
 
