@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(flash-tree C)
 
-option(FLASH_TREE_DOGFOOD_O1_RAM "Build flash-tree with FT_MPOOL_O1_RAM for host dogfooding" OFF)
+#
+# NOTE: FT_MPOOL_O1_RAM is always enabled (no build option).
+#
 
 set(FLASH_TREE_CORE_SRCS
     src/ft_kv.c
@@ -24,7 +26,6 @@ set(BSD_BTREE_SRCS
     src/ft_bt_search.c
     src/ft_bt_seq.c
     src/ft_bt_split.c
-    src/ft_bt_stack.c
     src/ft_bt_utils.c
     src/ft_bsd_db_panic.c
     src/ft_bsd_mpool.c
@@ -79,14 +80,9 @@ if(DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "esp32\\.cmake"
     endforeach()
 endif()
 
-# Host dogfooding: enable O(1)-RAM scan mode in mpool.
-if(FLASH_TREE_DOGFOOD_O1_RAM)
-    foreach(tgt flash-tree-obj bsd-btree-obj flash-tree-core bsd-btree flash-tree)
-        if(TARGET ${tgt})
-            target_compile_definitions(${tgt} PRIVATE FT_MPOOL_O1_RAM=1)
-        endif()
-    endforeach()
-endif()
+#
+# O(1)-RAM mode is always enabled (FT_MPOOL_O1_RAM=1).
+#
 
 # Single-config generators fallback (older CMake workflows).
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -122,6 +118,12 @@ if(UNITY_SRC)
         tests/test_blockdev.c
         tests/test_btree_prefix.c
         tests/test_btree_rw.c
+        tests/test_btree_pincount.c
+        tests/test_btree_split_helpers.c
+        tests/test_btree_split_child.c
+        tests/test_btree_topdown_insert.c
+        tests/test_mpool_cache_cfg.c
+        tests/test_mpool_cache_stress.c
         tests/test_multi_kv.c
         tests/test_kv_edge_cases.c
         tests/test_gc.c
@@ -145,10 +147,7 @@ if(UNITY_SRC)
     target_compile_definitions(flash-tree-tests PRIVATE
         $<$<CONFIG:Debug>:DEBUG>
     )
-
-    if(FLASH_TREE_DOGFOOD_O1_RAM)
-        # Force scan-miss coverage in tests (small cache), while keeping library defaults intact.
-        target_compile_definitions(flash-tree-tests PRIVATE FT_MPOOL_O1_RAM=1 FT_MPOOL_PG_CACHE_ENTRIES=1)
-    endif()
+    # Force scan-miss coverage in tests (small cache), while keeping library defaults intact.
+    target_compile_definitions(flash-tree-tests PRIVATE FT_MPOOL_PG_CACHE_ENTRIES=1)
 endif()
 

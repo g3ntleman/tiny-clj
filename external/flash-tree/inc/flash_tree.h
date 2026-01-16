@@ -174,6 +174,25 @@ ft_status_t ft_blob_truncate(ft_kv_t* kv, const void* key, size_t key_len, size_
 ft_status_t ft_blob_write_range(ft_kv_t* kv, const void* key, size_t key_len, size_t offset,
                                 const void* data, size_t len);
 
+/* ============== Mpool tuning (optional) ============== */
+
+/*
+ * Configure the mpool page cache size used by the embedded B-Tree.
+ *
+ * Notes:
+ * - Applies to subsequent opens (mpool_open), not already-open instances.
+ * - Minimum is 3 pages for top-down split.
+ */
+ft_status_t ft_mpool_set_cache_pagecount(uint32_t count);
+uint32_t ft_mpool_get_cache_pagecount(void);
+
+/*
+ * Enable/disable automatic cache sizing when PSRAM is available (ESP32).
+ * When enabled and PSRAM is present, mpool_open will raise the cache size
+ * to a higher default if the current configured value is smaller.
+ */
+ft_status_t ft_mpool_enable_psram_autosize(int enable);
+
 /* ============== Backwards-compatible aliases (temporary) ============== */
 
 typedef ft_kv_t ft_db_t;

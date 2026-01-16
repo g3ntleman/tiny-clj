@@ -71,7 +71,7 @@ int __bt_put(const DB* dbp, DBT* key, const DBT* data, u_int flags) {
     indx_t index, nxtindex;
     pgno_t pg;
     size_t nbytes;
-    int dflags, exact, status;
+    int dflags, exact;
     char *dest, db[NOVFLSIZE], kb[NOVFLSIZE];
 
     t = dbp->internal;
@@ -130,8 +130,9 @@ int __bt_put(const DB* dbp, DBT* key, const DBT* data, u_int flags) {
      * Find the key to delete, or, the location at which to insert.  Bt_fast
      * and __bt_search pin the returned page.
      */
+    nbytes = NBLEAFDBT(key->size, data->size);
     if (t->bt_order == NOT || (e = bt_fast(t, key, data, &exact)) == NULL)
-        if ((e = __bt_search(t, key, &exact)) == NULL)
+        if ((e = __bt_search_insert(t, key, nbytes, &exact)) == NULL)
             return (RET_ERROR);
     h = e->page;
     index = e->index;
@@ -176,11 +177,11 @@ int __bt_put(const DB* dbp, DBT* key, const DBT* data, u_int flags) {
      * insert the key and data and unpin the current page.  If inserting
      * into the offset array, shift the pointers up.
      */
-    nbytes = NBLEAFDBT(key->size, data->size);
-    if (h->upper - h->lower < nbytes + sizeof(indx_t)) {
-        if ((status = __bt_split(t, h, key, data, dflags, nbytes, index)) != RET_SUCCESS)
-            return (status);
-        goto success;
+    if (__bt_would_split(h, nbytes)) {
+        /* Should not happen: top-down search ensures leaf has room. */
+        mpool_put(t->bt_mp, h, 0);
+        errno = ENOMEM;
+        return (RET_ERROR);
     }
 
     if (index < (nxtindex = NEXTINDEX(h)))
@@ -209,7 +210,6 @@ int __bt_put(const DB* dbp, DBT* key, const DBT* data, u_int flags) {
 
     mpool_put(t->bt_mp, h, MPOOL_DIRTY);
 
-success:
     if (flags == R_SETCURSOR) {
         t->bt_bcursor.pgno = e->page->pgno;
         t->bt_bcursor.index = e->index;
@@ -249,7 +249,7 @@ static EPG* bt_fast(BTREE* t, const DBT* key, const DBT* data, int* exactp) {
      * to search to get split stack.
      */
     nbytes = NBLEAFDBT(key->size, data->size);
-    if (h->upper - h->lower < nbytes + sizeof(indx_t))
+    if (__bt_would_split(h, nbytes))
         goto miss;
 
     if (t->bt_order == FORWARD) {

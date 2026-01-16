@@ -40,6 +40,7 @@ static char sccsid[] = "@(#)bt_search.c	8.6 (Berkeley) 3/15/94";
 
 #include <sys/types.h>
 
+#include <errno.h>
 #include <stdio.h>
 
 #include "ft_bsd_db.h"
@@ -67,7 +68,6 @@ EPG* __bt_search(BTREE* t, const DBT* key, int* exactp) {
     pgno_t pg;
     int cmp;
 
-    BT_CLR(t);
     for (pg = P_ROOT;;) {
         if ((h = mpool_get(t->bt_mp, pg, 0)) == NULL)
             return (NULL);
@@ -119,11 +119,127 @@ EPG* __bt_search(BTREE* t, const DBT* key, int* exactp) {
         index = base ? base - 1 : base;
 
     next:
-        if (__bt_push(t, h->pgno, index) == RET_ERROR)
-            return (NULL);
         pg = GETBINTERNAL(h, index)->pgno;
         mpool_put(t->bt_mp, h, 0);
     }
+}
+
+/*
+ * __BT_SEARCH_INSERT -- Search for insert position using top-down (preemptive) splitting.
+ *
+ * This is used by the top-down insertion path to ensure that when a leaf is
+ * returned, it has enough space to insert an item of insert_nbytes.
+ *
+ * Note: This path does not build/consume the bt_stack. It only keeps one
+ * parent and one child pinned (plus the newly allocated right page during a split).
+ */
+EPG* __bt_search_insert(BTREE* t, const DBT* key, size_t insert_nbytes, int* exactp) {
+    if (!t || !key || !exactp) {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    BT_CLR(t);
+
+    const size_t need_internal = NBINTERNAL(key->size);
+
+    /* Ensure root is not full (top-down precondition). */
+    PAGE* h = mpool_get(t->bt_mp, P_ROOT, 0);
+    if (!h)
+        return NULL;
+    const size_t root_need = (h->flags & P_BLEAF) ? insert_nbytes : need_internal;
+    if (__bt_would_split(h, root_need)) {
+        mpool_put(t->bt_mp, h, 0);
+        if (__bt_split_root(t) != RET_SUCCESS)
+            return NULL;
+        h = mpool_get(t->bt_mp, P_ROOT, 0);
+        if (!h)
+            return NULL;
+    }
+
+    while (!(h->flags & P_BLEAF)) {
+        indx_t base, index, lim;
+        int cmp = 0;
+
+        /* Binary search on the current internal page to choose child. */
+        t->bt_cur.page = h;
+        for (base = 0, lim = NEXTINDEX(h); lim; lim >>= 1) {
+            t->bt_cur.index = index = base + (lim >> 1);
+            if ((cmp = __bt_cmp(t, key, &t->bt_cur)) == 0) {
+                goto have_index;
+            }
+            if (cmp > 0) {
+                base = index + 1;
+                --lim;
+            }
+        }
+        index = base ? base - 1 : base;
+
+    have_index:;
+        const pgno_t child_pgno = GETBINTERNAL(h, index)->pgno;
+        PAGE* child = mpool_get(t->bt_mp, child_pgno, 0);
+        if (!child) {
+            mpool_put(t->bt_mp, h, 0);
+            return NULL;
+        }
+
+        int parent_dirty = 0;
+        const int child_is_leaf = (child->flags & P_BLEAF) != 0;
+        const size_t child_need = child_is_leaf ? insert_nbytes : need_internal;
+
+        /* Preemptively split full child before descending. */
+        if (__bt_would_split(child, child_need)) {
+            pgno_t right_pgno = PGNO_INVALID;
+            if (__bt_split_child(t, h, index, child, &right_pgno) != RET_SUCCESS) {
+                mpool_put(t->bt_mp, child, 0);
+                mpool_put(t->bt_mp, h, 0);
+                return NULL;
+            }
+            parent_dirty = 1;
+
+            /* Decide whether we descend into left or right child. */
+            EPG sep = {.page = h, .index = (indx_t)(index + 1)};
+            const int csep = __bt_cmp(t, key, &sep);
+            if (csep > 0) {
+                /* Go right: release left child (it was modified by split). */
+                mpool_put(t->bt_mp, child, MPOOL_DIRTY);
+                child = mpool_get(t->bt_mp, right_pgno, 0);
+                if (!child) {
+                    mpool_put(t->bt_mp, h, MPOOL_DIRTY);
+                    return NULL;
+                }
+            } else {
+                /* Go left: release right child (new page, dirty). */
+                PAGE* right = mpool_get(t->bt_mp, right_pgno, 0);
+                if (right)
+                    mpool_put(t->bt_mp, right, MPOOL_DIRTY);
+            }
+        }
+
+        /* Descend: release parent, keep child pinned. */
+        mpool_put(t->bt_mp, h, parent_dirty ? MPOOL_DIRTY : 0);
+        h = child;
+    }
+
+    /* Leaf: return exact match or insertion location. */
+    indx_t base, index, lim;
+    int cmp = 0;
+    t->bt_cur.page = h;
+    for (base = 0, lim = NEXTINDEX(h); lim; lim >>= 1) {
+        t->bt_cur.index = index = base + (lim >> 1);
+        if ((cmp = __bt_cmp(t, key, &t->bt_cur)) == 0) {
+            *exactp = 1;
+            return &t->bt_cur;
+        }
+        if (cmp > 0) {
+            base = index + 1;
+            --lim;
+        }
+    }
+
+    t->bt_cur.index = base;
+    *exactp = 0;
+    return &t->bt_cur;
 }
 
 /*
