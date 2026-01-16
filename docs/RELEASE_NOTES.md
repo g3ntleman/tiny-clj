@@ -2,6 +2,12 @@
 
 ## Latest Updates (Recent Commits)
 
+### Version 0.3: tiny-db flash database layer (sorted key-value store)
+- **tiny-db storage layer**: Database layer for flash-like block devices using a sorted key-value store (B-tree)
+  - Copy-on-write / append-only write path to tolerate resets and power-loss scenarios
+  - Prefix iteration via cursors and large values via chunking/streaming helpers
+  - Integrated into Tiny-CLJ via the filesystem layer and key-value bindings
+
 ### Regular Expression Support (Latest)
 - **Regex Subset**: Basic regular expression support via `re-pattern`, `re-find`, `re-matches`, and `regex?`
   - Based on tiny-regex-c library (Public Domain)
