@@ -77,5 +77,5 @@ Current build removes the `printf`/`vfprintf`/`snprintf`/`vsnprintf` pull-ins by
 - **Compiler/Linker flags** are already size-focused (`-Os`, sections, GC). Remaining wins typically come from:
   - reducing printf-family usage in non-essential paths (often the biggest libc pull-in)
   - optimizing Tiny-CLJ hot functions: `parse_expr`, `eval_list`, `canonicalize_expr_with_scope`
-  - tuning third-party deps (e.g., flash-tree configuration) if they are over-provisioned for the target.
+  - tuning third-party deps (e.g., tiny-db configuration) if they are over-provisioned for the target.
 

@@ -92,7 +92,7 @@ endif()
 # template/reference subprojects can't be
 # accidentally picked up by includes.
 include_directories(${CMAKE_SOURCE_DIR} include src)
-include_directories(${CMAKE_SOURCE_DIR}/external/flash-tree/inc ${CMAKE_SOURCE_DIR}/external/flash-tree/src)
+include_directories(${CMAKE_SOURCE_DIR}/external/tiny-db/inc ${CMAKE_SOURCE_DIR}/external/tiny-db/src)
 
 # Subjective-C subproject (static library + early tests)
 #
@@ -118,8 +118,8 @@ endif()
 
 add_subdirectory(subjective-c "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}")
 
-# Flash-Tree subproject (new C-only storage stack)
-add_subdirectory(external/flash-tree)
+# Tiny-DB subproject (C-only KV storage stack)
+add_subdirectory(external/tiny-db)
 
 # Ensure Subjective-C artifacts appear in its own build directory.
 set_target_properties(subjective-c PROPERTIES
@@ -202,7 +202,7 @@ add_executable(tiny-clj EXCLUDE_FROM_ALL
     src/platform_macos.c
 )
 target_link_libraries(tiny-clj PRIVATE subjective-c)
-target_link_libraries(tiny-clj PRIVATE flash-tree)
+target_link_libraries(tiny-clj PRIVATE tiny-db)
 target_include_directories(tiny-clj PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -258,7 +258,7 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/fs_layer.c
 )
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
-target_link_libraries(tiny-clj-esp32 PRIVATE flash-tree)
+target_link_libraries(tiny-clj-esp32 PRIVATE tiny-db)
 target_include_directories(tiny-clj-esp32 PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -291,7 +291,7 @@ add_executable(tiny-clj-esp32-repl EXCLUDE_FROM_ALL
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-esp32-repl PRIVATE subjective-c)
-target_link_libraries(tiny-clj-esp32-repl PRIVATE flash-tree)
+target_link_libraries(tiny-clj-esp32-repl PRIVATE tiny-db)
 target_include_directories(tiny-clj-esp32-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR}
 )
@@ -326,7 +326,7 @@ add_executable(tiny-clj-repl
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-repl PRIVATE subjective-c)
-target_link_libraries(tiny-clj-repl PRIVATE flash-tree)
+target_link_libraries(tiny-clj-repl PRIVATE tiny-db)
 target_include_directories(tiny-clj-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -356,7 +356,7 @@ add_executable(tiny-clj-profile
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
-target_link_libraries(tiny-clj-profile PRIVATE flash-tree)
+target_link_libraries(tiny-clj-profile PRIVATE tiny-db)
 target_include_directories(tiny-clj-profile PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -455,7 +455,7 @@ target_compile_definitions(unit-tests PRIVATE
     LINE_EDITING_ENABLED=1
 )
 target_link_libraries(unit-tests PRIVATE subjective-c)
-target_link_libraries(unit-tests PRIVATE flash-tree)
+target_link_libraries(unit-tests PRIVATE tiny-db)
 target_include_directories(unit-tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/subjective-c/tests

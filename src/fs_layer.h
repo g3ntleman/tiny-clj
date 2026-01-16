@@ -4,7 +4,7 @@
 #include "object.h"
 #include "namespace.h" /* EvalState */
 
-#include "flash_tree.h"
+#include "tiny_db.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -13,7 +13,7 @@
 /* Minimal KV-backed "filesystem-like" layer (Phase 2.2).
  *
  * This is intentionally small and deterministic. The backing store is a KV
- * database (Flash-Tree). For host unit tests we use a small RAM-backed blockdev.
+ * database (tiny-db). For host unit tests we use a small RAM-backed blockdev.
  */
 
 typedef struct FsKvStore FsKvStore;
@@ -31,62 +31,62 @@ size_t fs_kv_get(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, s
 bool fs_kv_del(FsKvStore *st, const char *key);
 
 /* Status-returning variants (for native bindings: nil only on NOT_FOUND). */
-ft_status_t fs_kv_put_status(FsKvStore *st, const char *key, const uint8_t *data, size_t len);
-ft_status_t fs_kv_get_status(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out);
-ft_status_t fs_kv_del_status(FsKvStore *st, const char *key);
+tdb_status_t fs_kv_put_status(FsKvStore *st, const char *key, const uint8_t *data, size_t len);
+tdb_status_t fs_kv_get_status(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out);
+tdb_status_t fs_kv_del_status(FsKvStore *st, const char *key);
 
 /* Blob-key variants used by tinyclj.kv (avoid C-string/strlen/snprintf). */
-ft_status_t fs_kv_put_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, const uint8_t *data, size_t len);
-ft_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, uint8_t *out, size_t out_len, size_t *saved_len_out);
-ft_status_t fs_kv_del_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len);
+tdb_status_t fs_kv_put_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, const uint8_t *data, size_t len);
+tdb_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, uint8_t *out, size_t out_len, size_t *saved_len_out);
+tdb_status_t fs_kv_del_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len);
 
 /* -------------------------------------------------------------------------- */
 /* Streaming APIs (C-only)                                                    */
 /* -------------------------------------------------------------------------- */
 
-typedef ft_status_t (*fs_stream_sink_cb)(const uint8_t* data, size_t len, void* arg);
-typedef ft_status_t (*fs_stream_source_cb)(uint8_t* out, size_t out_cap, size_t* out_len, void* arg);
+typedef tdb_status_t (*fs_stream_sink_cb)(const uint8_t* data, size_t len, void* arg);
+typedef tdb_status_t (*fs_stream_source_cb)(uint8_t* out, size_t out_cap, size_t* out_len, void* arg);
 
 typedef struct FsStreamStats {
     uint64_t blocks_read;    /* number of stored chunk-keys read (not app slices, not meta) */
     uint64_t blocks_written; /* number of stored chunk-keys written (not meta) */
 } FsStreamStats;
 
-ft_status_t fs_stream_stats_reset(FsKvStore* st);
-ft_status_t fs_stream_stats_get(const FsKvStore* st, FsStreamStats* out);
+tdb_status_t fs_stream_stats_reset(FsKvStore* st);
+tdb_status_t fs_stream_stats_get(const FsKvStore* st, FsStreamStats* out);
 
 /* KV blob-key streaming */
-ft_status_t fs_kv_stream_read_key_bytes(FsKvStore* st,
+tdb_status_t fs_kv_stream_read_key_bytes(FsKvStore* st,
                                         const uint8_t* key, size_t key_len,
                                         size_t max_chunk,
                                         fs_stream_sink_cb cb, void* arg);
 
 /* Optional: start streaming from an offset (seek-by-chunk arithmetic). */
-ft_status_t fs_kv_stream_read_key_bytes_from(FsKvStore* st,
+tdb_status_t fs_kv_stream_read_key_bytes_from(FsKvStore* st,
                                              const uint8_t* key, size_t key_len,
                                              size_t offset,
                                              size_t max_chunk,
                                              fs_stream_sink_cb cb, void* arg);
 
-ft_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
+tdb_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
                                          const uint8_t* key, size_t key_len,
                                          fs_stream_source_cb next, void* arg,
                                          size_t* out_total_len);
 
 /* File streaming (path is still string key) */
-ft_status_t fs_file_stream_read(FsKvStore* st,
+tdb_status_t fs_file_stream_read(FsKvStore* st,
                                 const char* path,
                                 size_t max_chunk,
                                 fs_stream_sink_cb cb, void* arg);
 
 /* Optional: start streaming from an offset (seek-by-chunk arithmetic). */
-ft_status_t fs_file_stream_read_from(FsKvStore* st,
+tdb_status_t fs_file_stream_read_from(FsKvStore* st,
                                      const char* path,
                                      size_t offset,
                                      size_t max_chunk,
                                      fs_stream_sink_cb cb, void* arg);
 
-ft_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
+tdb_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
                                  const char* path,
                                  fs_stream_source_cb next, void* arg,
                                  size_t* out_total_len);
