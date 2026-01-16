@@ -196,7 +196,7 @@ TEST(test_autorelease_pool_memory_cleanup) {
         // Create multiple objects that should be autoreleased
         for (int i = 0; i < 10; i++) {
             char buffer[32];
-            snprintf(buffer, sizeof(buffer), "test_string_%d", i);
+            test_snprintf(buffer, sizeof(buffer), "test_string_%d", i);
             struct CljString *str = make_string(buffer);
             TEST_ASSERT_NOT_NULL(str);
             
@@ -208,7 +208,7 @@ TEST(test_autorelease_pool_memory_cleanup) {
         CljObject *list = NULL;
         for (int i = 0; i < 5; i++) {
             char buffer[32];
-            snprintf(buffer, sizeof(buffer), "list_item_%d", i);
+            test_snprintf(buffer, sizeof(buffer), "list_item_%d", i);
             struct CljString *str = make_string(buffer);
             list = (CljObject*)make_list(str, (CljList*)list);
             AUTORELEASE(str);

@@ -358,17 +358,17 @@ TEST(test_parameter_lookup_optimization) {
     // Call function 10 times - each call does parameter lookups
     for (int i = 0; i < 10; i++) {
         char code[64];
-        snprintf(code, sizeof(code), "(test-lookup %d %d %d)", i, i+1, i+2);
+        test_snprintf(code, sizeof(code), "(test-lookup %d %d %d)", i, i+1, i+2);
         CljValue result = eval_string(code, g_test_eval_state);
         if (!result) {
             char msg[128];
-            snprintf(msg, sizeof(msg), "test-lookup call %d returned NULL", i);
+            test_snprintf(msg, sizeof(msg), "test-lookup call %d returned NULL", i);
             TEST_FAIL_MESSAGE(msg);
             return;
         }
         if (!is_fixnum(result)) {
             char msg[128];
-            snprintf(msg, sizeof(msg), "test-lookup call %d returned non-fixnum (type: %d)", i,
+            test_snprintf(msg, sizeof(msg), "test-lookup call %d returned non-fixnum (type: %d)", i,
                      result ? ((CljObject*)result)->type : -1);
             TEST_FAIL_MESSAGE(msg);
             return;
@@ -377,7 +377,7 @@ TEST(test_parameter_lookup_optimization) {
         int actual = as_fixnum(result);
         if (actual != expected) {
             char msg[128];
-            snprintf(msg, sizeof(msg), "test-lookup call %d: expected %d, got %d", i, expected, actual);
+            test_snprintf(msg, sizeof(msg), "test-lookup call %d: expected %d, got %d", i, expected, actual);
             TEST_FAIL_MESSAGE(msg);
             return;
         }
@@ -639,7 +639,7 @@ TEST(test_defn_add_can_be_called) {
             CljObject *obj = (CljObject*)call_result;
             if (!is_fixnum(call_result)) {
                 char msg[256];
-                snprintf(msg, sizeof(msg),
+                test_snprintf(msg, sizeof(msg),
                         "Calling (my-sum 3 4) returned type %d (%s), expected fixnum",
                         obj->type, clj_type_name(obj->type));
                 TEST_FAIL_MESSAGE(msg);

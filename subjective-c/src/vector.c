@@ -7,7 +7,9 @@
 #include "validation.h"  // For throw_index_out_of_bounds
 #include <stdlib.h>
 #include <stdbool.h>
+#if !defined(ESP32_BUILD)
 #include <execinfo.h>  // For backtrace
+#endif
 #include <unistd.h>    // For write
 
 // CljVector struct definition (opaque pointer - only visible in vector.c)

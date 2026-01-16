@@ -331,7 +331,7 @@ TEST(test_slurp_reads_file) {
 
   // Test slurp with file path as string
   char expr[256];
-  snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
   CljObject *result = eval_string(expr, g_test_eval_state);
 
   // Verify result is a string
@@ -356,7 +356,7 @@ TEST(test_slurp_returns_string) {
 
   // Test slurp returns string type
   char expr[256];
-  snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
   CljObject *result = eval_string(expr, g_test_eval_state);
 
   // Verify return type
@@ -376,7 +376,7 @@ TEST(test_slurp_empty_file) {
 
   // Test slurp on empty file
   char expr[256];
-  snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
   CljObject *result = eval_string(expr, g_test_eval_state);
 
   // Verify result is empty string
@@ -418,7 +418,7 @@ TEST(test_slurp_multiline_content) {
 
   // Test slurp with multiline content
   char expr[256];
-  snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
   CljObject *result = eval_string(expr, g_test_eval_state);
 
   // Verify result contains all lines
@@ -445,12 +445,12 @@ TEST(test_spit_writes_file) {
 
   // Write content to file using spit
   char expr[512];
-  snprintf(expr, sizeof(expr), "(spit \"%s\" \"Hello from spit!\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(spit \"%s\" \"Hello from spit!\")", test_file);
   (void)eval_string(expr,
                     g_test_eval_state); // spit returns nil (Clojure-compatible)
 
   // Read file back to verify content
-  snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
   CljObject *read_result = eval_string(expr, g_test_eval_state);
 
   TEST_ASSERT_NOT_NULL(read_result);
@@ -472,11 +472,11 @@ TEST(test_spit_overwrites_file) {
 
   // Overwrite with new content
   char expr[512];
-  snprintf(expr, sizeof(expr), "(spit \"%s\" \"New content\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(spit \"%s\" \"New content\")", test_file);
   (void)eval_string(expr, g_test_eval_state);
 
   // Read file back to verify it was overwritten
-  snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
   CljObject *read_result = eval_string(expr, g_test_eval_state);
 
   TEST_ASSERT_NOT_NULL(read_result);
@@ -502,11 +502,11 @@ TEST(test_spit_multiline_content) {
   // Write multiline content
   const char *content = "Line 1\nLine 2\nLine 3\n";
   char expr[512];
-  snprintf(expr, sizeof(expr), "(spit \"%s\" \"%s\")", test_file, content);
+  test_snprintf(expr, sizeof(expr), "(spit \"%s\" \"%s\")", test_file, content);
   (void)eval_string(expr, g_test_eval_state);
 
   // Read back and verify
-  snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
   CljObject *read_result = eval_string(expr, g_test_eval_state);
 
   TEST_ASSERT_NOT_NULL(read_result);
@@ -528,11 +528,11 @@ TEST(test_spit_empty_string) {
 
   // Write empty string
   char expr[512];
-  snprintf(expr, sizeof(expr), "(spit \"%s\" \"\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(spit \"%s\" \"\")", test_file);
   (void)eval_string(expr, g_test_eval_state);
 
   // Read back and verify it's empty
-  snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
   CljObject *read_result = eval_string(expr, g_test_eval_state);
 
   TEST_ASSERT_NOT_NULL(read_result);
@@ -557,12 +557,11 @@ TEST(test_spit_slurp_roundtrip) {
 
   // Write with spit
   char expr[512];
-  snprintf(expr, sizeof(expr), "(spit \"%s\" \"%s\")", test_file,
-           original_content);
+  test_snprintf(expr, sizeof(expr), "(spit \"%s\" \"%s\")", test_file, original_content);
   (void)eval_string(expr, g_test_eval_state);
 
   // Read back with slurp
-  snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
+  test_snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
   CljObject *read_result = eval_string(expr, g_test_eval_state);
 
   TEST_ASSERT_NOT_NULL(read_result);
@@ -588,7 +587,7 @@ TEST(test_parse_vector_strings_inner_pool) {
     // eval_string creates an inner pool, parse_vector adds strings to that pool
     // When inner pool is popped, strings are freed even if retained by vector
     char expr[256];
-    snprintf(expr, sizeof(expr), "[\"test1\" \"test2\" \"test3\"]");
+    test_snprintf(expr, sizeof(expr), "[\"test1\" \"test2\" \"test3\"]");
 
     // eval_string creates inner pool
     CljObject *result = eval_string(expr, g_test_eval_state);
@@ -630,7 +629,7 @@ TEST(test_history_load_from_file_scenario) {
   const char *test_content = "[\"test1\" \"test2\" \"test3\"]\n";
   FILE *fp = fopen(tmp_hist_path, "w");
   TEST_ASSERT_NOT_NULL(fp);
-  fprintf(fp, "%s", test_content);
+  if (test_content) fputs(test_content, fp);
   fclose(fp);
 
   // Simulate exactly what history_load_from_file does:
@@ -641,7 +640,7 @@ TEST(test_history_load_from_file_scenario) {
     WITH_AUTORELEASE_POOL({
         TRY {
             char expr[512];
-            snprintf(expr, sizeof(expr), "(slurp \"%s\")", tmp_hist_path);
+            test_snprintf(expr, sizeof(expr), "(slurp \"%s\")", tmp_hist_path);
             ID slurp_result = eval_string(expr, g_test_eval_state);
             
             if (!slurp_result || TAG(slurp_result) != CLJ_STRING) {

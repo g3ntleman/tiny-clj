@@ -142,6 +142,14 @@ int ft_kv_gc_step_more(ft_kv_t* kv, size_t budget_bytes);
 
 typedef ft_status_t (*ft_blob_stream_cb)(const void* data, size_t len, void* arg);
 
+/*
+ * Query the blob chunk size (payload bytes per data page).
+ *
+ * This is typically (erase_granularity - sizeof(ft_page_hdr_t)) for the KV policy,
+ * e.g. 4096 - 16 = 4080 on ESP32-like setups.
+ */
+ft_status_t ft_blob_chunk_size(ft_kv_t* kv, size_t* out_chunk_size);
+
 /* Convenience: replace whole blob (writes + commits). */
 ft_status_t ft_blob_put(ft_kv_t* kv, const void* key, size_t key_len, const void* data, size_t len);
 

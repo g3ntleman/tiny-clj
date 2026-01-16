@@ -5,6 +5,25 @@
 #include "benchmark.h"
 #include <sys/time.h>
 #include <math.h>
+#include "mini_format.h"
+
+static void bench_printf(const char *fmt, ...) {
+    char buf[512];
+    va_list ap;
+    va_start(ap, fmt);
+    (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    fputs(buf, stdout);
+}
+
+static void bench_fprintf(FILE *file, const char *fmt, ...) {
+    char buf[512];
+    va_list ap;
+    va_start(ap, fmt);
+    (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    fputs(buf, file ? file : stdout);
+}
 
 void benchmark_init(void) {
     benchmark_clear_results();
@@ -18,21 +37,21 @@ BenchmarkResult g_benchmarks[MAX_BENCHMARKS];
 int g_benchmark_count = 0;
 
 void benchmark_print_results(void) {
-    printf("\n=== BENCHMARK RESULTS ===\n");
-    printf("%-30s %12s %12s %8s %12s\n", 
+    bench_printf("\n=== BENCHMARK RESULTS ===\n");
+    bench_printf("%-30s %12s %12s %8s %12s\n",
            "Name", "Time (ms)", "Per Iter (ms)", "Iters", "Ops/sec");
-    printf("%-30s %12s %12s %8s %12s\n", 
+    bench_printf("%-30s %12s %12s %8s %12s\n",
            "----", "----------", "-------------", "-----", "--------");
     
     for (int i = 0; i < g_benchmark_count; i++) {
-        printf("%-30s %12.3f %12.6f %8d %12.0f\n",
+        bench_printf("%-30s %12.3f %12.6f %8d %12.0f\n",
                g_benchmarks[i].name,
                g_benchmarks[i].time_ms * g_benchmarks[i].iterations,
                g_benchmarks[i].time_ms,
                g_benchmarks[i].iterations,
                g_benchmarks[i].ops_per_sec);
     }
-    printf("\n");
+    bench_printf("\n");
 }
 
 void benchmark_generate_report(const char* filename) {
@@ -61,11 +80,11 @@ void benchmark_compare_with_previous(const char* report_file, const char* previo
                     fwrite(buf, 1, n, out);
                 }
                 fclose(out);
-                printf("Baseline created at %s from %s\n", baseline_path, report_path);
+                bench_printf("Baseline created at %s from %s\n", baseline_path, report_path);
             }
             fclose(rep);
         } else {
-            printf("Warning: Could not create baseline; no report available\n");
+            bench_printf("Warning: Could not create baseline; no report available\n");
         }
     } else {
         fclose(baseline);
@@ -77,12 +96,12 @@ void benchmark_compare_with_previous(const char* report_file, const char* previo
 void benchmark_export_csv(const char* filename) {
     FILE* file = fopen(filename, "w");
     if (!file) {
-        printf("Error: Could not open %s for writing\n", filename);
+        bench_printf("Error: Could not open %s for writing\n", filename);
         return;
     }
     
     // Write header
-    fprintf(file, "timestamp,name,time_ms,iterations,ops_per_sec,memory_bytes\n");
+    bench_fprintf(file, "timestamp,name,time_ms,iterations,ops_per_sec,memory_bytes\n");
     
     // Get current timestamp
     time_t now = time(NULL);
@@ -91,7 +110,7 @@ void benchmark_export_csv(const char* filename) {
     
     // Write data
     for (int i = 0; i < g_benchmark_count; i++) {
-        fprintf(file, "%s,%s,%.6f,%d,%.0f,%zu\n",
+        bench_fprintf(file, "%s,%s,%.6f,%d,%.0f,%zu\n",
                 timestamp,
                 g_benchmarks[i].name,
                 g_benchmarks[i].time_ms,
@@ -101,7 +120,7 @@ void benchmark_export_csv(const char* filename) {
     }
     
     fclose(file);
-    printf("Benchmark results exported to %s (%d entries)\n", filename, g_benchmark_count);
+    bench_printf("Benchmark results exported to %s (%d entries)\n", filename, g_benchmark_count);
 }
 
 static void append_history(const char *cname, double current_time, int iterations, double ops_per_sec, size_t memory_bytes, double change_percent) {
@@ -110,24 +129,24 @@ static void append_history(const char *cname, double current_time, int iteration
     time_t now = time(NULL);
     char ts[32];
     strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", localtime(&now));
-    fprintf(file, "%s,%s,%.6f,%d,%.0f,%zu,%.2f\n", ts, cname, current_time, iterations, ops_per_sec, memory_bytes, change_percent);
+    bench_fprintf(file, "%s,%s,%.6f,%d,%.0f,%zu,%.2f\n", ts, cname, current_time, iterations, ops_per_sec, memory_bytes, change_percent);
     fclose(file);
 }
 
 void benchmark_compare_with_baseline(const char* baseline_file) {
     FILE* file = fopen(baseline_file, "r");
     if (!file) {
-        printf("Warning: Could not open baseline file %s\n", baseline_file);
+        bench_printf("Warning: Could not open baseline file %s\n", baseline_file);
         return;
     }
     
     char line[256];
     fgets(line, sizeof(line), file); // Skip header
     
-    printf("\n=== PERFORMANCE COMPARISON ===\n");
-    printf("%-30s %12s %12s %12s\n", 
+    bench_printf("\n=== PERFORMANCE COMPARISON ===\n");
+    bench_printf("%-30s %12s %12s %12s\n",
            "Name", "Current (ms)", "Baseline (ms)", "Change (%)");
-    printf("%-30s %12s %12s %12s\n", 
+    bench_printf("%-30s %12s %12s %12s\n",
            "----", "-------------", "-------------", "----------");
     
     int any_significant = 0;
@@ -149,7 +168,7 @@ void benchmark_compare_with_baseline(const char* baseline_file) {
                     double current_time = g_benchmarks[i].time_ms;
                     double change_percent = ((current_time - baseline_time) / baseline_time) * 100.0;
                     
-                    printf("%-30s %12.6f %12.6f %+11.2f%%\n",
+                    bench_printf("%-30s %12.6f %12.6f %+11.2f%%\n",
                            cname, current_time, baseline_time, change_percent);
                     if (fabs(change_percent) >= threshold) {
                         any_significant = 1;
@@ -167,12 +186,12 @@ void benchmark_compare_with_baseline(const char* baseline_file) {
     }
     
     fclose(file);
-    printf("\n");
+    bench_printf("\n");
 
     // Update baseline if significant change detected
     if (any_significant) {
         benchmark_export_csv(baseline_file);
-        printf("Baseline updated: %s (>= %.2f%% change)\n", baseline_file, threshold);
+        bench_printf("Baseline updated: %s (>= %.2f%% change)\n", baseline_file, threshold);
     }
 }
 

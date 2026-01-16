@@ -29,7 +29,7 @@
 // is_special_symbol is in symbol.h (already included)
 #include <string.h>
 #include <stdlib.h>
-#include <stdio.h>
+#include "mini_format.h"
 
 // ============================================================================
 // ============================================================================
@@ -182,7 +182,7 @@ static CljVector* transform_params(EvalState *st, CljVector *params, CljVector *
         unsigned char tag = TAG(param);
         if (tag == CLJ_VECTOR || tag == CLJ_MAP) {
             char name[64];
-            snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
+            clj_mini_snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
             CljSymbol *gsym = intern_symbol_global(name);
             ASSIGN(new_params, vector_conj(new_params, gsym));
             ASSIGN(let_bindings, vector_conj(let_bindings, param));
@@ -281,7 +281,7 @@ static CljSymbol* canonicalize_symbol_token(CljSymbolToken *token, EvalState *st
         if (is_keyword) {
             // For keywords, add ':' prefix to symbol name
             char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
-            snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", sym_buf);
+            clj_mini_snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", sym_buf);
             return intern_symbol(ns_name_sym, keyword_with_colon);
         } else {
             return intern_symbol(ns_name_sym, sym_buf);
@@ -292,7 +292,7 @@ static CljSymbol* canonicalize_symbol_token(CljSymbolToken *token, EvalState *st
         if (keyword_name[0] != '\0' && st && st->current_ns && st->current_ns->name) {
             CljSymbol *ns_name_sym = st->current_ns->name;
             char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
-            snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
+            clj_mini_snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
             return intern_symbol(ns_name_sym, keyword_with_colon);
         }
         // Fall through to unqualified keyword
@@ -484,7 +484,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                             if (TAG(binding_form) != CLJ_SYMBOL) {
                                 // Destructuring binding - create gensym
                                 char name[64];
-                                snprintf(name, sizeof(name), "loop__%lu", ++gensym_counter);
+                                clj_mini_snprintf(name, sizeof(name), "loop__%lu", ++gensym_counter);
                                 CljSymbol *gsym = intern_symbol_global(name);
                                 ASSIGN(loop_bindings, vector_conj(loop_bindings, gsym));
                                 ASSIGN(loop_bindings, vector_conj(loop_bindings, init_expr));

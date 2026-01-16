@@ -9,7 +9,7 @@
 #include "kv_macros.h"
 #include "exception.h"
 #include <string.h>
-#include <stdio.h>
+#include "mini_format.h"
 
 // FNV-1a hash for strings
 static uint32_t fnv1a(const char *s) {
@@ -235,7 +235,7 @@ CljString* clj_to_string_default(ID value) {
     
     if (is_fixnum(value)) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "%d", as_fixnum(value));
+        clj_mini_snprintf(buf, sizeof(buf), "%d", as_fixnum(value));
         return make_string(buf);
     }
     

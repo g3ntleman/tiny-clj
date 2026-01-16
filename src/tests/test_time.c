@@ -36,7 +36,7 @@ TEST_SHARED(test_time_basic_functionality) {
     }
     if (!is_fixnum(simple_result)) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "eval_string(\"(+ 1 2)\") returned non-fixnum (value: %p, type: %d)", 
+        test_snprintf(msg, sizeof(msg), "eval_string(\"(+ 1 2)\") returned non-fixnum (value: %p, type: %d)", 
                  (void*)simple_result, simple_result ? ((CljObject*)simple_result)->type : -1);
         TEST_FAIL_MESSAGE(msg);
         return;
@@ -44,7 +44,7 @@ TEST_SHARED(test_time_basic_functionality) {
     int simple_actual = as_fixnum(simple_result);
     if (simple_actual != 3) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "eval_string(\"(+ 1 2)\") returned %d, expected 3", simple_actual);
+        test_snprintf(msg, sizeof(msg), "eval_string(\"(+ 1 2)\") returned %d, expected 3", simple_actual);
         TEST_FAIL_MESSAGE(msg);
         return;
     }
@@ -64,7 +64,7 @@ TEST_SHARED(test_time_basic_functionality) {
     }
     if (time_sym != SYM_TIME) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "intern_symbol_global(\"time\") returned %p, but SYM_TIME is %p", 
+        test_snprintf(msg, sizeof(msg), "intern_symbol_global(\"time\") returned %p, but SYM_TIME is %p", 
                  (void*)time_sym, (void*)SYM_TIME);
         TEST_FAIL_MESSAGE(msg);
         return;
@@ -80,7 +80,7 @@ TEST_SHARED(test_time_basic_functionality) {
     }
     if (!is_fixnum(result)) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "eval_string(\"(time (+ 1 2))\", g_test_eval_state) returned non-fixnum (type: %d)", 
+        test_snprintf(msg, sizeof(msg), "eval_string(\"(time (+ 1 2))\", g_test_eval_state) returned non-fixnum (type: %d)", 
                  result ? ((CljObject*)result)->type : -1);
         TEST_FAIL_MESSAGE(msg);
         return;
@@ -88,7 +88,7 @@ TEST_SHARED(test_time_basic_functionality) {
     int actual = as_fixnum(result);
     if (actual != 3) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "eval_string(\"(time (+ 1 2))\", g_test_eval_state) returned %d, expected 3", actual);
+        test_snprintf(msg, sizeof(msg), "eval_string(\"(time (+ 1 2))\", g_test_eval_state) returned %d, expected 3", actual);
         TEST_FAIL_MESSAGE(msg);
         return;
     }

@@ -613,21 +613,21 @@ TEST(test_reduce_large_collection) {
         // eval_string returns AUTORELEASE objects - no manual RETAIN/RELEASE needed
         if (!is_fixnum(result)) {
             char msg[256];
-            snprintf(msg, sizeof(msg), "reduce returned non-fixnum: type=%d", result ? result->type : -1);
+            test_snprintf(msg, sizeof(msg), "reduce returned non-fixnum: type=%d", result ? result->type : -1);
             TEST_FAIL_MESSAGE(msg);
             return;
         }
         int value = as_fixnum(result);
         if (value != 55) {
             char msg[256];
-            snprintf(msg, sizeof(msg), "reduce returned %d, expected 55", value);
+            test_snprintf(msg, sizeof(msg), "reduce returned %d, expected 55", value);
             TEST_FAIL_MESSAGE(msg);
             return;
         }
         // No manual cleanup needed - result is autoreleased
     } CATCH(ex) {
         char msg[512];
-        snprintf(msg, sizeof(msg), "reduce threw exception: %s - %s", 
+        test_snprintf(msg, sizeof(msg), "reduce threw exception: %s - %s",
                 ex ? ex->type : "unknown", ex ? ex->message : "no message");
         TEST_FAIL_MESSAGE(msg);
     } END_TRY
@@ -649,20 +649,20 @@ TEST(test_reduce_with_identity_function) {
         }
         if (!is_fixnum(result)) {
             char msg[256];
-            snprintf(msg, sizeof(msg), "reduce returned non-fixnum: type=%d", result ? result->type : -1);
+            test_snprintf(msg, sizeof(msg), "reduce returned non-fixnum: type=%d", result ? result->type : -1);
             TEST_FAIL_MESSAGE(msg);
             return;
         }
         int value = as_fixnum(result);
         if (value != 42) {
             char msg[256];
-            snprintf(msg, sizeof(msg), "reduce returned %d, expected 42", value);
+            test_snprintf(msg, sizeof(msg), "reduce returned %d, expected 42", value);
             TEST_FAIL_MESSAGE(msg);
             return;
         }
     } CATCH(ex) {
         char msg[512];
-        snprintf(msg, sizeof(msg), "reduce threw exception: %s - %s", 
+        test_snprintf(msg, sizeof(msg), "reduce threw exception: %s - %s",
                 ex ? ex->type : "unknown", ex ? ex->message : "no message");
         TEST_FAIL_MESSAGE(msg);
     } END_TRY

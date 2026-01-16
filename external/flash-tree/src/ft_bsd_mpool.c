@@ -12,6 +12,7 @@
  */
 
 #include "ft_bsd_mpool.h"
+#include "ft_alloc.h"
 #include "ft_crc32.h"
 #include "ft_kv_bind.h"
 #include "ft_kv_internal.h"
@@ -70,6 +71,66 @@ static inline uint32_t ft_page_hdr_crc_calc(const uint8_t hdr_bytes[sizeof(ft_pa
     ft_page_hdr_zero_crc(tmp);
     uint32_t crc = ft_crc32_ieee(tmp, sizeof(tmp), 0);
     crc = ft_crc32_ieee(page_bytes, page_len, crc);
+    return crc;
+}
+
+/*
+ * Compute CRC for a record stored on flash without allocating a full (header+payload) buffer.
+ * Reads payload in small chunks and feeds it into the CRC incrementally.
+ */
+static ft_status_t ft_page_hdr_crc_calc_from_flash(MPOOL* mp, uint32_t rec_off,
+                                                   const uint8_t hdr_bytes[sizeof(ft_page_hdr_t)],
+                                                   uint32_t* out_crc) {
+    if (out_crc)
+        *out_crc = 0;
+    if (!mp || !mp->bdev || !hdr_bytes || !out_crc)
+        return FT_ERR_INVALID_ARG;
+
+    uint8_t tmp_hdr[sizeof(ft_page_hdr_t)];
+    memcpy(tmp_hdr, hdr_bytes, sizeof(tmp_hdr));
+    ft_page_hdr_zero_crc(tmp_hdr);
+
+    uint32_t crc = ft_crc32_ieee(tmp_hdr, sizeof(tmp_hdr), 0);
+
+    uint32_t payload_off = rec_off + (uint32_t)sizeof(ft_page_hdr_t);
+    size_t remaining = mp->pagesize;
+    uint8_t buf[64];
+    while (remaining) {
+        const size_t take = (remaining < sizeof(buf)) ? remaining : sizeof(buf);
+        if (ft_blockdev_read(mp->bdev, payload_off, buf, take) != FT_OK)
+            return FT_ERR_IO;
+        crc = ft_crc32_ieee(buf, take, crc);
+        payload_off += (uint32_t)take;
+        remaining -= take;
+    }
+
+    *out_crc = crc;
+    return FT_OK;
+}
+
+/*
+ * Compute CRC for a tombstone payload without allocating a full pagesize buffer.
+ * Tombstone payload layout:
+ * - first 4 bytes: next_free (u32 LE)
+ * - remaining bytes: left as erased (0xFF)
+ */
+static uint32_t ft_page_hdr_crc_calc_tombstone_erased_tail(
+    const uint8_t hdr_bytes[sizeof(ft_page_hdr_t)], const uint8_t next_free_le[4], size_t page_len) {
+    uint8_t tmp_hdr[sizeof(ft_page_hdr_t)];
+    memcpy(tmp_hdr, hdr_bytes, sizeof(tmp_hdr));
+    ft_page_hdr_zero_crc(tmp_hdr);
+
+    uint32_t crc = ft_crc32_ieee(tmp_hdr, sizeof(tmp_hdr), 0);
+    crc = ft_crc32_ieee(next_free_le, 4u, crc);
+
+    size_t rem = (page_len > 4u) ? (page_len - 4u) : 0u;
+    uint8_t ff[64];
+    memset(ff, 0xFF, sizeof(ff));
+    while (rem) {
+        const size_t take = (rem < sizeof(ff)) ? rem : sizeof(ff);
+        crc = ft_crc32_ieee(ff, take, crc);
+        rem -= take;
+    }
     return crc;
 }
 
@@ -233,15 +294,12 @@ static int ft_cache_flush_slot(MPOOL* mp, ft_cache_slot_t* slot) {
         mp->pgout(mp->pgcookie, slot->pgno, slot->data);
     }
 
-    /* Prepare full record (header+payload) and write in a single prog(). */
+    /* Write record (header+payload) without a full scratch buffer. */
     const uint32_t total = ft_rec_size(mp);
-    uint8_t* rec = mp->scratch_rec;
-    uint8_t* hdrb = rec;
-    uint8_t* payload = rec + sizeof(ft_page_hdr_t);
-    memcpy(payload, slot->data, mp->pagesize);
+    uint8_t hdrb[sizeof(ft_page_hdr_t)];
 
     ft_page_hdr_encode(hdrb, FT_PAGE_MAGIC, slot->pgno, 0u, 0u);
-    uint32_t crc = ft_page_hdr_crc_calc(hdrb, payload, mp->pagesize);
+    uint32_t crc = ft_page_hdr_crc_calc(hdrb, (const uint8_t*)slot->data, mp->pagesize);
     ft_u32_le_write(&hdrb[8], crc);
 
     /* Check space */
@@ -249,8 +307,11 @@ static int ft_cache_flush_slot(MPOOL* mp, ft_cache_slot_t* slot) {
         return -1; /* Log full */
     }
 
-    /* Write full record (header+payload) */
-    ft_status_t st = ft_blockdev_prog(mp->bdev, mp->write_off, rec, total);
+    /* Program header and payload separately (both aligned). */
+    ft_status_t st = ft_blockdev_prog(mp->bdev, mp->write_off, hdrb, sizeof(hdrb));
+    if (st != FT_OK)
+        return -1;
+    st = ft_blockdev_prog(mp->bdev, mp->write_off + (uint32_t)sizeof(hdrb), slot->data, mp->pagesize);
     if (st != FT_OK)
         return -1;
 
@@ -277,73 +338,85 @@ static int ft_cache_flush_slot(MPOOL* mp, ft_cache_slot_t* slot) {
  * Later entries for the same page number override earlier ones.
  * @return 0 on success, non-zero on error
  */
+static int ft_mpool_scan_half(MPOOL* mp, uint32_t start, uint32_t end, uint32_t* out_end,
+                              uint32_t* out_last_meta, pgno_t* inout_max_pgno, int* inout_any) {
+    if (out_end)
+        *out_end = start;
+    if (out_last_meta)
+        *out_last_meta = FT_OFF_INVALID;
+    if (!mp || !mp->bdev || !inout_max_pgno)
+        return -1;
+
+    const uint32_t total = ft_rec_size(mp);
+    uint32_t off = start;
+    while (off + total <= end) {
+        uint8_t hdrb[sizeof(ft_page_hdr_t)];
+        if (ft_blockdev_read(mp->bdev, off, hdrb, sizeof(hdrb)) != FT_OK)
+            break;
+        if (ft_is_all_erased(hdrb, sizeof(hdrb)))
+            break;
+        if (ft_page_hdr_get_magic(hdrb) != FT_PAGE_MAGIC)
+            break;
+
+        /* Validate CRC to avoid accepting torn last records. */
+        const uint32_t saved_crc = ft_page_hdr_get_crc(hdrb);
+        uint32_t crc = 0;
+        if (ft_page_hdr_crc_calc_from_flash(mp, off, hdrb, &crc) != FT_OK)
+            break;
+        if (crc != saved_crc) {
+            /* Best-effort: erase torn last record so we can safely reuse the block. */
+            const uint32_t eg = mp->bdev->geom.erase_granularity;
+            if (eg && (off % eg) == 0 && off + eg <= end) {
+                (void)ft_blockdev_erase(mp->bdev, off, eg);
+            }
+            break;
+        }
+
+        const pgno_t pgno = (pgno_t)ft_page_hdr_get_pgno(hdrb);
+        const uint32_t flags = ft_page_hdr_get_flags(hdrb);
+        if (inout_any)
+            *inout_any = 1;
+        if (pgno > *inout_max_pgno)
+            *inout_max_pgno = pgno;
+        if (pgno == 0 && !(flags & FT_PAGE_FLAG_TOMBSTONE) && out_last_meta)
+            *out_last_meta = off;
+
+#if FT_MPOOL_O1_RAM
+        (void)flags; /* Do not pre-populate the cache during recovery. */
+#else
+        if (ft_offsets_set(mp, pgno, off) != 0)
+            return -1;
+#endif
+
+        off += total;
+    }
+
+    if (out_end)
+        *out_end = off;
+    return 0;
+}
+
 static int ft_mpool_recover(MPOOL* mp) {
     if (!mp || !mp->bdev)
         return -1;
 
     mp->npages = 0;
+    pgno_t max_pgno = 0;
+    int any = 0;
 
-    const uint32_t total = ft_rec_size(mp);
+#if FT_MPOOL_O1_RAM
+    ft_pg_cache_init(mp);
+
+    uint32_t end0 = 0, end1 = 0;
+    uint32_t last_meta0 = FT_OFF_INVALID, last_meta1 = FT_OFF_INVALID;
     const uint32_t half0 = gc_half_start(mp, 0);
     const uint32_t half1 = gc_half_start(mp, 1);
 
-    uint32_t end0 = half0;
-    uint32_t end1 = half1;
-    uint32_t last_meta0 = FT_OFF_INVALID;
-    uint32_t last_meta1 = FT_OFF_INVALID;
-    pgno_t max_pgno = 0;
+    if (ft_mpool_scan_half(mp, half0, half0 + mp->gc_half_size, &end0, &last_meta0, &max_pgno, &any) != 0)
+        return -1;
+    if (ft_mpool_scan_half(mp, half1, half1 + mp->gc_half_size, &end1, &last_meta1, &max_pgno, &any) != 0)
+        return -1;
 
-    /* Helper lambda-like macro for scanning a half. */
-#define SCAN_HALF(half_start, half_end, out_end, out_last_meta)                                  \
-    do {                                                                                          \
-        uint32_t off = (half_start);                                                              \
-        while (off + total <= (half_end)) {                                                       \
-            uint8_t hdrb[sizeof(ft_page_hdr_t)];                                                  \
-            if (ft_blockdev_read(mp->bdev, off, hdrb, sizeof(hdrb)) != FT_OK)                     \
-                break;                                                                            \
-            if (ft_is_all_erased(hdrb, sizeof(hdrb)))                                             \
-                break;                                                                            \
-            if (ft_page_hdr_get_magic(hdrb) != FT_PAGE_MAGIC)                                     \
-                break;                                                                            \
-            /* Validate CRC to avoid accepting torn last records. */                              \
-            uint8_t* rec = mp->scratch_rec;                                                       \
-            if (ft_blockdev_read(mp->bdev, off, rec, total) != FT_OK)                             \
-                break;                                                                            \
-            const uint8_t* full_hdr = rec;                                                        \
-            const uint8_t* payload = rec + sizeof(ft_page_hdr_t);                                 \
-            const uint32_t saved_crc = ft_page_hdr_get_crc(full_hdr);                             \
-            const uint32_t crc = ft_page_hdr_crc_calc(full_hdr, payload, mp->pagesize);           \
-            if (crc != saved_crc)                                                                 \
-                break;                                                                            \
-            const pgno_t pgno = (pgno_t)ft_page_hdr_get_pgno(full_hdr);                            \
-            const uint32_t flags = ft_page_hdr_get_flags(full_hdr);                               \
-            if (pgno >= (max_pgno))                                                               \
-                (max_pgno) = pgno;                                                                \
-            if (pgno == 0 && !(flags & FT_PAGE_FLAG_TOMBSTONE))                                   \
-                (out_last_meta) = off;                                                            \
-#if FT_MPOOL_O1_RAM                                                                               \
-            if (!(flags & FT_PAGE_FLAG_TOMBSTONE))                                                \
-                ft_pg_cache_insert(mp, pgno, off);                                                 \
-#else                                                                                             \
-            if (ft_offsets_set(mp, pgno, off) != 0)                                                \
-                return -1;                                                                        \
-#endif                                                                                            \
-            off += total;                                                                         \
-        }                                                                                         \
-        (out_end) = off;                                                                          \
-    } while (0)
-
-#if FT_MPOOL_O1_RAM
-    /* Init cache before populating with last-seen records. */
-    ft_pg_cache_init(mp);
-#endif
-
-#if FT_MPOOL_O1_RAM
-    /* In O(1)-RAM mode, scan both halves to be robust across GC power-loss. */
-    SCAN_HALF(half0, half0 + mp->gc_half_size, end0, last_meta0);
-    SCAN_HALF(half1, half1 + mp->gc_half_size, end1, last_meta1);
-
-    /* Pick the half containing the most recent valid meta page (pgno 0). */
     if (last_meta1 != FT_OFF_INVALID && (last_meta0 == FT_OFF_INVALID || last_meta1 > last_meta0)) {
         mp->gc_active_half = 1;
         mp->write_off = end1;
@@ -352,18 +425,16 @@ static int ft_mpool_recover(MPOOL* mp) {
         mp->write_off = end0;
     }
 #else
-    /* Default (host) mode: scan forward from data_base. */
-    uint32_t dummy_last_meta = FT_OFF_INVALID;
-    SCAN_HALF(mp->data_base, mp->bdev->geom.total_size_bytes, mp->write_off, dummy_last_meta);
+    uint32_t dummy_end = 0;
+    if (ft_mpool_scan_half(mp, mp->data_base, mp->bdev->geom.total_size_bytes, &dummy_end, NULL,
+                           &max_pgno, &any) != 0)
+        return -1;
     mp->gc_active_half = 0;
+    mp->write_off = dummy_end;
 #endif
 
-    mp->npages = (max_pgno == 0 && (last_meta0 == FT_OFF_INVALID && last_meta1 == FT_OFF_INVALID))
-                     ? 0
-                     : (max_pgno + 1);
-
+    mp->npages = any ? (max_pgno + 1) : 0;
     return 0;
-#undef SCAN_HALF
 }
 
 /* ============== Public API ============== */
@@ -421,18 +492,12 @@ MPOOL* mpool_open(void* key, int fd, pgno_t pagesize, pgno_t maxcache) {
 #endif
 
     /* Allocate cache backing store and scratch buffer sized to pagesize. */
-    mp->cache_mem = (uint8_t*)malloc((size_t)FT_MPOOL_CACHE_PAGES * (size_t)mp->pagesize);
+    mp->cache_mem = (uint8_t*)ft_alloc((size_t)FT_MPOOL_CACHE_PAGES * (size_t)mp->pagesize,
+                                       FT_ALLOC_KIND_CACHE);
     if (!mp->cache_mem) {
         free(mp);
         return NULL;
     }
-    mp->scratch_rec = (uint8_t*)malloc((size_t)sizeof(ft_page_hdr_t) + (size_t)mp->pagesize);
-    if (!mp->scratch_rec) {
-        free(mp->cache_mem);
-        free(mp);
-        return NULL;
-    }
-
     /* Clear cache - mark all slots as empty */
     for (int i = 0; i < FT_MPOOL_CACHE_PAGES; i++) {
         mp->cache[i].pgno = PGNO_INVALID;
@@ -444,8 +509,7 @@ MPOOL* mpool_open(void* key, int fd, pgno_t pagesize, pgno_t maxcache) {
 
     /* Recover page-map from existing log */
     if (ft_mpool_recover(mp) != 0) {
-        free(mp->scratch_rec);
-        free(mp->cache_mem);
+        ft_free(mp->cache_mem);
         free(mp);
         return NULL;
     }
@@ -527,8 +591,11 @@ done_pop:
             }
         }
     }
-    if (!slot)
+    if (!slot) {
+        /* Cache exhausted: all pages are pinned (bt_split peak exceeded cache pages). */
+        errno = ENOMEM;
         return NULL;
+    }
 
     /* Initialize new page */
     slot->pgno = pgno;
@@ -573,18 +640,15 @@ static uint32_t ft_scan_back_in_range(MPOOL* mp, uint32_t start_off_exclusive, u
         if ((pgno_t)ft_page_hdr_get_pgno(hdrb) != want_pgno)
             goto next;
 
-        /* Candidate: validate full record CRC. */
-        uint8_t* rec = mp->scratch_rec;
-        if (ft_blockdev_read(mp->bdev, off, rec, total) != FT_OK)
-            continue;
-        const uint8_t* full_hdr = rec;
-        const uint8_t* payload = rec + sizeof(ft_page_hdr_t);
-        const uint32_t saved_crc = ft_page_hdr_get_crc(full_hdr);
-        const uint32_t crc = ft_page_hdr_crc_calc(full_hdr, payload, mp->pagesize);
+        /* Candidate: validate record CRC (stream payload). */
+        const uint32_t saved_crc = ft_page_hdr_get_crc(hdrb);
+        uint32_t crc = 0;
+        if (ft_page_hdr_crc_calc_from_flash(mp, off, hdrb, &crc) != FT_OK)
+            goto next;
         if (crc != saved_crc)
             goto next;
 
-        if (ft_page_hdr_get_flags(full_hdr) & FT_PAGE_FLAG_TOMBSTONE) {
+        if (ft_page_hdr_get_flags(hdrb) & FT_PAGE_FLAG_TOMBSTONE) {
             if (out_is_tombstone)
                 *out_is_tombstone = 1;
         }
@@ -664,16 +728,15 @@ void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags) {
             }
         }
     }
-    if (!slot)
+    if (!slot) {
+        /* Cache exhausted: all pages are pinned (bt_split peak exceeded cache pages). */
+        errno = ENOMEM;
         return NULL;
+    }
 
-    /* Read full record (header+payload) in a single read(). */
-    const uint32_t total = ft_rec_size(mp);
-    uint8_t* rec = mp->scratch_rec;
-    uint8_t* hdrb = rec;
-    uint8_t* payload = rec + sizeof(ft_page_hdr_t);
-
-    ft_status_t st = ft_blockdev_read(mp->bdev, log_off, rec, total);
+    /* Read header then payload directly into the cache slot. */
+    uint8_t hdrb[sizeof(ft_page_hdr_t)];
+    ft_status_t st = ft_blockdev_read(mp->bdev, log_off, hdrb, sizeof(hdrb));
     if (st != FT_OK)
         return NULL;
 
@@ -683,9 +746,13 @@ void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags) {
     if ((pgno_t)ft_page_hdr_get_pgno(hdrb) != pgno)
         return NULL;
 
+    st = ft_blockdev_read(mp->bdev, log_off + (uint32_t)sizeof(ft_page_hdr_t), slot->data, mp->pagesize);
+    if (st != FT_OK)
+        return NULL;
+
     /* Verify CRC */
     const uint32_t saved_crc = ft_page_hdr_get_crc(hdrb);
-    const uint32_t crc = ft_page_hdr_crc_calc(hdrb, payload, mp->pagesize);
+    const uint32_t crc = ft_page_hdr_crc_calc(hdrb, slot->data, mp->pagesize);
     if (crc != saved_crc)
         return NULL; /* Corrupt */
 
@@ -694,8 +761,6 @@ void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags) {
         errno = EINVAL;
         return NULL;
     }
-
-    memcpy(slot->data, payload, mp->pagesize);
 
     /* Call pgin filter if set */
     if (mp->pgin) {
@@ -753,8 +818,7 @@ int mpool_close(MPOOL* mp) {
     /* Sync before close */
     mpool_sync(mp);
 
-    free(mp->scratch_rec);
-    free(mp->cache_mem);
+    ft_free(mp->cache_mem);
 #if !FT_MPOOL_O1_RAM
     free(mp->page_offsets);
 #endif
@@ -790,29 +854,48 @@ static int gc_copy_page(MPOOL* mp, pgno_t pgno) {
     if (old_off == FT_OFF_INVALID)
         return 0;
 
-    /* Read full record (header+payload) in a single read(). */
     const uint32_t total = ft_rec_size(mp);
-    uint8_t* rec = mp->scratch_rec;
-    uint8_t* hdrb = rec;
-    uint8_t* payload = rec + sizeof(ft_page_hdr_t);
-    ft_status_t st = ft_blockdev_read(mp->bdev, old_off, rec, total);
+    uint8_t hdrb[sizeof(ft_page_hdr_t)];
+    ft_status_t st = ft_blockdev_read(mp->bdev, old_off, hdrb, sizeof(hdrb));
     if (st != FT_OK)
         return -1;
+    if (ft_page_hdr_get_magic(hdrb) != FT_PAGE_MAGIC)
+        return -1;
+    if ((pgno_t)ft_page_hdr_get_pgno(hdrb) != pgno)
+        return -1;
 
-    /* Verify CRC */
+    /* Verify CRC (stream payload). */
     const uint32_t saved_crc = ft_page_hdr_get_crc(hdrb);
-    const uint32_t crc = ft_page_hdr_crc_calc(hdrb, payload, mp->pagesize);
+    uint32_t crc = 0;
+    if (ft_page_hdr_crc_calc_from_flash(mp, old_off, hdrb, &crc) != FT_OK)
+        return -1;
     if (crc != saved_crc)
-        return -1; /* Corrupt, skip */
+        return -1;
 
     if (ft_page_hdr_get_flags(hdrb) & FT_PAGE_FLAG_TOMBSTONE)
         return 1; /* Freed page - skip copy. */
 
     /* Write to new location */
     uint32_t new_off = mp->write_off;
-    st = ft_blockdev_prog(mp->bdev, new_off, rec, total);
+    st = ft_blockdev_prog(mp->bdev, new_off, hdrb, sizeof(hdrb));
     if (st != FT_OK)
         return -1;
+    {
+        uint32_t src = old_off + (uint32_t)sizeof(ft_page_hdr_t);
+        uint32_t dst = new_off + (uint32_t)sizeof(ft_page_hdr_t);
+        size_t remaining = mp->pagesize;
+        uint8_t buf[64];
+        while (remaining) {
+            const size_t take = (remaining < sizeof(buf)) ? remaining : sizeof(buf);
+            if (ft_blockdev_read(mp->bdev, src, buf, take) != FT_OK)
+                return -1;
+            if (ft_blockdev_prog(mp->bdev, dst, buf, take) != FT_OK)
+                return -1;
+            src += (uint32_t)take;
+            dst += (uint32_t)take;
+            remaining -= take;
+        }
+    }
 
     /* Update page-map entry */
     if (ft_offsets_set(mp, pgno, new_off) != 0)
@@ -907,23 +990,23 @@ int mpool_free_pgno(MPOOL* mp, pgno_t pgno) {
 
     /* Append a tombstone record so recovery can restore the freed state. */
     const uint32_t total = ft_rec_size(mp);
-    uint8_t* rec = mp->scratch_rec;
-    uint8_t* hdrb = rec;
-    uint8_t* payload = rec + sizeof(ft_page_hdr_t);
+    uint8_t hdrb[sizeof(ft_page_hdr_t)];
     ft_page_hdr_encode(hdrb, FT_PAGE_MAGIC, pgno, 0u, FT_PAGE_FLAG_TOMBSTONE);
 
-    /* CRC covers header bytes (crc32=0) + a full pagesize data region. */
-    memset(payload, 0, mp->pagesize);
-    /* Store the current free-list head as next pointer (LE u32). */
-    ft_u32_le_write(payload, (uint32_t)mp->free_head);
-    uint32_t crc = ft_page_hdr_crc_calc(hdrb, payload, mp->pagesize);
+    /* Tombstone payload: next_free (u32 LE) + remaining bytes left erased (0xFF). */
+    uint8_t nextb[4];
+    ft_u32_le_write(nextb, (uint32_t)mp->free_head);
+    const uint32_t crc = ft_page_hdr_crc_calc_tombstone_erased_tail(hdrb, nextb, mp->pagesize);
     ft_u32_le_write(&hdrb[8], crc);
     if ((uint64_t)mp->write_off + (uint64_t)total > mp->bdev->geom.total_size_bytes) {
         return -1;
     }
 
     const uint32_t tomb_off = mp->write_off;
-    ft_status_t st = ft_blockdev_prog(mp->bdev, tomb_off, rec, total);
+    ft_status_t st = ft_blockdev_prog(mp->bdev, tomb_off, hdrb, sizeof(hdrb));
+    if (st != FT_OK)
+        return -1;
+    st = ft_blockdev_prog(mp->bdev, tomb_off + (uint32_t)sizeof(ft_page_hdr_t), nextb, sizeof(nextb));
     if (st != FT_OK)
         return -1;
 
@@ -970,19 +1053,19 @@ static int gc_copy_page_o1ram(MPOOL* mp, int old_half, pgno_t pgno) {
     if (old_off == FT_OFF_INVALID || is_tomb)
         return 0;
 
-    /* Read + verify old record. */
-    uint8_t* rec = mp->scratch_rec;
-    ft_status_t st = ft_blockdev_read(mp->bdev, old_off, rec, total);
+    /* Read + verify old record (header + streaming CRC). */
+    uint8_t hdrb[sizeof(ft_page_hdr_t)];
+    ft_status_t st = ft_blockdev_read(mp->bdev, old_off, hdrb, sizeof(hdrb));
     if (st != FT_OK)
         return -1;
-    const uint8_t* hdrb = rec;
-    const uint8_t* payload = rec + sizeof(ft_page_hdr_t);
     if (ft_page_hdr_get_magic(hdrb) != FT_PAGE_MAGIC)
         return -1;
     if ((pgno_t)ft_page_hdr_get_pgno(hdrb) != pgno)
         return -1;
     const uint32_t saved_crc = ft_page_hdr_get_crc(hdrb);
-    const uint32_t crc = ft_page_hdr_crc_calc(hdrb, payload, mp->pagesize);
+    uint32_t crc = 0;
+    if (ft_page_hdr_crc_calc_from_flash(mp, old_off, hdrb, &crc) != FT_OK)
+        return -1;
     if (crc != saved_crc)
         return -1;
     if (ft_page_hdr_get_flags(hdrb) & FT_PAGE_FLAG_TOMBSTONE)
@@ -991,10 +1074,26 @@ static int gc_copy_page_o1ram(MPOOL* mp, int old_half, pgno_t pgno) {
     /* Write to new location. */
     if ((uint64_t)mp->write_off + (uint64_t)total > mp->bdev->geom.total_size_bytes)
         return -1;
-    st = ft_blockdev_prog(mp->bdev, mp->write_off, rec, total);
+    const uint32_t new_off = mp->write_off;
+    st = ft_blockdev_prog(mp->bdev, new_off, hdrb, sizeof(hdrb));
     if (st != FT_OK)
         return -1;
-    uint32_t new_off = mp->write_off;
+    {
+        uint32_t src = old_off + (uint32_t)sizeof(ft_page_hdr_t);
+        uint32_t dst = new_off + (uint32_t)sizeof(ft_page_hdr_t);
+        size_t remaining = mp->pagesize;
+        uint8_t buf[64];
+        while (remaining) {
+            const size_t take = (remaining < sizeof(buf)) ? remaining : sizeof(buf);
+            if (ft_blockdev_read(mp->bdev, src, buf, take) != FT_OK)
+                return -1;
+            if (ft_blockdev_prog(mp->bdev, dst, buf, take) != FT_OK)
+                return -1;
+            src += (uint32_t)take;
+            dst += (uint32_t)take;
+            remaining -= take;
+        }
+    }
     mp->write_off += total;
     ft_pg_cache_insert(mp, pgno, new_off);
     return 0;
@@ -1074,19 +1173,20 @@ int mpool_free_pgno(MPOOL* mp, pgno_t pgno) {
     }
 
     const uint32_t total = ft_rec_size(mp);
-    uint8_t* rec = mp->scratch_rec;
-    uint8_t* hdrb = rec;
-    uint8_t* payload = rec + sizeof(ft_page_hdr_t);
+    uint8_t hdrb[sizeof(ft_page_hdr_t)];
     ft_page_hdr_encode(hdrb, FT_PAGE_MAGIC, pgno, 0u, FT_PAGE_FLAG_TOMBSTONE);
 
-    memset(payload, 0, mp->pagesize);
-    uint32_t crc = ft_page_hdr_crc_calc(hdrb, payload, mp->pagesize);
+    uint8_t nextb[4];
+    ft_u32_le_write(nextb, (uint32_t)PGNO_INVALID);
+    const uint32_t crc = ft_page_hdr_crc_calc_tombstone_erased_tail(hdrb, nextb, mp->pagesize);
     ft_u32_le_write(&hdrb[8], crc);
     if ((uint64_t)mp->write_off + (uint64_t)total > mp->bdev->geom.total_size_bytes)
         return -1;
 
     const uint32_t tomb_off = mp->write_off;
-    if (ft_blockdev_prog(mp->bdev, tomb_off, rec, total) != FT_OK)
+    if (ft_blockdev_prog(mp->bdev, tomb_off, hdrb, sizeof(hdrb)) != FT_OK)
+        return -1;
+    if (ft_blockdev_prog(mp->bdev, tomb_off + (uint32_t)sizeof(ft_page_hdr_t), nextb, sizeof(nextb)) != FT_OK)
         return -1;
     mp->write_off += total;
 

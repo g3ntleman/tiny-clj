@@ -53,7 +53,7 @@ TEST(test_core_initialization_inc_loaded) {
     
     if (!inc_value && !found_inc) {
         char msg[512];
-        snprintf(msg, sizeof(msg),
+        test_snprintf(msg, sizeof(msg),
                 "'inc' not found in clojure.core mappings after initialization. "
                 "Symbol count: %d, first: %s. "
                 "inc_sym pointer: %p. "
@@ -95,7 +95,7 @@ TEST(test_core_initialization_arithmetic_functions) {
     
     if (missing_count > 0) {
         char msg[512];
-        snprintf(msg, sizeof(msg),
+        test_snprintf(msg, sizeof(msg),
                 "%d arithmetic functions missing from clojure.core after initialization: %s",
                 missing_count, missing_names);
         TEST_FAIL_MESSAGE(msg);
@@ -171,7 +171,7 @@ TEST(test_clojure_core_loads_inc) {
             }
             
             char msg[512];
-            snprintf(msg, sizeof(msg),
+            test_snprintf(msg, sizeof(msg),
                     "'inc' not found in clojure.core mappings after load. "
                     "Symbol count: %d, first: %s. "
                     "inc_sym pointer: %p. "
@@ -236,7 +236,7 @@ TEST(test_clojure_core_loads_all_functions) {
         
         if (missing_count > 0) {
             char msg[512];
-            snprintf(msg, sizeof(msg),
+            test_snprintf(msg, sizeof(msg),
                     "%d functions missing from clojure.core: %s",
                     missing_count, missing_names);
             TEST_FAIL_MESSAGE(msg);
@@ -308,7 +308,7 @@ TEST(test_def_inc_evaluation_during_load) {
                 }
                 
                 char msg[256];
-                snprintf(msg, sizeof(msg),
+                test_snprintf(msg, sizeof(msg),
                         "'inc' not found in mappings after def evaluation "
                         "(but %d other symbols exist, first: %s)",
                         symbol_count, first_symbol ? first_symbol : "unknown");
@@ -325,7 +325,7 @@ TEST(test_def_inc_evaluation_during_load) {
             // Don't RELEASE result - eval_string returns autoreleased object
         } CATCH(ex) {
             char msg[256];
-            snprintf(msg, sizeof(msg),
+            test_snprintf(msg, sizeof(msg),
                     "Exception during def inc evaluation: %s",
                     ex && ex->message[0] ? ex->message : "unknown");
             TEST_FAIL_MESSAGE(msg);
@@ -377,7 +377,7 @@ TEST(test_plus_available_during_fn_evaluation) {
         // Don't RELEASE result - eval_string returns autoreleased object
     } CATCH(ex) {
             char msg[256];
-            snprintf(msg, sizeof(msg),
+            test_snprintf(msg, sizeof(msg),
                     "Exception during fn evaluation: %s",
                     ex && ex->message[0] ? ex->message : "unknown");
         TEST_FAIL_MESSAGE(msg);
@@ -429,7 +429,7 @@ TEST(test_def_stores_symbol_even_if_value_null) {
         // Don't RELEASE result - eval_string returns autoreleased object
     } CATCH(ex) {
         char msg[256];
-        snprintf(msg, sizeof(msg),
+        test_snprintf(msg, sizeof(msg),
                 "Exception during def test-var evaluation: %s",
                 ex && ex->message[0] ? ex->message : "unknown");
         TEST_FAIL_MESSAGE(msg);

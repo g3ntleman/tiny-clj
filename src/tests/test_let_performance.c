@@ -57,21 +57,21 @@ static void build_nested_let(char *buffer, size_t buffer_size, int depth) {
     
     // Build nested lets from outer to inner
     for (int i = depth; i >= 1; i--) {
-        int written = snprintf(buffer + pos, buffer_size - pos, 
+        int written = clj_mini_snprintf(buffer + pos, buffer_size - pos,
                               "(let [a%d %d] ", i, i);
         if (written < 0 || (size_t)written >= buffer_size - pos) break;
         pos += written;
     }
     
     // Body: access innermost variable
-    int written = snprintf(buffer + pos, buffer_size - pos, "a1");
+    int written = clj_mini_snprintf(buffer + pos, buffer_size - pos, "a1");
     if (written > 0 && (size_t)written < buffer_size - pos) {
         pos += written;
     }
     
     // Close all let blocks
     for (int i = 0; i < depth; i++) {
-        written = snprintf(buffer + pos, buffer_size - pos, ")");
+        written = clj_mini_snprintf(buffer + pos, buffer_size - pos, ")");
         if (written < 0 || (size_t)written >= buffer_size - pos) break;
         pos += written;
     }
@@ -117,22 +117,22 @@ static void write_baseline_results(const char *filename,
         return;
     }
     
-    fprintf(fp, "# Performance Baseline: let-Bindungen (VOR Optimierung)\n");
-    fprintf(fp, "# Datum: %s\n", __DATE__);
-    fprintf(fp, "# Zeit: %s\n", __TIME__);
-    fprintf(fp, "\n");
+    test_fprintf(fp, "# Performance Baseline: let-Bindungen (VOR Optimierung)\n");
+    test_fprintf(fp, "# Datum: %s\n", __DATE__);
+    test_fprintf(fp, "# Zeit: %s\n", __TIME__);
+    test_fprintf(fp, "\n");
     
-    fprintf(fp, "## let-Erstellungszeit (mit clojure.core-Kopieren)\n");
-    fprintf(fp, "Iterationen,Zeit_ms\n");
-    fprintf(fp, "10,%f\n", let_creation_times[0]);
-    fprintf(fp, "100,%f\n", let_creation_times[1]);
-    fprintf(fp, "1000,%f\n", let_creation_times[2]);
-    fprintf(fp, "\n");
+    test_fprintf(fp, "## let-Erstellungszeit (mit clojure.core-Kopieren)\n");
+    test_fprintf(fp, "Iterationen,Zeit_ms\n");
+    test_fprintf(fp, "10,%f\n", let_creation_times[0]);
+    test_fprintf(fp, "100,%f\n", let_creation_times[1]);
+    test_fprintf(fp, "1000,%f\n", let_creation_times[2]);
+    test_fprintf(fp, "\n");
     
-    fprintf(fp, "## Symbol-Auflösungszeit in verschachtelten let-Blöcken\n");
-    fprintf(fp, "Verschachtelungstiefe,Zeit_ms\n");
+    test_fprintf(fp, "## Symbol-Auflösungszeit in verschachtelten let-Blöcken\n");
+    test_fprintf(fp, "Verschachtelungstiefe,Zeit_ms\n");
     for (int i = 1; i <= max_depth; i++) {
-        fprintf(fp, "%d,%f\n", i, nested_resolution_times[i - 1]);
+        test_fprintf(fp, "%d,%f\n", i, nested_resolution_times[i - 1]);
     }
     
     fclose(fp);

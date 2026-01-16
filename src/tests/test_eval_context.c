@@ -33,7 +33,7 @@ TEST(test_recursive_function_ctx_propagation) {
         TEST_ASSERT_EQUAL_STRING_MESSAGE("a,b,c", clj_string_data(str), "my-join should concatenate strings");
     } CATCH(ex) {
         char msg[512];
-        snprintf(msg, sizeof(msg), "test_recursive_function_ctx_propagation threw exception: %s - %s",
+        test_snprintf(msg, sizeof(msg), "test_recursive_function_ctx_propagation threw exception: %s - %s",
                 ex ? ex->type : "unknown", ex ? ex->message : "no message");
         TEST_FAIL_MESSAGE(msg);
     } END_TRY
@@ -58,7 +58,7 @@ TEST(test_simple_recursive_function_ctx_propagation) {
         TEST_ASSERT_EQUAL_INT(120, as_fixnum(result));
     } CATCH(ex) {
         char msg[512];
-        snprintf(msg, sizeof(msg), "test_simple_recursive_function_ctx_propagation threw exception: %s - %s",
+        test_snprintf(msg, sizeof(msg), "test_simple_recursive_function_ctx_propagation threw exception: %s - %s",
                 ex ? ex->type : "unknown", ex ? ex->message : "no message");
         TEST_FAIL_MESSAGE(msg);
     } END_TRY
@@ -114,7 +114,7 @@ TEST(test_closure_capture_shadowing) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, as_fixnum(result), "closure must see captured x=1, not inner x=2");
     } CATCH(ex) {
         char msg[512];
-        snprintf(msg, sizeof(msg), "test_closure_capture_shadowing threw exception: %s - %s",
+        test_snprintf(msg, sizeof(msg), "test_closure_capture_shadowing threw exception: %s - %s",
                  ex ? ex->type : "unknown", ex ? ex->message : "no message");
         TEST_FAIL_MESSAGE(msg);
     } END_TRY

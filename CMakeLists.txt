@@ -5,7 +5,6 @@ project(tiny-clj)
 option(TINYCLJ_META_ENABLED "Enable metadata support (META_ENABLED)" ON)
 option(TINYCLJ_MEMORY_PROFILING_ENABLED "Enable memory profiling hooks (MEMORY_PROFILING_ENABLED)" ON)
 option(TINYCLJ_ZOMBIE_ENABLED "Enable zombie mode (ZOMBIE_ENABLED)" OFF)
-option(TINYCLJ_EMBEDDED_STRIP_FEATURES "Strip optional features for smallest embedded binaries" OFF)
 
 if(TINYCLJ_META_ENABLED)
     set(TINYCLJ_META_ENABLED_VALUE 1)
@@ -61,7 +60,7 @@ endif()
 
 # Ultra-compact build for <150KB target (embedded deployment)
 # Target: size-focused embedded build settings (ESP32)
-set(CMAKE_C_FLAGS_EMBEDDED "${CMAKE_C_FLAGS_EMBEDDED} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-common")
+set(CMAKE_C_FLAGS_EMBEDDED "${CMAKE_C_FLAGS_EMBEDDED} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common")
 if(APPLE)
   # For macOS testing: use size-optimized build (simulate embedded constraints)
   set(CMAKE_EXE_LINKER_FLAGS_EMBEDDED "${CMAKE_EXE_LINKER_FLAGS_EMBEDDED} -Wl,-dead_strip -Wl,-S -Wl,-x")
@@ -121,21 +120,6 @@ add_subdirectory(subjective-c "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}")
 
 # Flash-Tree subproject (new C-only storage stack)
 add_subdirectory(external/flash-tree)
-
-# Embedded/ESP32: keep flash-tree RAM bounded (mpool cache + pgno->offset map).
-# Note: flash-tree is a separate library target; it does not inherit compile definitions
-# from the tiny-clj-esp32 executable.
-if(CMAKE_BUILD_TYPE STREQUAL "Embedded")
-    foreach(tgt flash-tree-obj bsd-btree-obj flash-tree-core bsd-btree flash-tree)
-        if(TARGET ${tgt})
-            target_compile_definitions(${tgt} PRIVATE
-                ESP32_BUILD
-                FT_MPOOL_CACHE_PAGES=5
-                FT_MPOOL_PAGE_OFFSETS_INIT_CAP=64
-            )
-        endif()
-    endforeach()
-endif()
 
 # Ensure Subjective-C artifacts appear in its own build directory.
 set_target_properties(subjective-c PROPERTIES
@@ -283,23 +267,13 @@ target_include_directories(tiny-clj-esp32 PRIVATE
 # ESP32 Ultra-Minimal Build (only core features for <150KB) - DISABLED
 # This target has linker issues on macOS and is not needed for development
 
-# ESP32 build defines:
-# - Always define ESP32_BUILD
-# - Optional feature-strip is gated behind TINYCLJ_EMBEDDED_STRIP_FEATURES
-if(TINYCLJ_EMBEDDED_STRIP_FEATURES)
-    if(CMAKE_BUILD_TYPE STREQUAL "Release")
-        target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD REPL_ENABLED=0 MEMORY_PROFILING_ENABLED=0 LINE_EDITING_ENABLED=0 DEBUG_SYMBOLS_ENABLED=0 ERROR_MESSAGES_ENABLED=0 STRING_FORMATTING_ENABLED=0)
-    elseif(CMAKE_BUILD_TYPE STREQUAL "Embedded")
-        target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD REPL_ENABLED=0 MEMORY_PROFILING_ENABLED=0 LINE_EDITING_ENABLED=0 DEBUG_SYMBOLS_ENABLED=0 ERROR_MESSAGES_ENABLED=0 STRING_FORMATTING_ENABLED=0 META_ENABLED=0 COMPLEX_PARSING_ENABLED=0)
-    else()
-        target_compile_definitions(tiny-clj-esp32 PRIVATE META_ENABLED=1 ESP32_BUILD REPL_ENABLED=0 MEMORY_PROFILING_ENABLED=0 LINE_EDITING_ENABLED=0)
-    endif()
+# ESP32 Production Build - No Meta, Optimized
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD REPL_ENABLED=0 MEMORY_PROFILING_ENABLED=0 LINE_EDITING_ENABLED=0 DEBUG_SYMBOLS_ENABLED=0 ERROR_MESSAGES_ENABLED=0 STRING_FORMATTING_ENABLED=0)
+elseif(CMAKE_BUILD_TYPE STREQUAL "Embedded")
+    target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD REPL_ENABLED=0 MEMORY_PROFILING_ENABLED=0 LINE_EDITING_ENABLED=0 DEBUG_SYMBOLS_ENABLED=0 ERROR_MESSAGES_ENABLED=0 STRING_FORMATTING_ENABLED=0 META_ENABLED=0 COMPLEX_PARSING_ENABLED=0)
 else()
-    target_compile_definitions(tiny-clj-esp32 PRIVATE
-        ESP32_BUILD
-        META_ENABLED=${TINYCLJ_META_ENABLED_VALUE}
-        MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE}
-    )
+    target_compile_definitions(tiny-clj-esp32 PRIVATE META_ENABLED=1 ESP32_BUILD REPL_ENABLED=0 MEMORY_PROFILING_ENABLED=0 LINE_EDITING_ENABLED=0)
 endif()
 set_target_properties(tiny-clj-esp32 PROPERTIES
     COMPILE_FLAGS "${CMAKE_C_FLAGS_EMBEDDED}"
@@ -359,12 +333,12 @@ target_include_directories(tiny-clj-repl PRIVATE
 # Output directory is set globally to "build"
 # REPL Build
 # Debug in Debug mode, Release in Release mode
-if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "Embedded" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=${TINYCLJ_META_ENABLED_VALUE} LINE_EDITING_ENABLED=1)
     set_target_properties(tiny-clj-repl PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )
-    # Non-debug builds: use the configuration's flags (Release/Embedded/MinSizeRel/RelWithDebInfo)
+    # Release: use CMAKE_C_FLAGS_RELEASE (set above with -O3 -DNDEBUG)
 else()
     target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=${TINYCLJ_META_ENABLED_VALUE} DEBUG LINE_EDITING_ENABLED=1 MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE})
     set_target_properties(tiny-clj-repl PROPERTIES

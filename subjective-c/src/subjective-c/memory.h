@@ -176,9 +176,15 @@ bool is_autoreleased(CljObject *obj);
 #endif
 
 #if MEMORY_PROFILING_ENABLED
-    static inline void logf_impl(FILE *stream, const char *fmt, ...) __attribute__((format(printf,2,3)));
+    #include "mini_format.h"
+    // Use mini_format everywhere (host + embedded) to keep formatter complexity low.
     static inline void logf_impl(FILE *stream, const char *fmt, ...) {
-        va_list ap; va_start(ap, fmt); vfprintf(stream, fmt, ap); va_end(ap);
+        char buf[256];
+        va_list ap;
+        va_start(ap, fmt);
+        (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+        fputs(buf, stream ? stream : stdout);
     }
     #define LOGF(stream, fmt, ...) do { logf_impl((stream), (fmt), ##__VA_ARGS__); } while(0)
 #else

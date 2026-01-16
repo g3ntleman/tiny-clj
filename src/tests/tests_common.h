@@ -26,6 +26,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdarg.h>
 
 // Tiny-CLJ Core Headers
 #include "../object.h"
@@ -51,6 +52,7 @@
 #include "strings.h"
 #include "../tiny_clj.h"
 #include "instant.h"
+#include "mini_format.h"
 
 // Test Registry - use subjective-c test infrastructure
 #include "test_registry.h"
@@ -116,12 +118,50 @@ extern EvalState* test_get_eval_state(void);
         char *filename = test_extract_filename_from_path(__FILE__); \
         if (filename) { \
             char group[128]; \
-            snprintf(group, sizeof(group), "shared_%s", filename); \
+            (void)clj_mini_snprintf(group, sizeof(group), "shared_%s", filename); \
             test_registry_add_with_file_info(#name, name, group, __FILE__, __LINE__); \
             free(filename); \
         } \
     } \
     static void name##_impl(void)
+
+// -----------------------------------------------------------------------------
+// mini_format helpers for tests (avoid libc printf-family)
+// -----------------------------------------------------------------------------
+static inline void test_vfprintf(FILE *stream, const char *fmt, va_list ap) {
+    char buf[1024];
+    (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    fputs(buf, stream ? stream : stdout);
+}
+
+static inline void test_fprintf(FILE *stream, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    test_vfprintf(stream, fmt, ap);
+    va_end(ap);
+}
+
+static inline void test_snprintf(char *dst, size_t cap, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    (void)clj_mini_vsnprintf(dst, cap, fmt, ap);
+    va_end(ap);
+}
+
+// Like "%.*s" but without printf: copy prefix_len bytes, then append suffix.
+static inline void test_path_join_prefix(char *out, size_t out_sz, const char *prefix, size_t prefix_len, const char *suffix) {
+    if (!out || out_sz == 0) return;
+    out[0] = '\0';
+    size_t off = 0;
+    if (prefix && prefix_len > 0) {
+        size_t n = prefix_len;
+        if (n >= out_sz) n = out_sz - 1;
+        memcpy(out, prefix, n);
+        off = n;
+        out[off] = '\0';
+    }
+    (void)format_append(out, off, out_sz, suffix ? suffix : "");
+}
 
 // ============================================================================
 // HELPER FUNCTIONS FOR COMMON TEST PATTERNS

@@ -151,7 +151,7 @@ void memory_test_start(const char *test_name) {
     memory_profiler_reset();
     // Only print start message in verbose mode
     if (g_memory_verbose_mode) {
-        printf("🔍 Memory Test Start: %s\n", test_name);
+        LOGF(stdout, "🔍 Memory Test Start: %s\n", test_name);
     }
 }
 
@@ -477,19 +477,19 @@ void memory_profiler_check_leaks(const char *location) {
     if (!g_memory_profiling_enabled) return;
     if (g_memory_stats.memory_leaks > 0) {
         if (g_memory_leak_reporting_enabled) {
-            printf("\n🚨 MEMORY LEAK DETECTED at %s:\n", location ? location : "Unknown");
-            printf("   ┌─────────────────────────────────────────────────────────┐\n");
-            printf("   │ LEAK SUMMARY                                            │\n");
-            printf("   ├─────────────────────────────────────────────────────────┤\n");
-            printf("   │ Total Leaks:        %10zu allocations                    │\n", g_memory_stats.memory_leaks);
-            printf("   │ Current Memory:     %10zu bytes                         │\n", g_memory_stats.current_memory_usage);
-            printf("   │ Peak Memory:       %10zu bytes                         │\n", g_memory_stats.peak_memory_usage);
+            LOGF(stdout, "\n🚨 MEMORY LEAK DETECTED at %s:\n", location ? location : "Unknown");
+            LOGF(stdout, "   ┌─────────────────────────────────────────────────────────┐\n");
+            LOGF(stdout, "   │ LEAK SUMMARY                                            │\n");
+            LOGF(stdout, "   ├─────────────────────────────────────────────────────────┤\n");
+            LOGF(stdout, "   │ Total Leaks:        %10zu allocations                    │\n", g_memory_stats.memory_leaks);
+            LOGF(stdout, "   │ Current Memory:     %10zu bytes                         │\n", g_memory_stats.current_memory_usage);
+            LOGF(stdout, "   │ Peak Memory:       %10zu bytes                         │\n", g_memory_stats.peak_memory_usage);
 #ifdef DEBUG
-            printf("   │ Autorelease Peak:   %10u items                         │\n", (unsigned)autorelease_pool_peak_count());
+            LOGF(stdout, "   │ Autorelease Peak:   %10u items                         │\n", (unsigned)autorelease_pool_peak_count());
 #endif
-            printf("   │ Allocations:        %10zu                               │\n", g_memory_stats.total_allocations);
-            printf("   │ Deallocations:      %10zu                               │\n", g_memory_stats.total_deallocations);
-            printf("   └─────────────────────────────────────────────────────────┘\n");
+            LOGF(stdout, "   │ Allocations:        %10zu                               │\n", g_memory_stats.total_allocations);
+            LOGF(stdout, "   │ Deallocations:      %10zu                               │\n", g_memory_stats.total_deallocations);
+            LOGF(stdout, "   └─────────────────────────────────────────────────────────┘\n");
             
             // Leak breakdown - one line per type
             for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
@@ -499,7 +499,7 @@ void memory_profiler_check_leaks(const char *location) {
                 
                 if (leaks > 0) {
                     const char* type_name = clj_type_name((CljType)i);
-                    printf("🔍 %s: %zu leaks\n", type_name, leaks);
+                    LOGF(stdout, "🔍 %s: %zu leaks\n", type_name, leaks);
                 }
             }
         }

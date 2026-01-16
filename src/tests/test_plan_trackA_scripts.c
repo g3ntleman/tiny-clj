@@ -15,7 +15,7 @@ static void assert_load_file_ok(const char *path) {
     TEST_ASSERT_NOT_NULL_MESSAGE(path, "path must not be NULL");
 
     char expr[512];
-    snprintf(expr, sizeof(expr), "(load-file \"%s\")", path);
+    test_snprintf(expr, sizeof(expr), "(load-file \"%s\")", path);
 
     TRY {
         (void)eval_string(expr, g_test_eval_state);

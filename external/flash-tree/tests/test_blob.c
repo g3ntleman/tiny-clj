@@ -14,6 +14,11 @@
 /* Internal format helpers live in src/. */
 #include "ft_blob.h"
 
+/* For ft_page_hdr_t sizing (erase-block payload is 4096 - sizeof(header)). */
+#define __DBINTERFACE_PRIVATE
+#include "ft_bsd_db.h"
+#include "ft_bsd_mpool.h"
+
 typedef struct {
     uint8_t* buf;
     size_t len;
@@ -162,6 +167,12 @@ static uint8_t payload_byte(uint32_t idx, uint32_t off) {
 static void fill_payload(uint8_t* dst, uint32_t idx, size_t n) {
     for (size_t k = 0; k < n; k++)
         dst[k] = payload_byte(idx, (uint32_t)k);
+}
+
+static double now_seconds_monotonic(void) {
+    struct timespec ts;
+    (void)clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
 }
 
 static void test_blob_put_and_readback_64k(void) {
@@ -441,6 +452,117 @@ static void test_blob_stream_1mib_gated(void) {
     ft_kv_close(kv);
 }
 
+typedef struct {
+    ft_blob_writer_t* w;
+    uint32_t crc;
+    size_t bytes;
+} stream_copy_ctx_t;
+
+static ft_status_t stream_copy_cb(const void* data, size_t len, void* arg) {
+    stream_copy_ctx_t* c = (stream_copy_ctx_t*)arg;
+    if (!c || !c->w)
+        return FT_ERR_INVALID_ARG;
+    ft_status_t st = ft_blob_write(c->w, data, len);
+    if (st != FT_OK)
+        return st;
+    c->crc = ft_crc32_ieee((const uint8_t*)data, len, c->crc);
+    c->bytes += len;
+    return FT_OK;
+}
+
+typedef struct {
+    uint32_t crc;
+    size_t bytes;
+} stream_crc_ctx_t;
+
+static ft_status_t stream_crc_cb(const void* data, size_t len, void* arg) {
+    stream_crc_ctx_t* c = (stream_crc_ctx_t*)arg;
+    if (!c)
+        return FT_ERR_INVALID_ARG;
+    c->crc = ft_crc32_ieee((const uint8_t*)data, len, c->crc);
+    c->bytes += len;
+    return FT_OK;
+}
+
+static void test_blob_stream_copy_1mib(void) {
+    const size_t total = 1024u * 1024u;
+    const uint32_t erase_g = 4096;
+
+    // Size generously: two 1MiB blobs + btree churn + GC metadata.
+    const size_t flash_bytes = 32u << 20; // 32 MiB
+    uint8_t* storage = (uint8_t*)malloc(flash_bytes);
+    TEST_ASSERT_NOT_NULL(storage);
+    memset(storage, 0xFF, flash_bytes);
+
+    ramdev_t ctx;
+    ft_blockdev_t bdev = make_ram_bdev(&ctx, storage, flash_bytes, 1, 4, erase_g);
+    ft_kv_t* kv = NULL;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_kv_open(&kv, &bdev, NULL));
+
+    const char key_src[] = "file:1m:src";
+    const char key_dst[] = "file:1m:dst";
+
+    // Create source blob without holding 1MiB in RAM.
+    size_t chunk_size = 0;
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_blob_chunk_size(kv, &chunk_size));
+    TEST_ASSERT_TRUE(chunk_size > 0);
+    TEST_ASSERT_TRUE(chunk_size <= 4096u);
+    uint8_t* buf = (uint8_t*)malloc(chunk_size);
+    TEST_ASSERT_NOT_NULL(buf);
+    uint32_t expected_crc = 0;
+    {
+        ft_blob_writer_t* w = NULL;
+        TEST_ASSERT_EQUAL_INT(FT_OK, ft_blob_writer_init(kv, key_src, sizeof(key_src) - 1u, &w));
+        size_t off = 0;
+        while (off < total) {
+            const size_t n = ((total - off) < chunk_size) ? (total - off) : chunk_size;
+            // Deterministic pattern; do NOT assume 4096-byte chunks (blob chunk size is mp->pagesize, e.g. 4080).
+            for (size_t i = 0; i < n; i++) {
+                const uint32_t abs = (uint32_t)(off + i);
+                buf[i] = payload_byte(abs, (uint32_t)i);
+            }
+            expected_crc = ft_crc32_ieee(buf, n, expected_crc);
+            TEST_ASSERT_EQUAL_INT(FT_OK, ft_blob_write(w, buf, n));
+            off += n;
+        }
+        TEST_ASSERT_EQUAL_INT(FT_OK, ft_blob_finish(w));
+    }
+    free(buf);
+    buf = NULL;
+
+    // Streaming copy: ft_blob_stream(src) -> ft_blob_write(dst writer).
+    const double t0 = now_seconds_monotonic();
+    stream_copy_ctx_t copy = {0};
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_blob_writer_init(kv, key_dst, sizeof(key_dst) - 1u, &copy.w));
+    TEST_ASSERT_EQUAL_INT(FT_OK,
+                          ft_blob_stream(kv, key_src, sizeof(key_src) - 1u, stream_copy_cb, &copy));
+    TEST_ASSERT_EQUAL_INT(FT_OK, ft_blob_finish(copy.w));
+    copy.w = NULL;
+    const double t1 = now_seconds_monotonic();
+
+    TEST_ASSERT_EQUAL_UINT(total, (unsigned)copy.bytes);
+    TEST_ASSERT_EQUAL_UINT32(expected_crc, copy.crc);
+
+    // Verify destination by streaming readback CRC (still O(1) RAM).
+    stream_crc_ctx_t rd = {0};
+    TEST_ASSERT_EQUAL_INT(FT_OK,
+                          ft_blob_stream(kv, key_dst, sizeof(key_dst) - 1u, stream_crc_cb, &rd));
+    TEST_ASSERT_EQUAL_UINT(total, (unsigned)rd.bytes);
+    TEST_ASSERT_EQUAL_UINT32(expected_crc, rd.crc);
+
+    // Basic metric print for manual inspection.
+    const double dt = (t1 > t0) ? (t1 - t0) : 0.0;
+    const double payload_mib = (double)total / (1024.0 * 1024.0);
+    const double mib_s = (dt > 0.0) ? (payload_mib / dt) : 0.0;
+    const double prog_mib = (double)ctx.prog_bytes / (1024.0 * 1024.0);
+    const double wa = (payload_mib > 0.0) ? (prog_mib / payload_mib) : 0.0;
+    printf("[file-copy] 1MiB copy: %.2f MiB/s (WA %.2fx) prog_calls=%llu read_calls=%llu\n", mib_s,
+           wa, (unsigned long long)ctx.prog_calls, (unsigned long long)ctx.read_calls);
+
+    ft_kv_close(kv);
+    free(storage);
+}
+
 void ft_register_tests_blob(void) {
     RUN_TEST(test_blobdesc_roundtrip);
     RUN_TEST(test_blobdesc_decode_bounds_reports_needed);
@@ -451,4 +573,5 @@ void ft_register_tests_blob(void) {
     RUN_TEST(test_blob_writer_multi_step_and_abort);
     RUN_TEST(test_blob_gc_and_recovery_after_updates);
     RUN_TEST(test_blob_stream_1mib_gated);
+    RUN_TEST(test_blob_stream_copy_1mib);
 }

@@ -368,7 +368,7 @@ TEST(test_if_nil_in_function_regression) {
         result1 = eval_string("((fn [x] (if x :then :else)) nil)", g_test_eval_state);
     } CATCH(ex) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "if in function should not throw exception, got: %s", ex->message);
+        test_snprintf(msg, sizeof(msg), "if in function should not throw exception, got: %s", ex->message);
         TEST_FAIL_MESSAGE(msg);
         return;
     } END_TRY
@@ -394,7 +394,7 @@ TEST(test_if_nil_in_function_regression) {
         TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result2));
     } CATCH(ex) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "defn with if should not throw exception, got: %s", ex->message);
+        test_snprintf(msg, sizeof(msg), "defn with if should not throw exception, got: %s", ex->message);
         TEST_FAIL_MESSAGE(msg);
     } END_TRY
 
@@ -407,7 +407,7 @@ TEST(test_if_nil_in_function_regression) {
         TEST_ASSERT_NIL_MESSAGE(result3, "((fn [x] (if x 42)) nil) should return nil when no else branch");
     } CATCH(ex) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "if without else should not throw exception, got: %s", ex->message);
+        test_snprintf(msg, sizeof(msg), "if without else should not throw exception, got: %s", ex->message);
         TEST_FAIL_MESSAGE(msg);
     } END_TRY
 
@@ -421,7 +421,7 @@ TEST(test_if_nil_in_function_regression) {
         TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result4));
     } CATCH(ex) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "Nested if should not throw exception, got: %s", ex->message);
+        test_snprintf(msg, sizeof(msg), "Nested if should not throw exception, got: %s", ex->message);
         TEST_FAIL_MESSAGE(msg);
     } END_TRY
 
@@ -438,7 +438,7 @@ TEST(test_if_nil_in_function_regression) {
         TEST_ASSERT_EQUAL_STRING("falsy", sym5->cname + 1);
     } CATCH(ex) {
         char msg[256];
-        snprintf(msg, sizeof(msg), "if with false should not throw exception, got: %s", ex->message);
+        test_snprintf(msg, sizeof(msg), "if with false should not throw exception, got: %s", ex->message);
         TEST_FAIL_MESSAGE(msg);
     } END_TRY
 }

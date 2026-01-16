@@ -2,6 +2,7 @@
 #define TINY_CLJ_DEBUG_H
 
 #include "object.h"
+#include "mini_format.h"
 #include <stdio.h>
 #include <stdbool.h>
 
@@ -24,7 +25,11 @@ bool is_zombie(ID o);
 
 // Debug print macro
 #ifdef DEBUG
-    #define DEBUG_PRINT(fmt, ...) fprintf(stderr, fmt "\n", ##__VA_ARGS__)
+    #define DEBUG_PRINT(fmt, ...) do { \
+        char _buf[256]; \
+        (void)clj_mini_snprintf(_buf, sizeof(_buf), fmt "\n", ##__VA_ARGS__); \
+        fputs(_buf, stderr); \
+    } while(0)
 #else
     #define DEBUG_PRINT(fmt, ...) ((void)0)
 #endif

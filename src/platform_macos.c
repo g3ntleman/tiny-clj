@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <limits.h>
 
 #ifdef ESP32_BUILD
 #include "termios_stub.h"
@@ -14,6 +15,13 @@
 #endif
 
 void platform_init() {
+}
+
+void platform_sleep_ms(unsigned int ms) {
+    // macOS/host: usleep expects microseconds.
+    // Clamp to avoid overflow on very large ms values.
+    unsigned int usec = (ms > (UINT_MAX / 1000u)) ? UINT_MAX : (ms * 1000u);
+    usleep((useconds_t)usec);
 }
 
 void platform_print(const char *message) {
@@ -133,7 +141,9 @@ void platform_put_char(void *ctx, char c) {
 
 void platform_put_string(void *ctx, const char *s) {
     (void)ctx;
-    printf("%s", s);
+    if (s) {
+        fputs(s, stdout);
+    }
     fflush(stdout);
 }
 

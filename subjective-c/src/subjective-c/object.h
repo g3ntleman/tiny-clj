@@ -14,9 +14,25 @@ typedef void *ID;
 typedef ID CljValue;
 
 #include "types.h"
+
+// IMPORTANT (cross-compile / embedded):
+// `common.h` includes <string.h>, and some libc implementations include <strings.h>.
+// Since subjective-c provides its own "strings.h" header, we must ensure core types
+// like `CljObject` are defined BEFORE including `common.h`, otherwise a circular
+// include can occur during toolchain builds (e.g. Xtensa/newlib).
+
+typedef struct CljObject
+{
+    uint8_t type;
+    uint8_t flags;
+    int16_t rc;
+} CljObject;
+
 #include "common.h"
 #include <stdio.h>
+#if !defined(ESP32_BUILD)
 #include <execinfo.h>
+#endif
 #if defined(__APPLE__)
 #include <pthread.h>
 #endif
@@ -48,13 +64,6 @@ void *throw_exception_formatted(const char *type, const char *file, int line, in
 #define TYPE_OF_char CLJ_STRING
 #define TYPE_OF_CljNamespace CLJ_NAMESPACE
 #define TYPE_OF(struct_type) TYPE_OF_##struct_type
-
-typedef struct CljObject
-{
-    uint8_t type;
-    uint8_t flags;
-    int16_t rc;
-} CljObject;
 
 // Sentinel for distinguishing "not found" or "nil" from NULL pointer
 extern CljObject g_not_found_sentinel;
@@ -187,8 +196,13 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
     // Check NULL and invalid pointer range without dereferencing
     if (ptr_val == 0 || ptr_val < 0x1000)
     {
-        fprintf(stderr, "assert_type failed: invalid pointer %p (expected %d)\n",
-                (void *)obj, (int)expected_type);
+        {
+            char buf[256];
+            (void)clj_mini_snprintf(buf, sizeof(buf),
+                                    "assert_type failed: invalid pointer %p (expected %d)\n",
+                                    (void *)obj, (int)expected_type);
+            fputs(buf, stderr);
+        }
         void *trace[16];
         int trace_count = backtrace(trace, 16);
         backtrace_symbols_fd(trace, trace_count, fileno(stderr));
@@ -207,8 +221,13 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
     uintptr_t stack_lo_val = stack_hi_val - (uintptr_t)stack_size;
     if (ptr_val >= stack_lo_val && ptr_val <= stack_hi_val)
     {
-        fprintf(stderr, "assert_type failed: pointer %p appears to be on stack (expected %d)\n",
-                (void *)obj, (int)expected_type);
+        {
+            char buf[256];
+            (void)clj_mini_snprintf(buf, sizeof(buf),
+                                    "assert_type failed: pointer %p appears to be on stack (expected %d)\n",
+                                    (void *)obj, (int)expected_type);
+            fputs(buf, stderr);
+        }
         void *trace[16];
         int trace_count = backtrace(trace, 16);
         backtrace_symbols_fd(trace, trace_count, fileno(stderr));
@@ -219,8 +238,13 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
     uintptr_t fp_val = (uintptr_t)current_fp;
     if (ptr_val > fp_val && ptr_val < fp_val + (8 * 1024 * 1024))
     {
-        fprintf(stderr, "assert_type failed: pointer %p appears to be on stack (expected %d)\n",
-                (void *)obj, (int)expected_type);
+        {
+            char buf[256];
+            (void)clj_mini_snprintf(buf, sizeof(buf),
+                                    "assert_type failed: pointer %p appears to be on stack (expected %d)\n",
+                                    (void *)obj, (int)expected_type);
+            fputs(buf, stderr);
+        }
         void *trace[16];
         int trace_count = backtrace(trace, 16);
         backtrace_symbols_fd(trace, trace_count, fileno(stderr));
@@ -235,8 +259,13 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
     {
         return obj;
     }
-    fprintf(stderr, "assert_type failed: expected %d actual %d\n",
-            (int)expected_type, (int)actual_type);
+    {
+        char buf[128];
+        (void)clj_mini_snprintf(buf, sizeof(buf),
+                                "assert_type failed: expected %d actual %d\n",
+                                (int)expected_type, (int)actual_type);
+        fputs(buf, stderr);
+    }
     void *trace[16];
     int trace_count = backtrace(trace, 16);
     backtrace_symbols_fd(trace, trace_count, fileno(stderr));

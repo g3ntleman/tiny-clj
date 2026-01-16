@@ -121,7 +121,7 @@ extern GlobalExceptionStack global_exception_stack;
 #define TRY { \
     ExceptionHandler *_h = (ExceptionHandler*)malloc(sizeof(ExceptionHandler)); \
     if (!_h) { \
-        fprintf(stderr, "FATAL: malloc failed in TRY block\n"); \
+        fputs("FATAL: malloc failed in TRY block\n", stderr); \
         abort(); \
     } \
     _h->next = global_exception_stack.top; \

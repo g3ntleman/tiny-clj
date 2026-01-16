@@ -7,6 +7,15 @@ void platform_init(void) {
     // ESP32-specific initialization
 }
 
+// -----------------------------------------------------------------------------
+// Sleep hook (override in ESP32/ESP-IDF integration)
+// -----------------------------------------------------------------------------
+__attribute__((weak)) void tinyclj_esp32_sleep_ms(unsigned int ms) { (void)ms; }
+
+void platform_sleep_ms(unsigned int ms) {
+    tinyclj_esp32_sleep_ms(ms);
+}
+
 void platform_print(const char *message) {
     if (!message) return;
     fputs(message, stdout);

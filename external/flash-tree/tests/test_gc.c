@@ -251,6 +251,9 @@ static void test_gc_persists_periodically_during_gc_steps(void) {
 }
 
 static void test_free_list_reuses_tombstoned_pages_and_persists(void) {
+#if FT_MPOOL_O1_RAM
+    TEST_IGNORE_MESSAGE("FT_MPOOL_O1_RAM: simple mode does not reuse freed pgno numbers");
+#endif
     static uint8_t storage[262144];
     ramdev_t rd = {0};
     ft_blockdev_t bdev = {0};

@@ -64,11 +64,11 @@ static void build_fixture_path(char *out, size_t out_size)
     const char *slash = strrchr(self, '/');
     if (!slash)
     {
-        snprintf(out, out_size, "fixtures/all_types.edn");
+        test_snprintf(out, out_size, "fixtures/all_types.edn");
         return;
     }
     size_t dir_len = (size_t)(slash - self);
-    snprintf(out, out_size, "%.*s/fixtures/all_types.edn", (int)dir_len, self);
+    test_path_join_prefix(out, out_size, self, dir_len, "/fixtures/all_types.edn");
 }
 
 static ID map_get_required(CljMap *m, const char *kw_name)
@@ -93,17 +93,17 @@ TEST(test_edn_file_all_supported_types)
     if (!src && errno == ENOENT && path[0] != '/')
     {
         char alt[1024];
-        snprintf(alt, sizeof(alt), "../%s", path);
+        test_snprintf(alt, sizeof(alt), "../%s", path);
         src = read_entire_file(alt, &len);
         if (src)
         {
-            snprintf(path, sizeof(path), "%s", alt);
+            test_snprintf(path, sizeof(path), "%s", alt);
         }
     }
     if (!src)
     {
         char msg[256];
-        snprintf(msg, sizeof(msg), "Failed to read EDN fixture: %s (errno=%d)", path, errno);
+        test_snprintf(msg, sizeof(msg), "Failed to read EDN fixture: %s (errno=%d)", path, errno);
         TEST_FAIL_MESSAGE(msg);
     }
 
