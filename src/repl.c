@@ -446,7 +446,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     }
 #endif
 
-    repl_outf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.2", platform_name());
+    repl_outf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", TINY_CLJ_VERSION, platform_name());
     print_build_info();
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Line editor needs blocking input for proper character handling

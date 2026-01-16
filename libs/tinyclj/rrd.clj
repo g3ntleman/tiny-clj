@@ -9,7 +9,7 @@
 ;; - Automatic downsampling at update time (no scans needed)
 ;; - Deterministic O(1) per-sample update cost (cooperative multitasking friendly)
 ;;
-;; Storage: Uses tinyclj.kv for persistence (dogfooding flash-tree).
+;; Storage: Uses tinyclj.kv for persistence (dogfooding tiny-db).
 ;;
 ;; Handler Registration:
 ;; - RRA types beyond :classic require a handler registered via `register-handler!`

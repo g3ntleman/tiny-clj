@@ -133,9 +133,11 @@ This helps identify which build configuration is currently active and how it was
 
 ## tiny-db
 
-tiny-db is a small, embedded-friendly key/value storage engine used by Tiny-CLJ for its KV-backed filesystem layer and related tests. It is designed for flash-like block devices and favors deterministic behavior and simple integration over feature completeness.
+tiny-db is a small, embedded-friendly key-value storage engine used by Tiny-CLJ for its key-value-backed filesystem layer and related tests. Internally it uses a B-tree and is designed for flash-like block devices, favoring deterministic behavior and simple integration over feature completeness.
 
-It supports basic KV operations (`put/get/del`), prefix iteration via cursors, and large-value storage via chunking/streaming helpers. The implementation is copy-on-write and append-only, which makes it resilient to resets and power-loss scenarios when used with appropriate block device geometry and recovery logic.
+It supports basic key-value operations (`put/get/del`), prefix iteration via cursors, and large-value storage via chunking/streaming helpers. The implementation is copy-on-write and append-only, which makes it resilient to resets and power-loss scenarios when used with appropriate block device geometry and recovery logic.
+
+On top of the key-value layer, Tiny-CLJ also includes a small time-series database in pure Clojure: `tinyclj.rrd` (a Round-Robin Database inspired by RRDtool/RRD4J). It persists its state via `tinyclj.kv`, giving deterministic O(1) per-sample update cost and multiple archive/aggregation strategies.
 
 ## Feature Flags
 
