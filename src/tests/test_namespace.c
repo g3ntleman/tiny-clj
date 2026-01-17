@@ -1243,7 +1243,13 @@ TEST(test_ns_unload_releases_namespace_mappings) {
 
         // The function object should have been released as part of unloading.
         // In zombie mode this becomes rc=0.
+#if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
         TEST_ASSERT_EQUAL_INT_MESSAGE(0, retain_count(fn_obj), "Expected function to be released (rc=0) after ns-unload");
+#else
+        // Without zombie mode, released objects are actually freed, so reading rc
+        // via retain_count(fn_obj) would be use-after-free.
+        (void)fn_obj;
+#endif
     });
 }
 

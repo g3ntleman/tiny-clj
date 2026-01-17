@@ -53,7 +53,7 @@ TEST(test_byte_array_external_calls_finalizer_on_release)
     TEST_ASSERT_EQUAL_PTR(external_free_mark_and_free, ext->external_free_fn);
 
     RELEASE((ID)arr);
-#ifdef ZOMBIE_ENABLED
+#if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
     // In zombie mode, objects must remain intact for debugging, so we intentionally
     // do not run external finalizers (payload must stay accessible).
     TEST_ASSERT_FALSE(freed);
