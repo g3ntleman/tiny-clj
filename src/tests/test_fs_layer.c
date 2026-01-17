@@ -107,6 +107,27 @@ TEST(test_fs_list_dir_batch_many_files)
     TEST_ASSERT_EQUAL_INT(18, vector_count(as_vector(batch2)));
     TEST_ASSERT_TRUE(last_key2[0] == '\0'); // no more
 
+    // Correctness: combine and verify order + uniqueness.
+    CljVector *v1 = as_vector(batch1);
+    CljVector *v2 = as_vector(batch2);
+    TEST_ASSERT_NOT_NULL(v1);
+    TEST_ASSERT_NOT_NULL(v2);
+    TEST_ASSERT_EQUAL_INT(32, vector_count(v1));
+    TEST_ASSERT_EQUAL_INT(18, vector_count(v2));
+
+    // Verify every expected path is present exactly once, in lexicographic order.
+    // The %02d naming makes lexicographic == numeric order for 0..49.
+    for (int i = 0; i < 50; i++) {
+        char expected[FS_KEY_MAX];
+        mini_snprintf(expected, sizeof(expected), "/many/file_%02d.bin", i);
+
+        ID elem = (i < 32) ? vector_nth(v1, (unsigned int)i)
+                           : vector_nth(v2, (unsigned int)(i - 32));
+        TEST_ASSERT_NOT_NULL(elem);
+        TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(elem));
+        TEST_ASSERT_EQUAL_STRING(expected, string_data((CljString*)elem));
+    }
+
     fs_kv_store_free(st);
 }
 
