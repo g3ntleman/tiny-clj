@@ -1489,7 +1489,7 @@ void setUp(void) {
 }
 
 void tearDown(void) {
-    autorelease_pool_cleanup_all();
+    autorelease_pool_drain_all();
     symbol_table_cleanup();
     meta_registry_cleanup();
     MEMORY_PROFILER_CLEANUP();

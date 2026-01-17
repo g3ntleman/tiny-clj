@@ -73,7 +73,7 @@ TEST(test_stacktrace_toggle) {
     TEST_ASSERT_NOT_NULL(caught_ex);
 }
 
-TEST(test_autorelease_pool_cleanup_on_exception) {
+TEST(test_autorelease_pool_drain_on_exception) {
     CLJException *caught_ex = NULL;
     
     TRY {
@@ -103,7 +103,7 @@ TEST(test_autorelease_pool_cleanup_on_exception) {
     
     // IMPORTANT: Do not drain below the outer test harness pool (which wraps every TEST).
     // Restore exactly the depth we had before this test's manual push.
-    autorelease_pool_cleanup_to_depth(base_depth);
+    autorelease_pool_drain_to_depth(base_depth);
     TEST_ASSERT_EQUAL_UINT32(base_depth, autorelease_pool_depth());
 }
 

@@ -36,15 +36,15 @@ int retain_count(ID obj);
 void autorelease_pool_init(void);     // Call once at startup
 void autorelease_pool_push(void);      // Push new checkpoint
 void autorelease_pool_pop(void);       // Pop current checkpoint
-void autorelease_pool_cleanup_after_exception(void);
-void autorelease_pool_cleanup_all(void);
+void autorelease_pool_drain_after_exception(void);
+void autorelease_pool_drain_all(void);
 void autorelease_pool_destroy(void);
 bool is_autorelease_pool_active(void);
 
 // Pool depth helpers (for exception-safe cleanup without underflowing outer pools).
 // Depth is the number of active checkpoints (push count - pop count).
 uint32_t autorelease_pool_depth(void);
-void autorelease_pool_cleanup_to_depth(uint32_t depth);
+void autorelease_pool_drain_to_depth(uint32_t depth);
 
 #ifdef DEBUG
 /** @brief Get the peak autorelease pool item count since last reset.

@@ -547,7 +547,7 @@ void autorelease_pool_pop(void) {
 }
 
 // Exception-safe cleanup function (called from CATCH blocks)
-void autorelease_pool_cleanup_after_exception(void) {
+void autorelease_pool_drain_after_exception(void) {
     // Drain all pools
     while (g_pool.cp_count > 0) {
         autorelease_pool_pop();
@@ -581,7 +581,7 @@ void autorelease_pool_cleanup_after_exception(void) {
  * Pops all autorelease pools in the stack. Useful for global cleanup
  * at program termination or when you need to ensure all pools are drained.
  */
-void autorelease_pool_cleanup_all(void) {
+void autorelease_pool_drain_all(void) {
     while (g_pool.cp_count > 0) {
         autorelease_pool_pop();
     }
@@ -601,7 +601,7 @@ uint32_t autorelease_pool_depth(void) {
     return g_pool.cp_count;
 }
 
-void autorelease_pool_cleanup_to_depth(uint32_t depth) {
+void autorelease_pool_drain_to_depth(uint32_t depth) {
     // Drain pools until we reach the requested depth (or 0).
     while (g_pool.cp_count > depth) {
         autorelease_pool_pop();
@@ -612,7 +612,7 @@ void autorelease_pool_cleanup_to_depth(uint32_t depth) {
  */
 void autorelease_pool_destroy(void) {
     // Drain all remaining pools
-    autorelease_pool_cleanup_all();
+    autorelease_pool_drain_all();
     
     // Free backing arrays (always free pool structures, even in zombie mode)
     // Pool structures are not objects, so they should be freed normally
