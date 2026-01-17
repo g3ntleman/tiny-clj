@@ -112,6 +112,20 @@ tdb_status_t tdb_kv_iter_prefix(tdb_kv_t* kv, const void* prefix, size_t prefix_
 
 tdb_status_t tdb_kv_cursor_open_prefix(tdb_kv_t* kv, const void* prefix, size_t prefix_len,
                                      tdb_kv_cursor_t** out_cur);
+
+/*
+ * Open a cursor starting at the first key >= start_key, while still applying
+ * the prefix filter.
+ *
+ * Notes:
+ * - If start_key is NULL (or start_len == 0), this behaves like
+ *   tdb_kv_cursor_open_prefix().
+ * - The cursor will stop once keys no longer match the prefix.
+ */
+tdb_status_t tdb_kv_cursor_open_ge(tdb_kv_t* kv,
+                                  const void* prefix, size_t prefix_len,
+                                  const void* start_key, size_t start_len,
+                                  tdb_kv_cursor_t** out_cur);
 tdb_status_t tdb_kv_cursor_next(tdb_kv_cursor_t* cur, int* out_has_item);
 tdb_status_t tdb_kv_cursor_key(const tdb_kv_cursor_t* cur, tdb_blob_t* out_key);
 tdb_status_t tdb_kv_cursor_val(const tdb_kv_cursor_t* cur, tdb_blob_t* out_val);
@@ -192,58 +206,6 @@ uint32_t tdb_mpool_get_cache_pagecount(void);
  * to a higher default if the current configured value is smaller.
  */
 tdb_status_t tdb_mpool_enable_psram_autosize(int enable);
-
-/* ============== Backwards-compatible aliases (temporary) ============== */
-
-typedef tdb_kv_t tdb_db_t;
-typedef tdb_kv_cursor_t tdb_cursor_t;
-typedef tdb_kv_cfg_t tdb_cfg_t;
-
-static inline tdb_status_t tdb_db_init(tdb_db_t** out_db, tdb_blockdev_t* bdev, const tdb_cfg_t* cfg) {
-    return tdb_kv_open((tdb_kv_t**)out_db, bdev, (const tdb_kv_cfg_t*)cfg);
-}
-static inline void tdb_db_deinit(tdb_db_t* db) {
-    tdb_kv_close((tdb_kv_t*)db);
-}
-static inline tdb_status_t tdb_put(tdb_db_t* db, const void* k, size_t kl, const void* v, size_t vl) {
-    return tdb_kv_put((tdb_kv_t*)db, k, kl, v, vl);
-}
-static inline tdb_status_t tdb_get(tdb_db_t* db, const void* k, size_t kl, tdb_blob_t* out) {
-    return tdb_kv_get((tdb_kv_t*)db, k, kl, out);
-}
-static inline tdb_status_t tdb_get_len(tdb_db_t* db, const void* k, size_t kl, size_t* out_len) {
-    return tdb_kv_get_len((tdb_kv_t*)db, k, kl, out_len);
-}
-static inline tdb_status_t tdb_get_into(tdb_db_t* db, const void* k, size_t kl, void* out,
-                                      size_t out_len, size_t* saved_len_out) {
-    return tdb_kv_get_into((tdb_kv_t*)db, k, kl, out, out_len, saved_len_out);
-}
-static inline tdb_status_t tdb_del(tdb_db_t* db, const void* k, size_t kl) {
-    return tdb_kv_del((tdb_kv_t*)db, k, kl);
-}
-static inline tdb_status_t tdb_iter_prefix(tdb_db_t* db, const void* pfx, size_t pfx_len, tdb_key_cb cb,
-                                         void* arg) {
-    return tdb_kv_iter_prefix((tdb_kv_t*)db, pfx, pfx_len, cb, arg);
-}
-static inline tdb_status_t tdb_cursor_open_prefix(tdb_db_t* db, const void* pfx, size_t pfx_len,
-                                                tdb_cursor_t** out_cur) {
-    return tdb_kv_cursor_open_prefix((tdb_kv_t*)db, pfx, pfx_len, (tdb_kv_cursor_t**)out_cur);
-}
-static inline tdb_status_t tdb_cursor_next(tdb_cursor_t* cur, int* out_has_item) {
-    return tdb_kv_cursor_next((tdb_kv_cursor_t*)cur, out_has_item);
-}
-static inline tdb_status_t tdb_cursor_key(const tdb_cursor_t* cur, tdb_blob_t* out_key) {
-    return tdb_kv_cursor_key((const tdb_kv_cursor_t*)cur, out_key);
-}
-static inline tdb_status_t tdb_cursor_val(const tdb_cursor_t* cur, tdb_blob_t* out_val) {
-    return tdb_kv_cursor_val((const tdb_kv_cursor_t*)cur, out_val);
-}
-static inline void tdb_cursor_close(tdb_cursor_t* cur) {
-    tdb_kv_cursor_close((tdb_kv_cursor_t*)cur);
-}
-static inline tdb_status_t tdb_gc_step(tdb_db_t* db, size_t budget_bytes) {
-    return tdb_kv_gc_step((tdb_kv_t*)db, budget_bytes);
-}
 
 #ifdef __cplusplus
 } // extern "C"

@@ -10,7 +10,25 @@
 (defn slurp-bytes [path] :native)
 ^#^{:doc "Returns file metadata for path (native)."}
 (defn stat [path] :native)
-^#^{:doc "Lists directory entries for dir-path (native)."}
-(defn list [dir-path] :native)
+^#^{:doc "Internal: lists directory entries for dir-path in batches (native). Returns {:entries [...] :last-key k-or-nil}."}
+(defn list-batch [dir-path after-key batch-size] :native)
+
+^#^{:doc "Lists directory entries for dir-path. Returns a lazy sequence of paths."}
+(defn list [dir-path]
+  (let [batch-size 32]
+    ((fn fetch [after-key]
+       (lazy-seq
+         (let [res (tinyclj.fs/list-batch dir-path after-key batch-size)
+               entries (seq (get res :entries))
+               last-key (get res :last-key)
+               emit (fn emit [es]
+                      (lazy-seq
+                        (if (seq es)
+                          (cons (first es) (emit (rest es)))
+                          (if last-key
+                            (fetch last-key)
+                            nil))))]
+           (emit entries))))
+     nil)))
 ^#^{:doc "Deletes a file or directory at path (native)."}
 (defn delete! [path] :native)

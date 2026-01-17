@@ -46,6 +46,10 @@ struct tdb_kv_cursor {
     uint8_t* prefix;
     size_t prefix_len;
 
+    /* Optional: start scanning from first key >= start_key. */
+    uint8_t* start_key;
+    size_t start_len;
+
     /* Current key/value from B-Tree */
     DBT cur_key;
     DBT cur_val;
@@ -422,6 +426,41 @@ tdb_status_t tdb_kv_cursor_open_prefix(tdb_kv_t* kv, const void* prefix, size_t 
     return TDB_OK;
 }
 
+/**
+ * Open a cursor for iterating over keys with a given prefix, starting at the
+ * first key >= start_key (if provided).
+ */
+tdb_status_t tdb_kv_cursor_open_ge(tdb_kv_t* kv,
+                                  const void* prefix, size_t prefix_len,
+                                  const void* start_key, size_t start_len,
+                                  tdb_kv_cursor_t** out_cur) {
+    if (!out_cur)
+        return TDB_ERR_INVALID_ARG;
+
+    /* Fall back to plain prefix cursor when no explicit start key is given. */
+    if (!start_key || start_len == 0) {
+        return tdb_kv_cursor_open_prefix(kv, prefix, prefix_len, out_cur);
+    }
+
+    if (!kv || (!prefix && prefix_len != 0))
+        return TDB_ERR_INVALID_ARG;
+
+    tdb_status_t st = tdb_kv_cursor_open_prefix(kv, prefix, prefix_len, out_cur);
+    if (st != TDB_OK)
+        return st;
+
+    tdb_kv_cursor_t* cur = *out_cur;
+    cur->start_key = (uint8_t*)malloc(start_len);
+    if (!cur->start_key) {
+        tdb_kv_cursor_close(cur);
+        *out_cur = NULL;
+        return TDB_ERR_NO_MEMORY;
+    }
+    memcpy(cur->start_key, start_key, start_len);
+    cur->start_len = start_len;
+    return TDB_OK;
+}
+
 tdb_status_t tdb_kv_cursor_next(tdb_kv_cursor_t* cur, int* out_has_item) {
     if (!cur || !out_has_item)
         return TDB_ERR_INVALID_ARG;
@@ -434,7 +473,11 @@ tdb_status_t tdb_kv_cursor_next(tdb_kv_cursor_t* cur, int* out_has_item) {
     int rc;
     if (!cur->started) {
         /* First call: position at prefix or first key */
-        if (cur->prefix_len) {
+        if (cur->start_len) {
+            cur->cur_key.data = cur->start_key;
+            cur->cur_key.size = cur->start_len;
+            rc = cur->kv->bdb->seq(cur->kv->bdb, &cur->cur_key, &cur->cur_val, R_CURSOR);
+        } else if (cur->prefix_len) {
             cur->cur_key.data = cur->prefix;
             cur->cur_key.size = cur->prefix_len;
             rc = cur->kv->bdb->seq(cur->kv->bdb, &cur->cur_key, &cur->cur_val, R_CURSOR);
@@ -493,6 +536,7 @@ void tdb_kv_cursor_close(tdb_kv_cursor_t* cur) {
     if (!cur)
         return;
     free(cur->prefix);
+    free(cur->start_key);
     free(cur);
 }
 

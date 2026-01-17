@@ -9,6 +9,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Max key length for path-based FS keys (including terminator when used as C-string). */
+#define FS_KEY_MAX 64u
+
 /* Minimal KV-backed "filesystem-like" layer (Phase 2.2).
  *
  * This is intentionally small and deterministic. The backing store is a KV
@@ -117,8 +120,23 @@ bool fs_exists(FsKvStore *st, const char *path);
 /* Delete key. Returns true if deleted. */
 bool fs_delete(FsKvStore *st, const char *path);
 
-/* List direct children paths under a directory. Returns a vector of strings. */
-ID fs_list_dir(FsKvStore *st, const char *dir_path);
+/*
+ * List directory entries in batches.
+ *
+ * Reads up to batch_size entries under dir_path, starting after after_key
+ * (exclusive). Writes a continuation key into out_last_key:
+ * - out_last_key[0] == '\0' means no more data.
+ * - otherwise, call again with after_key = out_last_key.
+ *
+ * Returns a vector of strings (paths), or NULL on error.
+ */
+ID fs_list_dir_batch(FsKvStore *st,
+                     const char *dir_path,
+                     const char *after_key,
+                     size_t batch_size,
+                     char *out_last_key,
+                     size_t out_last_key_cap);
 
+/* List direct children paths under a directory. Returns a vector of strings. */
 #endif /* TINY_CLJ_FS_LAYER_H */
 

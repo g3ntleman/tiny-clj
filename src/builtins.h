@@ -4,6 +4,7 @@
 #include "object.h"
 #include "namespace.h"  // For EvalState
 #include "runtime.h"
+#include "exception.h"  // For CHECK_ARITY* macros used by builtins implementations
 
 typedef ID (*CljNativeFn)(ID *args, unsigned int argc);
 

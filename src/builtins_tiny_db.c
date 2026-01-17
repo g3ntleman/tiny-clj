@@ -5,7 +5,7 @@
  */
 
 #include "byte_array.h"
-#include "exception.h"
+#include "exception.h"  // CHECK_ARITY
 #include "fs_layer.h"
 #include "map.h"
 #include "memory.h"
@@ -18,16 +18,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-
-// Helper macro for arity checking
-#define TINY_DB_CHECK_ARITY(argc, expected, name) \
-    do { \
-        if ((argc) != (expected)) { \
-            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0, \
-                                      "%s expects %d argument(s), got %u", (name), (expected), (argc)); \
-            return NULL; \
-        } \
-    } while (0)
 
 // Helper to get string argument
 static const char *require_c_string_arg(ID arg, const char *fn_name, const char *arg_desc)
@@ -52,7 +42,7 @@ static const char *require_c_string_arg(ID arg, const char *fn_name, const char 
 
 ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
 {
-    TINY_DB_CHECK_ARITY(argc, 2, "tinyclj.fs/spit-bytes");
+    CHECK_ARITY(argc, 2, "tinyclj.fs/spit-bytes");
     const char *path = require_c_string_arg(args[0], "tinyclj.fs/spit-bytes", "a path string");
     if (!path) return NULL;
     if (!args[1] || TAG(args[1]) != CLJ_BYTE_ARRAY) {
@@ -72,7 +62,7 @@ ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
 
 ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc)
 {
-    TINY_DB_CHECK_ARITY(argc, 1, "tinyclj.fs/slurp-bytes");
+    CHECK_ARITY(argc, 1, "tinyclj.fs/slurp-bytes");
     const char *path = require_c_string_arg(args[0], "tinyclj.fs/slurp-bytes", "a path string");
     if (!path) return NULL;
     FsKvStore *st = fs_global_store();
@@ -82,7 +72,7 @@ ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc)
 
 ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
 {
-    TINY_DB_CHECK_ARITY(argc, 1, "tinyclj.fs/stat");
+    CHECK_ARITY(argc, 1, "tinyclj.fs/stat");
     const char *path = require_c_string_arg(args[0], "tinyclj.fs/stat", "a path string");
     if (!path) return NULL;
     FsKvStore *st = fs_global_store();
@@ -99,19 +89,48 @@ ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
     return AUTORELEASE(m);
 }
 
-ID native_tinyclj_fs_list(ID *args, unsigned int argc)
+ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc)
 {
-    TINY_DB_CHECK_ARITY(argc, 1, "tinyclj.fs/list");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/list", "a dir path string");
-    if (!path) return NULL;
+    CHECK_ARITY(argc, 3, "tinyclj.fs/list-batch");
+    const char *dir_path = require_c_string_arg(args[0], "tinyclj.fs/list-batch", "a dir path string");
+    if (!dir_path) return NULL;
+
+    const char *after_key = NULL;
+    if (args[1]) {
+        after_key = require_c_string_arg(args[1], "tinyclj.fs/list-batch", "nil or a continuation key string");
+        if (!after_key) return NULL;
+    }
+
+    if (!is_fixnum(args[2])) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/list-batch expects a batch-size fixnum");
+    }
+    int bs = as_fixnum(args[2]);
+    if (bs <= 0) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/list-batch batch-size must be > 0");
+    }
+
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
-    return fs_list_dir(st, path);
+
+    char last_key[FS_KEY_MAX] = {0};
+    ID entries = fs_list_dir_batch(st, dir_path, after_key, (size_t)bs, last_key, sizeof(last_key));
+    if (!entries) return NULL;
+
+    CljMap *m = make_map(4);
+    m = map_assoc(m, (ID)intern_symbol_global(":entries"), entries);
+    if (last_key[0] != '\0') {
+        m = map_assoc(m, (ID)intern_symbol_global(":last-key"), (ID)make_string(last_key));
+    } else {
+        m = map_assoc(m, (ID)intern_symbol_global(":last-key"), NULL);
+    }
+    return AUTORELEASE(m);
 }
 
 ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
 {
-    TINY_DB_CHECK_ARITY(argc, 1, "tinyclj.fs/delete!");
+    CHECK_ARITY(argc, 1, "tinyclj.fs/delete!");
     const char *path = require_c_string_arg(args[0], "tinyclj.fs/delete!", "a path string");
     if (!path) return NULL;
     FsKvStore *st = fs_global_store();
@@ -138,7 +157,7 @@ static ID tinyclj_kv_throw_ft(const char* op, tdb_status_t stc)
 
 ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
 {
-    TINY_DB_CHECK_ARITY(argc, 2, "tiny-db.kv/put-bytes");
+    CHECK_ARITY(argc, 2, "tiny-db.kv/put-bytes");
     CljString *key_str = to_string(args[0]);
     if (!key_str) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
@@ -170,7 +189,7 @@ ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
 
 ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
 {
-    TINY_DB_CHECK_ARITY(argc, 1, "tiny-db.kv/get-bytes");
+    CHECK_ARITY(argc, 1, "tiny-db.kv/get-bytes");
     CljString *key_str = to_string(args[0]);
     if (!key_str) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
@@ -209,7 +228,7 @@ ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
 
 ID native_tinyclj_kv_delete(ID *args, unsigned int argc)
 {
-    TINY_DB_CHECK_ARITY(argc, 1, "tiny-db.kv/delete!");
+    CHECK_ARITY(argc, 1, "tiny-db.kv/delete!");
     CljString *key_str = to_string(args[0]);
     if (!key_str) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,

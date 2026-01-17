@@ -15,7 +15,6 @@
 // Internal storage chunk size. This is NOT an app-facing limit.
 // App-facing streaming APIs (future) must cap chunks to FS_APP_MAX_CHUNK_SIZE.
 #define FS_STORE_CHUNK_SIZE 4096u
-#define FS_KEY_MAX 64u
 
 // Forward declarations for FS helpers.
 static bool fs_is_valid_path(const char *path);
@@ -82,7 +81,7 @@ static tdb_status_t fs_kv_make_chunk_key_bytes(const uint8_t* key, size_t key_le
     return TDB_OK;
 }
 
-static tdb_status_t fs_kv_read_meta_bytes(tdb_db_t* db, const uint8_t* key, size_t key_len,
+static tdb_status_t fs_kv_read_meta_bytes(tdb_kv_t* db, const uint8_t* key, size_t key_len,
                                         FsKvMeta* out_meta, int* out_has_meta)
 {
     if (out_has_meta) *out_has_meta = 0;
@@ -90,7 +89,7 @@ static tdb_status_t fs_kv_read_meta_bytes(tdb_db_t* db, const uint8_t* key, size
 
     FsKvMeta meta = {0};
     size_t saved = 0;
-    tdb_status_t stc = tdb_get_into(db, key, key_len, &meta, sizeof(meta), &saved);
+    tdb_status_t stc = tdb_kv_get_into(db, key, key_len, &meta, sizeof(meta), &saved);
     if (stc != TDB_OK) return stc;
 
     if (saved == sizeof(meta) && meta.magic == FS_KV_META_MAGIC) {
@@ -100,7 +99,7 @@ static tdb_status_t fs_kv_read_meta_bytes(tdb_db_t* db, const uint8_t* key, size
     return TDB_OK;
 }
 
-static tdb_status_t fs_kv_put_chunked_bytes(tdb_db_t* db, const uint8_t* key, size_t key_len,
+static tdb_status_t fs_kv_put_chunked_bytes(tdb_kv_t* db, const uint8_t* key, size_t key_len,
                                           const uint8_t* data, size_t len)
 {
     if (!db || !key || key_len == 0 || (!data && len != 0)) return TDB_ERR_INVALID_ARG;
@@ -127,7 +126,7 @@ static tdb_status_t fs_kv_put_chunked_bytes(tdb_db_t* db, const uint8_t* key, si
         stc = fs_kv_make_chunk_key_bytes(key, key_len, new_ver, i, ckey, sizeof(ckey), &ckey_len);
         if (stc != TDB_OK) return stc;
 
-        stc = tdb_put(db, ckey, ckey_len, data + off, chunk_len);
+        stc = tdb_kv_put(db, ckey, ckey_len, data + off, chunk_len);
         if (stc != TDB_OK) return stc;
     }
 
@@ -137,10 +136,10 @@ static tdb_status_t fs_kv_put_chunked_bytes(tdb_db_t* db, const uint8_t* key, si
         .total_len = (uint32_t)len,
         .chunks = chunks,
     };
-    return tdb_put(db, key, key_len, &meta, sizeof(meta));
+    return tdb_kv_put(db, key, key_len, &meta, sizeof(meta));
 }
 
-static tdb_status_t fs_kv_get_chunked_bytes(tdb_db_t* db, const uint8_t* key, size_t key_len,
+static tdb_status_t fs_kv_get_chunked_bytes(tdb_kv_t* db, const uint8_t* key, size_t key_len,
                                           uint8_t* out, size_t out_len, size_t* saved_len_out)
 {
     if (saved_len_out) *saved_len_out = 0;
@@ -170,7 +169,7 @@ static tdb_status_t fs_kv_get_chunked_bytes(tdb_db_t* db, const uint8_t* key, si
         if (want > out_len - copied) want = out_len - copied;
 
         size_t saved_chunk = 0;
-        stc = tdb_get_into(db, ckey, ckey_len, out + copied, want, &saved_chunk);
+        stc = tdb_kv_get_into(db, ckey, ckey_len, out + copied, want, &saved_chunk);
         if (stc != TDB_OK) return stc;
         if (saved_chunk < want && copied + saved_chunk < want_total) return TDB_ERR_CORRUPT;
         copied += (saved_chunk < want ? saved_chunk : want);
@@ -208,46 +207,36 @@ static tdb_status_t fs_ram_erase(void* ctx, uint32_t addr, size_t len) {
     return TDB_OK;
 }
 
-typedef struct {
-    const char* dir_path;
-    size_t prefix_len;
-    ID vec;
-} FsListDirCtx;
-
-static tdb_status_t fs_list_dir_cb(const void* key, size_t key_len,
-                                 const void* val, size_t val_len,
-                                 void* arg) {
-    (void)val;
-    (void)val_len;
-    FsListDirCtx* c = (FsListDirCtx*)arg;
-    if (!c || !c->dir_path) return TDB_ERR_INVALID_ARG;
-    if (key_len == c->prefix_len) return TDB_OK; // skip dir itself
-    if (key_len <= c->prefix_len) return TDB_OK;
+static bool fs_list_dir_key_is_direct_child(const char* dir_path,
+                                            size_t prefix_len,
+                                            const void* key, size_t key_len,
+                                            char out_kstr[FS_KEY_MAX])
+{
+    if (!dir_path || !key || !out_kstr) return false;
+    if (key_len == prefix_len) return false; // skip dir itself
+    if (key_len <= prefix_len) return false;
 
     // Keys are path strings; make a temporary NUL-terminated view.
-    if (key_len >= FS_KEY_MAX) return TDB_OK;
-    char kstr[FS_KEY_MAX];
-    memcpy(kstr, key, key_len);
-    kstr[key_len] = '\0';
+    if (key_len >= FS_KEY_MAX) return false;
+    memcpy(out_kstr, key, key_len);
+    out_kstr[key_len] = '\0';
 
-    const char* rest = kstr + c->prefix_len;
-    if (!rest || rest[0] == '\0') return TDB_OK;
+    const char* rest = out_kstr + prefix_len;
+    if (!rest || rest[0] == '\0') return false;
 
     // Skip chunk keys (versioned "@v#NNNN").
     const char* at = strchr(rest, '@');
-    if (at && strchr(at, '#')) return TDB_OK;
+    if (at && strchr(at, '#')) return false;
 
     // Only direct children: allow at most one '/' at end.
     const char* slash = strchr(rest, '/');
-    if (slash && slash[1] != '\0') return TDB_OK;
+    if (slash && slash[1] != '\0') return false;
 
-    // Add path as string
-    c->vec = (ID)vector_conj((CljVector*)c->vec, (ID)make_string(kstr));
-    return TDB_OK;
+    return true;
 }
 
 struct FsKvStore {
-    tdb_db_t* db;
+    tdb_kv_t* db;
     tdb_blockdev_t bdev;
     FsRamBdev ram;
     FsStreamStats stats;
@@ -314,7 +303,7 @@ FsKvStore *fs_kv_store_new(void)
     // granularity than the chunk size.
     st->bdev.geom.erase_granularity = 16384;
 
-    tdb_status_t fst = tdb_db_init(&st->db, &st->bdev, NULL);
+    tdb_status_t fst = tdb_kv_open(&st->db, &st->bdev, NULL);
     if (fst != TDB_OK) {
         free(st->ram.buf);
         free(st);
@@ -398,36 +387,36 @@ tdb_status_t fs_kv_stream_read_key_bytes(FsKvStore* st,
         fs_write_be32(prefix + pfx_len, meta.version);
         pfx_len += 4;
 
-        tdb_cursor_t* cur = NULL;
-        stc = tdb_cursor_open_prefix(st->db, prefix, pfx_len, &cur);
+        tdb_kv_cursor_t* cur = NULL;
+        stc = tdb_kv_cursor_open_prefix(st->db, prefix, pfx_len, &cur);
         if (stc != TDB_OK) return stc;
 
         size_t remaining_total = (size_t)meta.total_len;
         uint32_t seen_chunks = 0;
         while (seen_chunks < meta.chunks) {
             int has = 0;
-            stc = tdb_cursor_next(cur, &has);
-            if (stc != TDB_OK) { tdb_cursor_close(cur); return stc; }
+            stc = tdb_kv_cursor_next(cur, &has);
+            if (stc != TDB_OK) { tdb_kv_cursor_close(cur); return stc; }
             if (!has) break;
 
             tdb_blob_t v = {0};
-            stc = tdb_cursor_val(cur, &v);
-            if (stc != TDB_OK) { tdb_cursor_close(cur); return stc; }
+            stc = tdb_kv_cursor_val(cur, &v);
+            if (stc != TDB_OK) { tdb_kv_cursor_close(cur); return stc; }
 
-            if (v.len > (size_t)FS_STORE_CHUNK_SIZE) { tdb_cursor_close(cur); return TDB_ERR_CORRUPT; }
-            if (v.len > remaining_total) { tdb_cursor_close(cur); return TDB_ERR_CORRUPT; }
+            if (v.len > (size_t)FS_STORE_CHUNK_SIZE) { tdb_kv_cursor_close(cur); return TDB_ERR_CORRUPT; }
+            if (v.len > remaining_total) { tdb_kv_cursor_close(cur); return TDB_ERR_CORRUPT; }
 
             st->stats.blocks_read++;
             if (v.len) {
                 stc = fs_emit_sliced((const uint8_t*)v.data, v.len, chunk_cap, cb, arg);
-                if (stc != TDB_OK) { tdb_cursor_close(cur); return stc; }
+                if (stc != TDB_OK) { tdb_kv_cursor_close(cur); return stc; }
             }
             remaining_total -= v.len;
             seen_chunks++;
             if (remaining_total == 0) break;
         }
 
-        tdb_cursor_close(cur);
+        tdb_kv_cursor_close(cur);
         if (seen_chunks != meta.chunks) return TDB_ERR_CORRUPT;
         if (remaining_total != 0) return TDB_ERR_CORRUPT;
         return TDB_OK;
@@ -435,7 +424,7 @@ tdb_status_t fs_kv_stream_read_key_bytes(FsKvStore* st,
 
     // Legacy inline value: emit it in <= max_chunk slices.
     tdb_blob_t out = {0};
-    stc = tdb_get(st->db, key, key_len, &out);
+    stc = tdb_kv_get(st->db, key, key_len, &out);
     if (stc != TDB_OK) return stc;
     st->stats.blocks_read++; // single stored value
     return fs_emit_sliced((const uint8_t*)out.data, out.len, chunk_cap, cb, arg);
@@ -474,7 +463,7 @@ tdb_status_t fs_kv_stream_read_key_bytes_from(FsKvStore* st,
             if (stc != TDB_OK) return stc;
 
             size_t saved = 0;
-            stc = tdb_get_into(st->db, ckey, ckey_len, buf, sizeof(buf), &saved);
+            stc = tdb_kv_get_into(st->db, ckey, ckey_len, buf, sizeof(buf), &saved);
             if (stc != TDB_OK) return stc;
             if (saved == 0) return TDB_ERR_CORRUPT;
             if (start_off > saved) return TDB_ERR_INVALID_ARG;
@@ -498,7 +487,7 @@ tdb_status_t fs_kv_stream_read_key_bytes_from(FsKvStore* st,
 
     // Legacy inline: offset into single stored value.
     tdb_blob_t out = {0};
-    stc = tdb_get(st->db, key, key_len, &out);
+    stc = tdb_kv_get(st->db, key, key_len, &out);
     if (stc != TDB_OK) return stc;
     if (offset > out.len) return TDB_ERR_INVALID_ARG;
     if (offset == out.len) return TDB_OK;
@@ -558,7 +547,7 @@ tdb_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
             if (chunk_fill == (size_t)FS_STORE_CHUNK_SIZE) {
                 stc = fs_kv_make_chunk_key_bytes(key, key_len, new_ver, chunks_written, ckey, sizeof(ckey), &ckey_len);
                 if (stc != TDB_OK) return stc;
-                stc = tdb_put(st->db, ckey, ckey_len, chunkbuf, chunk_fill);
+                stc = tdb_kv_put(st->db, ckey, ckey_len, chunkbuf, chunk_fill);
                 if (stc != TDB_OK) return stc;
                 st->stats.blocks_written++;
                 chunks_written++;
@@ -571,7 +560,7 @@ tdb_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
     if (chunk_fill != 0) {
         stc = fs_kv_make_chunk_key_bytes(key, key_len, new_ver, chunks_written, ckey, sizeof(ckey), &ckey_len);
         if (stc != TDB_OK) return stc;
-        stc = tdb_put(st->db, ckey, ckey_len, chunkbuf, chunk_fill);
+        stc = tdb_kv_put(st->db, ckey, ckey_len, chunkbuf, chunk_fill);
         if (stc != TDB_OK) return stc;
         st->stats.blocks_written++;
         chunks_written++;
@@ -584,7 +573,7 @@ tdb_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
         .total_len = (uint32_t)total,
         .chunks = chunks_written,
     };
-    stc = tdb_put(st->db, key, key_len, &meta, sizeof(meta));
+    stc = tdb_kv_put(st->db, key, key_len, &meta, sizeof(meta));
     if (stc != TDB_OK) return stc;
 
     if (out_total_len) *out_total_len = total;
@@ -765,7 +754,7 @@ void fs_kv_store_free(FsKvStore *st)
 {
     if (!st) return;
     if (st->db) {
-        tdb_db_deinit(st->db);
+        tdb_kv_close(st->db);
         st->db = NULL;
     }
     free(st->ram.buf);
@@ -798,20 +787,20 @@ tdb_status_t fs_kv_put_status(FsKvStore *st, const char *key, const uint8_t *dat
 {
     if (!st || !st->db || !key) return TDB_ERR_INVALID_ARG;
     if (len > (size_t)INT32_MAX) return TDB_ERR_INVALID_ARG;
-    return tdb_put(st->db, key, strlen(key), data, len);
+    return tdb_kv_put(st->db, key, strlen(key), data, len);
 }
 
 tdb_status_t fs_kv_get_status(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out)
 {
     if (saved_len_out) *saved_len_out = 0;
     if (!st || !st->db || !key) return TDB_ERR_INVALID_ARG;
-    return tdb_get_into(st->db, key, strlen(key), out, out_len, saved_len_out);
+    return tdb_kv_get_into(st->db, key, strlen(key), out, out_len, saved_len_out);
 }
 
 tdb_status_t fs_kv_del_status(FsKvStore *st, const char *key)
 {
     if (!st || !st->db || !key) return TDB_ERR_INVALID_ARG;
-    return tdb_del(st->db, key, strlen(key));
+    return tdb_kv_del(st->db, key, strlen(key));
 }
 
 tdb_status_t fs_kv_put_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, const uint8_t *data, size_t len)
@@ -834,7 +823,7 @@ tdb_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_
     }
     // Legacy inline value.
     if (stc == TDB_OK && !has_meta) {
-        return tdb_get_into(st->db, key, key_len, out, out_len, saved_len_out);
+        return tdb_kv_get_into(st->db, key, key_len, out, out_len, saved_len_out);
     }
     return stc;
 }
@@ -842,7 +831,7 @@ tdb_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_
 tdb_status_t fs_kv_del_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len)
 {
     if (!st || !st->db || !key || key_len == 0) return TDB_ERR_INVALID_ARG;
-    return tdb_del(st->db, key, key_len);
+    return tdb_kv_del(st->db, key, key_len);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -994,17 +983,65 @@ bool fs_delete(FsKvStore *st, const char *path)
     return fs_kv_del(st, path);
 }
 
-ID fs_list_dir(FsKvStore *st, const char *dir_path)
+ID fs_list_dir_batch(FsKvStore *st,
+                     const char *dir_path,
+                     const char *after_key,
+                     size_t batch_size,
+                     char *out_last_key,
+                     size_t out_last_key_cap)
 {
+    if (out_last_key && out_last_key_cap) out_last_key[0] = '\0';
     if (!fs_is_valid_path(dir_path) || !fs_is_dir_path(dir_path)) return NULL;
     if (!st || !st->db) return NULL;
+    if (!out_last_key || out_last_key_cap == 0) return NULL;
 
     size_t prefix_len = strlen(dir_path);
+    size_t after_len = after_key ? strlen(after_key) : 0;
+
     ID vec = (ID)make_vector(8, CLJ_VECTOR);
     if (!vec) return NULL;
 
-    FsListDirCtx ctx = {.dir_path = dir_path, .prefix_len = prefix_len, .vec = vec};
-    (void)tdb_iter_prefix(st->db, dir_path, prefix_len, fs_list_dir_cb, &ctx);
-    return AUTORELEASE(ctx.vec);
+    tdb_kv_cursor_t* cur = NULL;
+    tdb_status_t stc = tdb_kv_cursor_open_ge(st->db,
+                                            dir_path, prefix_len,
+                                            after_key, after_len,
+                                            &cur);
+    if (stc != TDB_OK) return NULL;
+
+    size_t returned = 0;
+    int has = 0;
+    while (1) {
+        stc = tdb_kv_cursor_next(cur, &has);
+        if (stc != TDB_OK) { tdb_kv_cursor_close(cur); return NULL; }
+        if (!has) {
+            out_last_key[0] = '\0';
+            break;
+        }
+
+        tdb_blob_t k = {0};
+        stc = tdb_kv_cursor_key(cur, &k);
+        if (stc != TDB_OK) { tdb_kv_cursor_close(cur); return NULL; }
+
+        if (k.len + 1 > out_last_key_cap) { tdb_kv_cursor_close(cur); return NULL; }
+        memcpy(out_last_key, k.data, k.len);
+        out_last_key[k.len] = '\0';
+
+        // Exclusive continuation: skip after_key itself if cursor positioned exactly there.
+        if (after_key && after_len == k.len && memcmp(k.data, after_key, k.len) == 0) {
+            continue;
+        }
+
+        char kstr[FS_KEY_MAX];
+        if (fs_list_dir_key_is_direct_child(dir_path, prefix_len, k.data, k.len, kstr)) {
+            vec = (ID)vector_conj((CljVector*)vec, (ID)make_string(kstr));
+            returned++;
+            if (batch_size && returned >= batch_size) {
+                break;
+            }
+        }
+    }
+
+    tdb_kv_cursor_close(cur);
+    return AUTORELEASE(vec);
 }
 
