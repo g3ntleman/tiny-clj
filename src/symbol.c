@@ -438,11 +438,6 @@ DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
 #endif
 
 // Static symbol structs for fixed (non-keyword) literals used in C code
-DEFINE_STATIC_SYMBOL(sym_ns_clojure_string_data, "clojure.string");
-DEFINE_STATIC_SYMBOL(sym_ns_clojure_repl_data, "clojure.repl");
-DEFINE_STATIC_SYMBOL(sym_ns_clojure_core_data, "clojure.core");
-DEFINE_STATIC_SYMBOL(sym_ns_clojure_lang_data, "clojure.lang");
-DEFINE_STATIC_SYMBOL(sym_ns_tinyclj_data, "tinyclj");
 DEFINE_STATIC_SYMBOL(sym_destructure_data, "destructure");
 DEFINE_STATIC_SYMBOL(sym_math_data, "Math");
 DEFINE_STATIC_SYMBOL(sym_inc_data, "inc");
@@ -634,15 +629,18 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_ALL_NS, sym_all_ns_data);
 
     // Initialize clojure.string namespace symbol first (needed for clojure.string functions)
-    INIT_SYMBOL(SYM_CLOJURE_STRING, sym_ns_clojure_string_data);
+    // NOTE: keep as interned (not DEFINE_STATIC_SYMBOL) to match historical behavior.
+    SYM_CLOJURE_STRING = intern_symbol_global("clojure.string");
     
     // Initialize clojure.repl namespace symbol (needed for REPL helper functions)
-    INIT_SYMBOL(SYM_CLOJURE_REPL, sym_ns_clojure_repl_data);
+    // NOTE: keep as interned (not DEFINE_STATIC_SYMBOL) to match historical behavior.
+    SYM_CLOJURE_REPL = intern_symbol_global("clojure.repl");
 
     // Global symbols for namespace names (for fast comparison)
     // Use intern_symbol_global to ensure same symbol is returned by intern_symbol
-    INIT_SYMBOL(SYM_CLOJURE_CORE, sym_ns_clojure_core_data);
-    INIT_SYMBOL(SYM_CLOJURE_LANG, sym_ns_clojure_lang_data);
+    // NOTE: keep as interned (not DEFINE_STATIC_SYMBOL) to match historical behavior.
+    SYM_CLOJURE_CORE = intern_symbol_global("clojure.core");
+    SYM_CLOJURE_LANG = intern_symbol_global("clojure.lang");
     
     // clojure.string native function symbols - with namespace
     INIT_SYMBOL_NS(SYM_TRIM, sym_trim_data, SYM_CLOJURE_STRING);
@@ -665,7 +663,8 @@ void init_special_symbols() {
     // clojure.repl native function symbol for dir
     INIT_SYMBOL_NS(SYM_DIR_NATIVE, sym_dir_data, SYM_CLOJURE_REPL);
     // Initialize tinyclj namespace symbol
-    INIT_SYMBOL(SYM_TINYCLJ, sym_ns_tinyclj_data);
+    // NOTE: keep as interned (not DEFINE_STATIC_SYMBOL) to match historical behavior.
+    SYM_TINYCLJ = intern_symbol_global("tinyclj");
     
     // tinyclj native function symbol for retain-count
     INIT_SYMBOL_NS(SYM_RETAIN_COUNT, sym_retain_count_data, SYM_TINYCLJ);

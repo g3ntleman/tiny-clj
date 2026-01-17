@@ -10,7 +10,6 @@
 #include "../tiny_clj.h"
 #include "../event_loop.h"
 #include "unity/src/unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
-#include "build_info.h"
 #include <time.h>
 #include <unistd.h>
 
@@ -246,74 +245,27 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
         saved_stdout = -1;
     }
 
-    // In quiet mode, replay captured output only if test failed
-    if (g_quiet_output && capturing_stdout && captured_stdout != NULL) {
+    // Quiet mode contract: print ONLY FAIL lines (no PASS lines).
+    // We intentionally do NOT replay captured stdout, because it can contain arbitrary
+    // output (including Unity PASS lines when capture fails). Instead, emit a single
+    // normalized FAIL line when the test fails.
+    if (g_quiet_output) {
         if (test_failed) {
-            // Test failed - replay captured stdout
-            fflush(captured_stdout);
-            fseek(captured_stdout, 0, SEEK_SET);
-
-            char buffer[4096];
-            size_t bytes_read;
-            size_t bytes_total = 0;
-
-            // Detect if we saw a FAIL token in the replayed output.
-            // This matters for failures that don't trigger a Unity assertion line
-            // (e.g. exceptions). In that case we emit a minimal FAIL line.
-            int fail_match = 0; // matches "FAIL"
-            while ((bytes_read = fread(buffer, 1, sizeof(buffer), captured_stdout)) > 0) {
-                bytes_total += bytes_read;
-                fwrite(buffer, 1, bytes_read, stdout);
-
-                for (size_t i = 0; i < bytes_read; i++) {
-                    char c = buffer[i];
-                    if ((fail_match == 0 && c == 'F') ||
-                        (fail_match == 1 && c == 'A') ||
-                        (fail_match == 2 && c == 'I') ||
-                        (fail_match == 3 && c == 'L')) {
-                        fail_match++;
-                        if (fail_match == 4) {
-                            break;
-                        }
-                    } else {
-                        fail_match = (c == 'F') ? 1 : 0;
-                    }
-                }
-                if (fail_match == 4) {
-                    // keep draining, but we already know we saw FAIL
-                }
-            }
-
-            if (fail_match != 4) {
-                const char *file = (entry && entry->file) ? entry->file : "unknown";
-                int line = (entry && entry->line > 0) ? entry->line : 0;
-                const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
-
-                if (line > 0) {
-                    test_fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
-                } else {
-                    test_fprintf(stdout, "%s:%s:FAIL\n", file, name);
-                }
-            }
-
-            // If absolutely nothing was captured, still ensure a FAIL line exists.
-            // (The FAIL token detection above covers most cases.)
-            if (bytes_total == 0) {
-                const char *file = (entry && entry->file) ? entry->file : "unknown";
-                int line = (entry && entry->line > 0) ? entry->line : 0;
-                const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
-                if (line > 0) {
-                    test_fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
-                } else {
-                    test_fprintf(stdout, "%s:%s:FAIL\n", file, name);
-                }
+            const char *file = (entry && entry->file) ? entry->file : "unknown";
+            int line = (entry && entry->line > 0) ? entry->line : 0;
+            const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
+            if (line > 0) {
+                test_fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
+            } else {
+                test_fprintf(stdout, "%s:%s:FAIL\n", file, name);
             }
         }
-
-        fclose(captured_stdout);
-        captured_stdout = NULL;
+        if (captured_stdout) {
+            fclose(captured_stdout);
+            captured_stdout = NULL;
+        }
     } else if (captured_stdout) {
-        // Not capturing_stdout (or not quiet): close any tmpfile we opened.
+        // Not quiet: close any tmpfile we opened.
         fclose(captured_stdout);
         captured_stdout = NULL;
     }
