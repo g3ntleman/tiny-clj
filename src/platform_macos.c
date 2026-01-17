@@ -147,6 +147,16 @@ size_t platform_flash_bytes_free(void) { return (size_t)-1; }
 size_t platform_flash_bytes_total(void) { return (size_t)-1; }
 
 int platform_set_stdin_nonblocking(int enable) {
+    // When stdin is integrated into CFRunLoop via CFFileDescriptor, the callback
+    // drains stdin in a loop until it hits EAGAIN/EWOULDBLOCK. If stdin were put
+    // back into blocking mode, that loop could block indefinitely after consuming
+    // the currently available bytes, effectively freezing keyboard input.
+    //
+    // Therefore, on macOS we keep stdin non-blocking whenever CFRunLoop buffering
+    // is active.
+    if (g_stdin_fdref && !enable) {
+        enable = 1;
+    }
     int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
     if (flags == -1) return -1;
     if (enable) flags |= O_NONBLOCK; else flags &= ~O_NONBLOCK;
@@ -213,7 +223,7 @@ int platform_get_char(void *ctx) {
     int b = stdin_ring_pop(&g_stdin_ring);
     if (b >= 0) return b;
     if (g_stdin_ring.eof) return -1;
-    return -2;
+    return -2; // no input available (non-blocking)
 }
 
 void platform_put_char(void *ctx, char c) {
@@ -242,7 +252,10 @@ void platform_set_raw_mode(int enable) {
         
         struct termios raw = original_termios;
         raw.c_lflag &= ~(ICANON | ECHO);
-        raw.c_cc[VMIN] = 0;
+        // With VMIN=0/VTIME=0, read() may return 0 when no input is available,
+        // which our CFRunLoop stdin callback previously interpreted as EOF.
+        // Use VMIN=1 so "no data" yields EAGAIN/EWOULDBLOCK (since stdin is O_NONBLOCK).
+        raw.c_cc[VMIN] = 1;
         raw.c_cc[VTIME] = 0;
         
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
