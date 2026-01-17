@@ -13,12 +13,13 @@
  * - %x %X (optionally with 'l' or 'z')
  * - %p (prints 0x + lowercase hex)
  * - %f with optional precision (e.g. %.2f). Default precision: 6.
+ * - Zero-padding with width (e.g. %04u, %02d, %08X)
  *
  * Not supported (left as literal "%<spec>"):
- * - width, padding, alignment, scientific formats, etc.
+ * - left/right alignment, space padding, scientific formats, etc.
  */
-int clj_mini_vsnprintf(char *dst, size_t cap, const char *fmt, va_list ap);
-int clj_mini_snprintf(char *dst, size_t cap, const char *fmt, ...);
+int mini_vsnprintf(char *dst, size_t cap, const char *fmt, va_list ap);
+int mini_snprintf(char *dst, size_t cap, const char *fmt, ...);
 
 // -----------------------------------------------------------------------------
 // Legacy tiny-clj "format_utils.h" helpers (now consolidated here)
@@ -68,21 +69,23 @@ static inline size_t format_append_char(char *dest, size_t offset, size_t capaci
 
 static inline size_t format_append_uint(char *dest, size_t offset, size_t capacity, unsigned int value) {
     char number[16];
-    (void)clj_mini_snprintf(number, sizeof(number), "%u", value);
+    (void)mini_snprintf(number, sizeof(number), "%u", value);
     return format_append(dest, offset, capacity, number);
 }
 
 static inline size_t format_append_int(char *dest, size_t offset, size_t capacity, int value) {
     char number[16];
-    (void)clj_mini_snprintf(number, sizeof(number), "%d", value);
+    (void)mini_snprintf(number, sizeof(number), "%d", value);
     return format_append(dest, offset, capacity, number);
 }
 
 static inline size_t format_append_ulong(char *dest, size_t offset, size_t capacity, unsigned long value) {
     char number[32];
-    (void)clj_mini_snprintf(number, sizeof(number), "%lu", value);
+    (void)mini_snprintf(number, sizeof(number), "%lu", value);
     return format_append(dest, offset, capacity, number);
 }
+
+// Note: For zero-padded integers, use mini_snprintf with format like "%04u"
 
 #endif
 

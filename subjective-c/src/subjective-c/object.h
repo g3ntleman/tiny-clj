@@ -198,7 +198,7 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
     {
         {
             char buf[256];
-            (void)clj_mini_snprintf(buf, sizeof(buf),
+            (void)mini_snprintf(buf, sizeof(buf),
                                     "assert_type failed: invalid pointer %p (expected %d)\n",
                                     (void *)obj, (int)expected_type);
             fputs(buf, stderr);
@@ -223,7 +223,7 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
     {
         {
             char buf[256];
-            (void)clj_mini_snprintf(buf, sizeof(buf),
+            (void)mini_snprintf(buf, sizeof(buf),
                                     "assert_type failed: pointer %p appears to be on stack (expected %d)\n",
                                     (void *)obj, (int)expected_type);
             fputs(buf, stderr);
@@ -240,7 +240,7 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
     {
         {
             char buf[256];
-            (void)clj_mini_snprintf(buf, sizeof(buf),
+            (void)mini_snprintf(buf, sizeof(buf),
                                     "assert_type failed: pointer %p appears to be on stack (expected %d)\n",
                                     (void *)obj, (int)expected_type);
             fputs(buf, stderr);
@@ -261,7 +261,7 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
     }
     {
         char buf[128];
-        (void)clj_mini_snprintf(buf, sizeof(buf),
+        (void)mini_snprintf(buf, sizeof(buf),
                                 "assert_type failed: expected %d actual %d\n",
                                 (int)expected_type, (int)actual_type);
         fputs(buf, stderr);

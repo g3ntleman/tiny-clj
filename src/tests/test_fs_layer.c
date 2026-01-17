@@ -118,4 +118,3 @@ TEST(test_fs_layer_rewrite_increments_version)
 
     fs_kv_store_free(st);
 }
-

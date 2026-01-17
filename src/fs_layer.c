@@ -4,6 +4,7 @@
 #include "instant.h"
 #include "map.h"
 #include "memory.h"
+#include "mini_format.h"
 #include "ast_canon.h"
 #include "parser.h"
 #include "strings.h"
@@ -36,41 +37,7 @@ static ID fs_meta_ctime(ID meta_map);
 static fs_err_t fs_meta_put_map(FsKvStore *st, const char *path, ID map_obj);
 static fs_err_t fs_make_chunk_key(char out[FS_KEY_MAX], const char *path, uint32_t version, uint32_t chunk_idx);
 
-// Lightweight integer formatting helpers (avoid snprintf/printf dependencies).
-static size_t fs_u32_to_dec_rev(uint32_t v, uint8_t out_rev[10])
-{
-    size_t n = 0;
-    do {
-        out_rev[n++] = (uint8_t)('0' + (v % 10u));
-        v /= 10u;
-    } while (v && n < 10);
-    return n;
-}
-
-static size_t fs_append_u32_dec(uint8_t* out, size_t pos, size_t cap, uint32_t v)
-{
-    uint8_t rev[10];
-    size_t n = fs_u32_to_dec_rev(v, rev);
-    if (pos + n >= cap) return cap + 1;
-    for (size_t i = 0; i < n; i++) {
-        out[pos + i] = rev[n - 1 - i];
-    }
-    return pos + n;
-}
-
-static size_t fs_append_u32_dec_zeropad(uint8_t* out, size_t pos, size_t cap, uint32_t v, size_t width)
-{
-    uint8_t rev[10];
-    size_t n = fs_u32_to_dec_rev(v, rev);
-    if (n < width) {
-        size_t pad = width - n;
-        if (pos + pad >= cap) return cap + 1;
-        for (size_t i = 0; i < pad; i++) out[pos++] = '0';
-    }
-    if (pos + n >= cap) return cap + 1;
-    for (size_t i = 0; i < n; i++) out[pos + i] = rev[n - 1 - i];
-    return pos + n;
-}
+// Integer formatting: use mini_format.h helpers (DRY)
 
 // -----------------------------------------------------------------------------
 // tiny-db.kv long-value storage (chunked) using blob keys (no C-strings).
@@ -1109,22 +1076,10 @@ static fs_err_t fs_make_chunk_key(char out[FS_KEY_MAX], const char *path, uint32
     size_t path_len = strlen(path);
     if (path_len == 0 || path_len >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
 
-    size_t pos = 0;
-    if (pos + path_len >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
-    memcpy(out + pos, path, path_len);
-    pos += path_len;
+    // Format: "<path>@<version>#<chunk_idx_4digit>"
+    int n = mini_snprintf(out, FS_KEY_MAX, "%s@%u#%04u", path, version, chunk_idx);
+    if (n < 0 || (size_t)n >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
 
-    if (pos + 1 >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
-    out[pos++] = '@';
-    pos = fs_append_u32_dec((uint8_t*)out, pos, FS_KEY_MAX, version);
-    if (pos > FS_KEY_MAX) return FS_ERR_INVALID_PATH;
-
-    if (pos + 1 >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
-    out[pos++] = '#';
-    pos = fs_append_u32_dec_zeropad((uint8_t*)out, pos, FS_KEY_MAX, chunk_idx, 4);
-    if (pos > FS_KEY_MAX) return FS_ERR_INVALID_PATH;
-
-    out[pos] = '\0';
     return FS_NO_ERR;
 }
 

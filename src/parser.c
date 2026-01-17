@@ -87,7 +87,7 @@ static void throw_parser_exceptionf(Reader *reader, const char *format, ...) {
     char buffer[MSG_LEN];
     va_list args;
     va_start(args, format);
-    (void)clj_mini_vsnprintf(buffer, sizeof(buffer), format, args);
+    (void)mini_vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     throw_parser_exception(buffer, reader);
 #endif

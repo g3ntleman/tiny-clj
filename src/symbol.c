@@ -16,7 +16,6 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>  // For snprintf
 #include <assert.h>
 
 // Note: Symbols have SINGLETON_RC and are never released

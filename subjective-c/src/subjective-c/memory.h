@@ -37,7 +37,6 @@ void autorelease_pool_init(void);     // Call once at startup
 void autorelease_pool_push(void);      // Push new checkpoint
 void autorelease_pool_pop(void);       // Pop current checkpoint
 void autorelease_pool_drain_after_exception(void);
-void autorelease_pool_drain_all(void);
 void autorelease_pool_destroy(void);
 bool is_autorelease_pool_active(void);
 
@@ -187,7 +186,7 @@ bool is_autoreleased(CljObject *obj);
         char buf[256];
         va_list ap;
         va_start(ap, fmt);
-        (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+        (void)mini_vsnprintf(buf, sizeof(buf), fmt, ap);
         va_end(ap);
         fputs(buf, stream ? stream : stdout);
     }

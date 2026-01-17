@@ -21,7 +21,7 @@ static void bench_outf(const char *fmt, ...) {
     char buf[256];
     va_list ap;
     va_start(ap, fmt);
-    (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    (void)mini_vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
     fputs(buf, stdout);
 }

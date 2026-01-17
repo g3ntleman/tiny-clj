@@ -21,7 +21,7 @@ static void errf(const char *fmt, ...) {
     char buf[512];
     va_list ap;
     va_start(ap, fmt);
-    (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    (void)mini_vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
     fputs(buf, stderr);
 }
@@ -178,7 +178,7 @@ void* throw_exception_formatted(const char *type, const char *file, int line, in
     char message[512];
     va_list args;
     va_start(args, format);
-    (void)clj_mini_vsnprintf(message, sizeof(message), format, args);
+    (void)mini_vsnprintf(message, sizeof(message), format, args);
     va_end(args);
     CLJException *exception = make_exception(exception_type, message, file, line, code);
 #endif

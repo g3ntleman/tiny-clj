@@ -24,7 +24,7 @@ void exception_print_native_backtrace(void);
         #define CLJ_ASSERT(expr) do { \
             if (!(expr)) { \
                 char _buf[256]; \
-                (void)clj_mini_snprintf(_buf, sizeof(_buf), "\nASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
+                (void)mini_snprintf(_buf, sizeof(_buf), "\nASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
                 fputs(_buf, stderr); \
                 abort(); \
             } \
@@ -33,7 +33,7 @@ void exception_print_native_backtrace(void);
         #define CLJ_ASSERT(expr) do { \
             if (!(expr)) { \
                 char _buf[256]; \
-                (void)clj_mini_snprintf(_buf, sizeof(_buf), "\nASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
+                (void)mini_snprintf(_buf, sizeof(_buf), "\nASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
                 fputs(_buf, stderr); \
                 fputs("Stack Trace:\n", stderr); \
                 exception_print_native_backtrace(); \

@@ -118,7 +118,7 @@ extern EvalState* test_get_eval_state(void);
         char *filename = test_extract_filename_from_path(__FILE__); \
         if (filename) { \
             char group[128]; \
-            (void)clj_mini_snprintf(group, sizeof(group), "shared_%s", filename); \
+            (void)mini_snprintf(group, sizeof(group), "shared_%s", filename); \
             test_registry_add_with_file_info(#name, name, group, __FILE__, __LINE__); \
             free(filename); \
         } \
@@ -130,7 +130,7 @@ extern EvalState* test_get_eval_state(void);
 // -----------------------------------------------------------------------------
 static inline void test_vfprintf(FILE *stream, const char *fmt, va_list ap) {
     char buf[1024];
-    (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    (void)mini_vsnprintf(buf, sizeof(buf), fmt, ap);
     fputs(buf, stream ? stream : stdout);
 }
 
@@ -144,7 +144,7 @@ static inline void test_fprintf(FILE *stream, const char *fmt, ...) {
 static inline void test_snprintf(char *dst, size_t cap, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    (void)clj_mini_vsnprintf(dst, cap, fmt, ap);
+    (void)mini_vsnprintf(dst, cap, fmt, ap);
     va_end(ap);
 }
 

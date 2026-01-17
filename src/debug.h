@@ -27,7 +27,7 @@ bool is_zombie(ID o);
 #ifdef DEBUG
     #define DEBUG_PRINT(fmt, ...) do { \
         char _buf[256]; \
-        (void)clj_mini_snprintf(_buf, sizeof(_buf), fmt "\n", ##__VA_ARGS__); \
+        (void)mini_snprintf(_buf, sizeof(_buf), fmt "\n", ##__VA_ARGS__); \
         fputs(_buf, stderr); \
     } while(0)
 #else

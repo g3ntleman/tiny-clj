@@ -39,7 +39,7 @@ static void core_logf(const char *fmt, ...) {
   char buf[256];
   va_list ap;
   va_start(ap, fmt);
-  (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+  (void)mini_vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
   fputs(buf, stderr);
 }
@@ -460,11 +460,11 @@ int load_clojure_repl(EvalState *st) {
   
   // Search order: libs/<rel>, <rel>, ../libs/<rel>, ../<rel>
   char libs_path[512];
-  clj_mini_snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
+  mini_snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
   char parent_libs_path[512];
-  clj_mini_snprintf(parent_libs_path, sizeof(parent_libs_path), "../%s", libs_path);
+  mini_snprintf(parent_libs_path, sizeof(parent_libs_path), "../%s", libs_path);
   char parent_rel_path[512];
-  clj_mini_snprintf(parent_rel_path, sizeof(parent_rel_path), "../%s", rel);
+  mini_snprintf(parent_rel_path, sizeof(parent_rel_path), "../%s", rel);
   const char *candidates[] = {
     libs_path,
     rel,
