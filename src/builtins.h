@@ -92,7 +92,8 @@ ID native_schedule_periodic(ID *args, unsigned int argc);
 
 // Time functions
 // native_time removed: time is now only a special form
-ID native_sleep(ID *args, unsigned int argc);
+ID native_yield(ID *args, unsigned int argc);
+ID native_current_time_ms(ID *args, unsigned int argc);
 
 // Note: def and ns are special forms (not builtins) because they require non-evaluated arguments
 

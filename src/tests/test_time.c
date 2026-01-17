@@ -149,6 +149,33 @@ TEST_SHARED(test_time_with_too_many_arguments) {
 // test_time_with_sleep removed: was 1 second wait, sleep is trivial Unix wrapper
 // time functionality is already tested by test_time_basic_functionality
 
+TEST(test_yield_returns_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // yield should exist and return nil.
+    ID result = eval_string("(yield 0)", g_test_eval_state);
+    TEST_ASSERT_NULL(result);
+}
+
+TEST(test_current_time_ms_returns_fixnum_in_range) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = eval_string("(current-time-ms)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+
+    int ms = as_fixnum(result);
+    TEST_ASSERT_TRUE(ms >= 0);
+    TEST_ASSERT_TRUE(ms < 86400000);
+}
+
+TEST(test_sleep_zero_returns_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = eval_string("(sleep 0)", g_test_eval_state);
+    TEST_ASSERT_NULL(result);
+}
+
 TEST_SHARED(test_time_no_double_evaluation) {
     // Test that time does NOT evaluate its argument twice
     // Use a simple arithmetic expression that we can verify

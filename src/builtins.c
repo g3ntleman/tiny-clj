@@ -13,6 +13,7 @@
 #ifndef ESP32_BUILD
 #include <sys/utsname.h>
 #endif
+#include "platform.h"
 #include "object.h"
 #include "vector.h"
 #include "map.h"
@@ -165,7 +166,6 @@ ID native_fn_p(ID *args, unsigned int argc);
 ID native_atom_p(ID *args, unsigned int argc);
 ID native_char_p(ID *args, unsigned int argc);
 ID native_list_p(ID *args, unsigned int argc);
-ID native_sleep(ID *args, unsigned int argc);
 ID native_ns_map(ID *args, unsigned int argc);
 ID native_find_ns(ID *args, unsigned int argc);
 ID native_all_ns(ID *args, unsigned int argc);
@@ -180,6 +180,8 @@ ID native_run_next_task(ID *args, unsigned int argc);
 ID native_schedule(ID *args, unsigned int argc);
 ID native_schedule_periodic(ID *args, unsigned int argc);
 ID native_cancel_timer(ID *args, unsigned int argc);
+ID native_yield(ID *args, unsigned int argc);
+ID native_current_time_ms(ID *args, unsigned int argc);
 ID native_atom(ID *args, unsigned int argc);
 ID native_deref(ID *args, unsigned int argc);
 ID native_reset_bang(ID *args, unsigned int argc);
@@ -3384,7 +3386,6 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_atom_p_data.sym, native_atom_p},
     {&sym_char_p_data.sym, native_char_p},
     {&sym_list_p_data.sym, native_list_p},
-    {&sym_sleep_data.sym, native_sleep},
     {&sym_ns_map_data.sym, native_ns_map},
     {&sym_find_ns_data.sym, native_find_ns},
     {&sym_all_ns_data.sym, native_all_ns},
@@ -3399,6 +3400,8 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_schedule_data.sym, native_schedule},
     {&sym_schedule_periodic_data.sym, native_schedule_periodic},
     {&sym_cancel_timer_data.sym, native_cancel_timer},
+    {&sym_yield_data.sym, native_yield},
+    {&sym_current_time_ms_data.sym, native_current_time_ms},
     {&sym_atom_data.sym, native_atom},
     {&sym_deref_data.sym, native_deref},
     {&sym_reset_bang_data.sym, native_reset_bang},
@@ -6373,31 +6376,6 @@ ID native_list_p(ID *args, unsigned int argc)
 // native_time removed: time is now only a special form (eval_time)
 // This ensures time can measure actual evaluation time, not pre-evaluated arguments
 
-// Native sleep implementation
-ID native_sleep(ID *args, unsigned int argc)
-{
-    if (!validate_builtin_args(argc, 1, "sleep"))
-        return NULL;
-
-    // Get the sleep duration in seconds
-    ID duration_obj = args[0];
-    if (TAG(duration_obj) != CLJ_INT)
-    {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "sleep duration must be a number",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    // Convert to seconds (assuming the number is in seconds)
-    int duration = as_fixnum(duration_obj);
-
-    // Use Unix sleep function
-    sleep(duration);
-
-    // Return nil
-    return NULL;
-}
-
 // ============================================================================
 // ATOM FUNCTIONS
 // ============================================================================
@@ -6570,6 +6548,53 @@ ID native_instant_ms(ID *args, unsigned int argc)
                                          "instant-ms expects an Instant");
     }
     return fixnum((int32_t)clj_instant_ms(args[0]));
+}
+
+// yield: Drive the platform runloop for up to the given timeout (milliseconds).
+// Returns nil.
+ID native_yield(ID *args, unsigned int argc)
+{
+    if (!validate_builtin_args(argc, 1, "yield"))
+        return NULL;
+
+    if (!is_fixnum(args[0]))
+    {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "yield expects an integer milliseconds value");
+    }
+
+    int ms = as_fixnum(args[0]);
+    if (ms < 0)
+    {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "yield expects a non-negative milliseconds value");
+    }
+
+    platform_runloop_run_once((unsigned int)ms);
+    return NULL;
+}
+
+// current-time-ms: Current milliseconds since start of the current UTC day [0..86400000).
+// Useful for short-lived timing where full epoch milliseconds are not required.
+ID native_current_time_ms(ID *args, unsigned int argc)
+{
+    (void)args;
+    if (argc != 0)
+    {
+        throw_exception(EXCEPTION_ARITY, "current-time-ms takes no arguments", NULL, 0, 0);
+        return NULL;
+    }
+
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+
+    int32_t sec_in_day = (int32_t)(tv.tv_sec % 86400);
+    if (sec_in_day < 0) sec_in_day = 0;
+    int32_t millis = sec_in_day * 1000 + (int32_t)(tv.tv_usec / 1000);
+    if (millis < 0) millis = 0;
+    if (millis >= 86400000) millis = 86399999;
+
+    return fixnum(millis);
 }
 
 // tinyclj.datetime/civil-from-days: (civil-from-days unix-days) => {:year y :month m :day d}
