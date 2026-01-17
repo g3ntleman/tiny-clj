@@ -1,5 +1,6 @@
 #include "platform.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
@@ -12,6 +13,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <net/if.h>
+#include <ifaddrs.h>
 
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -291,42 +293,69 @@ static void udp_socket_cb(CFSocketRef s,
                           void *info) {
     (void)s;
     if (!info) return;
-    if (type != kCFSocketDataCallBack) return;
+    // We use kCFSocketReadCallBack and perform recvfrom() ourselves for robustness.
+    if (type != kCFSocketReadCallBack) return;
+    (void)address;
+    (void)data;
 
     PlatformUdpSocket *u = (PlatformUdpSocket*)info;
     if (!u->cb) return;
 
-    // Payload is provided as CFDataRef for kCFSocketDataCallBack.
-    CFDataRef payload = (CFDataRef)data;
-    if (!payload) return;
+    int fd = CFSocketGetNative(u->sock);
+    if (fd < 0) return;
 
-    // Extract source address.
-    char addr_buf[INET6_ADDRSTRLEN];
-    addr_buf[0] = '\0';
-    uint16_t port = 0;
-    if (address) {
-        const UInt8 *ab = CFDataGetBytePtr(address);
-        CFIndex alen = CFDataGetLength(address);
-        if (ab && alen >= (CFIndex)sizeof(struct sockaddr)) {
-            const struct sockaddr *sa = (const struct sockaddr*)ab;
-            if (sa->sa_family == AF_INET && alen >= (CFIndex)sizeof(struct sockaddr_in)) {
-                const struct sockaddr_in *sin = (const struct sockaddr_in*)sa;
-                (void)inet_ntop(AF_INET, &sin->sin_addr, addr_buf, sizeof(addr_buf));
-                port = ntohs(sin->sin_port);
-            } else if (sa->sa_family == AF_INET6 && alen >= (CFIndex)sizeof(struct sockaddr_in6)) {
-                const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6*)sa;
-                (void)inet_ntop(AF_INET6, &sin6->sin6_addr, addr_buf, sizeof(addr_buf));
-                port = ntohs(sin6->sin6_port);
-            }
+    // Read as many datagrams as are available (socket is non-blocking).
+    for (;;) {
+        struct sockaddr_storage ss;
+        socklen_t sslen = (socklen_t)sizeof(ss);
+        memset(&ss, 0, sizeof(ss));
+
+        // RFC6762 says mDNS messages should fit into a single UDP datagram.
+        // Keep this modest but safe for typical Bonjour payloads.
+        uint8_t buf[4096];
+        ssize_t n = recvfrom(fd, buf, sizeof(buf), 0, (struct sockaddr*)&ss, &sslen);
+        if (n <= 0) {
+            // EAGAIN/EWOULDBLOCK => no more packets.
+            break;
         }
+
+        // Extract source address string + port.
+        char addr_buf[INET6_ADDRSTRLEN];
+        addr_buf[0] = '\0';
+        uint16_t port = 0;
+        const struct sockaddr *sa = (const struct sockaddr*)&ss;
+        if (sa->sa_family == AF_INET && sslen >= (socklen_t)sizeof(struct sockaddr_in)) {
+            const struct sockaddr_in *sin = (const struct sockaddr_in*)sa;
+            (void)inet_ntop(AF_INET, &sin->sin_addr, addr_buf, sizeof(addr_buf));
+            port = ntohs(sin->sin_port);
+        } else if (sa->sa_family == AF_INET6 && sslen >= (socklen_t)sizeof(struct sockaddr_in6)) {
+            const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6*)sa;
+            (void)inet_ntop(AF_INET6, &sin6->sin6_addr, addr_buf, sizeof(addr_buf));
+            port = ntohs(sin6->sin6_port);
+        }
+
+        const char *trace = getenv("TINYCLJ_MDNS_TRACE");
+        if (trace && trace[0] != '\0' && trace[0] != '0') {
+            fprintf(stderr, "[tinyclj mdns] recv %zd bytes from %s:%u\n",
+                    n,
+                    addr_buf[0] ? addr_buf : "?",
+                    (unsigned)port);
+        }
+
+        // Copy bytes into a CFDataRef so the callback can treat it as a zero-copy packet handle.
+        CFDataRef payload = CFDataCreate(kCFAllocatorDefault, buf, (CFIndex)n);
+        if (!payload) continue;
+
+        const uint8_t *bytes = (const uint8_t*)CFDataGetBytePtr(payload);
+        size_t len = (size_t)CFDataGetLength(payload);
+
+        // packet_handle is a retained CFDataRef. Caller must release via platform_net_packet_release.
+        u->cb(u->cb_ctx, (void*)payload, bytes, len, addr_buf, port);
+
+        // If the callback didn't take ownership (it should), release defensively would be wrong.
+        // Ownership contract: platform_net_packet_release() will CFRelease(payload).
+        // So we do not CFRelease here.
     }
-
-    const uint8_t *bytes = (const uint8_t*)CFDataGetBytePtr(payload);
-    size_t len = (size_t)CFDataGetLength(payload);
-
-    // packet_handle is a retained CFDataRef. Caller must release via platform_net_packet_release.
-    CFRetain(payload);
-    u->cb(u->cb_ctx, (void*)payload, bytes, len, addr_buf, port);
 }
 
 static PlatformUdpSocket* udp_wrap_native_fd(int fd, platform_udp_recv_cb cb, void *cb_ctx) {
@@ -338,12 +367,18 @@ static PlatformUdpSocket* udp_wrap_native_fd(int fd, platform_udp_recv_cb cb, vo
     u->cb = cb;
     u->cb_ctx = cb_ctx;
 
+    // Ensure non-blocking so the CFRunLoop callback can drain recvfrom() without hanging.
+    int fd_flags = fcntl(fd, F_GETFL, 0);
+    if (fd_flags != -1) {
+        (void)fcntl(fd, F_SETFL, fd_flags | O_NONBLOCK);
+    }
+
     CFSocketContext ctx = {0};
     ctx.info = u;
 
     CFSocketRef sock = CFSocketCreateWithNative(kCFAllocatorDefault,
                                                 fd,
-                                                kCFSocketDataCallBack,
+                                                kCFSocketReadCallBack,
                                                 udp_socket_cb,
                                                 &ctx);
     if (!sock) {
@@ -353,9 +388,10 @@ static PlatformUdpSocket* udp_wrap_native_fd(int fd, platform_udp_recv_cb cb, vo
     }
 
     // Ensure we close the native fd when the socket is invalidated.
-    CFOptionFlags flags = CFSocketGetSocketFlags(sock);
-    flags |= kCFSocketCloseOnInvalidate;
-    CFSocketSetSocketFlags(sock, flags);
+    CFOptionFlags sock_flags = CFSocketGetSocketFlags(sock);
+    sock_flags |= kCFSocketCloseOnInvalidate;
+    sock_flags |= kCFSocketAutomaticallyReenableReadCallBack;
+    CFSocketSetSocketFlags(sock, sock_flags);
 
     CFRunLoopSourceRef source = CFSocketCreateRunLoopSource(kCFAllocatorDefault, sock, 0);
     if (!source) {
@@ -450,6 +486,11 @@ PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx) {
     PlatformMdns *m = (PlatformMdns*)calloc(1, sizeof(PlatformMdns));
     if (!m) return NULL;
 
+    // Enumerate interfaces so we can join IPv4/IPv6 mDNS multicast groups on all
+    // multicast-capable interfaces. This matters on hosts with VPNs / multiple NICs.
+    struct ifaddrs *ifas = NULL;
+    (void)getifaddrs(&ifas);
+
     // IPv4
     {
         int fd = (int)socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -459,6 +500,14 @@ PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx) {
 #ifdef SO_REUSEPORT
             (void)setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, (socklen_t)sizeof(yes));
 #endif
+            // RFC 6762: mDNS messages must be sent with IP TTL = 255.
+            // Many responders ignore packets with other TTL values.
+            {
+                int ttl = 255;
+                (void)setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, (socklen_t)sizeof(ttl));
+                (void)setsockopt(fd, IPPROTO_IP, IP_TTL, &ttl, (socklen_t)sizeof(ttl));
+                (void)setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, &yes, (socklen_t)sizeof(yes));
+            }
             struct sockaddr_in sin;
             memset(&sin, 0, sizeof(sin));
             sin.sin_len = sizeof(sin);
@@ -466,12 +515,33 @@ PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx) {
             sin.sin_port = htons(port);
             sin.sin_addr.s_addr = htonl(INADDR_ANY);
             if (bind(fd, (struct sockaddr*)&sin, (socklen_t)sizeof(sin)) == 0) {
-                // Join multicast group 224.0.0.251 on default interface.
-                struct ip_mreq mreq;
-                memset(&mreq, 0, sizeof(mreq));
-                (void)inet_pton(AF_INET, "224.0.0.251", &mreq.imr_multiaddr);
-                mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-                (void)setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, (socklen_t)sizeof(mreq));
+                // Join multicast group 224.0.0.251 on all multicast-capable IPv4 interfaces.
+                int joined_any = 0;
+                if (ifas) {
+                    for (struct ifaddrs *ifa = ifas; ifa; ifa = ifa->ifa_next) {
+                        if (!ifa->ifa_addr) continue;
+                        if ((ifa->ifa_flags & IFF_UP) == 0) continue;
+                        if ((ifa->ifa_flags & IFF_MULTICAST) == 0) continue;
+                        if ((ifa->ifa_flags & IFF_LOOPBACK) != 0) continue;
+                        if (ifa->ifa_addr->sa_family != AF_INET) continue;
+
+                        struct ip_mreq mreq;
+                        memset(&mreq, 0, sizeof(mreq));
+                        (void)inet_pton(AF_INET, "224.0.0.251", &mreq.imr_multiaddr);
+                        mreq.imr_interface = ((struct sockaddr_in*)ifa->ifa_addr)->sin_addr;
+                        if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, (socklen_t)sizeof(mreq)) == 0) {
+                            joined_any = 1;
+                        }
+                    }
+                }
+                if (!joined_any) {
+                    // Fallback: best-effort join on default interface.
+                    struct ip_mreq mreq;
+                    memset(&mreq, 0, sizeof(mreq));
+                    (void)inet_pton(AF_INET, "224.0.0.251", &mreq.imr_multiaddr);
+                    mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+                    (void)setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, (socklen_t)sizeof(mreq));
+                }
 
                 m->v4 = udp_wrap_native_fd(fd, cb, cb_ctx);
             } else {
@@ -491,6 +561,13 @@ PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx) {
 #endif
             // Keep it v6-only for predictable behavior.
             (void)setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &yes, (socklen_t)sizeof(yes));
+            // RFC 6762: mDNS messages must be sent with IPv6 hop limit = 255.
+            {
+                int hops = 255;
+                (void)setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &hops, (socklen_t)sizeof(hops));
+                (void)setsockopt(fd, IPPROTO_IPV6, IPV6_UNICAST_HOPS, &hops, (socklen_t)sizeof(hops));
+                (void)setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &yes, (socklen_t)sizeof(yes));
+            }
 
             struct sockaddr_in6 sin6;
             memset(&sin6, 0, sizeof(sin6));
@@ -499,18 +576,46 @@ PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx) {
             sin6.sin6_port = htons(port);
             sin6.sin6_addr = in6addr_any;
             if (bind(fd, (struct sockaddr*)&sin6, (socklen_t)sizeof(sin6)) == 0) {
-                // Join ff02::fb (mDNS) on default interface index 0 (best-effort).
-                struct ipv6_mreq mreq6;
-                memset(&mreq6, 0, sizeof(mreq6));
-                (void)inet_pton(AF_INET6, "ff02::fb", &mreq6.ipv6mr_multiaddr);
-                mreq6.ipv6mr_interface = 0;
-                (void)setsockopt(fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq6, (socklen_t)sizeof(mreq6));
+                // Join ff02::fb (mDNS) on all multicast-capable IPv6 interfaces.
+                int joined_any = 0;
+                if (ifas) {
+                    for (struct ifaddrs *ifa = ifas; ifa; ifa = ifa->ifa_next) {
+                        if (!ifa->ifa_addr) continue;
+                        if ((ifa->ifa_flags & IFF_UP) == 0) continue;
+                        if ((ifa->ifa_flags & IFF_MULTICAST) == 0) continue;
+                        if ((ifa->ifa_flags & IFF_LOOPBACK) != 0) continue;
+                        if (ifa->ifa_addr->sa_family != AF_INET6) continue;
+
+                        unsigned int ifindex = if_nametoindex(ifa->ifa_name);
+                        if (ifindex == 0) continue;
+
+                        struct ipv6_mreq mreq6;
+                        memset(&mreq6, 0, sizeof(mreq6));
+                        (void)inet_pton(AF_INET6, "ff02::fb", &mreq6.ipv6mr_multiaddr);
+                        mreq6.ipv6mr_interface = ifindex;
+                        if (setsockopt(fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq6, (socklen_t)sizeof(mreq6)) == 0) {
+                            joined_any = 1;
+                        }
+                    }
+                }
+                if (!joined_any) {
+                    // Fallback: best-effort (may not work for link-local multicast).
+                    struct ipv6_mreq mreq6;
+                    memset(&mreq6, 0, sizeof(mreq6));
+                    (void)inet_pton(AF_INET6, "ff02::fb", &mreq6.ipv6mr_multiaddr);
+                    mreq6.ipv6mr_interface = 0;
+                    (void)setsockopt(fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq6, (socklen_t)sizeof(mreq6));
+                }
 
                 m->v6 = udp_wrap_native_fd(fd, cb, cb_ctx);
             } else {
                 close(fd);
             }
         }
+    }
+
+    if (ifas) {
+        freeifaddrs(ifas);
     }
 
     if (!m->v4 && !m->v6) {
@@ -556,10 +661,71 @@ int platform_mdns_send_multicast(PlatformMdns *m, const uint8_t *data, size_t le
     if (!m || !data) return -1;
     int ok = 0;
     if (m->v4) {
-        ok = (platform_mdns_send_unicast(m, data, len, "224.0.0.251", 5353) == 0) ? 1 : ok;
+        // IPv4 multicast queries should go out on the LAN interface. If the host has a VPN
+        // as default route, sending on "default" may not reach the local network.
+        // Send once per multicast-capable interface (best-effort).
+        struct ifaddrs *ifas = NULL;
+        (void)getifaddrs(&ifas);
+        if (ifas) {
+            for (struct ifaddrs *ifa = ifas; ifa; ifa = ifa->ifa_next) {
+                if (!ifa->ifa_addr) continue;
+                if ((ifa->ifa_flags & IFF_UP) == 0) continue;
+                if ((ifa->ifa_flags & IFF_MULTICAST) == 0) continue;
+                if ((ifa->ifa_flags & IFF_LOOPBACK) != 0) continue;
+                if (ifa->ifa_addr->sa_family != AF_INET) continue;
+
+                struct in_addr ifaddr = ((struct sockaddr_in*)ifa->ifa_addr)->sin_addr;
+                (void)setsockopt(CFSocketGetNative(m->v4->sock), IPPROTO_IP, IP_MULTICAST_IF,
+                                 &ifaddr, (socklen_t)sizeof(ifaddr));
+
+                struct sockaddr_in sin;
+                memset(&sin, 0, sizeof(sin));
+                sin.sin_len = sizeof(sin);
+                sin.sin_family = AF_INET;
+                sin.sin_port = htons(5353);
+                (void)inet_pton(AF_INET, "224.0.0.251", &sin.sin_addr);
+                ssize_t n = sendto(CFSocketGetNative(m->v4->sock), data, len, 0,
+                                   (struct sockaddr*)&sin, (socklen_t)sizeof(sin));
+                if (n >= 0) ok = 1;
+            }
+            freeifaddrs(ifas);
+        } else {
+            ok = (platform_mdns_send_unicast(m, data, len, "224.0.0.251", 5353) == 0) ? 1 : ok;
+        }
     }
     if (m->v6) {
-        ok = (platform_mdns_send_unicast(m, data, len, "ff02::fb", 5353) == 0) ? 1 : ok;
+        // For IPv6 link-local multicast, a scope (interface index) is required.
+        // Send once per multicast-capable interface (best-effort).
+        struct ifaddrs *ifas = NULL;
+        (void)getifaddrs(&ifas);
+        if (ifas) {
+            for (struct ifaddrs *ifa = ifas; ifa; ifa = ifa->ifa_next) {
+                if (!ifa->ifa_addr) continue;
+                if ((ifa->ifa_flags & IFF_UP) == 0) continue;
+                if ((ifa->ifa_flags & IFF_MULTICAST) == 0) continue;
+                if ((ifa->ifa_flags & IFF_LOOPBACK) != 0) continue;
+                if (ifa->ifa_addr->sa_family != AF_INET6) continue;
+
+                unsigned int ifindex = if_nametoindex(ifa->ifa_name);
+                if (ifindex == 0) continue;
+
+                struct sockaddr_in6 sin6;
+                memset(&sin6, 0, sizeof(sin6));
+                sin6.sin6_len = sizeof(sin6);
+                sin6.sin6_family = AF_INET6;
+                sin6.sin6_port = htons(5353);
+                sin6.sin6_scope_id = ifindex;
+                if (inet_pton(AF_INET6, "ff02::fb", &sin6.sin6_addr) != 1) continue;
+
+                int fd = CFSocketGetNative(m->v6->sock);
+                ssize_t n = sendto(fd, data, len, 0, (struct sockaddr*)&sin6, (socklen_t)sizeof(sin6));
+                if (n >= 0) ok = 1;
+            }
+            freeifaddrs(ifas);
+        } else {
+            // Fallback (may fail if scope is required).
+            ok = (platform_mdns_send_unicast(m, data, len, "ff02::fb", 5353) == 0) ? 1 : ok;
+        }
     }
     return ok ? 0 : -1;
 }
