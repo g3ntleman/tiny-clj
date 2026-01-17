@@ -73,7 +73,7 @@ static char* read_file_cstr_local(const char *path) {
     fclose(fp);
     return NULL;
   }
-  char *buffer = (char*)malloc((size_t)sz + 1);
+  char *buffer = (char*)CLJ_MALLOC((size_t)sz + 1);
   if (!buffer) {
     fclose(fp);
     return NULL;
@@ -340,7 +340,7 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
 
   // Ensure Math alias points to clojure.core so Math/sqrt style symbols resolve
   if (target_ns && target_ns->name == SYM_CLOJURE_CORE) {
-    CljSymbol *math_alias = intern_symbol_global("Math");
+    CljSymbol *math_alias = SYM_MATH;
     if (math_alias && SYM_CLOJURE_CORE) {
       ns_set_alias(target_ns, math_alias, SYM_CLOJURE_CORE);
     }
@@ -378,7 +378,7 @@ int load_clojure_core(EvalState *st) {
   // IDEMPOTENCY: Check if clojure.core is already loaded
   // If 'inc' is already in mappings, skip loading to avoid double-loading
   if (clojure_core && clojure_core->mappings) {
-    CljSymbol *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = SYM_INC;
     if (inc_sym) {
       CljObject *inc_value = (CljObject*)map_get_sentinel((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
       if (inc_value && (TAG(inc_value) == CLJ_FUNC || TAG(inc_value) == CLJ_CLOSURE)) {
@@ -415,7 +415,7 @@ int load_clojure_core(EvalState *st) {
   // because st->current_ns may have been restored to original_ns after eval_core_source
   // clojure_core is already defined above
   if (clojure_core && clojure_core->mappings) {
-    CljSymbol *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = SYM_INC;
     if (inc_sym) {
       CljObject *inc_value = (CljObject*)map_get_sentinel((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
       if (!inc_value) {
@@ -448,7 +448,7 @@ int load_clojure_repl(EvalState *st) {
   // Convert namespace to relative path (clojure.repl -> clojure/repl.clj)
   const char *ns_name = "clojure.repl";
   size_t len = strlen(ns_name);
-  char *rel = (char*)malloc(len + 5); // +5 for ".clj" and potential slashes
+  char *rel = (char*)CLJ_MALLOC(len + 5); // +5 for ".clj" and potential slashes
   if (!rel) return 0;
   
   // Replace dots with slashes
@@ -483,7 +483,7 @@ int load_clojure_repl(EvalState *st) {
   }
   
   if (!source) {
-    free(rel);
+    CLJ_FREE(rel);
     return 0;
   }
   
@@ -493,8 +493,8 @@ int load_clojure_repl(EvalState *st) {
   // Ensure target namespace exists
   CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
   if (!target_ns) {
-    free(source);
-    free(rel);
+    CLJ_FREE(source);
+    CLJ_FREE(rel);
     return 0;
   }
   
@@ -509,8 +509,8 @@ int load_clojure_repl(EvalState *st) {
     st->current_ns = orig_ns;
   }
   
-  free(source);
-  free(rel);
+  CLJ_FREE(source);
+  CLJ_FREE(rel);
   
   return ok ? 1 : 0;
 }

@@ -215,7 +215,7 @@ bool eval_multiform_string(const char *code, EvalState *st) {
 static char* unescape_eval_arg(const char *raw_code) {
     CLJ_ASSERT(raw_code != NULL);
     size_t len = strlen(raw_code);
-    char *buffer = (char*)malloc(len + 1);
+    char *buffer = (char*)CLJ_MALLOC(len + 1);
     if (!buffer) {
         return NULL;
     }
@@ -249,7 +249,7 @@ static char* unescape_eval_arg(const char *raw_code) {
     buffer[w] = '\0';
 
     if (!changed) {
-        free(buffer);
+        CLJ_FREE(buffer);
         return NULL;
     }
     return buffer;
@@ -262,7 +262,7 @@ bool repl_eval_arg(const char *raw_code, EvalState *st) {
     const char *code = unescaped ? unescaped : raw_code;
     bool success = eval_multiform_string(code, st);
     if (unescaped) {
-        free(unescaped);
+        CLJ_FREE(unescaped);
     }
     return success;
 }
@@ -409,7 +409,7 @@ static void __attribute__((unused)) usage(const char *prog) {
  *  @param exit_code Exit code to use
  */
 static void __attribute__((unused)) cleanup_and_exit(const char **eval_args, int exit_code) {
-    if (eval_args) free(eval_args);
+    if (eval_args) CLJ_FREE(eval_args);
     exit(exit_code);
 }
 
@@ -526,7 +526,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             }
             if (!got_input) {
                 repl_process_event_loop(st);
-                usleep(1000);
+                platform_runloop_run_once(1);
                 continue;
             }
         }
@@ -539,7 +539,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             if (n < 0) { should_exit = true; break; }
             if (n == 0) {
                 event_loop_run_next(NULL, st);
-                usleep(1000);
+                platform_runloop_run_once(1);
                 continue;
             }
             if (n > 0) {
@@ -676,7 +676,7 @@ int main(int argc, char **argv) {
 
     // Allocate array for eval arguments
     if (eval_count > 0) {
-        eval_args = malloc(sizeof(char*) * eval_count);
+        eval_args = (char**)CLJ_MALLOC(sizeof(char*) * eval_count);
         if (!eval_args) return 1;
     }
 
@@ -789,7 +789,7 @@ int main(int argc, char **argv) {
         rewind(fp);
 
         // Allocate buffer (sz + 1 for null terminator)
-        char *buffer = (char*)malloc((size_t)sz + 1);
+        char *buffer = (char*)CLJ_MALLOC((size_t)sz + 1);
         if (!buffer) {
             fclose(fp);
             repl_outf("Error: Out of memory\n");
@@ -803,7 +803,7 @@ int main(int argc, char **argv) {
 
         // Evaluate entire file content
         bool success = eval_multiform_string(buffer, st);
-        free(buffer);
+        CLJ_FREE(buffer);
         if (!success) {
             cleanup_and_exit(eval_args, 1);
         }
@@ -834,7 +834,7 @@ int main(int argc, char **argv) {
     if (!stdin_is_tty) {
         size_t capacity = 4096;
         size_t len = 0;
-        char *buffer = (char*)malloc(capacity);
+        char *buffer = (char*)CLJ_MALLOC(capacity);
         if (!buffer) {
             repl_errf("Error: Out of memory while reading stdin\n");
             cleanup_and_exit(eval_args, 1);
@@ -844,9 +844,9 @@ int main(int argc, char **argv) {
         while ((ch = fgetc(stdin)) != EOF) {
             if (len + 1 >= capacity) {
                 size_t new_cap = capacity * 2;
-                char *tmp = (char*)realloc(buffer, new_cap);
+                char *tmp = (char*)CLJ_REALLOC(buffer, new_cap);
                 if (!tmp) {
-                    free(buffer);
+                    CLJ_FREE(buffer);
                     repl_errf("Error: Out of memory while reading stdin\n");
                     cleanup_and_exit(eval_args, 1);
                 }
@@ -858,12 +858,12 @@ int main(int argc, char **argv) {
         buffer[len] = '\0';
 
         if (len == 0) {
-            free(buffer);
+            CLJ_FREE(buffer);
             cleanup_and_exit(eval_args, 0);
         }
 
         bool success = eval_multiform_string(buffer, st);
-        free(buffer);
+        CLJ_FREE(buffer);
         cleanup_and_exit(eval_args, success ? 0 : 1);
     }
 

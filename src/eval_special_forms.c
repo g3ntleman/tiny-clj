@@ -1051,7 +1051,7 @@ ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const Eval
     
     // Resolve quasiquote-fn from clojure.core (lazy initialization)
     if (!g_quasiquote_fn) {
-        CljSymbol *sym = intern_symbol_global("quasiquote-fn");
+        CljSymbol *sym = SYM_QUASIQUOTE_FN;
         CljObject *resolved = sym ? ns_resolve(st, sym) : NULL;
         if (resolved != NOT_FOUND && is_closure(resolved)) {
             g_quasiquote_fn = as_function(resolved);
@@ -1180,7 +1180,7 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
     
     // Set :macro true in metadata
     CljMap *meta = make_map(4);
-    CljSymbol *kw_macro = intern_symbol_global(":macro");
+    CljSymbol *kw_macro = SYM_KW_MACRO;
     ASSIGN(meta, map_assoc(meta, kw_macro, clj_true));
     meta_set((CljObject*)macro_fn, (CljObject*)meta);
     RELEASE(meta);

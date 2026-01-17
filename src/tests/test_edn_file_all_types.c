@@ -34,7 +34,7 @@ static char *read_entire_file(const char *path, size_t *out_len)
         return NULL;
     }
 
-    char *buf = (char *)malloc((size_t)size + 1);
+    char *buf = (char *)CLJ_MALLOC((size_t)size + 1);
     if (!buf)
     {
         fclose(fp);
@@ -46,7 +46,7 @@ static char *read_entire_file(const char *path, size_t *out_len)
 
     if (n != (size_t)size)
     {
-        free(buf);
+        CLJ_FREE(buf);
         return NULL;
     }
 
@@ -136,7 +136,7 @@ TEST(test_edn_file_all_supported_types)
     assert_fixnum((CljObject *)map_get_required(m, ":int"), 42);
     assert_fixnum((CljObject *)map_get_required(m, ":neg-int"), -7);
 
-    free(src);
+    CLJ_FREE(src);
 
     ID v_float = map_get_required(m, ":float");
     TEST_ASSERT_TRUE(is_fixed(v_float));

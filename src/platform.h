@@ -12,6 +12,11 @@ const char *platform_name();
 // Contract: best-effort blocking delay for at least ms milliseconds.
 void platform_sleep_ms(unsigned int ms);
 
+// Run the platform event loop once, for up to timeout_ms milliseconds.
+// On macOS this drives CFRunLoop sources (including network callbacks).
+// On other platforms it may be a no-op.
+void platform_runloop_run_once(unsigned int timeout_ms);
+
 // Non-blocking input support for cooperative multitasking
 // Enable/disable non-blocking mode for stdin (returns 0 on success)
 int platform_set_stdin_nonblocking(int enable);
@@ -32,5 +37,56 @@ size_t platform_heap_bytes_free(void);
 size_t platform_heap_bytes_total(void);
 size_t platform_flash_bytes_free(void);
 size_t platform_flash_bytes_total(void);
+
+// -----------------------------------------------------------------------------
+// Networking (UDP/TCP) - event-driven, zero-copy friendly
+//
+// Design goals:
+// - No polling APIs (integrate with platform event mechanisms).
+// - Avoid copying receive buffers: callback provides a packet_handle + (data,len).
+// - Caller must eventually release packet_handle via platform_net_packet_release().
+// -----------------------------------------------------------------------------
+#include <stdint.h>
+
+typedef struct PlatformUdpSocket PlatformUdpSocket;
+typedef struct PlatformTcpConn PlatformTcpConn;
+
+typedef void (*platform_udp_recv_cb)(
+    void *ctx,
+    void *packet_handle,
+    const uint8_t *data,
+    size_t len,
+    const char *from_addr,
+    uint16_t from_port);
+
+typedef enum PlatformTcpEvent {
+    PLATFORM_TCP_EVENT_CONNECTED = 1,
+    PLATFORM_TCP_EVENT_DATA = 2,
+    PLATFORM_TCP_EVENT_CLOSED = 3,
+    PLATFORM_TCP_EVENT_ERROR = 4,
+} PlatformTcpEvent;
+
+typedef void (*platform_tcp_event_cb)(
+    void *ctx,
+    PlatformTcpEvent event,
+    void *packet_handle,
+    const uint8_t *data,
+    size_t len);
+
+// UDP
+PlatformUdpSocket* platform_udp_bind(uint16_t port, platform_udp_recv_cb cb, void *cb_ctx);
+int platform_udp_send(PlatformUdpSocket *sock,
+                      const uint8_t *data, size_t len,
+                      const char *to_addr, uint16_t to_port);
+void platform_udp_close(PlatformUdpSocket *sock);
+
+// TCP
+PlatformTcpConn* platform_tcp_connect_async(const char *host, uint16_t port,
+                                            platform_tcp_event_cb cb, void *cb_ctx);
+int platform_tcp_send(PlatformTcpConn *conn, const uint8_t *data, size_t len);
+void platform_tcp_close(PlatformTcpConn *conn);
+
+// Release a packet_handle received via callbacks (e.g., return to pool / pbuf_free()).
+void platform_net_packet_release(void *packet_handle);
 
 #endif // TINY_CLJ_PLATFORM_H

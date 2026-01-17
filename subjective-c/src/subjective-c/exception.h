@@ -118,6 +118,57 @@ extern GlobalExceptionStack global_exception_stack;
 //
 // Note: END_TRY is required (like Objective-C NS_ENDHANDLER)
 
+#if MEMORY_PROFILING_ENABLED
+// -----------------------------------------------------------------------------
+// Internal allocations for TRY/CATCH handler nodes (profiling-enabled builds)
+// -----------------------------------------------------------------------------
+//
+// We intentionally keep TRY/CATCH handler allocation "no-throw" (abort on OOM),
+// because failing to set up exception handling is a fatal condition.
+//
+
+static inline ExceptionHandler* exception_handler_alloc_or_abort(void) {
+    ExceptionHandler *h = (ExceptionHandler*)malloc(sizeof(ExceptionHandler));
+    if (!h) {
+        fputs("FATAL: malloc failed in TRY block\n", stderr);
+        abort();
+    }
+    memory_profiler_track_raw_alloc(h, sizeof(ExceptionHandler), __FILE__, __LINE__);
+    return h;
+}
+
+static inline void exception_handler_free(ExceptionHandler *h) {
+    if (!h) return;
+    memory_profiler_track_raw_free(h, __FILE__, __LINE__);
+    free(h);
+}
+
+#define TRY { \
+    ExceptionHandler *_h = exception_handler_alloc_or_abort(); \
+    _h->next = global_exception_stack.top; \
+    _h->exception = NULL; \
+    global_exception_stack.top = _h; \
+    if (setjmp(_h->jump_state) == 0) {
+
+#define CATCH(ex) \
+        /* Success path: pop stack only */ \
+        ExceptionHandler *_success_handler = global_exception_stack.top; \
+        global_exception_stack.top = _success_handler->next; \
+        exception_handler_free(_success_handler); \
+    } else { \
+        /* Exception path: get exception from handler */ \
+        ExceptionHandler *_caught_h = global_exception_stack.top; \
+        CLJException *ex = _caught_h ? _caught_h->exception : NULL; \
+        global_exception_stack.top = _caught_h->next; \
+        exception_handler_free(_caught_h); \
+        if (ex) { \
+            /* Exception will be manually released in END_TRY */
+
+#else
+// -----------------------------------------------------------------------------
+// TRY/CATCH handler nodes (production builds: no profiling instrumentation)
+// -----------------------------------------------------------------------------
+
 #define TRY { \
     ExceptionHandler *_h = (ExceptionHandler*)malloc(sizeof(ExceptionHandler)); \
     if (!_h) { \
@@ -142,6 +193,8 @@ extern GlobalExceptionStack global_exception_stack;
         free(_caught_h); \
         if (ex) { \
             /* Exception will be manually released in END_TRY */
+
+#endif // MEMORY_PROFILING_ENABLED
 
 #define END_TRY \
         } \

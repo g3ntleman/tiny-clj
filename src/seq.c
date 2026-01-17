@@ -24,7 +24,7 @@ __attribute__((weak)) EvalState* g_test_eval_state = NULL;
 CljLazySeq* make_lazy_seq(ID thunk) {
     if (!thunk) return NULL;
 
-    CljLazySeq *lazy = (CljLazySeq*)malloc(sizeof(CljLazySeq));
+    CljLazySeq *lazy = ALLOC(CljLazySeq, 1);
     if (!lazy) return NULL;
 
     lazy->base.type = CLJ_LAZY_SEQ;
@@ -488,7 +488,7 @@ CljSeqIterator* make_seq(ID obj) {
     
     // Allocate heap wrapper
     // Use malloc instead of calloc - all fields are immediately initialized
-    CljSeqIterator *heap_seq = (CljSeqIterator*)malloc(sizeof(CljSeqIterator));
+    CljSeqIterator *heap_seq = (CljSeqIterator*)CLJ_MALLOC(sizeof(CljSeqIterator));
     if (!heap_seq) return NULL;
     
     heap_seq->base.type = CLJ_SEQ;
@@ -496,13 +496,13 @@ CljSeqIterator* make_seq(ID obj) {
     
     // Initialize embedded stack iterator
     if (!seq_iter_init(&heap_seq->iter, (CljObject*)obj)) {
-        free(heap_seq);
+        CLJ_FREE(heap_seq);
         return NULL;  // Empty or not seqable
     }
     
     // If iterator is empty, return nil (NULL) - JVM-compatible
     if (seq_iter_empty(&heap_seq->iter)) {
-        free(heap_seq);
+        CLJ_FREE(heap_seq);
         return NULL;
     }
     
@@ -515,7 +515,7 @@ void seq_release(ID seq_obj) {
     if (!seq) return;
     
     // Stack iterator doesn't need cleanup
-    free(seq);
+    CLJ_FREE(seq);
 }
 
 ID seq_first(ID seq_obj) {
@@ -533,7 +533,7 @@ ID seq_rest(ID seq_obj) {
     
     // Create new heap wrapper with advanced iterator
     // Use malloc instead of calloc - all fields are immediately initialized
-    CljSeqIterator *rest_seq = (CljSeqIterator*)malloc(sizeof(CljSeqIterator));
+    CljSeqIterator *rest_seq = (CljSeqIterator*)CLJ_MALLOC(sizeof(CljSeqIterator));
     if (!rest_seq) return NULL;
     
     rest_seq->base.type = CLJ_SEQ;

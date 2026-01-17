@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h> // malloc/free/realloc/calloc
 
 typedef void (*SubjectiveCReleaseFn)(CljObject *obj);
 void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn);
@@ -22,6 +23,71 @@ CljObject *autorelease(CljObject *v);
 bool is_pointer_in_data_segment(const void *ptr);
 bool is_pointer_on_stack(const void *ptr);
 void throw_oom(void) __attribute__((noreturn));
+
+// -----------------------------------------------------------------------------
+// Raw heap allocation helpers (trackable by memory profiler)
+// -----------------------------------------------------------------------------
+//
+// Rule: Production builds must not contain any profiling instrumentation.
+// Therefore, file/line tracking and raw block bookkeeping are only compiled when
+// MEMORY_PROFILING_ENABLED=1. Otherwise, these macros are direct malloc/free.
+//
+
+#if MEMORY_PROFILING_ENABLED
+
+static inline void* clj_malloc_impl(size_t n, const char *file, int line) {
+    void *p = malloc(n);
+    if (!p && n != 0) {
+        throw_oom(); // never returns
+    }
+    memory_profiler_track_raw_alloc(p, n, file, line);
+    return p;
+}
+
+static inline void* clj_calloc_impl(size_t nmemb, size_t size, const char *file, int line) {
+    // Best-effort overflow guard.
+    if (nmemb != 0 && size > ((size_t)-1) / nmemb) {
+        throw_oom(); // never returns
+    }
+    size_t n = nmemb * size;
+    void *p = calloc(nmemb, size);
+    if (!p && n != 0) {
+        throw_oom(); // never returns
+    }
+    memory_profiler_track_raw_alloc(p, n, file, line);
+    return p;
+}
+
+static inline void* clj_realloc_impl(void *old_ptr, size_t n, const char *file, int line) {
+    void *new_ptr = realloc(old_ptr, n);
+    if (!new_ptr && n != 0) {
+        throw_oom(); // never returns; old_ptr remains valid per realloc contract
+    }
+    // Only track if realloc succeeded or if n==0 (free semantics).
+    if (new_ptr || n == 0) {
+        memory_profiler_track_raw_realloc(old_ptr, new_ptr, n, file, line);
+    }
+    return new_ptr;
+}
+
+static inline void clj_free_impl(void *ptr, const char *file, int line) {
+    memory_profiler_track_raw_free(ptr, file, line);
+    free(ptr);
+}
+
+#define CLJ_MALLOC(n) clj_malloc_impl((n), __FILE__, __LINE__)
+#define CLJ_CALLOC(nmemb, size) clj_calloc_impl((nmemb), (size), __FILE__, __LINE__)
+#define CLJ_REALLOC(ptr, n) clj_realloc_impl((ptr), (n), __FILE__, __LINE__)
+#define CLJ_FREE(ptr) clj_free_impl((ptr), __FILE__, __LINE__)
+
+#else
+
+#define CLJ_MALLOC(n) malloc((n))
+#define CLJ_CALLOC(nmemb, size) calloc((nmemb), (size))
+#define CLJ_REALLOC(ptr, n) realloc((ptr), (n))
+#define CLJ_FREE(ptr) free((ptr))
+
+#endif // MEMORY_PROFILING_ENABLED
 
 /** @brief Get the reference count of an object
  *
@@ -75,6 +141,9 @@ bool is_autoreleased(CljObject *obj);
 
 #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
 #define ALLOC_SIMPLE(obj_type) (ID) alloc(sizeof(CljObject), 1, obj_type)
+// For CljObject subtypes with dynamic size (flexible array members, embedded buffers, etc.)
+// Use this instead of raw malloc/CLJ_MALLOC so allocation is tracked as an object allocation.
+#define ALLOC_BYTES(obj_type, bytes) ((void*) alloc((bytes), 1, (obj_type)))
 
 #ifdef DEBUG
     #ifdef ZOMBIE_ENABLED
@@ -83,7 +152,7 @@ bool is_autoreleased(CljObject *obj);
         if (_tmp && (void*)_tmp != (void*)0x1 && !IS_IMMEDIATE(_tmp)) { \
             CljObject *_obj = (CljObject*)_tmp; \
             if (!is_singleton(_obj)) { \
-                memory_profiler_track_object_destruction(_obj); \
+                MEMORY_PROFILER_TRACK_OBJECT_ZOMBIFY(_obj); \
                 /* Don't free - keep object at rc=0 for inspection */ \
                 /* rc is already 0 from release() */ \
             } \

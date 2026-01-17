@@ -14,7 +14,7 @@
 ID *allocate_args_array(int argc) {
     if (argc <= 0) return NULL;
     
-    ID *args = malloc((size_t)argc * sizeof(*args));
+    ID *args = (ID*)CLJ_MALLOC((size_t)argc * sizeof(*args));
     if (!args) return NULL;
     
     // Initialize all pointers to NULL
@@ -40,5 +40,5 @@ void cleanup_args_array(ID *args, int argc) {
         RELEASE(args[i]);
     }
     
-    free(args);
+    CLJ_FREE(args);
 }

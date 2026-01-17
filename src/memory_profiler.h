@@ -111,6 +111,17 @@ typedef struct {
     size_t release_calls;         // release() calls
     size_t autorelease_calls;     // autorelease() calls
     size_t memory_leaks;          // Potential memory leaks (allocations - deallocations)
+
+#if MEMORY_PROFILING_ENABLED
+    // Raw heap allocations (malloc/calloc/realloc/free) tracked via CLJ_* macros.
+    size_t raw_allocations;       // Count of raw alloc events
+    size_t raw_frees;             // Count of raw free events
+    size_t raw_reallocations;     // Count of raw realloc events
+    size_t raw_bytes_current;     // Current tracked raw bytes
+    size_t raw_bytes_peak;        // Peak tracked raw bytes
+    size_t raw_blocks_current;    // Current number of tracked raw blocks
+    size_t raw_blocks_peak;       // Peak number of tracked raw blocks
+#endif
     
     // Object type breakdown
     size_t allocations_by_type[CLJ_TYPE_COUNT];  // Allocations per CljType
@@ -226,6 +237,15 @@ void memory_profiler_track_object_creation(CljObject *obj);
 void memory_profiler_track_object_destruction(CljObject *obj);
 
 /**
+ * @brief Track CljObject zombification (DEBUG-only zombie mode).
+ *
+ * In zombie mode, objects are not actually freed; they are kept for inspection.
+ * For "currently allocated bytes" accounting this means we must not subtract
+ * their allocation size. This hook counts the event without reducing current bytes.
+ */
+void memory_profiler_track_object_zombify(CljObject *obj);
+
+/**
  * @brief Track retain() operation
  * @param obj Pointer to retained CljObject
  */
@@ -242,6 +262,33 @@ void memory_profiler_track_release(CljObject *obj);
  * @param obj Pointer to autoreleased CljObject
  */
 void memory_profiler_track_autorelease(CljObject *obj);
+
+#if MEMORY_PROFILING_ENABLED
+/**
+ * @brief Track a raw heap allocation (malloc/calloc).
+ *
+ * This tracks non-object allocations that go through the CLJ_* allocation macros.
+ * The profiler records a "raw allocation block" keyed by pointer so free/realloc
+ * can be accounted correctly.
+ */
+void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, int line);
+
+/**
+ * @brief Track a raw heap free.
+ *
+ * If the pointer was previously tracked via memory_profiler_track_raw_alloc(),
+ * the associated block is removed and bytes/blocks are decremented.
+ */
+void memory_profiler_track_raw_free(void *ptr, const char *file, int line);
+
+/**
+ * @brief Track a raw heap reallocation.
+ *
+ * The profiler updates/removes the old block (if tracked) and records the new block.
+ * If realloc fails (new_ptr == NULL and new_size != 0), callers should not call this.
+ */
+void memory_profiler_track_raw_realloc(void *old_ptr, void *new_ptr, size_t new_size, const char *file, int line);
+#endif
 
 /**
  * @brief Check for memory leaks at a specific location
@@ -296,6 +343,7 @@ void memory_test_end(const char *test_name);
 #define MEMORY_PROFILER_TRACK_DEALLOCATION(size) memory_profiler_track_deallocation(size)
 #define MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj) memory_profiler_track_object_creation(obj)
 #define MEMORY_PROFILER_TRACK_OBJECT_DESTRUCTION(obj) memory_profiler_track_object_destruction(obj)
+#define MEMORY_PROFILER_TRACK_OBJECT_ZOMBIFY(obj) memory_profiler_track_object_zombify(obj)
 #define MEMORY_PROFILER_TRACK_RETAIN(obj) memory_profiler_track_retain(obj)
 #define MEMORY_PROFILER_TRACK_RELEASE(obj) memory_profiler_track_release(obj)
 #define MEMORY_PROFILER_TRACK_AUTORELEASE(obj) memory_profiler_track_autorelease(obj)
@@ -320,6 +368,7 @@ void memory_test_end(const char *test_name);
 #define MEMORY_PROFILER_TRACK_DEALLOCATION(size) ((void)0)
 #define MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj) ((void)0)
 #define MEMORY_PROFILER_TRACK_OBJECT_DESTRUCTION(obj) ((void)0)
+#define MEMORY_PROFILER_TRACK_OBJECT_ZOMBIFY(obj) ((void)0)
 #define MEMORY_PROFILER_TRACK_RETAIN(obj) ((void)0)
 #define MEMORY_PROFILER_TRACK_RELEASE(obj) ((void)0)
 #define MEMORY_PROFILER_TRACK_AUTORELEASE(obj) ((void)0)

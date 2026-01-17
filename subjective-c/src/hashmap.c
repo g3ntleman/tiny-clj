@@ -36,7 +36,7 @@ CljHashMap* make_hashmap(unsigned int capacity) {
     size_t data_size = (size_t)cap * 2 * sizeof(CljObject*);
     size_t total_size = struct_size + data_size;
     
-    CljHashMap *map = (CljHashMap*)malloc(total_size);
+    CljHashMap *map = (CljHashMap*)ALLOC_BYTES(CLJ_HASHMAP, total_size);
     if (!map) {
         throw_oom();
     }

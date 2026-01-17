@@ -12,7 +12,7 @@
 
 CljValue character(uint32_t codepoint) {
     if (codepoint > CLJ_CHAR_MAX) {
-        CljObject *v = (CljObject*)malloc(sizeof(CljObject) + sizeof(char*));
+        CljObject *v = (CljObject*)ALLOC_BYTES(CLJ_STRING, sizeof(CljObject) + sizeof(char*));
         if (!v) return NULL;
         v->type = CLJ_STRING;
         v->rc = 1;

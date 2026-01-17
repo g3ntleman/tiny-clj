@@ -120,7 +120,7 @@ extern EvalState* test_get_eval_state(void);
             char group[128]; \
             (void)mini_snprintf(group, sizeof(group), "shared_%s", filename); \
             test_registry_add_with_file_info(#name, name, group, __FILE__, __LINE__); \
-            free(filename); \
+            CLJ_FREE(filename); \
         } \
     } \
     static void name##_impl(void)

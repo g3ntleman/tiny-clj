@@ -79,7 +79,7 @@ CljList* as_list_checked(ID obj) {
         fputs(strings[i], stdout);
         fputc('\n', stdout);
     }
-    free(strings);
+    CLJ_FREE(strings);
     #endif
     throw_exception(EXCEPTION_TYPE, error_msg, __FILE__, __LINE__, 0);
     return NULL;

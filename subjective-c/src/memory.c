@@ -129,6 +129,8 @@ void memory_update_debug_output_active(void) {
  * @return Pointer to allocated memory
  */
 void* alloc(size_t type_size, size_t count, CljType obj_type) {
+    // IMPORTANT: CljObject allocations must not be counted as "raw heap blocks".
+    // They are tracked via object creation/destruction hooks instead.
     void *result = malloc(type_size * count);
     if (!result) {
         throw_oom();  // Never returns
@@ -168,11 +170,11 @@ void autorelease_pool_init(void) {
     if (g_pool.items) return;  // Already initialized
     
     g_pool.capacity = POOL_INITIAL_CAPACITY;
-    g_pool.items = (CljObject**)malloc(sizeof(CljObject*) * g_pool.capacity);
+    g_pool.items = (CljObject**)CLJ_MALLOC(sizeof(CljObject*) * g_pool.capacity);
     g_pool.count = 0;
     
     g_pool.cp_capacity = POOL_CHECKPOINT_CAPACITY;
-    g_pool.checkpoints = (uint32_t*)malloc(sizeof(uint32_t) * g_pool.cp_capacity);
+    g_pool.checkpoints = (uint32_t*)CLJ_MALLOC(sizeof(uint32_t) * g_pool.cp_capacity);
     g_pool.cp_count = 0;
 
 #ifdef DEBUG
@@ -364,7 +366,7 @@ CljObject *autorelease(CljObject *v) {
     // Grow items array if needed
     if (g_pool.count >= g_pool.capacity) {
         uint32_t new_capacity = g_pool.capacity * 2;
-        CljObject **new_items = (CljObject**)realloc(g_pool.items, sizeof(CljObject*) * new_capacity);
+        CljObject **new_items = (CljObject**)CLJ_REALLOC(g_pool.items, sizeof(CljObject*) * new_capacity);
         if (!new_items) {
             // Out of memory: stop tracking rather than crashing.
             // NOTE: pool has weak semantics (debug/profiling only), so leaking tracking is acceptable.
@@ -458,7 +460,7 @@ static inline void autorelease_pool_grow(void) {
     uint32_t old_capacity = g_pool.cp_capacity;
 #endif
     uint32_t new_capacity = g_pool.cp_capacity * 2;
-    uint32_t *new_cps = (uint32_t*)realloc(g_pool.checkpoints, sizeof(uint32_t) * new_capacity);
+    uint32_t *new_cps = (uint32_t*)CLJ_REALLOC(g_pool.checkpoints, sizeof(uint32_t) * new_capacity);
     if (!new_cps) {
         // Out of memory: keep existing checkpoints (best-effort).
         return;
@@ -528,7 +530,7 @@ void autorelease_pool_pop(void) {
             for (int i = 0; i < trace_count; i++) {
                 LOGF(stderr, "  %s\n", symbols[i]);
             }
-            free(symbols);
+            CLJ_FREE(symbols);
         }
 #endif
         return;
@@ -606,11 +608,11 @@ void autorelease_pool_destroy(void) {
     // Free backing arrays (always free pool structures, even in zombie mode)
     // Pool structures are not objects, so they should be freed normally
     if (g_pool.items) {
-        free(g_pool.items);
+        CLJ_FREE(g_pool.items);
         g_pool.items = NULL;
     }
     if (g_pool.checkpoints) {
-        free(g_pool.checkpoints);
+        CLJ_FREE(g_pool.checkpoints);
         g_pool.checkpoints = NULL;
     }
     g_pool.count = 0;
@@ -830,7 +832,7 @@ static void release_object_default(CljObject *v) {
                     // Don't free in zombie mode - object must remain intact
 #ifndef ZOMBIE_ENABLED
                     if (func->name) {
-                        free((void*)func->name);
+                        CLJ_FREE((void*)func->name);
                     }
 #endif
                 }
@@ -842,8 +844,18 @@ static void release_object_default(CljObject *v) {
                 // Don't free in zombie mode - object must remain intact
 #ifndef ZOMBIE_ENABLED
                 CljByteArray *ba = as_byte_array(v);
-                if (ba && ba->data) {
-                    free(ba->data);
+                if (ba) {
+                    if ((ba->base.flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) != 0) {
+                        CljByteArrayExternal *ext = (CljByteArrayExternal*)ba;
+                        if (ext->external_free_fn) {
+                            ext->external_free_fn(ext->external_ctx);
+                        }
+                        // External payload is owned by the external system (do not free ba->data).
+                    } else {
+                        if (ba->data) {
+                            CLJ_FREE(ba->data);
+                        }
+                    }
                 }
 #else
                 (void)v; // Suppress unused variable warning in zombie mode
@@ -893,7 +905,7 @@ static void release_object_default(CljObject *v) {
                     // Don't free in zombie mode - object must remain intact
 #ifndef ZOMBIE_ENABLED
                     if (ns->filename) {
-                        free((void*)ns->filename);
+                        CLJ_FREE((void*)ns->filename);
                     }
 #endif
                     // Note: name (CljSymbol*) is an interned symbol managed by the symbol table,

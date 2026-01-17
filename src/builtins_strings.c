@@ -463,7 +463,7 @@ ID native_format(ID *args, unsigned int argc) {
 
     // Allocate buffer for formatted string (start with reasonable size)
     size_t buf_size = 256;
-    char *buffer = malloc(buf_size);
+    char *buffer = (char*)CLJ_MALLOC(buf_size);
     if (!buffer) {
         throw_exception(EXCEPTION_RUNTIME, "format: failed to allocate buffer",
                        __FILE__, __LINE__, 0);
@@ -498,7 +498,7 @@ ID native_format(ID *args, unsigned int argc) {
                             // Buffer too small, reallocate
                             size_t used = out - buffer;
                             buf_size *= 2;
-                            buffer = realloc(buffer, buf_size);
+                            buffer = (char*)CLJ_REALLOC(buffer, buf_size);
                             if (!buffer) {
                                 throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
                                                __FILE__, __LINE__, 0);
@@ -522,7 +522,7 @@ ID native_format(ID *args, unsigned int argc) {
                         if (n < 0 || n >= (int)remaining) {
                             size_t used = out - buffer;
                             buf_size *= 2;
-                            buffer = realloc(buffer, buf_size);
+                            buffer = (char*)CLJ_REALLOC(buffer, buf_size);
                             if (!buffer) {
                                 throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
                                                __FILE__, __LINE__, 0);
@@ -548,7 +548,7 @@ ID native_format(ID *args, unsigned int argc) {
                                 if (n < 0 || n >= (int)remaining) {
                                     size_t used = out - buffer;
                                     buf_size *= 2;
-                                    buffer = realloc(buffer, buf_size);
+                                    buffer = (char*)CLJ_REALLOC(buffer, buf_size);
                                     if (!buffer) {
                                         throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
                                                        __FILE__, __LINE__, 0);
@@ -566,7 +566,7 @@ ID native_format(ID *args, unsigned int argc) {
                             if (n < 0 || n >= (int)remaining) {
                                 size_t used = out - buffer;
                                 buf_size *= 2;
-                                buffer = realloc(buffer, buf_size);
+                                buffer = (char*)CLJ_REALLOC(buffer, buf_size);
                                 if (!buffer) {
                                     throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
                                                    __FILE__, __LINE__, 0);
@@ -606,7 +606,7 @@ ID native_format(ID *args, unsigned int argc) {
 
     // Create string object from buffer
     CljString *result = make_string(buffer);
-    free(buffer);
+    CLJ_FREE(buffer);
 
     if (!result) {
         throw_exception(EXCEPTION_RUNTIME, "format: failed to create string",

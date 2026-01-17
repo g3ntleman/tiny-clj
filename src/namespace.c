@@ -137,7 +137,7 @@ static CljMap* grow_transient_map(CljMap *old_map) {
     // Allocate new map with larger capacity
     size_t struct_size = sizeof(CljMap);
     size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
-    CljMap *new_map = malloc(struct_size + data_size);
+    CljMap *new_map = (CljMap*)ALLOC_BYTES(CLJ_MAP, struct_size + data_size);
     if (!new_map) return NULL;
     
     // Initialize new transient map
@@ -169,7 +169,7 @@ static CljMap* transient_map_without_key(CljMap *old_map, ID remove_key) {
     int cap = old_map->capacity;
     size_t struct_size = sizeof(CljMap);
     size_t data_size = (size_t)cap * 2 * sizeof(CljObject*);
-    CljMap *new_map = (CljMap*)malloc(struct_size + data_size);
+    CljMap *new_map = (CljMap*)ALLOC_BYTES(CLJ_MAP, struct_size + data_size);
     if (!new_map) return NULL;
 
     new_map->base.type = CLJ_MAP_TRANSIENT;
@@ -368,7 +368,7 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
         // If intern_symbol fails, we need to free the namespace
         // But ALLOC doesn't allocate memory that needs freeing, so we just return NULL
         // Actually, ALLOC uses malloc, so we need to free it
-        free(ns);
+        DEALLOC(ns);
         return NULL;
     }
     
@@ -387,7 +387,7 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
         // strdup failed - OOM
         RELEASE(ns->mappings);
         RELEASE(ns->aliases);
-        free(ns);
+        DEALLOC(ns);
         return NULL;
     }
     
@@ -776,7 +776,7 @@ EvalState* get_global_eval_state(void) {
 // Reset for test isolation
 void reset_eval_state(void) {
     if (g_eval_state.stack) {
-        free(g_eval_state.stack);
+        CLJ_FREE(g_eval_state.stack);
         g_eval_state.stack = NULL;
     }
     if (g_eval_state.dynamic_bindings && !IS_IMMEDIATE(g_eval_state.dynamic_bindings)) {

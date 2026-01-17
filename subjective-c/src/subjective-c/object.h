@@ -55,6 +55,7 @@ void *throw_exception_formatted(const char *type, const char *file, int line, in
 #define TYPE_OF_CljMap CLJ_MAP
 #define TYPE_OF_CLJException CLJ_EXCEPTION
 #define TYPE_OF_CljSeqIterator CLJ_SEQ
+#define TYPE_OF_CljLazySeq CLJ_LAZY_SEQ
 #define TYPE_OF_CljByteArray CLJ_BYTE_ARRAY
 #define TYPE_OF_CljInstant CLJ_INSTANT
 #define TYPE_OF_CljUUID CLJ_UUID

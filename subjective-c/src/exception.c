@@ -220,7 +220,7 @@ struct CljString* stacktrace(void) {
     char **symbols = backtrace_symbols(array, size);
     
     if (!symbols || size == 0) {
-        if (symbols) free(symbols);
+        if (symbols) CLJ_FREE(symbols);
         return NULL;
     }
     
@@ -234,9 +234,9 @@ struct CljString* stacktrace(void) {
     }
     
     // Allocate buffer for stacktrace string
-    char *buffer = (char*)malloc(total_len + 1);
+    char *buffer = (char*)CLJ_MALLOC(total_len + 1);
     if (!buffer) {
-        free(symbols);
+        CLJ_FREE(symbols);
         return NULL;
     }
     
@@ -253,11 +253,11 @@ struct CljString* stacktrace(void) {
     }
     buffer[pos] = '\0';
     
-    free(symbols);
+    CLJ_FREE(symbols);
     
     // Create CljString from buffer
     struct CljString *result = make_string(buffer);
-    free(buffer);
+    CLJ_FREE(buffer);
     
     return result;
 #elif defined(__linux__)
@@ -266,7 +266,7 @@ struct CljString* stacktrace(void) {
     char **symbols = backtrace_symbols(array, size);
     
     if (!symbols || size == 0) {
-        if (symbols) free(symbols);
+        if (symbols) CLJ_FREE(symbols);
         return NULL;
     }
     
@@ -280,9 +280,9 @@ struct CljString* stacktrace(void) {
     }
     
     // Allocate buffer for stacktrace string
-    char *buffer = (char*)malloc(total_len + 1);
+    char *buffer = (char*)CLJ_MALLOC(total_len + 1);
     if (!buffer) {
-        free(symbols);
+        CLJ_FREE(symbols);
         return NULL;
     }
     
@@ -299,11 +299,11 @@ struct CljString* stacktrace(void) {
     }
     buffer[pos] = '\0';
     
-    free(symbols);
+    CLJ_FREE(symbols);
     
     // Create CljString from buffer
     struct CljString *result = make_string(buffer);
-    free(buffer);
+    CLJ_FREE(buffer);
     
     return result;
 #else
@@ -338,7 +338,7 @@ void exception_print_native_backtrace(void) {
         }
     }
 
-    free(strings);
+    CLJ_FREE(strings);
 #else
     // Platform without execinfo support
 #endif
@@ -410,7 +410,7 @@ void throw_exception_object(CLJException *ex) {
         
         // No handler - unhandled exception (exit as before)
         // Tests should use TRY/CATCH to catch exceptions
-        free(ex); exit(1);
+        CLJ_FREE(ex); exit(1);
     }
     
     // Don't print exception details if there's a handler (expected exceptions in tests)

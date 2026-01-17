@@ -242,10 +242,39 @@ TEST(test_autorelease_pool_memory_cleanup) {
     TEST_ASSERT_TRUE(after_stats.total_deallocations >= 0);
 }
 
+TEST(test_memory_profiler_tracks_raw_alloc_blocks) {
+#if MEMORY_PROFILING_ENABLED
+    // Ensure profiling is enabled (setUp usually does this in debug builds).
+    enable_memory_profiling(true);
+
+    MemoryStats before = memory_profiler_get_stats();
+
+    void *p = CLJ_MALLOC(123);
+    TEST_ASSERT_NOT_NULL(p);
+
+    MemoryStats mid = memory_profiler_get_stats();
+    TEST_ASSERT_TRUE(mid.raw_blocks_current >= before.raw_blocks_current + 1);
+    TEST_ASSERT_TRUE(mid.raw_bytes_current >= before.raw_bytes_current + 123);
+    TEST_ASSERT_TRUE(mid.raw_allocations >= before.raw_allocations + 1);
+
+    CLJ_FREE(p);
+
+    MemoryStats after = memory_profiler_get_stats();
+    TEST_ASSERT_EQUAL(before.raw_blocks_current, after.raw_blocks_current);
+    TEST_ASSERT_EQUAL(before.raw_bytes_current, after.raw_bytes_current);
+    TEST_ASSERT_TRUE(after.raw_frees >= before.raw_frees + 1);
+#else
+    TEST_IGNORE();
+#endif
+}
+
 #ifdef DEBUG
 TEST(test_zombie_detection) {
-    // Test zombie detection: release object once too often
-    // This should trigger ZombieAccessException when zombie mode is enabled
+    // Test zombie detection: access an object after it became a zombie.
+    //
+    // In this codebase:
+    // - retaining a zombie triggers ZombieAccessException (this is what we test)
+    // - releasing a zombie triggers UseAfterFreeError (double-free protection)
     
     // Create an object (rc = 1)
     CljObject *obj = (CljObject*)make_string("test_zombie_object");
@@ -255,10 +284,10 @@ TEST(test_zombie_detection) {
     // Release once (rc = 0, object becomes zombie if zombie mode enabled)
     RELEASE(obj);
     
-    // Try to release again - should trigger ZombieAccessError
+    // Try to retain again - should trigger ZombieAccessException
     TRY {
-        RELEASE(obj);  // This should throw ZombieAccessException
-        TEST_FAIL_MESSAGE("Expected ZombieAccessException when releasing zombie object");
+        RETAIN(obj);  // This should throw ZombieAccessException
+        TEST_FAIL_MESSAGE("Expected ZombieAccessException when retaining zombie object");
     } CATCH(ex) {
         // Verify exception type
         TEST_ASSERT_NOT_NULL(ex);

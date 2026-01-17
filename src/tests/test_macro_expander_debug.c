@@ -71,7 +71,7 @@ TEST(test_macro_expander_debug_isolated) {
     // Debug output removed for silent test execution
     const char *parsed_ast = print_ast(parsed);
     (void)parsed_ast; // Suppress unused variable warning
-    free((void*)parsed_ast);
+    CLJ_FREE((void*)parsed_ast);
 #endif
     
     // Canonicalize - this should trigger macro expansion if macro is registered
@@ -82,7 +82,7 @@ TEST(test_macro_expander_debug_isolated) {
     // Debug output removed for silent test execution
     const char *canon_ast = print_ast(canonicalized);
     (void)canon_ast; // Suppress unused variable warning
-    free((void*)canon_ast);
+    CLJ_FREE((void*)canon_ast);
     
     // Check if first element is a symbol or immediate
     if (canonicalized && list_type_matches(TAG(canonicalized))) {
@@ -97,7 +97,7 @@ TEST(test_macro_expander_debug_isolated) {
                 // Debug output removed for silent test execution
                 const char *first_ast = print_ast(list->first);
                 (void)first_ast; // Suppress unused variable warning
-                free((void*)first_ast);
+                CLJ_FREE((void*)first_ast);
             }
         }
     }
@@ -140,7 +140,7 @@ TEST(test_macro_expander_debug_with_macro) {
     // Debug output removed for silent test execution
     const char *parsed_ast = print_ast(parsed);
     (void)parsed_ast; // Suppress unused variable warning
-    free((void*)parsed_ast);
+    CLJ_FREE((void*)parsed_ast);
 #endif
     
     // Try to canonicalize - this will check for macro
@@ -151,7 +151,7 @@ TEST(test_macro_expander_debug_with_macro) {
     if (canonicalized) {
         const char *canon_ast = print_ast(canonicalized);
         (void)canon_ast; // Suppress unused variable warning
-        free((void*)canon_ast);
+        CLJ_FREE((void*)canon_ast);
     }
 #endif
     

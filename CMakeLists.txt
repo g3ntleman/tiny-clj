@@ -154,6 +154,7 @@ list(APPEND SOURCES
     src/clojure_core.c
     src/object.c
     src/builtins.c
+    src/builtins_net.c
     src/builtins_tiny_db.c
     src/builtins_strings.c
     src/builtins_regex.c
@@ -204,6 +205,9 @@ add_executable(tiny-clj EXCLUDE_FROM_ALL
 )
 target_link_libraries(tiny-clj PRIVATE subjective-c)
 target_link_libraries(tiny-clj PRIVATE tiny-db)
+if(APPLE)
+    target_link_libraries(tiny-clj PRIVATE "-framework CoreFoundation")
+endif()
 target_include_directories(tiny-clj PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -329,6 +333,9 @@ add_executable(tiny-clj-repl
 )
 target_link_libraries(tiny-clj-repl PRIVATE subjective-c)
 target_link_libraries(tiny-clj-repl PRIVATE tiny-db)
+if(APPLE)
+    target_link_libraries(tiny-clj-repl PRIVATE "-framework CoreFoundation")
+endif()
 target_include_directories(tiny-clj-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -359,6 +366,9 @@ add_executable(tiny-clj-profile
 )
 target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
 target_link_libraries(tiny-clj-profile PRIVATE tiny-db)
+if(APPLE)
+    target_link_libraries(tiny-clj-profile PRIVATE "-framework CoreFoundation")
+endif()
 target_include_directories(tiny-clj-profile PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -380,6 +390,7 @@ add_executable(unit-tests
     src/tests/unity_test_runner.c
     subjective-c/tests/test_registry.c
     src/tests/test_memory_macros.c
+    src/tests/test_memory.c
     src/tests/test_closure_capture_minimal.c
     src/tests/test_parser.c
     src/tests/test_utf8_emoji.c
@@ -444,6 +455,9 @@ add_executable(unit-tests
     src/tests/test_vector.c
     src/tests/test_time.c
     src/tests/test_runtime_stats.c
+    src/tests/test_static_keywords.c
+    src/tests/test_byte_array_view.c
+    src/tests/test_platform_net.c
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
@@ -459,6 +473,9 @@ target_compile_definitions(unit-tests PRIVATE
 )
 target_link_libraries(unit-tests PRIVATE subjective-c)
 target_link_libraries(unit-tests PRIVATE tiny-db)
+if(APPLE)
+    target_link_libraries(unit-tests PRIVATE "-framework CoreFoundation")
+endif()
 target_include_directories(unit-tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/subjective-c/tests

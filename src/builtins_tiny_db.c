@@ -83,9 +83,9 @@ ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
 
     // Build result map: {:path "..." :size N :type :file}
     CljMap *m = make_map(4);
-    m = map_assoc(m, (ID)intern_symbol_global(":path"), (ID)make_string(path));
-    m = map_assoc(m, (ID)intern_symbol_global(":size"), fixnum((int32_t)size));
-    m = map_assoc(m, (ID)intern_symbol_global(":type"), (ID)intern_symbol_global(":file"));
+    m = map_assoc(m, (ID)SYM_KW_PATH, (ID)make_string(path));
+    m = map_assoc(m, (ID)SYM_KW_SIZE, fixnum((int32_t)size));
+    m = map_assoc(m, (ID)SYM_KW_TYPE, (ID)SYM_KW_FILE);
     return AUTORELEASE(m);
 }
 
@@ -119,11 +119,11 @@ ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc)
     if (!entries) return NULL;
 
     CljMap *m = make_map(4);
-    m = map_assoc(m, (ID)intern_symbol_global(":entries"), entries);
+    m = map_assoc(m, (ID)SYM_KW_ENTRIES, entries);
     if (last_key[0] != '\0') {
-        m = map_assoc(m, (ID)intern_symbol_global(":last-key"), (ID)make_string(last_key));
+        m = map_assoc(m, (ID)SYM_KW_LAST_KEY, (ID)make_string(last_key));
     } else {
-        m = map_assoc(m, (ID)intern_symbol_global(":last-key"), NULL);
+        m = map_assoc(m, (ID)SYM_KW_LAST_KEY, NULL);
     }
     return AUTORELEASE(m);
 }

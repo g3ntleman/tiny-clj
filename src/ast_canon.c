@@ -774,7 +774,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         
         // Stack buffer for small vectors (avoid malloc)
         ID stack_buf[16];
-        ID *canon_elems = (count <= 16) ? stack_buf : (ID*)malloc(count * sizeof(ID));
+        ID *canon_elems = (count <= 16) ? stack_buf : (ID*)CLJ_MALLOC(count * sizeof(ID));
         CLJ_ASSERT(canon_elems != NULL && "Out of memory");
         
         bool changed = false;
@@ -788,7 +788,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
         
         if (!changed) {
-            if (count > 16) free(canon_elems);
+            if (count > 16) CLJ_FREE(canon_elems);
             return expr;  // No changes needed
         }
         
@@ -799,7 +799,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
         move_meta(vec, new_vec);
         
-        if (count > 16) free(canon_elems);
+        if (count > 16) CLJ_FREE(canon_elems);
         return AUTORELEASE(new_vec);
     }
     
