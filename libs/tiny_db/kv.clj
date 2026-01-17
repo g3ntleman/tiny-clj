@@ -1,4 +1,4 @@
-(ns tinyclj.kv)
+(ns tiny-db.kv)
 
 ;; Native-backed KV API (separate key-space from tinyclj.fs).
 ;; Keys here must NOT start with "/".

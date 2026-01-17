@@ -43,7 +43,7 @@
 #include "datetime_utc.h"
 #include "platform.h"
 #include "tiny_clj.h"
-#include "fs_layer.h" // tinyclj.fs / tinyclj.kv native stubs
+#include "fs_layer.h" // tinyclj.fs / tiny-db.kv native stubs
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -55,7 +55,7 @@ ID native_datetime_civil_from_days(ID *args, unsigned int argc);
 ID native_datetime_days_from_civil(ID *args, unsigned int argc);
 ID native_datetime_format_iso(ID *args, unsigned int argc);
 
-// tinyclj.fs / tinyclj.kv native functions (used by :native stubs)
+// tinyclj.fs / tiny-db.kv native functions (used by :native stubs)
 ID native_tinyclj_fs_mkdir(ID *args, unsigned int argc);
 ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc);
@@ -3056,7 +3056,7 @@ static StaticSymbolData sym_tinyclj_datetime_format_iso_qualified_data = {
             .unqualified = NULL,
             .cname = "tinyclj.datetime/format-iso"}};
 
-// Qualified-name entries for tinyclj.fs / tinyclj.kv native stubs.
+// Qualified-name entries for tinyclj.fs / tiny-db.kv native stubs.
 // Stored as pseudo-qualified cname and rely on native_function_lookup's qualified-name fallback.
 static StaticSymbolData sym_tinyclj_fs_mkdir_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
@@ -3093,17 +3093,17 @@ static StaticSymbolData sym_tinyclj_kv_put_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
             .unqualified = NULL,
-            .cname = "tinyclj.kv/put-bytes"}};
+            .cname = "tiny-db.kv/put-bytes"}};
 static StaticSymbolData sym_tinyclj_kv_get_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
             .unqualified = NULL,
-            .cname = "tinyclj.kv/get-bytes"}};
+            .cname = "tiny-db.kv/get-bytes"}};
 static StaticSymbolData sym_tinyclj_kv_delete_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
             .unqualified = NULL,
-            .cname = "tinyclj.kv/delete!"}};
+            .cname = "tiny-db.kv/delete!"}};
 
 static StaticSymbolData sym_tinyclj_runtime_stats_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
@@ -3134,7 +3134,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_tinyclj_datetime_days_from_civil_qualified_data.sym, native_datetime_days_from_civil},
     {&sym_tinyclj_datetime_format_iso_qualified_data.sym, native_datetime_format_iso},
 
-    // tinyclj.fs / tinyclj.kv
+    // tinyclj.fs / tiny-db.kv
     {&sym_tinyclj_fs_mkdir_qualified_data.sym, native_tinyclj_fs_mkdir},
     {&sym_tinyclj_fs_spit_bytes_qualified_data.sym, native_tinyclj_fs_spit_bytes},
     {&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes},
@@ -3420,7 +3420,7 @@ ID native_with_meta(ID *args, unsigned int argc)
 }
 
 // ----------------------------------------------------------------------------
-// tinyclj.fs and tinyclj.kv native bindings (host + embedded)
+// tinyclj.fs and tiny-db.kv native bindings (host + embedded)
 // ----------------------------------------------------------------------------
 
 static const char *require_c_string_arg(ID v, const char *fn_name, const char *what)
@@ -3524,53 +3524,53 @@ static ID tinyclj_kv_throw_ft(const char* op, tdb_status_t stc)
 
 ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
 {
-    CHECK_ARITY(argc, 2, "tinyclj.kv/put-bytes");
+    CHECK_ARITY(argc, 2, "tiny-db.kv/put-bytes");
     CljString *key_str = to_string(args[0]);
     if (!key_str) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/put-bytes expects a key string");
+                                         "tiny-db.kv/put-bytes expects a key string");
     }
     const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
     size_t key_len = (size_t)string_length(key_str);
     if (!key_bytes || key_len == 0) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/put-bytes key must not be empty");
+                                         "tiny-db.kv/put-bytes key must not be empty");
     }
     if (key_bytes[0] == '/') {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv keys must not start with '/'");
+                                         "tiny-db.kv keys must not start with '/'");
     }
     if (!args[1] || TAG(args[1]) != CLJ_BYTE_ARRAY) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/put-bytes expects a byte-array");
+                                         "tiny-db.kv/put-bytes expects a byte-array");
     }
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
     CljByteArray *ba = as_byte_array(args[1]);
     tdb_status_t stc = fs_kv_put_key_bytes_status(st, key_bytes, key_len, ba->data, (size_t)ba->length);
     if (stc != TDB_OK) {
-        return tinyclj_kv_throw_ft("tinyclj.kv/put-bytes", stc);
+        return tinyclj_kv_throw_ft("tiny-db.kv/put-bytes", stc);
     }
     return NULL;
 }
 
 ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
 {
-    CHECK_ARITY(argc, 1, "tinyclj.kv/get-bytes");
+    CHECK_ARITY(argc, 1, "tiny-db.kv/get-bytes");
     CljString *key_str = to_string(args[0]);
     if (!key_str) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/get-bytes expects a key string");
+                                         "tiny-db.kv/get-bytes expects a key string");
     }
     const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
     size_t key_len = (size_t)string_length(key_str);
     if (!key_bytes || key_len == 0) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/get-bytes key must not be empty");
+                                         "tiny-db.kv/get-bytes key must not be empty");
     }
     if (key_bytes[0] == '/') {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv keys must not start with '/'");
+                                         "tiny-db.kv keys must not start with '/'");
     }
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
@@ -3581,42 +3581,42 @@ ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
         return NULL;
     }
     if (stc != TDB_OK) {
-        return tinyclj_kv_throw_ft("tinyclj.kv/get-bytes", stc);
+        return tinyclj_kv_throw_ft("tiny-db.kv/get-bytes", stc);
     }
     ID arr = (ID)make_byte_array((int)saved);
     if (!arr) return NULL;
     CljByteArray *ba = as_byte_array(arr);
     stc = fs_kv_get_key_bytes_status(st, key_bytes, key_len, ba->data, (size_t)ba->length, &saved);
     if (stc != TDB_OK) {
-        return tinyclj_kv_throw_ft("tinyclj.kv/get-bytes", stc);
+        return tinyclj_kv_throw_ft("tiny-db.kv/get-bytes", stc);
     }
     return AUTORELEASE(arr);
 }
 
 ID native_tinyclj_kv_delete(ID *args, unsigned int argc)
 {
-    CHECK_ARITY(argc, 1, "tinyclj.kv/delete!");
+    CHECK_ARITY(argc, 1, "tiny-db.kv/delete!");
     CljString *key_str = to_string(args[0]);
     if (!key_str) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/delete! expects a key string");
+                                         "tiny-db.kv/delete! expects a key string");
     }
     const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
     size_t key_len = (size_t)string_length(key_str);
     if (!key_bytes || key_len == 0) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv/delete! key must not be empty");
+                                         "tiny-db.kv/delete! key must not be empty");
     }
     if (key_bytes[0] == '/') {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.kv keys must not start with '/'");
+                                         "tiny-db.kv keys must not start with '/'");
     }
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
     tdb_status_t stc = fs_kv_del_key_bytes_status(st, key_bytes, key_len);
     if (stc == TDB_OK) return (ID)clj_true;
     if (stc == TDB_ERR_NOT_FOUND) return (ID)clj_false;
-    return tinyclj_kv_throw_ft("tinyclj.kv/delete!", stc);
+    return tinyclj_kv_throw_ft("tiny-db.kv/delete!", stc);
 }
 
 // tinyclj.runtime: stats

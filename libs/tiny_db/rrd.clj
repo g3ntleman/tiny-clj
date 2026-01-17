@@ -1,5 +1,5 @@
-(ns tinyclj.rrd
-  (:require [tinyclj.kv :as kv]))
+(ns tiny-db.rrd
+  (:require [tiny-db.kv :as kv]))
 
 ;; Pure Clojure Round-Robin Database implementation for tiny-clj.
 ;;
@@ -9,7 +9,7 @@
 ;; - Automatic downsampling at update time (no scans needed)
 ;; - Deterministic O(1) per-sample update cost (cooperative multitasking friendly)
 ;;
-;; Storage: Uses tinyclj.kv for persistence (dogfooding tiny-db).
+;; Storage: Uses tiny-db.kv for persistence (dogfooding tiny-db).
 ;;
 ;; Handler Registration:
 ;; - RRA types beyond :classic require a handler registered via `register-handler!`
@@ -32,7 +32,7 @@
   "Register an RRA handler under a symbol name.
   
   Called by handler namespaces at load time, e.g.:
-    (rrd/register-handler! 'tinyclj.rrd.spline/handler spline-rra-handler)"
+    (rrd/register-handler! 'tiny-db.rrd.spline/handler spline-rra-handler)"
   [sym handler-map]
   (swap! handler-registry assoc sym handler-map))
 
@@ -136,8 +136,8 @@
   "Build handler-types map from RRA definitions and opts.
   
   All RRA types must be provided via :handler-types in opts.
-  Example: {:handler-types {:classic 'tinyclj.rrd.classic/handler
-                            :spline 'tinyclj.rrd.spline/handler}}"
+  Example: {:handler-types {:classic 'tiny-db.rrd.classic/handler
+                            :spline 'tiny-db.rrd.spline/handler}}"
   [rras opts]
   (let [types (set (map :type rras))
         custom (or (:handler-types opts) {})]
@@ -192,7 +192,7 @@
   Example:
     (create \"temp\" 60 [{:cf :average :steps 1 :rows 60}
                          {:type :spline :steps 1 :rows 100 :epsilon 0.1}]
-            {:handler-types {:spline 'tinyclj.rrd.spline/handler}})"
+            {:handler-types {:spline 'tiny-db.rrd.spline/handler}})"
   ([name step rras]
    (create name step rras {}))
   ([name step rras opts]
@@ -364,7 +364,7 @@
     (fetch-rra rrd rra-idx)))
 
 ;; =============================================================================
-;; Persistence (via tinyclj.kv)
+;; Persistence (via tiny-db.kv)
 ;; =============================================================================
 
 ;; Generate the KV key for an RRD.
