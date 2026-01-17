@@ -126,7 +126,7 @@ TEST(test_new_feature) {
 |--------|-------------|----------|
 | `--test <name>` | Einzelner Test oder Pattern mit Wildcards | `--test values/cljvalue_immediate_helpers` oder `--test "values/*"` |
 | `--list` | Alle Tests auflisten | `--list` |
-| `--quiet` | Minimale Ausgabe: Unterdrückt PASS-Zeilen und stdout von erfolgreichen Tests. Zeigt nur FAIL-Zeilen und die Zusammenfassung am Ende. | `--quiet` |
+| `--verbose` | Ausführliche Ausgabe: Zeigt PASS-Zeilen und stdout von erfolgreichen Tests (Default ist minimal/quiet). | `--verbose` |
 | `--help, -h` | Hilfe anzeigen | `--help` |
 | *(keine Args)* | Alle Tests | *(default)* |
 
@@ -192,7 +192,7 @@ Unterstützt komplexe Wildcard-Patterns mit voll-qualifizierten Namen über `--t
 ./unit-tests
 
 # Alle Tests mit minimaler Ausgabe (nur FAIL-Zeilen + Zusammenfassung)
-./unit-tests --quiet
+./unit-tests
 ```
 
 ## 🔧 Build-System

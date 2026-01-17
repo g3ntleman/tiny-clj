@@ -182,7 +182,7 @@ static void print_usage(const char *program_name) {
     printf("  -h, --help              Show this help message\n");
     printf("  --list                  List all available tests\n");
     printf("  --test <test_name>      Run a specific test (supports wildcards)\n");
-    printf("  --quiet                 Suppress PASS lines and stdout from passing tests. Only show FAIL lines and final summary.\n");
+    printf("  --verbose               Show PASS lines and stdout from passing tests (default: quiet)\n");
 #ifdef TINY_CLJ_TEST_RUNNER
     printf("  --memory-summary        Show memory profiler summary after all tests\n");
 #endif
@@ -193,8 +193,8 @@ static void print_usage(const char *program_name) {
 }
 
 int main(int argc, char **argv) {
-    // Parse command-line args early to check for --quiet before printing build info
-    bool quiet = false;
+    // Default: quiet output (PASS lines only shown with --verbose)
+    bool quiet = true;
     bool show_help = false;
     bool list_tests = false;
     bool show_memory_summary = false;
@@ -219,7 +219,10 @@ int main(int argc, char **argv) {
             show_help = true;
         } else if (strcmp(arg, "--list") == 0) {
             list_tests = true;
+        } else if (strcmp(arg, "--verbose") == 0) {
+            quiet = false;
         } else if (strcmp(arg, "--quiet") == 0) {
+            // Backward-compatible alias (quiet is the default now)
             quiet = true;
         } else if (strcmp(arg, "--memory-summary") == 0) {
 #ifdef TINY_CLJ_TEST_RUNNER
@@ -297,10 +300,9 @@ int main(int argc, char **argv) {
 #endif
 
 #ifdef TINY_CLJ_TEST_RUNNER
-    // Set quiet output mode if --quiet was specified
-    if (quiet) {
-        tiny_clj_tests_set_quiet_output(true);
-    }
+    // In tiny-clj mode, quiet controls capturing stdout + suppressing PASS output.
+    // Default is quiet, use --verbose to see PASS lines and stdout of passing tests.
+    tiny_clj_tests_set_quiet_output(quiet);
 #endif
 
     UNITY_BEGIN();
