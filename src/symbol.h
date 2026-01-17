@@ -135,6 +135,51 @@ extern CljSymbol *SYM_KW_NAME;
 extern CljSymbol *SYM_KW_NATIVE;
 extern CljSymbol *SYM_KW_AS;
 extern CljSymbol *SYM_KW_REFER;
+extern CljSymbol *SYM_KW_VALUE;
+extern CljSymbol *SYM_KW_CLOSED;
+extern CljSymbol *SYM_KW_DATA;
+extern CljSymbol *SYM_KW_FROM;
+extern CljSymbol *SYM_KW_TO;
+extern CljSymbol *SYM_KW_PORT;
+extern CljSymbol *SYM_KW_COLUMN;
+extern CljSymbol *SYM_KW_FN;
+extern CljSymbol *SYM_KW_RESULT_CHAN;
+extern CljSymbol *SYM_KW_SCHEDULED_SEC;
+extern CljSymbol *SYM_KW_SCHEDULED_MSEC;
+extern CljSymbol *SYM_KW_PERIODIC;
+extern CljSymbol *SYM_KW_PERIOD_MS;
+extern CljSymbol *SYM_KW_TIMER_ID;
+// tinyclj.runtime/stats keywords
+extern CljSymbol *SYM_KW_HOST_OS;
+extern CljSymbol *SYM_KW_HOST_OS_VERSION;
+extern CljSymbol *SYM_KW_TINY_CLJ_VERSION;
+extern CljSymbol *SYM_KW_BUILD_TIME;
+extern CljSymbol *SYM_KW_HEAP_BYTES_FREE;
+extern CljSymbol *SYM_KW_HEAP_BYTES_TOTAL;
+extern CljSymbol *SYM_KW_FLASH_BYTES_FREE;
+extern CljSymbol *SYM_KW_FLASH_BYTES_TOTAL;
+extern CljSymbol *SYM_KW_MEMORY_STATS;
+extern CljSymbol *SYM_KW_ENABLED_P;
+extern CljSymbol *SYM_KW_OBJECT_ALLOCATIONS;
+extern CljSymbol *SYM_KW_OBJECT_DEALLOCATIONS;
+extern CljSymbol *SYM_KW_OBJECT_DESTRUCTIONS;
+extern CljSymbol *SYM_KW_OBJECT_BYTES_CURRENT;
+extern CljSymbol *SYM_KW_OBJECT_BYTES_PEAK;
+extern CljSymbol *SYM_KW_RAW_ALLOCATIONS;
+extern CljSymbol *SYM_KW_RAW_FREES;
+extern CljSymbol *SYM_KW_RAW_REALLOCATIONS;
+extern CljSymbol *SYM_KW_RAW_BYTES_CURRENT;
+extern CljSymbol *SYM_KW_RAW_BYTES_PEAK;
+extern CljSymbol *SYM_KW_RAW_BLOCKS_CURRENT;
+extern CljSymbol *SYM_KW_RAW_BLOCKS_PEAK;
+// tinyclj.fs result map keywords
+extern CljSymbol *SYM_KW_PATH;
+extern CljSymbol *SYM_KW_SIZE;
+extern CljSymbol *SYM_KW_TYPE;
+extern CljSymbol *SYM_KW_ENTRIES;
+extern CljSymbol *SYM_KW_LAST_KEY;
+// metadata keywords
+extern CljSymbol *SYM_KW_MACRO;
 
 // Datetime keyword symbols
 extern CljSymbol *SYM_KW_YEAR;
@@ -154,6 +199,11 @@ extern CljSymbol *SYM_NS_STAR;
 
 // tinyclj namespace function symbols
 extern CljSymbol *SYM_RETAIN_COUNT;
+// Frequently used fixed symbols (non-keyword)
+extern CljSymbol *SYM_MATH;
+extern CljSymbol *SYM_INC;
+extern CljSymbol *SYM_QUASIQUOTE_FN;
+extern CljSymbol *SYM_PERCENT;
 
 #if defined(CLJ_HOT_PATH)
     #if defined(__clang__) || defined(__GNUC__)

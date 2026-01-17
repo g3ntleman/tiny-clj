@@ -273,7 +273,7 @@ static bool fs_kv_exists(FsKvStore *st, const char *key)
 
 FsKvStore *fs_kv_store_new(void)
 {
-    FsKvStore *st = (FsKvStore *)malloc(sizeof(FsKvStore));
+    FsKvStore *st = (FsKvStore *)CLJ_MALLOC(sizeof(FsKvStore));
     if (!st) {
         throw_oom();
         return NULL;
@@ -282,9 +282,9 @@ FsKvStore *fs_kv_store_new(void)
 
     // Host default: RAM-backed block device for tiny-db.
     const size_t ram_bytes = 128 * 1024;
-    st->ram.buf = (uint8_t*)malloc(ram_bytes);
+    st->ram.buf = (uint8_t*)CLJ_MALLOC(ram_bytes);
     if (!st->ram.buf) {
-        free(st);
+        CLJ_FREE(st);
         throw_oom();
         return NULL;
     }
@@ -305,8 +305,8 @@ FsKvStore *fs_kv_store_new(void)
 
     tdb_status_t fst = tdb_kv_open(&st->db, &st->bdev, NULL);
     if (fst != TDB_OK) {
-        free(st->ram.buf);
-        free(st);
+    CLJ_FREE(st->ram.buf);
+    CLJ_FREE(st);
         return NULL;
     }
     return st;
@@ -757,10 +757,10 @@ void fs_kv_store_free(FsKvStore *st)
         tdb_kv_close(st->db);
         st->db = NULL;
     }
-    free(st->ram.buf);
+    CLJ_FREE(st->ram.buf);
     st->ram.buf = NULL;
     st->ram.len = 0;
-    free(st);
+    CLJ_FREE(st);
 }
 
 bool fs_kv_put(FsKvStore *st, const char *key, const uint8_t *data, size_t len)

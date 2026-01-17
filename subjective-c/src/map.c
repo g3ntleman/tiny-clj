@@ -139,7 +139,7 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
   // Allocate new map with embedded data array
   size_t struct_size = sizeof(CljMap);
   size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
-  CljMap *new_map = (CljMap*)malloc(struct_size + data_size);
+  CljMap *new_map = (CljMap*)ALLOC_BYTES(CLJ_MAP, struct_size + data_size);
   if (!new_map) {
     throw_oom();
   }
@@ -362,7 +362,7 @@ static CljMap* map_remove_core(CljMap *map, ID key) {
   // Allocate new map with same capacity
   size_t struct_size = sizeof(CljMap);
   size_t data_size = (size_t)map_data->capacity * 2 * sizeof(CljObject*);
-  CljMap *new_map = (CljMap*)malloc(struct_size + data_size);
+  CljMap *new_map = (CljMap*)ALLOC_BYTES(CLJ_MAP_TRANSIENT, struct_size + data_size);
   if (!new_map) {
     throw_oom();
   }
@@ -523,7 +523,7 @@ static CljMap* map_copy(CljMap *src, CljType new_type) {
     // Allocate new map with embedded data array
     size_t struct_size = sizeof(CljMap);
     size_t data_size = (size_t)src->capacity * 2 * sizeof(CljObject*);
-    CljMap *new_map = (CljMap*)malloc(struct_size + data_size);
+    CljMap *new_map = (CljMap*)ALLOC_BYTES(new_type, struct_size + data_size);
     if (!new_map) {
         throw_oom();
     }
@@ -567,7 +567,7 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
     // Allocate transient map with embedded data array (single heap allocation)
     size_t struct_size = sizeof(CljMap);
     size_t data_size = (size_t)total_capacity * 2 * sizeof(CljObject*);
-    CljMap *tmap = (CljMap*)malloc(struct_size + data_size);
+    CljMap *tmap = (CljMap*)ALLOC_BYTES(CLJ_MAP_TRANSIENT, struct_size + data_size);
     if (!tmap) {
         return NULL;  // OOM
     }

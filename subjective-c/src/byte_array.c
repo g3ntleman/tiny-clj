@@ -10,7 +10,7 @@ static struct {
     CljByteArray ba;
 } clj_empty_byte_array_singleton_data = {
     .ba = {
-        .base = { .type = CLJ_BYTE_ARRAY, .rc = SINGLETON_RC },
+        .base = { .type = CLJ_BYTE_ARRAY, .flags = 0, .rc = SINGLETON_RC },
         .length = 0,
         .data = NULL
     }
@@ -35,13 +35,14 @@ CljByteArray* make_byte_array(int length) {
     }
     
     ba->base.type = CLJ_BYTE_ARRAY;
+    ba->base.flags = 0;
     ba->base.rc = 1;
     ba->length = length;
     
     if (length > 0) {
-        ba->data = (uint8_t*)calloc(length, sizeof(uint8_t));
+        ba->data = (uint8_t*)CLJ_CALLOC(length, sizeof(uint8_t));
         if (!ba->data) {
-            free(ba);
+            CLJ_FREE(ba);
             throw_oom();
         }
     } else {
@@ -66,6 +67,55 @@ CljValue make_byte_array_from_bytes(const uint8_t *bytes, int length) {
         memcpy(ba->data, bytes, length);
     }
     
+    return arr;
+}
+
+CljByteArray* make_byte_array_view(uint8_t *bytes, int length) {
+    assert(length >= 0 && "byte_array view length must be non-negative");
+    if (length < 0) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                "byte-array view length must be non-negative, got %d", length);
+    }
+    if (length == 0) {
+        return clj_empty_byte_array_singleton;
+    }
+    if (!bytes) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                "byte-array view requires non-NULL bytes when length=%d", length);
+    }
+
+    // Allocate as a CLJ_BYTE_ARRAY so the memory profiler / type tracking stays consistent.
+    // We intentionally avoid ALLOC(CljByteArrayExternal, ...) because TYPE_OF() is not defined for it.
+    CljByteArrayExternal *ext = (CljByteArrayExternal*)alloc(sizeof(CljByteArrayExternal), 1, CLJ_BYTE_ARRAY);
+    if (!ext) {
+        throw_oom();
+        return NULL;
+    }
+
+    ext->base_arr.base.type = CLJ_BYTE_ARRAY;
+    ext->base_arr.base.flags = CLJ_FLAG_BYTE_ARRAY_EXTERNAL;
+    ext->base_arr.base.rc = 1;
+    ext->base_arr.length = length;
+    ext->base_arr.data = bytes;
+    ext->external_ctx = NULL;
+    ext->external_free_fn = NULL;
+    return (CljByteArray*)ext;
+}
+
+CljByteArray* make_byte_array_external(uint8_t *bytes, int length, void *external_ctx, CljByteArrayExternalFreeFn free_fn) {
+    CljByteArray *arr = make_byte_array_view(bytes, length);
+    if (!arr) return NULL;
+    if (length == 0) {
+        // Empty singleton - no external finalizer.
+        return arr;
+    }
+
+    CljObject *obj = (CljObject*)arr;
+    CLJ_ASSERT(obj->type == CLJ_BYTE_ARRAY);
+    CLJ_ASSERT((obj->flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) != 0);
+    CljByteArrayExternal *ext = (CljByteArrayExternal*)arr;
+    ext->external_ctx = external_ctx;
+    ext->external_free_fn = free_fn;
     return arr;
 }
 

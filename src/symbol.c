@@ -108,6 +108,51 @@ CljSymbol *SYM_KW_NAME = NULL;
 CljSymbol *SYM_KW_NATIVE = NULL;
 CljSymbol *SYM_KW_AS = NULL;
 CljSymbol *SYM_KW_REFER = NULL;
+CljSymbol *SYM_KW_VALUE = NULL;
+CljSymbol *SYM_KW_CLOSED = NULL;
+CljSymbol *SYM_KW_DATA = NULL;
+CljSymbol *SYM_KW_FROM = NULL;
+CljSymbol *SYM_KW_TO = NULL;
+CljSymbol *SYM_KW_PORT = NULL;
+CljSymbol *SYM_KW_COLUMN = NULL;
+CljSymbol *SYM_KW_FN = NULL;
+CljSymbol *SYM_KW_RESULT_CHAN = NULL;
+CljSymbol *SYM_KW_SCHEDULED_SEC = NULL;
+CljSymbol *SYM_KW_SCHEDULED_MSEC = NULL;
+CljSymbol *SYM_KW_PERIODIC = NULL;
+CljSymbol *SYM_KW_PERIOD_MS = NULL;
+CljSymbol *SYM_KW_TIMER_ID = NULL;
+// tinyclj.runtime/stats keywords
+CljSymbol *SYM_KW_HOST_OS = NULL;
+CljSymbol *SYM_KW_HOST_OS_VERSION = NULL;
+CljSymbol *SYM_KW_TINY_CLJ_VERSION = NULL;
+CljSymbol *SYM_KW_BUILD_TIME = NULL;
+CljSymbol *SYM_KW_HEAP_BYTES_FREE = NULL;
+CljSymbol *SYM_KW_HEAP_BYTES_TOTAL = NULL;
+CljSymbol *SYM_KW_FLASH_BYTES_FREE = NULL;
+CljSymbol *SYM_KW_FLASH_BYTES_TOTAL = NULL;
+CljSymbol *SYM_KW_MEMORY_STATS = NULL;
+CljSymbol *SYM_KW_ENABLED_P = NULL;
+CljSymbol *SYM_KW_OBJECT_ALLOCATIONS = NULL;
+CljSymbol *SYM_KW_OBJECT_DEALLOCATIONS = NULL;
+CljSymbol *SYM_KW_OBJECT_DESTRUCTIONS = NULL;
+CljSymbol *SYM_KW_OBJECT_BYTES_CURRENT = NULL;
+CljSymbol *SYM_KW_OBJECT_BYTES_PEAK = NULL;
+CljSymbol *SYM_KW_RAW_ALLOCATIONS = NULL;
+CljSymbol *SYM_KW_RAW_FREES = NULL;
+CljSymbol *SYM_KW_RAW_REALLOCATIONS = NULL;
+CljSymbol *SYM_KW_RAW_BYTES_CURRENT = NULL;
+CljSymbol *SYM_KW_RAW_BYTES_PEAK = NULL;
+CljSymbol *SYM_KW_RAW_BLOCKS_CURRENT = NULL;
+CljSymbol *SYM_KW_RAW_BLOCKS_PEAK = NULL;
+// tinyclj.fs result map keywords
+CljSymbol *SYM_KW_PATH = NULL;
+CljSymbol *SYM_KW_SIZE = NULL;
+CljSymbol *SYM_KW_TYPE = NULL;
+CljSymbol *SYM_KW_ENTRIES = NULL;
+CljSymbol *SYM_KW_LAST_KEY = NULL;
+// metadata keywords
+CljSymbol *SYM_KW_MACRO = NULL;
 
 // Datetime keywords
 CljSymbol *SYM_KW_YEAR = NULL;
@@ -129,6 +174,12 @@ CljSymbol *SYM_RETAIN_COUNT = NULL;
 
 // Additional symbols for hot path optimization
 CljSymbol *SYM_NS_STAR = NULL;
+
+// Frequently used fixed symbols (non-keyword)
+CljSymbol *SYM_MATH = NULL;
+CljSymbol *SYM_INC = NULL;
+CljSymbol *SYM_QUASIQUOTE_FN = NULL;
+CljSymbol *SYM_PERCENT = NULL;
 
 // Macro to reduce boilerplate for static symbol declarations (DRY principle)
 // Note: For symbols that need to be extern (used in other files), use DEFINE_EXTERN_SYMBOL instead
@@ -385,6 +436,18 @@ DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
 DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
 #endif
 
+// Static symbol structs for fixed (non-keyword) literals used in C code
+DEFINE_STATIC_SYMBOL(sym_ns_clojure_string_data, "clojure.string");
+DEFINE_STATIC_SYMBOL(sym_ns_clojure_repl_data, "clojure.repl");
+DEFINE_STATIC_SYMBOL(sym_ns_clojure_core_data, "clojure.core");
+DEFINE_STATIC_SYMBOL(sym_ns_clojure_lang_data, "clojure.lang");
+DEFINE_STATIC_SYMBOL(sym_ns_tinyclj_data, "tinyclj");
+DEFINE_STATIC_SYMBOL(sym_destructure_data, "destructure");
+DEFINE_STATIC_SYMBOL(sym_math_data, "Math");
+DEFINE_STATIC_SYMBOL(sym_inc_data, "inc");
+DEFINE_STATIC_SYMBOL(sym_quasiquote_fn_data, "quasiquote-fn");
+DEFINE_STATIC_SYMBOL(sym_percent_data, "%");
+
 // Static symbol structs for keywords (compile-time initialization)
 DEFINE_STATIC_SYMBOL(sym_kw_line_data, ":line");
 DEFINE_STATIC_SYMBOL(sym_kw_file_data, ":file");
@@ -396,6 +459,48 @@ DEFINE_STATIC_SYMBOL(sym_kw_name_data, ":name");
 DEFINE_STATIC_SYMBOL(sym_kw_native_data, ":native");
 DEFINE_STATIC_SYMBOL(sym_kw_as_data, ":as");
 DEFINE_STATIC_SYMBOL(sym_kw_refer_data, ":refer");
+DEFINE_STATIC_SYMBOL(sym_kw_value_data, ":value");
+DEFINE_STATIC_SYMBOL(sym_kw_closed_data, ":closed");
+DEFINE_STATIC_SYMBOL(sym_kw_data_data, ":data");
+DEFINE_STATIC_SYMBOL(sym_kw_from_data, ":from");
+DEFINE_STATIC_SYMBOL(sym_kw_to_data, ":to");
+DEFINE_STATIC_SYMBOL(sym_kw_port_data, ":port");
+DEFINE_STATIC_SYMBOL(sym_kw_column_data, ":column");
+DEFINE_STATIC_SYMBOL(sym_kw_fn_data, ":fn");
+DEFINE_STATIC_SYMBOL(sym_kw_result_chan_data, ":result-chan");
+DEFINE_STATIC_SYMBOL(sym_kw_scheduled_sec_data, ":scheduled-sec");
+DEFINE_STATIC_SYMBOL(sym_kw_scheduled_msec_data, ":scheduled-msec");
+DEFINE_STATIC_SYMBOL(sym_kw_periodic_data, ":periodic");
+DEFINE_STATIC_SYMBOL(sym_kw_period_ms_data, ":period-ms");
+DEFINE_STATIC_SYMBOL(sym_kw_timer_id_data, ":timer-id");
+DEFINE_STATIC_SYMBOL(sym_kw_host_os_data, ":host-os");
+DEFINE_STATIC_SYMBOL(sym_kw_host_os_version_data, ":host-os-version");
+DEFINE_STATIC_SYMBOL(sym_kw_tiny_clj_version_data, ":tiny-clj-version");
+DEFINE_STATIC_SYMBOL(sym_kw_build_time_data, ":build-time");
+DEFINE_STATIC_SYMBOL(sym_kw_heap_bytes_free_data, ":heap-bytes-free");
+DEFINE_STATIC_SYMBOL(sym_kw_heap_bytes_total_data, ":heap-bytes-total");
+DEFINE_STATIC_SYMBOL(sym_kw_flash_bytes_free_data, ":flash-bytes-free");
+DEFINE_STATIC_SYMBOL(sym_kw_flash_bytes_total_data, ":flash-bytes-total");
+DEFINE_STATIC_SYMBOL(sym_kw_memory_stats_data, ":memory-stats");
+DEFINE_STATIC_SYMBOL(sym_kw_enabled_p_data, ":enabled?");
+DEFINE_STATIC_SYMBOL(sym_kw_object_allocations_data, ":object-allocations");
+DEFINE_STATIC_SYMBOL(sym_kw_object_deallocations_data, ":object-deallocations");
+DEFINE_STATIC_SYMBOL(sym_kw_object_destructions_data, ":object-destructions");
+DEFINE_STATIC_SYMBOL(sym_kw_object_bytes_current_data, ":object-bytes-current");
+DEFINE_STATIC_SYMBOL(sym_kw_object_bytes_peak_data, ":object-bytes-peak");
+DEFINE_STATIC_SYMBOL(sym_kw_raw_allocations_data, ":raw-allocations");
+DEFINE_STATIC_SYMBOL(sym_kw_raw_frees_data, ":raw-frees");
+DEFINE_STATIC_SYMBOL(sym_kw_raw_reallocations_data, ":raw-reallocations");
+DEFINE_STATIC_SYMBOL(sym_kw_raw_bytes_current_data, ":raw-bytes-current");
+DEFINE_STATIC_SYMBOL(sym_kw_raw_bytes_peak_data, ":raw-bytes-peak");
+DEFINE_STATIC_SYMBOL(sym_kw_raw_blocks_current_data, ":raw-blocks-current");
+DEFINE_STATIC_SYMBOL(sym_kw_raw_blocks_peak_data, ":raw-blocks-peak");
+DEFINE_STATIC_SYMBOL(sym_kw_path_data, ":path");
+DEFINE_STATIC_SYMBOL(sym_kw_size_data, ":size");
+DEFINE_STATIC_SYMBOL(sym_kw_type_data, ":type");
+DEFINE_STATIC_SYMBOL(sym_kw_entries_data, ":entries");
+DEFINE_STATIC_SYMBOL(sym_kw_last_key_data, ":last-key");
+DEFINE_STATIC_SYMBOL(sym_kw_macro_data, ":macro");
 
 DEFINE_STATIC_SYMBOL(sym_kw_year_data, ":year");
 DEFINE_STATIC_SYMBOL(sym_kw_month_data, ":month");
@@ -527,15 +632,15 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_ALL_NS, sym_all_ns_data);
 
     // Initialize clojure.string namespace symbol first (needed for clojure.string functions)
-    SYM_CLOJURE_STRING = intern_symbol_global("clojure.string");
+    INIT_SYMBOL(SYM_CLOJURE_STRING, sym_ns_clojure_string_data);
     
     // Initialize clojure.repl namespace symbol (needed for REPL helper functions)
-    SYM_CLOJURE_REPL = intern_symbol_global("clojure.repl");
+    INIT_SYMBOL(SYM_CLOJURE_REPL, sym_ns_clojure_repl_data);
 
     // Global symbols for namespace names (for fast comparison)
     // Use intern_symbol_global to ensure same symbol is returned by intern_symbol
-    SYM_CLOJURE_CORE = intern_symbol_global("clojure.core");
-    SYM_CLOJURE_LANG = intern_symbol_global("clojure.lang");
+    INIT_SYMBOL(SYM_CLOJURE_CORE, sym_ns_clojure_core_data);
+    INIT_SYMBOL(SYM_CLOJURE_LANG, sym_ns_clojure_lang_data);
     
     // clojure.string native function symbols - with namespace
     INIT_SYMBOL_NS(SYM_TRIM, sym_trim_data, SYM_CLOJURE_STRING);
@@ -558,7 +663,7 @@ void init_special_symbols() {
     // clojure.repl native function symbol for dir
     INIT_SYMBOL_NS(SYM_DIR_NATIVE, sym_dir_data, SYM_CLOJURE_REPL);
     // Initialize tinyclj namespace symbol
-    SYM_TINYCLJ = intern_symbol_global("tinyclj");
+    INIT_SYMBOL(SYM_TINYCLJ, sym_ns_tinyclj_data);
     
     // tinyclj native function symbol for retain-count
     INIT_SYMBOL_NS(SYM_RETAIN_COUNT, sym_retain_count_data, SYM_TINYCLJ);
@@ -604,6 +709,57 @@ void init_special_symbols() {
 
     INIT_SYMBOL(SYM_KW_REFER, sym_kw_refer_data);
 
+    INIT_SYMBOL(SYM_KW_VALUE, sym_kw_value_data);
+
+    INIT_SYMBOL(SYM_KW_CLOSED, sym_kw_closed_data);
+
+    INIT_SYMBOL(SYM_KW_DATA, sym_kw_data_data);
+
+    INIT_SYMBOL(SYM_KW_FROM, sym_kw_from_data);
+
+    INIT_SYMBOL(SYM_KW_TO, sym_kw_to_data);
+
+    INIT_SYMBOL(SYM_KW_PORT, sym_kw_port_data);
+
+    INIT_SYMBOL(SYM_KW_COLUMN, sym_kw_column_data);
+    INIT_SYMBOL(SYM_KW_FN, sym_kw_fn_data);
+    INIT_SYMBOL(SYM_KW_RESULT_CHAN, sym_kw_result_chan_data);
+    INIT_SYMBOL(SYM_KW_SCHEDULED_SEC, sym_kw_scheduled_sec_data);
+    INIT_SYMBOL(SYM_KW_SCHEDULED_MSEC, sym_kw_scheduled_msec_data);
+    INIT_SYMBOL(SYM_KW_PERIODIC, sym_kw_periodic_data);
+    INIT_SYMBOL(SYM_KW_PERIOD_MS, sym_kw_period_ms_data);
+    INIT_SYMBOL(SYM_KW_TIMER_ID, sym_kw_timer_id_data);
+
+    // Additional keywords used by native code
+    INIT_SYMBOL(SYM_KW_HOST_OS, sym_kw_host_os_data);
+    INIT_SYMBOL(SYM_KW_HOST_OS_VERSION, sym_kw_host_os_version_data);
+    INIT_SYMBOL(SYM_KW_TINY_CLJ_VERSION, sym_kw_tiny_clj_version_data);
+    INIT_SYMBOL(SYM_KW_BUILD_TIME, sym_kw_build_time_data);
+    INIT_SYMBOL(SYM_KW_HEAP_BYTES_FREE, sym_kw_heap_bytes_free_data);
+    INIT_SYMBOL(SYM_KW_HEAP_BYTES_TOTAL, sym_kw_heap_bytes_total_data);
+    INIT_SYMBOL(SYM_KW_FLASH_BYTES_FREE, sym_kw_flash_bytes_free_data);
+    INIT_SYMBOL(SYM_KW_FLASH_BYTES_TOTAL, sym_kw_flash_bytes_total_data);
+    INIT_SYMBOL(SYM_KW_MEMORY_STATS, sym_kw_memory_stats_data);
+    INIT_SYMBOL(SYM_KW_ENABLED_P, sym_kw_enabled_p_data);
+    INIT_SYMBOL(SYM_KW_OBJECT_ALLOCATIONS, sym_kw_object_allocations_data);
+    INIT_SYMBOL(SYM_KW_OBJECT_DEALLOCATIONS, sym_kw_object_deallocations_data);
+    INIT_SYMBOL(SYM_KW_OBJECT_DESTRUCTIONS, sym_kw_object_destructions_data);
+    INIT_SYMBOL(SYM_KW_OBJECT_BYTES_CURRENT, sym_kw_object_bytes_current_data);
+    INIT_SYMBOL(SYM_KW_OBJECT_BYTES_PEAK, sym_kw_object_bytes_peak_data);
+    INIT_SYMBOL(SYM_KW_RAW_ALLOCATIONS, sym_kw_raw_allocations_data);
+    INIT_SYMBOL(SYM_KW_RAW_FREES, sym_kw_raw_frees_data);
+    INIT_SYMBOL(SYM_KW_RAW_REALLOCATIONS, sym_kw_raw_reallocations_data);
+    INIT_SYMBOL(SYM_KW_RAW_BYTES_CURRENT, sym_kw_raw_bytes_current_data);
+    INIT_SYMBOL(SYM_KW_RAW_BYTES_PEAK, sym_kw_raw_bytes_peak_data);
+    INIT_SYMBOL(SYM_KW_RAW_BLOCKS_CURRENT, sym_kw_raw_blocks_current_data);
+    INIT_SYMBOL(SYM_KW_RAW_BLOCKS_PEAK, sym_kw_raw_blocks_peak_data);
+    INIT_SYMBOL(SYM_KW_PATH, sym_kw_path_data);
+    INIT_SYMBOL(SYM_KW_SIZE, sym_kw_size_data);
+    INIT_SYMBOL(SYM_KW_TYPE, sym_kw_type_data);
+    INIT_SYMBOL(SYM_KW_ENTRIES, sym_kw_entries_data);
+    INIT_SYMBOL(SYM_KW_LAST_KEY, sym_kw_last_key_data);
+    INIT_SYMBOL(SYM_KW_MACRO, sym_kw_macro_data);
+
     INIT_SYMBOL(SYM_KW_YEAR, sym_kw_year_data);
 
     INIT_SYMBOL(SYM_KW_MONTH, sym_kw_month_data);
@@ -615,6 +771,13 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_MINUTE, sym_kw_minute_data);
 
     INIT_SYMBOL(SYM_KW_SECOND, sym_kw_second_data);
+
+    // Frequently used fixed symbols (non-keyword)
+    INIT_SYMBOL(SYM_MATH, sym_math_data);
+    INIT_SYMBOL(SYM_INC, sym_inc_data);
+    INIT_SYMBOL(SYM_QUASIQUOTE_FN, sym_quasiquote_fn_data);
+    INIT_SYMBOL(SYM_PERCENT, sym_percent_data);
+    INIT_SYMBOL(SYM_DESTRUCTURE, sym_destructure_data);
 
     // Additional symbols for hot path optimization
     INIT_SYMBOL(SYM_NS_STAR, sym_ns_star_data);
@@ -698,7 +861,6 @@ void init_special_symbols() {
     }
     
     // destructure is a Clojure function, not a special form
-    SYM_DESTRUCTURE = intern_symbol_global("destructure");
 }
 
 // Static CljString for temporary lookups (avoids allocations)
@@ -812,8 +974,8 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
                 cname, SYMBOL_NAME_MAX_LEN - 1);
     }
 
-    // Use malloc directly instead of ALLOC macro
-    CljSymbol *sym = (CljSymbol*)malloc(sizeof(CljSymbol));
+    // Symbols are CljObject subtypes: allocate via ALLOC so object allocation is tracked consistently.
+    CljSymbol *sym = ALLOC(CljSymbol, 1);
     if (!sym) {
         return throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
                 "Failed to allocate memory for symbol '%s'", cname);
@@ -830,7 +992,7 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     // Store strdup'd name for heap-allocated symbols
     sym->cname = strdup(cname);
     if (!sym->cname) {
-        free(sym);
+        DEALLOC(sym);
         return throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
                 "Failed to duplicate string for symbol '%s'", cname);
     }

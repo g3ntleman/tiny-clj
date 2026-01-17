@@ -1990,14 +1990,14 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
             const char *cname = symbol->cname ? symbol->cname : "unknown";
             const char *ns_cname = symbol->ns_name && symbol->ns_name->cname ? symbol->ns_name->cname : "unknown";
             size_t qualified_len = strlen(ns_cname) + 1 + strlen(cname) + 1;
-            char *qualified_name = (char*)malloc(qualified_len);
+            char *qualified_name = (char*)CLJ_MALLOC(qualified_len);
             if (qualified_name) {
                 size_t pos = 0;
                 pos = format_append(qualified_name, pos, qualified_len, ns_cname);
                 pos = format_append_char(qualified_name, pos, qualified_len, '/');
                 format_append(qualified_name, pos, qualified_len, cname);
                 throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", qualified_name);
-                free(qualified_name);
+                CLJ_FREE(qualified_name);
             } else {
                 throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context", ns_cname, cname);
             }
@@ -2035,14 +2035,14 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         const char *cname = symbol->cname ? symbol->cname : "unknown";
         const char *ns_cname = symbol->ns_name && symbol->ns_name->cname ? symbol->ns_name->cname : "unknown";
         size_t qualified_len = strlen(ns_cname) + 1 + strlen(cname) + 1;
-        char *qualified_name = (char*)malloc(qualified_len);
+        char *qualified_name = (char*)CLJ_MALLOC(qualified_len);
         if (qualified_name) {
             size_t pos = 0;
             pos = format_append(qualified_name, pos, qualified_len, ns_cname);
             pos = format_append_char(qualified_name, pos, qualified_len, '/');
             format_append(qualified_name, pos, qualified_len, cname);
             throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", qualified_name);
-            free(qualified_name);
+            CLJ_FREE(qualified_name);
         } else {
             throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context", ns_cname, cname);
         }
@@ -2928,12 +2928,12 @@ ID* alloc_obj_array(int size, ID *stack_buffer) {
     if (size <= 16) {
         return stack_buffer;
     }
-    return malloc((size_t)size * sizeof(*stack_buffer));
+    return CLJ_MALLOC((size_t)size * sizeof(*stack_buffer));
 }
 
 void free_obj_array(ID *array, ID *stack_buffer) {
     if (array != stack_buffer) {
-        free((void*)array);
+        CLJ_FREE((void*)array);
     }
 }
 

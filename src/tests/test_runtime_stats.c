@@ -67,3 +67,32 @@ TEST(test_runtime_stats_build_time_before_now)
     }
 }
 
+
+
+#ifdef DEBUG
+TEST(test_runtime_stats_contains_memory_stats_map)
+{
+    ID stats = eval_string("(do (require 'tinyclj.runtime) (tinyclj.runtime/stats))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(stats);
+    TEST_ASSERT_TRUE(is_map(stats));
+
+    ID k_memory_stats = (ID)intern_symbol_global(":memory-stats");
+    ID v_memory_stats = map_get_sentinel((CljMap *)stats, k_memory_stats, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_memory_stats);
+    TEST_ASSERT_TRUE(is_map(v_memory_stats));
+
+    CljMap *ms = (CljMap *)v_memory_stats;
+    ID k_enabled = (ID)intern_symbol_global(":enabled?");
+    ID v_enabled = map_get_sentinel(ms, k_enabled, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_enabled);
+    TEST_ASSERT_TRUE(is_bool(v_enabled));
+
+#if MEMORY_PROFILING_ENABLED
+    // If memory profiling is enabled for this build, raw keys should exist.
+    ID k_raw_bytes_current = (ID)intern_symbol_global(":raw-bytes-current");
+    ID v_raw_bytes_current = map_get_sentinel(ms, k_raw_bytes_current, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_raw_bytes_current);
+    TEST_ASSERT_TRUE(is_fixnum(v_raw_bytes_current));
+#endif
+}
+#endif

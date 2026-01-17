@@ -198,7 +198,7 @@ static void register_test_history_load_from_file_crash_reproduction(void) {
     test_registry_add_with_group("test_history_load_from_file_crash_reproduction",
                                  test_history_load_from_file_crash_reproduction,
                                  filename);
-    free(filename);
+    CLJ_FREE(filename);
   }
 }
 
@@ -247,7 +247,7 @@ TEST(test_history_save_escapes_quotes) {
   fseek(fp, 0, SEEK_END);
   long sz = ftell(fp);
   fseek(fp, 0, SEEK_SET);
-  char *buf = (char *)malloc((size_t)sz + 1);
+  char *buf = (char *)CLJ_MALLOC((size_t)sz + 1);
   TEST_ASSERT_NOT_NULL(buf);
   size_t n = fread(buf, 1, (size_t)sz, fp);
   buf[n] = '\0';
@@ -262,7 +262,7 @@ TEST(test_history_save_escapes_quotes) {
   // Verify the exact format
   TEST_ASSERT_EQUAL_STRING("[\"(list 1 1.0 \\\"1\\\" \\\"one\\\")\"]\n", buf);
 
-  free(buf);
+  CLJ_FREE(buf);
   // Don't release str separately - it's owned by vec and will be released with vec
   RELEASE(vec);
   unlink(tmp_hist_path);
@@ -305,7 +305,7 @@ static char *create_test_file(const char *content) {
   }
   fclose(fp);
 
-  char *path = malloc(strlen(template) + 1);
+  char *path = (char*)CLJ_MALLOC(strlen(template) + 1);
   strcpy(path, template);
   return path;
 }
@@ -314,7 +314,7 @@ static char *create_test_file(const char *content) {
 static void cleanup_test_file(const char *path) {
   if (path) {
     unlink(path);
-    free((void *)path);
+    CLJ_FREE((void *)path);
   }
 }
 
@@ -650,7 +650,7 @@ TEST(test_history_load_from_file_scenario) {
     CljString *content = as_clj_string((CljObject *)slurp_result);
     const char *buf = clj_string_data(content);
     size_t buf_len = strlen(buf);
-    char *buf_copy = (char *)malloc(buf_len + 1);
+    char *buf_copy = (char *)CLJ_MALLOC(buf_len + 1);
     TEST_ASSERT_NOT_NULL(buf_copy);
     memcpy(buf_copy, buf, buf_len + 1);
 
@@ -664,7 +664,7 @@ TEST(test_history_load_from_file_scenario) {
       RETAIN((CljObject *)form);
     }
 
-    free(buf_copy);
+    CLJ_FREE(buf_copy);
 
     // Process form after pool is popped (simulate what happens after
     // WITH_AUTORELEASE_POOL)

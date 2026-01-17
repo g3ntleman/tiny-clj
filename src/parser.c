@@ -304,11 +304,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
         reader_consume(reader); // 'n'
         reader_consume(reader); // 'i'
         reader_consume(reader); // 'l'
-        CljSymbol *nil_sym = intern_symbol_global("nil");
-        if (nil_sym == SYM_NIL) {
-          return SYM_NIL;
-        }
-        return AUTORELEASE(nil_sym);
+        return SYM_NIL;
       }
       break;
 
@@ -1594,7 +1590,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
 
   if (!body) {
     // Empty function body - return (fn [] ())
-    CljSymbol *fn_sym = intern_symbol_global("fn");
+    CljSymbol *fn_sym = SYM_FN;
     CljValue empty_vec = make_vector(0, CLJ_VECTOR);
     ID empty_list_val = NULL; // () is nil in Clojure
     return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
@@ -1611,8 +1607,8 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // Simple approach: create (fn [%] body) for #(...)
   // This handles the most common case: #(+ % 1)
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
-  CljSymbol *fn_sym = intern_symbol_global("fn");
-  CljSymbol *percent_sym = intern_symbol_global("%");
+  CljSymbol *fn_sym = SYM_FN;
+  CljSymbol *percent_sym = SYM_PERCENT;
   CljVector *param_vec = make_vector(1, CLJ_VECTOR);
   vector_conj_inplace(&param_vec, percent_sym);
 

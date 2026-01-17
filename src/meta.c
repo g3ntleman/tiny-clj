@@ -92,12 +92,11 @@ CljMap* make_location_meta(void *reader_ptr, void *st_ptr) {
     CljSymbol *ns_name = current_ns ? current_ns->name : NULL;
     
     // Ensure special symbols are initialized
-    if (!SYM_KW_LINE || !SYM_KW_FILE || !SYM_KW_NS) {
+    if (!SYM_KW_LINE || !SYM_KW_FILE || !SYM_KW_NS || !SYM_KW_COLUMN) {
         init_special_symbols();
     }
     
-    // Get or create :column keyword
-    CljSymbol *kw_column = intern_symbol_global(":column");
+    CljSymbol *kw_column = SYM_KW_COLUMN;
     if (!kw_column) {
         RELEASE(location_map);
         return NULL;

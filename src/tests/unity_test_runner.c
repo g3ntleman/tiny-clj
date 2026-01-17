@@ -419,7 +419,16 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
         }
         
         if (found == 0) {
-            // No tests found - silently return (no printf output in tests)
+            // No tests found - treat as a test selection error.
+            // In quiet mode, emit a single FAIL line so CI surfaces the reason.
+            if (g_quiet_output) {
+                test_fprintf(stdout, "unknown:0:%s:FAIL: No tests found matching pattern\n", test_name_or_pattern);
+            } else {
+                test_fprintf(stderr, "ERROR: No tests found matching pattern: %s\n", test_name_or_pattern);
+                test_fprintf(stdout, "unknown:0:%s:FAIL: No tests found matching pattern\n", test_name_or_pattern);
+            }
+            Unity.NumberOfTests++;
+            Unity.TestFailures++;
             return;
         }
         
@@ -449,10 +458,11 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
             // Summary will be printed at end of main()
         } else {
             // Test not found - fail without noisy output.
-            // In quiet mode, still emit a single FAIL line so CI can surface the reason.
-            if (g_quiet_output) {
-                test_fprintf(stdout, "unknown:0:%s:FAIL: Test not found\n", test_name_or_pattern);
+            // Emit a single FAIL line so CI/user sees the reason (quiet or verbose).
+            if (!g_quiet_output) {
+                test_fprintf(stderr, "ERROR: Test '%s' not found.\n", test_name_or_pattern);
             }
+            test_fprintf(stdout, "unknown:0:%s:FAIL: Test not found\n", test_name_or_pattern);
             Unity.NumberOfTests++;
             Unity.TestFailures++;
         }

@@ -62,6 +62,12 @@ ID native_tinyclj_fs_stat(ID *args, unsigned int argc);
 ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc);
 ID native_tinyclj_fs_delete(ID *args, unsigned int argc);
 
+// tinyclj.net native functions (used by :native stubs)
+ID native_tinyclj_net_udp_socket(ID *args, unsigned int argc);
+ID native_tinyclj_net_on_receive(ID *args, unsigned int argc);
+ID native_tinyclj_net_send_bang(ID *args, unsigned int argc);
+ID native_tinyclj_net_close_bang(ID *args, unsigned int argc);
+
 ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_kv_delete(ID *args, unsigned int argc);
@@ -1069,13 +1075,14 @@ ID native_cons(ID *args, unsigned int argc)
             tail = (ID)make_seq(coll); // may be NULL if empty
         }
 
-        CljLazySeq *lazy = (CljLazySeq *)malloc(sizeof(CljLazySeq));
+        CljLazySeq *lazy = ALLOC(CljLazySeq, 1);
         if (!lazy)
         {
             RELEASE(tail);
             return NULL;
         }
 
+        // ALLOC already initializes type/flags for CljObject storage.
         lazy->base.type = CLJ_LAZY_SEQ;
         lazy->base.rc = 1;
         lazy->base.flags = 0;
@@ -2542,7 +2549,7 @@ ID native_print_ast(ID *args, unsigned int argc)
         platform_put_string(NULL, ast_str);
         platform_put_string(NULL, "\n");
         // print_ast returns a newly allocated string that must be freed
-        free((void *)ast_str);
+        CLJ_FREE((void *)ast_str);
     }
     return NULL;
 }
@@ -2569,7 +2576,7 @@ ID native_ast_string(ID *args, unsigned int argc)
     {
         CljString *result = make_string(ast_str);
         // print_ast returns a newly allocated string that must be freed
-        free((void *)ast_str);
+        CLJ_FREE((void *)ast_str);
         return AUTORELEASE(result);
     }
 
@@ -2954,7 +2961,7 @@ ID native_repl_dir(ID *args, unsigned int argc)
         return NULL;
     }
 
-    const char **names = (const char **)malloc(sizeof(char *) * entry_count);
+    const char **names = (const char **)CLJ_MALLOC(sizeof(char *) * entry_count);
     if (!names)
     {
         throw_oom();
@@ -2983,7 +2990,7 @@ ID native_repl_dir(ID *args, unsigned int argc)
             platform_put_string(NULL, "\n");
         }
     }
-    free(names);
+    CLJ_FREE(names);
     return NULL;
 }
 
@@ -3127,6 +3134,29 @@ static StaticSymbolData sym_tinyclj_fs_delete_qualified_data = {
             .unqualified = NULL,
             .cname = "tinyclj.fs/delete!"}};
 
+// Qualified-name entries for tinyclj.net native stubs.
+// Stored as pseudo-qualified cname and rely on native_function_lookup's qualified-name fallback.
+static StaticSymbolData sym_tinyclj_net_udp_socket_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net/udp-socket"}};
+static StaticSymbolData sym_tinyclj_net_on_receive_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net/on-receive"}};
+static StaticSymbolData sym_tinyclj_net_send_bang_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net/send!"}};
+static StaticSymbolData sym_tinyclj_net_close_bang_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net/close!"}};
+
 static StaticSymbolData sym_tinyclj_kv_put_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -3178,6 +3208,13 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat},
     {&sym_tinyclj_fs_list_batch_qualified_data.sym, native_tinyclj_fs_list_batch},
     {&sym_tinyclj_fs_delete_qualified_data.sym, native_tinyclj_fs_delete},
+
+    // tinyclj.net
+    {&sym_tinyclj_net_udp_socket_qualified_data.sym, native_tinyclj_net_udp_socket},
+    {&sym_tinyclj_net_on_receive_qualified_data.sym, native_tinyclj_net_on_receive},
+    {&sym_tinyclj_net_send_bang_qualified_data.sym, native_tinyclj_net_send_bang},
+    {&sym_tinyclj_net_close_bang_qualified_data.sym, native_tinyclj_net_close_bang},
+
     {&sym_tinyclj_kv_put_bytes_qualified_data.sym, native_tinyclj_kv_put_bytes},
     {&sym_tinyclj_kv_get_bytes_qualified_data.sym, native_tinyclj_kv_get_bytes},
     {&sym_tinyclj_kv_delete_qualified_data.sym, native_tinyclj_kv_delete},
@@ -3469,17 +3506,21 @@ ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     (void)args;
     CHECK_ARITY(argc, 0, "tinyclj.runtime/stats");
 
-    ID k_host_os = (ID)intern_symbol_global(":host-os");
-    ID k_host_os_version = (ID)intern_symbol_global(":host-os-version");
-    ID k_tiny_clj_version = (ID)intern_symbol_global(":tiny-clj-version");
-    ID k_build_time = (ID)intern_symbol_global(":build-time");
+    ID k_host_os = (ID)SYM_KW_HOST_OS;
+    ID k_host_os_version = (ID)SYM_KW_HOST_OS_VERSION;
+    ID k_tiny_clj_version = (ID)SYM_KW_TINY_CLJ_VERSION;
+    ID k_build_time = (ID)SYM_KW_BUILD_TIME;
 
-    ID k_heap_free = (ID)intern_symbol_global(":heap-bytes-free");
-    ID k_heap_total = (ID)intern_symbol_global(":heap-bytes-total");
-    ID k_flash_free = (ID)intern_symbol_global(":flash-bytes-free");
-    ID k_flash_total = (ID)intern_symbol_global(":flash-bytes-total");
+    ID k_heap_free = (ID)SYM_KW_HEAP_BYTES_FREE;
+    ID k_heap_total = (ID)SYM_KW_HEAP_BYTES_TOTAL;
+    ID k_flash_free = (ID)SYM_KW_FLASH_BYTES_FREE;
+    ID k_flash_total = (ID)SYM_KW_FLASH_BYTES_TOTAL;
 
     CljMap *m = map_empty();
+
+    // Helper: clamp size_t into fixnum range (int32_t).
+    // This keeps runtime stats stable across 32/64-bit hosts.
+#define CLAMP_SIZE_TO_FIXNUM(n) fixnum(((n) > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)(n))
 
     // :host-os
     const char *os_name = platform_name();
@@ -3522,24 +3563,70 @@ ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     // Optional memory stats (only include if platform reports available).
     size_t heap_free = platform_heap_bytes_free();
     if (heap_free != SIZE_MAX) {
-        ASSIGN(m, map_assoc(m, k_heap_free,
-                            fixnum((heap_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_free)));
+        ASSIGN(m, map_assoc(m, k_heap_free, CLAMP_SIZE_TO_FIXNUM(heap_free)));
     }
     size_t heap_total = platform_heap_bytes_total();
     if (heap_total != SIZE_MAX) {
-        ASSIGN(m, map_assoc(m, k_heap_total,
-                            fixnum((heap_total > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_total)));
+        ASSIGN(m, map_assoc(m, k_heap_total, CLAMP_SIZE_TO_FIXNUM(heap_total)));
     }
     size_t flash_free = platform_flash_bytes_free();
     if (flash_free != SIZE_MAX) {
-        ASSIGN(m, map_assoc(m, k_flash_free,
-                            fixnum((flash_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)flash_free)));
+        ASSIGN(m, map_assoc(m, k_flash_free, CLAMP_SIZE_TO_FIXNUM(flash_free)));
     }
     size_t flash_total = platform_flash_bytes_total();
     if (flash_total != SIZE_MAX) {
-        ASSIGN(m, map_assoc(m, k_flash_total,
-                            fixnum((flash_total > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)flash_total)));
+        ASSIGN(m, map_assoc(m, k_flash_total, CLAMP_SIZE_TO_FIXNUM(flash_total)));
     }
+
+#ifdef DEBUG
+    // Debug-only: embed memory profiler stats in a dedicated nested map.
+    // This must not exist in production builds.
+    ID k_memory_stats = (ID)SYM_KW_MEMORY_STATS;
+    ID k_enabled = (ID)SYM_KW_ENABLED_P;
+    ID k_object_allocations = (ID)SYM_KW_OBJECT_ALLOCATIONS;
+    ID k_object_deallocations = (ID)SYM_KW_OBJECT_DEALLOCATIONS;
+    ID k_object_destructions = (ID)SYM_KW_OBJECT_DESTRUCTIONS;
+    ID k_object_bytes_current = (ID)SYM_KW_OBJECT_BYTES_CURRENT;
+    ID k_object_bytes_peak = (ID)SYM_KW_OBJECT_BYTES_PEAK;
+
+    CljMap *ms = map_empty();
+    if (ms) {
+        // Note: the profiler counters are meaningful only if profiling is enabled,
+        // but we always include the map in DEBUG builds for consistent shape.
+        const bool mem_enabled = is_memory_profiling_enabled();
+        ASSIGN(ms, map_assoc(ms, k_enabled, mem_enabled ? clj_true : clj_false));
+
+        MemoryStats st = memory_profiler_get_stats();
+        ASSIGN(ms, map_assoc(ms, k_object_allocations, CLAMP_SIZE_TO_FIXNUM(st.total_allocations)));
+        ASSIGN(ms, map_assoc(ms, k_object_deallocations, CLAMP_SIZE_TO_FIXNUM(st.total_deallocations)));
+        ASSIGN(ms, map_assoc(ms, k_object_destructions, CLAMP_SIZE_TO_FIXNUM(st.object_destructions)));
+        ASSIGN(ms, map_assoc(ms, k_object_bytes_current, CLAMP_SIZE_TO_FIXNUM(st.current_memory_usage)));
+        ASSIGN(ms, map_assoc(ms, k_object_bytes_peak, CLAMP_SIZE_TO_FIXNUM(st.peak_memory_usage)));
+
+#if MEMORY_PROFILING_ENABLED
+        ID k_raw_allocations = (ID)SYM_KW_RAW_ALLOCATIONS;
+        ID k_raw_frees = (ID)SYM_KW_RAW_FREES;
+        ID k_raw_reallocations = (ID)SYM_KW_RAW_REALLOCATIONS;
+        ID k_raw_bytes_current = (ID)SYM_KW_RAW_BYTES_CURRENT;
+        ID k_raw_bytes_peak = (ID)SYM_KW_RAW_BYTES_PEAK;
+        ID k_raw_blocks_current = (ID)SYM_KW_RAW_BLOCKS_CURRENT;
+        ID k_raw_blocks_peak = (ID)SYM_KW_RAW_BLOCKS_PEAK;
+
+        ASSIGN(ms, map_assoc(ms, k_raw_allocations, CLAMP_SIZE_TO_FIXNUM(st.raw_allocations)));
+        ASSIGN(ms, map_assoc(ms, k_raw_frees, CLAMP_SIZE_TO_FIXNUM(st.raw_frees)));
+        ASSIGN(ms, map_assoc(ms, k_raw_reallocations, CLAMP_SIZE_TO_FIXNUM(st.raw_reallocations)));
+        ASSIGN(ms, map_assoc(ms, k_raw_bytes_current, CLAMP_SIZE_TO_FIXNUM(st.raw_bytes_current)));
+        ASSIGN(ms, map_assoc(ms, k_raw_bytes_peak, CLAMP_SIZE_TO_FIXNUM(st.raw_bytes_peak)));
+        ASSIGN(ms, map_assoc(ms, k_raw_blocks_current, CLAMP_SIZE_TO_FIXNUM(st.raw_blocks_current)));
+        ASSIGN(ms, map_assoc(ms, k_raw_blocks_peak, CLAMP_SIZE_TO_FIXNUM(st.raw_blocks_peak)));
+#endif
+
+        ASSIGN(m, map_assoc(m, k_memory_stats, (ID)ms));
+        RELEASE(ms);
+    }
+#endif
+
+#undef CLAMP_SIZE_TO_FIXNUM
 
     return AUTORELEASE(m);
 }
@@ -3837,7 +3924,7 @@ ID native_load_file(ID *args, unsigned int argc)
     }
 
     size_t n = (size_t)ba->length;
-    char *src = (char *)malloc(n + 1);
+    char *src = (char *)CLJ_MALLOC(n + 1);
     if (!src)
     {
         RELEASE(bytes);
@@ -3849,7 +3936,7 @@ ID native_load_file(ID *args, unsigned int argc)
     RELEASE(bytes);
 
     bool ok = eval_source_in_current_state(src, used_path, st);
-    free(src);
+    CLJ_FREE(src);
 
     // load-file returns nil (like Clojure)
     return ok ? NULL : NULL;
@@ -3865,7 +3952,7 @@ static char *namespace_to_relpath(const char *ns_name)
         return NULL;
     size_t len = strlen(ns_name);
     // Worst case: all chars + possible slashes + ".clj" + NUL
-    char *buf = (char *)malloc(len + 5);
+    char *buf = (char *)CLJ_MALLOC(len + 5);
     if (!buf)
         return NULL;
     for (size_t i = 0; i < len; i++)
@@ -3907,7 +3994,7 @@ static char *read_file_once(const char *path)
         fclose(fp);
         return NULL;
     }
-    char *buffer = (char *)malloc((size_t)sz + 1);
+    char *buffer = (char *)CLJ_MALLOC((size_t)sz + 1);
     if (!buffer)
     {
         fclose(fp);
@@ -3956,7 +4043,7 @@ static char *read_file_once(const char *path)
     }
 
     size_t n = (size_t)ba->length;
-    char *buffer = (char *)malloc(n + 1);
+    char *buffer = (char *)CLJ_MALLOC(n + 1);
     if (!buffer)
     {
         RELEASE(bytes);
@@ -4476,7 +4563,7 @@ static bool process_require_spec(ID spec, EvalState *st)
         pos = format_append(error_msg, pos, sizeof(error_msg), rel);
         format_append_char(error_msg, pos, sizeof(error_msg), ')');
         throw_exception(EXCEPTION_FILE_NOT_FOUND, error_msg, __FILE__, __LINE__, 0);
-        free(rel);
+        CLJ_FREE(rel);
         return false;
     }
 
@@ -4494,8 +4581,8 @@ static bool process_require_spec(ID spec, EvalState *st)
     CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
     if (!target_ns)
     {
-        free(source);
-        free(rel);
+        CLJ_FREE(source);
+        CLJ_FREE(rel);
         return false;
     }
 
@@ -4513,8 +4600,8 @@ static bool process_require_spec(ID spec, EvalState *st)
         st->current_ns = orig_ns;
     }
 
-    free(source);
-    free(rel);
+    CLJ_FREE(source);
+    CLJ_FREE(rel);
 
     // CRITICAL: Don't fail completely if some expressions failed to load
     // Some functions may have been successfully defined even if others failed
@@ -6333,7 +6420,7 @@ ID native_swap_bang(ID *args, unsigned int argc)
     {
         fn_argc = argc - 2;
         // Use malloc instead of calloc - array is immediately filled
-        fn_args = (ID *)malloc(fn_argc * sizeof(ID));
+        fn_args = (ID *)CLJ_MALLOC(fn_argc * sizeof(ID));
         if (!fn_args)
         {
             throw_oom();
@@ -6350,7 +6437,7 @@ ID native_swap_bang(ID *args, unsigned int argc)
 
     if (fn_args)
     {
-        free(fn_args);
+        CLJ_FREE(fn_args);
     }
 
     return result; // Returns new value (can be NULL/nil or immediate)
@@ -6572,7 +6659,7 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func)
     {
         // Qualified symbol: split into namespace and name
         size_t ns_len = slash - cname;
-        char *ns_name = (char *)malloc(ns_len + 1);
+        char *ns_name = (char *)CLJ_MALLOC(ns_len + 1);
         if (!ns_name)
         {
             return;
@@ -6582,7 +6669,7 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func)
 
         symbol_name = slash + 1;
         target_ns = ns_get_or_create(ns_name, NULL);
-        free(ns_name);
+        CLJ_FREE(ns_name);
     }
     else
     {

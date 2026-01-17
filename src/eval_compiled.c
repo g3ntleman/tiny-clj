@@ -65,7 +65,7 @@ ID eval_compiled_call(CljASTNode *node, CljMap *env, EvalState *st, const EvalCo
     for (CljList *cur = arg_nodes; cur; cur = cur->rest ? as_list(cur->rest) : NULL) {
         if (argc == 16) {
             // Grow to heap once if needed (rare).
-            args = (ID*)malloc(sizeof(ID) * 32);
+            args = (ID*)CLJ_MALLOC(sizeof(ID) * 32);
             if (!args) {
                 RELEASE(fn);
                 throw_oom();
@@ -84,7 +84,7 @@ ID eval_compiled_call(CljASTNode *node, CljMap *env, EvalState *st, const EvalCo
         RELEASE(args[i]);
     }
     if (args != stack_args) {
-        free(args);
+        CLJ_FREE(args);
     }
     RELEASE(fn);
     return result;
