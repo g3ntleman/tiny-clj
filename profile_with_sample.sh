@@ -47,7 +47,7 @@ START_TIME=$(date +%s)
 TEST_EXIT_CODE=0
 
 while [ $(($(date +%s) - START_TIME)) -lt $DURATION ]; do
-    $UNIT_TESTS_BIN --test "$TEST_NAME" --quiet > /dev/null 2>&1
+    $UNIT_TESTS_BIN --test "$TEST_NAME" > /dev/null 2>&1
     TEST_EXIT_CODE=$?
     if [ $TEST_EXIT_CODE -ne 0 ]; then
         break
