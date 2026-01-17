@@ -1213,6 +1213,48 @@ TEST(test_ns_registry_map_conj_handles_new_instance) {
     TEST_ASSERT_TRUE(count >= 20);
 }
 
+TEST(test_ns_unload_releases_namespace_mappings) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+        init_special_symbols();
+
+        // Create a namespace with a function, then unload it.
+        // We keep a raw pointer to the function object; in zombie mode it will remain
+        // allocated with rc=0 after being released, allowing us to assert the release happened.
+        (void)eval_string("(do (ns ns-unload-test) (defn f [x] x) (ns user))", g_test_eval_state);
+
+        CljNamespace *ns = ns_find("ns-unload-test");
+        TEST_ASSERT_NOT_NULL(ns);
+        TEST_ASSERT_NOT_NULL(ns->mappings);
+
+        // Lookup function object in that namespace
+        CljSymbol *f_sym = intern_symbol(ns->name, "f");
+        TEST_ASSERT_NOT_NULL(f_sym);
+        ID fn_obj = map_get_sentinel(ns->mappings, f_sym, NULL);
+        TEST_ASSERT_NOT_NULL_MESSAGE(fn_obj, "Expected f to be present in namespace mappings");
+        TEST_ASSERT_TRUE_MESSAGE(TAG(fn_obj) == CLJ_CLOSURE || TAG(fn_obj) == CLJ_FUNC, "Expected f to be a function");
+
+        // Unload namespace via public API
+        ID out = eval_string("(ns-unload 'ns-unload-test)", g_test_eval_state);
+        TEST_ASSERT_TRUE_MESSAGE(out == (ID)clj_true, "ns-unload should return true");
+
+        // Namespace should no longer be findable
+        TEST_ASSERT_NULL(ns_find("ns-unload-test"));
+
+        // The function object should have been released as part of unloading.
+        // In zombie mode this becomes rc=0.
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, retain_count(fn_obj), "Expected function to be released (rc=0) after ns-unload");
+    });
+}
+
+TEST(test_ns_unload_returns_false_for_missing_namespace) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+        ID out = eval_string("(ns-unload 'this.ns.does.not.exist)", g_test_eval_state);
+        TEST_ASSERT_TRUE(out == (ID)clj_false);
+    });
+}
+
 // Test: Verify ns-map returns mappings map
 TEST(test_ns_map_returns_mappings) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);

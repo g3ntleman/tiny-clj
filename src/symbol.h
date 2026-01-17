@@ -285,6 +285,7 @@ extern StaticSymbolData sym_sleep_data;
 extern StaticSymbolData sym_ns_map_data;
 extern StaticSymbolData sym_find_ns_data;
 extern StaticSymbolData sym_all_ns_data;
+extern StaticSymbolData sym_ns_unload_data;
 extern StaticSymbolData sym_pr_data;
 extern StaticSymbolData sym_prn_data;
 extern StaticSymbolData sym_byte_array_data;

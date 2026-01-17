@@ -48,6 +48,7 @@ ID native_format(ID *args, unsigned int argc);
 ID native_eval(ID *args, unsigned int argc);
 ID native_read_string(ID *args, unsigned int argc);
 ID native_meta(ID *args, unsigned int argc);
+ID native_ns_unload(ID *args, unsigned int argc);
 void builtin_set_eval_state(EvalState *st);
 EvalState* builtin_get_eval_state(void);
 

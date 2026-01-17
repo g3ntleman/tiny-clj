@@ -153,6 +153,7 @@ ID native_sleep(ID *args, unsigned int argc);
 ID native_ns_map(ID *args, unsigned int argc);
 ID native_find_ns(ID *args, unsigned int argc);
 ID native_all_ns(ID *args, unsigned int argc);
+ID native_ns_unload(ID *args, unsigned int argc);
 ID native_do(ID *args, unsigned int argc);
 ID native_byte_array(ID *args, unsigned int argc);
 ID native_aget(ID *args, unsigned int argc);
@@ -2756,6 +2757,49 @@ ID native_all_ns(ID *args, unsigned int argc)
     return AUTORELEASE(result);
 }
 
+// ns-unload: Remove a namespace from the registry and free its contents (except interned symbols).
+// Usage: (ns-unload 'my.ns) or (ns-unload "my.ns")
+// Returns true if unloaded, false if not found.
+ID native_ns_unload(ID *args, unsigned int argc)
+{
+    if (argc != 1) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "ns-unload expects exactly 1 argument, got %u", argc);
+        return NULL;
+    }
+
+    ID ns_arg = args[0];
+    if (!ns_arg) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "ns-unload: argument must not be nil");
+        return NULL;
+    }
+
+    const char *ns_name = NULL;
+    int tag = TAG(ns_arg);
+    if (tag == CLJ_SYMBOL) {
+        CljSymbol *sym = as_symbol(ns_arg);
+        if (sym && sym->cname) ns_name = sym->cname;
+    } else if (tag == CLJ_STRING) {
+        ns_name = string_data(ns_arg);
+    } else {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "ns-unload: argument must be a symbol or string");
+        return NULL;
+    }
+
+    if (!ns_name || !*ns_name) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "ns-unload: invalid namespace name");
+        return NULL;
+    }
+
+    // If current eval state points at the namespace, switch away before unloading.
+    EvalState *st = builtin_get_eval_state();
+    if (!st) st = get_global_eval_state();
+    return ns_unload(st, ns_name) ? clj_true : clj_false;
+}
+
 // Helper for dir: convert argument to namespace
 static CljNamespace *namespace_from_value(ID value)
 {
@@ -3233,6 +3277,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_ns_map_data.sym, native_ns_map},
     {&sym_find_ns_data.sym, native_find_ns},
     {&sym_all_ns_data.sym, native_all_ns},
+    {&sym_ns_unload_data.sym, native_ns_unload},
     {&sym_do_data.sym.base, native_do},
     {&sym_byte_array_data.sym, native_byte_array},
     {&sym_aget_data.sym, native_aget},

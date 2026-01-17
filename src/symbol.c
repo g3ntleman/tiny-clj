@@ -365,6 +365,7 @@ DEFINE_EXTERN_SYMBOL(sym_sleep_data, "sleep");
 DEFINE_EXTERN_SYMBOL(sym_ns_map_data, "ns-map");
 DEFINE_EXTERN_SYMBOL(sym_find_ns_data, "find-ns");
 DEFINE_EXTERN_SYMBOL(sym_all_ns_data, "all-ns");
+DEFINE_EXTERN_SYMBOL(sym_ns_unload_data, "ns-unload");
 DEFINE_EXTERN_SYMBOL(sym_pr_data, "pr");
 DEFINE_EXTERN_SYMBOL(sym_prn_data, "prn");
 DEFINE_EXTERN_SYMBOL(sym_byte_array_data, "byte-array");
