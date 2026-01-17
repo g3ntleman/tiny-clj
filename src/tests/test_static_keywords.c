@@ -16,6 +16,7 @@ TEST(test_static_keywords_are_interned_singletons)
     TEST_ASSERT_NOT_NULL(SYM_KW_FROM);
     TEST_ASSERT_NOT_NULL(SYM_KW_TO);
     TEST_ASSERT_NOT_NULL(SYM_KW_PORT);
+    TEST_ASSERT_NOT_NULL(SYM_KW_HOST);
     TEST_ASSERT_NOT_NULL(SYM_KW_COLUMN);
     TEST_ASSERT_NOT_NULL(SYM_KW_FN);
     TEST_ASSERT_NOT_NULL(SYM_KW_PATH);
@@ -28,6 +29,7 @@ TEST(test_static_keywords_are_interned_singletons)
     TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_FROM));
     TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_TO));
     TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_PORT));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_HOST));
     TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_COLUMN));
     TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_FN));
     TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_PATH));
@@ -41,6 +43,7 @@ TEST(test_static_keywords_are_interned_singletons)
     TEST_ASSERT_EQUAL_PTR(SYM_KW_FROM, intern_symbol_global(":from"));
     TEST_ASSERT_EQUAL_PTR(SYM_KW_TO, intern_symbol_global(":to"));
     TEST_ASSERT_EQUAL_PTR(SYM_KW_PORT, intern_symbol_global(":port"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_HOST, intern_symbol_global(":host"));
     TEST_ASSERT_EQUAL_PTR(SYM_KW_COLUMN, intern_symbol_global(":column"));
     TEST_ASSERT_EQUAL_PTR(SYM_KW_FN, intern_symbol_global(":fn"));
     TEST_ASSERT_EQUAL_PTR(SYM_KW_PATH, intern_symbol_global(":path"));
@@ -54,6 +57,7 @@ TEST(test_static_keywords_are_interned_singletons)
     TEST_ASSERT_EQUAL_STRING(":from", as_symbol((ID)SYM_KW_FROM)->cname);
     TEST_ASSERT_EQUAL_STRING(":to", as_symbol((ID)SYM_KW_TO)->cname);
     TEST_ASSERT_EQUAL_STRING(":port", as_symbol((ID)SYM_KW_PORT)->cname);
+    TEST_ASSERT_EQUAL_STRING(":host", as_symbol((ID)SYM_KW_HOST)->cname);
     TEST_ASSERT_EQUAL_STRING(":column", as_symbol((ID)SYM_KW_COLUMN)->cname);
     TEST_ASSERT_EQUAL_STRING(":fn", as_symbol((ID)SYM_KW_FN)->cname);
     TEST_ASSERT_EQUAL_STRING(":path", as_symbol((ID)SYM_KW_PATH)->cname);

@@ -141,6 +141,7 @@ extern CljSymbol *SYM_KW_DATA;
 extern CljSymbol *SYM_KW_FROM;
 extern CljSymbol *SYM_KW_TO;
 extern CljSymbol *SYM_KW_PORT;
+extern CljSymbol *SYM_KW_HOST;
 extern CljSymbol *SYM_KW_COLUMN;
 extern CljSymbol *SYM_KW_FN;
 extern CljSymbol *SYM_KW_RESULT_CHAN;

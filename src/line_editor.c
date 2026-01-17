@@ -310,6 +310,10 @@ int line_editor_process_input(LineEditor *editor) {
         // Read remaining characters of escape sequence
         while (editor->escape_pos < 8) {
             int c = editor->get_char(editor->ctx);
+            if (c == -2) {
+                // No more input yet; keep waiting for the rest of the escape sequence.
+                return LINE_EDITOR_SUCCESS;
+            }
             if (c == -1) {
                 // EOF during escape sequence, reset
                 editor->in_escape_sequence = false;
@@ -375,8 +379,7 @@ int line_editor_process_input(LineEditor *editor) {
         editor->escape_pos = 0;
         editor->escape_buffer[editor->escape_pos++] = c;
         editor->escape_buffer[editor->escape_pos] = '\0';
-        // Continue processing to get the rest of the escape sequence
-        return line_editor_process_input(editor);
+        return LINE_EDITOR_SUCCESS;
     }
     
     // Handle Ctrl-D (EOF)

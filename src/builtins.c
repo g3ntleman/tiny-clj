@@ -67,6 +67,10 @@ ID native_tinyclj_net_udp_socket(ID *args, unsigned int argc);
 ID native_tinyclj_net_on_receive(ID *args, unsigned int argc);
 ID native_tinyclj_net_send_bang(ID *args, unsigned int argc);
 ID native_tinyclj_net_close_bang(ID *args, unsigned int argc);
+ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc);
+ID native_tinyclj_net_tcp_on_receive(ID *args, unsigned int argc);
+ID native_tinyclj_net_tcp_send_bang(ID *args, unsigned int argc);
+ID native_tinyclj_net_tcp_close_bang(ID *args, unsigned int argc);
 
 ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc);
@@ -3157,6 +3161,27 @@ static StaticSymbolData sym_tinyclj_net_close_bang_qualified_data = {
             .unqualified = NULL,
             .cname = "tinyclj.net/close!"}};
 
+static StaticSymbolData sym_tinyclj_net_tcp_connect_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net/tcp-connect"}};
+static StaticSymbolData sym_tinyclj_net_tcp_on_receive_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net/tcp-on-receive"}};
+static StaticSymbolData sym_tinyclj_net_tcp_send_bang_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net/tcp-send!"}};
+static StaticSymbolData sym_tinyclj_net_tcp_close_bang_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net/tcp-close!"}};
+
 static StaticSymbolData sym_tinyclj_kv_put_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -3214,6 +3239,10 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_tinyclj_net_on_receive_qualified_data.sym, native_tinyclj_net_on_receive},
     {&sym_tinyclj_net_send_bang_qualified_data.sym, native_tinyclj_net_send_bang},
     {&sym_tinyclj_net_close_bang_qualified_data.sym, native_tinyclj_net_close_bang},
+    {&sym_tinyclj_net_tcp_connect_qualified_data.sym, native_tinyclj_net_tcp_connect},
+    {&sym_tinyclj_net_tcp_on_receive_qualified_data.sym, native_tinyclj_net_tcp_on_receive},
+    {&sym_tinyclj_net_tcp_send_bang_qualified_data.sym, native_tinyclj_net_tcp_send_bang},
+    {&sym_tinyclj_net_tcp_close_bang_qualified_data.sym, native_tinyclj_net_tcp_close_bang},
 
     {&sym_tinyclj_kv_put_bytes_qualified_data.sym, native_tinyclj_kv_put_bytes},
     {&sym_tinyclj_kv_get_bytes_qualified_data.sym, native_tinyclj_kv_get_bytes},

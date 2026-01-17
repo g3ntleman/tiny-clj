@@ -114,6 +114,7 @@ CljSymbol *SYM_KW_DATA = NULL;
 CljSymbol *SYM_KW_FROM = NULL;
 CljSymbol *SYM_KW_TO = NULL;
 CljSymbol *SYM_KW_PORT = NULL;
+CljSymbol *SYM_KW_HOST = NULL;
 CljSymbol *SYM_KW_COLUMN = NULL;
 CljSymbol *SYM_KW_FN = NULL;
 CljSymbol *SYM_KW_RESULT_CHAN = NULL;
@@ -465,6 +466,7 @@ DEFINE_STATIC_SYMBOL(sym_kw_data_data, ":data");
 DEFINE_STATIC_SYMBOL(sym_kw_from_data, ":from");
 DEFINE_STATIC_SYMBOL(sym_kw_to_data, ":to");
 DEFINE_STATIC_SYMBOL(sym_kw_port_data, ":port");
+DEFINE_STATIC_SYMBOL(sym_kw_host_data, ":host");
 DEFINE_STATIC_SYMBOL(sym_kw_column_data, ":column");
 DEFINE_STATIC_SYMBOL(sym_kw_fn_data, ":fn");
 DEFINE_STATIC_SYMBOL(sym_kw_result_chan_data, ":result-chan");
@@ -720,6 +722,8 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_TO, sym_kw_to_data);
 
     INIT_SYMBOL(SYM_KW_PORT, sym_kw_port_data);
+
+    INIT_SYMBOL(SYM_KW_HOST, sym_kw_host_data);
 
     INIT_SYMBOL(SYM_KW_COLUMN, sym_kw_column_data);
     INIT_SYMBOL(SYM_KW_FN, sym_kw_fn_data);

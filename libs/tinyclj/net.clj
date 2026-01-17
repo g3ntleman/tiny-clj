@@ -19,3 +19,14 @@
 ^#^{:doc "Closes a UDP socket (native)."}
 (defn close! [sock] :native)
 
+^#^{:doc "Creates a TCP connection (native). Expects {:host \"...\" :port N}. Returns an opaque handle."}
+(defn tcp-connect [opts] :native)
+
+^#^{:doc "Registers a TCP receive callback: (tcp-on-receive conn (fn [{:keys [data]}] ...)) (native)."}
+(defn tcp-on-receive [conn f] :native)
+
+^#^{:doc "Sends bytes on a TCP connection (native). Expects {:data byte-array}."}
+(defn tcp-send! [conn msg] :native)
+
+^#^{:doc "Closes a TCP connection (native)."}
+(defn tcp-close! [conn] :native)

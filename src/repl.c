@@ -400,7 +400,7 @@ static void __attribute__((unused)) usage(const char *prog) {
     repl_outf("  --no-core            Don't load clojure.core\n");
     repl_outf("  --repl               Start REPL after evaluating files/expressions\n");
     repl_outf("  --zombie             Enable zombie mode for memory debugging\n");
-    repl_outf("  --memory-debug       Enable verbose memory debugging\n");
+    repl_outf("  --memory-debug       Enable verbose memory debugging and memory profiling\n");
     repl_outf("  -h, --help           Show this help message\n");
 }
 
@@ -450,7 +450,13 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     print_build_info();
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Line editor needs blocking input for proper character handling
+    // On macOS, stdin is buffered via CFRunLoop in platform_macos.c, which
+    // requires non-blocking stdin. platform_get_char() blocks by pumping the runloop.
+#if defined(__APPLE__)
+    platform_set_stdin_nonblocking(1);
+#else
     platform_set_stdin_nonblocking(0);
+#endif
     // Enable raw mode for proper escape sequence handling
     platform_set_raw_mode(1);
 #else
@@ -483,18 +489,18 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                 ASSIGN(history_vec, AUTORELEASE(loaded));
             }
         } CATCH(ex) {
-            // Exception beim History-Laden - starte mit leerer History
-            // Exception wird automatisch freigegeben durch CATCH-Macro
+            // Exception while loading history - start with empty history.
+            // The exception is automatically released by the CATCH macro.
             history_vec = NULL;
         } END_TRY
     });
-    // Verwende die geladene History
-    // line_editor_set_history_from_vector ruft clj_conj auf, das AUTORELEASE verwendet
+    // Use the loaded history.
+    // line_editor_set_history_from_vector calls clj_conj, which uses AUTORELEASE.
     if (history_vec && TAG(history_vec) == CLJ_VECTOR) {
         WITH_AUTORELEASE_POOL({
             line_editor_set_history_from_vector(editor, (CljVector*)history_vec);
         });
-        RELEASE(history_vec);  // Release nach Verwendung
+        RELEASE(history_vec);  // Release after use
     } else {
         line_editor_clear_history(editor);
     }
@@ -676,7 +682,7 @@ int main(int argc, char **argv) {
 
     // Allocate array for eval arguments
     if (eval_count > 0) {
-        eval_args = (char**)CLJ_MALLOC(sizeof(char*) * eval_count);
+        eval_args = (const char**)CLJ_MALLOC(sizeof(*eval_args) * (size_t)eval_count);
         if (!eval_args) return 1;
     }
 
@@ -720,6 +726,13 @@ int main(int argc, char **argv) {
 #endif
 
         if (!no_core) {
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+            if (memory_debug) {
+                // Enable profiling as early as possible so we can account for clojure.core load.
+                memory_profiling_init_with_hooks();
+                enable_memory_profiling(true);
+            }
+#endif
 #ifdef PROFILE_STARTUP
             clock_t t4 = clock();
 #endif
