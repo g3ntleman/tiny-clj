@@ -210,6 +210,10 @@ target_link_libraries(tiny-clj PRIVATE subjective-c)
 target_link_libraries(tiny-clj PRIVATE tiny-db)
 if(APPLE)
     target_link_libraries(tiny-clj PRIVATE "-framework CoreFoundation")
+    # DNS-SD (Bonjour) symbols are provided by libsystem_dnssd on modern macOS toolchains.
+    # ld does not always search ${SDK}/usr/lib/system by default, so add it explicitly.
+    target_link_directories(tiny-clj PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
+    target_link_libraries(tiny-clj PRIVATE system_dnssd)
 endif()
 target_include_directories(tiny-clj PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
@@ -338,6 +342,8 @@ target_link_libraries(tiny-clj-repl PRIVATE subjective-c)
 target_link_libraries(tiny-clj-repl PRIVATE tiny-db)
 if(APPLE)
     target_link_libraries(tiny-clj-repl PRIVATE "-framework CoreFoundation")
+    target_link_directories(tiny-clj-repl PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
+    target_link_libraries(tiny-clj-repl PRIVATE system_dnssd)
 endif()
 target_include_directories(tiny-clj-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
@@ -483,6 +489,8 @@ target_link_libraries(unit-tests PRIVATE subjective-c)
 target_link_libraries(unit-tests PRIVATE tiny-db)
 if(APPLE)
     target_link_libraries(unit-tests PRIVATE "-framework CoreFoundation")
+    target_link_directories(unit-tests PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
+    target_link_libraries(unit-tests PRIVATE system_dnssd)
 endif()
 target_include_directories(unit-tests
     PRIVATE

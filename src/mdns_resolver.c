@@ -105,6 +105,12 @@ static void format_ipv6_full(char *out, size_t out_sz, const uint8_t a[16]) {
 
 int mdns_resolver_start_browse(MdnsResolver *r, const char *service_fullname) {
     if (!r || !service_fullname) return -1;
+    // Reset state so that background mDNS chatter observed before the first browse
+    // does not fill our fixed-size caches with unrelated entries.
+    // This is also important for low-RAM targets: we only want to track entries
+    // that are relevant to the current browse/resolve operation.
+    memset(r->entries, 0, sizeof(r->entries));
+    memset(r->hosts, 0, sizeof(r->hosts));
     (void)mini_snprintf(r->browse_service, sizeof(r->browse_service), "%s", service_fullname);
     return 0;
 }
@@ -134,6 +140,8 @@ static int entry_try_emit_resolved(MdnsResolver *r, MdnsEntry *e) {
 int mdns_resolver_on_message(MdnsResolver *r, const uint8_t *msg, size_t msg_len) {
     if (!r || !msg) return -1;
     if (msg_len < 12) return -1;
+    // Ignore background traffic until the user explicitly starts a browse.
+    if (r->browse_service[0] == '\0') return 0;
 
     // Minimal DNS header parsing (network byte order).
     uint16_t qd = (uint16_t)((uint16_t)msg[4] << 8) | (uint16_t)msg[5];
