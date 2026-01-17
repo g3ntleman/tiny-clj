@@ -154,6 +154,7 @@ list(APPEND SOURCES
     src/clojure_core.c
     src/object.c
     src/builtins.c
+    src/builtins_tiny_db.c
     src/builtins_strings.c
     src/builtins_regex.c
     src/runtime.c
@@ -223,6 +224,7 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/clojure_core.c
     src/object.c
     src/builtins.c
+    src/builtins_tiny_db.c
     src/builtins_strings.c
     src/builtins_regex.c
     src/runtime.c
