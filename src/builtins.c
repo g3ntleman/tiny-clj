@@ -51,6 +51,9 @@
 #include "builtins_strings.h"
 #include "builtins_regex.h"
 
+// Shared helper used by load-file and require implementations (host + embedded).
+static bool eval_source_in_current_state(const char *src, const char *src_name, EvalState *st);
+
 // tinyclj.datetime native functions (used by :native stubs)
 ID native_datetime_civil_from_days(ID *args, unsigned int argc);
 ID native_datetime_days_from_civil(ID *args, unsigned int argc);
@@ -3882,8 +3885,6 @@ ID native_slurp(ID *args, unsigned int argc)
     return AUTORELEASE(result);
 }
 
-static bool eval_source_in_current_state(const char *src, const char *src_name, EvalState *st);
-
 // load-file: read and evaluate all forms in a file (Clojure standard function)
 // DRY: Uses eval_source_in_current_state for the actual evaluation
 ID native_load_file(ID *args, unsigned int argc)
@@ -6584,17 +6585,7 @@ ID native_current_time_ms(ID *args, unsigned int argc)
         throw_exception(EXCEPTION_ARITY, "current-time-ms takes no arguments", NULL, 0, 0);
         return NULL;
     }
-
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-
-    int32_t sec_in_day = (int32_t)(tv.tv_sec % 86400);
-    if (sec_in_day < 0) sec_in_day = 0;
-    int32_t millis = sec_in_day * 1000 + (int32_t)(tv.tv_usec / 1000);
-    if (millis < 0) millis = 0;
-    if (millis >= 86400000) millis = 86399999;
-
-    return fixnum(millis);
+    return fixnum((int32_t)platform_current_time_ms());
 }
 
 // tinyclj.datetime/civil-from-days: (civil-from-days unix-days) => {:year y :month m :day d}
