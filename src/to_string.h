@@ -30,6 +30,19 @@ CljString* to_string_with_escape(ID v, bool escape_strings);
 CljString* pr_str(ID v);
 
 /**
+ * @brief Convert a value to readable pretty string representation (tiny-clj specific).
+ *
+ * This is an embedded-friendly pretty printer:
+ * - No width/column management
+ * - No sorting
+ * - Multi-line formatting for containers with indentation
+ *
+ * @param v Value to convert
+ * @return CljString with the readable pretty representation (caller must release)
+ */
+CljString* pr_str_pretty(ID v);
+
+/**
  * @brief Convert a value to print string representation (like Clojure's print-str)
  * 
  * Strings are not quoted or escaped (human-readable output).

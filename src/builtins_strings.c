@@ -69,6 +69,14 @@ ID native_str(ID *args, unsigned int argc) {
     return (CljObject*)result;
 }
 
+// Pretty string (readable, multi-line) for clojure.pprint.
+// This is intentionally minimal and embedded-friendly (no width management, no sorting).
+ID native_pprint_str(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "pprint-str");
+    CljString *s = pr_str_pretty(args[0]);
+    return (CljObject*)s;
+}
+
 // String substring: (subs s start) or (subs s start end)
 ID native_subs(ID *args, unsigned int argc) {
     if (argc != 2 && argc != 3) {

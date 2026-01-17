@@ -268,7 +268,7 @@ TEST(test_memory_profiler_tracks_raw_alloc_blocks) {
 #endif
 }
 
-#ifdef DEBUG
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
 TEST(test_zombie_detection) {
     // Test zombie detection: access an object after it became a zombie.
     //
@@ -304,5 +304,11 @@ TEST(test_zombie_detection) {
         // Verify stacktrace is present (DEBUG builds only)
         TEST_ASSERT_NOT_NULL(ex->stacktrace);
     } END_TRY
+}
+#else
+TEST(test_zombie_detection) {
+    // Zombie behavior is only valid when ZOMBIE_ENABLED is compiled in.
+    // When zombie mode is OFF, RELEASE() frees memory and accessing the object is UAF.
+    TEST_IGNORE();
 }
 #endif

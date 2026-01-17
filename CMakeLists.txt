@@ -155,6 +155,9 @@ list(APPEND SOURCES
     src/object.c
     src/builtins.c
     src/builtins_net.c
+    src/builtins_mdns.c
+    src/mdns_codec.c
+    src/mdns_resolver.c
     src/builtins_tiny_db.c
     src/builtins_strings.c
     src/builtins_regex.c
@@ -455,9 +458,14 @@ add_executable(unit-tests
     src/tests/test_vector.c
     src/tests/test_time.c
     src/tests/test_runtime_stats.c
+    src/tests/test_pprint.c
     src/tests/test_static_keywords.c
     src/tests/test_byte_array_view.c
     src/tests/test_platform_net.c
+    src/tests/test_mdns_codec.c
+    src/tests/test_mdns_resolver.c
+    src/tests/test_mdns_bindings.c
+    src/tests/test_platform_mdns.c
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}

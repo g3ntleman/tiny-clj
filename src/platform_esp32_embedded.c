@@ -4,11 +4,20 @@
 #include <stddef.h>
 
 #ifdef ESP32_BUILD
+#if defined(__has_include)
+#if __has_include(<lwip/udp.h>)
+#define TINYCLJ_HAVE_LWIP 1
 #include <lwip/udp.h>
 #include <lwip/tcp.h>
 #include <lwip/ip_addr.h>
 #include <lwip/pbuf.h>
 #include <lwip/err.h>
+#else
+#define TINYCLJ_HAVE_LWIP 0
+#endif
+#else
+#define TINYCLJ_HAVE_LWIP 0
+#endif
 #endif
 
 void platform_init(void) {
@@ -66,7 +75,7 @@ size_t platform_heap_bytes_total(void) { return tinyclj_esp32_heap_bytes_total()
 size_t platform_flash_bytes_free(void) { return tinyclj_esp32_flash_bytes_free(); }
 size_t platform_flash_bytes_total(void) { return tinyclj_esp32_flash_bytes_total(); }
 
-#ifdef ESP32_BUILD
+#if defined(ESP32_BUILD) && TINYCLJ_HAVE_LWIP
 
 struct PlatformUdpSocket {
     struct udp_pcb *pcb;
@@ -296,7 +305,37 @@ void platform_net_packet_release(void *packet_handle) {
     pbuf_free(p);
 }
 
-#else  // !ESP32_BUILD
+// -----------------------------------------------------------------------------
+// mDNS transport (ESP32)
+// -----------------------------------------------------------------------------
+//
+// Note: Proper dual-stack multicast join (IGMP/MLD) depends on lwIP/ESP-IDF
+// integration details (netif, interface indices). For now we provide stubs that
+// keep builds compiling; this will be implemented when the ESP32 runtime target
+// is exercised end-to-end.
+
+struct PlatformMdns { int unused; };
+
+PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx) {
+    (void)cb; (void)cb_ctx;
+    return NULL;
+}
+
+int platform_mdns_send_unicast(PlatformMdns *m,
+                              const uint8_t *data, size_t len,
+                              const char *to_addr, uint16_t to_port) {
+    (void)m; (void)data; (void)len; (void)to_addr; (void)to_port;
+    return -1;
+}
+
+int platform_mdns_send_multicast(PlatformMdns *m, const uint8_t *data, size_t len) {
+    (void)m; (void)data; (void)len;
+    return -1;
+}
+
+void platform_mdns_close(PlatformMdns *m) { (void)m; }
+
+#else  // !ESP32_BUILD || !TINYCLJ_HAVE_LWIP
 
 PlatformUdpSocket* platform_udp_bind(uint16_t port, platform_udp_recv_cb cb, void *cb_ctx) {
     (void)port; (void)cb; (void)cb_ctx;
@@ -323,7 +362,14 @@ void platform_tcp_close(PlatformTcpConn *conn) { (void)conn; }
 
 void platform_net_packet_release(void *packet_handle) { (void)packet_handle; }
 
-#endif // ESP32_BUILD
+struct PlatformMdns { int unused; };
+PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx) { (void)cb; (void)cb_ctx; return NULL; }
+int platform_mdns_send_unicast(PlatformMdns *m, const uint8_t *data, size_t len, const char *to_addr, uint16_t to_port)
+{ (void)m; (void)data; (void)len; (void)to_addr; (void)to_port; return -1; }
+int platform_mdns_send_multicast(PlatformMdns *m, const uint8_t *data, size_t len) { (void)m; (void)data; (void)len; return -1; }
+void platform_mdns_close(PlatformMdns *m) { (void)m; }
+
+#endif // ESP32_BUILD && TINYCLJ_HAVE_LWIP
 
 
 
