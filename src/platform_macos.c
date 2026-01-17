@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <limits.h>
 #include <stdint.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -135,6 +136,19 @@ void platform_print(const char *message) {
     if (!message) return;
     fputs(message, stdout);
     fputc('\n', stdout);
+}
+
+uint32_t platform_current_time_ms(void) {
+    struct timeval tv;
+    if (gettimeofday(&tv, NULL) != 0) {
+        return 0;
+    }
+    int32_t sec_in_day = (int32_t)(tv.tv_sec % 86400);
+    if (sec_in_day < 0) sec_in_day = 0;
+    int32_t millis = sec_in_day * 1000 + (int32_t)(tv.tv_usec / 1000);
+    if (millis < 0) millis = 0;
+    if (millis >= 86400000) millis = 86399999;
+    return (uint32_t)millis;
 }
 
 const char *platform_name() {

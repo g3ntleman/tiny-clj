@@ -3,6 +3,8 @@
 
 // For size_t in stats APIs
 #include <stddef.h>
+// For uint32_t in time APIs
+#include <stdint.h>
 
 void platform_init();
 void platform_print(const char *message);
@@ -29,6 +31,11 @@ int platform_get_char(void *ctx);
 void platform_put_char(void *ctx, char c);
 void platform_put_string(void *ctx, const char *s);
 void platform_set_raw_mode(int enable);
+
+// Platform time helper.
+// Returns milliseconds since start of the current UTC day [0..86400000).
+// On embedded targets this may return 0 if no wall clock is available (unless overridden).
+uint32_t platform_current_time_ms(void);
 
 // -----------------------------------------------------------------------------
 // Optional runtime stats (return SIZE_MAX if unavailable)

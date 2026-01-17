@@ -2,6 +2,7 @@
 #include "platform.h"
 #include <stdio.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef ESP32_BUILD
 #if defined(__has_include)
@@ -43,6 +44,15 @@ void platform_print(const char *message) {
     if (!message) return;
     fputs(message, stdout);
     fputc('\n', stdout);
+}
+
+// -----------------------------------------------------------------------------
+// Time hook (override in ESP32/ESP-IDF integration)
+// -----------------------------------------------------------------------------
+__attribute__((weak)) uint32_t tinyclj_esp32_current_time_ms(void) { return 0; }
+
+uint32_t platform_current_time_ms(void) {
+    return tinyclj_esp32_current_time_ms();
 }
 
 void platform_put_string(void *ctx, const char *s) {
