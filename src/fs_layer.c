@@ -73,7 +73,7 @@ static size_t fs_append_u32_dec_zeropad(uint8_t* out, size_t pos, size_t cap, ui
 }
 
 // -----------------------------------------------------------------------------
-// tinyclj.kv long-value storage (chunked) using blob keys (no C-strings).
+// tiny-db.kv long-value storage (chunked) using blob keys (no C-strings).
 // -----------------------------------------------------------------------------
 #define FS_KV_META_MAGIC 0x4D564B46u /* 'F''K''V''M' */
 #define FS_KV_CHUNK_KEY_SUFFIX_MAX 9u

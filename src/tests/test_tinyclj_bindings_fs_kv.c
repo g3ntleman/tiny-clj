@@ -11,7 +11,7 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
 
     /* Load :native stubs */
     eval_string("(require 'tinyclj.fs)", g_test_eval_state);
-    eval_string("(require 'tinyclj.kv)", g_test_eval_state);
+    eval_string("(require 'tiny-db.kv)", g_test_eval_state);
 
     /* mkdir */
     CljObject *mk = eval_string("(tinyclj.fs/mkdir \"/data/\")", g_test_eval_state);
@@ -45,9 +45,9 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
     eval_string(
         "(let [a (byte-array 2)]"
         "  (aset a 0 9) (aset a 1 8)"
-        "  (tinyclj.kv/put-bytes \"user:prefs\" a))",
+        "  (tiny-db.kv/put-bytes \"user:prefs\" a))",
         g_test_eval_state);
-    CljObject *kvb = eval_string("(tinyclj.kv/get-bytes \"user:prefs\")", g_test_eval_state);
+    CljObject *kvb = eval_string("(tiny-db.kv/get-bytes \"user:prefs\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(kvb);
     TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(kvb));
     CljByteArray *kba = as_byte_array(kvb);
@@ -60,17 +60,17 @@ TEST(test_tinyclj_kv_supports_large_values)
 {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     fs_global_store_reset();
-    eval_string("(require 'tinyclj.kv)", g_test_eval_state);
+    eval_string("(require 'tiny-db.kv)", g_test_eval_state);
 
     // 600 bytes -> forces chunking in fs_layer kv backend.
     eval_string(
         "(let [a (byte-array 600)]"
         "  (dotimes [i 600]"
         "    (aset a i (mod i 256)))"
-        "  (tinyclj.kv/put-bytes \"big\" a))",
+        "  (tiny-db.kv/put-bytes \"big\" a))",
         g_test_eval_state);
 
-    CljObject *kvb = eval_string("(tinyclj.kv/get-bytes \"big\")", g_test_eval_state);
+    CljObject *kvb = eval_string("(tiny-db.kv/get-bytes \"big\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(kvb);
     TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(kvb));
     CljByteArray *ba = as_byte_array(kvb);
