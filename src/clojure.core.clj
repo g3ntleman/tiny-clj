@@ -180,12 +180,15 @@ R"CLOJURE(
 ;   (defn f "doc" [x] body...)
 ; by simply skipping the docstring in the expansion.
 (defmacro defn [name & decls]
-  (let [decls (if (and (seq decls) (string? (first decls)))
-                (rest decls)
-                decls)
+  (let [doc   (if (and (seq decls) (string? (first decls)))
+                (first decls)
+                nil)
+        decls (if doc (rest decls) decls)
         params (first decls)
         body   (rest decls)]
-    (list 'def name (cons 'fn (cons name (cons params body))))))
+    (list 'def
+          (if doc (with-meta name {:doc doc}) name)
+          (cons 'fn (cons name (cons params body))))))
 
 ; ============================================================================
 ; Sequence Helper Functions (needed by Threading Macros)

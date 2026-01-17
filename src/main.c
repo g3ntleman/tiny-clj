@@ -47,7 +47,7 @@ int main() {
     
     // Cleanup
     meta_registry_cleanup(); // Cleanup meta functionality
-    autorelease_pool_drain_all(); // Drain alle Autorelease-Pools
+    autorelease_pool_drain_to_depth(0); // Drain alle Autorelease-Pools
     
     return 0;
 }

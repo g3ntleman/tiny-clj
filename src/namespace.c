@@ -426,6 +426,17 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         if (resolved != NOT_FOUND) {
             return resolved;
         }
+
+        // Fallback: some symbols (e.g. static symbol instances) may not be pointer-equal
+        // to the canonical global interned symbol used as the clojure.core mapping key.
+        // Use a globally interned key as a second attempt to keep unqualified core lookups robust.
+        CljSymbol *interned = intern_symbol_global(sym->cname);
+        if (interned && interned != sym) {
+            resolved = map_get(clojure_core->mappings, interned);
+            if (resolved != NOT_FOUND) {
+                return resolved;
+            }
+        }
     }
     
     // Symbol not found in current namespace or clojure.core

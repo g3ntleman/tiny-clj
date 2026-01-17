@@ -167,6 +167,7 @@
 
 ;; Create initial state for an RRA (by type handler).
 (defn make-rra-state
+  "Creates an initial RRA state using the handler for rra-def."
   [handlers rra-def]
   (let [t (:type rra-def)
         h (get handlers t)]
@@ -175,7 +176,9 @@
     ((:init-state h) rra-def)))
 
 ;; Create initial state for an RRD.
-(defn make-rrd-state [rrd-def]
+(defn make-rrd-state
+  "Creates initial runtime state (PDP prep + RRA states) for an RRD definition."
+  [rrd-def]
   (let [handlers (:handlers rrd-def)]
     {:last-update nil
      :last-value nil
@@ -218,11 +221,15 @@
 ;; =============================================================================
 
 ;; Normalize a timestamp to the start of its step interval.
-(defn normalize-to-step [ts step]
+(defn normalize-to-step
+  "Normalizes ts to the start of its step interval."
+  [ts step]
   (* (quot ts step) step))
 
 ;; Update PDP preparation with a new value.
-(defn update-pdp-prep [pdp-prep value]
+(defn update-pdp-prep
+  "Accumulates a sample into PDP preparation state."
+  [pdp-prep value]
   (if (nil? value)
     pdp-prep
     (let [old-val (:value pdp-prep)
@@ -232,7 +239,9 @@
         {:value (+ old-val value) :count (inc old-cnt)}))))
 
 ;; Finalize PDP from preparation.
-(defn finalize-pdp [pdp-prep]
+(defn finalize-pdp
+  "Finalizes PDP preparation into a single PDP value (or nil)."
+  [pdp-prep]
   (let [value (:value pdp-prep)
         cnt (:count pdp-prep)]
     (if (or (nil? value) (= 0 cnt))
@@ -244,7 +253,9 @@
 ;; =============================================================================
 
 ;; Update CDP preparation with a new PDP value.
-(defn update-cdp-prep [cdp-prep pdp-value]
+(defn update-cdp-prep
+  "Accumulates a PDP value into CDP preparation state."
+  [cdp-prep pdp-value]
   (if (nil? pdp-value)
     cdp-prep
     (let [old-val (:value cdp-prep)
@@ -254,7 +265,9 @@
         {:value (conj (:value cdp-prep) pdp-value) :count (inc old-cnt)}))))
 
 ;; Finalize CDP using the consolidation function.
-(defn finalize-cdp [cdp-prep cf-key]
+(defn finalize-cdp
+  "Finalizes CDP preparation using the consolidation function keyed by cf-key."
+  [cdp-prep cf-key]
   (let [value (:value cdp-prep)
         cnt (:count cdp-prep)]
     (if (or (nil? value) (= 0 cnt))
@@ -262,7 +275,9 @@
       ((get-cf cf-key) value))))
 
 ;; Push a value into the ring buffer, advancing the pointer.
-(defn push-to-ring [data ptr value]
+(defn push-to-ring
+  "Pushes value into ring buffer vector data at ptr, returning [new-data new-ptr]."
+  [data ptr value]
   (let [new-data (assoc data ptr value)
         new-ptr (mod (inc ptr) (count data))]
     [new-data new-ptr]))
@@ -291,7 +306,9 @@
 ;; =============================================================================
 
 ;; Update an RRD with a new value at the given timestamp.
-(defn update-rrd [rrd timestamp value]
+(defn update-rrd
+  "Updates an RRD with a new sample at timestamp, returning the updated RRD."
+  [rrd timestamp value]
   (let [step (:step rrd)
         last-update (:last-update rrd)
         current-slot (normalize-to-step timestamp step)
@@ -331,11 +348,15 @@
 ;; =============================================================================
 
 ;; Calculate the time coverage of an RRA in seconds.
-(defn rra-time-coverage [rra-def step]
+(defn rra-time-coverage
+  "Returns the total time coverage (seconds) of an RRA definition."
+  [rra-def step]
   (* (:steps rra-def) (:rows rra-def) step))
 
 ;; Find the best RRA index for a given time range and CF.
-(defn find-best-rra-index [rrd cf-key start-time end-time]
+(defn find-best-rra-index
+  "Selects the best matching RRA index for cf-key over [start-time,end-time]."
+  [rrd cf-key start-time end-time]
   (let [duration (- end-time start-time)
         step (:step rrd)
         rras (:rras rrd)
@@ -351,7 +372,9 @@
     (find-match 0)))
 
 ;; Fetch data from a specific RRA.
-(defn fetch-rra [rrd rra-index]
+(defn fetch-rra
+  "Fetches data view from a specific RRA index."
+  [rrd rra-index]
   (let [rra-def (nth (:rras rrd) rra-index)
         rra-state (nth (:rra-states rrd) rra-index)
         t (:type rra-def)
@@ -359,7 +382,9 @@
     ((:fetch h) rrd rra-index rra-def rra-state)))
 
 ;; Fetch data from the RRD for a time range.
-(defn fetch [rrd cf start-time end-time]
+(defn fetch
+  "Fetches data for cf over [start-time,end-time] using the best matching RRA."
+  [rrd cf start-time end-time]
   (let [rra-idx (find-best-rra-index rrd cf start-time end-time)]
     (fetch-rra rrd rra-idx)))
 
@@ -368,18 +393,24 @@
 ;; =============================================================================
 
 ;; Generate the KV key for an RRD.
-(defn rrd-key [name]
+(defn rrd-key
+  "Returns the KV key string used to store the RRD named name."
+  [name]
   (str "rrd:" name))
 
 ;; Serialize RRD to a byte array (as EDN string bytes).
 ;; Stores :handler-types but not :handlers (runtime-only).
-(defn serialize-rrd [rrd]
+(defn serialize-rrd
+  "Serializes an RRD to a byte-array (EDN string bytes)."
+  [rrd]
   (let [rrd2 (dissoc rrd :handlers)
         s (pr-str (assoc rrd2 :magic rrd-magic))]
     (byte-array (map byte s))))
 
 ;; Deserialize RRD from a byte array.
-(defn deserialize-rrd [bytes]
+(defn deserialize-rrd
+  "Deserializes an RRD from EDN string bytes. Validates the magic field."
+  [bytes]
   (let [s (apply str (map char bytes))
         rrd (read-string s)]
     (when (not= (:magic rrd) rrd-magic)
@@ -387,7 +418,9 @@
     (dissoc rrd :magic)))
 
 ;; Persist an RRD to storage.
-(defn save! [rrd]
+(defn save!
+  "Serializes and stores rrd in tiny-db.kv. Returns rrd."
+  [rrd]
   (let [key (rrd-key (:name rrd))
         bytes (serialize-rrd rrd)]
     (kv/put-bytes key bytes)
@@ -410,7 +443,9 @@
         (assoc rrd0 :handlers handlers)))))
 
 ;; Delete an RRD from storage.
-(defn delete! [name]
+(defn delete!
+  "Deletes the persisted RRD named name from tiny-db.kv."
+  [name]
   (kv/delete! (rrd-key name)))
 
 ;; =============================================================================
@@ -418,7 +453,9 @@
 ;; =============================================================================
 
 ;; Update an RRD and persist it.
-(defn update! [rrd timestamp value]
+(defn update!
+  "Updates rrd with (timestamp,value) and persists it. Returns the persisted RRD."
+  [rrd timestamp value]
   (-> rrd
       (update-rrd timestamp value)
       (save!)))
@@ -428,7 +465,9 @@
 ;; =============================================================================
 
 ;; Return info about an RRD structure.
-(defn info [rrd]
+(defn info
+  "Returns a summary map of the RRD (for debugging/inspection)."
+  [rrd]
   {:name (:name rrd)
    :step (:step rrd)
    :last-update (:last-update rrd)

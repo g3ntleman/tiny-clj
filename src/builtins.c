@@ -56,7 +56,6 @@ ID native_datetime_days_from_civil(ID *args, unsigned int argc);
 ID native_datetime_format_iso(ID *args, unsigned int argc);
 
 // tinyclj.fs / tiny-db.kv native functions (used by :native stubs)
-ID native_tinyclj_fs_mkdir(ID *args, unsigned int argc);
 ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_fs_stat(ID *args, unsigned int argc);
@@ -174,8 +173,8 @@ ID native_instant_ms(ID *args, unsigned int argc);
 #ifndef ESP32_BUILD
 ID native_slurp(ID *args, unsigned int argc);
 ID native_spit(ID *args, unsigned int argc);
-ID native_load_file(ID *args, unsigned int argc);
 #endif
+ID native_load_file(ID *args, unsigned int argc);
 // (declarations in builtins_strings.h)
 ID native_source(ID *args, unsigned int argc);
 ID native_repl_dir(ID *args, unsigned int argc);
@@ -3058,11 +3057,6 @@ static StaticSymbolData sym_tinyclj_datetime_format_iso_qualified_data = {
 
 // Qualified-name entries for tinyclj.fs / tiny-db.kv native stubs.
 // Stored as pseudo-qualified cname and rely on native_function_lookup's qualified-name fallback.
-static StaticSymbolData sym_tinyclj_fs_mkdir_qualified_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "tinyclj.fs/mkdir"}};
 static StaticSymbolData sym_tinyclj_fs_spit_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -3135,7 +3129,6 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_tinyclj_datetime_format_iso_qualified_data.sym, native_datetime_format_iso},
 
     // tinyclj.fs / tiny-db.kv
-    {&sym_tinyclj_fs_mkdir_qualified_data.sym, native_tinyclj_fs_mkdir},
     {&sym_tinyclj_fs_spit_bytes_qualified_data.sym, native_tinyclj_fs_spit_bytes},
     {&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes},
     {&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat},
@@ -3434,17 +3427,6 @@ static const char *require_c_string_arg(ID v, const char *fn_name, const char *w
     return string_data(s);
 }
 
-ID native_tinyclj_fs_mkdir(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "tinyclj.fs/mkdir");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/mkdir", "a path string");
-    if (!path) return NULL;
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-    fs_err_t e = fs_mkdir(st, path, NULL, NULL);
-    return (e == FS_NO_ERR) ? (ID)clj_true : (ID)clj_false;
-}
-
 ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
 {
     CHECK_ARITY(argc, 2, "tinyclj.fs/spit-bytes");
@@ -3456,9 +3438,8 @@ ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
     }
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
-    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
     CljByteArray *ba = as_byte_array(args[1]);
-    fs_err_t e = fs_write_bytes(st, es, path, ba->data, (size_t)ba->length);
+    fs_err_t e = fs_write_bytes(st, path, ba->data, (size_t)ba->length);
     if (e != FS_NO_ERR) {
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                          "tinyclj.fs/spit-bytes failed (err=%d)", (int)e);
@@ -3473,8 +3454,7 @@ ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc)
     if (!path) return NULL;
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
-    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
-    return fs_read_bytes(st, es, path);
+    return fs_read_bytes(st, path);
 }
 
 ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
@@ -3484,8 +3464,16 @@ ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
     if (!path) return NULL;
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
-    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
-    return fs_stat(st, es, path);
+
+    int64_t size = fs_stat_size(st, path);
+    if (size < 0) return NULL;
+
+    // Build result map: {:path "..." :size N :type :file}
+    CljMap *m = make_map(4);
+    m = map_assoc(m, (ID)intern_symbol_global(":path"), (ID)make_string(path));
+    m = map_assoc(m, (ID)intern_symbol_global(":size"), fixnum((int32_t)size));
+    m = map_assoc(m, (ID)intern_symbol_global(":type"), (ID)intern_symbol_global(":file"));
+    return AUTORELEASE(m);
 }
 
 ID native_tinyclj_fs_list(ID *args, unsigned int argc)
@@ -3495,8 +3483,7 @@ ID native_tinyclj_fs_list(ID *args, unsigned int argc)
     if (!path) return NULL;
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
-    EvalState *es = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
-    return fs_list_dir(st, es, path);
+    return fs_list_dir(st, path);
 }
 
 ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
@@ -3913,12 +3900,108 @@ ID native_load_file(ID *args, unsigned int argc)
     // load-file returns nil (like Clojure)
     return ok ? NULL : NULL;
 }
+#else
+ID native_load_file(ID *args, unsigned int argc)
+{
+    if (!validate_builtin_args(argc, 1, "load-file"))
+        return NULL;
+
+    // Get filename as string
+    CljString *filename_str_obj = to_string(args[0]);
+    if (!filename_str_obj)
+    {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "load-file requires a string argument",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    const char *filename = string_data(filename_str_obj);
+
+    FsKvStore *store = fs_global_store();
+    if (!store)
+    {
+        throw_exception(EXCEPTION_RUNTIME, "load-file: filesystem not available", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+
+    // Try filename as-is and also with a leading "/" (common on embedded FS).
+    const char *candidates[2] = {filename, NULL};
+    char abs_path[512];
+    abs_path[0] = '\0';
+    if (filename && filename[0] != '/' && strlen(filename) + 2 < sizeof(abs_path))
+    {
+        abs_path[0] = '/';
+        strcpy(abs_path + 1, filename);
+        candidates[1] = abs_path;
+    }
+
+    ID bytes = NULL;
+    const char *used_path = filename;
+    for (size_t i = 0; i < 2; i++)
+    {
+        const char *p = candidates[i];
+        if (!p)
+            continue;
+        TRY
+        {
+            bytes = fs_read_bytes(store, p);
+        }
+        CATCH(ex)
+        {
+            bytes = NULL;
+        }
+        END_TRY
+        if (bytes && TAG(bytes) == CLJ_BYTE_ARRAY)
+        {
+            used_path = p;
+            break;
+        }
+        if (bytes)
+        {
+            RELEASE(bytes);
+            bytes = NULL;
+        }
+    }
+
+    if (!bytes)
+    {
+        throw_exception(EXCEPTION_FILE_NOT_FOUND, "load-file: file not found", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    CljByteArray *ba = as_byte_array(bytes);
+    if (!ba || ba->length < 0)
+    {
+        RELEASE(bytes);
+        throw_exception(EXCEPTION_RUNTIME, "load-file: invalid byte-array", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    size_t n = (size_t)ba->length;
+    char *src = (char *)malloc(n + 1);
+    if (!src)
+    {
+        RELEASE(bytes);
+        throw_oom();
+        return NULL;
+    }
+    memcpy(src, ba->data, n);
+    src[n] = '\0';
+    RELEASE(bytes);
+
+    bool ok = eval_source_in_current_state(src, used_path, st);
+    free(src);
+
+    // load-file returns nil (like Clojure)
+    return ok ? NULL : NULL;
+}
 #endif // ESP32_BUILD
 
 // ----------------------------------------------------------------------------
 // REQUIRE IMPLEMENTATION (Clojure-like namespace loader)
 // ----------------------------------------------------------------------------
-#ifndef ESP32_BUILD
 static char *namespace_to_relpath(const char *ns_name)
 {
     if (!ns_name)
@@ -3943,6 +4026,7 @@ static char *namespace_to_relpath(const char *ns_name)
     return buf;
 }
 
+#ifndef ESP32_BUILD
 static char *read_file_once(const char *path)
 {
     if (!path)
@@ -3977,6 +4061,56 @@ static char *read_file_once(const char *path)
     fclose(fp);
     return buffer;
 }
+#else
+static char *read_file_once(const char *path)
+{
+    if (!path || !*path)
+        return NULL;
+
+    FsKvStore *store = fs_global_store();
+    if (!store)
+        return NULL;
+
+    ID bytes = NULL;
+    TRY
+    {
+        bytes = fs_read_bytes(store, path);
+    }
+    CATCH(ex)
+    {
+        bytes = NULL;
+    }
+    END_TRY
+
+    if (!bytes || TAG(bytes) != CLJ_BYTE_ARRAY)
+    {
+        if (bytes)
+        {
+            RELEASE(bytes);
+        }
+        return NULL;
+    }
+
+    CljByteArray *ba = as_byte_array(bytes);
+    if (!ba || ba->length < 0)
+    {
+        RELEASE(bytes);
+        return NULL;
+    }
+
+    size_t n = (size_t)ba->length;
+    char *buffer = (char *)malloc(n + 1);
+    if (!buffer)
+    {
+        RELEASE(bytes);
+        return NULL;
+    }
+    memcpy(buffer, ba->data, n);
+    buffer[n] = '\0';
+    RELEASE(bytes);
+    return buffer;
+}
+#endif
 
 static void store_resolved_path(char *dest, size_t dest_size, const char *value)
 {
@@ -3991,6 +4125,7 @@ static void store_resolved_path(char *dest, size_t dest_size, const char *value)
     dest[dest_size - 1] = '\0';
 }
 
+#ifndef ESP32_BUILD
 static char *read_file_cstr(const char *path, char *resolved_path, size_t resolved_path_size)
 {
     char *buffer = read_file_once(path);
@@ -4033,6 +4168,43 @@ static char *read_file_cstr(const char *path, char *resolved_path, size_t resolv
 
     return NULL;
 }
+#else
+static char *read_file_cstr(const char *path, char *resolved_path, size_t resolved_path_size)
+{
+    if (!path || path[0] == '\0')
+    {
+        return NULL;
+    }
+
+    // On embedded FS, prefer absolute paths but accept relative ones.
+    // Try path as-is, then "/path" if it isn't already absolute.
+    char *buffer = read_file_once(path);
+    if (buffer)
+    {
+        store_resolved_path(resolved_path, resolved_path_size, path);
+        return buffer;
+    }
+
+    if (path[0] != '/')
+    {
+        char abs_path[512];
+        size_t path_len = strlen(path);
+        if (path_len + 2 < sizeof(abs_path))
+        {
+            abs_path[0] = '/';
+            memcpy(abs_path + 1, path, path_len + 1);
+            buffer = read_file_once(abs_path);
+            if (buffer)
+            {
+                store_resolved_path(resolved_path, resolved_path_size, abs_path);
+                return buffer;
+            }
+        }
+    }
+
+    return NULL;
+}
+#endif
 
 static bool eval_source_in_current_state(const char *src, const char *src_name, EvalState *st)
 {
@@ -4684,8 +4856,6 @@ ID native_require(ID *args, unsigned int argc)
     }
     return NULL; // Clojure-compatible: require returns nil
 }
-
-#endif // ESP32_BUILD
 
 // File I/O: spit - write string to file
 #ifndef ESP32_BUILD
@@ -6628,10 +6798,8 @@ void register_builtins()
     // Functions needed before clojure.core.clj is loaded (--no-core mode)
     register_builtin_in_core("eval", native_eval);
     register_builtin_in_core("read-string", native_read_string);
-#ifndef ESP32_BUILD
     register_builtin_in_core("require", native_require);
     register_builtin_in_core("load-file", native_load_file);
-#endif
 
     // Arithmetic functions - needed for tests and --no-core mode
     register_builtin_in_core("+", native_add_variadic);
@@ -6646,6 +6814,10 @@ void register_builtins()
     register_builtin_in_core("list", native_list);
     register_builtin_in_core("cons", native_cons);
     register_builtin_in_core("seq", native_seq);
+
+    // NOTE: Some core helpers are needed very early by macroexpansion/destructuring
+    // in unit tests (and can be referenced before clojure.core finishes loading).
+    register_builtin_in_core("name", native_name);
 
     // NOTE: clojure.string functions are NOT registered here as builtins.
     // They are defined in libs/clojure/string.clj and loaded via require.

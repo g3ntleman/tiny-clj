@@ -1,22 +1,15 @@
 #include "fs_layer.h"
 
 #include "byte_array.h"
-#include "instant.h"
-#include "map.h"
 #include "memory.h"
 #include "mini_format.h"
-#include "ast_canon.h"
-#include "parser.h"
 #include "strings.h"
-#include "to_string.h"
-#include "value.h"
 #include "vector.h"
 
 #include "tiny_db.h"
 #include "tdb_blockdev.h"
 
 #include <string.h>
-#include <sys/time.h>
 
 #define FS_APP_MAX_CHUNK_SIZE 4096u
 // Internal storage chunk size. This is NOT an app-facing limit.
@@ -24,18 +17,22 @@
 #define FS_STORE_CHUNK_SIZE 4096u
 #define FS_KEY_MAX 64u
 
-// Forward declarations for FS helpers used by streaming APIs.
+// Forward declarations for FS helpers.
 static bool fs_is_valid_path(const char *path);
 static bool fs_is_dir_path(const char *path);
-static ID fs_now_instant(void);
-static CljSymbol *kw(const char *name);
-static ID fs_meta_get_map(FsKvStore *st, EvalState *eval, const char *path);
-static uint32_t fs_meta_version(ID meta_map);
-static size_t fs_meta_size(ID meta_map);
-static uint32_t fs_meta_chunks(ID meta_map);
-static ID fs_meta_ctime(ID meta_map);
-static fs_err_t fs_meta_put_map(FsKvStore *st, const char *path, ID map_obj);
 static fs_err_t fs_make_chunk_key(char out[FS_KEY_MAX], const char *path, uint32_t version, uint32_t chunk_idx);
+
+// Binary file metadata (16 bytes, no EDN parsing needed)
+#define FS_FILE_META_MAGIC 0x454C4946u /* 'F''I''L''E' */
+typedef struct __attribute__((packed)) FsFileMeta {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t size;
+    uint32_t chunks;
+} FsFileMeta;
+
+static bool fs_meta_get(FsKvStore *st, const char *path, FsFileMeta *out);
+static bool fs_meta_put(FsKvStore *st, const char *path, const FsFileMeta *meta);
 
 // Integer formatting: use mini_format.h helpers (DRY)
 
@@ -212,8 +209,6 @@ static tdb_status_t fs_ram_erase(void* ctx, uint32_t addr, size_t len) {
 }
 
 typedef struct {
-    FsKvStore* st;
-    EvalState* eval;
     const char* dir_path;
     size_t prefix_len;
     ID vec;
@@ -225,11 +220,11 @@ static tdb_status_t fs_list_dir_cb(const void* key, size_t key_len,
     (void)val;
     (void)val_len;
     FsListDirCtx* c = (FsListDirCtx*)arg;
-    if (!c || !c->st || !c->eval || !c->dir_path) return TDB_ERR_INVALID_ARG;
+    if (!c || !c->dir_path) return TDB_ERR_INVALID_ARG;
     if (key_len == c->prefix_len) return TDB_OK; // skip dir itself
     if (key_len <= c->prefix_len) return TDB_OK;
 
-    // Keys are path strings; make a temporary NUL-terminated view for existing helpers.
+    // Keys are path strings; make a temporary NUL-terminated view.
     if (key_len >= FS_KEY_MAX) return TDB_OK;
     char kstr[FS_KEY_MAX];
     memcpy(kstr, key, key_len);
@@ -246,10 +241,8 @@ static tdb_status_t fs_list_dir_cb(const void* key, size_t key_len,
     const char* slash = strchr(rest, '/');
     if (slash && slash[1] != '\0') return TDB_OK;
 
-    ID entry = fs_stat(c->st, c->eval, kstr);
-    if (entry) {
-        c->vec = (ID)vector_conj((CljVector*)c->vec, entry);
-    }
+    // Add path as string
+    c->vec = (ID)vector_conj((CljVector*)c->vec, (ID)make_string(kstr));
     return TDB_OK;
 }
 
@@ -325,9 +318,6 @@ FsKvStore *fs_kv_store_new(void)
     if (fst != TDB_OK) {
         free(st->ram.buf);
         free(st);
-        throw_exception(EXCEPTION_RUNTIME,
-                        "fs_kv_store_new: tiny-db init failed",
-                        __FILE__, __LINE__, 0);
         return NULL;
     }
     return st;
@@ -376,28 +366,6 @@ static tdb_status_t fs_emit_sliced(const uint8_t* data, size_t len,
         pos += n;
     }
     return TDB_OK;
-}
-
-static int fs_parse_u32_field(const char* s, const char* needle, uint32_t* out)
-{
-    if (!s || !needle || !out) return 0;
-    const char* p = strstr(s, needle);
-    if (!p) return 0;
-    p += strlen(needle);
-    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
-    if (*p == '-' || *p == '\0') return 0;
-    uint32_t v = 0;
-    int any = 0;
-    while (*p >= '0' && *p <= '9') {
-        any = 1;
-        uint32_t d = (uint32_t)(*p - '0');
-        if (v > (UINT32_MAX - d) / 10u) return 0;
-        v = v * 10u + d;
-        p++;
-    }
-    if (!any) return 0;
-    *out = v;
-    return 1;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -632,34 +600,17 @@ tdb_status_t fs_file_stream_read(FsKvStore* st,
     const size_t chunk_cap = fs_clamp_app_chunk(max_chunk);
     if (chunk_cap == 0) return TDB_ERR_INVALID_ARG;
 
-    // Read file meta bytes (EDN) and parse only the numeric fields we need.
-    size_t saved = 0;
-    (void)fs_kv_get(st, path, NULL, 0, &saved);
-    if (saved == 0) return TDB_ERR_NOT_FOUND;
-
-    char* meta = (char*)malloc(saved + 1);
-    if (!meta) return TDB_ERR_NO_MEMORY;
-    size_t got = fs_kv_get(st, path, (uint8_t*)meta, saved, &saved);
-    meta[got] = '\0';
-
-    uint32_t ver = 0;
-    uint32_t chunks = 0;
-    uint32_t size_u32 = 0;
-    int ok_ver = fs_parse_u32_field(meta, ":version", &ver);
-    int ok_chunks = fs_parse_u32_field(meta, ":chunks", &chunks);
-    int ok_size = fs_parse_u32_field(meta, ":size", &size_u32);
-    free(meta);
-
-    if (!ok_ver || !ok_chunks || !ok_size) return TDB_ERR_CORRUPT;
-    if (ver == 0 || chunks == 0) return TDB_ERR_CORRUPT;
-    size_t total = (size_t)size_u32;
+    // Read binary file meta.
+    FsFileMeta meta;
+    if (!fs_meta_get(st, path, &meta)) return TDB_ERR_NOT_FOUND;
+    if (meta.version == 0 || meta.chunks == 0) return TDB_ERR_CORRUPT;
 
     uint8_t buf[FS_STORE_CHUNK_SIZE];
-    size_t remaining_total = total;
+    size_t remaining_total = (size_t)meta.size;
 
-    for (uint32_t i = 0; i < chunks; i++) {
+    for (uint32_t i = 0; i < meta.chunks; i++) {
         char ckey[FS_KEY_MAX];
-        if (fs_make_chunk_key(ckey, path, ver, i) != FS_NO_ERR) return TDB_ERR_INVALID_ARG;
+        if (fs_make_chunk_key(ckey, path, meta.version, i) != FS_NO_ERR) return TDB_ERR_INVALID_ARG;
 
         size_t want = remaining_total;
         if (want > (size_t)FS_STORE_CHUNK_SIZE) want = (size_t)FS_STORE_CHUNK_SIZE;
@@ -669,7 +620,7 @@ tdb_status_t fs_file_stream_read(FsKvStore* st,
         if (stc != TDB_OK) return stc;
         if (saved_chunk < want && remaining_total != 0) return TDB_ERR_CORRUPT;
 
-        st->stats.blocks_read++; // count storage chunks, not app slices
+        st->stats.blocks_read++;
         if (want) {
             stc = fs_emit_sliced(buf, want, chunk_cap, cb, arg);
             if (stc != TDB_OK) return stc;
@@ -695,27 +646,12 @@ tdb_status_t fs_file_stream_read_from(FsKvStore* st,
     const size_t chunk_cap = fs_clamp_app_chunk(max_chunk);
     if (chunk_cap == 0) return TDB_ERR_INVALID_ARG;
 
-    // Read meta bytes and parse fields (same as fs_file_stream_read).
-    size_t saved = 0;
-    (void)fs_kv_get(st, path, NULL, 0, &saved);
-    if (saved == 0) return TDB_ERR_NOT_FOUND;
+    // Read binary file meta.
+    FsFileMeta meta;
+    if (!fs_meta_get(st, path, &meta)) return TDB_ERR_NOT_FOUND;
+    if (meta.version == 0 || meta.chunks == 0) return TDB_ERR_CORRUPT;
 
-    char* meta = (char*)malloc(saved + 1);
-    if (!meta) return TDB_ERR_NO_MEMORY;
-    size_t got = fs_kv_get(st, path, (uint8_t*)meta, saved, &saved);
-    meta[got] = '\0';
-
-    uint32_t ver = 0;
-    uint32_t chunks = 0;
-    uint32_t size_u32 = 0;
-    int ok_ver = fs_parse_u32_field(meta, ":version", &ver);
-    int ok_chunks = fs_parse_u32_field(meta, ":chunks", &chunks);
-    int ok_size = fs_parse_u32_field(meta, ":size", &size_u32);
-    free(meta);
-    if (!ok_ver || !ok_chunks || !ok_size) return TDB_ERR_CORRUPT;
-    if (ver == 0 || chunks == 0) return TDB_ERR_CORRUPT;
-
-    const size_t total = (size_t)size_u32;
+    const size_t total = (size_t)meta.size;
     if (offset > total) return TDB_ERR_INVALID_ARG;
     if (offset == total) return TDB_OK;
 
@@ -725,9 +661,9 @@ tdb_status_t fs_file_stream_read_from(FsKvStore* st,
 
     uint8_t buf[FS_STORE_CHUNK_SIZE];
 
-    for (uint32_t i = start_idx; i < chunks && remaining_total > 0; i++) {
+    for (uint32_t i = start_idx; i < meta.chunks && remaining_total > 0; i++) {
         char ckey[FS_KEY_MAX];
-        if (fs_make_chunk_key(ckey, path, ver, i) != FS_NO_ERR) return TDB_ERR_INVALID_ARG;
+        if (fs_make_chunk_key(ckey, path, meta.version, i) != FS_NO_ERR) return TDB_ERR_INVALID_ARG;
 
         size_t saved_chunk = 0;
         tdb_status_t stc = fs_kv_get_status(st, ckey, buf, sizeof(buf), &saved_chunk);
@@ -750,23 +686,19 @@ tdb_status_t fs_file_stream_read_from(FsKvStore* st,
     return TDB_OK;
 }
 
-tdb_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
+tdb_status_t fs_file_stream_write(FsKvStore* st,
                                  const char* path,
                                  fs_stream_source_cb next, void* arg,
                                  size_t* out_total_len)
 {
     if (out_total_len) *out_total_len = 0;
-    if (!st || !st->db || !eval || !fs_is_valid_path(path) || fs_is_dir_path(path) || !next) return TDB_ERR_INVALID_ARG;
+    if (!st || !st->db || !fs_is_valid_path(path) || fs_is_dir_path(path) || !next) return TDB_ERR_INVALID_ARG;
     if (strlen(path) >= FS_KEY_MAX) return TDB_ERR_INVALID_ARG;
 
-    ID old_meta = fs_meta_get_map(st, eval, path);
-    uint32_t old_ver = fs_meta_version(old_meta);
-    uint32_t new_ver = old_ver + 1u;
+    FsFileMeta old_meta;
+    bool has_old = fs_meta_get(st, path, &old_meta);
+    uint32_t new_ver = has_old ? (old_meta.version + 1u) : 1u;
     if (new_ver == 0) new_ver = 1u;
-
-    ID ctime = fs_meta_ctime(old_meta);
-    if (!ctime) ctime = fs_now_instant();
-    ID mtime = fs_now_instant();
 
     uint8_t inbuf[16384];
     uint8_t chunkbuf[FS_STORE_CHUNK_SIZE];
@@ -782,7 +714,7 @@ tdb_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
 
         if (total > SIZE_MAX - got) return TDB_ERR_INVALID_ARG;
         total += got;
-        if (total > (size_t)INT32_MAX) return TDB_ERR_INVALID_ARG;
+        if (total > (size_t)UINT32_MAX) return TDB_ERR_INVALID_ARG;
 
         size_t pos = 0;
         while (pos < got) {
@@ -805,7 +737,7 @@ tdb_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
         }
     }
 
-    // Files always store at least one chunk (even empty) to keep meta consistent with existing fs_write_bytes.
+    // Files always store at least one chunk (even empty).
     if (chunk_fill != 0 || chunk_idx == 0) {
         char ckey[FS_KEY_MAX];
         fs_err_t e = fs_make_chunk_key(ckey, path, new_ver, chunk_idx);
@@ -813,22 +745,16 @@ tdb_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
         if (!fs_kv_put(st, ckey, chunkbuf, chunk_fill)) return TDB_ERR_IO;
         st->stats.blocks_written++;
         chunk_idx++;
-        chunk_fill = 0;
     }
 
-    // Commit meta last (makes the new version visible).
-    CljMap* m = make_map(8);
-    m = map_assoc(m, (ID)kw(":type"), (ID)kw(":file"));
-    m = map_assoc(m, (ID)kw(":version"), fixnum((int32_t)new_ver));
-    m = map_assoc(m, (ID)kw(":size"), fixnum((int32_t)total));
-    m = map_assoc(m, (ID)kw(":chunks"), fixnum((int32_t)chunk_idx));
-    m = map_assoc(m, (ID)kw(":ctime"), ctime);
-    if (mtime != ctime) {
-        m = map_assoc(m, (ID)kw(":mtime"), mtime);
-    }
-
-    fs_err_t fe = fs_meta_put_map(st, path, (ID)m);
-    if (fe != FS_NO_ERR) return TDB_ERR_IO;
+    // Commit binary meta last (makes the new version visible).
+    FsFileMeta meta = {
+        .magic = FS_FILE_META_MAGIC,
+        .version = new_ver,
+        .size = (uint32_t)total,
+        .chunks = chunk_idx
+    };
+    if (!fs_meta_put(st, path, &meta)) return TDB_ERR_IO;
 
     if (out_total_len) *out_total_len = total;
     return TDB_OK;
@@ -935,139 +861,26 @@ static bool fs_is_dir_path(const char *path)
     return n > 0 && path[n - 1] == '/';
 }
 
-static ID fs_now_instant(void)
+// Binary metadata functions (no EDN parsing)
+static bool fs_meta_get(FsKvStore *st, const char *path, FsFileMeta *out)
 {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
+    if (!st || !path || !out) return false;
+    memset(out, 0, sizeof(*out));
 
-    int32_t days = (int32_t)(tv.tv_sec / 86400);
-    int32_t sec_in_day = (int32_t)(tv.tv_sec % 86400);
-    int32_t millis = sec_in_day * 1000 + (int32_t)(tv.tv_usec / 1000);
-    return AUTORELEASE(make_instant(days, (uint32_t)millis));
-}
+    size_t saved = 0;
+    FsFileMeta meta;
+    fs_kv_get(st, path, (uint8_t *)&meta, sizeof(meta), &saved);
+    if (saved != sizeof(meta)) return false;
+    if (meta.magic != FS_FILE_META_MAGIC) return false;
 
-static bool fs_make_name(const char *path, char out[FS_KEY_MAX])
-{
-    if (!path || !out) return false;
-
-    size_t n = strlen(path);
-    if (n == 0) {
-        out[0] = '\0';
-        return true;
-    }
-
-    size_t end = n;
-    if (end > 1 && path[end - 1] == '/') {
-        end--;
-    }
-
-    size_t start = end;
-    while (start > 0 && path[start - 1] != '/') {
-        start--;
-    }
-
-    size_t len = end - start;
-    if (len >= FS_KEY_MAX) {
-        return false;
-    }
-    memcpy(out, path + start, len);
-    out[len] = '\0';
+    *out = meta;
     return true;
 }
 
-static CljSymbol *kw(const char *name)
+static bool fs_meta_put(FsKvStore *st, const char *path, const FsFileMeta *meta)
 {
-    return intern_symbol_global(name);
-}
-
-static ID fs_meta_get_map(FsKvStore *st, EvalState *eval, const char *path)
-{
-    if (!st || !path) return NULL;
-
-    size_t saved = 0;
-    size_t n = fs_kv_get(st, path, NULL, 0, &saved);
-    (void)n;
-    if (saved == 0) return NULL;
-
-    uint8_t *buf = (uint8_t *)malloc(saved + 1);
-    if (!buf) {
-        throw_oom();
-        return NULL;
-    }
-    size_t got = fs_kv_get(st, path, buf, saved, &saved);
-    buf[got] = 0;
-
-    ID parsed = parse((const char *)buf, eval);
-    if (parsed) {
-        parsed = canonicalize_ast(parsed, eval);
-    }
-    free(buf);
-    return parsed;
-}
-
-static fs_err_t fs_meta_put_map(FsKvStore *st, const char *path, ID map_obj)
-{
-    if (!st || !path) return FS_ERR_IO;
-    if (!map_obj || TAG(map_obj) != CLJ_MAP) return FS_ERR_TYPE;
-
-    CljString *s = pr_str(map_obj);
-    if (!s) return FS_ERR_OOM;
-
-    const uint8_t *bytes = (const uint8_t *)string_data(s);
-    size_t len = (size_t)string_length(s);
-    bool ok = fs_kv_put(st, path, bytes, len);
-    RELEASE(s);
-    return ok ? FS_NO_ERR : FS_ERR_IO;
-}
-
-static uint32_t fs_meta_version(ID meta_map)
-{
-    if (!meta_map || TAG(meta_map) != CLJ_MAP) return 0;
-    ID v = map_get(as_map(meta_map), (ID)kw(":version"));
-    if (!v) return 0;
-    if (is_fixnum((CljValue)v)) {
-        int32_t vi = as_fixnum((CljValue)v);
-        return vi > 0 ? (uint32_t)vi : 0;
-    }
-    return 0;
-}
-
-static size_t fs_meta_size(ID meta_map)
-{
-    if (!meta_map || TAG(meta_map) != CLJ_MAP) return 0;
-    ID v = map_get(as_map(meta_map), (ID)kw(":size"));
-    if (!v) return 0;
-    if (is_fixnum((CljValue)v)) {
-        int32_t vi = as_fixnum((CljValue)v);
-        return vi >= 0 ? (size_t)vi : 0;
-    }
-    return 0;
-}
-
-static uint32_t fs_meta_chunks(ID meta_map)
-{
-    if (!meta_map || TAG(meta_map) != CLJ_MAP) return 0;
-    ID v = map_get(as_map(meta_map), (ID)kw(":chunks"));
-    if (!v) return 0;
-    if (is_fixnum((CljValue)v)) {
-        int32_t vi = as_fixnum((CljValue)v);
-        return vi > 0 ? (uint32_t)vi : 0;
-    }
-    return 0;
-}
-
-static ID fs_meta_ctime(ID meta_map)
-{
-    if (!meta_map || TAG(meta_map) != CLJ_MAP) return NULL;
-    ID v = map_get(as_map(meta_map), (ID)kw(":ctime"));
-    return v;
-}
-
-static ID fs_meta_mtime(ID meta_map)
-{
-    if (!meta_map || TAG(meta_map) != CLJ_MAP) return NULL;
-    ID v = map_get(as_map(meta_map), (ID)kw(":mtime"));
-    return v ? v : fs_meta_ctime(meta_map);
+    if (!st || !path || !meta) return false;
+    return fs_kv_put(st, path, (const uint8_t *)meta, sizeof(*meta));
 }
 
 static fs_err_t fs_make_chunk_key(char out[FS_KEY_MAX], const char *path, uint32_t version, uint32_t chunk_idx)
@@ -1083,41 +896,24 @@ static fs_err_t fs_make_chunk_key(char out[FS_KEY_MAX], const char *path, uint32
     return FS_NO_ERR;
 }
 
-fs_err_t fs_mkdir(FsKvStore *st, const char *dir_path, ID ctime_inst, ID mtime_inst)
-{
-    if (!fs_is_valid_path(dir_path) || !fs_is_dir_path(dir_path)) return FS_ERR_INVALID_PATH;
-    if (strlen(dir_path) >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
-    if (!ctime_inst) ctime_inst = fs_now_instant();
-    if (!mtime_inst) mtime_inst = ctime_inst;
-
-    CljMap *m = make_map(4);
-    m = map_assoc(m, (ID)kw(":type"), (ID)kw(":dir"));
-    m = map_assoc(m, (ID)kw(":ctime"), ctime_inst);
-    if (mtime_inst != ctime_inst) {
-        m = map_assoc(m, (ID)kw(":mtime"), mtime_inst);
-    }
-    return fs_meta_put_map(st, dir_path, (ID)m);
-}
-
-fs_err_t fs_write_bytes(FsKvStore *st, EvalState *eval, const char *path, const uint8_t *data, size_t len)
+fs_err_t fs_write_bytes(FsKvStore *st, const char *path, const uint8_t *data, size_t len)
 {
     if (!fs_is_valid_path(path) || fs_is_dir_path(path)) return FS_ERR_INVALID_PATH;
     if (strlen(path) >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
-    if (!st || !eval) return FS_ERR_IO;
+    if (!st) return FS_ERR_IO;
+    if (len > (size_t)UINT32_MAX) return FS_ERR_IO;
 
-    ID old_meta = fs_meta_get_map(st, eval, path);
-    uint32_t old_ver = fs_meta_version(old_meta);
-    uint32_t new_ver = old_ver + 1;
-    if (new_ver == 0) new_ver = 1;
+    // Get old version (if any) to increment
+    FsFileMeta old_meta;
+    bool has_old = fs_meta_get(st, path, &old_meta);
+    uint32_t new_ver = has_old ? (old_meta.version + 1u) : 1u;
+    if (new_ver == 0) new_ver = 1u;
 
-    ID ctime = fs_meta_ctime(old_meta);
-    if (!ctime) ctime = fs_now_instant();
-    ID mtime = fs_now_instant();
-
+    // Calculate chunks
     uint32_t chunks = (uint32_t)((len + FS_STORE_CHUNK_SIZE - 1) / FS_STORE_CHUNK_SIZE);
     if (chunks == 0) chunks = 1;
 
-    /* Write chunk keys first (new version). */
+    // Write chunk keys
     for (uint32_t i = 0; i < chunks; i++) {
         size_t off = (size_t)i * FS_STORE_CHUNK_SIZE;
         size_t remaining = len > off ? (len - off) : 0;
@@ -1132,44 +928,38 @@ fs_err_t fs_write_bytes(FsKvStore *st, EvalState *eval, const char *path, const 
         }
     }
 
-    /* Commit meta last (makes the new version visible). */
-    CljMap *m = make_map(8);
-    m = map_assoc(m, (ID)kw(":type"), (ID)kw(":file"));
-    m = map_assoc(m, (ID)kw(":version"), fixnum((int32_t)new_ver));
-    m = map_assoc(m, (ID)kw(":size"), fixnum((int32_t)len));
-    m = map_assoc(m, (ID)kw(":chunks"), fixnum((int32_t)chunks));
-    m = map_assoc(m, (ID)kw(":ctime"), ctime);
-    if (mtime != ctime) {
-        m = map_assoc(m, (ID)kw(":mtime"), mtime);
-    }
-    return fs_meta_put_map(st, path, (ID)m);
+    // Commit binary meta last
+    FsFileMeta meta = {
+        .magic = FS_FILE_META_MAGIC,
+        .version = new_ver,
+        .size = (uint32_t)len,
+        .chunks = chunks
+    };
+    return fs_meta_put(st, path, &meta) ? FS_NO_ERR : FS_ERR_IO;
 }
 
-ID fs_read_bytes(FsKvStore *st, EvalState *eval, const char *path)
+ID fs_read_bytes(FsKvStore *st, const char *path)
 {
     if (!fs_is_valid_path(path) || fs_is_dir_path(path)) return NULL;
-    if (!st || !eval) return NULL;
+    if (!st) return NULL;
 
-    ID meta = fs_meta_get_map(st, eval, path);
-    if (!meta || TAG(meta) != CLJ_MAP) return NULL;
+    // Read binary meta
+    FsFileMeta meta;
+    if (!fs_meta_get(st, path, &meta)) return NULL;
 
-    uint32_t ver = fs_meta_version(meta);
-    uint32_t chunks = fs_meta_chunks(meta);
-    size_t total = fs_meta_size(meta);
-
-    ID arr = (ID)make_byte_array((int)total);
+    ID arr = (ID)make_byte_array((int)meta.size);
     if (!arr) return NULL;
 
     CljByteArray *ba = as_byte_array(arr);
     size_t copied = 0;
-    for (uint32_t i = 0; i < chunks && copied < total; i++) {
+    for (uint32_t i = 0; i < meta.chunks && copied < meta.size; i++) {
         char ckey[FS_KEY_MAX];
-        if (fs_make_chunk_key(ckey, path, ver, i) != FS_NO_ERR) break;
+        if (fs_make_chunk_key(ckey, path, meta.version, i) != FS_NO_ERR) break;
 
-        size_t saved = 0;
-        size_t want = total - copied;
+        size_t want = meta.size - copied;
         if (want > FS_STORE_CHUNK_SIZE) want = FS_STORE_CHUNK_SIZE;
 
+        size_t saved = 0;
         size_t got = fs_kv_get(st, ckey, ba->data + copied, want, &saved);
         copied += got;
     }
@@ -1177,35 +967,23 @@ ID fs_read_bytes(FsKvStore *st, EvalState *eval, const char *path)
     return AUTORELEASE(arr);
 }
 
-ID fs_stat(FsKvStore *st, EvalState *eval, const char *path)
+int64_t fs_stat_size(FsKvStore *st, const char *path)
 {
-    if (!fs_is_valid_path(path)) return NULL;
-    if (!st || !eval) return NULL;
+    if (!fs_is_valid_path(path)) return -1;
+    if (!st) return -1;
 
-    ID meta = fs_meta_get_map(st, eval, path);
-    if (!meta || TAG(meta) != CLJ_MAP) return NULL;
+    FsFileMeta meta;
+    if (!fs_meta_get(st, path, &meta)) return -1;
 
-    ID type = map_get(as_map(meta), (ID)kw(":type"));
-    if (!type || TAG(type) != CLJ_SYMBOL) return NULL;
+    return (int64_t)meta.size;
+}
 
-    char name_buf[FS_KEY_MAX];
-    if (!fs_make_name(path, name_buf)) return NULL;
-
-    CljMap *out = make_map(8);
-    out = map_assoc(out, (ID)kw(":path"), (ID)make_string(path));
-    out = map_assoc(out, (ID)kw(":name"), (ID)make_string(name_buf));
-    out = map_assoc(out, (ID)kw(":type"), type);
-
-    ID ctime = fs_meta_ctime(meta);
-    ID mtime = fs_meta_mtime(meta);
-    if (ctime) out = map_assoc(out, (ID)kw(":ctime"), ctime);
-    if (mtime) out = map_assoc(out, (ID)kw(":mtime"), mtime);
-
-    if (strcmp(as_symbol(type)->cname, ":file") == 0) {
-        out = map_assoc(out, (ID)kw(":size"), fixnum((int32_t)fs_meta_size(meta)));
-    }
-
-    return AUTORELEASE(out);
+bool fs_exists(FsKvStore *st, const char *path)
+{
+    if (!fs_is_valid_path(path)) return false;
+    if (!st) return false;
+    FsFileMeta meta;
+    return fs_meta_get(st, path, &meta);
 }
 
 bool fs_delete(FsKvStore *st, const char *path)
@@ -1216,16 +994,16 @@ bool fs_delete(FsKvStore *st, const char *path)
     return fs_kv_del(st, path);
 }
 
-ID fs_list_dir(FsKvStore *st, EvalState *eval, const char *dir_path)
+ID fs_list_dir(FsKvStore *st, const char *dir_path)
 {
     if (!fs_is_valid_path(dir_path) || !fs_is_dir_path(dir_path)) return NULL;
-    if (!st || !st->db || !eval) return NULL;
+    if (!st || !st->db) return NULL;
 
     size_t prefix_len = strlen(dir_path);
     ID vec = (ID)make_vector(8, CLJ_VECTOR);
     if (!vec) return NULL;
 
-    FsListDirCtx ctx = {.st = st, .eval = eval, .dir_path = dir_path, .prefix_len = prefix_len, .vec = vec};
+    FsListDirCtx ctx = {.dir_path = dir_path, .prefix_len = prefix_len, .vec = vec};
     (void)tdb_iter_prefix(st->db, dir_path, prefix_len, fs_list_dir_cb, &ctx);
     return AUTORELEASE(ctx.vec);
 }
