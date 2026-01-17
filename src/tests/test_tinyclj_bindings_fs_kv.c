@@ -31,10 +31,22 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
     TEST_ASSERT_EQUAL_UINT8(2, ba->data[1]);
     TEST_ASSERT_EQUAL_UINT8(3, ba->data[2]);
 
-    /* list */
-    CljObject *lst = eval_string("(tinyclj.fs/list \"/data/\")", g_test_eval_state);
+    /* list (lazy): realize into a vector */
+    CljObject *lst = eval_string("(vec (tinyclj.fs/list \"/data/\"))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(lst);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(lst));
+
+    /* list with >32 files (forces batching in tinyclj.fs/list) */
+    eval_string(
+        "(dotimes [i 50]"
+        "  (let [a (byte-array 1)]"
+        "    (aset a 0 (mod i 256))"
+        "    (tinyclj.fs/spit-bytes (str \"/many/file_\" i \".bin\") a)))",
+        g_test_eval_state);
+    CljObject *many = eval_string("(vec (tinyclj.fs/list \"/many/\"))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(many);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(many));
+    TEST_ASSERT_EQUAL_INT(50, vector_count(as_vector(many)));
 
     /* kv put/get (key must not start with /) */
     eval_string(

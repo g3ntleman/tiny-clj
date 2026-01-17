@@ -1,6 +1,7 @@
 #include "tests_common.h"
 
 #include "../fs_layer.h"
+#include "mini_format.h"
 
 TEST(test_fs_kv_store_roundtrip_bytes)
 {
@@ -54,11 +55,13 @@ TEST(test_fs_layer_write_read_stat_list_delete)
     TEST_ASSERT_EQUAL_INT64((int64_t)sizeof(bytes), size);
 
     /* list dir: contains exactly the file path */
-    ID lst = fs_list_dir(st, "/data/");
+    char last_key[FS_KEY_MAX] = {0};
+    ID lst = fs_list_dir_batch(st, "/data/", NULL, 32, last_key, sizeof(last_key));
     TEST_ASSERT_NOT_NULL(lst);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(lst));
     CljVector *v = as_vector(lst);
     TEST_ASSERT_EQUAL_INT(1, vector_count(v));
+    TEST_ASSERT_TRUE(last_key[0] == '\0'); // only entry, end reached
 
     /* delete meta only */
     TEST_ASSERT_TRUE(fs_delete(st, "/data/file.bin"));
@@ -70,6 +73,39 @@ TEST(test_fs_layer_write_read_stat_list_delete)
     size_t n = fs_kv_get(st, "/data/file.bin@1#0000", tmp, sizeof(tmp), &saved_len);
     TEST_ASSERT_TRUE(n > 0);
     TEST_ASSERT_TRUE(saved_len > 0);
+
+    fs_kv_store_free(st);
+}
+
+TEST(test_fs_list_dir_batch_many_files)
+{
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    // Create: /many/file_00.bin .. /many/file_49.bin
+    for (int i = 0; i < 50; i++) {
+        char path[FS_KEY_MAX];
+        mini_snprintf(path, sizeof(path), "/many/file_%02d.bin", i);
+        uint8_t data = (uint8_t)i;
+        fs_err_t e = fs_write_bytes(st, path, &data, 1);
+        TEST_ASSERT_EQUAL_INT(FS_NO_ERR, e);
+    }
+
+    // Batch 1
+    char last_key[FS_KEY_MAX] = {0};
+    ID batch1 = fs_list_dir_batch(st, "/many/", NULL, 32, last_key, sizeof(last_key));
+    TEST_ASSERT_NOT_NULL(batch1);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(batch1));
+    TEST_ASSERT_EQUAL_INT(32, vector_count(as_vector(batch1)));
+    TEST_ASSERT_TRUE(last_key[0] != '\0');
+
+    // Batch 2
+    char last_key2[FS_KEY_MAX] = {0};
+    ID batch2 = fs_list_dir_batch(st, "/many/", last_key, 32, last_key2, sizeof(last_key2));
+    TEST_ASSERT_NOT_NULL(batch2);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(batch2));
+    TEST_ASSERT_EQUAL_INT(18, vector_count(as_vector(batch2)));
+    TEST_ASSERT_TRUE(last_key2[0] == '\0'); // no more
 
     fs_kv_store_free(st);
 }
