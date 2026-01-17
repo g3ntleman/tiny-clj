@@ -13,12 +13,7 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
     eval_string("(require 'tinyclj.fs)", g_test_eval_state);
     eval_string("(require 'tiny-db.kv)", g_test_eval_state);
 
-    /* mkdir */
-    CljObject *mk = eval_string("(tinyclj.fs/mkdir \"/data/\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(mk);
-    TEST_ASSERT_EQUAL_INT(CLJ_BOOL, TAG(mk));
-
-    /* write bytes */
+    /* write bytes (no explicit mkdir needed - directories are implicit) */
     CljObject *w = eval_string(
         "(let [a (byte-array 3)]"
         "  (aset a 0 1) (aset a 1 2) (aset a 2 3)"

@@ -4,6 +4,10 @@
 
 (ns tinyclj.gpio)
 
+^#^{:doc "Creates a core.async channel backed GPIO watcher.
+
+Args: (gpio-channel pin) or (gpio-channel pin buffer).
+Returns a map {:ch ch :watcher-id wid :close! (fn [])} where events are [pin value]."}
 (defn gpio-channel [& args]
   ;; Returns a map with:
   ;; - :ch         core.async channel receiving events

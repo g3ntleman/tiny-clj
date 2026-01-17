@@ -42,7 +42,7 @@ int main() {
     
     // Cleanup
     DEBUG_PRINT("Done");
-    autorelease_pool_drain_all();
+    autorelease_pool_drain_to_depth(0);
     
     return 0;
 }

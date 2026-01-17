@@ -2,7 +2,6 @@
 #define TINY_CLJ_FS_LAYER_H
 
 #include "object.h"
-#include "namespace.h" /* EvalState */
 
 #include "tiny_db.h"
 
@@ -73,26 +72,25 @@ tdb_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
                                          fs_stream_source_cb next, void* arg,
                                          size_t* out_total_len);
 
-/* File streaming (path is still string key) */
+/* File streaming (path-based, uses chunked storage) */
 tdb_status_t fs_file_stream_read(FsKvStore* st,
                                 const char* path,
                                 size_t max_chunk,
                                 fs_stream_sink_cb cb, void* arg);
 
-/* Optional: start streaming from an offset (seek-by-chunk arithmetic). */
 tdb_status_t fs_file_stream_read_from(FsKvStore* st,
                                      const char* path,
                                      size_t offset,
                                      size_t max_chunk,
                                      fs_stream_sink_cb cb, void* arg);
 
-tdb_status_t fs_file_stream_write(FsKvStore* st, EvalState* eval,
+tdb_status_t fs_file_stream_write(FsKvStore* st,
                                  const char* path,
                                  fs_stream_source_cb next, void* arg,
                                  size_t* out_total_len);
 
 /* -------------------------------------------------------------------------- */
-/* FS layer (paths -> meta + versioned chunks)                                */
+/* FS layer (simple path -> bytes, binary metadata)                           */
 /* -------------------------------------------------------------------------- */
 
 typedef enum {
@@ -104,23 +102,23 @@ typedef enum {
     FS_ERR_IO,
 } fs_err_t;
 
-/* Create/update a directory meta entry (path must end with '/'). */
-fs_err_t fs_mkdir(FsKvStore *st, const char *dir_path, ID ctime_inst, ID mtime_inst);
+/* Write bytes directly to KV store at path. */
+fs_err_t fs_write_bytes(FsKvStore *st, const char *path, const uint8_t *data, size_t len);
 
-/* Write a file as versioned chunk keys and commit meta last. */
-fs_err_t fs_write_bytes(FsKvStore *st, EvalState *eval, const char *path, const uint8_t *data, size_t len);
+/* Read full file bytes into a new byte-array. Returns NULL if not found. */
+ID fs_read_bytes(FsKvStore *st, const char *path);
 
-/* Read full file bytes into a new byte-array. */
-ID fs_read_bytes(FsKvStore *st, EvalState *eval, const char *path);
+/* Get file size. Returns -1 if not found. */
+int64_t fs_stat_size(FsKvStore *st, const char *path);
 
-/* Return a File-Map (Clojure map) or nil. */
-ID fs_stat(FsKvStore *st, EvalState *eval, const char *path);
+/* Check if path exists. */
+bool fs_exists(FsKvStore *st, const char *path);
 
-/* Delete meta key only (chunks are left for GC). Returns true if deleted. */
+/* Delete key. Returns true if deleted. */
 bool fs_delete(FsKvStore *st, const char *path);
 
-/* List direct children (files/dirs) under a directory. Returns a vector. */
-ID fs_list_dir(FsKvStore *st, EvalState *eval, const char *dir_path);
+/* List direct children paths under a directory. Returns a vector of strings. */
+ID fs_list_dir(FsKvStore *st, const char *dir_path);
 
 #endif /* TINY_CLJ_FS_LAYER_H */
 

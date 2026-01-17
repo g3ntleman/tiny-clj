@@ -425,6 +425,7 @@ add_executable(unit-tests
     src/tests/test_fs_layer.c
     src/tests/test_tinyclj_bindings_fs_kv.c
     src/tests/test_streaming_kv_fs.c
+    src/tests/test_rrd_scripts.c
     src/tests/test_atom.c
     src/tests/test_atom_watch.c
     src/tests/test_timer.c

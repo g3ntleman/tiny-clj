@@ -122,8 +122,6 @@ TEST(test_fs_file_stream_write_read_roundtrip_and_chunk_cap)
     FsKvStore* st = fs_kv_store_new();
     TEST_ASSERT_NOT_NULL(st);
 
-    TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_mkdir(st, "/data/", NULL, NULL));
-
     enum { N = 9000 };
     static uint8_t data[N];
     for (size_t i = 0; i < (size_t)N; i++) data[i] = (uint8_t)(i * 3u);
@@ -132,7 +130,7 @@ TEST(test_fs_file_stream_write_read_roundtrip_and_chunk_cap)
 
     SrcCtx src = {.data = data, .len = sizeof(data), .pos = 0, .call_idx = 0};
     size_t total_written = 0;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, fs_file_stream_write(st, g_test_eval_state, "/data/s.bin", src_var_chunks, &src, &total_written));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, fs_file_stream_write(st, "/data/s.bin", src_var_chunks, &src, &total_written));
     TEST_ASSERT_EQUAL_UINT32((uint32_t)sizeof(data), (uint32_t)total_written);
 
     static uint8_t out[N];
@@ -177,7 +175,6 @@ TEST(test_fs_file_stream_read_from_offset_seeks_by_chunk_arithmetic)
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     FsKvStore* st = fs_kv_store_new();
     TEST_ASSERT_NOT_NULL(st);
-    TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_mkdir(st, "/data/", NULL, NULL));
 
     enum { N = 9000 };
     static uint8_t data[N];
@@ -185,7 +182,7 @@ TEST(test_fs_file_stream_read_from_offset_seeks_by_chunk_arithmetic)
 
     SrcCtx src = {.data = data, .len = sizeof(data), .pos = 0, .call_idx = 0};
     size_t total_written = 0;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, fs_file_stream_write(st, g_test_eval_state, "/data/seek.bin", src_var_chunks, &src, &total_written));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, fs_file_stream_write(st, "/data/seek.bin", src_var_chunks, &src, &total_written));
     TEST_ASSERT_EQUAL_UINT32((uint32_t)sizeof(data), (uint32_t)total_written);
 
     const size_t off = 5000;
