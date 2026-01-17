@@ -678,10 +678,43 @@ R"CLOJURE(
 (defn ns-unload [ns] :native)
 
 ; ============================================================================
-; Sleep Functions (Native)
+; Time + Yield Functions
 ; ============================================================================
-^#^{:doc "Blocks the current thread for the specified number of seconds. For non-blocking delays in go blocks, use (schedule ms fn) instead."}
-(defn sleep [secs] :native)
+^#^{:doc "Yields control to the platform event loop for up to ms milliseconds. Returns nil."}
+(defn yield [ms] :native)
+
+^#^{:doc "Returns milliseconds since start of the current UTC day [0..86400000)."}
+(defn current-time-ms [] :native)
+
+^#^{:doc "Blocks the current thread for the specified number of seconds while continuing to drive the platform event loop via (yield). For non-blocking delays in go blocks, use (schedule ms fn) instead."}
+(defn sleep [secs]
+  (if (not (integer? secs))
+    (throw "sleep requires an integer number of seconds"))
+  (if (< secs 0)
+    (throw "sleep requires a non-negative number of seconds"))
+  (let [day-ms 86400000
+        secs-per-day 86400
+        start (now)
+        start-days (instant-days start)
+        start-ms (instant-ms start)
+        sleep-days (quot secs secs-per-day)
+        sleep-secs (mod secs secs-per-day)
+        sleep-ms (* sleep-secs 1000)
+        total-ms (+ start-ms sleep-ms)
+        carry-days (quot total-ms day-ms)
+        end-days (+ start-days sleep-days carry-days)
+        end-ms (mod total-ms day-ms)]
+    (loop []
+      (let [cur (now)
+            cur-days (instant-days cur)
+            cur-ms (instant-ms cur)]
+        (when (or (< cur-days end-days)
+                  (and (= cur-days end-days)
+                       (< cur-ms end-ms)))
+          (yield (if (= cur-days end-days)
+                   (- end-ms cur-ms)
+                   (- day-ms cur-ms)))
+          (recur))))))
 
 ; ============================================================================
 ; Byte Array Functions (Native)
