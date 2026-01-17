@@ -674,6 +674,8 @@ R"CLOJURE(
 (defn find-ns [sym] :native)
 ^#^{:doc "Returns a sequence of all namespaces currently loaded."}
 (defn all-ns [] :native)
+^#^{:doc "Unloads a namespace by name, removing it from the registry and releasing its mappings (symbols remain interned). Returns true if unloaded, false if not found."}
+(defn ns-unload [ns] :native)
 
 ; ============================================================================
 ; Sleep Functions (Native)
