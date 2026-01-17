@@ -370,7 +370,7 @@ void memory_test_end(const char *test_name);
     MemoryStats before = memory_profiler_get_stats(); \
     do { \
         char _buf[256]; \
-        (void)clj_mini_snprintf(_buf, sizeof(_buf), "🔍 Memory Benchmark: %s\n", test_name); \
+        (void)mini_snprintf(_buf, sizeof(_buf), "🔍 Memory Benchmark: %s\n", test_name); \
         fputs(_buf, stdout); \
     } while(0); \
 } while(0)

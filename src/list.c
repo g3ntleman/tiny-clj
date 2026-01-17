@@ -58,12 +58,12 @@ CljList* as_list_checked(ID obj) {
     // Error case: wrong type
     char error_msg[128];
     const char *type_name = clj_type_name(((CljObject*)obj)->type);
-    (void)clj_mini_snprintf(error_msg, sizeof(error_msg),
+    (void)mini_snprintf(error_msg, sizeof(error_msg),
             "Type mismatch: expected List, got %s", 
             type_name);
     {
         char buf[256];
-        (void)clj_mini_snprintf(buf, sizeof(buf),
+        (void)mini_snprintf(buf, sizeof(buf),
                 "[STACKTRACE] as_list failed at %s:%d - obj=%p, type=%d (%s)\n",
                 __FILE__, __LINE__, obj, ((CljObject*)obj)->type, type_name);
         fputs(buf, stdout);

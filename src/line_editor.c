@@ -569,10 +569,10 @@ void line_editor_reset_history_index(LineEditor *editor) {
 // Optional: Default-Persistenzpfad (~/.tiny-clj/history.edn)
 static void build_default_history_path(char *out, size_t out_sz) {
     const char *home = getenv("HOME") ? getenv("HOME") : ".";
-    (void)clj_mini_snprintf(out, out_sz, "%s/.tiny-clj", home);
+    (void)mini_snprintf(out, out_sz, "%s/.tiny-clj", home);
     // Ensure directory exists
     mkdir(out, 0700);
-    (void)clj_mini_snprintf(out, out_sz, "%s/.tiny-clj/history.edn", home);
+    (void)mini_snprintf(out, out_sz, "%s/.tiny-clj/history.edn", home);
 }
 
 // Externe Persistenz-Funktionen (in repl.c definiert)

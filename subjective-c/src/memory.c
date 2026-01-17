@@ -214,7 +214,7 @@ void retain(CljObject *v) {
         // Zombie detected: throw exception with stacktrace and zombie object
         // Don't try to print object representation (may fail if object is corrupted)
         char message[512];
-        (void)clj_mini_snprintf(message, sizeof(message),
+        (void)mini_snprintf(message, sizeof(message),
             "Attempted to retain zombie object %p (type=%s). "
             "This object was already freed but marked as zombie for debugging.",
             v, clj_type_name(v->type));
@@ -375,7 +375,7 @@ CljObject *autorelease(CljObject *v) {
 #ifdef DEBUG
         {
             char buf[128];
-            (void)clj_mini_snprintf(buf, sizeof(buf), "⚠️  AutoreleasePool: items grew %u -> %u\n",
+            (void)mini_snprintf(buf, sizeof(buf), "⚠️  AutoreleasePool: items grew %u -> %u\n",
                                     new_capacity / 2, new_capacity);
             fputs(buf, stderr);
         }
@@ -576,17 +576,6 @@ void autorelease_pool_drain_after_exception(void) {
  * Kept for backward compatibility with existing code.
  */
 
-/** @brief Drain all autorelease pools (global cleanup)
- * 
- * Pops all autorelease pools in the stack. Useful for global cleanup
- * at program termination or when you need to ensure all pools are drained.
- */
-void autorelease_pool_drain_all(void) {
-    while (g_pool.cp_count > 0) {
-        autorelease_pool_pop();
-    }
-}
-
 /** @brief Check if autorelease pool is active
  * 
  * @return true if there is an active autorelease pool, false otherwise
@@ -612,7 +601,7 @@ void autorelease_pool_drain_to_depth(uint32_t depth) {
  */
 void autorelease_pool_destroy(void) {
     // Drain all remaining pools
-    autorelease_pool_drain_all();
+    autorelease_pool_drain_to_depth(0);
     
     // Free backing arrays (always free pool structures, even in zombie mode)
     // Pool structures are not objects, so they should be freed normally

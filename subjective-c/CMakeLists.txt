@@ -105,6 +105,7 @@ set(SUBJECTIVE_C_TEST_SOURCES
     tests/test_hashmap.c
     tests/test_hashmap_id_keys.c
     tests/test_hash.c
+    tests/test_mini_format.c
     tests/test_support_stubs.c
     ${CMAKE_SOURCE_DIR}/external/unity/src/unity.c
     ${CMAKE_SOURCE_DIR}/src/memory_profiler.c

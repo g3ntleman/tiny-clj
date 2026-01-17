@@ -1286,7 +1286,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         const char *dbg = getenv("TINYCLJ_DEBUG_EVAL_LIST_OP");
         if (dbg && dbg[0] == '1' && (&g_clojure_core_last_form != NULL) && g_clojure_core_last_form == 210) {
             char buf[160];
-            (void)clj_mini_snprintf(buf, sizeof(buf), "[debug] eval_list: form=%d list=%p op=%p tag=%u\n",
+            (void)mini_snprintf(buf, sizeof(buf), "[debug] eval_list: form=%d list=%p op=%p tag=%u\n",
                                     (int)g_clojure_core_last_form, (void*)list, (void*)op, (unsigned)original_op_tag);
             fputs(buf, stderr);
         }
@@ -2841,7 +2841,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Suppress output in test context
     if (!g_suppress_time_output) {
         char msg[96];
-        (void)clj_mini_snprintf(msg, sizeof(msg), "Elapsed time: %.2f msecs\n", elapsed_ms);
+        (void)mini_snprintf(msg, sizeof(msg), "Elapsed time: %.2f msecs\n", elapsed_ms);
         platform_put_string(NULL, msg);
     }
 

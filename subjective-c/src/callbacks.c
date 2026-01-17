@@ -235,7 +235,7 @@ CljString* clj_to_string_default(ID value) {
     
     if (is_fixnum(value)) {
         char buf[32];
-        clj_mini_snprintf(buf, sizeof(buf), "%d", as_fixnum(value));
+        mini_snprintf(buf, sizeof(buf), "%d", as_fixnum(value));
         return make_string(buf);
     }
     

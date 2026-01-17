@@ -11,7 +11,7 @@ static void bench_printf(const char *fmt, ...) {
     char buf[512];
     va_list ap;
     va_start(ap, fmt);
-    (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    (void)mini_vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
     fputs(buf, stdout);
 }
@@ -20,7 +20,7 @@ static void bench_fprintf(FILE *file, const char *fmt, ...) {
     char buf[512];
     va_list ap;
     va_start(ap, fmt);
-    (void)clj_mini_vsnprintf(buf, sizeof(buf), fmt, ap);
+    (void)mini_vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
     fputs(buf, file ? file : stdout);
 }

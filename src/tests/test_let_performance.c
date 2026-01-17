@@ -57,21 +57,21 @@ static void build_nested_let(char *buffer, size_t buffer_size, int depth) {
     
     // Build nested lets from outer to inner
     for (int i = depth; i >= 1; i--) {
-        int written = clj_mini_snprintf(buffer + pos, buffer_size - pos,
+        int written = mini_snprintf(buffer + pos, buffer_size - pos,
                               "(let [a%d %d] ", i, i);
         if (written < 0 || (size_t)written >= buffer_size - pos) break;
         pos += written;
     }
     
     // Body: access innermost variable
-    int written = clj_mini_snprintf(buffer + pos, buffer_size - pos, "a1");
+    int written = mini_snprintf(buffer + pos, buffer_size - pos, "a1");
     if (written > 0 && (size_t)written < buffer_size - pos) {
         pos += written;
     }
     
     // Close all let blocks
     for (int i = 0; i < depth; i++) {
-        written = clj_mini_snprintf(buffer + pos, buffer_size - pos, ")");
+        written = mini_snprintf(buffer + pos, buffer_size - pos, ")");
         if (written < 0 || (size_t)written >= buffer_size - pos) break;
         pos += written;
     }

@@ -70,7 +70,7 @@ Current biggest individual symbols include:
 
 Previously, the linker map showed `printf`/`vsnprintf` pulling in newlib’s large formatting core.
 
-Current build removes the `printf`/`vfprintf`/`snprintf`/`vsnprintf` pull-ins by routing internal formatting/logging through a small formatter (`clj_mini_snprintf`/`clj_mini_vsnprintf`) and non-printf output paths.
+Current build removes the `printf`/`vfprintf`/`snprintf`/`vsnprintf` pull-ins by routing internal formatting/logging through a small formatter (`mini_snprintf`/`clj_mini_vsnprintf`) and non-printf output paths.
 
 ### Notes / next optimization targets (without feature stripping)
 
