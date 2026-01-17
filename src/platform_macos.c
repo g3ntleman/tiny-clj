@@ -11,6 +11,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <net/if.h>
 
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -278,6 +279,11 @@ struct PlatformUdpSocket {
     void *cb_ctx;
 };
 
+struct PlatformMdns {
+    PlatformUdpSocket *v4;
+    PlatformUdpSocket *v6;
+};
+
 static void udp_socket_cb(CFSocketRef s,
                           CFSocketCallBackType type,
                           CFDataRef address,
@@ -323,26 +329,7 @@ static void udp_socket_cb(CFSocketRef s,
     u->cb(u->cb_ctx, (void*)payload, bytes, len, addr_buf, port);
 }
 
-PlatformUdpSocket* platform_udp_bind(uint16_t port, platform_udp_recv_cb cb, void *cb_ctx) {
-    // Bind with native BSD sockets first so we can surface errors (e.g., sandbox EPERM).
-    int fd = (int)socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (fd < 0) return NULL;
-
-    int yes = 1;
-    (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, (socklen_t)sizeof(yes));
-
-    struct sockaddr_in sin;
-    memset(&sin, 0, sizeof(sin));
-    sin.sin_len = sizeof(sin);
-    sin.sin_family = AF_INET;
-    sin.sin_port = htons(port);
-    sin.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    if (bind(fd, (struct sockaddr*)&sin, (socklen_t)sizeof(sin)) != 0) {
-        close(fd);
-        return NULL;
-    }
-
+static PlatformUdpSocket* udp_wrap_native_fd(int fd, platform_udp_recv_cb cb, void *cb_ctx) {
     PlatformUdpSocket *u = (PlatformUdpSocket*)calloc(1, sizeof(PlatformUdpSocket));
     if (!u) {
         close(fd);
@@ -382,6 +369,28 @@ PlatformUdpSocket* platform_udp_bind(uint16_t port, platform_udp_recv_cb cb, voi
     u->sock = sock;
     u->source = source;
     return u;
+}
+
+PlatformUdpSocket* platform_udp_bind(uint16_t port, platform_udp_recv_cb cb, void *cb_ctx) {
+    // Bind with native BSD sockets first so we can surface errors (e.g., sandbox EPERM).
+    int fd = (int)socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (fd < 0) return NULL;
+
+    int yes = 1;
+    (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, (socklen_t)sizeof(yes));
+
+    struct sockaddr_in sin;
+    memset(&sin, 0, sizeof(sin));
+    sin.sin_len = sizeof(sin);
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons(port);
+    sin.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    if (bind(fd, (struct sockaddr*)&sin, (socklen_t)sizeof(sin)) != 0) {
+        close(fd);
+        return NULL;
+    }
+    return udp_wrap_native_fd(fd, cb, cb_ctx);
 }
 
 int platform_udp_send(PlatformUdpSocket *sock,
@@ -428,6 +437,138 @@ void platform_udp_close(PlatformUdpSocket *sock) {
         sock->sock = NULL;
     }
     free(sock);
+}
+
+// -----------------------------------------------------------------------------
+// mDNS transport (macOS)
+// -----------------------------------------------------------------------------
+
+PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx) {
+    // Best-effort: create IPv4 + IPv6 sockets bound to 5353 with reuse enabled.
+    const uint16_t port = 5353;
+
+    PlatformMdns *m = (PlatformMdns*)calloc(1, sizeof(PlatformMdns));
+    if (!m) return NULL;
+
+    // IPv4
+    {
+        int fd = (int)socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (fd >= 0) {
+            int yes = 1;
+            (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, (socklen_t)sizeof(yes));
+#ifdef SO_REUSEPORT
+            (void)setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, (socklen_t)sizeof(yes));
+#endif
+            struct sockaddr_in sin;
+            memset(&sin, 0, sizeof(sin));
+            sin.sin_len = sizeof(sin);
+            sin.sin_family = AF_INET;
+            sin.sin_port = htons(port);
+            sin.sin_addr.s_addr = htonl(INADDR_ANY);
+            if (bind(fd, (struct sockaddr*)&sin, (socklen_t)sizeof(sin)) == 0) {
+                // Join multicast group 224.0.0.251 on default interface.
+                struct ip_mreq mreq;
+                memset(&mreq, 0, sizeof(mreq));
+                (void)inet_pton(AF_INET, "224.0.0.251", &mreq.imr_multiaddr);
+                mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+                (void)setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, (socklen_t)sizeof(mreq));
+
+                m->v4 = udp_wrap_native_fd(fd, cb, cb_ctx);
+            } else {
+                close(fd);
+            }
+        }
+    }
+
+    // IPv6
+    {
+        int fd = (int)socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+        if (fd >= 0) {
+            int yes = 1;
+            (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, (socklen_t)sizeof(yes));
+#ifdef SO_REUSEPORT
+            (void)setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, (socklen_t)sizeof(yes));
+#endif
+            // Keep it v6-only for predictable behavior.
+            (void)setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &yes, (socklen_t)sizeof(yes));
+
+            struct sockaddr_in6 sin6;
+            memset(&sin6, 0, sizeof(sin6));
+            sin6.sin6_len = sizeof(sin6);
+            sin6.sin6_family = AF_INET6;
+            sin6.sin6_port = htons(port);
+            sin6.sin6_addr = in6addr_any;
+            if (bind(fd, (struct sockaddr*)&sin6, (socklen_t)sizeof(sin6)) == 0) {
+                // Join ff02::fb (mDNS) on default interface index 0 (best-effort).
+                struct ipv6_mreq mreq6;
+                memset(&mreq6, 0, sizeof(mreq6));
+                (void)inet_pton(AF_INET6, "ff02::fb", &mreq6.ipv6mr_multiaddr);
+                mreq6.ipv6mr_interface = 0;
+                (void)setsockopt(fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq6, (socklen_t)sizeof(mreq6));
+
+                m->v6 = udp_wrap_native_fd(fd, cb, cb_ctx);
+            } else {
+                close(fd);
+            }
+        }
+    }
+
+    if (!m->v4 && !m->v6) {
+        free(m);
+        return NULL;
+    }
+    return m;
+}
+
+int platform_mdns_send_unicast(PlatformMdns *m,
+                              const uint8_t *data, size_t len,
+                              const char *to_addr, uint16_t to_port) {
+    if (!m || !data || !to_addr) return -1;
+    // Prefer IPv4 if parse succeeds, else IPv6.
+    if (m->v4) {
+        struct sockaddr_in sin;
+        memset(&sin, 0, sizeof(sin));
+        sin.sin_len = sizeof(sin);
+        sin.sin_family = AF_INET;
+        sin.sin_port = htons(to_port);
+        if (inet_pton(AF_INET, to_addr, &sin.sin_addr) == 1) {
+            int fd = CFSocketGetNative(m->v4->sock);
+            ssize_t n = sendto(fd, data, len, 0, (struct sockaddr*)&sin, (socklen_t)sizeof(sin));
+            return (n < 0) ? -1 : 0;
+        }
+    }
+    if (m->v6) {
+        struct sockaddr_in6 sin6;
+        memset(&sin6, 0, sizeof(sin6));
+        sin6.sin6_len = sizeof(sin6);
+        sin6.sin6_family = AF_INET6;
+        sin6.sin6_port = htons(to_port);
+        if (inet_pton(AF_INET6, to_addr, &sin6.sin6_addr) == 1) {
+            int fd = CFSocketGetNative(m->v6->sock);
+            ssize_t n = sendto(fd, data, len, 0, (struct sockaddr*)&sin6, (socklen_t)sizeof(sin6));
+            return (n < 0) ? -1 : 0;
+        }
+    }
+    return -1;
+}
+
+int platform_mdns_send_multicast(PlatformMdns *m, const uint8_t *data, size_t len) {
+    if (!m || !data) return -1;
+    int ok = 0;
+    if (m->v4) {
+        ok = (platform_mdns_send_unicast(m, data, len, "224.0.0.251", 5353) == 0) ? 1 : ok;
+    }
+    if (m->v6) {
+        ok = (platform_mdns_send_unicast(m, data, len, "ff02::fb", 5353) == 0) ? 1 : ok;
+    }
+    return ok ? 0 : -1;
+}
+
+void platform_mdns_close(PlatformMdns *m) {
+    if (!m) return;
+    if (m->v4) { platform_udp_close(m->v4); m->v4 = NULL; }
+    if (m->v6) { platform_udp_close(m->v6); m->v6 = NULL; }
+    free(m);
 }
 
 // TCP is implemented in later todos (platform + builtins). For now, keep stubs that compile.

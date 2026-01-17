@@ -67,9 +67,7 @@ TEST(test_runtime_stats_build_time_before_now)
     }
 }
 
-
-
-#ifdef DEBUG
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_contains_memory_stats_map)
 {
     ID stats = eval_string("(do (require 'tinyclj.runtime) (tinyclj.runtime/stats))", g_test_eval_state);

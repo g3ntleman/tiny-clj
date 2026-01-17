@@ -50,6 +50,7 @@ size_t platform_flash_bytes_total(void);
 
 typedef struct PlatformUdpSocket PlatformUdpSocket;
 typedef struct PlatformTcpConn PlatformTcpConn;
+typedef struct PlatformMdns PlatformMdns;
 
 typedef void (*platform_udp_recv_cb)(
     void *ctx,
@@ -79,6 +80,16 @@ int platform_udp_send(PlatformUdpSocket *sock,
                       const uint8_t *data, size_t len,
                       const char *to_addr, uint16_t to_port);
 void platform_udp_close(PlatformUdpSocket *sock);
+
+// mDNS (multicast DNS) transport helpers.
+// These are used by the DNS-SD resolver to send queries and receive responses.
+// The callback uses the same signature as UDP receive callbacks.
+PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx);
+int platform_mdns_send_unicast(PlatformMdns *m,
+                              const uint8_t *data, size_t len,
+                              const char *to_addr, uint16_t to_port);
+int platform_mdns_send_multicast(PlatformMdns *m, const uint8_t *data, size_t len);
+void platform_mdns_close(PlatformMdns *m);
 
 // TCP
 PlatformTcpConn* platform_tcp_connect_async(const char *host, uint16_t port,

@@ -102,6 +102,9 @@ ID native_println(ID *args, unsigned int argc);
 ID native_pr(ID *args, unsigned int argc);
 ID native_prn(ID *args, unsigned int argc);
 
+// Pretty printing (clojure.pprint namespace)
+ID native_pprint_str(ID *args, unsigned int argc);
+
 // Atom functions
 ID native_atom(ID *args, unsigned int argc);
 ID native_deref(ID *args, unsigned int argc);

@@ -64,10 +64,6 @@ static size_t mini_append_int_dec_width(char *dst, size_t cap, size_t pos, long 
     return mini_append_uint_base_width(dst, cap, pos, (unsigned long long)v, 10, false, width, zero_pad);
 }
 
-static size_t mini_append_int_dec(char *dst, size_t cap, size_t pos, long long v) {
-    return mini_append_int_dec_width(dst, cap, pos, v, 0, false);
-}
-
 static size_t mini_append_double_fixed(char *dst, size_t cap, size_t pos, double v, int precision) {
     if (precision < 0) precision = 6;
     if (precision > 9) precision = 9; // keep 32-bit safe

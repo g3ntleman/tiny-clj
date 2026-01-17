@@ -72,6 +72,12 @@ ID native_tinyclj_net_tcp_on_receive(ID *args, unsigned int argc);
 ID native_tinyclj_net_tcp_send_bang(ID *args, unsigned int argc);
 ID native_tinyclj_net_tcp_close_bang(ID *args, unsigned int argc);
 
+// tinyclj.net.mdns native functions (used by :native stubs)
+ID native_tinyclj_net_mdns_open(ID *args, unsigned int argc);
+ID native_tinyclj_net_mdns_on_event(ID *args, unsigned int argc);
+ID native_tinyclj_net_mdns_browse_bang(ID *args, unsigned int argc);
+ID native_tinyclj_net_mdns_close_bang(ID *args, unsigned int argc);
+
 ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_kv_delete(ID *args, unsigned int argc);
@@ -3092,6 +3098,14 @@ static StaticSymbolData sym_stacktrace_str_qualified_data = {
             .cname = "clojure.stacktrace/stacktrace-str"}};
 #endif
 
+// Qualified-name entry for clojure.pprint/pprint-str.
+// Stored as pseudo-qualified cname and rely on native_function_lookup's qualified-name fallback.
+static StaticSymbolData sym_clojure_pprint_pprint_str_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "clojure.pprint/pprint-str"}};
+
 // Qualified-name entries for tinyclj.datetime native stubs.
 // Stored as pseudo-qualified cname and rely on native_function_lookup's qualified-name fallback.
 static StaticSymbolData sym_tinyclj_datetime_civil_from_days_qualified_data = {
@@ -3182,6 +3196,28 @@ static StaticSymbolData sym_tinyclj_net_tcp_close_bang_qualified_data = {
             .unqualified = NULL,
             .cname = "tinyclj.net/tcp-close!"}};
 
+// Qualified-name entries for tinyclj.net.mdns native stubs.
+static StaticSymbolData sym_tinyclj_net_mdns_open_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net.mdns/open"}};
+static StaticSymbolData sym_tinyclj_net_mdns_on_event_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net.mdns/on-event"}};
+static StaticSymbolData sym_tinyclj_net_mdns_browse_bang_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net.mdns/browse!"}};
+static StaticSymbolData sym_tinyclj_net_mdns_close_bang_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.net.mdns/close!"}};
+
 static StaticSymbolData sym_tinyclj_kv_put_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -3222,6 +3258,9 @@ static const NativeFunctionEntry native_function_table[] = {
 #endif
     {&sym_retain_count_data.sym, native_retain_count},
 
+    // clojure.pprint functions
+    {&sym_clojure_pprint_pprint_str_qualified_data.sym, native_pprint_str},
+
     // tinyclj.datetime functions
     {&sym_tinyclj_datetime_civil_from_days_qualified_data.sym, native_datetime_civil_from_days},
     {&sym_tinyclj_datetime_days_from_civil_qualified_data.sym, native_datetime_days_from_civil},
@@ -3243,6 +3282,12 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_tinyclj_net_tcp_on_receive_qualified_data.sym, native_tinyclj_net_tcp_on_receive},
     {&sym_tinyclj_net_tcp_send_bang_qualified_data.sym, native_tinyclj_net_tcp_send_bang},
     {&sym_tinyclj_net_tcp_close_bang_qualified_data.sym, native_tinyclj_net_tcp_close_bang},
+
+    // tinyclj.net.mdns
+    {&sym_tinyclj_net_mdns_open_qualified_data.sym, native_tinyclj_net_mdns_open},
+    {&sym_tinyclj_net_mdns_on_event_qualified_data.sym, native_tinyclj_net_mdns_on_event},
+    {&sym_tinyclj_net_mdns_browse_bang_qualified_data.sym, native_tinyclj_net_mdns_browse_bang},
+    {&sym_tinyclj_net_mdns_close_bang_qualified_data.sym, native_tinyclj_net_mdns_close_bang},
 
     {&sym_tinyclj_kv_put_bytes_qualified_data.sym, native_tinyclj_kv_put_bytes},
     {&sym_tinyclj_kv_get_bytes_qualified_data.sym, native_tinyclj_kv_get_bytes},
@@ -3607,9 +3652,9 @@ ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         ASSIGN(m, map_assoc(m, k_flash_total, CLAMP_SIZE_TO_FIXNUM(flash_total)));
     }
 
-#ifdef DEBUG
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     // Debug-only: embed memory profiler stats in a dedicated nested map.
-    // This must not exist in production builds.
+    // Memory profiling is a form of debugging, so keep this scoped to DEBUG builds.
     ID k_memory_stats = (ID)SYM_KW_MEMORY_STATS;
     ID k_enabled = (ID)SYM_KW_ENABLED_P;
     ID k_object_allocations = (ID)SYM_KW_OBJECT_ALLOCATIONS;
@@ -3620,7 +3665,7 @@ ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 
     CljMap *ms = map_empty();
     if (ms) {
-        // Note: the profiler counters are meaningful only if profiling is enabled,
+        // Note: profiler counters are meaningful only if profiling is enabled,
         // but we always include the map in DEBUG builds for consistent shape.
         const bool mem_enabled = is_memory_profiling_enabled();
         ASSIGN(ms, map_assoc(ms, k_enabled, mem_enabled ? clj_true : clj_false));
@@ -3632,7 +3677,6 @@ ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         ASSIGN(ms, map_assoc(ms, k_object_bytes_current, CLAMP_SIZE_TO_FIXNUM(st.current_memory_usage)));
         ASSIGN(ms, map_assoc(ms, k_object_bytes_peak, CLAMP_SIZE_TO_FIXNUM(st.peak_memory_usage)));
 
-#if MEMORY_PROFILING_ENABLED
         ID k_raw_allocations = (ID)SYM_KW_RAW_ALLOCATIONS;
         ID k_raw_frees = (ID)SYM_KW_RAW_FREES;
         ID k_raw_reallocations = (ID)SYM_KW_RAW_REALLOCATIONS;
@@ -3648,7 +3692,6 @@ ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         ASSIGN(ms, map_assoc(ms, k_raw_bytes_peak, CLAMP_SIZE_TO_FIXNUM(st.raw_bytes_peak)));
         ASSIGN(ms, map_assoc(ms, k_raw_blocks_current, CLAMP_SIZE_TO_FIXNUM(st.raw_blocks_current)));
         ASSIGN(ms, map_assoc(ms, k_raw_blocks_peak, CLAMP_SIZE_TO_FIXNUM(st.raw_blocks_peak)));
-#endif
 
         ASSIGN(m, map_assoc(m, k_memory_stats, (ID)ms));
         RELEASE(ms);

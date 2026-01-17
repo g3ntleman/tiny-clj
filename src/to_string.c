@@ -811,6 +811,163 @@ CljString* pr_str(ID v) {
     return to_string_with_escape(v, true);
 }
 
+// -----------------------------------------------------------------------------
+// Pretty printing (embedded-friendly, small subset)
+// -----------------------------------------------------------------------------
+
+typedef struct {
+    char *buffer; // NULL => length-only mode
+    size_t pos;
+    bool escape_strings;
+} PrettyOut;
+
+static inline void pp_emit_bytes(PrettyOut *out, const char *data, size_t len) {
+    if (out->buffer) memcpy(out->buffer + out->pos, data, len);
+    out->pos += len;
+}
+
+static inline void pp_emit_char(PrettyOut *out, char c) {
+    if (out->buffer) out->buffer[out->pos] = c;
+    out->pos += 1;
+}
+
+static inline void pp_emit_spaces(PrettyOut *out, int n) {
+    for (int i = 0; i < n; i++) pp_emit_char(out, ' ');
+}
+
+static inline void pp_emit_plain(PrettyOut *out, CljObject *v) {
+    if (!out->buffer) {
+        out->pos += to_string_calc_length(v, out->escape_strings);
+        return;
+    }
+    size_t off = out->pos;
+    to_string_build_string(v, out->buffer, &off, out->escape_strings);
+    out->pos = off;
+}
+
+// Minimal pretty: only maps and lists get multi-line layout.
+// Nested values remain single-line (plain printer) to keep code small.
+static void to_string_pretty_emit_minimal(PrettyOut *out, CljObject *v, int indent) {
+    if (!v) {
+        pp_emit_plain(out, NULL);
+        return;
+    }
+    CljValue val = (CljValue)v;
+    if (is_immediate(val)) {
+        pp_emit_plain(out, v);
+        return;
+    }
+
+    const int child_indent = indent + 2;
+
+    switch (v->type) {
+        case CLJ_VECTOR:
+        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_TRANSIENT_WEAK: {
+            CljVector *vec = (CljVector*)as_vector(v);
+            int count = vector_count(vec);
+            if (count == 0) {
+                pp_emit_plain(out, v);
+                return;
+            }
+
+            if (v->type == CLJ_VECTOR_TRANSIENT) pp_emit_bytes(out, "<transient ", 11);
+            pp_emit_char(out, '[');
+            pp_emit_char(out, '\n');
+
+            bool first = true;
+            VECTOR_FOR_EACH(vec, elem) {
+                if (!first) pp_emit_char(out, '\n');
+                pp_emit_spaces(out, child_indent);
+                pp_emit_plain(out, (CljObject*)elem);
+                first = false;
+            }
+
+            pp_emit_char(out, '\n');
+            pp_emit_spaces(out, indent);
+            pp_emit_char(out, ']');
+            if (v->type == CLJ_VECTOR_TRANSIENT) pp_emit_char(out, '>');
+            return;
+        }
+
+        case CLJ_MAP:
+        case CLJ_MAP_TRANSIENT: {
+            CljMap *map = as_map(v);
+            if (map_count(map) == 0) {
+                pp_emit_plain(out, v);
+                return;
+            }
+
+            if (v->type == CLJ_MAP_TRANSIENT) pp_emit_bytes(out, "<transient ", 11);
+            pp_emit_char(out, '{');
+            pp_emit_char(out, '\n');
+
+            bool first = true;
+            MAP_FOR_EACH(map, k, val2) {
+                if (!k) continue;
+                if (!first) pp_emit_char(out, '\n');
+                pp_emit_spaces(out, child_indent);
+                pp_emit_plain(out, (CljObject*)k);
+                pp_emit_char(out, ' ');
+                pp_emit_plain(out, (CljObject*)val2);
+                first = false;
+            }
+
+            pp_emit_char(out, '\n');
+            pp_emit_spaces(out, indent);
+            pp_emit_char(out, '}');
+            if (v->type == CLJ_MAP_TRANSIENT) pp_emit_char(out, '>');
+            return;
+        }
+
+        case CLJ_LIST:
+        case CLJ_AST_NODE: {
+            CljList *cur = list_or_null(list_like_as_list_or_null((ID)v));
+            if (!cur) {
+                pp_emit_plain(out, v);
+                return;
+            }
+
+            pp_emit_char(out, '(');
+            pp_emit_char(out, '\n');
+
+            bool first = true;
+            int n = 0;
+            while (cur && n < 1000) {
+                if (!first) pp_emit_char(out, '\n');
+                pp_emit_spaces(out, child_indent);
+                pp_emit_plain(out, (CljObject*)LIST_FIRST(cur));
+                first = false;
+                n++;
+                cur = list_rest_normalized(cur);
+            }
+
+            pp_emit_char(out, '\n');
+            pp_emit_spaces(out, indent);
+            pp_emit_char(out, ')');
+            return;
+        }
+
+        default:
+            pp_emit_plain(out, v);
+            return;
+    }
+}
+
+CljString* pr_str_pretty(ID v) {
+    PrettyOut out = { .buffer = NULL, .pos = 0, .escape_strings = true };
+    to_string_pretty_emit_minimal(&out, (CljObject*)v, 0);
+
+    CljString *result = (CljString*)AUTORELEASE(make_string_buffer(out.pos));
+    PrettyOut out2 = { .buffer = result->data, .pos = 0, .escape_strings = true };
+    to_string_pretty_emit_minimal(&out2, (CljObject*)v, 0);
+
+    size_t n = out2.pos;
+    result->data[n] = '\0';
+    result->length = (uint16_t)n;
+    return result;
+}
+
 CljString* print_str(ID v) {
     return to_string_with_escape(v, false);
 }

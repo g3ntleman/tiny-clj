@@ -40,6 +40,9 @@ ID native_string_reverse(ID *args, unsigned int argc);
 // Format string: (format fmt & args)
 ID native_format(ID *args, unsigned int argc);
 
+// Pretty printing (clojure.pprint namespace): (clojure.pprint/pprint-str x)
+ID native_pprint_str(ID *args, unsigned int argc);
+
 // Native lookup hook for clojure.string :native stubs.
 // (The main lookup lives in builtins.c, but clojure.string is split out.)
 BuiltinFn builtins_strings_native_function_lookup(struct CljSymbol *symbol);
