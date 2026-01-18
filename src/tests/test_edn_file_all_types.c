@@ -76,6 +76,17 @@ static ID map_get_required(CljMap *m, const char *kw_name)
     CljSymbol *kw = intern_symbol_global(kw_name);
     TEST_ASSERT_NOT_NULL(kw);
     ID v = map_get(m, kw);
+    if (!v || v == NOT_FOUND) {
+        test_fprintf(stderr, "EDN fixture map lookup failed for key %s\n", kw_name);
+        test_fprintf(stderr, "map_count=%d\n", map_count(m));
+        int i = 0;
+        MAP_FOR_EACH(m, k, val) {
+            (void)val;
+            CljString *ks = to_string((ID)k);
+            test_fprintf(stderr, "  key[%d]=%s (tag=%d)\n", i, ks ? clj_string_data(ks) : "<null>", (int)TAG((ID)k));
+            i++;
+        }
+    }
     TEST_ASSERT_NOT_NULL_MESSAGE(v, kw_name);
     TEST_ASSERT_NOT_EQUAL_MESSAGE(NOT_FOUND, v, kw_name);
     return v;

@@ -15,6 +15,7 @@ TEST(test_pprint_require_and_pprint_str_multiline)
 
     const char *s = clj_string_data((CljString*)out);
     TEST_ASSERT_NOT_NULL(s);
+    test_fprintf(stderr, "pprint-str(map) output:\n%s\n", s);
 
     // Must be multi-line and indented.
     TEST_ASSERT_TRUE_MESSAGE(strstr(s, "{\n") != NULL, "pprint-str(map) should start with '{\\n'");
@@ -32,6 +33,7 @@ TEST(test_pprint_require_and_pprint_str_multiline)
     TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(out2));
     const char *s2 = clj_string_data((CljString*)out2);
     TEST_ASSERT_NOT_NULL(s2);
+    test_fprintf(stderr, "pprint-str(list) output:\n%s\n", s2);
     TEST_ASSERT_TRUE_MESSAGE(strstr(s2, "(\n") != NULL, "pprint-str(list) should start with '(\\n'");
     TEST_ASSERT_TRUE_MESSAGE(strstr(s2, "\n  1") != NULL, "pprint-str(list) should contain indented elements");
     TEST_ASSERT_TRUE_MESSAGE(strstr(s2, "\n)") != NULL, "pprint-str(list) should contain closing paren on its own line");

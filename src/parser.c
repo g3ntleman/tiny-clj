@@ -619,8 +619,9 @@ static ID parse_map(Reader *reader, EvalState *st) {
   if (!reader_match(reader, '{'))
     return NULL;
   reader_skip_all(reader);
-  ID pairs[MAX_STACK_MAP_PAIRS * 2];
-  int pair_count = 0;
+  // Build the map incrementally to avoid relying on a fixed-size stack buffer.
+  // This also matches Clojure semantics for duplicate keys (later entries win).
+  CljMap *map = make_map(8);
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
     ID key = parse_expr(reader, st);
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
@@ -628,17 +629,19 @@ static ID parse_map(Reader *reader, EvalState *st) {
     ID value = parse_expr(reader, st);
     // Note: value can be NULL (nil) - that's a valid value in Clojure!
     reader_skip_all(reader);
-    pairs[pair_count * 2] = key;
-    pairs[pair_count * 2 + 1] = value;
-    pair_count++;
+    map_assoc_inplace(&map, key, value);
+    if (!map) {
+      throw_parser_exception("Failed to build map", reader);
+      return NULL;
+    }
   }
   if (reader_eof(reader) || !reader_match(reader, '}')) {
     throw_parser_exception("Unclosed map - missing closing '}'", reader);
     return NULL;
   }
-  // Use constructor API (owned) and return autoreleased
+  // Return autoreleased object - caller can use until pool is popped
   // No location meta - symbols have inline line/col
-  return AUTORELEASE(make_map_from_stack((CljObject**)pairs, pair_count));
+  return AUTORELEASE(map);
 }
 
 /**
@@ -999,6 +1002,21 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
   }
   if (!utf8valid(buffer))
     throw_parser_exception("Invalid UTF-8 in symbol", reader);
+
+  // Defensive literal handling: ensure we never end up interning these as regular symbols.
+  // These are EDN/Clojure literals and must evaluate/parse to their immediate/special values.
+  // (Normally handled in parse_expr's fast-path switch, but keep this as a safety net.)
+  if (buffer[0] != ':' && !auto_qualify) {
+    if (strcmp(buffer, "true") == 0) {
+      return clj_true;
+    }
+    if (strcmp(buffer, "false") == 0) {
+      return clj_false;
+    }
+    if (strcmp(buffer, "nil") == 0) {
+      return SYM_NIL;
+    }
+  }
 
   // Handle auto-qualified keywords: ::keyword or ::alias/keyword
   if (auto_qualify) {

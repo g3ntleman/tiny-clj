@@ -2956,6 +2956,58 @@ ID native_ns_unload(ID *args, unsigned int argc)
     if (!ns)
         return (ID)clj_false;
 
+    // If the namespace contains named functions, they may have a self-binding frame
+    // (fn-name -> fn) in their env_stack. That frame is intended to support recursion but
+    // must not keep objects alive after ns-unload. Clear the self-binding so the function
+    // can be released when the namespace mappings are released.
+    if (ns->mappings) {
+        MAP_FOR_EACH(ns->mappings, k, v) {
+            (void)k;
+            if (!v) continue;
+            if (TAG((ID)v) != CLJ_CLOSURE) continue;
+
+            CljFunction *fn = (CljFunction*)v;
+            if (!fn->env_stack) continue;
+
+            unsigned int sc = vector_count(fn->env_stack);
+            if (sc == 0) continue;
+
+            ID top_id = vector_nth(fn->env_stack, (int)(sc - 1));
+            if (!top_id || TAG(top_id) != CLJ_MAP) continue;
+
+            CljMap *top_map = (CljMap*)top_id;
+
+            // Only clear the simplest self-binding case: a single-entry map that points back to fn.
+            if (map_count(top_map) == 1) {
+                MAP_FOR_EACH(top_map, sk, sv) {
+                    if (sv == (ID)fn) {
+                        CljMap *tmp = top_map;
+                        map_assoc_inplace(&tmp, (ID)sk, NULL);
+                        if (tmp && tmp != top_map) {
+                            vector_assoc_inplace(&fn->env_stack, sc - 1, (ID)tmp);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Explicitly release namespace-owned maps so objects stored in mappings are released
+    // immediately (tests assert that function objects are released after ns-unload).
+    if (ns->mappings) {
+        RELEASE(ns->mappings);
+        ns->mappings = make_map(0);
+    }
+    if (ns->aliases) {
+        RELEASE(ns->aliases);
+        ns->aliases = make_map(0);
+    }
+    if (ns->macro_mappings) {
+        RELEASE(ns->macro_mappings);
+        ns->macro_mappings = NULL;
+    }
+
     // Remove from registry; releasing the old registry map releases the namespace object
     // (and thus its mappings), ensuring resources are freed.
     map_remove_inplace(&g_runtime.ns_registry, name_sym);

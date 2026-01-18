@@ -16,18 +16,6 @@
 #include "to_string.h"
 
 #include <string.h>
-#include <stdio.h>
-
-// #region agent log
-static void debug_log_loop_frame(const char *msg, int pair_count, int has_parent) {
-    FILE *f = fopen(".cursor/debug.log", "a");
-    if (f) {
-        fprintf(f, "{\"location\":\"eval_special_forms.c\",\"hypothesisId\":\"H3\",\"message\":\"%s\",\"data\":{\"pair_count\":%d,\"has_parent\":%d}}\n",
-                msg, pair_count, has_parent);
-        fclose(f);
-    }
-}
-// #endregion
 
 static INLINE bool sym_name_eq(ID obj, const char *name) {
     CLJ_ASSERT(name != NULL && "sym_name_eq: name must not be NULL");
@@ -375,9 +363,6 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
     CallFrame *loop_frame = (pair_count > 0) ? &loop_frame_storage : NULL;
     if (loop_frame) {
         frame_init(loop_frame, ctx ? ctx->frame : NULL);
-        // #region agent log
-        debug_log_loop_frame("loop_frame_init", pair_count, ctx && ctx->frame ? 1 : 0);
-        // #endregion
     }
 
     // Symbol/value arrays for frame_set_bindings.
@@ -462,9 +447,6 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
     ID result = NULL;
     CljList *args = list_or_null(as_list(LIST_REST(list)));
     CljList *body_node = args ? list_or_null(as_list(LIST_REST(args))) : NULL;
-    // #region agent log
-    debug_log_loop_frame("loop_body_eval_start", pair_count, loop_ctx.frame && loop_ctx.frame->parent ? 1 : 0);
-    // #endregion
     for (;;) {
         recur_arg_count = 0;
 
