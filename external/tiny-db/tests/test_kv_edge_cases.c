@@ -62,24 +62,24 @@ static void test_invalid_args_are_rejected(void) {
     tdb_blockdev_t bdev = {0};
     make_bdev(&bdev, &rd, storage, sizeof(storage), 1);
 
-    tdb_db_t* db = NULL;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_db_init(&db, &bdev, NULL));
+    tdb_kv_t* db = NULL;
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_open(&db, &bdev, NULL));
 
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_put(NULL, "k", 1, "v", 1));
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_put(db, NULL, 1, "v", 1));
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_put(db, "k", 1, NULL, 1));
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_get(NULL, "k", 1, &(tdb_blob_t){0}));
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_get(db, "k", 1, NULL));
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_get(db, NULL, 1, &(tdb_blob_t){0}));
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_del(NULL, "k", 1));
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_del(db, NULL, 1));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_put(NULL, "k", 1, "v", 1));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_put(db, NULL, 1, "v", 1));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_put(db, "k", 1, NULL, 1));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_get(NULL, "k", 1, &(tdb_blob_t){0}));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_get(db, "k", 1, NULL));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_get(db, NULL, 1, &(tdb_blob_t){0}));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_del(NULL, "k", 1));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_del(db, NULL, 1));
 
-    tdb_cursor_t* cur = NULL;
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_cursor_open_prefix(NULL, "a", 1, &cur));
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_cursor_open_prefix(db, NULL, 1, &cur));
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_cursor_next(NULL, &(int){0}));
+    tdb_kv_cursor_t* cur = NULL;
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_cursor_open_prefix(NULL, "a", 1, &cur));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_cursor_open_prefix(db, NULL, 1, &cur));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_cursor_next(NULL, &(int){0}));
 
-    tdb_db_deinit(db);
+    tdb_kv_close(db);
 }
 
 static void test_delete_missing_key_returns_not_found(void) {
@@ -88,10 +88,10 @@ static void test_delete_missing_key_returns_not_found(void) {
     tdb_blockdev_t bdev = {0};
     make_bdev(&bdev, &rd, storage, sizeof(storage), 1);
 
-    tdb_db_t* db = NULL;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_db_init(&db, &bdev, NULL));
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_NOT_FOUND, tdb_del(db, "nope", 4));
-    tdb_db_deinit(db);
+    tdb_kv_t* db = NULL;
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_open(&db, &bdev, NULL));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_NOT_FOUND, tdb_kv_del(db, "nope", 4));
+    tdb_kv_close(db);
 }
 
 static void test_empty_db_and_empty_prefix_cursor(void) {
@@ -100,47 +100,47 @@ static void test_empty_db_and_empty_prefix_cursor(void) {
     tdb_blockdev_t bdev = {0};
     make_bdev(&bdev, &rd, storage, sizeof(storage), 1);
 
-    tdb_db_t* db = NULL;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_db_init(&db, &bdev, NULL));
+    tdb_kv_t* db = NULL;
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_open(&db, &bdev, NULL));
 
     // Empty DB.
-    tdb_cursor_t* cur = NULL;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_open_prefix(db, NULL, 0, &cur));
+    tdb_kv_cursor_t* cur = NULL;
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_open_prefix(db, NULL, 0, &cur));
     int has = 1;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_next(cur, &has));
     TEST_ASSERT_FALSE(has);
-    tdb_cursor_close(cur);
+    tdb_kv_cursor_close(cur);
 
     // Insert keys and iterate with empty prefix (all keys).
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_put(db, "b", 1, "1", 1));
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_put(db, "a", 1, "2", 1));
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_put(db, "aa", 2, "3", 1));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_put(db, "b", 1, "1", 1));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_put(db, "a", 1, "2", 1));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_put(db, "aa", 2, "3", 1));
 
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_open_prefix(db, NULL, 0, &cur));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_open_prefix(db, NULL, 0, &cur));
     tdb_blob_t k = {0};
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_next(cur, &has));
     TEST_ASSERT_TRUE(has);
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_key(cur, &k));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_key(cur, &k));
     TEST_ASSERT_EQUAL_MEMORY("a", k.data, 1);
     TEST_ASSERT_EQUAL_UINT32(1, (uint32_t)k.len);
 
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_next(cur, &has));
     TEST_ASSERT_TRUE(has);
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_key(cur, &k));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_key(cur, &k));
     TEST_ASSERT_EQUAL_MEMORY("aa", k.data, 2);
     TEST_ASSERT_EQUAL_UINT32(2, (uint32_t)k.len);
 
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_next(cur, &has));
     TEST_ASSERT_TRUE(has);
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_key(cur, &k));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_key(cur, &k));
     TEST_ASSERT_EQUAL_MEMORY("b", k.data, 1);
     TEST_ASSERT_EQUAL_UINT32(1, (uint32_t)k.len);
 
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_next(cur, &has));
     TEST_ASSERT_FALSE(has);
-    tdb_cursor_close(cur);
+    tdb_kv_cursor_close(cur);
 
-    tdb_db_deinit(db);
+    tdb_kv_close(db);
 }
 
 static void test_binary_keys_with_nul_bytes_roundtrip_and_prefix(void) {
@@ -149,46 +149,46 @@ static void test_binary_keys_with_nul_bytes_roundtrip_and_prefix(void) {
     tdb_blockdev_t bdev = {0};
     make_bdev(&bdev, &rd, storage, sizeof(storage), 1);
 
-    tdb_db_t* db = NULL;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_db_init(&db, &bdev, NULL));
+    tdb_kv_t* db = NULL;
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_open(&db, &bdev, NULL));
 
     const uint8_t k1[] = {0x00, 0x01, 0x00, 0x02};
     const uint8_t k2[] = {0x00, 0x01, 0x00, 0x03};
     const uint8_t k3[] = {0x00, 0x02};
 
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_put(db, k1, sizeof(k1), "A", 1));
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_put(db, k2, sizeof(k2), "B", 1));
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_put(db, k3, sizeof(k3), "C", 1));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_put(db, k1, sizeof(k1), "A", 1));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_put(db, k2, sizeof(k2), "B", 1));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_put(db, k3, sizeof(k3), "C", 1));
 
     tdb_blob_t out = {0};
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_get(db, k2, sizeof(k2), &out));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_get(db, k2, sizeof(k2), &out));
     TEST_ASSERT_EQUAL_UINT32(1, (uint32_t)out.len);
     TEST_ASSERT_EQUAL_MEMORY("B", out.data, 1);
 
     // Prefix {0x00,0x01,0x00} matches k1 and k2 (in lex order).
     const uint8_t pfx[] = {0x00, 0x01, 0x00};
-    tdb_cursor_t* cur = NULL;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_open_prefix(db, pfx, sizeof(pfx), &cur));
+    tdb_kv_cursor_t* cur = NULL;
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_open_prefix(db, pfx, sizeof(pfx), &cur));
     int has = 0;
     tdb_blob_t k = {0};
 
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_next(cur, &has));
     TEST_ASSERT_TRUE(has);
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_key(cur, &k));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_key(cur, &k));
     TEST_ASSERT_EQUAL_UINT32(sizeof(k1), (uint32_t)k.len);
     TEST_ASSERT_EQUAL_MEMORY(k1, k.data, sizeof(k1));
 
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_next(cur, &has));
     TEST_ASSERT_TRUE(has);
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_key(cur, &k));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_key(cur, &k));
     TEST_ASSERT_EQUAL_UINT32(sizeof(k2), (uint32_t)k.len);
     TEST_ASSERT_EQUAL_MEMORY(k2, k.data, sizeof(k2));
 
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_cursor_next(cur, &has));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_next(cur, &has));
     TEST_ASSERT_FALSE(has);
-    tdb_cursor_close(cur);
+    tdb_kv_cursor_close(cur);
 
-    tdb_db_deinit(db);
+    tdb_kv_close(db);
 }
 
 static void test_get_len_and_get_into_truncation(void) {
@@ -197,29 +197,29 @@ static void test_get_len_and_get_into_truncation(void) {
     tdb_blockdev_t bdev = {0};
     make_bdev(&bdev, &rd, storage, sizeof(storage), 1);
 
-    tdb_db_t* db = NULL;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_db_init(&db, &bdev, NULL));
+    tdb_kv_t* db = NULL;
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_open(&db, &bdev, NULL));
 
     const char key[] = "k";
     const uint8_t val[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_put(db, key, 1, val, sizeof(val)));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_put(db, key, 1, val, sizeof(val)));
 
     size_t len = 123;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_get_len(db, key, 1, &len));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_get_len(db, key, 1, &len));
     TEST_ASSERT_EQUAL_UINT32(sizeof(val), (uint32_t)len);
 
     uint8_t small[4] = {0xAA, 0xAA, 0xAA, 0xAA};
     size_t saved = 0;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_get_into(db, key, 1, small, sizeof(small), &saved));
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_get_into(db, key, 1, small, sizeof(small), &saved));
     TEST_ASSERT_EQUAL_UINT32(sizeof(val), (uint32_t)saved);
     TEST_ASSERT_EQUAL_MEMORY(val, small, sizeof(small));
 
     // Missing key.
     len = 999;
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_NOT_FOUND, tdb_get_len(db, "no", 2, &len));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_NOT_FOUND, tdb_kv_get_len(db, "no", 2, &len));
     TEST_ASSERT_EQUAL_UINT32(0, (uint32_t)len);
 
-    tdb_db_deinit(db);
+    tdb_kv_close(db);
 }
 
 static void test_large_value_is_rejected_without_overflow_pages(void) {
@@ -236,11 +236,11 @@ static void test_large_value_is_rejected_without_overflow_pages(void) {
     for (size_t i = 0; i < n; i++)
         val[i] = (uint8_t)(i * 131u + 7u);
 
-    tdb_db_t* db = NULL;
-    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_db_init(&db, &bdev, NULL));
-    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_put(db, "big", 3, val, n));
+    tdb_kv_t* db = NULL;
+    TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_open(&db, &bdev, NULL));
+    TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_kv_put(db, "big", 3, val, n));
 
-    tdb_db_deinit(db);
+    tdb_kv_close(db);
     free(val);
 }
 

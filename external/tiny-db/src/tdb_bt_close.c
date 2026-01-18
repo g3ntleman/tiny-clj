@@ -111,7 +111,7 @@ int __bt_sync(const DB* dbp, u_int flags) {
     BTREE* t;
     int status;
     PAGE* h;
-    void* p;
+    void* p = NULL;
 
     t = dbp->internal;
 
@@ -157,8 +157,11 @@ ecrsr:
     if (ISSET(t, B_DELCRSR)) {
         if ((h = mpool_get(t->bt_mp, t->bt_bcursor.pgno, 0)) == NULL)
             return (RET_ERROR);
-        memmove(h, p, t->bt_psize);
-        free(p);
+        if (p) {
+            memmove(h, p, t->bt_psize);
+            free(p);
+            p = NULL;
+        }
         mpool_put(t->bt_mp, h, MPOOL_DIRTY);
     }
     return (status);
