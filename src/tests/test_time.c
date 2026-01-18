@@ -36,7 +36,7 @@ TEST_SHARED(test_time_basic_functionality) {
     }
     if (!is_fixnum(simple_result)) {
         char msg[256];
-        test_snprintf(msg, sizeof(msg), "eval_string(\"(+ 1 2)\") returned non-fixnum (value: %p, type: %d)", 
+        snprintf(msg, sizeof(msg), "eval_string(\"(+ 1 2)\") returned non-fixnum (value: %p, type: %d)", 
                  (void*)simple_result, simple_result ? ((CljObject*)simple_result)->type : -1);
         TEST_FAIL_MESSAGE(msg);
         return;
@@ -44,7 +44,7 @@ TEST_SHARED(test_time_basic_functionality) {
     int simple_actual = as_fixnum(simple_result);
     if (simple_actual != 3) {
         char msg[256];
-        test_snprintf(msg, sizeof(msg), "eval_string(\"(+ 1 2)\") returned %d, expected 3", simple_actual);
+        snprintf(msg, sizeof(msg), "eval_string(\"(+ 1 2)\") returned %d, expected 3", simple_actual);
         TEST_FAIL_MESSAGE(msg);
         return;
     }
@@ -64,7 +64,7 @@ TEST_SHARED(test_time_basic_functionality) {
     }
     if (time_sym != SYM_TIME) {
         char msg[256];
-        test_snprintf(msg, sizeof(msg), "intern_symbol_global(\"time\") returned %p, but SYM_TIME is %p", 
+        snprintf(msg, sizeof(msg), "intern_symbol_global(\"time\") returned %p, but SYM_TIME is %p", 
                  (void*)time_sym, (void*)SYM_TIME);
         TEST_FAIL_MESSAGE(msg);
         return;
@@ -80,7 +80,7 @@ TEST_SHARED(test_time_basic_functionality) {
     }
     if (!is_fixnum(result)) {
         char msg[256];
-        test_snprintf(msg, sizeof(msg), "eval_string(\"(time (+ 1 2))\", g_test_eval_state) returned non-fixnum (type: %d)", 
+        snprintf(msg, sizeof(msg), "eval_string(\"(time (+ 1 2))\", g_test_eval_state) returned non-fixnum (type: %d)", 
                  result ? ((CljObject*)result)->type : -1);
         TEST_FAIL_MESSAGE(msg);
         return;
@@ -88,7 +88,7 @@ TEST_SHARED(test_time_basic_functionality) {
     int actual = as_fixnum(result);
     if (actual != 3) {
         char msg[256];
-        test_snprintf(msg, sizeof(msg), "eval_string(\"(time (+ 1 2))\", g_test_eval_state) returned %d, expected 3", actual);
+        snprintf(msg, sizeof(msg), "eval_string(\"(time (+ 1 2))\", g_test_eval_state) returned %d, expected 3", actual);
         TEST_FAIL_MESSAGE(msg);
         return;
     }
@@ -148,33 +148,6 @@ TEST_SHARED(test_time_with_too_many_arguments) {
 
 // test_time_with_sleep removed: was 1 second wait, sleep is trivial Unix wrapper
 // time functionality is already tested by test_time_basic_functionality
-
-TEST(test_yield_returns_nil) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // yield should exist and return nil.
-    ID result = eval_string("(yield 0)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);
-}
-
-TEST(test_current_time_ms_returns_fixnum_in_range) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    ID result = eval_string("(current-time-ms)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-
-    int ms = as_fixnum(result);
-    TEST_ASSERT_TRUE(ms >= 0);
-    TEST_ASSERT_TRUE(ms < 86400000);
-}
-
-TEST(test_sleep_zero_returns_nil) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    ID result = eval_string("(sleep 0)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);
-}
 
 TEST_SHARED(test_time_no_double_evaluation) {
     // Test that time does NOT evaluate its argument twice

@@ -2,6 +2,7 @@
 #define TINY_CLJ_LINE_EDITOR_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include "object.h"
 #include "vector.h"
 #include "strings.h"  // For CljString
@@ -49,6 +50,11 @@ int line_editor_process_input(LineEditor *editor);
 
 // Get current state (reduced API)
 int line_editor_get_state(const LineEditor *editor, LineEditorState *state);
+
+// Get current editable buffer (may be larger than LineEditorState.buffer).
+// The returned pointer is owned by the editor and remains valid until the editor
+// is reset/cleared/freed.
+const char* line_editor_get_buffer_cstr(const LineEditor *editor, size_t *len);
 
 // Reset editor state
 void line_editor_clear(LineEditor *editor);

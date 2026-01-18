@@ -71,10 +71,11 @@ typedef struct MdnsCtx {
     void *resolver_storage;
     ID on_event_fn; // retained, may be NULL
     uint8_t *handle_bytes;
+    // Default: 0 (raw UDP). On macOS, can be switched to DNS-SD.
+    int use_dnssd;
 
 #ifdef __APPLE__
     // macOS: optionally use Apple's DNS-SD API (mDNSResponder) instead of raw UDP.
-    int use_dnssd;
     char dnssd_browse_service[256];
     DNSServiceRef dnssd_browse_ref;
     CFFileDescriptorRef dnssd_browse_fdref;

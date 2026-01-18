@@ -103,3 +103,57 @@ TEST(test_line_editor_serial_history_up_arrow) {
     line_editor_free(ed);
 }
 
+
+TEST(test_line_editor_serial_large_paste_uses_dynamic_growth) {
+    // Paste a line longer than LineEditorState.buffer[512] and ensure the full
+    // buffer is still available via line_editor_get_buffer_cstr().
+    const int n = 600;
+    unsigned char *input = (unsigned char*)malloc((size_t)n + 1);
+    TEST_ASSERT_NOT_NULL(input);
+    for (int i = 0; i < n; i++) input[i] = 'x';
+    input[n] = '\n';
+
+    FakeStream s = { .in = input, .in_len = n + 1, .in_pos = 0, .out_len = 0 };
+    LineEditor *ed = line_editor_new(fake_get_char, fake_put_char, fake_put_string, &s);
+    TEST_ASSERT_NOT_NULL(ed);
+
+    TEST_ASSERT_NOT_NULL(run_editor_until_ready(ed, n + 64));
+
+    size_t len = 0;
+    const char *buf = line_editor_get_buffer_cstr(ed, &len);
+    TEST_ASSERT_NOT_NULL(buf);
+    TEST_ASSERT_EQUAL_UINT((unsigned int)n, (unsigned int)len);
+    TEST_ASSERT_EQUAL_CHAR('x', buf[0]);
+    TEST_ASSERT_EQUAL_CHAR('x', buf[n - 1]);
+    TEST_ASSERT_EQUAL_CHAR('\0', buf[n]);
+
+    free(input);
+    line_editor_free(ed);
+}
+
+TEST(test_line_editor_serial_history_edit_then_down_then_up_preserves_edit) {
+    // History navigation should preserve edits while browsing, similar to linenoise.
+    const unsigned char input[] = {
+        0x1b, '[', 'A',  // Up
+        '!',
+        0x1b, '[', 'B',  // Down
+        0x1b, '[', 'A',  // Up
+        '\n'
+    };
+    FakeStream s = { .in = input, .in_len = (int)sizeof(input), .in_pos = 0, .out_len = 0 };
+
+    LineEditor *ed = line_editor_new(fake_get_char, fake_put_char, fake_put_string, &s);
+    TEST_ASSERT_NOT_NULL(ed);
+    line_editor_add_to_history(ed, "one");
+    line_editor_add_to_history(ed, "two");
+
+    TEST_ASSERT_NOT_NULL(run_editor_until_ready(ed, 256));
+
+    size_t len = 0;
+    const char *buf = line_editor_get_buffer_cstr(ed, &len);
+    TEST_ASSERT_NOT_NULL(buf);
+    TEST_ASSERT_EQUAL_UINT(4u, (unsigned int)len);
+    TEST_ASSERT_EQUAL_STRING("two!", buf);
+
+    line_editor_free(ed);
+}

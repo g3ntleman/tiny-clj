@@ -4,7 +4,6 @@
 #include "object.h"
 #include "namespace.h"  // For EvalState
 #include "runtime.h"
-#include "exception.h"  // For CHECK_ARITY* macros used by builtins implementations
 
 typedef ID (*CljNativeFn)(ID *args, unsigned int argc);
 
@@ -48,7 +47,6 @@ ID native_format(ID *args, unsigned int argc);
 ID native_eval(ID *args, unsigned int argc);
 ID native_read_string(ID *args, unsigned int argc);
 ID native_meta(ID *args, unsigned int argc);
-ID native_ns_unload(ID *args, unsigned int argc);
 void builtin_set_eval_state(EvalState *st);
 EvalState* builtin_get_eval_state(void);
 
@@ -92,8 +90,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc);
 
 // Time functions
 // native_time removed: time is now only a special form
-ID native_yield(ID *args, unsigned int argc);
-ID native_current_time_ms(ID *args, unsigned int argc);
+ID native_sleep(ID *args, unsigned int argc);
 
 // Note: def and ns are special forms (not builtins) because they require non-evaluated arguments
 
@@ -102,9 +99,6 @@ ID native_print(ID *args, unsigned int argc);
 ID native_println(ID *args, unsigned int argc);
 ID native_pr(ID *args, unsigned int argc);
 ID native_prn(ID *args, unsigned int argc);
-
-// Pretty printing (clojure.pprint namespace)
-ID native_pprint_str(ID *args, unsigned int argc);
 
 // Atom functions
 ID native_atom(ID *args, unsigned int argc);

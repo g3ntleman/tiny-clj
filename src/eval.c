@@ -42,6 +42,17 @@
 #include "eval_sequence.h"
 #include "eval_special_forms.h"
 
+// #region agent log
+static void debug_log_slot_eval(const char *msg, const char *sym_name, int depth, int slot, const char *result_info) {
+    FILE *f = fopen(".cursor/debug.log", "a");
+    if (f) {
+        fprintf(f, "{\"location\":\"eval.c\",\"hypothesisId\":\"H2\",\"message\":\"%s\",\"data\":{\"sym\":\"%s\",\"depth\":%d,\"slot\":%d,\"result\":\"%s\"}}\n",
+                msg, sym_name ? sym_name : "?", depth, slot, result_info ? result_info : "?");
+        fclose(f);
+    }
+}
+// #endregion
+
 #include <signal.h>
 extern __attribute__((weak)) volatile sig_atomic_t g_clojure_core_last_form;
 
@@ -579,6 +590,10 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         const CljSlotRef *ref = (const CljSlotRef*)body;
         if (!ctx || !ctx->frame) return NULL;
         ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+        // #region agent log
+        debug_log_slot_eval("slot_ref_eval", ref->symbol ? ref->symbol->cname : NULL, ref->depth, ref->slot,
+                            v == NOT_FOUND ? "NOT_FOUND" : (v ? "found" : "null"));
+        // #endregion
         if (v == NOT_FOUND || !v) return NULL;
         if (IS_IMMEDIATE(v)) return v;
         return AUTORELEASE(RETAIN(v));

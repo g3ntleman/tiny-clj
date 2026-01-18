@@ -192,13 +192,13 @@ static void timer_queue_remove_at(CljVector *timer_vec, int index) {
 
 void event_loop_init(void) {
     // Initialize keywords
-    KW_FN = SYM_KW_FN;
-    KW_RESULT_CHAN = SYM_KW_RESULT_CHAN;
-    KW_SCHEDULED_SEC = SYM_KW_SCHEDULED_SEC;
-    KW_SCHEDULED_MSEC = SYM_KW_SCHEDULED_MSEC;
-    KW_PERIODIC = SYM_KW_PERIODIC;
-    KW_PERIOD_MS = SYM_KW_PERIOD_MS;
-    KW_TIMER_ID = SYM_KW_TIMER_ID;
+    KW_FN = intern_symbol_global(":fn");
+    KW_RESULT_CHAN = intern_symbol_global(":result-chan");
+    KW_SCHEDULED_SEC = intern_symbol_global(":scheduled-sec");
+    KW_SCHEDULED_MSEC = intern_symbol_global(":scheduled-msec");
+    KW_PERIODIC = intern_symbol_global(":periodic");
+    KW_PERIOD_MS = intern_symbol_global(":period-ms");
+    KW_TIMER_ID = intern_symbol_global(":timer-id");
     
     // Ensure task queue is initialized (idempotent)
     task_queue_get();
@@ -400,7 +400,7 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
 #if defined(DEBUG)
         CLJ_ASSERT((void*)chan == chan_ptr_before);
         
-        CljObject *kw_closed = (CljObject*)SYM_KW_CLOSED;
+        CljObject *kw_closed = (CljObject*)intern_symbol_global(":closed");
         CljValue closed_val = map_get_sentinel(chan, (CljValue)kw_closed, NULL);
         CLJ_ASSERT(closed_val != NULL);
         CLJ_ASSERT(is_special(closed_val));

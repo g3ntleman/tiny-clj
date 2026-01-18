@@ -5,9 +5,8 @@
 #include "object.h"
 #include "exception.h"
 #include "types.h"  // For SINGLETON_RC
-#include "mini_format.h"
-#include <stdio.h>
-#if defined(__GNUC__) && !defined(ESP32_BUILD)
+#include <stdio.h>   // For snprintf
+#if defined(__GNUC__) && !defined(ESP32_BUILD) && !defined(ESP_PLATFORM)
 #include <execinfo.h> // For backtrace and backtrace_symbols
 #include <stdlib.h>  // For free
 #endif
@@ -58,28 +57,20 @@ CljList* as_list_checked(ID obj) {
     // Error case: wrong type
     char error_msg[128];
     const char *type_name = clj_type_name(((CljObject*)obj)->type);
-    (void)mini_snprintf(error_msg, sizeof(error_msg),
+    snprintf(error_msg, sizeof(error_msg), 
             "Type mismatch: expected List, got %s", 
             type_name);
-    {
-        char buf[256];
-        (void)mini_snprintf(buf, sizeof(buf),
-                "[STACKTRACE] as_list failed at %s:%d - obj=%p, type=%d (%s)\n",
-                __FILE__, __LINE__, obj, ((CljObject*)obj)->type, type_name);
-        fputs(buf, stdout);
-    }
+    printf("[STACKTRACE] as_list failed at %s:%d - obj=%p, type=%d (%s)\n", __FILE__, __LINE__, obj, ((CljObject*)obj)->type, type_name);
     // Print stacktrace
-    #if defined(__GNUC__) && !defined(ESP32_BUILD)
+    #ifdef __GNUC__
     void *array[10];
     size_t size = backtrace(array, 10);
     char **strings = backtrace_symbols(array, size);
-    fputs("[STACKTRACE] Backtrace:\n", stdout);
+    printf("[STACKTRACE] Backtrace:\n");
     for (size_t i = 0; i < size; i++) {
-        fputs("  ", stdout);
-        fputs(strings[i], stdout);
-        fputc('\n', stdout);
+        printf("  %s\n", strings[i]);
     }
-    CLJ_FREE(strings);
+    free(strings);
     #endif
     throw_exception(EXCEPTION_TYPE, error_msg, __FILE__, __LINE__, 0);
     return NULL;

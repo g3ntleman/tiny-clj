@@ -53,6 +53,23 @@ else
   echo "$bin_path"
 fi
 
+# Prefer Xtensa size tool for ESP32 ELFs if available.
+xtensa_size=""
+if command -v xtensa-esp32-elf-size >/dev/null 2>&1; then
+  xtensa_size="$(command -v xtensa-esp32-elf-size)"
+else
+  # Repo-local toolchain (when scripts/esp_env.sh was used to populate _deps)
+  candidate="$(ls -1 "$root_dir"/_deps/espressif-tools/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin/xtensa-esp32-elf-size 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$candidate" && -x "$candidate" ]]; then
+    xtensa_size="$candidate"
+  fi
+fi
+
+if [[ -n "$xtensa_size" ]]; then
+  "$xtensa_size" "$bin_path"
+  exit 0
+fi
+
 if size -m "$bin_path" >/dev/null 2>&1; then
   size -m "$bin_path" | awk '
     /^Segment __TEXT:/ ||

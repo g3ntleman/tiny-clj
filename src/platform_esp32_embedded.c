@@ -1,5 +1,6 @@
 // ESP32 Platform functions for embedded execution (no REPL, no Line Editor)
 #include "platform.h"
+#include "memory.h" // CLJ_MALLOC/CLJ_FREE
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -55,10 +56,12 @@ uint32_t platform_current_time_ms(void) {
     return tinyclj_esp32_current_time_ms();
 }
 
+#if !defined(REPL_ENABLED) || (REPL_ENABLED == 0)
 void platform_put_string(void *ctx, const char *s) {
     (void)ctx;
     if (s) fputs(s, stdout);
 }
+#endif
 
 const char *platform_name(void) {
     return "esp32";
@@ -76,8 +79,8 @@ __attribute__((weak)) size_t tinyclj_esp32_flash_bytes_free(void) { return (size
 __attribute__((weak)) size_t tinyclj_esp32_flash_bytes_total(void) { return (size_t)-1; }
 
 /*
- * ESP-IDF Beispiel: siehe Kommentarblock in src/platform_esp32_uart.c
- * (die gleichen vier Funktionen kannst du für embedded builds überschreiben).
+ * ESP-IDF example: see the comment block in src/platform_esp32_uart.c
+ * (you can override the same four functions for embedded builds).
  */
 
 size_t platform_heap_bytes_free(void) { return tinyclj_esp32_heap_bytes_free(); }

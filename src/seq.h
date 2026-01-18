@@ -191,6 +191,13 @@ static inline bool is_lazy_seq(ID obj) {
     return TAG((CljObject*)obj) == CLJ_LAZY_SEQ;
 }
 
+/**
+ * @brief Register seq-related release handlers with subjective-c memory system.
+ * 
+ * Should be called during runtime initialization.
+ */
+void seq_register_release_fn(void);
+
 #ifdef __cplusplus
 }
 #endif

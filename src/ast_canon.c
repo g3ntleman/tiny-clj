@@ -31,6 +31,17 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+// #region agent log
+static void debug_log_slotref(const char *msg, const char *sym_cname, int depth, int slot, int scope_count) {
+    FILE *f = fopen(".cursor/debug.log", "a");
+    if (f) {
+        fprintf(f, "{\"location\":\"ast_canon.c\",\"hypothesisId\":\"H1\",\"message\":\"%s\",\"data\":{\"sym\":\"%s\",\"depth\":%d,\"slot\":%d,\"scope_count\":%d}}\n",
+                msg, sym_cname ? sym_cname : "?", depth, slot, scope_count);
+        fclose(f);
+    }
+}
+// #endregion
+
 // ============================================================================
 // ============================================================================
 // HELPER FUNCTIONS
@@ -385,8 +396,14 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             if (!(sym->base.flags & CLJ_FLAG_DYNAMIC)) {
                 uint8_t depth = 0, slot = 0;
                 if (lexical_lookup(*scope_stack, sym, &depth, &slot)) {
+                    // #region agent log
+                    debug_log_slotref("lexical_lookup_found", sym->cname, depth, slot, scope_stack_count(*scope_stack));
+                    // #endregion
                     if (depth == 0) {
                         ID ref = (ID)make_slot_ref(sym, 0, slot);
+                        // #region agent log
+                        debug_log_slotref("slotref_created", sym->cname, 0, slot, scope_stack_count(*scope_stack));
+                        // #endregion
                         if (ref) return AUTORELEASE(ref);
                     }
                 }

@@ -14,7 +14,6 @@
 #include "parser.h"  // For eval_parsed
 #include "vector.h"
 #include "kv_macros.h"  // For KV_KEY, KV_VALUE
-#include "function.h"  // For CljFunction (to break retain cycles on unload)
 
 // Helper context for namespace search in ns_resolve()
 struct ns_search_ctx {
@@ -137,7 +136,7 @@ static CljMap* grow_transient_map(CljMap *old_map) {
     // Allocate new map with larger capacity
     size_t struct_size = sizeof(CljMap);
     size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
-    CljMap *new_map = (CljMap*)ALLOC_BYTES(CLJ_MAP, struct_size + data_size);
+    CljMap *new_map = malloc(struct_size + data_size);
     if (!new_map) return NULL;
     
     // Initialize new transient map
@@ -156,154 +155,6 @@ static CljMap* grow_transient_map(CljMap *old_map) {
     }
     
     return new_map;
-}
-
-// Remove one key from the transient ns_registry while preserving transient-ness.
-// Returns a NEW transient map (rc=1) and RELEASEs the old map via caller.
-// NOTE: We must not use map_remove() here because it returns a persistent map (CLJ_MAP),
-// but ns_registry is expected to remain transient (CLJ_MAP_TRANSIENT).
-static CljMap* transient_map_without_key(CljMap *old_map, ID remove_key) {
-    if (!old_map) return NULL;
-
-    // Allocate new transient map with same capacity
-    int cap = old_map->capacity;
-    size_t struct_size = sizeof(CljMap);
-    size_t data_size = (size_t)cap * 2 * sizeof(CljObject*);
-    CljMap *new_map = (CljMap*)ALLOC_BYTES(CLJ_MAP, struct_size + data_size);
-    if (!new_map) return NULL;
-
-    new_map->base.type = CLJ_MAP_TRANSIENT;
-    new_map->base.rc = 1;
-    new_map->count = 0;
-    new_map->capacity = cap;
-    for (int i = 0; i < cap * 2; i++) {
-        new_map->data[i] = NULL;
-    }
-
-    CljObject *remove_key_obj = (CljObject*)remove_key; // may be NULL (valid)
-    MAP_FOR_EACH(old_map, k, v) {
-        // key compare: pointer equality first; structural equality fallback.
-        bool match = (k == remove_key_obj) || (k && remove_key_obj && clj_equal(k, remove_key_obj));
-        if (match) {
-            continue;
-        }
-        (void)map_conj(new_map, k, v);
-    }
-
-    return new_map;
-}
-
-// Break retain cycles: closures created in a namespace retain the namespace pointer.
-// If we try to free the namespace via refcounting, we must detach these pointers first.
-// For each closure whose func->ns == ns, we set func->ns=NULL and RELEASE(ns) once to
-// balance the retain done in make_function().
-static void break_function_self_bindings(CljFunction *fn) {
-    if (!fn || !fn->env_stack) return;
-
-    int frames = vector_count(fn->env_stack);
-    for (int i = 0; i < frames; i++) {
-        ID frame = vector_nth(fn->env_stack, i);
-        if (!frame || !is_map(frame)) continue;
-        CljMap *m = as_map(frame);
-        if (!m) continue;
-
-        // Only mutate in-place when uniquely owned (avoid mutating shared env frames).
-        if (((CljObject*)m)->rc != 1) {
-            continue;
-        }
-
-        MAP_FOR_EACH(m, k, v) {
-            (void)k;
-            if (v == (ID)fn) {
-                // Clear value to nil, releasing the function reference.
-                ASSIGN(KV_VALUE(m->data, _i), NULL);
-            }
-        }
-    }
-}
-
-static void ns_break_closure_cycles(CljNamespace *ns) {
-    if (!ns) return;
-
-    CljMap *maps[2] = { ns->mappings, ns->macro_mappings };
-    for (int mi = 0; mi < 2; mi++) {
-        CljMap *m = maps[mi];
-        if (!m) continue;
-
-        MAP_FOR_EACH(m, k, v) {
-            (void)k;
-            if (!v) continue;
-            if (TAG(v) != CLJ_CLOSURE) continue;
-            CljFunction *fn = (CljFunction*)v;
-            break_function_self_bindings(fn);
-            if (fn->ns == ns) {
-                fn->ns = NULL;
-                // Balance make_function() retaining ns
-                RELEASE(ns);
-            }
-        }
-    }
-}
-
-bool ns_unload(EvalState *st, const char *ns_name) {
-    if (!ns_name || !*ns_name) {
-        return false;
-    }
-
-    // Disallow unloading clojure.core and user (safety).
-    if (strcmp(ns_name, "clojure.core") == 0 || strcmp(ns_name, "user") == 0) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "ns-unload: refusing to unload %s", ns_name);
-        return false;
-    }
-
-    if (!g_runtime.ns_registry) {
-        return false;
-    }
-
-    CljSymbol *name_sym = intern_symbol_global(ns_name);
-    if (!name_sym) {
-        return false;
-    }
-
-    CljNamespace *ns = (CljNamespace*)map_get_sentinel(g_runtime.ns_registry, name_sym, NULL);
-    if (!ns) {
-        return false;
-    }
-
-    // Keep ns alive while we rebuild registry; breaking cycles will RELEASE it multiple times.
-    RETAIN(ns);
-
-    // If eval state points at this namespace, switch away before unloading.
-    if (st && (st->current_ns == ns || st->resolve_ns == ns)) {
-        evalstate_set_ns(st, "user");
-    }
-
-    // Rebuild registry without this namespace (keep transient type).
-    CljMap *old_registry = g_runtime.ns_registry;
-    CljMap *new_registry = transient_map_without_key(old_registry, name_sym);
-    if (!new_registry) {
-        RELEASE(ns);
-        return false;
-    }
-
-    g_runtime.ns_registry = new_registry;
-    RELEASE(old_registry);
-
-    // Registry changed -> invalidate resolve cache
-    ns_invalidate_resolve_cache();
-
-    // Break retain cycles between closures and this namespace, then release namespace contents.
-    ns_break_closure_cycles(ns);
-    ASSIGN(ns->mappings, NULL);
-    ASSIGN(ns->macro_mappings, NULL);
-    ASSIGN(ns->aliases, NULL);
-    ns->loaded = false;
-
-    // Release our extra retain; after cycles are broken, this should free the namespace.
-    RELEASE(ns);
-
-    return true;
 }
 
 
@@ -368,7 +219,7 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
         // If intern_symbol fails, we need to free the namespace
         // But ALLOC doesn't allocate memory that needs freeing, so we just return NULL
         // Actually, ALLOC uses malloc, so we need to free it
-        DEALLOC(ns);
+        free(ns);
         return NULL;
     }
     
@@ -387,7 +238,7 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
         // strdup failed - OOM
         RELEASE(ns->mappings);
         RELEASE(ns->aliases);
-        DEALLOC(ns);
+        free(ns);
         return NULL;
     }
     
@@ -574,17 +425,6 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         ID resolved = map_get(clojure_core->mappings, sym);
         if (resolved != NOT_FOUND) {
             return resolved;
-        }
-
-        // Fallback: some symbols (e.g. static symbol instances) may not be pointer-equal
-        // to the canonical global interned symbol used as the clojure.core mapping key.
-        // Use a globally interned key as a second attempt to keep unqualified core lookups robust.
-        CljSymbol *interned = intern_symbol_global(sym->cname);
-        if (interned && interned != sym) {
-            resolved = map_get(clojure_core->mappings, interned);
-            if (resolved != NOT_FOUND) {
-                return resolved;
-            }
         }
     }
     
@@ -776,7 +616,7 @@ EvalState* get_global_eval_state(void) {
 // Reset for test isolation
 void reset_eval_state(void) {
     if (g_eval_state.stack) {
-        CLJ_FREE(g_eval_state.stack);
+        free(g_eval_state.stack);
         g_eval_state.stack = NULL;
     }
     if (g_eval_state.dynamic_bindings && !IS_IMMEDIATE(g_eval_state.dynamic_bindings)) {

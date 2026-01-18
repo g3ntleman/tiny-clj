@@ -8,7 +8,7 @@
 #include "test_common.h"
 #include "test_registry.h"
 #include "unity.h"
-#include "unity/src/unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
+#include "unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
 #include "build_info.h"
 #include <stdio.h>
 #include <string.h>

@@ -68,20 +68,25 @@ TEST(test_static_keywords_are_interned_singletons)
 TEST(test_static_symbols_are_interned_singletons)
 {
     // init_special_symbols() is executed once in unity_test_runner setUp().
-    TEST_ASSERT_NOT_NULL(SYM_INC);
-    TEST_ASSERT_NOT_NULL(SYM_MATH);
-    TEST_ASSERT_NOT_NULL(SYM_PERCENT);
+    CljSymbol *inc = intern_symbol_global("inc");
+    CljSymbol *math = intern_symbol_global("Math");
+    CljSymbol *percent = intern_symbol_global("%");
 
-    TEST_ASSERT_FALSE(IS_KEYWORD((ID)SYM_INC));
-    TEST_ASSERT_FALSE(IS_KEYWORD((ID)SYM_MATH));
-    TEST_ASSERT_FALSE(IS_KEYWORD((ID)SYM_PERCENT));
+    TEST_ASSERT_NOT_NULL(inc);
+    TEST_ASSERT_NOT_NULL(math);
+    TEST_ASSERT_NOT_NULL(percent);
 
-    TEST_ASSERT_EQUAL_PTR(SYM_INC, intern_symbol_global("inc"));
-    TEST_ASSERT_EQUAL_PTR(SYM_MATH, intern_symbol_global("Math"));
-    TEST_ASSERT_EQUAL_PTR(SYM_PERCENT, intern_symbol_global("%"));
+    TEST_ASSERT_FALSE(IS_KEYWORD((ID)inc));
+    TEST_ASSERT_FALSE(IS_KEYWORD((ID)math));
+    TEST_ASSERT_FALSE(IS_KEYWORD((ID)percent));
 
-    TEST_ASSERT_EQUAL_STRING("inc", as_symbol((ID)SYM_INC)->cname);
-    TEST_ASSERT_EQUAL_STRING("Math", as_symbol((ID)SYM_MATH)->cname);
-    TEST_ASSERT_EQUAL_STRING("%", as_symbol((ID)SYM_PERCENT)->cname);
+    // Pointer identity: calling intern_symbol_global should return the same singleton.
+    TEST_ASSERT_EQUAL_PTR(inc, intern_symbol_global("inc"));
+    TEST_ASSERT_EQUAL_PTR(math, intern_symbol_global("Math"));
+    TEST_ASSERT_EQUAL_PTR(percent, intern_symbol_global("%"));
+
+    TEST_ASSERT_EQUAL_STRING("inc", inc->cname);
+    TEST_ASSERT_EQUAL_STRING("Math", math->cname);
+    TEST_ASSERT_EQUAL_STRING("%", percent->cname);
 }
 

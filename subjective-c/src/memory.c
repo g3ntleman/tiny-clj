@@ -21,14 +21,16 @@
 #include "function.h"  // For CljFunction
 #include "namespace.h"  // For CljNamespace
 #include "hashmap.h"  // For CljHashMap
-#include "seq.h"  // For CljLazySeq
 #include "thread_local.h"
 #include "mini_format.h"
 #include <string.h>
-#if !defined(ESP32_BUILD)
+#include <stdlib.h>
+
+// Optional stack trace support (execinfo/backtrace), gated in object.h.
+// On ESP-IDF/newlib this is not available.
+#if defined(SUBJECTIVE_C_HAVE_EXECINFO) && SUBJECTIVE_C_HAVE_EXECINFO
 #include <execinfo.h>
 #endif
-#include <stdlib.h>
 
 // ============================================================================
 // Closure environment promotion (Stack → Heap)
@@ -279,11 +281,11 @@ void release(CljObject *v) {
     if (v->rc == 0) {
         // Keep diagnostics short: zombie/debug builds can otherwise flood output.
         LOGF(stderr, "DOUBLE-FREE: object=%p type=%s (rc=0)\n", v, clj_type_name(v->type));
+        #if defined(SUBJECTIVE_C_HAVE_EXECINFO) && SUBJECTIVE_C_HAVE_EXECINFO
         void *trace[32];
-#if !defined(ESP32_BUILD)
         int trace_count = backtrace(trace, (int)(sizeof(trace) / sizeof(trace[0])));
         backtrace_symbols_fd(trace, trace_count, fileno(stderr));
-#endif
+        #endif
         fflush(stderr);
         throw_exception_formatted("UseAfterFreeError", __FILE__, __LINE__, 0,
             "Double-free detected! Object %p (type=%s) was already freed (rc=0). "
@@ -518,13 +520,12 @@ void autorelease_pool_pop(void) {
 #ifdef DEBUG
         // Print stack trace for debugging
         void *trace[16];
-#if !defined(ESP32_BUILD)
-        int trace_count = backtrace(trace, 16);
-        char **symbols = backtrace_symbols(trace, trace_count);
-#else
         int trace_count = 0;
         char **symbols = NULL;
-#endif
+        #if defined(SUBJECTIVE_C_HAVE_EXECINFO) && SUBJECTIVE_C_HAVE_EXECINFO
+        trace_count = backtrace(trace, 16);
+        symbols = backtrace_symbols(trace, trace_count);
+        #endif
         if (symbols) {
             LOGF(stderr, "Stack trace:\n");
             for (int i = 0; i < trace_count; i++) {
@@ -880,17 +881,7 @@ static void release_object_default(CljObject *v) {
             // No heap-allocated data to release (container is a borrowed reference)
             break;
 
-        case CLJ_LAZY_SEQ:
-            {
-                // Direct cast - avoid TAG() which may throw in zombie mode.
-                CljLazySeq *lazy_seq = (CljLazySeq*)v;
-                if (lazy_seq) {
-                    RELEASE(lazy_seq->thunk);
-                    RELEASE(lazy_seq->first);
-                    RELEASE(lazy_seq->cached_rest);
-                }
-            }
-            break;
+        // CLJ_LAZY_SEQ: Release handler registered by tiny-clj via seq_register_release_fn()
             
         case CLJ_NAMESPACE:
             {

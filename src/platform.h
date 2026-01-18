@@ -33,8 +33,9 @@ void platform_put_string(void *ctx, const char *s);
 void platform_set_raw_mode(int enable);
 
 // Platform time helper.
-// Returns milliseconds since start of the current UTC day [0..86400000).
-// On embedded targets this may return 0 if no wall clock is available (unless overridden).
+// Returns milliseconds within a 24h window [0..86400000).
+// Host builds should map this to the current UTC day.
+// Embedded targets may derive this from a monotonic clock modulo 86400000 (good enough for sleep/yield).
 uint32_t platform_current_time_ms(void);
 
 // -----------------------------------------------------------------------------

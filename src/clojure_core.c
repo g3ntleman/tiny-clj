@@ -12,7 +12,6 @@
 #include "map.h"     // For map_get
 #include "parser.h"  // For eval_parsed
 #include "to_string.h" // For pr_str debug printing
-#include "mini_format.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -33,15 +32,6 @@ static int getenv_int(const char *name, int default_value) {
   long n = strtol(v, &end, 10);
   if (end == v) return default_value;
   return (int)n;
-}
-
-static void core_logf(const char *fmt, ...) {
-  char buf[256];
-  va_list ap;
-  va_start(ap, fmt);
-  (void)mini_vsnprintf(buf, sizeof(buf), fmt, ap);
-  va_end(ap);
-  fputs(buf, stderr);
 }
 
 
@@ -73,7 +63,7 @@ static char* read_file_cstr_local(const char *path) {
     fclose(fp);
     return NULL;
   }
-  char *buffer = (char*)CLJ_MALLOC((size_t)sz + 1);
+  char *buffer = (char*)malloc((size_t)sz + 1);
   if (!buffer) {
     fclose(fp);
     return NULL;
@@ -183,8 +173,8 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
         // ParseError during parsing - log and continue to next expression
         if (ex) {
           if (!g_core_quiet) {
-            core_logf("[%s] ParseError at form #%d: %s - %s\n",
-                      label, expr_count + 1, ex->type, ex->message);
+            fprintf(stderr, "[%s] ParseError at form #%d: %s - %s\n",
+                    label, expr_count + 1, ex->type, ex->message);
           }
         }
         // IMPORTANT: Ensure forward progress on parse errors.
@@ -203,7 +193,7 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     if (debug_form > 0 && (expr_count + 1) == debug_form) {
       CljString *s = pr_str((ID)form);
       const char *printed = (s) ? s->data : "<unprintable>";
-      core_logf("[%s] DEBUG core form #%d: %s\n", label, expr_count + 1, printed);
+      fprintf(stderr, "[%s] DEBUG core form #%d: %s\n", label, expr_count + 1, printed);
       fflush(stderr);
     }
     
@@ -268,14 +258,14 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
                              target_ns->name->cname && 
                              strcmp(target_ns->name->cname, "clojure.repl") == 0;
       if (!g_core_quiet || is_clojure_repl || is_def_expr) {
-        core_logf("[%s] Failed to eval form #%d%s: %s (%s:%d) [%s]\n",
-                  ns_name,
-                  expr_count + 1,
-                  is_def_expr ? " (def)" : "",
-                  error_msg,
-                  error_file,
-                  error_line,
-                  error_type);
+        fprintf(stderr, "[%s] Failed to eval form #%d%s: %s (%s:%d) [%s]\n",
+                ns_name,
+                expr_count + 1,
+                is_def_expr ? " (def)" : "",
+                error_msg,
+                error_file,
+                error_line,
+                error_type);
 #ifdef DEBUG
         if (is_def_expr && ex) {
           print_exception(ex);
@@ -293,8 +283,8 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     if (ar_threshold > 0) {
       uint32_t peak = autorelease_pool_peak_count();
       if ((int)peak > ar_threshold) {
-        core_logf("[%s] Autorelease peak in core form #%d: %u (threshold=%d)\n",
-                  label, expr_count + 1, peak, ar_threshold);
+        fprintf(stderr, "[%s] Autorelease peak in core form #%d: %u (threshold=%d)\n",
+                label, expr_count + 1, peak, ar_threshold);
       }
     }
 #endif
@@ -302,8 +292,8 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
 
     if (stop_after_form > 0 && expr_count >= stop_after_form) {
       if (!g_core_quiet) {
-        core_logf("[%s] DEBUG stopping after core form #%d (TINYCLJ_DEBUG_CORE_STOP_AFTER)\n",
-                  label, expr_count);
+        fprintf(stderr, "[%s] DEBUG stopping after core form #%d (TINYCLJ_DEBUG_CORE_STOP_AFTER)\n",
+                label, expr_count);
       }
       return true;
     }
@@ -313,8 +303,8 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     // Log but don't fail - some expressions may have loaded successfully
     if (ex) {
       if (!g_core_quiet) {
-        core_logf("Warning: Exception during clojure.core loading: %s - %s\n",
-                  ex->type, ex->message);
+        fprintf(stderr, "Warning: Exception during clojure.core loading: %s - %s\n", 
+                ex->type, ex->message);
       }
     }
     // Continue - return success if at least some expressions loaded
@@ -329,18 +319,18 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     const char *ns_name = target_ns && target_ns->name && target_ns->name->cname 
                           ? target_ns->name->cname 
                           : "clojure.core";
-    core_logf("[%s] Evaluated %d form(s), %d succeeded.\n",
-              ns_name, expr_count, success_count);
+    fprintf(stderr, "[%s] Evaluated %d form(s), %d succeeded.\n",
+            ns_name, expr_count, success_count);
   }
   
 #ifdef PROFILE_STARTUP
-  core_logf("[PROFILE] Parse: %.2f ms, Canon: %.2f ms, Eval: %.2f ms, Forms: %d\n",
-            g_parse_time_ms, g_canon_time_ms, g_eval_time_ms, g_form_count);
+  fprintf(stderr, "[PROFILE] Parse: %.2f ms, Canon: %.2f ms, Eval: %.2f ms, Forms: %d\n",
+          g_parse_time_ms, g_canon_time_ms, g_eval_time_ms, g_form_count);
 #endif
 
   // Ensure Math alias points to clojure.core so Math/sqrt style symbols resolve
   if (target_ns && target_ns->name == SYM_CLOJURE_CORE) {
-    CljSymbol *math_alias = SYM_MATH;
+    CljSymbol *math_alias = intern_symbol_global("Math");
     if (math_alias && SYM_CLOJURE_CORE) {
       ns_set_alias(target_ns, math_alias, SYM_CLOJURE_CORE);
     }
@@ -378,7 +368,7 @@ int load_clojure_core(EvalState *st) {
   // IDEMPOTENCY: Check if clojure.core is already loaded
   // If 'inc' is already in mappings, skip loading to avoid double-loading
   if (clojure_core && clojure_core->mappings) {
-    CljSymbol *inc_sym = SYM_INC;
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     if (inc_sym) {
       CljObject *inc_value = (CljObject*)map_get_sentinel((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
       if (inc_value && (TAG(inc_value) == CLJ_FUNC || TAG(inc_value) == CLJ_CLOSURE)) {
@@ -415,7 +405,7 @@ int load_clojure_core(EvalState *st) {
   // because st->current_ns may have been restored to original_ns after eval_core_source
   // clojure_core is already defined above
   if (clojure_core && clojure_core->mappings) {
-    CljSymbol *inc_sym = SYM_INC;
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     if (inc_sym) {
       CljObject *inc_value = (CljObject*)map_get_sentinel((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
       if (!inc_value) {
@@ -448,7 +438,7 @@ int load_clojure_repl(EvalState *st) {
   // Convert namespace to relative path (clojure.repl -> clojure/repl.clj)
   const char *ns_name = "clojure.repl";
   size_t len = strlen(ns_name);
-  char *rel = (char*)CLJ_MALLOC(len + 5); // +5 for ".clj" and potential slashes
+  char *rel = (char*)malloc(len + 5); // +5 for ".clj" and potential slashes
   if (!rel) return 0;
   
   // Replace dots with slashes
@@ -460,11 +450,18 @@ int load_clojure_repl(EvalState *st) {
   
   // Search order: libs/<rel>, <rel>, ../libs/<rel>, ../<rel>
   char libs_path[512];
-  mini_snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
+  snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
   char parent_libs_path[512];
-  mini_snprintf(parent_libs_path, sizeof(parent_libs_path), "../%s", libs_path);
+  // Avoid -Werror=format-truncation: "../" + libs_path must fit.
+  // Keep this robust on toolchains that treat warnings as errors (ESP-IDF).
+  const size_t max_copy = sizeof(parent_libs_path) - 4; // "../" + '\0'
+  if (strlen(libs_path) > max_copy) {
+    free(rel);
+    return 0;
+  }
+  snprintf(parent_libs_path, sizeof(parent_libs_path), "../%.*s", (int)max_copy, libs_path);
   char parent_rel_path[512];
-  mini_snprintf(parent_rel_path, sizeof(parent_rel_path), "../%s", rel);
+  snprintf(parent_rel_path, sizeof(parent_rel_path), "../%s", rel);
   const char *candidates[] = {
     libs_path,
     rel,
@@ -483,7 +480,7 @@ int load_clojure_repl(EvalState *st) {
   }
   
   if (!source) {
-    CLJ_FREE(rel);
+    free(rel);
     return 0;
   }
   
@@ -493,8 +490,8 @@ int load_clojure_repl(EvalState *st) {
   // Ensure target namespace exists
   CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
   if (!target_ns) {
-    CLJ_FREE(source);
-    CLJ_FREE(rel);
+    free(source);
+    free(rel);
     return 0;
   }
   
@@ -509,8 +506,8 @@ int load_clojure_repl(EvalState *st) {
     st->current_ns = orig_ns;
   }
   
-  CLJ_FREE(source);
-  CLJ_FREE(rel);
+  free(source);
+  free(rel);
   
   return ok ? 1 : 0;
 }

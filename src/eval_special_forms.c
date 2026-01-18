@@ -16,6 +16,18 @@
 #include "to_string.h"
 
 #include <string.h>
+#include <stdio.h>
+
+// #region agent log
+static void debug_log_loop_frame(const char *msg, int pair_count, int has_parent) {
+    FILE *f = fopen(".cursor/debug.log", "a");
+    if (f) {
+        fprintf(f, "{\"location\":\"eval_special_forms.c\",\"hypothesisId\":\"H3\",\"message\":\"%s\",\"data\":{\"pair_count\":%d,\"has_parent\":%d}}\n",
+                msg, pair_count, has_parent);
+        fclose(f);
+    }
+}
+// #endregion
 
 static INLINE bool sym_name_eq(ID obj, const char *name) {
     CLJ_ASSERT(name != NULL && "sym_name_eq: name must not be NULL");
@@ -76,117 +88,6 @@ ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContex
         }
     }
 
-    return NULL;
-}
-
-static inline bool case_key_matches(ID test_val, ID key_form) {
-    // `case` keys are NOT evaluated (Clojure semantics). They are treated as literals.
-    // Support: single key, list of keys, vector of keys.
-
-    if (key_form == SYM_NIL || key_form == NULL) {
-        return test_val == NULL;
-    }
-
-    unsigned char tag = TAG(key_form);
-    if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-        CljVector *v = as_vector(key_form);
-        unsigned int n = v ? vector_count(v) : 0;
-        for (unsigned int i = 0; i < n; i++) {
-            ID elem = vector_nth(v, i);
-            if (elem == SYM_NIL || elem == NULL) {
-                if (test_val == NULL) return true;
-            } else if (test_val && clj_equal(test_val, elem)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    if (list_type_matches(tag)) {
-        for (CljList *node = as_list(key_form); node; node = list_rest_normalized(node)) {
-            ID elem = LIST_FIRST(node);
-            if (elem == SYM_NIL || elem == NULL) {
-                if (test_val == NULL) return true;
-            } else if (test_val && clj_equal(test_val, elem)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    if (!test_val) return false;
-    return clj_equal(test_val, key_form);
-}
-
-ID eval_special_case(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    CLJ_ASSERT(list != NULL && "eval_special_case: list must not be NULL");
-    CLJ_ASSERT(st != NULL && "eval_special_case: st must not be NULL");
-    if (!list || !st) return NULL;
-
-    // Establish base env (match other special-form wrappers).
-    CljMap *base_env = eval_env_or_ns_mappings(env, st);
-
-    // Shape: (case expr key1 expr1 key2 expr2 ... default?)
-    CljList *args = list_rest_normalized(list);
-    if (!args) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "case requires an expression and at least one clause",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    ID test_expr = LIST_FIRST(args);
-    CljList *clauses = list_rest_normalized(args);
-    if (!clauses) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "case requires at least one clause",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    int clause_forms = list_count(clauses);
-    if (clause_forms < 2) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "case requires pairs of clauses (key expr), with optional default",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    // Evaluate test expression exactly once.
-    ID test_val = eval_body(test_expr, base_env, st, ctx);
-
-    ID default_expr = NULL;
-    int pair_forms = clause_forms;
-    if ((clause_forms % 2) == 1) {
-        // Odd number of forms after expr => last is default.
-        default_expr = list_nth(clauses, clause_forms - 1);
-        pair_forms = clause_forms - 1;
-    }
-
-    CljList *node = clauses;
-    for (int i = 0; i < pair_forms; i += 2) {
-        ID key_form = node ? LIST_FIRST(node) : NULL;
-        node = node ? list_rest_normalized(node) : NULL;
-        ID expr_form = node ? LIST_FIRST(node) : NULL;
-        node = node ? list_rest_normalized(node) : NULL;
-
-        if (case_key_matches(test_val, key_form)) {
-            ID out = eval_body(expr_form, base_env, st, ctx);
-            RELEASE(test_val);
-            return out;
-        }
-    }
-
-    if (default_expr) {
-        ID out = eval_body(default_expr, base_env, st, ctx);
-        RELEASE(test_val);
-        return out;
-    }
-
-    RELEASE(test_val);
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                    "No matching case clause",
-                    __FILE__, __LINE__, 0);
     return NULL;
 }
 
@@ -445,214 +346,171 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
     CLJ_ASSERT(st != NULL && "eval_special_loop: st must not be NULL");
     if (!list || !st) return NULL;
 
-    // Establish base env (match other special-form wrappers).
-    CljMap *base_env = eval_env_or_ns_mappings(env, st);
-    CallFrame *parent_frame = ctx ? ctx->frame : NULL;
-
-    // IMPORTANT: Keep ctx->frame intact so CLJ_SLOT_REF (lexical addressing) continues to work
-    // for outer function parameters. Loop bindings live in env_stack (like let), not in CallFrame.
-
     // Shape: (loop [sym1 init1 sym2 init2 ...] body...)
-    CljList *args = list_rest_normalized(list);
-    if (!args) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "loop requires a vector for bindings",
+    ID bindings_vec = list_get_element(list, 1);
+    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop requires a vector for bindings", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    CljVector *bindings = as_vector(bindings_vec);
+    int binding_count = bindings ? (int)vector_count(bindings) : 0;
+    if (!bindings || (binding_count % 2) != 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop requires an even number of forms in binding vector",
                         __FILE__, __LINE__, 0);
         return NULL;
     }
 
-    ID bindings_obj = LIST_FIRST(args);
-    if (!bindings_obj || TAG(bindings_obj) != CLJ_VECTOR) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "loop requires a vector for bindings",
-                        __FILE__, __LINE__, 0);
+    int pair_count = binding_count / 2;
+    if (pair_count > CALLFRAME_MAX_PARAMS) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop has too many bindings", __FILE__, __LINE__, 0);
         return NULL;
     }
 
-    CljVector *bindings = as_vector(bindings_obj);
-    unsigned int binding_count = bindings ? vector_count(bindings) : 0;
-    if ((binding_count % 2) != 0) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "loop requires an even number of forms in binding vector",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    int param_count = (int)(binding_count / 2);
-    if (param_count > CALLFRAME_MAX_PARAMS) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "Too many loop bindings",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    CljList *body = list_rest_normalized(args);
-
-    // Own an env_stack for the loop and push a map for loop locals.
+    // Start from captured env_stack (if any), but do NOT mutate it.
     CljVector *loop_stack = (ctx && ctx->env_stack) ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
-    CljMap *loop_env_map = (param_count > 0) ? make_map((unsigned int)param_count) : NULL;
-    if (param_count > 0 && loop_env_map) {
+
+    // Frame for fast local lookups.
+    CallFrame loop_frame_storage;
+    CallFrame *loop_frame = (pair_count > 0) ? &loop_frame_storage : NULL;
+    if (loop_frame) {
+        frame_init(loop_frame, ctx ? ctx->frame : NULL);
+        // #region agent log
+        debug_log_loop_frame("loop_frame_init", pair_count, ctx && ctx->frame ? 1 : 0);
+        // #endregion
+    }
+
+    // Symbol/value arrays for frame_set_bindings.
+    ID binding_slots[CALLFRAME_MAX_PARAMS * 2];
+    ID *binding_params = binding_slots;
+    ID *binding_values = binding_slots + pair_count;
+
+    // Let locals map stored as top frame in env_stack.
+    CljMap *loop_env_map = NULL;
+    if (pair_count > 0) {
+        loop_env_map = make_map(pair_count);
         env_stack_push_inplace(&loop_stack, loop_env_map);
-        // env_stack retains its elements; keep a borrowed pointer for incremental updates.
-        RELEASE(loop_env_map);
-        loop_env_map = loop_stack ? (CljMap*)vector_nth(loop_stack, vector_count(loop_stack) - 1) : loop_env_map;
+        RELEASE(loop_env_map); // env_stack retains
     }
 
-    // Extract binding symbols + evaluate initial values sequentially (let-like).
-    ID params[CALLFRAME_MAX_PARAMS];
-    ID current_args[CALLFRAME_MAX_PARAMS];
-    ID recur_args[CALLFRAME_MAX_PARAMS];
-    for (int i = 0; i < CALLFRAME_MAX_PARAMS; i++) {
-        current_args[i] = NULL;
-        recur_args[i] = NULL;
-    }
+    EvalContext loop_ctx = ctx ? *ctx : (EvalContext){0};
+    loop_ctx.frame = ctx ? ctx->frame : NULL;
+    loop_ctx.env_stack = loop_stack;
+    if (!loop_ctx.env) loop_ctx.env = env;
+    if (!loop_ctx.st) loop_ctx.st = st;
 
-    // Temporary frame to make earlier loop bindings visible to later initializers.
-    CallFrame init_frame_storage;
-    CallFrame *init_frame = NULL;
-    ID init_params[CALLFRAME_MAX_PARAMS];
-    ID init_values[CALLFRAME_MAX_PARAMS];
-    if (param_count > 0) {
-        init_frame = &init_frame_storage;
-        frame_init(init_frame, parent_frame);
-    }
-
-    EvalContext init_ctx = ctx ? *ctx : (EvalContext){0};
-    init_ctx.env = init_ctx.env ? init_ctx.env : base_env;
-    init_ctx.st = init_ctx.st ? init_ctx.st : st;
-    init_ctx.env_stack = loop_stack;
-    init_ctx.frame = parent_frame;
-
-    for (int i = 0; i < param_count; i++) {
-        ID sym = vector_nth(bindings, (unsigned int)(i * 2));
-        ID init_expr = vector_nth(bindings, (unsigned int)(i * 2 + 1));
+    // Evaluate initial bindings sequentially (later inits can see earlier binds).
+    int binding_index = 0;
+    for (int i = 0; i < binding_count; i += 2) {
+        ID sym = vector_nth(bindings, i);
+        ID init_expr = vector_nth(bindings, i + 1);
         if (!sym || TAG(sym) != CLJ_SYMBOL) {
-            if (init_frame) frame_release(init_frame);
-            RELEASE(loop_stack);
-            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                            "loop binding name must be a symbol",
-                            __FILE__, __LINE__, 0);
+            if (loop_stack) RELEASE(loop_stack);
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop binding must be a symbol", __FILE__, __LINE__, 0);
             return NULL;
         }
-        params[i] = sym;
 
-        // Evaluate initializer in a context that can see prior loop bindings.
-        if (init_frame) {
-            init_ctx.frame = init_frame;
-        }
-        ID v = init_expr ? eval_body(init_expr, base_env, st, &init_ctx) : NULL;
-        current_args[i] = v;
-
-        // Update init_frame so subsequent initializers can reference this binding.
-        if (init_frame) {
-            init_params[i] = sym;
-            init_values[i] = v;
-            if (v && !IS_IMMEDIATE(v)) RETAIN(v);
-            frame_set_bindings(init_frame, parent_frame, init_params, init_values, i + 1);
+        ID value = NULL;
+        if (!init_expr) {
+            value = NULL;
+        } else if (is_fixnum(init_expr) || is_special(init_expr)) {
+            value = init_expr;
+        } else {
+            value = eval_body(init_expr, env, st, &loop_ctx);
         }
 
-        // Also store binding into loop_env_map (top of env_stack) for body evaluation.
+        binding_params[binding_index] = sym;
+        binding_values[binding_index] = value;
+        if (value && !IS_IMMEDIATE(value)) {
+            RETAIN(value);
+        }
+
+        frame_set_bindings(loop_frame, ctx ? ctx->frame : NULL,
+                           binding_params, binding_values, binding_index + 1);
+        loop_ctx.frame = loop_frame;
+
+        // Expose bindings via the top env_stack map for closures and symbol resolution.
         if (loop_env_map) {
-            CljMap *updated = map_assoc(loop_env_map, sym, v);
-            if (updated && updated != loop_env_map && loop_stack) {
-                unsigned int top_idx = vector_count(loop_stack) - 1;
-                vector_assoc_inplace(&loop_stack, top_idx, (ID)updated);
+            CljMap *updated = map_assoc(loop_env_map, sym, value);
+            if (updated && updated != loop_env_map && loop_ctx.env_stack) {
+                unsigned int top_idx = vector_count(loop_ctx.env_stack) - 1;
+                vector_assoc_inplace(&loop_ctx.env_stack, top_idx, (ID)updated);
                 loop_env_map = updated;
             }
         }
 
-        if (v && !IS_IMMEDIATE(v)) {
-            RELEASE(v);
+        if (value && !IS_IMMEDIATE(value)) {
+            RELEASE(value);
         }
-        current_args[i] = NULL;
+        binding_index++;
     }
 
-    if (init_frame) {
-        frame_release(init_frame);
+    // Set up recur storage for loop: recur updates these values.
+    ID recur_args[CALLFRAME_MAX_PARAMS];
+    for (int i = 0; i < pair_count; i++) {
+        recur_args[i] = binding_values[i];
+        if (recur_args[i] && !IS_IMMEDIATE(recur_args[i])) {
+            RETAIN(recur_args[i]);
+        }
     }
+    int recur_arg_count = 0;
+    loop_ctx.recur_args = recur_args;
+    loop_ctx.recur_arg_count = &recur_arg_count;
+    loop_ctx.recur_param_count = pair_count;
 
-    // TCO loop over recur (updates loop_env_map each iteration).
-    int recur_arg_count = -1;
-    int used_recur_slots = 0;
+    // Evaluate body until no recur happens.
     ID result = NULL;
+    CljList *args = list_or_null(as_list(LIST_REST(list)));
+    CljList *body_node = args ? list_or_null(as_list(LIST_REST(args))) : NULL;
+    // #region agent log
+    debug_log_loop_frame("loop_body_eval_start", pair_count, loop_ctx.frame && loop_ctx.frame->parent ? 1 : 0);
+    // #endregion
+    for (;;) {
+        recur_arg_count = 0;
 
-    do {
-        recur_arg_count = -1;
-
-        // Cleanup previous recur args (only needed if recur was used).
-        if (used_recur_slots > 0) {
-            for (int i = 0; i < used_recur_slots; i++) {
-                RELEASE(recur_args[i]);
-                recur_args[i] = NULL;
-            }
-            used_recur_slots = 0;
-        }
-
-        EvalContext loop_ctx = ctx ? *ctx : (EvalContext){0};
-        loop_ctx.env = loop_ctx.env ? loop_ctx.env : base_env;
-        loop_ctx.st = loop_ctx.st ? loop_ctx.st : st;
-        loop_ctx.env_stack = loop_stack;
-        loop_ctx.frame = parent_frame;  // keep parent frame for slot refs
-        loop_ctx.recur_args = recur_args;
-        loop_ctx.recur_arg_count = &recur_arg_count;
-        loop_ctx.recur_param_count = param_count;
-
-        ID new_result = NULL;
-        for (CljList *node = body; node; node = list_rest_normalized(node)) {
-            ID expr = LIST_FIRST(node);
-            CljList *next = list_rest_normalized(node);
-            ASSIGN(new_result, eval_body(expr, base_env, st, &loop_ctx));
-
-            // If recur happened but there are still forms, it's not tail position.
-            if (recur_arg_count >= 0 && next) {
-                RELEASE(new_result);
-                RELEASE(loop_stack);
-                throw_exception(EXCEPTION_RUNTIME,
-                                "recur must be in tail position",
-                                __FILE__, __LINE__, 0);
-                return NULL;
+        for (CljList *node = body_node; node; node = list_or_null(as_list(LIST_REST(node)))) {
+            ID body_expr = LIST_FIRST(node);
+            if (!body_expr) continue;
+            RELEASE(result);
+            if (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr)) {
+                result = body_expr;
+                RETAIN(result);
+            } else {
+                result = eval_body(body_expr, env, st, &loop_ctx);
             }
         }
 
-        if (recur_arg_count >= 0) {
-            // Tail recur: update loop env bindings and continue.
-            RELEASE(new_result);
+        if (recur_arg_count <= 0) {
+            break;
+        }
 
-            for (int i = 0; i < recur_arg_count; i++) {
-                current_args[i] = recur_args[i]; // retained by eval_handle_recur
-                recur_args[i] = NULL;
-            }
-            used_recur_slots = recur_arg_count;
+        // Apply recur updates to bindings (frame + env_map).
+        frame_set_bindings(loop_frame, ctx ? ctx->frame : NULL,
+                           binding_params, recur_args, pair_count);
+        loop_ctx.frame = loop_frame;
 
-            // Update loop_env_map with new values (COW-aware).
-            for (int i = 0; i < recur_arg_count; i++) {
-                if (loop_env_map) {
-                    CljMap *updated = map_assoc(loop_env_map, params[i], current_args[i]);
-                    if (updated && updated != loop_env_map && loop_stack) {
-                        unsigned int top_idx = vector_count(loop_stack) - 1;
-                        vector_assoc_inplace(&loop_stack, top_idx, (ID)updated);
-                        loop_env_map = updated;
-                    }
+        if (loop_env_map) {
+            for (int i = 0; i < pair_count; i++) {
+                CljMap *updated = map_assoc(loop_env_map, binding_params[i], recur_args[i]);
+                if (updated && updated != loop_env_map && loop_ctx.env_stack) {
+                    unsigned int top_idx = vector_count(loop_ctx.env_stack) - 1;
+                    vector_assoc_inplace(&loop_ctx.env_stack, top_idx, (ID)updated);
+                    loop_env_map = updated;
                 }
-                // Balance retain from eval_handle_recur.
-                RELEASE(current_args[i]);
-                current_args[i] = NULL;
             }
-
-            continue;
         }
-
-        ASSIGN(result, new_result);
-        break;
-    } while (true);
+    }
 
     // Cleanup
-    if (used_recur_slots > 0) {
-        for (int i = 0; i < used_recur_slots; i++) {
+    for (int i = 0; i < pair_count; i++) {
+        if (binding_values[i] && !IS_IMMEDIATE(binding_values[i])) {
+            RELEASE(binding_values[i]);
+        }
+        if (recur_args[i] && !IS_IMMEDIATE(recur_args[i])) {
             RELEASE(recur_args[i]);
         }
     }
-    RELEASE(loop_stack);
+    if (loop_stack) RELEASE(loop_stack);
 
     return result;
 }
@@ -1051,7 +909,7 @@ ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const Eval
     
     // Resolve quasiquote-fn from clojure.core (lazy initialization)
     if (!g_quasiquote_fn) {
-        CljSymbol *sym = SYM_QUASIQUOTE_FN;
+        CljSymbol *sym = intern_symbol_global("quasiquote-fn");
         CljObject *resolved = sym ? ns_resolve(st, sym) : NULL;
         if (resolved != NOT_FOUND && is_closure(resolved)) {
             g_quasiquote_fn = as_function(resolved);
@@ -1180,7 +1038,7 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
     
     // Set :macro true in metadata
     CljMap *meta = make_map(4);
-    CljSymbol *kw_macro = SYM_KW_MACRO;
+    CljSymbol *kw_macro = intern_symbol_global(":macro");
     ASSIGN(meta, map_assoc(meta, kw_macro, clj_true));
     meta_set((CljObject*)macro_fn, (CljObject*)meta);
     RELEASE(meta);

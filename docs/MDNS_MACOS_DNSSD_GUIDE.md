@@ -6,9 +6,11 @@ It uses macOS' built-in `dns-sd` tool as a responder/advertiser and the Tiny-CLJ
 
 ## What this validates
 
-- `tinyclj.net.mdns/open` successfully creates the platform mDNS transport (no work happens before this call).
-- `tinyclj.net.mdns/browse!` sends a multicast PTR query.
-- The resolver receives and correlates DNS-SD records into events delivered via `tinyclj.net.mdns/on-event`.
+- `tinyclj.net.mdns/open` returns a native handle (no work happens before this call).
+- `tinyclj.net.mdns/browse!` starts browsing and delivers events via `tinyclj.net.mdns/on-event`.
+
+On macOS, Tiny-CLJ prefers Apple's DNS-SD API (mDNSResponder) for correctness across interfaces.
+You can force the legacy raw-UDP path via `TINYCLJ_MDNS_USE_DNSSD=0` for debugging.
 
 ## Prerequisites
 
@@ -47,6 +49,12 @@ Start the REPL:
 
 ```bash
 ./build/tiny-clj-repl
+```
+
+Optional: force raw-UDP backend (legacy) instead of DNS-SD:
+
+```bash
+TINYCLJ_MDNS_USE_DNSSD=0 ./build/tiny-clj-repl
 ```
 
 Then paste the following forms:
@@ -127,4 +135,12 @@ dns-sd -B _matterc._udp local
 `platform_mdns_open` may fail if the environment restricts certain socket options (sandboxing, corporate security tooling, etc.).
 
 If this happens, try running the REPL **outside** of restrictive environments and ensure your firewall allows local network traffic.
+
+### Extra debugging
+
+You can enable a low-level receive trace in the raw-UDP backend:
+
+```bash
+TINYCLJ_MDNS_TRACE=1 TINYCLJ_MDNS_USE_DNSSD=0 ./build/tiny-clj-repl
+```
 

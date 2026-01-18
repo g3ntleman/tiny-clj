@@ -23,21 +23,6 @@ bool is_ast_node(ID obj);
 void ast_node_set_callsite_cache(CljASTNode *node, ID cache);
 ID ast_node_get_callsite_cache(const CljASTNode *node);
 
-// -----------------------------------------------------------------------------
-// Optional compiled payload (currently a no-op placeholder)
-// -----------------------------------------------------------------------------
-// The compiled AST evaluator can attach a small, immutable payload (e.g. a function
-// pointer) to an AST node. The storage is currently not wired into CljASTNode, so
-// this is intentionally a no-op to keep all builds consistent and low-complexity.
-static inline void ast_node_set_compiled(CljASTNode *node, void *payload) {
-    (void)node;
-    (void)payload;
-}
-static inline void* ast_node_get_compiled(const CljASTNode *node) {
-    (void)node;
-    return NULL;
-}
-
 // Lexical addressing: direct reference to a local variable via (depth, slot).
 // - depth=0: current CallFrame
 // - depth=1: parent CallFrame, etc.
