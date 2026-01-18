@@ -31,17 +31,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// #region agent log
-static void debug_log_slotref(const char *msg, const char *sym_cname, int depth, int slot, int scope_count) {
-    FILE *f = fopen(".cursor/debug.log", "a");
-    if (f) {
-        fprintf(f, "{\"location\":\"ast_canon.c\",\"hypothesisId\":\"H1\",\"message\":\"%s\",\"data\":{\"sym\":\"%s\",\"depth\":%d,\"slot\":%d,\"scope_count\":%d}}\n",
-                msg, sym_cname ? sym_cname : "?", depth, slot, scope_count);
-        fclose(f);
-    }
-}
-// #endregion
-
 // ============================================================================
 // ============================================================================
 // HELPER FUNCTIONS
@@ -396,14 +385,8 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             if (!(sym->base.flags & CLJ_FLAG_DYNAMIC)) {
                 uint8_t depth = 0, slot = 0;
                 if (lexical_lookup(*scope_stack, sym, &depth, &slot)) {
-                    // #region agent log
-                    debug_log_slotref("lexical_lookup_found", sym->cname, depth, slot, scope_stack_count(*scope_stack));
-                    // #endregion
                     if (depth == 0) {
                         ID ref = (ID)make_slot_ref(sym, 0, slot);
-                        // #region agent log
-                        debug_log_slotref("slotref_created", sym->cname, 0, slot, scope_stack_count(*scope_stack));
-                        // #endregion
                         if (ref) return AUTORELEASE(ref);
                     }
                 }
@@ -647,6 +630,54 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 scope_stack_push_inplace(scope_stack, let_scope);
                 RELEASE(let_scope);
 
+                CljList *canon_body = rest1->rest
+                    ? canonicalize_rest_to_plain_list((ID)rest1->rest, st, child_in_quote, scope_stack)
+                    : NULL;
+
+                scope_stack_pop_inplace(scope_stack);
+
+                CljList *tail = (CljList*)AUTORELEASE(make_list(canon_bindings, canon_body));
+                ID result = in_quote
+                    ? AUTORELEASE(make_list(first, tail))
+                    : AUTORELEASE(make_ast_node(first, (ID)tail));
+                if (!result) return expr;
+                move_meta(expr, result);
+                return result;
+            }
+        }
+
+        // Lexical addressing for `loop`: the body runs with a fresh CallFrame containing the loop-bindings.
+        // IMPORTANT: Inside a loop, depth=0 refers to the loop frame. If we don't push a loop scope here,
+        // outer function parameters (like `n`) can be incorrectly rewritten to (depth=0, slot=0) and
+        // then read from the loop frame instead of the parent function frame.
+        if (!in_quote && first == SYM_LOOP && scope_stack) {
+            CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
+            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+                // Canonicalize bindings vector without lexical rewrite.
+                ID canon_bindings = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
+
+                // Build loop-scope from binding names (even indices): [i init acc init] -> scope [i acc]
+                CljVector *bindings_vec = as_vector(canon_bindings);
+                unsigned int bc = bindings_vec ? vector_count(bindings_vec) : 0;
+                unsigned int pair_count = (bc / 2);
+                CljVector *loop_scope = make_vector((int)pair_count, CLJ_VECTOR);
+                if (bindings_vec && loop_scope) {
+                    for (unsigned int i = 0; i + 1 < bc; i += 2) {
+                        ID k = vector_nth(bindings_vec, (int)i);
+                        // Destructuring should already have been expanded; keys should be symbols.
+                        if (k && TAG(k) == CLJ_SYMBOL && !IS_KEYWORD(k) && !is_special_symbol((CljSymbol*)k)) {
+                            vector_conj_inplace(&loop_scope, k);
+                        } else {
+                            // Keep placeholder to preserve slot indices.
+                            vector_conj_inplace(&loop_scope, NULL);
+                        }
+                    }
+                }
+
+                scope_stack_push_inplace(scope_stack, loop_scope);
+                RELEASE(loop_scope);
+
+                // Canonicalize body forms with loop-scope active.
                 CljList *canon_body = rest1->rest
                     ? canonicalize_rest_to_plain_list((ID)rest1->rest, st, child_in_quote, scope_stack)
                     : NULL;
