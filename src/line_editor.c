@@ -51,6 +51,7 @@ struct LineEditor {
     CljVector *history;        // CljVector for history
     int16_t history_index;     // 0 = temp entry, >0 = older entries, -1 = not browsing
     bool history_has_temp;     // true if a temporary entry is appended at end
+    uint16_t rendered_rows;    // number of terminal rows rendered for current buffer (for clearing)
 };
 
 static bool buffer_init(StringBuffer *buf, uint16_t initial_cap) {
@@ -164,20 +165,33 @@ static inline bool editor_is_valid(const LineEditor *editor) {
     return editor != NULL;
 }
 
-static void editor_move_cursor_to_start(LineEditor *editor) {
-    if (!editor) return;
-    for (uint16_t i = 0; i < editor->cursor_pos; i++) {
-        editor->put_string(editor->ctx, ESC_LEFT);
+static uint16_t buffer_row_count(const StringBuffer *buf) {
+    if (!buf || !buf->str) return 1;
+    uint16_t rows = 1;
+    for (uint16_t i = 0; i < buf->length; i++) {
+        if (buf->str->data[i] == '\n') rows++;
     }
-    editor->cursor_pos = 0;
+    return rows;
 }
 
 static void editor_redraw_from_start(LineEditor *editor) {
     if (!editor) return;
-    editor_move_cursor_to_start(editor);
-    editor->put_string(editor->ctx, ESC_CLEAR);
+    uint16_t rows = editor->rendered_rows ? editor->rendered_rows : 1;
+    // Clear previously rendered rows (best-effort, assumes no scrollback).
+    editor->put_string(editor->ctx, "\r");
+    for (uint16_t i = 0; i < rows; i++) {
+        editor->put_string(editor->ctx, "\033[2K"); // clear entire line
+        if (i + 1 < rows) {
+            editor->put_string(editor->ctx, "\033[1A"); // move up one line
+        }
+    }
+    editor->put_string(editor->ctx, "\r");
+
+    // Reprint buffer (may include newlines).
     editor->put_string(editor->ctx, editor->buffer.str ? editor->buffer.str->data : "");
+    editor->put_string(editor->ctx, ESC_CLEAR);
     editor->cursor_pos = editor->buffer.length;
+    editor->rendered_rows = buffer_row_count(&editor->buffer);
 }
 
 static void editor_ring_bell(LineEditor *editor) {
@@ -237,6 +251,9 @@ static void history_load_vector_index(LineEditor *editor, int idx) {
     RELEASE(line);
     editor_redraw_from_start(editor);
 }
+
+// NOTE: History entries may include newlines (multi-form REPL input).
+// The editor redraw logic must handle multi-line clearing when recalling history.
 
 static void history_begin_from_current(LineEditor *editor) {
     if (!editor) return;
@@ -432,6 +449,7 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
     RELEASE(persistent_vec);  // Release the persistent version
     editor->history_index = -1;  // Not browsing
     editor->history_has_temp = false;
+    editor->rendered_rows = 1;
     
     return editor;
 }
@@ -588,6 +606,7 @@ void line_editor_clear(LineEditor *editor) {
     buffer_clear(&editor->buffer);
     editor->cursor_pos = 0;
     editor->line_ready = false;
+    editor->rendered_rows = 1;
 }
 
 void line_editor_reset(LineEditor *editor) {

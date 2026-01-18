@@ -43,13 +43,12 @@ typedef struct DnssdOp {
     int in_use;
     size_t slot_index;
     struct MdnsCtx *owner;
-    char service_name[256];
-    char regtype[256];
-    char domain[256];
-    char host[256];
+    ID service_name;  // RETAIN/RELEASE managed
+    ID regtype;
+    ID domain;
+    ID host;
     uint16_t port;
-    uint8_t txt[256];
-    size_t txt_len;
+    ID txt;           // CljByteArray, RETAIN/RELEASE managed
     char addrs[4][INET6_ADDRSTRLEN];
     size_t addr_count;
     int got_resolve;
@@ -69,14 +68,12 @@ typedef struct MdnsCtx {
     PlatformMdns *m;
     MdnsResolver *resolver;
     void *resolver_storage;
-    ID on_event_fn; // retained, may be NULL
+    ID on_event_fn;
     uint8_t *handle_bytes;
-    // Default: 0 (raw UDP). On macOS, can be switched to DNS-SD.
     int use_dnssd;
 
 #ifdef __APPLE__
-    // macOS: optionally use Apple's DNS-SD API (mDNSResponder) instead of raw UDP.
-    char dnssd_browse_service[256];
+    CljString *dnssd_browse_service;  // RETAIN/RELEASE managed
     DNSServiceRef dnssd_browse_ref;
     CFFileDescriptorRef dnssd_browse_fdref;
     CFRunLoopSourceRef dnssd_browse_source;
@@ -104,44 +101,19 @@ static void mdns_init_keywords(void) {
     kw_txt = (ID)intern_symbol_global(":txt");
 }
 
+#ifdef __APPLE__
+static void dnssd_cleanup_op(MdnsCtx *m, size_t idx);
+#endif
+
 static void mdns_ctx_free(void *ctx) {
     MdnsCtx *m = (MdnsCtx*)ctx;
     if (!m) return;
 
 #ifdef __APPLE__
     if (m->use_dnssd) {
-        // Tear down outstanding resolve/address ops.
+        // Tear down outstanding resolve/address ops (releases CljString*/CljByteArray* fields).
         for (size_t i = 0; i < (sizeof(m->dnssd_ops) / sizeof(m->dnssd_ops[0])); i++) {
-            if (!m->dnssd_ops[i].in_use) continue;
-            if (m->dnssd_ops[i].resolve_source) {
-                CFRunLoopRemoveSource(CFRunLoopGetCurrent(), m->dnssd_ops[i].resolve_source, kCFRunLoopDefaultMode);
-                CFRelease(m->dnssd_ops[i].resolve_source);
-                m->dnssd_ops[i].resolve_source = NULL;
-            }
-            if (m->dnssd_ops[i].resolve_fdref) {
-                CFFileDescriptorInvalidate(m->dnssd_ops[i].resolve_fdref);
-                CFRelease(m->dnssd_ops[i].resolve_fdref);
-                m->dnssd_ops[i].resolve_fdref = NULL;
-            }
-            if (m->dnssd_ops[i].resolve_ref) {
-                DNSServiceRefDeallocate(m->dnssd_ops[i].resolve_ref);
-                m->dnssd_ops[i].resolve_ref = NULL;
-            }
-            if (m->dnssd_ops[i].addr_source) {
-                CFRunLoopRemoveSource(CFRunLoopGetCurrent(), m->dnssd_ops[i].addr_source, kCFRunLoopDefaultMode);
-                CFRelease(m->dnssd_ops[i].addr_source);
-                m->dnssd_ops[i].addr_source = NULL;
-            }
-            if (m->dnssd_ops[i].addr_fdref) {
-                CFFileDescriptorInvalidate(m->dnssd_ops[i].addr_fdref);
-                CFRelease(m->dnssd_ops[i].addr_fdref);
-                m->dnssd_ops[i].addr_fdref = NULL;
-            }
-            if (m->dnssd_ops[i].addr_ref) {
-                DNSServiceRefDeallocate(m->dnssd_ops[i].addr_ref);
-                m->dnssd_ops[i].addr_ref = NULL;
-            }
-            m->dnssd_ops[i].in_use = 0;
+            dnssd_cleanup_op(m, i);
         }
 
         if (m->dnssd_browse_source) {
@@ -157,6 +129,10 @@ static void mdns_ctx_free(void *ctx) {
         if (m->dnssd_browse_ref) {
             DNSServiceRefDeallocate(m->dnssd_browse_ref);
             m->dnssd_browse_ref = NULL;
+        }
+        if (m->dnssd_browse_service) {
+            RELEASE(m->dnssd_browse_service);
+            m->dnssd_browse_service = NULL;
         }
     }
 #endif
@@ -291,7 +267,15 @@ static void dnssd_cleanup_op(MdnsCtx *m, size_t idx) {
     dnssd_unschedule(&op->addr_fdref, &op->addr_source);
     if (op->resolve_ref) { DNSServiceRefDeallocate(op->resolve_ref); op->resolve_ref = NULL; }
     if (op->addr_ref) { DNSServiceRefDeallocate(op->addr_ref); op->addr_ref = NULL; }
-    memset(op, 0, sizeof(*op));
+    if (op->service_name) { RELEASE(op->service_name); op->service_name = NULL; }
+    if (op->regtype) { RELEASE(op->regtype); op->regtype = NULL; }
+    if (op->domain) { RELEASE(op->domain); op->domain = NULL; }
+    if (op->host) { RELEASE(op->host); op->host = NULL; }
+    if (op->txt) { RELEASE(op->txt); op->txt = NULL; }
+    op->in_use = 0;
+    op->addr_count = 0;
+    op->got_resolve = 0;
+    op->got_addr_done = 0;
 }
 
 static DnssdOp *dnssd_alloc_op(MdnsCtx *m) {
@@ -315,14 +299,20 @@ static void dnssd_finalize_op_if_ready(DnssdOp *op) {
 
     MdnsResolvedService svc;
     memset(&svc, 0, sizeof(svc));
-    (void)mini_snprintf(svc.instance, sizeof(svc.instance), "%s", op->service_name);
-    (void)mini_snprintf(svc.service, sizeof(svc.service), "%s", op->owner->dnssd_browse_service);
-    (void)mini_snprintf(svc.host, sizeof(svc.host), "%s", op->host);
+    const char *svc_name = op->service_name ? string_data(op->service_name) : "";
+    const char *browse_svc = op->owner->dnssd_browse_service ? string_data(op->owner->dnssd_browse_service) : "";
+    const char *host_str = op->host ? string_data(op->host) : "";
+    (void)mini_snprintf(svc.instance, sizeof(svc.instance), "%s", svc_name);
+    (void)mini_snprintf(svc.service, sizeof(svc.service), "%s", browse_svc);
+    (void)mini_snprintf(svc.host, sizeof(svc.host), "%s", host_str);
     svc.port = op->port;
 
-    svc.txt_len = op->txt_len;
-    if (svc.txt_len > sizeof(svc.txt)) svc.txt_len = sizeof(svc.txt);
-    memcpy(svc.txt, op->txt, svc.txt_len);
+    if (op->txt) {
+        CljByteArray *ba = as_byte_array(op->txt);
+        svc.txt_len = (size_t)ba->length;
+        if (svc.txt_len > sizeof(svc.txt)) svc.txt_len = sizeof(svc.txt);
+        memcpy(svc.txt, ba->data, svc.txt_len);
+    }
 
     svc.addr_count = op->addr_count;
     if (svc.addr_count > 4) svc.addr_count = 4;
@@ -393,13 +383,17 @@ static void DNSSD_API dnssd_resolve_cb(DNSServiceRef sdRef,
         return;
     }
 
-    (void)mini_snprintf(op->host, sizeof(op->host), "%s", hosttarget ? hosttarget : "");
+    if (op->host) { RELEASE(op->host); op->host = NULL; }
+    op->host = RETAIN(make_string(hosttarget ? hosttarget : ""));
     op->port = ntohs(port);
 
-    op->txt_len = (size_t)txtLen;
-    if (op->txt_len > sizeof(op->txt)) op->txt_len = sizeof(op->txt);
-    if (txtRecord && op->txt_len > 0) {
-        memcpy(op->txt, txtRecord, op->txt_len);
+    if (op->txt) { RELEASE(op->txt); op->txt = NULL; }
+    if (txtRecord && txtLen > 0) {
+        CljByteArray *ba = make_byte_array((int)txtLen);
+        if (ba) {
+            memcpy(ba->data, txtRecord, txtLen);
+            op->txt = RETAIN(ba);
+        }
     }
     op->got_resolve = 1;
 
@@ -441,7 +435,8 @@ static void DNSSD_API tinyclj_dnssd_browse_cb(DNSServiceRef sdRef,
 
     const int is_add = (flags & kDNSServiceFlagsAdd) ? 1 : 0;
 
-    if (dnssd_is_services_meta_query(m->dnssd_browse_service)) {
+    const char *browse_svc = m->dnssd_browse_service ? string_data(m->dnssd_browse_service) : "";
+    if (dnssd_is_services_meta_query(browse_svc)) {
         char full[256];
         (void)mini_snprintf(full, sizeof(full), "%s.%s%s", serviceName, regtype, replyDomain);
         dnssd_trim_trailing_dot(full);
@@ -449,17 +444,16 @@ static void DNSSD_API tinyclj_dnssd_browse_cb(DNSServiceRef sdRef,
         MdnsResolvedService svc;
         memset(&svc, 0, sizeof(svc));
         (void)mini_snprintf(svc.instance, sizeof(svc.instance), "%s", full);
-        (void)mini_snprintf(svc.service, sizeof(svc.service), "%s", m->dnssd_browse_service);
+        (void)mini_snprintf(svc.service, sizeof(svc.service), "%s", browse_svc);
         mdns_emit_event(m, is_add ? MDNS_EVENT_INSTANCE_FOUND : MDNS_EVENT_EXPIRED, &svc);
         return;
     }
 
-    // Emit instance found/expired for the instance name.
     {
         MdnsResolvedService svc;
         memset(&svc, 0, sizeof(svc));
         (void)mini_snprintf(svc.instance, sizeof(svc.instance), "%s", serviceName);
-        (void)mini_snprintf(svc.service, sizeof(svc.service), "%s", m->dnssd_browse_service);
+        (void)mini_snprintf(svc.service, sizeof(svc.service), "%s", browse_svc);
         mdns_emit_event(m, is_add ? MDNS_EVENT_INSTANCE_FOUND : MDNS_EVENT_EXPIRED, &svc);
     }
 
@@ -468,9 +462,9 @@ static void DNSSD_API tinyclj_dnssd_browse_cb(DNSServiceRef sdRef,
     DnssdOp *op = dnssd_alloc_op(m);
     if (!op) return;
 
-    (void)mini_snprintf(op->service_name, sizeof(op->service_name), "%s", serviceName);
-    (void)mini_snprintf(op->regtype, sizeof(op->regtype), "%s", regtype);
-    (void)mini_snprintf(op->domain, sizeof(op->domain), "%s", replyDomain);
+    op->service_name = RETAIN(make_string(serviceName));
+    op->regtype = RETAIN(make_string(regtype));
+    op->domain = RETAIN(make_string(replyDomain));
 
     DNSServiceErrorType err = DNSServiceResolve(&op->resolve_ref,
                                                 0,
@@ -687,7 +681,8 @@ ID native_tinyclj_net_mdns_browse_bang(ID *args, unsigned int argc) {
             dnssd_cleanup_op(m, i);
         }
 
-        (void)mini_snprintf(m->dnssd_browse_service, sizeof(m->dnssd_browse_service), "%s", service);
+        if (m->dnssd_browse_service) { RELEASE(m->dnssd_browse_service); m->dnssd_browse_service = NULL; }
+        m->dnssd_browse_service = RETAIN(make_string(service));
 
         char regtype[256];
         char domain[256];

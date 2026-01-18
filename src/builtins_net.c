@@ -38,47 +38,63 @@ static void net_packet_release_cb(void *ctx) {
     CLJ_FREE(p);
 }
 
-typedef struct NetUdpCtx {
-    PlatformUdpSocket *sock;
-    ID on_receive_fn;    // retained, may be NULL
-    uint8_t *handle_bytes;
-} NetUdpCtx;
+#define NET_TYPE_UDP 0
+#define NET_TYPE_TCP 1
 
-static void net_udp_ctx_free(void *ctx) {
-    NetUdpCtx *u = (NetUdpCtx*)ctx;
-    if (!u) return;
-    if (u->sock) {
-        platform_udp_close(u->sock);
-        u->sock = NULL;
+typedef struct NetCtx {
+    union {
+        PlatformUdpSocket *udp_sock;
+        PlatformTcpConn *tcp_conn;
+    } handle;
+    ID on_receive_fn;
+    uint8_t *handle_bytes;
+    uint8_t type;
+} NetCtx;
+
+static void net_ctx_free(void *ctx) {
+    NetCtx *c = (NetCtx*)ctx;
+    if (!c) return;
+    if (c->type == NET_TYPE_UDP && c->handle.udp_sock) {
+        platform_udp_close(c->handle.udp_sock);
+        c->handle.udp_sock = NULL;
+    } else if (c->type == NET_TYPE_TCP && c->handle.tcp_conn) {
+        platform_tcp_close(c->handle.tcp_conn);
+        c->handle.tcp_conn = NULL;
     }
-    if (u->on_receive_fn) {
-        RELEASE(u->on_receive_fn);
-        u->on_receive_fn = NULL;
+    if (c->on_receive_fn) {
+        RELEASE(c->on_receive_fn);
+        c->on_receive_fn = NULL;
     }
-    if (u->handle_bytes) {
-        CLJ_FREE(u->handle_bytes);
-        u->handle_bytes = NULL;
+    if (c->handle_bytes) {
+        CLJ_FREE(c->handle_bytes);
+        c->handle_bytes = NULL;
     }
-    CLJ_FREE(u);
+    CLJ_FREE(c);
 }
 
-static NetUdpCtx* require_udp_ctx(ID arg, const char *fn_name) {
+static NetCtx* require_net_ctx(ID arg, uint8_t expected_type, const char *fn_name) {
+    const char *type_name = expected_type == NET_TYPE_UDP ? "udp socket" : "tcp connection";
     if (!arg || TAG(arg) != CLJ_BYTE_ARRAY) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "%s expects a udp socket handle (byte-array)", fn_name);
+                                  "%s expects a %s handle (byte-array)", fn_name, type_name);
         return NULL;
     }
     CljByteArray *ba = as_byte_array(arg);
     if (!ba || (ba->base.flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) == 0) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "%s expects a native udp socket handle (external byte-array)", fn_name);
+                                  "%s expects a native %s handle (external byte-array)", fn_name, type_name);
         return NULL;
     }
     CljByteArrayExternal *ext = (CljByteArrayExternal*)ba;
-    NetUdpCtx *ctx = (NetUdpCtx*)ext->external_ctx;
+    NetCtx *ctx = (NetCtx*)ext->external_ctx;
     if (!ctx) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "%s: socket handle is invalid (NULL ctx)", fn_name);
+                                  "%s: handle is invalid (NULL ctx)", fn_name);
+        return NULL;
+    }
+    if (ctx->type != expected_type) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "%s expects a %s handle", fn_name, type_name);
         return NULL;
     }
     return ctx;
@@ -90,7 +106,7 @@ static void net_udp_recv_bridge(void *ctx,
                                 size_t len,
                                 const char *from_addr,
                                 uint16_t from_port) {
-    NetUdpCtx *u = (NetUdpCtx*)ctx;
+    NetCtx *u = (NetCtx*)ctx;
     if (!u || !packet_handle) {
         if (packet_handle) platform_net_packet_release(packet_handle);
         return;
@@ -163,44 +179,43 @@ ID native_tinyclj_net_udp_socket(ID *args, unsigned int argc) {
                                          "tinyclj.net/udp-socket :port out of range: %d", port_i);
     }
 
-    NetUdpCtx *u = (NetUdpCtx*)CLJ_MALLOC(sizeof(NetUdpCtx));
-    if (!u) {
+    NetCtx *c = (NetCtx*)CLJ_MALLOC(sizeof(NetCtx));
+    if (!c) {
         throw_oom();
         return NULL;
     }
-    memset(u, 0, sizeof(*u));
+    memset(c, 0, sizeof(*c));
+    c->type = NET_TYPE_UDP;
 
-    PlatformUdpSocket *sock = platform_udp_bind((uint16_t)port_i, net_udp_recv_bridge, u);
+    PlatformUdpSocket *sock = platform_udp_bind((uint16_t)port_i, net_udp_recv_bridge, c);
     if (!sock) {
-        CLJ_FREE(u);
+        CLJ_FREE(c);
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                          "tinyclj.net/udp-socket failed to bind port %d", port_i);
     }
-    u->sock = sock;
-    u->on_receive_fn = NULL;
+    c->handle.udp_sock = sock;
+    c->on_receive_fn = NULL;
 
-    // Store the ctx pointer as bytes (debug/inspection only).
-    u->handle_bytes = (uint8_t*)CLJ_MALLOC(sizeof(ID));
-    if (!u->handle_bytes) {
+    c->handle_bytes = (uint8_t*)CLJ_MALLOC(sizeof(ID));
+    if (!c->handle_bytes) {
         platform_udp_close(sock);
-        CLJ_FREE(u);
+        CLJ_FREE(c);
         throw_oom();
         return NULL;
     }
-    memcpy(u->handle_bytes, &u, sizeof(ID));
+    memcpy(c->handle_bytes, &c, sizeof(ID));
 
-    // External byte-array whose finalizer closes the socket and frees ctx + bytes.
-    CljByteArray *handle = make_byte_array_external(u->handle_bytes, (int)sizeof(ID), u, net_udp_ctx_free);
+    CljByteArray *handle = make_byte_array_external(c->handle_bytes, (int)sizeof(ID), c, net_ctx_free);
     if (!handle) {
-        net_udp_ctx_free(u);
+        net_ctx_free(c);
         return NULL;
     }
-    return (ID)handle;
+    return handle;
 }
 
 ID native_tinyclj_net_on_receive(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 2, "tinyclj.net/on-receive");
-    NetUdpCtx *u = require_udp_ctx(args[0], "tinyclj.net/on-receive");
+    NetCtx *u = require_net_ctx(args[0], NET_TYPE_UDP, "tinyclj.net/on-receive");
     if (!u) return NULL;
 
     ID fn = args[1];
@@ -221,8 +236,8 @@ ID native_tinyclj_net_on_receive(ID *args, unsigned int argc) {
 
 ID native_tinyclj_net_send_bang(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 2, "tinyclj.net/send!");
-    NetUdpCtx *u = require_udp_ctx(args[0], "tinyclj.net/send!");
-    if (!u || !u->sock) return NULL;
+    NetCtx *c = require_net_ctx(args[0], NET_TYPE_UDP, "tinyclj.net/send!");
+    if (!c || !c->handle.udp_sock) return NULL;
 
     if (!args[1] || TAG(args[1]) != CLJ_MAP) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
@@ -257,7 +272,7 @@ ID native_tinyclj_net_send_bang(ID *args, unsigned int argc) {
     }
     CljByteArray *ba = as_byte_array(data_val);
 
-    int rc = platform_udp_send(u->sock, (const uint8_t*)ba->data, (size_t)ba->length, to, (uint16_t)port_i);
+    int rc = platform_udp_send(c->handle.udp_sock, (const uint8_t*)ba->data, (size_t)ba->length, to, (uint16_t)port_i);
     if (rc != 0) {
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                          "tinyclj.net/send! failed");
@@ -267,15 +282,15 @@ ID native_tinyclj_net_send_bang(ID *args, unsigned int argc) {
 
 ID native_tinyclj_net_close_bang(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "tinyclj.net/close!");
-    NetUdpCtx *u = require_udp_ctx(args[0], "tinyclj.net/close!");
-    if (!u) return NULL;
-    if (u->sock) {
-        platform_udp_close(u->sock);
-        u->sock = NULL;
+    NetCtx *c = require_net_ctx(args[0], NET_TYPE_UDP, "tinyclj.net/close!");
+    if (!c) return NULL;
+    if (c->handle.udp_sock) {
+        platform_udp_close(c->handle.udp_sock);
+        c->handle.udp_sock = NULL;
     }
-    if (u->on_receive_fn) {
-        RELEASE(u->on_receive_fn);
-        u->on_receive_fn = NULL;
+    if (c->on_receive_fn) {
+        RELEASE(c->on_receive_fn);
+        c->on_receive_fn = NULL;
     }
     return NULL;
 }
@@ -284,58 +299,12 @@ ID native_tinyclj_net_close_bang(ID *args, unsigned int argc) {
 // TCP
 // -----------------------------------------------------------------------------
 
-typedef struct NetTcpCtx {
-    PlatformTcpConn *conn;
-    ID on_receive_fn;    // retained, may be NULL
-    uint8_t *handle_bytes;
-} NetTcpCtx;
-
-static void net_tcp_ctx_free(void *ctx) {
-    NetTcpCtx *c = (NetTcpCtx*)ctx;
-    if (!c) return;
-    if (c->conn) {
-        platform_tcp_close(c->conn);
-        c->conn = NULL;
-    }
-    if (c->on_receive_fn) {
-        RELEASE(c->on_receive_fn);
-        c->on_receive_fn = NULL;
-    }
-    if (c->handle_bytes) {
-        CLJ_FREE(c->handle_bytes);
-        c->handle_bytes = NULL;
-    }
-    CLJ_FREE(c);
-}
-
-static NetTcpCtx* require_tcp_ctx(ID arg, const char *fn_name) {
-    if (!arg || TAG(arg) != CLJ_BYTE_ARRAY) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "%s expects a tcp connection handle (byte-array)", fn_name);
-        return NULL;
-    }
-    CljByteArray *ba = as_byte_array(arg);
-    if (!ba || (ba->base.flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) == 0) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "%s expects a native tcp connection handle (external byte-array)", fn_name);
-        return NULL;
-    }
-    CljByteArrayExternal *ext = (CljByteArrayExternal*)ba;
-    NetTcpCtx *ctx = (NetTcpCtx*)ext->external_ctx;
-    if (!ctx) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "%s: connection handle is invalid (NULL ctx)", fn_name);
-        return NULL;
-    }
-    return ctx;
-}
-
 static void net_tcp_event_bridge(void *ctx,
                                  PlatformTcpEvent event,
                                  void *packet_handle,
                                  const uint8_t *data,
                                  size_t len) {
-    NetTcpCtx *c = (NetTcpCtx*)ctx;
+    NetCtx *c = (NetCtx*)ctx;
     if (!c) {
         if (packet_handle) platform_net_packet_release(packet_handle);
         return;
@@ -415,12 +384,13 @@ ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc) {
                                          "tinyclj.net/tcp-connect :port out of range: %d", port_i);
     }
 
-    NetTcpCtx *c = (NetTcpCtx*)CLJ_MALLOC(sizeof(NetTcpCtx));
+    NetCtx *c = (NetCtx*)CLJ_MALLOC(sizeof(NetCtx));
     if (!c) {
         throw_oom();
         return NULL;
     }
     memset(c, 0, sizeof(*c));
+    c->type = NET_TYPE_TCP;
 
     PlatformTcpConn *conn = platform_tcp_connect_async(host, (uint16_t)port_i, net_tcp_event_bridge, c);
     if (!conn) {
@@ -428,7 +398,7 @@ ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc) {
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                          "tinyclj.net/tcp-connect failed");
     }
-    c->conn = conn;
+    c->handle.tcp_conn = conn;
     c->on_receive_fn = NULL;
 
     c->handle_bytes = (uint8_t*)CLJ_MALLOC(sizeof(ID));
@@ -440,17 +410,17 @@ ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc) {
     }
     memcpy(c->handle_bytes, &c, sizeof(ID));
 
-    CljByteArray *handle = make_byte_array_external(c->handle_bytes, (int)sizeof(ID), c, net_tcp_ctx_free);
+    CljByteArray *handle = make_byte_array_external(c->handle_bytes, (int)sizeof(ID), c, net_ctx_free);
     if (!handle) {
-        net_tcp_ctx_free(c);
+        net_ctx_free(c);
         return NULL;
     }
-    return (ID)handle;
+    return handle;
 }
 
 ID native_tinyclj_net_tcp_on_receive(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 2, "tinyclj.net/tcp-on-receive");
-    NetTcpCtx *c = require_tcp_ctx(args[0], "tinyclj.net/tcp-on-receive");
+    NetCtx *c = require_net_ctx(args[0], NET_TYPE_TCP, "tinyclj.net/tcp-on-receive");
     if (!c) return NULL;
     ID fn = args[1];
     if (fn && !is_callable(fn)) {
@@ -467,8 +437,8 @@ ID native_tinyclj_net_tcp_on_receive(ID *args, unsigned int argc) {
 
 ID native_tinyclj_net_tcp_send_bang(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 2, "tinyclj.net/tcp-send!");
-    NetTcpCtx *c = require_tcp_ctx(args[0], "tinyclj.net/tcp-send!");
-    if (!c || !c->conn) return NULL;
+    NetCtx *c = require_net_ctx(args[0], NET_TYPE_TCP, "tinyclj.net/tcp-send!");
+    if (!c || !c->handle.tcp_conn) return NULL;
 
     if (!args[1] || TAG(args[1]) != CLJ_MAP) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
@@ -481,7 +451,7 @@ ID native_tinyclj_net_tcp_send_bang(ID *args, unsigned int argc) {
                                          "tinyclj.net/tcp-send! requires :data byte-array");
     }
     CljByteArray *ba = as_byte_array(data_val);
-    int rc = platform_tcp_send(c->conn, (const uint8_t*)ba->data, (size_t)ba->length);
+    int rc = platform_tcp_send(c->handle.tcp_conn, (const uint8_t*)ba->data, (size_t)ba->length);
     if (rc != 0) {
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                          "tinyclj.net/tcp-send! failed");
@@ -491,11 +461,11 @@ ID native_tinyclj_net_tcp_send_bang(ID *args, unsigned int argc) {
 
 ID native_tinyclj_net_tcp_close_bang(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "tinyclj.net/tcp-close!");
-    NetTcpCtx *c = require_tcp_ctx(args[0], "tinyclj.net/tcp-close!");
+    NetCtx *c = require_net_ctx(args[0], NET_TYPE_TCP, "tinyclj.net/tcp-close!");
     if (!c) return NULL;
-    if (c->conn) {
-        platform_tcp_close(c->conn);
-        c->conn = NULL;
+    if (c->handle.tcp_conn) {
+        platform_tcp_close(c->handle.tcp_conn);
+        c->handle.tcp_conn = NULL;
     }
     if (c->on_receive_fn) {
         RELEASE(c->on_receive_fn);
