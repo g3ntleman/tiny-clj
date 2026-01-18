@@ -29,7 +29,7 @@
 // is_special_symbol is in symbol.h (already included)
 #include <string.h>
 #include <stdlib.h>
-#include "mini_format.h"
+#include <stdio.h>
 
 // ============================================================================
 // ============================================================================
@@ -60,10 +60,6 @@ static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, boo
     if (!list_type_matches(TAG(rest_expr))) return NULL;
 
     CljList *src = as_list(rest_expr);
-    // IMPORTANT: normalize only the empty-list singleton to NULL.
-    // A list/AST node may legitimately contain a nil element represented as NULL in `first`,
-    // so (first==NULL && rest==NULL) is not a reliable "end-of-list" sentinel here.
-    if (list_empty(src)) return NULL;
     ID first = canonicalize_expr_with_scope(src->first, st, in_quote, scope_stack);
     CljList *rest = src->rest ? canonicalize_rest_to_plain_list(src->rest, st, in_quote, scope_stack) : NULL;
 
@@ -146,6 +142,17 @@ static bool lexical_lookup(CljVector *scope_stack, CljSymbol *sym, uint8_t *out_
                 *out_slot = (uint8_t)idx;
                 return true;
             }
+            // Fallback: Some symbols are pre-interned (builtins) and may appear as distinct
+            // objects with the same cname during canonicalization. Match locals by cname so
+            // macro/function parameters like `name` work correctly.
+            if (sym->cname && data[idx] && TAG(data[idx]) == CLJ_SYMBOL) {
+                CljSymbol *bound = (CljSymbol*)data[idx];
+                if (bound->cname && strcmp(bound->cname, sym->cname) == 0) {
+                    *out_depth = (uint8_t)d;
+                    *out_slot = (uint8_t)idx;
+                    return true;
+                }
+            }
         }
     }
     return false;
@@ -182,7 +189,7 @@ static CljVector* transform_params(EvalState *st, CljVector *params, CljVector *
         unsigned char tag = TAG(param);
         if (tag == CLJ_VECTOR || tag == CLJ_MAP) {
             char name[64];
-            mini_snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
+            snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
             CljSymbol *gsym = intern_symbol_global(name);
             ASSIGN(new_params, vector_conj(new_params, gsym));
             ASSIGN(let_bindings, vector_conj(let_bindings, param));
@@ -281,7 +288,14 @@ static CljSymbol* canonicalize_symbol_token(CljSymbolToken *token, EvalState *st
         if (is_keyword) {
             // For keywords, add ':' prefix to symbol name
             char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
-            mini_snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", sym_buf);
+            // Avoid -Werror=format-truncation on toolchains that treat warnings as errors.
+            // keyword_with_colon must fit ":" + sym_buf + '\0'
+            size_t sym_buf_len = strlen(sym_buf);
+            if (sym_buf_len + 2 > sizeof(keyword_with_colon)) {
+                return NULL;
+            }
+            snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%.*s",
+                     (int)(sizeof(keyword_with_colon) - 2), sym_buf);
             return intern_symbol(ns_name_sym, keyword_with_colon);
         } else {
             return intern_symbol(ns_name_sym, sym_buf);
@@ -292,7 +306,13 @@ static CljSymbol* canonicalize_symbol_token(CljSymbolToken *token, EvalState *st
         if (keyword_name[0] != '\0' && st && st->current_ns && st->current_ns->name) {
             CljSymbol *ns_name_sym = st->current_ns->name;
             char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
-            mini_snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
+            // Avoid -Werror=format-truncation (":" + keyword_name + '\0' must fit).
+            size_t kw_len = strlen(keyword_name);
+            if (kw_len + 2 > sizeof(keyword_with_colon)) {
+                return NULL;
+            }
+            snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%.*s",
+                     (int)(sizeof(keyword_with_colon) - 2), keyword_name);
             return intern_symbol(ns_name_sym, keyword_with_colon);
         }
         // Fall through to unqualified keyword
@@ -398,17 +418,23 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             }
             if (macro) {
                 // Collect unevaluated arguments for macro call
-                // NOTE: Arguments are NOT canonicalized here - macros work with raw forms
+                // NOTE: Arguments are NOT fully canonicalized here - macros work with raw forms
+                // BUT: Symbol tokens must be converted to interned symbols for frame lookup
                 // The expanded form will be canonicalized recursively below
                 ID args[16];
                 int argc = 0;
-                // IMPORTANT: use normalized list traversal. Some list producers use an
-                // explicit empty-list terminator node (first/rest == NULL) or the empty-list
-                // singleton; treating those as an argument would add a spurious trailing nil.
-                for (CljList *cur = list_rest_normalized(list);
+                for (CljList *cur = list->rest ? as_list(list->rest) : NULL;
                      cur && argc < 16;
-                     cur = list_rest_normalized(cur)) {
-                    args[argc++] = LIST_FIRST(cur);
+                     cur = cur->rest ? as_list(cur->rest) : NULL) {
+                    ID arg = cur->first;
+                    // Convert symbol tokens to interned symbols so frame_lookup works
+                    // (frame_lookup uses pointer comparison for interned symbols)
+                    if (arg && TAG(arg) == CLJ_SYMBOL_TOKEN) {
+                        CljSymbolToken *token = (CljSymbolToken*)arg;
+                        CljSymbol *sym = canonicalize_symbol_token(token, st);
+                        if (sym) arg = sym;
+                    }
+                    args[argc++] = arg;
                 }
                 
                 // Call macro function to expand the form
@@ -484,7 +510,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                             if (TAG(binding_form) != CLJ_SYMBOL) {
                                 // Destructuring binding - create gensym
                                 char name[64];
-                                mini_snprintf(name, sizeof(name), "loop__%lu", ++gensym_counter);
+                                snprintf(name, sizeof(name), "loop__%lu", ++gensym_counter);
                                 CljSymbol *gsym = intern_symbol_global(name);
                                 ASSIGN(loop_bindings, vector_conj(loop_bindings, gsym));
                                 ASSIGN(loop_bindings, vector_conj(loop_bindings, init_expr));
@@ -774,7 +800,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         
         // Stack buffer for small vectors (avoid malloc)
         ID stack_buf[16];
-        ID *canon_elems = (count <= 16) ? stack_buf : (ID*)CLJ_MALLOC(count * sizeof(ID));
+        ID *canon_elems = (count <= 16) ? stack_buf : (ID*)malloc(count * sizeof(ID));
         CLJ_ASSERT(canon_elems != NULL && "Out of memory");
         
         bool changed = false;
@@ -788,7 +814,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
         
         if (!changed) {
-            if (count > 16) CLJ_FREE(canon_elems);
+            if (count > 16) free(canon_elems);
             return expr;  // No changes needed
         }
         
@@ -799,14 +825,14 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
         move_meta(vec, new_vec);
         
-        if (count > 16) CLJ_FREE(canon_elems);
+        if (count > 16) free(canon_elems);
         return AUTORELEASE(new_vec);
     }
     
     if (tag == CLJ_MAP) {
         CljMap *map = (CljMap*)expr;
         CLJ_ASSERT(map != NULL);
-        CljMap *new_map = make_map(map_count(map));
+        CljMap *new_map = NULL;
         bool changed = false;
         
         // Canonicalize keys and values
@@ -814,17 +840,21 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             ID canon_key = canonicalize_expr_with_scope(key, st, in_quote, scope_stack);
             ID canon_value = canonicalize_expr_with_scope(value, st, in_quote, scope_stack);
             if (canon_key != key || canon_value != value) {
+                if (!new_map) {
+                    new_map = make_map(map_count(map));
+                }
+                ASSIGN(new_map, map_assoc(new_map, canon_key, canon_value));
                 changed = true;
+            } else if (new_map) {
+                ASSIGN(new_map, map_assoc(new_map, key, value));
             }
-            ASSIGN(new_map, map_assoc(new_map, canon_key, canon_value));
         }
         
-        if (changed) {
+        if (changed && new_map) {
             move_meta(map, new_map);
             return AUTORELEASE(new_map);
         }
         
-        RELEASE(new_map);
         return expr;  // No changes needed
     }
     

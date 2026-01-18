@@ -2,8 +2,6 @@
 #include "eval.h"
 #include "symbol.h"
 #include <stdio.h>
-#include "platform.h"
-#include "mini_format.h"
 #include "exception.h"
 #include "function.h"
 #include "validation.h"
@@ -36,6 +34,7 @@
 #include "strings.h"  // For pr_str
 #include "to_string.h"  // For is_special_symbol
 #include "numeric_utils.h"
+#include "format_utils.h"
 #include "eval_arithmetic.h"
 #include "eval_comparison.h"
 #include <time.h>
@@ -45,6 +44,17 @@
 
 #include <signal.h>
 extern __attribute__((weak)) volatile sig_atomic_t g_clojure_core_last_form;
+
+// -----------------------------------------------------------------------------
+// Compiled AST toggle (used by tests)
+// -----------------------------------------------------------------------------
+// The public API lives in eval.h. The current implementation is a minimal toggle
+// to satisfy tests and allow future integration of compiled/preattached AST eval.
+static int g_eval_use_compiled_ast = 0;
+
+void eval_set_use_compiled_ast(int enabled) {
+    g_eval_use_compiled_ast = enabled ? 1 : 0;
+}
 
 static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, CljSymbol *qualified) {
     if (!slot || !unqualified || !qualified) {
@@ -587,7 +597,24 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         // Use central symbol resolution function (DRY: handles environment stack and frames)
         if (ctx) {
             CljMap *ctx_env_map = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
-            ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, ctx_env_map, ctx->frame, body, get_eval_state(ctx, NULL));
+            // First check frame directly - frame lookups can legitimately return symbols
+            // (e.g., macro parameters like (defmacro m [name] name) called with (m name))
+            if (ctx->frame) {
+                ID frame_value = NOT_FOUND;
+                if (frame_lookup(ctx->frame, body, &frame_value)) {
+                    if (frame_value == NOT_FOUND) {
+                        return NULL;  // Parameter bound to nil
+                    }
+                    // Frame lookups return the bound value directly - no self-resolution check
+                    // This is correct for macros where a symbol parameter can have a symbol value
+                    if (!frame_value) return NULL;
+                    if (IS_IMMEDIATE(frame_value)) return frame_value;
+                    return AUTORELEASE(RETAIN(frame_value));
+                }
+            }
+            
+            // Then check env_stack and namespace
+            ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, ctx_env_map, NULL, body, get_eval_state(ctx, NULL));
             const char *log_sym = (body_sym && body_sym->cname) ? body_sym->cname : "<anon>";
             if (resolved_id != NOT_FOUND) {
                 if (!resolved_id || resolved_id == SYM_NIL) {
@@ -595,6 +622,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 }
                 // CRITICAL: If resolved_id is still a symbol (not a value), throw exception
                 // This prevents infinite loops where a symbol resolves to itself
+                // NOTE: This check only applies to env_stack/namespace lookups, not frame lookups
                 if (is_symbol(resolved_id) && !IS_KEYWORD(resolved_id)) {
                     bool resolves_to_self = (resolved_id == body);
                     if (!resolves_to_self && resolved_id && body) {
@@ -1072,52 +1100,52 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
         return (result == SYM_NIL) ? NULL : result;
     }
 
-    // Handle keywords as functions (for map lookup)
+    // Handle keywords as functions (Clojure semantics: (:k m) and (:k m default))
     if (is_keyword(op)) {
-        CljList *args = list_rest_normalized(list);
-        // Arity: (:kw coll) or (:kw coll not-found)
-        if (!args) {
-            return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                             "Wrong number of args (0) passed to: clojure.lang.Keyword");
+        // Count args (supports 1 or 2 args after the keyword).
+        int argc = 0;
+        for (CljList *node = list_rest_normalized(list); node; node = list_rest_normalized(node)) {
+            argc++;
         }
 
-        CljList *arg2_node = list_rest_normalized(args);
-        CljList *arg3_node = arg2_node ? list_rest_normalized(arg2_node) : NULL;
-        if (arg3_node) {
-            int argc = 0;
-            for (CljList *node = args; node; node = list_rest_normalized(node)) {
-                argc++;
+        if (argc < 1 || argc > 2) {
+            const char *kw_name = "keyword";
+            if (is_symbol(op)) {
+                CljSymbol *s = as_symbol(op);
+                if (s && s->cname) kw_name = s->cname;
             }
             return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                             "Wrong number of args (%d) passed to: clojure.lang.Keyword", argc);
+                "Wrong number of args (%d) passed to: %s", argc, kw_name);
         }
 
-        ID coll = eval_arg_with_context(list, 1, env, st, ctx);
-        if (is_symbol(coll)) {
-            ID resolved = eval_symbol(as_symbol(coll), st);
-            if (resolved) {
-                RELEASE(coll);
-                coll = resolved;
-            }
+        ID target = eval_arg_with_context(list, 1, env, st, ctx);
+        ID default_val = NULL;
+        if (argc == 2) {
+            default_val = eval_arg_with_context(list, 2, env, st, ctx);
         }
 
-        ID not_found = NULL;
-        if (arg2_node) {
-            not_found = eval_arg_with_context(list, 2, env, st, ctx);
+        // nil target: behave like (get nil :k) => nil, (get nil :k default) => default
+        if (!target || !is_map(target)) {
+            if (target) RELEASE(target);
+            // Return default (may be NULL/nil) when provided; otherwise nil.
+            return default_val;
         }
 
-        ID result = NULL;
-        if (coll && is_map(coll)) {
-            result = map_get_sentinel((CljValue)coll, (CljValue)op, (CljValue)not_found);
-        } else {
-            result = not_found ? not_found : NULL;
+        // Distinguish "missing" from "present with nil value" using NOT_FOUND sentinel.
+        ID found = map_get_sentinel((CljMap*)target, op, NOT_FOUND);
+        RELEASE(target);
+
+        if (found == NOT_FOUND) {
+            return default_val;
         }
 
-        // IMPORTANT: retain result before releasing locals (result may alias not_found).
-        ID out = RETAIN(result);
-        if (not_found) RELEASE(not_found);
-        if (coll) RELEASE(coll);
-        return out;
+        // Key exists. If a default was provided, it is not used.
+        if (default_val) {
+            RELEASE(default_val);
+        }
+
+        // Found value may be nil (NULL). Retain non-nil values so they survive target release.
+        return found ? RETAIN(found) : NULL;
     }
 
     // Resolve symbol to get function
@@ -1285,10 +1313,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (original_op_tag == CLJ_SYMBOL) {
         const char *dbg = getenv("TINYCLJ_DEBUG_EVAL_LIST_OP");
         if (dbg && dbg[0] == '1' && (&g_clojure_core_last_form != NULL) && g_clojure_core_last_form == 210) {
-            char buf[160];
-            (void)mini_snprintf(buf, sizeof(buf), "[debug] eval_list: form=%d list=%p op=%p tag=%u\n",
-                                    (int)g_clojure_core_last_form, (void*)list, (void*)op, (unsigned)original_op_tag);
-            fputs(buf, stderr);
+            fprintf(stderr, "[debug] eval_list: form=%d list=%p op=%p tag=%u\n",
+                    (int)g_clojure_core_last_form, (void*)list, (void*)op, (unsigned)original_op_tag);
+            fflush(stderr);
         }
     }
 #endif
@@ -1340,6 +1367,16 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // resulting in a non-special symbol (flags unset). Treat it as a special form by name.
     if (original_op_sym && original_op_sym->cname && strcmp(original_op_sym->cname, "try") == 0) {
         return eval_special_try(list, effective_env, effective_st, ctx);
+    }
+    // Fallback: clojure.core can be loaded before special symbols are registered, which can
+    // lead to "loop"/"recur" being interned as normal symbols. Treat them as special forms by name.
+    if (original_op_sym && original_op_sym->cname) {
+        if (strcmp(original_op_sym->cname, "loop") == 0) {
+            return eval_special_loop(list, effective_env, effective_st, ctx);
+        }
+        if (strcmp(original_op_sym->cname, "recur") == 0) {
+            return eval_special_recur(list, effective_env, effective_st, ctx);
+        }
     }
 
     // Resolve operator symbol
@@ -1990,14 +2027,14 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
             const char *cname = symbol->cname ? symbol->cname : "unknown";
             const char *ns_cname = symbol->ns_name && symbol->ns_name->cname ? symbol->ns_name->cname : "unknown";
             size_t qualified_len = strlen(ns_cname) + 1 + strlen(cname) + 1;
-            char *qualified_name = (char*)CLJ_MALLOC(qualified_len);
+            char *qualified_name = (char*)malloc(qualified_len);
             if (qualified_name) {
                 size_t pos = 0;
                 pos = format_append(qualified_name, pos, qualified_len, ns_cname);
                 pos = format_append_char(qualified_name, pos, qualified_len, '/');
                 format_append(qualified_name, pos, qualified_len, cname);
                 throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", qualified_name);
-                CLJ_FREE(qualified_name);
+                free(qualified_name);
             } else {
                 throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context", ns_cname, cname);
             }
@@ -2035,14 +2072,14 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         const char *cname = symbol->cname ? symbol->cname : "unknown";
         const char *ns_cname = symbol->ns_name && symbol->ns_name->cname ? symbol->ns_name->cname : "unknown";
         size_t qualified_len = strlen(ns_cname) + 1 + strlen(cname) + 1;
-        char *qualified_name = (char*)CLJ_MALLOC(qualified_len);
+        char *qualified_name = (char*)malloc(qualified_len);
         if (qualified_name) {
             size_t pos = 0;
             pos = format_append(qualified_name, pos, qualified_len, ns_cname);
             pos = format_append_char(qualified_name, pos, qualified_len, '/');
             format_append(qualified_name, pos, qualified_len, cname);
             throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", qualified_name);
-            CLJ_FREE(qualified_name);
+            free(qualified_name);
         } else {
             throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context", ns_cname, cname);
         }
@@ -2840,9 +2877,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Print timing information (Clojure-compatible: "msecs" format)
     // Suppress output in test context
     if (!g_suppress_time_output) {
-        char msg[96];
-        (void)mini_snprintf(msg, sizeof(msg), "Elapsed time: %.2f msecs\n", elapsed_ms);
-        platform_put_string(NULL, msg);
+        printf("Elapsed time: %.2f msecs\n", elapsed_ms);
     }
 
     // Return the result of the evaluated expression (Clojure-compatible: return the value)
@@ -2928,23 +2963,13 @@ ID* alloc_obj_array(int size, ID *stack_buffer) {
     if (size <= 16) {
         return stack_buffer;
     }
-    return CLJ_MALLOC((size_t)size * sizeof(*stack_buffer));
+    return malloc((size_t)size * sizeof(*stack_buffer));
 }
 
 void free_obj_array(ID *array, ID *stack_buffer) {
     if (array != stack_buffer) {
-        CLJ_FREE((void*)array);
+        free((void*)array);
     }
-}
-
-// ============================================================================
-// COMPILED AST CONTROL (primarily for tests/benchmarks)
-// ============================================================================
-
-static int g_use_compiled_ast_override = -1;
-
-void eval_set_use_compiled_ast(int enabled) {
-    g_use_compiled_ast_override = enabled;
 }
 
 
