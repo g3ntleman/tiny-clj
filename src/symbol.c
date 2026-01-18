@@ -16,6 +16,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>  // For snprintf
 #include <assert.h>
 
 // Note: Symbols have SINGLETON_RC and are never released
@@ -29,7 +30,6 @@ CljSymbol *SYM_TRY = NULL;
 CljSymbol *SYM_CATCH = NULL;
 CljSymbol *SYM_IF = NULL;
 CljSymbol *SYM_COND = NULL;
-CljSymbol *SYM_CASE = NULL;
 CljSymbol *SYM_WHEN = NULL;
 CljSymbol *SYM_WHILE = NULL;
 CljSymbol *SYM_LET = NULL;
@@ -117,43 +117,13 @@ CljSymbol *SYM_KW_PORT = NULL;
 CljSymbol *SYM_KW_HOST = NULL;
 CljSymbol *SYM_KW_COLUMN = NULL;
 CljSymbol *SYM_KW_FN = NULL;
-CljSymbol *SYM_KW_RESULT_CHAN = NULL;
-CljSymbol *SYM_KW_SCHEDULED_SEC = NULL;
-CljSymbol *SYM_KW_SCHEDULED_MSEC = NULL;
-CljSymbol *SYM_KW_PERIODIC = NULL;
-CljSymbol *SYM_KW_PERIOD_MS = NULL;
-CljSymbol *SYM_KW_TIMER_ID = NULL;
-// tinyclj.runtime/stats keywords
-CljSymbol *SYM_KW_HOST_OS = NULL;
-CljSymbol *SYM_KW_HOST_OS_VERSION = NULL;
-CljSymbol *SYM_KW_TINY_CLJ_VERSION = NULL;
-CljSymbol *SYM_KW_BUILD_TIME = NULL;
-CljSymbol *SYM_KW_HEAP_BYTES_FREE = NULL;
-CljSymbol *SYM_KW_HEAP_BYTES_TOTAL = NULL;
-CljSymbol *SYM_KW_FLASH_BYTES_FREE = NULL;
-CljSymbol *SYM_KW_FLASH_BYTES_TOTAL = NULL;
-CljSymbol *SYM_KW_MEMORY_STATS = NULL;
-CljSymbol *SYM_KW_ENABLED_P = NULL;
-CljSymbol *SYM_KW_OBJECT_ALLOCATIONS = NULL;
-CljSymbol *SYM_KW_OBJECT_DEALLOCATIONS = NULL;
-CljSymbol *SYM_KW_OBJECT_DESTRUCTIONS = NULL;
-CljSymbol *SYM_KW_OBJECT_BYTES_CURRENT = NULL;
-CljSymbol *SYM_KW_OBJECT_BYTES_PEAK = NULL;
-CljSymbol *SYM_KW_RAW_ALLOCATIONS = NULL;
-CljSymbol *SYM_KW_RAW_FREES = NULL;
-CljSymbol *SYM_KW_RAW_REALLOCATIONS = NULL;
-CljSymbol *SYM_KW_RAW_BYTES_CURRENT = NULL;
-CljSymbol *SYM_KW_RAW_BYTES_PEAK = NULL;
-CljSymbol *SYM_KW_RAW_BLOCKS_CURRENT = NULL;
-CljSymbol *SYM_KW_RAW_BLOCKS_PEAK = NULL;
-// tinyclj.fs result map keywords
 CljSymbol *SYM_KW_PATH = NULL;
-CljSymbol *SYM_KW_SIZE = NULL;
+CljSymbol *SYM_KW_HOST_OS = NULL;
+CljSymbol *SYM_KW_MACRO = NULL;
 CljSymbol *SYM_KW_TYPE = NULL;
+CljSymbol *SYM_KW_SIZE = NULL;
 CljSymbol *SYM_KW_ENTRIES = NULL;
 CljSymbol *SYM_KW_LAST_KEY = NULL;
-// metadata keywords
-CljSymbol *SYM_KW_MACRO = NULL;
 
 // Datetime keywords
 CljSymbol *SYM_KW_YEAR = NULL;
@@ -175,12 +145,6 @@ CljSymbol *SYM_RETAIN_COUNT = NULL;
 
 // Additional symbols for hot path optimization
 CljSymbol *SYM_NS_STAR = NULL;
-
-// Frequently used fixed symbols (non-keyword)
-CljSymbol *SYM_MATH = NULL;
-CljSymbol *SYM_INC = NULL;
-CljSymbol *SYM_QUASIQUOTE_FN = NULL;
-CljSymbol *SYM_PERCENT = NULL;
 
 // Macro to reduce boilerplate for static symbol declarations (DRY principle)
 // Note: For symbols that need to be extern (used in other files), use DEFINE_EXTERN_SYMBOL instead
@@ -218,7 +182,6 @@ static struct {
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "catch" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "if" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "cond" }, .eval_fn = NULL } },
-    { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "case" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "when" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "while" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "let" }, .eval_fn = NULL } },
@@ -247,28 +210,27 @@ static struct {
 #define SYM_CATCH_IDX 1
 #define SYM_IF_IDX 2
 #define SYM_COND_IDX 3
-#define SYM_CASE_IDX 4
-#define SYM_WHEN_IDX 5
-#define SYM_WHILE_IDX 6
-#define SYM_LET_IDX 7
-#define SYM_FN_IDX 8
-#define SYM_DEF_IDX 9
-#define SYM_DEFMACRO_IDX 10
-#define SYM_QUOTE_IDX 11
-#define SYM_QUASIQUOTE_IDX 12
-#define SYM_UNQUOTE_IDX 13
-#define SYM_UNQUOTE_SPLICE_IDX 14
-#define SYM_LOOP_IDX 15
-#define SYM_RECUR_IDX 16
-#define SYM_THROW_IDX 17
-#define SYM_FINALLY_IDX 18
-#define SYM_VAR_IDX 19
-#define SYM_NS_IDX 20
-#define SYM_BINDING_IDX 21
-#define SYM_TIME_IDX 22
-#define SYM_GO_IDX 23
-#define SYM_AND_IDX 24
-#define SYM_OR_IDX 25
+#define SYM_WHEN_IDX 4
+#define SYM_WHILE_IDX 5
+#define SYM_LET_IDX 6
+#define SYM_FN_IDX 7
+#define SYM_DEF_IDX 8
+#define SYM_DEFMACRO_IDX 9
+#define SYM_QUOTE_IDX 10
+#define SYM_QUASIQUOTE_IDX 11
+#define SYM_UNQUOTE_IDX 12
+#define SYM_UNQUOTE_SPLICE_IDX 13
+#define SYM_LOOP_IDX 14
+#define SYM_RECUR_IDX 15
+#define SYM_THROW_IDX 16
+#define SYM_FINALLY_IDX 17
+#define SYM_VAR_IDX 18
+#define SYM_NS_IDX 19
+#define SYM_BINDING_IDX 20
+#define SYM_TIME_IDX 21
+#define SYM_GO_IDX 22
+#define SYM_AND_IDX 23
+#define SYM_OR_IDX 24
 
 #define G_SPECIAL_SYMBOLS_COUNT (sizeof(g_special_symbols) / sizeof(g_special_symbols[0]))
 
@@ -380,7 +342,6 @@ DEFINE_EXTERN_SYMBOL(sym_peek_data, "peek");
 DEFINE_EXTERN_SYMBOL(sym_pop_data, "pop");
 DEFINE_EXTERN_SYMBOL(sym_subvec_data, "subvec");
 DEFINE_EXTERN_SYMBOL(sym_reverse_data, "reverse");
-DEFINE_EXTERN_SYMBOL(sym_map_data, "map");
 DEFINE_EXTERN_SYMBOL(sym_assoc_data, "assoc");
 DEFINE_EXTERN_SYMBOL(sym_dissoc_data, "dissoc");
 DEFINE_EXTERN_SYMBOL(sym_merge_data, "merge");
@@ -418,7 +379,6 @@ DEFINE_EXTERN_SYMBOL(sym_current_time_ms_data, "current-time-ms");
 DEFINE_EXTERN_SYMBOL(sym_ns_map_data, "ns-map");
 DEFINE_EXTERN_SYMBOL(sym_find_ns_data, "find-ns");
 DEFINE_EXTERN_SYMBOL(sym_all_ns_data, "all-ns");
-DEFINE_EXTERN_SYMBOL(sym_ns_unload_data, "ns-unload");
 DEFINE_EXTERN_SYMBOL(sym_pr_data, "pr");
 DEFINE_EXTERN_SYMBOL(sym_prn_data, "prn");
 DEFINE_EXTERN_SYMBOL(sym_byte_array_data, "byte-array");
@@ -437,13 +397,6 @@ DEFINE_EXTERN_SYMBOL(sym_swap_bang_data, "swap!");
 DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
 DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
 #endif
-
-// Static symbol structs for fixed (non-keyword) literals used in C code
-DEFINE_STATIC_SYMBOL(sym_destructure_data, "destructure");
-DEFINE_STATIC_SYMBOL(sym_math_data, "Math");
-DEFINE_STATIC_SYMBOL(sym_inc_data, "inc");
-DEFINE_STATIC_SYMBOL(sym_quasiquote_fn_data, "quasiquote-fn");
-DEFINE_STATIC_SYMBOL(sym_percent_data, "%");
 
 // Static symbol structs for keywords (compile-time initialization)
 DEFINE_STATIC_SYMBOL(sym_kw_line_data, ":line");
@@ -465,40 +418,13 @@ DEFINE_STATIC_SYMBOL(sym_kw_port_data, ":port");
 DEFINE_STATIC_SYMBOL(sym_kw_host_data, ":host");
 DEFINE_STATIC_SYMBOL(sym_kw_column_data, ":column");
 DEFINE_STATIC_SYMBOL(sym_kw_fn_data, ":fn");
-DEFINE_STATIC_SYMBOL(sym_kw_result_chan_data, ":result-chan");
-DEFINE_STATIC_SYMBOL(sym_kw_scheduled_sec_data, ":scheduled-sec");
-DEFINE_STATIC_SYMBOL(sym_kw_scheduled_msec_data, ":scheduled-msec");
-DEFINE_STATIC_SYMBOL(sym_kw_periodic_data, ":periodic");
-DEFINE_STATIC_SYMBOL(sym_kw_period_ms_data, ":period-ms");
-DEFINE_STATIC_SYMBOL(sym_kw_timer_id_data, ":timer-id");
-DEFINE_STATIC_SYMBOL(sym_kw_host_os_data, ":host-os");
-DEFINE_STATIC_SYMBOL(sym_kw_host_os_version_data, ":host-os-version");
-DEFINE_STATIC_SYMBOL(sym_kw_tiny_clj_version_data, ":tiny-clj-version");
-DEFINE_STATIC_SYMBOL(sym_kw_build_time_data, ":build-time");
-DEFINE_STATIC_SYMBOL(sym_kw_heap_bytes_free_data, ":heap-bytes-free");
-DEFINE_STATIC_SYMBOL(sym_kw_heap_bytes_total_data, ":heap-bytes-total");
-DEFINE_STATIC_SYMBOL(sym_kw_flash_bytes_free_data, ":flash-bytes-free");
-DEFINE_STATIC_SYMBOL(sym_kw_flash_bytes_total_data, ":flash-bytes-total");
-DEFINE_STATIC_SYMBOL(sym_kw_memory_stats_data, ":memory-stats");
-DEFINE_STATIC_SYMBOL(sym_kw_enabled_p_data, ":enabled?");
-DEFINE_STATIC_SYMBOL(sym_kw_object_allocations_data, ":object-allocations");
-DEFINE_STATIC_SYMBOL(sym_kw_object_deallocations_data, ":object-deallocations");
-DEFINE_STATIC_SYMBOL(sym_kw_object_destructions_data, ":object-destructions");
-DEFINE_STATIC_SYMBOL(sym_kw_object_bytes_current_data, ":object-bytes-current");
-DEFINE_STATIC_SYMBOL(sym_kw_object_bytes_peak_data, ":object-bytes-peak");
-DEFINE_STATIC_SYMBOL(sym_kw_raw_allocations_data, ":raw-allocations");
-DEFINE_STATIC_SYMBOL(sym_kw_raw_frees_data, ":raw-frees");
-DEFINE_STATIC_SYMBOL(sym_kw_raw_reallocations_data, ":raw-reallocations");
-DEFINE_STATIC_SYMBOL(sym_kw_raw_bytes_current_data, ":raw-bytes-current");
-DEFINE_STATIC_SYMBOL(sym_kw_raw_bytes_peak_data, ":raw-bytes-peak");
-DEFINE_STATIC_SYMBOL(sym_kw_raw_blocks_current_data, ":raw-blocks-current");
-DEFINE_STATIC_SYMBOL(sym_kw_raw_blocks_peak_data, ":raw-blocks-peak");
 DEFINE_STATIC_SYMBOL(sym_kw_path_data, ":path");
-DEFINE_STATIC_SYMBOL(sym_kw_size_data, ":size");
+DEFINE_STATIC_SYMBOL(sym_kw_host_os_data, ":host-os");
+DEFINE_STATIC_SYMBOL(sym_kw_macro_data, ":macro");
 DEFINE_STATIC_SYMBOL(sym_kw_type_data, ":type");
+DEFINE_STATIC_SYMBOL(sym_kw_size_data, ":size");
 DEFINE_STATIC_SYMBOL(sym_kw_entries_data, ":entries");
 DEFINE_STATIC_SYMBOL(sym_kw_last_key_data, ":last-key");
-DEFINE_STATIC_SYMBOL(sym_kw_macro_data, ":macro");
 
 DEFINE_STATIC_SYMBOL(sym_kw_year_data, ":year");
 DEFINE_STATIC_SYMBOL(sym_kw_month_data, ":month");
@@ -543,7 +469,6 @@ void init_special_symbols() {
     SYM_CATCH = (CljSymbol*)&g_special_symbols[SYM_CATCH_IDX].sym;
     SYM_IF = (CljSymbol*)&g_special_symbols[SYM_IF_IDX].sym;
     SYM_COND = (CljSymbol*)&g_special_symbols[SYM_COND_IDX].sym;
-    SYM_CASE = (CljSymbol*)&g_special_symbols[SYM_CASE_IDX].sym;
     SYM_WHEN = (CljSymbol*)&g_special_symbols[SYM_WHEN_IDX].sym;
     SYM_WHILE = (CljSymbol*)&g_special_symbols[SYM_WHILE_IDX].sym;
     SYM_LET = (CljSymbol*)&g_special_symbols[SYM_LET_IDX].sym;
@@ -630,16 +555,13 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_ALL_NS, sym_all_ns_data);
 
     // Initialize clojure.string namespace symbol first (needed for clojure.string functions)
-    // NOTE: keep as interned (not DEFINE_STATIC_SYMBOL) to match historical behavior.
     SYM_CLOJURE_STRING = intern_symbol_global("clojure.string");
     
     // Initialize clojure.repl namespace symbol (needed for REPL helper functions)
-    // NOTE: keep as interned (not DEFINE_STATIC_SYMBOL) to match historical behavior.
     SYM_CLOJURE_REPL = intern_symbol_global("clojure.repl");
 
     // Global symbols for namespace names (for fast comparison)
     // Use intern_symbol_global to ensure same symbol is returned by intern_symbol
-    // NOTE: keep as interned (not DEFINE_STATIC_SYMBOL) to match historical behavior.
     SYM_CLOJURE_CORE = intern_symbol_global("clojure.core");
     SYM_CLOJURE_LANG = intern_symbol_global("clojure.lang");
     
@@ -664,7 +586,6 @@ void init_special_symbols() {
     // clojure.repl native function symbol for dir
     INIT_SYMBOL_NS(SYM_DIR_NATIVE, sym_dir_data, SYM_CLOJURE_REPL);
     // Initialize tinyclj namespace symbol
-    // NOTE: keep as interned (not DEFINE_STATIC_SYMBOL) to match historical behavior.
     SYM_TINYCLJ = intern_symbol_global("tinyclj");
     
     // tinyclj native function symbol for retain-count
@@ -726,43 +647,22 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_HOST, sym_kw_host_data);
 
     INIT_SYMBOL(SYM_KW_COLUMN, sym_kw_column_data);
-    INIT_SYMBOL(SYM_KW_FN, sym_kw_fn_data);
-    INIT_SYMBOL(SYM_KW_RESULT_CHAN, sym_kw_result_chan_data);
-    INIT_SYMBOL(SYM_KW_SCHEDULED_SEC, sym_kw_scheduled_sec_data);
-    INIT_SYMBOL(SYM_KW_SCHEDULED_MSEC, sym_kw_scheduled_msec_data);
-    INIT_SYMBOL(SYM_KW_PERIODIC, sym_kw_periodic_data);
-    INIT_SYMBOL(SYM_KW_PERIOD_MS, sym_kw_period_ms_data);
-    INIT_SYMBOL(SYM_KW_TIMER_ID, sym_kw_timer_id_data);
 
-    // Additional keywords used by native code
-    INIT_SYMBOL(SYM_KW_HOST_OS, sym_kw_host_os_data);
-    INIT_SYMBOL(SYM_KW_HOST_OS_VERSION, sym_kw_host_os_version_data);
-    INIT_SYMBOL(SYM_KW_TINY_CLJ_VERSION, sym_kw_tiny_clj_version_data);
-    INIT_SYMBOL(SYM_KW_BUILD_TIME, sym_kw_build_time_data);
-    INIT_SYMBOL(SYM_KW_HEAP_BYTES_FREE, sym_kw_heap_bytes_free_data);
-    INIT_SYMBOL(SYM_KW_HEAP_BYTES_TOTAL, sym_kw_heap_bytes_total_data);
-    INIT_SYMBOL(SYM_KW_FLASH_BYTES_FREE, sym_kw_flash_bytes_free_data);
-    INIT_SYMBOL(SYM_KW_FLASH_BYTES_TOTAL, sym_kw_flash_bytes_total_data);
-    INIT_SYMBOL(SYM_KW_MEMORY_STATS, sym_kw_memory_stats_data);
-    INIT_SYMBOL(SYM_KW_ENABLED_P, sym_kw_enabled_p_data);
-    INIT_SYMBOL(SYM_KW_OBJECT_ALLOCATIONS, sym_kw_object_allocations_data);
-    INIT_SYMBOL(SYM_KW_OBJECT_DEALLOCATIONS, sym_kw_object_deallocations_data);
-    INIT_SYMBOL(SYM_KW_OBJECT_DESTRUCTIONS, sym_kw_object_destructions_data);
-    INIT_SYMBOL(SYM_KW_OBJECT_BYTES_CURRENT, sym_kw_object_bytes_current_data);
-    INIT_SYMBOL(SYM_KW_OBJECT_BYTES_PEAK, sym_kw_object_bytes_peak_data);
-    INIT_SYMBOL(SYM_KW_RAW_ALLOCATIONS, sym_kw_raw_allocations_data);
-    INIT_SYMBOL(SYM_KW_RAW_FREES, sym_kw_raw_frees_data);
-    INIT_SYMBOL(SYM_KW_RAW_REALLOCATIONS, sym_kw_raw_reallocations_data);
-    INIT_SYMBOL(SYM_KW_RAW_BYTES_CURRENT, sym_kw_raw_bytes_current_data);
-    INIT_SYMBOL(SYM_KW_RAW_BYTES_PEAK, sym_kw_raw_bytes_peak_data);
-    INIT_SYMBOL(SYM_KW_RAW_BLOCKS_CURRENT, sym_kw_raw_blocks_current_data);
-    INIT_SYMBOL(SYM_KW_RAW_BLOCKS_PEAK, sym_kw_raw_blocks_peak_data);
+    INIT_SYMBOL(SYM_KW_FN, sym_kw_fn_data);
+
     INIT_SYMBOL(SYM_KW_PATH, sym_kw_path_data);
-    INIT_SYMBOL(SYM_KW_SIZE, sym_kw_size_data);
-    INIT_SYMBOL(SYM_KW_TYPE, sym_kw_type_data);
-    INIT_SYMBOL(SYM_KW_ENTRIES, sym_kw_entries_data);
-    INIT_SYMBOL(SYM_KW_LAST_KEY, sym_kw_last_key_data);
+
+    INIT_SYMBOL(SYM_KW_HOST_OS, sym_kw_host_os_data);
+
     INIT_SYMBOL(SYM_KW_MACRO, sym_kw_macro_data);
+
+    INIT_SYMBOL(SYM_KW_TYPE, sym_kw_type_data);
+
+    INIT_SYMBOL(SYM_KW_SIZE, sym_kw_size_data);
+
+    INIT_SYMBOL(SYM_KW_ENTRIES, sym_kw_entries_data);
+
+    INIT_SYMBOL(SYM_KW_LAST_KEY, sym_kw_last_key_data);
 
     INIT_SYMBOL(SYM_KW_YEAR, sym_kw_year_data);
 
@@ -775,13 +675,6 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_MINUTE, sym_kw_minute_data);
 
     INIT_SYMBOL(SYM_KW_SECOND, sym_kw_second_data);
-
-    // Frequently used fixed symbols (non-keyword)
-    INIT_SYMBOL(SYM_MATH, sym_math_data);
-    INIT_SYMBOL(SYM_INC, sym_inc_data);
-    INIT_SYMBOL(SYM_QUASIQUOTE_FN, sym_quasiquote_fn_data);
-    INIT_SYMBOL(SYM_PERCENT, sym_percent_data);
-    INIT_SYMBOL(SYM_DESTRUCTURE, sym_destructure_data);
 
     // Additional symbols for hot path optimization
     INIT_SYMBOL(SYM_NS_STAR, sym_ns_star_data);
@@ -810,9 +703,6 @@ void init_special_symbols() {
     if (is_special_symbol(SYM_COND)) {
         ((CljSpecialSymbol*)SYM_COND)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_cond;
     }
-    if (is_special_symbol(SYM_CASE)) {
-        ((CljSpecialSymbol*)SYM_CASE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_case;
-    }
     if (is_special_symbol(SYM_DO)) {
         ((CljSpecialSymbol*)SYM_DO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_do;
     }
@@ -833,9 +723,6 @@ void init_special_symbols() {
     }
     if (is_special_symbol(SYM_QUOTE)) {
         ((CljSpecialSymbol*)SYM_QUOTE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_quote;
-    }
-    if (is_special_symbol(SYM_LOOP)) {
-        ((CljSpecialSymbol*)SYM_LOOP)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_loop;
     }
     if (is_special_symbol(SYM_RECUR)) {
         ((CljSpecialSymbol*)SYM_RECUR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_recur;
@@ -865,6 +752,7 @@ void init_special_symbols() {
     }
     
     // destructure is a Clojure function, not a special form
+    SYM_DESTRUCTURE = intern_symbol_global("destructure");
 }
 
 // Static CljString for temporary lookups (avoids allocations)
@@ -978,8 +866,8 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
                 cname, SYMBOL_NAME_MAX_LEN - 1);
     }
 
-    // Symbols are CljObject subtypes: allocate via ALLOC so object allocation is tracked consistently.
-    CljSymbol *sym = ALLOC(CljSymbol, 1);
+    // Use malloc directly instead of ALLOC macro
+    CljSymbol *sym = (CljSymbol*)malloc(sizeof(CljSymbol));
     if (!sym) {
         return throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
                 "Failed to allocate memory for symbol '%s'", cname);
@@ -996,7 +884,7 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     // Store strdup'd name for heap-allocated symbols
     sym->cname = strdup(cname);
     if (!sym->cname) {
-        DEALLOC(sym);
+        free(sym);
         return throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
                 "Failed to duplicate string for symbol '%s'", cname);
     }

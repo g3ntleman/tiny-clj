@@ -332,14 +332,24 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
         // Transform (cond test expr ...)
         CljList *t_rest = transform_list(rest, func_name, params, param_count, body);
         if (!t_rest) return NULL;
-        // IMPORTANT: splice the transformed rest directly after `cond`.
-        // The previous implementation accidentally nested the entire rest-list as a
-        // single argument: (cond (<test expr ...>)) which then fails arity/pair checks.
-        CljList *new_cond = (CljList*)make_list((CljObject*)SYM_COND, t_rest);
-        // make_list retains its `rest` argument; drop our local ownership.
-        RELEASE(t_rest);
+
+        CljList *new_cond = (CljList*)make_list((CljObject*)SYM_COND, NULL);
         if (!new_cond) {
+            RELEASE(t_rest);
             return NULL;
+        }
+
+        CljList *rest_list = as_list(new_cond->rest);
+        if (rest_list) {
+            rest_list->rest = (CljObject*)t_rest;
+        } else {
+            CljList *new_rest_list = (CljList*)make_list((CljObject*)t_rest, NULL);
+            if (!new_rest_list) {
+                RELEASE(new_cond);
+                RELEASE(t_rest);
+                return NULL;
+            }
+            new_cond->rest = (CljObject*)new_rest_list;
         }
 
         RETAIN(new_cond);

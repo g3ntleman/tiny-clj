@@ -1,13 +1,12 @@
 #include "vector.h"
 #include "memory.h"
 #include "types.h"  // For SINGLETON_RC
-#include "seq.h"  // For SeqIterator
 #include "common.h"  // For CLJ_ASSERT
 #include "exception.h"  // For throw_exception_formatted
 #include "validation.h"  // For throw_index_out_of_bounds
 #include <stdlib.h>
 #include <stdbool.h>
-#if !defined(ESP32_BUILD)
+#if !defined(ESP32_BUILD) && !defined(ESP_PLATFORM)
 #include <execinfo.h>  // For backtrace
 #endif
 #include <unistd.h>    // For write
@@ -82,31 +81,6 @@ int vector_index_of(CljVector *vec, ID value) {
     
     return INDEX_NOT_FOUND;
 }
-
-/** Initialize seq iterator for vector (internal use by seq.c).
- * Sets up iterator state without exposing internal data pointer.
- * @param iter Iterator to initialize
- * @param vec Vector to iterate over
- * @return true if successful, false if vector is empty
- */
-bool vector_init_seq_iterator(SeqIterator *iter, CljVector *vec) {
-    if (!iter || !vec) return false;
-    
-    // Check if empty
-    if (vec->count == 0) {
-        return false;  // Empty vector
-    }
-    
-    // Store vector in container (already set by seq_iter_init)
-    // Set index and count, but NOT data pointer
-    iter->state.vec.index = 0;
-    iter->state.vec.count = vec->count;
-    iter->state.vec.data = NULL;  // Don't expose internal pointer
-    iter->seq_type = CLJ_VECTOR;
-    
-    return true;
-}
-
 
 /** Get raw data array pointer (no copying, direct access).
  * @param vec Vector to access

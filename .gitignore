@@ -41,13 +41,6 @@ progress.marks
 # Local scratch
 tmp
 tmp/
-
-# Profiling outputs (do not commit)
-profile_outputs/
-
-# Local build directories (do not commit)
-_build_*/
-external/flash-tree/_build/
 # Test binaries
 test-*
 run-tests
@@ -73,7 +66,6 @@ venv/
 # Tooling caches (do not commit)
 .clj-kondo/
 .lsp/
-.cache/
 
 # Repo-local dependencies (do not commit)
 _deps/

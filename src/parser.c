@@ -31,7 +31,7 @@
 #include "instant.h"
 #include "uuid.h"
 #include <ctype.h>
-#include "mini_format.h"
+#include "format_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -87,7 +87,7 @@ static void throw_parser_exceptionf(Reader *reader, const char *format, ...) {
     char buffer[MSG_LEN];
     va_list args;
     va_start(args, format);
-    (void)mini_vsnprintf(buffer, sizeof(buffer), format, args);
+    vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     throw_parser_exception(buffer, reader);
 #endif
@@ -273,18 +273,18 @@ ID parse_expr(Reader *reader, EvalState *st) {
       return parse_string_internal(reader, st);
 
     case '-':
-      if (isdigit(reader_peek_ahead(reader, 1)))
+      if (isdigit((unsigned char)reader_peek_ahead(reader, 1)))
         return make_number_by_parsing(reader, st);
       break;
 
     case '.':
-      if (isdigit(reader_peek_ahead(reader, 1))) {
+      if (isdigit((unsigned char)reader_peek_ahead(reader, 1))) {
         // Check for invalid decimal syntax like .01 (should be 0.01)
         char invalid_decimal[64];
         int pos = 0;
         invalid_decimal[pos++] = c; // include the '.'
         reader_next(reader); // consume '.'
-        while (isdigit(reader_peek_char(reader)) && pos < (int)sizeof(invalid_decimal) - 1) {
+        while (isdigit((unsigned char)reader_peek_char(reader)) && pos < (int)sizeof(invalid_decimal) - 1) {
           invalid_decimal[pos++] = reader_next(reader);
         }
         invalid_decimal[pos] = '\0';
@@ -304,7 +304,11 @@ ID parse_expr(Reader *reader, EvalState *st) {
         reader_consume(reader); // 'n'
         reader_consume(reader); // 'i'
         reader_consume(reader); // 'l'
-        return SYM_NIL;
+        CljSymbol *nil_sym = intern_symbol_global("nil");
+        if (nil_sym == SYM_NIL) {
+          return SYM_NIL;
+        }
+        return AUTORELEASE(nil_sym);
       }
       break;
 
@@ -1057,7 +1061,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       
       // For keywords (ns_str starts with ':'), extract namespace name without ':'
       // and keep ':' prefix in symbol_str for IS_KEYWORD to work
-      bool is_keyword_symbol = (ns_str[0] == ':');
+      bool is_keyword_symbol = (ns_str && ns_str[0] == ':');
       
       // Resolve alias if available (for both keywords and regular symbols)
       CljSymbol *resolved_ns_name_sym = NULL;
@@ -1074,7 +1078,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       CljSymbol *ns_name_sym = resolved_ns_name_sym;
       if (!ns_name_sym) {
         if (is_keyword_symbol) {
-          ns_name_sym = (ns_str + 1) ? intern_symbol_global(ns_str + 1) : NULL;
+          ns_name_sym = (ns_str && ns_str[1] != '\0') ? intern_symbol_global(ns_str + 1) : NULL;
         } else {
           ns_name_sym = ns_str ? intern_symbol_global(ns_str) : NULL;
         }
@@ -1238,7 +1242,7 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
 
   if (reader_peek_char(reader) == '-')
     buf[pos++] = reader_next(reader);
-  if (!isdigit(reader_peek_char(reader))) {
+  if (!isdigit((unsigned char)reader_peek_char(reader))) {
     // Check if this is a decimal starting with '.' (invalid in Clojure)
     if (reader_peek_char(reader) == '.') {
       throw_parser_exception("Syntax error compiling at (REPL:1:1).\nUnable to resolve symbol: .01 in this context", reader);
@@ -1246,14 +1250,14 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
     }
     return NULL;
   }
-  while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1) {
+  while (isdigit((unsigned char)reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1) {
     buf[pos++] = reader_next(reader);
     has_digit_before_dot = true;
   }
   if (reader_peek_char(reader) == '.' &&
-      isdigit(reader_peek_ahead(reader, 1))) {
+      isdigit((unsigned char)reader_peek_ahead(reader, 1))) {
     buf[pos++] = reader_next(reader);
-    while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1)
+    while (isdigit((unsigned char)reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1)
       buf[pos++] = reader_next(reader);
   }
   buf[pos] = '\0';
@@ -1264,76 +1268,9 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
     return NULL;
   }
 
-  // Parse number without pulling in libc strtod/atof (huge code-size on embedded).
-  if (strchr(buf, '.')) {
-    const char *p = buf;
-    bool neg = false;
-    if (*p == '-') { neg = true; p++; }
-
-    // integer part (at least one digit guaranteed by earlier checks)
-    int64_t int_part = 0;
-    while (*p >= '0' && *p <= '9') {
-      int_part = int_part * 10 + (*p - '0');
-      p++;
-    }
-
-    // fractional part
-    int64_t frac_part = 0;
-    int frac_digits = 0;
-    if (*p == '.') {
-      p++;
-      while (*p >= '0' && *p <= '9') {
-        // keep up to 9 digits (more are ignored, consistent with truncating fixed())
-        if (frac_digits < 9) {
-          frac_part = frac_part * 10 + (*p - '0');
-          frac_digits++;
-        }
-        p++;
-      }
-    }
-
-    if (*p != '\0') {
-      throw_parser_exception("Invalid number literal", reader);
-      return NULL;
-    }
-
-    // Convert to fixed-point (scale=8192) using integer arithmetic.
-    int64_t fixed_val = int_part * 8192;
-    if (frac_digits > 0) {
-      int64_t scale = 1;
-      for (int i = 0; i < frac_digits; i++) scale *= 10;
-      fixed_val += (frac_part * 8192) / scale;
-    }
-    if (neg) fixed_val = -fixed_val;
-
-    // Match fixed() bounds: [-32768.0, 32767.9998]
-    const int64_t FIXED_MIN = -(int64_t)32768 * 8192;
-    const int64_t FIXED_MAX = (int64_t)32767 * 8192 + 8191;
-    if (fixed_val < FIXED_MIN || fixed_val > FIXED_MAX) {
-      throw_parser_exception("Fixed-point value exceeds representable range", reader);
-      return NULL;
-    }
-
-    int32_t f32 = (int32_t)fixed_val;
-    return (CljObject*)(CljValue)(((uintptr_t)f32 << TAG_BITS) | TAG_FIXED);
-  }
-
-  // Integer (avoid atoi to keep behavior predictable)
-  const char *p = buf;
-  bool neg = false;
-  if (*p == '-') { neg = true; p++; }
-  int64_t v = 0;
-  while (*p >= '0' && *p <= '9') {
-    v = v * 10 + (*p - '0');
-    p++;
-  }
-  if (*p != '\0') {
-    throw_parser_exception("Invalid number literal", reader);
-    return NULL;
-  }
-  if (neg) v = -v;
-  // fixnum() range is enforced elsewhere; keep current behavior by truncating to int32_t
-  return fixnum((int32_t)v);
+  if (strchr(buf, '.'))
+    return fixed((float)atof(buf));
+  return fixnum(atoi(buf));
 }
 
 /**
@@ -1590,7 +1527,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
 
   if (!body) {
     // Empty function body - return (fn [] ())
-    CljSymbol *fn_sym = SYM_FN;
+    CljSymbol *fn_sym = intern_symbol_global("fn");
     CljValue empty_vec = make_vector(0, CLJ_VECTOR);
     ID empty_list_val = NULL; // () is nil in Clojure
     return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
@@ -1607,8 +1544,8 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // Simple approach: create (fn [%] body) for #(...)
   // This handles the most common case: #(+ % 1)
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
-  CljSymbol *fn_sym = SYM_FN;
-  CljSymbol *percent_sym = SYM_PERCENT;
+  CljSymbol *fn_sym = intern_symbol_global("fn");
+  CljSymbol *percent_sym = intern_symbol_global("%");
   CljVector *param_vec = make_vector(1, CLJ_VECTOR);
   vector_conj_inplace(&param_vec, percent_sym);
 

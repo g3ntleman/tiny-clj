@@ -463,6 +463,8 @@ add_executable(unit-tests
     src/tests/test_string.c
     src/tests/test_vector.c
     src/tests/test_time.c
+    src/tests/test_yield_sleep_hooks.c
+    src/tests/test_yield_sleep.c
     src/tests/test_runtime_stats.c
     src/tests/test_pprint.c
     src/tests/test_static_keywords.c

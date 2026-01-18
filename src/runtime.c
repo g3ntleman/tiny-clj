@@ -11,6 +11,7 @@
 #include "macro.h"          // For macro_cache_reset()
 #include "map.h"            // For make_map()
 #include "hashmap.h"        // For hashmap_register_release_fn()
+#include "seq.h"            // For seq_register_release_fn()
 #include "hash.h"           // For clj_hash_full()
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
@@ -92,6 +93,9 @@ void runtime_init(TinyClJRuntime *runtime) {
     
     // Register hashmap release function with memory system
     hashmap_register_release_fn();
+    
+    // Register seq release function (CljLazySeq) with memory system
+    seq_register_release_fn();
     
     // Register callbacks for subjective-c (HashMap, exceptions, etc.)
     clj_set_callbacks((CljCallbacks){

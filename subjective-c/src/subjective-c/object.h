@@ -30,8 +30,14 @@ typedef struct CljObject
 
 #include "common.h"
 #include <stdio.h>
-#if !defined(ESP32_BUILD)
+
+// Optional: stack trace support (execinfo/backtrace) for debug diagnostics.
+// Not available on ESP-IDF/newlib, so keep it disabled for embedded builds.
+#if !defined(ESP32_BUILD) && !defined(ESP_PLATFORM)
+#define SUBJECTIVE_C_HAVE_EXECINFO 1
 #include <execinfo.h>
+#else
+#define SUBJECTIVE_C_HAVE_EXECINFO 0
 #endif
 #if defined(__APPLE__)
 #include <pthread.h>
@@ -204,9 +210,11 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
                                     (void *)obj, (int)expected_type);
             fputs(buf, stderr);
         }
+#if SUBJECTIVE_C_HAVE_EXECINFO
         void *trace[16];
         int trace_count = backtrace(trace, 16);
         backtrace_symbols_fd(trace, trace_count, fileno(stderr));
+#endif
         return NULL;
     }
 
@@ -229,9 +237,11 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
                                     (void *)obj, (int)expected_type);
             fputs(buf, stderr);
         }
+#if SUBJECTIVE_C_HAVE_EXECINFO
         void *trace[16];
         int trace_count = backtrace(trace, 16);
         backtrace_symbols_fd(trace, trace_count, fileno(stderr));
+#endif
         return NULL;
     }
 #else
@@ -246,9 +256,11 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
                                     (void *)obj, (int)expected_type);
             fputs(buf, stderr);
         }
+#if SUBJECTIVE_C_HAVE_EXECINFO
         void *trace[16];
         int trace_count = backtrace(trace, 16);
         backtrace_symbols_fd(trace, trace_count, fileno(stderr));
+#endif
         return NULL;
     }
 #endif
@@ -267,9 +279,11 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
                                 (int)expected_type, (int)actual_type);
         fputs(buf, stderr);
     }
+#if SUBJECTIVE_C_HAVE_EXECINFO
     void *trace[16];
     int trace_count = backtrace(trace, 16);
     backtrace_symbols_fd(trace, trace_count, fileno(stderr));
+#endif
     CLJ_ASSERT(0 && "Type assertion failed");
     return NULL;
 }

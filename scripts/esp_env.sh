@@ -5,7 +5,11 @@
 # Usage:
 #   source ./scripts/esp_env.sh
 #
-set -euo pipefail
+# NOTE:
+# - This file is meant to be sourced from interactive shells (bash/zsh).
+# - Avoid 'set -u' here, because ESP-IDF's export.sh touches variables that may
+#   be unset in some shells, which can cause noisy "parameter not set" errors.
+set -eo pipefail
 
 # Cross-shell (bash/zsh) repo root detection:
 # - When sourced from zsh, BASH_SOURCE is not set.

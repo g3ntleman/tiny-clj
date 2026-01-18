@@ -2,12 +2,17 @@
 #define SUBJECTIVE_C_MEMORY_H
 
 #include "object.h"
-#include "memory_profiler.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h> // malloc/free/realloc/calloc
+
+// memory_profiler.h lives in tiny-clj (not in subjective-c).
+// Only include it when profiling is explicitly enabled.
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+#include "memory_profiler.h"
+#endif
 
 typedef void (*SubjectiveCReleaseFn)(CljObject *obj);
 void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn);

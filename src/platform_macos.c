@@ -334,19 +334,19 @@ static void udp_socket_cb(CFSocketRef s,
         }
 
         // Extract source address string + port.
-        char addr_buf[INET6_ADDRSTRLEN];
-        addr_buf[0] = '\0';
-        uint16_t port = 0;
+    char addr_buf[INET6_ADDRSTRLEN];
+    addr_buf[0] = '\0';
+    uint16_t port = 0;
         const struct sockaddr *sa = (const struct sockaddr*)&ss;
         if (sa->sa_family == AF_INET && sslen >= (socklen_t)sizeof(struct sockaddr_in)) {
-            const struct sockaddr_in *sin = (const struct sockaddr_in*)sa;
-            (void)inet_ntop(AF_INET, &sin->sin_addr, addr_buf, sizeof(addr_buf));
-            port = ntohs(sin->sin_port);
+                const struct sockaddr_in *sin = (const struct sockaddr_in*)sa;
+                (void)inet_ntop(AF_INET, &sin->sin_addr, addr_buf, sizeof(addr_buf));
+                port = ntohs(sin->sin_port);
         } else if (sa->sa_family == AF_INET6 && sslen >= (socklen_t)sizeof(struct sockaddr_in6)) {
-            const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6*)sa;
-            (void)inet_ntop(AF_INET6, &sin6->sin6_addr, addr_buf, sizeof(addr_buf));
-            port = ntohs(sin6->sin6_port);
-        }
+                const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6*)sa;
+                (void)inet_ntop(AF_INET6, &sin6->sin6_addr, addr_buf, sizeof(addr_buf));
+                port = ntohs(sin6->sin6_port);
+            }
 
         const char *trace = getenv("TINYCLJ_MDNS_TRACE");
         if (trace && trace[0] != '\0' && trace[0] != '0') {
@@ -360,11 +360,11 @@ static void udp_socket_cb(CFSocketRef s,
         CFDataRef payload = CFDataCreate(kCFAllocatorDefault, buf, (CFIndex)n);
         if (!payload) continue;
 
-        const uint8_t *bytes = (const uint8_t*)CFDataGetBytePtr(payload);
-        size_t len = (size_t)CFDataGetLength(payload);
+    const uint8_t *bytes = (const uint8_t*)CFDataGetBytePtr(payload);
+    size_t len = (size_t)CFDataGetLength(payload);
 
-        // packet_handle is a retained CFDataRef. Caller must release via platform_net_packet_release.
-        u->cb(u->cb_ctx, (void*)payload, bytes, len, addr_buf, port);
+    // packet_handle is a retained CFDataRef. Caller must release via platform_net_packet_release.
+    u->cb(u->cb_ctx, (void*)payload, bytes, len, addr_buf, port);
 
         // If the callback didn't take ownership (it should), release defensively would be wrong.
         // Ownership contract: platform_net_packet_release() will CFRelease(payload).

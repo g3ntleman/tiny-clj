@@ -14,6 +14,7 @@
 #include "strings.h"
 #include "map.h"
 #include "symbol.h"
+#include "memory.h"    // For subjective_c_register_release_fn
 #include <string.h>
 #include <stdlib.h>
 
@@ -24,7 +25,7 @@ __attribute__((weak)) EvalState* g_test_eval_state = NULL;
 CljLazySeq* make_lazy_seq(ID thunk) {
     if (!thunk) return NULL;
 
-    CljLazySeq *lazy = ALLOC(CljLazySeq, 1);
+    CljLazySeq *lazy = (CljLazySeq*)malloc(sizeof(CljLazySeq));
     if (!lazy) return NULL;
 
     lazy->base.type = CLJ_LAZY_SEQ;
@@ -192,10 +193,16 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
         case CLJ_VECTOR_TRANSIENT: {
             CljVector *vec = as_vector(obj);
             
-            // Use vector_init_seq_iterator to avoid exposing internal data pointer
-            if (!vector_init_seq_iterator(iter, vec)) {
+            // Initialize vector iterator using public API
+            unsigned int count = vector_count(vec);
+            if (count == 0) {
                 return true;  // Empty vector
             }
+            
+            iter->state.vec.index = 0;
+            iter->state.vec.count = count;
+            iter->state.vec.data = NULL;  // Don't expose internal pointer
+            iter->seq_type = CLJ_VECTOR;
             return true;
         }
         
@@ -488,7 +495,7 @@ CljSeqIterator* make_seq(ID obj) {
     
     // Allocate heap wrapper
     // Use malloc instead of calloc - all fields are immediately initialized
-    CljSeqIterator *heap_seq = (CljSeqIterator*)CLJ_MALLOC(sizeof(CljSeqIterator));
+    CljSeqIterator *heap_seq = (CljSeqIterator*)malloc(sizeof(CljSeqIterator));
     if (!heap_seq) return NULL;
     
     heap_seq->base.type = CLJ_SEQ;
@@ -496,13 +503,13 @@ CljSeqIterator* make_seq(ID obj) {
     
     // Initialize embedded stack iterator
     if (!seq_iter_init(&heap_seq->iter, (CljObject*)obj)) {
-        CLJ_FREE(heap_seq);
+        free(heap_seq);
         return NULL;  // Empty or not seqable
     }
     
     // If iterator is empty, return nil (NULL) - JVM-compatible
     if (seq_iter_empty(&heap_seq->iter)) {
-        CLJ_FREE(heap_seq);
+        free(heap_seq);
         return NULL;
     }
     
@@ -515,7 +522,7 @@ void seq_release(ID seq_obj) {
     if (!seq) return;
     
     // Stack iterator doesn't need cleanup
-    CLJ_FREE(seq);
+    free(seq);
 }
 
 ID seq_first(ID seq_obj) {
@@ -533,7 +540,7 @@ ID seq_rest(ID seq_obj) {
     
     // Create new heap wrapper with advanced iterator
     // Use malloc instead of calloc - all fields are immediately initialized
-    CljSeqIterator *rest_seq = (CljSeqIterator*)CLJ_MALLOC(sizeof(CljSeqIterator));
+    CljSeqIterator *rest_seq = (CljSeqIterator*)malloc(sizeof(CljSeqIterator));
     if (!rest_seq) return NULL;
     
     rest_seq->base.type = CLJ_SEQ;
@@ -684,5 +691,33 @@ bool is_seq(ID obj) {
         return true;
     }
     return TAG(obj) == CLJ_SEQ || TAG(obj) == CLJ_LAZY_SEQ;
+}
+
+// ============================================================================
+// RELEASE HANDLER REGISTRATION
+// ============================================================================
+
+/**
+ * @brief Release handler for CljLazySeq objects.
+ * 
+ * Called by subjective-c memory.c when a CljLazySeq's reference count reaches zero.
+ * Releases the thunk, first element, and cached rest sequence.
+ */
+static void release_lazy_seq(CljObject *v) {
+    CljLazySeq *lazy_seq = (CljLazySeq*)v;
+    if (lazy_seq) {
+        RELEASE(lazy_seq->thunk);
+        RELEASE(lazy_seq->first);
+        RELEASE(lazy_seq->cached_rest);
+    }
+}
+
+/**
+ * @brief Register seq-related release handlers with subjective-c memory system.
+ * 
+ * Should be called during runtime initialization.
+ */
+void seq_register_release_fn(void) {
+    subjective_c_register_release_fn(CLJ_LAZY_SEQ, release_lazy_seq);
 }
 

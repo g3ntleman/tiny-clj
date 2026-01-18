@@ -53,10 +53,8 @@ static inline CljList* list_like_as_list_or_null(ID obj) {
 // Use is_singleton() to distinguish between empty list singleton and list with nil element
 static inline bool list_empty(CljList *list) {
     if (list == NULL) return true;
-    // Only the empty list singleton is empty (rc == SINGLETON_RC).
-    // IMPORTANT: Lists/AST nodes may legitimately contain a nil element represented as NULL
-    // in `first`, so (first==NULL && rest==NULL) must NOT be treated as empty unless it's
-    // the singleton empty list.
+    // Only the empty list singleton is empty (has SINGLETON_RC)
+    // A newly created list with (nil . NULL) is NOT empty - it has one nil element
     return LIST_FIRST(list) == NULL && LIST_REST(list) == NULL && is_singleton((CljObject*)list);
 }
 

@@ -5,6 +5,7 @@ This document records a reproducible, toolchain-backed size snapshot for the ESP
 ### Build recipe
 
 - **Toolchain**: repo-local Xtensa GCC from `./_deps/espressif-tools/`
+- **ESP-IDF (submodule)**: `external/esp-idf` pinned to `v5.3.4`
 - **Configure**:
 
 ```bash
@@ -38,10 +39,10 @@ xtensa-esp32-elf-size build-esp32/tiny-clj-esp32
 
 Updated snapshot (after removing libc printf/vsnprintf pull-ins, still **without feature stripping**):
 
-- **text**: 160,515
-- **data**: 4,268
-- **bss**: 1,361
-- **dec**: 166,144
+- **text**: 170,299
+- **data**: 4,060
+- **bss**: 1,348
+- **dec**: 175,707
 
 More detailed (`-A`):
 

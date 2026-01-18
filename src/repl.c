@@ -22,7 +22,6 @@
 #include "file_utils.h"
 #include "meta.h"
 #include "build_info.h"
-#include "mini_format.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -45,24 +44,6 @@ extern LineEditor* get_line_editor(void);
 extern CljVector* line_editor_get_history_vector(LineEditor *editor);
 extern int line_editor_get_history_size(const LineEditor *editor);
 extern void line_editor_clear_history(LineEditor *editor);
-
-static void repl_outf(const char *fmt, ...) {
-    char buf[512];
-    va_list ap;
-    va_start(ap, fmt);
-    (void)mini_vsnprintf(buf, sizeof(buf), fmt, ap);
-    va_end(ap);
-    platform_put_string(NULL, buf);
-}
-
-static void repl_errf(const char *fmt, ...) {
-    char buf[512];
-    va_list ap;
-    va_start(ap, fmt);
-    (void)mini_vsnprintf(buf, sizeof(buf), fmt, ap);
-    va_end(ap);
-    fputs(buf, stderr);
-}
 
 /** @brief Check the balance of parentheses, brackets, and braces.
  *  @param s String to check for delimiter balance
@@ -113,7 +94,8 @@ static void print_prompt(EvalState *st, bool balanced) {
             ns_name = st->current_ns->name->cname;
         }
     }
-    repl_outf("%s%s ", ns_name, balanced ? "=>" : "...");
+    printf("%s%s ", ns_name, balanced ? "=>" : "...");
+    fflush(stdout);
 }
 
 /** @brief Print a CljObject result to stdout with proper formatting.
@@ -121,13 +103,12 @@ static void print_prompt(EvalState *st, bool balanced) {
  */
 static void print_result(CljObject *v) {
     if (!v) {
-        repl_outf("nil\n");
+        printf("nil\n");
         return;
     }
     CljString *s = pr_str(v);
     if (s) {
-        platform_put_string(NULL, string_data(s));
-        platform_put_string(NULL, "\n");
+        printf("%s\n", string_data(s));
     }
 }
 
@@ -215,7 +196,7 @@ bool eval_multiform_string(const char *code, EvalState *st) {
 static char* unescape_eval_arg(const char *raw_code) {
     CLJ_ASSERT(raw_code != NULL);
     size_t len = strlen(raw_code);
-    char *buffer = (char*)CLJ_MALLOC(len + 1);
+    char *buffer = (char*)malloc(len + 1);
     if (!buffer) {
         return NULL;
     }
@@ -249,7 +230,7 @@ static char* unescape_eval_arg(const char *raw_code) {
     buffer[w] = '\0';
 
     if (!changed) {
-        CLJ_FREE(buffer);
+        free(buffer);
         return NULL;
     }
     return buffer;
@@ -262,7 +243,7 @@ bool repl_eval_arg(const char *raw_code, EvalState *st) {
     const char *code = unescaped ? unescaped : raw_code;
     bool success = eval_multiform_string(code, st);
     if (unescaped) {
-        CLJ_FREE(unescaped);
+        free(unescaped);
     }
     return success;
 }
@@ -392,16 +373,16 @@ CljVector* history_load_from_file(const char *path) {
  *  @param prog Program name for usage display
  */
 static void __attribute__((unused)) usage(const char *prog) {
-    repl_outf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [--no-core] [--repl] [--zombie] [--memory-debug]\n", prog);
-    repl_outf("\nOptions:\n");
-    repl_outf("  -n, --ns NS          Set namespace\n");
-    repl_outf("  -e, --eval EXPR      Evaluate expression (can be used multiple times)\n");
-    repl_outf("  -f, --file FILE      Evaluate file\n");
-    repl_outf("  --no-core            Don't load clojure.core\n");
-    repl_outf("  --repl               Start REPL after evaluating files/expressions\n");
-    repl_outf("  --zombie             Enable zombie mode for memory debugging\n");
-    repl_outf("  --memory-debug       Enable verbose memory debugging and memory profiling\n");
-    repl_outf("  -h, --help           Show this help message\n");
+    printf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [--no-core] [--repl] [--zombie] [--memory-debug]\n", prog);
+    printf("\nOptions:\n");
+    printf("  -n, --ns NS          Set namespace\n");
+    printf("  -e, --eval EXPR      Evaluate expression (can be used multiple times)\n");
+    printf("  -f, --file FILE      Evaluate file\n");
+    printf("  --no-core            Don't load clojure.core\n");
+    printf("  --repl               Start REPL after evaluating files/expressions\n");
+    printf("  --zombie             Enable zombie mode for memory debugging\n");
+    printf("  --memory-debug       Enable verbose memory debugging\n");
+    printf("  -h, --help           Show this help message\n");
 }
 
 /** @brief Clean up resources and exit with specified code.
@@ -409,7 +390,7 @@ static void __attribute__((unused)) usage(const char *prog) {
  *  @param exit_code Exit code to use
  */
 static void __attribute__((unused)) cleanup_and_exit(const char **eval_args, int exit_code) {
-    if (eval_args) CLJ_FREE(eval_args);
+    if (eval_args) free(eval_args);
     exit(exit_code);
 }
 
@@ -446,17 +427,11 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     }
 #endif
 
-    repl_outf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", TINY_CLJ_VERSION, platform_name());
+    printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.2", platform_name());
     print_build_info();
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Line editor needs blocking input for proper character handling
-    // On macOS, stdin is buffered via CFRunLoop in platform_macos.c, which
-    // requires non-blocking stdin. platform_get_char() blocks by pumping the runloop.
-#if defined(__APPLE__)
-    platform_set_stdin_nonblocking(1);
-#else
     platform_set_stdin_nonblocking(0);
-#endif
     // Enable raw mode for proper escape sequence handling
     platform_set_raw_mode(1);
 #else
@@ -474,7 +449,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     // Initialize line editor
     LineEditor *editor = line_editor_new(platform_get_char, platform_put_char, platform_put_string, NULL);
     if (!editor) {
-        repl_errf("Failed to initialize line editor\n");
+        fprintf(stderr, "Failed to initialize line editor\n");
         return false;
     }
     set_line_editor(editor);
@@ -489,18 +464,18 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                 ASSIGN(history_vec, AUTORELEASE(loaded));
             }
         } CATCH(ex) {
-            // Exception while loading history - start with empty history.
-            // The exception is automatically released by the CATCH macro.
+            // Exception beim History-Laden - starte mit leerer History
+            // Exception wird automatisch freigegeben durch CATCH-Macro
             history_vec = NULL;
         } END_TRY
     });
-    // Use the loaded history.
-    // line_editor_set_history_from_vector calls clj_conj, which uses AUTORELEASE.
+    // Verwende die geladene History
+    // line_editor_set_history_from_vector ruft clj_conj auf, das AUTORELEASE verwendet
     if (history_vec && TAG(history_vec) == CLJ_VECTOR) {
         WITH_AUTORELEASE_POOL({
             line_editor_set_history_from_vector(editor, (CljVector*)history_vec);
         });
-        RELEASE(history_vec);  // Release after use
+        RELEASE(history_vec);  // Release nach Verwendung
     } else {
         line_editor_clear_history(editor);
     }
@@ -521,18 +496,18 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             int result = line_editor_process_input(editor);
             if (result == LINE_EDITOR_EOF) break;
             if (result == LINE_EDITOR_LINE_READY) {
-                LineEditorState state;
-                if (line_editor_get_state(editor, &state) == LINE_EDITOR_SUCCESS &&
-                    state.length > 0) {
+                size_t line_len = 0;
+                const char *line = line_editor_get_buffer_cstr(editor, &line_len);
+                if (line && line_len > 0) {
                     if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
-                    strncat(acc, state.buffer, sizeof(acc) - strlen(acc) - 1);
+                    strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
                     line_editor_reset(editor);
                     got_input = true;
                 }
             }
             if (!got_input) {
                 repl_process_event_loop(st);
-                platform_runloop_run_once(1);
+                usleep(1000);
                 continue;
             }
         }
@@ -545,7 +520,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             if (n < 0) { should_exit = true; break; }
             if (n == 0) {
                 event_loop_run_next(NULL, st);
-                platform_runloop_run_once(1);
+                usleep(1000);
                 continue;
             }
             if (n > 0) {
@@ -571,7 +546,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             continue;
         } else if (balance < 0) {
             // Too many closing parens - syntax error
-            repl_outf("Error: Too many closing parentheses\n");
+            printf("Error: Too many closing parentheses\n");
             // Add to history before clearing
             if (acc[0] != '\0') {
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
@@ -655,7 +630,7 @@ int main(int argc, char **argv) {
     init_special_symbols();  // Initialize special symbols like SYM_DEF
 #ifdef PROFILE_STARTUP
     clock_t t1 = clock();
-    repl_errf("[PROFILE] init: %.2f ms\n", (double)(t1 - t0) * 1000.0 / CLOCKS_PER_SEC);
+    fprintf(stderr, "[PROFILE] init: %.2f ms\n", (double)(t1 - t0) * 1000.0 / CLOCKS_PER_SEC);
 #endif
     EvalState *st = get_global_eval_state();
     // Note: set_global_eval_state() removed - Exception handling now independent
@@ -682,7 +657,7 @@ int main(int argc, char **argv) {
 
     // Allocate array for eval arguments
     if (eval_count > 0) {
-        eval_args = (const char**)CLJ_MALLOC(sizeof(*eval_args) * (size_t)eval_count);
+        eval_args = malloc(sizeof(char*) * eval_count);
         if (!eval_args) return 1;
     }
 
@@ -722,17 +697,10 @@ int main(int argc, char **argv) {
         register_builtins();
 #ifdef PROFILE_STARTUP
         clock_t t3 = clock();
-        repl_errf("[PROFILE] register_builtins: %.2f ms\n", (double)(t3 - t2) * 1000.0 / CLOCKS_PER_SEC);
+        fprintf(stderr, "[PROFILE] register_builtins: %.2f ms\n", (double)(t3 - t2) * 1000.0 / CLOCKS_PER_SEC);
 #endif
 
         if (!no_core) {
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
-            if (memory_debug) {
-                // Enable profiling as early as possible so we can account for clojure.core load.
-                memory_profiling_init_with_hooks();
-                enable_memory_profiling(true);
-            }
-#endif
 #ifdef PROFILE_STARTUP
             clock_t t4 = clock();
 #endif
@@ -745,19 +713,19 @@ int main(int argc, char **argv) {
             load_clojure_core(st);
 #ifdef DEBUG
             if (memory_debug) {
-                repl_errf("[DEBUG] autorelease_pool peak during load_clojure_core: %u\n",
+                fprintf(stderr, "[DEBUG] autorelease_pool peak during load_clojure_core: %u\n",
                         (unsigned)autorelease_pool_peak_count());
             }
 #endif
 #ifdef PROFILE_STARTUP
             clock_t t5 = clock();
-            repl_errf("[PROFILE] load_clojure_core: %.2f ms\n", (double)(t5 - t4) * 1000.0 / CLOCKS_PER_SEC);
+            fprintf(stderr, "[PROFILE] load_clojure_core: %.2f ms\n", (double)(t5 - t4) * 1000.0 / CLOCKS_PER_SEC);
 #endif
             // Load clojure.repl namespace for REPL helper functions
             load_clojure_repl(st);
 #ifdef PROFILE_STARTUP
             clock_t t6 = clock();
-            repl_errf("[PROFILE] load_clojure_repl: %.2f ms\n", (double)(t6 - t5) * 1000.0 / CLOCKS_PER_SEC);
+            fprintf(stderr, "[PROFILE] load_clojure_repl: %.2f ms\n", (double)(t6 - t5) * 1000.0 / CLOCKS_PER_SEC);
 #endif
             // Require clojure.repl with :refer :all to make functions available in user namespace
             // This ensures functions like doc, source, dir, etc. are available without namespace prefix
@@ -766,8 +734,8 @@ int main(int argc, char **argv) {
             eval_multiform_string(require_code, st);
 #ifdef PROFILE_STARTUP
             clock_t t7 = clock();
-            repl_errf("[PROFILE] require clojure.repl: %.2f ms\n", (double)(t7 - t6) * 1000.0 / CLOCKS_PER_SEC);
-            repl_errf("[PROFILE] TOTAL startup: %.2f ms\n", (double)(t7 - t0) * 1000.0 / CLOCKS_PER_SEC);
+            fprintf(stderr, "[PROFILE] require clojure.repl: %.2f ms\n", (double)(t7 - t6) * 1000.0 / CLOCKS_PER_SEC);
+            fprintf(stderr, "[PROFILE] TOTAL startup: %.2f ms\n", (double)(t7 - t0) * 1000.0 / CLOCKS_PER_SEC);
 #endif
         }
     });
@@ -783,29 +751,29 @@ int main(int argc, char **argv) {
         // Load entire file into memory for proper parsing (handles metadata across lines)
         FILE *fp = fopen(file_arg, "r");
         if (!fp) {
-            repl_outf("Error: Cannot open file '%s': %s\n", file_arg, strerror(errno));
+            printf("Error: Cannot open file '%s': %s\n", file_arg, strerror(errno));
             cleanup_and_exit(eval_args, 1);
         }
 
         // Get file size
         if (fseek(fp, 0, SEEK_END) != 0) {
             fclose(fp);
-            repl_outf("Error: Cannot seek in file '%s': %s\n", file_arg, strerror(errno));
+            printf("Error: Cannot seek in file '%s': %s\n", file_arg, strerror(errno));
             cleanup_and_exit(eval_args, 1);
         }
         long sz = ftell(fp);
         if (sz < 0) {
             fclose(fp);
-            repl_outf("Error: Cannot get file size for '%s': %s\n", file_arg, strerror(errno));
+            printf("Error: Cannot get file size for '%s': %s\n", file_arg, strerror(errno));
             cleanup_and_exit(eval_args, 1);
         }
         rewind(fp);
 
         // Allocate buffer (sz + 1 for null terminator)
-        char *buffer = (char*)CLJ_MALLOC((size_t)sz + 1);
+        char *buffer = (char*)malloc((size_t)sz + 1);
         if (!buffer) {
             fclose(fp);
-            repl_outf("Error: Out of memory\n");
+            printf("Error: Out of memory\n");
             cleanup_and_exit(eval_args, 1);
         }
 
@@ -816,7 +784,7 @@ int main(int argc, char **argv) {
 
         // Evaluate entire file content
         bool success = eval_multiform_string(buffer, st);
-        CLJ_FREE(buffer);
+        free(buffer);
         if (!success) {
             cleanup_and_exit(eval_args, 1);
         }
@@ -847,9 +815,9 @@ int main(int argc, char **argv) {
     if (!stdin_is_tty) {
         size_t capacity = 4096;
         size_t len = 0;
-        char *buffer = (char*)CLJ_MALLOC(capacity);
+        char *buffer = (char*)malloc(capacity);
         if (!buffer) {
-            repl_errf("Error: Out of memory while reading stdin\n");
+            fprintf(stderr, "Error: Out of memory while reading stdin\n");
             cleanup_and_exit(eval_args, 1);
         }
 
@@ -857,10 +825,10 @@ int main(int argc, char **argv) {
         while ((ch = fgetc(stdin)) != EOF) {
             if (len + 1 >= capacity) {
                 size_t new_cap = capacity * 2;
-                char *tmp = (char*)CLJ_REALLOC(buffer, new_cap);
+                char *tmp = (char*)realloc(buffer, new_cap);
                 if (!tmp) {
-                    CLJ_FREE(buffer);
-                    repl_errf("Error: Out of memory while reading stdin\n");
+                    free(buffer);
+                    fprintf(stderr, "Error: Out of memory while reading stdin\n");
                     cleanup_and_exit(eval_args, 1);
                 }
                 buffer = tmp;
@@ -871,12 +839,12 @@ int main(int argc, char **argv) {
         buffer[len] = '\0';
 
         if (len == 0) {
-            CLJ_FREE(buffer);
+            free(buffer);
             cleanup_and_exit(eval_args, 0);
         }
 
         bool success = eval_multiform_string(buffer, st);
-        CLJ_FREE(buffer);
+        free(buffer);
         cleanup_and_exit(eval_args, success ? 0 : 1);
     }
 

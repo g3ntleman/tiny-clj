@@ -3,7 +3,6 @@
 
 #include "object.h"
 #include "common.h"
-#include "seq.h"
 
 typedef struct CljVector CljVector;
 
@@ -37,7 +36,6 @@ CljVector* make_vector_copy(CljVector* vec, unsigned capacity);
 CljVector* vector_pop(CljVector* vec);
 CljVector* vector_insert_at(CljVector* vec, unsigned int index, ID item);
 CljVector* vector_remove_at(CljVector* vec, unsigned int index);
-bool vector_init_seq_iterator(SeqIterator *iter, CljVector *vec);
 ID* vector_as_array(CljVector *vec);
 void vector_increment_count(CljVector *vec);
 void vector_clear(CljVector *vec);
