@@ -745,6 +745,22 @@ ID native_tinyclj_net_mdns_close_bang(ID *args, unsigned int argc) {
     MdnsCtx *m = require_mdns_ctx(args[0], "tinyclj.net.mdns/close!");
     if (!m) return NULL;
 
+#ifdef __APPLE__
+    if (m->use_dnssd) {
+        // Stop outstanding resolve/address ops.
+        for (size_t i = 0; i < (sizeof(m->dnssd_ops) / sizeof(m->dnssd_ops[0])); i++) {
+            dnssd_cleanup_op(m, i);
+        }
+
+        // Stop browse.
+        dnssd_unschedule(&m->dnssd_browse_fdref, &m->dnssd_browse_source);
+        if (m->dnssd_browse_ref) {
+            DNSServiceRefDeallocate(m->dnssd_browse_ref);
+            m->dnssd_browse_ref = NULL;
+        }
+    }
+#endif
+
     // Best-effort close now; finalizer will also close if user drops the handle.
     if (m->m) {
         platform_mdns_close(m->m);
