@@ -113,7 +113,8 @@ DB* __bt_open(const char* fname, int flags, int mode, const BTREEINFO* openinfo,
          * transfer size.
          */
         if (b.psize &&
-            (b.psize < MINPSIZE || b.psize > MAX_PAGE_OFFSET + 1 || b.psize & sizeof(indx_t) - 1))
+            (b.psize < MINPSIZE || b.psize > MAX_PAGE_OFFSET + 1 ||
+             (b.psize & (sizeof(indx_t) - 1)) != 0))
             goto einval;
 
         /* Minimum number of keys per page; absolute minimum is 2. */
@@ -202,8 +203,8 @@ DB* __bt_open(const char* fname, int flags, int mode, const BTREEINFO* openinfo,
     sb.st_size = 0;
 
     /* Set the cache size; must be a multiple of the page size. */
-    if (b.cachesize && b.cachesize & b.psize - 1)
-        b.cachesize += (~b.cachesize & b.psize - 1) + 1;
+    if (b.cachesize && (b.cachesize & (b.psize - 1)) != 0)
+        b.cachesize += (~b.cachesize & (b.psize - 1)) + 1;
     if (b.cachesize < b.psize * MINCACHE)
         b.cachesize = b.psize * MINCACHE;
 
@@ -247,7 +248,7 @@ DB* __bt_open(const char* fname, int flags, int mode, const BTREEINFO* openinfo,
             if (m.m_magic != BTREEMAGIC || m.m_version != BTREEVERSION)
                 goto eftype;
             if (m.m_psize < MINPSIZE || m.m_psize > MAX_PAGE_OFFSET + 1 ||
-                m.m_psize & sizeof(indx_t) - 1)
+                (m.m_psize & (sizeof(indx_t) - 1)) != 0)
                 goto eftype;
             if (m.m_flags & ~SAVEMETA)
                 goto eftype;

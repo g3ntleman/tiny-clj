@@ -66,11 +66,11 @@ static EPG* bt_fast __P((BTREE*, const DBT*, const DBT*, int*));
 int __bt_put(const DB* dbp, DBT* key, const DBT* data, u_int flags) {
     BTREE* t;
     DBT tkey, tdata;
-    EPG* e;
+    EPG* e = NULL;
     PAGE* h;
     indx_t index, nxtindex;
     pgno_t pg;
-    size_t nbytes;
+    size_t nbytes = 0;
     int dflags, exact;
     char *dest, db[NOVFLSIZE], kb[NOVFLSIZE];
 
@@ -118,6 +118,10 @@ int __bt_put(const DB* dbp, DBT* key, const DBT* data, u_int flags) {
         return (RET_ERROR);
     }
 
+    // Bytes needed for the leaf entry; used for fit checks and insertion.
+    // Initialize early so code paths like R_CURSOR (goto delete) don't leave it unset.
+    nbytes = NBLEAFDBT(key->size, data->size);
+
     /* Replace the cursor. */
     if (flags == R_CURSOR) {
         if ((h = mpool_get(t->bt_mp, t->bt_bcursor.pgno, 0)) == NULL)
@@ -130,7 +134,6 @@ int __bt_put(const DB* dbp, DBT* key, const DBT* data, u_int flags) {
      * Find the key to delete, or, the location at which to insert.  Bt_fast
      * and __bt_search pin the returned page.
      */
-    nbytes = NBLEAFDBT(key->size, data->size);
     if (t->bt_order == NOT || (e = bt_fast(t, key, data, &exact)) == NULL)
         if ((e = __bt_search_insert(t, key, nbytes, &exact)) == NULL)
             return (RET_ERROR);
@@ -208,11 +211,15 @@ int __bt_put(const DB* dbp, DBT* key, const DBT* data, u_int flags) {
         }
     }
 
+    // Save cursor target before mpool_put potentially invalidates the page pointer.
+    const pgno_t inserted_pgno = h->pgno;
+    const indx_t inserted_index = index;
+
     mpool_put(t->bt_mp, h, MPOOL_DIRTY);
 
     if (flags == R_SETCURSOR) {
-        t->bt_bcursor.pgno = e->page->pgno;
-        t->bt_bcursor.index = e->index;
+        t->bt_bcursor.pgno = inserted_pgno;
+        t->bt_bcursor.index = inserted_index;
     }
     SET(t, B_MODIFIED);
     return (RET_SUCCESS);
