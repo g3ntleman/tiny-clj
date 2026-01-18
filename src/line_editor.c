@@ -454,6 +454,10 @@ int line_editor_process_input(LineEditor *editor) {
         // Read remaining characters of escape sequence
         while (editor->escape_pos < sizeof(editor->escape_buffer)) {
             int c = editor->get_char(editor->ctx);
+            if (c == LINE_EDITOR_GETCHAR_NO_INPUT) {
+                // No more bytes available yet; keep escape state and try again later.
+                return LINE_EDITOR_SUCCESS;
+            }
             if (c == -1) {
                 // EOF during escape sequence, reset
                 editor->in_escape_sequence = false;

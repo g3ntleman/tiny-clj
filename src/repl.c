@@ -507,7 +507,9 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             }
             if (!got_input) {
                 repl_process_event_loop(st);
-                usleep(1000);
+                // macOS stdin is delivered via CFRunLoop callbacks (platform_macos.c).
+                // Use the platform runloop as our idle wait to avoid busy-polling.
+                platform_runloop_run_once(1);
                 continue;
             }
         }
