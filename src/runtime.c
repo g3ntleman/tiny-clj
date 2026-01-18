@@ -13,6 +13,7 @@
 #include "hashmap.h"        // For hashmap_register_release_fn()
 #include "seq.h"            // For seq_register_release_fn()
 #include "hash.h"           // For clj_hash_full()
+#include "symbol.h"         // For init_special_symbols()
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
 #include "to_string.h"      // For to_string()
@@ -103,6 +104,11 @@ void runtime_init(TinyClJRuntime *runtime) {
         .equal = clj_equal_full,
         .to_string = to_string
     });
+
+    // Initialize special symbols/keywords early, before any code can intern the same names.
+    // This must happen AFTER callbacks are set, because the symbol table is a HashMap that
+    // depends on clj_hash()/clj_equal() for correct behavior.
+    init_special_symbols();
 }
 
 void runtime_reset(TinyClJRuntime *runtime) {

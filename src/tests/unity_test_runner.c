@@ -66,11 +66,12 @@ void setUp(void) {
     // This suppresses "=== Loading Clojure Core Functions ===" output
     clojure_core_set_quiet(true);
     
-    // Initialize special symbols only once (they should persist across tests)
-    if (!g_special_symbols_initialized) {
-        init_special_symbols();
-        g_special_symbols_initialized = true;
-    }
+    // IMPORTANT:
+    // runtime_reset() clears the symbol table. Even though the global SYM_* pointers
+    // persist, they must be re-registered in the symbol table for intern_symbol_global()
+    // to return the singleton pointers (pointer identity tests rely on this).
+    init_special_symbols();
+    g_special_symbols_initialized = true;
     
     
     if (!g_runtime.builtins_registered) {

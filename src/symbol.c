@@ -205,6 +205,24 @@ static struct {
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "or" }, .eval_fn = NULL } },
 };
 
+// Namespace name symbols: store as a small static array (no heap allocation).
+// These are used frequently for qualified symbol resolution and native lookup.
+static struct {
+    CljSymbol sym;
+} g_namespace_name_symbols[] = {
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "clojure.string" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "clojure.repl" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "clojure.core" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "clojure.lang" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "tinyclj" } },
+};
+
+#define NS_NAME_CLOJURE_STRING_IDX 0
+#define NS_NAME_CLOJURE_REPL_IDX   1
+#define NS_NAME_CLOJURE_CORE_IDX   2
+#define NS_NAME_CLOJURE_LANG_IDX   3
+#define NS_NAME_TINYCLJ_IDX        4
+
 // Array indices for special symbols
 #define SYM_TRY_IDX 0
 #define SYM_CATCH_IDX 1
@@ -506,6 +524,18 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_NIL, sym_nil_data);
     INIT_SYMBOL(SYM_AMP, sym_amp_data);
 
+    // Namespace name symbols (static, no heap allocation; must be in symbol table)
+    SYM_CLOJURE_STRING = &g_namespace_name_symbols[NS_NAME_CLOJURE_STRING_IDX].sym;
+    SYM_CLOJURE_REPL = &g_namespace_name_symbols[NS_NAME_CLOJURE_REPL_IDX].sym;
+    SYM_CLOJURE_CORE = &g_namespace_name_symbols[NS_NAME_CLOJURE_CORE_IDX].sym;
+    SYM_CLOJURE_LANG = &g_namespace_name_symbols[NS_NAME_CLOJURE_LANG_IDX].sym;
+    SYM_TINYCLJ = &g_namespace_name_symbols[NS_NAME_TINYCLJ_IDX].sym;
+    symbol_table_add(SYM_CLOJURE_STRING);
+    symbol_table_add(SYM_CLOJURE_REPL);
+    symbol_table_add(SYM_CLOJURE_CORE);
+    symbol_table_add(SYM_CLOJURE_LANG);
+    symbol_table_add(SYM_TINYCLJ);
+
     // Arithmetic symbols: store ArithOp index in upper bits (ARITH_ADD=0, SUB=1, MUL=2, DIV=3)
     INIT_SYMBOL(SYM_PLUS, sym_plus_data);
     SYM_PLUS->base.flags |= CLJ_FLAG_ARITHMETIC | (0 << CLJ_ARITH_OP_SHIFT);
@@ -554,16 +584,8 @@ void init_special_symbols() {
 
     INIT_SYMBOL(SYM_ALL_NS, sym_all_ns_data);
 
-    // Initialize clojure.string namespace symbol first (needed for clojure.string functions)
-    SYM_CLOJURE_STRING = intern_symbol_global("clojure.string");
-    
-    // Initialize clojure.repl namespace symbol (needed for REPL helper functions)
-    SYM_CLOJURE_REPL = intern_symbol_global("clojure.repl");
-
-    // Global symbols for namespace names (for fast comparison)
-    // Use intern_symbol_global to ensure same symbol is returned by intern_symbol
-    SYM_CLOJURE_CORE = intern_symbol_global("clojure.core");
-    SYM_CLOJURE_LANG = intern_symbol_global("clojure.lang");
+    // Namespace name symbols are pre-allocated in g_namespace_name_symbols[] above
+    // and registered in the symbol table earlier in this function.
     
     // clojure.string native function symbols - with namespace
     INIT_SYMBOL_NS(SYM_TRIM, sym_trim_data, SYM_CLOJURE_STRING);
@@ -585,8 +607,7 @@ void init_special_symbols() {
     INIT_SYMBOL_NS(SYM_SOURCE_NATIVE, sym_source_data, SYM_CLOJURE_REPL);
     // clojure.repl native function symbol for dir
     INIT_SYMBOL_NS(SYM_DIR_NATIVE, sym_dir_data, SYM_CLOJURE_REPL);
-    // Initialize tinyclj namespace symbol
-    SYM_TINYCLJ = intern_symbol_global("tinyclj");
+    // tinyclj namespace name symbol is pre-allocated in g_namespace_name_symbols[] above.
     
     // tinyclj native function symbol for retain-count
     INIT_SYMBOL_NS(SYM_RETAIN_COUNT, sym_retain_count_data, SYM_TINYCLJ);

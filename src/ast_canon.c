@@ -880,30 +880,45 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     if (tag == CLJ_MAP) {
         CljMap *map = (CljMap*)expr;
         CLJ_ASSERT(map != NULL);
-        CljMap *new_map = NULL;
+        int cnt = map_count(map);
+        if (cnt <= 0) {
+            return expr;
+        }
+
+        // Canonicalize keys and values (single pass), but only rebuild the map if something changed.
+        // NOTE: We must not drop entries that appear before the first changed entry.
+        ID stack_pairs[32 * 2];
+        ID *pairs = (cnt <= 32) ? stack_pairs : (ID*)malloc((size_t)cnt * 2 * sizeof(ID));
+        CLJ_ASSERT(pairs != NULL && "Out of memory");
+
         bool changed = false;
-        
-        // Canonicalize keys and values
+        int i = 0;
         MAP_FOR_EACH(map, key, value) {
             ID canon_key = canonicalize_expr_with_scope(key, st, in_quote, scope_stack);
             ID canon_value = canonicalize_expr_with_scope(value, st, in_quote, scope_stack);
             if (canon_key != key || canon_value != value) {
-                if (!new_map) {
-                    new_map = make_map(map_count(map));
-                }
-                ASSIGN(new_map, map_assoc(new_map, canon_key, canon_value));
                 changed = true;
-            } else if (new_map) {
-                ASSIGN(new_map, map_assoc(new_map, key, value));
             }
+            pairs[i * 2] = canon_key;
+            pairs[i * 2 + 1] = canon_value;
+            i++;
         }
-        
-        if (changed && new_map) {
-            move_meta(map, new_map);
-            return AUTORELEASE(new_map);
+
+        if (!changed) {
+            if (pairs != stack_pairs) free(pairs);
+            return expr;  // No changes needed
         }
-        
-        return expr;  // No changes needed
+
+        CljMap *new_map = make_map(cnt);
+        for (int j = 0; j < cnt; j++) {
+            ID k = pairs[j * 2];
+            ID v = pairs[j * 2 + 1];
+            ASSIGN(new_map, map_assoc(new_map, k, v));
+        }
+        move_meta(map, new_map);
+
+        if (pairs != stack_pairs) free(pairs);
+        return AUTORELEASE(new_map);
     }
     
     // Other types don't need canonicalization
