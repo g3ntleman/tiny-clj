@@ -95,7 +95,7 @@ void tinyclj_idf_start(void) {
 
     for (;;) {
         platform_put_string(NULL, "user=> ");
-        line_editor_reset(ed);
+        line_editor_clear(ed);
 
         for (;;) {
             int r = line_editor_process_input(ed);

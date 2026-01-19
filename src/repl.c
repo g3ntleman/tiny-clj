@@ -541,10 +541,10 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                 if (line && line_len > 0) {
                     if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
                     strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
-                    line_editor_reset(editor);
+                    line_editor_clear(editor);
                     got_input = true;
                 } else {
-                    line_editor_reset(editor);
+                    line_editor_clear(editor);
                     prompt_shown = false;
                 }
             }
