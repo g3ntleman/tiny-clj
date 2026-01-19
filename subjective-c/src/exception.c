@@ -11,11 +11,8 @@
 #include "mini_format.h"
 #include "exception.h"
 #include "error_messages.h"
-#include "object.h"
 #include "memory.h"
-#include "strings.h"  // For to_cstring
-#include "value.h"  // For make_string
-#include "strings.h"  // For CljString
+#include "strings.h"
 
 static void errf(const char *fmt, ...) {
     char buf[512];
@@ -27,21 +24,19 @@ static void errf(const char *fmt, ...) {
 }
 
 // Stacktrace support
-#ifdef __APPLE__
-#include <execinfo.h>
-#elif defined(__linux__)
+#if defined(DEBUG) && (defined(__APPLE__) || defined(__linux__))
 #include <execinfo.h>
 #endif
 
 // Safe string copy helper
-static inline void safe_strncpy(char *dest, const char *src, size_t dest_size) {
+static void safe_strncpy(char *dest, const char *src, size_t dest_size) {
     if (!dest || !src || dest_size == 0) return;
     strncpy(dest, src, dest_size - 1);
     dest[dest_size - 1] = '\0';
 }
 
 // Shorten file path to show only from /src/ onwards
-static inline const char* shorten_file_path(const char *file) {
+static const char* shorten_file_path(const char *file) {
     if (!file) return "";
     const char *src_pos = strstr(file, "/src/");
     if (src_pos) {
@@ -57,40 +52,6 @@ struct CljString* stacktrace(void);
 
 // Global exception stack (independent of EvalState)
 GlobalExceptionStack global_exception_stack = {0};
-
-// ============================================================================
-// EXCEPTION CREATION
-// ============================================================================
-
-/** @brief Create exception with reference counting */
-CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col) {
-    if (!type || !message) return NULL;
-    
-    CLJException *exc = ALLOC(CLJException, 1);
-    if (!exc) return NULL;
-    
-    // Initialize base object
-    exc->base.type = CLJ_EXCEPTION;
-    exc->base.rc = 1;  // Start with reference count 1
-    
-    // Copy strings directly into the structure (no strdup needed)
-    safe_strncpy(exc->type, type, sizeof(exc->type));
-    safe_strncpy(exc->message, message, sizeof(exc->message));
-    safe_strncpy(exc->file, file ? file : "", sizeof(exc->file));
-    
-    exc->line = line;
-    exc->col = col;
-    
-#ifdef DEBUG
-    // Always generate stacktrace in DEBUG builds
-    exc->stacktrace = stacktrace();  // Can be NULL on error
-    exc->object = 0;  // Initialize to 0 (unset)
-#else
-    // Release builds: no stacktrace field
-#endif
-    
-    return exc;
-}
 
 // ============================================================================
 // STATIC EXCEPTION TYPE CONSTANTS
@@ -120,6 +81,76 @@ const char *EXCEPTION_INDEX_OUT_OF_BOUNDS = "IndexOutOfBoundsException";
 /** @brief Static exception type: FileNotFoundException */
 const char *EXCEPTION_FILE_NOT_FOUND = "FileNotFoundException";
 
+/** @brief Static exception type: StackOverflowError */
+const char *EXCEPTION_STACK_OVERFLOW = "StackOverflowError";
+
+/** @brief Static exception type: DivisionByZeroError */
+const char *EXCEPTION_DIVISION_BY_ZERO = "DivisionByZeroError";
+
+/** @brief Static exception type: ZombieAccessException */
+const char *EXCEPTION_ZOMBIE_ACCESS = "ZombieAccessException";
+
+/** @brief Static exception type: Generic Error */
+const char *EXCEPTION_ERROR = "Error";
+
+static inline bool is_out_of_memory_exception_type(const char *type) {
+    // Size-optimized fast path: compare pointer to interned const string.
+    // This relies on callsites using EXCEPTION_OUT_OF_MEMORY.
+    return type == EXCEPTION_OUT_OF_MEMORY;
+}
+
+// ============================================================================
+// EXCEPTION CREATION
+// ============================================================================
+
+/** @brief Create exception with reference counting */
+CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col) {
+    if (!type || !message) return NULL;
+
+    // CRITICAL: OutOfMemoryError must never allocate.
+    // Use the static singleton and avoid stacktrace generation.
+    if (is_out_of_memory_exception_type(type)) {
+        if (!clj_oom_exception) return NULL;
+
+        safe_strncpy(clj_oom_exception->type, EXCEPTION_OUT_OF_MEMORY, sizeof(clj_oom_exception->type));
+        safe_strncpy(clj_oom_exception->message, message, sizeof(clj_oom_exception->message));
+        safe_strncpy(clj_oom_exception->file, file ? file : "", sizeof(clj_oom_exception->file));
+        clj_oom_exception->line = line;
+        clj_oom_exception->col = col;
+#ifdef DEBUG
+        clj_oom_exception->stacktrace = NULL;
+        clj_oom_exception->object = 0;
+#endif
+        return clj_oom_exception;
+    }
+
+    CLJException *exc = ALLOC(CLJException, 1);
+    if (!exc) return NULL;
+
+    // Initialize base object
+    exc->base.type = CLJ_EXCEPTION;
+    exc->base.rc = 1;  // Start with reference count 1
+
+    // Copy strings directly into the structure (no strdup needed)
+    safe_strncpy(exc->type, type, sizeof(exc->type));
+    safe_strncpy(exc->message, message, sizeof(exc->message));
+    safe_strncpy(exc->file, file ? file : "", sizeof(exc->file));
+
+    exc->line = line;
+    exc->col = col;
+
+#ifdef DEBUG
+    // Always generate stacktrace in DEBUG builds
+    exc->stacktrace = stacktrace();  // Can be NULL on error
+    exc->object = 0;  // Initialize to 0 (unset)
+#else
+    // Release builds: no stacktrace field
+#endif
+
+    return exc;
+}
+
+// ============================================================================
 // ============================================================================
 // STATIC OUT OF MEMORY EXCEPTION (no allocation needed)
 // ============================================================================
@@ -141,15 +172,6 @@ static CLJException clj_oom_exception_data = {
 
 CLJException *clj_oom_exception = &clj_oom_exception_data;
 
-/** @brief Static exception type: StackOverflowError */
-const char *EXCEPTION_STACK_OVERFLOW = "StackOverflowError";
-
-/** @brief Static exception type: DivisionByZeroError */
-const char *EXCEPTION_DIVISION_BY_ZERO = "DivisionByZeroError";
-
-/** @brief Static exception type: ZombieAccessException */
-const char *EXCEPTION_ZOMBIE_ACCESS = "ZombieAccessException";
-
 // ============================================================================
 // EXCEPTION THROWING FUNCTIONS
 // ============================================================================
@@ -169,6 +191,24 @@ void* throw_exception_formatted(const char *type, const char *file, int line, in
     // Use generic RuntimeException if type is NULL
     const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
 
+    // CRITICAL: OutOfMemoryError must never allocate, even if memory is still available.
+    if (is_out_of_memory_exception_type(exception_type)) {
+        char message[256];
+        message[0] = '\0';
+#if defined(STRING_FORMATTING_ENABLED) && !STRING_FORMATTING_ENABLED
+        (void)mini_snprintf(message, sizeof(message), "%s", (format != NULL) ? format : "Out of memory");
+#else
+        va_list args;
+        va_start(args, format);
+        (void)mini_vsnprintf(message, sizeof(message), format ? format : "Out of memory", args);
+        va_end(args);
+#endif
+        CLJException *oom = make_exception(EXCEPTION_OUT_OF_MEMORY, message, file, line, code);
+        // make_exception() returns the static singleton for OOM.
+        throw_exception_object(oom ? oom : clj_oom_exception);
+        return NULL;
+    }
+
 #if defined(STRING_FORMATTING_ENABLED) && !STRING_FORMATTING_ENABLED
     // Size-focused builds: keep callsites/API but sacrifice formatted messages.
     const char *msg = (format != NULL) ? format : "Err";
@@ -183,27 +223,35 @@ void* throw_exception_formatted(const char *type, const char *file, int line, in
     CLJException *exception = make_exception(exception_type, message, file, line, code);
 #endif
     if (!exception) {
-#ifdef DEBUG
-        fputs("FAILED TO ALLOCATE FORMATTED EXCEPTION\n", stderr);
-#endif
-        exit(1);
+        // Last-resort: if we can't allocate an exception, throw static OOM exception.
+        throw_exception_object(clj_oom_exception);
+        return NULL;
     }
-    
+
     throw_exception_object(exception);
     return NULL;  // Never reached (longjmp), but allows return throw_exception_formatted(...);
 }
 
 /** @brief Throw an exception with type, message, and location */
 void throw_exception(const char *type, const char *message, const char *file, int line, int col) {
-    
-    CLJException *exception = make_exception(type, message, file, line, col);
-    if (!exception) {
-#ifdef DEBUG
-        fputs("FAILED TO ALLOCATE EXCEPTION\n", stderr);
-#endif
-        exit(1);
+    const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
+
+    // CRITICAL: OutOfMemoryError must never allocate.
+    if (is_out_of_memory_exception_type(exception_type)) {
+        CLJException *oom = make_exception(EXCEPTION_OUT_OF_MEMORY,
+                                           message ? message : "Out of memory",
+                                           file, line, col);
+        throw_exception_object(oom ? oom : clj_oom_exception);
+        return;
     }
-    
+
+    CLJException *exception = make_exception(exception_type, message, file, line, col);
+    if (!exception) {
+        // Last-resort: if we can't allocate an exception, throw static OOM exception.
+        throw_exception_object(clj_oom_exception);
+        return;
+    }
+
     // Use the new unified function
     throw_exception_object(exception);
 }
@@ -214,7 +262,7 @@ void throw_exception(const char *type, const char *message, const char *file, in
  */
 #ifdef DEBUG
 struct CljString* stacktrace(void) {
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
     void *array[32];
     size_t size = backtrace(array, 32);
     char **symbols = backtrace_symbols(array, size);
@@ -240,53 +288,7 @@ struct CljString* stacktrace(void) {
         return NULL;
     }
     
-    // Build stacktrace string, skipping the last line (usually contains "dyld" on macOS)
-    size_t pos = 0;
-    size_t last_index = (size > 0) ? size - 1 : 0;
-    for (size_t i = 0; i < last_index; i++) {
-        if (symbols[i]) {
-            size_t len = strlen(symbols[i]);
-            memcpy(buffer + pos, symbols[i], len);
-            pos += len;
-            buffer[pos++] = '\n';
-        }
-    }
-    buffer[pos] = '\0';
-    
-    CLJ_FREE(symbols);
-    
-    // Create CljString from buffer
-    struct CljString *result = make_string(buffer);
-    CLJ_FREE(buffer);
-    
-    return result;
-#elif defined(__linux__)
-    void *array[32];
-    size_t size = backtrace(array, 32);
-    char **symbols = backtrace_symbols(array, size);
-    
-    if (!symbols || size == 0) {
-        if (symbols) CLJ_FREE(symbols);
-        return NULL;
-    }
-    
-    // Calculate total length needed
-    size_t total_len = 0;
-    for (size_t i = 0; i < size; i++) {
-        if (symbols[i]) {
-            total_len += strlen(symbols[i]);
-            total_len += 1;  // newline
-        }
-    }
-    
-    // Allocate buffer for stacktrace string
-    char *buffer = (char*)CLJ_MALLOC(total_len + 1);
-    if (!buffer) {
-        CLJ_FREE(symbols);
-        return NULL;
-    }
-    
-    // Build stacktrace string, skipping the last line (usually contains "dyld" on macOS)
+    // Build stacktrace string, skipping the last line (often contains loader frames).
     size_t pos = 0;
     size_t last_index = (size > 0) ? size - 1 : 0;
     for (size_t i = 0; i < last_index; i++) {
@@ -433,6 +435,6 @@ void throw_exception_object(CLJException *ex) {
  * @return New exception object or NULL on failure
  */
 CLJException* exception(const char *msg, const char *file, int line, int col) {
-    return make_exception("Error", msg, file, line, col);
+    return make_exception(EXCEPTION_ERROR, msg, file, line, col);
 }
 

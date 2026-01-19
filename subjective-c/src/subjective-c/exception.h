@@ -373,4 +373,7 @@ extern const char *EXCEPTION_INDEX_OUT_OF_BOUNDS;
 /** @brief Static exception type: FileNotFoundException */
 extern const char *EXCEPTION_FILE_NOT_FOUND;
 
+/** @brief Static exception type: Generic Error */
+extern const char *EXCEPTION_ERROR;
+
 #endif // SUBJECTIVE_C_EXCEPTION_H

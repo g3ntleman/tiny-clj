@@ -1,0 +1,19 @@
+idf_component_register(
+  SRCS
+    "tinyclj_idf_main.c"
+    "tinyclj_idf_run.c"
+  INCLUDE_DIRS
+    "."
+  REQUIRES
+    freertos
+    esp_system
+    esp_timer
+    esp_common
+    esp_hw_support
+    heap
+    log
+    esp_driver_uart
+    spi_flash
+    tinyclj
+)
+

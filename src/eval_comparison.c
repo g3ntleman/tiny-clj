@@ -81,7 +81,7 @@ ID eval_comparison_dispatch(CljList *list,
     CljMap *eval_env = env;
     if (!eval_env) {
         if (st && st->current_ns && st->current_ns->mappings) {
-            eval_env = (CljMap*)st->current_ns->mappings;
+        eval_env = (CljMap*)st->current_ns->mappings;
         } else {
             CljNamespace *fallback_ns = ns_get_or_create("user", NULL);
             if (fallback_ns) {
