@@ -111,3 +111,6 @@ build_info.h
 DartConfiguration.tcl
 compile_commands.json
 subjective-c/subjective-c-tests
+
+# Profile outputs
+profile_outputs/
