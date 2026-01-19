@@ -36,15 +36,18 @@ static CljObject* eval_numeric_comparison(CljList *list,
                                           EvalState *st,
                                           const EvalContext *ctx,
                                           ComparisonOp op) {
-    CLJ_ASSERT(env != NULL);
+    CljMap *eval_env = env;
+    if (!eval_env && st && st->current_ns) {
+        eval_env = (CljMap*)st->current_ns->mappings;
+    }
     CljList *rest = as_list(LIST_REST(list));
     if (!rest) return NULL;
 
-    ID a = eval_arg_from_expr_with_context(rest->first, env, st, ctx);
+    ID a = eval_arg_from_expr_with_context(rest->first, eval_env, st, ctx);
     CljList *rest2 = as_list(LIST_REST(rest));
     if (!rest2) return NULL;
 
-    ID b = eval_arg_from_expr_with_context(rest2->first, env, st, ctx);
+    ID b = eval_arg_from_expr_with_context(rest2->first, eval_env, st, ctx);
     if (!a || !b) return NULL;
 
     // Fixnum fast-path
@@ -75,23 +78,38 @@ ID eval_comparison_dispatch(CljList *list,
                              const EvalContext *ctx,
                              ID op) {
     CljSymbol *op_sym = (CljSymbol*)op;
+    CljMap *eval_env = env;
+    if (!eval_env) {
+        if (st && st->current_ns && st->current_ns->mappings) {
+            eval_env = (CljMap*)st->current_ns->mappings;
+        } else {
+            CljNamespace *fallback_ns = ns_get_or_create("user", NULL);
+            if (fallback_ns) {
+                eval_env = (CljMap*)fallback_ns->mappings;
+            }
+        }
+    }
+    if (!eval_env) {
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "Missing evaluation environment");
+    }
 
     // Numeric comparisons: <, >, <=, >= - O(1) dispatch via flags
     // ComparisonOp is stored in bits 6-7: LT=0, GT=1, LE=2, GE=3
     if (op_sym != SYM_EQUALS) {
         ComparisonOp comp_op = (op_sym->base.flags >> CLJ_COMP_OP_SHIFT) & 0x03;
-        return eval_numeric_comparison(list, env, st, ctx, comp_op);
+        return eval_numeric_comparison(list, eval_env, st, ctx, comp_op);
     }
 
     // Equality: = (handles both numeric and generic equality)
         CljList *rest = as_list(LIST_REST(list));
         if (!rest) return NULL;
 
-        ID a = eval_arg_from_expr_with_context(rest->first, env, st, ctx);
+        ID a = eval_arg_from_expr_with_context(rest->first, eval_env, st, ctx);
         CljList *rest2 = as_list(LIST_REST(rest));
     if (!rest2) return NULL;
 
-        ID b = eval_arg_from_expr_with_context(rest2->first, env, st, ctx);
+        ID b = eval_arg_from_expr_with_context(rest2->first, eval_env, st, ctx);
     if (!a || !b) return NULL;
 
     // Fixnum fast-path (most common case)

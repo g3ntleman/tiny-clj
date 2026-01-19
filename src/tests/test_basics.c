@@ -196,6 +196,21 @@ TEST(test_nil_creation) {
     // Memory is automatically managed by eval_string
 }
 
+TEST(test_calling_nil_throws_exception) {
+    bool exception_caught = false;
+
+    TRY {
+        eval_string("(nil 1)", g_test_eval_state);
+        TEST_ASSERT_TRUE_MESSAGE(false, "Should throw when calling nil as a function");
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught,
+        "Exception should be thrown when calling nil as a function");
+}
+
 // ============================================================================
 // PARSER TESTS
 // ============================================================================

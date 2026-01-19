@@ -175,18 +175,21 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
     int saved_stdout = -1;
     bool capturing_stdout = false;
     bool test_failed = false;
+    bool quiet_capture_failed = false;
 
     // In quiet mode, capture stdout to a temporary file
     if (g_quiet_output) {
         captured_stdout = tmpfile();
         if (!captured_stdout) {
             test_fprintf(stderr, "Warning: Could not create temporary file for stdout capture, running test normally\n");
+            quiet_capture_failed = true;
         } else {
             saved_stdout = dup(STDOUT_FILENO);
             if (saved_stdout < 0) {
                 fclose(captured_stdout);
                 captured_stdout = NULL;
                 test_fprintf(stderr, "Warning: Could not save stdout, running test normally\n");
+                quiet_capture_failed = true;
             } else {
                 if (dup2(fileno(captured_stdout), STDOUT_FILENO) < 0) {
                     close(saved_stdout);
@@ -194,6 +197,7 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
                     fclose(captured_stdout);
                     captured_stdout = NULL;
                     test_fprintf(stderr, "Warning: Could not redirect stdout, running test normally\n");
+                    quiet_capture_failed = true;
                 } else {
                     capturing_stdout = true;
                 }
@@ -256,10 +260,23 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
             int line = (entry && entry->line > 0) ? entry->line : 0;
             const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
             if (line > 0) {
+                test_fprintf(stderr, "%s:%d:%s:FAIL\n", file, line, name);
+            } else {
+                test_fprintf(stderr, "%s:%s:FAIL\n", file, name);
+            }
+        }
+        if (test_failed) {
+            const char *file = (entry && entry->file) ? entry->file : "unknown";
+            int line = (entry && entry->line > 0) ? entry->line : 0;
+            const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
+            if (line > 0) {
                 test_fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
             } else {
                 test_fprintf(stdout, "%s:%s:FAIL\n", file, name);
             }
+        }
+        if (quiet_capture_failed) {
+            test_fprintf(stderr, "Note: Quiet output capture failed; PASS lines may appear.\n");
         }
         if (captured_stdout) {
             fclose(captured_stdout);
