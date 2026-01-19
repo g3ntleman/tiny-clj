@@ -62,7 +62,6 @@ void line_editor_set_prompt(LineEditor *editor, const char *prompt);
 
 // Reset editor state
 void line_editor_clear(LineEditor *editor);
-void line_editor_reset(LineEditor *editor);
 
 // History support (optional)
 void line_editor_add_to_history(LineEditor *editor, const char *line);

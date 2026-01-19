@@ -3,7 +3,6 @@
 #include "value.h"  // For make_string, fixnum, CljString
 #include "builtins.h"  // For nth2
 #include "strings.h"  // For to_cstring and string functions
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
@@ -163,16 +162,10 @@ static void buffer_delete_char(StringBuffer *buf, uint16_t pos) {
     buf->str->data[buf->length] = '\0';
 }
 
-// Generic cursor movement functions
-static void move_cursor_right(LineEditor *editor, int steps) {
+// Generic cursor movement function
+static void move_cursor_horizontal(LineEditor *editor, int steps, const char *escape_seq) {
     for (int i = 0; i < steps; i++) {
-        editor->put_string(editor->ctx, ESC_RIGHT);
-    }
-}
-
-static void move_cursor_left(LineEditor *editor, int steps) {
-    for (int i = 0; i < steps; i++) {
-        editor->put_string(editor->ctx, ESC_LEFT);
+        editor->put_string(editor->ctx, escape_seq);
     }
 }
 
@@ -293,7 +286,7 @@ static void editor_move_cursor_or_redraw(LineEditor *editor,
         editor->put_string(editor->ctx, escape_seq);
     }
     if (extra_right > 0) {
-        move_cursor_right(editor, extra_right);
+        move_cursor_horizontal(editor, extra_right, ESC_RIGHT);
     }
     editor->last_rendered_pos = editor->cursor_pos;
     editor->last_rendered_row = 0;
@@ -629,7 +622,7 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
                             editor->put_char(editor->ctx, editor->buffer.str->data[i]);
                         }
                         // Move cursor back to position
-                        move_cursor_left(editor, editor->buffer.length - editor->cursor_pos);
+                        move_cursor_horizontal(editor, editor->buffer.length - editor->cursor_pos, ESC_LEFT);
                         editor->last_rendered_pos = editor->cursor_pos;
                     }
                 }
@@ -673,9 +666,7 @@ static void insert_character(LineEditor *editor, char c) {
     }
 
     // Move cursor back to correct position
-    for (uint16_t i = editor->cursor_pos; i < editor->buffer.length; i++) {
-        editor->put_string(editor->ctx, ESC_LEFT);
-    }
+    move_cursor_horizontal(editor, editor->buffer.length - editor->cursor_pos, ESC_LEFT);
     editor->last_rendered_pos = editor->cursor_pos;
 }
 
@@ -703,7 +694,7 @@ static void backspace_character(LineEditor *editor) {
         }
 
         // Move cursor back to position
-        move_cursor_left(editor, editor->buffer.length - editor->cursor_pos);
+        move_cursor_horizontal(editor, editor->buffer.length - editor->cursor_pos, ESC_LEFT);
         editor->last_rendered_pos = editor->cursor_pos;
     }
 }
@@ -717,19 +708,10 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
         free(editor);
         return NULL;
     }
-    editor->cursor_pos = 0;
-    editor->last_rendered_pos = 0;
-    editor->line_ready = false;
     editor->get_char = get_char;
     editor->put_char = put_char;
     editor->put_string = put_string;
     editor->ctx = ctx;
-    
-    // Initialize escape sequence handling
-    editor->escape_buffer[0] = '\0';
-    editor->escape_pos = 0;
-    editor->in_escape_sequence = false;
-    editor->last_was_cr = false;
     
     // Initialize history support with transient vector for efficient in-place operations
     CljVector *persistent_vec = make_vector(50, CLJ_VECTOR);  // Start with persistent vector
@@ -740,8 +722,6 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
     editor->rendered_rows = 1;
     editor->rendered_content_rows = 1;
     editor->last_rendered_row = 0;
-    editor->rendered_content_rows = 1;
-    editor->rendered_content_rows = 1;
     editor->prompt[0] = '\0';
     editor->prompt_len = 0;
     
@@ -920,10 +900,6 @@ void line_editor_clear(LineEditor *editor) {
     editor->last_was_cr = false;
     editor->last_rendered_pos = 0;
     editor->last_rendered_row = 0;
-}
-
-void line_editor_reset(LineEditor *editor) {
-    line_editor_clear(editor);
 }
 
 void line_editor_add_to_history(LineEditor *editor, const char *line) {
@@ -1114,10 +1090,6 @@ const char* line_editor_get_buffer_cstr(const LineEditor *editor, size_t *len) {
 }
 
 void line_editor_clear(LineEditor *editor) {
-    (void)editor;
-}
-
-void line_editor_reset(LineEditor *editor) {
     (void)editor;
 }
 
