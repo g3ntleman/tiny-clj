@@ -64,6 +64,23 @@ TEST(test_first_in_clojure_core_after_loading) {
 }
 
 // ============================================================================
+// TEST: seq can be called (already loaded in setUp)
+// ============================================================================
+TEST(test_seq_callable_after_loading_core) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+        init_special_symbols();
+        
+        // Switch to user namespace
+        eval_string("(ns user)", g_test_eval_state);
+        
+        // Try to call seq on a non-empty vector
+        CljValue result = eval_string("(seq [1])", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL_MESSAGE(result, "seq should be callable");
+    });
+}
+
+// ============================================================================
 // TEST: count can be resolved (already loaded in setUp)
 // ============================================================================
 TEST(test_count_resolved_after_loading_core) {

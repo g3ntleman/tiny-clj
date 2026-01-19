@@ -151,24 +151,22 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
       g_clojure_core_last_form = expr_count + 1;
 
       // Keep autorelease pool tracking bounded per top-level form.
+      // Split parsing and evaluation into separate pools to reduce peak usage.
       // NOTE: We intentionally use AUTORELEASE_POOL_BEGIN/END (not WITH_AUTORELEASE_POOL)
       // so loop control flow stays obvious and we don't accidentally "continue" a do/while(0).
+      CljValue form = NULL;
+      bool parse_ok = true;
+
       AUTORELEASE_POOL_BEGIN();
-#if defined(DEBUG) && defined(TINYCLJ_AUTORELEASE_DIAGNOSTICS) && TINYCLJ_AUTORELEASE_DIAGNOSTICS
-      if (ar_threshold > 0) {
-        // Track peak strictly within this top-level form scope.
-        autorelease_pool_peak_reset();
-      }
-#endif
-      
 #ifdef PROFILE_STARTUP
       clock_t parse_start = clock();
 #endif
       size_t parse_offset_before = reader_offset(&reader);
-      CljValue form = NULL;
-      bool parse_ok = true;
       TRY {
         form = value_by_parsing_expr(&reader, st);
+        if (form && !IS_IMMEDIATE(form)) {
+          RETAIN(form); // keep form alive across pool boundary
+        }
       } CATCH(ex) {
         // ParseError during parsing - log and continue to next expression
         if (ex) {
@@ -186,108 +184,119 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
         parse_ok = false;
       } END_TRY
 #ifdef PROFILE_STARTUP
-    g_parse_time_ms += (double)(clock() - parse_start) * 1000.0 / CLOCKS_PER_SEC;
+      g_parse_time_ms += (double)(clock() - parse_start) * 1000.0 / CLOCKS_PER_SEC;
 #endif
-    if (parse_ok && form) {
+      AUTORELEASE_POOL_END();
 
-    if (debug_form > 0 && (expr_count + 1) == debug_form) {
-      CljString *s = pr_str((ID)form);
-      const char *printed = (s) ? s->data : "<unprintable>";
-      fprintf(stderr, "[%s] DEBUG core form #%d: %s\n", label, expr_count + 1, printed);
-      fflush(stderr);
-    }
-    
-    // Evaluate with exception handling using TRY/CATCH
-    TRY {
-#ifdef PROFILE_STARTUP
-      clock_t eval_start = clock();
+      if (parse_ok && form) {
+        AUTORELEASE_POOL_BEGIN();
+#if defined(DEBUG) && defined(TINYCLJ_AUTORELEASE_DIAGNOSTICS) && TINYCLJ_AUTORELEASE_DIAGNOSTICS
+        if (ar_threshold > 0) {
+          // Track peak strictly within this top-level form scope.
+          autorelease_pool_peak_reset();
+        }
 #endif
-      ID result = eval_parsed((CljObject*)form, st, NULL);
+
+        if (debug_form > 0 && (expr_count + 1) == debug_form) {
+          CljString *s = pr_str((ID)form);
+          const char *printed = (s) ? s->data : "<unprintable>";
+          fprintf(stderr, "[%s] DEBUG core form #%d: %s\n", label, expr_count + 1, printed);
+          fflush(stderr);
+        }
+
+        // Evaluate with exception handling using TRY/CATCH
+        TRY {
 #ifdef PROFILE_STARTUP
-      g_eval_time_ms += (double)(clock() - eval_start) * 1000.0 / CLOCKS_PER_SEC;
-      g_form_count++;
+          clock_t eval_start = clock();
 #endif
-      // Don't RELEASE result - eval_parsed already returns AUTORELEASE
-      // result can be NULL if nil was evaluated (legitimate case)
-      // eval_parsed should throw exceptions for errors, not return NULL
-      if (result) {
-        success_count++;
-      } else {
-        // NULL result could be nil (legitimate) or evaluation failure
-        // For def expressions, the symbol should be stored even if result is NULL
-        // For ns expressions, nil is a valid return value
-        // Check if this was a def or ns expression that might have stored something
-        if (form && list_type_matches(TAG(form))) {
-          CljList *list = as_list(form);
-          CljObject *first = LIST_FIRST(list);
-          if (first && TAG(first) == CLJ_SYMBOL) {
-            CljSymbol *first_sym = as_symbol(first);
-            if (first_sym == SYM_DEF) {
-              // def returns the symbol, not the value
-              // Even if value evaluation failed, def might have stored nil
-              success_count++;
-            } else if (first_sym == SYM_NS) {
-              // ns returns nil, which is a valid result
-              success_count++;
+          ID result = eval_parsed((CljObject*)form, st, NULL);
+#ifdef PROFILE_STARTUP
+          g_eval_time_ms += (double)(clock() - eval_start) * 1000.0 / CLOCKS_PER_SEC;
+          g_form_count++;
+#endif
+          // Don't RELEASE result - eval_parsed already returns AUTORELEASE
+          // result can be NULL if nil was evaluated (legitimate case)
+          // eval_parsed should throw exceptions for errors, not return NULL
+          if (result) {
+            success_count++;
+          } else {
+            // NULL result could be nil (legitimate) or evaluation failure
+            // For def expressions, the symbol should be stored even if result is NULL
+            // For ns expressions, nil is a valid return value
+            // Check if this was a def or ns expression that might have stored something
+            if (form && list_type_matches(TAG(form))) {
+              CljList *list = as_list(form);
+              CljObject *first = LIST_FIRST(list);
+              if (first && TAG(first) == CLJ_SYMBOL) {
+                CljSymbol *first_sym = as_symbol(first);
+                if (first_sym == SYM_DEF) {
+                  // def returns the symbol, not the value
+                  // Even if value evaluation failed, def might have stored nil
+                  success_count++;
+                } else if (first_sym == SYM_NS) {
+                  // ns returns nil, which is a valid result
+                  success_count++;
+                }
+              }
             }
           }
-        }
-      }
-    } CATCH(ex) {
-      // Exception occurred during evaluation
-      // Log the exception for debugging (always log for def expressions to catch silent failures)
-      bool is_def_expr = false;
-        if (form && list_type_matches(TAG(form))) {
-          CljList *list = as_list(form);
-          CljObject *first = LIST_FIRST(list);
-          if (first && TAG(first) == CLJ_SYMBOL && as_symbol(first) == SYM_DEF) {
-          is_def_expr = true;
-        }
-      }
-      const char *error_type = (ex && ex->type[0]) ? ex->type : "Exception";
-      const char *error_msg = (ex && ex->message[0]) ? ex->message : "Unknown error";
-      const char *error_file = (ex && ex->file[0]) ? ex->file : "<unknown>";
-      int error_line = ex ? ex->line : 0;
-      const char *ns_name = target_ns && target_ns->name && target_ns->name->cname 
-                            ? target_ns->name->cname 
-                            : "clojure.core";
-      // Always show errors for clojure.repl (not clojure.core), or if not in quiet mode.
-      // Additionally, always show errors for (def ...) forms even in quiet mode,
-      // since silent def failures can leave clojure.core partially loaded.
-      bool is_clojure_repl = target_ns && target_ns->name && 
-                             target_ns->name->cname && 
-                             strcmp(target_ns->name->cname, "clojure.repl") == 0;
-      if (!g_core_quiet || is_clojure_repl || is_def_expr) {
-        fprintf(stderr, "[%s] Failed to eval form #%d%s: %s (%s:%d) [%s]\n",
-                ns_name,
-                expr_count + 1,
-                is_def_expr ? " (def)" : "",
-                error_msg,
-                error_file,
-                error_line,
-                error_type);
+        } CATCH(ex) {
+          // Exception occurred during evaluation
+          // Log the exception for debugging (always log for def expressions to catch silent failures)
+          bool is_def_expr = false;
+            if (form && list_type_matches(TAG(form))) {
+              CljList *list = as_list(form);
+              CljObject *first = LIST_FIRST(list);
+              if (first && TAG(first) == CLJ_SYMBOL && as_symbol(first) == SYM_DEF) {
+              is_def_expr = true;
+            }
+          }
+          const char *error_type = (ex && ex->type[0]) ? ex->type : "Exception";
+          const char *error_msg = (ex && ex->message[0]) ? ex->message : "Unknown error";
+          const char *error_file = (ex && ex->file[0]) ? ex->file : "<unknown>";
+          int error_line = ex ? ex->line : 0;
+          const char *ns_name = target_ns && target_ns->name && target_ns->name->cname 
+                                ? target_ns->name->cname 
+                                : "clojure.core";
+          // Always show errors for clojure.repl (not clojure.core), or if not in quiet mode.
+          // Additionally, always show errors for (def ...) forms even in quiet mode,
+          // since silent def failures can leave clojure.core partially loaded.
+          bool is_clojure_repl = target_ns && target_ns->name && 
+                                 target_ns->name->cname && 
+                                 strcmp(target_ns->name->cname, "clojure.repl") == 0;
+          if (!g_core_quiet || is_clojure_repl || is_def_expr) {
+            fprintf(stderr, "[%s] Failed to eval form #%d%s: %s (%s:%d) [%s]\n",
+                    ns_name,
+                    expr_count + 1,
+                    is_def_expr ? " (def)" : "",
+                    error_msg,
+                    error_file,
+                    error_line,
+                    error_type);
 #ifdef DEBUG
-        if (is_def_expr && ex) {
-          print_exception(ex);
+            if (is_def_expr && ex) {
+              print_exception(ex);
+            }
+#endif
+          }
+
+        } END_TRY
+
+#if defined(DEBUG) && defined(TINYCLJ_AUTORELEASE_DIAGNOSTICS) && TINYCLJ_AUTORELEASE_DIAGNOSTICS
+        if (ar_threshold > 0) {
+          uint32_t peak = autorelease_pool_peak_count();
+          if ((int)peak > ar_threshold) {
+            fprintf(stderr, "[%s] Autorelease peak in core form #%d: %u (threshold=%d)\n",
+                    label, expr_count + 1, peak, ar_threshold);
+          }
         }
 #endif
+        AUTORELEASE_POOL_END();
       }
-      
-    } END_TRY
-    }
-    
-    // value_by_parsing_expr returns AUTORELEASE object
-    
-    AUTORELEASE_POOL_END();
-#if defined(DEBUG) && defined(TINYCLJ_AUTORELEASE_DIAGNOSTICS) && TINYCLJ_AUTORELEASE_DIAGNOSTICS
-    if (ar_threshold > 0) {
-      uint32_t peak = autorelease_pool_peak_count();
-      if ((int)peak > ar_threshold) {
-        fprintf(stderr, "[%s] Autorelease peak in core form #%d: %u (threshold=%d)\n",
-                label, expr_count + 1, peak, ar_threshold);
+
+      if (form && !IS_IMMEDIATE(form)) {
+        RELEASE(form);
       }
-    }
-#endif
     expr_count++;
 
     if (stop_after_form > 0 && expr_count >= stop_after_form) {

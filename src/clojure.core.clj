@@ -6,8 +6,15 @@ R"CLOJURE(
 ; BOOTSTRAP SECTION: Minimal bootstrap for defn macro
 ; These must be defined FIRST using (def ... (fn ...)) syntax
 ; ============================================================================
+; Bootstrap primitives required by the defn macro expansion.
+; ============================================================================
+^#^{:doc "Creates a new list containing the items."}
+(def list (fn list [& items] :native))
+^#^{:doc "Returns a new seq where x is the first element and seq is the rest."}
+(def cons (fn cons [x seq] :native))
+
+; ============================================================================
 ; defn Macro (bootstrap-safe: uses only def, fn, cons, list)
-; CRITICAL: Must be defined FIRST before any defn calls!
 ; ============================================================================
 ^#^{:doc "Defines a function. Same as (def name (fn name [params] body...))."}
 (defmacro defn [name params & body]
@@ -16,8 +23,6 @@ R"CLOJURE(
 ; ============================================================================
 ; Core Collection Functions (must be defined early - used by other functions)
 ; ============================================================================
-^#^{:doc "Creates a new list containing the items."}
-(defn list [& items] :native)
 ^#^{:doc "Returns a sequence of the collection. Returns nil if coll is empty or nil."}
 (defn seq [coll] :native)
 ^#^{:doc "Returns the first item in the collection. Calls seq on its argument. If coll is nil, returns nil."}
@@ -26,8 +31,6 @@ R"CLOJURE(
 (defn rest [coll] :native)
 ^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil (not a sequence)."}
 (defn next [coll] :native)
-^#^{:doc "Returns a new seq where x is the first element and seq is the rest."}
-(defn cons [x seq] :native)
 ^#^{:doc "Returns the number of items in the collection. (count nil) returns 0. Also works on strings, arrays, and Java Collections."}
 (defn count [coll] :native)
 
@@ -135,14 +138,6 @@ R"CLOJURE(
     (if (pred (first coll))
       (cons (first coll) (filter pred (rest coll)))
       (filter pred (rest coll))))))
-
-; ============================================================================
-; list and cons are required for defn macro
-; NOTE: fn with :native requires function name for native lookup
-^#^{:doc "Creates a new list containing the items."}
-(def list (fn list [& items] :native))
-^#^{:doc "Returns a new seq where x is the first element and seq is the rest."}
-(def cons (fn cons [x seq] :native))
 
 ; ============================================================================
 ; defn Macro - MUST come before other defn calls

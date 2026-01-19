@@ -19,6 +19,15 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 // -----------------------------------------------------------------------------
+// Optional stdout observer hook (used by REPL to decide whether to print a newline
+// before the next prompt).
+// -----------------------------------------------------------------------------
+__attribute__((weak)) void tinyclj_stdout_observe_bytes(const char *data, size_t n) {
+    (void)data;
+    (void)n;
+}
+
+// -----------------------------------------------------------------------------
 // CFRunLoop-driven stdin buffering (keyboard input)
 // -----------------------------------------------------------------------------
 
@@ -32,6 +41,32 @@ typedef struct {
 static StdinRing g_stdin_ring = {0};
 static CFFileDescriptorRef g_stdin_fdref = NULL;
 static CFRunLoopSourceRef g_stdin_source = NULL;
+
+// Bytes that we need to "push back" into the input stream (e.g. when probing terminal
+// capabilities like DSR ESC[6n). platform_get_char/readline will serve these before g_stdin_ring.
+static uint8_t g_inject_buf[128];
+static size_t g_inject_len = 0;
+static size_t g_inject_pos = 0;
+
+static inline size_t inject_count(void) {
+    return (g_inject_pos < g_inject_len) ? (g_inject_len - g_inject_pos) : 0;
+}
+
+static inline void inject_reset_if_empty(void) {
+    if (g_inject_pos >= g_inject_len) {
+        g_inject_pos = 0;
+        g_inject_len = 0;
+    }
+}
+
+static inline bool inject_append_bytes(const uint8_t *data, size_t n) {
+    if (!data || n == 0) return true;
+    inject_reset_if_empty();
+    if (n > (sizeof(g_inject_buf) - g_inject_len)) return false;
+    memcpy(&g_inject_buf[g_inject_len], data, n);
+    g_inject_len += n;
+    return true;
+}
 
 static inline size_t stdin_ring_count(const StdinRing *r) {
     if (r->tail >= r->head) return r->tail - r->head;
@@ -136,6 +171,8 @@ void platform_print(const char *message) {
     if (!message) return;
     fputs(message, stdout);
     fputc('\n', stdout);
+    tinyclj_stdout_observe_bytes(message, strlen(message));
+    tinyclj_stdout_observe_bytes("\n", 1);
 }
 
 uint32_t platform_current_time_ms(void) {
@@ -194,9 +231,10 @@ int platform_readline_nb(char *buf, int max) {
     static char linebuf[2048];
     static int len = 0;
 
-    // Drain available bytes into linebuf.
-    while (stdin_ring_count(&g_stdin_ring) > 0) {
-        int c = stdin_ring_pop(&g_stdin_ring);
+    // Drain available bytes into linebuf (including injected bytes).
+    while (inject_count() > 0 || stdin_ring_count(&g_stdin_ring) > 0) {
+        int c = (inject_count() > 0) ? (int)g_inject_buf[g_inject_pos++] : stdin_ring_pop(&g_stdin_ring);
+        inject_reset_if_empty();
         if (c < 0) break;
         if (len + 1 >= (int)sizeof(linebuf)) {
             len = 0; // overflow protection
@@ -237,6 +275,11 @@ int platform_readline_nb(char *buf, int max) {
 // Line editor platform functions
 int platform_get_char(void *ctx) {
     (void)ctx;
+    if (inject_count() > 0) {
+        int b = (int)g_inject_buf[g_inject_pos++];
+        inject_reset_if_empty();
+        return b;
+    }
     int b = stdin_ring_pop(&g_stdin_ring);
     if (b >= 0) return b;
     if (g_stdin_ring.eof) return -1;
@@ -247,14 +290,89 @@ void platform_put_char(void *ctx, char c) {
     (void)ctx;
     putchar(c);
     fflush(stdout);
+    tinyclj_stdout_observe_bytes(&c, 1);
 }
 
 void platform_put_string(void *ctx, const char *s) {
     (void)ctx;
     if (s) {
         fputs(s, stdout);
+        tinyclj_stdout_observe_bytes(s, strlen(s));
     }
     fflush(stdout);
+}
+
+bool platform_try_get_cursor_position(uint16_t *row, uint16_t *col) {
+    if (!row || !col) return false;
+    if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) return false;
+    const char *term = getenv("TERM");
+    if (term && strcmp(term, "dumb") == 0) return false;
+
+    // Avoid interfering with real user input: only probe when input buffers are empty.
+    if (inject_count() > 0 || stdin_ring_count(&g_stdin_ring) > 0) return false;
+
+    // Send DSR query ESC[6n without triggering stdout observer heuristics.
+    const char q[] = "\033[6n";
+    (void)fwrite(q, 1, sizeof(q) - 1, stdout);
+    fflush(stdout);
+
+    uint8_t captured[64];
+    size_t cap_len = 0;
+
+    // Parse states: expect ESC '[' row ';' col 'R'
+    enum { S_ESC, S_BRACKET, S_ROW, S_COL, S_DONE } st = S_ESC;
+    unsigned int r = 0, c = 0;
+
+    // Wait up to ~25ms total, pumping CFRunLoop to receive bytes into g_stdin_ring.
+    for (unsigned int tries = 0; tries < 25; tries++) {
+        platform_runloop_run_once(1);
+
+        while (stdin_ring_count(&g_stdin_ring) > 0 && cap_len < sizeof(captured)) {
+            int bi = stdin_ring_pop(&g_stdin_ring);
+            if (bi < 0) break;
+            uint8_t b = (uint8_t)bi;
+            captured[cap_len++] = b;
+
+            switch (st) {
+                case S_ESC:
+                    if (b == 0x1b) st = S_BRACKET;
+                    else st = S_DONE;
+                    break;
+                case S_BRACKET:
+                    if (b == (uint8_t)'[') st = S_ROW;
+                    else st = S_DONE;
+                    break;
+                case S_ROW:
+                    if (b >= '0' && b <= '9') { r = (r * 10u) + (unsigned)(b - '0'); }
+                    else if (b == ';') st = S_COL;
+                    else st = S_DONE;
+                    break;
+                case S_COL:
+                    if (b >= '0' && b <= '9') { c = (c * 10u) + (unsigned)(b - '0'); }
+                    else if (b == 'R') st = S_DONE;
+                    else st = S_DONE;
+                    break;
+                default:
+                    break;
+            }
+
+            if (st == S_DONE) {
+                // Accept only if we ended on 'R' and parsed sane numbers.
+                if (cap_len >= 6 && captured[0] == 0x1b && captured[1] == '[' && r > 0 && c > 0 && captured[cap_len - 1] == 'R') {
+                    *row = (uint16_t)r;
+                    *col = (uint16_t)c;
+                    return true;
+                }
+                // Not a valid DSR response: push back so we don't lose user input.
+                (void)inject_append_bytes(captured, cap_len);
+                return false;
+            }
+        }
+    }
+
+    // Timeout: if we captured anything, push it back.
+    if (cap_len > 0) (void)inject_append_bytes(captured, cap_len);
+    return false;
 }
 
 // Raw mode support for line editor
