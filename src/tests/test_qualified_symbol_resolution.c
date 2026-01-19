@@ -295,6 +295,49 @@ TEST(test_resolve_qualified_symbol_with_alias) {
 // TESTS FOR ERROR CASES
 // ============================================================================
 
+// Test: Missing namespace should suggest require (but not for clojure.core)
+TEST(test_missing_namespace_suggests_require) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    TRY {
+        (void)eval_string("clojure.string/blank?", g_test_eval_state);
+        TEST_FAIL_MESSAGE("Should have thrown exception for missing namespace (not required)");
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_NOT_NULL_MESSAGE(strstr(ex->message, "(require 'clojure.string) missing?"),
+                                     "Expected require hint for missing namespace");
+        TEST_ASSERT_NULL_MESSAGE(strchr(ex->message, '\n'),
+                                 "Exception message must not contain newlines");
+    } END_TRY
+}
+
+// Test: Missing namespace via (doc <qualified-sym>) should suggest require and keep the qualified name.
+TEST(test_missing_namespace_doc_suggests_require) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Ensure clojure.repl namespace is available. We call doc as a qualified var
+    // because (require ...) does not :refer symbols into the current namespace.
+    (void)eval_string("(require 'clojure.repl)", g_test_eval_state);
+
+    TRY {
+        // Use a namespace that is not loaded by clojure.repl itself.
+        (void)eval_string("(clojure.repl/doc tinyclj.net.mdns/close!)", g_test_eval_state);
+        TEST_FAIL_MESSAGE("Should have thrown exception for missing namespace in doc");
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+        const char *msg = ex->message;
+        bool has_qualified = (strstr(msg, "tinyclj.net.mdns/close!") != NULL);
+        bool has_hint = (strstr(msg, "(require 'tinyclj.net.mdns) missing?") != NULL);
+        if (!has_qualified || !has_hint) {
+            test_fprintf(stderr, "missing_namespace_doc_suggests_require: got message: %s\n", msg);
+        }
+        TEST_ASSERT_TRUE_MESSAGE(has_qualified, "Expected qualified symbol in error message");
+        TEST_ASSERT_TRUE_MESSAGE(has_hint, "Expected require hint for missing namespace");
+        TEST_ASSERT_NULL_MESSAGE(strchr(ex->message, '\n'),
+                                 "Exception message must not contain newlines");
+    } END_TRY
+}
+
 // Test: Non-existent qualified symbol should throw exception
 TEST(test_nonexistent_qualified_symbol_throws) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -306,6 +349,9 @@ TEST(test_nonexistent_qualified_symbol_throws) {
     } CATCH(ex) {
         // Expected exception
         TEST_ASSERT_NOT_NULL(ex);
+        // Never suggest requiring clojure.core (it's always loaded in setUp).
+        TEST_ASSERT_NULL_MESSAGE(strstr(ex->message, "(require 'clojure.core)"),
+                                 "Must not suggest requiring clojure.core");
     } END_TRY
 }
 

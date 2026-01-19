@@ -5951,7 +5951,7 @@ ID native_lt(ID *args, unsigned int argc)
     CompareResult result;
     if (!compare_numeric_values(args[0], args[1], &result))
     {
-        throw_exception("TypeError", "Expected number for < comparison",
+        throw_exception(EXCEPTION_TYPE, "Expected number for < comparison",
                         __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -5964,7 +5964,7 @@ ID native_gt(ID *args, unsigned int argc)
     CompareResult result;
     if (!compare_numeric_values(args[0], args[1], &result))
     {
-        throw_exception("TypeError", "Expected number for > comparison",
+        throw_exception(EXCEPTION_TYPE, "Expected number for > comparison",
                         __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -5977,7 +5977,7 @@ ID native_le(ID *args, unsigned int argc)
     CompareResult result;
     if (!compare_numeric_values(args[0], args[1], &result))
     {
-        throw_exception("TypeError", "Expected number for <= comparison",
+        throw_exception(EXCEPTION_TYPE, "Expected number for <= comparison",
                         __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -5990,7 +5990,7 @@ ID native_ge(ID *args, unsigned int argc)
     CompareResult result;
     if (!compare_numeric_values(args[0], args[1], &result))
     {
-        throw_exception("TypeError", "Expected number for >= comparison",
+        throw_exception(EXCEPTION_TYPE, "Expected number for >= comparison",
                         __FILE__, __LINE__, 0);
         return NULL;
     }

@@ -1,0 +1,1828 @@
+=== Build Information ===
+Build Type: Debug
+Build Date: Jan 18 2026 03:03:26
+Compiler: AppleClang 17.0.0.17000603
+CMake Version: 4.2.0
+Features:
+  - Debug: Enabled
+  - Memory Profiling: Enabled
+  - Zombie Mode: Enabled
+  - Meta: Enabled
+=======================
+src/tests/test_equal.c:14:shared_test_equal/aaa_map_assoc_autorelease_fixnum:PASS (0 ms)
+src/tests/test_equal.c:37:shared_test_equal/aab_ns_define_resolve_pattern:PASS (0 ms)
+src/tests/test_equal.c:67:shared_test_equal/equal_null_pointers:PASS (0 ms)
+src/tests/test_equal.c:78:shared_test_equal/equal_different_strings:PASS (0 ms)
+src/tests/test_equal.c:94:shared_test_equal/equal_different_types:PASS (0 ms)
+src/tests/test_equal.c:113:shared_test_equal/equal_immediate_values:PASS (0 ms)
+src/tests/test_equal.c:136:shared_test_equal/vector_equal_same_vectors:PASS (0 ms)
+src/tests/test_equal.c:171:shared_test_equal/vector_equal_different_lengths:PASS (0 ms)
+src/tests/test_equal.c:205:shared_test_equal/vector_equal_different_values:PASS (0 ms)
+src/tests/test_equal.c:236:shared_test_equal/clj_equal_id_function:PASS (0 ms)
+src/tests/test_equal.c:274:shared_test_equal/vector_equal_with_strings:PASS (0 ms)
+src/tests/test_equal.c:314:shared_test_equal/map_equal_same_maps:PASS (0 ms)
+src/tests/test_equal.c:348:shared_test_equal/map_equal_different_keys:PASS (0 ms)
+src/tests/test_equal.c:383:shared_test_equal/map_equal_different_values:PASS (0 ms)
+src/tests/test_equal.c:418:shared_test_equal/map_equal_different_sizes:PASS (0 ms)
+src/tests/test_equal.c:451:shared_test_equal/map_equal_with_nested_vectors:PASS (0 ms)
+src/tests/test_equal.c:501:shared_test_equal/list_equal_same_lists:PASS (0 ms)
+src/tests/test_equal.c:519:shared_test_equal/list_equal_same_instance:PASS (0 ms)
+src/tests/test_equal.c:534:shared_test_equal/list_equal_empty_lists:PASS (0 ms)
+src/tests/test_equal.c:554:shared_test_equal/not_eq:PASS (0 ms)
+src/tests/test_equal.c:595:shared_test_equal/equal_quoted_lists:PASS (0 ms)
+src/tests/test_equal.c:601:shared_test_equal/equal_quoted_lists_different:PASS (0 ms)
+src/tests/test_equal.c:607:shared_test_equal/equal_vectors:PASS (0 ms)
+src/tests/test_equal.c:613:shared_test_equal/equal_vectors_different:PASS (0 ms)
+src/tests/test_equal.c:619:shared_test_equal/equal_maps:PASS (0 ms)
+src/tests/test_equal.c:625:shared_test_equal/equal_maps_different:PASS (0 ms)
+src/tests/test_equal.c:631:shared_test_equal/equal_list_function_result:PASS (0 ms)
+src/tests/test_equal.c:637:shared_test_equal/equal_take_result:PASS (0 ms)
+src/tests/test_equal.c:651:shared_test_equal/equal_empty_collections:PASS (0 ms)
+src/tests/test_seq.c:30:shared_test_seq/make_seq_list:PASS (0 ms)
+src/tests/test_seq.c:34:shared_test_seq/make_seq_vector:PASS (0 ms)
+src/tests/test_seq.c:38:shared_test_seq/make_seq_string:PASS (0 ms)
+src/tests/test_seq.c:42:shared_test_seq/make_seq_map:PASS (0 ms)
+src/tests/test_seq.c:50:shared_test_seq/seq_first:PASS (0 ms)
+src/tests/test_seq.c:54:shared_test_seq/seq_rest:PASS (0 ms)
+src/tests/test_seq.c:58:shared_test_seq/seq_map_entry_vector:PASS (0 ms)
+src/tests/test_seq.c:65:shared_test_seq/seq_rest_map_returns_sequence:PASS (0 ms)
+src/tests/test_seq.c:71:shared_test_seq/seq_next_inplace_reuses_iterator:PASS (0 ms)
+src/tests/test_seq.c:78:shared_test_seq/seq_next:PASS (0 ms)
+src/tests/test_seq.c:82:shared_test_seq/seq_rest_vs_next_difference:PASS (0 ms)
+src/tests/test_seq.c:95:shared_test_seq/seq_equality:PASS (0 ms)
+src/tests/test_seq.c:110:shared_test_seq/seq_next_with_list_returns_list:PASS (0 ms)
+src/tests/test_seq.c:125:shared_test_seq/seq_next_with_list_preserves_structure:PASS (0 ms)
+src/tests/test_seq.c:137:shared_test_seq/seq_next_with_single_element_list:PASS (0 ms)
+src/tests/test_seq.c:141:shared_test_seq/seq_next_with_empty_list:PASS (0 ms)
+src/tests/test_seq.c:146:shared_test_seq/native_next_with_list:PASS (0 ms)
+src/tests/test_seq.c:158:shared_test_seq/seq_map_returns_sequence:PASS (0 ms)
+src/tests/test_seq.c:162:shared_test_seq/seq_empty_map_returns_nil:PASS (0 ms)
+src/tests/test_seq.c:167:shared_test_seq/seq_nil_returns_nil:PASS (0 ms)
+src/tests/test_seq.c:172:shared_test_seq/seq_map_first_returns_vector:PASS (0 ms)
+src/tests/test_seq.c:181:shared_test_seq/seq_map_count:PASS (0 ms)
+src/tests/test_seq.c:185:shared_test_seq/seq_map_next_returns_sequence:PASS (0 ms)
+src/tests/test_seq.c:189:shared_test_seq/seq_map_rest_returns_sequence:PASS (0 ms)
+src/tests/test_seq.c:193:shared_test_seq/seq_map_iteration:PASS (0 ms)
+src/tests/test_seq.c:199:shared_test_seq/seq_map_single_entry_next:PASS (0 ms)
+src/tests/test_seq.c:203:shared_test_seq/seq_map_single_entry_rest:PASS (0 ms)
+src/tests/test_seq.c:207:shared_test_seq/seq_map_entry_structure:PASS (0 ms)
+src/tests/test_seq.c:219:shared_test_seq/seq_cow_multiple_sequences_same_container:PASS (0 ms)
+src/tests/test_seq.c:236:shared_test_seq/seq_cow_rc_one_inplace:PASS (0 ms)
+src/tests/test_seq.c:246:shared_test_seq/seq_cow_rc_greater_one_copy_on_write:PASS (0 ms)
+src/tests/test_seq.c:260:shared_test_seq/seq_cow_multiple_sequences_preserved:PASS (0 ms)
+src/tests/test_seq.c:280:shared_test_seq/seq_cow_iteration_after_cow:PASS (0 ms)
+src/tests/test_do.c:8:shared_test_do/do_empty:PASS (0 ms)
+src/tests/test_do.c:20:shared_test_do/do_single_expr:PASS (0 ms)
+src/tests/test_do.c:34:shared_test_do/do_multiple_exprs:PASS (0 ms)
+src/tests/test_do.c:48:shared_test_do/do_with_arithmetic:PASS (0 ms)
+src/tests/test_do.c:62:shared_test_do/do_nested:PASS (0 ms)
+src/tests/test_do.c:76:shared_test_do/do_in_if:PASS (0 ms)
+src/tests/test_do.c:90:shared_test_do/do_in_if_else:PASS (0 ms)
+src/tests/test_do.c:104:shared_test_do/do_mixed_types:PASS (0 ms)
+src/tests/test_do.c:118:shared_test_do/do_last_nil:PASS (0 ms)
+src/tests/test_do.c:130:shared_test_do/do_with_let:PASS (0 ms)
+src/tests/test_datetime.c:8:shared_test_datetime/time_basic_functionality:PASS (0 ms)
+src/tests/test_datetime.c:19:shared_test_datetime/time_arity_validation:PASS (1 ms)
+src/tests/test_datetime.c:31:shared_test_datetime/time_with_too_many_arguments:PASS (0 ms)
+src/tests/test_datetime.c:44:shared_test_datetime/time_no_double_evaluation:PASS (0 ms)
+src/tests/test_datetime.c:51:shared_test_datetime/time_with_dotimes:PASS (1 ms)
+src/tests/test_datetime.c:57:shared_test_datetime/time_returns_expression_result:PASS (0 ms)
+src/tests/test_loops.c:17:shared_test_loops/dotimes_zero_iterations:PASS (0 ms)
+src/tests/test_loops.c:32:shared_test_loops/dotimes_negative_iterations:PASS (0 ms)
+src/tests/test_loops.c:47:shared_test_loops/dotimes_large_iterations:PASS (0 ms)
+src/tests/test_loops.c:62:shared_test_loops/dotimes_invalid_binding_format:PASS (0 ms)
+src/tests/test_loops.c:77:shared_test_loops/dotimes_non_numeric_count:PASS (0 ms)
+src/tests/test_loops.c:92:shared_test_loops/dotimes_null_input:PASS (0 ms)
+src/tests/test_loops.c:101:shared_test_loops/dotimes_simple_iteration_count:PASS (0 ms)
+src/tests/test_loops.c:126:shared_test_loops/dotimes_lexical_n_and_body_bindings:PASS (0 ms)
+src/tests/test_loops.c:141:shared_test_loops/while_basic_true:PASS (0 ms)
+src/tests/test_loops.c:154:shared_test_loops/while_loop_multiple:PASS (0 ms)
+src/tests/test_loops.c:167:shared_test_loops/while_false_condition:PASS (0 ms)
+src/tests/test_loops.c:177:shared_test_loops/while_nil_condition:PASS (0 ms)
+src/tests/test_loops.c:187:shared_test_loops/while_with_atom:PASS (0 ms)
+src/tests/test_loops.c:199:shared_test_loops/while_multiple_body_exprs:PASS (0 ms)
+src/tests/test_arithmetic.c:14:shared_test_arithmetic/integer_overflow_detection:PASS (5 ms)
+src/tests/test_arithmetic.c:118:shared_test_arithmetic/division_by_zero_exception:PASS (1 ms)
+src/tests/test_arithmetic.c:134:shared_test_arithmetic/eval_list_simple_arithmetic:PASS (0 ms)
+src/tests/test_arithmetic.c:142:shared_test_arithmetic/multiplication_with_negative_numbers:PASS (0 ms)
+src/tests/test_arithmetic.c:175:shared_test_arithmetic/quot:PASS (1 ms)
+src/tests/test_arithmetic.c:219:shared_test_arithmetic/bit_shift_left:PASS (0 ms)
+src/tests/test_arithmetic.c:246:shared_test_arithmetic/math_sqrt:PASS (0 ms)
+src/tests/test_core.c:26:shared_test_core/core_count:PASS (0 ms)
+src/tests/test_core.c:48:shared_test_core/core_first:PASS (0 ms)
+src/tests/test_core.c:62:shared_test_core/core_rest:PASS (0 ms)
+src/tests/test_core.c:76:shared_test_core/core_conj:PASS (0 ms)
+src/tests/test_core.c:92:shared_test_core/core_cons:PASS (0 ms)
+src/tests/test_core.c:102:shared_test_core/core_nth:PASS (0 ms)
+src/tests/test_core.c:122:shared_test_core/core_inc:PASS (0 ms)
+src/tests/test_core.c:138:shared_test_core/core_dec:PASS (0 ms)
+src/tests/test_core.c:154:shared_test_core/core_plus:PASS (0 ms)
+src/tests/test_core.c:170:shared_test_core/core_minus:PASS (0 ms)
+src/tests/test_core.c:186:shared_test_core/core_multiply:PASS (0 ms)
+src/tests/test_core.c:206:shared_test_core/core_equals:PASS (0 ms)
+src/tests/test_core.c:225:shared_test_core/core_not_equals:PASS (0 ms)
+src/tests/test_core.c:239:shared_test_core/core_less_than:PASS (0 ms)
+src/tests/test_core.c:253:shared_test_core/core_greater_than:PASS (0 ms)
+src/tests/test_core.c:331:shared_test_core/core_nil_predicate:PASS (0 ms)
+src/tests/test_core.c:359:shared_test_core/str_with_boolean:PASS (0 ms)
+src/tests/test_core.c:414:shared_test_core/core_empty_predicate:PASS (0 ms)
+src/tests/test_core.c:428:shared_test_core/core_vector_predicate:PASS (0 ms)
+src/tests/test_core.c:442:shared_test_core/core_map_predicate:PASS (0 ms)
+src/tests/test_core.c:485:shared_test_core/core_get:PASS (0 ms)
+src/tests/test_core.c:505:shared_test_core/core_assoc:PASS (0 ms)
+src/tests/test_core.c:515:shared_test_core/core_dissoc:PASS (0 ms)
+src/tests/test_core.c:529:shared_test_core/core_keys:PASS (0 ms)
+src/tests/test_core.c:539:shared_test_core/core_vals:PASS (0 ms)
+src/tests/test_core.c:553:shared_test_core/core_not:PASS (0 ms)
+src/tests/test_core.c:572:shared_test_core/core_not_first_class:PASS (0 ms)
+src/tests/test_core.c:604:shared_test_core/core_map:PASS (0 ms)
+src/tests/test_core.c:614:shared_test_core/core_filter:PASS (0 ms)
+src/tests/test_core.c:625:shared_test_core/core_reduce:PASS (0 ms)
+src/tests/test_core.c:641:shared_test_core/core_range:PASS (0 ms)
+src/tests/test_predicates.c:15:shared_test_predicates/predicate_number_true_integer:PASS (0 ms)
+src/tests/test_predicates.c:21:shared_test_predicates/predicate_number_true_float:PASS (0 ms)
+src/tests/test_predicates.c:27:shared_test_predicates/predicate_number_false_string:PASS (0 ms)
+src/tests/test_predicates.c:37:shared_test_predicates/predicate_integer_true:PASS (0 ms)
+src/tests/test_predicates.c:43:shared_test_predicates/predicate_integer_false_float:PASS (0 ms)
+src/tests/test_predicates.c:53:shared_test_predicates/predicate_float_true:PASS (0 ms)
+src/tests/test_predicates.c:59:shared_test_predicates/predicate_float_false_integer:PASS (0 ms)
+src/tests/test_predicates.c:69:shared_test_predicates/predicate_string_true:PASS (0 ms)
+src/tests/test_predicates.c:75:shared_test_predicates/predicate_string_false_number:PASS (0 ms)
+src/tests/test_predicates.c:85:shared_test_predicates/predicate_keyword_true:PASS (0 ms)
+src/tests/test_predicates.c:91:shared_test_predicates/predicate_keyword_false_symbol:PASS (0 ms)
+src/tests/test_predicates.c:101:shared_test_predicates/predicate_symbol_true:PASS (0 ms)
+src/tests/test_predicates.c:107:shared_test_predicates/predicate_symbol_false_keyword:PASS (0 ms)
+src/tests/test_predicates.c:117:shared_test_predicates/predicate_fn_true_builtin:PASS (0 ms)
+src/tests/test_predicates.c:123:shared_test_predicates/predicate_fn_true_lambda:PASS (0 ms)
+src/tests/test_predicates.c:129:shared_test_predicates/predicate_fn_false_number:PASS (0 ms)
+src/tests/test_predicates.c:139:shared_test_predicates/predicate_char_true:PASS (0 ms)
+src/tests/test_predicates.c:146:shared_test_predicates/predicate_char_false_string:PASS (0 ms)
+src/tests/test_predicates.c:156:shared_test_predicates/predicate_some_true:PASS (0 ms)
+src/tests/test_predicates.c:162:shared_test_predicates/predicate_some_false:PASS (0 ms)
+src/tests/test_predicates.c:172:shared_test_predicates/predicate_true_true:PASS (0 ms)
+src/tests/test_predicates.c:178:shared_test_predicates/predicate_true_false:PASS (0 ms)
+src/tests/test_predicates.c:184:shared_test_predicates/predicate_true_false_number:PASS (0 ms)
+src/tests/test_predicates.c:195:shared_test_predicates/predicate_false_true:PASS (0 ms)
+src/tests/test_predicates.c:201:shared_test_predicates/predicate_false_false:PASS (0 ms)
+src/tests/test_predicates.c:207:shared_test_predicates/predicate_false_false_nil:PASS (0 ms)
+src/tests/test_predicates.c:218:shared_test_predicates/predicate_boolean_true_true:PASS (0 ms)
+src/tests/test_predicates.c:224:shared_test_predicates/predicate_boolean_true_false:PASS (0 ms)
+src/tests/test_predicates.c:230:shared_test_predicates/predicate_boolean_false_nil:PASS (0 ms)
+src/tests/test_predicates.c:240:shared_test_predicates/predicate_list_true:PASS (0 ms)
+src/tests/test_predicates.c:246:shared_test_predicates/predicate_list_false_vector:PASS (0 ms)
+src/tests/test_predicates.c:256:shared_test_predicates/quoted_list_type_is_list:PASS (0 ms)
+src/tests/test_predicates.c:264:shared_test_predicates/quoted_nested_list_type:PASS (0 ms)
+src/tests/test_predicates.c:271:shared_test_predicates/quoted_symbol_type:PASS (0 ms)
+src/tests/test_predicates.c:282:shared_test_predicates/predicate_set_false_map:PASS (0 ms)
+src/tests/test_predicates.c:288:shared_test_predicates/predicate_set_false_vector:PASS (0 ms)
+src/tests/test_predicates.c:298:shared_test_predicates/predicate_coll_true_list:PASS (0 ms)
+src/tests/test_predicates.c:304:shared_test_predicates/predicate_coll_true_vector:PASS (0 ms)
+src/tests/test_predicates.c:310:shared_test_predicates/predicate_coll_true_map:PASS (0 ms)
+src/tests/test_predicates.c:316:shared_test_predicates/predicate_coll_false_number:PASS (0 ms)
+src/tests/test_predicates.c:326:shared_test_predicates/predicate_seq_true_list:PASS (0 ms)
+src/tests/test_predicates.c:332:shared_test_predicates/predicate_seq_false_vector:PASS (0 ms)
+src/tests/test_predicates.c:342:shared_test_predicates/predicate_seqable_true_list:PASS (0 ms)
+src/tests/test_predicates.c:348:shared_test_predicates/predicate_seqable_true_string:PASS (0 ms)
+src/tests/test_predicates.c:354:shared_test_predicates/predicate_seqable_true_nil:PASS (0 ms)
+src/tests/test_predicates.c:360:shared_test_predicates/predicate_seqable_false_number:PASS (0 ms)
+src/tests/test_predicates.c:370:shared_test_predicates/predicate_ifn_true_fn:PASS (0 ms)
+src/tests/test_predicates.c:376:shared_test_predicates/predicate_ifn_true_keyword:PASS (0 ms)
+src/tests/test_predicates.c:382:shared_test_predicates/predicate_ifn_true_map:PASS (0 ms)
+src/tests/test_predicates.c:388:shared_test_predicates/predicate_ifn_true_vector:PASS (0 ms)
+src/tests/test_predicates.c:394:shared_test_predicates/predicate_ifn_false_number:PASS (0 ms)
+src/tests/test_core_functions.c:30:shared_test_core_functions/concat_two_lists:PASS (0 ms)
+src/tests/test_core_functions.c:35:shared_test_core_functions/concat_empty_first:PASS (0 ms)
+src/tests/test_core_functions.c:42:shared_test_core_functions/take_normal:PASS (0 ms)
+src/tests/test_core_functions.c:50:shared_test_core_functions/take_more_than_available:PASS (0 ms)
+src/tests/test_core_functions.c:56:shared_test_core_functions/take_zero:PASS (0 ms)
+src/tests/test_core_functions.c:63:shared_test_core_functions/drop_normal:PASS (0 ms)
+src/tests/test_core_functions.c:69:shared_test_core_functions/drop_more_than_available:PASS (0 ms)
+src/tests/test_core_functions.c:74:shared_test_core_functions/drop_zero:PASS (0 ms)
+src/tests/test_core_functions.c:82:shared_test_core_functions/last_normal:PASS (0 ms)
+src/tests/test_core_functions.c:87:shared_test_core_functions/last_single_element:PASS (0 ms)
+src/tests/test_core_functions.c:92:shared_test_core_functions/last_empty_list:PASS (0 ms)
+src/tests/test_core_functions.c:103:shared_test_core_functions/some_found:PASS (0 ms)
+src/tests/test_core_functions.c:108:shared_test_core_functions/some_not_found:PASS (0 ms)
+src/tests/test_core_functions.c:113:shared_test_core_functions/some_with_identity:PASS (1 ms)
+src/tests/test_core_functions.c:120:shared_test_core_functions/every_all_match:PASS (0 ms)
+src/tests/test_core_functions.c:125:shared_test_core_functions/every_not_all_match:PASS (0 ms)
+src/tests/test_core_functions.c:130:shared_test_core_functions/every_empty_collection:PASS (0 ms)
+src/tests/test_core_functions.c:137:shared_test_core_functions/not_every_one_fails:PASS (0 ms)
+src/tests/test_core_functions.c:142:shared_test_core_functions/not_every_all_pass:PASS (0 ms)
+src/tests/test_core_functions.c:149:shared_test_core_functions/not_any_none_match:PASS (0 ms)
+src/tests/test_core_functions.c:154:shared_test_core_functions/not_any_one_matches:PASS (0 ms)
+src/tests/test_core_functions.c:165:shared_test_core_functions/mapcat_duplicate:PASS (1 ms)
+src/tests/test_core_functions.c:171:shared_test_core_functions/mapcat_expand:PASS (0 ms)
+src/tests/test_core_functions.c:179:shared_test_core_functions/map_two_collections_vector_zip:PASS (0 ms)
+src/tests/test_core_functions.c:184:shared_test_core_functions/map_two_collections_stops_at_shortest:PASS (0 ms)
+src/tests/test_core_functions.c:189:shared_test_core_functions/mapv_single_collection:PASS (0 ms)
+src/tests/test_core_functions.c:194:shared_test_core_functions/mapv_two_collections:PASS (0 ms)
+src/tests/test_core_functions.c:201:shared_test_core_functions/take_while_normal:PASS (0 ms)
+src/tests/test_core_functions.c:207:shared_test_core_functions/take_while_all_match:PASS (0 ms)
+src/tests/test_core_functions.c:213:shared_test_core_functions/take_while_none_match:PASS (0 ms)
+src/tests/test_core_functions.c:220:shared_test_core_functions/drop_while_normal:PASS (2 ms)
+src/tests/test_core_functions.c:225:shared_test_core_functions/drop_while_all_match:PASS (0 ms)
+src/tests/test_core_functions.c:230:shared_test_core_functions/drop_while_none_match:PASS (0 ms)
+src/tests/test_core_functions.c:237:shared_test_core_functions/butlast_normal:PASS (0 ms)
+src/tests/test_core_functions.c:242:shared_test_core_functions/butlast_two_elements:PASS (0 ms)
+src/tests/test_core_functions.c:247:shared_test_core_functions/butlast_single_element:PASS (0 ms)
+src/tests/test_core_functions.c:254:shared_test_core_functions/keep_filters_nil:PASS (2 ms)
+src/tests/test_core_functions.c:260:shared_test_core_functions/keep_all_non_nil:PASS (1 ms)
+src/tests/test_core_functions.c:265:shared_test_core_functions/keep_all_nil:PASS (0 ms)
+src/tests/test_core_functions.c:272:shared_test_core_functions/interleave_equal_length:PASS (1 ms)
+src/tests/test_core_functions.c:278:shared_test_core_functions/interleave_unequal_length:PASS (0 ms)
+src/tests/test_core_functions.c:290:shared_test_core_functions/reductions_sum:PASS (0 ms)
+src/tests/test_core_functions.c:296:shared_test_core_functions/reductions_product:PASS (0 ms)
+src/tests/test_core_functions.c:304:shared_test_core_functions/frequencies_symbols:PASS (0 ms)
+src/tests/test_core_functions.c:311:shared_test_core_functions/frequencies_numbers:PASS (0 ms)
+src/tests/test_core_functions.c:319:shared_test_core_functions/group_by_even:PASS (0 ms)
+src/tests/test_core_functions.c:325:shared_test_core_functions/group_by_identity:PASS (0 ms)
+src/tests/test_core_functions.c:332:shared_test_core_functions/distinct_removes_duplicates:PASS (0 ms)
+src/tests/test_core_functions.c:338:shared_test_core_functions/distinct_no_duplicates:PASS (0 ms)
+src/tests/test_core_functions.c:343:shared_test_core_functions/distinct_all_same:PASS (0 ms)
+src/tests/test_core_functions.c:355:shared_test_core_functions/partition_exact:PASS (0 ms)
+src/tests/test_core_functions.c:363:shared_test_core_functions/partition_drops_incomplete:PASS (0 ms)
+src/tests/test_core_functions.c:370:shared_test_core_functions/partition_all_keeps_incomplete:PASS (0 ms)
+src/tests/test_core_functions.c:375:shared_test_core_functions/partition_all_exact:PASS (0 ms)
+src/tests/test_core_functions.c:382:shared_test_core_functions/split_at_middle:PASS (0 ms)
+src/tests/test_core_functions.c:388:shared_test_core_functions/split_at_zero:PASS (0 ms)
+src/tests/test_core_functions.c:395:shared_test_core_functions/split_with_predicate:PASS (0 ms)
+src/tests/test_core_functions.c:401:shared_test_core_functions/split_with_all_match:PASS (0 ms)
+src/tests/test_core_functions.c:412:shared_test_core_functions/zipmap_normal:PASS (0 ms)
+src/tests/test_core_functions.c:418:shared_test_core_functions/zipmap_unequal_length:PASS (0 ms)
+src/tests/test_core_functions.c:426:shared_test_core_functions/get_in_nested:PASS (0 ms)
+src/tests/test_core_functions.c:431:shared_test_core_functions/get_in_not_found:PASS (0 ms)
+src/tests/test_core_functions.c:442:shared_test_core_functions/partial_add:PASS (0 ms)
+src/tests/test_core_functions.c:447:shared_test_core_functions/partial_subtract:PASS (0 ms)
+src/tests/test_core_functions.c:454:shared_test_core_functions/comp_two_functions:PASS (0 ms)
+src/tests/test_core_functions.c:459:shared_test_core_functions/comp_with_str:PASS (0 ms)
+src/tests/test_core_functions.c:466:shared_test_core_functions/juxt_inc_dec:PASS (0 ms)
+src/tests/test_core_functions.c:471:shared_test_core_functions/juxt_first_last:PASS (0 ms)
+src/tests/test_core_functions.c:478:shared_test_core_functions/complement_even:PASS (0 ms)
+src/tests/test_core_functions.c:483:shared_test_core_functions/complement_pos:PASS (0 ms)
+src/tests/test_core_functions.c:494:shared_test_core_functions/repeatedly_count:PASS (0 ms)
+src/tests/test_core_functions.c:499:shared_test_core_functions/repeatedly_values:PASS (0 ms)
+src/tests/test_core_functions.c:506:shared_test_core_functions/reduce_kv_sum_values:PASS (0 ms)
+src/tests/test_core_functions.c:511:shared_test_core_functions/reduce_kv_transform:PASS (0 ms)
+src/tests/test_core_functions.c:518:shared_test_core_functions/abs_negative:PASS (0 ms)
+src/tests/test_core_functions.c:523:shared_test_core_functions/abs_positive:PASS (0 ms)
+src/tests/test_core_functions.c:528:shared_test_core_functions/abs_zero:PASS (0 ms)
+src/tests/test_core_functions.c:535:shared_test_core_functions/rem_positive:PASS (0 ms)
+src/tests/test_core_functions.c:540:shared_test_core_functions/rem_negative_dividend:PASS (0 ms)
+src/tests/test_regex.c:14:shared_test_regex/regex_re_pattern_basic:PASS (0 ms)
+src/tests/test_regex.c:23:shared_test_regex/regex_re_pattern_special_chars:PASS (0 ms)
+src/tests/test_regex.c:36:shared_test_regex/regex_re_find_match:PASS (0 ms)
+src/tests/test_regex.c:46:shared_test_regex/regex_re_find_no_match:PASS (0 ms)
+src/tests/test_regex.c:54:shared_test_regex/regex_re_find_digits:PASS (0 ms)
+src/tests/test_regex.c:64:shared_test_regex/regex_re_find_word:PASS (0 ms)
+src/tests/test_regex.c:78:shared_test_regex/regex_re_find_anchor_start:PASS (0 ms)
+src/tests/test_regex.c:91:shared_test_regex/regex_re_find_anchor_end:PASS (0 ms)
+src/tests/test_regex.c:108:shared_test_regex/regex_re_matches_full:PASS (0 ms)
+src/tests/test_regex.c:117:shared_test_regex/regex_re_matches_partial_fails:PASS (0 ms)
+src/tests/test_regex.c:126:shared_test_regex/regex_re_matches_digits:PASS (0 ms)
+src/tests/test_regex.c:143:shared_test_regex/regex_predicate:PASS (0 ms)
+src/tests/test_regex.c:163:shared_test_regex/regex_char_class:PASS (0 ms)
+src/tests/test_regex.c:172:shared_test_regex/regex_negated_char_class:PASS (0 ms)
+src/tests/test_regex.c:185:shared_test_regex/regex_quantifier_star:PASS (0 ms)
+src/tests/test_regex.c:199:shared_test_regex/regex_quantifier_plus:PASS (0 ms)
+src/tests/test_regex.c:212:shared_test_regex/regex_quantifier_question:PASS (0 ms)
+src/tests/test_regex.c:230:shared_test_regex/regex_shorthand_digit:PASS (0 ms)
+src/tests/test_regex.c:239:shared_test_regex/regex_shorthand_word:PASS (0 ms)
+src/tests/test_regex.c:248:shared_test_regex/regex_shorthand_whitespace:PASS (0 ms)
+src/tests/test_regex.c:261:shared_test_regex/regex_string_representation_basic:PASS (0 ms)
+src/tests/test_regex.c:265:shared_test_regex/regex_string_representation_special_chars:PASS (0 ms)
+src/tests/test_regex.c:269:shared_test_regex/regex_string_representation_digits:PASS (0 ms)
+src/tests/test_regex.c:273:shared_test_regex/regex_string_representation_in_collection:PASS (0 ms)
+src/tests/test_string.c:35:shared_test_string/string_blank:PASS (20 ms)
+src/tests/test_string.c:66:shared_test_string/string_capitalize:PASS (0 ms)
+src/tests/test_string.c:91:shared_test_string/string_ends_with:PASS (0 ms)
+src/tests/test_string.c:112:shared_test_string/string_escape:PASS (0 ms)
+src/tests/test_string.c:130:shared_test_string/string_includes:PASS (0 ms)
+src/tests/test_string.c:151:shared_test_string/string_index_of:PASS (0 ms)
+src/tests/test_string.c:168:shared_test_string/string_reverse:PASS (0 ms)
+src/tests/test_vector.c:6:shared_test_vector/vector_builtin_basic:PASS (0 ms)
+src/tests/test_vector.c:33:shared_test_vector/nth_with_default_and_bounds:PASS (0 ms)
+src/tests/test_vector.c:55:shared_test_vector/nth_with_lists:PASS (1 ms)
+src/tests/test_vector.c:142:shared_test_vector/nth_with_sequences:PASS (1 ms)
+src/tests/test_vector.c:194:shared_test_vector/nth_edge_cases:PASS (3 ms)
+src/tests/test_vector.c:303:shared_test_vector/nth_nil_elements:PASS (1 ms)
+src/tests/test_vector.c:388:shared_test_vector/peek_and_pop_vector:PASS (0 ms)
+src/tests/test_vector.c:409:shared_test_vector/subvec_bounds_and_slices:PASS (0 ms)
+src/tests/test_vector.c:426:shared_test_vector/subvec_edge_cases:PASS (0 ms)
+src/tests/test_vector.c:509:shared_test_vector/subvec_error_cases:PASS (8 ms)
+src/tests/test_vector.c:596:shared_test_vector/vec_from_list_and_vector_id:PASS (0 ms)
+src/tests/test_vector.c:632:shared_test_vector/vec_with_nil_elements:PASS (0 ms)
+src/tests/test_vector.c:707:shared_test_vector/weak_vector_does_not_retain_elements:PASS (0 ms)
+src/tests/test_vector.c:740:shared_test_vector/weak_vector_does_not_release_elements:PASS (0 ms)
+src/tests/test_vector.c:787:shared_test_vector/weak_vector_nth_does_not_retain:PASS (0 ms)
+src/tests/test_vector.c:834:shared_test_vector/weak_vector_multiple_elements_rc_unchanged:PASS (0 ms)
+src/tests/test_vector.c:893:shared_test_vector/weak_vector_clear_does_not_release_elements:PASS (0 ms)
+src/tests/test_vector.c:940:shared_test_vector/clj_conj_updates_count_for_event_loop:PASS (0 ms)
+src/tests/test_vector.c:997:shared_test_vector/clj_conj_with_empty_transient_vector:PASS (0 ms)
+src/tests/test_vector.c:1035:shared_test_vector/equal_persistent_and_transient_vector:PASS (0 ms)
+src/tests/test_vector.c:1069:shared_test_vector/transient_on_transient_returns_same_object:PASS (0 ms)
+src/tests/test_vector.c:1130:shared_test_vector/persistent_on_persistent_returns_same_object:PASS (0 ms)
+src/tests/test_vector.c:1186:shared_test_vector/vector_for_each_macro:PASS (0 ms)
+src/tests/test_vector.c:1224:shared_test_vector/vector_for_each_empty_vector:PASS (0 ms)
+src/tests/test_vector.c:1237:shared_test_vector/vector_for_each_null_vector:PASS (0 ms)
+src/tests/test_vector.c:1250:shared_test_vector/vector_for_each_with_null_elements:PASS (0 ms)
+src/tests/test_vector.c:1278:shared_test_vector/vector_set_nth_with_reference_counts:PASS (0 ms)
+src/tests/test_vector.c:1319:shared_test_vector/vector_set_nth_copy_on_write:PASS (0 ms)
+src/tests/test_vector.c:1361:shared_test_vector/vector_set_nth_transient:PASS (0 ms)
+src/tests/test_vector.c:1400:shared_test_vector/vector_set_nth_edge_cases:PASS (0 ms)
+src/tests/test_vector.c:1433:shared_test_vector/vector_set_nth_persistent_throws_exception:PASS (0 ms)
+src/tests/test_time.c:27:shared_test_time/time_basic_functionality:PASS (0 ms)
+src/tests/test_time.c:99:shared_test_time/time_arity_validation:PASS (0 ms)
+src/tests/test_time.c:120:shared_test_time/time_with_too_many_arguments:PASS (0 ms)
+src/tests/test_time.c:152:shared_test_time/time_no_double_evaluation:PASS (0 ms)
+src/tests/test_time.c:163:shared_test_time/time_with_dotimes:PASS (1 ms)
+src/tests/test_time.c:224:shared_test_time/time_preserves_lexical_context:PASS (0 ms)
+src/tests/test_time.c:233:shared_test_time/time_dotimes_let_bindings_benchmark_pattern:PASS (0 ms)
+src/tests/test_time.c:249:shared_test_time/time_returns_expression_result:PASS (0 ms)
+src/tests/test_yield_sleep.c:10:shared_test_yield_sleep/yield_zero_returns_nil_and_runs_once:PASS (0 ms)
+src/tests/test_yield_sleep.c:22:shared_test_yield_sleep/current_time_ms_returns_fixnum_and_matches_override:PASS (0 ms)
+src/tests/test_yield_sleep.c:33:shared_test_yield_sleep/sleep_advances_time_and_returns_nil:PASS (0 ms)
+src/tests/test_yield_sleep.c:44:shared_test_yield_sleep/sleep_wraps_over_24h_boundary:PASS (0 ms)
+src/tests/test_memory_macros.c:11:test_memory_macros/memory_macros_null_safe:PASS (55 ms)
+src/tests/test_memory_macros.c:18:test_memory_macros/memory_macros_immediate_safe:PASS (52 ms)
+src/tests/test_memory_macros.c:28:test_memory_macros/is_pointer_on_stack_local_var_highlevel:PASS (50 ms)
+src/tests/test_memory_macros.c:33:test_memory_macros/is_pointer_on_stack_heap_obj_highlevel:PASS (54 ms)
+src/tests/test_memory_macros.c:39:test_memory_macros/is_pointer_on_stack_null_highlevel:PASS (58 ms)
+src/tests/test_memory_macros.c:43:test_memory_macros/is_pointer_on_stack_static_highlevel:PASS (52 ms)
+src/tests/test_memory.c:18:test_memory/memory_allocation:PASS (51 ms)
+src/tests/test_memory.c:43:test_memory/memory_deallocation:PASS (49 ms)
+src/tests/test_memory.c:69:test_memory/memory_leak_detection:PASS (51 ms)
+src/tests/test_memory.c:82:test_memory/vector_memory:PASS (50 ms)
+src/tests/test_memory.c:112:test_memory/autorelease_pool_basic:PASS (52 ms)
+src/tests/test_memory.c:142:test_memory/autorelease_pool_nested:PASS (58 ms)
+src/tests/test_memory.c:169:test_memory/cow_assumptions_rc_behavior:PASS (52 ms)
+src/tests/test_memory.c:191:test_memory/autorelease_pool_memory_cleanup:PASS (56 ms)
+src/tests/test_memory.c:245:test_memory/memory_profiler_tracks_raw_alloc_blocks:PASS (57 ms)
+src/tests/test_memory.c:272:test_memory/zombie_detection:PASS (58 ms)
+src/tests/test_closure_capture_minimal.c:17:test_closure_capture_minimal/closure_capture_fn_param_after_return:PASS (51 ms)
+src/tests/test_closure_capture_minimal.c:31:test_closure_capture_minimal/closure_capture_let_local_after_return:PASS (51 ms)
+src/tests/test_closure_capture_minimal.c:45:test_closure_capture_minimal/closure_capture_nested_closures:PASS (53 ms)
+src/tests/test_closure_capture_minimal.c:59:test_closure_capture_minimal/closure_capture_loop_value:PASS (55 ms)
+src/tests/test_closure_capture_minimal.c:73:test_closure_capture_minimal/closure_dynamic_var_not_captured:PASS (50 ms)
+src/tests/test_parser.c:22:test_parser/parse_basic_types:PASS (58 ms)
+src/tests/test_parser.c:54:test_parser/parse_collections:PASS (56 ms)
+src/tests/test_parser.c:75:test_parser/parse_empty_list:PASS (68 ms)
+src/tests/test_parser.c:89:test_parser/parse_comments:PASS (56 ms)
+src/tests/test_parser.c:102:test_parser/parse_metadata:PASS (398 ms)
+src/tests/test_parser.c:131:test_parser/parse_metadata_keyword_shorthand:PASS (164 ms)
+src/tests/test_parser.c:159:test_parser/parse_metadata_hash_caret:PASS (76 ms)
+src/tests/test_parser.c:188:test_parser/parse_metadata_combined:PASS (111 ms)
+src/tests/test_parser.c:217:test_parser/parse_metadata_multiple_keywords:PASS (106 ms)
+src/tests/test_parser.c:249:test_parser/parse_metadata_mixed:PASS (102 ms)
+src/tests/test_parser.c:281:test_parser/parse_utf8_symbols:PASS (184 ms)
+src/tests/test_parser.c:295:test_parser/keyword_evaluation:PASS (128 ms)
+src/tests/test_parser.c:317:test_parser/keyword_map_access:PASS (129 ms)
+src/tests/test_parser.c:339:test_parser/parse_multiline_expressions:PASS (204 ms)
+src/tests/test_parser.c:384:test_parser/parse_empty_string:PASS (112 ms)
+src/tests/test_parser.c:418:test_parser/parse_multiple_expressions:PASS (62 ms)
+src/tests/test_parser.c:454:test_parser/parse_from_reader_multiple_expressions:PASS (54 ms)
+src/tests/test_parser.c:522:test_parser/parse_quote_form_with_nil:PASS (49 ms)
+src/tests/test_parser.c:576:test_parser/parse_nil_literal:PASS (48 ms)
+src/tests/test_parser.c:594:test_parser/meta_set_and_get:PASS (51 ms)
+src/tests/test_parser.c:632:test_parser/meta_automatic_sourcecode_references:PASS (96 ms)
+src/tests/test_parser.c:682:test_parser/meta_merge_does_not_overwrite:PASS (97 ms)
+src/tests/test_parser.c:717:test_parser/meta_clojure_compatible_keys:PASS (99 ms)
+src/tests/test_parser.c:756:test_parser/meta_clear:PASS (105 ms)
+src/tests/test_parser.c:796:test_parser/anon_fn_reader_macro:PASS (118 ms)
+src/tests/test_utf8_emoji.c:10:test_utf8_emoji/utf8_emoji_in_string:PASS (103 ms)
+src/tests/test_exception.c:18:test_exception/simple_try_catch_exception_caught:PASS (95 ms)
+src/tests/test_exception.c:35:test_exception/simple_try_catch_no_exception:PASS (98 ms)
+src/tests/test_exception.c:51:test_exception/nested_try_catch_inner_exception:PASS (118 ms)
+src/tests/test_exception.c:80:test_exception/nested_try_catch_outer_exception:PASS (96 ms)
+src/tests/test_exception.c:107:test_exception/exception_with_autorelease:PASS (96 ms)
+src/tests/test_exception.c:129:test_exception/repl_crash_scenario:PASS (100 ms)
+src/tests/test_exception.c:152:test_exception/map_arity_exception_zero_args:PASS (100 ms)
+src/tests/test_exception.c:183:test_exception/with_autorelease_pool_swallows_exceptions:PASS (116 ms)
+src/tests/test_exception.c:223:test_exception/throw_existing_exception:PASS (104 ms)
+src/tests/test_exception.c:258:test_exception/throw_macro_convenience:PASS (91 ms)
+src/tests/test_basics.c:24:test_basics/list_count:PASS (101 ms)
+src/tests/test_basics.c:38:test_basics/list_creation:PASS (103 ms)
+src/tests/test_basics.c:59:test_basics/symbol_creation:PASS (133 ms)
+src/tests/test_basics.c:75:test_basics/string_creation:PASS (130 ms)
+src/tests/test_basics.c:86:test_basics/vector_creation:PASS (111 ms)
+src/tests/test_basics.c:103:test_basics/map_creation:PASS (98 ms)
+src/tests/test_basics.c:110:test_basics/array_map_builtin:PASS (112 ms)
+src/tests/test_basics.c:136:test_basics/integer_creation:PASS (140 ms)
+src/tests/test_basics.c:160:test_basics/float_creation:PASS (109 ms)
+src/tests/test_basics.c:184:test_basics/nil_creation:PASS (105 ms)
+src/tests/test_basics.c:223:test_basics/special_form_and:PASS (116 ms)
+src/tests/test_basics.c:250:test_basics/special_form_or:PASS (89 ms)
+src/tests/test_basics.c:286:test_basics/special_form_when:PASS (67 ms)
+src/tests/test_basics.c:363:test_basics/if_nil_in_function_regression:PASS (50 ms)
+src/tests/test_basics.c:446:test_basics/nil_in_function_environment_debug:PASS (59 ms)
+src/tests/test_basics.c:473:test_basics/load_multiline_file:PASS (74 ms)
+src/tests/test_basics.c:512:test_basics/identity_function:PASS (65 ms)
+src/tests/test_basics.c:549:test_basics/map_function:PASS (72 ms)
+src/tests/test_basics.c:644:test_basics/as_list_valid:PASS (51 ms)
+src/tests/test_basics.c:662:test_basics/as_list_invalid:PASS (72 ms)
+src/tests/test_basics.c:677:test_basics/list_first_valid:PASS (57 ms)
+src/tests/test_basics.c:695:test_basics/is_type_function:PASS (53 ms)
+src/tests/test_basics.c:718:test_basics/eval_list_function_call:PASS (64 ms)
+src/tests/test_basics.c:751:test_basics/def_isolated_problem:PASS (53 ms)
+src/tests/test_basics.c:826:test_basics/def_function_isolated_problem:PASS (56 ms)
+src/tests/test_basics.c:922:test_basics/identical_predicate:PASS (158 ms)
+src/tests/test_basics.c:949:test_basics/vector_predicate:PASS (51 ms)
+src/tests/test_basics.c:1012:test_basics/type_check_all_types:PASS (53 ms)
+src/tests/test_basics.c:1089:test_basics/eval:PASS (53 ms)
+src/tests/test_basics.c:1112:test_basics/read_string:PASS (52 ms)
+src/tests/test_list.c:11:test_list/nth_list_nil_at_index_1:PASS (54 ms)
+src/tests/test_list.c:25:test_list/nth_list_empty_list_out_of_bounds:PASS (108 ms)
+src/tests/test_list.c:38:test_list/nth_list_nil_at_index_0:PASS (71 ms)
+src/tests/test_list.c:51:test_list/nth_list_all_nil:PASS (72 ms)
+src/tests/test_list.c:64:test_list/nth_list_out_of_bounds:PASS (58 ms)
+src/tests/test_list.c:78:test_list/nth_list_nil_with_default_problem:PASS (55 ms)
+src/tests/test_list.c:109:test_list/list_for_each_basic:PASS (57 ms)
+src/tests/test_list.c:127:test_list/list_for_each_empty:PASS (57 ms)
+src/tests/test_list.c:139:test_list/list_for_each_single:PASS (60 ms)
+src/tests/test_list.c:154:test_list/list_for_each_rest:PASS (58 ms)
+src/tests/test_list.c:173:test_list/list_for_each_find:PASS (111 ms)
+src/tests/test_list.c:191:test_list/list_for_each_with_nil_in_middle:PASS (73 ms)
+src/tests/test_namespace.c:19:test_namespace/namespace_lookup_core_functions:PASS (53 ms)
+src/tests/test_namespace.c:44:test_namespace/namespace_lookup_user_namespace:PASS (61 ms)
+src/tests/test_namespace.c:74:test_namespace/qualified_symbol_parsing_moved:PASS (61 ms)
+src/tests/test_namespace.c:91:test_namespace/symbol_interning_consistency:PASS (121 ms)
+src/tests/test_namespace.c:112:test_namespace/symbol_interning_with_namespace:PASS (168 ms)
+src/tests/test_namespace.c:133:test_namespace/symbol_interning_global:PASS (91 ms)
+src/tests/test_namespace.c:148:test_namespace/inc_symbol_interning_during_load:PASS (187 ms)
+src/tests/test_namespace.c:215:test_namespace/inc_symbol_pointer_consistency:PASS (170 ms)
+src/tests/test_namespace.c:307:test_namespace/inc_symbol_interning_consistency:PASS (362 ms)
+src/tests/test_namespace.c:323:test_namespace/map_get_with_interned_symbols:PASS (89 ms)
+src/tests/test_namespace.c:363:test_namespace/symbol_table_operations:PASS (123 ms)
+src/tests/test_namespace.c:382:test_namespace/namespace_creation_and_switching:PASS (206 ms)
+src/tests/test_namespace.c:404:test_namespace/namespace_variable_storage:PASS (73 ms)
+src/tests/test_namespace.c:427:test_namespace/namespace_multiple_variables:PASS (83 ms)
+src/tests/test_namespace.c:465:test_namespace/symbol_resolution_fallback:PASS (86 ms)
+src/tests/test_namespace.c:481:test_namespace/namespace_special_characters:PASS (70 ms)
+src/tests/test_namespace.c:506:test_namespace/namespace_error_handling:PASS (74 ms)
+src/tests/test_namespace.c:524:test_namespace/ns_resolve_nil_vs_missing:PASS (72 ms)
+src/tests/test_namespace.c:558:test_namespace/ns_resolve_clojure_core_cache_initialization:PASS (73 ms)
+src/tests/test_namespace.c:589:test_namespace/ns_resolve_symbol_cache:PASS (72 ms)
+src/tests/test_namespace.c:640:test_namespace/resolve_list_operator_uses_cache:PASS (76 ms)
+src/tests/test_namespace.c:700:test_namespace/resolve_cache_invalidation_on_redefinition:PASS (73 ms)
+src/tests/test_namespace.c:784:test_namespace/require_loads_file:PASS (73 ms)
+src/tests/test_namespace.c:807:test_namespace/require_quoted_symbol:PASS (72 ms)
+src/tests/test_namespace.c:824:test_namespace/require_is_idempotent_by_default:PASS (68 ms)
+src/tests/test_namespace.c:853:test_namespace/require_nonexistent_file:PASS (51 ms)
+src/tests/test_namespace.c:869:test_namespace/require_nested_path:PASS (50 ms)
+src/tests/test_namespace.c:893:test_namespace/require_with_alias:PASS (48 ms)
+src/tests/test_namespace.c:918:test_namespace/require_with_refer:PASS (49 ms)
+src/tests/test_namespace.c:946:test_namespace/require_with_refer_all:PASS (48 ms)
+src/tests/test_namespace.c:983:test_namespace/require_multiple_namespaces:PASS (48 ms)
+src/tests/test_namespace.c:1017:test_namespace/require_alias_resolution:PASS (48 ms)
+src/tests/test_namespace.c:1057:test_namespace/require_invalid_syntax_symbol_with_keyword:PASS (49 ms)
+src/tests/test_namespace.c:1071:test_namespace/require_invalid_syntax_non_vector:PASS (52 ms)
+src/tests/test_namespace.c:1084:test_namespace/ns_registry_is_map:PASS (50 ms)
+src/tests/test_namespace.c:1094:test_namespace/ns_get_or_create_uses_map:PASS (48 ms)
+src/tests/test_namespace.c:1112:test_namespace/ns_find_uses_map:PASS (48 ms)
+src/tests/test_namespace.c:1127:test_namespace/ns_register_uses_map:PASS (50 ms)
+src/tests/test_namespace.c:1146:test_namespace/ns_cleanup_releases_all_from_map:PASS (49 ms)
+src/tests/test_namespace.c:1167:test_namespace/ns_registry_iteration:PASS (49 ms)
+src/tests/test_namespace.c:1189:test_namespace/ns_registry_map_conj_handles_new_instance:PASS (48 ms)
+src/tests/test_namespace.c:1247:test_namespace/ns_unload_releases_namespace_mappings:FAIL: Expected 0 Was 1. Expected function to be released (rc=0) after ns-unload (50 ms)
+src/tests/test_namespace.c:1256:test_namespace/ns_unload_returns_false_for_missing_namespace:PASS (48 ms)
+src/tests/test_namespace.c:1265:test_namespace/ns_map_returns_mappings:PASS (48 ms)
+src/tests/test_namespace.c:1313:test_namespace/ns_map_empty_namespace:PASS (48 ms)
+src/tests/test_namespace.c:1334:test_namespace/ns_map_current_namespace:PASS (49 ms)
+src/tests/test_namespace.c:1367:test_namespace/find_ns_returns_namespace:PASS (47 ms)
+src/tests/test_namespace.c:1385:test_namespace/find_ns_returns_nil_for_nonexistent:PASS (48 ms)
+src/tests/test_namespace.c:1394:test_namespace/find_ns_with_string:PASS (45 ms)
+src/tests/test_namespace.c:1412:test_namespace/find_ns_with_nil:PASS (45 ms)
+src/tests/test_namespace.c:1427:test_namespace/ambiguous_symbol_error:PASS (51 ms)
+src/tests/test_namespace.c:1470:test_namespace/unique_symbol_resolution:PASS (51 ms)
+src/tests/test_namespace.c:1493:test_namespace/clojure_core_only_symbol:PASS (50 ms)
+src/tests/test_namespace.c:1512:test_namespace/ambiguous_symbol_with_clojure_core:PASS (55 ms)
+src/tests/test_namespace.c:1558:test_namespace/ns_find_by_symbol_null:PASS (58 ms)
+src/tests/test_namespace.c:1614:test_namespace/core_namespace_find_inc:PASS (60 ms)
+src/tests/test_symbol_clojure_compat.c:5:test_symbol_clojure_compat/symbol_creation_without_namespace:PASS (60 ms)
+src/tests/test_symbol_clojure_compat.c:24:test_symbol_clojure_compat/symbol_ns_is_symbol_not_namespace:PASS (59 ms)
+src/tests/test_symbol_clojure_compat.c:43:test_symbol_clojure_compat/symbol_equality_with_symbol_ns:PASS (56 ms)
+src/tests/test_symbol_clojure_compat.c:67:test_symbol_clojure_compat/symbol_string_representation:PASS (51 ms)
+src/tests/test_symbol_clojure_compat.c:94:test_symbol_clojure_compat/namespace_lookup_from_symbol:PASS (49 ms)
+src/tests/test_symbol_clojure_compat.c:114:test_symbol_clojure_compat/symbol_without_namespace:PASS (52 ms)
+src/tests/test_core_initialization.c:17:test_core_initialization/core_initialization_inc_loaded:PASS (49 ms)
+src/tests/test_core_initialization.c:74:test_core_initialization/core_initialization_arithmetic_functions:PASS (47 ms)
+src/tests/test_core_initialization.c:106:test_core_initialization/core_initialization_plus_available:PASS (49 ms)
+src/tests/test_core_initialization.c:125:test_core_initialization/clojure_core_loads_inc:PASS (53 ms)
+src/tests/test_core_initialization.c:197:test_core_initialization/clojure_core_loads_all_functions:PASS (50 ms)
+src/tests/test_core_initialization.c:252:test_core_initialization/def_inc_evaluation_during_load:PASS (45 ms)
+src/tests/test_core_initialization.c:339:test_core_initialization/plus_available_during_fn_evaluation:PASS (46 ms)
+src/tests/test_core_initialization.c:390:test_core_initialization/def_stores_symbol_even_if_value_null:PASS (46 ms)
+src/tests/test_recur.c:7:test_recur/recur_factorial:PASS (46 ms)
+src/tests/test_recur.c:29:test_recur/recur_deep_recursion:PASS (46 ms)
+src/tests/test_recur.c:52:test_recur/recur_arity_error:PASS (46 ms)
+src/tests/test_recur.c:82:test_recur/loop_basic_countdown:PASS (60 ms)
+src/tests/test_recur.c:97:test_recur/loop_sum_accumulator:PASS (47 ms)
+src/tests/test_recur.c:112:test_recur/loop_no_recur:PASS (46 ms)
+src/tests/test_recur.c:125:test_recur/loop_recur_arity_error:PASS (47 ms)
+src/tests/test_recur.c:143:test_recur/loop_nested_in_fn:PASS (49 ms)
+src/tests/test_recur.c:168:test_recur/recur_outside_function_throws:PASS (46 ms)
+src/tests/test_recur.c:190:test_recur/recur_countdown:PASS (45 ms)
+src/tests/test_recur.c:213:test_recur/recur_sum:PASS (47 ms)
+src/tests/test_recur.c:237:test_recur/recur_tail_position_error:PASS (48 ms)
+src/tests/test_recur.c:255:test_recur/if_bug_in_functions:PASS (45 ms)
+src/tests/test_recur.c:274:test_recur/if_direct_evaluation:PASS (46 ms)
+src/tests/test_recur.c:286:test_recur/if_comparison_works:PASS (46 ms)
+src/tests/test_recur.c:302:test_recur/if_keywords_truthy:PASS (48 ms)
+src/tests/test_recur.c:314:test_recur/if_function_call_works:PASS (46 ms)
+src/tests/test_recur.c:327:test_recur/if_in_function_simple:PASS (54 ms)
+src/tests/test_recur.c:350:test_recur/if_in_function_with_comparison:PASS (58 ms)
+src/tests/test_recur.c:365:test_recur/if_after_recur_state:PASS (54 ms)
+src/tests/test_recur.c:390:test_recur/automatic_tco_factorial:PASS (70 ms)
+src/tests/test_recur.c:415:test_recur/automatic_tco_deep_recursion:PASS (50 ms)
+src/tests/test_recur.c:428:test_recur/automatic_tco_sum:PASS (50 ms)
+src/tests/test_recur.c:441:test_recur/automatic_tco_fibonacci:PASS (54 ms)
+src/tests/test_recur.c:454:test_recur/tco_artificially_generates_recur:PASS (50 ms)
+src/tests/test_recur.c:472:test_recur/eval_body_with_params_fixnum_literal:PASS (53 ms)
+src/tests/test_recur.c:502:test_recur/eval_body_with_params_fixnum_with_params:PASS (53 ms)
+src/tests/test_recur.c:540:test_recur/eval_body_with_params_fixnum_in_arithmetic:PASS (53 ms)
+src/tests/test_recur.c:585:test_recur/eval_body_with_params_fixnum_in_list_context:PASS (54 ms)
+src/tests/test_recur.c:619:test_recur/nested_recur_outer_calls_inner:PASS (54 ms)
+src/tests/test_recur.c:639:test_recur/nested_recur_in_recur_loop:PASS (55 ms)
+src/tests/test_recur.c:658:test_recur/nested_recur_complex:PASS (56 ms)
+src/tests/test_recur.c:677:test_recur/nested_recur_simple:PASS (55 ms)
+src/tests/test_recur.c:696:test_recur/nested_recur_isolation:PASS (53 ms)
+src/tests/test_let.c:22:test_let/let_basic_binding:PASS (47 ms)
+src/tests/test_let.c:35:test_let/let_multiple_bindings:PASS (46 ms)
+src/tests/test_let.c:48:test_let/let_sequential_bindings:PASS (51 ms)
+src/tests/test_let.c:61:test_let/let_expression_body:PASS (46 ms)
+src/tests/test_let.c:74:test_let/let_multiple_body_expressions:PASS (46 ms)
+src/tests/test_let.c:87:test_let/let_closure_captures_value:PASS (45 ms)
+src/tests/test_let.c:97:test_let/let_sixteen_frame_bindings:PASS (47 ms)
+src/tests/test_let.c:110:test_let/let_nested:PASS (49 ms)
+src/tests/test_let.c:123:test_let/let_shadowing:PASS (48 ms)
+src/tests/test_let.c:136:test_let/let_shadowing_closure_capture:PASS (47 ms)
+src/tests/test_let.c:153:test_let/let_symbol_in_arithmetic:PASS (54 ms)
+src/tests/test_let.c:166:test_let/let_with_function_calls:PASS (52 ms)
+src/tests/test_let.c:182:test_let/let_empty_bindings:PASS (47 ms)
+src/tests/test_let.c:196:test_let/if_let_basic:PASS (47 ms)
+src/tests/test_let.c:204:test_let/if_let_false_condition:PASS (47 ms)
+src/tests/test_let.c:212:test_let/if_let_nil_condition:PASS (46 ms)
+src/tests/test_let.c:220:test_let/if_let_without_else:PASS (47 ms)
+src/tests/test_let.c:232:test_let/if_let_with_expression:PASS (46 ms)
+src/tests/test_let.c:244:test_let/let_with_local_function:PASS (48 ms)
+src/tests/test_let.c:252:test_let/let_with_local_function_multiple_calls:PASS (53 ms)
+src/tests/test_let.c:260:test_let/let_with_local_function_using_namespace_function:PASS (56 ms)
+src/tests/test_let.c:268:test_let/let_with_local_function_using_reverse:PASS (69 ms)
+src/tests/test_let.c:282:test_let/let_verify_step_binding:PASS (73 ms)
+src/tests/test_let.c:289:test_let/let_verify_step_callable:PASS (67 ms)
+src/tests/test_let.c:297:test_let/let_verify_step_binding_order:PASS (68 ms)
+src/tests/test_let.c:305:test_let/let_inside_function:PASS (63 ms)
+src/tests/test_let.c:316:test_let/let_filter_pattern:PASS (51 ms)
+src/tests/test_let.c:326:test_let/let_filter_function_call:PASS (50 ms)
+src/tests/test_let.c:378:test_let/let_recursive_function_self_reference:PASS (51 ms)
+src/tests/test_let.c:391:test_let/let_recursive_function_with_namespace_function:PASS (51 ms)
+src/tests/test_let.c:409:test_let/let_filter_step_pattern:PASS (53 ms)
+src/tests/test_let.c:427:test_let/let_recursive_function_multiple_calls:PASS (50 ms)
+src/tests/test_let.c:440:test_let/let_recursive_function_namespace_access:PASS (51 ms)
+src/tests/test_let.c:462:test_let/let_lowlevel_eval_arg_symbol_resolution:PASS (51 ms)
+src/tests/test_let.c:519:test_let/let_tco_recur_synthesized:PASS (51 ms)
+src/tests/test_let.c:547:test_let/let_tco_deep_recursion:PASS (67 ms)
+src/tests/test_let_performance.c:144:test_let_performance/let_creation_time_baseline:PASS (189 ms)
+src/tests/test_let_performance.c:166:test_let_performance/nested_let_resolution_time_baseline:PASS (191 ms)
+src/tests/test_let_performance.c:189:test_let_performance/let_performance_baseline_complete:PASS (297 ms)
+src/tests/test_call_frame.c:15:test_call_frame/frame_init_and_lookup:PASS (48 ms)
+src/tests/test_call_frame.c:51:test_call_frame/frame_nested_lookup:PASS (50 ms)
+src/tests/test_call_frame.c:110:test_call_frame/frame_multiple_params:PASS (46 ms)
+src/tests/test_call_frame.c:156:test_call_frame/frame_lookup_not_found:PASS (48 ms)
+src/tests/test_call_frame.c:192:test_call_frame/frame_release_cleanup:PASS (52 ms)
+src/tests/test_call_frame.c:224:test_call_frame/frame_lookup_circular_reference:PASS (52 ms)
+src/tests/test_call_frame.c:269:test_call_frame/frame_lookup_repeated_calls:PASS (51 ms)
+src/tests/test_call_frame.c:307:test_call_frame/resolve_symbol_in_env_with_frame:PASS (50 ms)
+src/tests/test_call_frame.c:345:test_call_frame/eval_let_sequential_bindings_with_frame:PASS (114 ms)
+src/tests/test_call_frame.c:363:test_call_frame/eval_let_multiple_bindings_with_frame:PASS (51 ms)
+src/tests/test_call_frame.c:381:test_call_frame/eval_let_nested_let_blocks:PASS (50 ms)
+src/tests/test_call_frame.c:399:test_call_frame/eval_let_sixteen_bindings:PASS (50 ms)
+src/tests/test_call_frame.c:419:test_call_frame/eval_let_nested_infinite_loop_reproduction:PASS (49 ms)
+src/tests/test_call_frame.c:444:test_call_frame/frame_lookup_problematic_scenario:PASS (51 ms)
+src/tests/test_slot_ref.c:14:test_slot_ref/slot_ref_fn_params_rewritten_in_simple_body:PASS (49 ms)
+src/tests/test_slot_ref.c:60:test_slot_ref/slot_ref_operator_position_calls_param_function:PASS (50 ms)
+src/tests/test_slot_ref.c:73:test_slot_ref/slot_ref_nested_fn_rewrites_free_var_depth1:PASS (49 ms)
+src/tests/test_slot_ref.c:147:test_slot_ref/slot_ref_depth1_closure_capture_works_at_runtime:PASS (51 ms)
+src/tests/test_slot_ref.c:156:test_slot_ref/slot_ref_depth2_nested_closures_capture_works_at_runtime:PASS (50 ms)
+src/tests/test_compiled_ast.c:11:test_compiled_ast/compiled_ast_basic_specials_and_calls:PASS (53 ms)
+src/tests/test_line_editor_serial.c:50:test_line_editor_serial/line_editor_serial_basic_line:PASS (108 ms)
+src/tests/test_line_editor_serial.c:68:test_line_editor_serial/line_editor_serial_backspace:PASS (51 ms)
+src/tests/test_line_editor_serial.c:86:test_line_editor_serial/line_editor_serial_history_up_arrow:PASS (52 ms)
+src/tests/test_line_editor_serial.c:107:test_line_editor_serial/line_editor_serial_large_paste_uses_dynamic_growth:PASS (52 ms)
+src/tests/test_line_editor_serial.c:134:test_line_editor_serial/line_editor_serial_history_edit_then_down_then_up_preserves_edit:PASS (51 ms)
+src/tests/test_defn.c:25:test_defn/native_keyword_registered:PASS (55 ms)
+src/tests/test_defn.c:46:test_defn/native_keyword_can_be_parsed:PASS (50 ms)
+src/tests/test_defn.c:72:test_defn/defn_with_native_marker_recognized:PASS (56 ms)
+src/tests/test_defn.c:103:test_defn/defn_eval_defn_recognizes_native_marker:PASS (52 ms)
+src/tests/test_defn.c:123:test_defn/defn_normal_body_still_works:PASS (63 ms)
+src/tests/test_defn.c:144:test_defn/defn_closure_captures_parameter:PASS (51 ms)
+src/tests/test_defn.c:156:test_defn/defn_native_stub_registers_native_function:PASS (53 ms)
+src/tests/test_defn.c:186:test_defn/native_function_lookup_trim:PASS (53 ms)
+src/tests/test_defn.c:197:test_defn/native_function_lookup_upper_case:PASS (51 ms)
+src/tests/test_defn.c:208:test_defn/native_function_lookup_nonexistent:PASS (50 ms)
+src/tests/test_defn.c:218:test_defn/native_function_lookup_null_name:PASS (52 ms)
+src/tests/test_defn.c:226:test_defn/defn_basic_function:PASS (50 ms)
+src/tests/test_defn.c:248:test_defn/defn_single_parameter:PASS (51 ms)
+src/tests/test_defn.c:266:test_defn/defn_no_parameters:PASS (50 ms)
+src/tests/test_defn.c:284:test_defn/defn_multiple_body_expressions:PASS (53 ms)
+src/tests/test_defn.c:302:test_defn/defn_recursive_function:PASS (55 ms)
+src/tests/test_defn.c:320:test_defn/defn_symbol_resolution_in_repl_context:PASS (52 ms)
+src/tests/test_defn.c:341:test_defn/parameter_lookup_optimization:PASS (48 ms)
+src/tests/test_defn.c:396:test_defn/defn_symbol_recognized:PASS (48 ms)
+src/tests/test_defn.c:429:test_defn/defn_test_fn_parsed:PASS (53 ms)
+src/tests/test_defn.c:470:test_defn/defn_test_fn_evaluated:PASS (68 ms)
+src/tests/test_defn.c:523:test_defn/defn_add_stored_in_namespace:PASS (52 ms)
+src/tests/test_defn.c:562:test_defn/defn_ns_resolve_finds_add:PASS (49 ms)
+src/tests/test_defn.c:589:test_defn/defn_eval_symbol_resolves_add:PASS (52 ms)
+src/tests/test_defn.c:616:test_defn/defn_add_can_be_called:PASS (50 ms)
+src/tests/test_defn.c:660:test_defn/defn_docstring_function_is_callable:PASS (56 ms)
+src/tests/test_defn.c:672:test_defn/defn_docstring_native_stub_still_works:PASS (58 ms)
+src/tests/test_native_lookup.c:19:test_native_lookup/native_lookup_finds_count:PASS (52 ms)
+src/tests/test_native_lookup.c:36:test_native_lookup/native_lookup_finds_count_qualified:PASS (56 ms)
+src/tests/test_native_lookup.c:57:test_native_lookup/defn_native_registers_in_namespace:PASS (53 ms)
+src/tests/test_native_lookup.c:85:test_native_lookup/count_resolved_after_defn_native:PASS (55 ms)
+src/tests/test_native_lookup.c:109:test_native_lookup/count_callable_after_defn_native:PASS (55 ms)
+src/tests/test_clojure_core_loading.c:16:test_clojure_core_loading/clojure_core_namespace_exists:PASS (52 ms)
+src/tests/test_clojure_core_loading.c:31:test_clojure_core_loading/count_in_clojure_core_after_loading:PASS (54 ms)
+src/tests/test_clojure_core_loading.c:50:test_clojure_core_loading/first_in_clojure_core_after_loading:PASS (50 ms)
+src/tests/test_clojure_core_loading.c:69:test_clojure_core_loading/count_resolved_after_loading_core:PASS (56 ms)
+src/tests/test_clojure_core_loading.c:87:test_clojure_core_loading/count_callable_after_loading_core:PASS (49 ms)
+src/tests/test_memory_leak_fibonacci.c:15:test_memory_leak_fibonacci/memory_leak_fibonacci_reproduction:PASS (85 ms)
+src/tests/test_memory_leak_fibonacci.c:41:test_memory_leak_fibonacci/fibonacci_function_reference_count:PASS (53 ms)
+src/tests/test_memory_leak_fibonacci.c:62:test_memory_leak_fibonacci/nested_recursive_functions_no_leak:PASS (50 ms)
+src/tests/test_memory_leak_fibonacci.c:90:test_memory_leak_fibonacci/recursive_calls_without_closure_env_caching:PASS (48 ms)
+src/tests/test_datetime.c:68:test_datetime/now_returns_instant:PASS (48 ms)
+src/tests/test_datetime.c:74:test_datetime/now_has_days_value:PASS (49 ms)
+src/tests/test_datetime.c:81:test_datetime/now_has_ms_value:PASS (52 ms)
+src/tests/test_datetime.c:94:test_datetime/datetime_require:PASS (49 ms)
+src/tests/test_datetime.c:102:test_datetime/datetime_unix_epoch:PASS (47 ms)
+src/tests/test_datetime.c:113:test_datetime/datetime_y2k:PASS (48 ms)
+src/tests/test_datetime.c:124:test_datetime/datetime_christmas_2024:PASS (53 ms)
+src/tests/test_datetime.c:135:test_datetime/datetime_civil_from_days_epoch:PASS (75 ms)
+src/tests/test_datetime.c:150:test_datetime/datetime_civil_from_days_y2k:PASS (60 ms)
+src/tests/test_datetime.c:165:test_datetime/datetime_roundtrip:PASS (53 ms)
+src/tests/test_datetime.c:181:test_datetime/datetime_time_from_millis_midnight:PASS (54 ms)
+src/tests/test_datetime.c:196:test_datetime/datetime_time_from_millis_noon:PASS (54 ms)
+src/tests/test_datetime.c:210:test_datetime/datetime_time_from_millis_specific:PASS (55 ms)
+src/tests/test_datetime.c:226:test_datetime/datetime_millis_from_time:PASS (73 ms)
+src/tests/test_datetime.c:237:test_datetime/datetime_time_roundtrip:PASS (71 ms)
+src/tests/test_datetime.c:254:test_datetime/datetime_date_time_api:PASS (85 ms)
+src/tests/test_datetime.c:271:test_datetime/datetime_format_iso:PASS (83 ms)
+src/tests/test_datetime.c:282:test_datetime/datetime_format_iso_with_padding:PASS (80 ms)
+src/tests/test_datetime.c:295:test_datetime/datetime_now_integration:PASS (79 ms)
+src/tests/test_datetime.c:310:test_datetime/datetime_format_now:PASS (74 ms)
+src/tests/test_instant_uuid.c:9:test_instant_uuid/now_returns_instant:PASS (68 ms)
+src/tests/test_instant_uuid.c:15:test_instant_uuid/instant_equality_and_hash:PASS (70 ms)
+src/tests/test_instant_uuid.c:25:test_instant_uuid/instant_pr_str_shape:PASS (65 ms)
+src/tests/test_instant_uuid.c:33:test_instant_uuid/uuid_parse_print_equal:PASS (79 ms)
+src/tests/test_edn_file_all_types.c:80:test_edn_file_all_types/edn_file_all_supported_types:FAIL. :true (63 ms)
+src/tests/test_edn_file_all_types.c:209:test_edn_file_all_types/tagged_literals_roundtrip_inst_uuid:PASS (69 ms)
+src/tests/test_go_blocks.c:21:test_go_blocks/go_enqueues_and_result_channel_receives_value:PASS (73 ms)
+src/tests/test_go_blocks.c:70:test_go_blocks/run_next_task_returns_false_when_empty:PASS (66 ms)
+src/tests/test_go_blocks.c:91:test_go_blocks/go_exception_closes_channel_without_value:PASS (82 ms)
+src/tests/test_go_blocks.c:137:test_go_blocks/go_success_puts_value_high_level:PASS (61 ms)
+src/tests/test_go_blocks.c:183:test_go_blocks/go_nil_value_in_channel:PASS (49 ms)
+src/tests/test_go_blocks.c:238:test_go_blocks/go_returns_transient_map_channel:PASS (51 ms)
+src/tests/test_go_blocks.c:262:test_go_blocks/channel_is_transient_map_and_mutable:PASS (49 ms)
+src/tests/test_go_blocks.c:291:test_go_blocks/channel_mutation_after_run_next_task:PASS (58 ms)
+src/tests/test_go_blocks.c:339:test_go_blocks/direct_channel_creation_and_mutation:PASS (58 ms)
+src/tests/test_go_blocks.c:385:test_go_blocks/event_loop_run_next_mutates_channel:PASS (53 ms)
+src/tests/test_go_blocks.c:432:test_go_blocks/run_next_task_recursive_in_go_block:PASS (53 ms)
+src/tests/test_go_blocks.c:488:test_go_blocks/run_next_task_recursive_with_nested_go_block:PASS (54 ms)
+src/tests/test_go_blocks.c:531:test_go_blocks/event_loop_enqueue_updates_count:PASS (70 ms)
+src/tests/test_fixed_point.c:14:test_fixed_point/fixed_creation_and_conversion:PASS (70 ms)
+src/tests/test_fixed_point.c:36:test_fixed_point/fixed_arithmetic_operations:PASS (64 ms)
+src/tests/test_fixed_point.c:84:test_fixed_point/fixed_mixed_type_operations:PASS (57 ms)
+src/tests/test_fixed_point.c:124:test_fixed_point/fixed_division_with_remainder:PASS (58 ms)
+src/tests/test_fixed_point.c:163:test_fixed_point/fixed_precision_limits:PASS (56 ms)
+src/tests/test_fixed_point.c:204:test_fixed_point/fixed_variadic_operations:PASS (62 ms)
+src/tests/test_fixed_point.c:243:test_fixed_point/fixed_error_handling:PASS (63 ms)
+src/tests/test_fixed_point.c:269:test_fixed_point/fixed_comparison_operators:PASS (61 ms)
+src/tests/test_sequences.c:13:test_sequences/conj_arity_0:PASS (60 ms)
+src/tests/test_sequences.c:22:test_sequences/conj_arity_1:PASS (58 ms)
+src/tests/test_sequences.c:33:test_sequences/conj_arity_2:PASS (59 ms)
+src/tests/test_sequences.c:44:test_sequences/conj_arity_variadic:PASS (71 ms)
+src/tests/test_sequences.c:55:test_sequences/conj_nil_collection:PASS (65 ms)
+src/tests/test_sequences.c:66:test_sequences/conj_list_single:PASS (55 ms)
+src/tests/test_sequences.c:84:test_sequences/conj_list_variadic:PASS (54 ms)
+src/tests/test_sequences.c:108:test_sequences/conj_empty_list:PASS (51 ms)
+src/tests/test_sequences.c:125:test_sequences/rest_arity_0:PASS (55 ms)
+src/tests/test_sequences.c:142:test_sequences/rest_nil:PASS (54 ms)
+src/tests/test_sequences.c:153:test_sequences/rest_empty_vector:PASS (52 ms)
+src/tests/test_sequences.c:164:test_sequences/rest_single_element:PASS (62 ms)
+src/tests/test_sequences.c:179:test_sequences/seq_rest_performance:PASS (62 ms)
+src/tests/test_sequences.c:219:test_sequences/filter_basic:PASS (68 ms)
+src/tests/test_sequences.c:244:test_sequences/filter_empty:PASS (69 ms)
+src/tests/test_sequences.c:254:test_sequences/filter_all_match:PASS (57 ms)
+src/tests/test_sequences.c:270:test_sequences/filter_none_match:PASS (59 ms)
+src/tests/test_sequences.c:280:test_sequences/filter_with_custom_predicate:PASS (67 ms)
+src/tests/test_sequences.c:300:test_sequences/reverse_basic:PASS (73 ms)
+src/tests/test_sequences.c:322:test_sequences/reverse_empty:PASS (74 ms)
+src/tests/test_sequences.c:338:test_sequences/reverse_nil:PASS (74 ms)
+src/tests/test_sequences.c:354:test_sequences/reverse_single_element:PASS (70 ms)
+src/tests/test_sequences.c:376:test_sequences/reverse_multiple_elements:PASS (61 ms)
+src/tests/test_sequences.c:404:test_sequences/reverse_list_with_nil_elements:PASS (57 ms)
+src/tests/test_sequences.c:420:test_sequences/reverse_vector_with_nil_elements:PASS (68 ms)
+src/tests/test_sequences.c:443:test_sequences/reduce_empty_collection:PASS (52 ms)
+src/tests/test_sequences.c:455:test_sequences/reduce_single_element:PASS (62 ms)
+src/tests/test_sequences.c:472:test_sequences/reduce_nil_collection:PASS (68 ms)
+src/tests/test_sequences.c:481:test_sequences/reduce_basic_addition:PASS (68 ms)
+src/tests/test_sequences.c:499:test_sequences/reduce_multiplication:PASS (52 ms)
+src/tests/test_sequences.c:517:test_sequences/reduce_max:PASS (55 ms)
+src/tests/test_sequences.c:535:test_sequences/reduce_min:PASS (46 ms)
+src/tests/test_sequences.c:546:test_sequences/reduce_custom_function:PASS (54 ms)
+src/tests/test_sequences.c:557:test_sequences/reduce_subtraction:PASS (56 ms)
+src/tests/test_sequences.c:568:test_sequences/reduce_with_zero:PASS (53 ms)
+src/tests/test_sequences.c:585:test_sequences/reduce_with_negative_numbers:PASS (59 ms)
+src/tests/test_sequences.c:602:test_sequences/reduce_large_collection:PASS (65 ms)
+src/tests/test_sequences.c:637:test_sequences/reduce_with_identity_function:PASS (56 ms)
+src/tests/test_sequences.c:684:test_sequences/reduce_two_elements:PASS (57 ms)
+src/tests/test_sequences.c:709:test_sequences/rest_with_parameter_nested:PASS (71 ms)
+src/tests/test_sequences.c:740:test_sequences/next_with_parameter:PASS (62 ms)
+src/tests/test_sequences.c:766:test_sequences/rest_with_parameter_let:PASS (62 ms)
+src/tests/test_sequences.c:795:test_sequences/range:PASS (180 ms)
+src/tests/test_sequences.c:840:test_sequences/repeat:PASS (348 ms)
+src/tests/test_sequences.c:874:test_sequences/cons_with_nil:PASS (126 ms)
+src/tests/test_sequences.c:883:test_sequences/cons_with_empty_list:PASS (77 ms)
+src/tests/test_sequences.c:893:test_sequences/cons_chain_with_empty_list:PASS (70 ms)
+src/tests/test_sequences.c:902:test_sequences/cons_chain_with_nil:PASS (121 ms)
+src/tests/test_sequences.c:915:test_sequences/next_vector_with_nil_element:PASS (324 ms)
+src/tests/test_sequences.c:930:test_sequences/rest_vector_with_nil_element:PASS (73 ms)
+src/tests/test_sequences.c:939:test_sequences/take_with_nil_element:PASS (71 ms)
+src/tests/test_list_resolution.c:13:test_list_resolution/list_in_namespace:PASS (73 ms)
+src/tests/test_list_resolution.c:27:test_list_resolution/list_direct_call:PASS (70 ms)
+src/tests/test_list_resolution.c:36:test_list_resolution/list_with_args:PASS (68 ms)
+src/tests/test_list_resolution.c:52:test_list_resolution/list_in_clojure_core_clj:PASS (71 ms)
+src/tests/test_list_resolution.c:69:test_list_resolution/list_via_symbol_resolution:PASS (68 ms)
+src/tests/test_list_resolution.c:83:test_list_resolution/list_available_in_evalstate:PASS (72 ms)
+src/tests/test_keyword_evaluation.c:29:test_keyword_evaluation/keyword_evaluates_to_itself:PASS (69 ms)
+src/tests/test_keyword_evaluation.c:45:test_keyword_evaluation/keyword_in_function_body:PASS (71 ms)
+src/tests/test_keyword_evaluation.c:77:test_keyword_evaluation/keyword_in_if_statement:PASS (74 ms)
+src/tests/test_keyword_evaluation.c:108:test_keyword_evaluation/keyword_in_recur_function:PASS (61 ms)
+src/tests/test_keyword_evaluation.c:140:test_keyword_evaluation/keyword_in_let_binding:PASS (52 ms)
+src/tests/test_keyword_evaluation.c:156:test_keyword_evaluation/keyword_in_nested_function_call:PASS (55 ms)
+src/tests/test_keyword_evaluation.c:187:test_keyword_evaluation/multiple_keywords_in_expression:PASS (66 ms)
+src/tests/test_keyword_evaluation.c:202:test_keyword_evaluation/keyword_not_used_as_number:PASS (66 ms)
+src/tests/test_keyword_evaluation.c:219:test_keyword_evaluation/auto_qualified_keyword_current_namespace:PASS (65 ms)
+src/tests/test_keyword_evaluation.c:244:test_keyword_evaluation/auto_qualified_keyword_with_alias:PASS (97 ms)
+src/tests/test_keyword_evaluation.c:273:test_keyword_evaluation/parser_resolves_keyword_alias:PASS (77 ms)
+src/tests/test_keyword_evaluation.c:297:test_keyword_evaluation/regular_qualified_keyword:PASS (50 ms)
+src/tests/test_keyword_evaluation.c:322:test_keyword_evaluation/unqualified_keyword_still_works:PASS (51 ms)
+src/tests/test_keyword_evaluation.c:348:test_keyword_evaluation/keyword_as_function_map_lookup_and_default:PASS (57 ms)
+src/tests/test_keyword_evaluation.c:384:test_keyword_evaluation/keyword_as_function_arity_errors:PASS (60 ms)
+src/tests/test_core.c:272:test_core/native_nilp_low_level:PASS (58 ms)
+src/tests/test_builtins_destructure.c:13:test_builtins_destructure/builtins_gensym:PASS (59 ms)
+src/tests/test_builtins_destructure.c:45:test_builtins_destructure/builtins_partition:PASS (68 ms)
+src/tests/test_builtins_destructure.c:78:test_builtins_destructure/builtins_some:PASS (57 ms)
+src/tests/test_builtins_destructure.c:105:test_builtins_destructure/builtins_some_nil_elements:PASS (55 ms)
+src/tests/test_builtins_destructure.c:142:test_builtins_destructure/builtins_partition_nil_elements:PASS (61 ms)
+src/tests/test_builtins_destructure.c:169:test_builtins_destructure/builtins_nnext_nil_elements:PASS (55 ms)
+src/tests/test_builtins_destructure.c:195:test_builtins_destructure/builtins_nnext:PASS (61 ms)
+src/tests/test_builtins_destructure.c:230:test_builtins_destructure/seq_iter_first_nil_element:PASS (69 ms)
+src/tests/test_builtins_destructure.c:273:test_builtins_destructure/eval_function_call_with_nil_arg:PASS (60 ms)
+src/tests/test_builtins_destructure.c:293:test_builtins_destructure/vector_nth_nil_element:PASS (60 ms)
+src/tests/test_builtins_destructure.c:318:test_builtins_destructure/native_first_nil_element:PASS (47 ms)
+src/tests/test_builtins_destructure.c:326:test_builtins_destructure/native_first_direct_call:PASS (49 ms)
+src/tests/test_builtins_destructure.c:341:test_builtins_destructure/eval_string_nil_handling:PASS (53 ms)
+src/tests/test_builtins_destructure.c:349:test_builtins_destructure/eval_function_call_first_nil:PASS (52 ms)
+src/tests/test_builtins_destructure.c:368:test_builtins_destructure/eval_list_first_nil:PASS (58 ms)
+src/tests/test_builtins_destructure.c:381:test_builtins_destructure/native_some_simulation:PASS (56 ms)
+src/tests/test_builtins_destructure.c:430:test_builtins_destructure/destructure_sequential_basic:PASS (65 ms)
+src/tests/test_builtins_destructure.c:449:test_builtins_destructure/destructure_sequential_with_rest:PASS (69 ms)
+src/tests/test_builtins_destructure.c:460:test_builtins_destructure/destructure_sequential_with_as:PASS (52 ms)
+src/tests/test_builtins_destructure.c:471:test_builtins_destructure/destructure_sequential_nested:PASS (48 ms)
+src/tests/test_builtins_destructure.c:493:test_builtins_destructure/destructure_loop_transformation:PASS (51 ms)
+src/tests/test_builtins_destructure.c:517:test_builtins_destructure/destructure_map_keys:PASS (48 ms)
+src/tests/test_builtins_destructure.c:532:test_builtins_destructure/destructure_map_keys_with_defaults:PASS (54 ms)
+src/tests/test_builtins_destructure.c:547:test_builtins_destructure/destructure_map_with_as:PASS (64 ms)
+src/tests/test_builtins_destructure.c:567:test_builtins_destructure/keyword_function:PASS (51 ms)
+src/tests/test_builtins_destructure.c:590:test_builtins_destructure/name_function:PASS (46 ms)
+src/tests/test_macros.c:13:test_macros/macro_basic_defmacro:PASS (52 ms)
+src/tests/test_macros.c:29:test_macros/macro_macroexpand_1:PASS (60 ms)
+src/tests/test_macros.c:48:test_macros/macro_nested_expansion:PASS (50 ms)
+src/tests/test_macros.c:66:test_macros/variadic_fn_basic:PASS (55 ms)
+src/tests/test_macros.c:76:test_macros/variadic_fn_empty_rest:PASS (49 ms)
+src/tests/test_macros.c:84:test_macros/variadic_fn_many_args:PASS (46 ms)
+src/tests/test_macros.c:97:test_macros/variadic_macro_basic:PASS (47 ms)
+src/tests/test_macros.c:110:test_macros/variadic_macro_defn_style:PASS (63 ms)
+src/tests/test_macros.c:133:test_macros/variadic_macro_with_body:PASS (53 ms)
+src/tests/test_macros.c:155:test_macros/macroexpand_shows_expansion:PASS (59 ms)
+src/tests/test_macros.c:185:test_macros/macro_in_anonymous_fn:PASS (62 ms)
+src/tests/test_macros.c:198:test_macros/macro_in_reader_fn:PASS (64 ms)
+src/tests/test_macros.c:211:test_macros/macro_generating_fn:PASS (58 ms)
+src/tests/test_macros.c:224:test_macros/nested_macro_in_fn:PASS (54 ms)
+src/tests/test_macros.c:244:test_macros/unquote_splice_basic_list:PASS (65 ms)
+src/tests/test_macros.c:268:test_macros/unquote_splice_in_middle:PASS (51 ms)
+src/tests/test_macros.c:282:test_macros/unquote_splice_at_start:PASS (63 ms)
+src/tests/test_macros.c:296:test_macros/unquote_splice_at_end:PASS (54 ms)
+src/tests/test_macros.c:310:test_macros/unquote_splice_multiple:PASS (71 ms)
+src/tests/test_macros.c:324:test_macros/unquote_splice_empty_list:PASS (69 ms)
+src/tests/test_macros.c:338:test_macros/unquote_splice_in_macro:PASS (69 ms)
+src/tests/test_macros.c:355:test_macros/unquote_splice_with_unquote:PASS (66 ms)
+src/tests/test_macros.c:377:test_macros/unquote_splice_nested_quasiquote:PASS (51 ms)
+src/tests/test_macros.c:390:test_macros/unquote_splice_function_call_result:PASS (50 ms)
+src/tests/test_macros.c:409:test_macros/unquote_splice_clojure_compatible:PASS (55 ms)
+src/tests/test_macro_expander_debug.c:24:test_macro_expander_debug/macro_expander_debug_isolated:PASS (55 ms)
+src/tests/test_macro_expander_debug.c:113:test_macro_expander_debug/macro_expander_debug_with_macro:PASS (54 ms)
+src/tests/test_threading_macros.c:22:test_threading_macros/threading_thread_first_basic:PASS (48 ms)
+src/tests/test_threading_macros.c:32:test_threading_macros/threading_thread_first_single_form:PASS (51 ms)
+src/tests/test_threading_macros.c:42:test_threading_macros/threading_thread_first_no_forms:PASS (55 ms)
+src/tests/test_threading_macros.c:52:test_threading_macros/threading_thread_first_map_ops:PASS (50 ms)
+src/tests/test_threading_macros.c:62:test_threading_macros/threading_thread_first_non_seq_form:PASS (53 ms)
+src/tests/test_threading_macros.c:76:test_threading_macros/threading_thread_last_basic:PASS (52 ms)
+src/tests/test_threading_macros.c:89:test_threading_macros/threading_thread_last_single_form:PASS (54 ms)
+src/tests/test_threading_macros.c:102:test_threading_macros/threading_thread_last_no_forms:PASS (50 ms)
+src/tests/test_threading_macros.c:116:test_threading_macros/threading_as_basic:PASS (53 ms)
+src/tests/test_threading_macros.c:126:test_threading_macros/threading_as_no_forms:PASS (46 ms)
+src/tests/test_threading_macros.c:140:test_threading_macros/threading_some_first_stops_at_nil:PASS (47 ms)
+src/tests/test_threading_macros.c:148:test_threading_macros/threading_some_first_continues_when_not_nil:PASS (47 ms)
+src/tests/test_threading_macros.c:158:test_threading_macros/threading_some_first_nil_expr:PASS (67 ms)
+src/tests/test_threading_macros.c:170:test_threading_macros/threading_some_last_continues_when_not_nil:PASS (61 ms)
+src/tests/test_threading_macros.c:179:test_threading_macros/threading_some_last_nil_expr:PASS (50 ms)
+src/tests/test_threading_macros.c:191:test_threading_macros/threading_cond_first_basic:PASS (55 ms)
+src/tests/test_threading_macros.c:201:test_threading_macros/threading_cond_first_multiple_true:PASS (53 ms)
+src/tests/test_threading_macros.c:211:test_threading_macros/threading_cond_first_no_clauses:PASS (53 ms)
+src/tests/test_threading_macros.c:225:test_threading_macros/threading_cond_last_basic:PASS (52 ms)
+src/tests/test_threading_macros.c:234:test_threading_macros/threading_cond_last_no_clauses:PASS (54 ms)
+src/tests/test_threading_macros.c:248:test_threading_macros/threading_source_thread_first:PASS (78 ms)
+src/tests/test_threading_macros.c:262:test_threading_macros/threading_source_thread_last:PASS (69 ms)
+src/tests/test_threading_macros.c:274:test_threading_macros/threading_source_as:PASS (79 ms)
+src/tests/test_threading_macros.c:286:test_threading_macros/threading_source_some_first:PASS (68 ms)
+src/tests/test_threading_macros.c:298:test_threading_macros/threading_source_some_last:PASS (68 ms)
+src/tests/test_threading_macros.c:310:test_threading_macros/threading_source_cond_first:PASS (72 ms)
+src/tests/test_threading_macros.c:322:test_threading_macros/threading_source_cond_last:PASS (70 ms)
+src/tests/test_threading_macros.c:338:test_threading_macros/threading_macroexpand_thread_first:PASS (53 ms)
+src/tests/test_threading_macros.c:351:test_threading_macros/threading_macroexpand_thread_last:PASS (59 ms)
+src/tests/test_threading_macros.c:360:test_threading_macros/threading_macroexpand_as:PASS (64 ms)
+src/tests/test_threading_macros.c:369:test_threading_macros/threading_macroexpand_some_first:PASS (58 ms)
+src/tests/test_threading_macros.c:378:test_threading_macros/threading_macroexpand_cond_first:PASS (58 ms)
+src/tests/test_require.c:19:test_require/require_clojure_string:PASS (67 ms)
+src/tests/test_require.c:47:test_require/require_native_trim_available:PASS (67 ms)
+src/tests/test_require.c:62:test_require/require_loads_functions:PASS (70 ms)
+src/tests/test_require.c:81:test_require/require_blank_resolution:PASS (77 ms)
+src/tests/test_require.c:115:test_require/require_blank_call:PASS (73 ms)
+src/tests/test_require.c:137:test_require/string_blank_after_require:PASS (68 ms)
+src/tests/test_require.c:164:test_require/string_capitalize_after_require:PASS (72 ms)
+src/tests/test_require.c:185:test_require/string_ends_with_after_require:PASS (71 ms)
+src/tests/test_require.c:202:test_require/string_includes_after_require:PASS (84 ms)
+src/tests/test_require.c:219:test_require/string_index_of_after_require:PASS (69 ms)
+src/tests/test_require.c:232:test_require/string_reverse_after_require:PASS (61 ms)
+src/tests/test_require.c:250:test_require/require_reverse_conflict_clojure_core:PASS (62 ms)
+src/tests/test_require.c:270:test_require/require_reverse_conflict_clojure_string:PASS (66 ms)
+src/tests/test_require.c:285:test_require/require_reverse_in_let_after_require:PASS (68 ms)
+src/tests/test_require.c:305:test_require/require_reverse_in_recursive_function:PASS (75 ms)
+src/tests/test_require.c:325:test_require/require_both_reverse_functions:PASS (71 ms)
+src/tests/test_require.c:350:test_require/require_trim_metadata:PASS (68 ms)
+src/tests/test_require.c:393:test_require/require_trim_meta_function:PASS (61 ms)
+Elapsed time: 15.21 msecs
+src/tests/test_require_perf.c:8:test_require_perf/require_clojure_string_time:PASS (61 ms)
+Elapsed time: 15.44 msecs
+Elapsed time: 0.01 msecs
+Elapsed time: 0.00 msecs
+Elapsed time: 0.00 msecs
+Elapsed time: 0.00 msecs
+src/tests/test_require_perf.c:29:test_require_perf/require_clojure_string_performance:PASS (64 ms)
+src/tests/test_require_perf.c:52:test_require_perf/require_clojure_string_multiple_times:PASS (66 ms)
+src/tests/test_qualified_symbol_resolution.c:30:test_qualified_symbol_resolution/qualified_symbol_parsing:PASS (54 ms)
+src/tests/test_qualified_symbol_resolution.c:47:test_qualified_symbol_resolution/unqualified_symbol_parsing:PASS (50 ms)
+src/tests/test_qualified_symbol_resolution.c:67:test_qualified_symbol_resolution/resolve_clojure_core_reverse:PASS (54 ms)
+src/tests/test_qualified_symbol_resolution.c:84:test_qualified_symbol_resolution/eval_clojure_core_reverse_expression:PASS (48 ms)
+src/tests/test_qualified_symbol_resolution.c:97:test_qualified_symbol_resolution/resolve_clojure_core_reverse_in_let:PASS (54 ms)
+src/tests/test_qualified_symbol_resolution.c:110:test_qualified_symbol_resolution/resolve_clojure_core_reverse_in_function:PASS (63 ms)
+src/tests/test_qualified_symbol_resolution.c:132:test_qualified_symbol_resolution/resolve_clojure_string_blank:PASS (75 ms)
+src/tests/test_qualified_symbol_resolution.c:149:test_qualified_symbol_resolution/eval_clojure_string_blank_expression:PASS (81 ms)
+src/tests/test_qualified_symbol_resolution.c:162:test_qualified_symbol_resolution/resolve_clojure_string_join:PASS (92 ms)
+src/tests/test_qualified_symbol_resolution.c:179:test_qualified_symbol_resolution/eval_clojure_string_join_expression:PASS (69 ms)
+src/tests/test_qualified_symbol_resolution.c:192:test_qualified_symbol_resolution/resolve_clojure_string_reverse:PASS (69 ms)
+src/tests/test_qualified_symbol_resolution.c:209:test_qualified_symbol_resolution/eval_clojure_string_reverse_expression:PASS (78 ms)
+src/tests/test_qualified_symbol_resolution.c:226:test_qualified_symbol_resolution/resolve_clojure_core_reverse_in_local_fn:PASS (54 ms)
+src/tests/test_qualified_symbol_resolution.c:244:test_qualified_symbol_resolution/resolve_clojure_core_reverse_in_let_with_fn:PASS (52 ms)
+src/tests/test_qualified_symbol_resolution.c:257:test_qualified_symbol_resolution/resolve_clojure_string_join_in_local_fn:PASS (68 ms)
+src/tests/test_qualified_symbol_resolution.c:279:test_qualified_symbol_resolution/resolve_qualified_symbol_with_alias:PASS (67 ms)
+src/tests/test_qualified_symbol_resolution.c:299:test_qualified_symbol_resolution/nonexistent_qualified_symbol_throws:PASS (52 ms)
+src/tests/test_qualified_symbol_resolution.c:313:test_qualified_symbol_resolution/parser_resolves_symbol_alias:PASS (63 ms)
+src/tests/test_qualified_symbol_resolution.c:336:test_qualified_symbol_resolution/common_alias_resolution_for_keywords_and_symbols:PASS (79 ms)
+src/tests/test_qualified_symbol_resolution.c:361:test_qualified_symbol_resolution/no_runtime_fallback_for_alias:PASS (77 ms)
+src/tests/test_qualified_symbol_resolution.c:393:test_qualified_symbol_resolution/nonexistent_namespace_throws:PASS (58 ms)
+src/tests/test_repl.c:41:test_repl/repl_doc_function_exists:PASS (66 ms)
+-------------------------
+clojure.core/inc
+ Increments a number by 1. Returns the number plus one.
+src/tests/test_repl.c:59:test_repl/repl_doc_can_be_called:PASS (67 ms)
+-------------------------
+clojure.core/inc
+ Increments a number by 1. Returns the number plus one.
+src/tests/test_repl.c:71:test_repl/repl_doc_with_symbol:PASS (69 ms)
+-------------------------
+clojure.core/meta
+ Returns the metadata of obj, returns nil if there is no metadata.
+src/tests/test_repl.c:82:test_repl/repl_doc_extracts_metadata:PASS (73 ms)
+-------------------------
+user/test-doc-fn
+ Test function for doc test
+src/tests/test_repl.c:119:test_repl/repl_doc_with_function_with_metadata:PASS (77 ms)
+src/tests/test_repl.c:150:test_repl/repl_source_can_be_called:PASS (76 ms)
+src/tests/test_repl.c:160:test_repl/repl_source_with_function_symbol:PASS (87 ms)
+src/tests/test_repl.c:170:test_repl/repl_source_returns_string_for_clojure_function:PASS (103 ms)
+src/tests/test_repl.c:187:test_repl/repl_source_with_qualified_symbol:PASS (96 ms)
+src/tests/test_repl.c:197:test_repl/repl_source_with_native_function:PASS (92 ms)
+src/tests/test_repl.c:207:test_repl/repl_source_exists_in_namespace:PASS (91 ms)
+src/tests/test_repl.c:226:test_repl/repl_source_shows_qualified_recursive_call:PASS (88 ms)
+src/tests/test_repl.c:273:test_repl/repl_dir_function_exists:PASS (72 ms)
+*
++
+-
+->
+->>
+/
+<
+<=
+=
+>
+>=
+abs
+aclone
+add-watch
+aget
+alength
+all-ns
+apply
+array-map
+as->
+aset
+assoc
+atom
+atom?
+bit-shift-left
+boolean?
+butlast
+byte-array
+cancel-timer
+char?
+coll?
+comp
+complement
+concat
+concat2
+cond->
+cond->>
+conj
+conj!
+cons
+constantly
+contains?
+count
+current-time-ms
+dec
+defn
+deref
+destructure
+dissoc
+distinct
+do
+drop
+drop-while
+empty?
+eval
+even?
+every?
+false?
+filter
+find
+find-ns
+first
+float?
+fn?
+format
+frequencies
+gensym
+get
+get-in
+get-macro
+get-thread-bindings
+get-watcher-map
+group-by
+identical?
+identity
+ifn?
+inc
+inst?
+instant-days
+instant-ms
+integer?
+interleave
+interleave-repeat
+into
+juxt
+keep
+keys
+keyword
+keyword?
+last
+lazy-seq
+lazy-seq*
+list
+list?
+load-file
+macroexpand
+macroexpand-1
+map
+map?
+mapcat
+mapv
+max
+merge
+meta
+min
+mod
+name
+neg?
+next
+nil?
+nnext
+not
+not-any?
+not-every?
+not=
+notify-watchers
+now
+ns-map
+ns-unload
+nth
+nthnext
+number?
+odd?
+partial
+partition
+partition-all
+peek
+persistent!
+pop
+pos?
+pr
+print
+println
+prn
+quasiquote-fn
+quot
+range
+re-find
+re-matches
+re-pattern
+re-seq
+read-string
+reduce
+reduce-kv
+reductions
+regex?
+rem
+remove-watch
+repeat
+repeatedly
+require
+reset!
+rest
+reverse
+run-next-task
+schedule
+schedule-periodic
+second
+select-keys
+seq
+seq?
+seqable?
+set?
+sleep
+slurp
+some
+some->
+some->>
+some?
+spit
+split-at
+split-with
+sqrt
+str
+string?
+subs
+subvec
+swap!
+symbol
+symbol?
+take
+take-while
+transient
+true?
+type
+update
+update-watcher-map
+vals
+vec
+vector
+vector?
+watcher-registry
+with-meta
+yield
+zero?
+zipmap
+src/tests/test_repl.c:291:test_repl/repl_dir_can_be_called:PASS (87 ms)
+Namespace not found
+src/tests/test_repl.c:302:test_repl/repl_dir_with_nonexistent_namespace:PASS (82 ms)
+all-ns
+count
+dir
+doc
+empty?
+find-doc
+find-ns
+keys
+meta
+normalize-ns-name
+ns-map
+print-doc
+pst
+source
+src/tests/test_repl.c:313:test_repl/repl_dir_with_current_namespace:PASS (78 ms)
+src/tests/test_repl.c:328:test_repl/repl_pst_function_exists:PASS (86 ms)
+pst: no last exception (*e*) available; use (pst e) in (catch ...)
+src/tests/test_repl.c:346:test_repl/repl_pst_can_be_called:PASS (74 ms)
+src/tests/test_repl.c:361:test_repl/repl_find_doc_function_exists:PASS (82 ms)
+src/tests/test_repl.c:379:test_repl/repl_find_doc_can_be_called:PASS (88 ms)
+src/tests/test_repl.c:413:test_repl/repl_namespace_loads_automatically:PASS (76 ms)
+src/tests/test_repl.c:425:test_repl/repl_namespace_has_all_functions:PASS (82 ms)
+user/repl_eval_arg_value
+user/repl_eval_arg_value
+42
+src/tests/test_repl.c:452:test_repl/repl_eval_arg_supports_escaped_newlines:PASS (98 ms)
+*
++
+-
+->
+->>
+/
+<
+<=
+=
+>
+>=
+abs
+aclone
+add-watch
+aget
+alength
+all-ns
+apply
+array-map
+as->
+aset
+assoc
+atom
+atom?
+bit-shift-left
+boolean?
+butlast
+byte-array
+cancel-timer
+char?
+coll?
+comp
+complement
+concat
+concat2
+cond->
+cond->>
+conj
+conj!
+cons
+constantly
+contains?
+count
+current-time-ms
+dec
+defn
+deref
+destructure
+dissoc
+distinct
+do
+drop
+drop-while
+empty?
+eval
+even?
+every?
+false?
+filter
+find
+find-ns
+first
+float?
+fn?
+format
+frequencies
+gensym
+get
+get-in
+get-macro
+get-thread-bindings
+get-watcher-map
+group-by
+identical?
+identity
+ifn?
+inc
+inst?
+instant-days
+instant-ms
+integer?
+interleave
+interleave-repeat
+into
+juxt
+keep
+keys
+keyword
+keyword?
+last
+lazy-seq
+lazy-seq*
+list
+list?
+load-file
+macroexpand
+macroexpand-1
+map
+map?
+mapcat
+mapv
+max
+merge
+meta
+min
+mod
+name
+neg?
+next
+nil?
+nnext
+not
+not-any?
+not-every?
+not=
+notify-watchers
+now
+ns-map
+ns-unload
+nth
+nthnext
+number?
+odd?
+partial
+partition
+partition-all
+peek
+persistent!
+pop
+pos?
+pr
+print
+println
+prn
+quasiquote-fn
+quot
+range
+re-find
+re-matches
+re-pattern
+re-seq
+read-string
+reduce
+reduce-kv
+reductions
+regex?
+rem
+remove-watch
+repeat
+repeatedly
+require
+reset!
+rest
+reverse
+run-next-task
+schedule
+schedule-periodic
+second
+select-keys
+seq
+seq?
+seqable?
+set?
+sleep
+slurp
+some
+some->
+some->>
+some?
+spit
+split-at
+split-with
+sqrt
+str
+string?
+subs
+subvec
+swap!
+symbol
+symbol?
+take
+take-while
+transient
+true?
+type
+update
+update-watcher-map
+vals
+vec
+vector
+vector?
+watcher-registry
+with-meta
+yield
+zero?
+zipmap
+src/tests/test_repl.c:471:test_repl/repl_functions_accessible_from_user_namespace:PASS (73 ms)
+*
++
+-
+->
+->>
+/
+<
+<=
+=
+>
+>=
+abs
+aclone
+add-watch
+aget
+alength
+all-ns
+apply
+array-map
+as->
+aset
+assoc
+atom
+atom?
+bit-shift-left
+boolean?
+butlast
+byte-array
+cancel-timer
+char?
+coll?
+comp
+complement
+concat
+concat2
+cond->
+cond->>
+conj
+conj!
+cons
+constantly
+contains?
+count
+current-time-ms
+dec
+defn
+deref
+destructure
+dissoc
+distinct
+do
+drop
+drop-while
+empty?
+eval
+even?
+every?
+false?
+filter
+find
+find-ns
+first
+float?
+fn?
+format
+frequencies
+gensym
+get
+get-in
+get-macro
+get-thread-bindings
+get-watcher-map
+group-by
+identical?
+identity
+ifn?
+inc
+inst?
+instant-days
+instant-ms
+integer?
+interleave
+interleave-repeat
+into
+juxt
+keep
+keys
+keyword
+keyword?
+last
+lazy-seq
+lazy-seq*
+list
+list?
+load-file
+macroexpand
+macroexpand-1
+map
+map?
+mapcat
+mapv
+max
+merge
+meta
+min
+mod
+name
+neg?
+next
+nil?
+nnext
+not
+not-any?
+not-every?
+not=
+notify-watchers
+now
+ns-map
+ns-unload
+nth
+nthnext
+number?
+odd?
+partial
+partition
+partition-all
+peek
+persistent!
+pop
+pos?
+pr
+print
+println
+prn
+quasiquote-fn
+quot
+range
+re-find
+re-matches
+re-pattern
+re-seq
+read-string
+reduce
+reduce-kv
+reductions
+regex?
+rem
+remove-watch
+repeat
+repeatedly
+require
+reset!
+rest
+reverse
+run-next-task
+schedule
+schedule-periodic
+second
+select-keys
+seq
+seq?
+seqable?
+set?
+sleep
+slurp
+some
+some->
+some->>
+some?
+spit
+split-at
+split-with
+sqrt
+str
+string?
+subs
+subvec
+swap!
+symbol
+symbol?
+take
+take-while
+transient
+true?
+type
+update
+update-watcher-map
+vals
+vec
+vector
+vector?
+watcher-registry
+with-meta
+yield
+zero?
+zipmap
+src/tests/test_repl.c:481:test_repl/repl_functions_work_after_core_load:PASS (88 ms)
+src/tests/test_repl.c:499:test_repl/stacktrace_stack_trace_returns_vector_of_strings:PASS (73 ms)
+src/tests/test_file_io.c:14:test_file_io/history_roundtrip_basic:PASS (63 ms)
+src/tests/test_file_io.c:48:test_file_io/history_trim_to_50:PASS (53 ms)
+src/tests/test_file_io.c:95:test_file_io/history_load_current_format:PASS (58 ms)
+src/tests/test_file_io.c:200:test_file_io/history_load_from_file_crash_reproduction:PASS (55 ms)
+src/tests/test_file_io.c:205:test_file_io/pr_str_escapes_quotes:PASS (54 ms)
+src/tests/test_file_io.c:229:test_file_io/history_save_escapes_quotes:PASS (54 ms)
+src/tests/test_file_io.c:325:test_file_io/slurp_reads_file:PASS (53 ms)
+src/tests/test_file_io.c:350:test_file_io/slurp_returns_string:PASS (48 ms)
+src/tests/test_file_io.c:370:test_file_io/slurp_empty_file:PASS (50 ms)
+src/tests/test_file_io.c:394:test_file_io/slurp_nonexistent_file:PASS (49 ms)
+src/tests/test_file_io.c:411:test_file_io/slurp_multiline_content:PASS (47 ms)
+src/tests/test_file_io.c:439:test_file_io/spit_writes_file:PASS (56 ms)
+src/tests/test_file_io.c:466:test_file_io/spit_overwrites_file:PASS (68 ms)
+src/tests/test_file_io.c:495:test_file_io/spit_multiline_content:PASS (73 ms)
+src/tests/test_file_io.c:522:test_file_io/spit_empty_string:PASS (72 ms)
+src/tests/test_file_io.c:549:test_file_io/spit_slurp_roundtrip:PASS (73 ms)
+src/tests/test_file_io.c:580:test_file_io/parse_vector_strings_inner_pool:PASS (72 ms)
+src/tests/test_file_io.c:625:test_file_io/history_load_from_file_scenario:PASS (69 ms)
+src/tests/test_fs_layer.c:6:test_fs_layer/fs_kv_store_roundtrip_bytes:PASS (74 ms)
+src/tests/test_fs_layer.c:30:test_fs_layer/fs_layer_write_read_stat_list_delete:PASS (69 ms)
+src/tests/test_fs_layer.c:80:test_fs_layer/fs_list_dir_batch_many_files:PASS (72 ms)
+src/tests/test_fs_layer.c:134:test_fs_layer/fs_layer_rewrite_increments_version:PASS (63 ms)
+src/tests/test_tinyclj_bindings_fs_kv.c:5:test_tinyclj_bindings_fs_kv/tinyclj_fs_and_kv_bindings_smoke:PASS (70 ms)
+src/tests/test_tinyclj_bindings_fs_kv.c:66:test_tinyclj_bindings_fs_kv/tinyclj_kv_supports_large_values:PASS (54 ms)
+src/tests/test_streaming_kv_fs.c:24:test_streaming_kv_fs/kv_stream_read_enforces_4kb_and_preserves_bytes:PASS (55 ms)
+src/tests/test_streaming_kv_fs.c:89:test_streaming_kv_fs/kv_stream_write_accepts_variable_input_sizes_and_roundtrips:PASS (63 ms)
+src/tests/test_streaming_kv_fs.c:119:test_streaming_kv_fs/fs_file_stream_write_read_roundtrip_and_chunk_cap:PASS (70 ms)
+src/tests/test_streaming_kv_fs.c:152:test_streaming_kv_fs/kv_stream_read_from_offset_seeks_by_chunk_arithmetic:PASS (61 ms)
+src/tests/test_streaming_kv_fs.c:173:test_streaming_kv_fs/fs_file_stream_read_from_offset_seeks_by_chunk_arithmetic:PASS (56 ms)
+RRD test 1: create
+
+=== RRD smoke test: ALL OK ===
+src/tests/test_rrd_scripts.c:31:test_rrd_scripts/rrd_smoke_script:PASS (94 ms)
+  OK
+Spline test 5: integration via create/update-rrd/fetch
+  OK
+
+=== Spline tests: ALL OK ===
+src/tests/test_rrd_scripts.c:37:test_rrd_scripts/rrd_spline_script:PASS (96 ms)
+src/tests/test_atom.c:35:test_atom/atom_create_with_value:PASS (71 ms)
+src/tests/test_atom.c:43:test_atom/atom_create_with_nil:PASS (67 ms)
+src/tests/test_atom.c:51:test_atom/atom_create_with_string:PASS (63 ms)
+src/tests/test_atom.c:64:test_atom/atom_deref_returns_value:PASS (65 ms)
+src/tests/test_atom.c:73:test_atom/atom_deref_nil:PASS (66 ms)
+src/tests/test_atom.c:84:test_atom/atom_reset_changes_value:PASS (63 ms)
+src/tests/test_atom.c:94:test_atom/atom_reset_to_nil:PASS (69 ms)
+src/tests/test_atom.c:106:test_atom/atom_swap_simple:PASS (65 ms)
+src/tests/test_atom.c:130:test_atom/atom_swap_with_args:PASS (71 ms)
+src/tests/test_atom.c:153:test_atom/atom_swap_persists:PASS (70 ms)
+src/tests/test_atom.c:176:test_atom/atom_swap_multiple_times:PASS (70 ms)
+src/tests/test_atom.c:205:test_atom/atom_builtin_creates_atom:PASS (69 ms)
+src/tests/test_atom.c:213:test_atom/atom_builtin_deref:PASS (68 ms)
+src/tests/test_atom.c:223:test_atom/atom_builtin_reset_bang:PASS (70 ms)
+src/tests/test_atom.c:234:test_atom/atom_builtin_swap_bang:PASS (63 ms)
+src/tests/test_atom.c:258:test_atom/atom_memory_management:PASS (70 ms)
+src/tests/test_atom.c:277:test_atom/atom_reference_sharing:PASS (60 ms)
+src/tests/test_atom.c:295:test_atom/atom_print_representation:PASS (57 ms)
+src/tests/test_atom.c:307:test_atom/atom_deref_invalid:PASS (54 ms)
+src/tests/test_atom.c:321:test_atom/atom_reset_invalid:PASS (56 ms)
+src/tests/test_atom.c:335:test_atom/atom_swap_invalid_atom:PASS (54 ms)
+src/tests/test_atom.c:361:test_atom/atom_real_world_usage:PASS (60 ms)
+src/tests/test_atom_watch.c:14:test_atom_watch/watcher_registry_exists:PASS (56 ms)
+src/tests/test_atom_watch.c:30:test_atom_watch/watcher_registry_starts_empty:PASS (59 ms)
+src/tests/test_atom_watch.c:71:test_atom_watch/add_watch_adds_watcher:PASS (62 ms)
+src/tests/test_atom_watch.c:110:test_atom_watch/add_watch_returns_atom:PASS (58 ms)
+src/tests/test_atom_watch.c:131:test_atom_watch/add_watch_validates_atom:PASS (68 ms)
+src/tests/test_atom_watch.c:143:test_atom_watch/add_watch_validates_function:PASS (75 ms)
+src/tests/test_atom_watch.c:162:test_atom_watch/remove_watch_removes_watcher:PASS (82 ms)
+src/tests/test_atom_watch.c:180:test_atom_watch/remove_watch_returns_atom:PASS (131 ms)
+src/tests/test_atom_watch.c:202:test_atom_watch/remove_watch_cleans_up_empty:PASS (149 ms)
+src/tests/test_atom_watch.c:223:test_atom_watch/notify_watchers_function_exists:PASS (118 ms)
+src/tests/test_atom_watch.c:228:test_atom_watch/notify_watchers_calls_watcher:PASS (80 ms)
+src/tests/test_timer.c:23:test_timer/schedule_executes_after_delay:PASS (83 ms)
+src/tests/test_timer.c:62:test_timer/schedule_zero_delay_executes_immediately:PASS (72 ms)
+src/tests/test_timer.c:97:test_timer/schedule_periodic_repeats:PASS (82 ms)
+src/tests/test_timer.c:147:test_timer/schedule_validates_arguments:PASS (76 ms)
+src/tests/test_timer.c:164:test_timer/schedule_validates_function:PASS (83 ms)
+src/tests/test_timer.c:181:test_timer/schedule_periodic_validates_arguments:PASS (88 ms)
+src/tests/test_timer.c:198:test_timer/schedule_periodic_returns_timer_id:PASS (71 ms)
+src/tests/test_timer.c:222:test_timer/cancel_timer_stops_periodic_timer:PASS (73 ms)
+src/tests/test_timer.c:277:test_timer/cancel_timer_returns_true_when_found:PASS (75 ms)
+src/tests/test_timer.c:314:test_timer/cancel_timer_returns_false_when_not_found:PASS (75 ms)
+src/tests/test_timer.c:333:test_timer/cancel_timer_validates_argument:PASS (75 ms)
+src/tests/test_timer.c:350:test_timer/timer_enqueue_zero_delay_enqueues_task:PASS (79 ms)
+src/tests/test_timer.c:392:test_timer/timer_enqueue_zero_delay_with_run_next:PASS (74 ms)
+src/tests/test_meta.c:43:test_meta/meta_registry_init:PASS (76 ms)
+src/tests/test_meta.c:62:test_meta/meta_function_set_and_get:PASS (72 ms)
+src/tests/test_meta.c:103:test_meta/meta_returns_nil_for_no_metadata:PASS (68 ms)
+src/tests/test_meta.c:124:test_meta/meta_returns_metadata:PASS (57 ms)
+src/tests/test_meta.c:171:test_meta/meta_resolves_symbols:PASS (60 ms)
+src/tests/test_meta.c:227:test_meta/metadata_transferred_from_defn_to_function:PASS (56 ms)
+src/tests/test_meta.c:266:test_meta/metadata_transferred_from_defn_to_native_function:PASS (61 ms)
+src/tests/test_meta.c:308:test_meta/meta_qualified_symbol:PASS (75 ms)
+src/tests/test_meta.c:398:test_meta/meta_contains_line_info:PASS (75 ms)
+src/tests/test_meta.c:412:test_meta/meta_symbol_has_metadata:PASS (80 ms)
+src/tests/test_meta.c:419:test_meta/meta_string_returns_nil:PASS (73 ms)
+src/tests/test_meta.c:426:test_meta/meta_number_returns_nil:PASS (69 ms)
+src/tests/test_meta.c:433:test_meta/meta_keyword_returns_nil:PASS (70 ms)
+src/tests/test_meta.c:440:test_meta/meta_vector_can_have_metadata:PASS (69 ms)
+src/tests/test_meta.c:446:test_meta/meta_map_can_have_metadata:PASS (62 ms)
+src/tests/test_meta.c:452:test_meta/meta_list_can_have_metadata:PASS (53 ms)
+src/tests/test_hashmap_highlevel.c:30:test_hashmap_highlevel/symbol_table_many_symbols:PASS (70 ms)
+src/tests/test_hashmap_highlevel.c:45:test_hashmap_highlevel/symbol_table_redefinition:PASS (60 ms)
+src/tests/test_hashmap_highlevel.c:60:test_hashmap_highlevel/symbol_table_qualified_symbols:PASS (76 ms)
+src/tests/test_hashmap_highlevel.c:81:test_hashmap_highlevel/symbol_table_namespace_aliases:PASS (65 ms)
+src/tests/test_map.c:10:test_map/map_get_finds_let_binding:PASS (139 ms)
+src/tests/test_map.c:45:test_map/map_get_structural_comparison:PASS (70 ms)
+src/tests/test_map.c:72:test_map/map_assoc_performance_unchanged:PASS (153 ms)
+src/tests/test_map.c:93:test_map/update_basic:PASS (70 ms)
+src/tests/test_map.c:107:test_map/update_with_function:PASS (72 ms)
+src/tests/test_map.c:122:test_map/update_missing_key_simple:PASS (62 ms)
+src/tests/test_map.c:172:test_map/update_missing_key:PASS (69 ms)
+src/tests/test_map.c:219:test_map/assoc_map_isolated:PASS (63 ms)
+src/tests/test_map.c:259:test_map/assoc_multi_kv_pairs:PASS (470 ms)
+src/tests/test_map.c:266:test_map/assoc_multi_kv_pairs_on_vector:PASS (78 ms)
+src/tests/test_map.c:274:test_map/map_assoc_direct:PASS (72 ms)
+src/tests/test_map.c:313:test_map/map_transient_comprehensive:PASS (73 ms)
+src/tests/test_map.c:373:test_map/map_conj_comprehensive:PASS (71 ms)
+src/tests/test_map.c:459:test_map/map_conj_with_interned_symbols_across_contexts:PASS (71 ms)
+src/tests/test_map.c:507:test_map/map_conj_finds_existing_key_by_pointer:PASS (70 ms)
+src/tests/test_map.c:542:test_map/map_conj_channel_pattern:PASS (70 ms)
+src/tests/test_map.c:587:test_map/dissoc_single_key:PASS (69 ms)
+src/tests/test_map.c:624:test_map/dissoc_multiple_keys:PASS (70 ms)
+src/tests/test_map.c:651:test_map/dissoc_no_keys:PASS (70 ms)
+src/tests/test_map.c:663:test_map/dissoc_non_existent_key:PASS (64 ms)
+src/tests/test_map.c:688:test_map/map_assoc_nil_key:PASS (52 ms)
+src/tests/test_map.c:707:test_map/map_literal_nil_key:PASS (60 ms)
+src/tests/test_map.c:729:test_map/map_get_nil_key_exists:PASS (67 ms)
+src/tests/test_map.c:748:test_map/map_get_missing_key_returns_nil:PASS (78 ms)
+src/tests/test_map.c:763:test_map/map_contains_nil_key:PASS (69 ms)
+src/tests/test_map.c:782:test_map/map_contains_nil_key_not_exists:PASS (56 ms)
+src/tests/test_map.c:800:test_map/map_nil_key_nil_value:PASS (60 ms)
+src/tests/test_map.c:819:test_map/map_literal_nil_and_regular_key:PASS (55 ms)
+src/tests/test_map.c:848:test_map/map_literal_nil_key_stored_as_null:PASS (56 ms)
+src/tests/test_map.c:871:test_map/get_nil_key_from_map_literal:PASS (70 ms)
+src/tests/test_map.c:901:test_map/map_get_not_found_sentinel_edge_cases:PASS (52 ms)
+src/tests/test_map.c:954:test_map/map_for_each_macro:PASS (61 ms)
+src/tests/test_map.c:1007:test_map/map_for_each_empty_map:PASS (61 ms)
+src/tests/test_map.c:1020:test_map/map_for_each_null_map:PASS (67 ms)
+src/tests/test_map.c:1033:test_map/map_for_each_with_null_keys_and_values:PASS (62 ms)
+src/tests/test_map.c:1113:test_map/merge_no_args:PASS (50 ms)
+src/tests/test_map.c:1117:test_map/merge_nil:PASS (52 ms)
+src/tests/test_map.c:1121:test_map/merge_single_map:PASS (55 ms)
+src/tests/test_map.c:1125:test_map/merge_two_maps:PASS (53 ms)
+src/tests/test_map.c:1129:test_map/merge_override:PASS (55 ms)
+src/tests/test_map.c:1133:test_map/merge_with_nil:PASS (57 ms)
+src/tests/test_map.c:1137:test_map/merge_multiple_maps:PASS (64 ms)
+src/tests/test_map.c:1145:test_map/contains_p_key_exists:PASS (62 ms)
+src/tests/test_map.c:1149:test_map/contains_p_key_not_exists:PASS (66 ms)
+src/tests/test_map.c:1153:test_map/contains_p_nil_coll:PASS (126 ms)
+src/tests/test_map.c:1157:test_map/contains_p_vector_valid_index:PASS (70 ms)
+src/tests/test_map.c:1162:test_map/contains_p_vector_invalid_index:PASS (72 ms)
+src/tests/test_map.c:1167:test_map/contains_p_nil_value:PASS (78 ms)
+src/tests/test_map.c:1175:test_map/find_key_exists:PASS (63 ms)
+src/tests/test_map.c:1179:test_map/find_key_not_exists:PASS (92 ms)
+src/tests/test_map.c:1183:test_map/find_nil_map:PASS (123 ms)
+src/tests/test_map.c:1191:test_map/select_keys_basic:PASS (67 ms)
+src/tests/test_map.c:1195:test_map/select_keys_missing_keys:PASS (69 ms)
+src/tests/test_map.c:1199:test_map/select_keys_nil_map:PASS (73 ms)
+src/tests/test_map.c:1203:test_map/select_keys_nil_keys:PASS (69 ms)
+src/tests/test_map.c:1211:test_map/into_vector_to_vector:PASS (73 ms)
+src/tests/test_map.c:1215:test_map/into_vector_append:PASS (80 ms)
+src/tests/test_map.c:1219:test_map/into_pairs_to_map:PASS (67 ms)
+src/tests/test_map.c:1223:test_map/into_map_to_map:PASS (53 ms)
+src/tests/test_map.c:1227:test_map/into_map_to_vector:PASS (49 ms)
+src/tests/test_map.c:1233:test_map/into_nil_source:PASS (52 ms)
+src/tests/test_map.c:1237:test_map/into_list_to_vector:PASS (57 ms)
+src/tests/test_map.c:1245:test_map/update_native_basic:PASS (189 ms)
+src/tests/test_map.c:1249:test_map/update_native_with_function:PASS (73 ms)
+src/tests/test_map.c:1253:test_map/update_native_missing_key:PASS (70 ms)
+src/tests/test_map.c:1258:test_map/update_native_with_extra_args:PASS (69 ms)
+src/tests/test_map.c:1268:test_map/make_map_kv:PASS (67 ms)
+src/tests/test_map.c:1289:test_map/make_map_kv_empty:PASS (54 ms)
+src/tests/test_map.c:1303:test_map/map_assoc_autorelease_assign_hypothesis:PASS (61 ms)
+src/tests/test_map.c:1333:test_map/map_assoc_multiple_assign_hypothesis:PASS (63 ms)
+src/tests/test_map.c:1367:test_map/embedded_array_single_malloc:PASS (54 ms)
+src/tests/test_map.c:1391:test_map/embedded_array_memory_efficiency:PASS (61 ms)
+src/tests/test_map.c:1415:test_map/embedded_array_cow:PASS (55 ms)
+src/tests/test_map.c:1448:test_map/embedded_array_capacity_growth:PASS (68 ms)
+src/tests/test_map.c:1474:test_map/embedded_array_performance:PASS (71 ms)
+src/tests/test_cow.c:14:test_cow/autorelease_does_not_increase_rc:PASS (61 ms)
+src/tests/test_cow.c:26:test_cow/retain_increases_rc:PASS (55 ms)
+src/tests/test_cow.c:42:test_cow/autorelease_with_retain:PASS (59 ms)
+src/tests/test_cow.c:58:test_cow/multiple_autorelease_same_object:PASS (55 ms)
+src/tests/test_cow.c:73:test_cow/autorelease_in_loop_realistic:PASS (70 ms)
+src/tests/test_cow.c:95:test_cow/cow_inplace_mutation_rc_one:PASS (54 ms)
+src/tests/test_cow.c:130:test_cow/cow_copy_on_write_rc_greater_one:PASS (54 ms)
+src/tests/test_cow.c:170:test_cow/cow_original_map_unchanged:PASS (63 ms)
+src/tests/test_cow.c:198:test_cow/cow_with_autorelease:PASS (62 ms)
+src/tests/test_cow.c:215:test_cow/cow_memory_leak_detection:PASS (65 ms)
+src/tests/test_cow.c:242:test_cow/cow_environment_loop_mutation:PASS (53 ms)
+src/tests/test_cow.c:259:test_cow/cow_closure_environment_sharing:PASS (47 ms)
+src/tests/test_cow.c:288:test_cow/cow_memory_efficiency_benchmark:PASS (52 ms)
+src/tests/test_cow.c:305:test_cow/cow_real_clojure_simulation:PASS (49 ms)
+src/tests/test_cow.c:332:test_cow/cow_actual_cow_demonstration:PASS (60 ms)
+src/tests/test_cow.c:373:test_cow/map_assoc_autorelease_with_assign:PASS (64 ms)
+src/tests/test_cow.c:405:test_cow/map_assoc_multiple_assign_sequence:PASS (63 ms)
+src/tests/test_cow.c:442:test_cow/vector_conj_cow_rc_one_inplace:PASS (66 ms)
+src/tests/test_cow.c:474:test_cow/vector_conj_cow_rc_greater_one:PASS (59 ms)
+src/tests/test_cow.c:508:test_cow/vector_conj_cow_capacity_growth:PASS (51 ms)
+src/tests/test_cow.c:545:test_cow/vector_copy_counter_detects_forced_copy_patterns:PASS (51 ms)
+src/tests/test_cow.c:575:test_cow/env_stack_helpers_do_not_break_cow_fast_path:PASS (55 ms)
+src/tests/test_cow.c:608:test_cow/vector_conj_cow_original_unchanged:PASS (72 ms)
+src/tests/test_cow.c:640:test_cow/vector_conj_cow_memory_leak:PASS (64 ms)
+src/tests/test_cow.c:666:test_cow/vector_assoc_cow_rc_one_inplace:PASS (51 ms)
+src/tests/test_cow.c:695:test_cow/vector_assoc_cow_rc_greater_one:PASS (52 ms)
+src/tests/test_cow.c:732:test_cow/vector_assoc_cow_original_unchanged:PASS (51 ms)
+src/tests/test_special_forms.c:13:test_special_forms/special_if_dispatch:PASS (52 ms)
+src/tests/test_special_forms.c:23:test_special_forms/special_let_dispatch:PASS (62 ms)
+src/tests/test_special_forms.c:29:test_special_forms/special_do_dispatch:PASS (61 ms)
+src/tests/test_special_forms.c:35:test_special_forms/special_when_dispatch:PASS (60 ms)
+src/tests/test_special_forms.c:44:test_special_forms/special_and_dispatch:PASS (53 ms)
+src/tests/test_special_forms.c:54:test_special_forms/special_or_dispatch:PASS (46 ms)
+src/tests/test_special_forms.c:64:test_special_forms/special_cond_basic_match:PASS (57 ms)
+src/tests/test_special_forms.c:70:test_special_forms/special_cond_no_match_returns_nil:PASS (60 ms)
+src/tests/test_special_forms.c:75:test_special_forms/special_cond_else:PASS (51 ms)
+src/tests/test_special_forms.c:81:test_special_forms/special_cond_allows_nil_expr_and_short_circuits:PASS (54 ms)
+src/tests/test_special_forms.c:93:test_special_forms/special_cond_odd_number_of_forms_throws:PASS (61 ms)
+src/tests/test_special_forms.c:109:test_special_forms/all_special_symbols_have_eval_fn:PASS (57 ms)
+src/tests/test_special_forms.c:152:test_special_forms/special_form_not_shadowable:PASS (58 ms)
+src/tests/test_special_forms.c:164:test_special_forms/let_shadowing_special_form_name:PASS (56 ms)
+src/tests/test_special_forms.c:171:test_special_forms/special_form_operator_not_shadowed:PASS (60 ms)
+src/tests/test_special_forms.c:178:test_special_forms/let_shadowing_multiple_levels:PASS (50 ms)
+src/tests/test_special_forms.c:189:test_special_forms/special_form_dispatch_basic_performance:PASS (51 ms)
+src/tests/test_special_forms.c:202:test_special_forms/named_fn_creates_function:PASS (66 ms)
+src/tests/test_special_forms.c:209:test_special_forms/named_fn_factorial:PASS (69 ms)
+src/tests/test_special_forms.c:216:test_special_forms/named_fn_countdown:PASS (67 ms)
+src/tests/test_special_forms.c:223:test_special_forms/named_fn_with_two_params:PASS (64 ms)
+src/tests/test_dynamic_binding.c:11:test_dynamic_binding/dynamic_binding_basic_value:PASS (61 ms)
+src/tests/test_dynamic_binding.c:20:test_dynamic_binding/dynamic_binding_allows_nil_value:PASS (51 ms)
+src/tests/test_dynamic_binding.c:27:test_dynamic_binding/dynamic_binding_nested_restores_outer_value:PASS (67 ms)
+src/tests/test_dynamic_binding.c:47:test_dynamic_binding/dynamic_binding_can_be_used_as_arg:PASS (63 ms)
+src/tests/test_dynamic_binding.c:56:test_dynamic_binding/dynamic_binding_nil_can_be_used_as_arg:PASS (61 ms)
+src/tests/test_dynamic_binding.c:64:test_dynamic_binding/dynamic_binding_rejects_non_dynamic_symbol:PASS (66 ms)
+src/tests/test_dynamic_binding.c:84:test_dynamic_binding/ns_star_binding_changes_current_ns_and_restores:PASS (50 ms)
+src/tests/test_dynamic_binding.c:103:test_dynamic_binding/ns_star_binding_rejects_nil_and_restores:PASS (54 ms)
+src/tests/test_dynamic_binding.c:128:test_dynamic_binding/dynamic_binding_unwinds_on_exception:PASS (55 ms)
+src/tests/test_dynamic_binding.c:157:test_dynamic_binding/get_thread_bindings_snapshot_contains_dynamic_binding:PASS (53 ms)
+src/tests/test_core_functions.c:547:test_core_functions/string_pad_left_basic:PASS (80 ms)
+src/tests/test_core_functions.c:555:test_core_functions/string_pad_left_no_padding_needed:PASS (85 ms)
+src/tests/test_core_functions.c:565:test_core_functions/string_pad_left_empty_string:PASS (90 ms)
+src/tests/test_alias_lowlevel.c:29:test_alias_lowlevel/lowlevel_alias_sym_extraction:PASS (70 ms)
+src/tests/test_alias_lowlevel.c:72:test_alias_lowlevel/lowlevel_current_ns_correct:PASS (63 ms)
+src/tests/test_alias_lowlevel.c:92:test_alias_lowlevel/lowlevel_native_require_sets_alias_preloaded:PASS (66 ms)
+src/tests/test_alias_lowlevel.c:131:test_alias_lowlevel/lowlevel_ns_set_alias_stores:PASS (52 ms)
+src/tests/test_alias_lowlevel.c:163:test_alias_lowlevel/lowlevel_alias_sym_not_null_when_preloaded:PASS (78 ms)
+src/tests/test_alias_lowlevel.c:207:test_alias_lowlevel/lowlevel_current_ns_correct_when_alias_set:PASS (88 ms)
+src/tests/test_string.c:190:test_string/string_pad_left_basic:PASS (97 ms)
+src/tests/test_string.c:202:test_string/string_pad_left_no_padding_needed:PASS (95 ms)
+src/tests/test_string.c:220:test_string/string_pad_left_empty_string:PASS (98 ms)
+src/tests/test_time.c:264:test_time/now_returns_instant:PASS (69 ms)
+src/tests/test_time.c:270:test_time/now_has_days_value:PASS (70 ms)
+src/tests/test_time.c:277:test_time/now_has_ms_value:PASS (68 ms)
+src/tests/test_runtime_stats.c:5:test_runtime_stats/runtime_stats_basic_keys_present:PASS (62 ms)
+src/tests/test_runtime_stats.c:35:test_runtime_stats/runtime_stats_build_time_before_now:PASS (72 ms)
+src/tests/test_runtime_stats.c:71:test_runtime_stats/runtime_stats_contains_memory_stats_map:PASS (73 ms)
+src/tests/test_pprint.c:25:test_pprint/pprint_require_and_pprint_str_multiline:FAIL.  Expected TRUE Was FALSE (73 ms)
+src/tests/test_static_keywords.c:10:test_static_keywords/static_keywords_are_interned_singletons:PASS (68 ms)
+src/tests/test_static_keywords.c:68:test_static_keywords/static_symbols_are_interned_singletons:PASS (59 ms)
+src/tests/test_byte_array_view.c:15:test_byte_array_view/byte_array_view_exposes_external_buffer_without_copy:PASS (71 ms)
+src/tests/test_byte_array_view.c:31:test_byte_array_view/byte_array_external_calls_finalizer_on_release:PASS (71 ms)
+src/tests/test_platform_net.c:47:test_platform_net/platform_udp_bind_send_loopback:IGNORE: UDP bind failed (likely sandboxed environment without network syscalls) (72 ms)
+src/tests/test_mdns_codec.c:10:test_mdns_codec/mdns_decode_name_uncompressed:PASS (69 ms)
+src/tests/test_mdns_codec.c:38:test_mdns_codec/mdns_decode_name_with_compression_pointer:PASS (72 ms)
+src/tests/test_mdns_codec.c:71:test_mdns_codec/mdns_build_ptr_query_basic:PASS (69 ms)
+src/tests/test_mdns_resolver.c:41:test_mdns_resolver/mdns_resolver_starts_browse_without_events:PASS (69 ms)
+src/tests/test_mdns_resolver.c:53:test_mdns_resolver/mdns_resolver_emits_instance_found_on_ptr_answer:PASS (76 ms)
+src/tests/test_mdns_resolver.c:99:test_mdns_resolver/mdns_resolver_emits_resolved_when_ptr_srv_txt_aaaa_present:PASS (94 ms)
+src/tests/test_mdns_resolver.c:191:test_mdns_resolver/mdns_resolver_expires_entry_by_ttl:PASS (76 ms)
+src/tests/test_mdns_bindings.c:11:test_mdns_bindings/mdns_bindings_native_functions_exist:PASS (67 ms)
+src/tests/test_platform_mdns.c:42:test_platform_mdns/platform_mdns_open_send_unicast_loopback:IGNORE: mDNS open failed (likely sandboxed environment without privileged socket options) (77 ms)
+
+-----------------------
+1178 Tests 3 Failures 2 Ignored 
+FAIL
+
+Total runtime: 40.369s

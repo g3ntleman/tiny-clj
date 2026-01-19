@@ -387,6 +387,8 @@ void platform_set_raw_mode(int enable) {
         
         struct termios raw = original_termios;
         raw.c_lflag &= ~(ICANON | ECHO);
+        // Preserve carriage return in raw mode so Enter is not translated to '\n'.
+        raw.c_iflag &= ~(ICRNL | INLCR | IGNCR);
         // With VMIN=0/VTIME=0, read() may return 0 when no input is available,
         // which our CFRunLoop stdin callback previously interpreted as EOF.
         // Use VMIN=1 so "no data" yields EAGAIN/EWOULDBLOCK (since stdin is O_NONBLOCK).

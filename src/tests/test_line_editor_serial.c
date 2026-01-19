@@ -86,6 +86,26 @@ TEST(test_line_editor_serial_backspace) {
     line_editor_free(ed);
 }
 
+TEST(test_line_editor_serial_empty_enter_emits_newline) {
+    const unsigned char input[] = { '\r' };
+    FakeStream s = { .in = input, .in_len = (int)sizeof(input), .in_pos = 0, .out_len = 0 };
+
+    LineEditor *ed = line_editor_new(fake_get_char, fake_put_char, fake_put_string, &s);
+    TEST_ASSERT_NOT_NULL(ed);
+
+    TEST_ASSERT_TRUE(run_editor_until_ready(ed, 16));
+
+    LineEditorState st;
+    TEST_ASSERT_EQUAL_INT(0, line_editor_get_state(ed, &st));
+    TEST_ASSERT_TRUE(st.line_ready);
+    TEST_ASSERT_EQUAL_INT(0, st.length);
+    TEST_ASSERT_EQUAL_STRING("", st.buffer);
+    TEST_ASSERT_EQUAL_INT(1, s.out_len);
+    TEST_ASSERT_EQUAL_CHAR('\n', s.out[0]);
+
+    line_editor_free(ed);
+}
+
 TEST(test_line_editor_serial_history_up_arrow) {
     // Add history entry, then press Up Arrow (ESC [ A) and Enter.
     const unsigned char input[] = { 0x1b, '[', 'A', '\r' };
@@ -212,6 +232,58 @@ TEST(test_line_editor_serial_multiline_cursor_edit) {
     const char *buf = line_editor_get_buffer_cstr(ed, &len);
     TEST_ASSERT_NOT_NULL(buf);
     TEST_ASSERT_EQUAL_STRING("abX\ncd", buf);
+
+    line_editor_free(ed);
+}
+
+TEST(test_line_editor_serial_multiline_up_uses_history_on_first_line) {
+    // When cursor is on the first line, Up should navigate history.
+    const unsigned char input[] = {
+        0x1b, '[', 'A',  // Up (recall history)
+        0x1b, '[', 'D',  // Left
+        0x1b, '[', 'D',  // Left
+        0x1b, '[', 'D',  // Left (move to first line)
+        0x1b, '[', 'A',  // Up (history previous)
+        '\r'
+    };
+    FakeStream s = { .in = input, .in_len = (int)sizeof(input), .in_pos = 0, .out_len = 0 };
+
+    LineEditor *ed = line_editor_new(fake_get_char, fake_put_char, fake_put_string, &s);
+    TEST_ASSERT_NOT_NULL(ed);
+    line_editor_add_to_history(ed, "one");
+    line_editor_add_to_history(ed, "ab\ncd");
+
+    TEST_ASSERT_TRUE(run_editor_until_ready(ed, 256));
+
+    size_t len = 0;
+    const char *buf = line_editor_get_buffer_cstr(ed, &len);
+    TEST_ASSERT_NOT_NULL(buf);
+    TEST_ASSERT_EQUAL_STRING("one", buf);
+
+    line_editor_free(ed);
+}
+
+TEST(test_line_editor_serial_multiline_down_uses_history_on_last_line) {
+    // When cursor is on the last line, Down should navigate history.
+    const unsigned char input[] = {
+        0x1b, '[', 'A',  // Up (recall history)
+        0x1b, '[', 'B',  // Down (history next to temp)
+        'x',
+        '\r'
+    };
+    FakeStream s = { .in = input, .in_len = (int)sizeof(input), .in_pos = 0, .out_len = 0 };
+
+    LineEditor *ed = line_editor_new(fake_get_char, fake_put_char, fake_put_string, &s);
+    TEST_ASSERT_NOT_NULL(ed);
+    line_editor_add_to_history(ed, "one");
+    line_editor_add_to_history(ed, "ab\ncd");
+
+    TEST_ASSERT_TRUE(run_editor_until_ready(ed, 256));
+
+    size_t len = 0;
+    const char *buf = line_editor_get_buffer_cstr(ed, &len);
+    TEST_ASSERT_NOT_NULL(buf);
+    TEST_ASSERT_EQUAL_STRING("x", buf);
 
     line_editor_free(ed);
 }

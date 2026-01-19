@@ -543,6 +543,9 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                     strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
                     line_editor_reset(editor);
                     got_input = true;
+                } else {
+                    line_editor_reset(editor);
+                    prompt_shown = false;
                 }
             }
             if (!got_input) {

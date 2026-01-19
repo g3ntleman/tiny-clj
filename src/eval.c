@@ -177,9 +177,42 @@ ID eval_body_with_env(ID body, CljMap *env, EvalState *st);
 
 
 // Helper function to throw unresolved symbol exception (DRY principle)
-static void throw_unresolved_symbol_exception(const char *sym_name) {
+static INLINE bool should_suggest_require_for_ns(const char *ns_name) {
+    // Keep the hint focused on real namespaces, not aliases like "str".
+    // Also never suggest requiring clojure.core.
+    if (!ns_name || !ns_name[0]) return false;
+    if (strcmp(ns_name, "clojure.core") == 0) return false;
+    return strchr(ns_name, '.') != NULL;
+}
+
+static void throw_unresolved_symbol_exception_parts(const char *ns_name,
+                                                    const char *sym_name,
+                                                    bool suggest_require) {
+    const char *name = (sym_name && sym_name[0]) ? sym_name : "unknown";
+    if (ns_name && ns_name[0]) {
+        if (suggest_require && should_suggest_require_for_ns(ns_name)) {
+            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Unable to resolve symbol: %s/%s in this context. (require '%s) missing?",
+                ns_name, name, ns_name);
+            return;
+        }
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+            "Unable to resolve symbol: %s/%s in this context", ns_name, name);
+        return;
+    }
     throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-        "Unable to resolve symbol: %s in this context", sym_name);
+        "Unable to resolve symbol: %s in this context", name);
+}
+
+static void throw_unresolved_symbol_exception_symbol(const CljSymbol *sym) {
+    const char *name = (sym && sym->cname) ? sym->cname : "unknown";
+    const char *ns = (sym && sym->ns_name && sym->ns_name->cname) ? sym->ns_name->cname : NULL;
+    bool suggest = false;
+    if (ns && should_suggest_require_for_ns(ns)) {
+        // Only suggest require if the namespace is not loaded.
+        suggest = (ns_find(ns) == NULL);
+    }
+    throw_unresolved_symbol_exception_parts(ns, name, suggest);
 }
 
 // Extended function call implementation with complete evaluation
@@ -615,7 +648,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             
             // Then check env_stack and namespace
             ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, ctx_env_map, NULL, body, get_eval_state(ctx, NULL));
-            const char *log_sym = (body_sym && body_sym->cname) ? body_sym->cname : "<anon>";
             if (resolved_id != NOT_FOUND) {
                 if (!resolved_id || resolved_id == SYM_NIL) {
                     return NULL;
@@ -630,8 +662,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                         resolves_to_self = structural_equal;
                     }
                     if (resolves_to_self) {
-                        const char *sym_name = log_sym;
-                        throw_unresolved_symbol_exception(sym_name);
+                        throw_unresolved_symbol_exception_symbol(body_sym);
                         return NULL;
                     }
                 }
@@ -652,9 +683,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 // In this case, we should throw an exception instead of returning the symbol
                 if (is_symbol(resolved_id)) {
                     // Symbol found in namespace but value is also a symbol - this is an error
-                    CljSymbol *sym = as_symbol(body);
-                    const char *sym_name = sym && sym->cname ? sym->cname : "unknown";
-                    throw_unresolved_symbol_exception(sym_name);
+                    throw_unresolved_symbol_exception_symbol(as_symbol(body));
                     return NULL;
                 }
                 // ns_resolve returns retained values - object survives until pool-pop
@@ -668,8 +697,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         }
         // Symbol not found - throw exception
         CljSymbol *sym_obj = as_symbol(body);
-        const char *sym_name_final = sym_obj && sym_obj->cname ? sym_obj->cname : "unknown";
-        throw_unresolved_symbol_exception(sym_name_final);
+        throw_unresolved_symbol_exception_symbol(sym_obj);
         return NULL;
     }
 
@@ -2061,18 +2089,7 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
             // Namespace not found - throw exception
             const char *cname = symbol->cname ? symbol->cname : "unknown";
             const char *ns_cname = symbol->ns_name && symbol->ns_name->cname ? symbol->ns_name->cname : "unknown";
-            size_t qualified_len = strlen(ns_cname) + 1 + strlen(cname) + 1;
-            char *qualified_name = (char*)malloc(qualified_len);
-            if (qualified_name) {
-                size_t pos = 0;
-                pos = format_append(qualified_name, pos, qualified_len, ns_cname);
-                pos = format_append_char(qualified_name, pos, qualified_len, '/');
-                format_append(qualified_name, pos, qualified_len, cname);
-                throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", qualified_name);
-                free(qualified_name);
-            } else {
-                throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context", ns_cname, cname);
-            }
+            throw_unresolved_symbol_exception_parts(ns_cname, cname, true);
             return NULL;
         }
         if (target_ns->mappings && symbol->cname) {
@@ -2106,18 +2123,7 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         // Qualified symbol not found in target namespace
         const char *cname = symbol->cname ? symbol->cname : "unknown";
         const char *ns_cname = symbol->ns_name && symbol->ns_name->cname ? symbol->ns_name->cname : "unknown";
-        size_t qualified_len = strlen(ns_cname) + 1 + strlen(cname) + 1;
-        char *qualified_name = (char*)malloc(qualified_len);
-        if (qualified_name) {
-            size_t pos = 0;
-            pos = format_append(qualified_name, pos, qualified_len, ns_cname);
-            pos = format_append_char(qualified_name, pos, qualified_len, '/');
-            format_append(qualified_name, pos, qualified_len, cname);
-            throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", qualified_name);
-            free(qualified_name);
-        } else {
-            throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context", ns_cname, cname);
-        }
+        throw_unresolved_symbol_exception_parts(ns_cname, cname, false);
         return NULL;
     }
 
@@ -2155,7 +2161,7 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     // Symbol not found in namespace - this is an error
     // Functions must be registered via register_builtins() or :native stubs
     const char *cname = symbol->cname ? symbol->cname : "unknown";
-    throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", cname);
+    throw_unresolved_symbol_exception_parts(NULL, cname, false);
     return NULL;
 }
 
@@ -2669,8 +2675,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
                     }
                     if (resolves_to_self) {
                         CljSymbol *sym_obj = as_symbol(expr);
-                        const char *sym_name = sym_obj && sym_obj->cname ? sym_obj->cname : "unknown";
-                        throw_unresolved_symbol_exception(sym_name);
+                        throw_unresolved_symbol_exception_symbol(sym_obj);
                         return NULL;
                     }
                 }
@@ -2737,8 +2742,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
                 return (CljObject*)ns_candidate;
             }
         }
-        const char *sym_name = sym_obj && sym_obj->cname ? sym_obj->cname : "unknown";
-        throw_unresolved_symbol_exception(sym_name);
+        throw_unresolved_symbol_exception_symbol(sym_obj);
         return NULL;
     }
 

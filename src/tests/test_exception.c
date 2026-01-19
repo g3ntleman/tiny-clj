@@ -255,6 +255,28 @@ TEST(test_throw_existing_exception) {
         "Exception should have been caught when using THROW(ex)");
 }
 
+TEST(test_oom_exception_is_static_and_no_stacktrace) {
+    bool exception_caught = false;
+
+    TRY {
+        // Even when memory is available, OutOfMemoryError must not allocate a new exception
+        // or generate a stacktrace.
+        throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
+                                  "Out of memory while allocating %s", "test");
+        TEST_FAIL_MESSAGE("Should not reach here after throwing OOM");
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_PTR_MESSAGE(clj_oom_exception, ex, "OOM must use the static singleton exception");
+        TEST_ASSERT_EQUAL_STRING("OutOfMemoryError", ex->type);
+#ifdef DEBUG
+        TEST_ASSERT_NULL_MESSAGE(ex->stacktrace, "OOM exception must not allocate/generate stacktrace");
+#endif
+    } END_TRY
+
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "OOM exception should have been caught");
+}
+
 TEST(test_throw_macro_convenience) {
     bool exception_caught = false;
     CLJException *original_exception = NULL;

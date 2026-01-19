@@ -1,0 +1,22 @@
+# Use custom partition table with a reserved tiny-db partition.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Core dumps: store in flash (persistent) for first deployments.
+# Symbol names verified against: external/esp-idf/components/espcoredump/Kconfig
+CONFIG_ESP_COREDUMP_ENABLE=y
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+# Prefer ELF for best debugging experience (bigger than BIN).
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
+CONFIG_ESP_COREDUMP_CHECK_BOOT=y
+
+# Disable SPIFFS (this project does not use it).
+# Even with EXCLUDE_COMPONENTS=spiffs, keeping configs off avoids accidental re-enabling.
+# CONFIG_SPIFFS_CACHE is not set
+# CONFIG_SPIFFS_PAGE_CHECK is not set
+# CONFIG_SPIFFS_USE_MAGIC is not set
+# CONFIG_SPIFFS_USE_MAGIC_LENGTH is not set
+# CONFIG_SPIFFS_USE_MTIME is not set
+CONFIG_SPIFFS_MAX_PARTITIONS=0
+
