@@ -35,6 +35,7 @@
 #include "parser.h"
 #include "meta.h"
 #include "eval.h"
+#include "platform.h"
 #include "macro.h"
 #include "instant.h"
 #include "datetime_utc.h"
@@ -2627,13 +2628,14 @@ static void print_helper(ID *args, unsigned int argc, bool readable, bool newlin
             CljString *str = readable ? pr_str(args[i]) : print_str(args[i]);
             if (str)
             {
-                printf("%s", string_data(str));
+                platform_put_string(NULL, string_data(str));
+                RELEASE(str);
             }
 
             // Add space between arguments (except for the last one)
             if (i < argc - 1)
             {
-                printf(" ");
+                platform_put_char(NULL, ' ');
             }
         }
     }
@@ -2641,11 +2643,8 @@ static void print_helper(ID *args, unsigned int argc, bool readable, bool newlin
     // Add newline if requested
     if (newline)
     {
-        printf("\n");
+        platform_put_char(NULL, '\n');
     }
-
-    // Flush stdout to ensure output appears immediately (important for timers/go blocks)
-    fflush(stdout);
 }
 
 // ============================================================================

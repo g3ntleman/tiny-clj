@@ -10,6 +10,15 @@
 #include <stddef.h>
 
 // -----------------------------------------------------------------------------
+// Optional stdout observer hook (used by REPL to decide whether to print a newline
+// before the next prompt).
+// -----------------------------------------------------------------------------
+__attribute__((weak)) void tinyclj_stdout_observe_bytes(const char *data, size_t n) {
+    (void)data;
+    (void)n;
+}
+
+// -----------------------------------------------------------------------------
 // Weak hooks (override in ESP32/ESP-IDF integration)
 // -----------------------------------------------------------------------------
 
@@ -49,12 +58,14 @@ int platform_get_char(void *ctx) {
 void platform_put_char(void *ctx, char c) {
     (void)ctx;
     tinyclj_esp32_uart_write_bytes((const uint8_t *)&c, 1);
+    tinyclj_stdout_observe_bytes(&c, 1);
 }
 
 void platform_put_string(void *ctx, const char *s) {
     (void)ctx;
     if (!s) return;
     tinyclj_esp32_uart_write_bytes((const uint8_t *)s, strlen(s));
+    tinyclj_stdout_observe_bytes(s, strlen(s));
 }
 
 void platform_set_raw_mode(int enable) {
@@ -62,3 +73,8 @@ void platform_set_raw_mode(int enable) {
     // No-op: terminal modes are host-only.
 }
 
+bool platform_try_get_cursor_position(uint16_t *row, uint16_t *col) {
+    (void)row;
+    (void)col;
+    return false;
+}

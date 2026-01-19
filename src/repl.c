@@ -32,6 +32,18 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+// Tracks whether stdout is currently at the start of a new line.
+// Best-effort: updated via platform_macos stdout observer hook (for most prints)
+// and by REPL's own printing.
+static bool g_repl_stdout_at_line_start = true;
+
+void tinyclj_stdout_observe_bytes(const char *data, size_t n) {
+    if (!data || n == 0) return;
+    // Update based on the last byte written.
+    char last = data[n - 1];
+    g_repl_stdout_at_line_start = (last == '\n' || last == '\r');
+}
+
 // Maximum number of event loop iterations per REPL cycle
 // This limits processing to prevent blocking while still processing pending tasks
 #define REPL_EVENT_LOOP_MAX_ITERATIONS 10
@@ -94,8 +106,33 @@ static void print_prompt(EvalState *st, bool balanced) {
             ns_name = st->current_ns->name->cname;
         }
     }
-    printf("%s%s ", ns_name, balanced ? "=>" : "...");
+    char prompt[128];
+    (void)snprintf(prompt, sizeof(prompt), "%s%s ", ns_name, balanced ? "=>" : "...");
+    // Ensure the prompt starts at column 1, even if previous output did not end with '\n'.
+    // This is best-effort: we track stdout line-start via platform stdout hooks.
+    bool at_line_start = g_repl_stdout_at_line_start;
+#if defined(__APPLE__) && !defined(ESP32_BUILD)
+    // On macOS terminals, try a real cursor-position query (DSR ESC[6n) to avoid heuristics.
+    // If unsupported or not a TTY, we fall back to the stdout observer flag.
+    uint16_t row = 0, col = 0;
+    if (platform_try_get_cursor_position(&row, &col)) {
+        at_line_start = (col == 1);
+    }
+#endif
+    if (!at_line_start) {
+        fputs("\r\n", stdout);
+        g_repl_stdout_at_line_start = true;
+    }
+    // Ensure line editor knows the prompt, so multi-line redraw can restore it.
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
+    LineEditor *ed = get_line_editor();
+    if (ed) {
+        line_editor_set_prompt(ed, prompt);
+    }
+#endif
+    fputs(prompt, stdout);
     fflush(stdout);
+    g_repl_stdout_at_line_start = false;
 }
 
 /** @brief Print a CljObject result to stdout with proper formatting.
@@ -103,12 +140,15 @@ static void print_prompt(EvalState *st, bool balanced) {
  */
 static void print_result(CljObject *v) {
     if (!v) {
-        printf("nil\n");
+        platform_put_string(NULL, "nil");
+        platform_put_char(NULL, '\n');
         return;
     }
     CljString *s = pr_str(v);
     if (s) {
-        printf("%s\n", string_data(s));
+        platform_put_string(NULL, string_data(s));
+        platform_put_char(NULL, '\n');
+        RELEASE(s);
     }
 }
 
@@ -441,10 +481,6 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     char acc[4096]; acc[0] = '\0';
     bool prompt_shown = false;
 
-    // Print initial prompt immediately (before history loading to ensure it's visible)
-    print_prompt(st, true);
-    prompt_shown = true;
-
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Initialize line editor
     LineEditor *editor = line_editor_new(platform_get_char, platform_put_char, platform_put_string, NULL);
@@ -480,6 +516,10 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         line_editor_clear_history(editor);
     }
 #endif
+
+    // Print initial prompt after line editor init so the editor can track it for redraws.
+    print_prompt(st, true);
+    prompt_shown = true;
 
     while (true) {
         // Print prompt only once per input cycle to avoid flooding
@@ -548,7 +588,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             continue;
         } else if (balance < 0) {
             // Too many closing parens - syntax error
-            printf("Error: Too many closing parentheses\n");
+            platform_put_string(NULL, "Error: Too many closing parentheses\n");
             // Add to history before clearing
             if (acc[0] != '\0') {
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED

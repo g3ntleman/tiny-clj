@@ -4,6 +4,16 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
+
+// -----------------------------------------------------------------------------
+// Optional stdout observer hook (used by REPL to decide whether to print a newline
+// before the next prompt).
+// -----------------------------------------------------------------------------
+__attribute__((weak)) void tinyclj_stdout_observe_bytes(const char *data, size_t n) {
+    (void)data;
+    (void)n;
+}
 
 #ifdef ESP32_BUILD
 #if defined(__has_include)
@@ -45,6 +55,8 @@ void platform_print(const char *message) {
     if (!message) return;
     fputs(message, stdout);
     fputc('\n', stdout);
+    tinyclj_stdout_observe_bytes(message, strlen(message));
+    tinyclj_stdout_observe_bytes("\n", 1);
 }
 
 // -----------------------------------------------------------------------------
@@ -59,7 +71,10 @@ uint32_t platform_current_time_ms(void) {
 #if !defined(REPL_ENABLED) || (REPL_ENABLED == 0)
 void platform_put_string(void *ctx, const char *s) {
     (void)ctx;
-    if (s) fputs(s, stdout);
+    if (s) {
+        fputs(s, stdout);
+        tinyclj_stdout_observe_bytes(s, strlen(s));
+    }
 }
 #endif
 
@@ -68,6 +83,12 @@ const char *platform_name(void) {
 }
 
 // No line editor functions needed for embedded execution
+
+bool platform_try_get_cursor_position(uint16_t *row, uint16_t *col) {
+    (void)row;
+    (void)col;
+    return false;
+}
 
 // -----------------------------------------------------------------------------
 // Optional runtime stats hooks (override in ESP32/ESP-IDF integration).

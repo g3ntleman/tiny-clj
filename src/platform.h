@@ -5,6 +5,7 @@
 #include <stddef.h>
 // For uint32_t in time APIs
 #include <stdint.h>
+#include <stdbool.h>
 
 void platform_init();
 void platform_print(const char *message);
@@ -31,6 +32,13 @@ int platform_get_char(void *ctx);
 void platform_put_char(void *ctx, char c);
 void platform_put_string(void *ctx, const char *s);
 void platform_set_raw_mode(int enable);
+
+// -----------------------------------------------------------------------------
+// Optional terminal cursor position query (ANSI/VT100 DSR: ESC[6n).
+// Returns true if a valid response was received and row/col were written.
+// Intended for host terminals only; embedded UART/serial monitors usually do not support this.
+// -----------------------------------------------------------------------------
+bool platform_try_get_cursor_position(uint16_t *row, uint16_t *col);
 
 // Platform time helper.
 // Returns milliseconds within a 24h window [0..86400000).

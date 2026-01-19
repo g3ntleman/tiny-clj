@@ -32,10 +32,19 @@ static const char ESC_RIGHT[] = "\033[C";
 static const char ESC_LEFT[] = "\033[D";
 static const char ESC_CLEAR[] = "\033[K";
 static const char ESC_HOME[] = "\033[1G";
+static const char ESC_CLEAR_TO_END[] = "\033[J";
+static const char ESC_CURSOR_POS_FMT[] = "\033[%uG";
+static const char ESC_CURSOR_UP_FMT[] = "\033[%uA";
+static const char ESC_CURSOR_DOWN_FMT[] = "\033[%uB";
+
+#ifndef LINE_EDITOR_ESCAPE_BUFFER_SIZE
+#define LINE_EDITOR_ESCAPE_BUFFER_SIZE 8
+#endif
 
 struct LineEditor {
     StringBuffer buffer;
     uint16_t cursor_pos;
+    uint16_t last_rendered_pos;
     bool line_ready;
     GetCharFunc get_char;
     PutCharFunc put_char;
@@ -43,15 +52,20 @@ struct LineEditor {
     void *ctx;
     
     // ANSI escape sequence buffer
-    char escape_buffer[4];
+    char escape_buffer[LINE_EDITOR_ESCAPE_BUFFER_SIZE];
     uint8_t escape_pos;
     bool in_escape_sequence;
+    bool last_was_cr;
     
     // History support using CljVector
     CljVector *history;        // CljVector for history
     int16_t history_index;     // 0 = temp entry, >0 = older entries, -1 = not browsing
     bool history_has_temp;     // true if a temporary entry is appended at end
     uint16_t rendered_rows;    // number of terminal rows rendered for current buffer (for clearing)
+
+    // Prompt that should be re-drawn when we clear/redraw multi-line history entries.
+    char prompt[96];
+    uint16_t prompt_len;
 };
 
 static bool buffer_init(StringBuffer *buf, uint16_t initial_cap) {
@@ -174,24 +188,116 @@ static uint16_t buffer_row_count(const StringBuffer *buf) {
     return rows;
 }
 
-static void editor_redraw_from_start(LineEditor *editor) {
-    if (!editor) return;
-    uint16_t rows = editor->rendered_rows ? editor->rendered_rows : 1;
-    // Clear previously rendered rows (best-effort, assumes no scrollback).
-    editor->put_string(editor->ctx, "\r");
-    for (uint16_t i = 0; i < rows; i++) {
-        editor->put_string(editor->ctx, "\033[2K"); // clear entire line
-        if (i + 1 < rows) {
-            editor->put_string(editor->ctx, "\033[1A"); // move up one line
+static bool buffer_has_newline(const StringBuffer *buf) {
+    if (!buf || !buf->str) return false;
+    for (uint16_t i = 0; i < buf->length; i++) {
+        if (buf->str->data[i] == '\n') return true;
+    }
+    return false;
+}
+
+static void editor_compute_row_col(const LineEditor *editor, uint16_t pos,
+                                   uint16_t *row_out, uint16_t *col_out) {
+    uint16_t row = 0;
+    uint16_t col = (uint16_t)(editor ? editor->prompt_len + 1 : 1);
+    if (!editor || !editor->buffer.str) {
+        if (row_out) *row_out = 0;
+        if (col_out) *col_out = 1;
+        return;
+    }
+    if (pos > editor->buffer.length) pos = editor->buffer.length;
+    const char *s = editor->buffer.str->data;
+    for (uint16_t i = 0; i < pos; i++) {
+        if (s[i] == '\n') {
+            row++;
+            col = (uint16_t)(editor->prompt_len + 1);
+        } else {
+            col++;
         }
     }
-    editor->put_string(editor->ctx, "\r");
+    if (row_out) *row_out = row;
+    if (col_out) *col_out = col;
+}
 
-    // Reprint buffer (may include newlines).
-    editor->put_string(editor->ctx, editor->buffer.str ? editor->buffer.str->data : "");
+static void editor_move_cursor_abs(LineEditor *editor, uint16_t row, uint16_t col, uint16_t current_row) {
+    if (!editor) return;
+    char seq[16];
+    if (current_row > row) {
+        snprintf(seq, sizeof(seq), ESC_CURSOR_UP_FMT, (unsigned int)(current_row - row));
+        editor->put_string(editor->ctx, seq);
+    } else if (row > current_row) {
+        snprintf(seq, sizeof(seq), ESC_CURSOR_DOWN_FMT, (unsigned int)(row - current_row));
+        editor->put_string(editor->ctx, seq);
+    }
+    snprintf(seq, sizeof(seq), ESC_CURSOR_POS_FMT, (unsigned int)col);
+    editor->put_string(editor->ctx, seq);
+}
+
+static void editor_move_cursor_to_pos(LineEditor *editor, uint16_t target_pos) {
+    if (!editor) return;
+    uint16_t current_row = 0;
+    uint16_t current_col = 1;
+    uint16_t target_row = 0;
+    uint16_t target_col = 1;
+    editor_compute_row_col(editor, editor->cursor_pos, &current_row, &current_col);
+    editor_compute_row_col(editor, target_pos, &target_row, &target_col);
+    if (current_row == target_row && current_col == target_col) {
+        editor->cursor_pos = target_pos;
+        editor->last_rendered_pos = target_pos;
+        return;
+    }
+    editor_move_cursor_abs(editor, target_row, target_col, current_row);
+    editor->cursor_pos = target_pos;
+    editor->last_rendered_pos = target_pos;
+}
+
+static void editor_redraw_with_cursor(LineEditor *editor, uint16_t target_pos) {
+    if (!editor) return;
+    uint16_t current_row = 0;
+    editor_compute_row_col(editor, editor->last_rendered_pos, &current_row, NULL);
+    // Clear previously rendered rows (best-effort, assumes no scrollback).
+    if (current_row > 0) {
+        char seq[16];
+        snprintf(seq, sizeof(seq), ESC_CURSOR_UP_FMT, (unsigned int)current_row);
+        editor->put_string(editor->ctx, seq);
+    }
+    editor->put_string(editor->ctx, "\r");
+    editor->put_string(editor->ctx, ESC_CLEAR_TO_END);
+
+    // Reprint prompt + buffer (buffer may include newlines).
+    if (editor->prompt[0] != '\0') {
+        editor->put_string(editor->ctx, editor->prompt);
+    }
+    if (editor->buffer.str) {
+        const char *s = editor->buffer.str->data;
+        for (uint16_t i = 0; i < editor->buffer.length; i++) {
+            char c = s[i];
+            editor->put_char(editor->ctx, c);
+            if (c == '\n' && editor->prompt_len > 0) {
+                // Indent continuation lines under the prompt.
+                for (uint16_t k = 0; k < editor->prompt_len; k++) {
+                    editor->put_char(editor->ctx, ' ');
+                }
+            }
+        }
+    }
     editor->put_string(editor->ctx, ESC_CLEAR);
-    editor->cursor_pos = editor->buffer.length;
     editor->rendered_rows = buffer_row_count(&editor->buffer);
+
+    uint16_t end_row = 0;
+    uint16_t end_col = 1;
+    uint16_t target_row = 0;
+    uint16_t target_col = 1;
+    editor_compute_row_col(editor, editor->buffer.length, &end_row, &end_col);
+    editor_compute_row_col(editor, target_pos, &target_row, &target_col);
+    editor_move_cursor_abs(editor, target_row, target_col, end_row);
+    editor->cursor_pos = target_pos;
+    editor->last_rendered_pos = target_pos;
+}
+
+static void editor_redraw_from_start(LineEditor *editor) {
+    if (!editor) return;
+    editor_redraw_with_cursor(editor, editor->buffer.length);
 }
 
 static void editor_ring_bell(LineEditor *editor) {
@@ -282,12 +388,73 @@ static bool is_ansi_escape_sequence(const char *input, int len) {
     return len >= 3 && input[0] == '\033' && input[1] == '[';
 }
 
+static bool is_csi_final_char(char c) {
+    return (c >= '@' && c <= '~');
+}
+
+static void parse_csi_params(const char *input, int len, int *param1, int *param2) {
+    int p1 = 0;
+    int p2 = 0;
+    int count = 0;
+    bool in_number = false;
+    int current = 0;
+
+    if (len < 3) {
+        if (param1) *param1 = 0;
+        if (param2) *param2 = 0;
+        return;
+    }
+
+    for (int i = 2; i < len - 1; i++) {
+        char c = input[i];
+        if (c >= '0' && c <= '9') {
+            current = current * 10 + (c - '0');
+            in_number = true;
+            continue;
+        }
+        if (c == ';') {
+            if (in_number) {
+                if (count == 0) p1 = current;
+                if (count == 1) p2 = current;
+                count++;
+                current = 0;
+                in_number = false;
+            }
+            continue;
+        }
+        break;
+    }
+
+    if (in_number) {
+        if (count == 0) p1 = current;
+        if (count == 1) p2 = current;
+        count++;
+    }
+
+    if (param1) *param1 = p1;
+    if (param2) *param2 = p2;
+}
+
+static void insert_newline(LineEditor *editor) {
+    if (!editor) return;
+    if (!buffer_insert_char(&editor->buffer, editor->cursor_pos, '\n')) {
+        editor_ring_bell(editor);
+        return;
+    }
+    editor->cursor_pos++;
+    editor_redraw_with_cursor(editor, editor->cursor_pos);
+}
+
 static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, int len) {
     if (!is_ansi_escape_sequence(input, len)) {
         return 0;
     }
-    
-    char command = input[2];
+
+    char command = input[len - 1];
+    int p1 = 0;
+    int p2 = 0;
+    parse_csi_params(input, len, &p1, &p2);
+
     switch (command) {
         case 'A': // Up arrow - navigate history backwards
             {
@@ -337,45 +504,83 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
         case 'C': // Right arrow
             if (editor->cursor_pos < editor->buffer.length) {
                 editor->cursor_pos++;
-                editor->put_string(editor->ctx, ESC_RIGHT);
+                if (buffer_has_newline(&editor->buffer)) {
+                    editor_redraw_with_cursor(editor, editor->cursor_pos);
+                } else {
+                    editor->put_string(editor->ctx, ESC_RIGHT);
+                    editor->last_rendered_pos = editor->cursor_pos;
+                }
             }
             return 3;
         case 'D': // Left arrow
             if (editor->cursor_pos > 0) {
                 editor->cursor_pos--;
-                editor->put_string(editor->ctx, ESC_LEFT);
+                if (buffer_has_newline(&editor->buffer)) {
+                    editor_redraw_with_cursor(editor, editor->cursor_pos);
+                } else {
+                    editor->put_string(editor->ctx, ESC_LEFT);
+                    editor->last_rendered_pos = editor->cursor_pos;
+                }
             }
             return 3;
         case 'H': // Home
             editor->cursor_pos = 0;
-            editor->put_string(editor->ctx, ESC_HOME);
+            if (buffer_has_newline(&editor->buffer)) {
+                editor_redraw_with_cursor(editor, editor->cursor_pos);
+            } else {
+                editor->put_string(editor->ctx, ESC_HOME);
+                editor->last_rendered_pos = editor->cursor_pos;
+            }
             return 3;
         case 'F': // End
             editor->cursor_pos = editor->buffer.length;
-            editor->put_string(editor->ctx, ESC_HOME);
-            move_cursor_right(editor, editor->buffer.length);
+            if (buffer_has_newline(&editor->buffer)) {
+                editor_redraw_with_cursor(editor, editor->cursor_pos);
+            } else {
+                editor->put_string(editor->ctx, ESC_HOME);
+                move_cursor_right(editor, editor->buffer.length);
+                editor->last_rendered_pos = editor->cursor_pos;
+            }
             return 3;
         case 'K': // Clear line from cursor
             editor->put_string(editor->ctx, ESC_CLEAR);
             return 3;
-        case '3': // Delete key
-            if (len >= 4 && input[3] == '~') {
+        case '~': // Function keys like delete
+            if (p1 == 3) {
                 if (editor->cursor_pos < editor->buffer.length) {
-                    buffer_delete_char(&editor->buffer, editor->cursor_pos);
-                    // Redraw from cursor position
-                    editor->put_string(editor->ctx, ESC_CLEAR);
-                    for (uint16_t i = editor->cursor_pos; i < editor->buffer.length; i++) {
-                        editor->put_char(editor->ctx, editor->buffer.str->data[i]);
+                    if (editor->history_has_temp && editor->history_index > 0) {
+                        history_exit(editor);
                     }
-                    // Move cursor back to position
-                    move_cursor_left(editor, editor->buffer.length - editor->cursor_pos);
+                    buffer_delete_char(&editor->buffer, editor->cursor_pos);
+                    if (buffer_has_newline(&editor->buffer)) {
+                        editor_redraw_with_cursor(editor, editor->cursor_pos);
+                    } else {
+                        // Redraw from cursor position
+                        editor->put_string(editor->ctx, ESC_CLEAR);
+                        for (uint16_t i = editor->cursor_pos; i < editor->buffer.length; i++) {
+                            editor->put_char(editor->ctx, editor->buffer.str->data[i]);
+                        }
+                        // Move cursor back to position
+                        move_cursor_left(editor, editor->buffer.length - editor->cursor_pos);
+                        editor->last_rendered_pos = editor->cursor_pos;
+                    }
                 }
-                return 4; // Consumed 4 bytes
+                return len;
             }
-            return 3;
+            return len;
+        case 'u': // CSI u keyboard protocol (e.g. Shift/Ctrl-Enter)
+            if (p1 == 13 && (p2 == 2 || p2 == 5)) {
+                insert_newline(editor);
+                return len;
+            }
+            if (p1 == 10 && p2 == 5) {
+                insert_newline(editor);
+                return len;
+            }
+            return len;
     }
     
-    return 3; // Default: consume 3 bytes for unknown escape sequences
+    return len;
 }
 
 // Line editing operations
@@ -385,40 +590,53 @@ static void insert_character(LineEditor *editor, char c) {
         return;
     }
     editor->cursor_pos++;
-    
+
+    if (buffer_has_newline(&editor->buffer)) {
+        editor_redraw_with_cursor(editor, editor->cursor_pos);
+        return;
+    }
+
     // Display the character
     editor->put_char(editor->ctx, c);
-    
+
     // Redraw remaining characters
     for (uint16_t i = editor->cursor_pos; i < editor->buffer.length; i++) {
         editor->put_char(editor->ctx, editor->buffer.str->data[i]);
     }
-    
+
     // Move cursor back to correct position
     for (uint16_t i = editor->cursor_pos; i < editor->buffer.length; i++) {
         editor->put_string(editor->ctx, ESC_LEFT);
     }
+    editor->last_rendered_pos = editor->cursor_pos;
 }
 
 static void backspace_character(LineEditor *editor) {
     if (editor->cursor_pos > 0) {
         // Move cursor left
         editor->cursor_pos--;
+        if (buffer_has_newline(&editor->buffer)) {
+            buffer_delete_char(&editor->buffer, editor->cursor_pos);
+            editor_redraw_with_cursor(editor, editor->cursor_pos);
+            return;
+        }
+
         editor->put_string(editor->ctx, ESC_LEFT);
-        
+
         // Delete character
         buffer_delete_char(&editor->buffer, editor->cursor_pos);
-        
+
         // Clear from cursor to end of line
         editor->put_string(editor->ctx, ESC_CLEAR);
-        
+
         // Redraw remaining characters
         for (uint16_t i = editor->cursor_pos; i < editor->buffer.length; i++) {
             editor->put_char(editor->ctx, editor->buffer.str->data[i]);
         }
-        
+
         // Move cursor back to position
         move_cursor_left(editor, editor->buffer.length - editor->cursor_pos);
+        editor->last_rendered_pos = editor->cursor_pos;
     }
 }
 
@@ -432,6 +650,7 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
         return NULL;
     }
     editor->cursor_pos = 0;
+    editor->last_rendered_pos = 0;
     editor->line_ready = false;
     editor->get_char = get_char;
     editor->put_char = put_char;
@@ -442,6 +661,7 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
     editor->escape_buffer[0] = '\0';
     editor->escape_pos = 0;
     editor->in_escape_sequence = false;
+    editor->last_was_cr = false;
     
     // Initialize history support with transient vector for efficient in-place operations
     CljVector *persistent_vec = make_vector(50, CLJ_VECTOR);  // Start with persistent vector
@@ -450,6 +670,8 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
     editor->history_index = -1;  // Not browsing
     editor->history_has_temp = false;
     editor->rendered_rows = 1;
+    editor->prompt[0] = '\0';
+    editor->prompt_len = 0;
     
     return editor;
 }
@@ -470,7 +692,7 @@ int line_editor_process_input(LineEditor *editor) {
     // Try to read a complete escape sequence if we're in one
     if (editor->in_escape_sequence) {
         // Read remaining characters of escape sequence
-        while (editor->escape_pos < sizeof(editor->escape_buffer)) {
+        while (editor->escape_pos < sizeof(editor->escape_buffer) - 1) {
             int c = editor->get_char(editor->ctx);
             if (c == LINE_EDITOR_GETCHAR_NO_INPUT) {
                 // No more bytes available yet; keep escape state and try again later.
@@ -482,42 +704,27 @@ int line_editor_process_input(LineEditor *editor) {
                 editor->escape_pos = 0;
                 return LINE_EDITOR_EOF;
             }
-            
-            editor->escape_buffer[editor->escape_pos++] = (char)c;
-            if (editor->escape_pos < sizeof(editor->escape_buffer)) {
-                editor->escape_buffer[editor->escape_pos] = '\0';
-            }
-            
-            // Check if we have a complete escape sequence
-            if (editor->escape_pos >= 3 && editor->escape_buffer[1] == '[') {
-                if (editor->escape_buffer[2] != '3') {
-                    editor->in_escape_sequence = false;
-                    editor->escape_pos = 0;
-                    handle_ansi_escape_sequence(editor, editor->escape_buffer, 3);
-                    return LINE_EDITOR_SUCCESS;
-                }
-            }
-            
-            // Check for longer escape sequences (like \033[3~ for delete)
-            if (editor->escape_pos >= 4 && editor->escape_buffer[1] == '[' && 
-                editor->escape_buffer[2] == '3' && editor->escape_buffer[3] == '~') {
+            if (c == 4) {
                 editor->in_escape_sequence = false;
                 editor->escape_pos = 0;
-                
-                // Handle delete key - don't display escape sequence
-                if (editor->cursor_pos < editor->buffer.length) {
-                    if (editor->history_has_temp && editor->history_index > 0) {
-                        history_exit(editor);
-                    }
-                    buffer_delete_char(&editor->buffer, editor->cursor_pos);
-                    // Redraw from cursor position
-                    editor->put_string(editor->ctx, ESC_CLEAR);
-                    for (uint16_t i = editor->cursor_pos; i < editor->buffer.length; i++) {
-                        editor->put_char(editor->ctx, editor->buffer.str->data[i]);
-                    }
-                    // Move cursor back to position
-                    move_cursor_left(editor, editor->buffer.length - editor->cursor_pos);
-                }
+                return LINE_EDITOR_EOF;
+            }
+            
+            editor->escape_buffer[editor->escape_pos++] = (char)c;
+            editor->escape_buffer[editor->escape_pos] = '\0';
+
+            if (editor->escape_pos >= 2 && editor->escape_buffer[1] != '[') {
+                editor->in_escape_sequence = false;
+                editor->escape_pos = 0;
+                return LINE_EDITOR_SUCCESS;
+            }
+
+            if (editor->escape_pos >= 3 &&
+                editor->escape_buffer[1] == '[' &&
+                is_csi_final_char(editor->escape_buffer[editor->escape_pos - 1])) {
+                editor->in_escape_sequence = false;
+                handle_ansi_escape_sequence(editor, editor->escape_buffer, editor->escape_pos);
+                editor->escape_pos = 0;
                 return LINE_EDITOR_SUCCESS;
             }
         }
@@ -550,12 +757,17 @@ int line_editor_process_input(LineEditor *editor) {
     
     // Handle Ctrl-D (EOF)
     if (c == 4) {
+        editor->last_was_cr = false;
         return LINE_EDITOR_EOF;
     }
     
-    // Handle newline (submit line)
-    if (c == '\n' || c == '\r') {
+    // Handle carriage return (submit line)
+    if (c == '\r') {
+        editor->last_was_cr = true;
         if (editor->buffer.length > 0) {
+            if (buffer_has_newline(&editor->buffer) && editor->cursor_pos != editor->buffer.length) {
+                editor_move_cursor_to_pos(editor, editor->buffer.length);
+            }
             // Ensure temp history entry does not leak into persisted history.
             history_exit(editor);
             editor->line_ready = true;
@@ -564,7 +776,20 @@ int line_editor_process_input(LineEditor *editor) {
         }
         return LINE_EDITOR_SUCCESS;
     }
+
+    // Handle line feed (Ctrl+J / raw LF). Treat as insert-newline unless it follows CR.
+    if (c == '\n') {
+        if (editor->last_was_cr) {
+            editor->last_was_cr = false;
+            return LINE_EDITOR_SUCCESS;
+        }
+        editor->last_was_cr = false;
+        insert_newline(editor);
+        return LINE_EDITOR_SUCCESS;
+    }
     
+    editor->last_was_cr = false;
+
     // Handle backspace/delete
     if (c == '\b' || c == 127) {
         backspace_character(editor);
@@ -600,6 +825,15 @@ const char* line_editor_get_buffer_cstr(const LineEditor *editor, size_t *len) {
     return (editor->buffer.str) ? editor->buffer.str->data : "";
 }
 
+void line_editor_set_prompt(LineEditor *editor, const char *prompt) {
+    if (!editor) return;
+    if (!prompt) prompt = "";
+    // Copy into fixed storage (prompt is short: "ns=> " or "ns... ").
+    strncpy(editor->prompt, prompt, sizeof(editor->prompt) - 1);
+    editor->prompt[sizeof(editor->prompt) - 1] = '\0';
+    editor->prompt_len = (uint16_t)strlen(editor->prompt);
+}
+
 void line_editor_clear(LineEditor *editor) {
     if (!editor_is_valid(editor)) return;
     history_exit(editor);
@@ -607,6 +841,8 @@ void line_editor_clear(LineEditor *editor) {
     editor->cursor_pos = 0;
     editor->line_ready = false;
     editor->rendered_rows = 1;
+    editor->last_was_cr = false;
+    editor->last_rendered_pos = 0;
 }
 
 void line_editor_reset(LineEditor *editor) {

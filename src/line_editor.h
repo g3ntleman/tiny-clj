@@ -56,6 +56,10 @@ int line_editor_get_state(const LineEditor *editor, LineEditorState *state);
 // is reset/cleared/freed.
 const char* line_editor_get_buffer_cstr(const LineEditor *editor, size_t *len);
 
+// Set the prompt prefix shown before the editable buffer.
+// The editor does not own the pointer; it copies into internal storage.
+void line_editor_set_prompt(LineEditor *editor, const char *prompt);
+
 // Reset editor state
 void line_editor_clear(LineEditor *editor);
 void line_editor_reset(LineEditor *editor);
