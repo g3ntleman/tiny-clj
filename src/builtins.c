@@ -258,7 +258,7 @@ static bool list_try_nth_value(CljList *list, int index, ID *out_value)
     CljObject *current = (CljObject *)list;
     for (int j = 0; j < index; j++)
     {
-        if (!current || !list_type_matches(TAG(current)))
+        if (!current || !is_list_type(TAG(current)))
         {
             return false;
         }
@@ -266,13 +266,13 @@ static bool list_try_nth_value(CljList *list, int index, ID *out_value)
         CljList *current_list = as_list(current);
         current = LIST_REST(current_list);
 
-        if (current && !list_type_matches(TAG(current)))
+        if (current && !is_list_type(TAG(current)))
         {
             return false;
         }
     }
 
-    if (!current || !list_type_matches(TAG(current)))
+    if (!current || !is_list_type(TAG(current)))
     {
         return false;
     }
@@ -342,7 +342,7 @@ ID nth2(ID *args, unsigned int argc)
     }
 
     // Fast path: Lists (O(n) access via list_nth)
-    if (list_type_matches(TAG(coll)))
+    if (is_list_type(TAG(coll)))
     {
         CljList *list = as_list(coll);
         // list_nth() validates bounds and throws exception if out of bounds.
@@ -611,7 +611,7 @@ ID native_conj(ID *args, unsigned int argc)
     }
 
     // Lists: conj adds to front
-    if (list_type_matches(tag))
+    if (is_list_type(tag))
     {
         CljList *result = as_list(coll);
         for (unsigned int i = 1; i < argc; i++)
@@ -825,7 +825,7 @@ ID native_concat(ID *args, unsigned int argc)
     ID y = args[1];
 
     // If x is empty/nil, return y (or empty list if y is nil)
-    if (!x || (list_type_matches(TAG(x)) && !list_count(as_list(x))))
+    if (!x || (is_list_type(TAG(x)) && !list_count(as_list(x))))
     {
         return y ? RETAIN(y) : empty_list();
     }
@@ -1273,7 +1273,7 @@ ID native_cons(ID *args, unsigned int argc)
     }
 
     // Proper list-like tails (lists and parsed AST lists)
-    if (list_type_matches(TAG(coll)))
+    if (is_list_type(TAG(coll)))
     {
         CljList *list = as_list(coll);
         // Treat empty list singleton like nil for cons
@@ -2144,7 +2144,7 @@ ID native_count(ID *args, unsigned int argc)
             CljVector *vec = as_vector(coll);
             return (fixnum(vec ? vector_count(vec) : 0));
         }
-        else if (list_type_matches(tag))
+        else if (is_list_type(tag))
         {
             CljList *list = as_list(coll);
             return (fixnum(list ? list_count(list) : 0));
@@ -3821,7 +3821,7 @@ ID native_apply(ID *args, unsigned int argc)
     if (last)
     {
         unsigned char tag = TAG(last);
-        if (list_type_matches(tag))
+        if (is_list_type(tag))
         {
             for (CljList *l = as_list(last); l && n < 64; l = l->rest ? as_list(l->rest) : NULL)
             {
@@ -4630,7 +4630,7 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
         return spec;
     }
 
-    if (list_type_matches(tag))
+    if (is_list_type(tag))
     {
         CljList *list = as_list(spec);
         if (!list)
@@ -6260,7 +6260,7 @@ ID native_list_p(ID *args, unsigned int argc)
     CHECK_ARITY(argc, 1, "list?");
     // Treat CLJ_LIST and CLJ_AST_NODE as list-like. Macros/quasiquote operate on
     // parsed forms, which are typically CLJ_AST_NODE.
-    return (args[0] && list_type_matches(TAG(args[0]))) ? clj_true : clj_false;
+    return (args[0] && is_list_type(TAG(args[0]))) ? clj_true : clj_false;
 }
 
 // native_time removed: time is now only a special form (eval_time)

@@ -800,7 +800,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
 
         for (CljList *node = clause_node; node; node = list_or_null(as_list(LIST_REST(node)))) {
             CljObject *clause = LIST_FIRST(node);
-            if (!is_list(clause)) continue;
+            if (!is_list_like(clause)) continue;
 
             CljList *clause_list = as_list(clause);
             if (!clause_list) continue;

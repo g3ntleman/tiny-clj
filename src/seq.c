@@ -315,7 +315,7 @@ bool seq_iter_next(SeqIterator *iter) {
 
                 // If rest is a proper list node, keep iterating list nodes.
                 // Use list_empty to properly handle list with nil element.
-                if (rest && list_type_matches(TAG(rest))) {
+                if (rest && is_list_type(TAG(rest))) {
                     CljList *rest_list = as_list(rest);
                     if (!list_empty(rest_list)) {
                         iter->state.list.current = rest;
@@ -485,7 +485,7 @@ CljSeqIterator* make_seq(ID obj) {
     if (obj_tag == CLJ_VECTOR) {
         CljVector *vec = as_vector((CljObject*)obj);
         if (vec && vector_count(vec) == 0) return NULL;
-    } else if (list_type_matches(obj_tag)) {
+    } else if (is_list_type(obj_tag)) {
         CljList *list = as_list((CljObject*)obj);
         if (list_empty(list)) return NULL;
     } else if (obj_tag == CLJ_MAP || obj_tag == CLJ_MAP_TRANSIENT) {
@@ -687,7 +687,7 @@ bool is_seqable(ID obj) {
 
 bool is_seq(ID obj) {
     if (!obj) return false;
-    if (list_type_matches(TAG(obj))) {
+    if (is_list_type(TAG(obj))) {
         return true;
     }
     return TAG(obj) == CLJ_SEQ || TAG(obj) == CLJ_LAZY_SEQ;

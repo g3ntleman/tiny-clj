@@ -85,7 +85,7 @@ TEST(test_macro_expander_debug_isolated) {
     CLJ_FREE((void*)canon_ast);
     
     // Check if first element is a symbol or immediate
-    if (canonicalized && list_type_matches(TAG(canonicalized))) {
+    if (canonicalized && is_list_type(TAG(canonicalized))) {
         CljList *list = as_list(canonicalized);
         if (list && list->first) {
             unsigned char first_tag = TAG(list->first);

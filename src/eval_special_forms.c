@@ -294,7 +294,7 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
         ID body_expr = do_list;
         fn_rest->rest = (CljObject*)make_list(body_expr, NULL);
     }
-    ID fn_obj = eval_fn(fn_list, env, st);
+    ID fn_obj = eval_fn(fn_list, env, st, NULL);
     if (!fn_obj) {
         RELEASE(fn_list);
         return NULL;
@@ -309,7 +309,7 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 // Wrapper functions for existing special form evaluators
 ID eval_special_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_fn: list must not be NULL");
-    return AUTORELEASE(eval_fn_with_context(list, eval_env_or_ns_mappings(env, st), st, ctx));
+    return AUTORELEASE(eval_fn(list, eval_env_or_ns_mappings(env, st), st, ctx));
 }
 
 ID eval_special_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
@@ -521,7 +521,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
     CljList *clause_node = NULL;
     for (CljList *node = args; node; node = list_rest_normalized(node)) {
         ID elem = LIST_FIRST(node);
-        if (!elem || !list_type_matches(TAG(elem))) continue;
+        if (!elem || !is_list_type(TAG(elem))) continue;
         CljList *clause = as_list(elem);
         ID first = clause ? LIST_FIRST(clause) : NULL;
         if (first == (ID)SYM_CATCH || first == (ID)SYM_FINALLY ||
@@ -535,7 +535,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
     CljList *finally_clause = NULL;
     for (CljList *node = clause_node; node; node = list_rest_normalized(node)) {
         ID elem = LIST_FIRST(node);
-        if (!elem || !list_type_matches(TAG(elem))) continue;
+        if (!elem || !is_list_type(TAG(elem))) continue;
         CljList *clause = as_list(elem);
         ID first = clause ? LIST_FIRST(clause) : NULL;
         if (first == (ID)SYM_FINALLY || sym_name_eq(first, "finally")) {
@@ -562,7 +562,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
 
         for (CljList *node = clause_node; node; node = list_rest_normalized(node)) {
             ID elem = LIST_FIRST(node);
-            if (!elem || !list_type_matches(TAG(elem))) continue;
+            if (!elem || !is_list_type(TAG(elem))) continue;
 
             CljList *clause = as_list(elem);
             ID first = clause ? LIST_FIRST(clause) : NULL;

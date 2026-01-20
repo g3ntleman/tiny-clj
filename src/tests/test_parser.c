@@ -471,7 +471,7 @@ TEST(test_parse_from_reader_multiple_expressions) {
     // Parse second expression
     CljValue result2 = parse_from_reader(&reader1, eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(list_type_matches(TAG((CljObject*)result2)));
+    TEST_ASSERT_TRUE(is_list_type(TAG((CljObject*)result2)));
 
     // Test 2: Three expressions with different types
     const char *input2 = "\"hello\"\n:keyword\n[1 2 3]";
@@ -514,7 +514,7 @@ TEST(test_parse_from_reader_multiple_expressions) {
     // Parse second expression (after comment)
     CljValue list_result = parse_from_reader(&reader3, eval_state);
     TEST_ASSERT_NOT_NULL(list_result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG((CljObject*)list_result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG((CljObject*)list_result)));
 
     evalstate_free(eval_state);
 }
@@ -526,7 +526,7 @@ TEST(test_parse_quote_form_with_nil) {
     // Quote forms should parse to (quote (1 nil 3))
     CljObject *parsed = parse("'(1 nil 3)", eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(parsed)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(parsed)));
 
     // The parsed form should be (quote (1 nil 3))
     CljList *quote_list = as_list(parsed);
@@ -542,7 +542,7 @@ TEST(test_parse_quote_form_with_nil) {
     TEST_ASSERT_NOT_NULL(rest);
     CljObject *quoted_list = LIST_FIRST(rest);
     TEST_ASSERT_NOT_NULL(quoted_list);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(quoted_list)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(quoted_list)));
 
     // Check the quoted list structure: (1 nil 3)
     CljList *inner_list = as_list(quoted_list);
