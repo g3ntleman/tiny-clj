@@ -74,7 +74,7 @@ void platform_set_raw_mode(int enable) {
 }
 
 #if defined(REPL_ENABLED) && (REPL_ENABLED != 0)
-static bool platform_try_get_cursor_position(uint16_t *row, uint16_t *col) {
+__attribute__((weak)) bool platform_try_get_cursor_position(uint16_t *row, uint16_t *col) {
     (void)row;
     (void)col;
     return false;
