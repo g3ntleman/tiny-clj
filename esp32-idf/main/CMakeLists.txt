@@ -7,10 +7,10 @@ endif()
 
 if(TINYCLJ_PLATFORM STREQUAL "uart")
   set(PLATFORM_SRC "${CMAKE_SOURCE_DIR}/../../src/platform_esp32_uart.c")
-  add_compile_definitions(REPL_ENABLED=1)
+  set(_repl_def 1)
 else()
   set(PLATFORM_SRC "${CMAKE_SOURCE_DIR}/../../src/platform_esp32_embedded.c")
-  add_compile_definitions(REPL_ENABLED=0)
+  set(_repl_def 0)
 endif()
 
 idf_component_register(
@@ -32,4 +32,7 @@ idf_component_register(
     spi_flash
     tinyclj
 )
+
+# Propagate REPL_ENABLED to the component for conditional compilation.
+target_compile_definitions(${COMPONENT_LIB} PRIVATE REPL_ENABLED=${_repl_def})
 
