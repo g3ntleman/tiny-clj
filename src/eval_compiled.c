@@ -61,7 +61,7 @@ ID eval_compiled_call(CljASTNode *node, CljMap *env, EvalState *st, const EvalCo
     ID *args = stack_args;
     unsigned int argc = 0;
 
-    CljList *arg_nodes = (node->rest && list_type_matches(TAG(node->rest))) ? as_list(node->rest) : NULL;
+    CljList *arg_nodes = (node->rest && is_list_type(TAG(node->rest))) ? as_list(node->rest) : NULL;
     for (CljList *cur = arg_nodes; cur; cur = cur->rest ? as_list(cur->rest) : NULL) {
         if (argc == 16) {
             // Grow to heap once if needed (rare).

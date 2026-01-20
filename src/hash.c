@@ -62,7 +62,7 @@ static uint32_t hash_list(CljList *list) {
     for (CljList *c = list; c; ) {
         h = FNV_MIX(h, clj_hash_full(c->first));
         CljObject *rest = c->rest;
-        c = (rest && list_type_matches(TAG(rest))) ? as_list(rest) : NULL;
+        c = (rest && is_list_type(TAG(rest))) ? as_list(rest) : NULL;
     }
     return h;
 }

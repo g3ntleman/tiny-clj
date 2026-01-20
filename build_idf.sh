@@ -84,6 +84,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}" && pwd)"
 IDF_PROJECT_DIR="${REPO_ROOT}/esp32-idf"
+CENTRAL_BUILD_DIR="${REPO_ROOT}/builds/esp32-idf"
 
 if [ ! -d "${IDF_PROJECT_DIR}" ]; then
   echo "ERROR: ESP-IDF project dir not found: ${IDF_PROJECT_DIR}" >&2
@@ -98,6 +99,7 @@ cd "${IDF_PROJECT_DIR}"
 
 if [ "${DO_CLEAN}" -eq 1 ]; then
   rm -rf build
+  rm -rf "${CENTRAL_BUILD_DIR}/build"
   rm -f sdkconfig
 fi
 
@@ -105,10 +107,18 @@ idf.py set-target "${TARGET}"
 # Nounset-safe array expansion (EXTRA_IDF_ARGS may be unset/non-array in some shells).
 idf.py build ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"}
 
+# If requested, run flash/monitor before moving the build dir.
 if [ "${DO_FLASH}" -eq 1 ]; then
   idf.py flash ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"}
 fi
 
 if [ "${DO_MONITOR}" -eq 1 ]; then
   idf.py monitor ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"}
+fi
+
+# Move the produced build directory into the centralized builds area.
+if [ -d build ]; then
+  mkdir -p "${CENTRAL_BUILD_DIR}"
+  mv build "${CENTRAL_BUILD_DIR}/"
+  echo "Moved esp32-idf/build -> ${CENTRAL_BUILD_DIR}/build"
 fi

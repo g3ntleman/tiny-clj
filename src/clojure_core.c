@@ -224,7 +224,7 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
             // For def expressions, the symbol should be stored even if result is NULL
             // For ns expressions, nil is a valid return value
             // Check if this was a def or ns expression that might have stored something
-            if (form && list_type_matches(TAG(form))) {
+            if (form && is_list_type(TAG(form))) {
               CljList *list = as_list(form);
               CljObject *first = LIST_FIRST(list);
               if (first && TAG(first) == CLJ_SYMBOL) {
@@ -244,7 +244,7 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
           // Exception occurred during evaluation
           // Log the exception for debugging (always log for def expressions to catch silent failures)
           bool is_def_expr = false;
-            if (form && list_type_matches(TAG(form))) {
+            if (form && is_list_type(TAG(form))) {
               CljList *list = as_list(form);
               CljObject *first = LIST_FIRST(list);
               if (first && TAG(first) == CLJ_SYMBOL && as_symbol(first) == SYM_DEF) {

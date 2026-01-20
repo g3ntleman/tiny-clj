@@ -43,8 +43,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st);
 ID eval_ns(CljList *list, CljMap *env, EvalState *st);
 ID eval_var(CljList *list, CljMap *env, EvalState *st);
 ID eval_list_function(CljList *list, CljMap *env);
-ID eval_fn(CljList *list, CljMap *env, EvalState *st);
-ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_symbol(CljSymbol *symbol, EvalState *st);
 ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 
