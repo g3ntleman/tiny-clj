@@ -52,21 +52,6 @@ set(TINYCLJ_SRCS
   "../../../src/mdns_resolver.c"
 )
 
-# Select a single platform implementation at configure time. Valid values:
-#  - "uart"      -> include src/platform_esp32_uart.c (REPL UART)
-#  - "embedded"  -> include src/platform_esp32_embedded.c (no UART hooks)
-if(NOT DEFINED TINYCLJ_PLATFORM)
-  set(TINYCLJ_PLATFORM "uart" CACHE STRING "tiny-clj platform: uart|embedded")
-endif()
-
-if(TINYCLJ_PLATFORM STREQUAL "uart")
-  list(APPEND TINYCLJ_SRCS "../../../src/platform_esp32_uart.c")
-elseif(TINYCLJ_PLATFORM STREQUAL "embedded")
-  list(APPEND TINYCLJ_SRCS "../../../src/platform_esp32_embedded.c")
-else()
-  message(FATAL_ERROR "Unknown TINYCLJ_PLATFORM: ${TINYCLJ_PLATFORM} (expected 'uart' or 'embedded')")
-endif()
-
 idf_component_register(
   SRCS
     ${TINYCLJ_SRCS}
@@ -78,9 +63,15 @@ idf_component_register(
     tiny-db
 )
 
+if(TINYCLJ_PLATFORM STREQUAL "uart")
+  set(_repl_def 1)
+else()
+  set(_repl_def 0)
+endif()
+
 target_compile_definitions(${COMPONENT_LIB} PUBLIC
   ESP32_BUILD=1
-  REPL_ENABLED=1
+  REPL_ENABLED=${_repl_def}
   LINE_EDITING_ENABLED=1
   MEMORY_PROFILING_ENABLED=0
   META_ENABLED=0
