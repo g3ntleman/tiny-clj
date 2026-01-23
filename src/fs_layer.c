@@ -1,3 +1,6 @@
+#include <subjective-c/subjective-c.h>
+#include <stdbool.h>
+extern struct CljSymbol *SYM_KW_SIZE, *SYM_KW_CHUNKS, *SYM_KW_PATH, *SYM_KW_META;
 #include "fs_layer.h"
 
 #include "byte_array.h"
@@ -263,13 +266,6 @@ void fs_global_store_reset(void)
 /* -------------------------------------------------------------------------- */
 /* KV store helpers                                                           */
 /* -------------------------------------------------------------------------- */
-
-static bool fs_kv_exists(FsKvStore *st, const char *key)
-{
-    if (!st || !st->db || !key) return false;
-    size_t saved = 0;
-    return fs_kv_get_status(st, key, NULL, 0, &saved) == TDB_OK;
-}
 
 FsKvStore *fs_kv_store_new(void)
 {
@@ -578,6 +574,61 @@ tdb_status_t fs_kv_stream_write_key_bytes(FsKvStore* st,
 
     if (out_total_len) *out_total_len = total;
     return TDB_OK;
+}
+
+/* Set file size directly. Creates zero-filled chunks for new version and
+ * deletes old-version chunk keys after committing the new metadata.
+ */
+fs_err_t fs_set_size(FsKvStore *st, const char *path, uint32_t new_size)
+{
+    if (!fs_is_valid_path(path) || fs_is_dir_path(path)) return FS_ERR_INVALID_PATH;
+    if (!st) return FS_ERR_IO;
+    if (strlen(path) >= FS_KEY_MAX) return FS_ERR_INVALID_PATH;
+
+    FsFileMeta old_meta = {0};
+    bool has_old = fs_meta_get(st, path, &old_meta);
+    uint32_t new_ver = has_old ? (old_meta.version + 1u) : 1u;
+    if (new_ver == 0) new_ver = 1u;
+
+    uint32_t chunks = (uint32_t)((new_size + FS_STORE_CHUNK_SIZE - 1) / FS_STORE_CHUNK_SIZE);
+    if (chunks == 0) chunks = 1;
+
+    uint8_t zero_chunk[FS_STORE_CHUNK_SIZE];
+    memset(zero_chunk, 0, sizeof(zero_chunk));
+
+    for (uint32_t i = 0; i < chunks; i++) {
+        size_t off = (size_t)i * FS_STORE_CHUNK_SIZE;
+        size_t remaining = new_size > off ? (size_t)(new_size - off) : 0;
+        size_t chunk_len = remaining > FS_STORE_CHUNK_SIZE ? FS_STORE_CHUNK_SIZE : remaining;
+
+        char ckey[FS_KEY_MAX];
+        fs_err_t e = fs_make_chunk_key(ckey, path, new_ver, i);
+        if (e != FS_NO_ERR) return e;
+
+        if (!fs_kv_put(st, ckey, zero_chunk, chunk_len)) {
+            return FS_ERR_IO;
+        }
+    }
+
+    FsFileMeta meta = {
+        .magic = FS_FILE_META_MAGIC,
+        .version = new_ver,
+        .size = new_size,
+        .chunks = chunks
+    };
+    if (!fs_meta_put(st, path, &meta)) return FS_ERR_IO;
+
+    /* Remove previous-version chunk keys (best-effort). */
+    if (has_old && old_meta.version != 0) {
+        for (uint32_t i = 0; i < old_meta.chunks; i++) {
+            char ok[FS_KEY_MAX];
+            if (fs_make_chunk_key(ok, path, old_meta.version, i) == FS_NO_ERR) {
+                (void)fs_kv_del(st, ok);
+            }
+        }
+    }
+
+    return FS_NO_ERR;
 }
 
 tdb_status_t fs_file_stream_read(FsKvStore* st,
@@ -979,7 +1030,18 @@ bool fs_delete(FsKvStore *st, const char *path)
 {
     if (!fs_is_valid_path(path)) return false;
     if (!st) return false;
-    if (!fs_kv_exists(st, path)) return false;
+    /* Remove chunk keys for current version (if present), then delete meta key. */
+    FsFileMeta meta = {0};
+    if (fs_meta_get(st, path, &meta)) {
+        if (meta.version != 0) {
+            for (uint32_t i = 0; i < meta.chunks; i++) {
+                char ckey[FS_KEY_MAX];
+                if (fs_make_chunk_key(ckey, path, meta.version, i) == FS_NO_ERR) {
+                    (void)fs_kv_del(st, ckey);
+                }
+            }
+        }
+    }
     return fs_kv_del(st, path);
 }
 
@@ -998,7 +1060,7 @@ ID fs_list_dir_batch(FsKvStore *st,
     size_t prefix_len = strlen(dir_path);
     size_t after_len = after_key ? strlen(after_key) : 0;
 
-    ID vec = (ID)make_vector(8, CLJ_VECTOR);
+    CljVector *vec = make_vector(8, CLJ_VECTOR);
     if (!vec) return NULL;
 
     tdb_kv_cursor_t* cur = NULL;
@@ -1033,7 +1095,29 @@ ID fs_list_dir_batch(FsKvStore *st,
 
         char kstr[FS_KEY_MAX];
         if (fs_list_dir_key_is_direct_child(dir_path, prefix_len, k.data, k.len, kstr)) {
-            vec = (ID)vector_conj((CljVector*)vec, (ID)make_string(kstr));
+            // Entry map: {:path <string> :meta <map>}
+            FsFileMeta meta = {0};
+            bool has_formal = fs_meta_get(st, kstr, &meta);
+
+            CljMap *meta_map = make_map(4);
+            if (!meta_map) { tdb_kv_cursor_close(cur); return NULL; }
+            if (has_formal) {
+                map_assoc_inplace(&meta_map, (ID)SYM_KW_SIZE, fixnum((int32_t)meta.size));
+                map_assoc_inplace(&meta_map, (ID)SYM_KW_CHUNKS, fixnum((int32_t)meta.chunks));
+            }
+
+            CljMap *entry_map = make_map(2);
+            if (!entry_map) { RELEASE(meta_map); tdb_kv_cursor_close(cur); return NULL; }
+
+            ID path_str = (ID)make_string(kstr);
+            map_assoc_inplace(&entry_map, (ID)SYM_KW_PATH, path_str);
+            RELEASE(path_str);
+
+            map_assoc_inplace(&entry_map, (ID)SYM_KW_META, (ID)meta_map);
+            RELEASE(meta_map);
+
+            vector_conj_inplace(&vec, (ID)entry_map);
+            RELEASE(entry_map);
             returned++;
             if (batch_size && returned >= batch_size) {
                 break;
@@ -1042,6 +1126,6 @@ ID fs_list_dir_batch(FsKvStore *st,
     }
 
     tdb_kv_cursor_close(cur);
-    return AUTORELEASE(vec);
+    return AUTORELEASE((ID)vec);
 }
 

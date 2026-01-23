@@ -8,6 +8,7 @@
 #include "seq.h"
 #include "builtins.h"  // builtin_get_eval_state, builtin_set_eval_state, native_first/rest/seq
 #include "eval.h"      // eval_function_call
+#include "function.h"  // CljFunction (needed for thunk->ns)
 #include "value.h"
 #include "list.h"
 #include "vector.h"
@@ -71,8 +72,25 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
     }
 
     // Evaluate thunk once to produce the sequence body.
+    //
+    // CRITICAL (Clojure compatibility):
+    // Realize the thunk in the thunk's defining namespace, not the caller's
+    // current namespace. Otherwise unqualified symbol resolution inside the
+    // lazy body can fail at realization time (e.g. private helpers in the same ns).
     builtin_set_eval_state(st);
+    CljNamespace *saved_ns = st->current_ns;
+    CLJ_ASSERT(lazy->thunk && !IS_IMMEDIATE(lazy->thunk) && 
+               (TAG(lazy->thunk) == CLJ_CLOSURE || TAG(lazy->thunk) == CLJ_FUNC));
+    if (TAG(lazy->thunk) == CLJ_CLOSURE) {
+        CljFunction *thunk_fn = (CljFunction*)lazy->thunk;
+        if (thunk_fn->ns) {
+            st->current_ns = thunk_fn->ns;
+        }
+    }
+
     ID seq_val = eval_function_call(lazy->thunk, NULL, 0, NULL, st);
+
+    st->current_ns = saved_ns;
 
     ID first_val = NULL;
     ID rest_val = NULL;

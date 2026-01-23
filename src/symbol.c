@@ -1,3 +1,5 @@
+#include <stddef.h>
+struct CljSymbol *SYM_KW_META = NULL;
 #include "symbol.h"
 #include "object.h"
 #include "runtime.h"
@@ -122,6 +124,7 @@ CljSymbol *SYM_KW_HOST_OS = NULL;
 CljSymbol *SYM_KW_MACRO = NULL;
 CljSymbol *SYM_KW_TYPE = NULL;
 CljSymbol *SYM_KW_SIZE = NULL;
+CljSymbol *SYM_KW_CHUNKS = NULL;
 CljSymbol *SYM_KW_ENTRIES = NULL;
 CljSymbol *SYM_KW_LAST_KEY = NULL;
 
@@ -142,6 +145,7 @@ CljSymbol *SYM_TINYCLJ = NULL;
 
 // tinyclj namespace function symbols
 CljSymbol *SYM_RETAIN_COUNT = NULL;
+CljSymbol *SYM_LIST_BATCH = NULL;
 
 // Additional symbols for hot path optimization
 CljSymbol *SYM_NS_STAR = NULL;
@@ -411,6 +415,7 @@ DEFINE_EXTERN_SYMBOL(sym_cancel_timer_data, "cancel-timer");
 DEFINE_EXTERN_SYMBOL(sym_atom_data, "atom");
 DEFINE_EXTERN_SYMBOL(sym_reset_bang_data, "reset!");
 DEFINE_EXTERN_SYMBOL(sym_swap_bang_data, "swap!");
+DEFINE_EXTERN_SYMBOL(sym_list_batch_data, "list-batch");
 #ifndef ESP32_BUILD
 DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
 DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
@@ -437,10 +442,12 @@ DEFINE_STATIC_SYMBOL(sym_kw_host_data, ":host");
 DEFINE_STATIC_SYMBOL(sym_kw_column_data, ":column");
 DEFINE_STATIC_SYMBOL(sym_kw_fn_data, ":fn");
 DEFINE_STATIC_SYMBOL(sym_kw_path_data, ":path");
+DEFINE_STATIC_SYMBOL(sym_kw_meta_data, ":meta");
 DEFINE_STATIC_SYMBOL(sym_kw_host_os_data, ":host-os");
 DEFINE_STATIC_SYMBOL(sym_kw_macro_data, ":macro");
 DEFINE_STATIC_SYMBOL(sym_kw_type_data, ":type");
 DEFINE_STATIC_SYMBOL(sym_kw_size_data, ":size");
+DEFINE_STATIC_SYMBOL(sym_kw_chunks_data, ":chunks");
 DEFINE_STATIC_SYMBOL(sym_kw_entries_data, ":entries");
 DEFINE_STATIC_SYMBOL(sym_kw_last_key_data, ":last-key");
 
@@ -612,6 +619,9 @@ void init_special_symbols() {
     // tinyclj native function symbol for retain-count
     INIT_SYMBOL_NS(SYM_RETAIN_COUNT, sym_retain_count_data, SYM_TINYCLJ);
     
+    // list-batch symbol (used in tinyclj.fs namespace)
+    INIT_SYMBOL(SYM_LIST_BATCH, sym_list_batch_data);
+    
     // clojure.core sqrt native function symbol
     INIT_SYMBOL_NS(SYM_SQRT_NATIVE, sym_sqrt_data, SYM_CLOJURE_CORE);
 
@@ -673,6 +683,8 @@ void init_special_symbols() {
 
     INIT_SYMBOL(SYM_KW_PATH, sym_kw_path_data);
 
+    INIT_SYMBOL(SYM_KW_META, sym_kw_meta_data);
+
     INIT_SYMBOL(SYM_KW_HOST_OS, sym_kw_host_os_data);
 
     INIT_SYMBOL(SYM_KW_MACRO, sym_kw_macro_data);
@@ -680,6 +692,7 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_TYPE, sym_kw_type_data);
 
     INIT_SYMBOL(SYM_KW_SIZE, sym_kw_size_data);
+    INIT_SYMBOL(SYM_KW_CHUNKS, sym_kw_chunks_data);
 
     INIT_SYMBOL(SYM_KW_ENTRIES, sym_kw_entries_data);
 
