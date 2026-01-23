@@ -257,7 +257,7 @@ TEST(test_require_reverse_conflict_clojure_core) {
     // This tests if clojure.core/reverse still works after loading clojure.string
     CljObject *result = eval_string("(clojure.core/reverse (list 1 2 3))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
     
     // Verify first element is 3
     CljList *list = as_list(result);
@@ -292,7 +292,7 @@ TEST(test_require_reverse_in_let_after_require) {
     // This tests if clojure.core/reverse works in let bindings after loading clojure.string
     CljObject *result = eval_string("(let [step (fn [coll] (clojure.core/reverse coll))] (step (list 1 2 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
     
     // Verify first element is 3
     CljList *list = as_list(result);
@@ -312,7 +312,7 @@ TEST(test_require_reverse_in_recursive_function) {
     // This tests if clojure.core/reverse works in recursive functions after loading clojure.string
     CljObject *result = eval_string("(let [step (fn [coll acc] (if (empty? coll) (clojure.core/reverse acc) (step (rest coll) (cons (first coll) acc))))] (step (list 1 2 3) (list)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
     
     // Verify result is (1 2 3)
     CljList *list = as_list(result);
@@ -332,7 +332,7 @@ TEST(test_require_both_reverse_functions) {
     // clojure.core/reverse for collections
     CljObject *core_result = eval_string("(clojure.core/reverse (list 1 2 3))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(core_result);
-    TEST_ASSERT_TRUE(core_result && list_type_matches(TAG(core_result)));
+    TEST_ASSERT_TRUE(core_result && is_list_type(TAG(core_result)));
     
     // clojure.string/reverse for strings
     CljObject *string_result = eval_string("(clojure.string/reverse \"abc\")", g_test_eval_state);

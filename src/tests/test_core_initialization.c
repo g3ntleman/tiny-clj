@@ -263,7 +263,7 @@ TEST(test_def_inc_evaluation_during_load) {
     TEST_ASSERT_NOT_NULL(canonical_form);
     
     // Extract the symbol from the parsed form
-    if (canonical_form && list_type_matches(TAG(canonical_form))) {
+    if (canonical_form && is_list_type(TAG(canonical_form))) {
         CljList *list = as_list(canonical_form);
         CljSymbol *inc_sym = as_symbol(list_nth(list, 1));
         CljObject *fn_expr = (CljObject*)list_nth(list, 2);

@@ -175,7 +175,6 @@ static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
 // Forward declarations
 ID eval_body_with_params(ID body, const EvalContext *ctx);
 ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
-ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx);
 // is_special_symbol is now in symbol.c
 static INLINE bool is_builtin_function(CljSymbol *symbol);
@@ -589,7 +588,7 @@ ID eval_body_with_env(ID body, CljMap *env, EvalState *st) {
         case CLJ_LIST:
         case CLJ_AST_NODE: {
             // Type check before calling
-            if (!body_obj || !list_type_matches(TAG(body_obj))) return NULL;
+            if (!body_obj || !is_list_type(TAG(body_obj))) return NULL;
             CljList *list_data = as_list(body);
             return eval_list(list_data, env, st, NULL);
         }
@@ -1562,7 +1561,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     }
 
     // Error: op is a list (should have been evaluated earlier)
-    if (list_type_matches(op_tag)) {
+    if (is_list_type(op_tag)) {
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Cannot call list as a function");
     }
@@ -1578,7 +1577,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
 ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     CLJ_ASSERT(env != NULL);
-    CLJ_ASSERT(is_list(list));
+    CLJ_ASSERT(is_list_like(list));
 
     // Get the symbol name (second argument) - don't evaluate it, just get the symbol
     CljObject *symbol = list_get_element(list, 1);
@@ -1610,7 +1609,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     CljMap *eval_env = (st && st->current_ns) ? st->current_ns->mappings : env;
     ID value = NULL;
     if (value_expr) {
-        value = list_type_matches(TAG(value_expr))
+        value = is_list_type(TAG(value_expr))
             ? eval_list(as_list(value_expr), eval_env, st, NULL)
             : eval_parsed(value_expr, st, eval_env);
     }
@@ -1736,7 +1735,7 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
     CljList *clause_node = args ? list_or_null(as_list(LIST_REST(args))) : NULL;
     for (CljList *node = clause_node; node; node = list_or_null(as_list(LIST_REST(node)))) {
         CljObject *clause = LIST_FIRST(node);
-        if (!clause || !list_type_matches(TAG(clause))) continue;
+        if (!clause || !is_list_type(TAG(clause))) continue;
 
         CljList *clause_list = as_list(clause);
         if (!clause_list) continue;
@@ -1819,13 +1818,9 @@ ID eval_var(CljList *list, CljMap *env, EvalState *st) {
 // ============================================================================
 // TCO functions moved to optimize.c
 
-ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
-    return eval_fn_with_context(list, env, st, NULL);
-}
-
-ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(env != NULL);
-    CLJ_ASSERT(is_list(list));
+    CLJ_ASSERT(is_list_like(list));
 
     // Get potential function name (for named fn like (fn step [x] ...))
     CljList *rest1 = as_list(LIST_REST(list));     // nach 'fn'
@@ -1860,7 +1855,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
 
     // Parameters can be a vector [a b] or a list (a b)
     bool is_vector_params = is_vector(params_list);
-    if (!params_list || (!list_type_matches(TAG(params_list)) && !is_vector_params)) {
+    if (!params_list || (!is_list_type(TAG(params_list)) && !is_vector_params)) {
         return NULL;
     }
 
@@ -1933,7 +1928,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
             i++;
 
             CljObject *rest = LIST_REST(p);
-            if (!rest || !list_type_matches(TAG(rest))) {
+            if (!rest || !is_list_type(TAG(rest))) {
                 break;
             }
             p = as_list(rest);
@@ -2375,13 +2370,15 @@ ID eval_for(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         return NULL;
     }
 
-    // Accept both CLJ_VECTOR and CLJ_LIST for binding
+    // Binding vector/list must be treated as data (do NOT eval it).
+    // Example: (for [x [1 2 3]] (* x x))
     CljObject *binding_list = list_get_element(list, 1);
     CljObject *body = list_get_element(list, 2);
     if (!binding_list || !body) {
         return NULL;
     }
-    // Convert vector binding to list if needed
+
+    // Accept both CLJ_VECTOR and CLJ_LIST for binding.
     CljList *binding_data = NULL;
     if (TAG(binding_list) == CLJ_VECTOR) {
         binding_data = as_list(vector_to_list((CljVector*)binding_list));
@@ -2390,7 +2387,7 @@ ID eval_for(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     } else {
         return NULL;
     }
-    if (!binding_data->first || !binding_data->rest) {
+    if (!binding_data || !binding_data->first || !binding_data->rest) {
         return NULL;
     }
     CljObject *var = binding_data->first;
@@ -2549,7 +2546,7 @@ ID eval_list_function(CljList *list, CljMap *env) {
     (void)env; // Suppress unused parameter warning
     // (list arg1 arg2 ...)
     CLJ_ASSERT(list != NULL);
-    if (!list || !list_type_matches(TAG(list))) return NULL;
+    if (!list || !is_list_type(TAG(list))) return NULL;
 
     CljList *list_data = as_list(list);
 
@@ -2780,7 +2777,7 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
 
 ID eval_arg_with_context(CljList *list, int index, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL);
-    if (!list || !list_type_matches(TAG(list))) return NULL;
+    if (!list || !is_list_type(TAG(list))) return NULL;
 
     // Get element from list
     ID element = list_nth(as_list(list), index);
@@ -2926,7 +2923,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         return NULL;
     }
 
-    if (list_type_matches(expr_tag)) {
+    if (is_list_type(expr_tag)) {
         // Fast-path: use caller's EvalState (99% of cases)
         // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
         EvalState *list_st = eval_st ? eval_st : builtin_get_eval_state();
@@ -2995,7 +2992,7 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
         if (!vec || vector_count(vec) < 2) return NULL;
         var = vector_nth(vec, 0);
         n_obj = vector_nth(vec, 1);
-    } else if (list_type_matches(TAG(binding_list))) {
+    } else if (is_list_type(TAG(binding_list))) {
         CljList *binding_data = as_list(binding_list);
         if (!binding_data || !binding_data->first) return NULL;
         var = binding_data->first;

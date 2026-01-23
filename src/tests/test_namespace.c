@@ -234,7 +234,7 @@ TEST(test_inc_symbol_pointer_consistency) {
     TEST_ASSERT_NOT_NULL(form);
     
     // Extract the symbol from the parsed form
-    if (form && list_type_matches(TAG(form))) {
+    if (form && is_list_type(TAG(form))) {
         CljList *list = as_list(form);
         ID inc_sym_in_form = list_nth(list, 1);
         

@@ -101,6 +101,29 @@ With the ESP-IDF environment active, you can run the flash-tree size accounting 
 external/flash-tree/scripts/size_report_esp32.sh
 ```
 
+### Task: flash image (ESP-IDF app)
+
+Preferred (build + flash in one go, uses repo-local ESP-IDF env):
+
+```bash
+./build_idf.sh --flash
+```
+
+If the build already exists in the centralized build directory, flash it via `idf.py`:
+
+```bash
+cd esp32-idf
+source ../scripts/esp_env.sh
+idf.py -B ../builds/esp32-idf/build -p PORT flash
+```
+
+Lowest-level alternative (use the generated flash arguments):
+
+```bash
+cd builds/esp32-idf/build
+python -m esptool --chip esp32 -b 460800 --before default_reset --after hard_reset write_flash "@flash_args"
+```
+
 ### Running
 
 ```bash

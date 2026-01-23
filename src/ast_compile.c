@@ -40,7 +40,7 @@ static void ast_compile_expr_inplace(ID expr, EvalState *st) {
             // Compiled AST payload storage is not wired up in CljASTNode yet.
             // Keep traversal only; evaluation falls back to the existing evaluator.
             ast_compile_expr_inplace(node->first, st);
-            if (node->rest && list_type_matches(TAG(node->rest))) {
+            if (node->rest && is_list_type(TAG(node->rest))) {
                 ast_compile_list_inplace(as_list(node->rest), st);
             } else {
                 ast_compile_expr_inplace(node->rest, st);
