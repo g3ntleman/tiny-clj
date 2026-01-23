@@ -45,37 +45,29 @@ Setzt die Metadaten-Map für den angegebenen Pfad. Überschreibt nur die benutze
 - Test: Setze leere Map, prüfe, dass nur formale Metadaten erscheinen.
 - Test: Überschreibe bestehende Metadaten, prüfe Merge-Strategie.
 
-## Erweiterung: Dateilängen-Korrektur und Block-Reservierung
+## Änderung: Dateilängen-Korrektur via `meta-set!`
 
 ### Ziel
-Wenn beim Schreiben/Setzen einer Datei die übergebene Dateilänge (`size`) von der im B-Baum (KV-Meta) gespeicherten Länge abweicht, wird die Dateilänge auf den angegebenen Wert gesetzt. Fehlende Blöcke werden reserviert (angelegt, ggf. mit Nullbytes gefüllt), überzählige Blöcke werden freigegeben (gelöscht).
+Dateilängen-Anpassungen erfolgen durch Aktualisierung der benutzerdefinierten Metadaten mit `meta-set!` und dem Schlüssel `:size`. Wenn `meta-set!` einen `:size`-Eintrag schreibt, sorgt die native Schicht dafür, dass fehlende Blöcke angelegt und überzählige Blöcke entfernt werden. Eine separate `fs-set-size!`-API wird nicht benötigt.
 
-### API-Erweiterung
-- Neue native Funktion: `(fs-set-size! path size)`
-  - Setzt die Dateilänge auf den gewünschten Wert.
-  - Reserviert fehlende Blöcke, gibt überzählige frei.
-  - Rückgabe: neue Metadaten-Map (inkl. aktualisierter Länge und Chunk-Anzahl).
-
-### Implementierung (C)
-- Prüfe aktuelle Länge und Chunk-Anzahl im B-Baum/KV-Meta.
-- Wenn neue Länge > aktuelle Länge:
-  - Reserviere zusätzliche Blöcke (Chunk-Keys anlegen, mit Nullbytes füllen).
-- Wenn neue Länge < aktuelle Länge:
-  - Lösche überzählige Blöcke (Chunk-Keys entfernen).
-- Aktualisiere Metadaten (Größe, Chunk-Anzahl) im KV-Meta.
+### Implementierung (Konzept)
+- `meta-set!` serialisiert die Map als EDN und speichert sie in `<path>.meta` mittels `tiny-db.kv/put-bytes`.
+- Zusätzlich ruft `meta-set!` (oder der native Binding) eine native Helfer-Funktion `fs_apply_meta(path)` oder `fs_apply_meta_bytes(path, bytes, len)` auf, die die neue Metadaten-Map liest und `:size` extrahiert.
+- Verhalten bei `:size`:
+  - Wenn `:size` > aktuelle Größe: reserviere zusätzliche Chunks (mit Nullbytes initialisieren) und aktualisiere die `FsFileMeta`-Einträge.
+  - Wenn `:size` < aktuelle Größe: lösche überzählige Chunks und aktualisiere `FsFileMeta`.
 
 ### Fehlerfälle
-- Negative Länge: Exception.
-- Nicht existierende Datei: legt leere Datei mit angegebener Länge an.
+- Negative `:size`: Exception (prüfbar in Clojure vor dem Write oder nativ).
+- `:size` auf nicht-existierende Datei: Datei wird angelegt und nötige Chunks reserviert.
 
 ### Tests
-- Setze Länge auf größeren Wert: Blöcke werden angelegt, Datei wird verlängert.
-- Setze Länge auf kleineren Wert: Blöcke werden gelöscht, Datei wird gekürzt.
-- Setze Länge auf gleichen Wert: keine Änderung.
-- Negative Länge: Exception.
+- Verwende `meta-set!` mit `{:size N}` und prüfe, dass die Datei entsprechend verlängert/gekürzt wird.
+- Prüfe, dass vorhandene Daten in überschneidenden Bereichen erhalten bleiben.
+- Prüfe `:modified` / `:created` Metadaten-Verhalten beim Setzen durch `meta-set!`.
 
 ### Doku
-- Ergänze API-Doku und Beispiele für `fs-set-size!`.
+- Ergänze in `fs.clj` und der Plan-Datei die Beschreibung, dass `meta-set!` mit dem Schlüssel `:size` Datei-Längen-Anpassungen auslöst und die native Schicht Blöcke reserviert/freigibt.
 
 ## Änderung: Löschen über spit-bytes
 
