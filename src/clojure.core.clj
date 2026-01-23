@@ -43,6 +43,7 @@ R"CLOJURE(
 ^#^{:doc "Takes a body of expressions and yields a LazySeq that will evaluate them once when realized."}
 (defmacro lazy-seq [& body]
   (list 'clojure.core/lazy-seq* (cons 'fn (cons [] body))))
+
 ^#^{:doc "Creates a new vector containing the args."}
 (defn vector [& args] :native)
 ^#^{:doc "Returns a vector of the contents of coll."}
@@ -127,10 +128,6 @@ R"CLOJURE(
 ^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Returns a transducer when no collection is provided."}
 (defn map [f & colls] :native)
 
-^#^{:doc "Returns a vector of the results of calling (map f colls...)."}
-(defmacro mapv [f & colls]
-  (list 'vec (cons 'map (cons f colls))))
-
 ^#^{:doc "Returns a lazy sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects. Returns a transducer when no collection is provided."}
 (def filter (fn [pred coll]
   (if (empty? coll)
@@ -139,8 +136,6 @@ R"CLOJURE(
       (cons (first coll) (filter pred (rest coll)))
       (filter pred (rest coll))))))
 
-; ============================================================================
-; defn Macro - MUST come before other defn calls
 ; ============================================================================
 ; Type Predicates (needed by Threading Macros)
 ; ============================================================================
@@ -168,52 +163,10 @@ R"CLOJURE(
 (defn ifn? [x] (or (fn? x) (keyword? x) (map? x) (vector? x)))
 
 ; ============================================================================
-; defn Macro (extended): accept optional docstring
-; ============================================================================
-; The bootstrap `defn` macro at the top of this file is intentionally minimal.
-; Once `string?` (and basic seq ops) exist, we can support:
-;   (defn f "doc" [x] body...)
-; by simply skipping the docstring in the expansion.
-(defmacro defn [name & decls]
-  (let [doc   (if (and (seq decls) (string? (first decls)))
-                (first decls)
-                nil)
-        decls (if doc (rest decls) decls)
-        params (first decls)
-        body   (rest decls)]
-    (list 'def
-          (if doc (with-meta name {:doc doc}) name)
-          (cons 'fn (cons name (cons params body))))))
-
-^#^{:doc "Same as defn, but yields a private function (only accessible within the same namespace)."}
-(defmacro defn- [name & decls]
-  (let [doc   (if (and (seq decls) (string? (first decls)))
-                (first decls)
-                nil)
-        decls (if doc (rest decls) decls)
-        params (first decls)
-        body   (rest decls)]
-    (list 'def
-          (with-meta name (if doc {:doc doc :private true} {:private true}))
-          (cons 'fn (cons name (cons params body))))))
-
-; ============================================================================
 ; Sequence Helper Functions (needed by Threading Macros)
 ; ============================================================================
 ^#^{:doc "Internal 2-arity helper for concat (native)."}
 (defn concat2 [x y] :native)
-
-^#^{:doc "Returns a seq representing the concatenation of the elements in colls. Implemented as a macro (no multi-arity support yet) that expands into nested calls to clojure.core/concat2."}
-(defmacro concat [& colls]
-  (let [build (fn build [xs]
-                (if (empty? xs)
-                  (list 'clojure.core/list)
-                  (if (empty? (rest xs))
-                    (list 'clojure.core/seq (first xs))
-                    (if (empty? (rest (rest xs)))
-                      (list 'clojure.core/concat2 (first xs) (second xs))
-                      (list 'clojure.core/concat2 (first xs) (build (rest xs)))))))]
-    (build colls)))
 
 ^#^{:doc "Returns the last item in coll, in linear time."}
 (defn last [coll]
@@ -274,8 +227,27 @@ R"CLOJURE(
 (defn gensym [& prefix] :native)
 
 ; ============================================================================
-; Threading Macros
+; Macros (sorted by dependencies on other macros)
 ; ============================================================================
+^#^{:doc "Same as defn (private functions not yet distinguished)."}
+(defmacro defn- [name params & body]
+  (list 'def name (cons 'fn (cons name (cons params body)))))
+
+^#^{:doc "Returns a vector of the results of calling (map f colls...)."}
+(defmacro mapv [f & colls]
+  (list 'vec (cons 'map (cons f colls))))
+
+^#^{:doc "Returns a seq representing the concatenation of the elements in colls. Implemented as a macro (no multi-arity support yet) that expands into nested calls to clojure.core/concat2."}
+(defmacro concat [& colls]
+  (let [build (fn build [xs]
+                (if (empty? xs)
+                  (list 'clojure.core/list)
+                  (if (empty? (rest xs))
+                    (list 'clojure.core/seq (first xs))
+                    (if (empty? (rest (rest xs)))
+                      (list 'clojure.core/concat2 (first xs) (second xs))
+                      (list 'clojure.core/concat2 (first xs) (build (rest xs)))))))]
+    (build colls)))
 
 ^#^{:doc "Threads the expr through the forms. Inserts x as the second item in the first form, making a list of it if it is not a list already. If there are more forms, inserts the first form as the second item in second form, etc."}
 (defmacro -> [x & forms]
@@ -329,17 +301,17 @@ R"CLOJURE(
 ^#^{:doc "When expr is not nil, threads it into the first form (via ->), and when that result is not nil, through the next etc"}
 (defmacro some-> [expr & forms]
   (let [g (gensym)
-    build-bindings (fn build-bindings [fs]
-         (if (empty? fs)
-           (list)
-           (let [step (first fs)
-             threaded (if (keyword? step)
-                (list 'get g step)
-                (list '-> g step))
-             guarded (list 'if (list 'nil? g) 'nil threaded)]
-             (cons g (cons guarded (build-bindings (rest fs)))))))]
+        build-bindings (fn build-bindings [fs]
+                         (if (empty? fs)
+                           (list)
+                           (let [step (first fs)
+                                 threaded (if (keyword? step)
+                                            (list 'get g step)
+                                            (list '-> g step))
+                                 guarded (list 'if (list 'nil? g) 'nil threaded)]
+                             (cons g (cons guarded (build-bindings (rest fs)))))))]
     (list 'let (vec (cons g (cons expr (build-bindings forms))))
-      g)))
+          g)))
 
 ^#^{:doc "When expr is not nil, threads it into the first form (via ->>), and when that result is not nil, through the next etc"}
 (defmacro some->> [expr & forms]
@@ -384,7 +356,6 @@ R"CLOJURE(
     (list 'let (vec (cons g (cons expr (build-bindings clauses))))
           g)))
 
-; ============================================================================
 ; Native Functions - now we can use defn
 ; ============================================================================
 ^#^{:doc "Returns the metadata of obj, returns nil if there is no metadata."}
@@ -1049,7 +1020,6 @@ R"CLOJURE(
 ; Destructuring Support (bootstrap-safe: no destructuring in implementation)
 ; ============================================================================
 
-
 ^#^{:doc "Transforms binding forms with destructuring into flat symbol bindings."}
 (defn destructure [bindings]
   (let [; Sequential step: state=[result idx skip], no destructuring used
@@ -1096,6 +1066,45 @@ R"CLOJURE(
                          (map? bform)    (proc-map bvec bform init)
                          :else           (conj (conj bvec bform) init))))]
     (reduce proc-entry [] (partition 2 bindings))))
+
+; ============================================================================
+; for Macro Helper Function and Macro (requires destructure)
+; ============================================================================
+(defn normalize-for-bindings [bindings]
+  (let [helper (fn helper [result remaining]
+                 (if (empty? remaining)
+                   result
+                   (let [item (first remaining)]
+                     (cond
+                       (= item :when)
+                       (helper (conj result :when (second remaining))
+                              (nnext remaining))
+                       (= item :while)
+                       (helper (conj result :while (second remaining))
+                              (nnext remaining))
+                       (= item :let)
+                       (let [let-bindings (second remaining)
+                             flat-bindings (destructure let-bindings)]
+                         (helper (conj result :let (vec flat-bindings))
+                                (nnext remaining)))
+                       :else
+                       (let [pattern item
+                             expr (second remaining)]
+                         (if (symbol? pattern)
+                           ;; simple symbol - keep as-is
+                           (helper (conj result pattern expr)
+                                  (nnext remaining))
+                           ;; destructuring pattern - gensym + :let
+                           (let [g (gensym "for__")
+                                 destructured (destructure [pattern g])
+                                 destructured-vec (vec destructured)]
+                             (helper (conj (conj (conj (conj result g) expr) :let) destructured-vec)
+                                    (nnext remaining)))))))))]
+    (helper [] (seq bindings))))
+
+^#^{:doc "List comprehension. Expands to for* and normalizes bindings (supports :when/:let/:while and destructuring)."}
+(defmacro for [bindings body]
+  (list 'for* (vec (normalize-for-bindings bindings)) body))
 
 ; ============================================================================
 ; Macro Expansion Functions (bootstrap-safe: uses only basic special forms)
