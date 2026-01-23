@@ -470,6 +470,7 @@ static inline void autorelease_pool_grow(void) {
     g_pool.checkpoints = new_cps;
     g_pool.cp_capacity = new_capacity;
 #ifdef DEBUG
+    (void)old_capacity; // Suppress unused warning when DEBUG is not defined
     LOGF(stderr, "⚠️  AutoreleasePool: checkpoints grew %u -> %u\n", old_capacity, new_capacity);
 #endif
 }
