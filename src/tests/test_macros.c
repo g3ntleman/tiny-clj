@@ -497,4 +497,149 @@ TEST(test_get_macro_qualified_symbol) {
     (void)result;  // Suppress unused variable warning
 }
 
+// ============================================================================
+// TEST: for macro expansion
+// ============================================================================
+
+// Test: Simple for expansion (head rewrite only)
+TEST(test_for_macroexpand_simple) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should rewrite for to for*
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [x [1 2 3]] x))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be for* (or clojure.core/for*)
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0 || 
+                     (op_sym->ns_name && strcmp(op_sym->ns_name->cname, "clojure.core") == 0 && strcmp(op_sym->cname, "for*") == 0));
+}
+
+// Test: Multiple bindings expansion (passed through)
+TEST(test_for_macroexpand_multiple_bindings) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should rewrite for to for* and preserve bindings
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [x [1 2] y [3 4]] [x y]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be for*
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
+    
+    // Second element should be the binding vector
+    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
+    TEST_ASSERT_NOT_NULL(bindings);
+    TEST_ASSERT_TRUE(is_vector(bindings));
+}
+
+// Test: Modifiers preserved (:when, :while)
+TEST(test_for_macroexpand_modifiers) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should preserve :when and :while modifiers
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [x (range) :while (< x 3) :when (even? x)] x))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be for*
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
+    
+    // Bindings should contain :while and :when
+    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
+    TEST_ASSERT_NOT_NULL(bindings);
+    TEST_ASSERT_TRUE(is_vector(bindings));
+    
+    // Convert to list to check for keywords
+    CljVector *bindings_vec = as_vector(bindings);
+    bool found_while = false;
+    bool found_when = false;
+    for (unsigned int i = 0; i < vector_count(bindings_vec); i++) {
+        ID item = vector_nth(bindings_vec, i);
+        if (is_keyword(item)) {
+            CljSymbol *kw = as_symbol(item);
+            if (kw && kw->cname) {
+                if (strcmp(kw->cname, ":while") == 0) found_while = true;
+                if (strcmp(kw->cname, ":when") == 0) found_when = true;
+            }
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(found_while, ":while modifier should be preserved");
+    TEST_ASSERT_TRUE_MESSAGE(found_when, ":when modifier should be preserved");
+}
+
+// Test: Destructuring expansion (should normalize to gensym + :let)
+// Note: This test will fail until destructuring normalization is implemented
+TEST(test_for_macroexpand_destructuring) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should normalize destructuring to gensym + :let
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [[a b] [[1 2] [3 4]]] (+ a b)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be for*
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
+    
+    // Bindings should have a gensym as first binding, followed by :let
+    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
+    TEST_ASSERT_NOT_NULL(bindings);
+    TEST_ASSERT_TRUE(is_vector(bindings));
+    
+    // Convert to vector to check structure
+    CljVector *bindings_vec = as_vector(bindings);
+    ID first_binding = vector_nth(bindings_vec, 0);
+    // First binding should be a symbol (gensym), not a vector
+    TEST_ASSERT_TRUE(is_symbol(first_binding));
+    // Should contain :let keyword
+    bool found_let = false;
+    for (unsigned int i = 0; i < vector_count(bindings_vec); i++) {
+        ID item = vector_nth(bindings_vec, i);
+        if (is_keyword(item)) {
+            CljSymbol *kw = as_symbol(item);
+            if (kw && kw->cname && strcmp(kw->cname, ":let") == 0) {
+                found_let = true;
+                break;
+            }
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(found_let, "Destructuring should be normalized to gensym + :let");
+}
+
 

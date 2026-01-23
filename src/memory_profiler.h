@@ -1,14 +1,9 @@
 // Always declare the zombify function for macro expansion
 
-// Forward declaration for CljObject
 #ifndef TINY_CLJ_MEMORY_PROFILER_H
 #define TINY_CLJ_MEMORY_PROFILER_H
-#ifndef TINY_CLJOBJECT_TYPEDEF
-#define TINY_CLJOBJECT_TYPEDEF
-typedef struct CljObject CljObject;
-#endif
 
-void memory_profiler_track_object_zombify(CljObject *obj);
+#include "object.h"
 
 // Feature switches (positive naming)
 // MEMORY_PROFILER_ENABLED controls whether the profiler implementation is built.
@@ -21,7 +16,7 @@ void memory_profiler_track_object_zombify(CljObject *obj);
 #define MEMORY_PROFILING_ENABLED 0
 #endif
 
-#include "object.h"
+void memory_profiler_track_object_zombify(CljObject *obj);
 #include <stddef.h>  // size_t
 #include <stdbool.h>
 
