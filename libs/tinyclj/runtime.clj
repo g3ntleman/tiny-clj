@@ -30,4 +30,3 @@ Missing values are omitted (the key will not be present)."}
 ;; Only available in DEBUG builds
 ^#^{:doc "Returns the AST (Abstract Syntax Tree) structure of an object as a string with internal type information. Only available in DEBUG builds. Usage: (ast-string obj)"}
 (defn ast-string [x] :native)
-
