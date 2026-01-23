@@ -510,7 +510,7 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
 #endif
     }
     
-    if (parsed_expr && list_type_matches(TAG(parsed_expr))) {
+    if (parsed_expr && is_list_type(TAG(parsed_expr))) {
         // Use provided env or fall back to current_ns->mappings
         CljMap *eval_env = env;
         if (!eval_env) {

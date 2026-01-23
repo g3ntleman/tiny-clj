@@ -2,6 +2,8 @@
 DartConfiguration.tcl
 /tiny-clj
 /build/
+/_build*/
+/builds/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
