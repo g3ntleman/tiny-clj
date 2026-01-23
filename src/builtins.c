@@ -59,6 +59,7 @@ ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_fs_stat(ID *args, unsigned int argc);
 ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc);
 ID native_tinyclj_fs_delete(ID *args, unsigned int argc);
+ID native_tinyclj_fs_set_size(ID *args, unsigned int argc);
 
 ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc);
@@ -2419,6 +2420,7 @@ ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
 
     return func;
 }
+
 // Event-loop: run-next-task builtin
 ID native_run_next_task(ID *args, unsigned int argc)
 {
@@ -3354,6 +3356,11 @@ static StaticSymbolData sym_tinyclj_fs_delete_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tinyclj.fs/delete!"}};
+static StaticSymbolData sym_tinyclj_fs_set_size_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.fs/set-size!"}};
 
 static StaticSymbolData sym_tinyclj_kv_put_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
@@ -3485,6 +3492,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes},
     {&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat},
     {&sym_tinyclj_fs_list_batch_qualified_data.sym, native_tinyclj_fs_list_batch},
+    {&sym_tinyclj_fs_set_size_qualified_data.sym, native_tinyclj_fs_set_size},
     {&sym_tinyclj_fs_delete_qualified_data.sym, native_tinyclj_fs_delete},
     {&sym_tinyclj_kv_put_bytes_qualified_data.sym, native_tinyclj_kv_put_bytes},
     {&sym_tinyclj_kv_get_bytes_qualified_data.sym, native_tinyclj_kv_get_bytes},
@@ -6509,7 +6517,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     if (ms)
     {
         ASSIGN(ms, map_assoc(ms, k_enabled, g_memory_profiling_enabled ? (ID)clj_true : (ID)clj_false));
-        ASSIGN(ms, map_assoc(ms, k_raw_bytes_current, fixnum((int32_t)g_memory_stats.raw_bytes_current)));
+        ASSIGN(ms, map_assoc(ms, k_raw_bytes_current, fixnum((int32_t)g_memory_stats.current_memory_usage)));
         ASSIGN(m, map_assoc(m, k_memory_stats, (ID)ms));
     }
 #endif
