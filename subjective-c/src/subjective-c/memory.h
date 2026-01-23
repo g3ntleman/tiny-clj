@@ -12,6 +12,12 @@
 // Only include it when profiling is explicitly enabled.
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 #include "memory_profiler.h"
+// Functions are declared in memory_profiler.h, no need for no-op macros
+#else
+// Default no-op definitions for memory profiler functions when profiling is disabled
+#define memory_profiler_track_raw_alloc(p, n, file, line) ((void)0)
+#define memory_profiler_track_raw_free(ptr, file, line) ((void)0)
+#define memory_profiler_track_raw_realloc(old_ptr, new_ptr, n, file, line) ((void)0)
 #endif
 
 typedef void (*SubjectiveCReleaseFn)(CljObject *obj);
@@ -38,9 +44,11 @@ void throw_oom(void) __attribute__((noreturn));
 // MEMORY_PROFILING_ENABLED=1. Otherwise, these macros are direct malloc/free.
 //
 
+
 #if MEMORY_PROFILING_ENABLED
 
 static inline void* clj_malloc_impl(size_t n, const char *file, int line) {
+    (void)file; (void)line;
     void *p = malloc(n);
     if (!p && n != 0) {
         throw_oom(); // never returns
@@ -50,6 +58,7 @@ static inline void* clj_malloc_impl(size_t n, const char *file, int line) {
 }
 
 static inline void* clj_calloc_impl(size_t nmemb, size_t size, const char *file, int line) {
+    (void)file; (void)line;
     // Best-effort overflow guard.
     if (nmemb != 0 && size > ((size_t)-1) / nmemb) {
         throw_oom(); // never returns
@@ -64,6 +73,7 @@ static inline void* clj_calloc_impl(size_t nmemb, size_t size, const char *file,
 }
 
 static inline void* clj_realloc_impl(void *old_ptr, size_t n, const char *file, int line) {
+    (void)file; (void)line;
     void *new_ptr = realloc(old_ptr, n);
     if (!new_ptr && n != 0) {
         throw_oom(); // never returns; old_ptr remains valid per realloc contract
@@ -76,6 +86,7 @@ static inline void* clj_realloc_impl(void *old_ptr, size_t n, const char *file, 
 }
 
 static inline void clj_free_impl(void *ptr, const char *file, int line) {
+    (void)file; (void)line;
     memory_profiler_track_raw_free(ptr, file, line);
     free(ptr);
 }
@@ -86,6 +97,11 @@ static inline void clj_free_impl(void *ptr, const char *file, int line) {
 #define CLJ_FREE(ptr) clj_free_impl((ptr), __FILE__, __LINE__)
 
 #else
+
+// No-op macros for profiler tracking when profiling is disabled
+#define memory_profiler_track_raw_alloc(p, n, file, line) ((void)0)
+#define memory_profiler_track_raw_free(ptr, file, line) ((void)0)
+#define memory_profiler_track_raw_realloc(old_ptr, new_ptr, n, file, line) ((void)0)
 
 #define CLJ_MALLOC(n) malloc((n))
 #define CLJ_CALLOC(nmemb, size) calloc((nmemb), (size))

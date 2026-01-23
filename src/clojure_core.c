@@ -35,9 +35,14 @@ static int getenv_int(const char *name, int default_value) {
 }
 
 
+
+// Keyword symbol definitions for fs_layer and others
+extern CljSymbol *SYM_KW_SIZE;
+
+
+
 // Clojure core code for Tiny-Clj interpreter
 const char *clojure_core_code =
-
 #include "clojure.core.clj"
 
     ;

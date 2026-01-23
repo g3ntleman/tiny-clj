@@ -1,3 +1,4 @@
+
 /*
  * Memory Profiler Implementation for Tiny-CLJ
  * 
@@ -86,7 +87,21 @@ bool g_memory_verbose_mode = false;
 // MEMORY HOOKS IMPLEMENTATION
 // ============================================================================
 
+// Raw heap tracking (malloc/calloc/realloc/free via CLJ_* macros)
 #if MEMORY_PROFILING_ENABLED
+
+
+
+// Move #undef macros here
+#if defined(memory_profiler_track_raw_alloc)
+#undef memory_profiler_track_raw_alloc
+#endif
+#if defined(memory_profiler_track_raw_free)
+#undef memory_profiler_track_raw_free
+#endif
+#if defined(memory_profiler_track_raw_realloc)
+#undef memory_profiler_track_raw_realloc
+#endif
 // Global hook function (only one hook supported for simplicity)
 static MemoryHookFunc g_hook_func = NULL;
 
@@ -498,8 +513,8 @@ static RawBlock *g_raw_blocks = NULL;
 static size_t g_raw_blocks_count = 0;
 static size_t g_raw_blocks_capacity = 0;
 
-static void raw_blocks_ensure_capacity(size_t needed) {
-    if (needed <= g_raw_blocks_capacity) return;
+static bool raw_blocks_ensure_capacity(size_t needed) {
+    if (needed <= g_raw_blocks_capacity) return true;
     size_t new_cap = (g_raw_blocks_capacity == 0) ? 256 : g_raw_blocks_capacity * 2;
     while (new_cap < needed) {
         new_cap *= 2;
@@ -507,10 +522,11 @@ static void raw_blocks_ensure_capacity(size_t needed) {
     RawBlock *new_blocks = (RawBlock*)realloc(g_raw_blocks, new_cap * sizeof(RawBlock));
     if (!new_blocks) {
         // Best-effort: if profiler can't grow, skip tracking rather than crashing.
-        return;
+        return false;
     }
     g_raw_blocks = new_blocks;
     g_raw_blocks_capacity = new_cap;
+    return true;
 }
 
 static long raw_blocks_find(void *ptr) {
@@ -532,6 +548,7 @@ static void raw_blocks_update_peaks(void) {
     }
 }
 
+#if MEMORY_PROFILING_ENABLED
 void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, int line) {
     (void)file;
     (void)line;
@@ -555,8 +572,7 @@ void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, i
         return;
     }
 
-    raw_blocks_ensure_capacity(g_raw_blocks_count + 1);
-    if (g_raw_blocks_count + 1 > g_raw_blocks_capacity) {
+    if (!raw_blocks_ensure_capacity(g_raw_blocks_count + 1)) {
         // Could not grow; skip tracking.
         return;
     }
@@ -638,6 +654,7 @@ void memory_profiler_track_raw_realloc(void *old_ptr, void *new_ptr, size_t new_
     memory_profiler_track_raw_free(old_ptr, file, line);
     memory_profiler_track_raw_alloc(new_ptr, new_size, file, line);
 }
+#endif // MEMORY_PROFILING_ENABLED
 #endif // MEMORY_PROFILING_ENABLED
 
 // ============================================================================

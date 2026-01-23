@@ -51,8 +51,8 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 // Additional built-in helpers
 
 // For-loop functions
-ID eval_for(CljList *list, CljMap *env);
-ID eval_doseq(CljList *list, CljMap *env);
+ID eval_for(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 
 // Let bindings
