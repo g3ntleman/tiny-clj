@@ -4,12 +4,12 @@ This document records a reproducible, toolchain-backed size snapshot for the ESP
 
 ### Build recipe
 
-- **Toolchain**: repo-local Xtensa GCC from `./_deps/espressif-tools/`
+- **Toolchain**: repo-local Xtensa GCC from `./external/espressif-tools/`
 - **ESP-IDF (submodule)**: `external/esp-idf` pinned to `v5.3.4`
 - **Configure**:
 
 ```bash
-ESP32_TOOLCHAIN_PATH="$PWD/_deps/espressif-tools/tools/xtensa-esp-elf/esp-13.2.0_20240530/xtensa-esp-elf" \
+ESP32_TOOLCHAIN_PATH="$PWD/external/espressif-tools/tools/xtensa-esp-elf/esp-13.2.0_20240530/xtensa-esp-elf" \
 cmake -S . -B builds/esp32 -G "Unix Makefiles" \
   -DCMAKE_TOOLCHAIN_FILE="$PWD/toolchains/esp32.cmake" \
   -DCMAKE_BUILD_TYPE=Embedded \
