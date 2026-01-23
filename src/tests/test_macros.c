@@ -430,4 +430,71 @@ TEST(test_unquote_splice_clojure_compatible) {
     assert_fixnum(third, 3);
 }
 
+// ============================================================================
+// TEST: get-macro function
+// ============================================================================
+
+TEST(test_get_macro_basic) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a macro
+    eval_string("(defmacro test-macro [x] (list '+ x 1))", g_test_eval_state);
+    
+    // get-macro should return the macro function for the symbol
+    CljObject *result = eval_string("(get-macro 'test-macro)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    // Should return a function (CLJ_CLOSURE for macros)
+    TEST_ASSERT_EQUAL_INT(CLJ_CLOSURE, TAG(result));
+}
+
+TEST(test_get_macro_not_found) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // get-macro should return nil for non-existent macros
+    CljObject *result = eval_string("(get-macro 'non-existent-macro)", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_not_a_macro) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a regular function (not a macro)
+    eval_string("(defn regular-fn [x] (+ x 1))", g_test_eval_state);
+    
+    // get-macro should return nil for regular functions
+    CljObject *result = eval_string("(get-macro 'regular-fn)", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_with_non_symbol) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // get-macro should return nil when given a non-symbol argument
+    CljObject *result = eval_string("(get-macro \"not-a-symbol\")", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_with_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // get-macro should return nil when given nil
+    CljObject *result = eval_string("(get-macro nil)", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_qualified_symbol) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a macro in current namespace
+    eval_string("(defmacro my-macro [x] (list '+ x 1))", g_test_eval_state);
+    
+    // get-macro should work with qualified symbols
+    // Note: This test assumes the current namespace is "user"
+    CljObject *result = eval_string("(get-macro 'user/my-macro)", g_test_eval_state);
+    // Should either find it (if qualified lookup works) or return nil
+    // The behavior depends on namespace resolution implementation
+    // For now, just verify it doesn't crash
+    (void)result;  // Suppress unused variable warning
+}
+
 

@@ -42,6 +42,24 @@ TEST(test_fs_layer_write_read_stat_list_delete)
     fs_err_t e = fs_write_bytes(st, "/data/file.bin", bytes, sizeof(bytes));
     TEST_ASSERT_EQUAL_INT(FS_NO_ERR, e);
 
+    // Sanity: binary meta must exist and be readable right after write
+    {
+        typedef struct __attribute__((packed)) FsFileMetaDbg {
+            uint32_t magic;
+            uint32_t version;
+            uint32_t size;
+            uint32_t chunks;
+        } FsFileMetaDbg;
+        FsFileMetaDbg meta = {0};
+        size_t saved = 0;
+        (void)fs_kv_get(st, "/data/file.bin", (uint8_t *)&meta, sizeof(meta), &saved);
+        TEST_ASSERT_EQUAL_UINT32(sizeof(meta), (uint32_t)saved);
+        TEST_ASSERT_EQUAL_HEX32(0x454C4946u, meta.magic); // 'F''I''L''E'
+        TEST_ASSERT_EQUAL_UINT32(1u, meta.version);
+        TEST_ASSERT_EQUAL_UINT32((uint32_t)sizeof(bytes), meta.size);
+        TEST_ASSERT_EQUAL_UINT32(1u, meta.chunks);
+    }
+
     /* read back */
     ID out = fs_read_bytes(st, "/data/file.bin");
     TEST_ASSERT_NOT_NULL(out);
@@ -62,6 +80,20 @@ TEST(test_fs_layer_write_read_stat_list_delete)
     CljVector *v = as_vector(lst);
     TEST_ASSERT_EQUAL_INT(1, vector_count(v));
     TEST_ASSERT_TRUE(last_key[0] == '\0'); // only entry, end reached
+
+    // Entry shape: {:path "/data/file.bin" :meta {:size 600 :chunks 1}}
+    ID entry0 = vector_nth(v, 0);
+    assert_map((CljObject*)entry0);
+    ID kw_path = (ID)intern_symbol_global(":path");
+    ID kw_meta = (ID)intern_symbol_global(":meta");
+    ID kw_size = (ID)intern_symbol_global(":size");
+    ID kw_chunks = (ID)intern_symbol_global(":chunks");
+    ID p0 = map_get((CljMap*)entry0, kw_path);
+    assert_string((CljObject*)p0, "/data/file.bin");
+    ID m0 = map_get((CljMap*)entry0, kw_meta);
+    assert_map((CljObject*)m0);
+    assert_fixnum((CljObject*)map_get((CljMap*)m0, kw_size), (int)sizeof(bytes));
+    assert_fixnum((CljObject*)map_get((CljMap*)m0, kw_chunks), 1);
 
     /* delete meta only */
     TEST_ASSERT_TRUE(fs_delete(st, "/data/file.bin"));
@@ -124,8 +156,10 @@ TEST(test_fs_list_dir_batch_many_files)
         ID elem = (i < 32) ? vector_nth(v1, (unsigned int)i)
                            : vector_nth(v2, (unsigned int)(i - 32));
         TEST_ASSERT_NOT_NULL(elem);
-        TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(elem));
-        TEST_ASSERT_EQUAL_STRING(expected, string_data((CljString*)elem));
+        assert_map((CljObject*)elem);
+        ID kw_path = (ID)intern_symbol_global(":path");
+        ID p = map_get((CljMap*)elem, kw_path);
+        assert_string((CljObject*)p, expected);
     }
 
     fs_kv_store_free(st);
