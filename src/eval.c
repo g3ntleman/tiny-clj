@@ -1,14 +1,5 @@
 #include "list.h"
 #include "vector_to_list.h"
-
-// Helper: reverse a CljList (returns new list, does not mutate input)
-static CljList* reverse_list(CljList* list) {
-    CljList* result = NULL;
-    for (CljList* cur = list; cur; cur = as_list(LIST_REST(cur))) {
-        result = make_list(RETAIN(LIST_FIRST(cur)), result);
-    }
-    return result;
-}
 #include "object.h"
 #include "eval.h"
 #include "symbol.h"
@@ -40,12 +31,7 @@ static CljList* reverse_list(CljList* list) {
 #include "ast.h"
 #include "vector.h"
 #include "env_stack.h"
-#include "event_loop.h"
-#include "channel.h"
 #include "strings.h"  // For pr_str
-#include "to_string.h"  // For is_special_symbol
-#include "numeric_utils.h"
-#include "format_utils.h"
 #include "eval_arithmetic.h"
 #include "eval_comparison.h"
 #include <time.h>
@@ -2275,7 +2261,6 @@ ID native_for_thunk_executor(ID *args, unsigned int argc) {
     CljSymbol *k_env_stack = intern_symbol_global("__for_env_stack__");
     CljSymbol *k_env = intern_symbol_global("__for_env__");
     CljSymbol *k_fn_sym = intern_symbol_global("__for_thunk_fn__");
-    CljSymbol *k_state_sym = intern_symbol_global("__for_thunk_state__");
 
     ID seq_obj = map_get(state, (ID)k_seq);
     if (seq_obj == NOT_FOUND || !seq_obj) return NULL;
@@ -2341,8 +2326,13 @@ ID native_for_thunk_executor(ID *args, unsigned int argc) {
     // on symbol resolution inside the thunk's closure environment.
     ID fn_obj = make_named_func(native_for_thunk_executor, (CljSymbol*)k_fn_sym);
 
-    // Build thunk body AST: ( <native-fn> <rest_state> )
-    CljList *thunk_body = make_list(fn_obj, make_list((ID)rest_state, NULL));
+    // Pass rest_state as quoted data so eval doesn't try to evaluate map keys/values.
+    // Without quoting, eval_body() would evaluate the map and attempt to resolve
+    // symbols like __for_seq__ as variables.
+    CljList *quoted_rest_state = make_list((ID)SYM_QUOTE, make_list((ID)rest_state, NULL));
+
+    // Build thunk body AST: ( <native-fn> (quote <rest_state>) )
+    CljList *thunk_body = make_list(fn_obj, make_list((ID)quoted_rest_state, NULL));
 
     // Create closure (0-arity) with no captured env (we embedded literals)
     CljFunction *rest_thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
@@ -2430,7 +2420,6 @@ ID eval_for(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CljSymbol *k_env_stack = intern_symbol_global("__for_env_stack__");
     CljSymbol *k_env = intern_symbol_global("__for_env__");
     CljSymbol *k_fn_sym = intern_symbol_global("__for_thunk_fn__");
-    CljSymbol *k_state_sym = intern_symbol_global("__for_thunk_state__");
 
     // Build initial state map
     CljMap *state = map_assoc(map_empty(), (ID)k_seq, (ID)seq);
@@ -2447,8 +2436,13 @@ ID eval_for(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     // relying on closure env symbol resolution when the thunk is realized.
     ID fn_obj = make_named_func(native_for_thunk_executor, k_fn_sym);
 
-    // Build thunk body AST: ( <native-fn> <state> )
-    CljList *thunk_body = make_list(fn_obj, make_list((ID)state, NULL));
+    // Pass state as quoted data so eval doesn't try to evaluate map keys/values.
+    // Without quoting, eval_body() would evaluate the map and attempt to resolve
+    // symbols like __for_seq__ as variables.
+    CljList *quoted_state = make_list((ID)SYM_QUOTE, make_list((ID)state, NULL));
+
+    // Build thunk body AST: ( <native-fn> (quote <state>) )
+    CljList *thunk_body = make_list(fn_obj, make_list((ID)quoted_state, NULL));
 
     // Create closure (0-arity) with no captured env (we embedded literals)
     CljFunction *thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
@@ -2667,7 +2661,6 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         }
 
         ID value = NULL;
-        unsigned char init_tag = TAG(init_val);
         if (!init_val) {
             value = NULL;
         } else if (is_fixnum(init_val) || is_special(init_val)) {

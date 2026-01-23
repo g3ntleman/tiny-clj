@@ -68,6 +68,7 @@ venv/
 # Tooling caches (do not commit)
 .clj-kondo/
 .lsp/
+.cache/
 
 # Repo-local dependencies (do not commit)
 _deps/
