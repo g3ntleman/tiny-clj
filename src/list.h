@@ -36,9 +36,6 @@ static inline bool is_list_type(CljType type) {
     return type == CLJ_LIST || type == CLJ_AST_NODE;
 }
 
-// Backwards-compatible alias.
-// Prefer `is_list_type()` in new/modified code.
-#define list_type_matches is_list_type
 
 static inline bool is_list_like(ID obj) {
     return obj && is_list_type(TAG(obj));
@@ -105,8 +102,5 @@ int list_count(CljList *list);
 // Prefer `LIST_FIRST`/`LIST_REST`/`LIST_FOR_EACH` for traversal, or `list_nth` when the index
 // is provably in-bounds (and you want an exception on invalid indices).
 CljObject* list_get_element(CljList *list, int index);
-static inline bool is_list(ID v) {
-    return is_list_like(v);
-}
 
 #endif

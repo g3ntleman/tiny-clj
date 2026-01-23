@@ -37,7 +37,7 @@ TEST(test_macro_macroexpand_1) {
         "(macroexpand-1 '(double 5))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
     
     // Should be (* 5 2)
     CljList *expanded = as_list(result);
@@ -69,7 +69,7 @@ TEST(test_variadic_fn_basic) {
     // ((fn [a & rest] rest) 1 2 3) should return (2 3)
     CljObject *result = eval_string("((fn [a & rest] rest) 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
     TEST_ASSERT_EQUAL_INT(2, list_count(as_list(result)));
 }
 
@@ -103,7 +103,7 @@ TEST(test_variadic_macro_basic) {
     // Use the macro
     CljObject *result = eval_string("(collect-all 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
     TEST_ASSERT_EQUAL_INT(3, list_count(as_list(result)));
 }
 
@@ -165,7 +165,7 @@ TEST(test_macroexpand_shows_expansion) {
         "(macroexpand '(unless false 42))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
     
     // First element should be 'if
     CljList *expanded = as_list(result);

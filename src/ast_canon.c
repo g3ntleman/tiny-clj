@@ -57,7 +57,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
 // It only canonicalizes each element (which may itself be a list expression).
 static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, bool in_quote, CljVector **scope_stack) {
     if (!rest_expr) return NULL;
-    if (!list_type_matches(TAG(rest_expr))) return NULL;
+    if (!is_list_type(TAG(rest_expr))) return NULL;
 
     CljList *src = as_list(rest_expr);
     ID first = canonicalize_expr_with_scope(src->first, st, in_quote, scope_stack);
@@ -396,7 +396,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     
     // Handle lists and ASTNodes: Convert to ASTNode unless in_quote
     // NOTE: Parser produces ASTNodes, but we handle both for robustness
-    if (list_type_matches(tag)) {
+    if (is_list_type(tag)) {
         CljList *list = as_list(expr);
         CLJ_ASSERT(list != NULL);
         
@@ -454,7 +454,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 // CRITICAL: Ensure expanded form is a list-like type (CLJ_LIST or CLJ_AST_NODE)
                 // Macros can return PersistentList (CLJ_LIST) which needs to be canonicalized
                 unsigned char expanded_tag = TAG(expanded);
-                if (!list_type_matches(expanded_tag)) {
+                if (!is_list_type(expanded_tag)) {
                     // Expanded form is not a list - this shouldn't happen for threading macros
                     // but handle it gracefully by wrapping in a list
                     expanded = AUTORELEASE(make_list(expanded, NULL));
@@ -954,7 +954,7 @@ ID canonicalize_ast(ID parsed_expr, EvalState *st) {
 
         if (result && !IS_IMMEDIATE(result) && result != parsed_expr) {
             unsigned char tag = TAG(result);
-            if (list_type_matches(tag) || tag == CLJ_VECTOR || tag == CLJ_MAP) {
+            if (is_list_type(tag) || tag == CLJ_VECTOR || tag == CLJ_MAP) {
                 needs_escape = true;
                 RETAIN(result);
                 rc_after_retain = retain_count(result);
