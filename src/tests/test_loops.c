@@ -240,3 +240,135 @@ TEST_SHARED(test_for_basic_list_comprehension) {
     }
     TEST_ASSERT_EQUAL_INT(3, i); // Should have 3 elements
 }
+
+// ============================================================================
+// Extended for tests (multiple bindings, :when, :let, :while)
+// ============================================================================
+
+// Test: Multiple bindings (cartesian product)
+TEST_SHARED(test_for_multiple_bindings) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // (for [x [1 2] y [3 4]] [x y]) => [[1 3] [1 4] [2 3] [2 4]]
+    ID result = eval_string(
+        "(vec (for [x [1 2] y [3 4]] [x y]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_vector(result));
+    
+    CljVector *vec = as_vector(result);
+    TEST_ASSERT_EQUAL_INT(4, vector_count(vec));
+    
+    // Check first element: [1 3]
+    ID first = vector_nth(vec, 0);
+    TEST_ASSERT_TRUE(is_vector(first));
+    CljVector *first_vec = as_vector(first);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(first_vec));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(first_vec, 0)));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(vector_nth(first_vec, 1)));
+    
+    // Check last element: [2 4]
+    ID last = vector_nth(vec, 3);
+    TEST_ASSERT_TRUE(is_vector(last));
+    CljVector *last_vec = as_vector(last);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(last_vec));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(last_vec, 0)));
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum(vector_nth(last_vec, 1)));
+}
+
+// Test: :when modifier (filtering)
+TEST_SHARED(test_for_when_modifier) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // (for [x (range 6) :when (even? x)] x) => [0 2 4]
+    ID result = eval_string(
+        "(vec (for [x (range 6) :when (even? x)] x))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_vector(result));
+    
+    CljVector *vec = as_vector(result);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(vec, 0)));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(vec, 1)));
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum(vector_nth(vec, 2)));
+}
+
+// Test: :let modifier (binding intermediate values)
+TEST_SHARED(test_for_let_modifier) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // (for [x [1 2 3] :let [y (* x 2)]] y) => [2 4 6]
+    ID result = eval_string(
+        "(vec (for [x [1 2 3] :let [y (* x 2)]] y))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_vector(result));
+    
+    CljVector *vec = as_vector(result);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(vec, 0)));
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum(vector_nth(vec, 1)));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum(vector_nth(vec, 2)));
+}
+
+// Test: :while modifier (early termination)
+TEST_SHARED(test_for_while_modifier) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // (for [x (range) :while (< x 3)] x) => [0 1 2]
+    ID result = eval_string(
+        "(vec (for [x (range) :while (< x 3)] x))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_vector(result));
+    
+    CljVector *vec = as_vector(result);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(vec, 0)));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(vec, 1)));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(vec, 2)));
+}
+
+// Test: Large sequence (performance/regression)
+TEST_SHARED(test_for_large_sequence) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // (count (vec (for [x (range 10000)] x))) => 10000
+    ID result = eval_string(
+        "(count (vec (for [x (range 10000)] x)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(10000, as_fixnum(result));
+}
+
+// Test: Lazy sequence (take from infinite)
+TEST_SHARED(test_for_lazy_infinite) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // (vec (take 3 (for [x (range)] x))) => [0 1 2]
+    ID result = eval_string(
+        "(vec (take 3 (for [x (range)] x)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_vector(result));
+    
+    CljVector *vec = as_vector(result);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(vec, 0)));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(vec, 1)));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(vec, 2)));
+}
+
+// Test: Multi-consumer independence (realize same lazy seq twice)
+TEST_SHARED(test_for_multi_consumer_independence) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // (let [s (for [x (range 5)] x)] (= (vec s) (vec s))) => true
+    ID result = eval_string(
+        "(let [s (for [x (range 5)] x)] (= (vec s) (vec s)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}

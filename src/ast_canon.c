@@ -437,8 +437,18 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     args[argc++] = arg;
                 }
                 
-                // Call macro function to expand the form
+                // Call macro function to expand the form.
+                // IMPORTANT: Evaluate macro in the macro's defining namespace so that
+                // unqualified helper symbols used by the macro body resolve consistently
+                // (e.g. clojure.core macros calling core helpers while expanding in user ns).
+                CljNamespace *saved_ns = st ? st->current_ns : NULL;
+                if (st && macro && ((CljFunction*)macro)->ns) {
+                    st->current_ns = ((CljFunction*)macro)->ns;
+                }
                 ID expanded = eval_function_call((CljObject*)macro, args, argc, NULL, st);
+                if (st) {
+                    st->current_ns = saved_ns;
+                }
                 if (!expanded) return NULL;
                 
                 // Transfer metadata from original form to expanded form
