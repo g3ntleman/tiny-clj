@@ -8,6 +8,7 @@
 #include "exception.h"
 #include "environment.h"
 #include "runtime.h"
+#include "symbol.h"
 #include "function.h"
 #include "macro.h"
 #include "meta.h"
@@ -67,10 +68,19 @@ ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContex
         node = list_rest_normalized(node);
 
         // `test` and `expr` may legitimately be NULL (nil literal).
-        // `eval_body` and `RELEASE` are nil-safe.
-        ID test_result = eval_body(test, env, st, ctx);
-        bool truthy = clj_is_truthy(test_result);
-        RELEASE(test_result);
+        // `eval_body` returns autoreleased objects - no manual cleanup needed.
+        
+        // Special case: `:else` keyword is always true (Clojure semantics)
+        // Keywords are interned, so we can use direct pointer comparison
+        bool truthy;
+        if (test == SYM_KW_ELSE) {
+            truthy = true;
+        } else {
+            ID test_result = eval_body(test, env, st, ctx);
+            truthy = clj_is_truthy(test_result);
+            // No RELEASE needed - eval_body returns autoreleased object
+        }
+        
         if (truthy) {
             return eval_body(expr, env, st, ctx);
         }

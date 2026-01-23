@@ -8,7 +8,7 @@
 #include "value.h"  // For IS_IMMEDIATE macro
 #include "runtime.h" // For g_runtime
 #include "list.h"    // For LIST_FIRST
-#include "eval.h"  // For SYM_DEF, SYM_NS
+#include "eval.h"  // For SYM_DEF, SYM_NS, SYM_DEFMACRO
 #include "map.h"     // For map_get
 #include "parser.h"  // For eval_parsed
 #include "to_string.h" // For pr_str debug printing
@@ -249,11 +249,14 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
           // Exception occurred during evaluation
           // Log the exception for debugging (always log for def expressions to catch silent failures)
           bool is_def_expr = false;
-            if (form && is_list_type(TAG(form))) {
-              CljList *list = as_list(form);
-              CljObject *first = LIST_FIRST(list);
-              if (first && TAG(first) == CLJ_SYMBOL && as_symbol(first) == SYM_DEF) {
-              is_def_expr = true;
+          if (form && is_list_type(TAG(form))) {
+            CljList *list = as_list(form);
+            CljObject *first = LIST_FIRST(list);
+            if (first && TAG(first) == CLJ_SYMBOL) {
+              CljSymbol *first_sym = as_symbol(first);
+              if (first_sym == SYM_DEF || first_sym == SYM_DEFMACRO) {
+                is_def_expr = true;
+              }
             }
           }
           const char *error_type = (ex && ex->type[0]) ? ex->type : "Exception";

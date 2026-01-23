@@ -51,6 +51,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 
 // For-loop functions
 ID eval_for(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_for_star(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 
