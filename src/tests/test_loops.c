@@ -214,3 +214,29 @@ TEST_SHARED(test_while_multiple_body_exprs) {
 // ============================================================================
 
 // Register all tests
+
+// Regression: doseq with vector binding
+TEST_SHARED(test_doseq_with_vector_binding) {
+    ID result = eval_string(
+        "(let [sum (atom 0)] (doseq [x [1 2 3]] (swap! sum + x)) @sum)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
+}
+
+// Regression: for with vector binding (basic list comprehension)
+TEST_SHARED(test_for_basic_list_comprehension) {
+    ID result = eval_string(
+        "(for [x [1 2 3]] (* x x))",
+        g_test_eval_state);
+    // Accept both lazy sequences and lists; normalize to a seq iterator
+    ID seq = AUTORELEASE(make_seq(result));
+    TEST_ASSERT_NOT_NULL(seq);
+    int expected[] = {1, 4, 9};
+    int i = 0;
+    for (ID cur = seq; cur && !seq_empty(cur); cur = seq_next(cur), ++i) {
+        ID first = seq_first(cur);
+        TEST_ASSERT_TRUE(is_fixnum(first));
+        TEST_ASSERT_EQUAL_INT(expected[i], as_fixnum(first));
+    }
+    TEST_ASSERT_EQUAL_INT(3, i); // Should have 3 elements
+}

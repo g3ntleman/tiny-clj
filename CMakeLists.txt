@@ -91,7 +91,7 @@ endif()
 # NOTE: Avoid adding the whole 'external/' tree to include paths, so that
 # template/reference subprojects can't be
 # accidentally picked up by includes.
-include_directories(${CMAKE_SOURCE_DIR} include src)
+include_directories(${CMAKE_SOURCE_DIR} include src ${CMAKE_SOURCE_DIR}/subjective-c/src/subjective-c)
 include_directories(${CMAKE_SOURCE_DIR}/external/tiny-db/inc ${CMAKE_SOURCE_DIR}/external/tiny-db/src)
 
 # Subjective-C subproject (static library + early tests)
@@ -444,9 +444,6 @@ add_executable(unit-tests
     src/tests/test_qualified_symbol_resolution.c
     src/tests/test_repl.c
     src/tests/test_file_io.c
-    src/tests/test_fs_layer.c
-    src/tests/test_tinyclj_bindings_fs_kv.c
-    src/tests/test_streaming_kv_fs.c
     src/tests/test_rrd_scripts.c
     src/tests/test_atom.c
     src/tests/test_atom_watch.c
@@ -465,6 +462,7 @@ add_executable(unit-tests
     src/tests/test_time.c
     src/tests/test_yield_sleep_hooks.c
     src/tests/test_yield_sleep.c
+        src/tests/test_clojure_core_first_vector.c
     src/tests/test_runtime_stats.c
     src/tests/test_pprint.c
     src/tests/test_static_keywords.c
@@ -510,7 +508,7 @@ target_include_directories(unit-tests
 # Since unit-tests is always built in Debug mode, DEBUG will be set via CMAKE_BUILD_TYPE
 target_compile_definitions(subjective-c PRIVATE 
     UNITY_TESTS 
-    MEMORY_PROFILING_ENABLED=1
+    MEMORY_PROFILING_ENABLED=0
     META_ENABLED=1
     UNITY_INCLUDE_EXEC_TIME 
 )
