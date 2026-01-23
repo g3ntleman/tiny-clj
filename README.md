@@ -85,7 +85,7 @@ This repo pins **ESP-IDF v5.3.x** as a git submodule under `external/esp-idf` so
 # 1) Fetch submodules (required once after clone)
 git submodule update --init --recursive external/esp-idf
 
-# 2) Download ESP-IDF tools/toolchains into a repo-local directory (./_deps/)
+# 2) Download ESP-IDF tools/toolchains into a repo-local directory (./external/)
 ./scripts/setup_esp_idf.sh
 
 # 3) Activate ESP-IDF environment (adds xtensa-esp32-elf-* tools to PATH)

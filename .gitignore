@@ -66,11 +66,12 @@ venv/
 .venv/
 
 # Tooling caches (do not commit)
+.cache/
 .clj-kondo/
 .lsp/
 
 # Repo-local dependencies (do not commit)
-_deps/
+external/espressif-tools/
 
 # System files
 .DS_Store
