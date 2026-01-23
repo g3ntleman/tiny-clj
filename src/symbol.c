@@ -95,7 +95,7 @@ CljSymbol *SYM_NEXT = NULL;
 CljSymbol *SYM_LIST = NULL;
 CljSymbol *SYM_AND = NULL;
 CljSymbol *SYM_OR = NULL;
-CljSymbol *SYM_FOR = NULL;
+CljSymbol *SYM_FOR_STAR = NULL;
 CljSymbol *SYM_DOSEQ = NULL;
 CljSymbol *SYM_DOTIMES = NULL;
 
@@ -110,6 +110,7 @@ CljSymbol *SYM_KW_NAME = NULL;
 CljSymbol *SYM_KW_NATIVE = NULL;
 CljSymbol *SYM_KW_AS = NULL;
 CljSymbol *SYM_KW_REFER = NULL;
+CljSymbol *SYM_KW_ELSE = NULL;
 CljSymbol *SYM_KW_VALUE = NULL;
 CljSymbol *SYM_KW_CLOSED = NULL;
 CljSymbol *SYM_KW_DATA = NULL;
@@ -327,7 +328,7 @@ DEFINE_EXTERN_SYMBOL(sym_partition_data, "partition");
 DEFINE_EXTERN_SYMBOL(sym_some_data, "some");
 DEFINE_EXTERN_SYMBOL(sym_list_data, "list");
 // Note: sym_and_data and sym_or_data are now in g_special_symbols[] array
-DEFINE_STATIC_SYMBOL(sym_for_data, "for");
+DEFINE_STATIC_SYMBOL(sym_for_star_data, "for*");
 DEFINE_STATIC_SYMBOL(sym_doseq_data, "doseq");
 DEFINE_STATIC_SYMBOL(sym_dotimes_data, "dotimes");
 
@@ -432,6 +433,7 @@ DEFINE_STATIC_SYMBOL(sym_kw_name_data, ":name");
 DEFINE_STATIC_SYMBOL(sym_kw_native_data, ":native");
 DEFINE_STATIC_SYMBOL(sym_kw_as_data, ":as");
 DEFINE_STATIC_SYMBOL(sym_kw_refer_data, ":refer");
+DEFINE_STATIC_SYMBOL(sym_kw_else_data, ":else");
 DEFINE_STATIC_SYMBOL(sym_kw_value_data, ":value");
 DEFINE_STATIC_SYMBOL(sym_kw_closed_data, ":closed");
 DEFINE_STATIC_SYMBOL(sym_kw_data_data, ":data");
@@ -636,7 +638,7 @@ void init_special_symbols() {
 
     // Note: SYM_AND and SYM_OR are now in g_special_symbols[] array - initialized above
 
-    INIT_SYMBOL(SYM_FOR, sym_for_data);
+    INIT_SYMBOL(SYM_FOR_STAR, sym_for_star_data);
 
     INIT_SYMBOL(SYM_DOSEQ, sym_doseq_data);
 
@@ -662,6 +664,8 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_AS, sym_kw_as_data);
 
     INIT_SYMBOL(SYM_KW_REFER, sym_kw_refer_data);
+
+    INIT_SYMBOL(SYM_KW_ELSE, sym_kw_else_data);
 
     INIT_SYMBOL(SYM_KW_VALUE, sym_kw_value_data);
 

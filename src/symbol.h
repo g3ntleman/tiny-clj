@@ -120,7 +120,7 @@ extern CljSymbol *SYM_NEXT;
 extern CljSymbol *SYM_LIST;
 extern CljSymbol *SYM_AND;
 extern CljSymbol *SYM_OR;
-extern CljSymbol *SYM_FOR;
+extern CljSymbol *SYM_FOR_STAR;
 extern CljSymbol *SYM_DOSEQ;
 extern CljSymbol *SYM_DOTIMES;
 
@@ -135,6 +135,7 @@ extern CljSymbol *SYM_KW_NAME;
 extern CljSymbol *SYM_KW_NATIVE;
 extern CljSymbol *SYM_KW_AS;
 extern CljSymbol *SYM_KW_REFER;
+extern CljSymbol *SYM_KW_ELSE;
 extern CljSymbol *SYM_KW_VALUE;
 extern CljSymbol *SYM_KW_CLOSED;
 extern CljSymbol *SYM_KW_DATA;
