@@ -192,7 +192,7 @@ static inline void assert_string(CljObject *obj, const char *expected) {
 // Helper: Assert that object is a list or AST-backed list
 static inline void assert_list(CljObject *obj) {
     TEST_ASSERT_NOT_NULL(obj);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(obj)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(obj)));
 }
 
 // Helper: Assert that object is a vector

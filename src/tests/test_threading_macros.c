@@ -66,7 +66,7 @@ TEST(test_threading_thread_first_non_seq_form) {
     ID result = eval_string("(-> 5 :keyword)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     // Should be a list with :keyword and 5
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
 }
 
 // ============================================================================
@@ -79,7 +79,7 @@ TEST(test_threading_thread_last_basic) {
     // Basic threading: (->> [1 2 3] (map inc) (filter even?)) => (2 4)
     ID result = eval_string("(->> [1 2 3] (map inc) (filter even?))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
     
     CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
@@ -92,7 +92,7 @@ TEST(test_threading_thread_last_single_form) {
     // Single form: (->> [1 2 3] (map inc)) => (2 3 4)
     ID result = eval_string("(->> [1 2 3] (map inc))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
     
     CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
@@ -173,7 +173,7 @@ TEST(test_threading_some_last_continues_when_not_nil) {
     // Continues when not nil: (some->> [1 2 3] (map inc) (filter even?)) => (2 4)
     ID result = eval_string("(some->> [1 2 3] (map inc) (filter even?))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
 }
 
 TEST(test_threading_some_last_nil_expr) {
@@ -228,7 +228,7 @@ TEST(test_threading_cond_last_basic) {
     // Basic cond->>: (cond->> [1 2 3] true (map inc) false (filter even?)) => (2 3 4)
     ID result = eval_string("(cond->> [1 2 3] true (map inc) false (filter even?))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
 }
 
 TEST(test_threading_cond_last_no_clauses) {
@@ -341,7 +341,7 @@ TEST(test_threading_macroexpand_thread_first) {
     // Verify macroexpansion: (macroexpand '(-> 5 (+ 3)))
     ID result = eval_string("(macroexpand '(-> 5 (+ 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
     
     // Should expand to something like (+ 5 3)
     CljList *expanded = as_list(result);
@@ -354,7 +354,7 @@ TEST(test_threading_macroexpand_thread_last) {
     // Verify macroexpansion: (macroexpand '(->> [1 2 3] (map inc)))
     ID result = eval_string("(macroexpand '(->> [1 2 3] (map inc)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
 }
 
 TEST(test_threading_macroexpand_as) {
@@ -363,7 +363,7 @@ TEST(test_threading_macroexpand_as) {
     // Verify macroexpansion: (macroexpand '(as-> 5 x (+ x 3)))
     ID result = eval_string("(macroexpand '(as-> 5 x (+ x 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
 }
 
 TEST(test_threading_macroexpand_some_first) {
@@ -372,7 +372,7 @@ TEST(test_threading_macroexpand_some_first) {
     // Verify macroexpansion: (macroexpand '(some-> 5 inc))
     ID result = eval_string("(macroexpand '(some-> 5 inc))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
 }
 
 TEST(test_threading_macroexpand_cond_first) {
@@ -381,6 +381,6 @@ TEST(test_threading_macroexpand_cond_first) {
     // Verify macroexpansion: (macroexpand '(cond-> 1 true inc))
     ID result = eval_string("(macroexpand '(cond-> 1 true inc))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
 }
 

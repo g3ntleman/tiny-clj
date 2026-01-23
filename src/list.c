@@ -47,7 +47,7 @@ CljList* make_list(ID first, CljList *rest) {
 // Debug: Typ-Check mit Fehlerbehandlung
 CljList* as_list_checked(ID obj) {
     // Happy path: obj is not NULL and has correct type
-    if (obj && list_type_matches(TAG(obj))) {
+    if (obj && is_list_type(TAG(obj))) {
         return (CljList*)obj;  // Direct return, no jumps
     }
     // NULL is valid (e.g., end of list) - return NULL
@@ -94,7 +94,7 @@ ID list_nth(CljList *list, int n) {
     CljObject *current = (CljObject*)list;
     
     // Traverse the list properly
-    for (int i = 0; i <= n && current && list_type_matches(TAG(current)); i++) {
+    for (int i = 0; i <= n && current && is_list_type(TAG(current)); i++) {
         if (i == n) {
             CljList *current_list = as_list(current);
             // Element found - return it (may be NULL if element is nil)
@@ -102,7 +102,7 @@ ID list_nth(CljList *list, int n) {
         }
         CljList *current_list = as_list(current);
         current = LIST_REST(current_list);
-        if (current && !list_type_matches(TAG(current))) {
+        if (current && !is_list_type(TAG(current))) {
             current = NULL; // Stop if rest is not a list
         }
     }
@@ -118,7 +118,7 @@ int list_count(CljList *list) {
     if (!list) return 0;
     
     // Programmierfehler: list muss CLJ_LIST sein, wenn es nicht NULL ist
-    CLJ_ASSERT(list_type_matches(TAG(list)));
+    CLJ_ASSERT(is_list_type(TAG(list)));
     
     // Empty list has first = NULL and rest = NULL
     // A list with nil as element has first = NULL but rest != NULL
@@ -142,7 +142,7 @@ CljObject* list_get_element(CljList *list, int index) {
     int i = 0;
     while (i < index) {
         CljObject *rest = LIST_REST(node);
-        if (!rest || !list_type_matches(TAG(rest))) return NULL;
+        if (!rest || !is_list_type(TAG(rest))) return NULL;
         node = as_list(rest);
         i++;
     }

@@ -269,7 +269,7 @@ TEST(test_let_with_local_function_using_reverse) {
     // Test: (let [step (fn [coll] (reverse coll))] (step (list 1 2 3)))
     CljObject *result = eval_string("(let [step (fn [coll] (reverse coll))] (step (list 1 2 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
     
     // Verify first element is 3
     CljList *list = as_list(result);
@@ -335,7 +335,7 @@ TEST(test_let_filter_function_call) {
         TEST_FAIL_MESSAGE("filter with (fn [x] true) returned NULL");
         return;
     }
-    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
     
     // Test if even? works
     CljObject *even_result = eval_string("(even? 2)", g_test_eval_state);
@@ -358,7 +358,7 @@ TEST(test_let_filter_function_call) {
         TEST_FAIL_MESSAGE("filter with even? returned NULL");
         return;
     }
-    TEST_ASSERT_TRUE(result2 && list_type_matches(TAG(result2)));
+    TEST_ASSERT_TRUE(result2 && is_list_type(TAG(result2)));
     
     // Verify first element is 2
     CljList *list = as_list(result2);
@@ -397,7 +397,7 @@ TEST(test_let_recursive_function_with_namespace_function) {
         return;
     }
     
-    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
     
     CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
@@ -415,7 +415,7 @@ TEST(test_let_filter_step_pattern) {
         return;
     }
     
-    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
     
     CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
@@ -446,7 +446,7 @@ TEST(test_let_recursive_function_namespace_access) {
         return;
     }
     
-    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
+    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
     
     CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
