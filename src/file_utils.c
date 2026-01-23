@@ -5,7 +5,7 @@
 
 #include "file_utils.h"
 #include "strings.h"
-#include "mini_format.h"
+#include "format_utils.h"
 #include "memory.h"
 #include "exception.h"
 #include <string.h>
@@ -30,23 +30,6 @@ CljString* file_slurp(const char *path) {
     
     // Open file
     FILE *fp = fopen(path, "r");
-    char fallback_path[512];
-    fallback_path[0] = '\0';
-
-    // If path is relative, also try "../path" and "../../path" to support running from build directories.
-    if (!fp && path[0] != '\0' && path[0] != '/') {
-        size_t path_len = strlen(path);
-        if (path_len + 3 < sizeof(fallback_path)) {
-            memcpy(fallback_path, "../", 3);
-            memcpy(fallback_path + 3, path, path_len + 1);
-            fp = fopen(fallback_path, "r");
-        }
-        if (!fp && path_len + 6 < sizeof(fallback_path)) {
-            memcpy(fallback_path, "../../", 6);
-            memcpy(fallback_path + 6, path, path_len + 1);
-            fp = fopen(fallback_path, "r");
-        }
-    }
     if (!fp) {
         // File doesn't exist or cannot be opened - throw exception
         char error_msg[256];
@@ -96,7 +79,7 @@ CljString* file_slurp(const char *path) {
     
     // Read file content
     // Allocate buffer for file content + null terminator
-    char *buffer = (char*)CLJ_MALLOC((size_t)file_size + 1);
+    char *buffer = (char*)malloc((size_t)file_size + 1);
     if (!buffer) {
         fclose(fp);
         throw_oom();
@@ -110,7 +93,7 @@ CljString* file_slurp(const char *path) {
     
     // Create CljString from buffer
     CljString *result = make_string(buffer);
-    CLJ_FREE(buffer);
+    free(buffer);
     
     return result;
 }

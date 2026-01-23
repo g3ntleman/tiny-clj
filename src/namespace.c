@@ -406,6 +406,14 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             // No ambiguity check needed: current namespace always takes precedence
             return v;
         }
+        // Fallback: if qualified lookup failed, try unqualified (for private functions)
+        // This handles cases where the symbol pointer differs due to interning timing
+        if (qualified_sym != sym) {
+            v = map_get(current_ns->mappings, sym);
+            if (v != NOT_FOUND) {
+                return v;
+            }
+        }
     }
     
     // CRITICAL: In Clojure, unqualified symbols are only resolved in the current namespace
@@ -952,11 +960,6 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // For def: store qualified symbol (e.g., user/my-var)
     // IMPORTANT: Use owned/in-place update to keep rc==1 during core load (COW hot path).
     map_assoc_inplace(&ns->mappings, qualified_symbol, value);
-
-    // // Provide unqualified alias so direct map_get on the original symbol works (useful for tests/debuggers)
-    // if (sym && !sym->ns_name && sym != qualified_symbol) {
-    //     map_assoc_inplace(&ns->mappings, sym, value);
-    // }
     
     // OPTIMIZATION: Invalidate resolve cache completely instead of removing individual symbols
     // This avoids ~23 map_assoc() calls per require and is more efficient.

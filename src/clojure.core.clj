@@ -185,6 +185,18 @@ R"CLOJURE(
           (if doc (with-meta name {:doc doc}) name)
           (cons 'fn (cons name (cons params body))))))
 
+^#^{:doc "Same as defn, but yields a private function (only accessible within the same namespace)."}
+(defmacro defn- [name & decls]
+  (let [doc   (if (and (seq decls) (string? (first decls)))
+                (first decls)
+                nil)
+        decls (if doc (rest decls) decls)
+        params (first decls)
+        body   (rest decls)]
+    (list 'def
+          (with-meta name (if doc {:doc doc :private true} {:private true}))
+          (cons 'fn (cons name (cons params body))))))
+
 ; ============================================================================
 ; Sequence Helper Functions (needed by Threading Macros)
 ; ============================================================================

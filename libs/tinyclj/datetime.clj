@@ -1,5 +1,8 @@
 (ns tinyclj.datetime)
 
+;; Ensure clojure.string utilities are available for formatting
+(require 'clojure.string)
+
 ;; =============================================================================
 ;; Date/Time conversion library for tiny-clj
 ;;
@@ -94,10 +97,16 @@
 ;; =============================================================================
 
 ^#^{:doc "Converts a raw timestamp {:days d :ms m} to a full date-time map with :year :month :day :hour :minute :second :millis. Original :days and :ms are preserved."}
-(defn date-time [{:keys [days ms] :as raw}]
-  (merge raw
-         (civil-from-days days)
-         (time-from-millis ms)))
+(defn date-time [raw]
+  (let [raw-map (cond
+                  (and raw (map? raw)) raw
+                  (inst? raw) {:days (instant-days raw) :ms (instant-ms raw)}
+                  :else (to-raw raw))
+        days (:days raw-map)
+        ms   (:ms raw-map)]
+    (merge raw-map
+           (civil-from-days days)
+           (time-from-millis ms))))
 
 ^#^{:doc "Converts a date-time map back to raw {:days :ms} format. Uses existing :days/:ms if present, otherwise calculates from components."}
 (defn to-raw [{:keys [days ms year month day hour minute second millis] :as dt}]
