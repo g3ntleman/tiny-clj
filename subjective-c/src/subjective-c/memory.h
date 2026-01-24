@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h> // malloc/free/realloc/calloc
+#include <string.h> // strlen/memcpy
 
 // memory_profiler.h lives in tiny-clj (not in subjective-c).
 // Only include it when profiling is explicitly enabled.
@@ -109,6 +110,18 @@ static inline void clj_free_impl(void *ptr, const char *file, int line) {
 #define CLJ_FREE(ptr) free((ptr))
 
 #endif // MEMORY_PROFILING_ENABLED
+
+// -----------------------------------------------------------------------------
+// Trackable string allocation helpers
+// -----------------------------------------------------------------------------
+// Use these instead of strdup/free so raw allocations show up in the profiler.
+static inline char *clj_strdup(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s) + 1;
+    char *out = (char*)CLJ_MALLOC(n);
+    memcpy(out, s, n);
+    return out;
+}
 
 /** @brief Get the reference count of an object
  *

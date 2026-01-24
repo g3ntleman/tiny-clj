@@ -93,6 +93,10 @@ typedef struct {
     size_t retains_by_type[CLJ_TYPE_COUNT];    // Retains per CljType
     size_t releases_by_type[CLJ_TYPE_COUNT];   // Releases per CljType
     size_t autoreleases_by_type[CLJ_TYPE_COUNT]; // Autoreleases per CljType
+
+    // Object bytes by type (best-effort; excludes raw blocks)
+    size_t bytes_current_by_type[CLJ_TYPE_COUNT];
+    size_t bytes_peak_by_type[CLJ_TYPE_COUNT];
 } MemoryStats;
 
 // Global memory statistics
@@ -193,6 +197,14 @@ void memory_profiler_track_deallocation(size_t size);
  * @param obj Pointer to created CljObject
  */
 void memory_profiler_track_object_creation(CljObject *obj);
+
+/**
+ * @brief Track CljObject creation with precise allocated size
+ *
+ * This is used by the core allocator (`alloc`) which knows the exact byte size
+ * of the allocation (including flexible array members).
+ */
+void memory_profiler_track_object_creation_sized(CljObject *obj, size_t size);
 
 /**
  * @brief Track CljObject destruction

@@ -233,7 +233,7 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
     ns->loaded = false;
 
     
-    ns->filename = file ? strdup(file) : NULL;
+    ns->filename = file ? clj_strdup(file) : NULL;
     if (file && !ns->filename) {
         // strdup failed - OOM
         RELEASE(ns->mappings);

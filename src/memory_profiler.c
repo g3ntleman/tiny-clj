@@ -40,6 +40,7 @@
 #include "memory_profiler.h"
 #include "memory.h"  // For LOGF macro
 #include "object.h"
+#include "platform.h" // platform_allocated_size (best-effort)
 #include "value.h"
 #include "types.h"
 #include <stdio.h>
@@ -221,6 +222,8 @@ void memory_profiler_reset(void) {
     memset(g_memory_stats.retains_by_type, 0, sizeof(g_memory_stats.retains_by_type));
     memset(g_memory_stats.releases_by_type, 0, sizeof(g_memory_stats.releases_by_type));
     memset(g_memory_stats.autoreleases_by_type, 0, sizeof(g_memory_stats.autoreleases_by_type));
+    memset(g_memory_stats.bytes_current_by_type, 0, sizeof(g_memory_stats.bytes_current_by_type));
+    memset(g_memory_stats.bytes_peak_by_type, 0, sizeof(g_memory_stats.bytes_peak_by_type));
 
 #ifdef DEBUG
     // Keep autorelease peak scoped to the same profiling window as MemoryStats.
@@ -352,6 +355,57 @@ static void update_memory_leak_stats(void) {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Object allocation size tracking (alloc()/DEALLOC)
+// -----------------------------------------------------------------------------
+// alloc() knows the exact byte size, but destruction only has the pointer.
+// Keep a small best-effort table so current/peak bytes are meaningful.
+typedef struct {
+    void *ptr;
+    size_t size;
+    uint8_t type;
+} ObjBlock;
+
+static ObjBlock *g_obj_blocks = NULL;
+static size_t g_obj_blocks_count = 0;
+static size_t g_obj_blocks_capacity = 0;
+
+static bool obj_blocks_ensure_capacity(size_t needed) {
+    if (needed <= g_obj_blocks_capacity) return true;
+    size_t new_cap = (g_obj_blocks_capacity == 0) ? 256 : g_obj_blocks_capacity * 2;
+    while (new_cap < needed) {
+        new_cap *= 2;
+    }
+    ObjBlock *nb = (ObjBlock*)realloc(g_obj_blocks, new_cap * sizeof(ObjBlock));
+    if (!nb) {
+        // Best-effort: if profiler can't grow, skip tracking rather than crashing.
+        return false;
+    }
+    g_obj_blocks = nb;
+    g_obj_blocks_capacity = new_cap;
+    return true;
+}
+
+static void obj_blocks_track(void *ptr, size_t size, uint8_t type) {
+    if (!ptr) return;
+    if (!obj_blocks_ensure_capacity(g_obj_blocks_count + 1)) return;
+    g_obj_blocks[g_obj_blocks_count++] = (ObjBlock){ .ptr = ptr, .size = size, .type = type };
+}
+
+static bool obj_blocks_untrack(void *ptr, size_t *size_out, uint8_t *type_out) {
+    if (!ptr || !g_obj_blocks || g_obj_blocks_count == 0) return false;
+    for (size_t i = 0; i < g_obj_blocks_count; i++) {
+        if (g_obj_blocks[i].ptr == ptr) {
+            if (size_out) *size_out = g_obj_blocks[i].size;
+            if (type_out) *type_out = g_obj_blocks[i].type;
+            g_obj_blocks[i] = g_obj_blocks[g_obj_blocks_count - 1];
+            g_obj_blocks_count--;
+            return true;
+        }
+    }
+    return false;
+}
+
 
 void memory_profiler_track_deallocation(size_t size) {
     g_memory_stats.total_deallocations++;
@@ -364,6 +418,11 @@ void memory_profiler_track_deallocation(size_t size) {
 }
 
 void memory_profiler_track_object_creation(CljObject *obj) {
+    // Backward-compatible entry point: assume minimal header size.
+    memory_profiler_track_object_creation_sized(obj, sizeof(CljObject));
+}
+
+void memory_profiler_track_object_creation_sized(CljObject *obj, size_t size) {
     if (!g_memory_profiling_enabled) return;
     
     if (obj) {
@@ -379,12 +438,29 @@ void memory_profiler_track_object_creation(CljObject *obj) {
         
         g_memory_stats.total_allocations++;
         
-        // Add memory tracking
-        size_t obj_size = sizeof(CljObject);
+        // Add memory tracking (exact size when provided)
+        size_t obj_size = (size > 0) ? size : sizeof(CljObject);
+        // Prefer platform-reported allocated size (includes allocator alignment/overhead).
+        // Fall back to the requested size when unavailable.
+        size_t real_size = platform_allocated_size(obj);
+        if (real_size > 0) {
+            obj_size = real_size;
+        }
         g_memory_stats.current_memory_usage += obj_size;
         if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage) {
             g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
         }
+
+        // Track bytes by type (objects only; raw blocks tracked separately).
+        if (obj->type < CLJ_TYPE_COUNT) {
+            g_memory_stats.bytes_current_by_type[obj->type] += obj_size;
+            if (g_memory_stats.bytes_current_by_type[obj->type] > g_memory_stats.bytes_peak_by_type[obj->type]) {
+                g_memory_stats.bytes_peak_by_type[obj->type] = g_memory_stats.bytes_current_by_type[obj->type];
+            }
+        }
+
+        // Remember size+type so destruction can subtract accurately.
+        obj_blocks_track(obj, obj_size, obj->type);
         
         // Track by object type with bounds checking
         assert(obj->type >= 0 && obj->type < CLJ_TYPE_COUNT && "Invalid object type for memory tracking");
@@ -407,8 +483,20 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
         }
         
         g_memory_stats.object_destructions++;
-        // Track the deallocation size (approximate)
-        memory_profiler_track_deallocation(sizeof(CljObject));
+        // Track the deallocation size (exact if known)
+        size_t obj_size = sizeof(CljObject);
+        uint8_t tracked_type = obj->type;
+        (void)obj_blocks_untrack(obj, &obj_size, &tracked_type);
+        memory_profiler_track_deallocation(obj_size);
+
+        // Track bytes by type (use tracked type if available).
+        if (tracked_type < CLJ_TYPE_COUNT) {
+            if (g_memory_stats.bytes_current_by_type[tracked_type] >= obj_size) {
+                g_memory_stats.bytes_current_by_type[tracked_type] -= obj_size;
+            } else {
+                g_memory_stats.bytes_current_by_type[tracked_type] = 0;
+            }
+        }
         
         // Track by object type with bounds checking
         assert(obj->type >= 0 && obj->type < CLJ_TYPE_COUNT && "Invalid object type for memory tracking");
@@ -557,18 +645,37 @@ void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, i
 
     g_memory_stats.raw_allocations++;
 
+    // Prefer platform-reported allocated size (includes allocator alignment/overhead).
+    // Fall back to requested size when unavailable.
+    size_t actual_size = size;
+    size_t real_size = platform_allocated_size(ptr);
+    if (real_size > 0) {
+        actual_size = real_size;
+    }
+
     // If pointer is already tracked, treat this as an overwrite (best-effort).
     long idx = raw_blocks_find(ptr);
     if (idx >= 0) {
         size_t old_size = g_raw_blocks[(size_t)idx].size;
-        g_raw_blocks[(size_t)idx].size = size;
+        g_raw_blocks[(size_t)idx].size = actual_size;
         if (g_memory_stats.raw_bytes_current >= old_size) {
             g_memory_stats.raw_bytes_current -= old_size;
         } else {
             g_memory_stats.raw_bytes_current = 0;
         }
-        g_memory_stats.raw_bytes_current += size;
+        g_memory_stats.raw_bytes_current += actual_size;
         raw_blocks_update_peaks();
+
+        // Total current/peak memory (objects + raw blocks)
+        if (g_memory_stats.current_memory_usage >= old_size) {
+            g_memory_stats.current_memory_usage -= old_size;
+        } else {
+            g_memory_stats.current_memory_usage = 0;
+        }
+        g_memory_stats.current_memory_usage += actual_size;
+        if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage) {
+            g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
+        }
         return;
     }
 
@@ -577,10 +684,16 @@ void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, i
         return;
     }
 
-    g_raw_blocks[g_raw_blocks_count++] = (RawBlock){ .ptr = ptr, .size = size };
+    g_raw_blocks[g_raw_blocks_count++] = (RawBlock){ .ptr = ptr, .size = actual_size };
     g_memory_stats.raw_blocks_current++;
-    g_memory_stats.raw_bytes_current += size;
+    g_memory_stats.raw_bytes_current += actual_size;
     raw_blocks_update_peaks();
+
+    // Total current/peak memory (objects + raw blocks)
+    g_memory_stats.current_memory_usage += actual_size;
+    if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage) {
+        g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
+    }
 }
 
 void memory_profiler_track_raw_free(void *ptr, const char *file, int line) {
@@ -608,6 +721,13 @@ void memory_profiler_track_raw_free(void *ptr, const char *file, int line) {
         g_memory_stats.raw_bytes_current -= old_size;
     } else {
         g_memory_stats.raw_bytes_current = 0;
+    }
+
+    // Total current memory (objects + raw blocks)
+    if (g_memory_stats.current_memory_usage >= old_size) {
+        g_memory_stats.current_memory_usage -= old_size;
+    } else {
+        g_memory_stats.current_memory_usage = 0;
     }
 }
 
@@ -643,6 +763,17 @@ void memory_profiler_track_raw_realloc(void *old_ptr, void *new_ptr, size_t new_
             }
             g_memory_stats.raw_bytes_current += new_size;
             raw_blocks_update_peaks();
+
+            // Total current/peak memory (objects + raw blocks)
+            if (g_memory_stats.current_memory_usage >= old_size) {
+                g_memory_stats.current_memory_usage -= old_size;
+            } else {
+                g_memory_stats.current_memory_usage = 0;
+            }
+            g_memory_stats.current_memory_usage += new_size;
+            if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage) {
+                g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
+            }
         } else {
             // Not tracked yet: treat as alloc.
             memory_profiler_track_raw_alloc(new_ptr, new_size, file, line);
@@ -760,6 +891,10 @@ void memory_profiler_track_deallocation(size_t size) {
 }
 void memory_profiler_track_object_creation(CljObject *obj) { 
     (void)obj; /* no-op */ 
+}
+void memory_profiler_track_object_creation_sized(CljObject *obj, size_t size) {
+    (void)obj;
+    (void)size; /* no-op */
 }
 void memory_profiler_track_object_destruction(CljObject *obj) { 
     (void)obj; /* no-op */ 

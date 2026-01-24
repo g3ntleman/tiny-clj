@@ -38,6 +38,20 @@ __attribute__((weak)) void tinyclj_esp32_uart_flush(void) {
     fflush(stdout);
 }
 
+size_t platform_allocated_size(const void *ptr) {
+    if (!ptr) return 0;
+#if defined(ESP32_BUILD) && defined(__has_include)
+#if __has_include(<esp_heap_caps.h>)
+    #include <esp_heap_caps.h>
+    return heap_caps_get_allocated_size((void*)ptr);
+#else
+    return 0;
+#endif
+#else
+    return 0;
+#endif
+}
+
 int platform_set_stdin_nonblocking(int enable) {
     (void)enable;
     // Not applicable on ESP32 UART; input is always non-blocking via hook.

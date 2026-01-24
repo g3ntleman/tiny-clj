@@ -55,6 +55,13 @@ size_t platform_flash_bytes_free(void);
 size_t platform_flash_bytes_total(void);
 
 // -----------------------------------------------------------------------------
+// Optional: allocated size for a heap pointer (0 if unavailable)
+// -----------------------------------------------------------------------------
+// Intended for diagnostics/profiling. On ESP32 this can be backed by
+// heap_caps_get_allocated_size(). On macOS this can be backed by malloc_size().
+size_t platform_allocated_size(const void *ptr);
+
+// -----------------------------------------------------------------------------
 // Networking (UDP/TCP) - event-driven, zero-copy friendly
 //
 // Design goals:

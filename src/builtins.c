@@ -38,6 +38,7 @@
 #include "platform.h"
 #include "macro.h"
 #include "instant.h"
+#include "hashmap.h"
 #include "datetime_utc.h"
 #include "platform.h"
 #ifdef DEBUG
@@ -6689,16 +6690,81 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     // Use now() as a conservative proxy (must be <= now in tests).
     ASSIGN(m, map_assoc(m, k_build_time, native_now(NULL, 0)));
 
+#if defined(DEBUG)
+    // Allocation/registry sizes (debug-only diagnostics).
+    // NOTE: symbol_table stores both symbols and keywords (everything interned).
+    ID k_symbols_allocated = (ID)intern_symbol_global(":symbols-allocated");
+    ID k_namespaces_allocated = (ID)intern_symbol_global(":namespaces-allocated");
+    ASSIGN(m, map_assoc(m, k_symbols_allocated, fixnum((int32_t)hashmap_count(g_runtime.symbol_table))));
+    ASSIGN(m, map_assoc(m, k_namespaces_allocated, fixnum((int32_t)map_count(g_runtime.ns_registry))));
+#endif
+
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     ID k_memory_stats = (ID)intern_symbol_global(":memory-stats");
     ID k_enabled = (ID)intern_symbol_global(":enabled?");
+    ID k_bytes_current = (ID)intern_symbol_global(":bytes-current");
+    ID k_bytes_peak = (ID)intern_symbol_global(":bytes-peak");
     ID k_raw_bytes_current = (ID)intern_symbol_global(":raw-bytes-current");
+    ID k_raw_bytes_peak = (ID)intern_symbol_global(":raw-bytes-peak");
+    ID k_raw_blocks_current = (ID)intern_symbol_global(":raw-blocks-current");
+    ID k_raw_blocks_peak = (ID)intern_symbol_global(":raw-blocks-peak");
+    ID k_bytes_by_type = (ID)intern_symbol_global(":bytes-by-type");
 
     CljMap *ms = make_map(8);
     if (ms)
     {
+        // Fixnum range is limited; clamp to avoid overflow/truncation surprises.
+        // These stats are intended for quick diagnostics, not exact accounting on huge heaps.
+        size_t bytes_current = g_memory_stats.current_memory_usage;
+        size_t bytes_peak = g_memory_stats.peak_memory_usage;
+        size_t raw_bytes_current = g_memory_stats.raw_bytes_current;
+        size_t raw_bytes_peak = g_memory_stats.raw_bytes_peak;
+        size_t raw_blocks_current = g_memory_stats.raw_blocks_current;
+        size_t raw_blocks_peak = g_memory_stats.raw_blocks_peak;
+
+        int32_t fc = (bytes_current > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bytes_current;
+        int32_t fp = (bytes_peak > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bytes_peak;
+        int32_t frc = (raw_bytes_current > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_bytes_current;
+        int32_t frp = (raw_bytes_peak > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_bytes_peak;
+        int32_t frbc = (raw_blocks_current > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_blocks_current;
+        int32_t frbp = (raw_blocks_peak > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_blocks_peak;
+
         ASSIGN(ms, map_assoc(ms, k_enabled, g_memory_profiling_enabled ? (ID)clj_true : (ID)clj_false));
-        ASSIGN(ms, map_assoc(ms, k_raw_bytes_current, fixnum((int32_t)g_memory_stats.current_memory_usage)));
+        ASSIGN(ms, map_assoc(ms, k_bytes_current, fixnum(fc)));
+        ASSIGN(ms, map_assoc(ms, k_bytes_peak, fixnum(fp)));
+        ASSIGN(ms, map_assoc(ms, k_raw_bytes_current, fixnum(frc)));
+        ASSIGN(ms, map_assoc(ms, k_raw_bytes_peak, fixnum(frp)));
+        ASSIGN(ms, map_assoc(ms, k_raw_blocks_current, fixnum(frbc)));
+        ASSIGN(ms, map_assoc(ms, k_raw_blocks_peak, fixnum(frbp)));
+
+        // Bytes by object TAG/type (objects only; excludes raw blocks).
+        // Vector of [type-id bytes-current bytes-peak alloc-count dealloc-count].
+        CljVector *by_type = make_vector(0, CLJ_VECTOR);
+        if (by_type) {
+            for (int ti = 0; ti < CLJ_TYPE_COUNT; ti++) {
+                size_t bc = g_memory_stats.bytes_current_by_type[ti];
+                size_t bp = g_memory_stats.bytes_peak_by_type[ti];
+                if (bc == 0 && bp == 0) continue;
+
+                int32_t bc_i = (bc > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bc;
+                int32_t bp_i = (bp > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bp;
+
+                size_t ac = g_memory_stats.allocations_by_type[ti];
+                size_t dc = g_memory_stats.deallocations_by_type[ti];
+                int32_t ac_i = (ac > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)ac;
+                int32_t dc_i = (dc > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)dc;
+
+                ID entry[5] = { fixnum(ti), fixnum(bc_i), fixnum(bp_i), fixnum(ac_i), fixnum(dc_i) };
+                CljVector *row = make_vector(5, CLJ_VECTOR);
+                if (!row) break;
+                for (int i = 0; i < 5; i++) {
+                    ASSIGN(row, vector_conj(row, entry[i]));
+                }
+                ASSIGN(by_type, vector_conj(by_type, row));
+            }
+            ASSIGN(ms, map_assoc(ms, k_bytes_by_type, by_type));
+        }
+
         ASSIGN(m, map_assoc(m, k_memory_stats, (ID)ms));
     }
 #endif

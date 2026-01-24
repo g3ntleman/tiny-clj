@@ -17,6 +17,7 @@
 #include <ifaddrs.h>
 
 #include <CoreFoundation/CoreFoundation.h>
+#include <malloc/malloc.h> // malloc_size
 
 // -----------------------------------------------------------------------------
 // Optional stdout observer hook (used by REPL to decide whether to print a newline
@@ -199,6 +200,11 @@ size_t platform_heap_bytes_free(void) { return (size_t)-1; }
 size_t platform_heap_bytes_total(void) { return (size_t)-1; }
 size_t platform_flash_bytes_free(void) { return (size_t)-1; }
 size_t platform_flash_bytes_total(void) { return (size_t)-1; }
+
+size_t platform_allocated_size(const void *ptr) {
+    if (!ptr) return 0;
+    return malloc_size(ptr);
+}
 
 int platform_set_stdin_nonblocking(int enable) {
     // When stdin is integrated into CFRunLoop via CFFileDescriptor, the callback

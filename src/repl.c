@@ -449,11 +449,9 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 #endif
     // Initialize memory profiling DIRECTLY before the first prompt
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
-    MEMORY_PROFILER_INIT();
-    enable_memory_profiling(true);
-
-    // Set verbose memory mode based on command line argument
-    g_memory_verbose_mode = memory_debug;
+    // Profiling is enabled at process startup when hooks are compiled in.
+    // Only adjust verbosity here.
+    set_memory_verbose_mode(memory_debug);
 #endif
 
 #ifdef DEBUG
@@ -668,6 +666,18 @@ int main(int argc, char **argv) {
 #ifdef PROFILE_STARTUP
     #include <time.h>
     clock_t t0 = clock();
+#endif
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    // Build-time switch: if memory profiling hooks are compiled in, enable them
+    // for the whole process so we can inspect current/peak after core loading.
+    // (No output unless verbose/debug is enabled explicitly.)
+    MEMORY_PROFILER_INIT();
+    enable_memory_profiling(true);
+    set_memory_leak_reporting_enabled(false);
+    set_memory_verbose_mode(false);
+    // Keep memory.c debug-output cache consistent.
+    extern void memory_update_debug_output_active(void);
+    memory_update_debug_output_active();
 #endif
     platform_init();
     runtime_init(&g_runtime);
