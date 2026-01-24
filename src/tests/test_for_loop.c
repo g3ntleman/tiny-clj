@@ -23,12 +23,8 @@ TEST(test_doseq_basic) {
     RELEASE(env);
 }
 
-TEST(test_for_basic) {
-    CljMap *env = make_map(4);
-    CljObject *result = eval_for(NULL, env);
-    TEST_ASSERT_NULL(result);
-    RELEASE(env);
-}
+// test_for_basic removed - 'for' is now a macro that expands to 'for*'
+// Use test_for_basic_list_comprehension in test_loops.c instead
 
 // test_dotimes_with_environment removed - duplicate of test_dotimes_simple_iteration_count in test_loops.c
 

@@ -12,6 +12,7 @@
 
 #include "common.h"
 #include "memory.h"
+#include "memory_profiler.h"
 #include "value.h"
 
 #include <external/tiny_regex.h>

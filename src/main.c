@@ -38,6 +38,8 @@ int main() {
     // Initialize global structures
     meta_registry_init(); // Enable meta functionality
     init_special_symbols();
+    extern void init_fs_keywords(void);
+    init_fs_keywords();
     // Singletons are automatically initialized on first call
     
     // Demo output removed; everything should be covered by unit tests
@@ -47,7 +49,7 @@ int main() {
     
     // Cleanup
     meta_registry_cleanup(); // Cleanup meta functionality
-    autorelease_pool_drain_to_depth(0); // Drain alle Autorelease-Pools
+    autorelease_pool_cleanup_all(); // Cleanup alle Autorelease-Pools
     
     return 0;
 }

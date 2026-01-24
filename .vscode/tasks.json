@@ -68,6 +68,21 @@
       }
     },
     {
+      "label": "flash image",
+      "type": "shell",
+      "command": "./build_idf.sh --flash",
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "showReuseMessage": false
+      }
+    },
+    {
       "label": "run-repl",
       "type": "shell",
       "command": "pkill -f '/build/tiny-clj-repl' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj-repl && ./build/tiny-clj-repl",

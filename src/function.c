@@ -13,6 +13,7 @@
 #include "object.h"
 #include "vector.h"
 #include "symbol.h"  // For SYM_AMP
+#include "memory_profiler.h"
 
 /**
  * @brief Allocate and initialize parameter vector for function
