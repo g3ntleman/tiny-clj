@@ -73,8 +73,10 @@ void platform_set_raw_mode(int enable) {
     // No-op: terminal modes are host-only.
 }
 
-bool platform_try_get_cursor_position(uint16_t *row, uint16_t *col) {
+#if defined(REPL_ENABLED) && (REPL_ENABLED != 0)
+__attribute__((weak)) bool platform_try_get_cursor_position(uint16_t *row, uint16_t *col) {
     (void)row;
     (void)col;
     return false;
 }
+#endif

@@ -134,44 +134,27 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
                                          CljObject *parent_body);
 
 // Helper: Transform list of expressions
+// Mutates the list in-place
+// Returns the original list (now mutated) if transformations occurred
 static CljList* transform_list(CljList *list, CljObject *func_name,
                                 CljObject **params, int param_count,
                                 CljObject *parent_body) {
     if (!list) return NULL;
 
-    CljList *new_rest = NULL, *new_current = NULL;
-    CljList *current = list;
-
-    while (current) {
+    for (CljList *current = list; current; current = as_list(current->rest)) {
         CljObject *expr = current->first;
-        if (!expr) {
-            current = as_list(current->rest);
-            continue;
-        }
+        if (!expr) continue;
 
         CljObject *transformed = transform_recursive_tail_calls(expr, func_name, params, param_count, parent_body);
-        if (!transformed) {
-            RELEASE(new_rest);
-            return NULL;
-        }
+        if (!transformed) return NULL;
 
-        CljList *new_node = (CljList*)make_list(transformed, NULL);
-        if (!new_node) {
-            RELEASE(transformed);
-            RELEASE(new_rest);
-            return NULL;
+        if (transformed != expr) {
+            RELEASE(expr);
+            current->first = transformed ? RETAIN(transformed) : NULL;
         }
-
-        if (!new_rest) {
-            new_rest = new_current = new_node;
-        } else {
-            new_current->rest = (CljObject*)new_node;
-            new_current = new_node;
-        }
-        current = as_list(current->rest);
     }
 
-    return new_rest;
+    return list;
 }
 
 // Helper: Build list with 1-3 elements
@@ -333,23 +316,16 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
         CljList *t_rest = transform_list(rest, func_name, params, param_count, body);
         if (!t_rest) return NULL;
 
-        CljList *new_cond = (CljList*)make_list((CljObject*)SYM_COND, NULL);
+        // If nothing changed, return the original cond form
+        if (t_rest == rest) {
+            return RETAIN(body), body;
+        }
+
+        // Create new cond form: (cond test expr ...)
+        CljList *new_cond = (CljList*)make_list((CljObject*)SYM_COND, (CljList*)t_rest);
         if (!new_cond) {
             RELEASE(t_rest);
             return NULL;
-        }
-
-        CljList *rest_list = as_list(new_cond->rest);
-        if (rest_list) {
-            rest_list->rest = (CljObject*)t_rest;
-        } else {
-            CljList *new_rest_list = (CljList*)make_list((CljObject*)t_rest, NULL);
-            if (!new_rest_list) {
-                RELEASE(new_cond);
-                RELEASE(t_rest);
-                return NULL;
-            }
-            new_cond->rest = (CljObject*)new_rest_list;
         }
 
         RETAIN(new_cond);

@@ -12,15 +12,20 @@
 
 // Internal: Look up a macro by symbol in the given namespace
 static CljFunction* lookup_macro(CljNamespace *ns, CljSymbol *name) {
-    if (!ns || !name || !ns->macro_mappings) return NULL;
+    if (!ns || !name || !ns->macro_mappings) {
+        return NULL;
+    }
 
     CljObject *found = map_get_sentinel(ns->macro_mappings, (CljObject*)name, NULL);
     // Macros are CLJ_CLOSURE (interpreted functions), not CLJ_FUNC (native)
-    return (found && TAG(found) == CLJ_CLOSURE) ? as_function(found) : NULL;
+    CljFunction *result = (found && TAG(found) == CLJ_CLOSURE) ? as_function(found) : NULL;
+    return result;
 }
 
 void register_macro(CljNamespace *ns, CljSymbol *name, CljFunction *macro_fn) {
-    if (!ns || !name || !macro_fn) return;
+    if (!ns || !name || !macro_fn) {
+        return;
+    }
 
     // Initialize macro_mappings if NULL
     if (!ns->macro_mappings) {
@@ -63,20 +68,26 @@ CljFunction* lookup_macro_resolve(EvalState *st, CljSymbol *name) {
         if (target) {
             // First try the qualified key as-is.
             CljFunction *macro = lookup_macro(target, name);
-            if (macro) return macro;
+            if (macro) {
+                return macro;
+            }
 
             // Then fall back to unqualified lookup.
             CljSymbol *unqualified = intern_symbol_global(name->cname);
             if (unqualified) {
                 macro = lookup_macro(target, unqualified);
-                if (macro) return macro;
+                if (macro) {
+                    return macro;
+                }
             }
         }
     }
 
     // Check current namespace first (fast path - no lookup needed)
     CljFunction *macro = lookup_macro(st->current_ns, name);
-    if (macro) return macro;
+    if (macro) {
+        return macro;
+    }
 
     // Then check clojure.core (use cached pointer)
     if (!g_cached_core_ns) {
@@ -84,7 +95,9 @@ CljFunction* lookup_macro_resolve(EvalState *st, CljSymbol *name) {
     }
     if (g_cached_core_ns && g_cached_core_ns != st->current_ns) {
         macro = lookup_macro(g_cached_core_ns, name);
-        if (macro) return macro;
+        if (macro) {
+            return macro;
+        }
     }
 
     // Also check user namespace (use cached pointer)
@@ -94,7 +107,9 @@ CljFunction* lookup_macro_resolve(EvalState *st, CljSymbol *name) {
     }
     if (g_cached_user_ns && g_cached_user_ns != st->current_ns && g_cached_user_ns != g_cached_core_ns) {
         macro = lookup_macro(g_cached_user_ns, name);
-        if (macro) return macro;
+        if (macro) {
+            return macro;
+        }
     }
 
     return NULL;

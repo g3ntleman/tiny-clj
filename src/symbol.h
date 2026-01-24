@@ -1,3 +1,4 @@
+extern struct CljSymbol *SYM_KW_META;
 #ifndef TINY_CLJ_SYMBOLS_H
 #define TINY_CLJ_SYMBOLS_H
 
@@ -119,7 +120,7 @@ extern CljSymbol *SYM_NEXT;
 extern CljSymbol *SYM_LIST;
 extern CljSymbol *SYM_AND;
 extern CljSymbol *SYM_OR;
-extern CljSymbol *SYM_FOR;
+extern CljSymbol *SYM_FOR_STAR;
 extern CljSymbol *SYM_DOSEQ;
 extern CljSymbol *SYM_DOTIMES;
 
@@ -134,6 +135,7 @@ extern CljSymbol *SYM_KW_NAME;
 extern CljSymbol *SYM_KW_NATIVE;
 extern CljSymbol *SYM_KW_AS;
 extern CljSymbol *SYM_KW_REFER;
+extern CljSymbol *SYM_KW_ELSE;
 extern CljSymbol *SYM_KW_VALUE;
 extern CljSymbol *SYM_KW_CLOSED;
 extern CljSymbol *SYM_KW_DATA;
@@ -144,6 +146,7 @@ extern CljSymbol *SYM_KW_HOST;
 extern CljSymbol *SYM_KW_COLUMN;
 extern CljSymbol *SYM_KW_FN;
 extern CljSymbol *SYM_KW_PATH;
+extern CljSymbol *SYM_KW_CHUNKS;
 extern CljSymbol *SYM_KW_HOST_OS;
 extern CljSymbol *SYM_KW_MACRO;
 extern CljSymbol *SYM_KW_TYPE;
@@ -169,6 +172,7 @@ extern CljSymbol *SYM_NS_STAR;
 
 // tinyclj namespace function symbols
 extern CljSymbol *SYM_RETAIN_COUNT;
+extern CljSymbol *SYM_LIST_BATCH;
 
 #if defined(CLJ_HOT_PATH)
     #if defined(__clang__) || defined(__GNUC__)

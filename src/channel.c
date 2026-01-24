@@ -13,7 +13,7 @@ CljMap* make_result_channel(void) {
     int capacity = 4;  // Enough for :value and :closed
     size_t struct_size = sizeof(CljMap);
     size_t data_size = (size_t)capacity * 2 * sizeof(CljObject*);
-    CljMap *tmap = (CljMap*)ALLOC_BYTES(CLJ_MAP_TRANSIENT, struct_size + data_size);
+    CljMap *tmap = (CljMap*)malloc(struct_size + data_size);
     if (!tmap) {
         throw_oom();
         return NULL;
@@ -31,10 +31,8 @@ CljMap* make_result_channel(void) {
     }
     
     // Initialize with :value = nil and :closed = false
-    CLJ_ASSERT(SYM_KW_VALUE != NULL);
-    CLJ_ASSERT(SYM_KW_CLOSED != NULL);
-    CljObject *kw_value = (CljObject*)SYM_KW_VALUE;
-    CljObject *kw_closed = (CljObject*)SYM_KW_CLOSED;
+    CljObject *kw_value = (CljObject*)intern_symbol_global(":value");
+    CljObject *kw_closed = (CljObject*)intern_symbol_global(":closed");
     
     map_conj(tmap, kw_value, NULL);  // :value = nil
     map_conj(tmap, kw_closed, clj_false);  // :closed = false
@@ -59,8 +57,7 @@ void result_channel_put(CljMap *chan, ID value) {
         CLJ_ASSERT(obj->rc == 1);
     }
     
-    CLJ_ASSERT(SYM_KW_VALUE != NULL);
-    CljObject *kw_value = (CljObject*)SYM_KW_VALUE;
+    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
     CLJ_ASSERT(kw_value != NULL);
     
 #if defined(DEBUG)
@@ -89,8 +86,7 @@ void result_channel_close(CljMap *chan) {
         CLJ_ASSERT(obj->rc == 1);
     }
     
-    CLJ_ASSERT(SYM_KW_CLOSED != NULL);
-    CljObject *kw_closed = (CljObject*)SYM_KW_CLOSED;
+    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
     CLJ_ASSERT(kw_closed != NULL);
     
 #if defined(DEBUG)

@@ -160,7 +160,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st);
 static ID parse_vector(Reader *reader, EvalState *st);
 static ID parse_map(Reader *reader, EvalState *st);
 static ID parse_list(Reader *reader, EvalState *st);
-static ID parse_list_rest(Reader *reader, EvalState *st);
+static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open_column);
 static ID parse_string_internal(Reader *reader, EvalState *st);
 static ID parse_symbol(Reader *reader, EvalState *st);
 
@@ -651,8 +651,17 @@ static ID parse_map(Reader *reader, EvalState *st) {
  * @return Parsed list CljObject or NULL on error
  */
 static ID parse_list(Reader *reader, EvalState *st) {
+  // Save position of opening parenthesis for better error messages
+  // Position before reader_match is the position of '(' itself
+  int open_line = reader->line;
+  int open_column = reader->column;
   if (!reader_match(reader, '('))
     return NULL;
+  // After reader_match, line/column point to after '(', so adjust to position of '(' itself
+  if (open_column > 1) {
+    open_column--; // Position of '(' itself
+  }
+  // If column was 1, '(' is at start of line, which is correct
   reader_skip_all(reader);
 
   // Handle empty list - return nil (Clojure behavior: () is nil)
@@ -673,7 +682,11 @@ static ID parse_list(Reader *reader, EvalState *st) {
       // => (let [binding test] (if binding then else?))
 
       // Parse rest of the list: [binding test], then, else?
-      ID rest = parse_list_rest(reader, st);
+      // For if-let macro expansion, we don't have the original open position,
+      // so use current position as approximation (this is a nested list within the if-let)
+      int nested_open_line = reader->line;
+      int nested_open_column = reader->column > 1 ? reader->column - 1 : 1;
+      ID rest = parse_list_rest(reader, st, nested_open_line, nested_open_column);
       if (!rest) {
         throw_parser_exception("if-let requires at least binding vector and then expression", reader);
         return NULL;
@@ -740,7 +753,12 @@ static ID parse_list(Reader *reader, EvalState *st) {
 
       if (reader_eof(reader) || !reader_match(reader, ')')) {
         RELEASE(expanded);
-        throw_parser_exception("Unclosed list - missing closing ')'", reader);
+        // For if-let macro expansion, use current position as approximation
+        int nested_open_line = reader->line;
+        int nested_open_column = reader->column > 1 ? reader->column - 1 : 1;
+        throw_parser_exceptionf(reader, 
+                                "Unclosed list - missing closing ')' (opened at line %d, column %d)",
+                                nested_open_line, nested_open_column);
         return NULL;
       }
 
@@ -749,7 +767,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
   }
 
   // Parse rest of the list recursively
-  ID rest = parse_list_rest(reader, st);
+  ID rest = parse_list_rest(reader, st, open_line, open_column);
 
   // Build list from first and rest
   // Return autoreleased object - caller can use until pool is popped
@@ -760,7 +778,10 @@ static ID parse_list(Reader *reader, EvalState *st) {
 
   if (reader_eof(reader) || !reader_match(reader, ')')) {
     RELEASE(result);
-    throw_parser_exception("Unclosed list - missing closing ')'", reader);
+    // Include position of opening parenthesis in error message
+    throw_parser_exceptionf(reader, 
+                            "Unclosed list - missing closing ')' (opened at line %d, column %d)",
+                            open_line, open_column);
     return NULL;
   }
 
@@ -771,14 +792,18 @@ static ID parse_list(Reader *reader, EvalState *st) {
  * @brief Parse rest of list after first element
  * @param reader Reader instance for input
  * @param st Evaluation state
+ * @param open_line Line number where the list was opened (for error messages)
+ * @param open_column Column number where the list was opened (for error messages)
  * @return Parsed rest of list or NULL for empty rest
  */
-static ID parse_list_rest(Reader *reader, EvalState *st) {
+static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open_column) {
   reader_skip_all(reader);
 
   // If EOF reached before ')', this is an unclosed list
   if (reader_eof(reader)) {
-    throw_parser_exception("Unclosed list - unexpected EOF before ')'", reader);
+    throw_parser_exceptionf(reader, 
+                            "Unclosed list - unexpected EOF before ')' (opened at line %d, column %d)",
+                            open_line, open_column);
     return NULL;
   }
 
@@ -795,14 +820,16 @@ static ID parse_list_rest(Reader *reader, EvalState *st) {
 
   // If next is ')', stop recursion early
   if (reader_peek_char(reader) == ')') {
-    return AUTORELEASE(make_ast_list(element, NULL));
+    // Return CLJ_LIST for the tail to prevent double nesting
+    return AUTORELEASE(make_list(element, NULL));
   }
 
   // Parse remaining elements recursively
-  ID rest = parse_list_rest(reader, st);
+  ID rest = parse_list_rest(reader, st, open_line, open_column);
 
-  // Build list node
-  return AUTORELEASE(make_ast_list(element, (CljList*)rest));
+  // Build list node - use CLJ_LIST for the tail (not ASTNode) to prevent double nesting.
+  // The canonicalization expects this structure: ASTNode head with CLJ_LIST tail.
+  return AUTORELEASE(make_list(element, rest ? (CljList*)rest : NULL));
 }
 
 /**
@@ -1524,15 +1551,23 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // Consume '#'
   if (reader_next(reader) != '#')
     return NULL;
+  // Save position of opening parenthesis (before consuming it)
+  int open_line = reader->line;
+  int open_column = reader->column;
   // Consume '('
   if (reader_next(reader) != '(')
     return NULL;
+  // After reader_next, line/column point to after '(', so adjust to position of '(' itself
+  if (open_column > 1) {
+    open_column--; // Position of '(' itself
+  }
+  // If column was 1, '(' is at start of line, which is correct
 
   reader_skip_all(reader);
 
   // Parse the body (list contents)
   // Note: parse_list_rest does NOT consume the closing ')', so we need to do it
-  ID body = parse_list_rest(reader, st);
+  ID body = parse_list_rest(reader, st, open_line, open_column);
 
   // Consume closing ')'
   reader_skip_all(reader);

@@ -8,6 +8,7 @@
 #include "seq.h"
 #include "builtins.h"  // builtin_get_eval_state, builtin_set_eval_state, native_first/rest/seq
 #include "eval.h"      // eval_function_call
+#include "function.h"  // CljFunction (needed for thunk->ns)
 #include "value.h"
 #include "list.h"
 #include "vector.h"
@@ -71,8 +72,28 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
     }
 
     // Evaluate thunk once to produce the sequence body.
+    //
+    // CRITICAL (Clojure compatibility):
+    // Realize the thunk in the thunk's defining namespace, not the caller's
+    // current namespace. Otherwise unqualified symbol resolution inside the
+    // lazy body can fail at realization time (e.g. private helpers in the same ns).
     builtin_set_eval_state(st);
+    CljNamespace *saved_ns = st->current_ns;
+    CLJ_ASSERT(lazy->thunk && !IS_IMMEDIATE(lazy->thunk) && 
+               (TAG(lazy->thunk) == CLJ_CLOSURE || TAG(lazy->thunk) == CLJ_FUNC));
+    if (TAG(lazy->thunk) == CLJ_CLOSURE) {
+        CljFunction *thunk_fn = (CljFunction*)lazy->thunk;
+        if (thunk_fn->ns) {
+            st->current_ns = thunk_fn->ns;
+        }
+    }
+
     ID seq_val = eval_function_call(lazy->thunk, NULL, 0, NULL, st);
+    
+    // DEBUG: Print what the thunk returned (only first 3 calls)
+    static int debug_thunk_result_count = 0;
+
+    st->current_ns = saved_ns;
 
     ID first_val = NULL;
     ID rest_val = NULL;
@@ -93,6 +114,14 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
             if (!first_val) {
                 first_val = SYM_NIL;
             }
+        } else {
+            if (debug_thunk_result_count <= 3) {
+                fprintf(stderr, "DEBUG: native_seq returned NULL\n");
+            }
+        }
+    } else {
+        if (debug_thunk_result_count <= 3) {
+            fprintf(stderr, "DEBUG: seq_val is NULL\n");
         }
     }
     builtin_set_eval_state(NULL);
@@ -265,6 +294,11 @@ ID seq_iter_first(const SeqIterator *iter) {
             if (!lazy) return NULL;
             lazy_seq_realize(lazy);
             ID first = lazy->first;
+            static int debug_seq_iter_first_count = 0;
+            if (first == NOT_FOUND) {
+                // Still not realized - return NULL
+                return NULL;
+            }
             return (first == SYM_NIL) ? NULL : first;
         }
         

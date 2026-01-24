@@ -13,7 +13,7 @@ ESP32_TOOLCHAIN_PATH="$PWD/external/espressif-tools/tools/xtensa-esp-elf/esp-13.
 cmake -S . -B builds/esp32 -G "Unix Makefiles" \
   -DCMAKE_TOOLCHAIN_FILE="$PWD/toolchains/esp32.cmake" \
   -DCMAKE_BUILD_TYPE=Embedded \
-  -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/build-esp32" \
+  -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/builds/esp32" \
   -DTINYCLJ_EMBEDDED_STRIP_FEATURES=OFF \
   -DTINYCLJ_LINKER_MAP=ON
 
@@ -21,15 +21,15 @@ cmake --build builds/esp32 -j 8 --target tiny-clj-esp32
 ```
 
 - **Outputs**:
-  - `build-esp32/tiny-clj-esp32` (ELF)
-  - `build-esp32/tiny-clj-esp32.map` (linker map)
+  - `builds/esp32/tiny-clj-esp32` (ELF)
+  - `builds/esp32/tiny-clj-esp32.map` (linker map)
 
 ### Section sizes (xtensa-esp32-elf-size)
 
 From:
 
 ```bash
-xtensa-esp32-elf-size build-esp32/tiny-clj-esp32
+xtensa-esp32-elf-size builds/esp32/tiny-clj-esp32
 ```
 
 - **text**: 191,451

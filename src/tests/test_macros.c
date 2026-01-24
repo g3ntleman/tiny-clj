@@ -430,4 +430,256 @@ TEST(test_unquote_splice_clojure_compatible) {
     assert_fixnum(third, 3);
 }
 
+// ============================================================================
+// TEST: get-macro function
+// ============================================================================
+
+TEST(test_get_macro_basic) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a macro
+    eval_string("(defmacro test-macro [x] (list '+ x 1))", g_test_eval_state);
+    
+    // get-macro should return the macro function for the symbol
+    CljObject *result = eval_string("(get-macro 'test-macro)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    // Should return a function (CLJ_CLOSURE for macros)
+    TEST_ASSERT_EQUAL_INT(CLJ_CLOSURE, TAG(result));
+}
+
+TEST(test_get_macro_not_found) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // get-macro should return nil for non-existent macros
+    CljObject *result = eval_string("(get-macro 'non-existent-macro)", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_not_a_macro) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a regular function (not a macro)
+    eval_string("(defn regular-fn [x] (+ x 1))", g_test_eval_state);
+    
+    // get-macro should return nil for regular functions
+    CljObject *result = eval_string("(get-macro 'regular-fn)", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_with_non_symbol) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // get-macro should return nil when given a non-symbol argument
+    CljObject *result = eval_string("(get-macro \"not-a-symbol\")", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_with_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // get-macro should return nil when given nil
+    CljObject *result = eval_string("(get-macro nil)", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_qualified_symbol) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a macro in current namespace
+    eval_string("(defmacro my-macro [x] (list '+ x 1))", g_test_eval_state);
+    
+    // get-macro should work with qualified symbols
+    // Note: This test assumes the current namespace is "user"
+    CljObject *result = eval_string("(get-macro 'user/my-macro)", g_test_eval_state);
+    // Should either find it (if qualified lookup works) or return nil
+    // The behavior depends on namespace resolution implementation
+    // For now, just verify it doesn't crash
+    (void)result;  // Suppress unused variable warning
+}
+
+// ============================================================================
+// TEST: for macro expansion
+// ============================================================================
+
+// Test: Simple for expansion (head rewrite only)
+TEST(test_for_macroexpand_simple) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should rewrite for to for*
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [x [1 2 3]] x))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be for* (or clojure.core/for*)
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0 || 
+                     (op_sym->ns_name && strcmp(op_sym->ns_name->cname, "clojure.core") == 0 && strcmp(op_sym->cname, "for*") == 0));
+}
+
+// Test: Multiple bindings expansion (passed through)
+TEST(test_for_macroexpand_multiple_bindings) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should rewrite for to for* and preserve bindings
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [x [1 2] y [3 4]] [x y]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be for*
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
+    
+    // Second element should be the binding vector
+    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
+    TEST_ASSERT_NOT_NULL(bindings);
+    TEST_ASSERT_TRUE(is_vector(bindings));
+}
+
+// Test: Modifiers preserved (:when, :while)
+TEST(test_for_macroexpand_modifiers) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should preserve :when and :while modifiers
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [x (range) :while (< x 3) :when (even? x)] x))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be for*
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
+    
+    // Bindings should contain :while and :when
+    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
+    TEST_ASSERT_NOT_NULL(bindings);
+    TEST_ASSERT_TRUE(is_vector(bindings));
+    
+    // Convert to list to check for keywords
+    CljVector *bindings_vec = as_vector(bindings);
+    bool found_while = false;
+    bool found_when = false;
+    for (unsigned int i = 0; i < vector_count(bindings_vec); i++) {
+        ID item = vector_nth(bindings_vec, i);
+        if (is_keyword(item)) {
+            CljSymbol *kw = as_symbol(item);
+            if (kw && kw->cname) {
+                if (strcmp(kw->cname, ":while") == 0) found_while = true;
+                if (strcmp(kw->cname, ":when") == 0) found_when = true;
+            }
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(found_while, ":while modifier should be preserved");
+    TEST_ASSERT_TRUE_MESSAGE(found_when, ":when modifier should be preserved");
+}
+
+// Test: Destructuring expansion (should normalize to gensym + :let)
+// Note: This test will fail until destructuring normalization is implemented
+TEST(test_for_macroexpand_destructuring) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should normalize destructuring to gensym + :let
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [[a b] [[1 2] [3 4]]] (+ a b)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be for*
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
+    
+    // Bindings should have a gensym as first binding, followed by :let
+    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
+    TEST_ASSERT_NOT_NULL(bindings);
+    TEST_ASSERT_TRUE(is_vector(bindings));
+    
+    // Convert to vector to check structure
+    CljVector *bindings_vec = as_vector(bindings);
+    ID first_binding = vector_nth(bindings_vec, 0);
+    // First binding should be a symbol (gensym), not a vector
+    TEST_ASSERT_TRUE(is_symbol(first_binding));
+    // Should contain :let keyword
+    bool found_let = false;
+    for (unsigned int i = 0; i < vector_count(bindings_vec); i++) {
+        ID item = vector_nth(bindings_vec, i);
+        if (is_keyword(item)) {
+            CljSymbol *kw = as_symbol(item);
+            if (kw && kw->cname && strcmp(kw->cname, ":let") == 0) {
+                found_let = true;
+                break;
+            }
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(found_let, "Destructuring should be normalized to gensym + :let");
+}
+
+// Test: for expansion with cond and :else (tests normalize-for-bindings)
+// This test verifies that cond with :else works correctly during macro expansion
+TEST(test_for_macroexpand_with_cond_else) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test basic for expansion - this should work if cond with :else works
+    // Use macroexpand (not macroexpand-1) to fully expand
+    CljObject *result = eval_string(
+        "(macroexpand '(for [x [1 2 3]] x))",
+        g_test_eval_state);
+    
+    // Check if expansion succeeded (if cond fails, result will be NULL or exception thrown)
+    if (!result) {
+        TEST_FAIL_MESSAGE("for macro expansion failed - cond with :else may not work during macro expansion");
+        return;
+    }
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "for macro expansion should succeed");
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be for*
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
+    
+    // Second element should be the normalized bindings vector
+    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
+    TEST_ASSERT_NOT_NULL(bindings);
+    TEST_ASSERT_TRUE(is_vector(bindings));
+    
+    // Bindings should contain x and [1 2 3] (at least 2 elements)
+    CljVector *bindings_vec = as_vector(bindings);
+    TEST_ASSERT_TRUE(vector_count(bindings_vec) >= 2);
+}
+
 

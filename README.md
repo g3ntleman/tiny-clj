@@ -25,9 +25,7 @@ brew install cmake
 
 
 ### Optional Tools
-- **ESP32CubeIDE**: For ESP32 development and debugging
-- **OpenOCD**: For ESP32 flashing and debugging
-- **GDB**: For debugging (usually included with compiler toolchain)
+### Optional Tools
 
 ## Primary Objective
 **Follow the Clojure language as good as possible.** Maximum compatibility with standard [Clojure](https://clojure.org) features, syntax, and behavior.
@@ -37,6 +35,7 @@ brew install cmake
 ### Core Language Features
 - **Basic UTF-8 Support:** Unicode character handling for international text
 - **REPL Line Editing:** Interactive command-line editing with arrow keys (aka linereader)
+- **Multi-line REPL Editor:** Multi-line input editing (requires terminal emulation / a real TTY)
 - **Error Messages with Source References:** Detailed error reporting with line numbers and context
 - **Persistent Collections:** Inefficient, partially implemented vectors, maps, and sequences
 - **Clojure-Compatible:** Standard Clojure syntax (`*ns*`, `def`, `fn`, etc)
@@ -100,6 +99,29 @@ With the ESP-IDF environment active, you can run the flash-tree size accounting 
 
 ```bash
 external/flash-tree/scripts/size_report_esp32.sh
+```
+
+### Task: flash image (ESP-IDF app)
+
+Preferred (build + flash in one go, uses repo-local ESP-IDF env):
+
+```bash
+./build_idf.sh --flash
+```
+
+If the build already exists in the centralized build directory, flash it via `idf.py`:
+
+```bash
+cd esp32-idf
+source ../scripts/esp_env.sh
+idf.py -B ../builds/esp32-idf/build -p PORT flash
+```
+
+Lowest-level alternative (use the generated flash arguments):
+
+```bash
+cd builds/esp32-idf/build
+python -m esptool --chip esp32 -b 460800 --before default_reset --after hard_reset write_flash "@flash_args"
 ```
 
 ### Running
