@@ -88,3 +88,23 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_
     return func;
 }
 
+// -----------------------------------------------------------------------------
+// Native function constructor (CljCFunc)
+// -----------------------------------------------------------------------------
+ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
+{
+    CljCFunc *func = ALLOC(CljCFunc, 1);
+    if (!func) {
+        throw_oom();
+    }
+
+    func->base.type = CLJ_FUNC;
+    func->base.rc = 1;
+    func->fn = fn;
+
+    // Name is stored as an interned symbol (singleton), so we can safely borrow it.
+    func->name_sym = name_sym;
+
+    return (ID)func;
+}
+

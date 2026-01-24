@@ -46,6 +46,25 @@
 #include "builtins_strings.h"
 #include "builtins_regex.h"
 
+// -----------------------------------------------------------------------------
+// Hot-path helpers
+// -----------------------------------------------------------------------------
+// Some lazy-seq thunk executors build a small AST around a native function object:
+//   ( <native-fn> (quote <state>) )
+// Creating that <native-fn> object on every element adds avoidable allocation/RC churn.
+// Cache one instance per executor; `make_list` will RETAIN/RELEASE as needed.
+static inline ID cached_named_func(BuiltinFn fn, CljSymbol *name_sym, ID *slot) {
+    if (!*slot) {
+        *slot = make_named_func(fn, name_sym);
+    }
+    return *slot;
+}
+
+static ID g_concat_thunk_fn_obj = NULL;
+static ID g_map_thunk_fn_obj = NULL;
+static ID g_mapcat_thunk_fn_obj = NULL;
+static ID g_range_inf_thunk_fn_obj = NULL;
+
 // tinyclj.datetime native functions (used by :native stubs)
 ID native_datetime_civil_from_days(ID *args, unsigned int argc);
 ID native_datetime_days_from_civil(ID *args, unsigned int argc);
@@ -84,6 +103,7 @@ static ID native_clojure_pprint_pprint_str(ID *args, unsigned int argc);
 
 // clojure.core sequence functions (used by :native stubs)
 ID native_map(ID *args, unsigned int argc);
+ID native_mapcat(ID *args, unsigned int argc);
 ID native_filter(ID *args, unsigned int argc);
 ID native_last(ID *args, unsigned int argc);
 
@@ -817,6 +837,47 @@ ID native_rest(ID *args, unsigned int argc)
 }
 
 // Concat function: concatenates two sequences
+static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
+    if (argc != 1) return NULL;
+    ID state_id = args[0];
+    if (!state_id || TAG(state_id) != CLJ_MAP) return NULL;
+
+    CljMap *state = as_map(state_id);
+    ID x_seqable = map_get_sentinel(state, SYM_CONCAT_X, NULL);
+    ID y = map_get_sentinel(state, SYM_CONCAT_Y, NULL);
+
+    // Normalize x through seq/first/rest semantics (works for lists, vectors, lazy-seq).
+    ID x_arg[1] = { x_seqable };
+    ID x_seq = native_seq(x_arg, 1);
+
+    // If x is empty, return y directly (may be nil). This preserves laziness for y.
+    if (!x_seq) {
+        return y ? RETAIN(y) : NULL;
+    }
+
+    ID elem = native_first(&x_seq, 1);
+    ID next_x = native_rest(&x_seq, 1);
+
+    // Build next-state for rest thunk.
+    CljMap *rest_state = map_empty();
+    map_assoc_inplace(&rest_state, SYM_CONCAT_X, next_x);
+    map_assoc_inplace(&rest_state, SYM_CONCAT_Y, y);
+
+    ID fn_obj = cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, &g_concat_thunk_fn_obj);
+    CljList *quoted_rest_state = make_list(SYM_QUOTE, make_list(rest_state, NULL));
+    CljList *thunk_body = make_list(fn_obj, make_list((ID)quoted_rest_state, NULL));
+
+    CljFunction *rest_thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
+    CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
+    RELEASE(rest_thunk);
+
+    // Build dotted result: (elem . rest_lazy)
+    CljList *result = make_list(elem, (CljList*)rest_lazy);
+
+    RELEASE(rest_state);
+    return result;
+}
+
 ID native_concat(ID *args, unsigned int argc)
 {
     if (!validate_builtin_args(argc, 2, "concat"))
@@ -825,52 +886,25 @@ ID native_concat(ID *args, unsigned int argc)
     ID x = args[0];
     ID y = args[1];
 
-    // If x is empty/nil, return y (or empty list if y is nil)
-    if (!x || (is_list_type(TAG(x)) && !list_count(as_list(x))))
-    {
-        return y ? RETAIN(y) : empty_list();
-    }
+    // Fast empty cases.
+    if (!x && !y) return empty_list();
 
-    // If y is nil, return x
-    if (!y)
-        return RETAIN(x);
+    // Build thunk state.
+    CljMap *state = map_empty();
+    map_assoc_inplace(&state, SYM_CONCAT_X, x);
+    map_assoc_inplace(&state, SYM_CONCAT_Y, y);
 
-    // Collect elements from both sequences
-    ID elements[256];
-    int count = 0;
+    ID fn_obj = cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, &g_concat_thunk_fn_obj);
+    CljList *quoted_state = make_list(SYM_QUOTE, make_list(state, NULL));
+    CljList *thunk_body = make_list(fn_obj, make_list((ID)quoted_state, NULL));
 
-    SeqIterator iter;
-    if (seq_iter_init(&iter, x))
-    {
-        while (!seq_iter_empty(&iter) && count < 256)
-        {
-            elements[count++] = seq_iter_first(&iter);
-            seq_iter_next(&iter);
-        }
-    }
+    CljFunction *thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
+    CljLazySeq *lazy = make_lazy_seq((ID)thunk);
 
-    if (seq_iter_init(&iter, y))
-    {
-        while (!seq_iter_empty(&iter) && count < 256)
-        {
-            elements[count++] = seq_iter_first(&iter);
-            seq_iter_next(&iter);
-        }
-    }
+    RELEASE(thunk);
+    RELEASE(state);
 
-    // Build list from elements (reverse order)
-    if (count == 0)
-    {
-        return empty_list();
-    }
-
-    CljList *result = NULL;
-    for (int i = count - 1; i >= 0; i--)
-    {
-        result = make_list(elements[i], result);
-    }
-
-    return AUTORELEASE(result);
+    return lazy ? AUTORELEASE(lazy) : empty_list();
 }
 
 // nnext: (next (next coll)) - returns the next of the next
@@ -965,27 +999,21 @@ ID native_partition(ID *args, unsigned int argc)
 
     // Use vectors for building (efficient), convert to list at end
     CljVector *partitions = make_vector(0, CLJ_VECTOR);
-    RETAIN(partitions);
 
     while (!seq_iter_empty(&iter))
     {
         CljVector *part = make_vector(n, CLJ_VECTOR);
-        RETAIN(part);
         int count = 0;
 
         for (int i = 0; i < n && !seq_iter_empty(&iter); i++, count++)
         {
-            CljVector *new_part = vector_conj(part, seq_iter_first(&iter));
-            RELEASE(part);
-            part = RETAIN(new_part);
+            vector_conj_inplace(&part, seq_iter_first(&iter));
             seq_iter_next(&iter);
         }
 
         if (count == n)
         {
-            CljVector *new_partitions = vector_conj(partitions, part);
-            RELEASE(partitions);
-            partitions = RETAIN(new_partitions);
+            vector_conj_inplace(&partitions, part);
         }
         RELEASE(part);
     }
@@ -1005,6 +1033,127 @@ ID native_partition(ID *args, unsigned int argc)
 
 // map: apply f across 1+ colls (zips to shortest)
 // Usage: (map f coll) (map f coll1 coll2 ...)
+static ID native_map_thunk_executor(ID *args, unsigned int argc) {
+    if (argc != 1) return NULL;
+    ID state_id = args[0];
+    if (!state_id || TAG(state_id) != CLJ_MAP) return NULL;
+
+    CljMap *state = as_map(state_id);
+    ID fn = map_get_sentinel(state, SYM_MAP_FN, NULL);
+    ID seqs_vec_id = map_get_sentinel(state, SYM_MAP_SEQS, NULL);
+    if (!fn || !seqs_vec_id || TAG(seqs_vec_id) != CLJ_VECTOR) return NULL;
+
+    CljVector *seqs_vec = as_vector(seqs_vec_id);
+    unsigned int ncolls = vector_count(seqs_vec);
+    if (ncolls == 0 || ncolls > 8) return NULL;
+
+    ID call_args[8];
+    ID next_colls[8];
+    for (unsigned int i = 0; i < ncolls; i++) {
+        ID coll = vector_nth(seqs_vec, i);
+        ID one_arg[1] = { coll };
+        ID seq_obj = native_seq(one_arg, 1);
+        if (!seq_obj) {
+            return NULL; // stop at shortest
+        }
+        call_args[i] = native_first(&seq_obj, 1);
+        next_colls[i] = native_rest(&seq_obj, 1);
+    }
+
+    EvalState *st = builtin_get_eval_state();
+    if (!st) st = get_global_eval_state();
+    ID mapped = eval_function_call(fn, call_args, ncolls, NULL, st);
+
+    // Advance collections (store rest for each).
+    CljVector *next_seqs = make_vector(ncolls, CLJ_VECTOR);
+    if (!next_seqs) return NULL;
+    for (unsigned int i = 0; i < ncolls; i++) {
+        vector_conj_inplace(&next_seqs, next_colls[i]);
+    }
+
+    // Build rest thunk state.
+    CljMap *rest_state = map_empty();
+    map_assoc_inplace(&rest_state, SYM_MAP_FN, fn);
+    map_assoc_inplace(&rest_state, SYM_MAP_SEQS, next_seqs);
+    RELEASE(next_seqs);
+
+    ID fn_obj = cached_named_func(native_map_thunk_executor, SYM_MAP_THUNK_FN, &g_map_thunk_fn_obj);
+    CljList *quoted_rest_state = make_list(SYM_QUOTE, make_list(rest_state, NULL));
+    CljList *thunk_body = make_list(fn_obj, make_list((ID)quoted_rest_state, NULL));
+
+    CljFunction *rest_thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
+    CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
+    RELEASE(rest_thunk);
+
+    CljList *result = make_list(mapped, (CljList*)rest_lazy);
+
+    RELEASE(rest_state);
+    return result;
+}
+
+// mapcat: lazy concat of (f x) over coll
+static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
+    if (argc != 1) return NULL;
+    ID state_id = args[0];
+    if (!state_id || TAG(state_id) != CLJ_MAP) return NULL;
+
+    CljMap *state = as_map(state_id);
+    ID fn = map_get_sentinel(state, SYM_MAPCAT_FN, NULL);
+    ID coll = map_get_sentinel(state, SYM_MAPCAT_COLL, NULL);
+    ID inner = map_get_sentinel(state, SYM_MAPCAT_INNER, NULL);
+    if (!fn || IS_IMMEDIATE(fn) || !(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE)) return NULL;
+
+    EvalState *st = builtin_get_eval_state();
+    if (!st) st = get_global_eval_state();
+
+    // Advance until we have a non-empty inner sequence (or outer exhausted).
+    while (true) {
+        if (inner) {
+            ID inner_arg[1] = { inner };
+            ID inner_seq = native_seq(inner_arg, 1);
+            if (inner_seq) {
+                ID v = native_first(&inner_seq, 1);
+                ID inner_rest = native_rest(&inner_seq, 1);
+
+                // Build rest thunk state
+                CljMap *rest_state = map_empty();
+                map_assoc_inplace(&rest_state, SYM_MAPCAT_FN, fn);
+                map_assoc_inplace(&rest_state, SYM_MAPCAT_COLL, coll);
+                map_assoc_inplace(&rest_state, SYM_MAPCAT_INNER, inner_rest);
+
+                ID fn_obj = cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN, &g_mapcat_thunk_fn_obj);
+                CljList *quoted_rest_state = make_list(SYM_QUOTE, make_list(rest_state, NULL));
+                CljList *thunk_body = make_list(fn_obj, make_list((ID)quoted_rest_state, NULL));
+                CljFunction *rest_thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
+                CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
+                RELEASE(rest_thunk);
+
+                CljList *result = make_list(v, (CljList*)rest_lazy);
+
+                RELEASE(rest_state);
+                return result;
+            }
+            // inner exhausted -> fall through to advance outer
+            inner = NULL;
+        }
+
+        // Fetch next outer element
+        ID coll_arg[1] = { coll };
+        ID coll_seq = native_seq(coll_arg, 1);
+        if (!coll_seq) {
+            return NULL;
+        }
+
+        ID outer_first = native_first(&coll_seq, 1);
+        ID outer_rest = native_rest(&coll_seq, 1);
+
+        ID call_args[1] = { outer_first };
+        inner = eval_function_call(fn, call_args, 1, NULL, st);
+        coll = outer_rest;
+        // Loop again; either inner yields values, or we advance outer further.
+    }
+}
+
 ID native_map(ID *args, unsigned int argc)
 {
     if (argc < 2)
@@ -1030,78 +1179,82 @@ ID native_map(ID *args, unsigned int argc)
         return NULL;
     }
 
-    EvalState *st = builtin_get_eval_state();
-    if (!st)
-        st = get_global_eval_state();
+    // Validate and normalize inputs to sequences (one per coll).
+    // If any input is nil, map returns empty.
+    CljVector *seqs = make_vector(ncolls, CLJ_VECTOR);
+    if (!seqs) return NULL;
 
-    SeqIterator iters[8];
-    for (unsigned int i = 0; i < ncolls; i++)
-    {
+    for (unsigned int i = 0; i < ncolls; i++) {
         ID coll = args[i + 1];
-        if (!coll || IS_IMMEDIATE(coll))
-        {
+        if (!coll || IS_IMMEDIATE(coll)) {
             return empty_list();
         }
-        if (!is_seqable(coll))
-        {
+        if (!is_seqable(coll)) {
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "map expects seqable collections",
                             __FILE__, __LINE__, 0);
             return NULL;
         }
-        if (!seq_iter_init(&iters[i], coll))
-        {
-            return empty_list();
-        }
+        // Store the collection itself. The thunk executor will call seq/first/rest lazily.
+        vector_conj_inplace(&seqs, coll);
     }
 
-    // Collect results in a vector (then convert to list without extra reverse pass).
-    CljVector *results = make_vector(0, CLJ_VECTOR);
-    if (!results)
+    // Build thunk state and return a LazySeq immediately.
+    CljMap *state = map_empty();
+    map_assoc_inplace(&state, SYM_MAP_FN, fn);
+    map_assoc_inplace(&state, SYM_MAP_SEQS, seqs);
+    RELEASE(seqs);
+
+    ID fn_obj = cached_named_func(native_map_thunk_executor, SYM_MAP_THUNK_FN, &g_map_thunk_fn_obj);
+    CljList *quoted_state = make_list(SYM_QUOTE, make_list(state, NULL));
+    CljList *thunk_body = make_list(fn_obj, make_list((ID)quoted_state, NULL));
+
+    CljFunction *thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
+    CljLazySeq *lazy = make_lazy_seq((ID)thunk);
+
+    RELEASE(thunk);
+    RELEASE(state);
+
+    return lazy ? AUTORELEASE(lazy) : empty_list();
+}
+
+ID native_mapcat(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "mapcat"))
         return NULL;
-    RETAIN(results);
 
-    ID call_args[8];
-    while (true)
-    {
-        // Stop at shortest coll
-        for (unsigned int i = 0; i < ncolls; i++)
-        {
-            if (seq_iter_empty(&iters[i]))
-            {
-                goto done;
-            }
-        }
+    ID fn = args[0];
+    ID coll = args[1];
 
-        for (unsigned int i = 0; i < ncolls; i++)
-        {
-            call_args[i] = seq_iter_first(&iters[i]);
-        }
-
-        ID mapped = eval_function_call(fn, call_args, ncolls, NULL, st);
-
-        CljVector *new_results = vector_conj(results, mapped);
-        RELEASE(results);
-        results = RETAIN(new_results);
-
-        for (unsigned int i = 0; i < ncolls; i++)
-        {
-            seq_iter_next(&iters[i]);
-        }
+    if (!fn || IS_IMMEDIATE(fn) || !(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "mapcat requires a function as first argument",
+                        __FILE__, __LINE__, 0);
+        return NULL;
     }
 
-done:
-    {
-    // Convert results vector -> list (oldest first)
-    unsigned int count = vector_count(results);
-    CljList *out = NULL;
-    for (int i = (int)count - 1; i >= 0; i--)
-    {
-        ID v = vector_nth(results, (unsigned int)i);
-        out = make_list(v, out);
+    if (!coll || IS_IMMEDIATE(coll)) {
+        return empty_list();
     }
-    RELEASE(results);
-    return out ? AUTORELEASE(out) : empty_list();
+    if (!is_seqable(coll)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "mapcat expects a seqable collection",
+                        __FILE__, __LINE__, 0);
+        return NULL;
     }
+
+    CljMap *state = map_empty();
+    map_assoc_inplace(&state, SYM_MAPCAT_FN, fn);
+    map_assoc_inplace(&state, SYM_MAPCAT_COLL, coll);
+    map_assoc_inplace(&state, SYM_MAPCAT_INNER, NULL);
+
+    ID fn_obj = cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN, &g_mapcat_thunk_fn_obj);
+    CljList *quoted_state = make_list(SYM_QUOTE, make_list(state, NULL));
+    CljList *thunk_body = make_list(fn_obj, make_list((ID)quoted_state, NULL));
+
+    CljFunction *thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
+    CljLazySeq *lazy = make_lazy_seq((ID)thunk);
+
+    RELEASE(thunk);
+    RELEASE(state);
+
+    return lazy ? AUTORELEASE(lazy) : empty_list();
 }
 
 // filter: returns a list of items in coll where (pred item) is truthy
@@ -1145,7 +1298,6 @@ ID native_filter(ID *args, unsigned int argc)
     CljVector *kept = make_vector(0, CLJ_VECTOR);
     if (!kept)
         return NULL;
-    RETAIN(kept);
 
     while (!seq_iter_empty(&iter))
     {
@@ -1154,9 +1306,7 @@ ID native_filter(ID *args, unsigned int argc)
 
         if (pred_result && pred_result != (ID)clj_false)
         {
-            CljVector *new_kept = vector_conj(kept, elem);
-            RELEASE(kept);
-            kept = RETAIN(new_kept);
+            vector_conj_inplace(&kept, elem);
         }
 
         seq_iter_next(&iter);
@@ -2403,24 +2553,6 @@ ID native_vec(ID *args, unsigned int argc)
     return AUTORELEASE(vec);
 }
 
-// make_func() wrapper removed - use make_named_func(fn, name_sym) directly
-
-ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
-{
-    CljCFunc *func = ALLOC(CljCFunc, 1);
-    if (!func)
-        return NULL;
-
-    func->base.type = CLJ_FUNC;
-    func->base.rc = 1;
-    func->fn = fn;
-
-    // Name is stored as an interned symbol (singleton), so we can safely borrow it.
-    func->name_sym = name_sym;
-
-    return func;
-}
-
 // Event-loop: run-next-task builtin
 ID native_run_next_task(ID *args, unsigned int argc)
 {
@@ -3446,6 +3578,11 @@ static StaticSymbolData sym_map_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "map"}};
+static StaticSymbolData sym_mapcat_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "mapcat"}};
 static StaticSymbolData sym_filter_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -3517,6 +3654,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_reduce_data.sym, native_reduce},
     {&sym_list_data.sym, native_list},
     {&sym_map_data.sym, native_map},
+    {&sym_mapcat_data.sym, native_mapcat},
     {&sym_filter_data.sym, native_filter},
     {&sym_last_data.sym, native_last},
     {&sym_ns_unload_data.sym, native_ns_unload},
@@ -5375,10 +5513,56 @@ ID native_bit_shift_left(ID *args, unsigned int argc)
     return create_fixnum_result(a << b);
 }
 
+static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {
+    if (targc != 1) return NULL;
+    ID state_id = targs[0];
+    if (!state_id || TAG(state_id) != CLJ_MAP) return NULL;
+
+    CljMap *state = as_map(state_id);
+    ID cur_id = map_get_sentinel(state, SYM_RANGE_CUR, NULL);
+    if (!is_fixnum(cur_id)) return NULL;
+    int cur = AS_FIXNUM(cur_id);
+
+    // Next state
+    CljMap *rest_state = map_empty();
+    map_assoc_inplace(&rest_state, SYM_RANGE_CUR, fixnum(cur + 1));
+
+    ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
+    CljList *quoted_rest_state = make_list(SYM_QUOTE, make_list(rest_state, NULL));
+    CljList *thunk_body = make_list(fn_obj, make_list((ID)quoted_rest_state, NULL));
+
+    CljFunction *rest_thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
+    CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
+    RELEASE(rest_thunk);
+
+    CljList *result = make_list(fixnum(cur), (CljList*)rest_lazy);
+
+    RELEASE(rest_state);
+    return result;
+}
+
 ID native_range(ID *args, unsigned int argc)
 {
-    CHECK_ARITY_RANGE(argc, 1, 3, "range");
+    CHECK_ARITY_RANGE(argc, 0, 3, "range");
     ID native_lazy_seq_star(ID * args, unsigned int argc);
+
+    // 0-arity: infinite lazy range starting at 0, step 1.
+    if (argc == 0) {
+        CljMap *state = map_empty();
+        map_assoc_inplace(&state, SYM_RANGE_CUR, fixnum(0));
+
+        ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
+        CljList *quoted_state = make_list(SYM_QUOTE, make_list(state, NULL));
+        CljList *thunk_body = make_list(fn_obj, make_list((ID)quoted_state, NULL));
+
+        CljFunction *thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
+        CljLazySeq *lazy = make_lazy_seq((ID)thunk);
+
+        RELEASE(thunk);
+        RELEASE(state);
+
+        return lazy ? AUTORELEASE(lazy) : NULL;
+    }
 
     int start = 0, end = 0, step = 1;
 
@@ -6013,12 +6197,9 @@ ID native_eq(ID *args, unsigned int argc)
     ID a = args[0];
     ID b = args[1];
 
-    if (!a || !b)
-    {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "= arguments cannot be null",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    // Clojure semantics: nil is a valid value for =
+    if (!a && !b) return clj_true;
+    if (!a || !b) return clj_false;
 
     // Try numeric comparison first
     float val_a, val_b;

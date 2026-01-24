@@ -24,6 +24,28 @@ cmake --build builds/esp32 -j 8 --target tiny-clj-esp32
   - `builds/esp32/tiny-clj-esp32` (ELF)
   - `builds/esp32/tiny-clj-esp32.map` (linker map)
 
+### ESP-IDF firmware image (UART REPL)
+
+This repo also ships an ESP-IDF app under `esp32-idf/` (UART REPL by default).
+
+- **Build**:
+
+```bash
+./build_idf.sh --clean
+```
+
+- **Where outputs go**:
+  - The script moves `esp32-idf/build` into `builds/esp32-idf/build/`.
+  - The produced firmware image is `builds/esp32-idf/build/tinyclj_esp32_idf.bin`.
+
+- **Partition table**:
+  - The ESP-IDF app uses a custom partition table `esp32-idf/partitions.csv` (flash size is configured as **2MB** in `esp32-idf/sdkconfig`).
+
+- **Latest size checkpoint (ESP-IDF app)**:
+  - `.bin` size: `0x85220`
+  - app partition size: `0x120000`
+  - free: `0x9ade0` (**54%**)
+
 ### Section sizes (xtensa-esp32-elf-size)
 
 From:

@@ -145,13 +145,8 @@ R"CLOJURE(
 ^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Returns a transducer when no collection is provided."}
 (defn map [f & colls] :native)
 
-^#^{:doc "Returns a lazy sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects. Returns a transducer when no collection is provided."}
-(def filter (fn [pred coll]
-  (if (empty? coll)
-    (list)
-    (if (pred (first coll))
-      (cons (first coll) (filter pred (rest coll)))
-      (filter pred (rest coll))))))
+^#^{:doc "Returns a sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects."}
+(defn filter [pred coll] :native)
 
 ; ============================================================================
 ; Type Predicates (needed by Threading Macros)
@@ -795,9 +790,7 @@ R"CLOJURE(
 (def second (fn [coll] (first (rest coll))))
 ^#^{:doc "Returns true if coll has no items - same as (not (seq coll)). Please use the idiom (seq coll) when testing whether a collection is non-empty."}
 (def empty? (fn [coll] 
-  (if coll
-    (= (count coll) 0)
-    true)))
+  (not (seq coll))))
 
 ; ============================================================================
 ; Utility Functions
@@ -813,13 +806,8 @@ R"CLOJURE(
 ^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Returns a transducer when no collection is provided."}
 (defn map [f & colls] :native)
 
-^#^{:doc "Returns a lazy sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects. Returns a transducer when no collection is provided."}
-(def filter (fn [pred coll]
-  (if (empty? coll)
-    (list)
-    (if (pred (first coll))
-      (cons (first coll) (filter pred (rest coll)))
-      (filter pred (rest coll))))))
+^#^{:doc "Returns a sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects."}
+(defn filter [pred coll] :native)
 
 ; ============================================================================
 ; Type Predicates (Clojure-based)
@@ -883,35 +871,35 @@ R"CLOJURE(
 ; ============================================================================
 
 ^#^{:doc "Returns the result of applying concat to the result of applying map to f and colls."}
-(defn mapcat [f coll]
-  (if (empty? coll)
-    (list)
-    (concat (f (first coll)) (mapcat f (rest coll)))))
+(defn mapcat [f coll] :native)
 
 ^#^{:doc "Returns a lazy sequence of successive items from coll while (pred item) returns logical true."}
 (defn take-while [pred coll]
-  (if (empty? coll)
-    (list)
-    (if (pred (first coll))
-      (cons (first coll) (take-while pred (rest coll)))
-      (list))))
+  (lazy-seq
+    (if (empty? coll)
+      (list)
+      (if (pred (first coll))
+        (cons (first coll) (take-while pred (rest coll)))
+        (list)))))
 
 ^#^{:doc "Returns a lazy sequence of the items in coll starting from the first item for which (pred item) returns logical false."}
 (defn drop-while [pred coll]
-  (if (empty? coll)
-    coll
-    (if (pred (first coll))
-      (drop-while pred (rest coll))
-      coll)))
+  (lazy-seq
+    (if (empty? coll)
+      (list)
+      (if (pred (first coll))
+        (drop-while pred (rest coll))
+        coll))))
 
 ^#^{:doc "Returns a lazy sequence of the non-nil results of (f item)."}
 (defn keep [f coll]
-  (if (empty? coll)
-    (list)
-    (let [result (f (first coll))]
-      (if (nil? result)
-        (keep f (rest coll))
-        (cons result (keep f (rest coll)))))))
+  (lazy-seq
+    (if (empty? coll)
+      (list)
+      (let [result (f (first coll))]
+        (if (nil? result)
+          (keep f (rest coll))
+          (cons result (keep f (rest coll))))))))
 
 ; ============================================================================
 ; Aggregation Functions (Phase 4)
@@ -1121,9 +1109,53 @@ R"CLOJURE(
 (defn normalize-for-bindings [bindings]
   (normalize-for-bindings-helper [] (seq bindings)))
 
-^#^{:doc "List comprehension. Expands to for* and normalizes bindings (supports :when/:let/:while and destructuring)."}
+; Macro builder for `for` (returns a form that produces a lazy seq)
+(def for-build
+  (fn for-build [clauses body]
+    (if (empty? clauses)
+      (list 'clojure.core/list body)
+      (let [sym (first clauses)
+            expr (second clauses)
+            more (nnext clauses)
+            base-coll (list 'clojure.core/seq expr)
+            parse-mods (fn parse-mods [coll cs lets]
+                         (if (or (empty? cs) (not (keyword? (first cs))))
+                           (list coll cs lets)
+                           (let [kw (first cs)]
+                             (cond
+                               (= kw :when)
+                                 (parse-mods
+                                   (list 'clojure.core/filter
+                                         (list 'fn (vec [sym]) (second cs))
+                                         coll)
+                                   (nnext cs)
+                                   lets)
+                               (= kw :while)
+                                 (parse-mods
+                                   (list 'clojure.core/take-while
+                                         (list 'fn (vec [sym]) (second cs))
+                                         coll)
+                                   (nnext cs)
+                                   lets)
+                               (= kw :let)
+                                 (parse-mods coll (nnext cs) (conj lets (second cs)))
+                               :else
+                                 (throw (str "for: unknown binding modifier: " kw))))))]
+        (let [parsed (parse-mods base-coll more [])
+              coll2 (first parsed)
+              rest-clauses (second parsed)
+              lets (second (rest parsed))
+              inner (for-build rest-clauses body)
+              inner-with-lets (reduce (fn [acc b] (list 'let b acc))
+                                      inner
+                                      (reverse lets))]
+          (list 'clojure.core/mapcat
+                (list 'fn (vec [sym]) inner-with-lets)
+                coll2))))))
+
+^#^{:doc "List comprehension. Expands to nested mapcat/filter/take-while over normalized bindings (supports :when/:let/:while and destructuring)."}
 (defmacro for [bindings body]
-  (list 'for* (vec (normalize-for-bindings bindings)) body))
+  (for-build (seq (normalize-for-bindings bindings)) body))
 
 ; ============================================================================
 ; Macro Expansion Functions (bootstrap-safe: uses only basic special forms)

@@ -37,6 +37,14 @@ TEST_SHARED(test_concat_empty_first) {
     assert_eval_truthy("(= (concat '() '(1 2)) '(1 2))");
 }
 
+TEST_SHARED(test_concat_returns_lazy_seq) {
+    // In Clojure, concat is lazy.
+    ID result = eval_string("(concat '(1 2) '(3 4))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE_MESSAGE(TAG(result) == CLJ_LAZY_SEQ || TAG(result) == CLJ_SEQ,
+                             "concat should return a lazy seq");
+}
+
 // --- take ---
 
 TEST_SHARED(test_take_normal) {
@@ -184,6 +192,14 @@ TEST_SHARED(test_map_two_collections_vector_zip) {
 TEST_SHARED(test_map_two_collections_stops_at_shortest) {
     // Stops at shortest: (map + [1 2 3] [10]) => (11)
     assert_eval_truthy("(= (map + [1 2 3] [10]) '(11))");
+}
+
+TEST_SHARED(test_map_returns_lazy_seq) {
+    // In Clojure, map is lazy.
+    ID result = eval_string("(map inc [1 2 3])", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE_MESSAGE(TAG(result) == CLJ_LAZY_SEQ || TAG(result) == CLJ_SEQ,
+                             "map should return a lazy seq");
 }
 
 TEST_SHARED(test_mapv_single_collection) {

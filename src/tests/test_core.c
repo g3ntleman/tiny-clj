@@ -574,27 +574,15 @@ TEST_SHARED(test_core_not_first_class) {
     
     // Test: not can be passed as parameter to map (first-class function)
     // (map not [true false true]) => (false true false)
-    CljObject *result1 = eval_string("(map not [true false true])", g_test_eval_state);
+    CljObject *result1 = eval_string("(vec (map not [true false true]))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(TAG(result1) == CLJ_LIST);
-    
-    // Verify first element: (not true) => false
-    CljList *list1 = as_list(result1);
-    CljObject *first = LIST_FIRST(list1);
-    TEST_ASSERT_NOT_NULL(first);
-    TEST_ASSERT_TRUE(first == clj_false);
-    
-    // Verify second element: (not false) => true
-    CljList *rest1 = as_list(LIST_REST(list1));
-    CljObject *second = LIST_FIRST(rest1);
-    TEST_ASSERT_NOT_NULL(second);
-    TEST_ASSERT_TRUE(second == clj_true);
-    
-    // Verify third element: (not true) => false
-    CljList *rest2 = as_list(LIST_REST(rest1));
-    CljObject *third = LIST_FIRST(rest2);
-    TEST_ASSERT_NOT_NULL(third);
-    TEST_ASSERT_TRUE(third == clj_false);
+    TEST_ASSERT_TRUE(TAG(result1) == CLJ_VECTOR);
+
+    CljVector *v = (CljVector*)result1;
+    TEST_ASSERT_EQUAL_INT(3, vector_count(v));
+    TEST_ASSERT_TRUE(vector_nth(v, 0) == clj_false);
+    TEST_ASSERT_TRUE(vector_nth(v, 1) == clj_true);
+    TEST_ASSERT_TRUE(vector_nth(v, 2) == clj_false);
 }
 
 // ============================================================================

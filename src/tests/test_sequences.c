@@ -221,23 +221,14 @@ TEST(test_filter_basic) {
     
     // Test: (filter even? (list 1 2 3 4 5)) => (2 4)
     // Use list instead of vector to avoid potential vector handling issues
-    CljObject *result = eval_string("(filter even? (list 1 2 3 4 5))", g_test_eval_state);
+    CljObject *result = eval_string("(vec (filter even? (list 1 2 3 4 5)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
-    
-    // Verify first element is 2
-    CljList *list = as_list(result);
-    TEST_ASSERT_NOT_NULL(list);
-    TEST_ASSERT_NOT_NULL(list->first);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
-    
-    // Verify second element is 4
-    CljList *rest = as_list(list->rest);
-    TEST_ASSERT_NOT_NULL(rest);
-    TEST_ASSERT_NOT_NULL(rest->first);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)rest->first));
-    TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)rest->first));
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+
+    CljVector *v = as_vector(result);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(v));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)vector_nth(v, 0)));
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)vector_nth(v, 1)));
     
 }
 
@@ -255,15 +246,11 @@ TEST(test_filter_all_match) {
     // Use global st from setUp (clojure.core already loaded)
     
     // Test: (filter pos? [1 2 3]) => (1 2 3)
-    CljObject *result = eval_string("(filter pos? [1 2 3])", g_test_eval_state);
+    CljObject *result = eval_string("(vec (filter pos? [1 2 3]))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
     
-    // Verify count is 3 (use let to bind once)
-    CljObject *count_result = eval_string("(let [f (filter pos? [1 2 3])] (count f))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(count_result);
-    TEST_ASSERT_TRUE(is_fixnum(count_result));
-    TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));
+    TEST_ASSERT_EQUAL_INT(3, vector_count(as_vector(result)));
     
 }
 
@@ -281,15 +268,13 @@ TEST(test_filter_with_custom_predicate) {
     // Use global st from setUp (clojure.core already loaded)
     
     // Test: (filter (fn [x] (> x 2)) [1 2 3 4 5]) => (3 4 5)
-    CljObject *result = eval_string("(filter (fn [x] (> x 2)) [1 2 3 4 5])", g_test_eval_state);
+    CljObject *result = eval_string("(vec (filter (fn [x] (> x 2)) [1 2 3 4 5]))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
-    
-    // Verify count is 3 (use let to bind once)
-    CljObject *count_result = eval_string("(let [f (filter (fn [x] (> x 2)) [1 2 3 4 5])] (count f))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(count_result);
-    TEST_ASSERT_TRUE(is_fixnum(count_result));
-    TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+
+    CljVector *v = as_vector(result);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(v));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)vector_nth(v, 0)));
     
 }
 

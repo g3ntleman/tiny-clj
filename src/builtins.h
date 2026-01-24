@@ -19,7 +19,7 @@ ID native_array_map(ID *args, unsigned int argc);
 ID native_vector(ID *args, unsigned int argc);
 
 // Function value constructors
-ID make_named_func(BuiltinFn fn, CljSymbol *name_sym);
+// (moved) make_named_func is declared in function.h
 
 // Legacy apply_builtin removed - all builtins now use namespace registration
 

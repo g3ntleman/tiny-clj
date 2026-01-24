@@ -10,14 +10,14 @@ todos:
     content: |
       Baseline (host): run the full unit-test suite and record the current failures related to `for`/`for*`/lazy-seq.
       Then run: ./build/unit-tests  (FULL)
-    status: pending
+    status: completed
   - id: step-1-cons
     content: |
       Plausibility check (refcounting, not GC): study cons/list + lazy-seq ownership rules.
       Read: src/list.{c,h}, src/seq.{c,h}, and the `for*` thunk executor in src/eval.c.
       Goal: identify exactly which objects are owned/retained across (a) lazy-seq realization, (b) per-element thunk calls.
       Then run: ./build/unit-tests  (FULL)
-    status: pending
+    status: completed
   - id: step-2-map
     content: |
       Add/extend unit tests that pin the *required* laziness + ownership invariants for map/concat/for:
@@ -25,47 +25,47 @@ todos:
       - no double-free/leaks when iterating
       - binding vector/list is treated as data (never eval'ed)
       Then run: ./build/unit-tests  (FULL)
-    status: pending
+    status: completed
   - id: step-2-5-cow
     content: |
       Implement minimal lazy `map` (or the mapcat building block you need) to satisfy the new tests.
       Focus on correctness first (RC + autorelease boundaries), not micro-optimizations.
       Then run: ./build/unit-tests  (FULL)
-    status: pending
+    status: completed
   - id: step-3-concat
     content: |
       Implement minimal lazy `concat` that satisfies the new tests and does not materialize inputs.
       Then run: ./build/unit-tests  (FULL)
-    status: pending
+    status: completed
   - id: step-4-macros
     content: |
       Implement `for` macro in clojure.core (expand to nested mapcat/concat forms).
       Verify modifiers (:when/:let/:while) semantics with tests.
       Then run: ./build/unit-tests  (FULL)
-    status: pending
+    status: completed
   - id: step-5-for-macro
     content: |
       Embedded-target checkpoint (ESP32):
       - ensure the embedded build compiles with these changes (no host-only dependencies in core paths)
       - note how to build the UART REPL firmware image (ESP-IDF) after this change
       Then run: ./build/unit-tests  (FULL)
-    status: pending
+    status: completed
   - id: step-6-test
     content: |
       Remove legacy native `for*` path (no backwards compatibility required) *after* the new macro + lazy primitives are green.
       Then run: ./build/unit-tests  (FULL)
-    status: pending
+    status: completed
   - id: step-7-remove
     content: |
       Optional optimization: consider COW/in-place micro-optimizations only after correctness is proven.
       Measure on host and sanity-check embedded constraints.
       Then run: ./build/unit-tests  (FULL)
-    status: pending
+    status: completed
   - id: step-8-perf
     content: |
       Documentation + commit notes (include embedded/ESP32 notes and memory constraints).
       Then run: ./build/unit-tests  (FULL)
-    status: pending
+    status: completed
 ---
 
 ## Architecture Overview
@@ -463,6 +463,25 @@ time ./build/unit-tests --test "*for*"
 - Memory usage < 100 KB for reasonable sequences
 - Performance comparable or better than for*
 - No OOM errors on 100 KB limit
+
+**Later optimization (alloca / stack allocation) — document-only**:
+
+- **Rule of thumb**: only stack-allocate *scratch* `CljObject`-shaped values when they **provably do not escape** the current C function call:
+  - not returned
+  - not stored into a heap object / persistent collection
+  - not retained beyond the call (no `RETAIN()` into long-lived state)
+  - only used for transient lookup / formatting / temporary buffers
+
+- **Already used (good example)**:
+  - `symbol_table_find` / `symbol_table_add`: stack-backed lookup key `CljString` (via `alloca`) to avoid heap allocation on symbol-table lookup.
+
+- **`native_mapcat_thunk_executor` (what I hoped for, but reality check)**:
+  - The only obvious “scratch” pieces are already stack-based (`ID inner_arg[1]`, `ID coll_arg[1]`, `ID call_args[1]`).
+  - The *big* per-element allocations (`rest_state` map, and the `quoted_rest_state` / `thunk_body` lists captured by `make_function`) **must escape** into the next lazy thunk, so they **cannot** be stack-allocated safely.
+  - If we want to reduce allocations here later, it’s likely **not** an `alloca` tweak, but an API change: build lazy thunks without constructing a quoted AST (e.g. “C-level thunk object” or `make_lazy_seq_with_state(executor_fn, state)` style), so the state can be stored directly without extra list nodes.
+
+- **Similar situation**:
+  - `native_map_thunk_executor`, `native_concat_thunk_executor`, `native_range_infinite_thunk_executor`: the state passed to the next thunk escapes (so stack allocation is unsafe), but argument arrays are already on-stack.
 
 **Deliverable**: Performance verification, memory within budget
 

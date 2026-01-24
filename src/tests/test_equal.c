@@ -102,7 +102,8 @@ TEST_SHARED(test_equal_different_types) {
     CljObject *vec = (CljObject*)vec_val;
     
     TEST_ASSERT_FALSE(clj_equal((CljValue)vec, (CljValue)map));
-    TEST_ASSERT_FALSE(clj_equal((CljValue)vec, (CljValue)list));
+    // Clojure-compatible sequential equality: empty vector == empty list
+    TEST_ASSERT_TRUE(clj_equal((CljValue)vec, (CljValue)list));
     TEST_ASSERT_FALSE(clj_equal((CljValue)map, (CljValue)list));
     
     // Objects will be automatically cleaned up by WITH_MEMORY_PROFILING

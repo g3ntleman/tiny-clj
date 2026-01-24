@@ -14,6 +14,7 @@
 #include "strings.h"
 #include "kv_macros.h"
 #include "list.h"
+#include "seq.h"
 
 #include "instant.h"
 #include "uuid.h"
@@ -38,9 +39,33 @@ bool clj_equal_full(ID a, ID b) {
     // Handle CljObject* types
     CljObject *a_obj = (CljObject*)a;
     CljObject *b_obj = (CljObject*)b;
+    if (!a_obj || !b_obj) return false;
 
-    // Check that both objects have the same type
-    if (!a_obj || !b_obj || a_obj->type != b_obj->type) return false;
+    // Clojure-compatible sequential equality:
+    // Lists, vectors, seq wrappers and lazy seqs compare by element sequence,
+    // even across different concrete types (e.g. '(1 2) == [1 2]).
+    const unsigned char ta = TAG(a_obj);
+    const unsigned char tb = TAG(b_obj);
+    const bool a_seq = (ta == CLJ_LIST || ta == CLJ_VECTOR || ta == CLJ_SEQ || ta == CLJ_LAZY_SEQ);
+    const bool b_seq = (tb == CLJ_LIST || tb == CLJ_VECTOR || tb == CLJ_SEQ || tb == CLJ_LAZY_SEQ);
+    if (a_seq && b_seq) {
+        SeqIterator ia, ib;
+        if (!seq_iter_init(&ia, a_obj) || !seq_iter_init(&ib, b_obj)) {
+            // If either side isn't seqable/initializable, fall back to false.
+            return false;
+        }
+        while (!seq_iter_empty(&ia) && !seq_iter_empty(&ib)) {
+            ID ea = seq_iter_first(&ia);
+            ID eb = seq_iter_first(&ib);
+            if (!clj_equal(ea, eb)) return false;
+            seq_iter_next(&ia);
+            seq_iter_next(&ib);
+        }
+        return seq_iter_empty(&ia) && seq_iter_empty(&ib);
+    }
+
+    // Otherwise require same concrete type for structural equality.
+    if (a_obj->type != b_obj->type) return false;
 
     // Content comparison based on type
     // Note: CLJ_BOOL, CLJ_SYMBOL are handled by pointer comparison (line 23)
