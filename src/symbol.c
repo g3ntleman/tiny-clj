@@ -95,7 +95,6 @@ CljSymbol *SYM_NEXT = NULL;
 CljSymbol *SYM_LIST = NULL;
 CljSymbol *SYM_AND = NULL;
 CljSymbol *SYM_OR = NULL;
-CljSymbol *SYM_FOR_STAR = NULL;
 CljSymbol *SYM_DOSEQ = NULL;
 CljSymbol *SYM_DOTIMES = NULL;
 
@@ -150,6 +149,20 @@ CljSymbol *SYM_LIST_BATCH = NULL;
 
 // Additional symbols for hot path optimization
 CljSymbol *SYM_NS_STAR = NULL;
+
+// Internal pre-interned symbols for lazy seq thunk state (hot path)
+CljSymbol *SYM_CONCAT_X = NULL;
+CljSymbol *SYM_CONCAT_Y = NULL;
+CljSymbol *SYM_CONCAT_THUNK_FN = NULL;
+CljSymbol *SYM_MAP_FN = NULL;
+CljSymbol *SYM_MAP_SEQS = NULL;
+CljSymbol *SYM_MAP_THUNK_FN = NULL;
+CljSymbol *SYM_MAPCAT_FN = NULL;
+CljSymbol *SYM_MAPCAT_COLL = NULL;
+CljSymbol *SYM_MAPCAT_INNER = NULL;
+CljSymbol *SYM_MAPCAT_THUNK_FN = NULL;
+CljSymbol *SYM_RANGE_CUR = NULL;
+CljSymbol *SYM_RANGE_INF_THUNK_FN = NULL;
 
 // Macro to reduce boilerplate for static symbol declarations (DRY principle)
 // Note: For symbols that need to be extern (used in other files), use DEFINE_EXTERN_SYMBOL instead
@@ -328,9 +341,22 @@ DEFINE_EXTERN_SYMBOL(sym_partition_data, "partition");
 DEFINE_EXTERN_SYMBOL(sym_some_data, "some");
 DEFINE_EXTERN_SYMBOL(sym_list_data, "list");
 // Note: sym_and_data and sym_or_data are now in g_special_symbols[] array
-DEFINE_STATIC_SYMBOL(sym_for_star_data, "for*");
 DEFINE_STATIC_SYMBOL(sym_doseq_data, "doseq");
 DEFINE_STATIC_SYMBOL(sym_dotimes_data, "dotimes");
+
+// Internal state keys for lazy thunk executors (avoid interning in hot path)
+DEFINE_STATIC_SYMBOL(sym_concat_x_key_data, "__concat_x__");
+DEFINE_STATIC_SYMBOL(sym_concat_y_key_data, "__concat_y__");
+DEFINE_STATIC_SYMBOL(sym_concat_thunk_fn_key_data, "__concat_thunk_fn__");
+DEFINE_STATIC_SYMBOL(sym_map_fn_key_data, "__map_fn__");
+DEFINE_STATIC_SYMBOL(sym_map_seqs_key_data, "__map_seqs__");
+DEFINE_STATIC_SYMBOL(sym_map_thunk_fn_key_data, "__map_thunk_fn__");
+DEFINE_STATIC_SYMBOL(sym_mapcat_fn_key_data, "__mapcat_fn__");
+DEFINE_STATIC_SYMBOL(sym_mapcat_coll_key_data, "__mapcat_coll__");
+DEFINE_STATIC_SYMBOL(sym_mapcat_inner_key_data, "__mapcat_inner__");
+DEFINE_STATIC_SYMBOL(sym_mapcat_thunk_fn_key_data, "__mapcat_thunk_fn__");
+DEFINE_STATIC_SYMBOL(sym_range_cur_key_data, "__range_cur__");
+DEFINE_STATIC_SYMBOL(sym_range_inf_thunk_fn_key_data, "__range_inf_thunk_fn__");
 
 // Extern symbol structs for clojure.string native functions (compile-time initialization, statically allocated)
 // These are extern so they can be used in builtins.c's native function table
@@ -636,9 +662,22 @@ void init_special_symbols() {
 
     INIT_SYMBOL(SYM_LIST, sym_list_data);
 
+    // Internal pre-interned symbols for lazy seq thunk state (hot path)
+    INIT_SYMBOL(SYM_CONCAT_X, sym_concat_x_key_data);
+    INIT_SYMBOL(SYM_CONCAT_Y, sym_concat_y_key_data);
+    INIT_SYMBOL(SYM_CONCAT_THUNK_FN, sym_concat_thunk_fn_key_data);
+    INIT_SYMBOL(SYM_MAP_FN, sym_map_fn_key_data);
+    INIT_SYMBOL(SYM_MAP_SEQS, sym_map_seqs_key_data);
+    INIT_SYMBOL(SYM_MAP_THUNK_FN, sym_map_thunk_fn_key_data);
+    INIT_SYMBOL(SYM_MAPCAT_FN, sym_mapcat_fn_key_data);
+    INIT_SYMBOL(SYM_MAPCAT_COLL, sym_mapcat_coll_key_data);
+    INIT_SYMBOL(SYM_MAPCAT_INNER, sym_mapcat_inner_key_data);
+    INIT_SYMBOL(SYM_MAPCAT_THUNK_FN, sym_mapcat_thunk_fn_key_data);
+    INIT_SYMBOL(SYM_RANGE_CUR, sym_range_cur_key_data);
+    INIT_SYMBOL(SYM_RANGE_INF_THUNK_FN, sym_range_inf_thunk_fn_key_data);
+
     // Note: SYM_AND and SYM_OR are now in g_special_symbols[] array - initialized above
 
-    INIT_SYMBOL(SYM_FOR_STAR, sym_for_star_data);
 
     INIT_SYMBOL(SYM_DOSEQ, sym_doseq_data);
 
@@ -793,48 +832,39 @@ void init_special_symbols() {
     SYM_DESTRUCTURE = intern_symbol_global("destructure");
 }
 
-// Static CljString for temporary lookups (avoids allocations)
-// NOTE: CljString uses flexible array member (char data[]), so we need to manually
-// create a structure with inline buffer
-static struct {
-    CljObject base;
-    uint16_t length;
-    char data[512];
-} g_lookup_string = {
-    .base = { .type = CLJ_STRING, .rc = SINGLETON_RC },
-    .length = 0
-};
+// -----------------------------------------------------------------------------
+// Symbol-table keys (CljString)
+// -----------------------------------------------------------------------------
+// NOTE: This deliberately allocates a heap `CljString`. A previous stack-backed
+// key attempt (via alloca) caused crashes during early runtime init.
+static inline CljString* make_symbol_key(CljSymbol *ns_name, const char *cname) {
+    const char *ns_cname = (ns_name && ns_name->cname) ? ns_name->cname : NULL;
+    const size_t ns_len = ns_cname ? strlen(ns_cname) : 0;
+    const size_t name_len = cname ? strlen(cname) : 0;
+    const size_t total_len = ns_len ? (ns_len + 1 + name_len) : name_len;
 
-// Helper: Create symbol table key from namespace and name
-// Format: "ns/name" or just "name" for global symbols
-// Returns CljString* for HashMap lookup (uses static buffer)
-static CljString* make_symbol_key(CljSymbol *ns_name, const char *cname) {
-    size_t pos = 0;
-    const size_t cap = sizeof(g_lookup_string.data);
-    if (cap == 0) {
-        g_lookup_string.length = 0;
-        return (CljString*)&g_lookup_string;
+    if (total_len > UINT16_MAX) {
+        return NULL;
     }
 
-    if (ns_name && ns_name->cname) {
-        const char *ns = ns_name->cname;
-        while (*ns && pos + 1 < cap) {
-            g_lookup_string.data[pos++] = *ns++;
-        }
-        if (pos + 1 < cap) {
-            g_lookup_string.data[pos++] = '/';
-        }
+    CljString *key = make_string_buffer(total_len);
+    if (!key) {
+        return NULL;
     }
 
-    if (cname) {
-        while (*cname && pos + 1 < cap) {
-            g_lookup_string.data[pos++] = *cname++;
-        }
+    char *out = key->data;
+    if (ns_len) {
+        memcpy(out, ns_cname, ns_len);
+        out += ns_len;
+        *out++ = '/';
     }
+    if (name_len) {
+        memcpy(out, cname, name_len);
+        out += name_len;
+    }
+    *out = '\0';
 
-    g_lookup_string.data[pos] = '\0';
-    g_lookup_string.length = (uint16_t)pos;
-    return (CljString*)&g_lookup_string;
+    return key;
 }
 
 // Find symbol in the table - O(1) HashMap lookup
@@ -842,7 +872,9 @@ static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *cname) {
     if (!cname || !g_runtime.symbol_table) return NULL;
     
     CljString *key = make_symbol_key(ns_name, cname);
+    if (!key) return NULL;
     ID result = hashmap_get(g_runtime.symbol_table, key);
+    RELEASE(key);
     return (result == NOT_FOUND) ? NULL : (CljSymbol*)result;
 }
 
@@ -858,20 +890,15 @@ void symbol_table_add(CljSymbol *symbol) {
         g_runtime.symbol_table = make_hashmap(512);  // 512 = good initial capacity for Linear Probing
     }
 
-    // Use static lookup string to check if already exists
-    CljString *lookup_key = make_symbol_key(ns_name, cname);
-    if (hashmap_contains(g_runtime.symbol_table, lookup_key)) {
+    CljString *key = make_symbol_key(ns_name, cname);
+    if (!key) return;
+    if (hashmap_contains(g_runtime.symbol_table, key)) {
+        RELEASE(key);
         return;  // Already exists
     }
 
-    // Note: RC may be > 1 due to autorelease pool, COW handles this correctly
-
-    // Create a real CljString key for HashMap storage
-    // We need to create a new string because the HashMap will retain it
-    CljString *key = make_clj_string(string_data(lookup_key));
-    
-    // Insert symbol into HashMap with CljString key
-    // NOTE: The HashMap will RETAIN the key, so we can RELEASE our reference
+    // Insert symbol into HashMap with CljString key.
+    // NOTE: The HashMap will RETAIN the key, so we can RELEASE our reference.
     hashmap_assoc_inplace(&g_runtime.symbol_table, key, symbol);
     RELEASE(key);
 }

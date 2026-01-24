@@ -262,13 +262,13 @@ static err_t esp32_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err
     return ERR_OK;
 }
 
-static err_t esp32_tcp_err(void *arg, err_t err) {
+static void esp32_tcp_err(void *arg, err_t err) {
     (void)err;
     PlatformTcpConn *c = (PlatformTcpConn*)arg;
     if (c && c->cb) {
         c->cb(c->cb_ctx, PLATFORM_TCP_EVENT_ERROR, NULL, NULL, 0);
     }
-    return ERR_OK;
+    return;
 }
 
 static err_t esp32_tcp_connected(void *arg, struct tcp_pcb *tpcb, err_t err) {

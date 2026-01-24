@@ -2,6 +2,7 @@
 #define TINY_CLJ_FUNCTION_H
 
 #include "object.h"
+#include "runtime.h" // For BuiltinFn
 #include "map.h"
 #include "vector.h"
 #include "list.h"
@@ -27,6 +28,9 @@ typedef struct {
 } CljFunction;
 
 CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_stack, const char *cname, struct CljNamespace *ns);
+
+// Native function constructor (CljCFunc)
+ID make_named_func(BuiltinFn fn, struct CljSymbol *name_sym);
 
 
 // Type predicates

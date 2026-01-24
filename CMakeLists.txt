@@ -428,7 +428,6 @@ add_executable(unit-tests
     src/tests/test_edn_file_all_types.c
     src/tests/test_loops.c
     src/tests/test_eval_body_vector.c
-    src/tests/test_for_star_mini.c
     src/tests/test_go_blocks.c
     src/tests/test_fixed_point.c
     src/tests/test_arithmetic.c

@@ -6,7 +6,13 @@ if(NOT DEFINED TINYCLJ_PLATFORM)
 endif()
 
 if(TINYCLJ_PLATFORM STREQUAL "uart")
-  set(PLATFORM_SRC "${CMAKE_CURRENT_LIST_DIR}/../../src/platform_esp32_uart.c")
+  # UART REPL build needs:
+  # - core ESP32 platform hooks (init/sleep/time/net) from platform_esp32_embedded.c
+  # - UART I/O + line editor hooks from platform_esp32_uart.c
+  set(PLATFORM_SRC
+    "${CMAKE_CURRENT_LIST_DIR}/../../src/platform_esp32_embedded.c"
+    "${CMAKE_CURRENT_LIST_DIR}/../../src/platform_esp32_uart.c"
+  )
   set(_repl_def 1)
 else()
   set(PLATFORM_SRC "${CMAKE_CURRENT_LIST_DIR}/../../src/platform_esp32_embedded.c")

@@ -120,7 +120,6 @@ extern CljSymbol *SYM_NEXT;
 extern CljSymbol *SYM_LIST;
 extern CljSymbol *SYM_AND;
 extern CljSymbol *SYM_OR;
-extern CljSymbol *SYM_FOR_STAR;
 extern CljSymbol *SYM_DOSEQ;
 extern CljSymbol *SYM_DOTIMES;
 
@@ -169,6 +168,20 @@ extern CljSymbol *SYM_CLOJURE_REPL;
 extern CljSymbol *SYM_CLOJURE_LANG;
 extern CljSymbol *SYM_TINYCLJ;
 extern CljSymbol *SYM_NS_STAR;
+
+// Internal pre-interned symbols for lazy seq thunk state (hot path)
+extern CljSymbol *SYM_CONCAT_X;
+extern CljSymbol *SYM_CONCAT_Y;
+extern CljSymbol *SYM_CONCAT_THUNK_FN;
+extern CljSymbol *SYM_MAP_FN;
+extern CljSymbol *SYM_MAP_SEQS;
+extern CljSymbol *SYM_MAP_THUNK_FN;
+extern CljSymbol *SYM_MAPCAT_FN;
+extern CljSymbol *SYM_MAPCAT_COLL;
+extern CljSymbol *SYM_MAPCAT_INNER;
+extern CljSymbol *SYM_MAPCAT_THUNK_FN;
+extern CljSymbol *SYM_RANGE_CUR;
+extern CljSymbol *SYM_RANGE_INF_THUNK_FN;
 
 // tinyclj namespace function symbols
 extern CljSymbol *SYM_RETAIN_COUNT;

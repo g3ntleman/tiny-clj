@@ -248,21 +248,15 @@ TEST(test_unquote_splice_basic_list) {
     // Using quasiquote directly since we can't use backtick in C strings
     CljObject *result = eval_string(
         "(let [x (list 1 2 3)] "
-        "  (eval (quasiquote ((unquote-splice x)))))",
+        "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(3, list_count(lst));
-    
-    // Verify elements
-    ID first = lst->first;
-    assert_fixnum(first, 1);
-    ID second = as_list(lst->rest ? as_list(lst->rest) : NULL)->first;
-    assert_fixnum(second, 2);
-    ID third = as_list(as_list(lst->rest ? as_list(lst->rest) : NULL)->rest ? 
-                       as_list(as_list(lst->rest ? as_list(lst->rest) : NULL)->rest) : NULL)->first;
-    assert_fixnum(third, 3);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    CljVector *v = (CljVector*)result;
+    TEST_ASSERT_EQUAL_INT(3, vector_count(v));
+    assert_fixnum(vector_nth(v, 0), 1);
+    assert_fixnum(vector_nth(v, 1), 2);
+    assert_fixnum(vector_nth(v, 2), 3);
 }
 
 TEST(test_unquote_splice_in_middle) {
@@ -271,12 +265,11 @@ TEST(test_unquote_splice_in_middle) {
     // Splicing in middle: `(a ~@(list 1 2) b) should expand to (a 1 2 b)
     CljObject *result = eval_string(
         "(let [x (list 1 2)] "
-        "  (eval (quasiquote (a (unquote-splice x) b))))",
+        "  (vec (eval (quasiquote (a (unquote-splice x) b)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(4, list_count(lst));  // a, 1, 2, b
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // a, 1, 2, b
 }
 
 TEST(test_unquote_splice_at_start) {
@@ -285,12 +278,11 @@ TEST(test_unquote_splice_at_start) {
     // Splicing at start: `(~@(list 1 2) a b) should expand to (1 2 a b)
     CljObject *result = eval_string(
         "(let [x (list 1 2)] "
-        "  (eval (quasiquote ((unquote-splice x) a b))))",
+        "  (vec (eval (quasiquote ((unquote-splice x) a b)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(4, list_count(lst));  // 1, 2, a, b
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // 1, 2, a, b
 }
 
 TEST(test_unquote_splice_at_end) {
@@ -299,12 +291,11 @@ TEST(test_unquote_splice_at_end) {
     // Splicing at end: `(a b ~@(list 1 2)) should expand to (a b 1 2)
     CljObject *result = eval_string(
         "(let [x (list 1 2)] "
-        "  (eval (quasiquote (a b (unquote-splice x)))))",
+        "  (vec (eval (quasiquote (a b (unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(4, list_count(lst));  // a, b, 1, 2
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // a, b, 1, 2
 }
 
 TEST(test_unquote_splice_multiple) {
@@ -313,12 +304,11 @@ TEST(test_unquote_splice_multiple) {
     // Multiple splices: `(~@(list 1) ~@(list 2 3) ~@(list 4)) should expand to (1 2 3 4)
     CljObject *result = eval_string(
         "(let [x (list 1) y (list 2 3) z (list 4)] "
-        "  (eval (quasiquote ((unquote-splice x) (unquote-splice y) (unquote-splice z)))))",
+        "  (vec (eval (quasiquote ((unquote-splice x) (unquote-splice y) (unquote-splice z))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(4, list_count(lst));  // 1, 2, 3, 4
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // 1, 2, 3, 4
 }
 
 TEST(test_unquote_splice_empty_list) {
@@ -327,12 +317,11 @@ TEST(test_unquote_splice_empty_list) {
     // Empty list splice: `(~@(list) a) should expand to (a) - empty splice adds nothing
     CljObject *result = eval_string(
         "(let [x (list)] "
-        "  (eval (quasiquote ((unquote-splice x) a))))",
+        "  (vec (eval (quasiquote ((unquote-splice x) a)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(1, list_count(lst));  // just 'a'
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(1, vector_count((CljVector*)result));  // just 'a'
 }
 
 TEST(test_unquote_splice_in_macro) {
@@ -345,11 +334,10 @@ TEST(test_unquote_splice_in_macro) {
         g_test_eval_state);
     
     // Use macro: (my-concat (list 1) (list 2) (list 3)) should expand to (concat (list 1) (list 2) (list 3))
-    CljObject *result = eval_string("(my-concat (list 1) (list 2) (list 3))", g_test_eval_state);
+    CljObject *result = eval_string("(vec (my-concat (list 1) (list 2) (list 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(3, list_count(lst));  // 1, 2, 3
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(3, vector_count((CljVector*)result));  // 1, 2, 3
 }
 
 TEST(test_unquote_splice_with_unquote) {
@@ -358,20 +346,14 @@ TEST(test_unquote_splice_with_unquote) {
     // Mix unquote and unquote-splice: `(a ~b ~@(list 1 2) c) where b=99 should expand to (a 99 1 2 c)
     CljObject *result = eval_string(
         "(let [b 99 x (list 1 2)] "
-        "  (eval (quasiquote (a (unquote b) (unquote-splice x) c))))",
+        "  (vec (eval (quasiquote (a (unquote b) (unquote-splice x) c)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(5, list_count(lst));  // a, 99, 1, 2, c
-    
-    // Verify first element is 'a (symbol)
-    ID first = lst->first;
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(first));
-    
-    // Verify second element is 99
-    ID second = as_list(lst->rest ? as_list(lst->rest) : NULL)->first;
-    assert_fixnum(second, 99);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    CljVector *v = (CljVector*)result;
+    TEST_ASSERT_EQUAL_INT(5, vector_count(v));  // a, 99, 1, 2, c
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(vector_nth(v, 0)));
+    assert_fixnum(vector_nth(v, 1), 99);
 }
 
 TEST(test_unquote_splice_nested_quasiquote) {
@@ -381,10 +363,10 @@ TEST(test_unquote_splice_nested_quasiquote) {
     // This tests that nested quasiquotes handle unquote-splice properly
     CljObject *result = eval_string(
         "(let [x (list (quasiquote ((unquote-splice (list 1 2)))))] "
-        "  (eval (quasiquote ((unquote-splice x)))))",
+        "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
 }
 
 TEST(test_unquote_splice_function_call_result) {
@@ -394,16 +376,13 @@ TEST(test_unquote_splice_function_call_result) {
     // Using list instead of range since range might not exist
     CljObject *result = eval_string(
         "(let [x (list 0 1 2)] "
-        "  (eval (quasiquote ((unquote-splice x)))))",
+        "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(3, list_count(lst));
-    
-    // Verify elements are 0, 1, 2
-    ID first = lst->first;
-    assert_fixnum(first, 0);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    CljVector *v = (CljVector*)result;
+    TEST_ASSERT_EQUAL_INT(3, vector_count(v));
+    assert_fixnum(vector_nth(v, 0), 0);
 }
 
 TEST(test_unquote_splice_clojure_compatible) {
@@ -413,21 +392,15 @@ TEST(test_unquote_splice_clojure_compatible) {
     // In Clojure: (let [x '(1 2 3)] `(~@x)) => (1 2 3)
     CljObject *result = eval_string(
         "(let [x (list 1 2 3)] "
-        "  (eval (quasiquote ((unquote-splice x)))))",
+        "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(3, list_count(lst));
-    
-    // Verify it's exactly (1 2 3)
-    ID first = lst->first;
-    assert_fixnum(first, 1);
-    ID second = as_list(lst->rest ? as_list(lst->rest) : NULL)->first;
-    assert_fixnum(second, 2);
-    ID third = as_list(as_list(lst->rest ? as_list(lst->rest) : NULL)->rest ? 
-                       as_list(as_list(lst->rest ? as_list(lst->rest) : NULL)->rest) : NULL)->first;
-    assert_fixnum(third, 3);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    CljVector *v = (CljVector*)result;
+    TEST_ASSERT_EQUAL_INT(3, vector_count(v));
+    assert_fixnum(vector_nth(v, 0), 1);
+    assert_fixnum(vector_nth(v, 1), 2);
+    assert_fixnum(vector_nth(v, 2), 3);
 }
 
 // ============================================================================
@@ -505,7 +478,7 @@ TEST(test_get_macro_qualified_symbol) {
 TEST(test_for_macroexpand_simple) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
-    // macroexpand-1 should rewrite for to for*
+    // macroexpand-1 should expand for to a mapcat-based form (no legacy for*)
     CljObject *result = eval_string(
         "(macroexpand-1 '(for [x [1 2 3]] x))",
         g_test_eval_state);
@@ -515,20 +488,19 @@ TEST(test_for_macroexpand_simple) {
     CljList *expanded = as_list(result);
     TEST_ASSERT_NOT_NULL(expanded);
     
-    // First element should be for* (or clojure.core/for*)
+    // First element should be mapcat (or clojure.core/mapcat)
     ID first = LIST_FIRST(expanded);
     TEST_ASSERT_TRUE(is_symbol(first));
     CljSymbol *op_sym = as_symbol(first);
     TEST_ASSERT_NOT_NULL(op_sym);
-    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0 || 
-                     (op_sym->ns_name && strcmp(op_sym->ns_name->cname, "clojure.core") == 0 && strcmp(op_sym->cname, "for*") == 0));
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
 }
 
 // Test: Multiple bindings expansion (passed through)
 TEST(test_for_macroexpand_multiple_bindings) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
-    // macroexpand-1 should rewrite for to for* and preserve bindings
+    // macroexpand-1 should expand for to nested mapcat-based form
     CljObject *result = eval_string(
         "(macroexpand-1 '(for [x [1 2] y [3 4]] [x y]))",
         g_test_eval_state);
@@ -538,24 +510,19 @@ TEST(test_for_macroexpand_multiple_bindings) {
     CljList *expanded = as_list(result);
     TEST_ASSERT_NOT_NULL(expanded);
     
-    // First element should be for*
+    // First element should be mapcat
     ID first = LIST_FIRST(expanded);
     TEST_ASSERT_TRUE(is_symbol(first));
     CljSymbol *op_sym = as_symbol(first);
     TEST_ASSERT_NOT_NULL(op_sym);
-    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
-    
-    // Second element should be the binding vector
-    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
-    TEST_ASSERT_NOT_NULL(bindings);
-    TEST_ASSERT_TRUE(is_vector(bindings));
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
 }
 
 // Test: Modifiers preserved (:when, :while)
 TEST(test_for_macroexpand_modifiers) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
-    // macroexpand-1 should preserve :when and :while modifiers
+    // macroexpand-1 should expand modifiers into filter/take-while (no legacy for*)
     CljObject *result = eval_string(
         "(macroexpand-1 '(for [x (range) :while (< x 3) :when (even? x)] x))",
         g_test_eval_state);
@@ -565,34 +532,12 @@ TEST(test_for_macroexpand_modifiers) {
     CljList *expanded = as_list(result);
     TEST_ASSERT_NOT_NULL(expanded);
     
-    // First element should be for*
+    // First element should be mapcat
     ID first = LIST_FIRST(expanded);
     TEST_ASSERT_TRUE(is_symbol(first));
     CljSymbol *op_sym = as_symbol(first);
     TEST_ASSERT_NOT_NULL(op_sym);
-    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
-    
-    // Bindings should contain :while and :when
-    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
-    TEST_ASSERT_NOT_NULL(bindings);
-    TEST_ASSERT_TRUE(is_vector(bindings));
-    
-    // Convert to list to check for keywords
-    CljVector *bindings_vec = as_vector(bindings);
-    bool found_while = false;
-    bool found_when = false;
-    for (unsigned int i = 0; i < vector_count(bindings_vec); i++) {
-        ID item = vector_nth(bindings_vec, i);
-        if (is_keyword(item)) {
-            CljSymbol *kw = as_symbol(item);
-            if (kw && kw->cname) {
-                if (strcmp(kw->cname, ":while") == 0) found_while = true;
-                if (strcmp(kw->cname, ":when") == 0) found_when = true;
-            }
-        }
-    }
-    TEST_ASSERT_TRUE_MESSAGE(found_while, ":while modifier should be preserved");
-    TEST_ASSERT_TRUE_MESSAGE(found_when, ":when modifier should be preserved");
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
 }
 
 // Test: Destructuring expansion (should normalize to gensym + :let)
@@ -610,36 +555,12 @@ TEST(test_for_macroexpand_destructuring) {
     CljList *expanded = as_list(result);
     TEST_ASSERT_NOT_NULL(expanded);
     
-    // First element should be for*
+    // First element should be mapcat (destructuring is normalized via :let)
     ID first = LIST_FIRST(expanded);
     TEST_ASSERT_TRUE(is_symbol(first));
     CljSymbol *op_sym = as_symbol(first);
     TEST_ASSERT_NOT_NULL(op_sym);
-    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
-    
-    // Bindings should have a gensym as first binding, followed by :let
-    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
-    TEST_ASSERT_NOT_NULL(bindings);
-    TEST_ASSERT_TRUE(is_vector(bindings));
-    
-    // Convert to vector to check structure
-    CljVector *bindings_vec = as_vector(bindings);
-    ID first_binding = vector_nth(bindings_vec, 0);
-    // First binding should be a symbol (gensym), not a vector
-    TEST_ASSERT_TRUE(is_symbol(first_binding));
-    // Should contain :let keyword
-    bool found_let = false;
-    for (unsigned int i = 0; i < vector_count(bindings_vec); i++) {
-        ID item = vector_nth(bindings_vec, i);
-        if (is_keyword(item)) {
-            CljSymbol *kw = as_symbol(item);
-            if (kw && kw->cname && strcmp(kw->cname, ":let") == 0) {
-                found_let = true;
-                break;
-            }
-        }
-    }
-    TEST_ASSERT_TRUE_MESSAGE(found_let, "Destructuring should be normalized to gensym + :let");
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
 }
 
 // Test: for expansion with cond and :else (tests normalize-for-bindings)
@@ -665,21 +586,12 @@ TEST(test_for_macroexpand_with_cond_else) {
     CljList *expanded = as_list(result);
     TEST_ASSERT_NOT_NULL(expanded);
     
-    // First element should be for*
+    // First element should be mapcat (no legacy for*)
     ID first = LIST_FIRST(expanded);
     TEST_ASSERT_TRUE(is_symbol(first));
     CljSymbol *op_sym = as_symbol(first);
     TEST_ASSERT_NOT_NULL(op_sym);
-    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
-    
-    // Second element should be the normalized bindings vector
-    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
-    TEST_ASSERT_NOT_NULL(bindings);
-    TEST_ASSERT_TRUE(is_vector(bindings));
-    
-    // Bindings should contain x and [1 2 3] (at least 2 elements)
-    CljVector *bindings_vec = as_vector(bindings);
-    TEST_ASSERT_TRUE(vector_count(bindings_vec) >= 2);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
 }
 
 
