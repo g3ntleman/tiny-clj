@@ -33,6 +33,7 @@
 #include "env_stack.h"
 #include "strings.h"  // For pr_str
 #include "eval_arithmetic.h"
+#include "debug.h"  // For print_ast
 #include "eval_comparison.h"
 #include <time.h>
 
@@ -644,7 +645,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             }
             
             // Then check env_stack and namespace
-            ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, ctx_env_map, NULL, body, get_eval_state(ctx, NULL));
+            CljMap *fallback_env = ctx_env_map;
+            ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, fallback_env, NULL, body, get_eval_state(ctx, NULL));
             if (resolved_id != NOT_FOUND) {
                 if (!resolved_id || resolved_id == SYM_NIL) {
                     return NULL;
@@ -700,8 +702,29 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
 
     // For non-symbol, non-slotref objects, dispatch on the already computed tag.
     switch (body_tag) {
-        case CLJ_LIST:
         case CLJ_AST_NODE: {
+            // AST-Nodes can contain vectors as first element
+            // Check if first element is a vector (by tag, not is_vector which may have additional checks)
+            CljASTNode *node = as_ast_node(body);
+            static bool debug_ast_check = false;
+            if (node && node->first && (TAG(node->first) == CLJ_VECTOR || TAG(node->first) == CLJ_VECTOR_TRANSIENT || TAG(node->first) == CLJ_VECTOR_TRANSIENT_WEAK)) {
+                // AST-Node wrapping a vector - evaluate the vector
+                static bool debug_ast_vector = false;
+                if (!debug_ast_vector) {
+                    debug_ast_vector = true;
+                    fprintf(stderr, "DEBUG: AST_NODE with vector first (tag: %u), evaluating vector\n", TAG(node->first));
+                }
+                return eval_body_with_params(node->first, ctx);
+            }
+            // Otherwise treat as list
+            CljMap *env_map = get_closure_env(ctx);
+            EvalState *ctx_state = get_eval_state(ctx, NULL);
+            // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
+            if (!ctx_state) ctx_state = builtin_get_eval_state();
+            return eval_list(as_list(body), env_map, ctx_state, ctx);
+        }
+        
+        case CLJ_LIST: {
             // Evaluate list with context (ctx preserves recur)
             CljMap *env_map = get_closure_env(ctx);
             EvalState *ctx_state = get_eval_state(ctx, NULL);
@@ -812,12 +835,10 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 EvalState *eval_st = get_eval_state(ctx, st);
                 CljMap *fallback_env = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
                 ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, fallback_env, ctx->frame, body, eval_st);
-                if (resolved_id) {
-                    if (resolved_id == NOT_FOUND) {
-                        return NULL;
-                    }
+                if (resolved_id != NOT_FOUND) {
                     return AUTORELEASE(RETAIN(resolved_id));
                 }
+                // If NOT_FOUND, continue to fallback resolution paths below
             }
 
             // Resolve symbol - first try local environment, then namespace
@@ -2524,6 +2545,13 @@ ID native_for_star_thunk_executor(ID *args, unsigned int argc) {
         ? (CljVector*)RETAIN((CljVector*)env_stack_id) : NULL;
     CljMap *base_env = (CljMap*)(env_id == NOT_FOUND ? NULL : env_id);
     
+    // DEBUG: Print environment setup (only once)
+    static bool debug_printed = false;
+    bool is_first_call = !debug_printed;
+    if (is_first_call) {
+        debug_printed = true;
+    }
+    
     // Bind all variables
     for (int i = 0; i < binding_count; i++) {
         ID var_sym = vector_nth(vars_vec, i);
@@ -2534,9 +2562,138 @@ ID native_for_star_thunk_executor(ID *args, unsigned int argc) {
             CljMap *self_bind = map_assoc(map_empty(), var_sym, elem);
             env_stack_push_inplace(&new_stack, self_bind);
             RELEASE(self_bind);
+            if (is_first_call) {
+            }
         } else {
             base_env = extend_env_with_binding(base_env, (CljObject*)var_sym, (CljObject*)elem);
         }
+    }
+    
+    // Process modifiers (:let, :when, :while) in order
+    // ops_vec format: [type0, data0, type1, data1, ...]
+    // type: 0=BINDING, 1=WHEN, 2=LET, 3=WHILE
+    unsigned int ops_count = vector_count(ops_vec);
+    EvalContext modifier_ctx_storage;
+    EvalContext *modifier_ctx = NULL;
+    if (new_stack) {
+        modifier_ctx_storage = (EvalContext){ .env = NULL, .env_stack = new_stack, .frame = NULL, .st = st, .recur_args = NULL, .recur_arg_count = NULL, .recur_param_count = 0 };
+        modifier_ctx = &modifier_ctx_storage;
+    }
+    
+    bool should_skip = false;
+    bool should_stop = false;
+    
+    for (unsigned int i = 0; i < ops_count; i += 2) {
+        if (i + 1 >= ops_count) break;
+        
+        ID op_type_id = vector_nth(ops_vec, i);
+        if (!is_fixnum(op_type_id)) continue;
+        int op_type = as_fixnum(op_type_id);
+        ID op_data = vector_nth(ops_vec, i + 1);
+        
+        if (op_type == 2) { // FOR_OP_LET = 2
+            // :let [bindings...] - evaluate and bind
+            if (op_data && TAG(op_data) == CLJ_VECTOR) {
+                CljVector *let_bindings = (CljVector*)op_data;
+                unsigned int let_count = vector_count(let_bindings);
+                if (let_count % 2 == 0) {
+                    for (unsigned int j = 0; j < let_count; j += 2) {
+                        ID let_var = vector_nth(let_bindings, j);
+                        ID let_expr = vector_nth(let_bindings, j + 1);
+                        if (let_var && let_expr) {
+                            ID let_value = NULL;
+                            if (new_stack) {
+                                // Update modifier_ctx to point to current new_stack
+                                modifier_ctx_storage.env_stack = new_stack;
+                                let_value = eval_body(let_expr, NULL, st, modifier_ctx);
+                            } else if (base_env) {
+                                let_value = eval_body_with_env(let_expr, base_env, st);
+                            }
+                            if (let_value) {
+                                if (new_stack) {
+                                    CljMap *let_bind = map_assoc(map_empty(), let_var, let_value);
+                                    env_stack_push_inplace(&new_stack, let_bind);
+                                    // Update modifier_ctx to point to updated new_stack
+                                    modifier_ctx_storage.env_stack = new_stack;
+                                    RELEASE(let_bind);
+                                } else {
+                                    base_env = extend_env_with_binding(base_env, (CljObject*)let_var, (CljObject*)let_value);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (op_type == 1) { // FOR_OP_WHEN = 1
+            // :when pred - skip if false
+            ID pred_result = NULL;
+            if (new_stack) {
+                // Update modifier_ctx to point to current new_stack
+                modifier_ctx_storage.env_stack = new_stack;
+                pred_result = eval_body(op_data, NULL, st, modifier_ctx);
+            } else if (base_env) {
+                pred_result = eval_body_with_env(op_data, base_env, st);
+            }
+            if (!pred_result || !clj_is_truthy(pred_result)) {
+                should_skip = true;
+            }
+        } else if (op_type == 3) { // FOR_OP_WHILE
+            // :while pred - stop if false
+            ID pred_result = NULL;
+            if (new_stack) {
+                // Update modifier_ctx to point to current new_stack
+                modifier_ctx_storage.env_stack = new_stack;
+                pred_result = eval_body(op_data, NULL, st, modifier_ctx);
+            } else if (base_env) {
+                pred_result = eval_body_with_env(op_data, base_env, st);
+            }
+            if (!pred_result || !clj_is_truthy(pred_result)) {
+                should_stop = true;
+            }
+        }
+    }
+    
+    // If :while failed, return NULL (end of sequence)
+    if (should_stop) {
+        if (new_stack) RELEASE(new_stack);
+        if (base_env) RELEASE(base_env);
+        return NULL;
+    }
+    
+    // If :when failed, skip this element (return NULL for first, continue with rest)
+    if (should_skip) {
+        // Advance innermost sequence for next iteration
+        ID innermost_seq = vector_nth(seqs_vec, binding_count - 1);
+        ID next_innermost = seq_next(innermost_seq);
+        ASSIGN(seqs_vec, vector_assoc(seqs_vec, binding_count - 1, next_innermost));
+        
+        // Build next state
+        CljMap *rest_state = map_assoc(map_empty(), (ID)k_seqs, (ID)RETAIN(seqs_vec));
+        ASSIGN(rest_state, map_assoc(rest_state, (ID)k_vars, (ID)RETAIN(vars_vec)));
+        if (initial_colls_vec) {
+            ASSIGN(rest_state, map_assoc(rest_state, (ID)k_initial_colls, (ID)RETAIN(initial_colls_vec)));
+        }
+        ASSIGN(rest_state, map_assoc(rest_state, (ID)k_ops, (ID)RETAIN(ops_vec)));
+        ASSIGN(rest_state, map_assoc(rest_state, (ID)k_body, (ID)body));
+        ASSIGN(rest_state, map_assoc(rest_state, (ID)k_binding_count, fixnum(binding_count)));
+        if (env_stack_id && env_stack_id != NOT_FOUND) {
+            ASSIGN(rest_state, map_assoc(rest_state, (ID)k_env_stack, env_stack_id));
+        } else if (env_id && env_id != NOT_FOUND) {
+            ASSIGN(rest_state, map_assoc(rest_state, (ID)k_env, env_id));
+        }
+        
+        ID fn_obj = make_named_func(native_for_star_thunk_executor, (CljSymbol*)k_fn_sym);
+        CljList *quoted_rest_state = make_list((ID)SYM_QUOTE, make_list((ID)rest_state, NULL));
+        CljList *thunk_body = make_list(fn_obj, make_list((ID)quoted_rest_state, NULL));
+        CljFunction *rest_thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
+        CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
+        RELEASE(rest_thunk);
+        CljList *result = make_list(NULL, (CljList*)rest_lazy); // NULL for skipped element
+        RELEASE(fn_obj);
+        RELEASE(rest_state);
+        if (new_stack) RELEASE(new_stack);
+        if (base_env) RELEASE(base_env);
+        return (ID)result;
     }
     
     // Evaluate body
@@ -2552,10 +2709,57 @@ ID native_for_star_thunk_executor(ID *args, unsigned int argc) {
         }
     }
     
-    // Advance innermost sequence for next iteration
-    ID innermost_seq = vector_nth(seqs_vec, binding_count - 1);
-    ID next_innermost = seq_next(innermost_seq);
-    ASSIGN(seqs_vec, vector_assoc(seqs_vec, binding_count - 1, next_innermost));
+    // Advance sequences for next iteration (cartesian product logic)
+    // If innermost sequence is exhausted, advance outer and reset inner
+    bool need_advance = true;
+    for (int i = binding_count - 1; i >= 0 && need_advance; i--) {
+        ID seq_id = vector_nth(seqs_vec, i);
+        if (seq_id && !seq_empty(seq_id)) {
+            ID next_seq = seq_next(seq_id);
+            ASSIGN(seqs_vec, vector_assoc(seqs_vec, i, next_seq));
+            // If this sequence is now empty (next_seq is NULL or empty), we need to advance the outer one
+            if (!next_seq || seq_empty(next_seq)) {
+                // Only reset for multiple bindings (cartesian product)
+                // For single binding, let it stay exhausted
+                if (initial_colls_vec && i > 0) {
+                    // Reset current and all inner sequences (i to end) to their initial state
+                    for (int j = i; j < binding_count; j++) {
+                        ID initial_coll = vector_nth(initial_colls_vec, j);
+                        if (initial_coll) {
+                            CljSeqIterator *reset_seq = make_seq(initial_coll);
+                            if (reset_seq) {
+                                ASSIGN(seqs_vec, vector_assoc(seqs_vec, j, (ID)reset_seq));
+                            }
+                        }
+                    }
+                }
+                // Continue loop to advance outer sequence
+                need_advance = (i > 0);
+            } else {
+                // Successfully advanced this sequence, done
+                need_advance = false;
+            }
+        } else {
+            // This sequence is empty, try to advance outer
+            need_advance = (i > 0);
+        }
+    }
+    
+    // Check if all sequences are now exhausted
+    bool all_exhausted = true;
+    for (int i = 0; i < binding_count; i++) {
+        ID seq_id = vector_nth(seqs_vec, i);
+        if (seq_id && !seq_empty(seq_id)) {
+            all_exhausted = false;
+            break;
+        }
+    }
+    if (all_exhausted) {
+        // All sequences exhausted - return NULL to end the sequence
+        if (new_stack) RELEASE(new_stack);
+        if (base_env) RELEASE(base_env);
+        return NULL;
+    }
     
     // Build next state
     CljMap *rest_state = map_assoc(map_empty(), (ID)k_seqs, (ID)RETAIN(seqs_vec));
@@ -2816,6 +3020,34 @@ ID eval_for_star(CljList *list, CljMap *env, EvalState *st, const EvalContext *c
     if (!binding_list || !body) {
         return NULL;
     }
+    
+    // DEBUG: Print what we received (only for calls with vector body like [x y])
+    static int debug_for_star_count = 0;
+#ifdef DEBUG
+    const char *body_ast = print_ast(body);
+    if (body_ast) {
+        // Check if body is a vector (look for [ in the AST string)
+        // This will match [x y] but not (* x x)
+        if (strstr(body_ast, "[") && strstr(body_ast, "]") && 
+            !strstr(body_ast, "SYM:*") && !strstr(body_ast, "SYM:if")) {
+            debug_for_star_count++;
+            fprintf(stderr, "DEBUG: eval_for_star received (call #%d, vector body):\n", debug_for_star_count);
+            fprintf(stderr, "  body: %s\n", body_ast);
+            const char *bindings_ast = print_ast(binding_list);
+            if (bindings_ast) {
+                fprintf(stderr, "  bindings: %s\n", bindings_ast);
+                free((void*)bindings_ast);
+            }
+            // Also print the full list structure
+            const char *list_ast = print_ast((ID)list);
+            if (list_ast) {
+                fprintf(stderr, "  full list: %s\n", list_ast);
+                free((void*)list_ast);
+            }
+        }
+        free((void*)body_ast);
+    }
+#endif
 
     // Accept both CLJ_VECTOR and CLJ_LIST for binding.
     CljVector *bindings_vec = NULL;
@@ -2935,8 +3167,9 @@ ID eval_for_star(CljList *list, CljMap *env, EvalState *st, const EvalContext *c
         ASSIGN(ops_vec, vector_conj(ops_vec, fixnum(ops[i].type)));
         // Store additional data based on type
         if (ops[i].type == FOR_OP_BINDING) {
-            ASSIGN(ops_vec, vector_conj(ops_vec, ops[i].var_sym));
-            ASSIGN(ops_vec, vector_conj(ops_vec, ops[i].coll_expr));
+            // For BINDING, we don't store var_sym/coll_expr here - they're already in vars_vec/seqs_vec
+            // Just store a placeholder to maintain [type, data] pairs
+            ASSIGN(ops_vec, vector_conj(ops_vec, NULL));
         } else if (ops[i].type == FOR_OP_WHEN || ops[i].type == FOR_OP_WHILE) {
             ASSIGN(ops_vec, vector_conj(ops_vec, ops[i].pred_expr));
         } else if (ops[i].type == FOR_OP_LET) {
@@ -2954,7 +3187,11 @@ ID eval_for_star(CljList *list, CljMap *env, EvalState *st, const EvalContext *c
     if (ctx && ctx->env_stack) {
         ASSIGN(state, map_assoc(state, (ID)k_env_stack, (ID)RETAIN(ctx->env_stack)));
     } else {
-        ASSIGN(state, map_assoc(state, (ID)k_env, (ID)RETAIN(env)));
+        // If no env_stack, create an empty one to maintain consistency
+        // The base environment will be accessible via namespace mappings
+        CljVector *empty_stack = make_vector(0, CLJ_VECTOR);
+        ASSIGN(state, map_assoc(state, (ID)k_env_stack, (ID)empty_stack));
+        RELEASE(empty_stack);
     }
     
     // Cleanup temporary vectors (state map now owns them)
