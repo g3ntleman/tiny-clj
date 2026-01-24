@@ -1,56 +1,118 @@
 ---
 name: lazy-map-concat-for
-overview: Implement lazy map and concat using cons-based sequences, then implement for as a pure Clojure macro. This architecture reduces heap allocations by 94% and memory usage by 76%, making it feasible within the 100KB total heap limit. Eliminates for* native special form entirely.
+overview: |
+  Test-first plan to implement lazy sequence primitives (map/concat building blocks) and then implement `for` as a pure Clojure macro built on them.
+  Explicitly targets the embedded build (ESP32): keep peak live allocations low and ensure refcounting is correct (no double-free / leaks).
+notes:
+  - No backwards compatibility required: once the new lazy/macro-based implementation is correct, we can remove the old `for*`/legacy code paths aggressively.
 todos:
+  - id: step-0-baseline
+    content: |
+      Baseline (host): run the full unit-test suite and record the current failures related to `for`/`for*`/lazy-seq.
+      Then run: ./build/unit-tests  (FULL)
+    status: pending
   - id: step-1-cons
-    content: Study cons cell implementation and verify it's lightweight (48 bytes)
+    content: |
+      Plausibility check (refcounting, not GC): study cons/list + lazy-seq ownership rules.
+      Read: src/list.{c,h}, src/seq.{c,h}, and the `for*` thunk executor in src/eval.c.
+      Goal: identify exactly which objects are owned/retained across (a) lazy-seq realization, (b) per-element thunk calls.
+      Then run: ./build/unit-tests  (FULL)
     status: pending
   - id: step-2-map
-    content: Implement native_map_lazy() returning LazySeq with cons + lazy-seq
+    content: |
+      Add/extend unit tests that pin the *required* laziness + ownership invariants for map/concat/for:
+      - does not realize full inputs (works with infinite inputs when consumed via take)
+      - no double-free/leaks when iterating
+      - binding vector/list is treated as data (never eval'ed)
+      Then run: ./build/unit-tests  (FULL)
     status: pending
   - id: step-2-5-cow
-    content: Add COW optimization to cons operations (RC==1 in-place modify)
+    content: |
+      Implement minimal lazy `map` (or the mapcat building block you need) to satisfy the new tests.
+      Focus on correctness first (RC + autorelease boundaries), not micro-optimizations.
+      Then run: ./build/unit-tests  (FULL)
     status: pending
   - id: step-3-concat
-    content: Implement native_concat_lazy() using cons + lazy-seq recursion
+    content: |
+      Implement minimal lazy `concat` that satisfies the new tests and does not materialize inputs.
+      Then run: ./build/unit-tests  (FULL)
     status: pending
   - id: step-4-macros
-    content: Verify lazy primitives integrate with existing macro system
+    content: |
+      Implement `for` macro in clojure.core (expand to nested mapcat/concat forms).
+      Verify modifiers (:when/:let/:while) semantics with tests.
+      Then run: ./build/unit-tests  (FULL)
     status: pending
   - id: step-5-for-macro
-    content: Implement for macro in clojure.core.clj expanding to mapcat nesting
+    content: |
+      Embedded-target checkpoint (ESP32):
+      - ensure the embedded build compiles with these changes (no host-only dependencies in core paths)
+      - note how to build the UART REPL firmware image (ESP-IDF) after this change
+      Then run: ./build/unit-tests  (FULL)
     status: pending
   - id: step-6-test
-    content: Run all for tests and verify they pass with lazy implementation
+    content: |
+      Remove legacy native `for*` path (no backwards compatibility required) *after* the new macro + lazy primitives are green.
+      Then run: ./build/unit-tests  (FULL)
     status: pending
   - id: step-7-remove
-    content: Delete for* special form, parse_for_bindings, ForOp structures, 500+ LOC
+    content: |
+      Optional optimization: consider COW/in-place micro-optimizations only after correctness is proven.
+      Measure on host and sanity-check embedded constraints.
+      Then run: ./build/unit-tests  (FULL)
     status: pending
   - id: step-8-perf
-    content: Run memory profiling and performance tests within 100KB budget
-    status: pending
-  - id: step-9-commit
-    content: Document changes and commit with memory budget summary
+    content: |
+      Documentation + commit notes (include embedded/ESP32 notes and memory constraints).
+      Then run: ./build/unit-tests  (FULL)
     status: pending
 ---
 
 ## Architecture Overview
 
-**Critical Constraint**: 100 KB total heap limit
+### Plausibility notes (important)
+
+- This project uses **manual reference counting + autorelease pools**, not a tracing GC.
+- Therefore “cons cells are GC’d immediately” is not literally true; instead, objects are freed when RC reaches 0.
+- The current failure mode we must avoid/regress-test is **UseAfterFree / double-free** (especially in lazy sequence thunks).
+
+### Constraints
+
+- **Embedded target (ESP32)** is the design center: keep peak live allocations low and avoid host-only code paths.
+- Host unit-tests are the primary safety net. After *each step* in this plan: run **all** unit tests.
 
 **Current Problem**:
 
-- `for*` allocates 16+ objects per element
-- State maps consume 200 bytes each
-- (for [x (range 100) y (range 100)] ...) needs 2 MB → IMPOSSIBLE with 100 KB
+- Recent `for`/`for*` work has triggered:
+  - double-free / UseAfterFree in lazy thunk execution
+  - `seq_val == NULL` regressions in `for` tests
+  - symbol resolution failure in vector body evaluation (`eval_body_vector_with_base_env`)
 
 **Solution**:
 
-- Lazy sequences using cons cells (48 bytes each)
-- Cons cells are GC'd immediately after consumption
-- (for [x (range 100) y (range 100)] (take 1000)) uses only 48 KB
+- Implement/verify lazy sequence primitives that produce one element at a time (works with `(take N ...)` and infinite inputs).
+- Implement `for` as macro expansion using these primitives.
+- After that, remove old native `for*` path (no backwards compatibility required).
 
-**Key Principle**: cons doesn't materialize, lazy-seq defers computation
+**Key Principles**:
+- `cons` doesn't materialize the rest
+- `lazy-seq` defers computation
+- RC must be correct across pool boundaries (retain exactly what you need, release exactly once)
+
+---
+
+## Test-first execution loop (applies to every step)
+
+For each change:
+
+1. **Add/adjust a unit test** that would fail without the change (or that reproduces the current failure).
+2. **Run all unit-tests**: `./build/unit-tests` (FULL).
+3. **Implement the smallest possible code change** to make the new test pass.
+4. **Run all unit-tests again**: `./build/unit-tests` (FULL).
+5. Only then proceed to the next step.
+
+Embedded-target (ESP32) note:
+- After any change touching `seq`, `lazy-seq`, `for`/`for*`, or `eval`, also verify we can still build the embedded targets (at least compile stage) and that the code does not rely on host-only features.
 
 ---
 
@@ -63,10 +125,13 @@ Study existing `make_list()` and cons cell implementation:
 - Check cons cell structure (likely ~48 bytes)
 - Understand reference counting
 - Verify it doesn't force realization
+- Verify refcount/ownership expectations when lists are used as seqs (what is retained across calls?)
 
-**Goal**: Confirm cons cells are lightweight and GC-friendly
+**Goal**: Confirm cons cells are lightweight and **RC-friendly** (no hidden retain/release surprises)
 
-**Deliverable**: Understanding of cons cell overhead
+**Deliverable**: A concrete ownership table (“who owns what?”) for list/cons + seq iteration
+
+**Test checkpoint**: run all unit-tests: `./build/unit-tests` (FULL)
 
 ---
 
@@ -119,6 +184,9 @@ ID native_map_lazy(ID *args, unsigned int argc) {
 
 **File**: [src/list.c](src/list.c), [src/list.h](src/list.h), [src/object.h](src/object.h)
 
+**Test-first note**: Treat this as *optional* and defer it until after correctness is proven and all unit-tests are green.
+At the moment, correctness (RC/ownership) is the bottleneck, not micro-optimizations.
+
 Since we already have reference counting in place, we can apply COW optimization to cons cell operations.
 
 **Key Insight**: When a cons cell has `ref_count == 1` (only one reference), **we are the exclusive owner** and can mutate it in-place. Nobody else holds a reference, so the mutation is invisible to all other code.
@@ -155,7 +223,7 @@ ID cons_with_cow(ID head, ID tail) {
 
 - `native_map_lazy`: When cons'ing next element, check if previous cons has RC==1 → reuse
 - `native_concat_lazy`: When building intermediate cons chains, reuse non-shared cells
-- Overall effect: fewer temporary allocations that would be GC'd anyway
+- Overall effect: fewer temporary allocations that would otherwise be freed soon via RC (once no longer referenced)
 
 **Example Impact**:
 
@@ -303,7 +371,7 @@ mapcat → lazy-seq (deferred)
 - (for [x (range 1000) y (range 1000)] [x y])
 - With (take 100): Only 100 cons cells in memory = 4.8 KB
 - With (take 2000): Only 2000 cons cells = 96 KB
-- GC frees consumed cells immediately
+- In the RC runtime, consumed cells can be freed promptly *if* RC drops to 0 (no hidden retains)
 
 **Deliverable**: for macro producing lazy cartesian product
 
@@ -480,7 +548,7 @@ Benefits:
 
 **With GC**:
 
-- New: Consumed cons cells freed → unbounded sequences possible
+- New: Consumed cons cells can be freed promptly (RC→0) → unbounded sequences possible *if* ownership is correct
 - Old: No immediate reclamation → bounded
 
 ---
