@@ -642,4 +642,44 @@ TEST(test_for_macroexpand_destructuring) {
     TEST_ASSERT_TRUE_MESSAGE(found_let, "Destructuring should be normalized to gensym + :let");
 }
 
+// Test: for expansion with cond and :else (tests normalize-for-bindings)
+// This test verifies that cond with :else works correctly during macro expansion
+TEST(test_for_macroexpand_with_cond_else) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test basic for expansion - this should work if cond with :else works
+    // Use macroexpand (not macroexpand-1) to fully expand
+    CljObject *result = eval_string(
+        "(macroexpand '(for [x [1 2 3]] x))",
+        g_test_eval_state);
+    
+    // Check if expansion succeeded (if cond fails, result will be NULL or exception thrown)
+    if (!result) {
+        TEST_FAIL_MESSAGE("for macro expansion failed - cond with :else may not work during macro expansion");
+        return;
+    }
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "for macro expansion should succeed");
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be for*
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "for*") == 0);
+    
+    // Second element should be the normalized bindings vector
+    ID bindings = LIST_FIRST(list_rest_normalized(expanded));
+    TEST_ASSERT_NOT_NULL(bindings);
+    TEST_ASSERT_TRUE(is_vector(bindings));
+    
+    // Bindings should contain x and [1 2 3] (at least 2 elements)
+    CljVector *bindings_vec = as_vector(bindings);
+    TEST_ASSERT_TRUE(vector_count(bindings_vec) >= 2);
+}
+
 
