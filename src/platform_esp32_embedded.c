@@ -109,6 +109,22 @@ size_t platform_heap_bytes_total(void) { return tinyclj_esp32_heap_bytes_total()
 size_t platform_flash_bytes_free(void) { return tinyclj_esp32_flash_bytes_free(); }
 size_t platform_flash_bytes_total(void) { return tinyclj_esp32_flash_bytes_total(); }
 
+size_t platform_allocated_size(const void *ptr) {
+    if (!ptr) return 0;
+#if defined(ESP32_BUILD) && defined(__has_include)
+#if __has_include(<esp_heap_caps.h>)
+    // ESP-IDF: Note that heap_caps_get_allocated_size() may be unreliable with
+    // some heap poisoning configurations. Use for diagnostics only.
+    #include <esp_heap_caps.h>
+    return heap_caps_get_allocated_size((void*)ptr);
+#else
+    return 0;
+#endif
+#else
+    return 0;
+#endif
+}
+
 #if defined(ESP32_BUILD) && TINYCLJ_HAVE_LWIP
 
 struct PlatformUdpSocket {

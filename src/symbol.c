@@ -931,8 +931,9 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
                 cname, SYMBOL_NAME_MAX_LEN - 1);
     }
 
-    // Use malloc directly instead of ALLOC macro
-    CljSymbol *sym = (CljSymbol*)malloc(sizeof(CljSymbol));
+    // Allocate as raw heap block (symbols are singletons and never released).
+    // Use CLJ_MALLOC so the allocation is tracked by the memory profiler.
+    CljSymbol *sym = (CljSymbol*)CLJ_MALLOC(sizeof(CljSymbol));
     if (!sym) {
         return throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
                 "Failed to allocate memory for symbol '%s'", cname);
@@ -946,10 +947,10 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
         sym->base.flags |= CLJ_FLAG_DYNAMIC;
     }
 
-    // Store strdup'd name for heap-allocated symbols
-    sym->cname = strdup(cname);
+    // Store duplicated name for heap-allocated symbols (tracked allocation)
+    sym->cname = clj_strdup(cname);
     if (!sym->cname) {
-        free(sym);
+        CLJ_FREE(sym);
         return throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
                 "Failed to duplicate string for symbol '%s'", cname);
     }

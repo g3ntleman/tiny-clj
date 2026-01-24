@@ -12,13 +12,9 @@
 
 CljValue character(uint32_t codepoint) {
     if (codepoint > CLJ_CHAR_MAX) {
-        CljObject *v = (CljObject*)ALLOC_BYTES(CLJ_STRING, sizeof(CljObject) + sizeof(char*));
-        if (!v) return NULL;
-        v->type = CLJ_STRING;
-        v->rc = 1;
-        char **str_ptr = (char**)((char*)v + sizeof(CljObject));
-        *str_ptr = strdup("?");
-        return (CljValue)v;
+        // Represent unprintable/invalid characters as a string.
+        // Use the standard string constructor so allocation + release are correct and tracked.
+        return (CljValue)make_string("?");
     }
     return (CljValue)(((uintptr_t)codepoint << TAG_BITS) | TAG_CHAR);
 }

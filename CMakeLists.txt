@@ -118,6 +118,11 @@ endif()
 
 add_subdirectory(subjective-c "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}")
 
+# Ensure MEMORY_PROFILING_ENABLED is consistent across the whole binary.
+# The compile definition on tiny-clj targets does NOT automatically propagate
+# into the linked static library, so we must set it on `subjective-c` itself.
+target_compile_definitions(subjective-c PUBLIC MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE})
+
 # Tiny-DB subproject (C-only KV storage stack)
 add_subdirectory(external/tiny-db)
 
@@ -508,7 +513,7 @@ target_include_directories(unit-tests
 # Since unit-tests is always built in Debug mode, DEBUG will be set via CMAKE_BUILD_TYPE
 target_compile_definitions(subjective-c PRIVATE 
     UNITY_TESTS 
-    MEMORY_PROFILING_ENABLED=0
+    MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE}
     META_ENABLED=1
     UNITY_INCLUDE_EXEC_TIME 
 )

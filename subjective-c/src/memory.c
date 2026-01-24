@@ -144,7 +144,14 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
         CljObject *obj = (CljObject*)result;
         obj->type = obj_type;  // Set type before tracking
         obj->flags = 0;  // Initialize flags
+        // IMPORTANT: initialize rc before any profiling logic that may call is_singleton().
+        // Many constructors set rc later, but the profiler needs a deterministic value here.
+        obj->rc = 1;
+#if MEMORY_PROFILING_ENABLED
+        memory_profiler_track_object_creation_sized(obj, type_size * count);
+#else
         MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj);
+#endif
     }
     
     return result;
@@ -833,13 +840,6 @@ static void release_object_default(CljObject *v) {
                     }
                     // Release captured namespace reference
                     RELEASE(func->ns);
-                    // Free function name (strdup'd in make_function)
-                    // Don't free in zombie mode - object must remain intact
-#ifndef ZOMBIE_ENABLED
-                    if (func->name) {
-                        CLJ_FREE((void*)func->name);
-                    }
-#endif
                 }
             }
             break;

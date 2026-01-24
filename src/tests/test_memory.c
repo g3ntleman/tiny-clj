@@ -256,12 +256,15 @@ TEST(test_memory_profiler_tracks_raw_alloc_blocks) {
     TEST_ASSERT_TRUE(mid.raw_blocks_current >= before.raw_blocks_current + 1);
     TEST_ASSERT_TRUE(mid.raw_bytes_current >= before.raw_bytes_current + 123);
     TEST_ASSERT_TRUE(mid.raw_allocations >= before.raw_allocations + 1);
+    TEST_ASSERT_TRUE(mid.current_memory_usage >= before.current_memory_usage + 123);
+    TEST_ASSERT_TRUE(mid.peak_memory_usage >= mid.current_memory_usage);
 
     CLJ_FREE(p);
 
     MemoryStats after = memory_profiler_get_stats();
     TEST_ASSERT_EQUAL(before.raw_blocks_current, after.raw_blocks_current);
     TEST_ASSERT_EQUAL(before.raw_bytes_current, after.raw_bytes_current);
+    TEST_ASSERT_EQUAL(before.current_memory_usage, after.current_memory_usage);
     TEST_ASSERT_TRUE(after.raw_frees >= before.raw_frees + 1);
 #else
     TEST_IGNORE();

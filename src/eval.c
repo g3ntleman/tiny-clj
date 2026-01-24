@@ -1643,7 +1643,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     if (is_closure(value)) {
         CljFunction *func = as_function(value);
         if (func && sym && sym->cname[0]) {
-            if (!func->name) func->name = strdup(sym->cname);
+            if (!func->name_sym) func->name_sym = sym;
             
             // Rewrite recursive calls to use qualified name (for TCO optimization)
             // Only if namespace is available (avoids unnecessary work)
@@ -2021,7 +2021,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     }
 
     // Create function object
-    CljFunction *fn = make_function(params, param_count, body, fn_env_stack, NULL, st ? st->current_ns : NULL);
+    CljFunction *fn = make_function(params, param_count, body, fn_env_stack, fn_name, st ? st->current_ns : NULL);
     if (fn_env_stack_owned) {
         RELEASE(fn_env_stack);
     }
