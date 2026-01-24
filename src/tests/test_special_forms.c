@@ -191,39 +191,12 @@ TEST(test_special_cond_nesting_low_level) {
     TEST_ASSERT_NOT_NULL(first_elem);
     TEST_ASSERT_TRUE(is_list_type(TAG(first_elem)));
     
-    fprintf(stderr, "[TEST] PROBLEM: list_rest_normalized returns nested structure\n");
-    fprintf(stderr, "[TEST] Expected: (cond true 1 false 2) -> rest should be (true 1 false 2)\n");
-    fprintf(stderr, "[TEST] Actual: (cond (true 1 false 2)) -> rest is ((true 1 false 2))\n");
-    fprintf(stderr, "[TEST] The first element of rest is a LIST, not a VALUE\n");
-    
     // Verify the nested structure
     CljList *nested_inner = as_list(first_elem);
     TEST_ASSERT_NOT_NULL(nested_inner);
     ID nested_first = LIST_FIRST(nested_inner);
     TEST_ASSERT_NOT_NULL(nested_first);
     TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(nested_first));
-    
-    fprintf(stderr, "[TEST] The nested list contains: (true 1 false 2)\n");
-    fprintf(stderr, "[TEST] This proves the nesting problem exists\n");
-    fprintf(stderr, "[TEST]\n");
-    fprintf(stderr, "[TEST] TRACING THE PROBLEM:\n");
-    fprintf(stderr, "[TEST] 1. eval_list_function returns LIST_REST(list_data)\n");
-    fprintf(stderr, "[TEST]    - LIST_REST returns list->rest directly\n");
-    fprintf(stderr, "[TEST]    - This should be correct, but let's verify\n");
-    fprintf(stderr, "[TEST]\n");
-    fprintf(stderr, "[TEST] 2. The problem: When (list 'cond true 1 false 2) is called,\n");
-    fprintf(stderr, "[TEST]    LIST_REST returns ('cond true 1 false 2) which is a list\n");
-    fprintf(stderr, "[TEST]    But when this list is used as argument to cond,\n");
-    fprintf(stderr, "[TEST]    it gets wrapped in another list: (cond (list 'cond true 1 false 2))\n");
-    fprintf(stderr, "[TEST]\n");
-    fprintf(stderr, "[TEST] 3. The root cause: eval_list_function returns LIST_REST directly\n");
-    fprintf(stderr, "[TEST]    If LIST_REST is already a list containing the arguments,\n");
-    fprintf(stderr, "[TEST]    then returning it directly is correct.\n");
-    fprintf(stderr, "[TEST]    But if the arguments should be FLATTENED, then LIST_REST\n");
-    fprintf(stderr, "[TEST]    might be wrapping them in an extra list.\n");
-    fprintf(stderr, "[TEST]\n");
-    fprintf(stderr, "[TEST] 4. Need to check: Does LIST_REST return the arguments as a flat list,\n");
-    fprintf(stderr, "[TEST]    or does it return them wrapped in another list?\n");
 }
 
 TEST(test_special_cond_after_macro_expansion) {

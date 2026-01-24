@@ -376,10 +376,13 @@ CljObject *autorelease(CljObject *v) {
         }
         g_pool.items = new_items;
         g_pool.capacity = new_capacity;
-#ifdef DEBUG
-        {
+        // Keep the pool growth silent by default (tests should not be noisy).
+        // To debug pool growth, compile with DEBUG and set:
+        //   TINYCLJ_DEBUG_AUTORELEASE_POOL_GROWTH=1
+#if defined(DEBUG)
+        if (getenv("TINYCLJ_DEBUG_AUTORELEASE_POOL_GROWTH")) {
             char buf[128];
-            (void)mini_snprintf(buf, sizeof(buf), "⚠️  AutoreleasePool: items grew %u -> %u\n",
+            (void)mini_snprintf(buf, sizeof(buf), "AutoreleasePool: items grew %u -> %u\n",
                                     new_capacity / 2, new_capacity);
             fputs(buf, stderr);
         }

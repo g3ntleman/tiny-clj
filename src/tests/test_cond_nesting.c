@@ -56,8 +56,6 @@ TEST(test_cond_structure_debug) {
     
     // This is where the problem shows: rest_first might be a list instead of true
     if (is_list_type(TAG(rest_first))) {
-        fprintf(stderr, "[TEST] PROBLEM: rest_first is a list, not a boolean!\n");
-        fprintf(stderr, "[TEST] This indicates the nesting problem.\n");
         TEST_FAIL_MESSAGE("cond rest_first should be a boolean, not a list");
     }
 }
@@ -92,8 +90,6 @@ TEST(test_cond_nesting_low_level) {
     TEST_ASSERT_NOT_NULL(first_elem);
     TEST_ASSERT_TRUE(is_list_type(TAG(first_elem)));
     
-    fprintf(stderr, "[TEST] list_rest_normalized returns nested structure (PROBLEM)\n");
-    
     // Test list_rest_unwrapped: should unwrap the nested list
     CljList *rest_unwrapped = list_rest_unwrapped(nested_cond);
     TEST_ASSERT_NOT_NULL(rest_unwrapped);
@@ -103,8 +99,6 @@ TEST(test_cond_nesting_low_level) {
     TEST_ASSERT_NOT_NULL(unwrapped_first);
     TEST_ASSERT_FALSE(is_list_type(TAG(unwrapped_first)));
     TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(unwrapped_first));
-    
-    fprintf(stderr, "[TEST] list_rest_unwrapped correctly unwraps the nested structure\n");
     
     // Verify the structure: (true 1 false 2)
     CljList *node = rest_unwrapped;
@@ -121,6 +115,4 @@ TEST(test_cond_nesting_low_level) {
     node = list_rest_normalized(node);
     TEST_ASSERT_NOT_NULL(node);
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(LIST_FIRST(node)));
-    
-    fprintf(stderr, "[TEST] Unwrapped structure is correct: (true 1 false 2)\n");
 }

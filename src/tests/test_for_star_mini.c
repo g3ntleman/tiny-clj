@@ -114,13 +114,11 @@ TEST_SHARED(test_for_star_mini_cartesian) {
     // Check that rest is a lazy sequence
     TEST_ASSERT_NOT_NULL_MESSAGE(rest, "Rest should not be NULL");
     if (!rest) {
-        fprintf(stderr, "ERROR: rest is NULL\n");
         return;
     }
     
     TEST_ASSERT_TRUE_MESSAGE(TAG(rest) == CLJ_LAZY_SEQ, "Rest should be a lazy sequence");
     if (TAG(rest) != CLJ_LAZY_SEQ) {
-        fprintf(stderr, "ERROR: rest tag is %u, expected CLJ_LAZY_SEQ (%u)\n", TAG(rest), CLJ_LAZY_SEQ);
         return;
     }
     
@@ -151,22 +149,14 @@ TEST_SHARED(test_for_star_mini_cartesian) {
     if (lazy_after && lazy_after->cached_rest != NOT_FOUND) {
         rest_second = lazy_after->cached_rest;
     }
-    fprintf(stderr, "  rest_second: %p (tag: %u)\n", 
-        (void*)rest_second, rest_second ? TAG(rest_second) : 0);
     TEST_ASSERT_NOT_NULL_MESSAGE(rest_second, "Rest second should not be NULL");
     if (rest_second) {
         // rest_second is a LazySeq, realize it
         CljSeqIterator *rest_second_seq = make_seq(rest_second);
         if (rest_second_seq) {
-            fprintf(stderr, "  rest_second_seq created, seq_type: %u\n", rest_second_seq->iter.seq_type);
             ID third = seq_first((ID)rest_second_seq);
-            fprintf(stderr, "  third from seq_first: %p (tag: %u)\n", 
-                (void*)third, third ? TAG(third) : 0);
+            RELEASE(rest_second_seq);
             CljLazySeq *lazy_second = as_lazy_seq(rest_second);
-            if (lazy_second) {
-                fprintf(stderr, "  lazy_second->first: %p\n", (void*)lazy_second->first);
-                fprintf(stderr, "  lazy_second->cached_rest: %p\n", (void*)lazy_second->cached_rest);
-            }
             TEST_ASSERT_NOT_NULL_MESSAGE(third, "Third element should not be NULL");
             if (third && is_vector(third)) {
                 CljVector *third_vec = as_vector(third);

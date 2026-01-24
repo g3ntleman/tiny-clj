@@ -644,8 +644,10 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 }
             }
             
-            // Then check env_stack and namespace
-            CljMap *fallback_env = ctx_env_map;
+            // Then check env_stack and namespace.
+            // If there is no env_stack, we still must use ctx->env as the fallback environment
+            // (e.g. eval_body_vector_with_base_env tests pass bindings via ctx->env only).
+            CljMap *fallback_env = ctx_env_map ? ctx_env_map : ctx->env;
             ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, fallback_env, NULL, body, get_eval_state(ctx, NULL));
             if (resolved_id != NOT_FOUND) {
                 if (!resolved_id || resolved_id == SYM_NIL) {
