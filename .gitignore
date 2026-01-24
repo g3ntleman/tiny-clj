@@ -73,6 +73,7 @@ venv/
 .lsp/
 .cache/
 
+
 # Repo-local dependencies (do not commit)
 external/espressif-tools/
 

@@ -89,9 +89,6 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
     }
 
     ID seq_val = eval_function_call(lazy->thunk, NULL, 0, NULL, st);
-    
-    // DEBUG: Print what the thunk returned (only first 3 calls)
-    static int debug_thunk_result_count = 0;
 
     st->current_ns = saved_ns;
 
@@ -114,14 +111,6 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
             if (!first_val) {
                 first_val = SYM_NIL;
             }
-        } else {
-            if (debug_thunk_result_count <= 3) {
-                fprintf(stderr, "DEBUG: native_seq returned NULL\n");
-            }
-        }
-    } else {
-        if (debug_thunk_result_count <= 3) {
-            fprintf(stderr, "DEBUG: seq_val is NULL\n");
         }
     }
     builtin_set_eval_state(NULL);
@@ -294,7 +283,6 @@ ID seq_iter_first(const SeqIterator *iter) {
             if (!lazy) return NULL;
             lazy_seq_realize(lazy);
             ID first = lazy->first;
-            static int debug_seq_iter_first_count = 0;
             if (first == NOT_FOUND) {
                 // Still not realized - return NULL
                 return NULL;
