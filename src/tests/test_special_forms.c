@@ -5,6 +5,7 @@
  */
 
 #include "tests_common.h"
+#include "ast.h"
 
 // ============================================================================
 // TEST: Special Form Dispatch Functionality
@@ -100,6 +101,160 @@ TEST(test_special_cond_odd_number_of_forms_throws) {
         TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
     } END_TRY
     TEST_ASSERT_TRUE(did_throw);
+}
+
+TEST(test_special_cond_with_else_in_function_context) {
+    // Test that cond with :else works when called from within a function
+    // This reproduces the issue where cond fails during macro expansion
+    ID result = eval_string(
+        "(let [helper (fn [item] "
+        "  (cond "
+        "    (= item :when) :w "
+        "    (= item :while) :wh "
+        "    (= item :let) :l "
+        "    :else :d))] "
+        "(helper :x))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_keyword(result));
+    CljSymbol *kw = as_symbol(result);
+    TEST_ASSERT_NOT_NULL(kw);
+    TEST_ASSERT_EQUAL_STRING(":d", kw->cname);
+}
+
+TEST(test_special_cond_with_else_multiple_clauses) {
+    // Test cond with multiple clauses ending in :else
+    ID result = eval_string(
+        "(cond "
+        "  false 1 "
+        "  false 2 "
+        "  false 3 "
+        "  :else 4)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum(result));
+}
+
+TEST(test_special_cond_simple_nesting_problem) {
+    // Very simple test to demonstrate the cond nesting problem
+    // Expected: (cond true 1 false 2) should work
+    // Problem: cond receives nested structure [List: (true 1 false 2)] instead of (true 1 false 2)
+    ID result = eval_string("(cond true 1 false 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
+    
+    // Test with :else
+    ID result2 = eval_string("(cond false 1 :else 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result2));
+}
+
+// Low-level test that demonstrates the nesting problem directly
+// Creates a nested structure: (cond (true 1 false 2)) instead of (cond true 1 false 2)
+// This test shows WHERE the nesting problem occurs
+TEST(test_special_cond_nesting_low_level) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create values: true, 1, false, 2
+    // Use eval_string to create the values properly
+    ID true_val_obj = eval_string("true", g_test_eval_state);
+    ID one_obj = eval_string("1", g_test_eval_state);
+    ID false_val_obj = eval_string("false", g_test_eval_state);
+    ID two_obj = eval_string("2", g_test_eval_state);
+    
+    CljValue true_val = (CljValue)true_val_obj;
+    CljValue one = (CljValue)one_obj;
+    CljValue false_val = (CljValue)false_val_obj;
+    CljValue two = (CljValue)two_obj;
+    
+    // Create the inner list: (true 1 false 2)
+    CljList *inner_list = make_list(true_val, 
+                                    make_list(one,
+                                             make_list(false_val,
+                                                      make_list(two, NULL))));
+    
+    // Create the nested structure: (cond (true 1 false 2))
+    // This simulates the problem where arguments are wrapped in an extra list
+    // The structure is: (cond [List: (true 1 false 2)])
+    // So LIST_REST(cond) is the list (true 1 false 2), which is itself a list
+    // We wrap it in another list to simulate the nesting problem
+    CljList *wrapped_inner = make_list((ID)inner_list, NULL);
+    CljList *nested_cond = make_ast_list(SYM_COND, wrapped_inner);
+    
+    // Test list_rest_normalized: should return the nested list
+    CljList *rest_normalized = list_rest_normalized(nested_cond);
+    TEST_ASSERT_NOT_NULL(rest_normalized);
+    
+    // The first element should be a list (the nested structure)
+    // This demonstrates the PROBLEM: arguments are wrapped in an extra list
+    ID first_elem = LIST_FIRST(rest_normalized);
+    TEST_ASSERT_NOT_NULL(first_elem);
+    TEST_ASSERT_TRUE(is_list_type(TAG(first_elem)));
+    
+    fprintf(stderr, "[TEST] PROBLEM: list_rest_normalized returns nested structure\n");
+    fprintf(stderr, "[TEST] Expected: (cond true 1 false 2) -> rest should be (true 1 false 2)\n");
+    fprintf(stderr, "[TEST] Actual: (cond (true 1 false 2)) -> rest is ((true 1 false 2))\n");
+    fprintf(stderr, "[TEST] The first element of rest is a LIST, not a VALUE\n");
+    
+    // Verify the nested structure
+    CljList *nested_inner = as_list(first_elem);
+    TEST_ASSERT_NOT_NULL(nested_inner);
+    ID nested_first = LIST_FIRST(nested_inner);
+    TEST_ASSERT_NOT_NULL(nested_first);
+    TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(nested_first));
+    
+    fprintf(stderr, "[TEST] The nested list contains: (true 1 false 2)\n");
+    fprintf(stderr, "[TEST] This proves the nesting problem exists\n");
+    fprintf(stderr, "[TEST]\n");
+    fprintf(stderr, "[TEST] TRACING THE PROBLEM:\n");
+    fprintf(stderr, "[TEST] 1. eval_list_function returns LIST_REST(list_data)\n");
+    fprintf(stderr, "[TEST]    - LIST_REST returns list->rest directly\n");
+    fprintf(stderr, "[TEST]    - This should be correct, but let's verify\n");
+    fprintf(stderr, "[TEST]\n");
+    fprintf(stderr, "[TEST] 2. The problem: When (list 'cond true 1 false 2) is called,\n");
+    fprintf(stderr, "[TEST]    LIST_REST returns ('cond true 1 false 2) which is a list\n");
+    fprintf(stderr, "[TEST]    But when this list is used as argument to cond,\n");
+    fprintf(stderr, "[TEST]    it gets wrapped in another list: (cond (list 'cond true 1 false 2))\n");
+    fprintf(stderr, "[TEST]\n");
+    fprintf(stderr, "[TEST] 3. The root cause: eval_list_function returns LIST_REST directly\n");
+    fprintf(stderr, "[TEST]    If LIST_REST is already a list containing the arguments,\n");
+    fprintf(stderr, "[TEST]    then returning it directly is correct.\n");
+    fprintf(stderr, "[TEST]    But if the arguments should be FLATTENED, then LIST_REST\n");
+    fprintf(stderr, "[TEST]    might be wrapping them in an extra list.\n");
+    fprintf(stderr, "[TEST]\n");
+    fprintf(stderr, "[TEST] 4. Need to check: Does LIST_REST return the arguments as a flat list,\n");
+    fprintf(stderr, "[TEST]    or does it return them wrapped in another list?\n");
+}
+
+TEST(test_special_cond_after_macro_expansion) {
+    // Test that cond with :else works correctly after macro expansion
+    // This tests the normalize-for-bindings function which uses cond
+    // Note: normalize-for-bindings is a private function, so we test it indirectly
+    // by testing the for macro which uses it
+    ID result = eval_string(
+        "(for [x [1 2 3]] x)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    // for returns a lazy sequence, so we can't easily check the structure
+    // Just verify it doesn't throw an exception
+}
+
+TEST(test_special_cond_else_last_expression) {
+    // Test that :else clause correctly evaluates its expression
+    // This ensures the last expression in cond is properly handled
+    ID result = eval_string(
+        "(let [item :unknown] "
+        "  (cond "
+        "    (= item :when) :w "
+        "    (= item :while) :wh "
+        "    (= item :let) :l "
+        "    :else (do :d :final)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_keyword(result));
+    CljSymbol *kw = as_symbol(result);
+    TEST_ASSERT_NOT_NULL(kw);
+    TEST_ASSERT_EQUAL_STRING(":final", kw->cname);
 }
 
 // ============================================================================

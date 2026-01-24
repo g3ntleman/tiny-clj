@@ -16,9 +16,26 @@ R"CLOJURE(
 ; ============================================================================
 ; defn Macro (bootstrap-safe: uses only def, fn, cons, list)
 ; ============================================================================
-^#^{:doc "Defines a function. Same as (def name (fn name [params] body...))."}
-(defmacro defn [name params & body]
-  (list 'def name (cons 'fn (cons name (cons params body)))))
+^#^{:doc "Defines a function. Same as (def name (fn name [params] body...)). Supports optional docstring: (defn name \"doc\" [params] body...)"}
+(defmacro defn [name & args]
+  ; Simple heuristic: if we have 3+ args and first is not a vector/list/symbol, assume it's a docstring
+  ; This works because at macro expansion time, string literals are already parsed
+  ; We check if first arg looks like params (vector) - if not and we have 3+ args, it's likely a docstring
+  (if (and (>= (count args) 3)
+           (let [first-arg (first args)]
+             (and first-arg 
+                  (not (vector? first-arg))
+                  (not (list? first-arg))
+                  (not (symbol? first-arg)))))
+    ; Has docstring: (defn name "doc" [params] body...)
+    (let [docstring (first args)
+          params (second args)
+          body (nnext args)]
+      (list 'def name (cons 'fn (cons name (cons params body)))))
+    ; No docstring: (defn name [params] body...)
+    (let [params (first args)
+          body (rest args)]
+      (list 'def name (cons 'fn (cons name (cons params body)))))))
 
 ; ============================================================================
 ; Core Collection Functions (must be defined early - used by other functions)
@@ -1070,37 +1087,39 @@ R"CLOJURE(
 ; ============================================================================
 ; for Macro Helper Function and Macro (requires destructure)
 ; ============================================================================
+; TEST: helper as global function to see if it fixes the nesting problem
+(defn normalize-for-bindings-helper [result remaining]
+  (if (empty? remaining)
+    result
+    (let [item (first remaining)]
+      (cond
+        (= item :when)
+        (normalize-for-bindings-helper (conj result :when (second remaining))
+                                       (nnext remaining))
+        (= item :while)
+        (normalize-for-bindings-helper (conj result :while (second remaining))
+                                       (nnext remaining))
+        (= item :let)
+        (let [let-bindings (second remaining)
+              flat-bindings (destructure let-bindings)]
+          (normalize-for-bindings-helper (conj result :let (vec flat-bindings))
+                                         (nnext remaining)))
+        :else
+        (let [pattern item
+              expr (second remaining)]
+          (if (symbol? pattern)
+            ;; simple symbol - keep as-is
+            (normalize-for-bindings-helper (conj result pattern expr)
+                                           (nnext remaining))
+            ;; destructuring pattern - gensym + :let
+            (let [g (gensym "for__")
+                  destructured (destructure [pattern g])
+                  destructured-vec (vec destructured)]
+              (normalize-for-bindings-helper (conj (conj (conj (conj result g) expr) :let) destructured-vec)
+                                             (nnext remaining)))))))))
+
 (defn normalize-for-bindings [bindings]
-  (let [helper (fn helper [result remaining]
-                 (if (empty? remaining)
-                   result
-                   (let [item (first remaining)]
-                     (cond
-                       (= item :when)
-                       (helper (conj result :when (second remaining))
-                              (nnext remaining))
-                       (= item :while)
-                       (helper (conj result :while (second remaining))
-                              (nnext remaining))
-                       (= item :let)
-                       (let [let-bindings (second remaining)
-                             flat-bindings (destructure let-bindings)]
-                         (helper (conj result :let (vec flat-bindings))
-                                (nnext remaining)))
-                       :else
-                       (let [pattern item
-                             expr (second remaining)]
-                         (if (symbol? pattern)
-                           ;; simple symbol - keep as-is
-                           (helper (conj result pattern expr)
-                                  (nnext remaining))
-                           ;; destructuring pattern - gensym + :let
-                           (let [g (gensym "for__")
-                                 destructured (destructure [pattern g])
-                                 destructured-vec (vec destructured)]
-                             (helper (conj (conj (conj (conj result g) expr) :let) destructured-vec)
-                                    (nnext remaining)))))))))]
-    (helper [] (seq bindings))))
+  (normalize-for-bindings-helper [] (seq bindings)))
 
 ^#^{:doc "List comprehension. Expands to for* and normalizes bindings (supports :when/:let/:while and destructuring)."}
 (defmacro for [bindings body]
@@ -1257,5 +1276,4 @@ This is called synchronously from atom operations (reset!/swap!)."}
 (ns Thread)
 (defn sleep [ms] (clojure.core/sleep ms))
 (ns clojure.core)
-
 )CLOJURE"

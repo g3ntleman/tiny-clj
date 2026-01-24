@@ -26,6 +26,7 @@
 #include "symbol_token.h"
 #include "eval.h"    // For eval_function_call
 #include "macro.h"   // For lookup_macro_resolve
+#include "debug.h"   // For print_ast
 // is_special_symbol is in symbol.h (already included)
 #include <string.h>
 #include <stdlib.h>
@@ -445,6 +446,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 if (st && macro && ((CljFunction*)macro)->ns) {
                     st->current_ns = ((CljFunction*)macro)->ns;
                 }
+                
                 ID expanded = eval_function_call((CljObject*)macro, args, argc, NULL, st);
                 if (st) {
                     st->current_ns = saved_ns;
