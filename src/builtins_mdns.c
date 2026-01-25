@@ -513,13 +513,11 @@ static void mdns_emit_event(void *ctx, MdnsEventType type, const MdnsResolvedSer
 
     // This function can be called from platform network callbacks (e.g. macOS CFRunLoop
     // socket callbacks). Those do not necessarily run with an active autorelease pool.
-    // Many collection/string helpers use AUTORELEASE internally, so ensure a pool exists.
-    AUTORELEASE_POOL_BEGIN();
-
+    WITH_AUTORELEASE_POOL({
     mdns_init_keywords();
 
     CljMap *ev = make_map(6);
-    if (!ev) { AUTORELEASE_POOL_END(); return; }
+    if (!ev) { autorelease_pool_drain_to_depth((uint32_t)pool_restore_depth); return; }
 
     ID type_val = NULL;
     if (type == MDNS_EVENT_INSTANCE_FOUND) type_val = kw_instance_found;
@@ -566,11 +564,10 @@ static void mdns_emit_event(void *ctx, MdnsEventType type, const MdnsResolvedSer
         (void)eval_function_call(m->on_event_fn, args, 1, NULL, st);
     } CATCH(ex) {
         (void)ex;
-        // Swallow to avoid crashing platform callback.
     } END_TRY
 
     RELEASE((ID)ev);
-    AUTORELEASE_POOL_END();
+    });
 }
 
 static void mdns_recv_bridge(void *ctx,

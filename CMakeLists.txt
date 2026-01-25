@@ -189,7 +189,6 @@ list(APPEND SOURCES
     src/debug.c
     src/seq.c
     src/error_messages.c
-    src/memory_profiler.c
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
@@ -261,7 +260,6 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/debug.c
     src/seq.c
     src/error_messages.c
-    src/memory_profiler.c
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
@@ -645,7 +643,6 @@ set(COMMON_TEST_SOURCES
     src/equality.c
     src/list.c
     src/seq.c
-    src/memory_profiler.c
     src/runtime.c
     src/clojure_core.c
     src/line_editor.c
