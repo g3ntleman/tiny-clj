@@ -6,6 +6,7 @@
  */
 
 #include "memory.h"
+#include "common.h"  // CLJ_ASSERT
 #include "runtime.h"
 #include "object.h"
 #include "vector.h"
@@ -41,24 +42,15 @@
 // promotion mechanism is no longer used.
 
 // ============================================================================
-// AUTORELEASE POOL (flat)
+// AUTORELEASE POOL (nested)
 // ============================================================================
 //
-// Pool is flat: items[] + depth (0|1). Caller passes target depth to drain_to_depth(d).
-// depth==0: inactive. depth==1: active; ensure_active sets depth=1 (count is 0 at ensure).
-// drain_to_depth(d): when depth>d, release [0,count), count=0, depth=0.
+// Pool is CLJ_VECTOR_TRANSIENT_WEAK. _restore = vector_count at block start (mark);
+// drain_to_depth(mark) RELEASEs [mark,count) and vector_truncate to mark.
 
 #define POOL_INITIAL_CAPACITY 1024
 
-typedef struct {
-    CljObject **items;
-    uint32_t count;
-    uint32_t capacity;
-    uint32_t depth;  // 0 or 1; current state for while(depth>d) in drain_to_depth
-} AutoreleasePoolState;
-
-// Thread-local pool state
-static THREAD_LOCAL AutoreleasePoolState g_pool = {0};
+static THREAD_LOCAL CljVector *g_pool = NULL;
 
 #ifdef DEBUG
 static THREAD_LOCAL uint32_t g_pool_peak_count = 0;
@@ -134,8 +126,6 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
 // AUTORELEASE POOL IMPLEMENTATION
 // ============================================================================
 
-// MAX_POOL_DEPTH is defined in runtime.h
-
 // Forward declarations
 static void release_object_deep(CljObject *v);
 static void release_object_default(CljObject *v);
@@ -149,13 +139,8 @@ static bool g_release_dispatch_initialized = false;
  * from runtime_init().
  */
 void autorelease_pool_init(void) {
-    if (g_pool.items) return;  // Already initialized
-    
-    g_pool.capacity = POOL_INITIAL_CAPACITY;
-    g_pool.items = (CljObject**)CLJ_MALLOC(sizeof(CljObject*) * g_pool.capacity);
-    g_pool.count = 0;
-    g_pool.depth = 0;
-
+    if (g_pool) return;
+    g_pool = make_vector(POOL_INITIAL_CAPACITY, CLJ_VECTOR_TRANSIENT_WEAK);
 #ifdef DEBUG
     g_pool_peak_count = 0;
 #endif
@@ -284,14 +269,8 @@ void release(CljObject *v) {
         if (g_debug_output_active) {
             LOGF(stdout, "🔍 release: Object %p will be freed (rc=0)\n", v);
         }
+        CLJ_ASSERT((autorelease_count(v) == 0) && "Object v still in autorelease pool; will double-release");
 
-        // Release contained values (for containers)
-        // Note: rc is already 0 at this point (after decrement).
-        // In zombie mode, rc=0 means the object is a zombie (freed but not DEALLOCed).
-        // release_object_deep() uses direct casts in release_object_default() (not as_*() functions),
-        // so it's safe to call even when rc=0 (zombie mode).
-        release_object_deep(v);
-        
 #ifdef ZOMBIE_ENABLED
         // In zombie mode: DON'T free the object, keep it at rc=0 for inspection
         // The object remains in memory so we can examine it later
@@ -302,6 +281,7 @@ void release(CljObject *v) {
         }
 #else
         // Normal mode: free the object
+        release_object_deep(v);
         DEALLOC(v);
         if (g_debug_output_active) {
             LOGF(stdout, "🔍 release: Object %p freed\n", v);
@@ -310,53 +290,26 @@ void release(CljObject *v) {
     }
 }
 
-/** Ensure pool is active when depth==0 (for WITH_AUTORELEASE_POOL). */
 void autorelease_pool_ensure_active(void) {
-    if (!g_pool.items) autorelease_pool_init();
-    if (g_pool.depth == 0) g_pool.depth = 1;
+    if (!g_pool) autorelease_pool_init();
 }
 
-/** Add object to pool. Ensures active when depth==0. Grows items when needed. COW: no RETAIN. */
+/** @brief Return vector count as mark for WITH_AUTORELEASE_POOL. Ensures pool is active. */
+uint32_t autorelease_pool_mark(void) {
+    autorelease_pool_ensure_active();
+    return g_pool ? (uint32_t)vector_count(g_pool) : 0u;
+}
+
+/** Add object to pool. TRANSIENT_WEAK: no RETAIN. Push via ASSIGN + vector_conj_owned. */
 CljObject *autorelease(CljObject *v) {
     if (!v) return NULL;
-    CLJ_ASSERT(g_pool.items && "autorelease_pool_init() not called");
-    autorelease_pool_ensure_active();
-    // Grow items array if needed
-    if (g_pool.count >= g_pool.capacity) {
-        uint32_t new_capacity = g_pool.capacity * 2;
-        CljObject **new_items = (CljObject**)CLJ_REALLOC(g_pool.items, sizeof(CljObject*) * new_capacity);
-        if (!new_items) {
-            // Out of memory: stop tracking rather than crashing.
-            // NOTE: pool has weak semantics (debug/profiling only), so leaking tracking is acceptable.
-            return v;
-        }
-        g_pool.items = new_items;
-        g_pool.capacity = new_capacity;
-        // Keep the pool growth silent by default (tests should not be noisy).
-        // To debug pool growth, compile with DEBUG and set:
-        //   TINYCLJ_DEBUG_AUTORELEASE_POOL_GROWTH=1
-#if defined(DEBUG)
-        if (getenv("TINYCLJ_DEBUG_AUTORELEASE_POOL_GROWTH")) {
-            char buf[128];
-            (void)mini_snprintf(buf, sizeof(buf), "AutoreleasePool: items grew %u -> %u\n",
-                                    new_capacity / 2, new_capacity);
-            fputs(buf, stderr);
-        }
-#endif
-    }
-    
-    // Append object (no RETAIN - COW friendly!)
-    g_pool.items[g_pool.count++] = v;
-
+    CLJ_ASSERT(g_pool && "autorelease_pool_init() not called");
+    ASSIGN(g_pool, vector_conj_owned(g_pool, v));
 #ifdef DEBUG
-    if (g_pool.count > g_pool_peak_count) {
-        g_pool_peak_count = g_pool.count;
-    }
+    if (vector_count(g_pool) > g_pool_peak_count)
+        g_pool_peak_count = vector_count(g_pool);
 #endif
-    
-    // Track for memory profiling
     MEMORY_PROFILER_TRACK_AUTORELEASE(v);
-    
     return v;
 }
 
@@ -370,77 +323,51 @@ uint32_t autorelease_pool_peak_count(void) {
 
 void autorelease_pool_peak_reset(void) {
 #ifdef DEBUG
-    if (!g_pool.items) {
-        g_pool_peak_count = 0;
-        return;
-    }
-    g_pool_peak_count = g_pool.count;
+    if (!g_pool) { g_pool_peak_count = 0; return; }
+    g_pool_peak_count = vector_count(g_pool);
 #else
-    // no-op in non-debug builds
+    (void)0;
 #endif
 }
 
 #ifdef DEBUG
-/** @brief Check if an object is in the autorelease pool (O(n) search)
- * 
- * @param obj Object to check
- * @return true if object is in the current autorelease pool, false otherwise
- * 
- * Debug-only function that searches through the autorelease pool items array
- * to determine if the given object is currently autoreleased.
- * This is O(n) where n is the number of objects in the pool.
- */
-bool is_autoreleased(CljObject *obj) {
-    if (!obj || !g_pool.items) {
-        return false;
-    }
-    
-    // Search through all items in the pool
-    for (uint32_t i = 0; i < g_pool.count; i++) {
-        if (g_pool.items[i] == obj) {
-            return true;
-        }
-    }
-    
-    return false;
+/** @brief Number of occurrences of obj in the autorelease pool (debug). O(pool count). */
+uint32_t autorelease_count(CljObject *obj) {
+    if (!obj || !g_pool) return 0;
+    uint32_t n = 0;
+    unsigned int c = vector_count(g_pool);
+    ID *arr = vector_as_array(g_pool);
+    for (unsigned int i = 0; i < c; i++)
+        if (arr[i] == obj) n++;
+    return n;
 }
-#endif // DEBUG
+#endif
 
 // ============================================================================
 
-/** @brief Check if autorelease pool is active
- * 
- * @return true if there is an active autorelease pool, false otherwise
- * 
- * Useful for debugging and ensuring proper pool management.
- */
-bool is_autorelease_pool_active(void) { return g_pool.depth > 0; }
+/** @brief True if the autorelease pool exists (and is thus active). */
+bool is_autorelease_pool_active(void) { return g_pool != NULL; }
 
-uint32_t autorelease_pool_depth(void) { return g_pool.depth; }
+uint32_t autorelease_pool_depth(void) { return 0u; }
 
-void autorelease_pool_drain_to_depth(uint32_t d) {
-    while (g_pool.depth > d) {
-        if (g_debug_output_active)
-            LOGF(stdout, "🔍 autorelease_pool_drain: clearing %u objects\n", (unsigned)g_pool.count);
-        for (uint32_t i = 0; i < g_pool.count; i++) {
-            CljObject *obj = g_pool.items[i];
-            CLJ_ASSERT(obj && "autorelease pool entry must not be NULL");
-            g_pool.items[i] = NULL;
-            release(obj);
-        }
-        g_pool.count = 0;
-        g_pool.depth = 0;
+void autorelease_pool_drain_to_depth(uint32_t mark) {
+    if (!g_pool) return;
+    unsigned int c = vector_count(g_pool);
+    if (g_debug_output_active && c > mark)
+        LOGF(stdout, "🔍 autorelease_pool_drain: [%u..%u)\n", (unsigned)mark, (unsigned)c);
+    for (unsigned int i = c; i > mark; ) {
+        i--;
+        ID e = vector_nth(g_pool, i);
+        CLJ_ASSERT(e && "pool entry must not be NULL");
+        vector_truncate(g_pool, i);
+        RELEASE(e);
     }
 }
 
-/** @brief Cleanup pool state (call at program exit or runtime reset)
- */
+/** @brief Cleanup pool state (call at program exit or runtime reset). */
 void autorelease_pool_free(void) {
     autorelease_pool_drain_to_depth(0);
-    if (g_pool.items) { CLJ_FREE(g_pool.items); g_pool.items = NULL; }
-    g_pool.count = 0;
-    g_pool.capacity = 0;
-    g_pool.depth = 0;
+    if (g_pool) { RELEASE(g_pool); g_pool = NULL; }
 }
 
 /** @brief Get retain count of object

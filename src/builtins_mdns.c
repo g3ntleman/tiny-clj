@@ -517,7 +517,7 @@ static void mdns_emit_event(void *ctx, MdnsEventType type, const MdnsResolvedSer
     mdns_init_keywords();
 
     CljMap *ev = make_map(6);
-    if (!ev) { autorelease_pool_drain_to_depth((uint32_t)pool_restore_depth); return; }
+    if (!ev) { autorelease_pool_drain_to_depth(_restore); return; }
 
     ID type_val = NULL;
     if (type == MDNS_EVENT_INSTANCE_FOUND) type_val = kw_instance_found;
