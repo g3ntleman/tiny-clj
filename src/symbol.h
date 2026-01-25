@@ -205,13 +205,13 @@ extern CljSymbol *SYM_LIST_BATCH;
 
 // Helpers
 void symbol_table_add(CljSymbol *symbol);
-void symbol_table_cleanup();
+void symbol_table_cleanup(void);
 
 struct CljNamespace;
 struct CljNamespace* symbol_get_namespace(CljSymbol *sym);
 const char* symbol_get_namespace_name(CljSymbol *sym);
 
-void init_special_symbols();
+void init_special_symbols(void);
 
 // Static symbol data for builtin registration
 typedef struct StaticSymbolData {

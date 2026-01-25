@@ -24,7 +24,7 @@ ID native_vector(ID *args, unsigned int argc);
 // Legacy apply_builtin removed - all builtins now use namespace registration
 
 // Builtins registration
-void register_builtins();
+void register_builtins(void);
 
 // Native function lookup for stubs
 // Returns NULL if not found

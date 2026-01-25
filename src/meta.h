@@ -17,8 +17,8 @@ extern CljObject *meta_registry;
 void meta_set(ID v, ID meta);
 ID meta_get(ID v);
 void meta_clear(ID v);
-void meta_registry_init();
-void meta_registry_cleanup();
+void meta_registry_init(void);
+void meta_registry_cleanup(void);
 
 // Helper function for source code location metadata
 // Note: Uses void* to avoid circular dependencies in header
