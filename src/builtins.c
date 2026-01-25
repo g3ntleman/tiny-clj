@@ -4292,7 +4292,7 @@ static bool eval_source_in_current_state(const char *src, const char *src_name, 
         // Save reader position before parsing to detect if we're stuck
         size_t pos_before = reader_offset(&reader);
 
-        AUTORELEASE_POOL_BEGIN();
+        WITH_AUTORELEASE_POOL({
         CljValue form = NULL;
         TRY
         {
@@ -4301,40 +4301,33 @@ static bool eval_source_in_current_state(const char *src, const char *src_name, 
             {
                 if (reader_is_eof(&reader))
                 {
-                    AUTORELEASE_POOL_END();
+                    autorelease_pool_drain_to_depth((uint32_t)pool_restore_depth);
                     break;
                 }
-                // Parse failed - skip to next line to avoid infinite loop
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n')
                     reader_next(&reader);
                 if (!reader_is_eof(&reader))
                     reader_next(&reader);
-                AUTORELEASE_POOL_END();
+                autorelease_pool_drain_to_depth((uint32_t)pool_restore_depth);
                 continue;
             }
 
             (void)eval_parsed(form, st, NULL);
-            // value_by_parsing_expr returns AUTORELEASE object
             success_count++;
 
-            // Check if reader advanced (to detect infinite loops)
             size_t pos_after = reader_offset(&reader);
             if (pos_after == pos_before && !reader_is_eof(&reader))
-            {
-                // Reader didn't advance - skip character to avoid infinite loop
                 reader_next(&reader);
-            }
         }
         CATCH(ex)
         {
-            // Skip to next line to avoid infinite loop
             while (!reader_is_eof(&reader) && reader_current(&reader) != '\n')
                 reader_next(&reader);
             if (!reader_is_eof(&reader))
                 reader_next(&reader);
         }
         END_TRY
-        AUTORELEASE_POOL_END();
+        });
     }
     // Return true if at least some expressions succeeded (partial loading is OK)
     return success_count > 0;

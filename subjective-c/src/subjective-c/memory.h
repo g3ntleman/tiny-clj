@@ -9,8 +9,7 @@
 #include <stdlib.h> // malloc/free/realloc/calloc
 #include <string.h> // strlen/memcpy
 
-// memory_profiler.h lives in tiny-clj (not in subjective-c).
-// Only include it when profiling is explicitly enabled.
+// memory_profiler.h lives in subjective-c. Include when profiling enabled.
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 #include "memory_profiler.h"
 // Functions are declared in memory_profiler.h, no need for no-op macros
@@ -29,8 +28,8 @@ void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn);
 
 void retain(CljObject *v);
 void release(CljObject *v);
-void enable_memory_debug_output(void);
-void disable_memory_debug_output(void);
+void memory_set_debug_output_enabled(bool enabled);
+bool memory_get_debug_output_enabled(void);
 CljObject *autorelease(CljObject *v);
 bool is_pointer_in_data_segment(const void *ptr);
 bool is_pointer_on_stack(const void *ptr);
@@ -135,9 +134,7 @@ int retain_count(ID obj);
 // Autorelease pool API (checkpoint-based implementation)
 void autorelease_pool_init(void);     // Call once at startup
 void autorelease_pool_push(void);      // Push new checkpoint
-void autorelease_pool_pop(void);       // Pop current checkpoint
-void autorelease_pool_drain_after_exception(void);
-void autorelease_pool_destroy(void);
+void autorelease_pool_free(void);
 bool is_autorelease_pool_active(void);
 
 // Pool depth helpers (for exception-safe cleanup without underflowing outer pools).
@@ -316,17 +313,11 @@ void* alloc(size_t type_size, size_t count, CljType obj_type);
 
 // WITH_AUTORELEASE_POOL is essential and must be available in all builds
 #define WITH_AUTORELEASE_POOL(code) do { \
-    autorelease_pool_push(); \
-    TRY { \
-        code; \
-        autorelease_pool_pop(); \
-    } CATCH(ex) { \
-        autorelease_pool_pop(); \
-        THROW(ex); \
-    } END_TRY \
+    int pool_restore_depth = autorelease_pool_depth(); \
+    code; \
+    autorelease_pool_drain_to_depth(pool_restore_depth); \
 } while(0)
 
-#define AUTORELEASE_POOL_BEGIN() autorelease_pool_push()
-#define AUTORELEASE_POOL_END() autorelease_pool_pop()
+
 
 #endif // SUBJECTIVE_C_MEMORY_H

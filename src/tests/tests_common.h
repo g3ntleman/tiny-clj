@@ -32,7 +32,7 @@
 #include "../object.h"
 #include "exception.h"  // Must be included before memory.h for WITH_AUTORELEASE_POOL
 #include "memory.h"
-#include "../memory_profiler.h"
+#include "memory_profiler.h"
 #include "value.h"
 #include "../builtins.h"
 #include "../symbol.h"

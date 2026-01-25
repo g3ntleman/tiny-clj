@@ -186,48 +186,28 @@ bool eval_multiform_string(const char *code, EvalState *st) {
             break;
         }
 
-        AUTORELEASE_POOL_BEGIN();
         bool should_break = false;
-
+        WITH_AUTORELEASE_POOL({
         // Save current namespace in local variable before TRY - preserved by setjmp
         CljNamespace *saved_ns = st ? st->current_ns : NULL;
 
-        // Use TRY/CATCH to handle exceptions for each expression
         TRY {
             CljValue parsed = parse_from_reader(&reader, st);
             ID eval_result = eval_parsed_value(parsed, st);
             print_result(eval_result);
-
-            // Check for EOF after processing (in case this was the last expression)
-            if (reader_is_eof(&reader)) {
-                should_break = true; // Normal EOF, exit loop after pool pop
-            }
-
+            if (reader_is_eof(&reader)) { should_break = true; }
         } CATCH(ex) {
-            // Restore namespace from local variable on exception
-            if (st && saved_ns) {
-                st->current_ns = saved_ns;
-            }
-            // Print exception and continue with next expression
+            if (st && saved_ns) { st->current_ns = saved_ns; }
             print_exception((CLJException*)ex);
-            result = false; // Mark as failed, but continue processing
-            // Note: History is saved after evaluation in run_interactive_repl
-            // No need to save here to avoid double-saving and memory issues
-
-            // Skip to next line to avoid infinite loop on same expression
-            while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') {
+            result = false;
+            while (!reader_is_eof(&reader) && reader_current(&reader) != '\n')
                 reader_next(&reader);
-            }
-            if (!reader_is_eof(&reader)) {
-                reader_next(&reader); // consume the newline
-            }
+            if (!reader_is_eof(&reader)) { reader_next(&reader); }
         } END_TRY
 
-        AUTORELEASE_POOL_END();
+        });
 
-        if (should_break) {
-            break;
-        }
+        if (should_break) { break; }
     }
 
     return result;
@@ -461,7 +441,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     // Enable verbose memory debugging if requested
     if (memory_debug) {
         set_memory_verbose_mode(true);
-        enable_memory_debug_output();
+        memory_set_debug_output_enabled(true);
     }
 #endif
 
@@ -675,9 +655,7 @@ int main(int argc, char **argv) {
     enable_memory_profiling(true);
     set_memory_leak_reporting_enabled(false);
     set_memory_verbose_mode(false);
-    // Keep memory.c debug-output cache consistent.
-    extern void memory_update_debug_output_active(void);
-    memory_update_debug_output_active();
+    memory_set_debug_output_enabled(memory_get_debug_output_enabled());
 #endif
     platform_init();
     runtime_init(&g_runtime);

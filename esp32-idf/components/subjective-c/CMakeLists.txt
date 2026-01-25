@@ -1,5 +1,7 @@
 idf_component_register(
   SRCS
+    "../../../subjective-c/src/platform_allocated_size.c"
+    "../../../subjective-c/src/memory_profiler.c"
     "../../../subjective-c/src/value.c"
     "../../../subjective-c/src/types.c"
     "../../../subjective-c/src/memory.c"
