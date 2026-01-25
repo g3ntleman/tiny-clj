@@ -93,7 +93,8 @@ static inline void update_debug_output_active(void) {
     g_debug_output_active = g_memory_profiling_enabled && g_memory_verbose_mode && g_debug_output_enabled;
 }
 
-
+static SubjectiveCZombieLogFn g_zombie_log_fn = NULL;
+void subjective_c_set_zombie_log_fn(SubjectiveCZombieLogFn fn) { g_zombie_log_fn = fn; }
 
 void memory_set_debug_output_enabled(bool enabled) {
     g_debug_output_enabled = enabled;
@@ -272,6 +273,9 @@ void release(CljObject *v) {
     if (v->rc == 0) {
         // Keep diagnostics short: zombie/debug builds can otherwise flood output.
         LOGF(stderr, "DOUBLE-FREE: object=%p type=%s (rc=0)\n", v, clj_type_name(v->type));
+#ifdef ZOMBIE_ENABLED
+        if (g_zombie_log_fn) g_zombie_log_fn(v, true);
+#endif
         #if defined(SUBJECTIVE_C_HAVE_EXECINFO) && SUBJECTIVE_C_HAVE_EXECINFO
         void *trace[32];
         int trace_count = backtrace(trace, (int)(sizeof(trace) / sizeof(trace[0])));
@@ -307,6 +311,7 @@ void release(CljObject *v) {
         // In zombie mode: DON'T free the object, keep it at rc=0 for inspection
         // The object remains in memory so we can examine it later
         // rc is already 0, so no need to set it again
+        if (g_zombie_log_fn) g_zombie_log_fn(v, false);
         if (g_debug_output_active) {
             LOGF(stdout, "🔍 release: Object %p marked as zombie (rc=0, not DEALLOCed)\n", v);
         }
