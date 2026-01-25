@@ -231,6 +231,13 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         builtin_set_eval_state(st);
         ID result = native_func->fn(args, argc);
         builtin_set_eval_state(NULL); // Clear after call
+        // Native functions do not retain args; caller must release. (eval_arg returns
+        // AUTORELEASE'd values; pool is weak/track-only, so we release here to avoid
+        // leaks for temporaries like (range 4000) in (reduce + (range 4000)).)
+        for (unsigned int i = 0; i < argc; i++) {
+            if (args[i] && !IS_IMMEDIATE(args[i]) && args[i] != result)
+                RELEASE(args[i]);
+        }
         return result;
     }
 

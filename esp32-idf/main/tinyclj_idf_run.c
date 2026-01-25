@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "memory.h"
 #include "platform.h"
 #include "runtime.h"
 #include "builtins.h"
@@ -47,15 +48,15 @@ static void eval_and_print(const char *code, EvalState *st) {
         reader_skip_all(&reader);
         if (reader_is_eof(&reader)) break;
 
-        AUTORELEASE_POOL_BEGIN();
-        TRY {
-            CljValue parsed = parse_from_reader(&reader, st);
-            ID res = eval_parsed_value(parsed, st);
-            print_result(res);
-        } CATCH(ex) {
-            print_exception((CLJException*)ex);
-        } END_TRY
-        AUTORELEASE_POOL_END();
+        WITH_AUTORELEASE_POOL(
+            TRY {
+                CljValue parsed = parse_from_reader(&reader, st);
+                ID res = eval_parsed_value(parsed, st);
+                print_result(res);
+            } CATCH(ex) {
+                print_exception((CLJException*)ex);
+            } END_TRY
+        );
     }
 }
 
