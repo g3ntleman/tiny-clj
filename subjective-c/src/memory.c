@@ -93,31 +93,15 @@ static inline void update_debug_output_active(void) {
     g_debug_output_active = g_memory_profiling_enabled && g_memory_verbose_mode && g_debug_output_enabled;
 }
 
-#ifdef DEBUG
-// Zombie mode is controlled by ZOMBIE_ENABLED macro at compile time
-// No runtime variable needed - if ZOMBIE_ENABLED is defined, zombie mode is active
-#ifdef ZOMBIE_ENABLED
-// Intentionally no compile-time warning: this project reports zombie mode via runtime build info.
-#endif
-#else
-// Release builds: zombie mode not available
-#endif
 
-// Function to enable debug output after initialization
-void enable_memory_debug_output(void) {
-    g_debug_output_enabled = true;
+
+void memory_set_debug_output_enabled(bool enabled) {
+    g_debug_output_enabled = enabled;
     update_debug_output_active();
 }
 
-// Function to disable debug output
-void disable_memory_debug_output(void) {
-    g_debug_output_enabled = false;
-    update_debug_output_active();
-}
-
-// Public function to update cached debug output flag (called from memory_profiler.c)
-void memory_update_debug_output_active(void) {
-    update_debug_output_active();
+bool memory_get_debug_output_enabled(void) {
+    return g_debug_output_enabled;
 }
 
 // ============================================================================
@@ -518,9 +502,8 @@ void autorelease_pool_push() {
  * 
  * @return void (no parameters)
  * 
- * Removes the checkpoint. Objects are NOT released (weak/track-only semantics).
- *
- * The pool is used for debug/profiling visibility, but does not own objects.
+ * Removes the checkpoint. Objects are released (delayed from theautrelease call).
+ * Callers must ensure object that need to survive the pool pop, are explicitly retained).
  */
 void autorelease_pool_pop(void) {
     
@@ -556,39 +539,17 @@ void autorelease_pool_pop(void) {
              (unsigned)(g_pool.count - checkpoint), (unsigned)checkpoint, (unsigned)g_pool.count);
     }
     
-    // Weak semantics: forget items, do not release them.
+    // Release each object in [checkpoint, count)
+    for (uint32_t i = checkpoint; i < g_pool.count; i++) {
+        CljObject *obj = g_pool.items[i];
+        CLJ_ASSERT(obj && "Object in autorelease pool should never be NULL");
+        g_pool.items[i] = NULL;
+        release(obj);
+    }    
     g_pool.count = checkpoint;
 }
 
-// Exception-safe cleanup function (called from CATCH blocks)
-void autorelease_pool_drain_after_exception(void) {
-    // Drain all pools
-    while (g_pool.cp_count > 0) {
-        autorelease_pool_pop();
-    }
-}
 
-/** @brief Pop and drain current autorelease pool (most common usage)
- * 
- * Pops the current autorelease pool and releases all objects in it.
- * This is the most common way to use autorelease pools.
- */
-// Removed: autorelease_pool_pop() - use autorelease_pool_pop_specific() instead
-
-/** @brief Pop and drain specific autorelease pool (advanced usage)
- * 
- * @param pool Specific pool to pop (must be the current top or NULL)
- * 
- * Allows popping a specific pool, useful for advanced memory management
- * scenarios where you need fine-grained control over pool lifetimes.
- */
-
-/** @brief Legacy API: Pop and drain given autorelease pool (backward compatibility)
- * 
- * @param pool Pool to pop
- * 
- * Kept for backward compatibility with existing code.
- */
 
 /** @brief Check if autorelease pool is active
  * 
@@ -613,7 +574,7 @@ void autorelease_pool_drain_to_depth(uint32_t depth) {
 
 /** @brief Cleanup pool state (call at program exit or runtime reset)
  */
-void autorelease_pool_destroy(void) {
+void autorelease_pool_free(void) {
     // Drain all remaining pools
     autorelease_pool_drain_to_depth(0);
     
