@@ -135,13 +135,13 @@ static inline char *clj_strdup(const char *s) {
  */
 int retain_count(ID obj);
 
-// Autorelease pool API (checkpoint-based implementation)
-void autorelease_pool_init(void);     // Call once at startup
+// Autorelease pool API (flat). autorelease_pool_ensure_active() or autorelease() when depth==0.
+void autorelease_pool_init(void);
+void autorelease_pool_ensure_active(void);  // no-op when depth>0; for WITH_AUTORELEASE_POOL
 void autorelease_pool_free(void);
 bool is_autorelease_pool_active(void);
 
-// Pool depth helpers (for exception-safe cleanup without underflowing outer pools).
-// Depth is the number of active checkpoints (push count - pop count).
+// depth: 0=inactive, 1=active. drain_to_depth(d) for exception-safe cleanup.
 uint32_t autorelease_pool_depth(void);
 void autorelease_pool_drain_to_depth(uint32_t depth);
 
@@ -314,9 +314,10 @@ void* alloc(size_t type_size, size_t count, CljType obj_type);
 // AUTORELEASE POOL MACROS - Always available in all builds
 // ============================================================================
 
-// WITH_AUTORELEASE_POOL is essential and must be available in all builds
+// WITH_AUTORELEASE_POOL: run code with an active pool. Ensures active when depth==0.
 #define WITH_AUTORELEASE_POOL(code) do { \
-    int pool_restore_depth = autorelease_pool_depth(); \
+    uint32_t pool_restore_depth = autorelease_pool_depth(); \
+    if (pool_restore_depth == 0) autorelease_pool_ensure_active(); \
     code; \
     autorelease_pool_drain_to_depth(pool_restore_depth); \
 } while(0)

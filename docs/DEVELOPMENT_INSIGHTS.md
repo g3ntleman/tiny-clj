@@ -1484,7 +1484,6 @@ static void test_group_memory(void) {
 void setUp(void) {
     init_special_symbols();
     meta_registry_init();
-    autorelease_pool_push();
     MEMORY_PROFILER_INIT();
 }
 

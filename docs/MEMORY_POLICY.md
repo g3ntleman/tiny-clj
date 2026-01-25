@@ -311,12 +311,14 @@ vector_conj_inplace(&vec, item);  // rc stays 1 → COW works!
 
 **Important:** `WITH_AUTORELEASE_POOL` provides exception-safe memory cleanup. The same object can appear multiple times in a pool - this is normal.
 
-### Balanced Push/Pop Operations
+### Balanced Pool Usage
 
-**`autorelease_pool_pop()` on empty stack** indicates unbalanced operations:
+**Unbalanced use** (AUTORELEASE without pool, early return or throw from `WITH_AUTORELEASE_POOL`):
 - Missing `WITH_AUTORELEASE_POOL` wrappers
 - Early returns from pool scope
 - Exceptions jumping out of pool scope
+
+`autorelease_pool_drain_to_depth(d)` when depth is already ≤ d is a no-op.
 
 ```c
 // ❌ WRONG: AUTORELEASE without pool, early return, exception from pool
@@ -330,13 +332,13 @@ WITH_AUTORELEASE_POOL({
 WITH_AUTORELEASE_POOL({
     CljValue result = parse("42", st);
     AUTORELEASE(result);
-    // Pool automatically popped at end
+    // Pool automatically drained at end
 });
 ```
 
 ### Transferring Objects Between Pools
 
-**Use RETAIN before pool pop, then AUTORELEASE for outer pool:**
+**Use RETAIN before pool drain, then AUTORELEASE for outer pool:**
 
 ```c
 CljValue parse_from_reader(Reader *reader, EvalState *st) {
