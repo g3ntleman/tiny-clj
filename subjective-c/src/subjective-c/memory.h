@@ -23,6 +23,10 @@
 typedef void (*SubjectiveCReleaseFn)(CljObject *obj);
 void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn);
 
+/** When ZOMBIE_ENABLED: optional callback (object, is_double_free) to log pr_str for inspection. */
+typedef void (*SubjectiveCZombieLogFn)(CljObject *v, bool is_double_free);
+void subjective_c_set_zombie_log_fn(SubjectiveCZombieLogFn fn);
+
 // Zombie mode is controlled by ZOMBIE_ENABLED macro at compile time
 // No runtime API needed
 
@@ -133,7 +137,6 @@ int retain_count(ID obj);
 
 // Autorelease pool API (checkpoint-based implementation)
 void autorelease_pool_init(void);     // Call once at startup
-void autorelease_pool_push(void);      // Push new checkpoint
 void autorelease_pool_free(void);
 bool is_autorelease_pool_active(void);
 
