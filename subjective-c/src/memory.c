@@ -41,32 +41,20 @@
 // promotion mechanism is no longer used.
 
 // ============================================================================
-// CHECKPOINT-BASED AUTORELEASE POOL
+// AUTORELEASE POOL (flat)
 // ============================================================================
 //
-// Design: Single array for all autoreleased objects + checkpoint stack
-// - items[]: Array of autoreleased object pointers
-// - checkpoints[]: Stack of indices marking pool boundaries
-// - push() adds a checkpoint (current count)
-// - pop() releases all items from last checkpoint, removes checkpoint
-// - autorelease() appends object to items[]
-//
-// Advantages over vector-based approach:
-// - Zero allocations during push/pop/autorelease (after initial setup)
-// - Better cache locality
-// - COW-friendly: AUTORELEASE never increases reference count
+// Pool is flat: items[] + depth (0|1). Caller passes target depth to drain_to_depth(d).
+// depth==0: inactive. depth==1: active; ensure_active sets depth=1 (count is 0 at ensure).
+// drain_to_depth(d): when depth>d, release [0,count), count=0, depth=0.
 
 #define POOL_INITIAL_CAPACITY 1024
-#define POOL_CHECKPOINT_CAPACITY 32
 
 typedef struct {
-    CljObject **items;       // Array for autoreleased objects
-    uint32_t count;          // Current number of items
-    uint32_t capacity;       // Capacity of items array
-    
-    uint32_t *checkpoints;   // Stack of checkpoint indices
-    uint32_t cp_count;       // Number of active pools (checkpoint stack depth)
-    uint32_t cp_capacity;    // Capacity of checkpoints array
+    CljObject **items;
+    uint32_t count;
+    uint32_t capacity;
+    uint32_t depth;  // 0 or 1; current state for while(depth>d) in drain_to_depth
 } AutoreleasePoolState;
 
 // Thread-local pool state
@@ -166,10 +154,7 @@ void autorelease_pool_init(void) {
     g_pool.capacity = POOL_INITIAL_CAPACITY;
     g_pool.items = (CljObject**)CLJ_MALLOC(sizeof(CljObject*) * g_pool.capacity);
     g_pool.count = 0;
-    
-    g_pool.cp_capacity = POOL_CHECKPOINT_CAPACITY;
-    g_pool.checkpoints = (uint32_t*)CLJ_MALLOC(sizeof(uint32_t) * g_pool.cp_capacity);
-    g_pool.cp_count = 0;
+    g_pool.depth = 0;
 
 #ifdef DEBUG
     g_pool_peak_count = 0;
@@ -325,42 +310,17 @@ void release(CljObject *v) {
     }
 }
 
-/** @brief Add object to autorelease pool for deferred cleanup
- * 
- * @param v Pointer to CljObject to autorelease (NULL parameters are safely ignored)
- * @return The same object pointer, or NULL if input was NULL
- * 
- * Adds object to the current autorelease pool for deferred cleanup. Requires
- * an active autorelease pool. The object is not retained when added to the pool.
- * COW-friendly: Does NOT increase reference count.
- */
+/** Ensure pool is active when depth==0 (for WITH_AUTORELEASE_POOL). */
+void autorelease_pool_ensure_active(void) {
+    if (!g_pool.items) autorelease_pool_init();
+    if (g_pool.depth == 0) g_pool.depth = 1;
+}
+
+/** Add object to pool. Ensures active when depth==0. Grows items when needed. COW: no RETAIN. */
 CljObject *autorelease(CljObject *v) {
     if (!v) return NULL;
-    
     CLJ_ASSERT(g_pool.items && "autorelease_pool_init() not called");
-
-    // Require active autorelease pool
-    if (g_pool.cp_count == 0) {
-        // In DEBUG builds, throw exception to catch programming errors
-        // In release builds, silently ignore (object will be leaked, but program continues)
-    #ifdef DEBUG
-        // Safety: check if v is valid before accessing v->type
-        CljType type_val = CLJ_NIL;
-        if (v && (uintptr_t)v >= 0x1000) {
-            type_val = v->type;
-        }
-        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
-                "autorelease() called without active autorelease pool! Object %p (type=%s) will not be automatically freed. "
-                "This indicates missing autorelease_pool_push() or premature autorelease_pool_pop().", 
-                v, clj_type_name(type_val));
-#else
-        // In release builds, just return the object (it will be leaked)
-        // This prevents crashes in production code
-        return v;
-#endif
-        return v;
-    }
-    
+    autorelease_pool_ensure_active();
     // Grow items array if needed
     if (g_pool.count >= g_pool.capacity) {
         uint32_t new_capacity = g_pool.capacity * 2;
@@ -447,114 +407,6 @@ bool is_autoreleased(CljObject *obj) {
 #endif // DEBUG
 
 // ============================================================================
-// CHECKPOINT-BASED AUTORELEASE POOL IMPLEMENTATION
-// ============================================================================
-
-
-/** @brief Grow the checkpoints array if needed
- * 
- * Doubles the capacity of the checkpoints array when it's full.
- * Inline for performance (growth is rare but in hot path).
- */
-static inline void autorelease_pool_grow(void) {
-#ifdef DEBUG
-    uint32_t old_capacity = g_pool.cp_capacity;
-#endif
-    uint32_t new_capacity = g_pool.cp_capacity * 2;
-    uint32_t *new_cps = (uint32_t*)CLJ_REALLOC(g_pool.checkpoints, sizeof(uint32_t) * new_capacity);
-    if (!new_cps) {
-        // Out of memory: keep existing checkpoints (best-effort).
-        return;
-    }
-    g_pool.checkpoints = new_cps;
-    g_pool.cp_capacity = new_capacity;
-#ifdef DEBUG
-    (void)old_capacity; // Suppress unused warning when DEBUG is not defined
-    LOGF(stderr, "⚠️  AutoreleasePool: checkpoints grew %u -> %u\n", old_capacity, new_capacity);
-#endif
-}
-
-/** @brief Push a new autorelease pool (checkpoint)
- * 
- * @return void (no return value)
- * 
- * Creates a new checkpoint at the current item count. Objects added via 
- * autorelease() will be tracked until pop() clears them.
- */
-void autorelease_pool_push(void) {
-    // Safety: initialize pool if not already initialized
-    if (!g_pool.items) {
-        autorelease_pool_init();
-    }
-    CLJ_ASSERT(g_pool.items && "autorelease_pool_init() failed");
-    
-    // Grow checkpoints array if needed
-    if (g_pool.cp_count >= g_pool.cp_capacity) {
-        autorelease_pool_grow();
-    }
-    
-    // Push checkpoint (current item count)
-    g_pool.checkpoints[g_pool.cp_count++] = g_pool.count;
-    
-    if (g_debug_output_active) {
-        LOGF(stdout, "🔍 autorelease_pool_push: checkpoint at %u (depth=%u)\n",
-             (unsigned)g_pool.count, (unsigned)g_pool.cp_count);
-    }
-}
-
-
-/** @brief Pop and drain the current autorelease pool
- * 
- * @return void (no parameters)
- * 
- * Removes the checkpoint. Objects are released (delayed from theautrelease call).
- * Callers must ensure object that need to survive the pool pop, are explicitly retained).
- */
-void autorelease_pool_pop(void) {
-    
-    // Check for stack underflow
-    if (g_pool.cp_count == 0) {
-        LOGF(stdout, "WARNING: autorelease_pool_pop() called on empty stack! "
-                     "This indicates more pop() calls than push() calls.\n");
-#ifdef DEBUG
-        // Print stack trace for debugging
-        void *trace[16];
-        int trace_count = 0;
-        char **symbols = NULL;
-        #if defined(SUBJECTIVE_C_HAVE_EXECINFO) && SUBJECTIVE_C_HAVE_EXECINFO
-        trace_count = backtrace(trace, 16);
-        symbols = backtrace_symbols(trace, trace_count);
-        #endif
-        if (symbols) {
-            LOGF(stderr, "Stack trace:\n");
-            for (int i = 0; i < trace_count; i++) {
-                LOGF(stderr, "  %s\n", symbols[i]);
-            }
-            CLJ_FREE(symbols);
-        }
-#endif
-        return;
-    }
-    
-    // Get checkpoint (start index for this pool)
-    uint32_t checkpoint = g_pool.checkpoints[--g_pool.cp_count];
-    
-    if (g_debug_output_active) {
-        LOGF(stdout, "🔍 autorelease_pool_pop: clearing %u objects (checkpoint=%u, count=%u)\n",
-             (unsigned)(g_pool.count - checkpoint), (unsigned)checkpoint, (unsigned)g_pool.count);
-    }
-    
-    // Release each object in [checkpoint, count)
-    for (uint32_t i = checkpoint; i < g_pool.count; i++) {
-        CljObject *obj = g_pool.items[i];
-        CLJ_ASSERT(obj && "Object in autorelease pool should never be NULL");
-        g_pool.items[i] = NULL;
-        release(obj);
-    }    
-    g_pool.count = checkpoint;
-}
-
-
 
 /** @brief Check if autorelease pool is active
  * 
@@ -562,41 +414,33 @@ void autorelease_pool_pop(void) {
  * 
  * Useful for debugging and ensuring proper pool management.
  */
-bool is_autorelease_pool_active(void) {
-    return g_pool.cp_count > 0;
-}
+bool is_autorelease_pool_active(void) { return g_pool.depth > 0; }
 
-uint32_t autorelease_pool_depth(void) {
-    return g_pool.cp_count;
-}
+uint32_t autorelease_pool_depth(void) { return g_pool.depth; }
 
-void autorelease_pool_drain_to_depth(uint32_t depth) {
-    // Drain pools until we reach the requested depth (or 0).
-    while (g_pool.cp_count > depth) {
-        autorelease_pool_pop();
+void autorelease_pool_drain_to_depth(uint32_t d) {
+    while (g_pool.depth > d) {
+        if (g_debug_output_active)
+            LOGF(stdout, "🔍 autorelease_pool_drain: clearing %u objects\n", (unsigned)g_pool.count);
+        for (uint32_t i = 0; i < g_pool.count; i++) {
+            CljObject *obj = g_pool.items[i];
+            CLJ_ASSERT(obj && "autorelease pool entry must not be NULL");
+            g_pool.items[i] = NULL;
+            release(obj);
+        }
+        g_pool.count = 0;
+        g_pool.depth = 0;
     }
 }
 
 /** @brief Cleanup pool state (call at program exit or runtime reset)
  */
 void autorelease_pool_free(void) {
-    // Drain all remaining pools
     autorelease_pool_drain_to_depth(0);
-    
-    // Free backing arrays (always free pool structures, even in zombie mode)
-    // Pool structures are not objects, so they should be freed normally
-    if (g_pool.items) {
-        CLJ_FREE(g_pool.items);
-        g_pool.items = NULL;
-    }
-    if (g_pool.checkpoints) {
-        CLJ_FREE(g_pool.checkpoints);
-        g_pool.checkpoints = NULL;
-    }
+    if (g_pool.items) { CLJ_FREE(g_pool.items); g_pool.items = NULL; }
     g_pool.count = 0;
     g_pool.capacity = 0;
-    g_pool.cp_count = 0;
-    g_pool.cp_capacity = 0;
+    g_pool.depth = 0;
 }
 
 /** @brief Get retain count of object
