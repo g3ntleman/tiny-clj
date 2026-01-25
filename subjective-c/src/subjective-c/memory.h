@@ -135,40 +135,23 @@ static inline char *clj_strdup(const char *s) {
  */
 int retain_count(ID obj);
 
-// Autorelease pool API. Pool is always active once it exists. ensure_active() inits when needed.
 void autorelease_pool_init(void);
 void autorelease_pool_ensure_active(void);
 void autorelease_pool_free(void);
 bool is_autorelease_pool_active(void);
 
-uint32_t autorelease_pool_mark(void);       // ensure + vector_count for WITH_AUTORELEASE_POOL
-uint32_t autorelease_pool_depth(void);      // legacy, always 0
-void autorelease_pool_drain_to_depth(uint32_t mark);  // RELEASE [mark,count), truncate to mark
+uint32_t autorelease_pool_mark(void);
+uint32_t autorelease_pool_depth(void);
+void autorelease_pool_drain_to_depth(uint32_t mark);
 
 #ifdef DEBUG
-/** @brief Get the peak autorelease pool item count since last reset.
- *
- * Tracks max of internal pool 'count' (number of tracked autoreleased objects).
- * Intended for diagnosing peak autorelease tracking overhead.
- */
 uint32_t autorelease_pool_peak_count(void);
-
-/** @brief Reset the peak autorelease pool counter.
- *
- * After reset, peak is at least the current pool count.
- */
 void autorelease_pool_peak_reset(void);
-#endif
-
-#ifdef DEBUG
-/** @brief Number of occurrences of obj in the autorelease pool (debug). O(pool size). */
 uint32_t autorelease_count(CljObject *obj);
-#endif // DEBUG
+#endif
 
 #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
 #define ALLOC_SIMPLE(obj_type) (ID) alloc(sizeof(CljObject), 1, obj_type)
-// For CljObject subtypes with dynamic size (flexible array members, embedded buffers, etc.)
-// Use this instead of raw malloc/CLJ_MALLOC so allocation is tracked as an object allocation.
 #define ALLOC_BYTES(obj_type, bytes) ((void*) alloc((bytes), 1, (obj_type)))
 
 #ifdef DEBUG
@@ -302,11 +285,6 @@ uint32_t autorelease_count(CljObject *obj);
 
 void* alloc(size_t type_size, size_t count, CljType obj_type);
 
-// ============================================================================
-// AUTORELEASE POOL MACROS - Always available in all builds
-// ============================================================================
-
-// WITH_AUTORELEASE_POOL: run code with an active pool. Inits pool when not yet created.
 #define WITH_AUTORELEASE_POOL(code) do { \
     uint32_t _restore = autorelease_pool_mark(); \
     code; \

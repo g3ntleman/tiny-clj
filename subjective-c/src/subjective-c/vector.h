@@ -7,9 +7,6 @@
 typedef struct CljVector CljVector;
 
 static inline CljVector* as_vector(ID obj) {
-    // NULL is valid (nil)
-    // TAG() already handles NULL safely (returns CLJ_NIL)
-    // CLJ_ASSERT already has #ifdef DEBUG internally
 #ifdef DEBUG
     CljType tag;
     CLJ_ASSERT(((tag = TAG(obj)), (obj == NULL || tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT)));
@@ -43,25 +40,15 @@ CljVector* vector_remove_at(CljVector* vec, unsigned int index);
 ID* vector_as_array(CljVector *vec);
 void vector_increment_count(CljVector *vec);
 void vector_clear(CljVector *vec);
-/** Set count to n (n <= count). Caller must have released [n,count) when vec retains. */
+/** n<=count; caller releases [n,count) when vec retains. */
 void vector_truncate(CljVector *vec, unsigned int n);
 CljVector* vector_transient(CljVector *vec);
 CljVector* clj_conj(CljVector *tvec, ID item);
 ID vector_persistent(CljVector *tvec);
 
-// ----------------------------------------------------------------------------
-// Debug/test instrumentation
-// ----------------------------------------------------------------------------
-// Count how often the vector implementation had to copy backing storage
-// (make_vector_copy). Useful to ensure we don't accidentally force copies via
-// persistent(transient(...)) patterns in hot paths.
 size_t vector_make_copy_count(void);
 void vector_make_copy_count_reset(void);
 
-// In-place helpers for long-lived slots (no AUTORELEASE + releases old vector on replacement).
-// These functions update the pointer stored in *vec_slot and RELEASE the old vector
-// if a new vector instance is produced (grow/COW).
-// Use these for performance-critical code where you want to maintain rc=1 for COW optimizations.
 void vector_conj_inplace(CljVector **vec_slot, ID item);
 void vector_assoc_inplace(CljVector **vec_slot, unsigned int index, ID value);
 void vector_insert_at_inplace(CljVector **vec_slot, unsigned int index, ID item);

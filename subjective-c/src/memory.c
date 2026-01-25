@@ -33,20 +33,8 @@
 #include <execinfo.h>
 #endif
 
-// ============================================================================
-// Closure environment promotion (Stack → Heap)
-// ============================================================================
-//
-// NOTE: tiny-clj closure environments (`CljFunction.env_stack`) are now backed by
-// persistent COW vectors (heap-managed). The previous "stack-backed list prefix"
-// promotion mechanism is no longer used.
-
-// ============================================================================
-// AUTORELEASE POOL (nested)
-// ============================================================================
-//
-// Pool is CLJ_VECTOR_TRANSIENT_WEAK. _restore = vector_count at block start (mark);
-// drain_to_depth(mark) RELEASEs [mark,count) and vector_truncate to mark.
+// AUTORELEASE POOL: CLJ_VECTOR_TRANSIENT_WEAK. _restore=vector_count at block start;
+// drain_to_depth(mark) RELEASEs [mark,count) and truncates.
 
 #define POOL_INITIAL_CAPACITY 1024
 
@@ -56,19 +44,10 @@ static THREAD_LOCAL CljVector *g_pool = NULL;
 static THREAD_LOCAL uint32_t g_pool_peak_count = 0;
 #endif
 
-// External reference to verbose mode
 extern bool g_memory_verbose_mode;
-
-// Global flag to control debug output during initialization
 static bool g_debug_output_enabled = false;
-
-// Cached flag to avoid repeated checks - updated when any of the flags change
 static bool g_debug_output_active = false;
 
-// Forward declaration for update function
-static inline void update_debug_output_active(void);
-
-// Update cached debug output flag (call when flags change)
 static inline void update_debug_output_active(void) {
     g_debug_output_active = g_memory_profiling_enabled && g_memory_verbose_mode && g_debug_output_enabled;
 }
@@ -85,32 +64,13 @@ bool memory_get_debug_output_enabled(void) {
     return g_debug_output_enabled;
 }
 
-// ============================================================================
-// MEMORY ALLOCATION WITH PROFILING
-// ============================================================================
-
-/**
- * @brief Allocate memory with automatic profiling for CljObject types
- * @param type The type to allocate
- * @param count Number of elements to allocate
- * @return Pointer to allocated memory
- */
 void* alloc(size_t type_size, size_t count, CljType obj_type) {
-    // IMPORTANT: CljObject allocations must not be counted as "raw heap blocks".
-    // They are tracked via object creation/destruction hooks instead.
     void *result = malloc(type_size * count);
-    if (!result) {
-        throw_oom();  // Never returns
-    }
-    
-    // Track object creation if it's a CljObject subtype
-    // Note: Singletons (rc == SINGLETON_RC) are set up later and never released
+    if (!result) throw_oom();
     if (type_size >= sizeof(CljObject)) {
         CljObject *obj = (CljObject*)result;
-        obj->type = obj_type;  // Set type before tracking
-        obj->flags = 0;  // Initialize flags
-        // IMPORTANT: initialize rc before any profiling logic that may call is_singleton().
-        // Many constructors set rc later, but the profiler needs a deterministic value here.
+        obj->type = obj_type;
+        obj->flags = 0;
         obj->rc = 1;
 #if MEMORY_PROFILING_ENABLED
         memory_profiler_track_object_creation_sized(obj, type_size * count);
@@ -122,22 +82,12 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
     return result;
 }
 
-// ============================================================================
-// AUTORELEASE POOL IMPLEMENTATION
-// ============================================================================
-
-// Forward declarations
 static void release_object_deep(CljObject *v);
 static void release_object_default(CljObject *v);
 static void init_release_dispatch(void);
 static SubjectiveCReleaseFn g_release_dispatch[CLJ_TYPE_COUNT];
 static bool g_release_dispatch_initialized = false;
 
-/** @brief Initialize the autorelease pool (call once at startup)
- * 
- * Must be called before any autorelease operations. Typically called
- * from runtime_init().
- */
 void autorelease_pool_init(void) {
     if (g_pool) return;
     g_pool = make_vector(POOL_INITIAL_CAPACITY, CLJ_VECTOR_TRANSIENT_WEAK);
@@ -154,28 +104,9 @@ static void init_release_dispatch(void) {
     g_release_dispatch_initialized = true;
 }
 
-// ============================================================================
-// REFERENCE COUNTING IMPLEMENTATION
-// ============================================================================
-
-/** @brief Increment reference count if applicable
- * 
- * @param v Pointer to CljObject to retain (NULL parameters are safely ignored)
- * 
- * Safely handles NULL parameters and singletons. Objects that don't track
- * references (singletons) are ignored. Empty vector/map singletons are
- * also ignored to prevent reference counting issues.
- */
 void retain(CljObject *v) {
-    if (!v) return;
-    
-    // Safety check: ensure the pointer is valid
-    if ((uintptr_t)v < 0x1000) {
-        return;
-    }
-    
+    if (!v || (uintptr_t)v < 0x1000) return;
 #ifdef DEBUG
-    // Check for zombie object
     if (v->rc == 0) {
         // Zombie detected: throw exception with stacktrace and zombie object
         // Don't try to print object representation (may fail if object is corrupted)
@@ -192,56 +123,18 @@ void retain(CljObject *v) {
         return;
     }
 #endif
-    
-    // Note: closure environments are heap-managed (vector). No stack promotion needed.
-
-    // Happy path: valid object that tracks retains
-    if ((uintptr_t)v >= 0x1000 && TRACKS_RETAINS(v)) {
-        // Track retain call for profiling (compile-time no-op in release builds)
+    if (TRACKS_RETAINS(v)) {
         MEMORY_PROFILER_TRACK_RETAIN(v);
         v->rc++;
     }
 }
 
-/** @brief Decrement reference count and free if zero
- * 
- * @param v Pointer to CljObject to release (NULL parameters are safely ignored)
- * 
- * Safely handles NULL parameters, singletons, and native functions. Objects
- * that don't track references are ignored. When reference count reaches zero,
- * the object is freed and its deep cleanup is performed.
- */
 void release(CljObject *v) {
-    if (!v) return;
-    
-    // Safety check: ensure the pointer is valid and points to a valid object
-    // Check if the pointer is in a reasonable memory range (not in zero page)
-    if ((uintptr_t)v < 0x1000) {
-        return;
-    }
-    
-    // Additional safety check: use is_singleton which has better pointer validation
-    // This avoids accessing v->type if v is an invalid pointer
-    if (is_singleton(v)) {
-        return;
-    }
-    
-    // Only show debug output if memory profiling is enabled and verbose mode is on
-    // AND debug output is enabled (after initialization)
-    // Move this after the safety checks to avoid accessing v->type on invalid pointers
-    // Use cached flag to avoid repeated function calls
-    if (g_debug_output_active) {
+    if (!v || (uintptr_t)v < 0x1000 || is_singleton(v)) return;
+    if (g_debug_output_active)
         LOGF(stdout, "🔍 release: Object %p, type=%d (%s), rc=%d -> ",
              v, (int)v->type, clj_type_name(v->type), (int)v->rc);
-    }
-    
-    // Note: CLJ_FUNC (native functions) are static and don't need release
-    // CLJ_CLOSURE (interpreted functions) need to be released and will be handled by release_object_deep
-    
-    // Check for double-free BEFORE decrementing (ALWAYS, not just in DEBUG)
-    // This detects attempts to release already-freed objects
     if (v->rc == 0) {
-        // Keep diagnostics short: zombie/debug builds can otherwise flood output.
         LOGF(stderr, "DOUBLE-FREE: object=%p type=%s (rc=0)\n", v, clj_type_name(v->type));
 #ifdef ZOMBIE_ENABLED
         if (g_zombie_log_fn) g_zombie_log_fn(v, true);
@@ -261,31 +154,17 @@ void release(CljObject *v) {
     }
 
     v->rc--;
-    
-    // Track release operation
     MEMORY_PROFILER_TRACK_RELEASE(v);
-    
-    if (v->rc == 0) { 
-        if (g_debug_output_active) {
-            LOGF(stdout, "🔍 release: Object %p will be freed (rc=0)\n", v);
-        }
+    if (v->rc == 0) {
+        if (g_debug_output_active) LOGF(stdout, "🔍 release: Object %p will be freed (rc=0)\n", v);
         CLJ_ASSERT((autorelease_count(v) == 0) && "Object v still in autorelease pool; will double-release");
-
 #ifdef ZOMBIE_ENABLED
-        // In zombie mode: DON'T free the object, keep it at rc=0 for inspection
-        // The object remains in memory so we can examine it later
-        // rc is already 0, so no need to set it again
         if (g_zombie_log_fn) g_zombie_log_fn(v, false);
-        if (g_debug_output_active) {
-            LOGF(stdout, "🔍 release: Object %p marked as zombie (rc=0, not DEALLOCed)\n", v);
-        }
+        if (g_debug_output_active) LOGF(stdout, "🔍 release: Object %p marked as zombie (rc=0, not DEALLOCed)\n", v);
 #else
-        // Normal mode: free the object
         release_object_deep(v);
         DEALLOC(v);
-        if (g_debug_output_active) {
-            LOGF(stdout, "🔍 release: Object %p freed\n", v);
-        }
+        if (g_debug_output_active) LOGF(stdout, "🔍 release: Object %p freed\n", v);
 #endif
     }
 }
@@ -294,13 +173,11 @@ void autorelease_pool_ensure_active(void) {
     if (!g_pool) autorelease_pool_init();
 }
 
-/** @brief Return vector count as mark for WITH_AUTORELEASE_POOL. Ensures pool is active. */
 uint32_t autorelease_pool_mark(void) {
     autorelease_pool_ensure_active();
-    return g_pool ? (uint32_t)vector_count(g_pool) : 0u;
+    return (uint32_t)vector_count(g_pool);
 }
 
-/** Add object to pool. TRANSIENT_WEAK: no RETAIN. Push via ASSIGN + vector_conj_owned. */
 CljObject *autorelease(CljObject *v) {
     if (!v) return NULL;
     CLJ_ASSERT(g_pool && "autorelease_pool_init() not called");
@@ -331,7 +208,6 @@ void autorelease_pool_peak_reset(void) {
 }
 
 #ifdef DEBUG
-/** @brief Number of occurrences of obj in the autorelease pool (debug). O(pool count). */
 uint32_t autorelease_count(CljObject *obj) {
     if (!obj || !g_pool) return 0;
     uint32_t n = 0;
@@ -343,9 +219,6 @@ uint32_t autorelease_count(CljObject *obj) {
 }
 #endif
 
-// ============================================================================
-
-/** @brief True if the autorelease pool exists (and is thus active). */
 bool is_autorelease_pool_active(void) { return g_pool != NULL; }
 
 uint32_t autorelease_pool_depth(void) { return 0u; }
@@ -353,8 +226,7 @@ uint32_t autorelease_pool_depth(void) { return 0u; }
 void autorelease_pool_drain_to_depth(uint32_t mark) {
     if (!g_pool) return;
     unsigned int c = vector_count(g_pool);
-    if (g_debug_output_active && c > mark)
-        LOGF(stdout, "🔍 autorelease_pool_drain: [%u..%u)\n", (unsigned)mark, (unsigned)c);
+    if (g_debug_output_active && c > mark) LOGF(stdout, "🔍 autorelease_pool_drain: [%u..%u)\n", (unsigned)mark, (unsigned)c);
     for (unsigned int i = c; i > mark; ) {
         i--;
         ID e = vector_nth(g_pool, i);
@@ -364,74 +236,20 @@ void autorelease_pool_drain_to_depth(uint32_t mark) {
     }
 }
 
-/** @brief Cleanup pool state (call at program exit or runtime reset). */
 void autorelease_pool_free(void) {
     autorelease_pool_drain_to_depth(0);
     if (g_pool) { RELEASE(g_pool); g_pool = NULL; }
 }
 
-/** @brief Get retain count of object
- * 
- * @param obj Object to check (can be NULL)
- * @return Reference count (0 for singletons, actual rc for others)
- * 
- * Returns 0 for singleton objects (nil, true, false) since they don't use
- * reference counting. For other objects, returns the actual reference count.
- * Note: AUTORELEASE objects are not counted as they are deferred.
- */
 int retain_count(ID obj) {
     if (!obj || IS_IMMEDIATE(obj)) return 0;
-    
-    CljObject *obj_ptr = (CljObject*)obj;
-    
-    // Singletons don't use retain counting
-    if (obj_ptr->rc == SINGLETON_RC) {
-        return 0;
-    }
-    
-    // Return actual retain count for tracked objects
-    return obj_ptr->rc;
+    CljObject *o = (CljObject*)obj;
+    return (o->rc == SINGLETON_RC) ? 0 : o->rc;
 }
 
 
-// ============================================================================
-// DEEP OBJECT RELEASE IMPLEMENTATION
-// ============================================================================
-
-/** @brief Central dispatcher for finalizers based on type tag
- * 
- * @param v Object to finalize
- * 
- * Handles deep cleanup of objects based on their type. Called when an object's
- * reference count reaches zero. Performs type-specific cleanup (freeing strings,
- * releasing vector elements, etc.).
- */
 static void release_object_deep(CljObject *v) {
-    
-    if (!v) {
-        if (g_debug_output_active) {
-            LOGF(stdout, "🔍 release_object_deep: NULL object\n");
-        }
-        return;
-    }
-    
-#ifdef ZOMBIE_ENABLED
-    // In zombie mode: rc=0 is the zombie marker (object freed but not DEALLOCed)
-    // We can safely access the object structure even if it's a zombie
-    // (object remains in memory for inspection)
-#endif
-    
-    if (g_debug_output_active) {
-        LOGF(stdout, "🔍 release_object_deep: Object %p, type=%d (%s), rc=%d\n",
-             v, (int)v->type, clj_type_name(v->type), (int)v->rc);
-    }
-    
-    // Skip singletons (they don't need cleanup)
-    if (!TRACKS_RETAINS(v)) {
-        return;
-    }
-    
-    
+    if (!v || !TRACKS_RETAINS(v)) return;
     init_release_dispatch();
     SubjectiveCReleaseFn fn = (v->type >= 0 && v->type < CLJ_TYPE_COUNT)
         ? g_release_dispatch[v->type]
@@ -444,51 +262,19 @@ static void release_object_deep(CljObject *v) {
 static void release_object_default(CljObject *v) {
     switch (v->type) {
         case CLJ_STRING:
-            /* Strings store their data inline (flexible array member).
-             * DEALLOC(v) frees both header and characters, so nothing
-             * extra to do here. */
             break;
-            
-        // CLJ_SYMBOL: Release handler registered by tiny-clj via subjective_c_register_release_fn()
-            
-        case CLJ_VECTOR:
-            {
-                // Direct cast - we already know it's a Vector from the switch case
-                // Using as_vector() would call TAG() which fails when rc=0 (zombie mode)
-                CljVector *vec = (CljVector*)v;
-                if (vec) {
-                    // Release all vector elements
-                    VECTOR_FOR_EACH(vec, elem) {
-                        RELEASE(elem);
-                    }
-                    // Note: data array is automatically freed
-                }
-            }
+        case CLJ_VECTOR: {
+            CljVector *vec = (CljVector*)v;
+            VECTOR_FOR_EACH(vec, elem) { RELEASE(elem); }
             break;
-            
+        }
         case CLJ_VECTOR_TRANSIENT_WEAK:
-            {
-                // For CLJ_VECTOR_TRANSIENT_WEAK, elements are not retained or released (weak references)
-                // Note: data array is automatically freed
-            }
             break;
-            
-        case CLJ_MAP:
-            {
-                // Direct cast - we already know it's a Map from the switch case
-                // Using as_map() would call TAG() which fails when rc=0 (zombie mode)
-                CljMap *map = (CljMap*)v;
-                if (map) {
-                    // Release all key-value pairs
-                    MAP_FOR_EACH(map, key, value) {
-                        RELEASE(key);
-                        RELEASE(value);
-                    }
-                    // Note: map->data is a flexible array member, part of the struct
-                    // It will be freed automatically when DEALLOC frees the struct
-                }
-            }
+        case CLJ_MAP: {
+            CljMap *map = (CljMap*)v;
+            MAP_FOR_EACH(map, key, value) { RELEASE(key); RELEASE(value); }
             break;
+        }
             
         case CLJ_HASHMAP:
             {
@@ -502,238 +288,83 @@ static void release_object_default(CljObject *v) {
             }
             break;
             
-        case CLJ_LIST:
-            {
-                // Direct cast - we already know it's a List from the switch case
-                // Using as_list() would call TAG() which fails when rc=0 (zombie mode)
-                CljList *list = (CljList*)v;
-                if (g_debug_output_active) {
-                    LOGF(stdout, "🔍 release_object_deep: Freeing LIST object %p, first=%p, rest=%p\n",
-                         v, list ? list->first : NULL, list ? list->rest : NULL);
-                }
-                // Release head and tail elements - RELEASE handles NULL
-                if (list) {
-                    if (g_debug_output_active) {
-                        if (list->first) {
-                            LOGF(stdout, "🔍 release_object_deep: Releasing list first element %p\n", list->first);
-                        }
-                    }
-                    RELEASE(list->first);
-                    if (g_debug_output_active) {
-                        if (list->rest) {
-                            LOGF(stdout, "🔍 release_object_deep: Releasing list rest element %p\n", list->rest);
-                        }
-                    }
-                    RELEASE(list->rest);
-                }
-            }
+        case CLJ_LIST: {
+            CljList *list = (CljList*)v;
+            RELEASE(list->first);
+            RELEASE(list->rest);
             break;
-
-        case CLJ_AST_NODE:
-            {
-                // Direct cast - we already know it's an AST node from the switch case
-                // Using as_ast_node() would call TAG() which fails when rc=0 (zombie mode)
-                CljASTNode *node = (CljASTNode*)v;
-                if (!node) {
-                    break;
-                }
-                if (g_debug_output_active) {
-                    LOGF(stdout, "🔍 release_object_deep: Freeing AST node %p, first=%p, rest=%p, cache=%p\n",
-                         v, node->first, node->rest, node->callsite_cache);
-                }
-                RELEASE(node->first);
-                RELEASE(node->rest);
-                RELEASE(node->callsite_cache);
-            }
+        }
+        case CLJ_AST_NODE: {
+            CljASTNode *node = (CljASTNode*)v;
+            RELEASE(node->first);
+            RELEASE(node->rest);
+            RELEASE(node->callsite_cache);
             break;
+        }
 
-            
-        case CLJ_CALLSITE_CACHE:
-            {
-                CljCallsiteCache *cache = as_callsite_cache(v);
-                if (!cache) {
-                    break;
-                }
-                ASSIGN(cache->resolved, NULL);
-            }
+        case CLJ_CALLSITE_CACHE: {
+            CljCallsiteCache *cache = as_callsite_cache(v);
+            if (cache) ASSIGN(cache->resolved, NULL);
             break;
-
+        }
         case CLJ_FUNC:
-            // Native functions are static - no cleanup needed
             break;
-            
-        case CLJ_CLOSURE:
-            {
-                CljFunction *func = (CljFunction*)v;
-                if (func) {
-                    // Release parameter vector (vector will release all elements) - RELEASE handles NULL
-                    RELEASE(func->params);
-                    // Release body - RELEASE handles NULL
-                    RELEASE(func->body);
-                    // Release closure environment.
-                    // NOTE: env_stack can be stack-backed for lazy capture. Never RELEASE stack pointers.
-                    if (func->env_stack && !is_pointer_on_stack(func->env_stack)) {
-                        RELEASE(func->env_stack);
-                    }
-                    // Release captured namespace reference
-                    RELEASE(func->ns);
-                }
-            }
+        case CLJ_CLOSURE: {
+            CljFunction *func = (CljFunction*)v;
+            RELEASE(func->params);
+            RELEASE(func->body);
+            if (func->env_stack && !is_pointer_on_stack(func->env_stack)) RELEASE(func->env_stack);
+            RELEASE(func->ns);
             break;
+        }
             
         case CLJ_BYTE_ARRAY:
-            {
-                // Don't free in zombie mode - object must remain intact
 #ifndef ZOMBIE_ENABLED
-                CljByteArray *ba = as_byte_array(v);
-                if (ba) {
-                    if ((ba->base.flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) != 0) {
-                        CljByteArrayExternal *ext = (CljByteArrayExternal*)ba;
-                        if (ext->external_free_fn) {
-                            ext->external_free_fn(ext->external_ctx);
-                        }
-                        // External payload is owned by the external system (do not free ba->data).
-                    } else {
-                        if (ba->data) {
-                            CLJ_FREE(ba->data);
-                        }
-                    }
-                }
+            { CljByteArray *ba = as_byte_array(v);
+              if (ba) {
+                  if ((ba->base.flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) != 0) {
+                      CljByteArrayExternal *ext = (CljByteArrayExternal*)ba;
+                      if (ext->external_free_fn) ext->external_free_fn(ext->external_ctx);
+                  } else if (ba->data) CLJ_FREE(ba->data);
+              } }
 #else
-                (void)v; // Suppress unused variable warning in zombie mode
+            (void)v;
 #endif
-            }
             break;
-            
         case CLJ_ATOM:
-            {
-                // Direct cast - we already know it's an Atom from the switch case
-                // Using as_atom() would call TAG() which fails on zombie objects
-                CljAtom *atom = (CljAtom*)v;
-                if (atom) {
-                    // Release the atom's value - RELEASE handles NULL, nil, and immediates safely
-                    RELEASE(atom->value);
-                }
-            }
+            RELEASE(((CljAtom*)v)->value);
             break;
-            
         case CLJ_SEQ:
-            // CljSeqIterator contains only stack-allocated iterator state
-            // No heap-allocated data to release (container is a borrowed reference)
             break;
-
-        // CLJ_LAZY_SEQ: Release handler registered by tiny-clj via seq_register_release_fn()
-            
-        case CLJ_NAMESPACE:
-            {
-                // Note: namespace.h is included at the top of memory.c
-                CljNamespace *ns = (CljNamespace*)v;
-                if (ns) {
-                    // Release mappings map (CljMap*) - RELEASE handles NULL
-                    RELEASE(ns->mappings);
-                    // Release aliases map (CljMap*) - RELEASE handles NULL
-                    RELEASE(ns->aliases);
-                    // Free filename (strdup'd in make_namespace/ns_get_or_create)
-                    // Don't free in zombie mode - object must remain intact
+        case CLJ_NAMESPACE: {
+            CljNamespace *ns = (CljNamespace*)v;
+            RELEASE(ns->mappings);
+            RELEASE(ns->aliases);
 #ifndef ZOMBIE_ENABLED
-                    if (ns->filename) {
-                        CLJ_FREE((void*)ns->filename);
-                    }
+            if (ns->filename) CLJ_FREE((void*)ns->filename);
 #endif
-                    // Note: name (CljSymbol*) is an interned symbol managed by the symbol table,
-                    // so it should NOT be released here. The symbol table owns the symbol's lifetime.
-                }
-            }
             break;
-            
-        // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates
-            
+        }
         default:
-            // Unknown type - no specific finalizer needed
             break;
     }
 }
 
-// ============================================================================
-// MEMORY SEGMENT DETECTION UTILITIES
-// ============================================================================
-
-/** @brief Check if a pointer points to data segment (static/read-only memory)
- * 
- * @param ptr Pointer to check
- * @return true if pointer is in data segment, false otherwise
- * 
- * This function detects if a pointer points to data segment memory (string literals,
- * static variables) by checking if the address is in a typical data segment range.
- * This is useful for detecting static strings that should not be freed with free().
- * 
- * Implementation:
- * - On 64-bit systems, data segment is typically at low addresses (< 0x100000000)
- * - On 32-bit systems, data segment is typically at low addresses (< 0x08000000)
- * - Heap-allocated memory (malloc) is typically at higher addresses
- * 
- * Note: This is a heuristic and may not be 100% accurate, but works for
- * typical cases where string literals are in data segment and malloc'd
- * strings are on the heap.
- */
 bool is_pointer_in_data_segment(const void *ptr) {
     if (!ptr) return false;
-    
-    uintptr_t addr = (uintptr_t)ptr;
-    
-    // On 64-bit systems, data segment is typically below 0x100000000 (4GB)
-    // On 32-bit systems, data segment is typically below 0x08000000 (128MB)
-    // Heap-allocated memory (malloc) is typically at higher addresses
-    
-    // Check if address is in typical data segment range
-    // This is a heuristic - actual ranges may vary by platform
+    uintptr_t a = (uintptr_t)ptr;
 #if UINTPTR_MAX == UINT64_MAX
-    // 64-bit system
-    // Data segment: typically < 0x100000000 (4GB)
-    // Heap: typically > 0x100000000
-    return addr < 0x100000000ULL;
+    return a < 0x100000000ULL;
 #else
-    // 32-bit system
-    // Data segment: typically < 0x08000000 (128MB)
-    // Heap: typically > 0x08000000
-    return addr < 0x08000000UL;
+    return a < 0x08000000UL;
 #endif
 }
 
-/** @brief Check if a pointer points to stack memory
- * 
- * @param ptr Pointer to check
- * @return true if pointer is on the stack, false otherwise
- * 
- * This function detects if a pointer points to stack memory by comparing
- * the pointer address with the current stack position. Used for lazy
- * closure environment promotion: stack-based env_stack is copied to heap
- * only when the closure escapes (RETAIN with rc > 1).
- * 
- * Implementation:
- * - Uses a local variable as stack position marker
- * - Stack grows downward: older frames have higher addresses
- * - Returns true if ptr is in valid stack range above current position
- */
 bool is_pointer_on_stack(const void *ptr) {
     if (!ptr) return false;
-    
-    // Get current stack position using a local variable
-    volatile char stack_marker;
-    uintptr_t stack_pos = (uintptr_t)&stack_marker;
-    uintptr_t ptr_pos = (uintptr_t)ptr;
-    
-    // Stack grows downward on x86/ARM: older frames have higher addresses
-    // Valid stack pointers are between current position and stack top
-    #define STACK_SIZE_MAX (8UL * 1024 * 1024)  // 8 MB typical max stack
-    
-    // Check if pointer is in reasonable stack range
-    // Stack grows down: caller frames have higher addresses than us
-    if (ptr_pos >= stack_pos && ptr_pos < stack_pos + STACK_SIZE_MAX) {
-        return true;
-    }
-    
-    return false;
+    volatile char m;
+    uintptr_t sp = (uintptr_t)&m, pp = (uintptr_t)ptr;
+    return pp >= sp && pp < sp + (8UL * 1024 * 1024);
 }
 
 void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn) {
@@ -742,29 +373,14 @@ void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn) {
     g_release_dispatch[type] = fn ? fn : release_object_default;
 }
 
-// ============================================================================
-// OUT OF MEMORY HELPER
-// ============================================================================
-
 void throw_oom(void) {
-    // Use static OOM exception - no allocation needed!
-    // This is critical: when we're out of memory, we can't allocate more memory
     extern CLJException *clj_oom_exception;
-    
-    // Update message (using static buffer in exception)
-    // Note: We can safely modify the static exception's message field
-    // since it's a singleton and won't be freed
-    // Type information is available from stack trace
     strncpy(clj_oom_exception->message, "Out of memory", sizeof(clj_oom_exception->message) - 1);
     clj_oom_exception->message[sizeof(clj_oom_exception->message) - 1] = '\0';
-    
-    // Update file and line info
     strncpy(clj_oom_exception->file, __FILE__, sizeof(clj_oom_exception->file) - 1);
     clj_oom_exception->file[sizeof(clj_oom_exception->file) - 1] = '\0';
     clj_oom_exception->line = __LINE__;
     clj_oom_exception->col = 0;
-    
-    // Throw the static exception (no allocation)
     throw_exception_object(clj_oom_exception);
-    abort(); // Ensure no return
+    abort();
 }
