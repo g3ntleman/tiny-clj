@@ -476,7 +476,7 @@ static inline void autorelease_pool_grow(void) {
  * Creates a new checkpoint at the current item count. Objects added via 
  * autorelease() will be tracked until pop() clears them.
  */
-void autorelease_pool_push() {
+void autorelease_pool_push(void) {
     // Safety: initialize pool if not already initialized
     if (!g_pool.items) {
         autorelease_pool_init();

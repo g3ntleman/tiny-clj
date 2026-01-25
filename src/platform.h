@@ -7,9 +7,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-void platform_init();
+void platform_init(void);
 void platform_print(const char *message);
-const char *platform_name();
+const char *platform_name(void);
 
 // Sleep/delay helper used by clojure.core/sleep builtin.
 // Contract: best-effort blocking delay for at least ms milliseconds.
