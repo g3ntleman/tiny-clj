@@ -196,8 +196,7 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
 }
 
 CljMap* map_assoc(CljMap* map, ID key, ID value) {
-  CljMap* result = map_assoc_core(map, key, value);
-  return AUTORELEASE(result);
+  return map_assoc_core(map, key, value);
 }
 
 static CljMap* map_assoc_owned(CljMap* map, ID key, ID value) {
@@ -236,38 +235,34 @@ CljMap* map_merge(CljMap* a, CljMap* b, bool overwrite) {
   return result;
 }
 
-/** Return a vector of keys (retained). */
+/** Return a vector of keys (retained). Owned (no AUTORELEASE); caller must RELEASE. */
 ID map_keys(CljMap *map) {
-  if (!map)
-    return NULL;
+  if (!map) return NULL;
   CljMap *map_data = map;
-  if (!map_data)
-    return NULL;
+  if (!map_data) return NULL;
   CljVector* keys_vec = make_vector(map_data->count, CLJ_VECTOR);
-  if (!keys_vec)
-    return NULL;
+  if (!keys_vec) return NULL;
   MAP_FOR_EACH(map_data, key, value) {
     if (key) {
-      keys_vec = vector_conj(keys_vec, RETAIN(key));
+      CljVector *next = vector_conj_owned(keys_vec, RETAIN(key));
+      if (next != keys_vec) { RELEASE(keys_vec); keys_vec = next; }
     }
   }
   return keys_vec;
 }
 
-/** Return a vector of values (retained). */
+/** Return a vector of values (retained). Owned (no AUTORELEASE); caller must RELEASE. */
 ID map_vals(CljMap *map) {
-  if (!map)
-    return NULL;
+  if (!map) return NULL;
   CljMap *map_data = map;
-  if (!map_data)
-    return NULL;
+  if (!map_data) return NULL;
   CljVector* vals_vec = make_vector(map_data->count, CLJ_VECTOR);
-  if (!vals_vec)
-    return NULL;
+  if (!vals_vec) return NULL;
   MAP_FOR_EACH(map_data, key, val) {
-    (void)key;  // unused
+    (void)key;
     if (val) {
-      vals_vec = vector_conj(vals_vec, RETAIN(val));
+      CljVector *next = vector_conj_owned(vals_vec, RETAIN(val));
+      if (next != vals_vec) { RELEASE(vals_vec); vals_vec = next; }
     }
   }
   return vals_vec;
@@ -391,8 +386,7 @@ static CljMap* map_remove_core(CljMap *map, ID key) {
 }
 
 CljMap* map_remove(CljMap *map, ID key) {
-  CljMap* result = map_remove_core(map, key);
-  return AUTORELEASE(result);
+  return map_remove_core(map, key);
 }
 
 static CljMap* map_remove_owned(CljMap *map, ID key) {

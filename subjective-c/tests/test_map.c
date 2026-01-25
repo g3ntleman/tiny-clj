@@ -1,11 +1,7 @@
 #include "test_common.h"
 static CljMap* adopt_map(CljMap *current, CljMap *updated) {
-    if (!updated) {
-        return current;
-    }
-    if (current && current != updated) {
-        RELEASE(current);
-    }
+    if (!updated) return current;
+    if (current && current != updated) RELEASE(current);
     return updated;
 }
 
