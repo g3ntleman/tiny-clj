@@ -105,14 +105,15 @@ void vector_increment_count(CljVector *vec) {
 
 void vector_clear(CljVector *vec) {
     CLJ_ASSERT(vec != NULL);
-    
     if (vec->base.type != CLJ_VECTOR_TRANSIENT_WEAK) {
-        VECTOR_FOR_EACH(vec, elem) {
-        RELEASE(elem);
-        }
+        VECTOR_FOR_EACH(vec, elem) { RELEASE(elem); }
     }
-    
     vec->count = 0;
+}
+
+void vector_truncate(CljVector *vec, unsigned int n) {
+    CLJ_ASSERT(vec && n <= vec->count);
+    vec->count = n;
 }
 
 /** Set element at index. Only works for transient vectors.

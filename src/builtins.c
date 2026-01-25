@@ -4301,14 +4301,14 @@ static bool eval_source_in_current_state(const char *src, const char *src_name, 
             {
                 if (reader_is_eof(&reader))
                 {
-                    autorelease_pool_drain_to_depth((uint32_t)pool_restore_depth);
+                    autorelease_pool_drain_to_depth(_restore);
                     break;
                 }
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n')
                     reader_next(&reader);
                 if (!reader_is_eof(&reader))
                     reader_next(&reader);
-                autorelease_pool_drain_to_depth((uint32_t)pool_restore_depth);
+                autorelease_pool_drain_to_depth(_restore);
                 continue;
             }
 
@@ -7089,6 +7089,7 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func)
 
 void register_builtins()
 {
+    WITH_AUTORELEASE_POOL({
     // NOTE: Most functions are now registered via :native stubs in clojure.core.clj
     // This allows metadata (docstrings) to be properly attached.
     // Only functions needed in --no-core mode are registered here directly.
@@ -7153,4 +7154,6 @@ void register_builtins()
 
     // Apply function
     register_builtin_in_core("apply", native_apply);
+
+    });
 }

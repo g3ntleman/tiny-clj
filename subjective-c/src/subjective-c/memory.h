@@ -135,15 +135,15 @@ static inline char *clj_strdup(const char *s) {
  */
 int retain_count(ID obj);
 
-// Autorelease pool API (flat). autorelease_pool_ensure_active() or autorelease() when depth==0.
+// Autorelease pool API. Pool is always active once it exists. ensure_active() inits when needed.
 void autorelease_pool_init(void);
-void autorelease_pool_ensure_active(void);  // no-op when depth>0; for WITH_AUTORELEASE_POOL
+void autorelease_pool_ensure_active(void);
 void autorelease_pool_free(void);
 bool is_autorelease_pool_active(void);
 
-// depth: 0=inactive, 1=active. drain_to_depth(d) for exception-safe cleanup.
-uint32_t autorelease_pool_depth(void);
-void autorelease_pool_drain_to_depth(uint32_t depth);
+uint32_t autorelease_pool_mark(void);       // ensure + vector_count for WITH_AUTORELEASE_POOL
+uint32_t autorelease_pool_depth(void);      // legacy, always 0
+void autorelease_pool_drain_to_depth(uint32_t mark);  // RELEASE [mark,count), truncate to mark
 
 #ifdef DEBUG
 /** @brief Get the peak autorelease pool item count since last reset.
@@ -161,16 +161,8 @@ void autorelease_pool_peak_reset(void);
 #endif
 
 #ifdef DEBUG
-/** @brief Check if an object is in the autorelease pool (O(n) search)
- * 
- * @param obj Object to check
- * @return true if object is in the current autorelease pool, false otherwise
- * 
- * Debug-only function that searches through the autorelease pool items array
- * to determine if the given object is currently autoreleased.
- * This is O(n) where n is the number of objects in the pool.
- */
-bool is_autoreleased(CljObject *obj);
+/** @brief Number of occurrences of obj in the autorelease pool (debug). O(pool size). */
+uint32_t autorelease_count(CljObject *obj);
 #endif // DEBUG
 
 #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
@@ -314,12 +306,11 @@ void* alloc(size_t type_size, size_t count, CljType obj_type);
 // AUTORELEASE POOL MACROS - Always available in all builds
 // ============================================================================
 
-// WITH_AUTORELEASE_POOL: run code with an active pool. Ensures active when depth==0.
+// WITH_AUTORELEASE_POOL: run code with an active pool. Inits pool when not yet created.
 #define WITH_AUTORELEASE_POOL(code) do { \
-    uint32_t pool_restore_depth = autorelease_pool_depth(); \
-    if (pool_restore_depth == 0) autorelease_pool_ensure_active(); \
+    uint32_t _restore = autorelease_pool_mark(); \
     code; \
-    autorelease_pool_drain_to_depth(pool_restore_depth); \
+    autorelease_pool_drain_to_depth(_restore); \
 } while(0)
 
 
