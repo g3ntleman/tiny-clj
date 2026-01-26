@@ -63,15 +63,8 @@ idf_component_register(
     tiny-db
 )
 
-if(TINYCLJ_PLATFORM STREQUAL "uart")
-  set(_repl_def 1)
-else()
-  set(_repl_def 0)
-endif()
-
 target_compile_definitions(${COMPONENT_LIB} PUBLIC
   ESP32_BUILD=1
-  REPL_ENABLED=${_repl_def}
   LINE_EDITING_ENABLED=1
   MEMORY_PROFILING_ENABLED=0
   META_ENABLED=0

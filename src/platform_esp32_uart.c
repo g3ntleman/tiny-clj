@@ -38,15 +38,62 @@ __attribute__((weak)) void tinyclj_esp32_uart_flush(void) {
     fflush(stdout);
 }
 
-int platform_set_stdin_nonblocking(int enable) {
-    (void)enable;
-    // Not applicable on ESP32 UART; input is always non-blocking via hook.
-    return 0;
-}
+// -----------------------------------------------------------------------------
+// REPL / line editor platform APIs
+// -----------------------------------------------------------------------------
 
 int platform_readline_nb(char *buf, int max) {
-    (void)buf; (void)max;
-    // Not used when LINE_EDITING_ENABLED=1.
+    if (!buf || max <= 1) return -1;
+
+    static char linebuf[2048];
+    static int len = 0;
+
+    // Drain available bytes into a line buffer until we see a line terminator.
+    for (;;) {
+        int b = tinyclj_esp32_uart_read_byte_nonblocking();
+        if (b == -2) {
+            break; // no input available
+        }
+        if (b == -1) {
+            if (len == 0) return -1; // EOF and nothing buffered
+            // Flush buffered bytes as final line.
+            int outlen = (len < (max - 1)) ? len : (max - 1);
+            memcpy(buf, linebuf, (size_t)outlen);
+            buf[outlen] = '\0';
+            len = 0;
+            return outlen;
+        }
+
+        if (len + 1 >= (int)sizeof(linebuf)) {
+            len = 0;
+            return -1;
+        }
+
+        char c = (char)b;
+        // Treat CR as end-of-line for typical UART monitors.
+        if (c == '\r') c = '\n';
+        linebuf[len++] = c;
+        if (c == '\n') {
+            break;
+        }
+    }
+
+    // Look for a newline; if present, return a line without the terminator.
+    for (int i = 0; i < len; i++) {
+        if (linebuf[i] == '\n') {
+            int outlen = (i < (max - 1)) ? i : (max - 1);
+            memcpy(buf, linebuf, (size_t)outlen);
+            buf[outlen] = '\0';
+
+            int remaining = len - (i + 1);
+            if (remaining > 0) {
+                memmove(linebuf, linebuf + i + 1, (size_t)remaining);
+            }
+            len = remaining;
+            return outlen;
+        }
+    }
+
     return 0;
 }
 
@@ -57,26 +104,27 @@ int platform_get_char(void *ctx) {
 
 void platform_put_char(void *ctx, char c) {
     (void)ctx;
-    tinyclj_esp32_uart_write_bytes((const uint8_t *)&c, 1);
-    tinyclj_stdout_observe_bytes(&c, 1);
+    uint8_t b = (uint8_t)c;
+    tinyclj_esp32_uart_write_bytes(&b, 1);
+    tinyclj_stdout_observe_bytes((const char*)&c, 1);
 }
 
 void platform_put_string(void *ctx, const char *s) {
     (void)ctx;
     if (!s) return;
-    tinyclj_esp32_uart_write_bytes((const uint8_t *)s, strlen(s));
-    tinyclj_stdout_observe_bytes(s, strlen(s));
+    size_t n = strlen(s);
+    if (n == 0) return;
+    tinyclj_esp32_uart_write_bytes((const uint8_t*)s, n);
+    tinyclj_stdout_observe_bytes(s, n);
 }
 
 void platform_set_raw_mode(int enable) {
     (void)enable;
-    // No-op: terminal modes are host-only.
+    // On ESP32 UART we don't have a host terminal mode to switch.
 }
 
-#if defined(REPL_ENABLED) && (REPL_ENABLED != 0)
-__attribute__((weak)) bool platform_try_get_cursor_position(uint16_t *row, uint16_t *col) {
-    (void)row;
-    (void)col;
-    return false;
+int platform_set_stdin_nonblocking(int enable) {
+    (void)enable;
+    return 0;
 }
-#endif
+
