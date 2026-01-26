@@ -5,11 +5,13 @@ if(NOT DEFINED TINYCLJ_PLATFORM)
   set(TINYCLJ_PLATFORM "uart" CACHE STRING "tiny-clj platform: uart|embedded")
 endif()
 
+## Always include the embedded core platform implementation; append UART
+## helpers when building a REPL image.
+set(PLATFORM_SRCS "${CMAKE_CURRENT_LIST_DIR}/../../src/platform_esp32_embedded.c")
 if(TINYCLJ_PLATFORM STREQUAL "uart")
-  set(PLATFORM_SRC "${CMAKE_CURRENT_LIST_DIR}/../../src/platform_esp32_uart.c")
+  list(APPEND PLATFORM_SRCS "${CMAKE_CURRENT_LIST_DIR}/../../src/platform_esp32_uart.c")
   set(_repl_def 1)
 else()
-  set(PLATFORM_SRC "${CMAKE_CURRENT_LIST_DIR}/../../src/platform_esp32_embedded.c")
   set(_repl_def 0)
 endif()
 
@@ -17,7 +19,7 @@ idf_component_register(
   SRCS
     "tinyclj_idf_main.c"
     "tinyclj_idf_run.c"
-    ${PLATFORM_SRC}
+    ${PLATFORM_SRCS}
   INCLUDE_DIRS
     "."
   REQUIRES

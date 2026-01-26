@@ -119,6 +119,10 @@ fi
 # Move the produced build directory into the centralized builds area.
 if [ -d build ]; then
   mkdir -p "${CENTRAL_BUILD_DIR}"
+  # Allow re-running without --clean: replace any prior centralized build dir.
+  if [ -d "${CENTRAL_BUILD_DIR}/build" ]; then
+    rm -rf "${CENTRAL_BUILD_DIR}/build"
+  fi
   mv build "${CENTRAL_BUILD_DIR}/"
   echo "Moved esp32-idf/build -> ${CENTRAL_BUILD_DIR}/build"
 fi
