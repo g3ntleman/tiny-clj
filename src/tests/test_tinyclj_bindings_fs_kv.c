@@ -34,7 +34,7 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
     /* list (lazy): realize into a vector */
     CljObject *lst = eval_string("(vec (tinyclj.fs/list \"/data/\"))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(lst);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(lst));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(lst));
 
     /* list with >32 files (forces batching in tinyclj.fs/list) */
     eval_string(
@@ -45,7 +45,7 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
         g_test_eval_state);
     CljObject *many = eval_string("(vec (tinyclj.fs/list \"/many/\"))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(many);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(many));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(many));
     TEST_ASSERT_EQUAL_INT(50, vector_count(as_vector(many)));
 
     /* kv put/get (key must not start with /) */

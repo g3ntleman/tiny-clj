@@ -140,7 +140,7 @@ TEST(test_datetime_civil_from_days_epoch) {
         "      (vector (:year c) (:month c) (:day c))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     CljVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(1970, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 1)));
@@ -155,7 +155,7 @@ TEST(test_datetime_civil_from_days_y2k) {
         "      (vector (:year c) (:month c) (:day c))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     CljVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(2000, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 1)));
@@ -186,7 +186,7 @@ TEST(test_datetime_time_from_millis_midnight) {
         "      (vector (:hour t) (:minute t) (:second t))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     CljVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
@@ -201,7 +201,7 @@ TEST(test_datetime_time_from_millis_noon) {
         "      (vector (:hour t) (:minute t))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     CljVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(12, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
@@ -215,7 +215,7 @@ TEST(test_datetime_time_from_millis_specific) {
         "      (vector (:hour t) (:minute t) (:second t) (:millis t))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     CljVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(14, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(30, as_fixnum(vector_nth(v, 1)));

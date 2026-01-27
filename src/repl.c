@@ -297,12 +297,12 @@ bool repl_eval_arg(const char *raw_code, EvalState *st) {
  *  @return New vector with last N elements (or original if smaller)
  */
 CljObject* history_trim_last_n(CljObject *vec, int limit) {
-    if (!vec || TAG(vec) != CLJ_VECTOR || limit <= 0) return (CljObject*)empty_vector();
+    if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT || limit <= 0) return (CljObject*)empty_vector();
     CljVector *v = as_vector(vec);
     int count = vector_count(v);
     if (count <= limit) return RETAIN(vec);
     int start = count - limit;
-    CljVector* out = make_vector(limit, CLJ_VECTOR);
+    CljVector* out = make_vector(limit, CLJ_VECTOR_PERSISTENT);
     ID nth_args[2];
     nth_args[0] = v;
     for (int i = 0; i < limit; i++) {
@@ -325,16 +325,14 @@ bool history_save_to_file(CljVector *vec, const char *path) {
     if (!path || !vec) return false;
 
     CljObject *persistent_vec = (CljObject*)vec;
-    if (TAG((CljObject*)vec) == CLJ_VECTOR_TRANSIENT) {
-        persistent_vec = (CljObject*)vector_persistent(vec);
-        if (!persistent_vec || TAG(persistent_vec) != CLJ_VECTOR) {
-            if (persistent_vec != (CljObject*)vec) RELEASE(persistent_vec);
+    if (TAG((CljObject*)vec) == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        persistent_vec = (CljObject*)vector_persistent((CljTransientVector*)vec);
+        if (!persistent_vec || TAG(persistent_vec) != CLJ_VECTOR_PERSISTENT) {
             return false;
         }
     }
 
-    if (TAG(persistent_vec) != CLJ_VECTOR) {
-        if (persistent_vec != (CljObject*)vec) RELEASE(persistent_vec);
+    if (TAG(persistent_vec) != CLJ_VECTOR_PERSISTENT) {
         return false;
     }
 
@@ -389,7 +387,7 @@ CljVector* history_load_from_file(const char *path) {
                 ID parsed = value_by_parsing_expr(&rd, st);
 
                 // Validate it's a vector
-                if (parsed && TAG(parsed) == CLJ_VECTOR) {
+                if (parsed && TAG(parsed) == CLJ_VECTOR_PERSISTENT) {
                     string_history = as_vector((CljObject*)parsed);
 
                     // RETAIN before pool pop to keep it alive
@@ -495,7 +493,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         TRY {
             CljObject *loaded = line_editor_history_load_default();
             // Only use loaded history if it has content
-            if (loaded && TAG(loaded) == CLJ_VECTOR && vector_count((CljVector*)loaded) > 0) {
+            if (loaded && TAG(loaded) == CLJ_VECTOR_PERSISTENT && vector_count((CljVector*)loaded) > 0) {
                 // loaded is already retained from history_load_from_file, transfer to outer pool
                 ASSIGN(history_vec, AUTORELEASE(loaded));
             }
@@ -507,7 +505,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     });
     // Verwende die geladene History
     // line_editor_set_history_from_vector ruft clj_conj auf, das AUTORELEASE verwendet
-    if (history_vec && TAG(history_vec) == CLJ_VECTOR) {
+    if (history_vec && TAG(history_vec) == CLJ_VECTOR_PERSISTENT) {
         WITH_AUTORELEASE_POOL({
             line_editor_set_history_from_vector(editor, (CljVector*)history_vec);
         });

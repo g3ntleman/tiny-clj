@@ -533,7 +533,7 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
         }
         result = eval_body(parsed_expr, eval_env, eval_state, NULL);
         // eval_body returns AUTORELEASE objects
-    } else if (parsed_expr && TAG(parsed_expr) == CLJ_VECTOR) {
+    } else if (parsed_expr && TAG(parsed_expr) == CLJ_VECTOR_PERSISTENT) {
         // Vector literals need to have their elements evaluated
         // Use provided env or fall back to current_ns->mappings
         CljMap *eval_env = env;
@@ -569,7 +569,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     reader_skip_all(reader);
 
     // Create transient vector for efficient building
-    CljVector *vec = make_vector(6, CLJ_VECTOR);
+    CljVector *vec = make_vector(6, CLJ_VECTOR_PERSISTENT);
     CljVector *tvec = vector_transient(vec);
     RELEASE(vec);  // Release original, use transient
 
@@ -595,7 +595,8 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     }
 
     // Convert back to persistent vector
-    vec = (CljVector*)vector_persistent(tvec);
+    vec = vector_persistent((CljTransientVector*)tvec);
+    RETAIN(vec);
     RELEASE(tvec);
 
     if (reader_eof(reader) || !reader_match(reader, ']')) {
@@ -687,7 +688,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
       }
 
       ID binding_vec = rest_list->first;
-      if (!binding_vec || TAG(binding_vec) != CLJ_VECTOR) {
+      if (!binding_vec || TAG(binding_vec) != CLJ_VECTOR_PERSISTENT) {
         throw_parser_exception("if-let binding must be a vector", reader);
         return NULL;
       }
@@ -1546,7 +1547,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   if (!body) {
     // Empty function body - return (fn [] ())
     CljSymbol *fn_sym = intern_symbol_global("fn");
-    CljValue empty_vec = make_vector(0, CLJ_VECTOR);
+    CljValue empty_vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
     ID empty_list_val = NULL; // () is nil in Clojure
     return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
   }
@@ -1564,7 +1565,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
   CljSymbol *fn_sym = intern_symbol_global("fn");
   CljSymbol *percent_sym = intern_symbol_global("%");
-  CljVector *param_vec = make_vector(1, CLJ_VECTOR);
+  CljVector *param_vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
   vector_conj_inplace(&param_vec, percent_sym);
 
   // Create (fn [%] body)

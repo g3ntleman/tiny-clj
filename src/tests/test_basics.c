@@ -89,12 +89,12 @@ TEST(test_vector_creation) {
     // Test empty vector creation
     CljObject *vec = eval_string("[]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vec);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, vec->type);
 
     // Test vector with elements
     CljObject *vec2 = eval_string("[1 2 3]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vec2);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec2->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, vec2->type);
 
     // Clean up
 }
@@ -516,7 +516,7 @@ TEST(test_load_multiline_file) {
     const char *multiline_nested = "[\n  {:a 1\n   :b 2}\n  (+ 1\n     2)\n  3\n]";
     CljObject *parsed5 = parse(multiline_nested, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed5);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, parsed5->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, parsed5->type);
 
     // Clean up
 }
@@ -551,7 +551,7 @@ TEST(test_identity_function) {
     // Test with vector
     CljObject *result5 = eval_string("(identity [1 2 3])", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result5);
-    TEST_ASSERT_TRUE(TAG(result5) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result5) == CLJ_VECTOR_PERSISTENT);
 
     // Test with map
     CljObject *result6 = eval_string("(identity {:a 1 :b 2})", g_test_eval_state);
@@ -1059,7 +1059,7 @@ TEST(test_type_check_all_types) {
 
     ID vector_val = parse("[]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vector_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(vector_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vector_val));
 
     ID map_val = parse("{}", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(map_val);
@@ -1086,7 +1086,7 @@ TEST(test_type_check_all_types) {
 
     ID vector_with_elems = parse("[1 2 3]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vector_with_elems);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(vector_with_elems));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vector_with_elems));
 
     ID map_with_elems = parse("{:a 1 :b 2}", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(map_with_elems);

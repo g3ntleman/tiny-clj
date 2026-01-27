@@ -515,7 +515,7 @@ TEST(test_stacktrace_stack_trace_returns_vector_of_strings) {
     TEST_ASSERT_NOT_NULL_MESSAGE(trace_obj, "stack-trace should return a vector (possibly empty)");
 
     // 4) assert it returns a vector and that every element is a string
-    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR, TAG(trace_obj), "stack-trace should return a vector");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR_PERSISTENT, TAG(trace_obj), "stack-trace should return a vector");
     CljVector *trace_vec = as_vector(trace_obj);
     TEST_ASSERT_NOT_NULL(trace_vec);
 

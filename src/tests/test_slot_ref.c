@@ -31,7 +31,7 @@ TEST(test_slot_ref_fn_params_rewritten_in_simple_body) {
     // params vector
     ID params_vec = LIST_FIRST(rest1);
     TEST_ASSERT_NOT_NULL(params_vec);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR, TAG(params_vec), "Params must be vector");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR_PERSISTENT, TAG(params_vec), "Params must be vector");
 
     // body expression: (+ n acc)
     CljList *body_tail = as_list(LIST_REST(rest1));
@@ -87,7 +87,7 @@ TEST(test_slot_ref_nested_fn_rewrites_free_var_depth1) {
 
     CljList *outer_rest1 = as_list(LIST_REST(outer_fn));
     TEST_ASSERT_NOT_NULL(outer_rest1);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR, TAG(LIST_FIRST(outer_rest1)), "Outer params must be vector");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR_PERSISTENT, TAG(LIST_FIRST(outer_rest1)), "Outer params must be vector");
 
     CljList *outer_body_tail = as_list(LIST_REST(outer_rest1));
     TEST_ASSERT_NOT_NULL(outer_body_tail);
@@ -102,7 +102,7 @@ TEST(test_slot_ref_nested_fn_rewrites_free_var_depth1) {
 
     CljList *inner_rest1 = as_list(LIST_REST(inner_fn));
     TEST_ASSERT_NOT_NULL(inner_rest1);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR, TAG(LIST_FIRST(inner_rest1)), "Inner params must be vector");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR_PERSISTENT, TAG(LIST_FIRST(inner_rest1)), "Inner params must be vector");
 
     CljList *inner_body_tail = as_list(LIST_REST(inner_rest1));
     TEST_ASSERT_NOT_NULL(inner_body_tail);

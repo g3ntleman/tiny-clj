@@ -91,7 +91,7 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
         return;
     }
 
-    if (tag == CLJ_VECTOR) {
+    if (tag == CLJ_VECTOR_PERSISTENT) {
         CljVector *vec = as_vector(expr);
         if (vec) {
             unsigned int count = vector_count(vec);
@@ -712,9 +712,9 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             return eval_list(as_list(body), env_map, ctx_state, ctx);
         }
 
-        case CLJ_VECTOR:
-        case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: {
+        case CLJ_VECTOR_PERSISTENT_PERSISTENT:
+        case CLJ_VECTOR_PERSISTENT_TRANSIENT:
+        case CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK: {
             // Vector literals need to have their elements evaluated
             CljVector *vec = (CljVector*)body;
             unsigned int count = vector_count(vec);
@@ -725,7 +725,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             }
             
             // Create new vector with evaluated elements
-            CljVector *result = make_vector(count, CLJ_VECTOR);
+            CljVector *result = make_vector(count, CLJ_VECTOR_PERSISTENT);
             RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
@@ -870,9 +870,9 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             return NULL;
         }
 
-        case CLJ_VECTOR:
-        case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: {
+        case CLJ_VECTOR_PERSISTENT_PERSISTENT:
+        case CLJ_VECTOR_PERSISTENT_TRANSIENT:
+        case CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK: {
             // Vector literals need to have their elements evaluated
             // This is necessary for cases like [(f x) (g x)] where f and g should be called
             CljVector *vec = (CljVector*)body;
@@ -884,7 +884,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             }
             
             // Create new vector with evaluated elements
-            CljVector *result = make_vector(count, CLJ_VECTOR);
+            CljVector *result = make_vector(count, CLJ_VECTOR_PERSISTENT);
             RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
@@ -2405,7 +2405,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     // Get bindings vector (second element): (let [x 10 y 20] ...)
     CljObject *bindings_vec = list_get_element(list, 1);
-    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR) {
+    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR_PERSISTENT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "let requires a vector for bindings",
                        NULL, 0, 0);
@@ -2763,12 +2763,12 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         return AUTORELEASE(result);
     }
 
-    if (expr_tag == CLJ_VECTOR || expr_tag == CLJ_VECTOR_TRANSIENT || expr_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+    if (expr_tag == CLJ_VECTOR_PERSISTENT || expr_tag == CLJ_VECTOR_PERSISTENT_TRANSIENT || expr_tag == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK) {
         CljVector *vec = (CljVector*)expr;
         unsigned int count = vector_count(vec);
         if (count == 0) return expr;
         
-        CljVector *result = make_vector(count, CLJ_VECTOR);
+        CljVector *result = make_vector(count, CLJ_VECTOR_PERSISTENT);
         RETAIN(result);
         VECTOR_FOR_EACH(vec, elem) {
             ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, eval_env, eval_st, ctx) : NULL;

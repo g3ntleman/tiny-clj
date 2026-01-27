@@ -6,7 +6,6 @@
  */
 
 #include "memory.h"
-#include "runtime.h"
 #include "object.h"
 #include "vector.h"
 #include "value.h"  // For IS_IMMEDIATE macro used in memory.h
@@ -16,7 +15,6 @@
 #include "map.h"
 #include "list.h"
 #include "ast.h"
-#include "byte_array.h"
 #include "atom.h"
 #include "function.h"  // For CljFunction
 #include "namespace.h"  // For CljNamespace
@@ -703,7 +701,7 @@ static void release_object_default(CljObject *v) {
             
         // CLJ_SYMBOL: Release handler registered by tiny-clj via subjective_c_register_release_fn()
             
-        case CLJ_VECTOR:
+        case CLJ_VECTOR_PERSISTENT:
             {
                 // Direct cast - we already know it's a Vector from the switch case
                 // Using as_vector() would call TAG() which fails when rc=0 (zombie mode)
@@ -714,6 +712,15 @@ static void release_object_default(CljObject *v) {
                         RELEASE(elem);
                     }
                     // Note: data array is automatically freed
+                }
+            }
+            break;
+
+        case CLJ_VECTOR_TRANSIENT:
+            {
+                CljTransientVector *tvec = (CljTransientVector*)v;
+                if (tvec && tvec->backing_store) {
+                    RELEASE(tvec->backing_store);
                 }
             }
             break;

@@ -22,7 +22,7 @@ typedef enum {
     CLJ_NIL = 0,
     CLJ_SYMBOL = 2,
     CLJ_STRING = 4,
-    CLJ_VECTOR = 6,
+    CLJ_VECTOR_PERSISTENT = 6,
     CLJ_VECTOR_TRANSIENT_WEAK = 8,
     CLJ_MAP = 10,
     CLJ_LIST = 12,
