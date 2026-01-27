@@ -34,7 +34,6 @@ set(TINYCLJ_SRCS
   "../../../src/debug.c"
   "../../../src/seq.c"
   "../../../src/error_messages.c"
-  "../../../src/memory_profiler.c"
   "../../../src/numeric_utils.c"
   "../../../src/validation.c"
   "../../../src/args_utils.c"

@@ -8,12 +8,14 @@
 #include "exception.h"
 #include "environment.h"
 #include "runtime.h"
+#include "symbol.h"
 #include "function.h"
 #include "macro.h"
 #include "meta.h"
 #include "ast.h"
 #include "strings.h"
 #include "to_string.h"
+#include "debug.h"
 
 #include <string.h>
 
@@ -47,33 +49,96 @@ ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContex
     CLJ_ASSERT(list != NULL && "eval_special_cond: list must not be NULL");
 
     // `cond` expects pairs: test expr test expr ...
-    // Validate at runtime (must be an even number of forms after `cond`, even if it would short-circuit)
-    // and traverse the list once (avoid O(n^2) list_get_element walks).
+    // We validate during iteration (not using list_count upfront) to handle :else correctly
+    // even in macro expansion contexts where form counting might be affected.
+    // This also avoids traversing the list twice (once for counting, once for processing).
     CljList *node = list_rest_normalized(list);
     if (!node) return NULL;
 
-    int forms = list_count(node);
-    if ((forms % 2) != 0) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "cond requires an even number of forms",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
+    // Process pairs: (test expr) or (:else expr)
+    // We validate as we go, which is more robust for macro expansion contexts
     while (node) {
         ID test = LIST_FIRST(node);
-        node = list_rest_normalized(node);
-        ID expr = LIST_FIRST(node);
-        node = list_rest_normalized(node);
-
+        if (!test) {
+            // nil test - skip to next
+            node = list_rest_normalized(node);
+            continue;
+        }
+        
+        // Check if we have an expression for this test BEFORE evaluating test
+        // This ensures we detect odd number of forms even if first test is truthy
+        CljList *expr_node = list_rest_normalized(node);
+        if (!expr_node) {
+            // No expression - check if test is :else (which would be invalid - :else needs an expr)
+            bool is_else = false;
+            if (test == SYM_KW_ELSE) {
+                is_else = true;
+            } else if (IS_KEYWORD(test)) {
+                CljSymbol *kw = as_symbol(test);
+                if (kw && kw->cname) {
+                    // Check name comparison for non-interned keywords (macro expansion context)
+                    if (strcmp(kw->cname, ":else") == 0) {
+                        is_else = true;
+                    }
+                }
+            }
+            
+            if (is_else) {
+                throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                                "cond :else clause requires an expression",
+                                __FILE__, __LINE__, 0);
+                return NULL;
+            } else {
+                throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                                "cond requires an even number of forms",
+                                __FILE__, __LINE__, 0);
+                return NULL;
+            }
+        }
+        
+        ID expr = LIST_FIRST(expr_node);
+        CljList *next_pair = list_rest_normalized(expr_node);
+        
         // `test` and `expr` may legitimately be NULL (nil literal).
-        // `eval_body` and `RELEASE` are nil-safe.
-        ID test_result = eval_body(test, env, st, ctx);
-        bool truthy = clj_is_truthy(test_result);
-        RELEASE(test_result);
+        // `eval_body` returns autoreleased objects - no manual cleanup needed.
+        
+        // Special case: `:else` keyword is always true (Clojure semantics)
+        // Check both pointer comparison (for interned keywords) and name comparison
+        // (for non-interned keywords in macro expansion contexts)
+        bool truthy;
+        if (test == SYM_KW_ELSE) {
+            truthy = true;
+        } else if (IS_KEYWORD(test)) {
+            CljSymbol *kw = as_symbol(test);
+            if (kw && kw->cname && strcmp(kw->cname, ":else") == 0) {
+                truthy = true;
+            } else {
+                ID test_result = eval_body(test, env, st, ctx);
+                truthy = clj_is_truthy(test_result);
+                // No RELEASE needed - eval_body returns autoreleased object
+            }
+        } else {
+            ID test_result = eval_body(test, env, st, ctx);
+            truthy = clj_is_truthy(test_result);
+            // No RELEASE needed - eval_body returns autoreleased object
+        }
+        
         if (truthy) {
+            // Before returning, check if there are more elements that form an incomplete pair
+            // If next_pair exists but has no second element (rest), we have an odd number
+            // This means: we have (test expr remaining...) where remaining has odd count
+            if (next_pair && !list_rest_normalized(next_pair)) {
+                // next_pair exists but has no second element - odd number of forms
+                throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                                "cond requires an even number of forms",
+                                __FILE__, __LINE__, 0);
+                return NULL;
+            }
             return eval_body(expr, env, st, ctx);
         }
+        
+        // Move to next pair
+        node = next_pair;
     }
 
     return NULL;

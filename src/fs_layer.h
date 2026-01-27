@@ -108,6 +108,11 @@ typedef enum {
 /* Write bytes directly to KV store at path. */
 fs_err_t fs_write_bytes(FsKvStore *st, const char *path, const uint8_t *data, size_t len);
 
+/* Set file size directly. Creates zero-filled chunks if extending the file,
+ * or truncates/free trailing chunks if shrinking. Commits metadata atomically.
+ */
+fs_err_t fs_set_size(FsKvStore *st, const char *path, uint32_t size);
+
 /* Read full file bytes into a new byte-array. Returns NULL if not found. */
 ID fs_read_bytes(FsKvStore *st, const char *path);
 
@@ -128,7 +133,10 @@ bool fs_delete(FsKvStore *st, const char *path);
  * - out_last_key[0] == '\0' means no more data.
  * - otherwise, call again with after_key = out_last_key.
  *
- * Returns a vector of strings (paths), or NULL on error.
+ * Returns a vector of entry maps:
+ *   {:path <string> :meta <map>}
+ * where :meta includes at least formal fields like :size and :chunks when available.
+ * Returns NULL on error.
  */
 ID fs_list_dir_batch(FsKvStore *st,
                      const char *dir_path,
@@ -137,6 +145,6 @@ ID fs_list_dir_batch(FsKvStore *st,
                      char *out_last_key,
                      size_t out_last_key_cap);
 
-/* List direct children paths under a directory. Returns a vector of strings. */
+/* List direct children paths under a directory (batched). */
 #endif /* TINY_CLJ_FS_LAYER_H */
 

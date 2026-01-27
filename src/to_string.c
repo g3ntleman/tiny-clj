@@ -278,14 +278,17 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
 
         case CLJ_CLOSURE: {
             CljFunction *clj_func = (CljFunction*)v;
-            if (clj_func && clj_func->name) {
+            const char *name = (clj_func && clj_func->name_sym && clj_func->name_sym->cname)
+                ? clj_func->name_sym->cname
+                : NULL;
+            if (name) {
                 CljNamespace *ns = ns_find_for_object((CljObject*)v);
                 const char *ns_name = ns && ns->name && ns->name->cname ? ns->name->cname : NULL;
                 size_t len = 20; // "#<Clojure function "
                 if (ns_name) {
                     len += strlen(ns_name) + 1; // "ns/"
                 }
-                len += strlen(clj_func->name) + 1; // "name>"
+                len += strlen(name) + 1; // "name>"
                 return len;
             }
             return 20; // "#<Clojure function>"
@@ -602,7 +605,10 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
 
         case CLJ_CLOSURE: {
             CljFunction *clj_func = (CljFunction*)v;
-            if (clj_func && clj_func->name) {
+            const char *name = (clj_func && clj_func->name_sym && clj_func->name_sym->cname)
+                ? clj_func->name_sym->cname
+                : NULL;
+            if (name) {
                 CljNamespace *ns = ns_find_for_object((CljObject*)v);
                 const char *ns_name = ns && ns->name && ns->name->cname ? ns->name->cname : NULL;
                 append_cstr(buffer, offset, "#<Clojure function ");
@@ -610,7 +616,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                     append_cstr(buffer, offset, ns_name);
                     append_char(buffer, offset, '/');
                 }
-                append_cstr(buffer, offset, clj_func->name);
+                append_cstr(buffer, offset, name);
                 append_char(buffer, offset, '>');
             } else {
                 memcpy(buffer + *offset, "#<Clojure function>", 19);

@@ -18,6 +18,8 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # -----------------------------------------------------------------------------
 
 set(SUBJECTIVE_C_SOURCES
+    src/platform_allocated_size.c
+    src/memory_profiler.c
     src/value.c
     src/types.c
     src/memory.c
@@ -107,10 +109,8 @@ set(SUBJECTIVE_C_TEST_SOURCES
     tests/test_hash.c
     tests/test_support_stubs.c
     ${CMAKE_SOURCE_DIR}/external/unity/src/unity.c
-    ${CMAKE_SOURCE_DIR}/src/memory_profiler.c
     ${CMAKE_SOURCE_DIR}/src/validation.c
     ${CMAKE_SOURCE_DIR}/src/ast.c
-    ${CMAKE_SOURCE_DIR}/src/equality.c
     ${CMAKE_SOURCE_DIR}/src/error_messages.c
     ${CMAKE_SOURCE_DIR}/src/object.c
     ${CMAKE_SOURCE_DIR}/subjective-c/src/types.c

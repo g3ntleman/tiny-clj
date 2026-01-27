@@ -16,9 +16,10 @@
 #include "symbol.h"         // For init_special_symbols()
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
-#include "to_string.h"      // For to_string()
+#include "to_string.h"      // For to_string(), pr_str; strings.h for string_data
 #include "callbacks.h"  // For clj_set_callbacks
 #include <stdint.h>
+#include <stdbool.h>
 
 // Statically allocated global runtime struct (all pointers initialized to NULL).
 TinyClJRuntime g_runtime = {
@@ -37,6 +38,19 @@ TinyClJRuntime g_runtime = {
 // Monotonic epoch for callsite + resolve cache invalidation.
 // Must never be reset to avoid re-validating stale cached pointers across runtime_reset().
 static uint64_t g_resolve_cache_epoch_counter = 1;
+
+#if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
+static void zombie_log_fn(CljObject *v, bool is_double_free) {
+    WITH_AUTORELEASE_POOL({
+        CljString *s = pr_str((ID)v);
+        if (s) {
+            fputs(is_double_free ? "DOUBLE-FREE pr_str: " : "ZOMBIE pr_str: ", stderr);
+            fputs(string_data((CljObject *)s), stderr);
+            fputc('\n', stderr);
+        }
+    });
+}
+#endif
 
 void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime) return;
@@ -104,6 +118,10 @@ void runtime_init(TinyClJRuntime *runtime) {
         .equal = clj_equal_full,
         .to_string = to_string
     });
+
+#if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
+    subjective_c_set_zombie_log_fn(zombie_log_fn);
+#endif
 
     // Initialize special symbols/keywords early, before any code can intern the same names.
     // This must happen AFTER callbacks are set, because the symbol table is a HashMap that

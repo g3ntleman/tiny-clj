@@ -2,7 +2,7 @@
 #
 # Bootstrap ESP-IDF (as a git submodule) + toolchain for this repo.
 #
-# This keeps tools repo-local by default (under ./_deps/) so contributors
+# This keeps tools repo-local by default (under ./external/) so contributors
 # don't need to install anything globally.
 #
 # Usage:
@@ -13,7 +13,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IDF_SUBMODULE_PATH="${REPO_ROOT}/external/esp-idf"
 
-export IDF_TOOLS_PATH="${IDF_TOOLS_PATH:-${REPO_ROOT}/_deps/espressif-tools}"
+export IDF_TOOLS_PATH="${IDF_TOOLS_PATH:-${REPO_ROOT}/external/espressif-tools}"
 
 echo "== ESP-IDF bootstrap =="
 echo "Repo: ${REPO_ROOT}"

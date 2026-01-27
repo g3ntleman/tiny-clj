@@ -3,9 +3,9 @@
 static CljVector* make_vector_from_ints(const int *values, size_t count) {
     CljVector *vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
     for (size_t i = 0; i < count; ++i) {
-        CljVector *updated = vector_conj(vec, fixnum(values[i]));
+        CljVector *updated = vector_conj_owned(vec, fixnum(values[i]));
         if (updated != vec) {
-            RELEASE(vec);
+            if (vec != empty_vector()) RELEASE(vec);
             vec = updated;
         }
     }

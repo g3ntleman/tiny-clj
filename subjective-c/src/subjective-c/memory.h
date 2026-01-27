@@ -7,23 +7,33 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h> // malloc/free/realloc/calloc
+#include <string.h> // strlen/memcpy
 
-// memory_profiler.h lives in tiny-clj (not in subjective-c).
-// Only include it when profiling is explicitly enabled.
+// memory_profiler.h lives in subjective-c. Include when profiling enabled.
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 #include "memory_profiler.h"
+// Functions are declared in memory_profiler.h, no need for no-op macros
+#else
+// Default no-op definitions for memory profiler functions when profiling is disabled
+#define memory_profiler_track_raw_alloc(p, n, file, line) ((void)0)
+#define memory_profiler_track_raw_free(ptr, file, line) ((void)0)
+#define memory_profiler_track_raw_realloc(old_ptr, new_ptr, n, file, line) ((void)0)
 #endif
 
 typedef void (*SubjectiveCReleaseFn)(CljObject *obj);
 void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn);
+
+/** When ZOMBIE_ENABLED: optional callback (object, is_double_free) to log pr_str for inspection. */
+typedef void (*SubjectiveCZombieLogFn)(CljObject *v, bool is_double_free);
+void subjective_c_set_zombie_log_fn(SubjectiveCZombieLogFn fn);
 
 // Zombie mode is controlled by ZOMBIE_ENABLED macro at compile time
 // No runtime API needed
 
 void retain(CljObject *v);
 void release(CljObject *v);
-void enable_memory_debug_output(void);
-void disable_memory_debug_output(void);
+void memory_set_debug_output_enabled(bool enabled);
+bool memory_get_debug_output_enabled(void);
 CljObject *autorelease(CljObject *v);
 bool is_pointer_in_data_segment(const void *ptr);
 bool is_pointer_on_stack(const void *ptr);
@@ -38,9 +48,11 @@ void throw_oom(void) __attribute__((noreturn));
 // MEMORY_PROFILING_ENABLED=1. Otherwise, these macros are direct malloc/free.
 //
 
+
 #if MEMORY_PROFILING_ENABLED
 
 static inline void* clj_malloc_impl(size_t n, const char *file, int line) {
+    (void)file; (void)line;
     void *p = malloc(n);
     if (!p && n != 0) {
         throw_oom(); // never returns
@@ -50,6 +62,7 @@ static inline void* clj_malloc_impl(size_t n, const char *file, int line) {
 }
 
 static inline void* clj_calloc_impl(size_t nmemb, size_t size, const char *file, int line) {
+    (void)file; (void)line;
     // Best-effort overflow guard.
     if (nmemb != 0 && size > ((size_t)-1) / nmemb) {
         throw_oom(); // never returns
@@ -64,6 +77,7 @@ static inline void* clj_calloc_impl(size_t nmemb, size_t size, const char *file,
 }
 
 static inline void* clj_realloc_impl(void *old_ptr, size_t n, const char *file, int line) {
+    (void)file; (void)line;
     void *new_ptr = realloc(old_ptr, n);
     if (!new_ptr && n != 0) {
         throw_oom(); // never returns; old_ptr remains valid per realloc contract
@@ -76,6 +90,7 @@ static inline void* clj_realloc_impl(void *old_ptr, size_t n, const char *file, 
 }
 
 static inline void clj_free_impl(void *ptr, const char *file, int line) {
+    (void)file; (void)line;
     memory_profiler_track_raw_free(ptr, file, line);
     free(ptr);
 }
@@ -87,12 +102,29 @@ static inline void clj_free_impl(void *ptr, const char *file, int line) {
 
 #else
 
+// No-op macros for profiler tracking when profiling is disabled
+#define memory_profiler_track_raw_alloc(p, n, file, line) ((void)0)
+#define memory_profiler_track_raw_free(ptr, file, line) ((void)0)
+#define memory_profiler_track_raw_realloc(old_ptr, new_ptr, n, file, line) ((void)0)
+
 #define CLJ_MALLOC(n) malloc((n))
 #define CLJ_CALLOC(nmemb, size) calloc((nmemb), (size))
 #define CLJ_REALLOC(ptr, n) realloc((ptr), (n))
 #define CLJ_FREE(ptr) free((ptr))
 
 #endif // MEMORY_PROFILING_ENABLED
+
+// -----------------------------------------------------------------------------
+// Trackable string allocation helpers
+// -----------------------------------------------------------------------------
+// Use these instead of strdup/free so raw allocations show up in the profiler.
+static inline char *clj_strdup(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s) + 1;
+    char *out = (char*)CLJ_MALLOC(n);
+    memcpy(out, s, n);
+    return out;
+}
 
 /** @brief Get the reference count of an object
  *
@@ -103,51 +135,23 @@ static inline void clj_free_impl(void *ptr, const char *file, int line) {
  */
 int retain_count(ID obj);
 
-// Autorelease pool API (checkpoint-based implementation)
-void autorelease_pool_init(void);     // Call once at startup
-void autorelease_pool_push(void);      // Push new checkpoint
-void autorelease_pool_pop(void);       // Pop current checkpoint
-void autorelease_pool_drain_after_exception(void);
-void autorelease_pool_destroy(void);
+void autorelease_pool_init(void);
+void autorelease_pool_ensure_active(void);
+void autorelease_pool_free(void);
 bool is_autorelease_pool_active(void);
 
-// Pool depth helpers (for exception-safe cleanup without underflowing outer pools).
-// Depth is the number of active checkpoints (push count - pop count).
+uint32_t autorelease_pool_mark(void);
 uint32_t autorelease_pool_depth(void);
-void autorelease_pool_drain_to_depth(uint32_t depth);
+void autorelease_pool_drain_to_depth(uint32_t mark);
 
 #ifdef DEBUG
-/** @brief Get the peak autorelease pool item count since last reset.
- *
- * Tracks max of internal pool 'count' (number of tracked autoreleased objects).
- * Intended for diagnosing peak autorelease tracking overhead.
- */
 uint32_t autorelease_pool_peak_count(void);
-
-/** @brief Reset the peak autorelease pool counter.
- *
- * After reset, peak is at least the current pool count.
- */
 void autorelease_pool_peak_reset(void);
+uint32_t autorelease_count(CljObject *obj);
 #endif
-
-#ifdef DEBUG
-/** @brief Check if an object is in the autorelease pool (O(n) search)
- * 
- * @param obj Object to check
- * @return true if object is in the current autorelease pool, false otherwise
- * 
- * Debug-only function that searches through the autorelease pool items array
- * to determine if the given object is currently autoreleased.
- * This is O(n) where n is the number of objects in the pool.
- */
-bool is_autoreleased(CljObject *obj);
-#endif // DEBUG
 
 #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
 #define ALLOC_SIMPLE(obj_type) (ID) alloc(sizeof(CljObject), 1, obj_type)
-// For CljObject subtypes with dynamic size (flexible array members, embedded buffers, etc.)
-// Use this instead of raw malloc/CLJ_MALLOC so allocation is tracked as an object allocation.
 #define ALLOC_BYTES(obj_type, bytes) ((void*) alloc((bytes), 1, (obj_type)))
 
 #ifdef DEBUG
@@ -281,23 +285,12 @@ bool is_autoreleased(CljObject *obj);
 
 void* alloc(size_t type_size, size_t count, CljType obj_type);
 
-// ============================================================================
-// AUTORELEASE POOL MACROS - Always available in all builds
-// ============================================================================
-
-// WITH_AUTORELEASE_POOL is essential and must be available in all builds
 #define WITH_AUTORELEASE_POOL(code) do { \
-    autorelease_pool_push(); \
-    TRY { \
-        code; \
-        autorelease_pool_pop(); \
-    } CATCH(ex) { \
-        autorelease_pool_pop(); \
-        THROW(ex); \
-    } END_TRY \
+    uint32_t _restore = autorelease_pool_mark(); \
+    code; \
+    autorelease_pool_drain_to_depth(_restore); \
 } while(0)
 
-#define AUTORELEASE_POOL_BEGIN() autorelease_pool_push()
-#define AUTORELEASE_POOL_END() autorelease_pool_pop()
+
 
 #endif // SUBJECTIVE_C_MEMORY_H

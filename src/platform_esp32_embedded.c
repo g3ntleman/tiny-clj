@@ -268,6 +268,7 @@ static void esp32_tcp_err(void *arg, err_t err) {
     if (c && c->cb) {
         c->cb(c->cb_ctx, PLATFORM_TCP_EVENT_ERROR, NULL, NULL, 0);
     }
+    return;
 }
 
 static err_t esp32_tcp_connected(void *arg, struct tcp_pcb *tpcb, err_t err) {

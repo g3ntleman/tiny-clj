@@ -92,6 +92,26 @@ static inline CljList* list_rest_normalized(CljList *list) {
     return list ? list_or_null(as_list(LIST_REST(list))) : NULL;
 }
 
+// Get rest of list, unwrapping if it's a single-element list containing a list
+// This handles cases where arguments are wrapped in an extra list: (cond (test1 expr1 ...))
+// Returns the unwrapped list if applicable, otherwise same as list_rest_normalized
+static inline CljList* list_rest_unwrapped(CljList *list) {
+    CljList *rest = list_rest_normalized(list);
+    if (!rest) return NULL;
+    
+    // Check if rest is a single-element list containing a list
+    ID first = LIST_FIRST(rest);
+    CljList *rest_rest = list_rest_normalized(rest);
+    
+    // If rest has exactly one element (first is not NULL, rest_rest is NULL)
+    // and that element is itself a list, unwrap it
+    if (first && !rest_rest && is_list_type(TAG(first))) {
+        return as_list(first);
+    }
+    
+    return rest;
+}
+
 ID list_nth(CljList *list, int n);
 // NOTE: `list_count` is O(n) for linked lists.
 // Avoid calling it just to drive iteration; prefer `LIST_FOR_EACH` / `LIST_REST` traversal when possible.

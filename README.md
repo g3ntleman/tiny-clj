@@ -25,9 +25,7 @@ brew install cmake
 
 
 ### Optional Tools
-- **ESP32CubeIDE**: For ESP32 development and debugging
-- **OpenOCD**: For ESP32 flashing and debugging
-- **GDB**: For debugging (usually included with compiler toolchain)
+### Optional Tools
 
 ## Primary Objective
 **Follow the Clojure language as good as possible.** Maximum compatibility with standard [Clojure](https://clojure.org) features, syntax, and behavior.
@@ -37,6 +35,7 @@ brew install cmake
 ### Core Language Features
 - **Basic UTF-8 Support:** Unicode character handling for international text
 - **REPL Line Editing:** Interactive command-line editing with arrow keys (aka linereader)
+- **Multi-line REPL Editor:** Multi-line input editing (requires terminal emulation / a real TTY)
 - **Error Messages with Source References:** Detailed error reporting with line numbers and context
 - **Persistent Collections:** Inefficient, partially implemented vectors, maps, and sequences
 - **Clojure-Compatible:** Standard Clojure syntax (`*ns*`, `def`, `fn`, etc)
@@ -85,7 +84,7 @@ This repo pins **ESP-IDF v5.3.x** as a git submodule under `external/esp-idf` so
 # 1) Fetch submodules (required once after clone)
 git submodule update --init --recursive external/esp-idf
 
-# 2) Download ESP-IDF tools/toolchains into a repo-local directory (./_deps/)
+# 2) Download ESP-IDF tools/toolchains into a repo-local directory (./external/)
 ./scripts/setup_esp_idf.sh
 
 # 3) Activate ESP-IDF environment (adds xtensa-esp32-elf-* tools to PATH)

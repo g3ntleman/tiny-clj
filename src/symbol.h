@@ -1,3 +1,4 @@
+extern struct CljSymbol *SYM_KW_META;
 #ifndef TINY_CLJ_SYMBOLS_H
 #define TINY_CLJ_SYMBOLS_H
 
@@ -119,7 +120,6 @@ extern CljSymbol *SYM_NEXT;
 extern CljSymbol *SYM_LIST;
 extern CljSymbol *SYM_AND;
 extern CljSymbol *SYM_OR;
-extern CljSymbol *SYM_FOR;
 extern CljSymbol *SYM_DOSEQ;
 extern CljSymbol *SYM_DOTIMES;
 
@@ -134,6 +134,7 @@ extern CljSymbol *SYM_KW_NAME;
 extern CljSymbol *SYM_KW_NATIVE;
 extern CljSymbol *SYM_KW_AS;
 extern CljSymbol *SYM_KW_REFER;
+extern CljSymbol *SYM_KW_ELSE;
 extern CljSymbol *SYM_KW_VALUE;
 extern CljSymbol *SYM_KW_CLOSED;
 extern CljSymbol *SYM_KW_DATA;
@@ -144,6 +145,7 @@ extern CljSymbol *SYM_KW_HOST;
 extern CljSymbol *SYM_KW_COLUMN;
 extern CljSymbol *SYM_KW_FN;
 extern CljSymbol *SYM_KW_PATH;
+extern CljSymbol *SYM_KW_CHUNKS;
 extern CljSymbol *SYM_KW_HOST_OS;
 extern CljSymbol *SYM_KW_MACRO;
 extern CljSymbol *SYM_KW_TYPE;
@@ -167,8 +169,23 @@ extern CljSymbol *SYM_CLOJURE_LANG;
 extern CljSymbol *SYM_TINYCLJ;
 extern CljSymbol *SYM_NS_STAR;
 
+// Internal pre-interned symbols for lazy seq thunk state (hot path)
+extern CljSymbol *SYM_CONCAT_X;
+extern CljSymbol *SYM_CONCAT_Y;
+extern CljSymbol *SYM_CONCAT_THUNK_FN;
+extern CljSymbol *SYM_MAP_FN;
+extern CljSymbol *SYM_MAP_SEQS;
+extern CljSymbol *SYM_MAP_THUNK_FN;
+extern CljSymbol *SYM_MAPCAT_FN;
+extern CljSymbol *SYM_MAPCAT_COLL;
+extern CljSymbol *SYM_MAPCAT_INNER;
+extern CljSymbol *SYM_MAPCAT_THUNK_FN;
+extern CljSymbol *SYM_RANGE_CUR;
+extern CljSymbol *SYM_RANGE_INF_THUNK_FN;
+
 // tinyclj namespace function symbols
 extern CljSymbol *SYM_RETAIN_COUNT;
+extern CljSymbol *SYM_LIST_BATCH;
 
 #if defined(CLJ_HOT_PATH)
     #if defined(__clang__) || defined(__GNUC__)
@@ -188,13 +205,13 @@ extern CljSymbol *SYM_RETAIN_COUNT;
 
 // Helpers
 void symbol_table_add(CljSymbol *symbol);
-void symbol_table_cleanup();
+void symbol_table_cleanup(void);
 
 struct CljNamespace;
 struct CljNamespace* symbol_get_namespace(CljSymbol *sym);
 const char* symbol_get_namespace_name(CljSymbol *sym);
 
-void init_special_symbols();
+void init_special_symbols(void);
 
 // Static symbol data for builtin registration
 typedef struct StaticSymbolData {

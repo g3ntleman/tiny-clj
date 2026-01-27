@@ -45,12 +45,18 @@ ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
     CHECK_ARITY(argc, 2, "tinyclj.fs/spit-bytes");
     const char *path = require_c_string_arg(args[0], "tinyclj.fs/spit-bytes", "a path string");
     if (!path) return NULL;
-    if (!args[1] || TAG(args[1]) != CLJ_BYTE_ARRAY) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/spit-bytes expects a byte-array");
-    }
+    /* If second arg is nil -> delete the file. Otherwise expect a byte-array. */
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
+    if (!args[1]) {
+        /* delete file */
+        (void)fs_delete(st, path);
+        return NULL;
+    }
+    if (TAG(args[1]) != CLJ_BYTE_ARRAY) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/spit-bytes expects a byte-array or nil");
+    }
     CljByteArray *ba = as_byte_array(args[1]);
     fs_err_t e = fs_write_bytes(st, path, ba->data, (size_t)ba->length);
     if (e != FS_NO_ERR) {
@@ -136,6 +142,39 @@ ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
     return fs_delete(st, path) ? (ID)clj_true : (ID)clj_false;
+}
+
+ID native_tinyclj_fs_set_size(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 2, "tinyclj.fs/set-size!");
+    const char *path = require_c_string_arg(args[0], "tinyclj.fs/set-size!", "a path string");
+    if (!path) return NULL;
+    if (!is_fixnum(args[1])) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/set-size! expects a size fixnum");
+    }
+    int32_t s = as_fixnum(args[1]);
+    if (s < 0) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/set-size! size must be >= 0");
+    }
+
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+    fs_err_t e = fs_set_size(st, path, (uint32_t)s);
+    if (e != FS_NO_ERR) {
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/set-size! failed (err=%d)", (int)e);
+    }
+
+    int64_t size = fs_stat_size(st, path);
+    if (size < 0) return NULL;
+
+    CljMap *m = make_map(4);
+    m = map_assoc(m, (ID)SYM_KW_PATH, (ID)make_string(path));
+    m = map_assoc(m, (ID)SYM_KW_SIZE, fixnum((int32_t)size));
+    m = map_assoc(m, (ID)SYM_KW_TYPE, (ID)SYM_KW_FILE);
+    return AUTORELEASE(m);
 }
 
 // -----------------------------------------------------------------------------

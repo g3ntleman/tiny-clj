@@ -4,12 +4,12 @@ This document records a reproducible, toolchain-backed size snapshot for the ESP
 
 ### Build recipe
 
-- **Toolchain**: repo-local Xtensa GCC from `./_deps/espressif-tools/`
+- **Toolchain**: repo-local Xtensa GCC from `./external/espressif-tools/`
 - **ESP-IDF (submodule)**: `external/esp-idf` pinned to `v5.3.4`
 - **Configure**:
 
 ```bash
-ESP32_TOOLCHAIN_PATH="$PWD/_deps/espressif-tools/tools/xtensa-esp-elf/esp-13.2.0_20240530/xtensa-esp-elf" \
+ESP32_TOOLCHAIN_PATH="$PWD/external/espressif-tools/tools/xtensa-esp-elf/esp-13.2.0_20240530/xtensa-esp-elf" \
 cmake -S . -B builds/esp32 -G "Unix Makefiles" \
   -DCMAKE_TOOLCHAIN_FILE="$PWD/toolchains/esp32.cmake" \
   -DCMAKE_BUILD_TYPE=Embedded \
@@ -23,6 +23,28 @@ cmake --build builds/esp32 -j 8 --target tiny-clj-esp32
 - **Outputs**:
   - `builds/esp32/tiny-clj-esp32` (ELF)
   - `builds/esp32/tiny-clj-esp32.map` (linker map)
+
+### ESP-IDF firmware image (UART REPL)
+
+This repo also ships an ESP-IDF app under `esp32-idf/` (UART REPL by default).
+
+- **Build**:
+
+```bash
+./build_idf.sh --clean
+```
+
+- **Where outputs go**:
+  - The script moves `esp32-idf/build` into `builds/esp32-idf/build/`.
+  - The produced firmware image is `builds/esp32-idf/build/tinyclj_esp32_idf.bin`.
+
+- **Partition table**:
+  - The ESP-IDF app uses a custom partition table `esp32-idf/partitions.csv` (flash size is configured as **2MB** in `esp32-idf/sdkconfig`).
+
+- **Latest size checkpoint (ESP-IDF app)**:
+  - `.bin` size: `0x85220`
+  - app partition size: `0x120000`
+  - free: `0x9ade0` (**54%**)
 
 ### Section sizes (xtensa-esp32-elf-size)
 
