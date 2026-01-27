@@ -136,7 +136,7 @@ static void timer_insert_sorted_map(CljMap *task_map);
 // Helper function to ensure task queue is initialized
 static CljVector* task_queue_get(void) {
     if (!g_runtime.task_queue) {
-        CljVector* task_vec = make_vector(8, CLJ_VECTOR);
+        CljVector* task_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
         if (task_vec) {
             g_runtime.task_queue = vector_transient(task_vec);
             RELEASE(task_vec);
@@ -154,7 +154,7 @@ static CljVector* task_queue_get(void) {
 #ifdef DEBUG
     if ((uintptr_t)task_vec >= 0x1000) {
         CljType tag = TAG(task_vec);
-        CLJ_ASSERT(tag == CLJ_VECTOR_TRANSIENT);
+        CLJ_ASSERT(tag == CLJ_VECTOR_PERSISTENT_TRANSIENT);
     }
 #endif
     return task_vec;
@@ -163,7 +163,7 @@ static CljVector* task_queue_get(void) {
 // Helper function to ensure timer queue is initialized
 static CljVector* timer_queue_get(void) {
     if (!g_runtime.timer_queue) {
-        CljVector* timer_vec = make_vector(8, CLJ_VECTOR);
+        CljVector* timer_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
         ASSIGN(g_runtime.timer_queue, vector_transient(timer_vec));
         RELEASE(timer_vec);
     }
@@ -177,7 +177,7 @@ static CljVector* timer_queue_get(void) {
     
     // Safety: validate pointer before calling TAG
     if (timer_vec && (uintptr_t)timer_vec >= 0x1000) {
-        CLJ_ASSERT(TAG(timer_vec) == CLJ_VECTOR_TRANSIENT);
+        CLJ_ASSERT(TAG(timer_vec) == CLJ_VECTOR_PERSISTENT_TRANSIENT);
     }
     return timer_vec;
 }

@@ -95,7 +95,7 @@ TEST_SHARED(test_equal_different_types) {
     WITH_MEMORY_PROFILING({
     
     // Test different types
-    CljValue vec_val = make_vector(1, CLJ_VECTOR);
+    CljValue vec_val = make_vector(1, CLJ_VECTOR_PERSISTENT);
     CljMap *map = (CljMap*)make_map(16);
     CljList *list = empty_list();
     
@@ -137,8 +137,8 @@ TEST_SHARED(test_vector_equal_same_vectors) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical vectors using CljValue API
-    CljValue vec1_val = make_vector(3, CLJ_VECTOR);
-    CljValue vec2_val = make_vector(3, CLJ_VECTOR);
+    CljValue vec1_val = make_vector(3, CLJ_VECTOR_PERSISTENT);
+    CljValue vec2_val = make_vector(3, CLJ_VECTOR_PERSISTENT);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
@@ -172,8 +172,8 @@ TEST_SHARED(test_vector_equal_different_lengths) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with different lengths
-    CljValue vec1_val = make_vector(2, CLJ_VECTOR);
-    CljValue vec2_val = make_vector(3, CLJ_VECTOR);
+    CljValue vec1_val = make_vector(2, CLJ_VECTOR_PERSISTENT);
+    CljValue vec2_val = make_vector(3, CLJ_VECTOR_PERSISTENT);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
@@ -206,8 +206,8 @@ TEST_SHARED(test_vector_equal_different_values) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with different values using CljValue API
-    CljValue vec1_val = make_vector(0, CLJ_VECTOR); // Start with empty vector
-    CljValue vec2_val = make_vector(0, CLJ_VECTOR); // Start with empty vector
+    CljValue vec1_val = make_vector(0, CLJ_VECTOR_PERSISTENT); // Start with empty vector
+    CljValue vec2_val = make_vector(0, CLJ_VECTOR_PERSISTENT); // Start with empty vector
     
     // Create different integer values (immediate values)
     CljValue int1 = fixnum(1);
@@ -224,8 +224,8 @@ TEST_SHARED(test_vector_equal_different_values) {
     // Verify vectors were created successfully
     TEST_ASSERT_NOT_NULL((CljObject*)vec1_val);
     TEST_ASSERT_NOT_NULL((CljObject*)vec2_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)vec1_val)->type);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)vec2_val)->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)vec1_val)->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)vec2_val)->type);
     
     // Test vector equality with clj_equal - now supports immediate values in vectors
     TEST_ASSERT_FALSE(clj_equal(vec1_val, vec2_val));
@@ -275,8 +275,8 @@ TEST_SHARED(test_vector_equal_with_strings) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with strings
-    CljValue vec1_val = make_vector(2, CLJ_VECTOR);
-    CljValue vec2_val = make_vector(2, CLJ_VECTOR);
+    CljValue vec1_val = make_vector(2, CLJ_VECTOR_PERSISTENT);
+    CljValue vec2_val = make_vector(2, CLJ_VECTOR_PERSISTENT);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
@@ -455,8 +455,8 @@ TEST_SHARED(test_map_equal_with_nested_vectors) {
     CljMap *map2 = (CljMap*)make_map(16);
     
     // Create nested vectors
-    CljValue vec1_val = make_vector(2, CLJ_VECTOR);
-    CljValue vec2_val = make_vector(2, CLJ_VECTOR);
+    CljValue vec1_val = make_vector(2, CLJ_VECTOR_PERSISTENT);
+    CljValue vec2_val = make_vector(2, CLJ_VECTOR_PERSISTENT);
     
     CljValue val1 = fixnum(1);
     CljValue val2 = fixnum(2);

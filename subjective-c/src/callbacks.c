@@ -49,7 +49,7 @@ uint32_t clj_hash_default(ID value) {
         case CLJ_STRING:
             return fnv1a(((CljString*)value)->data);
         
-        case CLJ_VECTOR:
+        case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
             CljVector *vec = (CljVector*)value;
@@ -148,7 +148,7 @@ bool clj_equal_default(ID a, ID b) {
             return strcmp(str_a->data, str_b->data) == 0;
         }
         
-        case CLJ_VECTOR:
+        case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
             CljVector *vec_a = (CljVector*)a;
@@ -249,7 +249,7 @@ CljString* clj_to_string_default(ID value) {
     switch (type) {
         case CLJ_STRING:
             return make_string(((CljString*)value)->data);
-        case CLJ_VECTOR:
+        case CLJ_VECTOR_PERSISTENT:
             return make_string("[...]");
         case CLJ_MAP:
         case CLJ_HASHMAP:

@@ -111,7 +111,7 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
             *offset += mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "#<map>");
             break;
 
-        case CLJ_VECTOR:
+        case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT:
             *offset += mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "#<vector>");

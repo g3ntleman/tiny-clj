@@ -63,7 +63,7 @@ bool clj_equal_full(ID a, ID b) {
             return strcmp(str_a->data, str_b->data) == 0;
         }
 
-        case CLJ_VECTOR:
+        case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT: {
             CljVector *vec_a = (CljVector*)a;

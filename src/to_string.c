@@ -203,7 +203,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             return strlen(sym->cname);
         }
 
-        case CLJ_VECTOR:
+        case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
             void *vec_ptr = as_vector(v);
@@ -489,7 +489,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             return;
         }
 
-        case CLJ_VECTOR:
+        case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
             void *vec_ptr = as_vector(v);

@@ -58,7 +58,7 @@ TEST(test_fs_layer_write_read_stat_list_delete)
     char last_key[FS_KEY_MAX] = {0};
     ID lst = fs_list_dir_batch(st, "/data/", NULL, 32, last_key, sizeof(last_key));
     TEST_ASSERT_NOT_NULL(lst);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(lst));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(lst));
     CljVector *v = as_vector(lst);
     TEST_ASSERT_EQUAL_INT(1, vector_count(v));
     TEST_ASSERT_TRUE(last_key[0] == '\0'); // only entry, end reached
@@ -95,7 +95,7 @@ TEST(test_fs_list_dir_batch_many_files)
     char last_key[FS_KEY_MAX] = {0};
     ID batch1 = fs_list_dir_batch(st, "/many/", NULL, 32, last_key, sizeof(last_key));
     TEST_ASSERT_NOT_NULL(batch1);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(batch1));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(batch1));
     TEST_ASSERT_EQUAL_INT(32, vector_count(as_vector(batch1)));
     TEST_ASSERT_TRUE(last_key[0] != '\0');
 
@@ -103,7 +103,7 @@ TEST(test_fs_list_dir_batch_many_files)
     char last_key2[FS_KEY_MAX] = {0};
     ID batch2 = fs_list_dir_batch(st, "/many/", last_key, 32, last_key2, sizeof(last_key2));
     TEST_ASSERT_NOT_NULL(batch2);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(batch2));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(batch2));
     TEST_ASSERT_EQUAL_INT(18, vector_count(as_vector(batch2)));
     TEST_ASSERT_TRUE(last_key2[0] == '\0'); // no more
 

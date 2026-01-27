@@ -233,7 +233,7 @@ TEST(test_seq_iter_first_nil_element) {
     // Create vector [1 nil 3] using eval_string
     CljObject *vec = eval_string("[1 nil 3]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vec);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(vec));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
     
     // Initialize SeqIterator
     SeqIterator iter;
@@ -296,7 +296,7 @@ TEST(test_vector_nth_nil_element) {
     // Create vector [1 nil 3]
     CljObject *vec = eval_string("[1 nil 3]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vec);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(vec));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
     
     CljVector *v = as_vector(vec);
     TEST_ASSERT_NOT_NULL(v);
