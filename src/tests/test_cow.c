@@ -441,7 +441,7 @@ TEST(test_map_assoc_multiple_assign_sequence) {
 // Test that vector_conj uses in-place mutation when RC=1
 TEST(test_vector_conj_cow_rc_one_inplace) {
     WITH_AUTORELEASE_POOL({
-        CljVector* vec = make_vector(4, CLJ_VECTOR);
+        CljVector* vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
         // base.rc is part of CljObject, access via cast
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
@@ -473,7 +473,7 @@ TEST(test_vector_conj_cow_rc_one_inplace) {
 // Test that vector_conj uses Copy-on-Write when RC>1
 TEST(test_vector_conj_cow_rc_greater_one) {
     WITH_AUTORELEASE_POOL({
-        CljVector* vec = make_vector(4, CLJ_VECTOR);
+        CljVector* vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // Add some entries
@@ -507,7 +507,7 @@ TEST(test_vector_conj_cow_rc_greater_one) {
 // Test that vector_conj handles capacity growth with COW
 TEST(test_vector_conj_cow_capacity_growth) {
     WITH_AUTORELEASE_POOL({
-        CljVector *vec = (CljVector*)make_vector(2, CLJ_VECTOR);
+        CljVector *vec = (CljVector*)make_vector(2, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // Fill capacity
@@ -545,7 +545,7 @@ TEST(test_vector_conj_cow_capacity_growth) {
 TEST(test_vector_copy_counter_detects_forced_copy_patterns) {
     WITH_AUTORELEASE_POOL({
         // Setup: a small persistent vector with enough capacity for a conj without growth.
-        CljVector *pv = make_vector(8, CLJ_VECTOR);
+        CljVector *pv = make_vector(8, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_NOT_NULL(pv);
 
         vector_make_copy_count_reset();
@@ -559,7 +559,7 @@ TEST(test_vector_copy_counter_detects_forced_copy_patterns) {
         // Converting persistent -> transient should copy backing storage (by design).
         CljVector *tv = vector_transient(pv);
         TEST_ASSERT_NOT_NULL(tv);
-        TEST_ASSERT_TRUE(TAG(tv) == CLJ_VECTOR_TRANSIENT || TAG(tv) == CLJ_VECTOR_TRANSIENT_WEAK);
+        TEST_ASSERT_TRUE(TAG(tv) == CLJ_VECTOR_PERSISTENT_TRANSIENT);
         TEST_ASSERT_TRUE_MESSAGE(vector_make_copy_count() > 0,
                                  "vector_transient should copy backing storage (make_vector_copy_count must increase)");
 
@@ -607,7 +607,7 @@ TEST(test_env_stack_helpers_do_not_break_cow_fast_path) {
 // Test that original vector remains unchanged after COW
 TEST(test_vector_conj_cow_original_unchanged) {
     WITH_AUTORELEASE_POOL({
-        CljVector* vec = make_vector(4, CLJ_VECTOR);
+        CljVector* vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
         
         // Add entries
         vector_conj((CljVector*)vec, fixnum(10));
@@ -639,7 +639,7 @@ TEST(test_vector_conj_cow_original_unchanged) {
 // Test memory leak detection for vector_conj COW
 TEST(test_vector_conj_cow_memory_leak) {
     WITH_MEMORY_PROFILING({
-        CljVector* vec = make_vector(4, CLJ_VECTOR);
+        CljVector* vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
         
         // Add entries
         vector_conj((CljVector*)vec, fixnum(10));
@@ -665,7 +665,7 @@ TEST(test_vector_conj_cow_memory_leak) {
 // Test that vector_assoc uses in-place mutation when RC=1
 TEST(test_vector_assoc_cow_rc_one_inplace) {
     WITH_AUTORELEASE_POOL({
-        CljVector* vec = make_vector(4, CLJ_VECTOR);
+        CljVector* vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // Add initial entries
@@ -694,7 +694,7 @@ TEST(test_vector_assoc_cow_rc_one_inplace) {
 // Test that vector_assoc uses Copy-on-Write when RC>1
 TEST(test_vector_assoc_cow_rc_greater_one) {
     WITH_AUTORELEASE_POOL({
-        CljVector* vec = make_vector(4, CLJ_VECTOR);
+        CljVector* vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // Add entries
@@ -731,7 +731,7 @@ TEST(test_vector_assoc_cow_rc_greater_one) {
 // Test that original vector remains unchanged after vector_assoc COW
 TEST(test_vector_assoc_cow_original_unchanged) {
     WITH_AUTORELEASE_POOL({
-        CljVector* vec = make_vector(4, CLJ_VECTOR);
+        CljVector* vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
         
         // Add entries
         vec = vector_conj(vec, fixnum(10));

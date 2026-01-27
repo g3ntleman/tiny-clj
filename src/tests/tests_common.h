@@ -198,7 +198,7 @@ static inline void assert_list(CljObject *obj) {
 // Helper: Assert that object is a vector
 static inline void assert_vector(CljObject *obj) {
     TEST_ASSERT_NOT_NULL(obj);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(obj));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(obj));
 }
 
 // Helper: Assert that object is a map

@@ -18,12 +18,6 @@
 #define FNV1A_PRIME  16777619u
 #define FNV_MIX(h, v) (((h) ^ (v)) * FNV1A_PRIME)
 
-static inline uint32_t fnv1a(const char *s) {
-    uint32_t h = FNV1A_OFFSET;
-    for (; *s; s++) h = FNV_MIX(h, (uint8_t)*s);
-    return h;
-}
-
 static inline uint32_t fnv1a_continue(uint32_t h, const char *s) {
     for (; *s; s++) h = FNV_MIX(h, (uint8_t)*s);
     return h;
@@ -32,10 +26,10 @@ static inline uint32_t fnv1a_continue(uint32_t h, const char *s) {
 static uint32_t hash_symbol(CljSymbol *sym) {
     if (!sym || !sym->cname) return 0;
     if (sym->ns_name && sym->ns_name->cname) {
-        uint32_t h = fnv1a(sym->ns_name->cname);
+        uint32_t h = fnv1a_continue(FNV1A_OFFSET, sym->ns_name->cname);
         return fnv1a_continue(FNV_MIX(h, '/'), sym->cname);
     }
-    return fnv1a(sym->cname);
+    return fnv1a_continue(FNV1A_OFFSET, sym->cname);
 }
 
 static uint32_t hash_vector(CljVector *vec) {
@@ -69,7 +63,7 @@ static uint32_t hash_list(CljList *list) {
 
 static uint32_t hash_string(CljString *str) {
     uint16_t len = str->length;
-    if (len <= 16) return fnv1a(str->data);
+    if (len <= 16) return fnv1a_continue(FNV1A_OFFSET, str->data);
     // O(1): length + first 8 + last 8 chars
     const char *d = str->data;
     uint32_t h = FNV_MIX(FNV_MIX(FNV1A_OFFSET, len), len >> 8);
@@ -87,7 +81,7 @@ uint32_t clj_hash_full(ID value) {
     switch (TAG(value)) {
         case CLJ_STRING: return hash_string((CljString*)value);
         case CLJ_SYMBOL: return hash_symbol((CljSymbol*)value);
-        case CLJ_VECTOR:
+        case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: return hash_vector((CljVector*)value);
         case CLJ_MAP:
@@ -114,4 +108,3 @@ uint32_t clj_hash_full(ID value) {
         default: return (uint32_t)(uintptr_t)value;
     }
 }
-

@@ -113,7 +113,7 @@ static inline CljVector* scope_stack_get_from_top(CljVector *stack, unsigned int
 static inline void scope_stack_push_inplace(CljVector **stack_slot, CljVector *scope_vec) {
     if (!stack_slot) return;
     if (!*stack_slot) {
-        *stack_slot = make_vector(4, CLJ_VECTOR);
+        *stack_slot = make_vector(4, CLJ_VECTOR_PERSISTENT);
     }
     vector_conj_inplace(stack_slot, scope_vec);
 }
@@ -171,7 +171,7 @@ static CljVector* destructure(EvalState *st, CljVector *bindings) {
     
     ID args[] = { bindings };
     ID result = eval_function_call(destructure_fn, args, 1, NULL, st);
-    return (TAG(result) == CLJ_VECTOR) ? as_vector(result) : NULL;
+    return (TAG(result) == CLJ_VECTOR_PERSISTENT) ? as_vector(result) : NULL;
 }
 
 // Gensym counter for fn/defn/loop param destructuring
@@ -181,13 +181,13 @@ static unsigned long param_gensym_counter = 0;
 // Returns NULL for let_bindings if no destructuring needed
 static CljVector* transform_params(EvalState *st, CljVector *params, CljVector **out_let_bindings) {
     unsigned int count = vector_count(params);
-    CljVector *new_params = make_vector(count, CLJ_VECTOR);
-    CljVector *let_bindings = make_vector(count * 2, CLJ_VECTOR);
+    CljVector *new_params = make_vector(count, CLJ_VECTOR_PERSISTENT);
+    CljVector *let_bindings = make_vector(count * 2, CLJ_VECTOR_PERSISTENT);
     bool has_destructuring = false;
     
     VECTOR_FOR_EACH(params, param) {
         unsigned char tag = TAG(param);
-        if (tag == CLJ_VECTOR || tag == CLJ_MAP) {
+        if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_MAP) {
             char name[64];
             snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
             CljSymbol *gsym = intern_symbol_global(name);
@@ -474,7 +474,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             // (let [bindings] body...) - expand bindings using Clojure destructure
             if (head_sym == SYM_LET) {
                 CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
                     CljVector *bindings = as_vector(rest1->first);
                     if (bindings_need_destructuring(bindings)) {
                         CljVector *expanded = destructure(st, bindings);
@@ -494,13 +494,13 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             //       To: (loop [loop__1 init, sum 0] (let [expanded-bindings] body))
             if (head_sym == SYM_LOOP) {
                 CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
                     CljVector *bindings = as_vector(rest1->first);
                     if (bindings_need_destructuring(bindings)) {
                         static unsigned long gensym_counter = 0;
                         unsigned int count = vector_count(bindings);
-                        CljVector *loop_bindings = make_vector(count, CLJ_VECTOR);
-                        CljVector *let_bindings = make_vector(count, CLJ_VECTOR);
+                        CljVector *loop_bindings = make_vector(count, CLJ_VECTOR_PERSISTENT);
+                        CljVector *let_bindings = make_vector(count, CLJ_VECTOR_PERSISTENT);
                         
                         // Process each binding pair
                         for (unsigned int i = 0; i < count; i += 2) {
@@ -567,11 +567,11 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                         // Named fn: (fn name [params] body)
                         named = true;
                         CljList *rest2 = rest1->rest ? as_list(rest1->rest) : NULL;
-                        if (rest2 && rest2->first && TAG(rest2->first) == CLJ_VECTOR) {
+                        if (rest2 && rest2->first && TAG(rest2->first) == CLJ_VECTOR_PERSISTENT) {
                             params = as_vector(rest2->first);
                             body_rest = rest2->rest ? as_list(rest2->rest) : NULL;
                         }
-                    } else if (second && TAG(second) == CLJ_VECTOR) {
+                    } else if (second && TAG(second) == CLJ_VECTOR_PERSISTENT) {
                         // Anonymous fn: (fn [params] body)
                         params = as_vector(second);
                         body_rest = rest1->rest ? as_list(rest1->rest) : NULL;
@@ -604,7 +604,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         // then push a scope of the let binding names for the body.
         if (!in_quote && first == SYM_LET && scope_stack) {
             CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
                 // Canonicalize bindings vector without lexical rewrite.
                 ID canon_bindings = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
 
@@ -612,7 +612,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 CljVector *bindings_vec = as_vector(canon_bindings);
                 unsigned int bc = bindings_vec ? vector_count(bindings_vec) : 0;
                 unsigned int pair_count = (bc / 2);
-                CljVector *let_scope = make_vector((int)pair_count, CLJ_VECTOR);
+                CljVector *let_scope = make_vector((int)pair_count, CLJ_VECTOR_PERSISTENT);
                 if (bindings_vec && let_scope) {
                     for (unsigned int i = 0; i + 1 < bc; i += 2) {
                         ID k = vector_nth(bindings_vec, (int)i);
@@ -652,7 +652,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         // then read from the loop frame instead of the parent function frame.
         if (!in_quote && first == SYM_LOOP && scope_stack) {
             CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
                 // Canonicalize bindings vector without lexical rewrite.
                 ID canon_bindings = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
 
@@ -660,7 +660,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 CljVector *bindings_vec = as_vector(canon_bindings);
                 unsigned int bc = bindings_vec ? vector_count(bindings_vec) : 0;
                 unsigned int pair_count = (bc / 2);
-                CljVector *loop_scope = make_vector((int)pair_count, CLJ_VECTOR);
+                CljVector *loop_scope = make_vector((int)pair_count, CLJ_VECTOR_PERSISTENT);
                 if (bindings_vec && loop_scope) {
                     for (unsigned int i = 0; i + 1 < bc; i += 2) {
                         ID k = vector_nth(bindings_vec, (int)i);
@@ -699,7 +699,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         // then push a scope with just the loop var for the body.
         if (!in_quote && first == SYM_DOTIMES && scope_stack) {
             CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
                 ID canon_binding_vec = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
                 CljVector *binding_vec = as_vector(canon_binding_vec);
 
@@ -709,7 +709,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     : NULL;
 
                 // Push scope [i] for the dotimes body so `i` can become a SlotRef.
-                CljVector *dotimes_scope = make_vector(1, CLJ_VECTOR);
+                CljVector *dotimes_scope = make_vector(1, CLJ_VECTOR_PERSISTENT);
                 if (loop_var && TAG(loop_var) == CLJ_SYMBOL && !IS_KEYWORD(loop_var)) {
                     vector_conj_inplace(&dotimes_scope, loop_var);
                 } else {
@@ -754,7 +754,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     body_rest = rest1->rest ? as_list(rest1->rest) : NULL;
                 }
 
-                if (params_form && TAG(params_form) == CLJ_VECTOR) {
+                if (params_form && TAG(params_form) == CLJ_VECTOR_PERSISTENT) {
                     // Canonicalize fn-name/params with lexical rewrite disabled.
                     ID name_canon = named ? canonicalize_expr_with_scope(second, st, child_in_quote, NULL) : NULL;
                     ID params_canon_id = canonicalize_expr_with_scope(params_form, st, child_in_quote, NULL);
@@ -773,7 +773,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     if (ok && !variadic) {
                         // Build a scope-vector where index == CallFrame slot index.
                         unsigned int pc = vector_count(params_vec);
-                        CljVector *param_scope = make_vector((int)pc, CLJ_VECTOR);
+                        CljVector *param_scope = make_vector((int)pc, CLJ_VECTOR_PERSISTENT);
                         VECTOR_FOR_EACH(params_vec, p) {
                             vector_conj_inplace(&param_scope, p);
                         }
@@ -841,7 +841,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     }
     
     // For other types (vectors, maps), recursively canonicalize elements
-    if (tag == CLJ_VECTOR) {
+    if (tag == CLJ_VECTOR_PERSISTENT) {
         CljVector *vec = (CljVector*)expr;
         CLJ_ASSERT(vec != NULL);
         int count = vector_count(vec);
@@ -867,7 +867,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
         
         // Create new vector with canonicalized elements
-        CljVector *new_vec = make_vector(count, CLJ_VECTOR);
+        CljVector *new_vec = make_vector(count, CLJ_VECTOR_PERSISTENT);
         for (int i = 0; i < count; i++) {
             ASSIGN(new_vec, vector_conj(new_vec, canon_elems[i]));
         }
@@ -954,7 +954,7 @@ ID canonicalize_ast(ID parsed_expr, EvalState *st) {
 
         if (result && !IS_IMMEDIATE(result) && result != parsed_expr) {
             unsigned char tag = TAG(result);
-            if (is_list_type(tag) || tag == CLJ_VECTOR || tag == CLJ_MAP) {
+            if (is_list_type(tag) || tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_MAP) {
                 needs_escape = true;
                 RETAIN(result);
                 rc_after_retain = retain_count(result);

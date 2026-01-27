@@ -5,22 +5,58 @@
 #include "common.h"
 
 typedef struct CljVector CljVector;
+typedef struct CljVector CljPersistentVector;
+
+typedef struct CljTransientVector {
+    CljObject base;
+    CljPersistentVector *backing_store;
+} CljTransientVector;
+
+unsigned int vector_count(CljVector *vec);
+int vector_capacity(CljVector *vec);
 
 static inline CljVector* as_vector(ID obj) {
     // NULL is valid (nil)
     // TAG() already handles NULL safely (returns CLJ_NIL)
     // CLJ_ASSERT already has #ifdef DEBUG internally
 #ifdef DEBUG
-    CljType tag;
-    CLJ_ASSERT(((tag = TAG(obj)), (obj == NULL || tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT)));
+    CljType tag = TAG(obj);
+    CLJ_ASSERT(obj == NULL || tag == CLJ_VECTOR_PERSISTENT);
 #endif
     return (CljVector*)obj;
+}
+
+static inline CljTransientVector* as_transient_vector(ID obj) {
+#ifdef DEBUG
+    CljType tag = TAG(obj);
+    CLJ_ASSERT(obj == NULL || tag == CLJ_VECTOR_TRANSIENT);
+#endif
+    return (CljTransientVector*)obj;
 }
 
 static inline bool is_vector(CljObject *obj) {
     if (!obj) return false;
     int tag = (int)TAG(obj);
-    return (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT);
+    return (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT);
+}
+
+static inline bool is_transient_vector(CljObject *obj) {
+    return obj && TAG(obj) == CLJ_VECTOR_TRANSIENT;
+}
+
+static inline CljVector* transient_vector_backing_store(CljTransientVector *tvec) {
+    CLJ_ASSERT(tvec && tvec->base.type == CLJ_VECTOR_TRANSIENT);
+    return (CljVector*)tvec->backing_store;
+}
+
+static inline unsigned int transient_vector_count(CljTransientVector *tvec) {
+    CLJ_ASSERT(tvec && tvec->base.type == CLJ_VECTOR_TRANSIENT);
+    return vector_count(tvec->backing_store);
+}
+
+static inline int transient_vector_capacity(CljTransientVector *tvec) {
+    CLJ_ASSERT(tvec && tvec->base.type == CLJ_VECTOR_TRANSIENT);
+    return vector_capacity(tvec->backing_store);
 }
 
 extern CljVector* vector_empty_singleton;
@@ -28,7 +64,6 @@ CljVector* empty_vector(void);
 CljVector* make_vector(unsigned int capacity, CljType type);
 CljVector* vector_conj(CljVector* vec, ID item);
 CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value);
-unsigned int vector_count(CljVector *vec);
 ID vector_nth(CljVector *vec, unsigned int index);
 int vector_index_of(CljVector *vec, ID value);
 CljVector* vector_set_nth(CljVector* vec, unsigned int index, ID value);
@@ -41,7 +76,7 @@ void vector_increment_count(CljVector *vec);
 void vector_clear(CljVector *vec);
 CljVector* vector_transient(CljVector *vec);
 CljVector* clj_conj(CljVector *tvec, ID item);
-ID vector_persistent(CljVector *tvec);
+CljPersistentVector* vector_persistent(CljTransientVector *tvec);
 
 // ----------------------------------------------------------------------------
 // Debug/test instrumentation

@@ -54,7 +54,7 @@ static void ast_compile_expr_inplace(ID expr, EvalState *st) {
         return;
     }
 
-    if (tag == CLJ_VECTOR) {
+    if (tag == CLJ_VECTOR_PERSISTENT) {
         ast_compile_vector_inplace(as_vector(expr), st);
         return;
     }
