@@ -298,7 +298,7 @@ TEST(test_vector_nth_nil_element) {
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
     
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_vector(vec);
     TEST_ASSERT_NOT_NULL(v);
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     

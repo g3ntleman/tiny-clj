@@ -29,14 +29,14 @@ if (argc != param_count) {
 ```c
 typedef struct {
     CljObject base;
-    CljVector *params;  // Parameter vector (can be NULL if no parameters)
+    CljPersistentVector *params;  // Parameter vector (can be NULL if no parameters)
     ID body;  // Function body (AST to evaluate)
     CljList *env_stack;
     CljSymbol *name;  // Function name symbol (konsistent mit Clojure-Semantik)
     CljNamespace *ns;
     
     // NEU: Arity-Dispatch (nur bei Bedarf allokiert)
-    CljVector *arity_bodies;  // Vector: Index = Arity, Value = Body (AST) (NULL = feste Arity)
+    CljPersistentVector *arity_bodies;  // Vector: Index = Arity, Value = Body (AST) (NULL = feste Arity)
     ID varargs_param;         // Symbol für & args Parameter (NULL wenn keine varargs)
     // OPTIMIERUNG für Embedded: min_arity/max_arity aus arity_bodies ableitbar (spart 8 Bytes)
     // OPTIMIERUNG für Embedded: fixed_param_count aus params ableitbar (spart 4 Bytes)
@@ -106,7 +106,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
 
 ```c
 // Berechne min_arity aus arity_bodies Vector (spart 4 Bytes pro Funktion)
-static int compute_min_arity(CljVector *arity_bodies) {
+static int compute_min_arity(CljPersistentVector *arity_bodies) {
     if (!arity_bodies) return 0;
     int count = vector_count(arity_bodies);
     for (int i = 0; i < count; i++) {
@@ -118,7 +118,7 @@ static int compute_min_arity(CljVector *arity_bodies) {
 }
 
 // Berechne max_arity aus arity_bodies Vector (spart 4 Bytes pro Funktion)
-static int compute_max_arity(CljVector *arity_bodies) {
+static int compute_max_arity(CljPersistentVector *arity_bodies) {
     if (!arity_bodies) return -1;  // -1 = unbounded
     int count = vector_count(arity_bodies);
     return (count > 0) ? (count - 1) : -1;  // max_arity = letzter Index = count - 1
@@ -156,7 +156,7 @@ typedef struct {
     ID varargs_param;  // NULL wenn keine varargs
 } ParsedParams;
 
-ParsedParams parse_function_params(CljVector *param_vec) {
+ParsedParams parse_function_params(CljPersistentVector *param_vec) {
     ParsedParams result = {NULL, 0, NULL};
     
     // Suche nach & Symbol
@@ -238,7 +238,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
 
 ```c
 // Berechne fixed_param_count aus params (spart 4 Bytes pro Funktion)
-static int compute_fixed_param_count(CljVector *params, ID varargs_param) {
+static int compute_fixed_param_count(CljPersistentVector *params, ID varargs_param) {
     if (!params) return 0;
     int count = vector_count(params);
     if (varargs_param) {

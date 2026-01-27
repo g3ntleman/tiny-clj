@@ -207,7 +207,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
             void *vec_ptr = as_vector(v);
-            CljVector *vec = (CljVector*)vec_ptr;
+            CljPersistentVector *vec = (CljPersistentVector*)vec_ptr;
             int count = vector_count(vec);
             size_t len = 2; // "[ ]"
             int i = 0;
@@ -493,7 +493,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
             void *vec_ptr = as_vector(v);
-            CljVector *vec = (CljVector*)vec_ptr;
+            CljPersistentVector *vec = (CljPersistentVector*)vec_ptr;
             if (v->type == CLJ_VECTOR_TRANSIENT) {
                 memcpy(buffer + *offset, "<transient ", 11);
                 *offset += 11;

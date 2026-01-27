@@ -41,7 +41,7 @@ TEST(test_cljvalue_vector_api) {
         TEST_ASSERT_NOT_NULL(vec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)vec)->type);
         
-        CljVector *vec_data = as_vector((CljObject*)vec);
+        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         // Capacity is implementation detail, only test that vector was created
         
@@ -68,20 +68,20 @@ TEST(test_cljvalue_transient_vector) {
         // Test transient vector operations
         CljValue vec = AUTORELEASE(make_vector(5, CLJ_VECTOR_PERSISTENT));  // Create persistent vector first
         TEST_ASSERT_NOT_NULL(vec);
-        CljValue tvec = AUTORELEASE(vector_transient((CljVector*)vec));  // Convert to transient
+        CljValue tvec = AUTORELEASE(vector_transient((CljPersistentVector*)vec));  // Convert to transient
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT_TRANSIENT, ((CljObject*)tvec)->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
         
-        CljVector *tvec_data = (CljVector*)tvec;
+        CljPersistentVector *tvec_data = (CljPersistentVector*)tvec;
         TEST_ASSERT_NOT_NULL(tvec_data);
         // Capacity is implementation detail, only test that vector was created
         
         // Test transient operations using clj_conj
         // clj_conj returns the same transient vector (in-place mutation)
-        CljVector *tvec1 = clj_conj((CljVector*)tvec_data, fixnum(10));
+        CljPersistentVector *tvec1 = clj_conj((CljPersistentVector*)tvec_data, fixnum(10));
         TEST_ASSERT_NOT_NULL(tvec1);
-        TEST_ASSERT_EQUAL_PTR((CljVector*)tvec_data, tvec1);  // Should be same pointer
-        CljVector *tvec2 = clj_conj(tvec1, fixnum(20));
+        TEST_ASSERT_EQUAL_PTR((CljPersistentVector*)tvec_data, tvec1);  // Should be same pointer
+        CljPersistentVector *tvec2 = clj_conj(tvec1, fixnum(20));
         TEST_ASSERT_NOT_NULL(tvec2);
         TEST_ASSERT_EQUAL_PTR(tvec1, tvec2);  // Should be same pointer
         // tvec_data should still be valid since clj_conj does in-place mutation
@@ -99,7 +99,7 @@ TEST(test_cljvalue_clojure_semantics) {
     WITH_AUTORELEASE_POOL({
         // Test Clojure semantics
         CljValue vec = make_vector(2, CLJ_VECTOR_PERSISTENT);
-        CljVector *vec_data = as_vector((CljObject*)vec);
+        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         
         // Add elements using vector_conj
         vec_data = vector_conj(vec_data, fixnum(1));
@@ -279,7 +279,7 @@ TEST(test_cljvalue_vectors_high_level) {
         TEST_ASSERT_NOT_NULL(vec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)vec)->type);
         
-        CljVector *vec_data = as_vector((CljObject*)vec);
+        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         // Capacity is implementation detail, only test that vector was created
         TEST_ASSERT_EQUAL_INT(0, vector_count(vec_data));
@@ -384,12 +384,12 @@ TEST(test_truthiness_comprehensive) {
         TEST_ASSERT_TRUE(clj_is_truthy(non_empty_list));
         
         // Empty vector is truthy
-        CljVector *empty_vec = AUTORELEASE(make_vector(0, CLJ_VECTOR_PERSISTENT));
+        CljPersistentVector *empty_vec = AUTORELEASE(make_vector(0, CLJ_VECTOR_PERSISTENT));
         TEST_ASSERT_NOT_NULL(empty_vec);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_vec));
         
         // Non-empty vector is truthy
-        CljVector *non_empty_vec = AUTORELEASE(make_vector(1, CLJ_VECTOR_PERSISTENT));
+        CljPersistentVector *non_empty_vec = AUTORELEASE(make_vector(1, CLJ_VECTOR_PERSISTENT));
         TEST_ASSERT_NOT_NULL(non_empty_vec);
         non_empty_vec = vector_conj(non_empty_vec, fixnum(1));
         TEST_ASSERT_TRUE(clj_is_truthy(non_empty_vec));

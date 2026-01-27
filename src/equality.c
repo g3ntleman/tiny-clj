@@ -66,8 +66,8 @@ bool clj_equal_full(ID a, ID b) {
         case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT: {
-            CljVector *vec_a = (CljVector*)a;
-            CljVector *vec_b = (CljVector*)b;
+            CljPersistentVector *vec_a = (CljPersistentVector*)a;
+            CljPersistentVector *vec_b = (CljPersistentVector*)b;
             int count_a = vector_count(vec_a);
             int count_b = vector_count(vec_b);
             if (count_a != count_b) return false;

@@ -705,7 +705,7 @@ static void release_object_default(CljObject *v) {
             {
                 // Direct cast - we already know it's a Vector from the switch case
                 // Using as_vector() would call TAG() which fails when rc=0 (zombie mode)
-                CljVector *vec = (CljVector*)v;
+                CljPersistentVector *vec = (CljPersistentVector*)v;
                 if (vec) {
                     // Release all vector elements
                     VECTOR_FOR_EACH(vec, elem) {

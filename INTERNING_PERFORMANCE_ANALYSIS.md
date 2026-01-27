@@ -20,14 +20,14 @@ static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *name) {
 }
 
 // symbol.c:347-365
-static CljSymbol* find_symbol(CljVector *vec, CljSymbol *ns_name, const char *name) {
+static CljSymbol* find_symbol(CljPersistentVector *vec, CljSymbol *ns_name, const char *name) {
     // ...
     int index = vector_index_of(vec, (ID)&temp_sym);  // O(n) lineare Suche
     // ...
 }
 
 // vector.c:73-83
-int vector_index_of(CljVector *vec, ID value) {
+int vector_index_of(CljPersistentVector *vec, ID value) {
     VECTOR_FOR_EACH(vec, elem) {  // Iteriert durch alle Elemente
         if (clj_equal(elem, value)) {
             return _i;
@@ -73,7 +73,7 @@ int vector_index_of(CljVector *vec, ID value) {
 **Implementierung**:
 ```c
 // Statt Vector:
-CljVector *symbol_table;  // O(n) Suche
+CljPersistentVector *symbol_table;  // O(n) Suche
 
 // Hash-Map:
 CljMap *symbol_table;  // O(1) Lookup
@@ -153,7 +153,7 @@ CljSymbol* intern_symbol_global_fast(const char *name) {
 - Professionelle Lösung
 
 **Implementierung**:
-- Symbol-Tabelle als `CljMap` statt `CljVector`
+- Symbol-Tabelle als `CljMap` statt `CljPersistentVector`
 - Hash-Funktion für Symbol-Namen
 - Migration der bestehenden Symbole
 

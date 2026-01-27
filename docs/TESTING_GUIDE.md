@@ -695,7 +695,7 @@ TEST(test_cow_object_identity) {
     ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR));
     ID seq = AUTORELEASE(make_seq(vec));
     RETAIN(vec);
-    CljVector *new_vec = vector_conj(as_vector(vec), fixnum(4));
+    CljPersistentVector *new_vec = vector_conj(as_vector(vec), fixnum(4));
     TEST_ASSERT_EQUAL_PTR(as_vector(vec), as_seq(seq)->iter.container);
     RELEASE(vec);
 }

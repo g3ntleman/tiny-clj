@@ -402,7 +402,7 @@ TEST(test_map_keys) {
     
     ID keys_vec = map_keys(map);
     TEST_ASSERT_NOT_NULL(keys_vec);
-    CljVector *vec = as_vector(keys_vec);
+    CljPersistentVector *vec = as_vector(keys_vec);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     
@@ -423,7 +423,7 @@ TEST(test_map_vals) {
     
     ID vals_vec = map_vals(map);
     TEST_ASSERT_NOT_NULL(vals_vec);
-    CljVector *vec = as_vector(vals_vec);
+    CljPersistentVector *vec = as_vector(vals_vec);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     

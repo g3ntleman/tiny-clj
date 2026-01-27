@@ -60,7 +60,7 @@ TEST(test_doseq_with_environment) {
         TEST_ASSERT_NOT_NULL(eval_state);
         
         CljValue vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
-        CljVector *vec_data = as_vector(vec);
+        CljPersistentVector *vec_data = as_vector(vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
         vec_data->data[0] = fixnum(1);

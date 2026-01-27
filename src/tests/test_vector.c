@@ -705,11 +705,11 @@ TEST_SHARED(test_vec_with_nil_elements) {
 // ============================================================================
 
 TEST_SHARED(test_weak_vector_does_not_retain_elements) {
-    TEST_IGNORE_MESSAGE("CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK is private");
-    // Test that adding elements to CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK does NOT increase their RC
+    TEST_IGNORE_MESSAGE("CLJ_VECTOR_TRANSIENT_WEAK is private");
+    // Test that adding elements to CLJ_VECTOR_TRANSIENT_WEAK does NOT increase their RC
     WITH_AUTORELEASE_POOL({
         // Create a weak vector (like autorelease pool)
-        CljVector *weak_vec = make_vector(8, CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK);
+        CljPersistentVector *weak_vec = make_vector(8, CLJ_VECTOR_TRANSIENT_WEAK);
         TEST_ASSERT_NOT_NULL(weak_vec);
         
         // Create an object with RC=1
@@ -719,7 +719,7 @@ TEST_SHARED(test_weak_vector_does_not_retain_elements) {
         // Add to weak vector - should NOT increase RC
         // vector_assoc handles count increment and capacity growth automatically
         unsigned int count = vector_count(weak_vec);
-        CljVector *new_vec = vector_assoc(weak_vec, count, map);
+        CljPersistentVector *new_vec = vector_assoc(weak_vec, count, map);
         TEST_ASSERT_NOT_NULL(new_vec);
         
         // RC should still be 1 (not retained)
@@ -739,11 +739,11 @@ TEST_SHARED(test_weak_vector_does_not_retain_elements) {
 }
 
 TEST_SHARED(test_weak_vector_does_not_release_elements) {
-    TEST_IGNORE_MESSAGE("CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK is private");
-    // Test that removing elements from CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK does NOT decrease their RC
+    TEST_IGNORE_MESSAGE("CLJ_VECTOR_TRANSIENT_WEAK is private");
+    // Test that removing elements from CLJ_VECTOR_TRANSIENT_WEAK does NOT decrease their RC
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
-        CljVector *weak_vec = make_vector(8, CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK);
+        CljPersistentVector *weak_vec = make_vector(8, CLJ_VECTOR_TRANSIENT_WEAK);
         TEST_ASSERT_NOT_NULL(weak_vec);
         
         // Create an object with RC=1
@@ -756,19 +756,19 @@ TEST_SHARED(test_weak_vector_does_not_release_elements) {
         // Since we can't access capacity directly, we'll grow when count >= initial capacity (8)
         if (count >= 8) {
             int newcap = 16;  // Double the initial capacity
-            CljVector *new_vec = make_vector_copy(weak_vec, newcap);
+            CljPersistentVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
                 RELEASE(weak_vec);
                 weak_vec = new_vec;
             }
         }
         vector_increment_count(weak_vec);
-        CljVector *new_vec = vector_assoc(weak_vec, count, map);
+        CljPersistentVector *new_vec = vector_assoc(weak_vec, count, map);
         TEST_ASSERT_NOT_NULL(new_vec);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // Still 1
         
         // Remove from weak vector using vector_pop - should NOT decrease RC
-        CljVector *popped = vector_pop(new_vec);
+        CljPersistentVector *popped = vector_pop(new_vec);
         TEST_ASSERT_NOT_NULL(popped);
         
         // RC should still be 1 (not released)
@@ -787,11 +787,11 @@ TEST_SHARED(test_weak_vector_does_not_release_elements) {
 }
 
 TEST_SHARED(test_weak_vector_nth_does_not_retain) {
-    TEST_IGNORE_MESSAGE("CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK is private");
-    // Test that vector_nth does NOT retain elements for CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK
+    TEST_IGNORE_MESSAGE("CLJ_VECTOR_TRANSIENT_WEAK is private");
+    // Test that vector_nth does NOT retain elements for CLJ_VECTOR_TRANSIENT_WEAK
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
-        CljVector *weak_vec = make_vector(8, CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK);
+        CljPersistentVector *weak_vec = make_vector(8, CLJ_VECTOR_TRANSIENT_WEAK);
         TEST_ASSERT_NOT_NULL(weak_vec);
         
         // Create an object with RC=1
@@ -799,20 +799,20 @@ TEST_SHARED(test_weak_vector_nth_does_not_retain) {
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         // Add to weak vector
-        // Note: vector_assoc for CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK allows index == count (append)
+        // Note: vector_assoc for CLJ_VECTOR_TRANSIENT_WEAK allows index == count (append)
         unsigned int count = vector_count(weak_vec);
         // Grow capacity if needed using make_vector_copy
         // Since we can't access capacity directly, we'll grow when count >= initial capacity (8)
         if (count >= 8) {
             int newcap = 16;  // Double the initial capacity
-            CljVector *new_vec = make_vector_copy(weak_vec, newcap);
+            CljPersistentVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
                 RELEASE(weak_vec);
                 weak_vec = new_vec;
             }
         }
         vector_increment_count(weak_vec);
-        CljVector *new_vec = vector_assoc(weak_vec, count, map);
+        CljPersistentVector *new_vec = vector_assoc(weak_vec, count, map);
         TEST_ASSERT_NOT_NULL(new_vec);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // Still 1
         TEST_ASSERT_EQUAL(1, vector_count(new_vec));  // Count should be 1
@@ -835,11 +835,11 @@ TEST_SHARED(test_weak_vector_nth_does_not_retain) {
 }
 
 TEST_SHARED(test_weak_vector_multiple_elements_rc_unchanged) {
-    TEST_IGNORE_MESSAGE("CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK is private");
-    // Test that multiple elements in CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK maintain their RC
+    TEST_IGNORE_MESSAGE("CLJ_VECTOR_TRANSIENT_WEAK is private");
+    // Test that multiple elements in CLJ_VECTOR_TRANSIENT_WEAK maintain their RC
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
-        CljVector *weak_vec = make_vector(8, CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK);
+        CljPersistentVector *weak_vec = make_vector(8, CLJ_VECTOR_TRANSIENT_WEAK);
         TEST_ASSERT_NOT_NULL(weak_vec);
         
         // Create multiple objects
@@ -852,7 +852,7 @@ TEST_SHARED(test_weak_vector_multiple_elements_rc_unchanged) {
         TEST_ASSERT_EQUAL(1, map3->base.rc);
         
         // Add all to weak vector
-        // Note: vector_assoc for CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK with rc=1 mutates in-place
+        // Note: vector_assoc for CLJ_VECTOR_TRANSIENT_WEAK with rc=1 mutates in-place
         for (int i = 0; i < 3; i++) {
             CljMap *map = (i == 0) ? map1 : (i == 1) ? map2 : map3;
             unsigned int count = vector_count(weak_vec);
@@ -860,16 +860,16 @@ TEST_SHARED(test_weak_vector_multiple_elements_rc_unchanged) {
         // Since we can't access capacity directly, we'll grow when count >= initial capacity (8)
         if (count >= 8) {
             int newcap = 16;  // Double the initial capacity
-            CljVector *new_vec = make_vector_copy(weak_vec, newcap);
+            CljPersistentVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
                 RELEASE(weak_vec);
                 weak_vec = new_vec;
             }
         }
             vector_increment_count(weak_vec);
-            CljVector *new_vec = vector_assoc(weak_vec, count, map);
+            CljPersistentVector *new_vec = vector_assoc(weak_vec, count, map);
             TEST_ASSERT_NOT_NULL(new_vec);
-            // For CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK with rc=1, vector_assoc mutates in-place
+            // For CLJ_VECTOR_TRANSIENT_WEAK with rc=1, vector_assoc mutates in-place
             if (new_vec != weak_vec) {
                 RELEASE(weak_vec);
                 weak_vec = new_vec;
@@ -895,11 +895,11 @@ TEST_SHARED(test_weak_vector_multiple_elements_rc_unchanged) {
 }
 
 TEST_SHARED(test_weak_vector_clear_does_not_release_elements) {
-    TEST_IGNORE_MESSAGE("CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK is private");
-    // Test that vector_clear does NOT release elements for CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK
+    TEST_IGNORE_MESSAGE("CLJ_VECTOR_TRANSIENT_WEAK is private");
+    // Test that vector_clear does NOT release elements for CLJ_VECTOR_TRANSIENT_WEAK
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
-        CljVector *weak_vec = make_vector(8, CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK);
+        CljPersistentVector *weak_vec = make_vector(8, CLJ_VECTOR_TRANSIENT_WEAK);
         TEST_ASSERT_NOT_NULL(weak_vec);
         
         // Create an object with RC=1
@@ -912,14 +912,14 @@ TEST_SHARED(test_weak_vector_clear_does_not_release_elements) {
         // Since we can't access capacity directly, we'll grow when count >= initial capacity (8)
         if (count >= 8) {
             int newcap = 16;  // Double the initial capacity
-            CljVector *new_vec = make_vector_copy(weak_vec, newcap);
+            CljPersistentVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
                 RELEASE(weak_vec);
                 weak_vec = new_vec;
             }
         }
         vector_increment_count(weak_vec);
-        CljVector *new_vec = vector_assoc(weak_vec, count, map);
+        CljPersistentVector *new_vec = vector_assoc(weak_vec, count, map);
         TEST_ASSERT_NOT_NULL(new_vec);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // Still 1
         
@@ -946,22 +946,22 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
     WITH_AUTORELEASE_POOL({
         // Simulate event_loop_enqueue scenario:
         // 1. Create persistent vector with capacity
-        CljVector *task_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *task_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_NOT_NULL(task_vec);
         TEST_ASSERT_EQUAL_INT(0, vector_count(task_vec));
         
         // 2. Convert to transient (like task_queue_get does)
-        CljVector *tvec = vector_transient(task_vec);
+        CljPersistentVector *tvec = vector_transient(task_vec);
         RELEASE(task_vec);
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT_TRANSIENT, ((CljObject*)tvec)->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
         TEST_ASSERT_EQUAL_INT(0, vector_count(tvec));
         
         // 3. Use clj_conj to add an item (like event_loop_enqueue does)
         CljMap *test_map = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map);
         
-        CljVector *result = clj_conj(tvec, test_map);
+        CljPersistentVector *result = clj_conj(tvec, test_map);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_PTR(tvec, result);  // Should be same pointer (in-place)
         
@@ -974,7 +974,7 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
         CljMap *test_map2 = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map2);
         
-        CljVector *result2 = clj_conj(tvec, test_map2);
+        CljPersistentVector *result2 = clj_conj(tvec, test_map2);
         TEST_ASSERT_NOT_NULL(result2);
         TEST_ASSERT_EQUAL_PTR(tvec, result2);
         
@@ -1000,15 +1000,15 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
 TEST_SHARED(test_clj_conj_with_empty_transient_vector) {
     WITH_AUTORELEASE_POOL({
         // Create empty persistent vector (capacity 0)
-        CljVector *task_vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *task_vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_NOT_NULL(task_vec);
         TEST_ASSERT_EQUAL_INT(0, vector_count(task_vec));
         
         // Convert to transient
-        CljVector *tvec = vector_transient(task_vec);
+        CljPersistentVector *tvec = vector_transient(task_vec);
         RELEASE(task_vec);
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT_TRANSIENT, ((CljObject*)tvec)->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
         TEST_ASSERT_EQUAL_INT(0, vector_count(tvec));
         
         // clj_conj should grow capacity and add item
@@ -1037,15 +1037,15 @@ TEST_SHARED(test_clj_conj_with_empty_transient_vector) {
 // New tests for transient vector mutable functions (backing_store design)
 TEST_SHARED(test_transient_vector_conj_keeps_pointer_and_updates_backing_store) {
     WITH_AUTORELEASE_POOL({
-        CljVector *vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_NOT_NULL(vec);
 
-        CljVector *tvec = vector_transient(vec);
+        CljPersistentVector *tvec = vector_transient(vec);
         RELEASE(vec);
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT_TRANSIENT, ((CljObject*)tvec)->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
 
-        CljVector *result = vector_conj(tvec, fixnum(10));
+        CljPersistentVector *result = vector_conj(tvec, fixnum(10));
         TEST_ASSERT_EQUAL_PTR(tvec, result);
 
         CljPersistentVector *backing = vector_persistent((CljTransientVector*)tvec);
@@ -1054,7 +1054,7 @@ TEST_SHARED(test_transient_vector_conj_keeps_pointer_and_updates_backing_store) 
         TEST_ASSERT_EQUAL_INT(1, retain_count(backing));
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(backing, 0)));
 
-        CljVector *result2 = vector_conj(tvec, fixnum(20));
+        CljPersistentVector *result2 = vector_conj(tvec, fixnum(20));
         TEST_ASSERT_EQUAL_PTR(tvec, result2);
         backing = vector_persistent((CljTransientVector*)tvec);
         TEST_ASSERT_NOT_NULL(backing);
@@ -1067,17 +1067,17 @@ TEST_SHARED(test_transient_vector_conj_keeps_pointer_and_updates_backing_store) 
 
 TEST_SHARED(test_transient_vector_assoc_keeps_pointer_and_updates_backing_store) {
     WITH_AUTORELEASE_POOL({
-        CljVector *vec = make_vector(2, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *vec = make_vector(2, CLJ_VECTOR_PERSISTENT);
         vec = vector_conj(vec, fixnum(1));
         vec = vector_conj(vec, fixnum(2));
         TEST_ASSERT_NOT_NULL(vec);
 
-        CljVector *tvec = vector_transient(vec);
+        CljPersistentVector *tvec = vector_transient(vec);
         RELEASE(vec);
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT_TRANSIENT, ((CljObject*)tvec)->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
 
-        CljVector *result = vector_assoc(tvec, 1, fixnum(99));
+        CljPersistentVector *result = vector_assoc(tvec, 1, fixnum(99));
         TEST_ASSERT_EQUAL_PTR(tvec, result);
 
         CljPersistentVector *backing = vector_persistent((CljTransientVector*)tvec);
@@ -1092,15 +1092,15 @@ TEST_SHARED(test_transient_vector_assoc_keeps_pointer_and_updates_backing_store)
 
 TEST_SHARED(test_transient_vector_capacity_growth_keeps_pointer) {
     WITH_AUTORELEASE_POOL({
-        CljVector *vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_NOT_NULL(vec);
 
-        CljVector *tvec = vector_transient(vec);
+        CljPersistentVector *tvec = vector_transient(vec);
         RELEASE(vec);
         TEST_ASSERT_NOT_NULL(tvec);
 
         for (int i = 0; i < 8; ++i) {
-            CljVector *result = vector_conj(tvec, fixnum(i));
+            CljPersistentVector *result = vector_conj(tvec, fixnum(i));
             TEST_ASSERT_EQUAL_PTR(tvec, result);
         }
 
@@ -1153,12 +1153,12 @@ TEST_SHARED(test_transient_on_transient_returns_same_object) {
         // Test 1: (transient) on transient vector returns the same object
         CljObject *tvec1 = eval_string("(transient (vector 1 2 3))", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(tvec1);
-        TEST_ASSERT_TRUE(TAG(tvec1) == CLJ_VECTOR_PERSISTENT_TRANSIENT);
+        TEST_ASSERT_TRUE(TAG(tvec1) == CLJ_VECTOR_TRANSIENT);
         
         // Call transient again on the transient vector
         CljObject *tvec2 = eval_string("(transient (transient (vector 1 2 3)))", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(tvec2);
-        TEST_ASSERT_TRUE(TAG(tvec2) == CLJ_VECTOR_PERSISTENT_TRANSIENT);
+        TEST_ASSERT_TRUE(TAG(tvec2) == CLJ_VECTOR_TRANSIENT);
         
         // They should be equal (same elements)
         CljObject *equal_result = eval_string("(= (transient (vector 1 2 3)) (transient (transient (vector 1 2 3))))", g_test_eval_state);
@@ -1168,21 +1168,21 @@ TEST_SHARED(test_transient_on_transient_returns_same_object) {
         
         // Test 2: Direct test using native_transient function
         // Create a transient vector
-        CljVector *vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
         vec = vector_conj(vec, fixnum(1));
         vec = vector_conj(vec, fixnum(2));
         vec = vector_conj(vec, fixnum(3));
-        CljVector *tvec = vector_transient(vec);
+        CljPersistentVector *tvec = vector_transient(vec);
         RELEASE(vec);
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_TRUE(TAG(tvec) == CLJ_VECTOR_PERSISTENT_TRANSIENT);
+        TEST_ASSERT_TRUE(TAG(tvec) == CLJ_VECTOR_TRANSIENT);
         
         // Call transient on the transient vector - should return same object
         ID args[] = {tvec};
         CljObject *result = (CljObject*)native_transient(args, 1);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_PTR(tvec, result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT_TRANSIENT);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_TRANSIENT);
         
         RELEASE(tvec);
         
@@ -1228,7 +1228,7 @@ TEST_SHARED(test_persistent_on_persistent_returns_same_object) {
         TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(equal_result));
         
         // Test 2: Direct test using native_persistent_bang function
-        CljVector *vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
         vec = vector_conj(vec, fixnum(1));
         vec = vector_conj(vec, fixnum(2));
         vec = vector_conj(vec, fixnum(3));
@@ -1266,7 +1266,7 @@ TEST_SHARED(test_persistent_on_persistent_returns_same_object) {
 
 // Test VECTOR_FOR_EACH macro - iterate over all vector elements
 TEST_SHARED(test_vector_for_each_macro) {
-    CljVector *vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
+    CljPersistentVector *vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
     
     // Add elements to vector
     vec = vector_conj(vec, fixnum(1));
@@ -1304,7 +1304,7 @@ TEST_SHARED(test_vector_for_each_macro) {
 
 // Test VECTOR_FOR_EACH with empty vector
 TEST_SHARED(test_vector_for_each_empty_vector) {
-    CljVector *vec = AUTORELEASE(make_vector(0, CLJ_VECTOR_PERSISTENT));
+    CljPersistentVector *vec = AUTORELEASE(make_vector(0, CLJ_VECTOR_PERSISTENT));
     
     int iteration_count = 0;
     VECTOR_FOR_EACH(vec, elem) {
@@ -1317,7 +1317,7 @@ TEST_SHARED(test_vector_for_each_empty_vector) {
 
 // Test VECTOR_FOR_EACH with NULL vector (should not crash)
 TEST_SHARED(test_vector_for_each_null_vector) {
-    CljVector *vec = NULL;
+    CljPersistentVector *vec = NULL;
     
     int iteration_count = 0;
     VECTOR_FOR_EACH(vec, elem) {
@@ -1330,7 +1330,7 @@ TEST_SHARED(test_vector_for_each_null_vector) {
 
 // Test VECTOR_FOR_EACH with NULL elements
 TEST_SHARED(test_vector_for_each_with_null_elements) {
-    CljVector *vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
+    CljPersistentVector *vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
     
     // Add elements including NULL (nil)
     vec = vector_conj(vec, fixnum(1));
@@ -1358,7 +1358,7 @@ TEST_SHARED(test_vector_for_each_with_null_elements) {
 
 // Test vector_set_nth with reference count checks (transient vector)
 TEST_SHARED(test_vector_set_nth_with_reference_counts) {
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT_TRANSIENT);
+    CljPersistentVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(1, retain_count(vec));
     
@@ -1375,7 +1375,7 @@ TEST_SHARED(test_vector_set_nth_with_reference_counts) {
     int old_val_rc_before = retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(2, old_val_rc_before);
     
-    CljVector *result = vector_set_nth(vec, 0, new_val);
+    CljPersistentVector *result = vector_set_nth(vec, 0, new_val);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(vec, result);
     TEST_ASSERT_EQUAL_INT(1, retain_count(result));
@@ -1399,7 +1399,7 @@ TEST_SHARED(test_vector_set_nth_with_reference_counts) {
 
 // Test vector_set_nth with transient vector and multiple references
 TEST_SHARED(test_vector_set_nth_copy_on_write) {
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT_TRANSIENT);
+    CljPersistentVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
     
     CljObject *old_val = AUTORELEASE(make_string("old"));
@@ -1417,7 +1417,7 @@ TEST_SHARED(test_vector_set_nth_copy_on_write) {
     int old_val_rc_before = retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(2, old_val_rc_before);
     
-    CljVector *result = vector_set_nth(vec, 0, new_val);
+    CljPersistentVector *result = vector_set_nth(vec, 0, new_val);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(vec, result);
     TEST_ASSERT_EQUAL_INT(2, retain_count(vec));
@@ -1441,9 +1441,9 @@ TEST_SHARED(test_vector_set_nth_copy_on_write) {
 
 // Test vector_set_nth with transient vector
 TEST_SHARED(test_vector_set_nth_transient) {
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT_TRANSIENT);
+    CljPersistentVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
-    TEST_ASSERT_TRUE(TAG(vec) == CLJ_VECTOR_PERSISTENT_TRANSIENT);
+    TEST_ASSERT_TRUE(TAG(vec) == CLJ_VECTOR_TRANSIENT);
     
     CljObject *old_val = AUTORELEASE(make_string("old"));
     CljObject *new_val = AUTORELEASE(make_string("new"));
@@ -1456,10 +1456,10 @@ TEST_SHARED(test_vector_set_nth_transient) {
     int old_val_rc_before = retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(2, old_val_rc_before);
     
-    CljVector *result = vector_set_nth(vec, 0, new_val);
+    CljPersistentVector *result = vector_set_nth(vec, 0, new_val);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(vec, result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT_TRANSIENT);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_TRANSIENT);
     
     ID elem = vector_nth(result, 0);
     TEST_ASSERT_NOT_NULL(elem);
@@ -1481,23 +1481,23 @@ TEST_SHARED(test_vector_set_nth_transient) {
 // Test vector_set_nth edge cases (NULL vector, out-of-bounds, NULL value)
 TEST_SHARED(test_vector_set_nth_edge_cases) {
     // Test 1: NULL vector should return NULL
-    CljVector *result1 = vector_set_nth(NULL, 0, fixnum(42));
+    CljPersistentVector *result1 = vector_set_nth(NULL, 0, fixnum(42));
     TEST_ASSERT_NULL(result1);
     
     // Test 2: Out-of-bounds index should return NULL
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT_TRANSIENT);
+    CljPersistentVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
     vec = vector_conj(vec, fixnum(10));
     vec = vector_conj(vec, fixnum(20));
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
     
     // Index 2 is out of bounds (count is 2, valid indices are 0 and 1)
-    CljVector *result2 = vector_set_nth(vec, 2, fixnum(30));
+    CljPersistentVector *result2 = vector_set_nth(vec, 2, fixnum(30));
     TEST_ASSERT_NULL(result2);
     
     // Test 3: NULL value is allowed (represents nil) and should succeed
     CLJException *exception_caught = NULL;
-    CljVector *result3 = NULL;
+    CljPersistentVector *result3 = NULL;
     TRY {
         result3 = vector_set_nth(vec, 0, NULL);
     } CATCH(ex) {
@@ -1513,7 +1513,7 @@ TEST_SHARED(test_vector_set_nth_edge_cases) {
 
 // Test that vector_set_nth throws exception for persistent vectors
 TEST_SHARED(test_vector_set_nth_persistent_throws_exception) {
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_NOT_NULL(vec);
     vec = vector_conj(vec, fixnum(10));
     vec = vector_conj(vec, fixnum(20));

@@ -53,7 +53,7 @@ extern CljObject* line_editor_history_load_default(void);
 extern bool line_editor_history_save_default(CljObject *vec);
 extern void set_line_editor(LineEditor *editor);
 extern LineEditor* get_line_editor(void);
-extern CljVector* line_editor_get_history_vector(LineEditor *editor);
+extern CljPersistentVector* line_editor_get_history_vector(LineEditor *editor);
 extern int line_editor_get_history_size(const LineEditor *editor);
 extern void line_editor_clear_history(LineEditor *editor);
 
@@ -298,11 +298,11 @@ bool repl_eval_arg(const char *raw_code, EvalState *st) {
  */
 CljObject* history_trim_last_n(CljObject *vec, int limit) {
     if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT || limit <= 0) return (CljObject*)empty_vector();
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_vector(vec);
     int count = vector_count(v);
     if (count <= limit) return RETAIN(vec);
     int start = count - limit;
-    CljVector* out = make_vector(limit, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector* out = make_vector(limit, CLJ_VECTOR_PERSISTENT);
     ID nth_args[2];
     nth_args[0] = v;
     for (int i = 0; i < limit; i++) {
@@ -321,11 +321,11 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
  *  @param path File path
  *  @return true if successful
  */
-bool history_save_to_file(CljVector *vec, const char *path) {
+bool history_save_to_file(CljPersistentVector *vec, const char *path) {
     if (!path || !vec) return false;
 
     CljObject *persistent_vec = (CljObject*)vec;
-    if (TAG((CljObject*)vec) == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+    if (TAG((CljObject*)vec) == CLJ_VECTOR_TRANSIENT) {
         persistent_vec = (CljObject*)vector_persistent((CljTransientVector*)vec);
         if (!persistent_vec || TAG(persistent_vec) != CLJ_VECTOR_PERSISTENT) {
             return false;
@@ -364,13 +364,13 @@ bool history_save_to_file(CljVector *vec, const char *path) {
  *  @param path File path
  *  @return Vector loaded from file, or empty vector on error
  */
-CljVector* history_load_from_file(const char *path) {
+CljPersistentVector* history_load_from_file(const char *path) {
     if (!path) return empty_vector();
 
     EvalState *st = get_global_eval_state();
     if (!st) return empty_vector();
 
-    CljVector *string_history = NULL;
+    CljPersistentVector *string_history = NULL;
 
     WITH_AUTORELEASE_POOL({
         TRY {
@@ -493,7 +493,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         TRY {
             CljObject *loaded = line_editor_history_load_default();
             // Only use loaded history if it has content
-            if (loaded && TAG(loaded) == CLJ_VECTOR_PERSISTENT && vector_count((CljVector*)loaded) > 0) {
+            if (loaded && TAG(loaded) == CLJ_VECTOR_PERSISTENT && vector_count((CljPersistentVector*)loaded) > 0) {
                 // loaded is already retained from history_load_from_file, transfer to outer pool
                 ASSIGN(history_vec, AUTORELEASE(loaded));
             }
@@ -507,7 +507,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     // line_editor_set_history_from_vector ruft clj_conj auf, das AUTORELEASE verwendet
     if (history_vec && TAG(history_vec) == CLJ_VECTOR_PERSISTENT) {
         WITH_AUTORELEASE_POOL({
-            line_editor_set_history_from_vector(editor, (CljVector*)history_vec);
+            line_editor_set_history_from_vector(editor, (CljPersistentVector*)history_vec);
         });
         RELEASE(history_vec);  // Release nach Verwendung
     } else {
@@ -621,7 +621,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                 line_editor_add_to_history(editor, acc);
                 // Save history after each expression (fsync removed to avoid blocking)
                 WITH_AUTORELEASE_POOL({
-                    CljVector *vec = line_editor_get_history_vector(editor);
+                    CljPersistentVector *vec = line_editor_get_history_vector(editor);
                     if (vec) {
                         // RETAIN before passing to save function (it may convert transient to persistent)
                         RETAIN(vec);
@@ -646,7 +646,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     WITH_AUTORELEASE_POOL({
         LineEditor *ed = get_line_editor();
         if (ed) {
-            CljVector *vec = line_editor_get_history_vector(ed);
+            CljPersistentVector *vec = line_editor_get_history_vector(ed);
             if (vec) {
                 // RETAIN before passing to save function (it may convert transient to persistent)
                 RETAIN(vec);

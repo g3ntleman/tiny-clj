@@ -5,7 +5,7 @@
 Statt zwei separater Felder:
 ```c
 ID body;                    // Für feste Arity
-CljVector *arity_bodies;    // Für mehrere Aritäten (NULL wenn nicht verwendet)
+CljPersistentVector *arity_bodies;    // Für mehrere Aritäten (NULL wenn nicht verwendet)
 ```
 
 Nur ein Feld:
@@ -17,7 +17,7 @@ ID body_or_bodies;  // Entweder AST-Node (feste Arity) oder Vector (mehrere Arit
 ```c
 if (TAG(body_or_bodies) == CLJ_VECTOR) {
     // Mehrere Aritäten
-    CljVector *arity_bodies = (CljVector*)body_or_bodies;
+    CljPersistentVector *arity_bodies = (CljPersistentVector*)body_or_bodies;
     // ...
 } else {
     // Feste Arity
@@ -181,7 +181,7 @@ if (TAG(func->body_or_bodies) == CLJ_VECTOR) {  // Tag-Check
 ```c
 typedef struct {
     CljObject base;
-    CljVector *params;
+    CljPersistentVector *params;
     ID body_or_bodies;  // Entweder AST-Node (feste Arity) oder Vector (mehrere Aritäten)
     CljList *env_stack;
     CljSymbol *name;
@@ -201,9 +201,9 @@ static inline ID get_single_body(CljFunction *func) {
 }
 
 // Helper: Hole Vector für mehrere Aritäten
-static inline CljVector* get_arity_bodies(CljFunction *func) {
+static inline CljPersistentVector* get_arity_bodies(CljFunction *func) {
     CLJ_ASSERT(has_multiple_arities(func));
-    return (CljVector*)func->body_or_bodies;
+    return (CljPersistentVector*)func->body_or_bodies;
 }
 
 // Dispatch-Logik
@@ -212,7 +212,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     
     if (unlikely(has_multiple_arities(func))) {
         // Mehrere Aritäten
-        CljVector *arity_bodies = get_arity_bodies(func);
+        CljPersistentVector *arity_bodies = get_arity_bodies(func);
         ID body = NULL;
         if (argc >= 0 && argc < vector_count(arity_bodies)) {
             body = vector_nth(arity_bodies, argc);

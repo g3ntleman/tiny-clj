@@ -4,18 +4,17 @@
 #include "object.h"
 #include "common.h"
 
-typedef struct CljVector CljVector;
-typedef struct CljVector CljPersistentVector;
+typedef struct CljPersistentVector CljPersistentVector;
 
 typedef struct CljTransientVector {
     CljObject base;
     CljPersistentVector *backing_store;
 } CljTransientVector;
 
-unsigned int vector_count(CljVector *vec);
-int vector_capacity(CljVector *vec);
+unsigned int vector_count(CljPersistentVector *vec);
+int vector_capacity(CljPersistentVector *vec);
 
-static inline CljVector* as_vector(ID obj) {
+static inline CljPersistentVector* as_vector(ID obj) {
     // NULL is valid (nil)
     // TAG() already handles NULL safely (returns CLJ_NIL)
     // CLJ_ASSERT already has #ifdef DEBUG internally
@@ -23,7 +22,7 @@ static inline CljVector* as_vector(ID obj) {
     CljType tag = TAG(obj);
     CLJ_ASSERT(obj == NULL || tag == CLJ_VECTOR_PERSISTENT);
 #endif
-    return (CljVector*)obj;
+    return (CljPersistentVector*)obj;
 }
 
 static inline CljTransientVector* as_transient_vector(ID obj) {
@@ -44,9 +43,9 @@ static inline bool is_transient_vector(CljObject *obj) {
     return obj && TAG(obj) == CLJ_VECTOR_TRANSIENT;
 }
 
-static inline CljVector* transient_vector_backing_store(CljTransientVector *tvec) {
+static inline CljPersistentVector* transient_vector_backing_store(CljTransientVector *tvec) {
     CLJ_ASSERT(tvec && tvec->base.type == CLJ_VECTOR_TRANSIENT);
-    return (CljVector*)tvec->backing_store;
+    return (CljPersistentVector*)tvec->backing_store;
 }
 
 static inline unsigned int transient_vector_count(CljTransientVector *tvec) {
@@ -59,23 +58,23 @@ static inline int transient_vector_capacity(CljTransientVector *tvec) {
     return vector_capacity(tvec->backing_store);
 }
 
-extern CljVector* vector_empty_singleton;
-CljVector* empty_vector(void);
-CljVector* make_vector(unsigned int capacity, CljType type);
-CljVector* vector_conj(CljVector* vec, ID item);
-CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value);
-ID vector_nth(CljVector *vec, unsigned int index);
-int vector_index_of(CljVector *vec, ID value);
-CljVector* vector_set_nth(CljVector* vec, unsigned int index, ID value);
-CljVector* make_vector_copy(CljVector* vec, unsigned capacity);
-CljVector* vector_pop(CljVector* vec);
-CljVector* vector_insert_at(CljVector* vec, unsigned int index, ID item);
-CljVector* vector_remove_at(CljVector* vec, unsigned int index);
-ID* vector_as_array(CljVector *vec);
-void vector_increment_count(CljVector *vec);
-void vector_clear(CljVector *vec);
-CljVector* vector_transient(CljVector *vec);
-CljVector* clj_conj(CljVector *tvec, ID item);
+extern CljPersistentVector* vector_empty_singleton;
+CljPersistentVector* empty_vector(void);
+CljPersistentVector* make_vector(unsigned int capacity, CljType type);
+CljPersistentVector* vector_conj(CljPersistentVector* vec, ID item);
+CljPersistentVector* vector_assoc(CljPersistentVector* vec, unsigned int index, ID value);
+ID vector_nth(CljPersistentVector *vec, unsigned int index);
+int vector_index_of(CljPersistentVector *vec, ID value);
+CljPersistentVector* vector_set_nth(CljPersistentVector* vec, unsigned int index, ID value);
+CljPersistentVector* make_vector_copy(CljPersistentVector* vec, unsigned capacity);
+CljPersistentVector* vector_pop(CljPersistentVector* vec);
+CljPersistentVector* vector_insert_at(CljPersistentVector* vec, unsigned int index, ID item);
+CljPersistentVector* vector_remove_at(CljPersistentVector* vec, unsigned int index);
+ID* vector_as_array(CljPersistentVector *vec);
+void vector_increment_count(CljPersistentVector *vec);
+void vector_clear(CljPersistentVector *vec);
+CljTransientVector* vector_transient(CljPersistentVector *vec);
+CljTransientVector* clj_conj(CljTransientVector *tvec, ID item);
 CljPersistentVector* vector_persistent(CljTransientVector *tvec);
 
 // ----------------------------------------------------------------------------
@@ -91,11 +90,11 @@ void vector_make_copy_count_reset(void);
 // These functions update the pointer stored in *vec_slot and RELEASE the old vector
 // if a new vector instance is produced (grow/COW).
 // Use these for performance-critical code where you want to maintain rc=1 for COW optimizations.
-void vector_conj_inplace(CljVector **vec_slot, ID item);
-void vector_assoc_inplace(CljVector **vec_slot, unsigned int index, ID value);
-void vector_insert_at_inplace(CljVector **vec_slot, unsigned int index, ID item);
-void vector_remove_at_inplace(CljVector **vec_slot, unsigned int index);
-void vector_pop_inplace(CljVector **vec_slot);
+void vector_conj_inplace(CljPersistentVector **vec_slot, ID item);
+void vector_assoc_inplace(CljPersistentVector **vec_slot, unsigned int index, ID value);
+void vector_insert_at_inplace(CljPersistentVector **vec_slot, unsigned int index, ID item);
+void vector_remove_at_inplace(CljPersistentVector **vec_slot, unsigned int index);
+void vector_pop_inplace(CljPersistentVector **vec_slot);
 
 #define VECTOR_FOR_EACH(vector, elem_var) \
     for (int _i = 0, _cnt = vector_count(vector); (vector) && _i < _cnt; ++_i) \

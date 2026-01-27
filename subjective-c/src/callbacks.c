@@ -52,7 +52,7 @@ uint32_t clj_hash_default(ID value) {
         case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
-            CljVector *vec = (CljVector*)value;
+            CljPersistentVector *vec = (CljPersistentVector*)value;
             unsigned int count = vector_count(vec);
             uint32_t elem_hash = count > 0 ? clj_hash_default(vector_nth(vec, 0)) : 0;
             return hash_container(count, elem_hash);
@@ -151,8 +151,8 @@ bool clj_equal_default(ID a, ID b) {
         case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
-            CljVector *vec_a = (CljVector*)a;
-            CljVector *vec_b = (CljVector*)b;
+            CljPersistentVector *vec_a = (CljPersistentVector*)a;
+            CljPersistentVector *vec_b = (CljPersistentVector*)b;
             unsigned int count_a = vector_count(vec_a);
             if (count_a != vector_count(vec_b)) return false;
             for (unsigned int i = 0; i < count_a; i++) {

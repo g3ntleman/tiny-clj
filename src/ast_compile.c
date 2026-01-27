@@ -13,7 +13,7 @@ static void ast_compile_list_inplace(CljList *list, EvalState *st) {
     }
 }
 
-static void ast_compile_vector_inplace(CljVector *vec, EvalState *st) {
+static void ast_compile_vector_inplace(CljPersistentVector *vec, EvalState *st) {
     if (!vec) return;
     VECTOR_FOR_EACH(vec, elem) {
         ast_compile_expr_inplace(elem, st);

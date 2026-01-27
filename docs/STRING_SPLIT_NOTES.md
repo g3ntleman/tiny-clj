@@ -53,7 +53,7 @@ Diese Funktionen benötigen nur `CljString` und generische Runtime-Funktionen:
 - `print_str()` - öffentlich
 
 Diese Funktionen benötigen:
-- `CljSymbol`, `CljNamespace`, `CljVector`, `CljList`, `CljMap`, `CljFunction`, `CljSeq`, `CljAtom`, `CljByteArray`, `CLJException`
+- `CljSymbol`, `CljNamespace`, `CljPersistentVector`, `CljList`, `CljMap`, `CljFunction`, `CljSeq`, `CljAtom`, `CljByteArray`, `CLJException`
 - `namespace.h`, `symbol.h`, `vector.h`, `list.h`, `map.h`, `function.h`, `seq.h`, `atom.h`, `byte_array.h`, `exception.h`
 - `value.h`, `runtime.h`, `kv_macros.h`
 

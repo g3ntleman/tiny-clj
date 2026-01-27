@@ -34,8 +34,8 @@ typedef struct {
     CljObject **stack;
     int sp;
     int stack_capacity;
-    struct CljVector *pool;
-    struct CljVector *dynamic_bindings; // transient vector: stack of binding frame maps
+    struct CljPersistentVector *pool;
+    struct CljPersistentVector *dynamic_bindings; // transient vector: stack of binding frame maps
     int finished;
     CljNamespace *current_ns; // dynamic current namespace (*ns*)
     CljNamespace *resolve_ns; // namespace used for unqualified symbol resolution (defaults to current_ns)

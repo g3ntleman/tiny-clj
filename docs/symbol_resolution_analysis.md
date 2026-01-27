@@ -16,7 +16,7 @@
 **Ursachen**
 1. **Symbol-Interning im Hot-Path**  
    - `resolve_list_operator` und `eval_symbol` rufen `intern_symbol*` bei jedem Aufruf.  
-   - `intern_symbol` → `symbol_table_find` iteriert ein `CljVector` und vergleicht Namen via `strcmp`.
+   - `intern_symbol` → `symbol_table_find` iteriert ein `CljPersistentVector` und vergleicht Namen via `strcmp`.
 
 2. **Namespace-Lookups benötigen Re-Interning**  
    - `eval_symbol` interned qualifizierte Symbole erneut, um den Namespace-Map-Key zu finden (`intern_symbol(ns, cname)` / `intern_symbol_global`).  

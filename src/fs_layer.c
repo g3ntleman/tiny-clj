@@ -1033,7 +1033,7 @@ ID fs_list_dir_batch(FsKvStore *st,
 
         char kstr[FS_KEY_MAX];
         if (fs_list_dir_key_is_direct_child(dir_path, prefix_len, k.data, k.len, kstr)) {
-            vec = (ID)vector_conj((CljVector*)vec, (ID)make_string(kstr));
+            vec = (ID)vector_conj((CljPersistentVector*)vec, (ID)make_string(kstr));
             returned++;
             if (batch_size && returned >= batch_size) {
                 break;

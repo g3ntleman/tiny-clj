@@ -569,8 +569,8 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     reader_skip_all(reader);
 
     // Create transient vector for efficient building
-    CljVector *vec = make_vector(6, CLJ_VECTOR_PERSISTENT);
-    CljVector *tvec = vector_transient(vec);
+    CljPersistentVector *vec = make_vector(6, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *tvec = vector_transient(vec);
     RELEASE(vec);  // Release original, use transient
 
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
@@ -694,7 +694,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
       }
 
       // Extract binding and test from vector [binding test]
-      CljVector *vec = as_vector((CljValue)binding_vec);
+      CljPersistentVector *vec = as_vector((CljValue)binding_vec);
       if (!vec || vector_count(vec) < 2) {
         throw_parser_exception("if-let binding vector must have exactly 2 elements", reader);
         return NULL;
@@ -1565,7 +1565,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
   CljSymbol *fn_sym = intern_symbol_global("fn");
   CljSymbol *percent_sym = intern_symbol_global("%");
-  CljVector *param_vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
+  CljPersistentVector *param_vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
   vector_conj_inplace(&param_vec, percent_sym);
 
   // Create (fn [%] body)

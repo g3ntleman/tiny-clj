@@ -92,7 +92,7 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
     }
 
     if (tag == CLJ_VECTOR_PERSISTENT) {
-        CljVector *vec = as_vector(expr);
+        CljPersistentVector *vec = as_vector(expr);
         if (vec) {
             unsigned int count = vector_count(vec);
             ID *data = vector_as_array(vec);
@@ -304,7 +304,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     ID result = NULL;
     // Local owned env_stack for this call. We RETAIN the function's captured env_stack
     // so any mutations we do for nested lets will COW instead of mutating the function.
-    CljVector *call_env_stack = func->env_stack ? (CljVector*)RETAIN(func->env_stack) : NULL;
+    CljPersistentVector *call_env_stack = func->env_stack ? (CljPersistentVector*)RETAIN(func->env_stack) : NULL;
     do {
         // Reset recur state for each iteration
         recur_arg_count = -1;  // -1 = no tail call
@@ -387,7 +387,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
 
 // DRY: Central symbol resolution function with environment stack support
 // Resolves symbol by searching through environment stack (vector of maps)
-static INLINE CljMap* env_stack_head(CljVector *stack) {
+static INLINE CljMap* env_stack_head(CljPersistentVector *stack) {
     return env_stack_top(stack);
 }
 
@@ -413,7 +413,7 @@ static const EvalContext* ensure_eval_context(CljMap *env,
                                               EvalState *st,
                                               const EvalContext *ctx,
                                               EvalContext *local_ctx,
-                                              CljVector **owned_stack) {
+                                              CljPersistentVector **owned_stack) {
     *owned_stack = NULL;
     if (!ctx) {
         *local_ctx = (EvalContext){
@@ -455,7 +455,7 @@ static INLINE bool is_dynamic_var_symbol(const CljSymbol *symbol);
 static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol);
 
 // Extended version that also searches in CallFrame
-static INLINE ID resolve_symbol_in_env_with_frame(CljVector *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
+static INLINE ID resolve_symbol_in_env_with_frame(CljPersistentVector *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
     if (!sym || TAG(sym) != CLJ_SYMBOL) {
         return NOT_FOUND;
     }
@@ -712,11 +712,11 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             return eval_list(as_list(body), env_map, ctx_state, ctx);
         }
 
-        case CLJ_VECTOR_PERSISTENT_PERSISTENT:
-        case CLJ_VECTOR_PERSISTENT_TRANSIENT:
-        case CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK: {
+        case CLJ_VECTOR_PERSISTENT:
+        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_TRANSIENT_WEAK: {
             // Vector literals need to have their elements evaluated
-            CljVector *vec = (CljVector*)body;
+            CljPersistentVector *vec = (CljPersistentVector*)body;
             unsigned int count = vector_count(vec);
             
             // Empty vector - return as-is
@@ -725,7 +725,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             }
             
             // Create new vector with evaluated elements
-            CljVector *result = make_vector(count, CLJ_VECTOR_PERSISTENT);
+            CljPersistentVector *result = make_vector(count, CLJ_VECTOR_PERSISTENT);
             RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
@@ -870,12 +870,12 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             return NULL;
         }
 
-        case CLJ_VECTOR_PERSISTENT_PERSISTENT:
-        case CLJ_VECTOR_PERSISTENT_TRANSIENT:
-        case CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK: {
+        case CLJ_VECTOR_PERSISTENT:
+        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_TRANSIENT_WEAK: {
             // Vector literals need to have their elements evaluated
             // This is necessary for cases like [(f x) (g x)] where f and g should be called
-            CljVector *vec = (CljVector*)body;
+            CljPersistentVector *vec = (CljPersistentVector*)body;
             unsigned int count = vector_count(vec);
             
             // Empty vector - return as-is
@@ -884,7 +884,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             }
             
             // Create new vector with evaluated elements
-            CljVector *result = make_vector(count, CLJ_VECTOR_PERSISTENT);
+            CljPersistentVector *result = make_vector(count, CLJ_VECTOR_PERSISTENT);
             RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
@@ -1052,11 +1052,11 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
 
     // === COLD PATH: ctx fehlt oder Cache-Miss ===
     EvalContext local_ctx;
-    CljVector *owned_env_stack = NULL;
+    CljPersistentVector *owned_env_stack = NULL;
     const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &owned_env_stack);
     ID resolved = NULL;
     EvalState *ctx_st = get_eval_state(effective_ctx, st);
-    CljVector *resolve_stack = effective_ctx ? effective_ctx->env_stack : NULL;
+    CljPersistentVector *resolve_stack = effective_ctx ? effective_ctx->env_stack : NULL;
     
     // NOTE: We intentionally do NOT drop a single-frame env_stack here.
     // A single map frame can still hold real lexical bindings (e.g. let-recursion self-binding).
@@ -1917,7 +1917,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     }
 
     // Capture env_stack from context if available (vector of maps).
-    CljVector *fn_env_stack = NULL;
+    CljPersistentVector *fn_env_stack = NULL;
     bool fn_env_stack_owned = false;
     if (ctx && ctx->env_stack) {
         fn_env_stack = ctx->env_stack;
@@ -1959,7 +1959,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         }
 
         unsigned int base_cnt = vector_count(fn_env_stack);
-        CljVector *combined = NULL;
+        CljPersistentVector *combined = NULL;
         env_stack_push_inplace(&combined, param_map);
         RELEASE(param_map);
         for (unsigned int i = 0; i < base_cnt; i++) {
@@ -2412,7 +2412,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         return NULL;
     }
 
-    CljVector *bindings = as_vector((CljValue)bindings_vec);
+    CljPersistentVector *bindings = as_vector((CljValue)bindings_vec);
     if (!bindings) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "let bindings must be a valid vector",
@@ -2434,7 +2434,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     // Start from captured env_stack (if any), but do NOT mutate it.
     // We take an owned ref so later pushes can COW without touching the original.
-    CljVector *let_stack = (ctx && ctx->env_stack) ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
+    CljPersistentVector *let_stack = (ctx && ctx->env_stack) ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
     bool let_stack_owned = true;
 
     // Frame for fast local lookups during initializer evaluation.
@@ -2763,12 +2763,12 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         return AUTORELEASE(result);
     }
 
-    if (expr_tag == CLJ_VECTOR_PERSISTENT || expr_tag == CLJ_VECTOR_PERSISTENT_TRANSIENT || expr_tag == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK) {
-        CljVector *vec = (CljVector*)expr;
+    if (expr_tag == CLJ_VECTOR_PERSISTENT || expr_tag == CLJ_VECTOR_TRANSIENT || expr_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+        CljPersistentVector *vec = (CljPersistentVector*)expr;
         unsigned int count = vector_count(vec);
         if (count == 0) return expr;
         
-        CljVector *result = make_vector(count, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *result = make_vector(count, CLJ_VECTOR_PERSISTENT);
         RETAIN(result);
         VECTOR_FOR_EACH(vec, elem) {
             ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, eval_env, eval_st, ctx) : NULL;
@@ -2806,7 +2806,7 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
     ID n_obj = NULL;
 
     if (is_vector(binding_list)) {
-        CljVector *vec = as_vector(binding_list);
+        CljPersistentVector *vec = as_vector(binding_list);
         if (!vec || vector_count(vec) < 2) return NULL;
         var = vector_nth(vec, 0);
         n_obj = vector_nth(vec, 1);
@@ -2824,7 +2824,7 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
     if (!var || TAG(var) != CLJ_SYMBOL || !n_obj) return NULL;
 
     EvalContext local_ctx = {0};
-    CljVector *owned_stack = NULL;
+    CljPersistentVector *owned_stack = NULL;
     const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &owned_stack);
 
     // Evaluate n (once) using the current lexical context.

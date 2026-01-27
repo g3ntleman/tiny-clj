@@ -243,7 +243,7 @@ ID map_keys(CljMap *map) {
   CljMap *map_data = map;
   if (!map_data)
     return NULL;
-  CljVector* keys_vec = make_vector(map_data->count, CLJ_VECTOR_PERSISTENT);
+  CljPersistentVector* keys_vec = make_vector(map_data->count, CLJ_VECTOR_PERSISTENT);
   if (!keys_vec)
     return NULL;
   MAP_FOR_EACH(map_data, key, value) {
@@ -261,7 +261,7 @@ ID map_vals(CljMap *map) {
   CljMap *map_data = map;
   if (!map_data)
     return NULL;
-  CljVector* vals_vec = make_vector(map_data->count, CLJ_VECTOR_PERSISTENT);
+  CljPersistentVector* vals_vec = make_vector(map_data->count, CLJ_VECTOR_PERSISTENT);
   if (!vals_vec)
     return NULL;
   MAP_FOR_EACH(map_data, key, val) {

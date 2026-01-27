@@ -54,7 +54,7 @@ Add function to calculate milliseconds until next timer:
  * @return Milliseconds until next timer (0 if timer ready, -1 if no timers)
  */
 int event_loop_get_next_timer_delay_ms(void) {
-    CljVector *timer_vec = timer_queue_get();
+    CljPersistentVector *timer_vec = timer_queue_get();
     if (!timer_vec || vector_count(timer_vec) == 0) {
         return -1;  // No timers
     }

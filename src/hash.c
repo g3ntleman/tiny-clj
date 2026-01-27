@@ -32,7 +32,7 @@ static uint32_t hash_symbol(CljSymbol *sym) {
     return fnv1a_continue(FNV1A_OFFSET, sym->cname);
 }
 
-static uint32_t hash_vector(CljVector *vec) {
+static uint32_t hash_vector(CljPersistentVector *vec) {
     if (!vec) return 0;
     uint32_t h = 0;
     int n = vector_count(vec);
@@ -83,7 +83,7 @@ uint32_t clj_hash_full(ID value) {
         case CLJ_SYMBOL: return hash_symbol((CljSymbol*)value);
         case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: return hash_vector((CljVector*)value);
+        case CLJ_VECTOR_TRANSIENT_WEAK: return hash_vector((CljPersistentVector*)value);
         case CLJ_MAP:
         case CLJ_MAP_TRANSIENT: return hash_map((CljMap*)value);
         case CLJ_LIST: return hash_list((CljList*)value);

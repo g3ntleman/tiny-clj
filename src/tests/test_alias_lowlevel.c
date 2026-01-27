@@ -39,7 +39,7 @@ TEST(test_lowlevel_alias_sym_extraction) {
     TEST_ASSERT_NOT_NULL(str_alias);
     
     // Create vector
-    CljVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR_PERSISTENT));
+    CljPersistentVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR_PERSISTENT));
     vec = AUTORELEASE(vector_conj(vec, ns_sym));
     vec = AUTORELEASE(vector_conj(vec, as_kw));
     vec = AUTORELEASE(vector_conj(vec, str_alias));
@@ -103,7 +103,7 @@ TEST(test_lowlevel_native_require_sets_alias_preloaded) {
     CljSymbol *as_kw = AUTORELEASE(intern_symbol_global(":as"));
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
-    CljVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR_PERSISTENT));
+    CljPersistentVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR_PERSISTENT));
     vec = AUTORELEASE(vector_conj(vec, ns_sym));
     vec = AUTORELEASE(vector_conj(vec, as_kw));
     vec = AUTORELEASE(vector_conj(vec, str_alias));
@@ -174,7 +174,7 @@ TEST(test_lowlevel_alias_sym_not_null_when_preloaded) {
     CljSymbol *as_kw = AUTORELEASE(intern_symbol_global(":as"));
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
-    CljVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR_PERSISTENT));
+    CljPersistentVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR_PERSISTENT));
     vec = AUTORELEASE(vector_conj(vec, ns_sym));
     vec = AUTORELEASE(vector_conj(vec, as_kw));
     vec = AUTORELEASE(vector_conj(vec, str_alias));
@@ -225,7 +225,7 @@ TEST(test_lowlevel_current_ns_correct_when_alias_set) {
     CljSymbol *as_kw = AUTORELEASE(intern_symbol_global(":as"));
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
-    CljVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR_PERSISTENT));
+    CljPersistentVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR_PERSISTENT));
     vec = AUTORELEASE(vector_conj(vec, ns_sym));
     vec = AUTORELEASE(vector_conj(vec, as_kw));
     vec = AUTORELEASE(vector_conj(vec, str_alias));

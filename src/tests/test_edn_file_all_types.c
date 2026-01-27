@@ -163,7 +163,7 @@ TEST(test_edn_file_all_supported_types)
 
     ID v_vec = map_get_required(m, ":vector");
     assert_vector((CljObject *)v_vec);
-    CljVector *vec = as_vector(v_vec);
+    CljPersistentVector *vec = as_vector(v_vec);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(vec, 0)));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(vec, 1)));

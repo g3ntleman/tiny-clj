@@ -59,7 +59,7 @@ TEST(test_fs_layer_write_read_stat_list_delete)
     ID lst = fs_list_dir_batch(st, "/data/", NULL, 32, last_key, sizeof(last_key));
     TEST_ASSERT_NOT_NULL(lst);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(lst));
-    CljVector *v = as_vector(lst);
+    CljPersistentVector *v = as_vector(lst);
     TEST_ASSERT_EQUAL_INT(1, vector_count(v));
     TEST_ASSERT_TRUE(last_key[0] == '\0'); // only entry, end reached
 
@@ -108,8 +108,8 @@ TEST(test_fs_list_dir_batch_many_files)
     TEST_ASSERT_TRUE(last_key2[0] == '\0'); // no more
 
     // Correctness: combine and verify order + uniqueness.
-    CljVector *v1 = as_vector(batch1);
-    CljVector *v2 = as_vector(batch2);
+    CljPersistentVector *v1 = as_vector(batch1);
+    CljPersistentVector *v2 = as_vector(batch2);
     TEST_ASSERT_NOT_NULL(v1);
     TEST_ASSERT_NOT_NULL(v2);
     TEST_ASSERT_EQUAL_INT(32, vector_count(v1));

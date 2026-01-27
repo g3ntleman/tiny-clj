@@ -248,23 +248,23 @@ CljValue num = make_fixnum(42);  // No RELEASE() needed
 - `map_remove_inplace(CljMap **map_slot, ID key)`
 
 **Vectors:**
-- `vector_conj_inplace(CljVector **vec_slot, ID item)`
-- `vector_assoc_inplace(CljVector **vec_slot, unsigned int index, ID value)`
-- `vector_insert_at_inplace(CljVector **vec_slot, unsigned int index, ID item)`
-- `vector_remove_at_inplace(CljVector **vec_slot, unsigned int index)`
-- `vector_pop_inplace(CljVector **vec_slot)`
+- `vector_conj_inplace(CljPersistentVector **vec_slot, ID item)`
+- `vector_assoc_inplace(CljPersistentVector **vec_slot, unsigned int index, ID value)`
+- `vector_insert_at_inplace(CljPersistentVector **vec_slot, unsigned int index, ID item)`
+- `vector_remove_at_inplace(CljPersistentVector **vec_slot, unsigned int index)`
+- `vector_pop_inplace(CljPersistentVector **vec_slot)`
 
 ### Usage Pattern
 
 **Before (Problem - RC increases):**
 ```c
-CljVector *vec = make_vector(10, CLJ_VECTOR);
+CljPersistentVector *vec = make_vector(10, CLJ_VECTOR);
 ASSIGN(vec, vector_conj(vec, item));  // rc becomes 2 → COW fails
 ```
 
 **After (Solution - RC stays 1):**
 ```c
-CljVector *vec = make_vector(10, CLJ_VECTOR);
+CljPersistentVector *vec = make_vector(10, CLJ_VECTOR);
 vector_conj_inplace(&vec, item);  // rc stays 1 → COW works!
 ```
 
@@ -272,7 +272,7 @@ vector_conj_inplace(&vec, item);  // rc stays 1 → COW works!
 
 1. **For long-lived variables**: Use `_inplace` functions
    ```c
-   CljVector *stack = make_vector(100, CLJ_VECTOR);
+   CljPersistentVector *stack = make_vector(100, CLJ_VECTOR);
    vector_conj_inplace(&stack, item1);  // rc stays 1
    vector_conj_inplace(&stack, item2);  // rc stays 1, COW works
    vector_pop_inplace(&stack);  // Removes item2, rc stays 1
@@ -280,7 +280,7 @@ vector_conj_inplace(&vec, item);  // rc stays 1 → COW works!
 
 2. **In loops**: `_inplace` for performance
    ```c
-   CljVector *result = make_vector(1000, CLJ_VECTOR);
+   CljPersistentVector *result = make_vector(1000, CLJ_VECTOR);
    for (int i = 0; i < 1000; i++) {
        vector_conj_inplace(&result, item(i));  // rc stays 1, in-place possible
    }
