@@ -4659,7 +4659,7 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
         {
             return NULL;
         }
-        CljPersistentVector *transient_vec = vector_transient(vec);
+        CljPersistentVector *transient_vec = (CljPersistentVector*)vector_transient(vec);
         RELEASE(vec);
         if (!transient_vec)
         {

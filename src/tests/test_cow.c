@@ -556,12 +556,18 @@ TEST(test_vector_copy_counter_detects_forced_copy_patterns) {
         TEST_ASSERT_EQUAL_UINT64_MESSAGE(0, (uint64_t)vector_make_copy_count(),
                                         "vector_conj on RC=1 (no growth) should not call make_vector_copy");
 
-        // Converting persistent -> transient should copy backing storage (by design).
-        CljPersistentVector *tv = vector_transient(pv);
+        // Converting persistent -> transient should NOT copy immediately (wrap + retain).
+        // First mutation should copy-on-write because backing_store is shared (rc>1 due to retain).
+        CljPersistentVector *tv = (CljPersistentVector*)vector_transient(pv);
         TEST_ASSERT_NOT_NULL(tv);
         TEST_ASSERT_TRUE(TAG(tv) == CLJ_VECTOR_TRANSIENT);
+
+        TEST_ASSERT_EQUAL_UINT64_MESSAGE(0, (uint64_t)vector_make_copy_count(),
+                                        "vector_transient should wrap without copying");
+
+        clj_conj(as_transient_vector((ID)tv), fixnum(1));
         TEST_ASSERT_TRUE_MESSAGE(vector_make_copy_count() > 0,
-                                 "vector_transient should copy backing storage (make_vector_copy_count must increase)");
+                                 "first transient mutation should trigger copy-on-write when backing is shared");
 
         // Cleanup
         RELEASE(tv);

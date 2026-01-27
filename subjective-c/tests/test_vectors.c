@@ -40,7 +40,7 @@ TEST(test_vector_nth_returns_elements) {
 TEST(test_vector_set_nth_on_transient) {
     int values[] = {4, 5, 6};
     CljPersistentVector *vec = make_vector_from_ints(values, 3);
-    CljPersistentVector *transient = vector_transient(vec);
+    CljPersistentVector *transient = (CljPersistentVector*)vector_transient(vec);
     if (transient != vec) {
         RELEASE(vec);
         vec = transient;
@@ -235,7 +235,7 @@ TEST(test_vector_nil_as_value_set_nth) {
     }
     
     // Convert to transient for set_nth
-    CljPersistentVector *transient = vector_transient(vec);
+    CljPersistentVector *transient = (CljPersistentVector*)vector_transient(vec);
     if (transient != vec) {
         RELEASE(vec);
         vec = transient;
@@ -272,7 +272,7 @@ TEST(test_vector_assoc_append_on_transient) {
     TEST_ASSERT_EQUAL_UINT(2, vector_count(vec));
     
     // Convert to transient
-    CljPersistentVector *transient = vector_transient(vec);
+    CljPersistentVector *transient = (CljPersistentVector*)vector_transient(vec);
     if (transient != vec) {
         RELEASE(vec);
         vec = transient;

@@ -570,7 +570,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
 
     // Create transient vector for efficient building
     CljPersistentVector *vec = make_vector(6, CLJ_VECTOR_PERSISTENT);
-    CljPersistentVector *tvec = vector_transient(vec);
+    CljPersistentVector *tvec = (CljPersistentVector*)vector_transient(vec);
     RELEASE(vec);  // Release original, use transient
 
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {

@@ -74,7 +74,7 @@ void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime->task_queue) {
         CljPersistentVector* task_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
         if (task_vec) {
-            CljPersistentVector* transient_task = vector_transient(task_vec);
+            CljPersistentVector* transient_task = (CljPersistentVector*)vector_transient(task_vec);
             RELEASE(task_vec); // vector_transient() retains the result
             ASSIGN(runtime->task_queue, transient_task);
         }
@@ -82,7 +82,7 @@ void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime->timer_queue) {
         CljPersistentVector* timer_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
         if (timer_vec) {
-            CljPersistentVector* transient_timer = vector_transient(timer_vec);
+            CljPersistentVector* transient_timer = (CljPersistentVector*)vector_transient(timer_vec);
             RELEASE(timer_vec); // vector_transient() retains the result
             ASSIGN(runtime->timer_queue, transient_timer);
         }

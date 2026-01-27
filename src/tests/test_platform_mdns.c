@@ -11,6 +11,8 @@
 
 typedef struct {
     bool got;
+    uint8_t expected[64];
+    size_t expected_len;
     uint8_t data[64];
     size_t len;
     void *packet_handle;
@@ -26,6 +28,14 @@ static void mdns_test_recv(void *ctx,
     (void)from_port;
     MdnsRecvCtx *r = (MdnsRecvCtx*)ctx;
     if (!r || !data) return;
+
+    // Best-effort filter: ignore unrelated traffic on 5353.
+    if (r->expected_len > 0) {
+        if (len != r->expected_len) return;
+        if (len > sizeof(r->expected)) return;
+        if (memcmp(r->expected, data, len) != 0) return;
+    }
+
     r->got = true;
     r->packet_handle = packet_handle;
     if (len > sizeof(r->data)) len = sizeof(r->data);
@@ -43,6 +53,8 @@ TEST(test_platform_mdns_open_send_unicast_loopback)
     }
 
     const uint8_t msg[] = {0xAA, 0xBB, 0xCC, 0xDD};
+    r.expected_len = sizeof(msg);
+    memcpy(r.expected, msg, sizeof(msg));
     TEST_ASSERT_EQUAL_INT(0, platform_mdns_send_unicast(m, msg, sizeof(msg), "127.0.0.1", 5353));
 
     // Best-effort: depending on sandboxing / local firewall this can be flaky.

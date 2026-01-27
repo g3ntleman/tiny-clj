@@ -57,6 +57,7 @@ void *throw_exception_formatted(const char *type, const char *file, int line, in
 #define TYPE_OF_CljFunction CLJ_CLOSURE
 #define TYPE_OF_CljCFunc CLJ_FUNC
 #define TYPE_OF_CljPersistentVector CLJ_VECTOR_PERSISTENT
+#define TYPE_OF_CljTransientVector CLJ_VECTOR_TRANSIENT
 #define TYPE_OF_CljPersistentMap CLJ_MAP
 #define TYPE_OF_CljMap CLJ_MAP
 #define TYPE_OF_CLJException CLJ_EXCEPTION

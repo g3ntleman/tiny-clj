@@ -43,11 +43,6 @@ static inline bool is_transient_vector(CljObject *obj) {
     return obj && TAG(obj) == CLJ_VECTOR_TRANSIENT;
 }
 
-static inline CljPersistentVector* transient_vector_backing_store(CljTransientVector *tvec) {
-    CLJ_ASSERT(tvec && tvec->base.type == CLJ_VECTOR_TRANSIENT);
-    return (CljPersistentVector*)tvec->backing_store;
-}
-
 static inline unsigned int transient_vector_count(CljTransientVector *tvec) {
     CLJ_ASSERT(tvec && tvec->base.type == CLJ_VECTOR_TRANSIENT);
     return vector_count(tvec->backing_store);
@@ -74,7 +69,8 @@ ID* vector_as_array(CljPersistentVector *vec);
 void vector_increment_count(CljPersistentVector *vec);
 void vector_clear(CljPersistentVector *vec);
 CljTransientVector* vector_transient(CljPersistentVector *vec);
-CljTransientVector* clj_conj(CljTransientVector *tvec, ID item);
+// Mutating transient operations are in-place and return no value.
+void clj_conj(CljTransientVector *tvec, ID item);
 CljPersistentVector* vector_persistent(CljTransientVector *tvec);
 
 // ----------------------------------------------------------------------------

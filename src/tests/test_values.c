@@ -68,26 +68,21 @@ TEST(test_cljvalue_transient_vector) {
         // Test transient vector operations
         CljValue vec = AUTORELEASE(make_vector(5, CLJ_VECTOR_PERSISTENT));  // Create persistent vector first
         TEST_ASSERT_NOT_NULL(vec);
-        CljValue tvec = AUTORELEASE(vector_transient((CljPersistentVector*)vec));  // Convert to transient
+        CljValue tvec = AUTORELEASE((ID)vector_transient((CljPersistentVector*)vec));  // Convert to transient
         TEST_ASSERT_NOT_NULL(tvec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
         
-        CljPersistentVector *tvec_data = (CljPersistentVector*)tvec;
+        CljTransientVector *tvec_data = as_transient_vector(tvec);
         TEST_ASSERT_NOT_NULL(tvec_data);
         // Capacity is implementation detail, only test that vector was created
         
         // Test transient operations using clj_conj
-        // clj_conj returns the same transient vector (in-place mutation)
-        CljPersistentVector *tvec1 = clj_conj((CljPersistentVector*)tvec_data, fixnum(10));
-        TEST_ASSERT_NOT_NULL(tvec1);
-        TEST_ASSERT_EQUAL_PTR((CljPersistentVector*)tvec_data, tvec1);  // Should be same pointer
-        CljPersistentVector *tvec2 = clj_conj(tvec1, fixnum(20));
-        TEST_ASSERT_NOT_NULL(tvec2);
-        TEST_ASSERT_EQUAL_PTR(tvec1, tvec2);  // Should be same pointer
-        // tvec_data should still be valid since clj_conj does in-place mutation
-        TEST_ASSERT_EQUAL_INT(2, vector_count(tvec_data));
-        ID elem0 = vector_nth(tvec_data, 0);
-        ID elem1 = vector_nth(tvec_data, 1);
+        clj_conj(tvec_data, fixnum(10));
+        clj_conj(tvec_data, fixnum(20));
+
+        TEST_ASSERT_EQUAL_INT(2, vector_count((CljPersistentVector*)tvec_data));
+        ID elem0 = vector_nth((CljPersistentVector*)tvec_data, 0);
+        ID elem1 = vector_nth((CljPersistentVector*)tvec_data, 1);
         TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)elem0));
         TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)elem1));
         RELEASE(elem0);

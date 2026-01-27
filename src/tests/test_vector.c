@@ -951,22 +951,20 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
         TEST_ASSERT_EQUAL_INT(0, vector_count(task_vec));
         
         // 2. Convert to transient (like task_queue_get does)
-        CljPersistentVector *tvec = vector_transient(task_vec);
+        CljTransientVector *tvec = vector_transient(task_vec);
         RELEASE(task_vec);
         TEST_ASSERT_NOT_NULL(tvec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
-        TEST_ASSERT_EQUAL_INT(0, vector_count(tvec));
+        TEST_ASSERT_EQUAL_INT(0, vector_count((CljPersistentVector*)tvec));
         
         // 3. Use clj_conj to add an item (like event_loop_enqueue does)
         CljMap *test_map = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map);
         
-        CljPersistentVector *result = clj_conj(tvec, test_map);
-        TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_PTR(tvec, result);  // Should be same pointer (in-place)
+        clj_conj(tvec, test_map);
         
         // 4. Check that count was updated correctly
-        unsigned int count_after = vector_count(tvec);
+        unsigned int count_after = vector_count((CljPersistentVector*)tvec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after, 
             "clj_conj should increment count from 0 to 1");
         
@@ -974,18 +972,16 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
         CljMap *test_map2 = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map2);
         
-        CljPersistentVector *result2 = clj_conj(tvec, test_map2);
-        TEST_ASSERT_NOT_NULL(result2);
-        TEST_ASSERT_EQUAL_PTR(tvec, result2);
+        clj_conj(tvec, test_map2);
         
         // 6. Check that count was updated again
-        unsigned int count_after2 = vector_count(tvec);
+        unsigned int count_after2 = vector_count((CljPersistentVector*)tvec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(2, count_after2,
             "clj_conj should increment count from 1 to 2");
         
         // 7. Verify elements are accessible
-        ID elem0 = vector_nth(tvec, 0);
-        ID elem1 = vector_nth(tvec, 1);
+        ID elem0 = vector_nth((CljPersistentVector*)tvec, 0);
+        ID elem1 = vector_nth((CljPersistentVector*)tvec, 1);
         TEST_ASSERT_EQUAL_PTR(test_map, elem0);
         TEST_ASSERT_EQUAL_PTR(test_map2, elem1);
         
@@ -1005,27 +1001,25 @@ TEST_SHARED(test_clj_conj_with_empty_transient_vector) {
         TEST_ASSERT_EQUAL_INT(0, vector_count(task_vec));
         
         // Convert to transient
-        CljPersistentVector *tvec = vector_transient(task_vec);
+        CljTransientVector *tvec = vector_transient(task_vec);
         RELEASE(task_vec);
         TEST_ASSERT_NOT_NULL(tvec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
-        TEST_ASSERT_EQUAL_INT(0, vector_count(tvec));
+        TEST_ASSERT_EQUAL_INT(0, vector_count((CljPersistentVector*)tvec));
         
         // clj_conj should grow capacity and add item
         CljMap *test_map = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map);
         
-        ID result = clj_conj(tvec, test_map);
-        TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_PTR(tvec, result);
+        clj_conj(tvec, test_map);
         
         // Count should be 1
-        unsigned int count_after = vector_count(tvec);
+        unsigned int count_after = vector_count((CljPersistentVector*)tvec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after,
             "clj_conj should increment count even when starting with capacity 0");
         
         // Verify element is accessible
-        ID elem0 = vector_nth(tvec, 0);
+        ID elem0 = vector_nth((CljPersistentVector*)tvec, 0);
         TEST_ASSERT_EQUAL_PTR(test_map, elem0);
         
         // Cleanup: elem0 lifetime is tied to vector, do not RELEASE
@@ -1040,12 +1034,12 @@ TEST_SHARED(test_transient_vector_conj_keeps_pointer_and_updates_backing_store) 
         CljPersistentVector *vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_NOT_NULL(vec);
 
-        CljPersistentVector *tvec = vector_transient(vec);
+        CljTransientVector *tvec = vector_transient(vec);
         RELEASE(vec);
         TEST_ASSERT_NOT_NULL(tvec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
 
-        CljPersistentVector *result = vector_conj(tvec, fixnum(10));
+        CljPersistentVector *result = vector_conj((CljPersistentVector*)tvec, fixnum(10));
         TEST_ASSERT_EQUAL_PTR(tvec, result);
 
         CljPersistentVector *backing = vector_persistent((CljTransientVector*)tvec);
@@ -1054,7 +1048,7 @@ TEST_SHARED(test_transient_vector_conj_keeps_pointer_and_updates_backing_store) 
         TEST_ASSERT_EQUAL_INT(1, retain_count(backing));
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(backing, 0)));
 
-        CljPersistentVector *result2 = vector_conj(tvec, fixnum(20));
+        CljPersistentVector *result2 = vector_conj((CljPersistentVector*)tvec, fixnum(20));
         TEST_ASSERT_EQUAL_PTR(tvec, result2);
         backing = vector_persistent((CljTransientVector*)tvec);
         TEST_ASSERT_NOT_NULL(backing);
@@ -1072,7 +1066,7 @@ TEST_SHARED(test_transient_vector_assoc_keeps_pointer_and_updates_backing_store)
         vec = vector_conj(vec, fixnum(2));
         TEST_ASSERT_NOT_NULL(vec);
 
-        CljPersistentVector *tvec = vector_transient(vec);
+        CljPersistentVector *tvec = (CljPersistentVector*)vector_transient(vec);
         RELEASE(vec);
         TEST_ASSERT_NOT_NULL(tvec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
@@ -1095,12 +1089,12 @@ TEST_SHARED(test_transient_vector_capacity_growth_keeps_pointer) {
         CljPersistentVector *vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_NOT_NULL(vec);
 
-        CljPersistentVector *tvec = vector_transient(vec);
+        CljPersistentVector *tvec = (CljPersistentVector*)vector_transient(vec);
         RELEASE(vec);
         TEST_ASSERT_NOT_NULL(tvec);
 
         for (int i = 0; i < 8; ++i) {
-            CljPersistentVector *result = vector_conj(tvec, fixnum(i));
+            CljPersistentVector *result = vector_conj((CljPersistentVector*)tvec, fixnum(i));
             TEST_ASSERT_EQUAL_PTR(tvec, result);
         }
 
@@ -1172,7 +1166,7 @@ TEST_SHARED(test_transient_on_transient_returns_same_object) {
         vec = vector_conj(vec, fixnum(1));
         vec = vector_conj(vec, fixnum(2));
         vec = vector_conj(vec, fixnum(3));
-        CljPersistentVector *tvec = vector_transient(vec);
+        CljPersistentVector *tvec = (CljPersistentVector*)vector_transient(vec);
         RELEASE(vec);
         TEST_ASSERT_NOT_NULL(tvec);
         TEST_ASSERT_TRUE(TAG(tvec) == CLJ_VECTOR_TRANSIENT);

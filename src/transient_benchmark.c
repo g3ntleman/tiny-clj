@@ -59,11 +59,11 @@ void benchmark_transient_vector() {
     
     for (int iter = 0; iter < BENCHMARK_ITERATIONS; iter++) {
         CljValue vec = make_vector_v(0, 0); // Start with empty vector
-        CljValue tvec = vector_transient((CljPersistentVector*)vec);
+        CljValue tvec = (ID)vector_transient((CljPersistentVector*)vec);
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
             CljValue item = fixnum(i);
-            clj_conj((CljPersistentVector*)tvec, item);
+            clj_conj(as_transient_vector(tvec), item);
         }
         
         CljValue final_vec = persistent(tvec);

@@ -133,7 +133,12 @@ void vector_clear(CljPersistentVector *vec) {
     CLJ_ASSERT(vec != NULL);
     if (vec->base.type == CLJ_VECTOR_TRANSIENT) {
         CljTransientVector *tvec = (CljTransientVector*)vec;
-        vector_clear((CljPersistentVector*)tvec->backing_store);
+        // Clearing a transient should not mutate a shared backing store.
+        // Swap to a fresh empty backing store and release the old one.
+        CljPersistentVector *new_backing = make_vector(4, CLJ_VECTOR_PERSISTENT);
+        if (!new_backing) return;
+        ASSIGN(tvec->backing_store, new_backing);
+        RELEASE(new_backing); // balance ASSIGN's RETAIN to keep rc==1 in the transient
         return;
     }
     
@@ -195,7 +200,7 @@ CljPersistentVector* make_vector_copy(CljPersistentVector* vec, unsigned capacit
     CljPersistentVector *v = vec;
     if (TAG(vec) == CLJ_VECTOR_TRANSIENT) {
         CljTransientVector *tvec = as_transient_vector(vec);
-        v = transient_vector_backing_store(tvec);
+        v = vector_persistent(tvec);
     } else {
         v = as_vector(vec);
     }
@@ -232,8 +237,9 @@ static CljPersistentVector* vector_pop_core(CljPersistentVector* vec) {
     if (vec) {
         if (TAG(vec) == CLJ_VECTOR_TRANSIENT) {
             CljTransientVector *tvec = as_transient_vector(vec);
-            CljPersistentVector *new_backing = vector_pop((CljPersistentVector*)tvec->backing_store);
-            ASSIGN(tvec->backing_store, (CljPersistentVector*)new_backing);
+            CljPersistentVector *backing = (CljPersistentVector*)tvec->backing_store;
+            CljPersistentVector *new_backing = vector_pop(backing);
+            ASSIGN(tvec->backing_store, new_backing);
             return vec;
         }
         CljPersistentVector *v = as_vector(vec);
@@ -509,8 +515,9 @@ static CljPersistentVector* vector_conj_core(CljPersistentVector* vec, ID item) 
 
     if (vec->base.type == CLJ_VECTOR_TRANSIENT) {
         CljTransientVector *tvec = (CljTransientVector*)vec;
-        CljPersistentVector *new_backing = vector_conj((CljPersistentVector*)tvec->backing_store, item);
-        ASSIGN(tvec->backing_store, (CljPersistentVector*)new_backing);
+        CljPersistentVector *backing = (CljPersistentVector*)tvec->backing_store;
+        CljPersistentVector *new_backing = vector_conj(backing, item);
+        ASSIGN(tvec->backing_store, new_backing);
         return vec;  // Always return same transient pointer
     }
 
@@ -625,8 +632,23 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
         // Append is handled via conj to reuse growth logic.
         if (index == backing->count) {
             CljPersistentVector *new_backing = vector_conj(backing, value);
-            ASSIGN(tvec->backing_store, (CljPersistentVector*)new_backing);
+            ASSIGN(tvec->backing_store, new_backing);
             return vec;
+        }
+
+        // Overwrite in-place requires exclusive backing (avoid mutating shared persistent vectors).
+        if (is_singleton((CljObject*)backing) || backing->base.type != CLJ_VECTOR_PERSISTENT || backing->base.rc != 1) {
+            CljPersistentVector *new_backing = NULL;
+            if (backing->count == 0 && backing->capacity == 0) {
+                new_backing = make_vector(4, CLJ_VECTOR_PERSISTENT);
+            } else {
+                new_backing = make_vector_copy(backing, backing->capacity);
+            }
+            if (!new_backing) return vec;
+            new_backing->base.type = CLJ_VECTOR_PERSISTENT;
+            ASSIGN(tvec->backing_store, new_backing);
+            RELEASE(new_backing); // keep rc==1 for transient backing
+            backing = tvec->backing_store;
         }
 
         // Overwrite in-place. IMPORTANT: transient semantics do NOT release old value.
@@ -805,26 +827,31 @@ void vector_pop_inplace(CljPersistentVector **vec_slot) {
 
 
 /** Convert persistent vector to transient. */
-CljPersistentVector* vector_transient(CljPersistentVector *vec) {    
+CljTransientVector* vector_transient(CljPersistentVector *vec) {
     
     if (!vec) return NULL;
     if (vec->base.type == CLJ_VECTOR_TRANSIENT) {
-        return vec;
+        return as_transient_vector((ID)vec);
     }
     if (vec->base.type == CLJ_VECTOR_TRANSIENT_WEAK) {
-        return vec;
+        // CLJ_VECTOR_TRANSIENT_WEAK is currently unused; avoid inventing semantics here.
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "vector_transient: cannot convert CLJ_VECTOR_TRANSIENT_WEAK to transient");
+        return NULL;
     }
     
-    // Create a persistent backing store with exclusive ownership (RC=1).
+    // Wrap the persistent vector as backing store. We RETAIN it here, and the first
+    // mutating operation will copy-on-write if the backing is shared (rc>1).
     CljPersistentVector *backing = NULL;
-    if (vec->count == 0 && vec->capacity == 0) {
+    if (is_singleton((CljObject*)vec) || (vec->count == 0 && vec->capacity == 0)) {
+        // Don't ever mutate the empty singleton; allocate a small backing store instead.
         backing = make_vector(4, CLJ_VECTOR_PERSISTENT);
     } else {
-        backing = make_vector_copy(vec, vec->capacity);
+        backing = (CljPersistentVector*)RETAIN(vec);
     }
     if (!backing) return NULL;
 
-    CljTransientVector *tvec = (CljTransientVector*)alloc(sizeof(CljTransientVector), 1, CLJ_VECTOR_TRANSIENT);
+    CljTransientVector *tvec = ALLOC(CljTransientVector, 1);
     if (!tvec) {
         RELEASE(backing);
         throw_oom();
@@ -832,13 +859,14 @@ CljPersistentVector* vector_transient(CljPersistentVector *vec) {
     tvec->base.type = CLJ_VECTOR_TRANSIENT;
     tvec->base.rc = 1;
     tvec->backing_store = (CljPersistentVector*)backing;
-    return (CljPersistentVector*)tvec;
+    return tvec;
 }
 
 
 /** Append to transient vector (guaranteed in-place). */
-CljPersistentVector* clj_conj(CljPersistentVector *tvec, ID item) {
-    return vector_conj(tvec, item);
+void clj_conj(CljTransientVector *tvec, ID item) {
+    // Mutates in-place; backing_store may be replaced (growth/COW), but the transient wrapper stays stable.
+    (void)vector_conj((CljPersistentVector*)tvec, item);
 }
 
 

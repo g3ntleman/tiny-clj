@@ -138,7 +138,7 @@ static CljPersistentVector* task_queue_get(void) {
     if (!g_runtime.task_queue) {
         CljPersistentVector* task_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
         if (task_vec) {
-            g_runtime.task_queue = vector_transient(task_vec);
+            g_runtime.task_queue = (CljPersistentVector*)vector_transient(task_vec);
             RELEASE(task_vec);
         }
     }
@@ -164,7 +164,7 @@ static CljPersistentVector* task_queue_get(void) {
 static CljPersistentVector* timer_queue_get(void) {
     if (!g_runtime.timer_queue) {
         CljPersistentVector* timer_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
-        ASSIGN(g_runtime.timer_queue, vector_transient(timer_vec));
+        ASSIGN(g_runtime.timer_queue, (CljPersistentVector*)vector_transient(timer_vec));
         RELEASE(timer_vec);
     }
     if (!g_runtime.timer_queue) return NULL;
@@ -263,20 +263,21 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljMap *result_channel) {
         return;
     }
     
-    // Use clj_conj for transient vectors - it handles count internally
-    // clj_conj returns the same transient vector (in-place mutation)
-           CljPersistentVector *new_vec = clj_conj(task_vec, task_map);
-    if (!new_vec) {
-        RELEASE(task_map);
-        return;  // clj_conj failed
+    // Mutate transient queues in-place (no return value).
+    if (TAG(task_vec) == CLJ_VECTOR_TRANSIENT) {
+        clj_conj(as_transient_vector((ID)task_vec), task_map);
+    } else {
+        // Fallback: if we ever end up with a persistent vector here, keep behavior correct.
+        CljPersistentVector *new_vec = vector_conj(task_vec, task_map);
+        if (!new_vec) {
+            RELEASE(task_map);
+            return;
+        }
+        if (new_vec != task_vec) {
+            RELEASE(task_vec);
+            g_runtime.task_queue = new_vec;
+        }
     }
-    
-    if (new_vec != task_vec) {
-        // Should not happen for transient vectors, but handle it
-        RELEASE(task_vec);
-        g_runtime.task_queue = new_vec;  // Update global queue reference
-    }
-    // For transient vectors, new_vec == task_vec, so no update needed
     RELEASE(task_map);
 }
 
