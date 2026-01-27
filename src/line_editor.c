@@ -714,7 +714,7 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
     editor->ctx = ctx;
     
     // Initialize history support with transient vector for efficient in-place operations
-    CljVector *persistent_vec = make_vector(50, CLJ_VECTOR);  // Start with persistent vector
+    CljVector *persistent_vec = make_vector(50, CLJ_VECTOR_PERSISTENT);  // Start with persistent vector
     editor->history = vector_transient(persistent_vec);      // Convert to transient for efficient operations
     RELEASE(persistent_vec);  // Release the persistent version
     editor->history_index = -1;  // Not browsing
@@ -908,9 +908,9 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
     // Check if this line is identical to the last history entry
     // Convert transient to persistent temporarily for checking
     CljVector *history_vec = editor->history;
-    CljVector *temp_persistent = NULL;
-    if (history_vec && TAG(history_vec) == CLJ_VECTOR_TRANSIENT) {
-        temp_persistent = (CljVector*)vector_persistent(history_vec);
+    CljPersistentVector *temp_persistent = NULL;
+    if (history_vec && TAG(history_vec) == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        temp_persistent = vector_persistent((CljTransientVector*)history_vec);
         if (temp_persistent) {
             int count = vector_count(temp_persistent);
             if (count > 0) {
@@ -920,13 +920,11 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
                     if (strcmp(line, str_data) == 0) {
                         // Duplicate of last entry - skip adding
                         RELEASE(last_line);
-                        RELEASE(temp_persistent);
                         return;
                     }
                     RELEASE(last_line);
                 }
             }
-            RELEASE(temp_persistent);
         }
     } else {
         int count = vector_count(history_vec);
@@ -985,7 +983,7 @@ void line_editor_clear_history(LineEditor *editor) {
     if (!editor) return;
     history_exit(editor);
     RELEASE(editor->history);
-    CljVector *persistent_vec = make_vector(50, CLJ_VECTOR);
+    CljVector *persistent_vec = make_vector(50, CLJ_VECTOR_PERSISTENT);
     editor->history = vector_transient(persistent_vec);
     RELEASE(persistent_vec);
     editor->history_index = -1;
@@ -993,7 +991,7 @@ void line_editor_clear_history(LineEditor *editor) {
 }
 
 void line_editor_set_history_from_vector(LineEditor *editor, CljVector *vec) {
-    if (!editor || !vec || TAG(vec) != CLJ_VECTOR) return;
+    if (!editor || !vec || TAG(vec) != CLJ_VECTOR_PERSISTENT) return;
     line_editor_clear_history(editor);
     int count = vector_count(vec);
     ID nth_args[2];

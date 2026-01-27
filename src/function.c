@@ -24,7 +24,7 @@
 static int allocate_function_params(CljFunction *func, ID *params, int param_count) {
     if (param_count > 0 && params) {
         // Create vector for parameters
-        CljVector *vec = make_vector(param_count, CLJ_VECTOR);
+        CljVector *vec = make_vector(param_count, CLJ_VECTOR_PERSISTENT);
         if (!vec) {
             DEALLOC(func);
             throw_oom();

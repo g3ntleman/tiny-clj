@@ -20,7 +20,7 @@ struct CljVector {
     ID data[];  // Flexible array member - elements stored at end of malloc block
 };
 
-// Empty-vector singleton: CLJ_VECTOR with rc=SINGLETON_RC, statically initialized
+// Empty-vector singleton: CLJ_VECTOR_PERSISTENT_PERSISTENT with rc=SINGLETON_RC, statically initialized
 // Note: Flexible array member cannot be initialized, so we use a struct with no data array
 static struct {
     CljObject base;
@@ -28,7 +28,7 @@ static struct {
     int capacity;
     // No data array for empty vector (capacity = 0)
 } clj_empty_vector_singleton_data = {
-    .base = { .type = CLJ_VECTOR, .rc = SINGLETON_RC },
+    .base = { .type = CLJ_VECTOR_PERSISTENT_PERSISTENT, .rc = SINGLETON_RC },
     .count = 0,
     .capacity = 0
 };
@@ -44,7 +44,21 @@ CljVector* empty_vector(void) {
 /** Get vector count. Returns 0 if vec is NULL. */
 unsigned int vector_count(CljVector *vec) {
     if (!vec) return 0;
-    return vec->count;
+    if (vec->base.type != CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        return vec->count;
+    }
+    CljTransientVector *tvec = (CljTransientVector*)vec;
+    return vector_count((CljVector*)tvec->backing_store);
+}
+
+/** Get vector capacity. Returns 0 if vec is NULL. */
+int vector_capacity(CljVector *vec) {
+    if (!vec) return 0;
+    if (vec->base.type != CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        return vec->capacity;
+    }
+    CljTransientVector *tvec = (CljTransientVector*)vec;
+    return vector_capacity((CljVector*)tvec->backing_store);
 }
 
 /** Get element at index. Returns element or NULL if index out of bounds or nil.
@@ -53,8 +67,12 @@ unsigned int vector_count(CljVector *vec) {
  * @param index Index (0-based)
  * @return Element or NULL (nil) - lifetime tied to vector
  */
- ID vector_nth(CljVector *vec, unsigned int index) {
+ID vector_nth(CljVector *vec, unsigned int index) {
     if (vec) {
+        if (vec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+            CljTransientVector *tvec = (CljTransientVector*)vec;
+            return vector_nth((CljVector*)tvec->backing_store, index);
+        }
         if (index < vec->count) {
             return vec->data[index];
         }
@@ -72,6 +90,10 @@ unsigned int vector_count(CljVector *vec) {
  */
 int vector_index_of(CljVector *vec, ID value) {
     if (!vec) return INDEX_NOT_FOUND;
+    if (vec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        CljTransientVector *tvec = (CljTransientVector*)vec;
+        return vector_index_of((CljVector*)tvec->backing_store, value);
+    }
     
     VECTOR_FOR_EACH(vec, elem) {
         if (clj_equal(elem, value)) {
@@ -88,6 +110,10 @@ int vector_index_of(CljVector *vec, ID value) {
  */
 ID* vector_as_array(CljVector *vec) {
     CLJ_ASSERT(vec != NULL && "vector_as_array called with NULL");
+    if (vec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        CljTransientVector *tvec = (CljTransientVector*)vec;
+        return vector_as_array((CljVector*)tvec->backing_store);
+    }
     return vec->data;  // Flexible array member - points to end of struct
 }
 
@@ -98,15 +124,20 @@ void vector_increment_count(CljVector *vec) {
     CLJ_ASSERT(vec != NULL);
 #if defined(DEBUG)
     int tag = TAG(vec);
-    CLJ_ASSERT(tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_TRANSIENT_WEAK);
+    CLJ_ASSERT(tag == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK);
 #endif
     vec->count++;
 }
 
 void vector_clear(CljVector *vec) {
     CLJ_ASSERT(vec != NULL);
+    if (vec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        CljTransientVector *tvec = (CljTransientVector*)vec;
+        vector_clear((CljVector*)tvec->backing_store);
+        return;
+    }
     
-    if (vec->base.type != CLJ_VECTOR_TRANSIENT_WEAK) {
+    if (vec->base.type != CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK) {
         VECTOR_FOR_EACH(vec, elem) {
         RELEASE(elem);
         }
@@ -127,19 +158,14 @@ CljVector* vector_set_nth(CljVector* vec, unsigned int index, ID value) {
         return NULL;
     }
     
-    CljVector *v = as_vector(vec);
-    if (!v) {
-        return NULL;
-    }
-    
-    // Only transient vectors allowed - persistent vectors are immutable
-    if (v->base.type != CLJ_VECTOR_TRANSIENT && v->base.type != CLJ_VECTOR_TRANSIENT_WEAK) {
+    unsigned int tag = TAG(vec);
+    if (tag != CLJ_VECTOR_PERSISTENT_TRANSIENT && tag != CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "vector_set_nth: cannot modify persistent vector. Use transient vector instead.");
         return NULL;
     }
     
-    if (index < v->count) {
+    if (index < vector_count(vec)) {
         return vector_assoc(vec, index, value);
     }
     
@@ -166,31 +192,30 @@ CljVector* make_vector_copy(CljVector* vec, unsigned capacity) {
     g_make_vector_copy_count++;
     
     if (!vec) return NULL;
-    CljVector *v = as_vector(vec);
+    CljVector *v = vec;
+    if (TAG(vec) == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        CljTransientVector *tvec = as_transient_vector(vec);
+        v = transient_vector_backing_store(tvec);
+    } else {
+        v = as_vector(vec);
+    }
     unsigned count = MIN(capacity, v->count); // trunkate as requested
     
     
     // Create new vector with specified capacity using make_vector
-    // make_vector handles singleton case automatically (capacity==0 && type==CLJ_VECTOR)
-    // For transient vectors, use CLJ_VECTOR and convert to transient afterwards
-    CljType base_type = (v->base.type == CLJ_VECTOR_TRANSIENT) ? CLJ_VECTOR : v->base.type;
-    CljVector *vec_copy = make_vector(capacity, base_type);
-    
-    // If original was transient, convert copy to transient
-    if (v->base.type == CLJ_VECTOR_TRANSIENT) {
-        vec_copy->base.type = CLJ_VECTOR_TRANSIENT;
-    }
+    // make_vector handles singleton case automatically (capacity==0 && type==CLJ_VECTOR_PERSISTENT)
+    CljVector *vec_copy = make_vector(capacity, v->base.type);
     
     // Set count to match original vector (make_vector sets count=0)
     vec_copy->count = count;
     
     // Copy all elements (including nil/NULL - nil is a valid value in Clojure)
-    // For CLJ_VECTOR_TRANSIENT_WEAK, don't RETAIN (weak reference)
+    // For CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK, don't RETAIN (weak reference)
     // But when copying, we need to retain for normal vectors to maintain reference counting
     // Copy all elements (count was already set to MIN(capacity, v->count) above)
     for (unsigned i = 0; i < count; ++i) {
         ID elem = v->data[i];
-        vec_copy->data[i] = (v->base.type == CLJ_VECTOR_TRANSIENT_WEAK) ? elem : (elem ? RETAIN(elem) : NULL);
+        vec_copy->data[i] = (v->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK) ? elem : (elem ? RETAIN(elem) : NULL);
     }
     
     return vec_copy;
@@ -205,12 +230,18 @@ CljVector* make_vector_copy(CljVector* vec, unsigned capacity) {
  */
 static CljVector* vector_pop_core(CljVector* vec) {
     if (vec) {
+        if (TAG(vec) == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+            CljTransientVector *tvec = as_transient_vector(vec);
+            CljVector *new_backing = vector_pop((CljVector*)tvec->backing_store);
+            ASSIGN(tvec->backing_store, (CljPersistentVector*)new_backing);
+            return vec;
+        }
         CljVector *v = as_vector(vec);
         if (v && v->count > 0) {
             // Happy path: RC=1, mutate in-place (O(1))
             if (v->base.rc == 1) {
-                // For CLJ_VECTOR_TRANSIENT_WEAK, don't RELEASE (weak reference)
-                if (v->base.type != CLJ_VECTOR_TRANSIENT_WEAK) {
+                // For CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK, don't RELEASE (weak reference)
+                if (v->base.type != CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK) {
                     // Release last element (element lifetime is tied to vector)
                     ID last_elem = vector_nth(v, v->count - 1);
                     if (last_elem && !is_immediate(last_elem)) {
@@ -239,7 +270,10 @@ static CljVector* vector_pop_core(CljVector* vec) {
 
 CljVector* vector_pop(CljVector* vec) {
     CljVector* result = vector_pop_core(vec);
-    return AUTORELEASE(result);
+    if (result && result != vec) {
+        return AUTORELEASE(result);
+    }
+    return result;
 }
 
 /** Core implementation: Insert element at index in vector (in-place if RC=1, COW if RC>1).
@@ -251,27 +285,28 @@ CljVector* vector_pop(CljVector* vec) {
  */
 static CljVector* vector_insert_at_core(CljVector* vec, unsigned int index, ID item) {
     if (!vec) return NULL;
+    if (TAG(vec) == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        CljTransientVector *tvec = as_transient_vector(vec);
+        CljVector *new_backing = vector_insert_at((CljVector*)tvec->backing_store, index, item);
+        ASSIGN(tvec->backing_store, (CljPersistentVector*)new_backing);
+        return vec;
+    }
     CljVector *v = as_vector(vec);
     if (!v || index > v->count) return vec;  // Invalid index, return as-is
     
-    bool is_weak = (v->base.type == CLJ_VECTOR_TRANSIENT_WEAK);
-    bool is_transient = (TAG(vec) == CLJ_VECTOR_TRANSIENT);
+    bool is_weak = (v->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK);
     
     // Check if we need to grow capacity
     bool needs_growth = (v->count >= (unsigned int)v->capacity);
     
-    // OPTIMIZATION: If RC=1 or transient vector, mutate in-place (O(n) due to shifting)
-    if (v->base.rc == 1 || is_transient) {
+    // OPTIMIZATION: If RC=1 or transient weak vector, mutate in-place (O(n) due to shifting)
+    if (v->base.rc == 1 || is_weak) {
         // Grow capacity if needed
         if (needs_growth) {
             int new_capacity = v->capacity * 2;
             if (new_capacity < 4) new_capacity = 4;
             CljVector *new_vec = make_vector_copy(v, new_capacity);
             if (!new_vec) return vec;  // Return original on OOM
-            // Ensure new vector is still transient if original was transient
-            if (is_transient) {
-                new_vec->base.type = CLJ_VECTOR_TRANSIENT;
-            }
             v = new_vec;
             vec = new_vec;
         }
@@ -327,11 +362,12 @@ CljVector* vector_insert_at(CljVector* vec, unsigned int index, ID item) {
     CljVector* result = vector_insert_at_core(vec, index, item);
     if (result && result != vec) {
         unsigned char from_tag = TAG(vec);
-        if (from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+        if (from_tag == CLJ_VECTOR_PERSISTENT_TRANSIENT || from_tag == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK) {
             RELEASE(vec);
         }
+        return AUTORELEASE(result);
     }
-    return AUTORELEASE(result);
+    return result;
 }
 
 /** Core implementation: Remove element at index from vector (in-place if RC=1, COW if RC>1).
@@ -342,15 +378,21 @@ CljVector* vector_insert_at(CljVector* vec, unsigned int index, ID item) {
  */
 static CljVector* vector_remove_at_core(CljVector* vec, unsigned int index) {
     if (!vec) return NULL;
+    if (TAG(vec) == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        CljTransientVector *tvec = as_transient_vector(vec);
+        CljVector *new_backing = vector_remove_at((CljVector*)tvec->backing_store, index);
+        ASSIGN(tvec->backing_store, (CljPersistentVector*)new_backing);
+        return vec;
+    }
     CljVector *v = as_vector(vec);
     if (!v || index >= v->count) return vec;  // Invalid index, return as-is
     
-    // OPTIMIZATION: If RC=1 or transient vector, mutate in-place (O(n) due to shifting)
+    // OPTIMIZATION: If RC=1 or transient weak vector, mutate in-place (O(n) due to shifting)
     int tag = TAG(vec);
-    bool is_transient = (tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_TRANSIENT_WEAK);
-    if (v->base.rc == 1 || is_transient) {
+    bool is_weak = (tag == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK);
+    if (v->base.rc == 1 || is_weak) {
         // Release element at index (only for non-weak vectors)
-        if (v->data[index] && tag != CLJ_VECTOR_TRANSIENT_WEAK) {
+        if (v->data[index] && tag != CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK) {
             RELEASE(v->data[index]);
         }
         // Shift elements left
@@ -386,7 +428,10 @@ static CljVector* vector_remove_at_core(CljVector* vec, unsigned int index) {
  */
 CljVector* vector_remove_at(CljVector* vec, unsigned int index) {
     CljVector* result = vector_remove_at_core(vec, index);
-    return AUTORELEASE(result);
+    if (result && result != vec) {
+        return AUTORELEASE(result);
+    }
+    return result;
 }
 
 // Creates a CljVector*.
@@ -414,7 +459,21 @@ static size_t g_make_vector_count = 0;
 
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
 CljVector* make_vector(unsigned int capacity, CljType type) {
-    if (capacity == 0 && type == CLJ_VECTOR) {
+    if (type == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        CljVector *backing = make_vector(capacity ? capacity : 4, CLJ_VECTOR_PERSISTENT);
+        if (!backing) return NULL;
+
+        CljTransientVector *tvec = (CljTransientVector*)alloc(sizeof(CljTransientVector), 1, CLJ_VECTOR_PERSISTENT_TRANSIENT);
+        if (!tvec) {
+            RELEASE(backing);
+            throw_oom();
+        }
+        tvec->base.type = CLJ_VECTOR_PERSISTENT_TRANSIENT;
+        tvec->base.rc = 1;
+    tvec->backing_store = (CljPersistentVector*)backing;
+        return (CljVector*)tvec;
+    }
+    if (capacity == 0 && type == CLJ_VECTOR_PERSISTENT) {
         return clj_empty_vector_singleton;
     }
     // Allocate struct + flexible array member in one block
@@ -439,25 +498,29 @@ CljVector* make_vector(unsigned int capacity, CljType type) {
 /** Core implementation: Return a new vector with item appended; original vector remains unchanged.
  * Returns owned object (rc=1, no AUTORELEASE).
  * Behavior depends on vector type:
- * - CLJ_VECTOR: Uses Copy-on-Write (RC=1 → in-place mutation, RC>1 → COW)
- * - CLJ_VECTOR_TRANSIENT: Always mutates in-place (transient behavior)
- * - CLJ_VECTOR_TRANSIENT_WEAK: Always mutates in-place (transient behavior, weak references)
+ * - CLJ_VECTOR_PERSISTENT: Uses Copy-on-Write (RC=1 → in-place mutation, RC>1 → COW)
+ * - CLJ_VECTOR_PERSISTENT_TRANSIENT: Always mutates in-place (transient behavior)
+ * - CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK: Always mutates in-place (transient behavior, weak references)
  */
 static CljVector* vector_conj_core(CljVector* vec, ID item) {
     if (!vec) return NULL;
 
     // Note: item can be NULL (nil) - it's a valid value in Clojure collections
 
+    if (vec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        CljTransientVector *tvec = (CljTransientVector*)vec;
+        CljVector *new_backing = vector_conj((CljVector*)tvec->backing_store, item);
+        ASSIGN(tvec->backing_store, (CljPersistentVector*)new_backing);
+        return vec;  // Always return same transient pointer
+    }
+
     CljVector *old_vec = as_vector(vec);
-    if (!old_vec)
-        return NULL;
 
     CljType vec_type = old_vec->base.type;
-    bool is_transient = (vec_type == CLJ_VECTOR_TRANSIENT);
-    bool is_weak = (vec_type == CLJ_VECTOR_TRANSIENT_WEAK);
+    bool is_weak = (vec_type == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK);
 
-    // For transient vectors (CLJ_VECTOR_TRANSIENT and CLJ_VECTOR_TRANSIENT_WEAK), always mutate in-place
-    if (is_transient || is_weak) {
+    // For transient weak vectors, always mutate in-place
+    if (is_weak) {
         CljVector *v = old_vec;
         
         // Ensure capacity is sufficient - use make_vector_copy for safety
@@ -470,14 +533,13 @@ static CljVector* vector_conj_core(CljVector* vec, ID item) {
             vec = new_v;  // Update return value
         }
         
-        // For CLJ_VECTOR_TRANSIENT_WEAK, don't RETAIN (weak reference)
-        // For CLJ_VECTOR_TRANSIENT, RETAIN the item
-        v->data[v->count++] = is_weak ? item : (item ? RETAIN(item) : NULL);
+        // For CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK, don't RETAIN (weak reference)
+        v->data[v->count++] = item;
         
         return vec; // In-place mutation (or new vector if capacity grew)
     }
 
-    // For CLJ_VECTOR: Use COW semantics
+    // For CLJ_VECTOR_PERSISTENT: Use COW semantics
     // HOT-PATH: RC=1 && capacity OK → direct in-place mutation (no branches)
     // Most common case: single owner, enough capacity
     if (old_vec->base.rc == 1 && old_vec->count < (unsigned int)old_vec->capacity) {
@@ -488,7 +550,7 @@ static CljVector* vector_conj_core(CljVector* vec, ID item) {
     // Early returns for uncommon cases
     if (old_vec->base.rc == 0) {
         // Empty vector singleton: create new vector
-        CljVector* new_vec = make_vector(4, CLJ_VECTOR);
+        CljVector* new_vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
         if (!new_vec)
             return vec;
         new_vec->data[0] = item ? RETAIN(item) : NULL;
@@ -521,19 +583,20 @@ static CljVector* vector_conj_core(CljVector* vec, ID item) {
 
 /** Return a new vector with item appended; original vector remains unchanged.
  * Behavior depends on vector type:
- * - CLJ_VECTOR: Uses Copy-on-Write (RC=1 → in-place mutation, RC>1 → COW)
- * - CLJ_VECTOR_TRANSIENT: Always mutates in-place (transient behavior)
- * - CLJ_VECTOR_TRANSIENT_WEAK: Always mutates in-place (transient behavior, weak references)
+ * - CLJ_VECTOR_PERSISTENT: Uses Copy-on-Write (RC=1 → in-place mutation, RC>1 → COW)
+ * - CLJ_VECTOR_PERSISTENT_TRANSIENT: Always mutates in-place (transient behavior)
+ * - CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK: Always mutates in-place (transient behavior, weak references)
  */
 CljVector* vector_conj(CljVector* vec, ID item) {
     CljVector* result = vector_conj_core(vec, item);
     if (result && result != vec) {
         unsigned char from_tag = TAG(vec);
-        if (from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+        if (from_tag == CLJ_VECTOR_PERSISTENT_TRANSIENT || from_tag == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK) {
             RELEASE(vec);
         }
+        return AUTORELEASE(result);
     }
-    return AUTORELEASE(result);
+    return result;  // result == vec (in-place), no new object created
 }
 
 /** Core implementation: Update element at index with COW: RC=1 → in-place, RC>1 → COW.
@@ -547,22 +610,40 @@ static CljVector* vector_assoc_core(CljVector* vec, unsigned int index, ID value
     }
     // Note: value can be NULL (nil) - that's a valid value in Clojure!
     
-    CLJ_ASSERT(vec->base.type == CLJ_VECTOR || vec->base.type == CLJ_VECTOR_TRANSIENT_WEAK || vec->base.type == CLJ_VECTOR_TRANSIENT);
+    CLJ_ASSERT(vec->base.type == CLJ_VECTOR_PERSISTENT || vec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK || vec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT);
+
+    if (vec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        CljTransientVector *tvec = as_transient_vector(vec);
+        CljVector *backing = (CljVector*)tvec->backing_store;
+
+        // transient assoc allows index == count (append), but not index > count
+        if (index > backing->count) {
+            throw_index_out_of_bounds("vector_assoc", index, backing->count, "transient vector");
+            return vec;
+        }
+
+        // Append is handled via conj to reuse growth logic.
+        if (index == backing->count) {
+            CljVector *new_backing = vector_conj(backing, value);
+            ASSIGN(tvec->backing_store, (CljPersistentVector*)new_backing);
+            return vec;
+        }
+
+        // Overwrite in-place. IMPORTANT: transient semantics do NOT release old value.
+        backing->data[index] = value ? RETAIN(value) : NULL;
+        return vec;
+    }
 
     CljVector *old_vec = as_vector(vec);
     
-    bool is_transient = (old_vec->base.type == CLJ_VECTOR_TRANSIENT);
+    bool is_weak = (old_vec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK);
     
-    // For CLJ_VECTOR_TRANSIENT_WEAK, allow index == count (append)
-    // For CLJ_VECTOR_TRANSIENT, allow index == count (append)
-    if (!is_transient && old_vec->base.type != CLJ_VECTOR_TRANSIENT_WEAK && index >= old_vec->count) {
+    // For CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK, allow index == count (append)
+    if (!is_weak && index >= old_vec->count) {
         throw_index_out_of_bounds("vector_assoc", index, old_vec->count, "vector");
     }
-    if (old_vec->base.type == CLJ_VECTOR_TRANSIENT_WEAK && index > old_vec->count) {
+    if (is_weak && index > old_vec->count) {
         throw_index_out_of_bounds("vector_assoc", index, old_vec->count, "weak vector");
-    }
-    if (is_transient && index > old_vec->count) {
-        throw_index_out_of_bounds("vector_assoc", index, old_vec->count, "transient vector");
     }
 
     // Empty vector singleton (RC=0): Not applicable (index >= count)
@@ -571,10 +652,10 @@ static CljVector* vector_assoc_core(CljVector* vec, unsigned int index, ID value
                 "vector_assoc: cannot modify empty vector singleton");
     }
 
-    // OPTIMIZATION: If RC=1 or transient, mutate in-place
-    if (old_vec->base.rc == 1 || is_transient) {
-        // For CLJ_VECTOR_TRANSIENT_WEAK with index == count (append), we need to grow capacity first
-        if (old_vec->base.type == CLJ_VECTOR_TRANSIENT_WEAK && index == old_vec->count) {
+    // OPTIMIZATION: If RC=1 or transient weak, mutate in-place
+    if (old_vec->base.rc == 1 || is_weak) {
+        // For CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK with index == count (append), we need to grow capacity first
+        if (is_weak && index == old_vec->count) {
             // Append to weak vector - need to ensure capacity
             // After incrementing count, index must be < capacity
             // So we need capacity > index, i.e., capacity >= index + 1
@@ -592,29 +673,29 @@ static CljVector* vector_assoc_core(CljVector* vec, unsigned int index, ID value
         // Ensure index is within bounds before accessing data[index]
         CLJ_ASSERT(index < (unsigned int)old_vec->capacity);
         
-        // For CLJ_VECTOR_TRANSIENT_WEAK, don't RETAIN (weak reference)
-        // For CLJ_VECTOR_TRANSIENT, always RETAIN
-        if (index < old_vec->count && old_vec->data[index] && !is_transient && old_vec->base.type != CLJ_VECTOR_TRANSIENT_WEAK) {
+        // For CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK, don't RETAIN (weak reference)
+        // For CLJ_VECTOR_PERSISTENT_TRANSIENT, always RETAIN
+        if (index < old_vec->count && old_vec->data[index] && !is_weak) {
             RELEASE(old_vec->data[index]);
         }
-        old_vec->data[index] = (old_vec->base.type == CLJ_VECTOR_TRANSIENT_WEAK) ? value : RETAIN(value);
-        if (is_transient && index == old_vec->count) {
+        old_vec->data[index] = is_weak ? value : RETAIN(value);
+        if (is_weak && index == old_vec->count) {
             old_vec->count++;
         }
         return vec;  // Return same vector (in-place mutation) or new vector if capacity grew
     }
 
     // RC>1: Copy-on-Write - use make_vector_copy for efficiency
-    // For CLJ_VECTOR_TRANSIENT_WEAK with index == count (append), ensure capacity is sufficient
+    // For CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK with index == count (append), ensure capacity is sufficient
     int new_capacity = old_vec->capacity;
-    if (old_vec->base.type == CLJ_VECTOR_TRANSIENT_WEAK && index == old_vec->count) {
+    if (is_weak && index == old_vec->count) {
         // Append to weak vector - ensure capacity is at least index + 1, minimum 4
         new_capacity = MAX(MAX(old_vec->capacity * 2, (int)index + 1), 4);
     }
     CljVector* new_vec = make_vector_copy(old_vec, new_capacity);
 
-    // For CLJ_VECTOR_TRANSIENT_WEAK append, increment count
-    if (old_vec->base.type == CLJ_VECTOR_TRANSIENT_WEAK && index == old_vec->count) {
+    // For CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK append, increment count
+    if (is_weak && index == old_vec->count) {
         new_vec->count++;
     }
 
@@ -622,11 +703,11 @@ static CljVector* vector_assoc_core(CljVector* vec, unsigned int index, ID value
     CLJ_ASSERT(index < (unsigned int)new_vec->capacity);
 
     // Update element at index (replace the copied element)
-    if (index < old_vec->count && new_vec->data[index] && old_vec->base.type != CLJ_VECTOR_TRANSIENT_WEAK) {
+    if (index < old_vec->count && new_vec->data[index] && !is_weak) {
         RELEASE(new_vec->data[index]);
     }
-    // For CLJ_VECTOR_TRANSIENT_WEAK, don't RETAIN (weak reference)
-    new_vec->data[index] = old_vec->base.type == CLJ_VECTOR_TRANSIENT_WEAK ? value : RETAIN(value);
+    // For CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK, don't RETAIN (weak reference)
+    new_vec->data[index] = is_weak ? value : RETAIN(value);
 
     return new_vec;  // owned (rc=1)
 }
@@ -638,11 +719,12 @@ CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value) {
     CljVector* result = vector_assoc_core(vec, index, value);
     if (result && result != vec) {
         unsigned char from_tag = TAG(vec);
-        if (from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+        if (from_tag == CLJ_VECTOR_PERSISTENT_TRANSIENT || from_tag == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK) {
             RELEASE(vec);
         }
+        return AUTORELEASE(result);  // New object created, autorelease it
     }
-    return AUTORELEASE(result);
+    return result;  // result == vec (in-place), no new object created
 }
 
 // === _owned functions (for internal use) ===
@@ -726,25 +808,31 @@ void vector_pop_inplace(CljVector **vec_slot) {
 CljVector* vector_transient(CljVector *vec) {    
     
     if (!vec) return NULL;
-    if (vec->base.type == CLJ_VECTOR_TRANSIENT) {
+    if (vec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+        return vec;
+    }
+    if (vec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT_WEAK) {
         return vec;
     }
     
-    // Handle empty vector singleton - create new transient vector with initial capacity
+    // Create a persistent backing store with exclusive ownership (RC=1).
+    CljVector *backing = NULL;
     if (vec->count == 0 && vec->capacity == 0) {
-        // Create transient vector with initial capacity (not 0, so we can grow it)
-        CljVector *tvec = make_vector(4, CLJ_VECTOR); // might throw oom
-        if (!tvec) return NULL;
-        tvec->base.type = CLJ_VECTOR_TRANSIENT;
-        return tvec;
+        backing = make_vector(4, CLJ_VECTOR_PERSISTENT);
+    } else {
+        backing = make_vector_copy(vec, vec->capacity);
     }
-    
-    // Use make_vector_copy to create a copy with flexible array member
-    CljVector *tvec = make_vector_copy(vec, vec->capacity);    
-    // Change type to transient
-    tvec->base.type = CLJ_VECTOR_TRANSIENT;
-    
-    return tvec;
+    if (!backing) return NULL;
+
+    CljTransientVector *tvec = (CljTransientVector*)alloc(sizeof(CljTransientVector), 1, CLJ_VECTOR_PERSISTENT_TRANSIENT);
+    if (!tvec) {
+        RELEASE(backing);
+        throw_oom();
+    }
+    tvec->base.type = CLJ_VECTOR_PERSISTENT_TRANSIENT;
+    tvec->base.rc = 1;
+    tvec->backing_store = (CljPersistentVector*)backing;
+    return (CljVector*)tvec;
 }
 
 
@@ -755,19 +843,11 @@ CljVector* clj_conj(CljVector *tvec, ID item) {
 
 
 /** Convert transient vector back to persistent. */
-ID vector_persistent(CljVector *tvec) {
-    
-    if (!tvec || tvec->base.type == CLJ_VECTOR) {
-        return tvec;
+CljPersistentVector* vector_persistent(CljTransientVector *tvec) {
+    if (!tvec) {
+        return NULL;
     }
-
-    // Clojure-Semantik: Erstelle NEUE persistent collection
-    // Use make_vector_copy to copy all elements efficiently
-    CljVector* new_vec = make_vector_copy(tvec, tvec->capacity);
-    if (!new_vec) return NULL;
-    
-    // Set type to CLJ_VECTOR (persistent, not transient)
-    new_vec->base.type = CLJ_VECTOR;
-    
-    return new_vec;
+    CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_PERSISTENT_TRANSIENT);
+    // Return backing_store (persistent CLJ_VECTOR_PERSISTENT).
+    return tvec->backing_store;
 }
