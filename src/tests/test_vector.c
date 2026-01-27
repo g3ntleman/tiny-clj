@@ -1028,6 +1028,58 @@ TEST_SHARED(test_clj_conj_with_empty_transient_vector) {
     });
 }
 
+// Two transient vectors created from the same persistent backing must not interfere:
+// each mutation should COW and preserve per-transient correctness.
+TEST_SHARED(test_two_transients_from_same_backing_are_isolated_on_mutation) {
+    WITH_AUTORELEASE_POOL({
+        // Non-singleton empty persistent vector (capacity > 0).
+        CljPersistentVector *pv = make_vector(4, CLJ_VECTOR_PERSISTENT);
+        TEST_ASSERT_NOT_NULL(pv);
+        TEST_ASSERT_EQUAL_UINT(0, vector_count(pv));
+
+        // Create two transients that initially share the same backing store.
+        CljTransientVector *t1 = vector_transient(pv);
+        CljTransientVector *t2 = vector_transient(pv);
+        TEST_ASSERT_NOT_NULL(t1);
+        TEST_ASSERT_NOT_NULL(t2);
+        TEST_ASSERT_TRUE(TAG(t1) == CLJ_VECTOR_TRANSIENT);
+        TEST_ASSERT_TRUE(TAG(t2) == CLJ_VECTOR_TRANSIENT);
+
+        // Drop our original reference; backing is retained by both transients.
+        RELEASE(pv);
+
+        // Each transient pushes a different value.
+        clj_conj(t1, fixnum(11));
+        clj_conj(t2, fixnum(22));
+
+        TEST_ASSERT_EQUAL_UINT(1, transient_vector_count(t1));
+        TEST_ASSERT_EQUAL_UINT(1, transient_vector_count(t2));
+        TEST_ASSERT_EQUAL_INT(11, as_fixnum(vector_nth((CljPersistentVector*)t1, 0)));
+        TEST_ASSERT_EQUAL_INT(22, as_fixnum(vector_nth((CljPersistentVector*)t2, 0)));
+
+        // Mutate one transient again; the other must remain unchanged.
+        clj_conj(t1, fixnum(33));
+        TEST_ASSERT_EQUAL_UINT(2, transient_vector_count(t1));
+        TEST_ASSERT_EQUAL_UINT(1, transient_vector_count(t2));
+        TEST_ASSERT_EQUAL_INT(33, as_fixnum(vector_nth((CljPersistentVector*)t1, 1)));
+        TEST_ASSERT_EQUAL_INT(22, as_fixnum(vector_nth((CljPersistentVector*)t2, 0)));
+
+        // Ensure their persistent! results are distinct and correct.
+        CljPersistentVector *p1 = vector_persistent(t1);
+        CljPersistentVector *p2 = vector_persistent(t2);
+        TEST_ASSERT_NOT_NULL(p1);
+        TEST_ASSERT_NOT_NULL(p2);
+        TEST_ASSERT_TRUE(p1 != p2);
+        TEST_ASSERT_EQUAL_UINT(2, vector_count(p1));
+        TEST_ASSERT_EQUAL_UINT(1, vector_count(p2));
+        TEST_ASSERT_EQUAL_INT(33, as_fixnum(vector_nth(p1, 1)));
+        TEST_ASSERT_EQUAL_INT(22, as_fixnum(vector_nth(p2, 0)));
+
+        RELEASE(t1);
+        RELEASE(t2);
+    });
+}
+
 // New tests for transient vector mutable functions (backing_store design)
 TEST_SHARED(test_transient_vector_conj_keeps_pointer_and_updates_backing_store) {
     WITH_AUTORELEASE_POOL({
