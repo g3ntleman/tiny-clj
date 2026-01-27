@@ -47,8 +47,8 @@ unsigned int vector_count(CljPersistentVector *vec) {
     if (vec->base.type != CLJ_VECTOR_TRANSIENT) {
         return vec->count;
     }
-    CljTransientVector *tvec = (CljTransientVector*)vec;
-    return vector_count((CljPersistentVector*)tvec->backing_store);
+    CljTransientVector *tvec = as_transient_vector(vec);
+    return vector_count(tvec->backing_store);
 }
 
 /** Get vector capacity. Returns 0 if vec is NULL. */
@@ -57,8 +57,8 @@ int vector_capacity(CljPersistentVector *vec) {
     if (vec->base.type != CLJ_VECTOR_TRANSIENT) {
         return vec->capacity;
     }
-    CljTransientVector *tvec = (CljTransientVector*)vec;
-    return vector_capacity((CljPersistentVector*)tvec->backing_store);
+    CljTransientVector *tvec = as_transient_vector(vec);
+    return vector_capacity(tvec->backing_store);
 }
 
 /** Get element at index. Returns element or NULL if index out of bounds or nil.
@@ -70,8 +70,8 @@ int vector_capacity(CljPersistentVector *vec) {
 ID vector_nth(CljPersistentVector *vec, unsigned int index) {
     if (vec) {
         if (vec->base.type == CLJ_VECTOR_TRANSIENT) {
-            CljTransientVector *tvec = (CljTransientVector*)vec;
-            return vector_nth((CljPersistentVector*)tvec->backing_store, index);
+            CljTransientVector *tvec = as_transient_vector(vec);
+            return vector_nth(tvec->backing_store, index);
         }
         if (index < vec->count) {
             return vec->data[index];
@@ -91,8 +91,8 @@ ID vector_nth(CljPersistentVector *vec, unsigned int index) {
 int vector_index_of(CljPersistentVector *vec, ID value) {
     if (!vec) return INDEX_NOT_FOUND;
     if (vec->base.type == CLJ_VECTOR_TRANSIENT) {
-        CljTransientVector *tvec = (CljTransientVector*)vec;
-        return vector_index_of((CljPersistentVector*)tvec->backing_store, value);
+        CljTransientVector *tvec = as_transient_vector(vec);
+        return vector_index_of(tvec->backing_store, value);
     }
     
     VECTOR_FOR_EACH(vec, elem) {
@@ -111,8 +111,8 @@ int vector_index_of(CljPersistentVector *vec, ID value) {
 ID* vector_as_array(CljPersistentVector *vec) {
     CLJ_ASSERT(vec != NULL && "vector_as_array called with NULL");
     if (vec->base.type == CLJ_VECTOR_TRANSIENT) {
-        CljTransientVector *tvec = (CljTransientVector*)vec;
-        return vector_as_array((CljPersistentVector*)tvec->backing_store);
+        CljTransientVector *tvec = as_transient_vector(vec);
+        return vector_as_array(tvec->backing_store);
     }
     return vec->data;  // Flexible array member - points to end of struct
 }
@@ -132,7 +132,7 @@ void vector_increment_count(CljPersistentVector *vec) {
 void vector_clear(CljPersistentVector *vec) {
     CLJ_ASSERT(vec != NULL);
     if (vec->base.type == CLJ_VECTOR_TRANSIENT) {
-        CljTransientVector *tvec = (CljTransientVector*)vec;
+        CljTransientVector *tvec = as_transient_vector(vec);
         // Clearing a transient should not mutate a shared backing store.
         // Swap to a fresh empty backing store and release the old one.
         CljPersistentVector *new_backing = make_vector(4, CLJ_VECTOR_PERSISTENT);
@@ -237,7 +237,7 @@ static CljPersistentVector* vector_pop_core(CljPersistentVector* vec) {
     if (vec) {
         if (TAG(vec) == CLJ_VECTOR_TRANSIENT) {
             CljTransientVector *tvec = as_transient_vector(vec);
-            CljPersistentVector *backing = (CljPersistentVector*)tvec->backing_store;
+            CljPersistentVector *backing = tvec->backing_store;
             CljPersistentVector *new_backing = vector_pop(backing);
             ASSIGN(tvec->backing_store, new_backing);
             return vec;
@@ -293,8 +293,8 @@ static CljPersistentVector* vector_insert_at_core(CljPersistentVector* vec, unsi
     if (!vec) return NULL;
     if (TAG(vec) == CLJ_VECTOR_TRANSIENT) {
         CljTransientVector *tvec = as_transient_vector(vec);
-        CljPersistentVector *new_backing = vector_insert_at((CljPersistentVector*)tvec->backing_store, index, item);
-        ASSIGN(tvec->backing_store, (CljPersistentVector*)new_backing);
+        CljPersistentVector *new_backing = vector_insert_at(tvec->backing_store, index, item);
+        ASSIGN(tvec->backing_store, new_backing);
         return vec;
     }
     CljPersistentVector *v = as_vector(vec);
@@ -386,8 +386,8 @@ static CljPersistentVector* vector_remove_at_core(CljPersistentVector* vec, unsi
     if (!vec) return NULL;
     if (TAG(vec) == CLJ_VECTOR_TRANSIENT) {
         CljTransientVector *tvec = as_transient_vector(vec);
-        CljPersistentVector *new_backing = vector_remove_at((CljPersistentVector*)tvec->backing_store, index);
-        ASSIGN(tvec->backing_store, (CljPersistentVector*)new_backing);
+        CljPersistentVector *new_backing = vector_remove_at(tvec->backing_store, index);
+        ASSIGN(tvec->backing_store, new_backing);
         return vec;
     }
     CljPersistentVector *v = as_vector(vec);
@@ -469,14 +469,14 @@ CljPersistentVector* make_vector(unsigned int capacity, CljType type) {
         CljPersistentVector *backing = make_vector(capacity ? capacity : 4, CLJ_VECTOR_PERSISTENT);
         if (!backing) return NULL;
 
-        CljTransientVector *tvec = (CljTransientVector*)alloc(sizeof(CljTransientVector), 1, CLJ_VECTOR_TRANSIENT);
+        CljTransientVector *tvec = ALLOC(CljTransientVector, 1);
         if (!tvec) {
             RELEASE(backing);
             throw_oom();
         }
         tvec->base.type = CLJ_VECTOR_TRANSIENT;
         tvec->base.rc = 1;
-    tvec->backing_store = (CljPersistentVector*)backing;
+        tvec->backing_store = backing;
         return (CljPersistentVector*)tvec;
     }
     if (capacity == 0 && type == CLJ_VECTOR_PERSISTENT) {
@@ -489,7 +489,7 @@ CljPersistentVector* make_vector(unsigned int capacity, CljType type) {
     size_t total_size = struct_size + data_size;
     
     // Use malloc instead of calloc - we set all fields manually and data[] is filled by vector_conj
-    CljPersistentVector *vec = (CljPersistentVector*)alloc(total_size, 1, type);
+    CljPersistentVector *vec = alloc(total_size, 1, type);
 
     vec->base.type = type;
     vec->base.rc = 1;
@@ -514,8 +514,8 @@ static CljPersistentVector* vector_conj_core(CljPersistentVector* vec, ID item) 
     // Note: item can be NULL (nil) - it's a valid value in Clojure collections
 
     if (vec->base.type == CLJ_VECTOR_TRANSIENT) {
-        CljTransientVector *tvec = (CljTransientVector*)vec;
-        CljPersistentVector *backing = (CljPersistentVector*)tvec->backing_store;
+        CljTransientVector *tvec = as_transient_vector(vec);
+        CljPersistentVector *backing = tvec->backing_store;
         CljPersistentVector *new_backing = vector_conj(backing, item);
         ASSIGN(tvec->backing_store, new_backing);
         return vec;  // Always return same transient pointer
@@ -621,7 +621,7 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
 
     if (vec->base.type == CLJ_VECTOR_TRANSIENT) {
         CljTransientVector *tvec = as_transient_vector(vec);
-        CljPersistentVector *backing = (CljPersistentVector*)tvec->backing_store;
+        CljPersistentVector *backing = tvec->backing_store;
 
         // transient assoc allows index == count (append), but not index > count
         if (index > backing->count) {
@@ -847,7 +847,7 @@ CljTransientVector* vector_transient(CljPersistentVector *vec) {
         // Don't ever mutate the empty singleton; allocate a small backing store instead.
         backing = make_vector(4, CLJ_VECTOR_PERSISTENT);
     } else {
-        backing = (CljPersistentVector*)RETAIN(vec);
+        backing = RETAIN(vec);
     }
     if (!backing) return NULL;
 
@@ -858,7 +858,7 @@ CljTransientVector* vector_transient(CljPersistentVector *vec) {
     }
     tvec->base.type = CLJ_VECTOR_TRANSIENT;
     tvec->base.rc = 1;
-    tvec->backing_store = (CljPersistentVector*)backing;
+    tvec->backing_store = backing;
     return tvec;
 }
 
