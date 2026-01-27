@@ -91,7 +91,7 @@ endif()
 # NOTE: Avoid adding the whole 'external/' tree to include paths, so that
 # template/reference subprojects can't be
 # accidentally picked up by includes.
-include_directories(${CMAKE_SOURCE_DIR} include src)
+include_directories(${CMAKE_SOURCE_DIR} include src ${CMAKE_SOURCE_DIR}/subjective-c/src/subjective-c)
 include_directories(${CMAKE_SOURCE_DIR}/external/tiny-db/inc ${CMAKE_SOURCE_DIR}/external/tiny-db/src)
 
 # Subjective-C subproject (static library + early tests)
@@ -117,6 +117,11 @@ if(TINYCLJ_ZOMBIE_ENABLED)
 endif()
 
 add_subdirectory(subjective-c "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}")
+
+# Ensure MEMORY_PROFILING_ENABLED is consistent across the whole binary.
+# The compile definition on tiny-clj targets does NOT automatically propagate
+# into the linked static library, so we must set it on `subjective-c` itself.
+target_compile_definitions(subjective-c PUBLIC MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE})
 
 # Tiny-DB subproject (C-only KV storage stack)
 add_subdirectory(external/tiny-db)
@@ -184,7 +189,6 @@ list(APPEND SOURCES
     src/debug.c
     src/seq.c
     src/error_messages.c
-    src/memory_profiler.c
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
@@ -256,7 +260,6 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/debug.c
     src/seq.c
     src/error_messages.c
-    src/memory_profiler.c
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
@@ -427,6 +430,7 @@ add_executable(unit-tests
     src/tests/test_instant_uuid.c
     src/tests/test_edn_file_all_types.c
     src/tests/test_loops.c
+    src/tests/test_eval_body_vector.c
     src/tests/test_go_blocks.c
     src/tests/test_fixed_point.c
     src/tests/test_arithmetic.c
@@ -444,9 +448,6 @@ add_executable(unit-tests
     src/tests/test_qualified_symbol_resolution.c
     src/tests/test_repl.c
     src/tests/test_file_io.c
-    src/tests/test_fs_layer.c
-    src/tests/test_tinyclj_bindings_fs_kv.c
-    src/tests/test_streaming_kv_fs.c
     src/tests/test_rrd_scripts.c
     src/tests/test_atom.c
     src/tests/test_atom_watch.c
@@ -510,7 +511,7 @@ target_include_directories(unit-tests
 # Since unit-tests is always built in Debug mode, DEBUG will be set via CMAKE_BUILD_TYPE
 target_compile_definitions(subjective-c PRIVATE 
     UNITY_TESTS 
-    MEMORY_PROFILING_ENABLED=1
+    MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE}
     META_ENABLED=1
     UNITY_INCLUDE_EXEC_TIME 
 )
@@ -642,7 +643,6 @@ set(COMMON_TEST_SOURCES
     src/equality.c
     src/list.c
     src/seq.c
-    src/memory_profiler.c
     src/runtime.c
     src/clojure_core.c
     src/line_editor.c

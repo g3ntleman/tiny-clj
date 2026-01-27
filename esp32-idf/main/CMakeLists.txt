@@ -9,6 +9,9 @@ endif()
 ## helpers when building a REPL image.
 set(PLATFORM_SRCS "${CMAKE_CURRENT_LIST_DIR}/../../src/platform_esp32_embedded.c")
 if(TINYCLJ_PLATFORM STREQUAL "uart")
+  # UART REPL build needs:
+  # - core ESP32 platform hooks (init/sleep/time/net) from platform_esp32_embedded.c
+  # - UART I/O + line editor hooks from platform_esp32_uart.c
   list(APPEND PLATFORM_SRCS "${CMAKE_CURRENT_LIST_DIR}/../../src/platform_esp32_uart.c")
   set(_repl_def 1)
 else()

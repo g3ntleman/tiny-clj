@@ -335,7 +335,10 @@ TEST(test_let_filter_function_call) {
         TEST_FAIL_MESSAGE("filter with (fn [x] true) returned NULL");
         return;
     }
-    TEST_ASSERT_TRUE(result && is_list_type(TAG(result)));
+    CljObject *count_result = eval_string("(count (filter (fn [x] true) (list 1 2 3)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(count_result);
+    TEST_ASSERT_TRUE(is_fixnum(count_result));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));
     
     // Test if even? works
     CljObject *even_result = eval_string("(even? 2)", g_test_eval_state);
@@ -358,6 +361,10 @@ TEST(test_let_filter_function_call) {
         TEST_FAIL_MESSAGE("filter with even? returned NULL");
         return;
     }
+    CljObject *count_result2 = eval_string("(count (filter even? (list 1 2 3)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(count_result2);
+    TEST_ASSERT_TRUE(is_fixnum(count_result2));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(count_result2));
     TEST_ASSERT_TRUE(result2 && is_list_type(TAG(result2)));
     
     // Verify first element is 2

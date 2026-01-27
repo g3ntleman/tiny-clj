@@ -22,7 +22,7 @@ if [ -z "${REPO_ROOT}" ]; then
 fi
 
 export IDF_PATH="${IDF_PATH:-${REPO_ROOT}/external/esp-idf}"
-export IDF_TOOLS_PATH="${IDF_TOOLS_PATH:-${REPO_ROOT}/_deps/espressif-tools}"
+export IDF_TOOLS_PATH="${IDF_TOOLS_PATH:-${REPO_ROOT}/external/espressif-tools}"
 
 if [ ! -d "${IDF_PATH}" ]; then
   echo "ERROR: IDF_PATH not found: ${IDF_PATH}" >&2

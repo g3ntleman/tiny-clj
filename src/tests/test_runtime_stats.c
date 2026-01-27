@@ -87,10 +87,25 @@ TEST(test_runtime_stats_contains_memory_stats_map)
 
 #if MEMORY_PROFILING_ENABLED
     // If memory profiling is enabled for this build, raw keys should exist.
+    ID k_bytes_current = (ID)intern_symbol_global(":bytes-current");
+    ID v_bytes_current = map_get_sentinel(ms, k_bytes_current, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_bytes_current);
+    TEST_ASSERT_TRUE(is_fixnum(v_bytes_current));
+
+    ID k_bytes_peak = (ID)intern_symbol_global(":bytes-peak");
+    ID v_bytes_peak = map_get_sentinel(ms, k_bytes_peak, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_bytes_peak);
+    TEST_ASSERT_TRUE(is_fixnum(v_bytes_peak));
+
     ID k_raw_bytes_current = (ID)intern_symbol_global(":raw-bytes-current");
     ID v_raw_bytes_current = map_get_sentinel(ms, k_raw_bytes_current, NOT_FOUND);
     TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_raw_bytes_current);
     TEST_ASSERT_TRUE(is_fixnum(v_raw_bytes_current));
+
+    ID k_raw_bytes_peak = (ID)intern_symbol_global(":raw-bytes-peak");
+    ID v_raw_bytes_peak = map_get_sentinel(ms, k_raw_bytes_peak, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_raw_bytes_peak);
+    TEST_ASSERT_TRUE(is_fixnum(v_raw_bytes_peak));
 #endif
 }
 #endif

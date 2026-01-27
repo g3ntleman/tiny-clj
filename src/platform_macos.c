@@ -17,6 +17,7 @@
 #include <ifaddrs.h>
 
 #include <CoreFoundation/CoreFoundation.h>
+#include <malloc/malloc.h> // malloc_size
 
 // -----------------------------------------------------------------------------
 // Optional stdout observer hook (used by REPL to decide whether to print a newline

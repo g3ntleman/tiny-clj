@@ -248,21 +248,15 @@ TEST(test_unquote_splice_basic_list) {
     // Using quasiquote directly since we can't use backtick in C strings
     CljObject *result = eval_string(
         "(let [x (list 1 2 3)] "
-        "  (eval (quasiquote ((unquote-splice x)))))",
+        "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(3, list_count(lst));
-    
-    // Verify elements
-    ID first = lst->first;
-    assert_fixnum(first, 1);
-    ID second = as_list(lst->rest ? as_list(lst->rest) : NULL)->first;
-    assert_fixnum(second, 2);
-    ID third = as_list(as_list(lst->rest ? as_list(lst->rest) : NULL)->rest ? 
-                       as_list(as_list(lst->rest ? as_list(lst->rest) : NULL)->rest) : NULL)->first;
-    assert_fixnum(third, 3);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    CljVector *v = (CljVector*)result;
+    TEST_ASSERT_EQUAL_INT(3, vector_count(v));
+    assert_fixnum(vector_nth(v, 0), 1);
+    assert_fixnum(vector_nth(v, 1), 2);
+    assert_fixnum(vector_nth(v, 2), 3);
 }
 
 TEST(test_unquote_splice_in_middle) {
@@ -271,12 +265,11 @@ TEST(test_unquote_splice_in_middle) {
     // Splicing in middle: `(a ~@(list 1 2) b) should expand to (a 1 2 b)
     CljObject *result = eval_string(
         "(let [x (list 1 2)] "
-        "  (eval (quasiquote (a (unquote-splice x) b))))",
+        "  (vec (eval (quasiquote (a (unquote-splice x) b)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(4, list_count(lst));  // a, 1, 2, b
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // a, 1, 2, b
 }
 
 TEST(test_unquote_splice_at_start) {
@@ -285,12 +278,11 @@ TEST(test_unquote_splice_at_start) {
     // Splicing at start: `(~@(list 1 2) a b) should expand to (1 2 a b)
     CljObject *result = eval_string(
         "(let [x (list 1 2)] "
-        "  (eval (quasiquote ((unquote-splice x) a b))))",
+        "  (vec (eval (quasiquote ((unquote-splice x) a b)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(4, list_count(lst));  // 1, 2, a, b
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // 1, 2, a, b
 }
 
 TEST(test_unquote_splice_at_end) {
@@ -299,12 +291,11 @@ TEST(test_unquote_splice_at_end) {
     // Splicing at end: `(a b ~@(list 1 2)) should expand to (a b 1 2)
     CljObject *result = eval_string(
         "(let [x (list 1 2)] "
-        "  (eval (quasiquote (a b (unquote-splice x)))))",
+        "  (vec (eval (quasiquote (a b (unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(4, list_count(lst));  // a, b, 1, 2
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // a, b, 1, 2
 }
 
 TEST(test_unquote_splice_multiple) {
@@ -313,12 +304,11 @@ TEST(test_unquote_splice_multiple) {
     // Multiple splices: `(~@(list 1) ~@(list 2 3) ~@(list 4)) should expand to (1 2 3 4)
     CljObject *result = eval_string(
         "(let [x (list 1) y (list 2 3) z (list 4)] "
-        "  (eval (quasiquote ((unquote-splice x) (unquote-splice y) (unquote-splice z)))))",
+        "  (vec (eval (quasiquote ((unquote-splice x) (unquote-splice y) (unquote-splice z))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(4, list_count(lst));  // 1, 2, 3, 4
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // 1, 2, 3, 4
 }
 
 TEST(test_unquote_splice_empty_list) {
@@ -327,12 +317,11 @@ TEST(test_unquote_splice_empty_list) {
     // Empty list splice: `(~@(list) a) should expand to (a) - empty splice adds nothing
     CljObject *result = eval_string(
         "(let [x (list)] "
-        "  (eval (quasiquote ((unquote-splice x) a))))",
+        "  (vec (eval (quasiquote ((unquote-splice x) a)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(1, list_count(lst));  // just 'a'
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(1, vector_count((CljVector*)result));  // just 'a'
 }
 
 TEST(test_unquote_splice_in_macro) {
@@ -345,11 +334,10 @@ TEST(test_unquote_splice_in_macro) {
         g_test_eval_state);
     
     // Use macro: (my-concat (list 1) (list 2) (list 3)) should expand to (concat (list 1) (list 2) (list 3))
-    CljObject *result = eval_string("(my-concat (list 1) (list 2) (list 3))", g_test_eval_state);
+    CljObject *result = eval_string("(vec (my-concat (list 1) (list 2) (list 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(3, list_count(lst));  // 1, 2, 3
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_EQUAL_INT(3, vector_count((CljVector*)result));  // 1, 2, 3
 }
 
 TEST(test_unquote_splice_with_unquote) {
@@ -358,20 +346,14 @@ TEST(test_unquote_splice_with_unquote) {
     // Mix unquote and unquote-splice: `(a ~b ~@(list 1 2) c) where b=99 should expand to (a 99 1 2 c)
     CljObject *result = eval_string(
         "(let [b 99 x (list 1 2)] "
-        "  (eval (quasiquote (a (unquote b) (unquote-splice x) c))))",
+        "  (vec (eval (quasiquote (a (unquote b) (unquote-splice x) c)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(5, list_count(lst));  // a, 99, 1, 2, c
-    
-    // Verify first element is 'a (symbol)
-    ID first = lst->first;
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(first));
-    
-    // Verify second element is 99
-    ID second = as_list(lst->rest ? as_list(lst->rest) : NULL)->first;
-    assert_fixnum(second, 99);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    CljVector *v = (CljVector*)result;
+    TEST_ASSERT_EQUAL_INT(5, vector_count(v));  // a, 99, 1, 2, c
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(vector_nth(v, 0)));
+    assert_fixnum(vector_nth(v, 1), 99);
 }
 
 TEST(test_unquote_splice_nested_quasiquote) {
@@ -381,10 +363,10 @@ TEST(test_unquote_splice_nested_quasiquote) {
     // This tests that nested quasiquotes handle unquote-splice properly
     CljObject *result = eval_string(
         "(let [x (list (quasiquote ((unquote-splice (list 1 2)))))] "
-        "  (eval (quasiquote ((unquote-splice x)))))",
+        "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
 }
 
 TEST(test_unquote_splice_function_call_result) {
@@ -394,16 +376,13 @@ TEST(test_unquote_splice_function_call_result) {
     // Using list instead of range since range might not exist
     CljObject *result = eval_string(
         "(let [x (list 0 1 2)] "
-        "  (eval (quasiquote ((unquote-splice x)))))",
+        "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(3, list_count(lst));
-    
-    // Verify elements are 0, 1, 2
-    ID first = lst->first;
-    assert_fixnum(first, 0);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    CljVector *v = (CljVector*)result;
+    TEST_ASSERT_EQUAL_INT(3, vector_count(v));
+    assert_fixnum(vector_nth(v, 0), 0);
 }
 
 TEST(test_unquote_splice_clojure_compatible) {
@@ -413,21 +392,206 @@ TEST(test_unquote_splice_clojure_compatible) {
     // In Clojure: (let [x '(1 2 3)] `(~@x)) => (1 2 3)
     CljObject *result = eval_string(
         "(let [x (list 1 2 3)] "
-        "  (eval (quasiquote ((unquote-splice x)))))",
+        "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    assert_list(result);
-    CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(3, list_count(lst));
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    CljVector *v = (CljVector*)result;
+    TEST_ASSERT_EQUAL_INT(3, vector_count(v));
+    assert_fixnum(vector_nth(v, 0), 1);
+    assert_fixnum(vector_nth(v, 1), 2);
+    assert_fixnum(vector_nth(v, 2), 3);
+}
+
+// ============================================================================
+// TEST: get-macro function
+// ============================================================================
+
+TEST(test_get_macro_basic) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
-    // Verify it's exactly (1 2 3)
-    ID first = lst->first;
-    assert_fixnum(first, 1);
-    ID second = as_list(lst->rest ? as_list(lst->rest) : NULL)->first;
-    assert_fixnum(second, 2);
-    ID third = as_list(as_list(lst->rest ? as_list(lst->rest) : NULL)->rest ? 
-                       as_list(as_list(lst->rest ? as_list(lst->rest) : NULL)->rest) : NULL)->first;
-    assert_fixnum(third, 3);
+    // Define a macro
+    eval_string("(defmacro test-macro [x] (list '+ x 1))", g_test_eval_state);
+    
+    // get-macro should return the macro function for the symbol
+    CljObject *result = eval_string("(get-macro 'test-macro)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    // Should return a function (CLJ_CLOSURE for macros)
+    TEST_ASSERT_EQUAL_INT(CLJ_CLOSURE, TAG(result));
+}
+
+TEST(test_get_macro_not_found) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // get-macro should return nil for non-existent macros
+    CljObject *result = eval_string("(get-macro 'non-existent-macro)", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_not_a_macro) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a regular function (not a macro)
+    eval_string("(defn regular-fn [x] (+ x 1))", g_test_eval_state);
+    
+    // get-macro should return nil for regular functions
+    CljObject *result = eval_string("(get-macro 'regular-fn)", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_with_non_symbol) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // get-macro should return nil when given a non-symbol argument
+    CljObject *result = eval_string("(get-macro \"not-a-symbol\")", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_with_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // get-macro should return nil when given nil
+    CljObject *result = eval_string("(get-macro nil)", g_test_eval_state);
+    TEST_ASSERT_NIL(result);  // nil
+}
+
+TEST(test_get_macro_qualified_symbol) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a macro in current namespace
+    eval_string("(defmacro my-macro [x] (list '+ x 1))", g_test_eval_state);
+    
+    // get-macro should work with qualified symbols
+    // Note: This test assumes the current namespace is "user"
+    CljObject *result = eval_string("(get-macro 'user/my-macro)", g_test_eval_state);
+    // Should either find it (if qualified lookup works) or return nil
+    // The behavior depends on namespace resolution implementation
+    // For now, just verify it doesn't crash
+    (void)result;  // Suppress unused variable warning
+}
+
+// ============================================================================
+// TEST: for macro expansion
+// ============================================================================
+
+// Test: Simple for expansion (head rewrite only)
+TEST(test_for_macroexpand_simple) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should expand for to a mapcat-based form (no legacy for*)
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [x [1 2 3]] x))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be mapcat (or clojure.core/mapcat)
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
+}
+
+// Test: Multiple bindings expansion (passed through)
+TEST(test_for_macroexpand_multiple_bindings) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should expand for to nested mapcat-based form
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [x [1 2] y [3 4]] [x y]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be mapcat
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
+}
+
+// Test: Modifiers preserved (:when, :while)
+TEST(test_for_macroexpand_modifiers) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should expand modifiers into filter/take-while (no legacy for*)
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [x (range) :while (< x 3) :when (even? x)] x))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be mapcat
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
+}
+
+// Test: Destructuring expansion (should normalize to gensym + :let)
+// Note: This test will fail until destructuring normalization is implemented
+TEST(test_for_macroexpand_destructuring) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // macroexpand-1 should normalize destructuring to gensym + :let
+    CljObject *result = eval_string(
+        "(macroexpand-1 '(for [[a b] [[1 2] [3 4]]] (+ a b)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be mapcat (destructuring is normalized via :let)
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
+}
+
+// Test: for expansion with cond and :else (tests normalize-for-bindings)
+// This test verifies that cond with :else works correctly during macro expansion
+TEST(test_for_macroexpand_with_cond_else) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test basic for expansion - this should work if cond with :else works
+    // Use macroexpand (not macroexpand-1) to fully expand
+    CljObject *result = eval_string(
+        "(macroexpand '(for [x [1 2 3]] x))",
+        g_test_eval_state);
+    
+    // Check if expansion succeeded (if cond fails, result will be NULL or exception thrown)
+    if (!result) {
+        TEST_FAIL_MESSAGE("for macro expansion failed - cond with :else may not work during macro expansion");
+        return;
+    }
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "for macro expansion should succeed");
+    TEST_ASSERT_TRUE(is_list_type(TAG(result)));
+    
+    CljList *expanded = as_list(result);
+    TEST_ASSERT_NOT_NULL(expanded);
+    
+    // First element should be mapcat (no legacy for*)
+    ID first = LIST_FIRST(expanded);
+    TEST_ASSERT_TRUE(is_symbol(first));
+    CljSymbol *op_sym = as_symbol(first);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
 }
 
 

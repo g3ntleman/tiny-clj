@@ -12,7 +12,7 @@
 #   external/tiny-db/scripts/size_report_esp32.sh
 #
 # Overrides:
-#   BUILD_DIR=builds/esp32
+#   BUILD_DIR=builds/tiny-db-esp32-size
 #   TOOLCHAIN_FILE=toolchains/esp32.cmake
 #   SIZE_TOOL=xtensa-esp32-elf-size
 #   AR_TOOL=xtensa-esp32-elf-ar
@@ -23,7 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TDB_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${TDB_DIR}/../.." && pwd)"
 
-BUILD_DIR="${BUILD_DIR:-${REPO_ROOT}/builds/esp32}"
+BUILD_DIR="${BUILD_DIR:-${REPO_ROOT}/builds/tiny-db-esp32-size}"
 TOOLCHAIN_FILE="${TOOLCHAIN_FILE:-${REPO_ROOT}/toolchains/esp32.cmake}"
 
 SIZE_TOOL="${SIZE_TOOL:-xtensa-esp32-elf-size}"

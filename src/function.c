@@ -13,6 +13,7 @@
 #include "object.h"
 #include "vector.h"
 #include "symbol.h"  // For SYM_AMP
+#include "memory_profiler.h"
 
 /**
  * @brief Allocate and initialize parameter vector for function
@@ -54,7 +55,7 @@ static int allocate_function_params(CljFunction *func, ID *params, int param_cou
     return 0;
 }
 
-CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_stack, const char *cname, struct CljNamespace *ns) {
+CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_stack, CljSymbol *name_sym, struct CljNamespace *ns) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     
     // Find variadic index (position of & in params), -1 if not variadic
@@ -75,7 +76,8 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_
     // Persistent env_stack is always heap-managed (vector of maps).
     // It may be shared across closures; RETAIN is required for correctness.
     func->env_stack = env_stack ? (CljVector*)RETAIN(env_stack) : NULL;
-    func->name = cname ? strdup(cname) : NULL;
+    // Name is stored as an interned symbol (singleton), so we can safely borrow it.
+    func->name_sym = name_sym;
     func->ns = ns ? (struct CljNamespace*)RETAIN(ns) : NULL;
     func->variadic_index = variadic_index;
     
@@ -85,5 +87,25 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_
     }
     
     return func;
+}
+
+// -----------------------------------------------------------------------------
+// Native function constructor (CljCFunc)
+// -----------------------------------------------------------------------------
+ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
+{
+    CljCFunc *func = ALLOC(CljCFunc, 1);
+    if (!func) {
+        throw_oom();
+    }
+
+    func->base.type = CLJ_FUNC;
+    func->base.rc = 1;
+    func->fn = fn;
+
+    // Name is stored as an interned symbol (singleton), so we can safely borrow it.
+    func->name_sym = name_sym;
+
+    return (ID)func;
 }
 

@@ -1,3 +1,5 @@
+#include "list.h"
+#include "vector_to_list.h"
 #include "object.h"
 #include "eval.h"
 #include "symbol.h"
@@ -29,18 +31,15 @@
 #include "ast.h"
 #include "vector.h"
 #include "env_stack.h"
-#include "event_loop.h"
-#include "channel.h"
 #include "strings.h"  // For pr_str
-#include "to_string.h"  // For is_special_symbol
-#include "numeric_utils.h"
-#include "format_utils.h"
 #include "eval_arithmetic.h"
+#include "debug.h"  // For print_ast
 #include "eval_comparison.h"
 #include <time.h>
 
 #include "eval_sequence.h"
 #include "eval_special_forms.h"
+#include "macro.h"  // For lookup_macro_resolve
 
 #include <signal.h>
 extern __attribute__((weak)) volatile sig_atomic_t g_clojure_core_last_form;
@@ -232,6 +231,13 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         builtin_set_eval_state(st);
         ID result = native_func->fn(args, argc);
         builtin_set_eval_state(NULL); // Clear after call
+        // Native functions do not retain args; caller must release. (eval_arg returns
+        // AUTORELEASE'd values; pool is weak/track-only, so we release here to avoid
+        // leaks for temporaries like (range 4000) in (reduce + (range 4000)).)
+        for (unsigned int i = 0; i < argc; i++) {
+            if (args[i] && !IS_IMMEDIATE(args[i]) && args[i] != result)
+                RELEASE(args[i]);
+        }
         return result;
     }
 
@@ -645,8 +651,11 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 }
             }
             
-            // Then check env_stack and namespace
-            ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, ctx_env_map, NULL, body, get_eval_state(ctx, NULL));
+            // Then check env_stack and namespace.
+            // If there is no env_stack, we still must use ctx->env as the fallback environment
+            // (e.g. eval_body_vector_with_base_env tests pass bindings via ctx->env only).
+            CljMap *fallback_env = ctx_env_map ? ctx_env_map : ctx->env;
+            ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, fallback_env, NULL, body, get_eval_state(ctx, NULL));
             if (resolved_id != NOT_FOUND) {
                 if (!resolved_id || resolved_id == SYM_NIL) {
                     return NULL;
@@ -702,8 +711,23 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
 
     // For non-symbol, non-slotref objects, dispatch on the already computed tag.
     switch (body_tag) {
-        case CLJ_LIST:
         case CLJ_AST_NODE: {
+            // AST-Nodes can contain vectors as first element
+            // Check if first element is a vector (by tag, not is_vector which may have additional checks)
+            CljASTNode *node = as_ast_node(body);
+            if (node && node->first && (TAG(node->first) == CLJ_VECTOR || TAG(node->first) == CLJ_VECTOR_TRANSIENT || TAG(node->first) == CLJ_VECTOR_TRANSIENT_WEAK)) {
+                // AST-Node wrapping a vector - evaluate the vector
+                return eval_body_with_params(node->first, ctx);
+            }
+            // Otherwise treat as list
+            CljMap *env_map = get_closure_env(ctx);
+            EvalState *ctx_state = get_eval_state(ctx, NULL);
+            // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
+            if (!ctx_state) ctx_state = builtin_get_eval_state();
+            return eval_list(as_list(body), env_map, ctx_state, ctx);
+        }
+        
+        case CLJ_LIST: {
             // Evaluate list with context (ctx preserves recur)
             CljMap *env_map = get_closure_env(ctx);
             EvalState *ctx_state = get_eval_state(ctx, NULL);
@@ -814,12 +838,10 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 EvalState *eval_st = get_eval_state(ctx, st);
                 CljMap *fallback_env = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
                 ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, fallback_env, ctx->frame, body, eval_st);
-                if (resolved_id) {
-                    if (resolved_id == NOT_FOUND) {
-                        return NULL;
-                    }
+                if (resolved_id != NOT_FOUND) {
                     return AUTORELEASE(RETAIN(resolved_id));
                 }
+                // If NOT_FOUND, continue to fallback resolution paths below
             }
 
             // Resolve symbol - first try local environment, then namespace
@@ -1359,9 +1381,31 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         }
     }
 
+
     // Handle maps as functions (for key lookup) - must be first
     if (is_map(op)) {
         return eval_map_lookup(list, effective_env, effective_st, ctx, op);
+    }
+
+#ifdef DEBUG
+    {
+        const char *dbg = getenv("TINYCLJ_DEBUG_DOSEQ");
+        if (dbg && dbg[0] == '1') {
+            unsigned char tag = op ? TAG(op) : 0;
+            const char *type_name = "nil";
+            if (op) type_name = clj_type_name(((CljObject*)op)->type);
+            fprintf(stderr, "[debug] eval_list: list=%p op=%p tag=%u type=%s\n",
+                    (void*)list, (void*)op, (unsigned)tag, type_name);
+            fflush(stderr);
+        }
+    }
+#endif
+
+    // Clojure compatibility: Vectors are seqable, but not callable as functions
+    if (TAG(op) == CLJ_VECTOR || TAG(op) == CLJ_VECTOR_TRANSIENT || TAG(op) == CLJ_VECTOR_TRANSIENT_WEAK) {
+        // If the operator is a vector, throw a Clojure-compatible error
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+            "Cannot call Vector as a function");
     }
 
     // Check if op is a symbol and resolve it
@@ -1394,8 +1438,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         }
     }
 
-    // Handle def and ns before symbol resolution
+    // Handle def, defmacro, and ns before symbol resolution
     if (original_op_sym == SYM_DEF) return eval_def(list, effective_env, effective_st);
+    if (original_op_sym == SYM_DEFMACRO) return eval_special_defmacro(list, effective_env, effective_st, ctx);
     if (original_op_sym == SYM_NS) return eval_ns(list, effective_env, effective_st);
 
     // Fast-path: Comparison operators (avoid symbol resolution for <, >, <=, >=, =)
@@ -1437,6 +1482,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
             return eval_special_recur(list, effective_env, effective_st, ctx);
         }
     }
+
 
     // Resolve operator symbol
     // CRITICAL: Pass ctx to allow environment chaining lookup (for functions defined in let)
@@ -1498,12 +1544,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         return str_result;
     }
 
-    // Tier 6: Loop operations (for, doseq, dotimes) - inline dispatch
-    if (original_op_sym == SYM_FOR) {
-        return eval_for(list, effective_env);
-    }
+    // Tier 6: Loop operations (doseq, dotimes) - inline dispatch
     if (original_op_sym == SYM_DOSEQ) {
-        return eval_doseq(list, effective_env);
+        return eval_doseq(list, effective_env, effective_st, ctx);
     }
     if (original_op_sym == SYM_DOTIMES) {
         // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
@@ -1607,7 +1650,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     if (is_closure(value)) {
         CljFunction *func = as_function(value);
         if (func && sym && sym->cname[0]) {
-            if (!func->name) func->name = strdup(sym->cname);
+            if (!func->name_sym) func->name_sym = sym;
             
             // Rewrite recursive calls to use qualified name (for TCO optimization)
             // Only if namespace is available (avoids unnecessary work)
@@ -1786,7 +1829,17 @@ ID eval_var(CljList *list, CljMap *env, EvalState *st) {
 // TCO functions moved to optimize.c
 
 ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    CLJ_ASSERT(env != NULL);
+    // Some call paths (notably during bootstrap / lazy builder thunks) may not have
+    // an explicit EvalState or lexical env map available.
+    if (!st) st = builtin_get_eval_state();
+    if (!st) st = get_global_eval_state();
+    if (!env && st && st->current_ns) {
+        env = st->current_ns->mappings;
+    }
+    if (!env) {
+        // Final fallback: empty environment.
+        env = map_empty();
+    }
     CLJ_ASSERT(is_list_like(list));
 
     // Get potential function name (for named fn like (fn step [x] ...))
@@ -1975,7 +2028,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     }
 
     // Create function object
-    CljFunction *fn = make_function(params, param_count, body, fn_env_stack, NULL, st ? st->current_ns : NULL);
+    CljFunction *fn = make_function(params, param_count, body, fn_env_stack, fn_name, st ? st->current_ns : NULL);
     if (fn_env_stack_owned) {
         RELEASE(fn_env_stack);
     }
@@ -2026,7 +2079,6 @@ static INLINE bool is_builtin_function(CljSymbol *symbol) {
             symbol == SYM_COUNT ||
             symbol == SYM_CONS ||
             symbol == SYM_NEXT ||
-            symbol == SYM_FOR ||
             symbol == SYM_DOSEQ ||
             symbol == SYM_DOTIMES);
 }
@@ -2222,78 +2274,10 @@ static CljMap* extend_env_with_binding(CljMap *env, CljObject *var, CljObject *e
     return new_env;
 }
 
-ID eval_for(CljList *list, CljMap *env) {
-    CLJ_ASSERT(env != NULL);
-    // (for [binding coll] expr)
-    // Returns a lazy sequence of results
+// NOTE: Legacy native `for`/`for*` special forms were removed.
+// `for` is implemented as a Clojure macro in `clojure.core` and expands to lazy primitives.
 
-    if (!list) {
-        return NULL;
-    }
-
-    CljObject *binding_list = eval_arg(list, 1, env, NULL);
-    CljObject *body = eval_arg(list, 2, env, NULL);
-
-    if (!binding_list || !is_list_type(TAG(binding_list))) {
-        return NULL;
-    }
-
-    // Parse binding: [var coll]
-    CljList *binding_data = as_list(binding_list);
-    if (!binding_data->first || !binding_data->rest) {
-        return NULL;
-    }
-
-    CljObject *var = binding_data->first;
-    CljObject *coll = (CljObject*)LIST_REST(binding_data);
-
-    // Get collection to iterate over
-    CljList *coll_data = as_list(coll);
-    if (!coll_data->first) {
-        return NULL;
-    }
-
-    CljObject *collection = coll_data->first; // Simple: just use the expression directly
-    if (!collection) {
-        return NULL;
-    }
-
-    // Create result list
-    CljObject *result = (CljObject*)empty_list();
-
-    // Iterate over collection using seq
-    CljSeqIterator *seq = make_seq(collection);
-    if (seq) {
-        while (!seq_empty((CljObject*)seq)) {
-            CljObject *element = (CljObject*)seq_first((CljObject*)seq);
-
-            WITH_AUTORELEASE_POOL({
-                // Create new environment with binding using helper
-                CljMap *new_env = extend_env_with_binding(env, var, element);
-                if (new_env) {
-                    // Evaluate body with new binding
-                    ID body_result = eval_body_with_env(body, new_env, NULL);
-                    RELEASE(body_result);
-
-                    // Clean up environment
-                    RELEASE(new_env);
-                }
-            });
-
-            // Move to next element
-            CljObject *next = (CljObject*)seq_next((CljObject*)seq);
-            RELEASE(seq);
-            seq = (CljSeqIterator*)next;
-        }
-        // Clean up final seq iterator (not returned as value)
-        RELEASE(seq);
-    }
-
-    RELEASE(collection);
-    return AUTORELEASE(result);
-}
-
-ID eval_doseq(CljList *list, CljMap *env) {
+ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(env != NULL);
     // (doseq [binding coll] expr)
     // Executes expr for side effects, returns nil
@@ -2304,61 +2288,67 @@ ID eval_doseq(CljList *list, CljMap *env) {
 
     CljObject *binding_list = list_get_element(list, 1);
     CljObject *body = list_get_element(list, 2);
-
-    if (!binding_list || binding_list->type != CLJ_LIST || !body) {
+    if (!binding_list || !body) {
         return NULL;
     }
-
-    // Parse binding: [var coll]
-    CljList *binding_data = as_list(binding_list);
+    // Convert vector binding to list if needed
+    CljList *binding_data = NULL;
+    if (TAG(binding_list) == CLJ_VECTOR) {
+        binding_data = as_list(vector_to_list((CljVector*)binding_list));
+    } else if (TAG(binding_list) == CLJ_LIST) {
+        binding_data = as_list(binding_list);
+    } else {
+        return NULL;
+    }
     if (!binding_data->first || !binding_data->rest) {
         return NULL;
     }
-
     CljObject *var = binding_data->first;
-    CljObject *coll = (CljObject*)LIST_REST(binding_data);
+    CljObject *coll_expr = list_get_element(binding_data, 1);
 
-    // Get collection to iterate over
-    CljList *coll_data = as_list(coll);
-    if (!coll_data->first) {
-        return NULL;
-    }
-
-    CljObject *collection = coll_data->first; // Simple: just use the expression directly
-    if (!collection) {
+    // Evaluate collection expression in current env (preserve ctx for lexical lookup)
+    ID coll_eval = eval_body(coll_expr, env, st, ctx);
+    if (!coll_eval) {
         return NULL;
     }
 
     // Iterate over collection using seq
-    CljSeqIterator *seq = make_seq(collection);
+    CljSeqIterator *seq = make_seq(coll_eval);
     if (seq) {
         while (!seq_empty((CljObject*)seq)) {
             CljObject *element = (CljObject*)seq_first((CljObject*)seq);
 
             WITH_AUTORELEASE_POOL({
-                // Create new environment with binding using helper
-                CljMap *new_env = extend_env_with_binding(env, var, element);
-                if (new_env) {
-                    // Evaluate body with new binding
-                    ID body_result = eval_body_with_env(body, new_env, NULL);
-                    RELEASE(body_result);
+                if (ctx) {
+                    // Push binding onto a copy of env_stack so lexical lookup works
+                    CljVector *new_stack = ctx->env_stack ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
+                    CljMap *self_bind = map_assoc(map_empty(), var, element);
+                    env_stack_push_inplace(&new_stack, self_bind);
+                    RELEASE(self_bind);
 
-                    // Clean up environment
-                    RELEASE(new_env);
+                    EvalContext inner_ctx = *ctx;
+                    inner_ctx.env_stack = new_stack;
+
+                    ID body_result = eval_body(body, NULL, st, &inner_ctx);
+                    if (new_stack) RELEASE(new_stack);
+                    RELEASE(body_result);
+                } else {
+                    CljMap *new_env = extend_env_with_binding(env, var, element);
+                    if (new_env) {
+                        ID body_result = eval_body_with_env(body, new_env, st);
+                        RELEASE(body_result);
+                        RELEASE(new_env);
+                    }
                 }
             });
-
 
             CljObject *next = (CljObject*)seq_next((CljObject*)seq);
             RELEASE(seq);
             seq = (CljSeqIterator*)next;
         }
-        // Clean up final seq iterator
         RELEASE(seq);
     }
-
-    // Clean up allocated objects
-    // Note: collection is a parameter, don't release it
+    RELEASE(coll_eval);
     return AUTORELEASE(NULL); // doseq always returns nil
 }
 
@@ -2472,11 +2462,13 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     int binding_index = 0;
 
+
     for (int i = 0; i < binding_count; i += 2) {
         CljValue sym_val = (CljValue)vector_nth(bindings, i);
         CljValue init_val = (CljValue)vector_nth(bindings, i + 1);
 
-        if (!sym_val || TAG(sym_val) != CLJ_SYMBOL) {
+        unsigned char sym_tag = TAG(sym_val);
+        if (!sym_val || sym_tag != CLJ_SYMBOL) {
             if (has_frame) frame_release(let_frame);
             if (let_stack_owned) RELEASE(let_stack);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -2489,8 +2481,8 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         if (!init_val) {
             value = NULL;
         } else if (is_fixnum(init_val) || is_special(init_val)) {
-                value = init_val;
-            } else {
+            value = init_val;
+        } else {
             value = eval_body(init_val, eval_env, st, &let_ctx);
         }
 

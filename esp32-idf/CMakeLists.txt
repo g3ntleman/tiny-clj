@@ -8,6 +8,11 @@ cmake_minimum_required(VERSION 3.16)
 # It intentionally keeps tiny-clj compiled-in but avoids allocating RAM until
 # features are used (lazy init).
 
+# Redirect FetchContent dependencies to external/ directory (instead of _deps/)
+# This must be set BEFORE including ESP-IDF's project.cmake
+get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
+set(FETCHCONTENT_BASE_DIR "${REPO_ROOT}/external" CACHE PATH "Base directory for FetchContent dependencies")
+
 # Keep this ESP-IDF project minimal (REPL + stats only).
 # ESP-IDF supports excluding components by name via EXCLUDE_COMPONENTS.
 #
