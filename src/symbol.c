@@ -72,6 +72,8 @@ CljSymbol *SYM_LT = NULL;
 CljSymbol *SYM_GT = NULL;
 CljSymbol *SYM_LE = NULL;
 CljSymbol *SYM_GE = NULL;
+CljSymbol *SYM_NOT_EQ = NULL;
+CljSymbol *SYM_IDENTICAL = NULL;
 CljSymbol *SYM_PRINTLN = NULL;
 CljSymbol *SYM_PRINT = NULL;
 CljSymbol *SYM_STR = NULL;
@@ -600,6 +602,10 @@ void init_special_symbols() {
 
     INIT_SYMBOL(SYM_GE, sym_ge_data);
     SYM_GE->base.flags |= CLJ_FLAG_COMPARISON | (3 << CLJ_COMP_OP_SHIFT);
+
+    // Additional comparison symbols (not= and identical?)
+    INIT_SYMBOL(SYM_NOT_EQ, sym_not_eq_data);
+    INIT_SYMBOL(SYM_IDENTICAL, sym_identical_data);
 
     INIT_SYMBOL(SYM_PRINTLN, sym_println_data);
 

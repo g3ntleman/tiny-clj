@@ -97,6 +97,8 @@ extern CljSymbol *SYM_LT;
 extern CljSymbol *SYM_GT;
 extern CljSymbol *SYM_LE;
 extern CljSymbol *SYM_GE;
+extern CljSymbol *SYM_NOT_EQ;
+extern CljSymbol *SYM_IDENTICAL;
 extern CljSymbol *SYM_PRINTLN;
 extern CljSymbol *SYM_PRINT;
 extern CljSymbol *SYM_STR;
