@@ -69,8 +69,8 @@ CljString* line_editor_get_history_line(LineEditor *editor, int index);  // Retu
 int line_editor_get_history_size(const LineEditor *editor);
 
 // History bulk operations
-CljVector* line_editor_get_history_vector(LineEditor *editor); // returns persistent vector (rc=1)
-void line_editor_set_history_from_vector(LineEditor *editor, CljVector *vec);
+CljPersistentVector* line_editor_get_history_vector(LineEditor *editor); // returns persistent vector (rc>=1)
+void line_editor_set_history_from_vector(LineEditor *editor, CljPersistentVector *vec);
 void line_editor_clear_history(LineEditor *editor);
 
 // Global line editor management

@@ -206,9 +206,11 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
-            void *vec_ptr = as_vector(v);
-            CljVector *vec = (CljVector*)vec_ptr;
-            int count = vector_count(vec);
+            CljPersistentVector *vec =
+                (v->type == CLJ_VECTOR_TRANSIENT)
+                    ? vector_persistent(as_transient_vector((ID)v))
+                    : as_persistent_vector((ID)v);
+            int count = (int)vector_count(vec);
             size_t len = 2; // "[ ]"
             int i = 0;
             VECTOR_FOR_EACH(vec, elem) {
@@ -495,15 +497,17 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
         case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
-            void *vec_ptr = as_vector(v);
-            CljVector *vec = (CljVector*)vec_ptr;
+            CljPersistentVector *vec =
+                (v->type == CLJ_VECTOR_TRANSIENT)
+                    ? vector_persistent(as_transient_vector((ID)v))
+                    : as_persistent_vector((ID)v);
             if (v->type == CLJ_VECTOR_TRANSIENT) {
                 memcpy(buffer + *offset, "<transient ", 11);
                 *offset += 11;
             }
             buffer[*offset] = '[';
             *offset += 1;
-            int count = vector_count(vec);
+            int count = (int)vector_count(vec);
             int i = 0;
             VECTOR_FOR_EACH(vec, elem) {
                 to_string_build_string((CljObject*)elem, buffer, offset, escape_strings);

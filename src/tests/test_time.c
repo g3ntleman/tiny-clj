@@ -179,11 +179,11 @@ TEST_SHARED(test_time_with_dotimes) {
     CljObject *five = fixnum(5);
     
     // Create binding vector: [i 1000]
-    CljObject *binding_vector = (CljObject *)make_vector(2, CLJ_VECTOR_PERSISTENT);
-    CljVector *vec_data = as_vector(binding_vector);
-    // Add elements using vector_conj
-    vec_data = vector_conj(vec_data, i_symbol);
-    vec_data = vector_conj(vec_data, thousand);
+    CljObject *binding_vector = (CljObject *)make_vector(2, false);
+    CljPersistentVector *vec_data = as_persistent_vector((ID)binding_vector);
+    // Add elements using vector_conj (persistent API)
+    vec_data = vector_conj(vec_data, (ID)i_symbol);
+    vec_data = vector_conj(vec_data, (ID)thousand);
     
     // Create arithmetic expression: (+ 1 2 3 4 5)
     CljObject *arithmetic_expr = (CljObject *)make_list(plus_symbol, 

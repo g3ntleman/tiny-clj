@@ -25,26 +25,20 @@
 static int allocate_function_params(CljFunction *func, ID *params, int param_count) {
     if (param_count > 0 && params) {
         // Create vector for parameters
-        CljVector *vec = make_vector(param_count, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *vec = make_vector((unsigned int)param_count, false);
         if (!vec) {
             DEALLOC(func);
             throw_oom();
             return -1;
         }
         
-        // Add all parameters to vector (vector_conj retains elements)
+        // Add all parameters to vector (vector retains elements when not WEAK)
         for (int i = 0; i < param_count; i++) {
-            CljVector *new_vec = vector_conj(vec, RETAIN(params[i]));
-            if (!new_vec) {
-                RELEASE(vec);
+            vector_conj_inplace(&vec, params[i]);
+            if (!vec) {
                 DEALLOC(func);
                 throw_oom();
                 return -1;
-            }
-            // vector_conj may return a new vector (COW), so update vec
-            if (new_vec != vec) {
-                RELEASE(vec);
-                vec = new_vec;
             }
         }
         
@@ -55,7 +49,7 @@ static int allocate_function_params(CljFunction *func, ID *params, int param_cou
     return 0;
 }
 
-CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_stack, CljSymbol *name_sym, struct CljNamespace *ns) {
+CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVector *env_stack, CljSymbol *name_sym, struct CljNamespace *ns) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     
     // Find variadic index (position of & in params), -1 if not variadic
@@ -75,7 +69,7 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_
     func->body = RETAIN(body);
     // Persistent env_stack is always heap-managed (vector of maps).
     // It may be shared across closures; RETAIN is required for correctness.
-    func->env_stack = env_stack ? (CljVector*)RETAIN(env_stack) : NULL;
+    func->env_stack = env_stack ? (CljPersistentVector*)RETAIN(env_stack) : NULL;
     // Name is stored as an interned symbol (singleton), so we can safely borrow it.
     func->name_sym = name_sym;
     func->ns = ns ? (struct CljNamespace*)RETAIN(ns) : NULL;

@@ -13,7 +13,7 @@ static void ast_compile_list_inplace(CljList *list, EvalState *st) {
     }
 }
 
-static void ast_compile_vector_inplace(CljVector *vec, EvalState *st) {
+static void ast_compile_vector_inplace(CljPersistentVector *vec, EvalState *st) {
     if (!vec) return;
     VECTOR_FOR_EACH(vec, elem) {
         ast_compile_expr_inplace(elem, st);
@@ -54,8 +54,12 @@ static void ast_compile_expr_inplace(ID expr, EvalState *st) {
         return;
     }
 
-    if (tag == CLJ_VECTOR_PERSISTENT) {
-        ast_compile_vector_inplace(as_vector(expr), st);
+    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT) {
+        CljPersistentVector *vec =
+            (tag == CLJ_VECTOR_TRANSIENT)
+                ? vector_persistent(as_transient_vector(expr))
+                : as_persistent_vector(expr);
+        ast_compile_vector_inplace(vec, st);
         return;
     }
 

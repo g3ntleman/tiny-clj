@@ -141,7 +141,7 @@ TEST(test_datetime_civil_from_days_epoch) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    CljVector *v = as_vector(result);
+    CljPersistentVector *v = as_persistent_vector(result);
     TEST_ASSERT_EQUAL_INT(1970, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 2)));
@@ -156,7 +156,7 @@ TEST(test_datetime_civil_from_days_y2k) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    CljVector *v = as_vector(result);
+    CljPersistentVector *v = as_persistent_vector(result);
     TEST_ASSERT_EQUAL_INT(2000, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 2)));
@@ -187,7 +187,7 @@ TEST(test_datetime_time_from_millis_midnight) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    CljVector *v = as_vector(result);
+    CljPersistentVector *v = as_persistent_vector(result);
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 2)));
@@ -202,7 +202,7 @@ TEST(test_datetime_time_from_millis_noon) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    CljVector *v = as_vector(result);
+    CljPersistentVector *v = as_persistent_vector(result);
     TEST_ASSERT_EQUAL_INT(12, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
 }
@@ -216,7 +216,7 @@ TEST(test_datetime_time_from_millis_specific) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    CljVector *v = as_vector(result);
+    CljPersistentVector *v = as_persistent_vector(result);
     TEST_ASSERT_EQUAL_INT(14, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(30, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_INT(45, as_fixnum(vector_nth(v, 2)));

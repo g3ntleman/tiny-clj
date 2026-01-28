@@ -347,11 +347,14 @@ ID nth2(ID *args, unsigned int argc)
                                          "nth index %d is negative", i);
     }
 
-    // Fast path: Vectors (O(1) access) - includes transient vectors
+    // Fast path: Vectors (O(1) access) - includes transient vectors (via backing)
     int tag = TAG(coll);
-    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT)
+    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT)
     {
-        CljVector *v = as_vector(coll);
+        CljPersistentVector *v =
+            (tag == CLJ_VECTOR_TRANSIENT)
+                ? vector_persistent(as_transient_vector(coll))
+                : as_persistent_vector(coll);
         int count = vector_count(v);
         if (i >= count)
         {
@@ -429,7 +432,7 @@ ID native_peek(ID *args, unsigned int argc)
     ID vec = args[0];
     if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT)
         return NULL;
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_persistent_vector(vec);
     int count = vector_count(v);
     if (!count)
         return NULL; // nil for empty vector
@@ -446,16 +449,16 @@ ID native_pop(ID *args, unsigned int argc)
     ID vec = args[0];
     if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT)
         return NULL;
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_persistent_vector(vec);
     int count = vector_count(v);
     if (count == 0)
     {
         // Return empty vector singleton (no memory management needed)
-        return make_vector(0, CLJ_VECTOR_PERSISTENT);
+        return make_vector(0, false);
     }
 
-    // Use vector_pop() which handles RC=1 (in-place) and RC>1 (COW) automatically
-    CljVector *result = vector_pop(v);
+    // Use vector_popped() which handles RC=1 (in-place) and RC>1 (COW) automatically
+    CljPersistentVector *result = vector_popped(v);
     if (!result)
         return NULL;
     return result; // vec is retained by caller, result is already retained
@@ -499,7 +502,7 @@ ID native_subvec(ID *args, unsigned int argc)
                                          "subvec requires a number as start index");
     }
 
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_persistent_vector(vec);
 
     int start = AS_FIXNUM(start_idx);
     int end;
@@ -545,11 +548,11 @@ ID native_subvec(ID *args, unsigned int argc)
     // Special case: empty sub-vector (start == end)
     if (subvec_count == 0)
     {
-        return make_vector(0, CLJ_VECTOR_PERSISTENT); // Returns empty-vector singleton (no memory management needed)
+        return make_vector(0, false); // Returns empty-vector singleton (no memory management needed)
     }
 
     // Create new vector and add elements using vector_conj_inplace
-    CljVector *new_vec = make_vector(subvec_count, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *new_vec = make_vector(subvec_count, false);
 
     // Copy elements from start to end using vector_conj_inplace
     // This keeps rc=1 for COW optimizations
@@ -583,7 +586,7 @@ ID conj2(ID vec, ID val)
 {
     if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT)
         return NULL;
-    return vector_conj(vec, val);
+    return vector_conj(as_persistent_vector(vec), val);
 }
 
 // Generic conj function that works with BuiltinFn signature
@@ -1006,11 +1009,11 @@ ID native_partition(ID *args, unsigned int argc)
     }
 
     // Use vectors for building (efficient), convert to list at end
-    CljVector *partitions = make_vector(0, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *partitions = make_vector(0, false);
 
     while (!seq_iter_empty(&iter))
     {
-        CljVector *part = make_vector(n, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *part = make_vector(n, false);
         int count = 0;
 
         for (int i = 0; i < n && !seq_iter_empty(&iter); i++, count++)
@@ -1051,7 +1054,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     ID seqs_vec_id = map_get_sentinel(state, SYM_MAP_SEQS, NULL);
     if (!fn || !seqs_vec_id || TAG(seqs_vec_id) != CLJ_VECTOR_PERSISTENT) return NULL;
 
-    CljVector *seqs_vec = as_vector(seqs_vec_id);
+    CljPersistentVector *seqs_vec = as_persistent_vector(seqs_vec_id);
     unsigned int ncolls = vector_count(seqs_vec);
     if (ncolls == 0 || ncolls > 8) return NULL;
 
@@ -1073,7 +1076,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     ID mapped = eval_function_call(fn, call_args, ncolls, NULL, st);
 
     // Advance collections (store rest for each).
-    CljVector *next_seqs = make_vector(ncolls, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *next_seqs = make_vector(ncolls, false);
     if (!next_seqs) return NULL;
     for (unsigned int i = 0; i < ncolls; i++) {
         vector_conj_inplace(&next_seqs, next_colls[i]);
@@ -1196,7 +1199,7 @@ ID native_map(ID *args, unsigned int argc)
 
     // Validate and normalize inputs to sequences (one per coll).
     // If any input is nil, map returns empty.
-    CljVector *seqs = make_vector(ncolls, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *seqs = make_vector(ncolls, false);
     if (!seqs) return NULL;
 
     for (unsigned int i = 0; i < ncolls; i++) {
@@ -1310,7 +1313,7 @@ ID native_filter(ID *args, unsigned int argc)
         return empty_list();
     }
 
-    CljVector *kept = make_vector(0, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *kept = make_vector(0, false);
     if (!kept)
         return NULL;
 
@@ -1348,10 +1351,14 @@ ID native_last(ID *args, unsigned int argc)
     if (!coll || IS_IMMEDIATE(coll))
         return NULL;
 
-    // Fast path: vector O(1)
-    if (TAG(coll) == CLJ_VECTOR_PERSISTENT)
+    // Fast path: vector O(1) (including transient via backing)
+    CljType tag = TAG(coll);
+    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT)
     {
-        CljVector *v = as_vector(coll);
+        CljPersistentVector *v =
+            (tag == CLJ_VECTOR_TRANSIENT)
+                ? vector_persistent(as_transient_vector(coll))
+                : as_persistent_vector(coll);
         unsigned int n = vector_count(v);
         if (n == 0)
             return NULL;
@@ -1642,11 +1649,11 @@ ID assoc3(ID *args, unsigned int argc)
         if (!key || TAG(key) != CLJ_FIXNUM)
             return NULL;
         int i = AS_FIXNUM(key);
-        CljVector *v = as_vector(coll);
+        CljPersistentVector *v = as_persistent_vector(coll);
         if (i < 0 || (unsigned int)i >= vector_count(v))
             return NULL;
         // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
-        CljVector *result = vector_assoc(coll, i, val);
+        CljPersistentVector *result = vector_assoc(v, (unsigned int)i, val);
         if (!result)
             return NULL;
         return result;
@@ -1946,23 +1953,39 @@ ID native_into(ID *args, unsigned int argc)
     if (!to)
     {
         // Default to vector if target is nil
-        to = make_vector(0, CLJ_VECTOR_PERSISTENT);
+        to = make_vector(0, false);
     }
 
     CljType to_tag = TAG(to);
 
     // Handle vector target
-    if (to_tag == CLJ_VECTOR_PERSISTENT || to_tag == CLJ_VECTOR_TRANSIENT || to_tag == CLJ_VECTOR_TRANSIENT_WEAK)
+    if (to_tag == CLJ_VECTOR_PERSISTENT || to_tag == CLJ_VECTOR_TRANSIENT_WEAK || to_tag == CLJ_VECTOR_TRANSIENT)
     {
-        CljVector *result = to;
+        CljPersistentVector *result_p = NULL;
+        CljTransientVector *result_t = NULL;
+
+        if (to_tag == CLJ_VECTOR_TRANSIENT) {
+            result_t = as_transient_vector(to);
+        } else {
+            result_p = as_persistent_vector(to);
+        }
 
         // Iterate over source
         CljType from_tag = TAG(from);
-        if (from_tag == CLJ_VECTOR_PERSISTENT || from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK)
+        if (from_tag == CLJ_VECTOR_PERSISTENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK || from_tag == CLJ_VECTOR_TRANSIENT)
         {
-            VECTOR_FOR_EACH(from, elem)
-            {
-                result = vector_conj(result, elem);
+            CljPersistentVector *src =
+                (from_tag == CLJ_VECTOR_TRANSIENT)
+                    ? vector_persistent(as_transient_vector(from))
+                    : as_persistent_vector(from);
+            unsigned int n = vector_count(src);
+            for (unsigned int i = 0; i < n; i++) {
+                ID elem = vector_nth(src, i);
+                if (result_t) {
+                    (void)vector_push(result_t, elem);
+                } else {
+                    result_p = vector_conj(result_p, elem);
+                }
             }
         }
         else if (from_tag == CLJ_MAP || from_tag == CLJ_MAP_TRANSIENT)
@@ -1975,10 +1998,14 @@ ID native_into(ID *args, unsigned int argc)
                 if (key)
                 {
                     ID val = KV_VALUE(m->data, i);
-                    CljVector *entry = make_vector(2, CLJ_VECTOR_PERSISTENT);
+                    CljPersistentVector *entry = make_vector(2, false);
                     entry = vector_conj(entry, key);
                     entry = vector_conj(entry, val);
-                    result = vector_conj(result, entry);
+                    if (result_t) {
+                        (void)vector_push(result_t, entry);
+                    } else {
+                        result_p = vector_conj(result_p, entry);
+                    }
                 }
             }
         }
@@ -1988,11 +2015,15 @@ ID native_into(ID *args, unsigned int argc)
             CljList *list = from;
             LIST_FOR_EACH(list, elem)
             {
-                result = vector_conj(result, elem);
+                if (result_t) {
+                    (void)vector_push(result_t, elem);
+                } else {
+                    result_p = vector_conj(result_p, elem);
+                }
             }
         }
 
-        return result;
+        return result_t ? (ID)result_t : (ID)result_p;
     }
 
     // Handle map target
@@ -2006,16 +2037,24 @@ ID native_into(ID *args, unsigned int argc)
             // Merge maps
             result = map_merge(result, from, true);
         }
-        else if (from_tag == CLJ_VECTOR_PERSISTENT || from_tag == CLJ_VECTOR_TRANSIENT)
+        else if (from_tag == CLJ_VECTOR_PERSISTENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK || from_tag == CLJ_VECTOR_TRANSIENT)
         {
             // Vector of [k v] pairs
-            VECTOR_FOR_EACH(from, entry)
-            {
+            CljPersistentVector *from_vec =
+                (from_tag == CLJ_VECTOR_TRANSIENT)
+                    ? vector_persistent(as_transient_vector(from))
+                    : as_persistent_vector(from);
+            unsigned int n = vector_count(from_vec);
+            for (unsigned int i = 0; i < n; i++) {
+                ID entry = vector_nth(from_vec, i);
                 unsigned char entry_tag = entry ? TAG(entry) : 0;
-                if (entry_tag == CLJ_VECTOR_PERSISTENT || entry_tag == CLJ_VECTOR_TRANSIENT)
+                if (entry_tag == CLJ_VECTOR_PERSISTENT || entry_tag == CLJ_VECTOR_TRANSIENT_WEAK || entry_tag == CLJ_VECTOR_TRANSIENT)
                 {
-                    CljVector *pair = entry;
-                    if (vector_count(pair) >= 2)
+                    CljPersistentVector *pair =
+                        (entry_tag == CLJ_VECTOR_TRANSIENT)
+                            ? vector_persistent(as_transient_vector(entry))
+                            : as_persistent_vector(entry);
+                    if (pair && vector_count(pair) >= 2)
                     {
                         ASSIGN(result, map_assoc(result, vector_nth(pair, 0), vector_nth(pair, 1)));
                     }
@@ -2140,7 +2179,7 @@ ID native_find(ID *args, unsigned int argc)
     ID val = map_get(map, key);
 
     // Return [key value] vector
-    CljVector *entry = make_vector(2, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *entry = make_vector(2, false);
     entry = vector_conj(entry, key);
     entry = vector_conj(entry, val);
 
@@ -2161,7 +2200,7 @@ ID native_transient(ID *args, unsigned int argc)
     switch (tag)
     {
     case CLJ_VECTOR_PERSISTENT:
-        return vector_transient(coll);
+        return vector_transient(as_persistent_vector(coll));
     case CLJ_MAP:
         return map_transient(coll);
     case CLJ_VECTOR_TRANSIENT:
@@ -2220,15 +2259,12 @@ ID native_conj_bang(ID *args, unsigned int argc)
         return NULL;
 
     int tag = TAG(coll);
-    if (tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_TRANSIENT_WEAK)
+    if (tag == CLJ_VECTOR_TRANSIENT)
     {
-        CljVector *result = coll;
-        // vector_conj automatically handles transient vectors correctly (always in-place)
+        CljTransientVector *result = as_transient_vector(coll);
         for (unsigned int i = 1; i < argc; i++)
         {
-            result = vector_conj(result, args[i]);
-            if (!result)
-                return NULL;
+            vector_push(result, args[i]);
         }
         return result;
     }
@@ -2303,10 +2339,13 @@ ID native_count(ID *args, unsigned int argc)
         {
             return (fixnum(map_count(coll)));
         }
-        else if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT)
+        else if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT)
         {
-            CljVector *vec = as_vector(coll);
-            return (fixnum(vec ? vector_count(vec) : 0));
+            CljPersistentVector *vec =
+                (tag == CLJ_VECTOR_TRANSIENT)
+                    ? vector_persistent(as_transient_vector(coll))
+                    : as_persistent_vector(coll);
+            return fixnum(vec ? (int)vector_count(vec) : 0);
         }
         else if (is_list_type(tag))
         {
@@ -2472,7 +2511,7 @@ ID native_array_map(ID *args, unsigned int argc)
 
 ID native_vector(ID *args, unsigned int argc)
 {
-    // This is the same singleton returned by make_vector(0, CLJ_VECTOR_PERSISTENT
+    // This is the same singleton returned by make_vector(0, false)
     if (argc == 0)
     {
         return vector_empty_singleton; // Returns empty-vector singleton (no memory management needed)
@@ -2480,8 +2519,8 @@ ID native_vector(ID *args, unsigned int argc)
 
     // Create vector with capacity+1 to avoid COW when adding all elements
     // (vector_conj uses COW when count >= capacity, so we need capacity > argc)
-    CljVector *v = make_vector(argc + 1, CLJ_VECTOR_PERSISTENT);
-    CljVector *initial_v = v;
+    CljPersistentVector *v = make_vector(argc + 1, false);
+    CljPersistentVector *initial_v = v;
 
     // Add all elements using vector_conj
     for (unsigned int i = 0; i < argc; i++)
@@ -2542,13 +2581,13 @@ ID native_vec(ID *args, unsigned int argc)
 
     // Create vector with default capacity (vector_conj will grow automatically)
     // make_vector throws OOM exception or returns valid object
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(4, false);
     if (!vec)
     {
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                          "Failed to create vector");
     }
-    CljVector *initial_vec = vec;
+    CljPersistentVector *initial_vec = vec;
 
     // Iterate through sequence and add elements using vector_conj (reuse existing logic)
     // This avoids code duplication and reuses COW-based vector_conj
@@ -3987,10 +4026,13 @@ ID native_apply(ID *args, unsigned int argc)
                 call_args[n++] = l->first;
             }
         }
-        else     if (tag == CLJ_VECTOR_PERSISTENT)
-    {
-            CljVector *v = as_vector(last);
-            int cnt = vector_count(v);
+        else if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT)
+        {
+            CljPersistentVector *v =
+                (tag == CLJ_VECTOR_TRANSIENT)
+                    ? vector_persistent(as_transient_vector(last))
+                    : as_persistent_vector(last);
+            int cnt = (int)vector_count(v);
             for (int i = 0; i < cnt && n < 64; i++)
             {
                 call_args[n++] = vector_nth(v, i);
@@ -4359,7 +4401,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     if (!symbols || TAG(symbols) != CLJ_VECTOR_PERSISTENT)
         return;
 
-    CljVector *vec = as_vector(symbols);
+    CljPersistentVector *vec = as_persistent_vector((ID)symbols);
     VECTOR_FOR_EACH(vec, sym)
     {
         if (!sym || TAG(sym) != CLJ_SYMBOL)
@@ -4467,7 +4509,7 @@ static bool process_require_spec(ID spec, EvalState *st)
     CljObject *refer_syms = NULL;
     bool refer_all = false;
 
-    CljVector *vec = NULL;
+    CljPersistentVector *vec = NULL;
 
     // Handle simple Symbol case: (require 'namespace)
     if (TAG(spec) == CLJ_SYMBOL)
@@ -4480,7 +4522,7 @@ static bool process_require_spec(ID spec, EvalState *st)
     // Handle Vector case: [namespace :as alias] or [namespace :refer [syms]]
     else if (TAG(spec) == CLJ_VECTOR_PERSISTENT)
     {
-        vec = as_vector(spec);
+        vec = as_persistent_vector(spec);
         if (vector_count(vec) < 1)
             return false;
 
@@ -4806,13 +4848,13 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
         }
 
         // Convert list to vector for other cases
-        CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *vec = make_vector(4, false);
         if (!vec)
         {
             return NULL;
         }
-        CljVector *transient_vec = vector_transient(vec);
-        RELEASE(vec);
+        CljTransientVector *transient_vec = vector_transient(vec);
+        RELEASE(vec); // transient wrapper RETAINs backing (or creates its own backing)
         if (!transient_vec)
         {
             return NULL;
@@ -4821,14 +4863,10 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
         CljList *current = list;
         LIST_FOR_EACH(current, elem)
         {
-            transient_vec = vector_conj(transient_vec, elem);
-            if (!transient_vec)
-            {
-                return NULL;
-            }
+            vector_push(transient_vec, elem);
         }
 
-        CljVector *persistent_vec = vector_persistent(transient_vec);
+        CljPersistentVector *persistent_vec = (CljPersistentVector*)RETAIN(vector_persistent(transient_vec));
         RELEASE(transient_vec);
         if (!persistent_vec)
         {
@@ -5627,8 +5665,8 @@ ID native_range(ID *args, unsigned int argc)
     }
 
     // Create vector with calculated capacity
-    ID vec = make_vector(size, CLJ_VECTOR_PERSISTENT);
-    CljVector *v = as_vector(vec);
+    ID vec = make_vector(size, false);
+    CljPersistentVector *v = as_persistent_vector(vec);
 
     // Fill vector
     for (int i = start; (step > 0) ? (i < end) : (i > end); i += step)
@@ -5689,8 +5727,8 @@ ID native_repeat(ID *args, unsigned int argc)
         return empty_vector();
     }
 
-    ID vec = make_vector(count, CLJ_VECTOR_PERSISTENT);
-    CljVector *v = as_vector(vec);
+    ID vec = make_vector(count, false);
+    CljPersistentVector *v = as_persistent_vector(vec);
 
     for (int i = 0; i < count; i++)
     {
@@ -6005,10 +6043,14 @@ ID native_byte_array(ID *args, unsigned int argc)
     }
 
     // For now, only support vectors as sequences
-    if (TAG(seq) == CLJ_VECTOR_PERSISTENT)
+    CljType seq_tag = TAG(seq);
+    if (seq_tag == CLJ_VECTOR_PERSISTENT || seq_tag == CLJ_VECTOR_TRANSIENT_WEAK || seq_tag == CLJ_VECTOR_TRANSIENT)
     {
-        CljVector *vec = as_vector(seq);
-        int count = vector_count(vec);
+        CljPersistentVector *vec =
+            (seq_tag == CLJ_VECTOR_TRANSIENT)
+                ? vector_persistent(as_transient_vector(seq))
+                : as_persistent_vector(seq);
+        int count = (int)vector_count(vec);
         CljValue arr = (CljValue)make_byte_array(count);
 
         int i = 0;
@@ -6744,7 +6786,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 
         // Bytes by object TAG/type (objects only; excludes raw blocks).
         // Vector of [type-id bytes-current bytes-peak alloc-count dealloc-count].
-        CljVector *by_type = make_vector(0, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *by_type = make_vector(0, false);
         if (by_type) {
             for (int ti = 0; ti < CLJ_TYPE_COUNT; ti++) {
                 size_t bc = g_memory_stats.bytes_current_by_type[ti];
@@ -6760,7 +6802,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
                 int32_t dc_i = (dc > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)dc;
 
                 ID entry[5] = { fixnum(ti), fixnum(bc_i), fixnum(bp_i), fixnum(ac_i), fixnum(dc_i) };
-                CljVector *row = make_vector(5, CLJ_VECTOR_PERSISTENT);
+                CljPersistentVector *row = make_vector(5, false);
                 if (!row) break;
                 for (int i = 0; i < 5; i++) {
                     ASSIGN(row, vector_conj(row, entry[i]));

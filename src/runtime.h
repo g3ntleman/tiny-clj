@@ -57,15 +57,15 @@ typedef struct TinyClJRuntime {
     CljHashMap *meta_registry;
     
     // Autorelease Pool Stack
-    CljVector *pool_stack;  // transient vector for autorelease pools
+    CljTransientVector *pool_stack;  // transient vector for autorelease pools
     int pool_stack_top;
     
     // Builtins
     bool builtins_registered;
     
-    // Event Loop
-    CljVector *task_queue;    // transient vector for normal tasks
-    CljVector *timer_queue;  // transient vector for timer tasks
+    // Event Loop (persistent vectors used as queues)
+    CljPersistentVector *task_queue;
+    CljPersistentVector *timer_queue;
     int timer_id_counter;
 } TinyClJRuntime;
 

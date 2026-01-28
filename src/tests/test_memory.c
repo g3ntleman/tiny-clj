@@ -85,10 +85,8 @@ TEST(test_vector_memory) {
         // Test vector creation and memory management
         CljValue vec = make_vector(5, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_NOT_NULL(vec);
-        
-        CljVector *vec_data = as_vector((CljObject*)vec);
-        TEST_ASSERT_NOT_NULL(vec_data);
-        // Capacity is implementation detail, only test that vector was created
+
+        CljPersistentVector *vec_data = as_persistent_vector(vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
         // Add elements using vector_conj

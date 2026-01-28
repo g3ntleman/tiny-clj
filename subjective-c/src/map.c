@@ -241,12 +241,12 @@ ID map_keys(CljMap *map) {
   CljMap *map_data = map;
   if (!map_data)
     return NULL;
-  CljVector* keys_vec = make_vector(map_data->count, CLJ_VECTOR_PERSISTENT);
+  CljPersistentVector* keys_vec = make_vector(map_data->count, false);
   if (!keys_vec)
     return NULL;
   MAP_FOR_EACH(map_data, key, value) {
     if (key) {
-      CljVector *next = vector_conj_owned(keys_vec, RETAIN(key));
+      CljPersistentVector *next = vector_conj_owned(keys_vec, RETAIN(key));
       if (next != keys_vec) { RELEASE(keys_vec); keys_vec = next; }
     }
   }
@@ -259,13 +259,13 @@ ID map_vals(CljMap *map) {
   CljMap *map_data = map;
   if (!map_data)
     return NULL;
-  CljVector* vals_vec = make_vector(map_data->count, CLJ_VECTOR_PERSISTENT);
+  CljPersistentVector* vals_vec = make_vector(map_data->count, false);
   if (!vals_vec)
     return NULL;
   MAP_FOR_EACH(map_data, key, val) {
     (void)key;
     if (val) {
-      CljVector *next = vector_conj_owned(vals_vec, RETAIN(val));
+      CljPersistentVector *next = vector_conj_owned(vals_vec, RETAIN(val));
       if (next != vals_vec) { RELEASE(vals_vec); vals_vec = next; }
     }
   }

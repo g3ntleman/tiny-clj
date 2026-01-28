@@ -57,7 +57,7 @@ TEST_SHARED(test_seq_rest) {
 
 TEST_SHARED(test_seq_map_entry_vector) {
     ID entry = eval_string("(first (seq {:k1 10 :k2 20}))", g_test_eval_state);
-    CljVector *vec = as_vector(entry);
+    CljPersistentVector *vec = as_persistent_vector(entry);
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(vec, 1)));
 }
@@ -93,9 +93,10 @@ TEST_SHARED(test_seq_rest_vs_next_difference) {
 // ============================================================================
 
 TEST_SHARED(test_seq_equality) {
-    ID vec1 = AUTORELEASE(make_vector(2, CLJ_VECTOR_PERSISTENT));
-    ID vec2 = AUTORELEASE(make_vector(2, CLJ_VECTOR_PERSISTENT));
-    CljVector *v1 = as_vector(vec1), *v2 = as_vector(vec2);
+    ID vec1 = AUTORELEASE(make_vector(2, false));
+    ID vec2 = AUTORELEASE(make_vector(2, false));
+    CljPersistentVector *v1 = as_persistent_vector(vec1);
+    CljPersistentVector *v2 = as_persistent_vector(vec2);
     v1 = vector_conj(vector_conj(v1, fixnum(1)), fixnum(2));
     v2 = vector_conj(vector_conj(v2, fixnum(1)), fixnum(2));
     ID seq1 = AUTORELEASE(make_seq(vec1));
@@ -172,7 +173,7 @@ TEST_SHARED(test_seq_nil_returns_nil) {
 TEST_SHARED(test_seq_map_first_returns_vector) {
     ID result = eval_string("(first (seq {:a 1 :b 2}))", g_test_eval_state);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
-    CljVector *vec = as_vector(result);
+    CljPersistentVector *vec = as_persistent_vector(result);
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(vector_nth(vec, 0)));
     TEST_ASSERT_TRUE(is_fixnum(vector_nth(vec, 1)));
@@ -193,7 +194,9 @@ TEST_SHARED(test_seq_map_rest_returns_sequence) {
 TEST_SHARED(test_seq_map_iteration) {
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(eval_string("(first (seq {:a 1 :b 2}))", g_test_eval_state)));
     TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(eval_string("(next (seq {:a 1 :b 2}))", g_test_eval_state)));
-    TEST_ASSERT_EQUAL_INT(2, vector_count(as_vector(eval_string("(first (next (seq {:a 1 :b 2})))", g_test_eval_state))));
+    ID next_first = eval_string("(first (next (seq {:a 1 :b 2})))", g_test_eval_state);
+    CljPersistentVector *vec = as_persistent_vector(next_first);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
 }
 
 TEST_SHARED(test_seq_map_single_entry_next) {
@@ -206,7 +209,7 @@ TEST_SHARED(test_seq_map_single_entry_rest) {
 
 TEST_SHARED(test_seq_map_entry_structure) {
     ID entry = eval_string("(first (seq {:a 1}))", g_test_eval_state);
-    CljVector *vec = as_vector(entry);
+    CljPersistentVector *vec = as_persistent_vector(entry);
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(vector_nth(vec, 0)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(vec, 1)));
@@ -217,13 +220,13 @@ TEST_SHARED(test_seq_map_entry_structure) {
 // ============================================================================
 
 TEST_SHARED(test_seq_cow_multiple_sequences_same_container) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
-    CljVector *v = as_vector(vec);
+    ID vec = AUTORELEASE(make_vector(4, false));
+    CljPersistentVector *v = as_persistent_vector(vec);
     v = vector_conj(vector_conj(vector_conj(v, fixnum(1)), fixnum(2)), fixnum(3));
     ID seq1 = AUTORELEASE(make_seq(vec));
     ID seq2 = AUTORELEASE(make_seq(vec));
     RETAIN(vec);
-    CljVector *new_vec = vector_conj(v, fixnum(4));
+    CljPersistentVector *new_vec = vector_conj(v, fixnum(4));
     TEST_ASSERT_TRUE(v != new_vec);
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     TEST_ASSERT_EQUAL_PTR(v, as_seq(seq1)->iter.container);
@@ -234,22 +237,22 @@ TEST_SHARED(test_seq_cow_multiple_sequences_same_container) {
 }
 
 TEST_SHARED(test_seq_cow_rc_one_inplace) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
-    CljVector *v = as_vector(vec);
+    ID vec = AUTORELEASE(make_vector(4, false));
+    CljPersistentVector *v = as_persistent_vector(vec);
     v = vector_conj(vector_conj(v, fixnum(1)), fixnum(2));
     ID seq = AUTORELEASE(make_seq(vec));
-    CljVector *new_vec = vector_conj(v, fixnum(3));
+    CljPersistentVector *new_vec = vector_conj(v, fixnum(3));
     TEST_ASSERT_TRUE(v == new_vec);
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(seq_first(seq)));
 }
 
 TEST_SHARED(test_seq_cow_rc_greater_one_copy_on_write) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
-    CljVector *v = as_vector(vec);
+    ID vec = AUTORELEASE(make_vector(4, false));
+    CljPersistentVector *v = as_persistent_vector(vec);
     v = vector_conj(vector_conj(v, fixnum(1)), fixnum(2));
     ID seq = AUTORELEASE(make_seq(vec));
     RETAIN(vec);
-    CljVector *new_vec = vector_conj(v, fixnum(3));
+    CljPersistentVector *new_vec = vector_conj(v, fixnum(3));
     TEST_ASSERT_TRUE(v != new_vec);
     TEST_ASSERT_EQUAL_INT(2, vector_count(v));
     TEST_ASSERT_EQUAL_PTR(v, as_seq(seq)->iter.container);
@@ -258,14 +261,14 @@ TEST_SHARED(test_seq_cow_rc_greater_one_copy_on_write) {
 }
 
 TEST_SHARED(test_seq_cow_multiple_sequences_preserved) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
-    CljVector *v = as_vector(vec);
+    ID vec = AUTORELEASE(make_vector(4, false));
+    CljPersistentVector *v = as_persistent_vector(vec);
     v = vector_conj(vector_conj(vector_conj(v, fixnum(10)), fixnum(20)), fixnum(30));
     ID seq1 = AUTORELEASE(make_seq(vec));
     ID seq2 = AUTORELEASE(make_seq(vec));
     ID seq3 = AUTORELEASE(make_seq(vec));
     RETAIN(vec); RETAIN(vec);
-    CljVector *new_vec = vector_conj(v, fixnum(40));
+    CljPersistentVector *new_vec = vector_conj(v, fixnum(40));
     TEST_ASSERT_TRUE(v != new_vec);
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     TEST_ASSERT_EQUAL_PTR(v, as_seq(seq1)->iter.container);
@@ -278,8 +281,8 @@ TEST_SHARED(test_seq_cow_multiple_sequences_preserved) {
 }
 
 TEST_SHARED(test_seq_cow_iteration_after_cow) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
-    CljVector *v = as_vector(vec);
+    ID vec = AUTORELEASE(make_vector(4, false));
+    CljPersistentVector *v = as_persistent_vector(vec);
     v = vector_conj(vector_conj(vector_conj(v, fixnum(1)), fixnum(2)), fixnum(3));
     ID seq = AUTORELEASE(make_seq(vec));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(seq_first(seq)));

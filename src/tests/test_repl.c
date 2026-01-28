@@ -516,10 +516,10 @@ TEST(test_stacktrace_stack_trace_returns_vector_of_strings) {
 
     // 4) assert it returns a vector and that every element is a string
     TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR_PERSISTENT, TAG(trace_obj), "stack-trace should return a vector");
-    CljVector *trace_vec = as_vector(trace_obj);
+    CljPersistentVector *trace_vec = as_persistent_vector((ID)trace_obj);
     TEST_ASSERT_NOT_NULL(trace_vec);
 
-    int n = vector_count(trace_vec);
+    int n = (int)vector_count(trace_vec);
     for (int i = 0; i < n; i++) {
         ID frame = vector_nth(trace_vec, i);
         TEST_ASSERT_NOT_NULL_MESSAGE(frame, "stack-trace frame should not be nil");

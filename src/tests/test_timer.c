@@ -357,7 +357,7 @@ TEST(test_timer_enqueue_zero_delay_enqueues_task) {
         TEST_ASSERT_NOT_NULL(fn);
         
         // Check initial count (should be 0)
-        CljVector *task_vec = (CljVector*)g_runtime.task_queue;
+        CljPersistentVector *task_vec = g_runtime.task_queue;
         TEST_ASSERT_NOT_NULL(task_vec);
         unsigned int count_before = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,
@@ -399,7 +399,7 @@ TEST(test_timer_enqueue_zero_delay_with_run_next) {
         TEST_ASSERT_NOT_NULL(fn);
         
         // Check initial count (should be 0)
-        CljVector *task_vec = (CljVector*)g_runtime.task_queue;
+        CljPersistentVector *task_vec = g_runtime.task_queue;
         TEST_ASSERT_NOT_NULL(task_vec);
         unsigned int count_before = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,
@@ -422,7 +422,7 @@ TEST(test_timer_enqueue_zero_delay_with_run_next) {
         
         // Now test event_loop_run_next - it should see the count and return true
         // But first, get a fresh reference to task_vec (like event_loop_run_next does)
-        CljVector *task_vec_fresh = (CljVector*)g_runtime.task_queue;
+        CljPersistentVector *task_vec_fresh = g_runtime.task_queue;
         TEST_ASSERT_NOT_NULL(task_vec_fresh);
         unsigned int count_before_run = vector_count(task_vec_fresh);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_before_run,

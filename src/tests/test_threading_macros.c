@@ -80,7 +80,7 @@ TEST(test_threading_thread_last_basic) {
     ID result = eval_string("(vec (->> [1 2 3] (map inc) (filter even?)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    TEST_ASSERT_EQUAL_INT(2, vector_count((CljVector*)result));
+    TEST_ASSERT_EQUAL_INT(2, vector_count(as_persistent_vector(result)));
 }
 
 TEST(test_threading_thread_last_single_form) {
@@ -90,7 +90,7 @@ TEST(test_threading_thread_last_single_form) {
     ID result = eval_string("(vec (->> [1 2 3] (map inc)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    TEST_ASSERT_EQUAL_INT(3, vector_count((CljVector*)result));
+    TEST_ASSERT_EQUAL_INT(3, vector_count(as_persistent_vector(result)));
 }
 
 TEST(test_threading_thread_last_no_forms) {
@@ -168,7 +168,7 @@ TEST(test_threading_some_last_continues_when_not_nil) {
     ID result = eval_string("(vec (some->> [1 2 3] (map inc) (filter even?)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    TEST_ASSERT_EQUAL_INT(2, vector_count((CljVector*)result));
+    TEST_ASSERT_EQUAL_INT(2, vector_count(as_persistent_vector(result)));
 }
 
 TEST(test_threading_some_last_nil_expr) {
@@ -224,7 +224,7 @@ TEST(test_threading_cond_last_basic) {
     ID result = eval_string("(vec (cond->> [1 2 3] true (map inc) false (filter even?)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    TEST_ASSERT_EQUAL_INT(3, vector_count((CljVector*)result));
+    TEST_ASSERT_EQUAL_INT(3, vector_count(as_persistent_vector(result)));
 }
 
 TEST(test_threading_cond_last_no_clauses) {
