@@ -71,21 +71,17 @@ void runtime_init(TinyClJRuntime *runtime) {
         runtime->resolve_cache_epoch = ++g_resolve_cache_epoch_counter;
     }
     
-    // Initialize event loop queues as transient vectors (only if not already set)
+    // Initialize event loop queues as persistent vectors (only if not already set)
     if (!runtime->task_queue) {
-        CljVector* task_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector* task_vec = make_vector(8, false);
         if (task_vec) {
-            CljVector* transient_task = vector_transient(task_vec);
-            RELEASE(task_vec); // vector_transient() retains the result
-            ASSIGN(runtime->task_queue, transient_task);
+            ASSIGN(runtime->task_queue, task_vec);
         }
     }
     if (!runtime->timer_queue) {
-        CljVector* timer_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector* timer_vec = make_vector(8, false);
         if (timer_vec) {
-            CljVector* transient_timer = vector_transient(timer_vec);
-            RELEASE(timer_vec); // vector_transient() retains the result
-            ASSIGN(runtime->timer_queue, transient_timer);
+            ASSIGN(runtime->timer_queue, timer_vec);
         }
     }
     

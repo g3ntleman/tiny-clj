@@ -33,12 +33,12 @@
 #include <execinfo.h>
 #endif
 
-// AUTORELEASE POOL: CLJ_VECTOR_TRANSIENT_WEAK. _restore=vector_count at block start;
+// AUTORELEASE POOL: CLJ_VECTOR_TRANSIENT_WEAK (implemented as CljPersistentVector). _restore=vector_count at block start;
 // drain_to_depth(mark) RELEASEs [mark,count) and truncates.
 
 #define POOL_INITIAL_CAPACITY 1024
 
-static THREAD_LOCAL CljVector *g_pool = NULL;
+static THREAD_LOCAL CljPersistentVector *g_pool = NULL;
 static THREAD_LOCAL bool g_in_drain = false;
 
 #ifdef DEBUG
@@ -93,7 +93,7 @@ static bool g_release_dispatch_initialized = false;
 
 void autorelease_pool_init(void) {
     if (g_pool) return;
-    g_pool = make_vector(POOL_INITIAL_CAPACITY, CLJ_VECTOR_TRANSIENT_WEAK);
+    g_pool = make_vector(POOL_INITIAL_CAPACITY, true);
 #ifdef DEBUG
     g_pool_peak_count = 0;
 #endif
@@ -347,7 +347,7 @@ static void release_object_default(CljObject *v) {
             {
                 // Direct cast - we already know it's a Vector from the switch case
                 // Using as_vector() would call TAG() which fails when rc=0 (zombie mode)
-                CljVector *vec = (CljVector*)v;
+                CljPersistentVector *vec = (CljPersistentVector*)v;
                 if (vec) {
                     // Release all vector elements
                     VECTOR_FOR_EACH(vec, elem) {
@@ -361,8 +361,9 @@ static void release_object_default(CljObject *v) {
         case CLJ_VECTOR_TRANSIENT:
             {
                 CljTransientVector *tvec = (CljTransientVector*)v;
-                if (tvec && tvec->backing_store) {
-                    RELEASE(tvec->backing_store);
+                if (tvec && tvec->backing) {
+                    RELEASE(tvec->backing);
+                    tvec->backing = NULL;
                 }
             }
             break;

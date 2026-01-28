@@ -6,7 +6,7 @@
 
 // Converts a CljVector to a CljList (linked list).
 // Returns a new list (caller owns; list nodes retain elements).
-static inline CljList* vector_to_list(CljVector* vec) {
+static inline CljList* vector_to_list(CljPersistentVector* vec) {
     if (!vec) return empty_list();
     unsigned int count = vector_count(vec);
     CljList* result = empty_list();

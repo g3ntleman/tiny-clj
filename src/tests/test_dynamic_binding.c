@@ -30,7 +30,7 @@ TEST(test_dynamic_binding_nested_restores_outer_value) {
     CljObject *result = eval_string("(binding [*x* 1] [(binding [*x* 2] *x*) *x*])", g_test_eval_state);
     assert_vector(result);
 
-    CljVector *vec = as_vector(result);
+    CljPersistentVector *vec = as_persistent_vector((ID)result);
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
 
     CljObject *inner = (CljObject *)vector_nth(vec, 0);

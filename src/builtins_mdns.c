@@ -534,7 +534,7 @@ static void mdns_emit_event(void *ctx, MdnsEventType type, const MdnsResolvedSer
         ASSIGN(ev, map_assoc(ev, (ID)SYM_KW_PORT, fixnum((int32_t)svc->port)));
 
         // :addrs => vector of strings
-        CljVector *addrs = make_vector((unsigned int)svc->addr_count, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *addrs = make_vector((unsigned int)svc->addr_count, false);
         if (addrs) {
             for (size_t i = 0; i < svc->addr_count; i++) {
                 ID s = (ID)make_string(svc->addrs[i]);

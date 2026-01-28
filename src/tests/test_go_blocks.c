@@ -542,7 +542,7 @@ TEST(test_event_loop_enqueue_updates_count) {
         TEST_ASSERT_NOT_NULL(chan);
         
         // Check initial count (should be 0)
-        CljVector *task_vec = (CljVector*)g_runtime.task_queue;
+        CljPersistentVector *task_vec = g_runtime.task_queue;
         TEST_ASSERT_NOT_NULL(task_vec);
         unsigned int count_before = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,

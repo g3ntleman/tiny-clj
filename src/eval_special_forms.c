@@ -350,7 +350,7 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
             }
         }
     }
-    CljVector* empty_params_vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector* empty_params_vec = make_vector(0, false);
     CljList *fn_list = make_list((CljObject*)SYM_FN, NULL);
     if (!fn_list) return NULL;
     fn_list->rest = (CljObject*)make_list(empty_params_vec, NULL);
@@ -406,7 +406,7 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
         return NULL;
     }
 
-    CljVector *bindings = as_vector(bindings_vec);
+    CljPersistentVector *bindings = as_persistent_vector(bindings_vec);
     int binding_count = bindings ? (int)vector_count(bindings) : 0;
     if (!bindings || (binding_count % 2) != 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop requires an even number of forms in binding vector",
@@ -421,7 +421,7 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
     }
 
     // Start from captured env_stack (if any), but do NOT mutate it.
-    CljVector *loop_stack = (ctx && ctx->env_stack) ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
+    CljPersistentVector *loop_stack = (ctx && ctx->env_stack) ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
 
     // Frame for fast local lookups.
     CallFrame loop_frame_storage;
@@ -685,10 +685,10 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
             // explicit env argument. Make the catch binding visible by extending env_stack.
             EvalContext catch_ctx_storage;
             const EvalContext *catch_ctx = ctx;
-            CljVector *catch_stack = NULL;
+            CljPersistentVector *catch_stack = NULL;
             if (ctx) {
                 catch_ctx_storage = *ctx;
-                catch_stack = ctx->env_stack ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
+                catch_stack = ctx->env_stack ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
                 env_stack_push_inplace(&catch_stack, catch_env);
                 catch_ctx_storage.env_stack = catch_stack;
                 catch_ctx = &catch_ctx_storage;
@@ -747,7 +747,7 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
         return NULL;
     }
 
-    CljVector *bindings_vec = as_vector(bindings_obj);
+    CljPersistentVector *bindings_vec = as_persistent_vector(bindings_obj);
     unsigned int bind_count = vector_count(bindings_vec);
     if ((bind_count % 2) != 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding vector must contain an even number of forms", __FILE__, __LINE__, 0);

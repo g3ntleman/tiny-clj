@@ -59,7 +59,7 @@ TEST(test_vector_pop_and_insert) {
     TEST_ASSERT_EQUAL_UINT(4, vector_count(vec));
     CljValue inserted = vector_nth(vec, 1);
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(inserted));
-    CljVector *popped = vector_pop(vec);
+    CljVector *popped = vector_popped(vec);
     if (popped != vec) {
         RELEASE(vec);
         vec = popped;

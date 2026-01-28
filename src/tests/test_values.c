@@ -72,22 +72,19 @@ TEST(test_cljvalue_transient_vector) {
         TEST_ASSERT_NOT_NULL(tvec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
         
-        CljVector *tvec_data = (CljVector*)tvec;
+        CljTransientVector *tvec_data = (CljTransientVector*)tvec;
         TEST_ASSERT_NOT_NULL(tvec_data);
         // Capacity is implementation detail, only test that vector was created
         
         // Test transient operations using clj_conj
-        // clj_conj returns the same transient vector (in-place mutation)
-        CljVector *tvec1 = clj_conj((CljVector*)tvec_data, fixnum(10));
-        TEST_ASSERT_NOT_NULL(tvec1);
-        TEST_ASSERT_EQUAL_PTR((CljVector*)tvec_data, tvec1);  // Should be same pointer
-        CljVector *tvec2 = clj_conj(tvec1, fixnum(20));
-        TEST_ASSERT_NOT_NULL(tvec2);
-        TEST_ASSERT_EQUAL_PTR(tvec1, tvec2);  // Should be same pointer
-        // tvec_data should still be valid since clj_conj does in-place mutation
-        TEST_ASSERT_EQUAL_INT(2, vector_count(tvec_data));
-        ID elem0 = vector_nth(tvec_data, 0);
-        ID elem1 = vector_nth(tvec_data, 1);
+        // clj_conj mutates the transient vector in-place
+        clj_conj(tvec_data, fixnum(10));
+        clj_conj(tvec_data, fixnum(20));
+        CljPersistentVector *backing = vector_persistent(tvec_data);
+        TEST_ASSERT_NOT_NULL(backing);
+        TEST_ASSERT_EQUAL_INT(2, vector_count(backing));
+        ID elem0 = vector_nth(backing, 0);
+        ID elem1 = vector_nth(backing, 1);
         TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)elem0));
         TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)elem1));
         RELEASE(elem0);

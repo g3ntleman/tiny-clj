@@ -138,8 +138,8 @@ TEST_SHARED(test_vector_equal_same_vectors) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical vectors using CljValue API
-    CljValue vec1_val = make_vector(3, CLJ_VECTOR_PERSISTENT);
-    CljValue vec2_val = make_vector(3, CLJ_VECTOR_PERSISTENT);
+    CljValue vec1_val = (CljValue)make_vector(3, false);
+    CljValue vec2_val = (CljValue)make_vector(3, false);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
@@ -149,13 +149,17 @@ TEST_SHARED(test_vector_equal_same_vectors) {
     CljValue val2 = fixnum(2);
     CljValue val3 = fixnum(3);
     
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val1);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val2);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val3);
+    CljPersistentVector *vec1_vec = as_persistent_vector(vec1_val);
+    vec1_vec = vector_conj(vec1_vec, val1);
+    vec1_vec = vector_conj(vec1_vec, val2);
+    vec1_vec = vector_conj(vec1_vec, val3);
+    vec1_val = (CljValue)vec1_vec;
     
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val1);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val2);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val3);
+    CljPersistentVector *vec2_vec = as_persistent_vector(vec2_val);
+    vec2_vec = vector_conj(vec2_vec, val1);
+    vec2_vec = vector_conj(vec2_vec, val2);
+    vec2_vec = vector_conj(vec2_vec, val3);
+    vec2_val = (CljValue)vec2_vec;
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -173,8 +177,8 @@ TEST_SHARED(test_vector_equal_different_lengths) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with different lengths
-    CljValue vec1_val = make_vector(2, CLJ_VECTOR_PERSISTENT);
-    CljValue vec2_val = make_vector(3, CLJ_VECTOR_PERSISTENT);
+    CljValue vec1_val = (CljValue)make_vector(2, false);
+    CljValue vec2_val = (CljValue)make_vector(3, false);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
@@ -184,12 +188,16 @@ TEST_SHARED(test_vector_equal_different_lengths) {
     CljValue val2 = fixnum(2);
     CljValue val3 = fixnum(3);
     
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val1);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val2);
+    CljPersistentVector *vec1_vec = as_persistent_vector(vec1_val);
+    vec1_vec = vector_conj(vec1_vec, val1);
+    vec1_vec = vector_conj(vec1_vec, val2);
+    vec1_val = (CljValue)vec1_vec;
     
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val1);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val2);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val3);
+    CljPersistentVector *vec2_vec = as_persistent_vector(vec2_val);
+    vec2_vec = vector_conj(vec2_vec, val1);
+    vec2_vec = vector_conj(vec2_vec, val2);
+    vec2_vec = vector_conj(vec2_vec, val3);
+    vec2_val = (CljValue)vec2_vec;
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -207,8 +215,8 @@ TEST_SHARED(test_vector_equal_different_values) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with different values using CljValue API
-    CljValue vec1_val = make_vector(0, CLJ_VECTOR_PERSISTENT); // Start with empty vector
-    CljValue vec2_val = make_vector(0, CLJ_VECTOR_PERSISTENT); // Start with empty vector
+    CljValue vec1_val = (CljValue)make_vector(0, false); // Start with empty vector
+    CljValue vec2_val = (CljValue)make_vector(0, false); // Start with empty vector
     
     // Create different integer values (immediate values)
     CljValue int1 = fixnum(1);
@@ -217,10 +225,15 @@ TEST_SHARED(test_vector_equal_different_values) {
     CljValue int4 = fixnum(4);
     
     // Build vectors with different values using conj
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, int1);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, int2);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, int3);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, int4);
+    CljPersistentVector *vec1_vec = as_persistent_vector(vec1_val);
+    vec1_vec = vector_conj(vec1_vec, int1);
+    vec1_vec = vector_conj(vec1_vec, int2);
+    vec1_val = (CljValue)vec1_vec;
+
+    CljPersistentVector *vec2_vec = as_persistent_vector(vec2_val);
+    vec2_vec = vector_conj(vec2_vec, int3);
+    vec2_vec = vector_conj(vec2_vec, int4);
+    vec2_val = (CljValue)vec2_vec;
     
     // Verify vectors were created successfully
     TEST_ASSERT_NOT_NULL((CljObject*)vec1_val);
@@ -276,8 +289,8 @@ TEST_SHARED(test_vector_equal_with_strings) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with strings
-    CljValue vec1_val = make_vector(2, CLJ_VECTOR_PERSISTENT);
-    CljValue vec2_val = make_vector(2, CLJ_VECTOR_PERSISTENT);
+    CljValue vec1_val = (CljValue)make_vector(2, false);
+    CljValue vec2_val = (CljValue)make_vector(2, false);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
@@ -289,11 +302,15 @@ TEST_SHARED(test_vector_equal_with_strings) {
     CljObject *str4 = (CljObject *)make_string("world");
     
     // Fill vectors with strings
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, str1);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, str2);
+    CljPersistentVector *vec1_vec = as_persistent_vector(vec1_val);
+    vec1_vec = vector_conj(vec1_vec, (ID)str1);
+    vec1_vec = vector_conj(vec1_vec, (ID)str2);
+    vec1_val = (CljValue)vec1_vec;
     
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, str3);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, str4);
+    CljPersistentVector *vec2_vec = as_persistent_vector(vec2_val);
+    vec2_vec = vector_conj(vec2_vec, (ID)str3);
+    vec2_vec = vector_conj(vec2_vec, (ID)str4);
+    vec2_val = (CljValue)vec2_vec;
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -456,18 +473,22 @@ TEST_SHARED(test_map_equal_with_nested_vectors) {
     CljMap *map2 = (CljMap*)make_map(16);
     
     // Create nested vectors
-    CljValue vec1_val = make_vector(2, CLJ_VECTOR_PERSISTENT);
-    CljValue vec2_val = make_vector(2, CLJ_VECTOR_PERSISTENT);
+    CljValue vec1_val = (CljValue)make_vector(2, false);
+    CljValue vec2_val = (CljValue)make_vector(2, false);
     
     CljValue val1 = fixnum(1);
     CljValue val2 = fixnum(2);
     
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val1);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val2);
+    CljPersistentVector *vec1_vec = as_persistent_vector(vec1_val);
+    vec1_vec = vector_conj(vec1_vec, val1);
+    vec1_vec = vector_conj(vec1_vec, val2);
+    vec1_val = (CljValue)vec1_vec;
     
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val1);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val2);
-    
+    CljPersistentVector *vec2_vec = as_persistent_vector(vec2_val);
+    vec2_vec = vector_conj(vec2_vec, val1);
+    vec2_vec = vector_conj(vec2_vec, val2);
+    vec2_val = (CljValue)vec2_vec;
+
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
     

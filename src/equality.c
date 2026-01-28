@@ -91,15 +91,21 @@ bool clj_equal_full(ID a, ID b) {
         case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT: {
-            CljVector *vec_a = (CljVector*)a;
-            CljVector *vec_b = (CljVector*)b;
-            int count_a = vector_count(vec_a);
-            int count_b = vector_count(vec_b);
+            CljPersistentVector *vec_a =
+                (a_obj->type == CLJ_VECTOR_TRANSIENT)
+                    ? vector_persistent(as_transient_vector(a))
+                    : as_persistent_vector(a);
+            CljPersistentVector *vec_b =
+                (b_obj->type == CLJ_VECTOR_TRANSIENT)
+                    ? vector_persistent(as_transient_vector(b))
+                    : as_persistent_vector(b);
+            int count_a = (int)vector_count(vec_a);
+            int count_b = (int)vector_count(vec_b);
             if (count_a != count_b) return false;
             for (int i = 0; i < count_a; i++) {
                 // Vector elements can be immediates or heap objects
-                ID elem_a = vector_nth(vec_a, i);
-                ID elem_b = vector_nth(vec_b, i);
+                ID elem_a = vector_nth(vec_a, (unsigned int)i);
+                ID elem_b = vector_nth(vec_b, (unsigned int)i);
                 if (!clj_equal(elem_a, elem_b)) return false;
             }
             return true;

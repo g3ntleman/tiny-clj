@@ -181,7 +181,7 @@ TEST(test_seq_rest_performance) {
     // Use global st from setUp
     
     // Test direct vector creation first
-    CljValue vec_val = make_vector(10, CLJ_VECTOR_PERSISTENT);
+    CljValue vec_val = make_vector(10, false);
     TEST_ASSERT_NOT_NULL(vec_val);
     
     // Create large vector
@@ -225,7 +225,7 @@ TEST(test_filter_basic) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
 
-    CljVector *v = as_vector(result);
+    CljPersistentVector *v = as_persistent_vector((ID)result);
     TEST_ASSERT_EQUAL_INT(2, vector_count(v));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)vector_nth(v, 1)));
@@ -250,7 +250,8 @@ TEST(test_filter_all_match) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     
-    TEST_ASSERT_EQUAL_INT(3, vector_count(as_vector(result)));
+    CljPersistentVector *v = as_persistent_vector((ID)result);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     
 }
 
@@ -272,7 +273,7 @@ TEST(test_filter_with_custom_predicate) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
 
-    CljVector *v = as_vector(result);
+    CljPersistentVector *v = as_persistent_vector((ID)result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)vector_nth(v, 0)));
     
@@ -787,7 +788,7 @@ TEST(test_range) {
     CljObject *result1 = eval_string("(range 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result1));
-    CljVector *vec1 = as_vector(result1);
+    CljPersistentVector *vec1 = as_persistent_vector((ID)result1);
     TEST_ASSERT_EQUAL_INT(5, vector_count(vec1));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)vector_nth(vec1, 0)));
     TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)vector_nth(vec1, 4)));
@@ -796,7 +797,7 @@ TEST(test_range) {
     CljObject *result2 = eval_string("(range 2 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result2));
-    CljVector *vec2 = as_vector(result2);
+    CljPersistentVector *vec2 = as_persistent_vector((ID)result2);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec2));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)vector_nth(vec2, 0)));
     TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)vector_nth(vec2, 2)));
@@ -805,7 +806,7 @@ TEST(test_range) {
     CljObject *result3 = eval_string("(range 0 10 2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result3));
-    CljVector *vec3 = as_vector(result3);
+    CljPersistentVector *vec3 = as_persistent_vector((ID)result3);
     TEST_ASSERT_EQUAL_INT(5, vector_count(vec3));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)vector_nth(vec3, 0)));
     TEST_ASSERT_EQUAL_INT(8, as_fixnum((CljValue)vector_nth(vec3, 4)));
@@ -814,7 +815,7 @@ TEST(test_range) {
     CljObject *result4 = eval_string("(range 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result4));
-    CljVector *vec4 = as_vector(result4);
+    CljPersistentVector *vec4 = as_persistent_vector((ID)result4);
     TEST_ASSERT_EQUAL_INT(0, vector_count(vec4));
 }
 
@@ -832,21 +833,21 @@ TEST(test_repeat) {
     CljObject *result1 = eval_string("(repeat 3 \"x\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result1));
-    CljVector *vec1 = as_vector(result1);
+    CljPersistentVector *vec1 = as_persistent_vector((ID)result1);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec1));
     
     // Test: (repeat 0 "x") => []
     CljObject *result2 = eval_string("(repeat 0 \"x\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result2));
-    CljVector *vec2 = as_vector(result2);
+    CljPersistentVector *vec2 = as_persistent_vector((ID)result2);
     TEST_ASSERT_EQUAL_INT(0, vector_count(vec2));
     
     // Test: (repeat 2 42) => [42 42]
     CljObject *result3 = eval_string("(repeat 2 42)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result3));
-    CljVector *vec3 = as_vector(result3);
+    CljPersistentVector *vec3 = as_persistent_vector((ID)result3);
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec3));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)vector_nth(vec3, 0)));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)vector_nth(vec3, 1)));

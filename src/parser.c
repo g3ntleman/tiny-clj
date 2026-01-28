@@ -569,8 +569,8 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     reader_skip_all(reader);
 
     // Create transient vector for efficient building
-    CljVector *vec = make_vector(6, CLJ_VECTOR_PERSISTENT);
-    CljVector *tvec = vector_transient(vec);
+    CljPersistentVector *vec = make_vector(6, false);
+    CljTransientVector *tvec = vector_transient(vec);
     RELEASE(vec);  // Release original, use transient
 
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
@@ -585,18 +585,13 @@ static ID parse_vector(Reader *reader, EvalState *st) {
         return NULL;
       }
 
-      // Use *_inplace to avoid vector_conj()'s unconditional AUTORELEASE.
-      vector_conj_inplace(&tvec, value);
-      if (!tvec) {
-        throw_parser_exception("Failed to append to vector", reader);
-        return NULL;
-      }
+      // Transient append (wrapper stays stable; backing may be replaced).
+      vector_push(tvec, value);
       reader_skip_all(reader);
     }
 
     // Convert back to persistent vector
-    vec = vector_persistent((CljTransientVector*)tvec);
-    RETAIN(vec);
+    vec = (CljPersistentVector*)RETAIN(vector_persistent(tvec));
     RELEASE(tvec);
 
     if (reader_eof(reader) || !reader_match(reader, ']')) {
@@ -706,7 +701,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
       }
 
       // Extract binding and test from vector [binding test]
-      CljVector *vec = as_vector((CljValue)binding_vec);
+      CljPersistentVector *vec = as_persistent_vector(binding_vec);
       if (!vec || vector_count(vec) < 2) {
         throw_parser_exception("if-let binding vector must have exactly 2 elements", reader);
         return NULL;
@@ -1588,7 +1583,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   if (!body) {
     // Empty function body - return (fn [] ())
     CljSymbol *fn_sym = intern_symbol_global("fn");
-    CljValue empty_vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
+    CljValue empty_vec = make_vector(0, false);
     ID empty_list_val = NULL; // () is nil in Clojure
     return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
   }
@@ -1606,7 +1601,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
   CljSymbol *fn_sym = intern_symbol_global("fn");
   CljSymbol *percent_sym = intern_symbol_global("%");
-  CljVector *param_vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
+  CljPersistentVector *param_vec = make_vector(1, false);
   vector_conj_inplace(&param_vec, percent_sym);
 
   // Create (fn [%] body)

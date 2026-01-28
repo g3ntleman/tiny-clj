@@ -32,21 +32,42 @@ static uint32_t hash_symbol(CljSymbol *sym) {
     return fnv1a_continue(FNV1A_OFFSET, sym->cname);
 }
 
-static uint32_t hash_vector(CljVector *vec) {
+static uint32_t hash_vector(CljPersistentVector *vec) {
     if (!vec) return 0;
-    uint32_t h = 0;
-    int n = vector_count(vec);
-    for (int i = 0; i < n; i++)
-        h = FNV_MIX(h, clj_hash_full(vector_nth(vec, i)));
+    unsigned int n = vector_count(vec);
+    if (n == 0) return 0;
+
+    ID first = vector_nth(vec, 0);
+    ID last  = (n > 1) ? vector_nth(vec, n - 1) : first;
+
+    uint32_t h = FNV1A_OFFSET;
+    h = FNV_MIX(h, (uint32_t)n);
+    h = FNV_MIX(h, clj_hash_full(first));
+    if (n > 1) {
+        h = FNV_MIX(h, clj_hash_full(last));
+    }
     return h;
 }
 
 static uint32_t hash_map(CljMap *map) {
     if (!map) return 0;
-    uint32_t h = 0;
-    MAP_FOR_EACH(map, key, value) {
-        h = FNV_MIX(h, clj_hash_full(key));
-        h = FNV_MIX(h, clj_hash_full(value));
+    int cnt = map_count(map);
+    if (cnt <= 0) return 0;
+
+    // Maps store key/value pairs densely in data[0..2*cnt-1]
+    CljObject **data = map->data;
+    ID first_key = data[0];
+    ID first_val = data[1];
+    ID last_key  = data[2 * (cnt - 1)];
+    ID last_val  = data[2 * (cnt - 1) + 1];
+
+    uint32_t h = FNV1A_OFFSET;
+    h = FNV_MIX(h, (uint32_t)cnt);
+    h = FNV_MIX(h, clj_hash_full(first_key));
+    h = FNV_MIX(h, clj_hash_full(first_val));
+    if (cnt > 1) {
+        h = FNV_MIX(h, clj_hash_full(last_key));
+        h = FNV_MIX(h, clj_hash_full(last_val));
     }
     return h;
 }
@@ -83,7 +104,14 @@ uint32_t clj_hash_full(ID value) {
         case CLJ_SYMBOL: return hash_symbol((CljSymbol*)value);
         case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: return hash_vector((CljVector*)value);
+        case CLJ_VECTOR_TRANSIENT_WEAK: {
+            CljType t = TAG(value);
+            CljPersistentVector *vec =
+                (t == CLJ_VECTOR_TRANSIENT)
+                    ? vector_persistent(as_transient_vector(value))
+                    : as_persistent_vector(value);
+            return hash_vector(vec);
+        }
         case CLJ_MAP:
         case CLJ_MAP_TRANSIENT: return hash_map((CljMap*)value);
         case CLJ_LIST: return hash_list((CljList*)value);

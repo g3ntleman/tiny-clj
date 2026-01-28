@@ -252,7 +252,7 @@ TEST(test_unquote_splice_basic_list) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    CljVector *v = (CljVector*)result;
+    CljPersistentVector *v = as_persistent_vector((ID)result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     assert_fixnum(vector_nth(v, 0), 1);
     assert_fixnum(vector_nth(v, 1), 2);
@@ -269,7 +269,7 @@ TEST(test_unquote_splice_in_middle) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // a, 1, 2, b
+    TEST_ASSERT_EQUAL_INT(4, vector_count(as_persistent_vector((ID)result)));  // a, 1, 2, b
 }
 
 TEST(test_unquote_splice_at_start) {
@@ -282,7 +282,7 @@ TEST(test_unquote_splice_at_start) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // 1, 2, a, b
+    TEST_ASSERT_EQUAL_INT(4, vector_count(as_persistent_vector((ID)result)));  // 1, 2, a, b
 }
 
 TEST(test_unquote_splice_at_end) {
@@ -295,7 +295,7 @@ TEST(test_unquote_splice_at_end) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // a, b, 1, 2
+    TEST_ASSERT_EQUAL_INT(4, vector_count(as_persistent_vector((ID)result)));  // a, b, 1, 2
 }
 
 TEST(test_unquote_splice_multiple) {
@@ -308,7 +308,7 @@ TEST(test_unquote_splice_multiple) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // 1, 2, 3, 4
+    TEST_ASSERT_EQUAL_INT(4, vector_count(as_persistent_vector((ID)result)));  // 1, 2, 3, 4
 }
 
 TEST(test_unquote_splice_empty_list) {
@@ -321,7 +321,7 @@ TEST(test_unquote_splice_empty_list) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    TEST_ASSERT_EQUAL_INT(1, vector_count((CljVector*)result));  // just 'a'
+    TEST_ASSERT_EQUAL_INT(1, vector_count(as_persistent_vector((ID)result)));  // just 'a'
 }
 
 TEST(test_unquote_splice_in_macro) {
@@ -337,7 +337,7 @@ TEST(test_unquote_splice_in_macro) {
     CljObject *result = eval_string("(vec (my-concat (list 1) (list 2) (list 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    TEST_ASSERT_EQUAL_INT(3, vector_count((CljVector*)result));  // 1, 2, 3
+    TEST_ASSERT_EQUAL_INT(3, vector_count(as_persistent_vector((ID)result)));  // 1, 2, 3
 }
 
 TEST(test_unquote_splice_with_unquote) {
@@ -350,7 +350,7 @@ TEST(test_unquote_splice_with_unquote) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    CljVector *v = (CljVector*)result;
+    CljPersistentVector *v = as_persistent_vector((ID)result);
     TEST_ASSERT_EQUAL_INT(5, vector_count(v));  // a, 99, 1, 2, c
     TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(vector_nth(v, 0)));
     assert_fixnum(vector_nth(v, 1), 99);
@@ -380,7 +380,7 @@ TEST(test_unquote_splice_function_call_result) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    CljVector *v = (CljVector*)result;
+    CljPersistentVector *v = as_persistent_vector((ID)result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     assert_fixnum(vector_nth(v, 0), 0);
 }
@@ -396,7 +396,7 @@ TEST(test_unquote_splice_clojure_compatible) {
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-    CljVector *v = (CljVector*)result;
+    CljPersistentVector *v = as_persistent_vector((ID)result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     assert_fixnum(vector_nth(v, 0), 1);
     assert_fixnum(vector_nth(v, 1), 2);

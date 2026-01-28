@@ -39,11 +39,11 @@ TEST(test_lowlevel_alias_sym_extraction) {
     TEST_ASSERT_NOT_NULL(str_alias);
     
     // Create vector: [clojure.string :as str]
-    CljVector *vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
-    CljVector *initial_vec = vec;
-    ASSIGN(vec, vector_conj(vec, ns_sym));
-    ASSIGN(vec, vector_conj(vec, as_kw));
-    ASSIGN(vec, vector_conj(vec, str_alias));
+    CljPersistentVector *vec = make_vector(3, false);
+    CljPersistentVector *initial_vec = vec;
+    ASSIGN(vec, vector_conj(vec, (ID)ns_sym));
+    ASSIGN(vec, vector_conj(vec, (ID)as_kw));
+    ASSIGN(vec, vector_conj(vec, (ID)str_alias));
     if (vec == initial_vec) AUTORELEASE(vec);
 
     TEST_ASSERT_NOT_NULL(vec);
@@ -105,16 +105,16 @@ TEST(test_lowlevel_native_require_sets_alias_preloaded) {
     CljSymbol *as_kw = AUTORELEASE(intern_symbol_global(":as"));
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
-    CljVector *vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
-    CljVector *initial_vec = vec;
-    ASSIGN(vec, vector_conj(vec, ns_sym));
-    ASSIGN(vec, vector_conj(vec, as_kw));
-    ASSIGN(vec, vector_conj(vec, str_alias));
+    CljPersistentVector *vec = make_vector(3, false);
+    CljPersistentVector *initial_vec = vec;
+    ASSIGN(vec, vector_conj(vec, (ID)ns_sym));
+    ASSIGN(vec, vector_conj(vec, (ID)as_kw));
+    ASSIGN(vec, vector_conj(vec, (ID)str_alias));
     if (vec == initial_vec) AUTORELEASE(vec);
 
     // Call native_require
     builtin_set_eval_state(g_test_eval_state);
-    ID args[1] = { vec };
+    ID args[1] = { (ID)vec };
     ID result = native_require(args, 1);
     builtin_set_eval_state(NULL);
 
@@ -178,11 +178,11 @@ TEST(test_lowlevel_alias_sym_not_null_when_preloaded) {
     CljSymbol *as_kw = AUTORELEASE(intern_symbol_global(":as"));
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
-    CljVector *vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
-    CljVector *initial_vec = vec;
-    ASSIGN(vec, vector_conj(vec, ns_sym));
-    ASSIGN(vec, vector_conj(vec, as_kw));
-    ASSIGN(vec, vector_conj(vec, str_alias));
+    CljPersistentVector *vec = make_vector(3, false);
+    CljPersistentVector *initial_vec = vec;
+    ASSIGN(vec, vector_conj(vec, (ID)ns_sym));
+    ASSIGN(vec, vector_conj(vec, (ID)as_kw));
+    ASSIGN(vec, vector_conj(vec, (ID)str_alias));
     if (vec == initial_vec) AUTORELEASE(vec);
 
     // Verify vector is correct before calling native_require
@@ -198,7 +198,7 @@ TEST(test_lowlevel_alias_sym_not_null_when_preloaded) {
     
     // Call native_require - this should extract alias_sym and set it
     builtin_set_eval_state(g_test_eval_state);
-    ID args[1] = { vec };
+    ID args[1] = { (ID)vec };
     ID result = native_require(args, 1);
     builtin_set_eval_state(NULL);
     
@@ -231,16 +231,16 @@ TEST(test_lowlevel_current_ns_correct_when_alias_set) {
     CljSymbol *as_kw = AUTORELEASE(intern_symbol_global(":as"));
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
-    CljVector *vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
-    CljVector *initial_vec = vec;
-    ASSIGN(vec, vector_conj(vec, ns_sym));
-    ASSIGN(vec, vector_conj(vec, as_kw));
-    ASSIGN(vec, vector_conj(vec, str_alias));
+    CljPersistentVector *vec = make_vector(3, false);
+    CljPersistentVector *initial_vec = vec;
+    ASSIGN(vec, vector_conj(vec, (ID)ns_sym));
+    ASSIGN(vec, vector_conj(vec, (ID)as_kw));
+    ASSIGN(vec, vector_conj(vec, (ID)str_alias));
     if (vec == initial_vec) AUTORELEASE(vec);
 
     // Call native_require
     builtin_set_eval_state(g_test_eval_state);
-    ID args[1] = { vec };
+    ID args[1] = { (ID)vec };
     ID result = native_require(args, 1);
     builtin_set_eval_state(NULL);
 

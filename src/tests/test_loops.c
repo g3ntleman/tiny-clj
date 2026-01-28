@@ -257,13 +257,13 @@ TEST_SHARED(test_for_multiple_bindings) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
-    CljVector *vec = as_vector(result);
+    CljPersistentVector *vec = as_persistent_vector(result);
     TEST_ASSERT_EQUAL_INT(4, vector_count(vec));
     
     // Check first element: [1 3]
     ID first = vector_nth(vec, 0);
     TEST_ASSERT_TRUE(is_vector(first));
-    CljVector *first_vec = as_vector(first);
+    CljPersistentVector *first_vec = as_persistent_vector(first);
     TEST_ASSERT_EQUAL_INT(2, vector_count(first_vec));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(first_vec, 0)));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(vector_nth(first_vec, 1)));
@@ -271,7 +271,7 @@ TEST_SHARED(test_for_multiple_bindings) {
     // Check last element: [2 4]
     ID last = vector_nth(vec, 3);
     TEST_ASSERT_TRUE(is_vector(last));
-    CljVector *last_vec = as_vector(last);
+    CljPersistentVector *last_vec = as_persistent_vector(last);
     TEST_ASSERT_EQUAL_INT(2, vector_count(last_vec));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(last_vec, 0)));
     TEST_ASSERT_EQUAL_INT(4, as_fixnum(vector_nth(last_vec, 1)));
@@ -288,7 +288,7 @@ TEST_SHARED(test_for_when_modifier) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
-    CljVector *vec = as_vector(result);
+    CljPersistentVector *vec = as_persistent_vector(result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(vec, 0)));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(vec, 1)));
@@ -306,7 +306,7 @@ TEST_SHARED(test_for_let_modifier) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
-    CljVector *vec = as_vector(result);
+    CljPersistentVector *vec = as_persistent_vector(result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(vec, 0)));
     TEST_ASSERT_EQUAL_INT(4, as_fixnum(vector_nth(vec, 1)));
@@ -324,7 +324,7 @@ TEST_SHARED(test_for_while_modifier) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
-    CljVector *vec = as_vector(result);
+    CljPersistentVector *vec = as_persistent_vector(result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(vec, 0)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(vec, 1)));
@@ -355,7 +355,7 @@ TEST_SHARED(test_for_lazy_infinite) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
-    CljVector *vec = as_vector(result);
+    CljPersistentVector *vec = as_persistent_vector(result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(vec, 0)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(vec, 1)));
