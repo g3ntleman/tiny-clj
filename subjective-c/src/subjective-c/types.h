@@ -14,7 +14,7 @@
 #endif
 
 typedef enum {
-    CLJ_INT = 1,
+    CLJ_FIXNUM = 1,
     CLJ_CHAR = 3,
     CLJ_BOOL = 5,
     CLJ_FLOAT = 7,

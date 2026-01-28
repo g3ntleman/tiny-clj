@@ -569,7 +569,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     reader_skip_all(reader);
 
     // Create transient vector for efficient building
-    CljVector *vec = make_vector(6, CLJ_VECTOR_PERSISTENT);
+    CljVector *vec = make_vector(6);
     CljVector *tvec = vector_transient(vec);
     RELEASE(vec);  // Release original, use transient
 
@@ -1582,7 +1582,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   if (!body) {
     // Empty function body - return (fn [] ())
     CljSymbol *fn_sym = intern_symbol_global("fn");
-    CljValue empty_vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
+    CljValue empty_vec = make_vector(0);
     ID empty_list_val = NULL; // () is nil in Clojure
     return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
   }
@@ -1600,7 +1600,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
   CljSymbol *fn_sym = intern_symbol_global("fn");
   CljSymbol *percent_sym = intern_symbol_global("%");
-  CljVector *param_vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
+  CljVector *param_vec = make_vector(1);
   vector_conj_inplace(&param_vec, percent_sym);
 
   // Create (fn [%] body)

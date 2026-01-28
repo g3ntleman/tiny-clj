@@ -34,7 +34,7 @@ static inline void env_stack_push_inplace(CljVector **stack_slot, CljMap *env) {
     if (!stack_slot) return;
     if (!*stack_slot) {
         // Start with a small capacity to avoid immediate growth copies.
-        *stack_slot = make_vector(4, CLJ_VECTOR_PERSISTENT);
+        *stack_slot = make_vector(4);
     }
     vector_conj_inplace(stack_slot, env);
 }

@@ -20,7 +20,7 @@ static inline bool compare_fixnums(int va, int vb, ComparisonOp op) {
 
 static inline bool extract_numeric_value(ID obj, float *val) {
     unsigned char tag = TAG(obj);
-    if (tag == CLJ_INT) {
+    if (tag == CLJ_FIXNUM) {
         *val = (float)as_fixnum((CljValue)obj);
     return true;
 }

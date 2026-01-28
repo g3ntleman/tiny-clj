@@ -22,7 +22,7 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
     // Handle immediates
     if (IS_IMMEDIATE(v)) {
         switch (TAG(v)) {
-            case CLJ_INT:
+            case CLJ_FIXNUM:
                 *offset += mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "%d", as_fixnum((CljValue)v));
                 break;
             case CLJ_FLOAT:

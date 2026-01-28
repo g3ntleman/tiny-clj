@@ -22,7 +22,7 @@ TEST(test_macro_basic_defmacro) {
     // Use the macro
     result = eval_string("(my-inc 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result));
 }
 
@@ -55,7 +55,7 @@ TEST(test_macro_nested_expansion) {
     // macroexpand should expand all levels
     CljObject *result = eval_string("(add2 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(7, as_fixnum((CljValue)result));  // 5 + 1 + 1 = 7
 }
 
@@ -191,7 +191,7 @@ TEST(test_macro_in_anonymous_fn) {
     // Use macro inside anonymous function: ((fn [y] (inc2 y)) 5) => 7
     CljObject *result = eval_string("((fn [y] (inc2 y)) 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(7, as_fixnum((CljValue)result));
 }
 
@@ -204,7 +204,7 @@ TEST(test_macro_in_reader_fn) {
     // Use macro inside #() reader macro: (#(triple %) 4) => 12
     CljObject *result = eval_string("(#(triple %) 4)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(12, as_fixnum((CljValue)result));
 }
 
@@ -217,7 +217,7 @@ TEST(test_macro_generating_fn) {
     // Use macro that returns a function: ((make-doubler) 5) => 10
     CljObject *result = eval_string("((make-doubler) 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)result));
 }
 
@@ -231,7 +231,7 @@ TEST(test_nested_macro_in_fn) {
     CljObject *result = eval_string(
         "((fn [x] ((fn [y] (add x y)) 3)) 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(8, as_fixnum((CljValue)result));
 }
 
@@ -251,7 +251,7 @@ TEST(test_unquote_splice_basic_list) {
         "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     CljVector *v = (CljVector*)result;
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     assert_fixnum(vector_nth(v, 0), 1);
@@ -268,7 +268,7 @@ TEST(test_unquote_splice_in_middle) {
         "  (vec (eval (quasiquote (a (unquote-splice x) b)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // a, 1, 2, b
 }
 
@@ -281,7 +281,7 @@ TEST(test_unquote_splice_at_start) {
         "  (vec (eval (quasiquote ((unquote-splice x) a b)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // 1, 2, a, b
 }
 
@@ -294,7 +294,7 @@ TEST(test_unquote_splice_at_end) {
         "  (vec (eval (quasiquote (a b (unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // a, b, 1, 2
 }
 
@@ -307,7 +307,7 @@ TEST(test_unquote_splice_multiple) {
         "  (vec (eval (quasiquote ((unquote-splice x) (unquote-splice y) (unquote-splice z))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_EQUAL_INT(4, vector_count((CljVector*)result));  // 1, 2, 3, 4
 }
 
@@ -320,7 +320,7 @@ TEST(test_unquote_splice_empty_list) {
         "  (vec (eval (quasiquote ((unquote-splice x) a)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_EQUAL_INT(1, vector_count((CljVector*)result));  // just 'a'
 }
 
@@ -336,7 +336,7 @@ TEST(test_unquote_splice_in_macro) {
     // Use macro: (my-concat (list 1) (list 2) (list 3)) should expand to (concat (list 1) (list 2) (list 3))
     CljObject *result = eval_string("(vec (my-concat (list 1) (list 2) (list 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_EQUAL_INT(3, vector_count((CljVector*)result));  // 1, 2, 3
 }
 
@@ -349,7 +349,7 @@ TEST(test_unquote_splice_with_unquote) {
         "  (vec (eval (quasiquote (a (unquote b) (unquote-splice x) c)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     CljVector *v = (CljVector*)result;
     TEST_ASSERT_EQUAL_INT(5, vector_count(v));  // a, 99, 1, 2, c
     TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(vector_nth(v, 0)));
@@ -366,7 +366,7 @@ TEST(test_unquote_splice_nested_quasiquote) {
         "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
 }
 
 TEST(test_unquote_splice_function_call_result) {
@@ -379,7 +379,7 @@ TEST(test_unquote_splice_function_call_result) {
         "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     CljVector *v = (CljVector*)result;
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     assert_fixnum(vector_nth(v, 0), 0);
@@ -395,7 +395,7 @@ TEST(test_unquote_splice_clojure_compatible) {
         "  (vec (eval (quasiquote ((unquote-splice x))))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     CljVector *v = (CljVector*)result;
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     assert_fixnum(vector_nth(v, 0), 1);

@@ -807,13 +807,13 @@ TEST(test_anon_fn_reader_macro) {
     // Test: Call the anonymous function: (#(+ % 1) 5) => 6
     CljObject *result2 = eval_string("(#(+ % 1) 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result2));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result2));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result2));
 
     // Test: #(* % 2) => (fn [%] (* % 2))
     CljObject *result3 = eval_string("(#(* % 2) 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result3));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result3));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result3));
 }
 

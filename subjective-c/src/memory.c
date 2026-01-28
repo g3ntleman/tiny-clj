@@ -89,7 +89,7 @@ static bool g_release_dispatch_initialized = false;
 
 void autorelease_pool_init(void) {
     if (g_pool) return;
-    g_pool = make_vector(POOL_INITIAL_CAPACITY, CLJ_VECTOR_TRANSIENT_WEAK);
+    g_pool = make_vector_weak(POOL_INITIAL_CAPACITY);
 #ifdef DEBUG
     g_pool_peak_count = 0;
 #endif
@@ -262,7 +262,6 @@ static void release_object_default(CljObject *v) {
     switch (v->type) {
         case CLJ_STRING:
             break;
-<<<<<<< HEAD
             
         // CLJ_SYMBOL: Release handler registered by tiny-clj via subjective_c_register_release_fn()
             
@@ -290,13 +289,6 @@ static void release_object_default(CljObject *v) {
             }
             break;
             
-=======
-        case CLJ_VECTOR: {
-            CljVector *vec = (CljVector*)v;
-            VECTOR_FOR_EACH(vec, elem) { RELEASE(elem); }
-            break;
-        }
->>>>>>> af65598be4ce5ad0372af581ec81496acb467be8
         case CLJ_VECTOR_TRANSIENT_WEAK:
             break;
         case CLJ_MAP: {

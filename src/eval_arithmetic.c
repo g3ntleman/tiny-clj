@@ -8,7 +8,7 @@
 static inline bool is_numeric_type(ID value) {
     if (!value) return false;
     uint16_t tag = TAG((CljObject*)value);
-    return tag == CLJ_INT || tag == CLJ_FLOAT;
+    return tag == CLJ_FIXNUM || tag == CLJ_FLOAT;
 }
 
 static inline CljObject* throw_non_numeric_argument(ID value) {

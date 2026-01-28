@@ -181,7 +181,7 @@ TEST(test_seq_rest_performance) {
     // Use global st from setUp
     
     // Test direct vector creation first
-    CljValue vec_val = make_vector(10, CLJ_VECTOR_PERSISTENT);
+    CljValue vec_val = make_vector(10);
     TEST_ASSERT_NOT_NULL(vec_val);
     
     // Create large vector
@@ -223,7 +223,7 @@ TEST(test_filter_basic) {
     // Use list instead of vector to avoid potential vector handling issues
     CljObject *result = eval_string("(vec (filter even? (list 1 2 3 4 5)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
 
     CljVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(2, vector_count(v));
@@ -248,7 +248,7 @@ TEST(test_filter_all_match) {
     // Test: (filter pos? [1 2 3]) => (1 2 3)
     CljObject *result = eval_string("(vec (filter pos? [1 2 3]))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     
     TEST_ASSERT_EQUAL_INT(3, vector_count(as_vector(result)));
     
@@ -270,7 +270,7 @@ TEST(test_filter_with_custom_predicate) {
     // Test: (filter (fn [x] (> x 2)) [1 2 3 4 5]) => (3 4 5)
     CljObject *result = eval_string("(vec (filter (fn [x] (> x 2)) [1 2 3 4 5]))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
 
     CljVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
@@ -469,14 +469,14 @@ TEST(test_reduce_basic_addition) {
     // Test: (reduce + (list 1 2 3 4 5)) => 15
     CljObject *result = eval_string("(reduce + (list 1 2 3 4 5))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(15, as_fixnum((CljValue)result));
     
     // Note: Vector support may require seq handling - test with list for now
     // Test: (reduce + (list 1 2 3)) => 6
     CljObject *result2 = eval_string("(reduce + (list 1 2 3))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result2));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result2));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result2));
 }
 
