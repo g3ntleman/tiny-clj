@@ -1,0 +1,35 @@
+# Debug-Session: CLJ_SEQ double-AUTORELEASE bei for-Macro
+#
+# Start:  lldb ./build/unit-tests -s .lldb-debug-autorelease
+#
+# Nach dem Stopp:
+#   n (next)     - Zeile für Zeile
+#   s (step)     - in Funktion einsteigen
+#   c (continue) - bis zum nächsten Breakpoint oder Ende
+#
+# Nützlich:  p v   bzw.  frame variable
+#            p v->base.rc   (Referenzzähler)
+#            p v->base.type (Typ, 18 = CLJ_SEQ)
+
+# Breakpoint 1: autorelease() nur für CLJ_SEQ (18)
+breakpoint set -f memory.c -n autorelease -c 'v && (int)v->type == 18'
+
+# Breakpoint 2: autorelease() für alle Objekte (zum Vergleich)
+# breakpoint set -f memory.c -n autorelease
+
+# Commands für Breakpoint 1: Zeige Objekt-Info und prüfe pool_count
+breakpoint command add 1
+  print v
+  print v->rc
+  print v->type
+  # Prüfe pool_count (nur wenn DEBUG und ZOMBIE_ENABLED)
+  expr uint32_t pool_count = autorelease_count(v)
+  expr int rc = v->rc
+  expr (rc > (int)pool_count) ? "OK" : "PROBLEM: rc <= pool_count"
+  # Zeige Backtrace (nur 5 Ebenen)
+  bt 5
+  continue
+DONE
+
+# Test starten
+process launch -- -test shared_test_loops/for_basic_list_comprehension

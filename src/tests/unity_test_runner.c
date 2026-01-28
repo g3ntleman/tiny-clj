@@ -76,9 +76,7 @@ void setUp(void) {
     
     if (!g_runtime.builtins_registered) {
         meta_registry_init();
-        WITH_AUTORELEASE_POOL({
-            register_builtins();
-        });
+        register_builtins();
         g_runtime.builtins_registered = true;
     }
         

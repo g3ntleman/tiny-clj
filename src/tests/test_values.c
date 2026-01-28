@@ -37,9 +37,9 @@ TEST(test_cljvalue_immediate_helpers) {
 TEST(test_cljvalue_vector_api) {
     WITH_AUTORELEASE_POOL({
         // Test vector API
-        CljValue vec = make_vector(3);
+        CljValue vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_NOT_NULL(vec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)vec)->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
         
         CljVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
@@ -66,7 +66,7 @@ TEST(test_cljvalue_vector_api) {
 TEST(test_cljvalue_transient_vector) {
     WITH_AUTORELEASE_POOL({
         // Test transient vector operations
-        CljValue vec = AUTORELEASE(make_vector(5));  // Create persistent vector first
+        CljValue vec = AUTORELEASE(make_vector(5, CLJ_VECTOR_PERSISTENT));  // Create persistent vector first
         TEST_ASSERT_NOT_NULL(vec);
         CljValue tvec = AUTORELEASE(vector_transient((CljVector*)vec));  // Convert to transient
         TEST_ASSERT_NOT_NULL(tvec);
@@ -98,7 +98,7 @@ TEST(test_cljvalue_transient_vector) {
 TEST(test_cljvalue_clojure_semantics) {
     WITH_AUTORELEASE_POOL({
         // Test Clojure semantics
-        CljValue vec = make_vector(2);
+        CljValue vec = make_vector(2, CLJ_VECTOR_PERSISTENT);
         CljVector *vec_data = as_vector((CljObject*)vec);
         
         // Add elements using vector_conj
@@ -275,9 +275,9 @@ TEST(test_cljvalue_memory_efficiency) {
 TEST(test_cljvalue_vectors_high_level) {
     WITH_AUTORELEASE_POOL({
         // Test vectors at high level
-        CljValue vec = make_vector(3);
+        CljValue vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
         TEST_ASSERT_NOT_NULL(vec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)vec)->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
         
         CljVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
@@ -384,12 +384,12 @@ TEST(test_truthiness_comprehensive) {
         TEST_ASSERT_TRUE(clj_is_truthy(non_empty_list));
         
         // Empty vector is truthy
-        CljVector *empty_vec = AUTORELEASE(make_vector(0));
+        CljVector *empty_vec = AUTORELEASE(make_vector(0, CLJ_VECTOR_PERSISTENT));
         TEST_ASSERT_NOT_NULL(empty_vec);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_vec));
         
         // Non-empty vector is truthy
-        CljVector *non_empty_vec = AUTORELEASE(make_vector(1));
+        CljVector *non_empty_vec = AUTORELEASE(make_vector(1, CLJ_VECTOR_PERSISTENT));
         TEST_ASSERT_NOT_NULL(non_empty_vec);
         non_empty_vec = vector_conj(non_empty_vec, fixnum(1));
         TEST_ASSERT_TRUE(clj_is_truthy(non_empty_vec));

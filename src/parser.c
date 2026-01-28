@@ -264,7 +264,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
       return parse_vector(reader, st);
 
     case '{':
-      return parse_map(reader, st);
+      return AUTORELEASE(parse_map(reader, st));
 
     case '(':
       return parse_list(reader, st);
@@ -569,7 +569,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     reader_skip_all(reader);
 
     // Create transient vector for efficient building
-    CljVector *vec = make_vector(6);
+    CljVector *vec = make_vector(6, CLJ_VECTOR_PERSISTENT);
     CljVector *tvec = vector_transient(vec);
     RELEASE(vec);  // Release original, use transient
 
@@ -640,9 +640,8 @@ static ID parse_map(Reader *reader, EvalState *st) {
     throw_parser_exception("Unclosed map - missing closing '}'", reader);
     return NULL;
   }
-  // Return autoreleased object - caller can use until pool is popped
-  // No location meta - symbols have inline line/col
-  return AUTORELEASE(map);
+  // Return owned (rc=1). Caller must AUTORELEASE or RELEASE or pass to callee that RELEASEs.
+  return (ID)map;
 }
 
 /**
@@ -1418,7 +1417,7 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
  * @param st Evaluation state
  * @param meta Metadata to apply (will be released)
  * @param obj Object to apply metadata to
- * @return Object with applied metadata (autoreleased) or NULL on error
+ * @return obj (pass-through; already autoreleased by inner parse_expr) or NULL on error
  */
 static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID obj) {
   (void)reader;  // Unused parameter
@@ -1459,7 +1458,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
 #endif // META_ENABLED
 
   RELEASE(meta);
-  return AUTORELEASE(obj);
+  return obj;  /* obj is already AUTORELEASE'd by caller (parse_expr); do not add again */
 }
 
 /**
@@ -1522,18 +1521,25 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   }
 
   // Regular ^meta syntax (map or other expression)
+  // ^{...}: parse_map returns owned; merge_metadata_with_object will RELEASE it.
+  // ^other: parse_expr returns autoreleased; merge RELEASEs (ok for e.g. interned symbols).
   reader_skip_all(reader);
-  ID meta = parse_expr(reader, st);
+  ID meta;
+  bool meta_owned = false;
+  if (!reader_eof(reader) && reader_peek_char(reader) == '{') {
+    meta = parse_map(reader, st);
+    meta_owned = true;
+  } else {
+    meta = parse_expr(reader, st);
+  }
   if (!meta)
     return NULL;
   reader_skip_all(reader);
   ID obj = parse_expr(reader, st);
   if (!obj) {
-    RELEASE(meta);
+    if (meta_owned) RELEASE(meta);
     return NULL;
   }
-
-  // Merge metadata with object (handles existing metadata)
   ID result = merge_metadata_with_object(obj, meta);
   if (!result) {
     return NULL;
@@ -1582,7 +1588,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   if (!body) {
     // Empty function body - return (fn [] ())
     CljSymbol *fn_sym = intern_symbol_global("fn");
-    CljValue empty_vec = make_vector(0);
+    CljValue empty_vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
     ID empty_list_val = NULL; // () is nil in Clojure
     return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
   }
@@ -1600,7 +1606,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
   CljSymbol *fn_sym = intern_symbol_global("fn");
   CljSymbol *percent_sym = intern_symbol_global("%");
-  CljVector *param_vec = make_vector(1);
+  CljVector *param_vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
   vector_conj_inplace(&param_vec, percent_sym);
 
   // Create (fn [%] body)
@@ -1630,7 +1636,7 @@ static ID parse_meta_map(Reader *reader,
   reader_next(reader);  // Consume '^'
 
   reader_skip_all(reader);
-  ID meta = parse_map(reader, st);
+  ID meta = parse_map(reader, st);  // owned; apply_metadata_to_object will RELEASE it
   if (!meta)
     return NULL;
   reader_skip_all(reader);
@@ -1639,7 +1645,6 @@ static ID parse_meta_map(Reader *reader,
     RELEASE(meta);
     return NULL;
   }
-
   return apply_metadata_to_object(reader, st, meta, obj);
 }
 

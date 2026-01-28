@@ -1,0 +1,20 @@
+# Debug-Session: Closure-Allokation bei (fn [x] (+ x 1))
+#
+# Start:  lldb ./build/unit-tests -s .lldb-debug-closure
+#
+# Nach dem Stopp:
+#   n (next)     - Zeile für Zeile
+#   s (step)     - in Funktion einsteigen
+#   c (continue) - bis zum nächsten Breakpoint oder Ende
+#
+# Nützlich:  p func   bzw.  frame variable
+#            p func->base.rc   (Referenzzähler)
+
+# Breakpoint 1: Einstieg in make_function (Closure-Allokation)
+breakpoint set -n make_function
+
+# Breakpoint 2: autorelease() in memory.c, nur für CLJ_CLOSURE (22) – z.B. return AUTORELEASE(fn) in eval_fn
+breakpoint set -f memory.c -n autorelease -c 'v && (int)v->type == 22'
+
+# Test starten
+process launch -- -test test_plus_available_during_fn_evaluation

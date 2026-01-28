@@ -58,8 +58,8 @@ static inline int transient_vector_capacity(CljTransientVector *tvec) {
 
 extern CljVector* vector_empty_singleton;
 CljVector* empty_vector(void);
-/** Create a persistent vector with given capacity. Returns empty-vector singleton if capacity == 0. */
-CljVector* make_vector(unsigned int capacity);
+/** Create a vector with given capacity and type. Returns empty-vector singleton if capacity == 0 and type == CLJ_VECTOR_PERSISTENT. */
+CljVector* make_vector(unsigned int capacity, CljType type);
 /** Create a weak transient vector for internal use (e.g., autorelease pool). */
 CljVector* make_vector_weak(unsigned int capacity);
 CljVector* vector_conj(CljVector* vec, ID item);

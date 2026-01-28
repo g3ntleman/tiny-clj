@@ -23,7 +23,7 @@ TEST_SHARED(test_eval_body_vector_with_env_stack) {
     CljSymbol *x_sym = intern_symbol_global("x");
     CljSymbol *y_sym = intern_symbol_global("y");
     
-    CljVector *vec = make_vector(2);
+    CljVector *vec = make_vector(2, CLJ_VECTOR_PERSISTENT);
     ASSIGN(vec, vector_conj(vec, x_sym));
     ASSIGN(vec, vector_conj(vec, y_sym));
     
@@ -81,7 +81,7 @@ TEST_SHARED(test_eval_body_vector_with_base_env) {
     CljSymbol *x_sym = intern_symbol_global("x");
     CljSymbol *y_sym = intern_symbol_global("y");
     
-    CljVector *vec = make_vector(2);
+    CljVector *vec = make_vector(2, CLJ_VECTOR_PERSISTENT);
     ASSIGN(vec, vector_conj(vec, x_sym));
     ASSIGN(vec, vector_conj(vec, y_sym));
     
@@ -132,13 +132,13 @@ TEST_SHARED(test_eval_body_nested_vector_with_env_stack) {
     CljSymbol *x_sym = intern_symbol_global("x");
     CljSymbol *y_sym = intern_symbol_global("y");
     
-    CljVector *inner_vec1 = make_vector(1);
+    CljVector *inner_vec1 = make_vector(1, CLJ_VECTOR_PERSISTENT);
     ASSIGN(inner_vec1, vector_conj(inner_vec1, x_sym));
     
-    CljVector *inner_vec2 = make_vector(1);
+    CljVector *inner_vec2 = make_vector(1, CLJ_VECTOR_PERSISTENT);
     ASSIGN(inner_vec2, vector_conj(inner_vec2, y_sym));
     
-    CljVector *outer_vec = make_vector(2);
+    CljVector *outer_vec = make_vector(2, CLJ_VECTOR_PERSISTENT);
     ASSIGN(outer_vec, vector_conj(outer_vec, inner_vec1));
     ASSIGN(outer_vec, vector_conj(outer_vec, inner_vec2));
     

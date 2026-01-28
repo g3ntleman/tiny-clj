@@ -131,7 +131,7 @@ static ID make_map_entry_vector(CljMap *map, int index) {
     CljObject *key = map->data[index * 2];
     CljObject *value = map->data[index * 2 + 1];
 
-    CljVector *entry = make_vector(2);
+    CljVector *entry = make_vector(2, CLJ_VECTOR_PERSISTENT);
     if (!entry) {
         return NULL;
     }

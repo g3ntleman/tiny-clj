@@ -136,7 +136,7 @@ static void timer_insert_sorted_map(CljMap *task_map);
 // Helper function to ensure task queue is initialized
 static CljVector* task_queue_get(void) {
     if (!g_runtime.task_queue) {
-        CljVector* task_vec = make_vector(8);
+        CljVector* task_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
         if (task_vec) {
             g_runtime.task_queue = vector_transient(task_vec);
             RELEASE(task_vec);
@@ -163,7 +163,7 @@ static CljVector* task_queue_get(void) {
 // Helper function to ensure timer queue is initialized
 static CljVector* timer_queue_get(void) {
     if (!g_runtime.timer_queue) {
-        CljVector* timer_vec = make_vector(8);
+        CljVector* timer_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
         ASSIGN(g_runtime.timer_queue, vector_transient(timer_vec));
         RELEASE(timer_vec);
     }

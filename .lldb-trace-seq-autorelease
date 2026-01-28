@@ -1,0 +1,33 @@
+# Debug-Session: seq() wird mehrfach aufgerufen
+#
+# Start:  lldb ./build/unit-tests -s .lldb-trace-seq-autorelease
+#
+# Zeige, wann seq() aufgerufen wird und ob es dasselbe Objekt zurückgibt
+
+# Breakpoint 1: native_seq() - zeige Input und Output
+breakpoint set -f builtins.c -n native_seq
+
+# Commands für Breakpoint 1
+breakpoint command add 1
+  print args[0]
+  print (args[0] ? TAG(args[0]) : 0)
+  # Zeige Backtrace (nur 5 Ebenen)
+  bt 5
+  continue
+DONE
+
+# Breakpoint 2: autorelease() für CLJ_SEQ - zeige pool_count
+breakpoint set -f memory.c -n autorelease -c 'v && (int)v->type == 18'
+
+# Commands für Breakpoint 2
+breakpoint command add 2
+  print v
+  print v->rc
+  expr uint32_t pool_count = autorelease_count(v)
+  # Zeige Backtrace wenn pool_count > 0
+  expr if (pool_count > 0) { bt 6; }
+  continue
+DONE
+
+# Test starten
+process launch -- -test shared_test_loops/for_basic_list_comprehension

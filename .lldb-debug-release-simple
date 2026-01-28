@@ -1,0 +1,20 @@
+# Debug-Session: CLJ_SEQ wird 8x zum Pool hinzugefügt
+#
+# Start:  lldb ./build/unit-tests -s .lldb-debug-release-simple
+
+# Breakpoint: release() für CLJ_SEQ wenn rc <= pool_count
+breakpoint set -f memory.c -l 172 -c 'v && (int)v->type == 18'
+
+# Commands: Zeige Info und Backtrace
+breakpoint command add 1
+  print v
+  print v->rc
+  expr -- uint32_t pool_count = autorelease_count(v)
+  expr -- int rc_before = v->rc
+  # Backtrace ausgeben
+  bt
+  continue
+DONE
+
+# Test starten
+process launch -- -test shared_test_loops/for_basic_list_comprehension

@@ -89,12 +89,12 @@ TEST(test_vector_creation) {
     // Test empty vector creation
     CljObject *vec = eval_string("[]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vec);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, vec->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
 
     // Test vector with elements
     CljObject *vec2 = eval_string("[1 2 3]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vec2);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, vec2->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec2));
 
     // Clean up
 }
@@ -516,7 +516,7 @@ TEST(test_load_multiline_file) {
     const char *multiline_nested = "[\n  {:a 1\n   :b 2}\n  (+ 1\n     2)\n  3\n]";
     CljObject *parsed5 = parse(multiline_nested, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed5);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, parsed5->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(parsed5));
 
     // Clean up
 }

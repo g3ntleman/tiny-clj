@@ -125,53 +125,15 @@ static inline CljType TAG(ID obj)
     }
 
     // Access type field first (it's at the beginning of the struct, safer)
-    // This will crash if pointer is invalid, but that's better than silent corruption
     CljType type = obj_ptr->type;
-
-#ifdef DEBUG
-    // Detect use-after-free: check if object is a zombie (freed but not deallocated)
-    // Check zombie status AFTER accessing type (type is at offset 0, rc is later)
-    // If zombie mode is enabled, objects are marked as zombies when freed
-    // This check will catch use-after-free errors before they cause corruption
-#ifdef ZOMBIE_ENABLED
-    // In zombie mode, rc=0 means the object is a zombie (freed but not DEALLOCed)
-    // Access rc field - if this crashes, it means the pointer was invalid
-    // and we would have crashed anyway when accessing type
-    if (obj_ptr->rc == 0)
-    {
-        // This is a use-after-free error! The object was freed but we're still accessing it.
-        // Report the error with detailed information
-        const char *type_name = "unknown";
-        if (type < CLJ_TYPE_COUNT)
-        {
-            type_name = clj_type_name(type);
-        }
-        throw_exception_formatted("ZombieAccessError", __FILE__, __LINE__, 0,
-                                  "Use-after-free detected: Attempted to access freed object %p (type=%s, rc=0). "
-                                  "This object was freed but is still being accessed. Check for dangling pointers or missing RETAIN.",
-                                  obj_ptr, type_name);
-        // Return a safe default to prevent further crashes
-        return CLJ_NIL;
-    }
-#endif
-#endif
-
-    // Return the type we already accessed
     return type;
 }
 
 static inline bool is_singleton(CljObject *obj)
 {
-    if (!obj || (uintptr_t)obj < 0x1000)
-    {
+    if (!obj || (uintptr_t)obj < 0x1000) {
         return true;
     }
-#ifdef DEBUG
-    if (obj->rc == 0)
-    {
-        return false;
-    }
-#endif
     return obj->rc == SINGLETON_RC;
 }
 

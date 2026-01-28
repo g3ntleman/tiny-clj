@@ -226,19 +226,20 @@ TEST_SHARED(test_doseq_with_vector_binding) {
 // Regression: for with vector binding (basic list comprehension)
 TEST_SHARED(test_for_basic_list_comprehension) {
     ID result = eval_string(
-        "(for [x [1 2 3]] (* x x))",
+        "(for [x [1 2 3 4]] (* x x))",
         g_test_eval_state);
-    // Accept both lazy sequences and lists; normalize to a seq iterator
-    ID seq = AUTORELEASE(make_seq(result));
+    // Accept both lazy sequences and lists; normalize to a seq. If result is already
+    // CLJ_SEQ, make_seq returns it as-is — do not AUTORELEASE again (it is from eval).
+    ID seq = (TAG(result) == CLJ_SEQ) ? result : AUTORELEASE(make_seq(result));
     TEST_ASSERT_NOT_NULL(seq);
-    int expected[] = {1, 4, 9};
+    int expected[] = {1, 4, 9, 16};
     int i = 0;
     for (ID cur = seq; cur && !seq_empty(cur); cur = seq_next(cur), ++i) {
         ID first = seq_first(cur);
         TEST_ASSERT_TRUE(is_fixnum(first));
         TEST_ASSERT_EQUAL_INT(expected[i], as_fixnum(first));
     }
-    TEST_ASSERT_EQUAL_INT(3, i); // Should have 3 elements
+    TEST_ASSERT_EQUAL_INT(4, i); // Should have 4 elements
 }
 
 // ============================================================================

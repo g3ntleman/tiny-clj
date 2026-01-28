@@ -20,7 +20,7 @@ TEST(test_history_roundtrip_basic) {
   // Erzeuge Vector aus Strings
   CljObject *vec = eval_string("[\"a\" \"b\" \"c\"]", g_test_eval_state);
   TEST_ASSERT_NOT_NULL(vec);
-  TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, vec->type);
+  TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
 
   // Speichern
   bool ok = history_save_to_file((CljVector*)vec, tmp_hist_path);
@@ -29,7 +29,7 @@ TEST(test_history_roundtrip_basic) {
   // Laden
   CljVector *loaded = history_load_from_file(tmp_hist_path);
   TEST_ASSERT_NOT_NULL(loaded);
-  TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)loaded)->type);
+  TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(loaded));
 
   // Vergleiche Count und Werte
   CljObject *c = eval_string("(count [\"a\" \"b\" \"c\"])", g_test_eval_state);
@@ -64,7 +64,7 @@ TEST(test_history_trim_to_50) {
       "\"71\" \"72\" \"73\" \"74\"]",
       g_test_eval_state);
   TEST_ASSERT_NOT_NULL(vec);
-  TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, vec->type);
+  TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
   CljVector *v = as_vector(vec);
   TEST_ASSERT_NOT_NULL(v);
   TEST_ASSERT_EQUAL_INT(75, vector_count(v));
@@ -111,7 +111,7 @@ TEST(test_history_load_current_format) {
   TEST_ASSERT_NOT_NULL(loaded);
   // RETAIN loaded to keep it alive outside of autorelease pool
   RETAIN(loaded);
-  TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)loaded)->type);
+  TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(loaded));
 
   // Verify vector structure
   CljVector *v = as_vector(loaded);
@@ -162,7 +162,7 @@ static void test_history_load_from_file_crash_reproduction_body(void) {
   // But the memory management is still wrong
   if (loaded) {
     RETAIN(loaded);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)loaded)->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(loaded));
 
     CljVector *v = as_vector(loaded);
     TEST_ASSERT_NOT_NULL(v);
@@ -237,7 +237,7 @@ TEST(test_history_save_escapes_quotes) {
   CljObject *str = (CljObject *)make_string(test_input);
   TEST_ASSERT_NOT_NULL(str);
 
-  CljVector *vec = make_vector(1);
+  CljVector *vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
   vec = vector_conj(vec, str);
 
   // Save to file
@@ -674,7 +674,7 @@ TEST(test_history_load_from_file_scenario) {
         RELEASE(elem);
       }
       if (all_strings) {
-        CljVector* new_vec = make_vector(count);
+        CljVector* new_vec = make_vector(count, CLJ_VECTOR_PERSISTENT);
         for (int i = 0; i < count; i++) {
           ID elem = vector_nth(v, i);
           new_vec = vector_conj(new_vec, elem);

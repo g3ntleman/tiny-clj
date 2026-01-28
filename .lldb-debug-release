@@ -1,0 +1,34 @@
+# Debug-Session: rc zu früh auf 0 reduziert bei release()
+#
+# Start:  lldb ./build/unit-tests -s .lldb-debug-release
+#
+# Nach dem Stopp:
+#   n (next)     - Zeile für Zeile
+#   s (step)     - in Funktion einsteigen
+#   c (continue) - bis zum nächsten Breakpoint oder Ende
+#
+# Nützlich:  p v   bzw.  frame variable
+#            p v->rc   (Referenzzähler)
+#            p v->type (Typ, 18 = CLJ_SEQ)
+
+# Breakpoint 1: release() wenn rc == pool_count (vor dem Decrement)
+# Hinweis: Wir prüfen VOR v->rc--, um das Problem früher zu erkennen
+breakpoint set -f memory.c -l 163
+
+# Breakpoint 2: release() für alle Objekte (zum Vergleich)
+# breakpoint set -f memory.c -n release
+
+# Commands für Breakpoint 1: Zeige Objekt-Info und pool_count
+breakpoint command add 1
+  print v
+  print v->rc
+  print v->type
+  expr uint32_t pool_count = autorelease_count(v)
+  expr int rc_before = v->rc
+  # Zeige Backtrace (nur 10 Ebenen)
+  bt 10
+  continue
+DONE
+
+# Test starten
+process launch -- -test shared_test_loops/for_basic_list_comprehension

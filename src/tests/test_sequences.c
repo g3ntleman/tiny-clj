@@ -25,7 +25,7 @@ TEST(test_conj_arity_1) {
     // Test (conj [1 2]) - should return collection unchanged
     CljObject *result = eval_string("(conj [1 2])", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, result->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
     
     // Don't RELEASE result - eval_string returns autoreleased object
 }
@@ -36,7 +36,7 @@ TEST(test_conj_arity_2) {
     // Test (conj [1 2] 3) - should return [1 2 3]
     CljObject *result = eval_string("(conj [1 2] 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, result->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
     
     // Don't RELEASE result - eval_string returns autoreleased object
 }
@@ -47,7 +47,7 @@ TEST(test_conj_arity_variadic) {
     // Test (conj [1] 2 3 4) - should return [1 2 3 4]
     CljObject *result = eval_string("(conj [1] 2 3 4)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, result->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
     
     // Don't RELEASE result - eval_string returns autoreleased object
 }
@@ -181,7 +181,7 @@ TEST(test_seq_rest_performance) {
     // Use global st from setUp
     
     // Test direct vector creation first
-    CljValue vec_val = make_vector(10);
+    CljValue vec_val = make_vector(10, CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_NOT_NULL(vec_val);
     
     // Create large vector
@@ -813,7 +813,7 @@ TEST(test_range) {
     // Test: (range 0) => []
     CljObject *result4 = eval_string("(range 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)result4)->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result4));
     CljVector *vec4 = as_vector(result4);
     TEST_ASSERT_EQUAL_INT(0, vector_count(vec4));
 }
@@ -838,7 +838,7 @@ TEST(test_repeat) {
     // Test: (repeat 0 "x") => []
     CljObject *result2 = eval_string("(repeat 0 \"x\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)result2)->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result2));
     CljVector *vec2 = as_vector(result2);
     TEST_ASSERT_EQUAL_INT(0, vector_count(vec2));
     

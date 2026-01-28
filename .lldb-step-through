@@ -1,0 +1,30 @@
+breakpoint set -n make_function
+breakpoint set -f memory.c -n autorelease -c 'v && (int)v->type == 22'
+process launch -- -test test_plus_available_during_fn_evaluation
+
+# === STOP 1: make_function (Closure-Allokation) ===
+thread backtrace
+frame variable
+continue
+
+# === STOP 2: autorelease(closure) – 1. Aufruf? ===
+thread backtrace
+p (void*)v
+p v->rc
+continue
+
+# === STOP 3: autorelease(closure) – 2. Aufruf = Doppel-AUTORELEASE? ===
+thread backtrace
+p (void*)v
+p v->rc
+continue
+
+# === STOP 4: ggf. weiterer autorelease(closure) ===
+thread backtrace
+p (void*)v
+continue
+
+# === bis Crash oder Ende, dann Backtrace ===
+continue
+thread backtrace
+quit
