@@ -4,7 +4,7 @@ project(tiny-clj)
 # Feature flags (compile-time): all are positive *_ENABLED macros (0/1)
 option(TINYCLJ_META_ENABLED "Enable metadata support (META_ENABLED)" ON)
 option(TINYCLJ_MEMORY_PROFILING_ENABLED "Enable memory profiling hooks (MEMORY_PROFILING_ENABLED)" ON)
-option(TINYCLJ_ZOMBIE_ENABLED "Enable zombie mode (ZOMBIE_ENABLED)" OFF)
+option(TINYCLJ_ZOMBIE_ENABLED "Enable zombie mode (ZOMBIE_ENABLED)" ON)
 
 if(TINYCLJ_META_ENABLED)
     set(TINYCLJ_META_ENABLED_VALUE 1)

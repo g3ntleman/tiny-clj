@@ -451,7 +451,7 @@ ID native_pop(ID *args, unsigned int argc)
     if (count == 0)
     {
         // Return empty vector singleton (no memory management needed)
-        return make_vector(0);
+        return make_vector(0, CLJ_VECTOR_PERSISTENT);
     }
 
     // Use vector_pop() which handles RC=1 (in-place) and RC>1 (COW) automatically
@@ -545,11 +545,11 @@ ID native_subvec(ID *args, unsigned int argc)
     // Special case: empty sub-vector (start == end)
     if (subvec_count == 0)
     {
-        return make_vector(0); // Returns empty-vector singleton (no memory management needed)
+        return make_vector(0, CLJ_VECTOR_PERSISTENT); // Returns empty-vector singleton (no memory management needed)
     }
 
     // Create new vector and add elements using vector_conj_inplace
-    CljVector *new_vec = make_vector(subvec_count);
+    CljVector *new_vec = make_vector(subvec_count, CLJ_VECTOR_PERSISTENT);
 
     // Copy elements from start to end using vector_conj_inplace
     // This keeps rc=1 for COW optimizations
@@ -710,10 +710,16 @@ ID native_seq(ID *args, unsigned int argc)
     if (TAG(coll) == CLJ_LIST || TAG(coll) == CLJ_AST_NODE)
     {
         CljList *list_data = as_list(coll);
-        return list_empty(list_data) ? NULL : AUTORELEASE(RETAIN(coll));
+        if (list_empty(list_data)) return NULL;
+        // RETAIN before AUTORELEASE to ensure correct ownership
+        return AUTORELEASE(RETAIN(coll));
     }
+    /* Already a seq: return as-is without AUTORELEASE (avoids double pool entry).
+     * Note: If the CLJ_SEQ is already in the pool, the caller must RETAIN it before using it again. */
+    if (TAG(coll) == CLJ_SEQ)
+        return coll;
     CljSeqIterator *seq = make_seq(coll);
-    return seq ? AUTORELEASE((ID)seq) : NULL;
+    return AUTORELEASE(seq);
 }
 
 ID native_not(ID *args, unsigned int argc)
@@ -754,7 +760,7 @@ ID native_next(ID *args, unsigned int argc)
     // EAT-YOUR-OWN-DOG-FOOD: Use seq_next for all seqable types
     // This consolidates the logic and eliminates duplication
     // For CLJ_LIST, seq_next handles it efficiently (returns CLJ_LIST directly)
-    // For CLJ_VECTOR_PERSISTENT, CLJ_SEQ, and other seqable types, seq_next handles them via seq_rest
+    // For CLJ_VECTOR_PERSISTENT CLJ_SEQ, and other seqable types, seq_next handles them via seq_rest
 
     // Check if collection is seqable before trying to create seq
     if (!is_seqable(coll))
@@ -804,16 +810,17 @@ ID native_next(ID *args, unsigned int argc)
         result = seq_next(seq);
     }
 
-    // seq_next now returns AUTORELEASE objects (already in pool) or NULL
-    // For CLJ_LIST, seq_next returns AUTORELEASE(RETAIN(...)) - already in pool
-    // For other types, seq_next returns new CljSeqIterator objects (rc=1) - need AUTORELEASE
-    // Note: seq_next never returns immediate values, only NULL or heap objects (CLJ_LIST or CLJ_SEQ)
-    if (result && TAG(result) == CLJ_SEQ)
-    {
-        // Only seq_next results that are freshly allocated seq iterators
-        // (TAG == CLJ_SEQ) still need to be autoreleased. LIST results that
-        // came from seq_next are already autoreleased inside seq_next.
-        result = AUTORELEASE(result);
+    // seq_next returns new CljSeqIterator (rc=1) or NULL; LIST from seq_next not AUTORELEASE'd here.
+    // When reused_seq&&seq_is_original, result is the input: seq_next_inplace returned it in-place; it is already managed (pool or caller).
+    if (result) {
+        if (TAG(result) == CLJ_SEQ) {
+            bool inplace_returned_input = (reused_seq && seq_is_original);
+            if (!inplace_returned_input) {
+                // New seq from seq_rest - must be AUTORELEASE'd
+                result = AUTORELEASE(result);
+            }
+        }
+        // For CLJ_LIST, result is already managed (part of original list structure)
     }
 
     // Only release the seq if we created it (not if it was the original object)
@@ -999,13 +1006,11 @@ ID native_partition(ID *args, unsigned int argc)
     }
 
     // Use vectors for building (efficient), convert to list at end
-    CljVector *partitions = make_vector(0);
-    RETAIN(partitions);
+    CljVector *partitions = make_vector(0, CLJ_VECTOR_PERSISTENT);
 
     while (!seq_iter_empty(&iter))
     {
-        CljVector *part = make_vector(n);
-        RETAIN(part);
+        CljVector *part = make_vector(n, CLJ_VECTOR_PERSISTENT);
         int count = 0;
 
         for (int i = 0; i < n && !seq_iter_empty(&iter); i++, count++)
@@ -1068,7 +1073,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     ID mapped = eval_function_call(fn, call_args, ncolls, NULL, st);
 
     // Advance collections (store rest for each).
-    CljVector *next_seqs = make_vector(ncolls);
+    CljVector *next_seqs = make_vector(ncolls, CLJ_VECTOR_PERSISTENT);
     if (!next_seqs) return NULL;
     for (unsigned int i = 0; i < ncolls; i++) {
         vector_conj_inplace(&next_seqs, next_colls[i]);
@@ -1146,9 +1151,16 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
         if (!coll_seq) {
             return NULL;
         }
-
+        // RETAIN if coll_seq is already a CLJ_SEQ (native_seq returns it as-is without RETAIN)
+        if (TAG(coll_seq) == CLJ_SEQ) {
+            RETAIN(coll_seq);
+        }
         ID outer_first = native_first(&coll_seq, 1);
         ID outer_rest = native_rest(&coll_seq, 1);
+        // RELEASE the RETAIN'd coll_seq if it was a CLJ_SEQ
+        if (TAG(coll_seq) == CLJ_SEQ) {
+            RELEASE(coll_seq);
+        }
 
         ID call_args[1] = { outer_first };
         inner = eval_function_call(fn, call_args, 1, NULL, st);
@@ -1184,7 +1196,7 @@ ID native_map(ID *args, unsigned int argc)
 
     // Validate and normalize inputs to sequences (one per coll).
     // If any input is nil, map returns empty.
-    CljVector *seqs = make_vector(ncolls);
+    CljVector *seqs = make_vector(ncolls, CLJ_VECTOR_PERSISTENT);
     if (!seqs) return NULL;
 
     for (unsigned int i = 0; i < ncolls; i++) {
@@ -1298,7 +1310,7 @@ ID native_filter(ID *args, unsigned int argc)
         return empty_list();
     }
 
-    CljVector *kept = make_vector(0);
+    CljVector *kept = make_vector(0, CLJ_VECTOR_PERSISTENT);
     if (!kept)
         return NULL;
 
@@ -1475,7 +1487,7 @@ ID native_cons(ID *args, unsigned int argc)
         lazy->thunk = NULL;
         lazy->cached_rest = tail; // already a strong ref (or NULL)
 
-        return AUTORELEASE((ID)lazy);
+        return AUTORELEASE(lazy);
     }
 
     // Non-seqable tail: fall back to singleton list (historical behavior)
@@ -1483,23 +1495,17 @@ ID native_cons(ID *args, unsigned int argc)
     return AUTORELEASE(result);
 }
 
-// List function that creates a list from its arguments
+// List function: creates with make_list → AUTORELEASE before return (only place allowed: make_* or RETAIN).
 ID native_list(ID *args, unsigned int argc)
 {
     CLJ_ASSERT(args != NULL);
 
-    // If no arguments, return empty list
     if (argc == 0)
-    {
         return empty_list();
-    }
 
-    // Build list backwards (from end to start) using make_list
     CljList *result = NULL;
     for (int i = argc - 1; i >= 0; i--)
-    {
         result = make_list(args[i], result);
-    }
     return AUTORELEASE(result);
 }
 
@@ -1842,11 +1848,15 @@ ID native_contains_p(ID *args, unsigned int argc)
     case CLJ_VECTOR_TRANSIENT:
     case CLJ_VECTOR_TRANSIENT_WEAK:
     {
-        // For vectors, key must be an integer index
-        if (!is_fixnum(key))
+        // For vectors, contains? checks if the index exists (not the value).
+        // In Clojure: (contains? [3 4 5] 0) => true (index 0 exists)
+        //            (contains? [3 4 5] 3) => false (index 3 doesn't exist, only 0,1,2)
+        // Key must be an integer index (fixnum or CLJ_FIXNUM)
+        if (TAG(key) != CLJ_FIXNUM)
             return clj_false;
-        long idx = as_fixnum(key);
+        long idx = AS_FIXNUM(key);
         unsigned int count = vector_count(coll);
+        // Index must be non-negative and within bounds [0, count)
         return (idx >= 0 && (unsigned long)idx < count) ? clj_true : clj_false;
     }
 
@@ -1936,7 +1946,7 @@ ID native_into(ID *args, unsigned int argc)
     if (!to)
     {
         // Default to vector if target is nil
-        to = make_vector(0);
+        to = make_vector(0, CLJ_VECTOR_PERSISTENT);
     }
 
     CljType to_tag = TAG(to);
@@ -1965,7 +1975,7 @@ ID native_into(ID *args, unsigned int argc)
                 if (key)
                 {
                     ID val = KV_VALUE(m->data, i);
-                    CljVector *entry = make_vector(2);
+                    CljVector *entry = make_vector(2, CLJ_VECTOR_PERSISTENT);
                     entry = vector_conj(entry, key);
                     entry = vector_conj(entry, val);
                     result = vector_conj(result, entry);
@@ -2055,7 +2065,7 @@ ID native_select_keys(ID *args, unsigned int argc)
 
     CljType keys_tag = TAG(keys);
     if (keys_tag != CLJ_VECTOR_PERSISTENT && keys_tag != CLJ_VECTOR_TRANSIENT &&
-        keys_tag != CLJ_VECTOR_PERSISTENT && keys_tag != CLJ_VECTOR_TRANSIENT_WEAK && keys_tag != CLJ_LIST && keys_tag != CLJ_AST_NODE)
+        keys_tag != CLJ_VECTOR_TRANSIENT_WEAK && keys_tag != CLJ_LIST && keys_tag != CLJ_AST_NODE)
     {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                         "select-keys second argument must be a sequence",
@@ -2130,7 +2140,7 @@ ID native_find(ID *args, unsigned int argc)
     ID val = map_get(map, key);
 
     // Return [key value] vector
-    CljVector *entry = make_vector(2);
+    CljVector *entry = make_vector(2, CLJ_VECTOR_PERSISTENT);
     entry = vector_conj(entry, key);
     entry = vector_conj(entry, val);
 
@@ -2182,7 +2192,7 @@ ID native_persistent_bang(ID *args, unsigned int argc)
     switch (tag)
     {
     case CLJ_VECTOR_TRANSIENT:
-        return (ID)vector_persistent((CljTransientVector*)coll);
+        return vector_persistent(coll);
     case CLJ_MAP_TRANSIENT:
         return map_persistent(coll);
     case CLJ_VECTOR_PERSISTENT:
@@ -2411,6 +2421,8 @@ ID native_type(ID *args, unsigned int argc)
         return intern_symbol(SYM_CLOJURE_LANG, "TransientArrayMap");
     case CLJ_MAP:
         return intern_symbol(SYM_CLOJURE_LANG, "PersistentArrayMap");
+    case CLJ_HASHMAP:
+        return intern_symbol(SYM_CLOJURE_LANG, "HashMap");
     case CLJ_LIST:
         return intern_symbol(SYM_CLOJURE_LANG, "PersistentList");
     case CLJ_FUNC:
@@ -2460,7 +2472,7 @@ ID native_array_map(ID *args, unsigned int argc)
 
 ID native_vector(ID *args, unsigned int argc)
 {
-    // This is the same singleton returned by make_vector(0)
+    // This is the same singleton returned by make_vector(0, CLJ_VECTOR_PERSISTENT
     if (argc == 0)
     {
         return vector_empty_singleton; // Returns empty-vector singleton (no memory management needed)
@@ -2468,15 +2480,16 @@ ID native_vector(ID *args, unsigned int argc)
 
     // Create vector with capacity+1 to avoid COW when adding all elements
     // (vector_conj uses COW when count >= capacity, so we need capacity > argc)
-    CljVector *v = make_vector(argc + 1);
+    CljVector *v = make_vector(argc + 1, CLJ_VECTOR_PERSISTENT);
+    CljVector *initial_v = v;
 
     // Add all elements using vector_conj
     for (unsigned int i = 0; i < argc; i++)
     {
         ASSIGN(v, vector_conj(v, args[i]));
     }
-
-    return AUTORELEASE(v);
+    // If v was replaced by vector_conj, it already AUTORELEASE'd; only our make_vector needs it
+    return (v == initial_v) ? AUTORELEASE(v) : (ID)v;
 }
 
 // vec: converts a sequence to a vector
@@ -2497,12 +2510,11 @@ ID native_vec(ID *args, unsigned int argc)
         return empty_vector();
     }
 
-    // If already a vector, return same object (No-Op - Clojure behavior)
-    // Note: coll is already AUTORELEASEd by eval_arg, so we need to AUTORELEASE it again
-    // to ensure it's in the caller's pool
+    // If already a vector, return same object (No-Op - Clojure behavior).
+    // coll comes from eval_arg (already in pool); we did not make_* or RETAIN it.
     if (TAG(coll) == CLJ_VECTOR_PERSISTENT)
     {
-        return AUTORELEASE(coll);
+        return coll;
     }
 
     // Check if collection is seqable
@@ -2530,12 +2542,13 @@ ID native_vec(ID *args, unsigned int argc)
 
     // Create vector with default capacity (vector_conj will grow automatically)
     // make_vector throws OOM exception or returns valid object
-    CljVector *vec = make_vector(4);
+    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
     if (!vec)
     {
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                          "Failed to create vector");
     }
+    CljVector *initial_vec = vec;
 
     // Iterate through sequence and add elements using vector_conj (reuse existing logic)
     // This avoids code duplication and reuses COW-based vector_conj
@@ -2552,8 +2565,8 @@ ID native_vec(ID *args, unsigned int argc)
         // Move to next element (reuse existing seq_iter_next API)
         seq_iter_next(&iter);
     }
-
-    return AUTORELEASE(vec);
+    // If vec was replaced by vector_conj, it already AUTORELEASE'd; only our make_vector needs it
+    return (vec == initial_vec) ? AUTORELEASE(vec) : (ID)vec;
 }
 
 // Event-loop: run-next-task builtin
@@ -2764,10 +2777,7 @@ static void print_helper(ID *args, unsigned int argc, bool readable, bool newlin
         {
             CljString *str = readable ? pr_str(args[i]) : print_str(args[i]);
             if (str)
-            {
                 platform_put_string(NULL, string_data(str));
-                RELEASE(str);
-            }
 
             // Add space between arguments (except for the last one)
             if (i < argc - 1)
@@ -3977,8 +3987,8 @@ ID native_apply(ID *args, unsigned int argc)
                 call_args[n++] = l->first;
             }
         }
-        else if (tag == CLJ_VECTOR_PERSISTENT)
-        {
+        else     if (tag == CLJ_VECTOR_PERSISTENT)
+    {
             CljVector *v = as_vector(last);
             int cnt = vector_count(v);
             for (int i = 0; i < cnt && n < 64; i++)
@@ -4796,7 +4806,7 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
         }
 
         // Convert list to vector for other cases
-        CljVector *vec = make_vector(4);
+        CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
         if (!vec)
         {
             return NULL;
@@ -4818,8 +4828,7 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
             }
         }
 
-        CljPersistentVector *persistent_vec = vector_persistent((CljTransientVector*)transient_vec);
-        RETAIN(persistent_vec);
+        CljVector *persistent_vec = vector_persistent(transient_vec);
         RELEASE(transient_vec);
         if (!persistent_vec)
         {
@@ -5558,7 +5567,7 @@ ID native_range(ID *args, unsigned int argc)
         RELEASE(thunk);
         RELEASE(state);
 
-        return lazy ? AUTORELEASE(lazy) : NULL;
+        return AUTORELEASE(lazy);
     }
 
     int start = 0, end = 0, step = 1;
@@ -5618,7 +5627,7 @@ ID native_range(ID *args, unsigned int argc)
     }
 
     // Create vector with calculated capacity
-    ID vec = make_vector(size);
+    ID vec = make_vector(size, CLJ_VECTOR_PERSISTENT);
     CljVector *v = as_vector(vec);
 
     // Fill vector
@@ -5680,7 +5689,7 @@ ID native_repeat(ID *args, unsigned int argc)
         return empty_vector();
     }
 
-    ID vec = make_vector(count);
+    ID vec = make_vector(count, CLJ_VECTOR_PERSISTENT);
     CljVector *v = as_vector(vec);
 
     for (int i = 0; i < count; i++)
@@ -5710,7 +5719,7 @@ ID native_lazy_seq_star(ID *args, unsigned int argc)
     }
 
     CljLazySeq *lazy = make_lazy_seq(f);
-    return lazy ? AUTORELEASE((ID)lazy) : NULL;
+    return AUTORELEASE((ID)lazy);
 }
 
 ID native_math_sqrt(ID *args, unsigned int argc)
@@ -6735,7 +6744,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 
         // Bytes by object TAG/type (objects only; excludes raw blocks).
         // Vector of [type-id bytes-current bytes-peak alloc-count dealloc-count].
-        CljVector *by_type = make_vector(0);
+        CljVector *by_type = make_vector(0, CLJ_VECTOR_PERSISTENT);
         if (by_type) {
             for (int ti = 0; ti < CLJ_TYPE_COUNT; ti++) {
                 size_t bc = g_memory_stats.bytes_current_by_type[ti];
@@ -6751,7 +6760,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
                 int32_t dc_i = (dc > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)dc;
 
                 ID entry[5] = { fixnum(ti), fixnum(bc_i), fixnum(bp_i), fixnum(ac_i), fixnum(dc_i) };
-                CljVector *row = make_vector(5);
+                CljVector *row = make_vector(5, CLJ_VECTOR_PERSISTENT);
                 if (!row) break;
                 for (int i = 0; i < 5; i++) {
                     ASSIGN(row, vector_conj(row, entry[i]));

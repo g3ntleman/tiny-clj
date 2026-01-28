@@ -1,0 +1,23 @@
+---
+description: Bei Crashes, AutoreleasePool- oder Speicherfehlern gezielt lldb vorschlagen und nutzen
+alwaysApply: true
+---
+
+# Debugging: Crashes, AutoreleasePool, Speicherfehler
+
+Bei **Crashes** (SIGABRT, SIGSEGV, Exit 134), **AutoreleasePoolError** („still in autorelease pool; will double-release“, „autorelease called during drain“) oder **Speicherfehlern** (UseAfterFree, Doppel-Release, Zombie) in diesem Projekt:
+
+1. **lldb gezielt vorschlagen und nutzen**
+   - `./build/unit-tests` unter lldb starten oder mit `-test` einen einzelnen Test
+   - Breakpoints: in `autorelease` (z.B. wenn `v->type == X` und `autorelease_count(v) > 0`), in `release` vor dem ZOMBIE-Block, in `zombie_desc`
+   - Nach Backtrace (BT) die zweite AUTORELEASE-Quelle oder den Aufrufer im Drain identifizieren
+
+2. **Typische Fehlerquellen**
+   - **Doppeltes AUTORELEASE**: `native_seq`/`make_seq` bei schon CLJ_SEQ (ohne erneutes AUTORELEASE zurückgeben); `to_string`/`print_helper`/`print_result` wenn der String schon im Pool ist; `apply_metadata_to_object` / `vector_conj` + äußeres AUTORELEASE; in Tests: `AUTORELEASE(make_seq(result))` wenn `result` schon CLJ_SEQ → `(TAG(result)==CLJ_SEQ) ? result : AUTORELEASE(make_seq(result))`
+   - **autorelease during drain**: `zombie_desc` oder andere Aufrufe von `clj_to_string`/`to_string`/`autorelease` im `release`-Pfad oder während `autorelease_pool_drain_to_depth`; `zombie_desc` bei `g_in_drain` überspringen
+
+3. **Hilfreiche lldb-Skripte**
+   - `.lldb-trace-astnode`, `.lldb-debug-closure` etc. für Breakpoints mit Bedingungen (z.B. `v->type == 14` für ASTNode, `autorelease_count(v) > 0`)
+
+4. **Nach Fix**
+   - `./build/unit-tests` ausführen, betroffene Test-Gruppen mit `-test` prüfen, Code aufräumen (kein Debug-Code, kein Dead-Code).

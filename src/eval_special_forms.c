@@ -350,7 +350,7 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
             }
         }
     }
-    CljVector* empty_params_vec = make_vector(0);
+    CljVector* empty_params_vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
     CljList *fn_list = make_list((CljObject*)SYM_FN, NULL);
     if (!fn_list) return NULL;
     fn_list->rest = (CljObject*)make_list(empty_params_vec, NULL);
@@ -374,7 +374,7 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 // Wrapper functions for existing special form evaluators
 ID eval_special_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_fn: list must not be NULL");
-    return AUTORELEASE(eval_fn(list, eval_env_or_ns_mappings(env, st), st, ctx));
+    return eval_fn(list, eval_env_or_ns_mappings(env, st), st, ctx);
 }
 
 ID eval_special_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {

@@ -376,11 +376,10 @@ TEST_SHARED(test_str_with_boolean) {
     TEST_ASSERT_TRUE(is_special(false_val2));
     TEST_ASSERT_FALSE(is_fixed(false_val2));
     
-    CljString *direct_result = to_string(clj_false);
+    CljString *direct_result = to_string(clj_false);  // AUTORELEASE; pool will release
     TEST_ASSERT_NOT_NULL(direct_result);
     const char *result_str = string_data(direct_result);
     TEST_ASSERT_EQUAL_STRING("false", result_str);
-    RELEASE(direct_result);
     
     // Test: (str false) should return "false"
     CljObject *str_result3 = eval_string("(str false)", g_test_eval_state);

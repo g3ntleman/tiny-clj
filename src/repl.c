@@ -148,7 +148,6 @@ static void print_result(CljObject *v) {
     if (s) {
         platform_put_string(NULL, string_data(s));
         platform_put_char(NULL, '\n');
-        RELEASE(s);
     }
 }
 
@@ -282,7 +281,7 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
     int count = vector_count(v);
     if (count <= limit) return RETAIN(vec);
     int start = count - limit;
-    CljVector* out = make_vector(limit);
+    CljVector* out = make_vector(limit, CLJ_VECTOR_PERSISTENT);
     ID nth_args[2];
     nth_args[0] = v;
     for (int i = 0; i < limit; i++) {

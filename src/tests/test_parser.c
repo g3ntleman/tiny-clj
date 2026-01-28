@@ -57,7 +57,7 @@ TEST(test_parse_collections) {
     // Test vector parsing
     CljObject *vec_result = parse("[1 2 3]", eval_state);
     TEST_ASSERT_NOT_NULL(vec_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, vec_result->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec_result));
 
     // Test list parsing
     CljObject *list_result = parse("(1 2 3)", eval_state);
@@ -347,7 +347,7 @@ TEST(test_parse_multiline_expressions) {
     // Test 2: Multiline vector with comments
     CljObject *vec_result = parse("[1 ; first element\n 2\n 3]", eval_state);
     TEST_ASSERT_NOT_NULL(vec_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, vec_result->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec_result));
     CljVector *vec = as_vector(vec_result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
 
@@ -364,7 +364,7 @@ TEST(test_parse_multiline_expressions) {
     // Test 5: Nested multiline structures with various whitespace
     CljObject *nested_result = parse("[\n  {:a 1\n   :b 2}\n  (+ 1\n     2)\n  3\n]", eval_state);
     TEST_ASSERT_NOT_NULL(nested_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, nested_result->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(nested_result));
     CljVector *nested_vec = as_vector(nested_result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(nested_vec));
 
@@ -376,7 +376,7 @@ TEST(test_parse_multiline_expressions) {
     // Test 7: Multiline with commas (Clojure treats commas as whitespace)
     CljObject *comma_result = parse("[1,\n 2,\n 3]", eval_state);
     TEST_ASSERT_NOT_NULL(comma_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, comma_result->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(comma_result));
 
     evalstate_free(eval_state);
 }
@@ -498,7 +498,7 @@ TEST(test_parse_from_reader_multiple_expressions) {
     // Parse third expression (vector)
     CljValue vec_result = parse_from_reader(&reader2, eval_state);
     TEST_ASSERT_NOT_NULL(vec_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, ((CljObject*)vec_result)->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec_result));
 
     // Test 3: Mixed expressions with comments
     const char *input3 = "; comment\n42\n; another comment\n(+ 1 2)";

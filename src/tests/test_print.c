@@ -65,7 +65,7 @@ TEST_SHARED(test_print_str_vs_pr_str_difference) {
 TEST_SHARED(test_pr_str_with_containers) {
     WITH_AUTORELEASE_POOL({
         // Test: pr_str with vector containing strings
-        CljVector vec = make_vector(2);
+        CljVector vec = make_vector(2, CLJ_VECTOR_PERSISTENT);
         CljObject *str1 = make_string("hello");
         CljObject *str2 = make_string("world");
         vec = vector_conj(vec, str1);
@@ -97,8 +97,8 @@ TEST_SHARED(test_pr_str_with_containers) {
         RELEASE(val_str);
         
         // Test: pr_str with nested containers
-        CljVector outer_vec = make_vector(1);
-        CljVector inner_vec = make_vector(1);
+        CljVector outer_vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
+        CljVector inner_vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
         CljObject *nested_str = make_string("nested");
         inner_vec = vector_conj(inner_vec, nested_str);
         outer_vec = vector_conj(outer_vec, inner_vec);
@@ -119,7 +119,7 @@ TEST_SHARED(test_pr_str_with_containers) {
 TEST_SHARED(test_print_str_different_types) {
     WITH_AUTORELEASE_POOL({
         // Test with vector
-        CljObject *vec = make_vector(2);
+        CljObject *vec = make_vector(2, CLJ_VECTOR_PERSISTENT);
         CljVector *vec_data = as_vector(vec);
         vec_data->data[0] = (CljObject*)fixnum(1);
         vec_data->data[1] = (CljObject*)fixnum(2);

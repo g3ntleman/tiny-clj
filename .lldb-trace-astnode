@@ -1,0 +1,26 @@
+# Trace: ASTNode mit doppeltem AUTORELEASE (unbalanciert RETAIN/RELEASE)
+# Start:  lldb ./build/unit-tests -s .lldb-trace-astnode
+# Build:  ZOMBIE_ENABLED=ON (subjective-c Debug) fuer BP2.
+#
+# Stopp 1 (BP1): autorelease() – Objekt schon im Pool (Zweiteintrag).
+#   -> bt: Call-Site der 2. AUTORELEASE; p/x v; p autorelease_count(v)
+# Stopp 2 (BP2): release() – kurz vor AutoreleasePoolError.
+#   -> v: betroffenes Objekt; p v->first, v->rest (AST); bt
+
+# BP1: 2. AUTORELEASE desselben ASTNode (autorelease_count > 0 *vor* dem Einfuegen)
+breakpoint set -f memory.c -n autorelease -c 'v && (int)v->type == 14 && autorelease_count(v) > 0'
+breakpoint command add 1
+p/x v
+p autorelease_count(v)
+bt
+c
+DONE
+
+# BP2: Release, der AutoreleasePoolError ausloest (ZOMBIE-Block, rc==0, count!=0)
+breakpoint set -f memory.c -l 176 -c 'v && (int)v->type == 14'
+breakpoint command add 2
+p/x v
+bt
+DONE
+
+process launch -- -test test_string_blank_after_require

@@ -1060,7 +1060,7 @@ ID fs_list_dir_batch(FsKvStore *st,
     size_t prefix_len = strlen(dir_path);
     size_t after_len = after_key ? strlen(after_key) : 0;
 
-    ID vec = (ID)make_vector(8);
+    ID vec = (ID)make_vector(8, CLJ_VECTOR_PERSISTENT);
     if (!vec) return NULL;
 
     tdb_kv_cursor_t* cur = NULL;

@@ -1,0 +1,46 @@
+# Debug-Session: Objekt wird 8x zum Pool hinzugefügt
+#
+# Start:  lldb ./build/unit-tests -s .lldb-debug-pool-count
+#
+# Nach dem Stopp:
+#   n (next)     - Zeile für Zeile
+#   s (step)     - in Funktion einsteigen
+#   c (continue) - bis zum nächsten Breakpoint oder Ende
+#
+# Nützlich:  p v   bzw.  frame variable
+#            p v->rc   (Referenzzähler)
+#            p v->type (Typ, 18 = CLJ_SEQ)
+
+# Breakpoint 1: autorelease() für CLJ_SEQ - zeige pool_count vor und nach
+breakpoint set -f memory.c -n autorelease -c 'v && (int)v->type == 18'
+
+# Commands für Breakpoint 1: Zeige Objekt-Info und pool_count
+breakpoint command add 1
+  print v
+  print v->rc
+  print v->type
+  expr uint32_t pool_count_before = autorelease_count(v)
+  expr int rc = v->rc
+  # Zeige Backtrace wenn pool_count > 0 (Objekt war bereits im Pool)
+  expr if (pool_count_before > 0) { bt 8; }
+  continue
+DONE
+
+# Breakpoint 2: release() wenn rc == pool_count (vor dem Decrement)
+# Vereinfachte Bedingung: nur für CLJ_SEQ
+breakpoint set -f memory.c -l 172 -c 'v && (int)v->type == 18'
+
+# Commands für Breakpoint 2: Zeige Objekt-Info und pool_count
+breakpoint command add 2
+  print v
+  print v->rc
+  print v->type
+  expr -- uint32_t pool_count = autorelease_count(v)
+  expr -- int rc_before = v->rc
+  # Zeige Backtrace (immer, da Breakpoint nur bei Problem stoppt)
+  bt 15
+  continue
+DONE
+
+# Test starten
+process launch -- -test shared_test_loops/for_basic_list_comprehension

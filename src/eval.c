@@ -231,13 +231,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         builtin_set_eval_state(st);
         ID result = native_func->fn(args, argc);
         builtin_set_eval_state(NULL); // Clear after call
-        // Native functions do not retain args; caller must release. (eval_arg returns
-        // AUTORELEASE'd values; pool is weak/track-only, so we release here to avoid
-        // leaks for temporaries like (range 4000) in (reduce + (range 4000)).)
-        for (unsigned int i = 0; i < argc; i++) {
-            if (args[i] && !IS_IMMEDIATE(args[i]) && args[i] != result)
-                RELEASE(args[i]);
-        }
+        // args come from eval_arg (AUTORELEASE'd, in pool). Do not RELEASE – pool will drain.
         return result;
     }
 
@@ -344,8 +338,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         if (recur_arg_count >= 0) {
             // Tail call detected: recur was used in this function
             CLJ_ASSERT(recur_arg_count <= param_count);
-            // RELEASE handles NULL and immediates automatically
-            RELEASE(new_result);
+            // new_result from eval (AUTORELEASE'd in pool); do not RELEASE
 
             // Update argc and copy new arguments from recur_args
             CLJ_ASSERT(recur_arg_count >= 0 && recur_arg_count <= param_count);
@@ -749,7 +742,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             }
             
             // Create new vector with evaluated elements
-            CljVector *result = make_vector(count);
+            CljVector *result = make_vector(count, CLJ_VECTOR_PERSISTENT);
             RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
@@ -763,28 +756,24 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 // Add evaluated element to result vector
                 ASSIGN(result, vector_conj(result, eval_elem));
             }
-            
-            return AUTORELEASE(result);
+            // result after ASSIGN is from vector_conj (callee); we did make_vector+RETAIN but ASSIGN replaced it
+            return result;
         }
 
         case CLJ_MAP: {
-            // Map literals need to have their keys and values evaluated
             CljMap *map = (CljMap*)body;
             CljMap *result = map_empty();
             RETAIN(result);
-            
             MAP_FOR_EACH(map, key, value) {
                 ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
                 ID eval_value = value ? eval_body_with_params(value, ctx) : NULL;
-                
                 ASSIGN(result, map_assoc(result, eval_key, eval_value));
             }
-            
-            return AUTORELEASE(result);
+            // result after ASSIGN is from map_assoc (callee)
+            return result;
         }
 
         default:
-            // Literal value
             return RETAIN(body);
     }
 }
@@ -905,9 +894,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 return body;
             }
             
-            // Create new vector with evaluated elements
-            CljVector *result = make_vector(count);
-            RETAIN(result);
+            // Create new vector with evaluated elements; AUTORELEASE here (make_*) so return is simple
+            CljVector *result = AUTORELEASE(make_vector(count, CLJ_VECTOR_PERSISTENT));
             
             VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
@@ -919,11 +907,10 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     eval_elem = eval_body(elem, env, st, ctx);
                 }
                 
-                // Add evaluated element to result vector
-                ASSIGN(result, vector_conj(result, eval_elem));
+                // Plain assign: old result stays in pool; vector_conj AUTORELEASEs when it allocates new
+                result = (CljVector*)vector_conj(result, eval_elem);
             }
-            
-            return AUTORELEASE(result);
+            return (ID)result;
         }
 
         case CLJ_MAP: {
@@ -1344,7 +1331,8 @@ static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljMa
     if (result == SYM_NIL) {
         return NULL;
     }
-    return AUTORELEASE(result);
+    // result from callee: builtin/Clojure that created it does AUTORELEASE; we do not (no make_* or RETAIN here)
+    return result;
 }
 
 // List evaluation (optionally accepts EvalContext for recur support)
@@ -2056,16 +2044,11 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     if (fn_name) {
         CljMap *self_binding = map_assoc(map_empty(), fn_name, fn);
         RELEASE(fn);  // Balance map_assoc's RETAIN
-        
-        // Rewrite recursive calls: For def, use qualified name (TCO optimization)
-        // For let, keep unqualified (function not in namespace, so qualified lookup would fail)
-        // The rewrite still happens to ensure recursive calls work correctly
-        // Note: eval_def will do the qualified rewrite when the function is stored in namespace
-        // Here we only handle the closure binding for let-based recursive functions
-        
+
         // Push self-binding as the innermost frame.
         env_stack_push_inplace(&fn->env_stack, self_binding);
         RELEASE(self_binding);
+        RETAIN(fn);  // Need a ref to return to caller
     }
 
     free_obj_array(params, params_stack);
@@ -2255,12 +2238,16 @@ ID eval_seq(CljList *list, CljMap *env) {
             return arg;
         }
 
+        case CLJ_SEQ: {
+            // Already a seq: make_seq returns it as-is. Do not AUTORELEASE again (avoids double pool entry).
+            // Return as-is - caller manages lifetime
+            return arg;
+        }
         default: {
             // For other seqable types, return SeqIterator directly
-            CljSeqIterator *seq = (CljSeqIterator*)AUTORELEASE(make_seq(arg));
+            CljSeqIterator *seq = make_seq(arg);
             if (!seq) return NULL;
-
-            return (CljObject*)seq;
+            return AUTORELEASE(seq);
         }
     }
 }
@@ -2635,6 +2622,13 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
 
     CLJ_ASSERT(expr_tag != CLJ_SYMBOL_TOKEN && "Symbol tokens must be canonicalized before evaluation");
 
+    // CRITICAL: If expr is already a CLJ_SEQ that might be in the pool, RETAIN it before returning
+    // to prevent double-AUTORELEASE when the caller AUTORELEASE's the return value.
+    // This must be checked early, before other cases that might return expr directly.
+    if (expr_tag == CLJ_SEQ) {
+        return AUTORELEASE(RETAIN(expr));
+    }
+
     if (expr_tag == CLJ_SLOT_REF) {
         const CljSlotRef *ref = (const CljSlotRef*)expr;
         if (!ctx || !ctx->frame) return NULL;
@@ -2781,13 +2775,14 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         unsigned int count = vector_count(vec);
         if (count == 0) return expr;
         
-        CljVector *result = make_vector(count);
-        RETAIN(result);
+        // AUTORELEASE here (make_*) so return is simple
+        CljVector *result = AUTORELEASE(make_vector(count, CLJ_VECTOR_PERSISTENT));
         VECTOR_FOR_EACH(vec, elem) {
             ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, eval_env, eval_st, ctx) : NULL;
-            ASSIGN(result, vector_conj(result, eval_elem));
+            // Plain assign: old result stays in pool; vector_conj AUTORELEASEs when it allocates new
+            result = (CljVector*)vector_conj(result, eval_elem);
         }
-        return AUTORELEASE(result);
+        return (ID)result;
     }
 
     return expr;
@@ -2843,9 +2838,9 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
     // Evaluate n (once) using the current lexical context.
     ID n_evaluated = eval_arg_from_expr_with_context(n_obj, env, st, effective_ctx);
 
-    if (!n_evaluated || TAG(n_evaluated) != CLJ_FIXNUM) return NULL;
+    if (!n_evaluated || !is_fixnum(n_evaluated)) return NULL;
     int n = as_fixnum((CljValue)n_evaluated);
-    if (n <= 0) return AUTORELEASE(NULL);
+    if (n <= 0) return NULL;
 
     // Loop var binding: use a stack CallFrame to avoid allocating a new map/env each iteration.
     CallFrame dotimes_frame;
@@ -2883,7 +2878,7 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
 
     frame_release(&dotimes_frame);
     if (owned_stack) RELEASE(owned_stack);
-    return AUTORELEASE(NULL);
+    return NULL;
 }
 
 // ============================================================================

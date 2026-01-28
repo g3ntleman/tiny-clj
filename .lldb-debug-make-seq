@@ -1,0 +1,20 @@
+# Debug-Session: CLJ_SEQ double-AUTORELEASE bei for-Macro
+#
+# Start:  lldb ./build/unit-tests -s .lldb-debug-make-seq
+#
+# Nach dem Stopp:
+#   n (next)     - Zeile für Zeile
+#   s (step)     - in Funktion einsteigen
+#   c (continue) - bis zum nächsten Breakpoint oder Ende
+#
+# Nützlich:  p seq   bzw.  frame variable
+#            p seq->base.rc   (Referenzzähler)
+
+# Breakpoint 1: make_seq - wenn Input bereits CLJ_SEQ ist
+breakpoint set -f seq.c -n make_seq -c 'obj && (unsigned char)((CljObject*)obj)->type == 18'
+
+# Breakpoint 2: autorelease() nur für CLJ_SEQ (18)
+breakpoint set -f memory.c -n autorelease -c 'v && (int)v->type == 18'
+
+# Test starten
+process launch -- -test shared_test_loops/for_basic_list_comprehension
