@@ -1255,18 +1255,12 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
                     // Extract and evaluate arguments from list
                     ID args[16];
                     unsigned int argc = 0;
-                    CljList *rest = LIST_REST(list);
                     CljMap *eval_env = is_map(env) ? env : eval_env_or_ns_mappings(env, st);
-                    while (rest && argc < 16) {
-                        ID arg_expr = LIST_FIRST(rest);
-                        if (!arg_expr) break;
+                    LIST_FOR_EACH(LIST_REST(list), arg_expr) {
+                        if (argc >= 16) break;
+                        // Evaluate argument (nil is a valid value, so NULL is acceptable)
                         ID arg = eval_arg_from_expr_with_context(arg_expr, eval_env, st, ctx);
-                        if (!arg && arg_expr != SYM_NIL) {
-                            // Evaluation failed (exception thrown)
-                            return NULL;
-                        }
-                        args[argc++] = arg;
-                        rest = LIST_REST(rest);
+                        args[argc++] = arg;  // arg can be NULL (nil)
                     }
                     // Call native function
                     ID result = native_func(args, argc);
