@@ -69,10 +69,10 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVe
     func->body = RETAIN(body);
     // Persistent env_stack is always heap-managed (vector of maps).
     // It may be shared across closures; RETAIN is required for correctness.
-    func->env_stack = env_stack ? (CljPersistentVector*)RETAIN(env_stack) : NULL;
+    func->env_stack = (CljPersistentVector*)RETAIN(env_stack);
     // Name is stored as an interned symbol (singleton), so we can safely borrow it.
     func->name_sym = name_sym;
-    func->ns = ns ? (struct CljNamespace*)RETAIN(ns) : NULL;
+    func->ns = (struct CljNamespace*)RETAIN(ns);
     func->variadic_index = variadic_index;
     
     // Allocate and initialize parameter array

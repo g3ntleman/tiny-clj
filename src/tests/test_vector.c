@@ -714,12 +714,12 @@ TEST_SHARED(test_weak_vector_does_not_retain_elements) {
     WITH_AUTORELEASE_POOL({
         CljPersistentVector *weak_vec = make_weak_vector(8);
         CljMap *map = (CljMap*)make_map(4);
-        TEST_ASSERT_EQUAL(1, map->base.rc);
+        TEST_ASSERT_EQUAL_INT(1, retain_count((ID)map));
 
         CljPersistentVector *v2 = vector_conj(weak_vec, (ID)map);
         if (v2 != weak_vec) RELEASE(weak_vec);
 
-        TEST_ASSERT_EQUAL(1, map->base.rc);
+        TEST_ASSERT_EQUAL_INT(1, retain_count((ID)map));
         TEST_ASSERT_EQUAL_INT(1, vector_count(v2));
         RELEASE(v2);
         RELEASE(map);
@@ -731,12 +731,12 @@ TEST_SHARED(test_weak_vector_does_not_release_on_pop) {
         CljPersistentVector *weak_vec = make_weak_vector(8);
         CljMap *map = (CljMap*)make_map(4);
         weak_vec = vector_conj(weak_vec, (ID)map);
-        TEST_ASSERT_EQUAL(1, map->base.rc);
+        TEST_ASSERT_EQUAL_INT(1, retain_count((ID)map));
 
         CljPersistentVector *popped = vector_popped(weak_vec);
         if (popped != weak_vec) RELEASE(weak_vec);
 
-        TEST_ASSERT_EQUAL(1, map->base.rc);
+        TEST_ASSERT_EQUAL_INT(1, retain_count((ID)map));
         RELEASE(popped);
         RELEASE(map);
     });
@@ -750,7 +750,7 @@ TEST_SHARED(test_weak_vector_nth_returns_same_pointer_without_retain) {
 
         ID elem = vector_nth(weak_vec, 0);
         TEST_ASSERT_EQUAL_PTR(map, elem);
-        TEST_ASSERT_EQUAL(1, map->base.rc);
+        TEST_ASSERT_EQUAL_INT(1, retain_count((ID)map));
 
         RELEASE(weak_vec);
         RELEASE(map);
@@ -765,12 +765,12 @@ TEST_SHARED(test_weak_vector_clear_does_not_release_elements) {
         weak_vec = vector_conj(weak_vec, (ID)map);
         weak_vec = vector_conj(weak_vec, (ID)map);
         TEST_ASSERT_EQUAL_INT(2, vector_count(weak_vec));
-        TEST_ASSERT_EQUAL(1, map->base.rc);
+        TEST_ASSERT_EQUAL_INT(1, retain_count((ID)map));
 
         vector_clear(weak_vec);
 
         TEST_ASSERT_EQUAL(0, vector_count(weak_vec));
-        TEST_ASSERT_EQUAL(1, map->base.rc);
+        TEST_ASSERT_EQUAL_INT(1, retain_count((ID)map));
 
         RELEASE(weak_vec);
         RELEASE(map);
@@ -797,7 +797,7 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
         CljMap *test_map = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map);
         
-        clj_conj(tvec, test_map);
+        vector_push(tvec, test_map);
         
         // 4. Check that count was updated correctly
         unsigned int count_after = vector_count(vector_persistent(tvec));
@@ -808,7 +808,7 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
         CljMap *test_map2 = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map2);
         
-        clj_conj(tvec, test_map2);
+        vector_push(tvec, test_map2);
         
         // 6. Check that count was updated again
         unsigned int count_after2 = vector_count(vector_persistent(tvec));
@@ -848,7 +848,7 @@ TEST_SHARED(test_clj_conj_with_empty_transient_vector) {
         CljMap *test_map = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map);
         
-        clj_conj(tvec, test_map);
+        vector_push(tvec, test_map);
         
         // Count should be 1
         unsigned int count_after = vector_count(vector_persistent(tvec));
@@ -876,7 +876,7 @@ TEST_SHARED(test_transient_vector_conj_keeps_pointer_and_updates_backing_store) 
         TEST_ASSERT_NOT_NULL(tvec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
 
-        clj_conj(tvec, fixnum(10));
+        vector_push(tvec, fixnum(10));
         TEST_ASSERT_NOT_NULL(tvec);
 
         CljPersistentVector *backing = vector_persistent(tvec);
@@ -885,7 +885,7 @@ TEST_SHARED(test_transient_vector_conj_keeps_pointer_and_updates_backing_store) 
         TEST_ASSERT_EQUAL_INT(1, retain_count(backing));
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(backing, 0)));
 
-        clj_conj(tvec, fixnum(20));
+        vector_push(tvec, fixnum(20));
         backing = vector_persistent(tvec);
         TEST_ASSERT_NOT_NULL(backing);
         TEST_ASSERT_EQUAL_INT(2, vector_count(backing));
@@ -931,7 +931,7 @@ TEST_SHARED(test_transient_vector_capacity_growth_keeps_pointer) {
         TEST_ASSERT_NOT_NULL(tvec);
 
         for (int i = 0; i < 8; ++i) {
-            clj_conj(tvec, fixnum(i));
+            vector_push(tvec, fixnum(i));
         }
 
         CljPersistentVector *backing = vector_persistent(tvec);

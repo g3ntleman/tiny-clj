@@ -304,7 +304,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     ID result = NULL;
     // Local owned env_stack for this call. We RETAIN the function's captured env_stack
     // so any mutations we do for nested lets will COW instead of mutating the function.
-    CljPersistentVector *call_env_stack = func->env_stack ? (CljPersistentVector*)RETAIN(func->env_stack) : NULL;
+    CljPersistentVector *call_env_stack = (CljPersistentVector*)RETAIN(func->env_stack);
     do {
         // Reset recur state for each iteration
         recur_arg_count = -1;  // -1 = no tail call
@@ -984,9 +984,9 @@ static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
         return NOT_FOUND;
     }
 
-    unsigned int depth = vector_count(st->dynamic_bindings);
+    unsigned int depth = vector_count(vector_persistent(st->dynamic_bindings));
     for (unsigned int i = depth; i > 0; i--) {
-        ID frame_id = vector_nth(st->dynamic_bindings, i - 1);
+        ID frame_id = vector_nth(vector_persistent(st->dynamic_bindings), i - 1);
         if (!frame_id || TAG(frame_id) != CLJ_MAP) {
             continue;
         }
@@ -1183,7 +1183,7 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
         }
 
         // Found value may be nil (NULL). Retain non-nil values so they survive target release.
-        return found ? RETAIN(found) : NULL;
+        return RETAIN(found);
     }
 
     // Resolve symbol to get function
@@ -2334,7 +2334,7 @@ ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx)
             WITH_AUTORELEASE_POOL({
                 if (ctx) {
                     // Push binding onto a copy of env_stack so lexical lookup works
-                    CljPersistentVector *new_stack = ctx->env_stack ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
+                    CljPersistentVector *new_stack = (CljPersistentVector*)RETAIN(ctx->env_stack);
                     CljMap *self_bind = map_assoc(map_empty(), var, element);
                     env_stack_push_inplace(&new_stack, self_bind);
                     RELEASE(self_bind);
@@ -2437,7 +2437,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     // Start from captured env_stack (if any), but do NOT mutate it.
     // We take an owned ref so later pushes can COW without touching the original.
-    CljPersistentVector *let_stack = (ctx && ctx->env_stack) ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
+    CljPersistentVector *let_stack = ctx ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
     bool let_stack_owned = true;
 
     // Frame for fast local lookups during initializer evaluation.

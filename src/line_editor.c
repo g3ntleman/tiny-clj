@@ -934,7 +934,7 @@ CljString* line_editor_get_history_line(LineEditor *editor, int index) {
     CljPersistentVector *history_vec = editor->history;
     ID elem = vector_nth(history_vec, (unsigned int)index);
     // Retain element for return value (caller will release it)
-    return elem ? (CljString*)RETAIN(elem) : NULL;
+    return (CljString*)RETAIN(elem);
 }
 
 int line_editor_get_history_size(const LineEditor *editor) {

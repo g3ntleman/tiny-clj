@@ -53,7 +53,7 @@ void benchmark_transient_vector() {
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
             CljValue item = fixnum(i);
-            clj_conj((CljTransientVector*)tvec, item);
+            vector_push((CljTransientVector*)tvec, item);
         }
         
         CljValue final_vec = persistent(tvec);

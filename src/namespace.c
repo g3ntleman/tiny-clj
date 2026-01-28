@@ -759,8 +759,8 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
 
 void evalstate_pop_dynamic_bindings_to(EvalState *st, unsigned int depth) {
     if (!st) return;
-    while (st->dynamic_bindings && vector_count(st->dynamic_bindings) > depth) {
-        vector_pop_inplace(&st->dynamic_bindings);
+    while (st->dynamic_bindings && vector_count(vector_persistent(st->dynamic_bindings)) > depth) {
+        vector_pop(st->dynamic_bindings);
     }
 }
 
