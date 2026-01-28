@@ -114,7 +114,7 @@ static inline CljVector* scope_stack_get_from_top(CljVector *stack, unsigned int
 static inline void scope_stack_push_inplace(CljVector **stack_slot, CljVector *scope_vec) {
     if (!stack_slot) return;
     if (!*stack_slot) {
-        *stack_slot = make_vector(4, CLJ_VECTOR_PERSISTENT);
+        *stack_slot = make_vector(4);
     }
     vector_conj_inplace(stack_slot, scope_vec);
 }
@@ -182,8 +182,8 @@ static unsigned long param_gensym_counter = 0;
 // Returns NULL for let_bindings if no destructuring needed
 static CljVector* transform_params(EvalState *st, CljVector *params, CljVector **out_let_bindings) {
     unsigned int count = vector_count(params);
-    CljVector *new_params = make_vector(count, CLJ_VECTOR_PERSISTENT);
-    CljVector *let_bindings = make_vector(count * 2, CLJ_VECTOR_PERSISTENT);
+    CljVector *new_params = make_vector(count);
+    CljVector *let_bindings = make_vector(count * 2);
     bool has_destructuring = false;
     
     VECTOR_FOR_EACH(params, param) {
@@ -511,8 +511,8 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     if (bindings_need_destructuring(bindings)) {
                         static unsigned long gensym_counter = 0;
                         unsigned int count = vector_count(bindings);
-                        CljVector *loop_bindings = make_vector(count, CLJ_VECTOR_PERSISTENT);
-                        CljVector *let_bindings = make_vector(count, CLJ_VECTOR_PERSISTENT);
+                        CljVector *loop_bindings = make_vector(count);
+                        CljVector *let_bindings = make_vector(count);
                         
                         // Process each binding pair
                         for (unsigned int i = 0; i < count; i += 2) {
@@ -624,7 +624,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 CljVector *bindings_vec = as_vector(canon_bindings);
                 unsigned int bc = bindings_vec ? vector_count(bindings_vec) : 0;
                 unsigned int pair_count = (bc / 2);
-                CljVector *let_scope = make_vector((int)pair_count, CLJ_VECTOR_PERSISTENT);
+                CljVector *let_scope = make_vector((int)pair_count);
                 if (bindings_vec && let_scope) {
                     for (unsigned int i = 0; i + 1 < bc; i += 2) {
                         ID k = vector_nth(bindings_vec, (int)i);
@@ -672,7 +672,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 CljVector *bindings_vec = as_vector(canon_bindings);
                 unsigned int bc = bindings_vec ? vector_count(bindings_vec) : 0;
                 unsigned int pair_count = (bc / 2);
-                CljVector *loop_scope = make_vector((int)pair_count, CLJ_VECTOR_PERSISTENT);
+                CljVector *loop_scope = make_vector((int)pair_count);
                 if (bindings_vec && loop_scope) {
                     for (unsigned int i = 0; i + 1 < bc; i += 2) {
                         ID k = vector_nth(bindings_vec, (int)i);
@@ -721,7 +721,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     : NULL;
 
                 // Push scope [i] for the dotimes body so `i` can become a SlotRef.
-                CljVector *dotimes_scope = make_vector(1, CLJ_VECTOR_PERSISTENT);
+                CljVector *dotimes_scope = make_vector(1);
                 if (loop_var && TAG(loop_var) == CLJ_SYMBOL && !IS_KEYWORD(loop_var)) {
                     vector_conj_inplace(&dotimes_scope, loop_var);
                 } else {
@@ -785,7 +785,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     if (ok && !variadic) {
                         // Build a scope-vector where index == CallFrame slot index.
                         unsigned int pc = vector_count(params_vec);
-                        CljVector *param_scope = make_vector((int)pc, CLJ_VECTOR_PERSISTENT);
+                        CljVector *param_scope = make_vector((int)pc);
                         VECTOR_FOR_EACH(params_vec, p) {
                             vector_conj_inplace(&param_scope, p);
                         }
@@ -879,7 +879,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
         
         // Create new vector with canonicalized elements
-        CljVector *new_vec = make_vector(count, CLJ_VECTOR_PERSISTENT);
+        CljVector *new_vec = make_vector(count);
         for (int i = 0; i < count; i++) {
             ASSIGN(new_vec, vector_conj(new_vec, canon_elems[i]));
         }

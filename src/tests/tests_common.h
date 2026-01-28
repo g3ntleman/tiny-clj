@@ -170,7 +170,7 @@ static inline void test_path_join_prefix(char *out, size_t out_sz, const char *p
 // Helper: Assert that object is a fixnum with expected value
 static inline void assert_fixnum(CljObject *obj, int expected) {
     TEST_ASSERT_NOT_NULL(obj);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(obj));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(obj));
     TEST_ASSERT_EQUAL_INT(expected, as_fixnum((CljValue)obj));
 }
 

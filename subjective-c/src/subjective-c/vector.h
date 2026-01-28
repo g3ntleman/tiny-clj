@@ -18,7 +18,7 @@ int vector_capacity(CljVector *vec);
 static inline CljVector* as_vector(ID obj) {
 #ifdef DEBUG
     CljType tag = TAG(obj);
-    CLJ_ASSERT(obj == NULL || tag == CLJ_VECTOR_PERSISTENT);
+    CLJ_ASSERT(obj == NULL || tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT_WEAK);
 #endif
     return (CljVector*)obj;
 }
@@ -58,7 +58,10 @@ static inline int transient_vector_capacity(CljTransientVector *tvec) {
 
 extern CljVector* vector_empty_singleton;
 CljVector* empty_vector(void);
-CljVector* make_vector(unsigned int capacity, CljType type);
+/** Create a persistent vector with given capacity. Returns empty-vector singleton if capacity == 0. */
+CljVector* make_vector(unsigned int capacity);
+/** Create a weak transient vector for internal use (e.g., autorelease pool). */
+CljVector* make_vector_weak(unsigned int capacity);
 CljVector* vector_conj(CljVector* vec, ID item);
 /** Append; returns owned (no AUTORELEASE). Use ASSIGN(slot, vector_conj_owned(slot, item)) to update. */
 CljVector* vector_conj_owned(CljVector* vec, ID item);
@@ -80,6 +83,21 @@ void vector_truncate(CljVector *vec, unsigned int n);
 CljVector* vector_transient(CljVector *vec);
 CljVector* clj_conj(CljVector *tvec, ID item);
 CljPersistentVector* vector_persistent(CljTransientVector *tvec);
+
+/** Push item to end of transient vector (in-place mutation).
+ * Only works on transient vectors. Throws exception if called on persistent vector.
+ * @param tvec Transient vector (must be CLJ_VECTOR_TRANSIENT)
+ * @param item Item to push (can be NULL/nil)
+ * @return Same transient vector pointer (always in-place mutation)
+ */
+CljVector* vector_push(CljVector *tvec, ID item);
+
+/** Pop last item from transient vector (in-place mutation).
+ * Only works on transient vectors. Throws exception if called on persistent vector.
+ * @param tvec Transient vector (must be CLJ_VECTOR_TRANSIENT)
+ * @return Same transient vector pointer (always in-place mutation)
+ */
+CljVector* vector_pop_transient(CljVector *tvec);
 
 size_t vector_make_copy_count(void);
 void vector_make_copy_count_reset(void);

@@ -576,7 +576,7 @@ TEST_SHARED(test_core_not_first_class) {
     // (map not [true false true]) => (false true false)
     CljObject *result1 = eval_string("(vec (map not [true false true]))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(TAG(result1) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result1) == CLJ_VECTOR_PERSISTENT);
 
     CljVector *v = (CljVector*)result1;
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));

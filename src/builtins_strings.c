@@ -91,7 +91,7 @@ ID native_subs(ID *args, unsigned int argc) {
     }
 
     // Validate start index
-    if (!start_arg || TAG(start_arg) != CLJ_INT) {
+    if (!start_arg || TAG(start_arg) != CLJ_FIXNUM) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "subs requires a number as start index");
     }
@@ -105,7 +105,7 @@ ID native_subs(ID *args, unsigned int argc) {
 
     // Determine end index: if not provided, use string length
     if (end_arg) {
-        if (TAG(end_arg) != CLJ_INT) {
+        if (TAG(end_arg) != CLJ_FIXNUM) {
             return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                     "subs requires a number as end index");
         }
@@ -380,7 +380,7 @@ ID native_last_index_of(ID *args, unsigned int argc) {
     // Validate from-index if provided
     int from_index = str_len - 1; // Default: search from end
     if (from_index_arg) {
-        if (TAG(from_index_arg) != CLJ_INT) {
+        if (TAG(from_index_arg) != CLJ_FIXNUM) {
             throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                       "last-index-of requires an integer as from-index");
             return NULL;
@@ -515,7 +515,7 @@ ID native_format(ID *args, unsigned int argc) {
                     }
                     case 'f': {
                         // Float
-                        float val = (TAG(args[arg_idx]) == CLJ_INT) ?
+                        float val = (TAG(args[arg_idx]) == CLJ_FIXNUM) ?
                                    (float)AS_FIXNUM(args[arg_idx]) :
                                    as_fixed((CljValue)args[arg_idx]);
                         int n = snprintf(out, remaining, "%f", val);

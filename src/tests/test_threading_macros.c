@@ -25,7 +25,7 @@ TEST(test_threading_thread_first_basic) {
     // Basic threading: (-> 5 (+ 3) (* 2)) => 16
     ID result = eval_string("(-> 5 (+ 3) (* 2))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(16, as_fixnum((CljValue)result));
 }
 
@@ -35,7 +35,7 @@ TEST(test_threading_thread_first_single_form) {
     // Single form: (-> 5 inc) => 6
     ID result = eval_string("(-> 5 inc)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result));
 }
 
@@ -45,7 +45,7 @@ TEST(test_threading_thread_first_no_forms) {
     // No forms: (-> 5) => 5
     ID result = eval_string("(-> 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(5, as_fixnum((CljValue)result));
 }
 
@@ -55,7 +55,7 @@ TEST(test_threading_thread_first_map_ops) {
     // Map operations: (-> {:a 1} (assoc :b 2) (get :b)) => 2
     ID result = eval_string("(-> {:a 1} (assoc :b 2) (get :b))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)result));
 }
 
@@ -79,7 +79,7 @@ TEST(test_threading_thread_last_basic) {
     // Basic threading: (->> [1 2 3] (map inc) (filter even?)) => (2 4)
     ID result = eval_string("(vec (->> [1 2 3] (map inc) (filter even?)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_EQUAL_INT(2, vector_count((CljVector*)result));
 }
 
@@ -89,7 +89,7 @@ TEST(test_threading_thread_last_single_form) {
     // Single form: (->> [1 2 3] (map inc)) => (2 3 4)
     ID result = eval_string("(vec (->> [1 2 3] (map inc)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_EQUAL_INT(3, vector_count((CljVector*)result));
 }
 
@@ -99,7 +99,7 @@ TEST(test_threading_thread_last_no_forms) {
     // No forms: (->> 5) => 5
     ID result = eval_string("(->> 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(5, as_fixnum((CljValue)result));
 }
 
@@ -113,7 +113,7 @@ TEST(test_threading_as_basic) {
     // Basic as->: (as-> 5 x (+ x 3) (* x 2)) => 16
     ID result = eval_string("(as-> 5 x (+ x 3) (* x 2))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(16, as_fixnum((CljValue)result));
 }
 
@@ -123,7 +123,7 @@ TEST(test_threading_as_no_forms) {
     // No forms: (as-> 5 x) => 5
     ID result = eval_string("(as-> 5 x)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(5, as_fixnum((CljValue)result));
 }
 
@@ -145,7 +145,7 @@ TEST(test_threading_some_first_continues_when_not_nil) {
     // Continues when not nil: (some-> {:a 1} :a inc) => 2
     ID result = eval_string("(some-> {:a 1} :a inc)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)result));
 }
 
@@ -167,7 +167,7 @@ TEST(test_threading_some_last_continues_when_not_nil) {
     // Continues when not nil: (some->> [1 2 3] (map inc) (filter even?)) => (2 4)
     ID result = eval_string("(vec (some->> [1 2 3] (map inc) (filter even?)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_EQUAL_INT(2, vector_count((CljVector*)result));
 }
 
@@ -189,7 +189,7 @@ TEST(test_threading_cond_first_basic) {
     // Basic cond->: (cond-> 1 true inc false dec) => 2
     ID result = eval_string("(cond-> 1 true inc false dec)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)result));
 }
 
@@ -199,7 +199,7 @@ TEST(test_threading_cond_first_multiple_true) {
     // Multiple true tests: (cond-> 1 true inc true (* 2)) => 4
     ID result = eval_string("(cond-> 1 true inc true (* 2))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)result));
 }
 
@@ -209,7 +209,7 @@ TEST(test_threading_cond_first_no_clauses) {
     // No clauses: (cond-> 1) => 1
     ID result = eval_string("(cond-> 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)result));
 }
 
@@ -223,7 +223,7 @@ TEST(test_threading_cond_last_basic) {
     // Basic cond->>: (cond->> [1 2 3] true (map inc) false (filter even?)) => (2 3 4)
     ID result = eval_string("(vec (cond->> [1 2 3] true (map inc) false (filter even?)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     TEST_ASSERT_EQUAL_INT(3, vector_count((CljVector*)result));
 }
 
@@ -233,7 +233,7 @@ TEST(test_threading_cond_last_no_clauses) {
     // No clauses: (cond->> 1) => 1
     ID result = eval_string("(cond->> 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)result));
 }
 

@@ -237,7 +237,7 @@ TEST(test_history_save_escapes_quotes) {
   CljObject *str = (CljObject *)make_string(test_input);
   TEST_ASSERT_NOT_NULL(str);
 
-  CljVector *vec = make_vector(1, CLJ_VECTOR_PERSISTENT);
+  CljVector *vec = make_vector(1);
   vec = vector_conj(vec, str);
 
   // Save to file
@@ -674,7 +674,7 @@ TEST(test_history_load_from_file_scenario) {
         RELEASE(elem);
       }
       if (all_strings) {
-        CljVector* new_vec = make_vector(count, CLJ_VECTOR_PERSISTENT);
+        CljVector* new_vec = make_vector(count);
         for (int i = 0; i < count; i++) {
           ID elem = vector_nth(v, i);
           new_vec = vector_conj(new_vec, elem);
@@ -794,7 +794,7 @@ TEST(test_fs_layer_write_read_stat_list_delete)
     char last_key[FS_KEY_MAX] = {0};
     ID lst = fs_list_dir_batch(st, "/data/", NULL, 32, last_key, sizeof(last_key));
     TEST_ASSERT_NOT_NULL(lst);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(lst));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(lst));
     CljVector *v = as_vector(lst);
     TEST_ASSERT_EQUAL_INT(1, vector_count(v));
     TEST_ASSERT_TRUE(last_key[0] == '\0'); // only entry, end reached
@@ -845,7 +845,7 @@ TEST(test_fs_list_dir_batch_many_files)
     char last_key[FS_KEY_MAX] = {0};
     ID batch1 = fs_list_dir_batch(st, "/many/", NULL, 32, last_key, sizeof(last_key));
     TEST_ASSERT_NOT_NULL(batch1);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(batch1));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(batch1));
     TEST_ASSERT_EQUAL_INT(32, vector_count(as_vector(batch1)));
     TEST_ASSERT_TRUE(last_key[0] != '\0');
 
@@ -853,7 +853,7 @@ TEST(test_fs_list_dir_batch_many_files)
     char last_key2[FS_KEY_MAX] = {0};
     ID batch2 = fs_list_dir_batch(st, "/many/", last_key, 32, last_key2, sizeof(last_key2));
     TEST_ASSERT_NOT_NULL(batch2);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(batch2));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(batch2));
     TEST_ASSERT_EQUAL_INT(18, vector_count(as_vector(batch2)));
     TEST_ASSERT_TRUE(last_key2[0] == '\0'); // no more
 
@@ -949,7 +949,7 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
     /* list (lazy): realize into a vector */
     CljObject *lst = eval_string("(vec (tinyclj.fs/list \"/data/\"))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(lst);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(lst));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(lst));
     TEST_ASSERT_EQUAL_INT(1, vector_count(as_vector(lst)));
 
     /* list with >32 files (forces batching in tinyclj.fs/list) */
@@ -961,7 +961,7 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
         g_test_eval_state);
     CljObject *many = eval_string("(vec (tinyclj.fs/list \"/many/\"))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(many);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(many));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(many));
     TEST_ASSERT_EQUAL_INT(50, vector_count(as_vector(many)));
 
     /* kv put/get (key must not start with /) */

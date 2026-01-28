@@ -7,7 +7,7 @@ const char* clj_type_name(CljType type) {
     }
 
     switch (type) {
-        case CLJ_INT: return "Integer";
+        case CLJ_FIXNUM: return "Integer";
         case CLJ_CHAR: return "Character";
         case CLJ_BOOL: return "Boolean";
         case CLJ_FLOAT: return "Float";

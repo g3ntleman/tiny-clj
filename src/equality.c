@@ -46,8 +46,8 @@ bool clj_equal_full(ID a, ID b) {
     // even across different concrete types (e.g. '(1 2) == [1 2]).
     const unsigned char ta = TAG(a_obj);
     const unsigned char tb = TAG(b_obj);
-    const bool a_seq = (ta == CLJ_LIST || ta == CLJ_VECTOR || ta == CLJ_SEQ || ta == CLJ_LAZY_SEQ);
-    const bool b_seq = (tb == CLJ_LIST || tb == CLJ_VECTOR || tb == CLJ_SEQ || tb == CLJ_LAZY_SEQ);
+    const bool a_seq = (ta == CLJ_LIST || ta == CLJ_VECTOR_PERSISTENT || ta == CLJ_SEQ || ta == CLJ_LAZY_SEQ);
+    const bool b_seq = (tb == CLJ_LIST || tb == CLJ_VECTOR_PERSISTENT || tb == CLJ_SEQ || tb == CLJ_LAZY_SEQ);
     if (a_seq && b_seq) {
         SeqIterator ia, ib;
         if (!seq_iter_init(&ia, a_obj) || !seq_iter_init(&ib, b_obj)) {
@@ -71,7 +71,7 @@ bool clj_equal_full(ID a, ID b) {
     // Note: CLJ_BOOL, CLJ_SYMBOL are handled by pointer comparison (line 23)
     // Symbols are interned - only identity (pointer comparison) is needed
     switch (a_obj->type) {
-        // CLJ_INT, CLJ_FLOAT removed - handled as immediates
+        // CLJ_FIXNUM, CLJ_FLOAT removed - handled as immediates
         // CLJ_SYMBOL removed - handled by pointer comparison (line 23) due to interning
 
         // Complex types - content comparison

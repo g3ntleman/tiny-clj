@@ -714,7 +714,7 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
     editor->ctx = ctx;
     
     // Initialize history support with transient vector for efficient in-place operations
-    CljVector *persistent_vec = make_vector(50, CLJ_VECTOR_PERSISTENT);  // Start with persistent vector
+    CljVector *persistent_vec = make_vector(50);  // Start with persistent vector
     editor->history = vector_transient(persistent_vec);      // Convert to transient for efficient operations
     RELEASE(persistent_vec);  // Release the persistent version
     editor->history_index = -1;  // Not browsing
@@ -909,7 +909,7 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
     // Convert transient to persistent temporarily for checking
     CljVector *history_vec = editor->history;
     CljPersistentVector *temp_persistent = NULL;
-    if (history_vec && TAG(history_vec) == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+    if (history_vec && TAG(history_vec) == CLJ_VECTOR_TRANSIENT) {
         temp_persistent = vector_persistent((CljTransientVector*)history_vec);
         if (temp_persistent) {
             int count = vector_count(temp_persistent);
@@ -983,7 +983,7 @@ void line_editor_clear_history(LineEditor *editor) {
     if (!editor) return;
     history_exit(editor);
     RELEASE(editor->history);
-    CljVector *persistent_vec = make_vector(50, CLJ_VECTOR_PERSISTENT);
+    CljVector *persistent_vec = make_vector(50);
     editor->history = vector_transient(persistent_vec);
     RELEASE(persistent_vec);
     editor->history_index = -1;

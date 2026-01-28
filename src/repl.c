@@ -282,7 +282,7 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
     int count = vector_count(v);
     if (count <= limit) return RETAIN(vec);
     int start = count - limit;
-    CljVector* out = make_vector(limit, CLJ_VECTOR_PERSISTENT);
+    CljVector* out = make_vector(limit);
     ID nth_args[2];
     nth_args[0] = v;
     for (int i = 0; i < limit; i++) {
@@ -305,7 +305,7 @@ bool history_save_to_file(CljVector *vec, const char *path) {
     if (!path || !vec) return false;
 
     CljObject *persistent_vec = (CljObject*)vec;
-    if (TAG((CljObject*)vec) == CLJ_VECTOR_PERSISTENT_TRANSIENT) {
+    if (TAG((CljObject*)vec) == CLJ_VECTOR_TRANSIENT) {
         persistent_vec = (CljObject*)vector_persistent((CljTransientVector*)vec);
         if (!persistent_vec || TAG(persistent_vec) != CLJ_VECTOR_PERSISTENT) {
             return false;

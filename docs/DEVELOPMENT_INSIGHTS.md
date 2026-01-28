@@ -240,7 +240,7 @@ for (int i = 0; i < TEST_VECTOR_SIZE; i++) { /* ... */ }
 ```c
 // Statt redundante Checks:
 mu_assert_obj_not_null(result);  // ← redundant
-mu_assert_obj_type(result, CLJ_INT);
+mu_assert_obj_type(result, CLJ_FIXNUM);
 mu_assert_obj_int(result, 3);
 
 // Besser (spezifische Makros enthalten bereits Checks):
@@ -1295,7 +1295,7 @@ Verwende konsequent `is_type(obj, CLJ_TYPE)` statt direkte Typvergleiche wie `ob
 ```c
 // Unnötig - direkter Typvergleich
 if (obj->type == CLJ_NIL) { ... }
-if (obj->type == CLJ_INT) { ... }
+if (obj->type == CLJ_FIXNUM) { ... }
 if (obj->type == CLJ_SYMBOL) { ... }
 ```
 
@@ -1303,7 +1303,7 @@ if (obj->type == CLJ_SYMBOL) { ... }
 ```c
 // Konsistent - is_type() verwenden
 if (is_type(obj, CLJ_NIL)) { ... }
-if (is_type(obj, CLJ_INT)) { ... }
+if (is_type(obj, CLJ_FIXNUM)) { ... }
 if (is_type(obj, CLJ_SYMBOL)) { ... }
 ```
 
@@ -1329,7 +1329,7 @@ if (a && is_type(a, CLJ_NIL)) {
 #### Regel für zukünftige Entwicklung
 **Immer verwenden:**
 - `is_type(obj, CLJ_NIL)` statt `obj->type == CLJ_NIL`
-- `is_type(obj, CLJ_INT)` statt `obj->type == CLJ_INT`
+- `is_type(obj, CLJ_FIXNUM)` statt `obj->type == CLJ_FIXNUM`
 - `is_type(obj, CLJ_SYMBOL)` statt `obj->type == CLJ_SYMBOL`
 
 Diese Regel macht den Code konsistenter und robuster.
@@ -1344,14 +1344,14 @@ Die `is_type()` Funktion hat bereits eingebaute NULL-Checks, daher sind explizit
 ```c
 // Unnötig - is_type() hat bereits NULL-Check
 if (obj && is_type(obj, CLJ_NIL)) { ... }
-if (a && is_type(a, CLJ_INT)) { ... }
+if (a && is_type(a, CLJ_FIXNUM)) { ... }
 ```
 
 #### ✅ Korrekte Verwendung
 ```c
 // Direkt verwenden - is_type() handhabt NULL automatisch
 if (is_type(obj, CLJ_NIL)) { ... }
-if (is_type(a, CLJ_INT)) { ... }
+if (is_type(a, CLJ_FIXNUM)) { ... }
 ```
 
 #### Code-Cleanup-Beispiele
@@ -1376,7 +1376,7 @@ if (is_type(a, CLJ_NIL)) {
 #### Regel für zukünftige Entwicklung
 **Immer direkt verwenden:**
 - `is_type(obj, CLJ_NIL)` statt `if (obj && is_type(obj, CLJ_NIL))`
-- `is_type(obj, CLJ_INT)` statt `if (obj && is_type(obj, CLJ_INT))`
+- `is_type(obj, CLJ_FIXNUM)` statt `if (obj && is_type(obj, CLJ_FIXNUM))`
 - `is_type(obj, CLJ_SYMBOL)` statt `if (obj && is_type(obj, CLJ_SYMBOL))`
 
 Diese Regel macht den Code sauberer und konsistenter.

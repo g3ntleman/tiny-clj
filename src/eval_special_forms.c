@@ -350,7 +350,7 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
             }
         }
     }
-    CljVector* empty_params_vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
+    CljVector* empty_params_vec = make_vector(0);
     CljList *fn_list = make_list((CljObject*)SYM_FN, NULL);
     if (!fn_list) return NULL;
     fn_list->rest = (CljObject*)make_list(empty_params_vec, NULL);

@@ -66,7 +66,7 @@ void *throw_exception_formatted(const char *type, const char *file, int line, in
 #define TYPE_OF_CljInstant CLJ_INSTANT
 #define TYPE_OF_CljUUID CLJ_UUID
 #define TYPE_OF_CljAtom CLJ_ATOM
-#define TYPE_OF_int CLJ_INT
+#define TYPE_OF_int CLJ_FIXNUM
 #define TYPE_OF_double CLJ_FLOAT
 #define TYPE_OF_char CLJ_STRING
 #define TYPE_OF_CljNamespace CLJ_NAMESPACE

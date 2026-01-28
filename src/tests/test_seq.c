@@ -93,8 +93,8 @@ TEST_SHARED(test_seq_rest_vs_next_difference) {
 // ============================================================================
 
 TEST_SHARED(test_seq_equality) {
-    ID vec1 = AUTORELEASE(make_vector(2, CLJ_VECTOR_PERSISTENT));
-    ID vec2 = AUTORELEASE(make_vector(2, CLJ_VECTOR_PERSISTENT));
+    ID vec1 = AUTORELEASE(make_vector(2));
+    ID vec2 = AUTORELEASE(make_vector(2));
     CljVector *v1 = as_vector(vec1), *v2 = as_vector(vec2);
     v1 = vector_conj(vector_conj(v1, fixnum(1)), fixnum(2));
     v2 = vector_conj(vector_conj(v2, fixnum(1)), fixnum(2));
@@ -217,7 +217,7 @@ TEST_SHARED(test_seq_map_entry_structure) {
 // ============================================================================
 
 TEST_SHARED(test_seq_cow_multiple_sequences_same_container) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
+    ID vec = AUTORELEASE(make_vector(4));
     CljVector *v = as_vector(vec);
     v = vector_conj(vector_conj(vector_conj(v, fixnum(1)), fixnum(2)), fixnum(3));
     ID seq1 = AUTORELEASE(make_seq(vec));
@@ -234,7 +234,7 @@ TEST_SHARED(test_seq_cow_multiple_sequences_same_container) {
 }
 
 TEST_SHARED(test_seq_cow_rc_one_inplace) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
+    ID vec = AUTORELEASE(make_vector(4));
     CljVector *v = as_vector(vec);
     v = vector_conj(vector_conj(v, fixnum(1)), fixnum(2));
     ID seq = AUTORELEASE(make_seq(vec));
@@ -244,7 +244,7 @@ TEST_SHARED(test_seq_cow_rc_one_inplace) {
 }
 
 TEST_SHARED(test_seq_cow_rc_greater_one_copy_on_write) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
+    ID vec = AUTORELEASE(make_vector(4));
     CljVector *v = as_vector(vec);
     v = vector_conj(vector_conj(v, fixnum(1)), fixnum(2));
     ID seq = AUTORELEASE(make_seq(vec));
@@ -258,7 +258,7 @@ TEST_SHARED(test_seq_cow_rc_greater_one_copy_on_write) {
 }
 
 TEST_SHARED(test_seq_cow_multiple_sequences_preserved) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
+    ID vec = AUTORELEASE(make_vector(4));
     CljVector *v = as_vector(vec);
     v = vector_conj(vector_conj(vector_conj(v, fixnum(10)), fixnum(20)), fixnum(30));
     ID seq1 = AUTORELEASE(make_seq(vec));
@@ -278,7 +278,7 @@ TEST_SHARED(test_seq_cow_multiple_sequences_preserved) {
 }
 
 TEST_SHARED(test_seq_cow_iteration_after_cow) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
+    ID vec = AUTORELEASE(make_vector(4));
     CljVector *v = as_vector(vec);
     v = vector_conj(vector_conj(vector_conj(v, fixnum(1)), fixnum(2)), fixnum(3));
     ID seq = AUTORELEASE(make_seq(vec));

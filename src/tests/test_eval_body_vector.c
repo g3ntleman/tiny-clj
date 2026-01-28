@@ -23,7 +23,7 @@ TEST_SHARED(test_eval_body_vector_with_env_stack) {
     CljSymbol *x_sym = intern_symbol_global("x");
     CljSymbol *y_sym = intern_symbol_global("y");
     
-    CljVector *vec = make_vector(2, CLJ_VECTOR);
+    CljVector *vec = make_vector(2);
     ASSIGN(vec, vector_conj(vec, x_sym));
     ASSIGN(vec, vector_conj(vec, y_sym));
     
@@ -50,7 +50,7 @@ TEST_SHARED(test_eval_body_vector_with_env_stack) {
     // Evaluate vector
     ID result = eval_body(vec, NULL, g_test_eval_state, &ctx);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     
     CljVector *result_vec = as_vector(result);
     TEST_ASSERT_EQUAL_INT(2, vector_count(result_vec));
@@ -81,7 +81,7 @@ TEST_SHARED(test_eval_body_vector_with_base_env) {
     CljSymbol *x_sym = intern_symbol_global("x");
     CljSymbol *y_sym = intern_symbol_global("y");
     
-    CljVector *vec = make_vector(2, CLJ_VECTOR);
+    CljVector *vec = make_vector(2);
     ASSIGN(vec, vector_conj(vec, x_sym));
     ASSIGN(vec, vector_conj(vec, y_sym));
     
@@ -101,7 +101,7 @@ TEST_SHARED(test_eval_body_vector_with_base_env) {
     };
     ID result = eval_body(vec, base_env, g_test_eval_state, &ctx);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     
     CljVector *result_vec = as_vector(result);
     TEST_ASSERT_EQUAL_INT(2, vector_count(result_vec));
@@ -132,13 +132,13 @@ TEST_SHARED(test_eval_body_nested_vector_with_env_stack) {
     CljSymbol *x_sym = intern_symbol_global("x");
     CljSymbol *y_sym = intern_symbol_global("y");
     
-    CljVector *inner_vec1 = make_vector(1, CLJ_VECTOR);
+    CljVector *inner_vec1 = make_vector(1);
     ASSIGN(inner_vec1, vector_conj(inner_vec1, x_sym));
     
-    CljVector *inner_vec2 = make_vector(1, CLJ_VECTOR);
+    CljVector *inner_vec2 = make_vector(1);
     ASSIGN(inner_vec2, vector_conj(inner_vec2, y_sym));
     
-    CljVector *outer_vec = make_vector(2, CLJ_VECTOR);
+    CljVector *outer_vec = make_vector(2);
     ASSIGN(outer_vec, vector_conj(outer_vec, inner_vec1));
     ASSIGN(outer_vec, vector_conj(outer_vec, inner_vec2));
     
@@ -165,7 +165,7 @@ TEST_SHARED(test_eval_body_nested_vector_with_env_stack) {
     // Evaluate vector
     ID result = eval_body(outer_vec, NULL, g_test_eval_state, &ctx);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
     
     CljVector *result_vec = as_vector(result);
     TEST_ASSERT_EQUAL_INT(2, vector_count(result_vec));
@@ -173,7 +173,7 @@ TEST_SHARED(test_eval_body_nested_vector_with_env_stack) {
     // Check first inner vector (should be [1], not [x])
     ID first_inner = vector_nth(result_vec, 0);
     TEST_ASSERT_NOT_NULL(first_inner);
-    TEST_ASSERT_TRUE(TAG(first_inner) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(first_inner) == CLJ_VECTOR_PERSISTENT);
     CljVector *first_vec = as_vector(first_inner);
     TEST_ASSERT_EQUAL_INT(1, vector_count(first_vec));
     ID first_elem = vector_nth(first_vec, 0);
@@ -183,7 +183,7 @@ TEST_SHARED(test_eval_body_nested_vector_with_env_stack) {
     // Check second inner vector (should be [2], not [y])
     ID second_inner = vector_nth(result_vec, 1);
     TEST_ASSERT_NOT_NULL(second_inner);
-    TEST_ASSERT_TRUE(TAG(second_inner) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(second_inner) == CLJ_VECTOR_PERSISTENT);
     CljVector *second_vec = as_vector(second_inner);
     TEST_ASSERT_EQUAL_INT(1, vector_count(second_vec));
     ID second_elem = vector_nth(second_vec, 0);

@@ -670,7 +670,7 @@ TEST(test_as_list_valid) {
     // Test LIST_FIRST
     CljObject *first = LIST_FIRST(list_data);
     TEST_ASSERT_NOT_NULL(first);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(first));  // First element should be a fixnum (1)
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(first));  // First element should be a fixnum (1)
 }
 
 // Test as_list function with invalid input
@@ -1031,7 +1031,7 @@ TEST(test_type_check_all_types) {
     // Test immediate types
     ID fixnum_val = parse("42", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fixnum_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(fixnum_val));
 
     // Character literals are not yet supported in the parser
     // Skip character test for now
@@ -1105,7 +1105,7 @@ TEST(test_eval) {
     // Test: (eval '(+ 1 2)) => 3
     CljObject *result1 = eval_string("(eval '(+ 1 2))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result1));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result1));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result1));
 
     // Test: (eval '(def x 42)) => should define x
@@ -1116,7 +1116,7 @@ TEST(test_eval) {
     // Test: (eval 'x) => 42 (after defining x)
     CljObject *result3 = eval_string("(eval 'x)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result3));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result3));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result3));
 }
 
@@ -1133,7 +1133,7 @@ TEST(test_read_string) {
     // Test: (read-string "42") => 42
     CljObject *result2 = eval_string("(read-string \"42\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result2));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result2));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result2));
 }
 

@@ -15,14 +15,14 @@ TEST_SHARED(test_integer_overflow_detection) {
     // Test that normal multiplication still works
     CljObject *normal_result = eval_string("(* 2 3 4)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(normal_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(normal_result));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(normal_result));
     TEST_ASSERT_EQUAL_INT(24, as_fixnum((CljValue)normal_result));
     
     // Test that factorial calculation works (using direct multiplication)
     // Note: recur can only be used inside function bodies, so we test factorial via direct multiplication
     CljObject *small_factorial = eval_string("(* 5 4 3 2 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(small_factorial);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(small_factorial));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(small_factorial));
     TEST_ASSERT_EQUAL_INT(120, as_fixnum((CljValue)small_factorial));
     
     // Test addition overflow - large positive numbers
@@ -102,12 +102,12 @@ TEST_SHARED(test_integer_overflow_detection) {
     // Test that normal operations still work after overflow tests
     CljObject *normal_add = eval_string("(+ 10 20)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(normal_add);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(normal_add));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(normal_add));
     TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)normal_add));
     
     CljObject *normal_sub = eval_string("(- 50 20)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(normal_sub);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(normal_sub));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(normal_sub));
     TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)normal_sub));
 }
 
@@ -143,31 +143,31 @@ TEST_SHARED(test_multiplication_with_negative_numbers) {
     // Test: (* 1 -2) => -2 (positive * negative)
     CljObject *result1 = eval_string("(* 1 -2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result1));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result1));
     TEST_ASSERT_EQUAL_INT(-2, as_fixnum((CljValue)result1));
     
     // Test: (* -2 3) => -6 (negative * positive)
     CljObject *result2 = eval_string("(* -2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result2));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result2));
     TEST_ASSERT_EQUAL_INT(-6, as_fixnum((CljValue)result2));
     
     // Test: (* -2 3 -4) => 24 (negative * positive * negative)
     CljObject *result3 = eval_string("(* -2 3 -4)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result3));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result3));
     TEST_ASSERT_EQUAL_INT(24, as_fixnum((CljValue)result3));
     
     // Test: (* -1 -2) => 2 (negative * negative)
     CljObject *result4 = eval_string("(* -1 -2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result4));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result4));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)result4));
     
     // Test: (* -1 -2 -3) => -6 (negative * negative * negative)
     CljObject *result5 = eval_string("(* -1 -2 -3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result5);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result5));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result5));
     TEST_ASSERT_EQUAL_INT(-6, as_fixnum((CljValue)result5));
 }
 
@@ -176,31 +176,31 @@ TEST_SHARED(test_quot) {
     // Test: (quot 10 3) => 3
     CljObject *result1 = eval_string("(quot 10 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result1));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result1));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result1));
     
     // Test: (quot -10 3) => -3 (Clojure behavior: truncates toward zero)
     CljObject *result2 = eval_string("(quot -10 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result2));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result2));
     TEST_ASSERT_EQUAL_INT(-3, as_fixnum((CljValue)result2));
     
     // Test: (quot 10 -3) => -3
     CljObject *result3 = eval_string("(quot 10 -3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result3));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result3));
     TEST_ASSERT_EQUAL_INT(-3, as_fixnum((CljValue)result3));
     
     // Test: (quot -10 -3) => 3
     CljObject *result4 = eval_string("(quot -10 -3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result4));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result4));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result4));
     
     // Test: (quot 0 5) => 0
     CljObject *result5 = eval_string("(quot 0 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result5);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result5));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result5));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result5));
     
     // Test division by zero exception
@@ -220,25 +220,25 @@ TEST_SHARED(test_bit_shift_left) {
     // Test: (bit-shift-left 1 3) => 8
     CljObject *result1 = eval_string("(bit-shift-left 1 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result1));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result1));
     TEST_ASSERT_EQUAL_INT(8, as_fixnum((CljValue)result1));
     
     // Test: (bit-shift-left 2 1) => 4
     CljObject *result2 = eval_string("(bit-shift-left 2 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result2));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result2));
     TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)result2));
     
     // Test: (bit-shift-left 1 0) => 1
     CljObject *result3 = eval_string("(bit-shift-left 1 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result3));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result3));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)result3));
     
     // Test: (bit-shift-left 0 5) => 0
     CljObject *result4 = eval_string("(bit-shift-left 0 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result4));
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result4));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result4));
 }
 
