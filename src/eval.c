@@ -1240,13 +1240,38 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
         }
 
         // If fn is still a symbol, it means eval_symbol couldn't resolve it as a function
-        // Check if it's unquote-splice (only valid inside quasiquote)
+        // Check if it's a builtin function first
         if (fn_tag == CLJ_SYMBOL) {
             CljSymbol *sym = as_symbol(fn);
             if (sym == SYM_UNQUOTE_SPLICE) {
                 throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                         "unquote-splice can only be used inside quasiquote");
                 return NULL;
+            }
+            // Check if it's a builtin function that should be handled via native_function_lookup
+            if (is_builtin_function(sym)) {
+                BuiltinFn native_func = native_function_lookup(sym);
+                if (native_func) {
+                    // Extract and evaluate arguments from list
+                    ID args[16];
+                    unsigned int argc = 0;
+                    CljList *rest = LIST_REST(list);
+                    CljMap *eval_env = is_map(env) ? env : eval_env_or_ns_mappings(env, st);
+                    while (rest && argc < 16) {
+                        ID arg_expr = LIST_FIRST(rest);
+                        if (!arg_expr) break;
+                        ID arg = eval_arg_from_expr_with_context(arg_expr, eval_env, st, ctx);
+                        if (!arg && arg_expr != SYM_NIL) {
+                            // Evaluation failed (exception thrown)
+                            return NULL;
+                        }
+                        args[argc++] = arg;
+                        rest = LIST_REST(rest);
+                    }
+                    // Call native function
+                    ID result = native_func(args, argc);
+                    return (result == SYM_NIL) ? NULL : AUTORELEASE(result);
+                }
             }
             const char *sym_name = sym && sym->cname ? sym->cname : "unknown";
             throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
