@@ -2070,6 +2070,8 @@ static INLINE bool is_builtin_function(CljSymbol *symbol) {
             symbol == SYM_GT ||
             symbol == SYM_LE ||
             symbol == SYM_GE ||
+            symbol == SYM_NOT_EQ ||
+            symbol == SYM_IDENTICAL ||
             symbol == SYM_PRINT ||
             symbol == SYM_PRINTLN ||
             symbol == SYM_STR ||
