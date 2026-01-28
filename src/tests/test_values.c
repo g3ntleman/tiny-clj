@@ -78,8 +78,8 @@ TEST(test_cljvalue_transient_vector) {
         
         // Test transient operations using clj_conj
         // clj_conj mutates the transient vector in-place
-        clj_conj(tvec_data, fixnum(10));
-        clj_conj(tvec_data, fixnum(20));
+        vector_push(tvec_data, fixnum(10));
+        vector_push(tvec_data, fixnum(20));
         CljPersistentVector *backing = vector_persistent(tvec_data);
         TEST_ASSERT_NOT_NULL(backing);
         TEST_ASSERT_EQUAL_INT(2, vector_count(backing));

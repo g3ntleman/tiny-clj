@@ -64,7 +64,7 @@ TEST(test_dynamic_binding_nil_can_be_used_as_arg) {
 TEST(test_dynamic_binding_rejects_non_dynamic_symbol) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-    unsigned int base_depth = vector_count(g_test_eval_state->dynamic_bindings);
+    unsigned int base_depth = vector_count(vector_persistent(g_test_eval_state->dynamic_bindings));
 
     CljObject *result = NULL;
     bool exception_caught = false;
@@ -78,7 +78,7 @@ TEST(test_dynamic_binding_rejects_non_dynamic_symbol) {
 
     TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Expected exception for non-dynamic binding key");
     TEST_ASSERT_NULL(result);
-    TEST_ASSERT_EQUAL_UINT(base_depth, vector_count(g_test_eval_state->dynamic_bindings));
+    TEST_ASSERT_EQUAL_UINT(base_depth, vector_count(vector_persistent(g_test_eval_state->dynamic_bindings)));
 }
 
 TEST(test_ns_star_binding_changes_current_ns_and_restores) {
@@ -107,7 +107,7 @@ TEST(test_ns_star_binding_rejects_nil_and_restores) {
     CljNamespace *before = g_test_eval_state->current_ns;
     TEST_ASSERT_NOT_NULL(before);
 
-    unsigned int base_depth = vector_count(g_test_eval_state->dynamic_bindings);
+    unsigned int base_depth = vector_count(vector_persistent(g_test_eval_state->dynamic_bindings));
 
     CljObject *result = NULL;
     bool exception_caught = false;
@@ -122,7 +122,7 @@ TEST(test_ns_star_binding_rejects_nil_and_restores) {
     TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Expected exception for (*ns* nil)");
     TEST_ASSERT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(before, g_test_eval_state->current_ns);
-    TEST_ASSERT_EQUAL_UINT(base_depth, vector_count(g_test_eval_state->dynamic_bindings));
+    TEST_ASSERT_EQUAL_UINT(base_depth, vector_count(vector_persistent(g_test_eval_state->dynamic_bindings)));
 }
 
 TEST(test_dynamic_binding_unwinds_on_exception) {
@@ -130,7 +130,7 @@ TEST(test_dynamic_binding_unwinds_on_exception) {
 
     evalstate_set_ns(g_test_eval_state, "test-dynamic-binding-unwind");
 
-    unsigned int base_depth = vector_count(g_test_eval_state->dynamic_bindings);
+    unsigned int base_depth = vector_count(vector_persistent(g_test_eval_state->dynamic_bindings));
     CljNamespace *before = g_test_eval_state->current_ns;
     TEST_ASSERT_NOT_NULL(before);
 
@@ -144,7 +144,7 @@ TEST(test_dynamic_binding_unwinds_on_exception) {
     } END_TRY
 
     TEST_ASSERT_TRUE(exception_caught);
-    TEST_ASSERT_EQUAL_UINT(base_depth, vector_count(g_test_eval_state->dynamic_bindings));
+    TEST_ASSERT_EQUAL_UINT(base_depth, vector_count(vector_persistent(g_test_eval_state->dynamic_bindings)));
     TEST_ASSERT_EQUAL_PTR(before, g_test_eval_state->current_ns);
 
     // Ensure the evaluator still works after unwind.

@@ -421,7 +421,7 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
     }
 
     // Start from captured env_stack (if any), but do NOT mutate it.
-    CljPersistentVector *loop_stack = (ctx && ctx->env_stack) ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
+    CljPersistentVector *loop_stack = ctx ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
 
     // Frame for fast local lookups.
     CallFrame loop_frame_storage;
@@ -688,7 +688,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
             CljPersistentVector *catch_stack = NULL;
             if (ctx) {
                 catch_ctx_storage = *ctx;
-                catch_stack = ctx->env_stack ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
+                catch_stack = (CljPersistentVector*)RETAIN(ctx->env_stack);
                 env_stack_push_inplace(&catch_stack, catch_env);
                 catch_ctx_storage.env_stack = catch_stack;
                 catch_ctx = &catch_ctx_storage;
@@ -754,7 +754,7 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
         return NULL;
     }
 
-    unsigned int base_depth = vector_count(st->dynamic_bindings);
+    unsigned int base_depth = vector_count(vector_persistent(st->dynamic_bindings));
     CljNamespace *saved_ns = st->current_ns;
 
     // Build a single frame map: Symbol -> value.
@@ -828,7 +828,7 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
     }
 
     // Push the new frame and run body; unwind stack even if an exception escapes.
-    vector_conj_inplace(&st->dynamic_bindings, frame);
+    vector_push(st->dynamic_bindings, frame);
     RELEASE(frame);
 
     if (bound_ns) {

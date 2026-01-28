@@ -7,6 +7,7 @@
 // Plan: remove shared `struct CljVector` layout. Keep only:
 // - CljPersistentVector: TAG CLJ_VECTOR_PERSISTENT or CLJ_VECTOR_TRANSIENT_WEAK, owns `data[]`.
 // - CljTransientVector: wrapper (TAG CLJ_VECTOR_TRANSIENT) with `backing` (always persistent tag).
+//   Transient mutation API: vector_push, vector_pop, clj_conj, and vector_set_nth_transient.
 
 typedef struct CljPersistentVector CljPersistentVector;
 
@@ -77,7 +78,6 @@ void vector_truncate(CljPersistentVector *vec, unsigned int n);
 // Transient wrapper API (wrapper pointer remains stable; `backing` may be replaced/grown).
 CljTransientVector* vector_transient(CljPersistentVector *vec);
 CljPersistentVector* vector_persistent(CljTransientVector *tvec);
-void clj_conj(CljTransientVector *tvec, ID item);
 // (internal) backing replacement helper is intentionally not part of the public API.
 
 /** Push item to end of transient vector (in-place mutation).
@@ -92,6 +92,13 @@ void vector_push(CljTransientVector *tvec, ID item);
  * @param tvec Transient vector (must be CLJ_VECTOR_TRANSIENT)
  */
 void vector_pop(CljTransientVector *tvec);
+
+/** Set element at index in transient vector (in-place via backing).
+ * Uses persistent COW semantics under the hood:
+ * - Within bounds: updates element at index.
+ * - Out of bounds: throws index-out-of-bounds exception.
+ */
+void vector_set_nth_transient(CljTransientVector *tvec, unsigned int index, ID value);
 
 size_t vector_make_copy_count(void);
 void vector_make_copy_count_reset(void);

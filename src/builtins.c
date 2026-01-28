@@ -863,7 +863,7 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
 
     // If x is empty, return y directly (may be nil). This preserves laziness for y.
     if (!x_seq) {
-        return y ? RETAIN(y) : NULL;
+        return RETAIN(y);
     }
 
     ID elem = native_first(&x_seq, 1);
@@ -3421,9 +3421,10 @@ ID native_get_thread_bindings(ID *args, unsigned int argc)
     RETAIN(out);
 
     if (st && st->dynamic_bindings) {
-        unsigned int depth = vector_count(st->dynamic_bindings);
+        CljPersistentVector *backing = vector_persistent(st->dynamic_bindings);
+        unsigned int depth = vector_count(backing);
         for (unsigned int i = 0; i < depth; i++) {
-            ID frame_id = vector_nth(st->dynamic_bindings, i);
+            ID frame_id = vector_nth(backing, i);
             if (!frame_id || TAG(frame_id) != CLJ_MAP) continue;
             ASSIGN(out, map_merge(out, (CljMap*)frame_id, true));
         }
@@ -3984,7 +3985,7 @@ ID native_get_macro(ID *args, unsigned int argc)
     if (!args[0] || TAG(args[0]) != CLJ_SYMBOL || !g_current_eval_state)
         return NULL;
     CljFunction *macro = lookup_macro_resolve(g_current_eval_state, as_symbol(args[0]));
-    return macro ? RETAIN(macro) : NULL;
+    return RETAIN(macro);
 }
 
 // Apply function to arguments: (apply f args) or (apply f a b c args)

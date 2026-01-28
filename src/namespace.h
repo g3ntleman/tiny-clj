@@ -10,6 +10,7 @@
 // Note: This may create a circular dependency if value.h includes namespace.h
 // But since CljMap is an anonymous struct typedef, we can't use forward declaration
 #include "map.h"
+#include "vector.h"
 
 // Namespace structure - subtype of CljObject
 #pragma GCC diagnostic push
@@ -35,7 +36,7 @@ typedef struct {
     int sp;
     int stack_capacity;
     struct CljVector *pool;
-    struct CljVector *dynamic_bindings; // transient vector: stack of binding frame maps
+    CljTransientVector *dynamic_bindings; // stack of binding frame maps (use vector_push/vector_pop)
     int finished;
     CljNamespace *current_ns; // dynamic current namespace (*ns*)
     CljNamespace *resolve_ns; // namespace used for unqualified symbol resolution (defaults to current_ns)
