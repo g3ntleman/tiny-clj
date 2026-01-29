@@ -110,9 +110,8 @@ CljByteArray* make_byte_array_external(uint8_t *bytes, int length, void *externa
         return arr;
     }
 
-    CljObject *obj = (CljObject*)arr;
-    CLJ_ASSERT(obj->type == CLJ_BYTE_ARRAY);
-    CLJ_ASSERT((obj->flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) != 0);
+    CLJ_ASSERT(((CljObject*)arr)->type == CLJ_BYTE_ARRAY);
+    CLJ_ASSERT((((CljObject*)arr)->flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) != 0);
     CljByteArrayExternal *ext = (CljByteArrayExternal*)arr;
     ext->external_ctx = external_ctx;
     ext->external_free_fn = free_fn;

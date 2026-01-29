@@ -1,12 +1,11 @@
 #include "test_common.h"
 
 TEST(test_throw_exception_formatted) {
-    void *result = NULL;
     CLJException *caught_ex = NULL;
-    
+
     TRY {
-        result = throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0, 
-                                          "Test formatted message: %d", 42);
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                 "Test formatted message: %d", 42);
         TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here after throw");
     } CATCH(ex) {
         caught_ex = ex;
@@ -16,8 +15,7 @@ TEST(test_throw_exception_formatted) {
         TEST_ASSERT_NOT_NULL(strstr(caught_ex->file, "test_exception.c"));
         TEST_ASSERT_TRUE(caught_ex->line > 0);
     } END_TRY
-    
-    TEST_ASSERT_NULL(result);
+
     TEST_ASSERT_NOT_NULL(caught_ex);
 }
 

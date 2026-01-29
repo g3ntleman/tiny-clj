@@ -127,9 +127,7 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
     return result;
 }
 
-#ifndef ZOMBIE_ENABLED
 static void release_object_deep(CljObject *v);
-#endif
 static void release_object_default(CljObject *v);
 static void init_release_dispatch(void);
 static SubjectiveCReleaseFn g_release_dispatch[CLJ_TYPE_COUNT];
@@ -234,7 +232,7 @@ void release(CljObject *v) {
     MEMORY_PROFILER_TRACK_RELEASE(v);
     if (v->rc == 0) {
         if (g_debug_output_active) LOGF(stdout, "🔍 release: Object %p will be freed (rc=0)\n", v);
-#ifdef ZOMBIE_ENABLED
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
         if (autorelease_count(v) != 0) {
             char msg[256];
             /* No zombie_desc: clj_to_string can autorelease; we are inside drain (g_in_drain). */
@@ -327,7 +325,7 @@ void autorelease_pool_peak_reset(void) {
 }
 
 #ifdef DEBUG
-// Never use in Production code.
+/* DEBUG only; must not be used in Release builds. */
 uint32_t autorelease_count(CljObject *obj) {
     if (!obj || !g_pool) return 0;
     uint32_t n = 0;
@@ -378,7 +376,6 @@ int retain_count(ID obj) {
     return (o->rc == SINGLETON_RC) ? 0 : o->rc;
 }
 
-#ifndef ZOMBIE_ENABLED
 static void release_object_deep(CljObject *v) {
     if (!v || !TRACKS_RETAINS(v)) return;
     init_release_dispatch();
@@ -389,7 +386,6 @@ static void release_object_deep(CljObject *v) {
         fn(v);
     }
 }
-#endif
 
 static void release_object_default(CljObject *v) {
     switch (v->type) {

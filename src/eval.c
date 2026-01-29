@@ -293,16 +293,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     int current_argc = effective_count;
     int recur_arg_count = -1;
 
-    // Own refs for initial args so they stay valid across recur iterations and frame_set_bindings
-    // (caller may pass pool-only refs; frame_set_bindings_init RETAINs for the frame, but on recur
-    // we call frame_release first and need the old values to have at least one non-pool ref).
-    ID initial_args[16];
-    const int initial_argc = current_argc;
-    for (int i = 0; i < initial_argc; i++) {
-        initial_args[i] = current_args[i];
-        if (initial_args[i] && !IS_IMMEDIATE(initial_args[i]))
-            RETAIN(initial_args[i]);
-    }
+    // Frame owns arg refs (frame_set_bindings_init RETAINs); frame_release at end frees them.
 
     // Create call frame with parameters (fixed-size stack variable)
     CLJ_ASSERT(effective_count <= CALLFRAME_MAX_PARAMS && "Too many parameters");
@@ -320,14 +311,12 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         // Reset recur state for each iteration
         recur_arg_count = -1;  // -1 = no tail call
 
-        // OPTIMIZATION: Only cleanup recur_args if recur was actually used in previous iteration
-        // For functions without recur (like fib), this check is always false - zero overhead
         if (used_recur_slots > 0) {
-        for (int i = 0; i < used_recur_slots; i++) {
-            RELEASE(recur_args[i]);
-            recur_args[i] = NULL;
-        }
-        used_recur_slots = 0;
+            for (int i = 0; i < used_recur_slots; i++) {
+                RELEASE(recur_args[i]);
+                recur_args[i] = NULL;
+            }
+            used_recur_slots = 0;
         }
 
         // Evaluate function body with context (stack-only, no allocations)
@@ -347,26 +336,16 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         // With C stack, nested functions have their own stack frames, so recur_arg_count
         // only changes if recur was used in THIS function
         if (recur_arg_count >= 0) {
-            // Tail call detected: recur was used in this function
             CLJ_ASSERT(recur_arg_count <= param_count);
-            // new_result from eval (AUTORELEASE'd in pool); do not RELEASE
-
-            // Update argc and copy new arguments from recur_args
-            CLJ_ASSERT(recur_arg_count >= 0 && recur_arg_count <= param_count);
             current_argc = recur_arg_count;
             for (int i = 0; i < current_argc; i++) {
                 current_args[i] = recur_args[i];
                 recur_args[i] = NULL;
             }
             used_recur_slots = current_argc;
-
-            // Recreate call frame with new parameters (stack-allocated)
             frame_set_bindings(call_frame, NULL, effective_params, current_args, current_argc);
-            // Release refs we held in recur_args (frame now owns via frame_set_bindings RETAIN)
             for (int i = 0; i < current_argc; i++)
                 RELEASE(current_args[i]);
-
-            // Continue loop - recur_arg_count will be reset at the start of the next iteration
             continue;
         }
 
@@ -376,27 +355,11 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         break;
     } while (true);
 
-    // current_args[i] is stored in call_env, and call_env holds a reference to it.
-    // If we release current_args[i] here, the object might be freed, but call_env
-    // still holds a pointer to it. When call_env is released later, RELEASE will
-    // be called on the already-freed object, causing a use-after-free error.
-    // The call_env will be released below, which will properly release all stored values.
-
-    // OPTIMIZATION: Only cleanup if recur args were actually set
     if (used_recur_slots > 0) {
-    for (int i = 0; i < used_recur_slots; i++) {
-        RELEASE(recur_args[i]);
-        }
+        for (int i = 0; i < used_recur_slots; i++)
+            RELEASE(recur_args[i]);
     }
-
-    // Cleanup call frame (stack-allocated, but may contain retained values)
     frame_release(call_frame);
-
-    // Release refs we took for initial args
-    for (int i = 0; i < initial_argc; i++) {
-        if (initial_args[i] && !IS_IMMEDIATE(initial_args[i]))
-            RELEASE(initial_args[i]);
-    }
 
     RELEASE(call_env_stack);
 
