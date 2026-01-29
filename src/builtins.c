@@ -2937,14 +2937,14 @@ static ID create_fixed_result(int32_t acc_fixed)
 // Helper function to throw arithmetic overflow exceptions (DRY principle)
 static ID throw_arithmetic_overflow(const char *err_msg, int a, int b)
 {
-    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg, a, b return NULL;
+    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg, a, b); return NULL;
 
 }
 
 // Helper function to throw fixed-point overflow exceptions
 static ID throw_fixed_overflow(const char *err_msg)
 {
-    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg return NULL;
+    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg); return NULL;
 
 }
 
@@ -5308,14 +5308,14 @@ ID native_sub_variadic(ID *args, unsigned int argc)
     {
         if (!args[0])
         {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER return NULL;
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return NULL;
 
             return NULL;
         }
         uint16_t tag = TAG(args[0]);
         if (tag != CLJ_FIXNUM && tag != CLJ_FLOAT)
         {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER return NULL;
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return NULL;
 
             return NULL;
         }
@@ -5863,14 +5863,14 @@ ID native_div_variadic(ID *args, unsigned int argc)
     {
         if (!args[0])
         {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER return NULL;
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return NULL;
 
             return NULL;
         }
         uint16_t tag = TAG(args[0]);
         if (tag != CLJ_FIXNUM && tag != CLJ_FLOAT)
         {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER return NULL;
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return NULL;
 
             return NULL;
         }

@@ -58,7 +58,7 @@ static CljObject* eval_numeric_comparison(CljList *list,
     // Generic numeric comparison
         float val_a, val_b;
     if (!extract_numeric_value(a, &val_a) || !extract_numeric_value(b, &val_b)) {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER return NULL;
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return NULL;
 
         }
 
