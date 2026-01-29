@@ -31,7 +31,7 @@ Spart O(n*m) `(list body)` Allokationen -> 0.
 Nach jedem Schritt:
 
 ```bash
-cmake --build build -t unit-tests && ./build/unit-tests
+cmake --build build/ -t unit-tests && ./build/unit-tests
 ```
 
 ## Schritt 0: Baseline

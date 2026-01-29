@@ -134,9 +134,9 @@ set_target_properties(subjective-c-tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}/bin"
 )
 
-# Set output directory for all executables to "build"
+# Set output directory for all executables to build/
 if(NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY OR CMAKE_RUNTIME_OUTPUT_DIRECTORY STREQUAL "")
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/")
 endif()
 
 # Build time as Unix epoch seconds (UTC) for reproducible #inst in runtime stats
@@ -351,7 +351,7 @@ endif()
 target_include_directories(tiny-clj-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
-# Output directory is set globally to "build"
+# Output directory is set globally to build/
 # REPL Build
 # Debug in Debug mode, Release in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")

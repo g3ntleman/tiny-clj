@@ -493,7 +493,7 @@ static void release_object_default(CljObject *v) {
 #ifdef DEBUG
         case CLJ_EXCEPTION: {
             CLJException *ex = (CLJException*)v;
-            if (ex->stacktrace) RELEASE(ex->stacktrace);
+            RELEASE(ex->stacktrace);
             break;
         }
 #endif

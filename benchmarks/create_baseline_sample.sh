@@ -29,7 +29,7 @@ echo ""
 TINY_CLJ_PATH="./build/tiny-clj-repl"
 if [ ! -f "$TINY_CLJ_PATH" ]; then
     echo -e "${YELLOW}⚠️  tiny-clj-repl not found. Building...${NC}"
-    cmake --build build --target tiny-clj-repl
+    cmake --build build/ --target tiny-clj-repl
 fi
 
 if [ ! -f "$TINY_CLJ_PATH" ]; then

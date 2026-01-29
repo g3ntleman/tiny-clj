@@ -16,7 +16,7 @@ echo "Benchmark: fib(20) - original benchmarks-game version (without recur)"
 echo ""
 
 # Configuration
-BUILD_DIR="build"
+BUILD_DIR="build/"
 RESULTS_DIR="benchmark_results"
 HISTORY_FILE="$RESULTS_DIR/performance_history.csv"
 BENCHMARK_FILE="benchmarks/fibonacci.clj"

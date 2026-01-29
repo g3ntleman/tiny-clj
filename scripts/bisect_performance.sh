@@ -15,7 +15,7 @@ echo -e "${BLUE}=== Git Bisect for Performance Regression ===${NC}"
 echo ""
 
 # Configuration
-BUILD_DIR="build"
+BUILD_DIR="build/"
 BENCHMARK_FILE="benchmarks/fibonacci.clj"
 FIB_N=20
 ITERATIONS=100
