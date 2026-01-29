@@ -55,7 +55,7 @@ TEST(test_doseq_with_environment) {
         EvalState *eval_state = evalstate_new(false);
         TEST_ASSERT_NOT_NULL(eval_state);
         
-        CljValue vec = make_vector(3, CLJ_VECTOR_PERSISTENT);
+        CljValue vec = make_vector(3, false);
         CljVector *vec_data = as_vector(vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         

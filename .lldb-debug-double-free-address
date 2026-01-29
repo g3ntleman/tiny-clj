@@ -1,0 +1,41 @@
+# Double-Free debuggen: retain/release für eine Objektadresse beobachten
+#
+# --- Strategie A: FRÜH FANGEN (empfohlen) – Objekt bei Geburt erwischen ---
+# Wenn Du erst bei release/skipping RELEASE stoppst, ist das Problem schon passiert.
+# Besser: bei Erzeugung stoppen, Adresse holen, dann retain/release für diese Adresse beobachten.
+#
+# 1) Breakpoint bei Erzeugung setzen (z.B. neues CLJ_SEQ in make_seq oder seq_rest):
+#    breakpoint set -f seq.c -l 553
+#    (seq.c:553 = return heap_seq in make_seq; seq.c:589 = return rest_seq in seq_rest)
+# 2) run --test <dein_test>
+# 3) Beim ersten Stopp: Adresse holen mit  p heap_seq  (bzw. p rest_seq bei 589)
+# 4) Retain/Release nur für diese Adresse beobachten (im selben Lauf):
+#    breakpoint set -f memory.c -n release -c 'v == (void*)0xADRESSE'
+#    breakpoint set -f memory.c -n retain -c 'v == (void*)0xADRESSE'
+#    breakpoint command add <nr> -o 'printf "RELEASE %p rc=%d\n", (void*)v, (int)v->rc' -o 'bt 6' -o continue
+#    breakpoint command add <nr> -o 'printf "RETAIN  %p rc=%d\n", (void*)v, (int)v->rc' -o 'bt 6' -o continue
+# 5) c  (continue) – Du siehst jetzt jedes retain/release dieses Objekts von Geburt an.
+#
+# --- Rückwärts lesen (ohne Reverse-Stepping) ---
+# Bei DEBUG+ZOMBIE_ENABLED zeichnet memory.c die letzten RCHIST_SIZE retain/release/autorelease auf.
+# An der Problemstelle wird die Historie nach stderr geschrieben (neueste zuerst); Caller werden
+# automatisch symbolisiert (backtrace_symbols), lldb ist dafür nicht nötig.
+# Nur ein Objekt anzeigen: RCHIST_FILTER_ADDR=0x<addr> setzen (Adresse aus „obj=%p“ in der Ausgabe).
+#
+# --- Strategie B: Adresse schon bekannt (z.B. aus Crash-Meldung) ---
+# Adressen sind pro Lauf anders (ASLR/Heap); nur sinnvoll wenn Du in einem Lauf die Adresse
+# aus Strategie A holst und dann die Breakpoints setzt (siehe oben).
+#
+# Platzhalter 0xDEADBEEF unten durch echte Adresse ersetzen (aus p heap_seq / p v in diesem Lauf).
+
+# Optional: zuerst bei Erzeugung stoppen (Strategie A), dann p heap_seq → Adresse, dann Breakpoints unten mit dieser Adresse setzen
+# breakpoint set -f seq.c -l 553
+
+breakpoint set -f memory.c -n release -c 'v == (void*)0xDEADBEEF'
+breakpoint set -f memory.c -n retain -c 'v == (void*)0xDEADBEEF'
+
+breakpoint command add 1 -o 'printf "RELEASE %p rc=%d\n", (void*)v, (int)v->rc' -o 'bt 6' -o continue
+breakpoint command add 2 -o 'printf "RETAIN  %p rc=%d\n", (void*)v, (int)v->rc' -o 'bt 6' -o continue
+
+run --test test_memory_macros/memory_macros_null_safe
+quit

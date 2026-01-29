@@ -569,7 +569,7 @@ TEST(test_event_loop_enqueue_updates_count) {
         // The count check above is the main test
         
         // Cleanup - manually remove the task to avoid memory issues
-        vector_remove_at(task_vec, 0);
+        vector_by_removing_at(task_vec, 0);
         RELEASE(fn);
         RELEASE(chan);
     });

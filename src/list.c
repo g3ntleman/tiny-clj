@@ -80,15 +80,15 @@ CljList* as_list_checked(ID obj) {
 // List operations for try/catch
 ID list_nth(CljList *list, int n) {
     if (!list || n < 0) {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "nth index %d is out of bounds for list", n);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                "nth index %d is out of bounds for list", n); return NULL;
     }
     
     // Check if list is empty (both first and rest are NULL)
     if (list_empty(list)) {
         // Empty list - index is out of bounds
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "nth index %d is out of bounds for list", n);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                "nth index %d is out of bounds for list", n); return NULL;
     }
     
     CljObject *current = (CljObject*)list;
@@ -108,8 +108,8 @@ ID list_nth(CljList *list, int n) {
     }
     
     // Index not found - out of bounds
-    return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-            "nth index %d is out of bounds for list", n);
+    throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+            "nth index %d is out of bounds for list", n); return NULL;
 }
 
 // NOTE: O(n) traversal for linked lists.

@@ -11,6 +11,7 @@
 #include "mini_format.h"
 #include "exception.h"
 #include "error_messages.h"
+#include "value.h"   /* IS_IMMEDIATE for AUTORELEASE macro */
 #include "memory.h"
 #include "strings.h"
 
@@ -140,8 +141,9 @@ CLJException* make_exception(const char *type, const char *message, const char *
     exc->col = col;
 
 #ifdef DEBUG
-    // Always generate stacktrace in DEBUG builds
-    exc->stacktrace = stacktrace();  // Can be NULL on error
+    // Always generate stacktrace in DEBUG builds; exception must retain it
+    exc->stacktrace = stacktrace();
+    if (exc->stacktrace) RETAIN(exc->stacktrace);
     exc->object = 0;  // Initialize to 0 (unset)
 #else
     // Release builds: no stacktrace field
@@ -186,7 +188,7 @@ CLJException *clj_oom_exception = &clj_oom_exception_data;
  * @param format printf-style format string
  * @param ... Variable arguments for formatting
  */
-void* throw_exception_formatted(const char *type, const char *file, int line, int code, 
+void throw_exception_formatted(const char *type, const char *file, int line, int code, 
                               const char *format, ...) {
     // Use generic RuntimeException if type is NULL
     const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
@@ -204,9 +206,8 @@ void* throw_exception_formatted(const char *type, const char *file, int line, in
         va_end(args);
 #endif
         CLJException *oom = make_exception(EXCEPTION_OUT_OF_MEMORY, message, file, line, code);
-        // make_exception() returns the static singleton for OOM.
-        throw_exception_object(oom ? oom : clj_oom_exception);
-        return NULL;
+        throw_exception_object(AUTORELEASE(oom ? oom : clj_oom_exception));  /* Singleton: no-op */
+        return;
     }
 
 #if defined(STRING_FORMATTING_ENABLED) && !STRING_FORMATTING_ENABLED
@@ -223,13 +224,10 @@ void* throw_exception_formatted(const char *type, const char *file, int line, in
     CLJException *exception = make_exception(exception_type, message, file, line, code);
 #endif
     if (!exception) {
-        // Last-resort: if we can't allocate an exception, throw static OOM exception.
-        throw_exception_object(clj_oom_exception);
-        return NULL;
+        throw_exception_object(AUTORELEASE(clj_oom_exception));  /* Singleton: no-op */
+        return;
     }
-
-    throw_exception_object(exception);
-    return NULL;  // Never reached (longjmp), but allows return throw_exception_formatted(...);
+    throw_exception_object(AUTORELEASE(exception));
 }
 
 /** @brief Throw an exception with type, message, and location */
@@ -241,19 +239,15 @@ void throw_exception(const char *type, const char *message, const char *file, in
         CLJException *oom = make_exception(EXCEPTION_OUT_OF_MEMORY,
                                            message ? message : "Out of memory",
                                            file, line, col);
-        throw_exception_object(oom ? oom : clj_oom_exception);
+        throw_exception_object(AUTORELEASE(oom ? oom : clj_oom_exception));
         return;
     }
-
     CLJException *exception = make_exception(exception_type, message, file, line, col);
     if (!exception) {
-        // Last-resort: if we can't allocate an exception, throw static OOM exception.
-        throw_exception_object(clj_oom_exception);
+        throw_exception_object(AUTORELEASE(clj_oom_exception));
         return;
     }
-
-    // Use the new unified function
-    throw_exception_object(exception);
+    throw_exception_object(AUTORELEASE(exception));
 }
 
 /** @brief Generate stacktrace as CljString

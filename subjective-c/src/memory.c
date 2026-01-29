@@ -26,6 +26,7 @@
 #include "mini_format.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 // Optional stack trace support (execinfo/backtrace), gated in object.h.
 // On ESP-IDF/newlib this is not available.
@@ -43,6 +44,49 @@ static THREAD_LOCAL bool g_in_drain = false;
 
 #ifdef DEBUG
 static THREAD_LOCAL uint32_t g_pool_peak_count = 0;
+#endif
+
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
+#define RCHIST_SIZE 128
+typedef struct { CljObject *obj; char op; int rc_after; void *caller; } RcHistEntry;
+static THREAD_LOCAL RcHistEntry g_rchist[RCHIST_SIZE];
+static THREAD_LOCAL unsigned int g_rchist_head = 0;
+
+static void rchist_push(CljObject *v, char op, int rc_after) {
+    g_rchist[g_rchist_head] = (RcHistEntry){ v, op, rc_after, __builtin_return_address(0) };
+    g_rchist_head = (g_rchist_head + 1) % RCHIST_SIZE;
+}
+
+static void rchist_dump_for_object(CljObject *v) {
+    const char *filter_env = getenv("RCHIST_FILTER_ADDR");
+    if (filter_env && (uintptr_t)v != (uintptr_t)strtoull(filter_env, NULL, 0))
+        return;
+    fprintf(stderr, "=== double-release debug: retain/release history for obj=%p (type=%s), newest first (read backwards) ===\n",
+            (void*)v, clj_type_name(v->type));
+    fprintf(stderr, "  R=retain L=release A=autorelease. Filter by address: RCHIST_FILTER_ADDR=0x%lx\n", (unsigned long)(uintptr_t)v);
+    for (unsigned int i = 0; i < RCHIST_SIZE; i++) {
+        unsigned int idx = (g_rchist_head + RCHIST_SIZE - 1 - i) % RCHIST_SIZE;
+        RcHistEntry *e = &g_rchist[idx];
+        if (e->obj != v) continue;
+#if defined(SUBJECTIVE_C_HAVE_EXECINFO) && SUBJECTIVE_C_HAVE_EXECINFO
+        if (e->caller) {
+            void *arr[1] = { e->caller };
+            char **syms = backtrace_symbols(arr, 1);
+            if (syms && syms[0]) {
+                fprintf(stderr, "  %c rc=%d  %s\n", e->op, e->rc_after, syms[0]);
+                free(syms);
+            } else {
+                fprintf(stderr, "  %c rc=%d caller=%p\n", e->op, e->rc_after, e->caller);
+                if (syms) free(syms);
+            }
+        } else
+            fprintf(stderr, "  %c rc=%d caller=NULL\n", e->op, e->rc_after);
+#else
+        fprintf(stderr, "  %c rc=%d caller=%p\n", e->op, e->rc_after, e->caller);
+#endif
+    }
+    fflush(stderr);
+}
 #endif
 
 extern bool g_memory_verbose_mode;
@@ -134,13 +178,16 @@ void retain(CljObject *v) {
         CLJException *ex = make_exception(EXCEPTION_ZOMBIE_ACCESS, message, __FILE__, __LINE__, 0);
         if (ex) {
             ex->object = (uintptr_t)v;
-            throw_exception_object(AUTORELEASE(ex));
+            throw_exception_object(AUTORELEASE(ex));  /* In pool; END_TRY does not release. */
         }
         return;
     }
 #endif
     MEMORY_PROFILER_TRACK_RETAIN(v);
     v->rc++;
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
+    rchist_push(v, 'R', v->rc);
+#endif
 }
 
 void release(CljObject *v) {
@@ -149,6 +196,9 @@ void release(CljObject *v) {
         LOGF(stdout, "🔍 release: Object %p, type=%d (%s), rc=%d -> ",
              v, (int)v->type, clj_type_name(v->type), (int)v->rc);
     if (v->rc == 0) {
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
+        rchist_dump_for_object(v);
+#endif
         char z[384];
         if (!g_in_drain) zombie_desc(v, z, sizeof(z));
         else z[0] = '\0';
@@ -161,25 +211,24 @@ void release(CljObject *v) {
     }
 
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
-    // Check that object has enough references to survive all autorelease pool entries
-    // Same check as in autorelease(): rc must be > pool_count BEFORE decrementing
-    // If rc == pool_count, the object will be freed when pool drains, causing double-release
-    // We check BEFORE v->rc-- so we can detect the problem early
+    /* rc must be > pool_count before decrement; else double-release when pool drains. */
     if (TRACKS_RETAINS(v)) {
         uint32_t pool_count = autorelease_count(v);
-        int rc_before_decrement = v->rc;
-        if (pool_count > 0 && rc_before_decrement <= (int)pool_count) {
-            if (rc_before_decrement == (int)pool_count) {
-                fprintf(stderr, "release: Object %p (type=%s) has rc=%d but already %u times in pool. Missing RETAIN before RELEASE!\n",
-                        (void*)v, clj_type_name(v->type), rc_before_decrement, pool_count);
-            } else {
-                fprintf(stderr, "release: Object %p (type=%s) has rc=%d but already %u times in pool. Will cause double-release!\n",
-                        (void*)v, clj_type_name(v->type), rc_before_decrement, pool_count);
-            }
+        int rc_before = v->rc;
+        if (pool_count > 0 && rc_before <= (int)pool_count) {
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
+            rchist_dump_for_object(v);
+#endif
+            fprintf(stderr, "release: Object %p (type=%s) rc=%d <= pool_count=%u. %s\n",
+                    (void*)v, clj_type_name(v->type), rc_before, pool_count,
+                    rc_before == (int)pool_count ? "Missing RETAIN before RELEASE!" : "Will cause double-release!");
             fflush(stderr);
-            CLJ_ASSERT(rc_before_decrement > (int)pool_count && "Object has insufficient references: rc must be > pool_count before RELEASE (missing RETAIN or double RELEASE)");
+            CLJ_ASSERT(rc_before > (int)pool_count && "rc must be > pool_count before RELEASE (missing RETAIN or double RELEASE)");
         }
     }
+#endif
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
+    rchist_push(v, 'L', v->rc - 1);
 #endif
     v->rc--;
     MEMORY_PROFILER_TRACK_RELEASE(v);
@@ -220,8 +269,9 @@ CljObject *autorelease(CljObject *v) {
     if (!v) return NULL;
     CLJ_ASSERT(g_pool && "autorelease_pool_init() not called");
     if (g_in_drain)
-        return (CljObject*)throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
+        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
             "autorelease called during drain");
+        return (CljObject*)NULL;
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
     // Check that object has enough references to survive all autorelease pool entries
     // After adding to pool, we'll have (pool_count + 1) entries, so we need rc > pool_count
@@ -234,6 +284,7 @@ CljObject *autorelease(CljObject *v) {
         uint32_t pool_count = autorelease_count(v);
         int rc = v->rc;
         if (rc <= (int)pool_count) {
+            rchist_dump_for_object(v);
             if (rc == (int)pool_count) {
                 fprintf(stderr, "autorelease: Object %p (type=%s) has rc=%d but already %u times in pool. Missing RETAIN before AUTORELEASE!\n",
                         (void*)v, clj_type_name(v->type), rc, pool_count);
@@ -247,6 +298,9 @@ CljObject *autorelease(CljObject *v) {
     }
 #endif
     ASSIGN(g_pool, vector_conj_owned(g_pool, v));
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
+    rchist_push(v, 'A', v->rc);
+#endif
 #ifdef DEBUG
     if (vector_count(g_pool) > g_pool_peak_count)
         g_pool_peak_count = vector_count(g_pool);
@@ -436,6 +490,13 @@ static void release_object_default(CljObject *v) {
         case CLJ_ATOM:
             RELEASE(((CljAtom*)v)->value);
             break;
+#ifdef DEBUG
+        case CLJ_EXCEPTION: {
+            CLJException *ex = (CLJException*)v;
+            if (ex->stacktrace) RELEASE(ex->stacktrace);
+            break;
+        }
+#endif
         case CLJ_SEQ:
             break;
         case CLJ_NAMESPACE: {

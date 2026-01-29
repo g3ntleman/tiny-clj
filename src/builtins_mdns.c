@@ -488,20 +488,20 @@ static void DNSSD_API tinyclj_dnssd_browse_cb(DNSServiceRef sdRef,
 static MdnsCtx* require_mdns_ctx(ID arg, const char *fn_name) {
     if (!arg || TAG(arg) != CLJ_BYTE_ARRAY) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "%s expects a mdns handle (byte-array)", fn_name);
+                                  "%s expects a mdns handle (byte-array)", fn_name); return NULL;
         return NULL;
     }
     CljByteArray *ba = as_byte_array(arg);
     if (!ba || (ba->base.flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) == 0) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "%s expects a native mdns handle (external byte-array)", fn_name);
+                                  "%s expects a native mdns handle (external byte-array)", fn_name); return NULL;
         return NULL;
     }
     CljByteArrayExternal *ext = (CljByteArrayExternal*)ba;
     MdnsCtx *ctx = (MdnsCtx*)ext->external_ctx;
     if (!ctx) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "%s: handle is invalid (NULL ctx)", fn_name);
+                                  "%s: handle is invalid (NULL ctx)", fn_name); return NULL;
         return NULL;
     }
     return ctx;
@@ -615,8 +615,8 @@ ID native_tinyclj_net_mdns_open(ID *args, unsigned int argc) {
         PlatformMdns *pm = platform_mdns_open(mdns_recv_bridge, m);
         if (!pm) {
             mdns_ctx_free(m);
-            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                             "tinyclj.net.mdns/open failed to open platform mDNS");
+            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                             "tinyclj.net.mdns/open failed to open platform mDNS"); return NULL;
         }
         m->m = pm;
     }
@@ -638,8 +638,8 @@ ID native_tinyclj_net_mdns_on_event(ID *args, unsigned int argc) {
 
     ID fn = args[1];
     if (fn && !is_callable(fn)) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net.mdns/on-event expects nil or a function");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.net.mdns/on-event expects nil or a function"); return NULL;
     }
     if (m->on_event_fn) {
         RELEASE(m->on_event_fn);
@@ -656,13 +656,13 @@ ID native_tinyclj_net_mdns_browse_bang(ID *args, unsigned int argc) {
 
     ID service_val = args[1];
     if (!service_val || TAG(service_val) != CLJ_STRING) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net.mdns/browse! expects a service name string");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.net.mdns/browse! expects a service name string"); return NULL;
     }
     const char *service = string_data(service_val);
     if (!service || service[0] == '\0') {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net.mdns/browse! expects a non-empty service name string");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.net.mdns/browse! expects a non-empty service name string"); return NULL;
     }
 
 #ifdef __APPLE__
@@ -684,8 +684,8 @@ ID native_tinyclj_net_mdns_browse_bang(ID *args, unsigned int argc) {
         char regtype[256];
         char domain[256];
         if (dnssd_parse_browse_service(service, regtype, sizeof(regtype), domain, sizeof(domain)) != 0) {
-            return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                             "tinyclj.net.mdns/browse! invalid service name");
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                             "tinyclj.net.mdns/browse! invalid service name"); return NULL;
         }
 
         DNSServiceErrorType err = DNSServiceBrowse(&m->dnssd_browse_ref,
@@ -697,14 +697,14 @@ ID native_tinyclj_net_mdns_browse_bang(ID *args, unsigned int argc) {
                                                    m);
         if (err != kDNSServiceErr_NoError || !m->dnssd_browse_ref) {
             m->dnssd_browse_ref = NULL;
-            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                             "tinyclj.net.mdns/browse! DNSServiceBrowse failed");
+            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                             "tinyclj.net.mdns/browse! DNSServiceBrowse failed"); return NULL;
         }
         if (dnssd_schedule(m->dnssd_browse_ref, &m->dnssd_browse_fdref, &m->dnssd_browse_source) != 0) {
             DNSServiceRefDeallocate(m->dnssd_browse_ref);
             m->dnssd_browse_ref = NULL;
-            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                             "tinyclj.net.mdns/browse! failed to attach DNS-SD fd to CFRunLoop");
+            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                             "tinyclj.net.mdns/browse! failed to attach DNS-SD fd to CFRunLoop"); return NULL;
         }
         return NULL;
     }
@@ -713,21 +713,21 @@ ID native_tinyclj_net_mdns_browse_bang(ID *args, unsigned int argc) {
     if (!m->m || !m->resolver) return NULL;
 
     if (mdns_resolver_start_browse(m->resolver, service) != 0) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.net.mdns/browse! failed to start browse");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "tinyclj.net.mdns/browse! failed to start browse"); return NULL;
     }
 
     uint8_t buf[512];
     size_t out_len = 0;
     int rc = mdns_build_ptr_query(service, buf, sizeof(buf), &out_len);
     if (rc != MDNS_CODEC_OK) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.net.mdns/browse! failed to build query");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "tinyclj.net.mdns/browse! failed to build query"); return NULL;
     }
 
     if (platform_mdns_send_multicast(m->m, buf, out_len) != 0) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.net.mdns/browse! failed to send mDNS query");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "tinyclj.net.mdns/browse! failed to send mDNS query"); return NULL;
     }
     return NULL;
 }

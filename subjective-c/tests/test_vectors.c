@@ -1,9 +1,9 @@
 #include "test_common.h"
 
-static CljVector* make_vector_from_ints(const int *values, size_t count) {
-    CljVector *vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
+static CljPersistentVector* make_vector_from_ints(const int *values, size_t count) {
+    CljPersistentVector *vec = make_vector(0, false);
     for (size_t i = 0; i < count; ++i) {
-        CljVector *updated = vector_conj_owned(vec, fixnum(values[i]));
+        CljPersistentVector *updated = vector_conj_owned(vec, fixnum(values[i]));
         if (updated != vec) {
             if (vec != empty_vector()) RELEASE(vec);
             vec = updated;
@@ -13,10 +13,10 @@ static CljVector* make_vector_from_ints(const int *values, size_t count) {
 }
 
 TEST(test_vector_make_and_count) {
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(4, false);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_UINT(0, vector_count(vec));
-    CljVector *vec2 = vector_conj(vec, fixnum(10));
+    CljPersistentVector *vec2 = vector_conj(vec, fixnum(10));
     if (vec2 != vec) {
         RELEASE(vec);
         vec = vec2;
@@ -27,7 +27,7 @@ TEST(test_vector_make_and_count) {
 
 TEST(test_vector_nth_returns_elements) {
     int values[] = {1, 2, 3};
-    CljVector *vec = make_vector_from_ints(values, 3);
+    CljPersistentVector *vec = make_vector_from_ints(values, 3);
     CljValue first = vector_nth(vec, 0);
     TEST_ASSERT_TRUE(is_fixnum(first));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(first));
@@ -39,27 +39,24 @@ TEST(test_vector_nth_returns_elements) {
 
 TEST(test_vector_set_nth_on_transient) {
     int values[] = {4, 5, 6};
-    CljVector *vec = make_vector_from_ints(values, 3);
-    CljVector *transient = vector_transient(vec);
-    if (transient != vec) {
-        RELEASE(vec);
-        vec = transient;
-    }
-    vec = vector_set_nth(vec, 1, fixnum(99));
-    CljValue mid = vector_nth(vec, 1);
+    CljPersistentVector *vec = make_vector_from_ints(values, 3);
+    CljTransientVector *tvec = vector_transient(vec);
+    RELEASE(vec);
+    vector_set_nth_transient(tvec, 1, fixnum(99));
+    CljValue mid = vector_nth(vector_persistent(tvec), 1);
     TEST_ASSERT_TRUE(is_fixnum(mid));
     TEST_ASSERT_EQUAL_INT(99, as_fixnum(mid));
-    RELEASE(vec);
+    RELEASE(tvec);
 }
 
 TEST(test_vector_pop_and_insert) {
     int values[] = {7, 8, 9};
-    CljVector *vec = make_vector_from_ints(values, 3);
-    vec = vector_insert_at(vec, 1, fixnum(100));
+    CljPersistentVector *vec = make_vector_from_ints(values, 3);
+    vec = vector_by_inserting_at(vec, 1, fixnum(100));
     TEST_ASSERT_EQUAL_UINT(4, vector_count(vec));
     CljValue inserted = vector_nth(vec, 1);
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(inserted));
-    CljVector *popped = vector_popped(vec);
+    CljPersistentVector *popped = vector_popped(vec);
     if (popped != vec) {
         RELEASE(vec);
         vec = popped;
@@ -69,10 +66,10 @@ TEST(test_vector_pop_and_insert) {
 }
 
 TEST(test_vector_nil_as_value_conj) {
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(4, false);
     
     // Add nil (NULL) as value using conj
-    CljVector *updated = vector_conj(vec, NULL);
+    CljPersistentVector *updated = vector_conj(vec, NULL);
     if (updated != vec) {
         RELEASE(vec);
         vec = updated;
@@ -104,10 +101,10 @@ TEST(test_vector_nil_as_value_conj) {
 }
 
 TEST(test_vector_nil_as_value_assoc) {
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(4, false);
     
     // Add some values first
-    CljVector *updated = vector_conj(vec, fixnum(10));
+    CljPersistentVector *updated = vector_conj(vec, fixnum(10));
     if (updated != vec) {
         RELEASE(vec);
         vec = updated;
@@ -139,10 +136,10 @@ TEST(test_vector_nil_as_value_assoc) {
 }
 
 TEST(test_vector_nil_as_value_insert_at) {
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(4, false);
     
     // Add some values first
-    CljVector *updated = vector_conj(vec, fixnum(10));
+    CljPersistentVector *updated = vector_conj(vec, fixnum(10));
     if (updated != vec) {
         RELEASE(vec);
         vec = updated;
@@ -155,7 +152,7 @@ TEST(test_vector_nil_as_value_insert_at) {
     TEST_ASSERT_EQUAL_UINT(2, vector_count(vec));
     
     // Insert nil (NULL) as value at index 1
-    updated = vector_insert_at(vec, 1, NULL);
+    updated = vector_by_inserting_at(vec, 1, NULL);
     if (updated != vec) {
         RELEASE(vec);
         vec = updated;
@@ -179,10 +176,10 @@ TEST(test_vector_nil_as_value_insert_at) {
 }
 
 TEST(test_vector_nil_as_value_remove_at) {
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(4, false);
     
     // Add values including nil
-    CljVector *updated = vector_conj(vec, fixnum(10));
+    CljPersistentVector *updated = vector_conj(vec, fixnum(10));
     if (updated != vec) {
         RELEASE(vec);
         vec = updated;
@@ -200,7 +197,7 @@ TEST(test_vector_nil_as_value_remove_at) {
     TEST_ASSERT_EQUAL_UINT(3, vector_count(vec));
     
     // Remove nil value at index 1
-    updated = vector_remove_at(vec, 1);
+    updated = vector_by_removing_at(vec, 1);
     if (updated != vec) {
         RELEASE(vec);
         vec = updated;
@@ -220,10 +217,10 @@ TEST(test_vector_nil_as_value_remove_at) {
 }
 
 TEST(test_vector_nil_as_value_set_nth) {
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(4, false);
     
     // Add some values first
-    CljVector *updated = vector_conj(vec, fixnum(10));
+    CljPersistentVector *updated = vector_conj(vec, fixnum(10));
     if (updated != vec) {
         RELEASE(vec);
         vec = updated;
@@ -235,31 +232,26 @@ TEST(test_vector_nil_as_value_set_nth) {
     }
     
     // Convert to transient for set_nth
-    CljVector *transient = vector_transient(vec);
-    if (transient != vec) {
-        RELEASE(vec);
-        vec = transient;
-    }
-    
-    // Set nil (NULL) as value at index 0 using set_nth
-    vec = vector_set_nth(vec, 0, NULL);
+    CljTransientVector *tvec = vector_transient(vec);
+    RELEASE(vec);
+    vector_set_nth_transient(tvec, 0, NULL);
     
     // Get nil value
-    CljValue result = vector_nth(vec, 0);
+    CljValue result = vector_nth(vector_persistent(tvec), 0);
     TEST_ASSERT_NULL(result);
     
     // Verify other value is still there
-    CljValue other_result = vector_nth(vec, 1);
+    CljValue other_result = vector_nth(vector_persistent(tvec), 1);
     TEST_ASSERT_TRUE(is_fixnum(other_result));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(other_result));
     
-    RELEASE(vec);
+    RELEASE(tvec);
 }
 
 TEST(test_vector_assoc_append_on_transient) {
     // Create persistent vector with some values
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
-    CljVector *updated = vector_conj(vec, fixnum(10));
+    CljPersistentVector *vec = make_vector(4, false);
+    CljPersistentVector *updated = vector_conj(vec, fixnum(10));
     if (updated != vec) {
         RELEASE(vec);
         vec = updated;
@@ -271,46 +263,36 @@ TEST(test_vector_assoc_append_on_transient) {
     }
     TEST_ASSERT_EQUAL_UINT(2, vector_count(vec));
     
-    // Convert to transient
-    CljVector *transient = vector_transient(vec);
-    if (transient != vec) {
-        RELEASE(vec);
-        vec = transient;
-    }
-    TEST_ASSERT_EQUAL_UINT(2, vector_count(vec));
-    
-    // Use assoc with index == count to append (transient behavior)
-    unsigned int count_before = vector_count(vec);
-    updated = vector_assoc(vec, count_before, fixnum(30));
-    if (updated != vec) {
-        RELEASE(vec);
-        vec = updated;
-    }
+    // Convert to transient and append via vector_push
+    CljTransientVector *tvec = vector_transient(vec);
+    RELEASE(vec);
+    TEST_ASSERT_EQUAL_UINT(2, vector_count(vector_persistent(tvec)));
+    vector_push(tvec, fixnum(30));
     
     // Verify count increased
-    TEST_ASSERT_EQUAL_UINT(3, vector_count(vec));
+    TEST_ASSERT_EQUAL_UINT(3, vector_count(vector_persistent(tvec)));
     
     // Verify existing values are still there
-    CljValue first = vector_nth(vec, 0);
+    CljValue first = vector_nth(vector_persistent(tvec), 0);
     TEST_ASSERT_TRUE(is_fixnum(first));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(first));
     
-    CljValue second = vector_nth(vec, 1);
+    CljValue second = vector_nth(vector_persistent(tvec), 1);
     TEST_ASSERT_TRUE(is_fixnum(second));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(second));
     
     // Verify appended value
-    CljValue appended = vector_nth(vec, 2);
+    CljValue appended = vector_nth(vector_persistent(tvec), 2);
     TEST_ASSERT_TRUE(is_fixnum(appended));
     TEST_ASSERT_EQUAL_INT(30, as_fixnum(appended));
     
-    RELEASE(vec);
+    RELEASE(tvec);
 }
 
 TEST(test_vector_assoc_append_fails_on_persistent) {
     // Create persistent vector with some values
-    CljVector *vec = make_vector(4, CLJ_VECTOR_PERSISTENT);
-    CljVector *updated = vector_conj(vec, fixnum(10));
+    CljPersistentVector *vec = make_vector(4, false);
+    CljPersistentVector *updated = vector_conj(vec, fixnum(10));
     if (updated != vec) {
         RELEASE(vec);
         vec = updated;
@@ -358,14 +340,14 @@ TEST(test_vector_assoc_append_fails_on_persistent) {
 // === Tests for _inplace functions ===
 
 TEST(test_vector_conj_inplace_cow_rc_one) {
-    CljVector *vec = make_vector(10, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(10, false);
     TEST_ASSERT_EQUAL_INT(1, REFERENCE_COUNT(vec));
     
     ID item1 = fixnum(10);
     ID item2 = fixnum(20);
     
     // RC=1: should mutate in-place
-    CljVector *vec_before = vec;
+    CljPersistentVector *vec_before = vec;
     vector_conj_inplace(&vec, item1);
     TEST_ASSERT_EQUAL_PTR(vec_before, vec);  // Same pointer (in-place)
     TEST_ASSERT_EQUAL_INT(1, REFERENCE_COUNT(vec));
@@ -384,7 +366,7 @@ TEST(test_vector_conj_inplace_cow_rc_one) {
 }
 
 TEST(test_vector_conj_inplace_cow_rc_greater_one) {
-    CljVector *vec = make_vector(10, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(10, false);
     TEST_ASSERT_EQUAL_INT(1, REFERENCE_COUNT(vec));
     
     ID item1 = fixnum(10);
@@ -392,11 +374,11 @@ TEST(test_vector_conj_inplace_cow_rc_greater_one) {
     
     // Create second reference (RC>1)
     RETAIN(vec);
-    CljVector *copy = vec;
+    CljPersistentVector *copy = vec;
     TEST_ASSERT_EQUAL_INT(2, REFERENCE_COUNT(vec));
     
     // RC>1: should create new vector (COW)
-    CljVector *vec_before = vec;
+    CljPersistentVector *vec_before = vec;
     vector_conj_inplace(&vec, item1);
     TEST_ASSERT_NOT_EQUAL(vec_before, vec);  // Different pointer (COW)
     TEST_ASSERT_EQUAL_INT(1, REFERENCE_COUNT(vec));
@@ -419,13 +401,13 @@ TEST(test_vector_conj_inplace_cow_rc_greater_one) {
 }
 
 TEST(test_vector_assoc_inplace_cow_rc_one) {
-    CljVector *vec = make_vector(10, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(10, false);
     vector_conj_inplace(&vec, fixnum(10));
     vector_conj_inplace(&vec, fixnum(20));
     TEST_ASSERT_EQUAL_INT(1, REFERENCE_COUNT(vec));
     
     // RC=1: should mutate in-place
-    CljVector *vec_before = vec;
+    CljPersistentVector *vec_before = vec;
     vector_assoc_inplace(&vec, 0, fixnum(99));
     TEST_ASSERT_EQUAL_PTR(vec_before, vec);  // Same pointer (in-place)
     TEST_ASSERT_EQUAL_INT(1, REFERENCE_COUNT(vec));
@@ -436,17 +418,17 @@ TEST(test_vector_assoc_inplace_cow_rc_one) {
 }
 
 TEST(test_vector_assoc_inplace_cow_rc_greater_one) {
-    CljVector *vec = make_vector(10, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(10, false);
     vector_conj_inplace(&vec, fixnum(10));
     vector_conj_inplace(&vec, fixnum(20));
     
     // Create second reference (RC>1)
     RETAIN(vec);
-    CljVector *copy = vec;
+    CljPersistentVector *copy = vec;
     TEST_ASSERT_EQUAL_INT(2, REFERENCE_COUNT(vec));
     
     // RC>1: should create new vector (COW)
-    CljVector *vec_before = vec;
+    CljPersistentVector *vec_before = vec;
     vector_assoc_inplace(&vec, 0, fixnum(99));
     TEST_ASSERT_NOT_EQUAL(vec_before, vec);  // Different pointer (COW)
     TEST_ASSERT_EQUAL_INT(1, REFERENCE_COUNT(vec));
@@ -460,14 +442,14 @@ TEST(test_vector_assoc_inplace_cow_rc_greater_one) {
 }
 
 TEST(test_vector_pop_inplace_cow_rc_one) {
-    CljVector *vec = make_vector(10, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(10, false);
     vector_conj_inplace(&vec, fixnum(10));
     vector_conj_inplace(&vec, fixnum(20));
     TEST_ASSERT_EQUAL_INT(1, REFERENCE_COUNT(vec));
     TEST_ASSERT_EQUAL_UINT(2, vector_count(vec));
     
     // RC=1: should mutate in-place
-    CljVector *vec_before = vec;
+    CljPersistentVector *vec_before = vec;
     vector_pop_inplace(&vec);
     TEST_ASSERT_EQUAL_PTR(vec_before, vec);  // Same pointer (in-place)
     TEST_ASSERT_EQUAL_INT(1, REFERENCE_COUNT(vec));
@@ -478,17 +460,17 @@ TEST(test_vector_pop_inplace_cow_rc_one) {
 }
 
 TEST(test_vector_pop_inplace_cow_rc_greater_one) {
-    CljVector *vec = make_vector(10, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(10, false);
     vector_conj_inplace(&vec, fixnum(10));
     vector_conj_inplace(&vec, fixnum(20));
     
     // Create second reference (RC>1)
     RETAIN(vec);
-    CljVector *copy = vec;
+    CljPersistentVector *copy = vec;
     TEST_ASSERT_EQUAL_INT(2, REFERENCE_COUNT(vec));
     
     // RC>1: should create new vector (COW)
-    CljVector *vec_before = vec;
+    CljPersistentVector *vec_before = vec;
     vector_pop_inplace(&vec);
     TEST_ASSERT_NOT_EQUAL(vec_before, vec);  // Different pointer (COW)
     TEST_ASSERT_EQUAL_INT(1, REFERENCE_COUNT(vec));
@@ -502,7 +484,7 @@ TEST(test_vector_pop_inplace_cow_rc_greater_one) {
 }
 
 TEST(test_vector_inplace_memory_management) {
-    CljVector *vec = make_vector(10, CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *vec = make_vector(10, false);
     TEST_ASSERT_EQUAL_INT(1, REFERENCE_COUNT(vec));
     
     // Add items using inplace

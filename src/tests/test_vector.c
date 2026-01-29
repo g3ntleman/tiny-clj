@@ -782,7 +782,7 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
     WITH_AUTORELEASE_POOL({
         // Simulate event_loop_enqueue scenario:
         // 1. Create persistent vector with capacity
-        CljPersistentVector *task_vec = make_vector(8, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *task_vec = make_vector(8, false);
         TEST_ASSERT_NOT_NULL(task_vec);
         TEST_ASSERT_EQUAL_INT(0, vector_count(task_vec));
         
@@ -833,7 +833,7 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
 TEST_SHARED(test_clj_conj_with_empty_transient_vector) {
     WITH_AUTORELEASE_POOL({
         // Create empty persistent vector (capacity 0)
-        CljPersistentVector *task_vec = make_vector(0, CLJ_VECTOR_PERSISTENT);
+        CljPersistentVector *task_vec = make_vector(0, false);
         TEST_ASSERT_NOT_NULL(task_vec);
         TEST_ASSERT_EQUAL_INT(0, vector_count(task_vec));
         

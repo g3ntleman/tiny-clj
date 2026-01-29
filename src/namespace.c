@@ -109,9 +109,9 @@ static ID throw_ambiguous_symbol_error(CljSymbol *sym,
         ? first_ns->name->cname : "unknown";
     const char *ns2_name = (second_ns && second_ns->name && second_ns->name->cname)
         ? second_ns->name->cname : "unknown";
-    return throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
+    throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
         "Unable to resolve symbol: %s in this context, perhaps you meant: %s/%s or %s/%s",
-        sym_name, ns1_name, sym_name, ns2_name, sym_name);
+        sym_name, ns1_name, sym_name, ns2_name, sym_name); return NULL;
 }
 
 // Helper context for namespace cleanup in ns_cleanup()

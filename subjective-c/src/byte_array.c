@@ -25,8 +25,8 @@ CljByteArray* make_byte_array(int length) {
     assert(length >= 0 && "byte_array length must be non-negative");
     
     if (length < 0) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "byte-array length must be non-negative, got %d", length);
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                "byte-array length must be non-negative, got %d", length); return NULL;
     }
     
     CljByteArray *ba = ALLOC(CljByteArray, 1);
@@ -73,15 +73,15 @@ CljValue make_byte_array_from_bytes(const uint8_t *bytes, int length) {
 CljByteArray* make_byte_array_view(uint8_t *bytes, int length) {
     assert(length >= 0 && "byte_array view length must be non-negative");
     if (length < 0) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "byte-array view length must be non-negative, got %d", length);
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                "byte-array view length must be non-negative, got %d", length); return NULL;
     }
     if (length == 0) {
         return clj_empty_byte_array_singleton;
     }
     if (!bytes) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "byte-array view requires non-NULL bytes when length=%d", length);
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                "byte-array view requires non-NULL bytes when length=%d", length); return NULL;
     }
 
     // Allocate as a CLJ_BYTE_ARRAY so the memory profiler / type tracking stays consistent.
@@ -285,9 +285,9 @@ CljValue byte_array_slice(CljValue arr, int offset, int length) {
     }
     
     if (offset + length > ba->length) {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "Slice from offset %d with length %d exceeds array length %d",
-                offset, length, ba->length);
+                offset, length, ba->length); return NULL;
     }
     
     return make_byte_array_from_bytes(ba->data + offset, length);
@@ -306,9 +306,9 @@ ID byte_array_get_id(CljValue arr, int index) {
     assert(index + sizeof(ID) <= (size_t)ba->length && "ID read would exceed array bounds");
     
     if (index < 0 || index + sizeof(ID) > (size_t)ba->length) {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "ID read at index %d (size %zu) exceeds array length %d",
-                index, sizeof(ID), ba->length);
+                index, sizeof(ID), ba->length); return NULL;
     }
     
     ID value;

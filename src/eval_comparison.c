@@ -58,7 +58,8 @@ static CljObject* eval_numeric_comparison(CljList *list,
     // Generic numeric comparison
         float val_a, val_b;
     if (!extract_numeric_value(a, &val_a) || !extract_numeric_value(b, &val_b)) {
-            return throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER return NULL;
+
         }
 
     bool result;
@@ -90,8 +91,8 @@ ID eval_comparison_dispatch(CljList *list,
         }
     }
     if (!eval_env) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "Missing evaluation environment");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "Missing evaluation environment"); return NULL;
     }
 
     // Numeric comparisons: <, >, <=, >= - O(1) dispatch via flags

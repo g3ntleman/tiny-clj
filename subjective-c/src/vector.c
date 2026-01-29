@@ -55,15 +55,17 @@ unsigned int vector_capacity(CljPersistentVector *vec) {
 
 ID vector_nth(CljPersistentVector *vec, unsigned int index) {
     if (!vec) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "vector_nth: vector is NULL");
+        return NULL;
     }
     if (index < vec->count) {
         return vec->data[index];
     }
-    return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+    throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                                      "vector_nth: index %u is out of bounds for vector with %u elements",
                                      index, vec->count);
+    return NULL;
 }
 
 int vector_index_of(CljPersistentVector *vec, ID value) {
@@ -191,7 +193,7 @@ static CljPersistentVector* vector_insert_at_core(CljPersistentVector* vec, unsi
     return new_vec;
 }
 
-CljPersistentVector* vector_insert_at(CljPersistentVector* vec, unsigned int index, ID item) {
+CljPersistentVector* vector_by_inserting_at(CljPersistentVector* vec, unsigned int index, ID item) {
     CljPersistentVector* result = vector_insert_at_core(vec, index, item);
     if (result && result != vec) return AUTORELEASE(result);
     return result;
@@ -226,7 +228,7 @@ static CljPersistentVector* vector_remove_at_core(CljPersistentVector* vec, unsi
     return new_vec;
 }
 
-CljPersistentVector* vector_remove_at(CljPersistentVector* vec, unsigned int index) {
+CljPersistentVector* vector_by_removing_at(CljPersistentVector* vec, unsigned int index) {
     return vector_remove_at_core(vec, index, 1);
 }
 
@@ -298,6 +300,7 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                  "vector_assoc: vector is NULL");
         return NULL;
+        return NULL;
     }
 
     bool weak = is_weak_vector(vec);
@@ -314,6 +317,7 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
     if (is_singleton((CljObject*)vec)) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                  "vector_assoc: cannot modify empty vector singleton");
+        return NULL;
         return NULL;
     }
 
@@ -468,6 +472,7 @@ void vector_push(CljTransientVector *tvec, ID item) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "vector_push: vector is NULL");
         return;
+        return;
     }
     CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
     CLJ_ASSERT(tvec->backing != NULL);
@@ -482,6 +487,7 @@ void vector_pop(CljTransientVector *tvec) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "vector_pop: vector is NULL");
         return;
+        return;
     }
     CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
     CLJ_ASSERT(tvec->backing != NULL);
@@ -490,6 +496,7 @@ void vector_pop(CljTransientVector *tvec) {
     if (vector_count(backing) == 0) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "vector_pop: cannot pop from empty vector");
+        return;
         return;
     }
 
@@ -501,6 +508,7 @@ void vector_set_nth_transient(CljTransientVector *tvec, unsigned int index, ID v
     if (!tvec) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "vector_set_nth_transient: vector is NULL");
+        return;
         return;
     }
     CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
@@ -519,5 +527,47 @@ void vector_set_nth_transient(CljTransientVector *tvec, unsigned int index, ID v
     if (!new_backing) {
         return; // exception already thrown by vector_assoc_core
     }
+    transient_vector_set_backing(tvec, new_backing);
+}
+
+void vector_remove_at(CljTransientVector *tvec, unsigned int index) {
+    if (!tvec) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "vector_remove_at: vector is NULL");
+        return;
+        return;
+    }
+    CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
+    CLJ_ASSERT(tvec->backing != NULL);
+
+    CljPersistentVector *backing = tvec->backing;
+    unsigned int cnt = vector_count(backing);
+    if (index >= cnt) {
+        throw_index_out_of_bounds("vector_remove_at", index, cnt, "vector");
+        return;
+    }
+
+    CljPersistentVector *new_backing = vector_remove_at_owned(backing, index);
+    transient_vector_set_backing(tvec, new_backing);
+}
+
+void vector_insert_at(CljTransientVector *tvec, unsigned int index, ID item) {
+    if (!tvec) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "vector_insert_at: vector is NULL");
+        return;
+        return;
+    }
+    CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
+    CLJ_ASSERT(tvec->backing != NULL);
+
+    CljPersistentVector *backing = tvec->backing;
+    unsigned int cnt = vector_count(backing);
+    if (index > cnt) {
+        throw_index_out_of_bounds("vector_insert_at", index, cnt, "vector");
+        return;
+    }
+
+    CljPersistentVector *new_backing = vector_insert_at_owned(backing, index, item);
     transient_vector_set_backing(tvec, new_backing);
 }
