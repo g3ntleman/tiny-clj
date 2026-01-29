@@ -144,9 +144,10 @@ uint32_t autorelease_pool_mark(void);
 uint32_t autorelease_pool_depth(void);
 void autorelease_pool_drain_to_depth(uint32_t mark);
 
-/** Number of times obj appears in the current autorelease pool (for release() policy: prefer leak over double-free). */
-uint32_t autorelease_count(CljObject *obj);
 #ifdef DEBUG
+/** Number of times obj appears in the current autorelease pool (for release() policy: prefer leak over double-free).
+ *  DEBUG only; must not be used in Release builds. */
+uint32_t autorelease_count(CljObject *obj);
 uint32_t autorelease_pool_peak_count(void);
 void autorelease_pool_peak_reset(void);
 #endif
