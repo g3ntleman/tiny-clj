@@ -191,15 +191,15 @@ static void throw_unresolved_symbol_exception_parts(const char *ns_name,
         if (suggest_require && should_suggest_require_for_ns(ns_name)) {
             throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Unable to resolve symbol: %s/%s in this context. (require '%s) missing?",
-                ns_name, name, ns_name); return NULL;
+                ns_name, name, ns_name);
             return;
         }
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-            "Unable to resolve symbol: %s/%s in this context", ns_name, name); return NULL;
+            "Unable to resolve symbol: %s/%s in this context", ns_name, name);
         return;
     }
     throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-        "Unable to resolve symbol: %s in this context", name); return NULL;
+        "Unable to resolve symbol: %s in this context", name);
 }
 
 static void throw_unresolved_symbol_exception_symbol(const CljSymbol *sym) {
@@ -355,13 +355,16 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
             CLJ_ASSERT(recur_arg_count >= 0 && recur_arg_count <= param_count);
             current_argc = recur_arg_count;
             for (int i = 0; i < current_argc; i++) {
-                current_args[i] = recur_args[i]; // Already retained in recur evaluation
-                recur_args[i] = NULL; // Clear to prevent double-release
+                current_args[i] = recur_args[i];
+                recur_args[i] = NULL;
             }
             used_recur_slots = current_argc;
 
             // Recreate call frame with new parameters (stack-allocated)
             frame_set_bindings(call_frame, NULL, effective_params, current_args, current_argc);
+            // Release refs we held in recur_args (frame now owns via frame_set_bindings RETAIN)
+            for (int i = 0; i < current_argc; i++)
+                RELEASE(current_args[i]);
 
             // Continue loop - recur_arg_count will be reset at the start of the next iteration
             continue;
