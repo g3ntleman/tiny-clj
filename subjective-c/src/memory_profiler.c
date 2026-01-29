@@ -203,9 +203,18 @@ void memory_profiler_track_object_zombify(CljObject *obj) {
     if (!g_memory_profiling_enabled || !obj) return;
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;
     g_memory_stats.object_destructions++;
+    size_t obj_size = sizeof(CljObject);
+    uint8_t tt = obj->type;
+    (void)obj_blocks_untrack(obj, &obj_size, &tt);
+    memory_profiler_track_deallocation(obj_size);
+    if (tt < CLJ_TYPE_COUNT) {
+        if (g_memory_stats.bytes_current_by_type[tt] >= obj_size)
+            g_memory_stats.bytes_current_by_type[tt] -= obj_size;
+        else
+            g_memory_stats.bytes_current_by_type[tt] = 0;
+    }
     assert(obj->type >= 0 && obj->type < CLJ_TYPE_COUNT);
     g_memory_stats.deallocations_by_type[obj->type]++;
-    update_memory_leak_stats();
 }
 
 void memory_profiler_track_retain(CljObject *obj) {

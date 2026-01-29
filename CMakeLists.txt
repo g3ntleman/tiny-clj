@@ -505,11 +505,12 @@ target_include_directories(unit-tests
 )
 
 # Ensure subjective-c library is compiled with same flags as unit-tests
-# This is critical: exception.c must use DEBUG to match CLJException struct size
-# Note: DEBUG is set in subjective-c/CMakeLists.txt based on CMAKE_BUILD_TYPE
-# For unit-tests, we need additional flags (UNITY_TESTS, etc.)
-# Since unit-tests is always built in Debug mode, DEBUG will be set via CMAKE_BUILD_TYPE
+# This is critical: exception.c must use DEBUG to match CLJException struct size,
+# and zombie_detection test needs retain() to check rc<=0 (DEBUG) and ZOMBIE_ENABLED.
+# Without this, a Release build would compile subjective-c with NDEBUG and zombie_detection would fail.
 target_compile_definitions(subjective-c PRIVATE 
+    DEBUG
+    ZOMBIE_ENABLED
     UNITY_TESTS 
     MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE}
     META_ENABLED=1

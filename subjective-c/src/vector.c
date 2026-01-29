@@ -363,10 +363,11 @@ CljPersistentVector* vector_assoc(CljPersistentVector* vec, unsigned int index, 
 }
 
 CljPersistentVector* vector_set_nth(CljPersistentVector* vec, unsigned int index, ID value) {
+    (void)index;
+    (void)value;
     if (!vec) return NULL;
-    if (index < vec->count) {
-        return vector_assoc(vec, index, value);
-    }
+    throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+        "set-nth on persistent vector is not allowed (immutable); use assoc or vector_assoc");
     return NULL;
 }
 
