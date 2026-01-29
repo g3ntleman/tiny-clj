@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 TEST_BIN="./build/unit-tests"
 
 if [ ! -x "$TEST_BIN" ]; then
-    echo "❌ $TEST_BIN not found or not executable. Build it first (e.g. cmake --build build -t unit-tests)."
+    echo "❌ $TEST_BIN not found or not executable. Build it first (e.g. cmake --build build/ -t unit-tests)."
     exit 1
 fi
 

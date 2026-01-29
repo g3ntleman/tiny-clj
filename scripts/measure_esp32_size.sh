@@ -8,7 +8,7 @@ if [[ -z "$build_dir" ]]; then
   if [[ -d "$root_dir/build-release" ]]; then
     build_dir="$root_dir/build-release"
   else
-    build_dir="$root_dir/build"
+    build_dir="$root_dir/build/"
   fi
 fi
 
