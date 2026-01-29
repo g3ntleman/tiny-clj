@@ -24,13 +24,13 @@ static const char *require_c_string_arg(ID arg, const char *fn_name, const char 
 {
     if (!arg) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "%s requires %s", fn_name, arg_desc);
+                                  "%s requires %s", fn_name, arg_desc); return NULL;
         return NULL;
     }
     CljString *s = to_string(arg);
     if (!s) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "%s requires %s", fn_name, arg_desc);
+                                  "%s requires %s", fn_name, arg_desc); return NULL;
         return NULL;
     }
     return string_data(s);
@@ -54,14 +54,14 @@ ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
         return NULL;
     }
     if (TAG(args[1]) != CLJ_BYTE_ARRAY) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/spit-bytes expects a byte-array or nil");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/spit-bytes expects a byte-array or nil"); return NULL;
     }
     CljByteArray *ba = as_byte_array(args[1]);
     fs_err_t e = fs_write_bytes(st, path, ba->data, (size_t)ba->length);
     if (e != FS_NO_ERR) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/spit-bytes failed (err=%d)", (int)e);
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/spit-bytes failed (err=%d)", (int)e); return NULL;
     }
     return NULL;
 }
@@ -108,13 +108,13 @@ ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc)
     }
 
     if (!is_fixnum(args[2])) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/list-batch expects a batch-size fixnum");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/list-batch expects a batch-size fixnum"); return NULL;
     }
     int bs = as_fixnum(args[2]);
     if (bs <= 0) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/list-batch batch-size must be > 0");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/list-batch batch-size must be > 0"); return NULL;
     }
 
     FsKvStore *st = fs_global_store();
@@ -150,21 +150,21 @@ ID native_tinyclj_fs_set_size(ID *args, unsigned int argc)
     const char *path = require_c_string_arg(args[0], "tinyclj.fs/set-size!", "a path string");
     if (!path) return NULL;
     if (!is_fixnum(args[1])) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/set-size! expects a size fixnum");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/set-size! expects a size fixnum"); return NULL;
     }
     int32_t s = as_fixnum(args[1]);
     if (s < 0) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/set-size! size must be >= 0");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/set-size! size must be >= 0"); return NULL;
     }
 
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
     fs_err_t e = fs_set_size(st, path, (uint32_t)s);
     if (e != FS_NO_ERR) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/set-size! failed (err=%d)", (int)e);
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "tinyclj.fs/set-size! failed (err=%d)", (int)e); return NULL;
     }
 
     int64_t size = fs_stat_size(st, path);
@@ -187,11 +187,11 @@ static ID tinyclj_kv_throw_ft(const char* op, tdb_status_t stc)
         throw_oom();
         return NULL;
     }
-    return throw_exception_formatted(
+    throw_exception_formatted(
         stc == TDB_ERR_INVALID_ARG ? EXCEPTION_ILLEGAL_ARGUMENT : EXCEPTION_RUNTIME,
         __FILE__, __LINE__, 0,
         "%s failed (err=%d)", op, (int)stc
-    );
+    ); return NULL;
 }
 
 ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
@@ -199,22 +199,22 @@ ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc)
     CHECK_ARITY(argc, 2, "tiny-db.kv/put-bytes");
     CljString *key_str = to_string(args[0]);
     if (!key_str) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tiny-db.kv/put-bytes expects a key string");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tiny-db.kv/put-bytes expects a key string"); return NULL;
     }
     const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
     size_t key_len = (size_t)string_length(key_str);
     if (!key_bytes || key_len == 0) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tiny-db.kv/put-bytes key must not be empty");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tiny-db.kv/put-bytes key must not be empty"); return NULL;
     }
     if (key_bytes[0] == '/') {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tiny-db.kv keys must not start with '/'");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tiny-db.kv keys must not start with '/'"); return NULL;
     }
     if (!args[1] || TAG(args[1]) != CLJ_BYTE_ARRAY) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tiny-db.kv/put-bytes expects a byte-array");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tiny-db.kv/put-bytes expects a byte-array"); return NULL;
     }
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
@@ -231,18 +231,18 @@ ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc)
     CHECK_ARITY(argc, 1, "tiny-db.kv/get-bytes");
     CljString *key_str = to_string(args[0]);
     if (!key_str) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tiny-db.kv/get-bytes expects a key string");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tiny-db.kv/get-bytes expects a key string"); return NULL;
     }
     const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
     size_t key_len = (size_t)string_length(key_str);
     if (!key_bytes || key_len == 0) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tiny-db.kv/get-bytes key must not be empty");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tiny-db.kv/get-bytes key must not be empty"); return NULL;
     }
     if (key_bytes[0] == '/') {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tiny-db.kv keys must not start with '/'");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tiny-db.kv keys must not start with '/'"); return NULL;
     }
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
@@ -270,18 +270,18 @@ ID native_tinyclj_kv_delete(ID *args, unsigned int argc)
     CHECK_ARITY(argc, 1, "tiny-db.kv/delete!");
     CljString *key_str = to_string(args[0]);
     if (!key_str) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tiny-db.kv/delete! expects a key string");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tiny-db.kv/delete! expects a key string"); return NULL;
     }
     const uint8_t *key_bytes = (const uint8_t *)string_data(key_str);
     size_t key_len = (size_t)string_length(key_str);
     if (!key_bytes || key_len == 0) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tiny-db.kv/delete! key must not be empty");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tiny-db.kv/delete! key must not be empty"); return NULL;
     }
     if (key_bytes[0] == '/') {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tiny-db.kv keys must not start with '/'");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "tiny-db.kv keys must not start with '/'"); return NULL;
     }
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;

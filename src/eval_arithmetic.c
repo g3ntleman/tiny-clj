@@ -13,8 +13,8 @@ static inline bool is_numeric_type(ID value) {
 
 static inline CljObject* throw_non_numeric_argument(ID value) {
     RELEASE(value);
-    return throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
-        "String cannot be used as a Number");
+    throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
+        "String cannot be used as a Number"); return NULL;
 }
 
 typedef ID (*ArithVariadicFn)(ID *args, unsigned int argc);
@@ -44,8 +44,8 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list,
             case ARITH_ADD: return fixnum(0);
             case ARITH_MUL: return fixnum(1);
             default:
-                return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                    "Wrong number of args: 0");
+                throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                    "Wrong number of args: 0"); return NULL;
         }
     }
 
@@ -78,7 +78,7 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list,
                     case ARITH_DIV:
                         if (vb == 0) {
                             throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                "Division by zero: %d / %d", va, vb);
+                                "Division by zero: %d / %d", va, vb); return NULL;
                             return NULL;
                         }
                         return fixnum(va / vb);
@@ -126,8 +126,8 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list,
         }
         if (!is_numeric_type(args[i])) {
             free_obj_array(args, args_stack);
-            return throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
-                "String cannot be used as a Number");
+            throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
+                "String cannot be used as a Number"); return NULL;
         }
         current = current->rest ? as_list(current->rest) : NULL;
     }

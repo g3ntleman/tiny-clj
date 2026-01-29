@@ -45,15 +45,14 @@ ID eval_compiled_call(CljASTNode *node, CljMap *env, EvalState *st, const EvalCo
     // Operator lives in node->first; arguments are in node->rest (plain list).
     ID fn = eval_arg_from_expr_with_context(node->first, env, st, ctx);
     if (!fn) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                        "Cannot call nil as a function");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                        "Cannot call nil as a function"); return NULL;
     }
     if (!is_callable(fn)) {
         const char *type_name = is_fixed((CljValue)fn) ? "number"
                               : (is_bool((CljValue)fn) ? "boolean" : "value");
-        RELEASE(fn);
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                        "Cannot call %s as a function", type_name);
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                        "Cannot call %s as a function", type_name); return NULL;
     }
 
     // Evaluate arguments (arity is typically small in hot code like fib).
@@ -67,7 +66,6 @@ ID eval_compiled_call(CljASTNode *node, CljMap *env, EvalState *st, const EvalCo
             // Grow to heap once if needed (rare).
             args = (ID*)CLJ_MALLOC(sizeof(ID) * 32);
             if (!args) {
-                RELEASE(fn);
                 throw_oom();
                 return NULL;
             }
@@ -79,14 +77,11 @@ ID eval_compiled_call(CljASTNode *node, CljMap *env, EvalState *st, const EvalCo
 
     ID result = eval_function_call(fn, args, argc, env, st);
 
-    // Clean up evaluated arguments (eval_arg_from_expr_with_context returns retained).
-    for (unsigned int i = 0; i < argc; i++) {
-        RELEASE(args[i]);
-    }
+    // eval_arg_from_expr_with_context returns pool-managed (AUTORELEASE'd) values;
+    // do not RELEASE args or fn – the pool owns them; frame_set_bindings_init RETAINs args for the frame.
     if (args != stack_args) {
         CLJ_FREE(args);
     }
-    RELEASE(fn);
     return result;
 }
 

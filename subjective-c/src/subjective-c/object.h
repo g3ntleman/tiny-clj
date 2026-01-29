@@ -44,7 +44,7 @@ typedef struct CljObject
 #endif
 
 // Forward declaration to avoid circular dependency with exception.h
-void *throw_exception_formatted(const char *type, const char *file, int line, int col, const char *format, ...);
+void throw_exception_formatted(const char *type, const char *file, int line, int col, const char *format, ...);
 
 #define INDEX_NOT_FOUND (-1)
 #define TRACKS_RETAINS(obj) ((obj) && !is_singleton(obj))

@@ -3,9 +3,14 @@ description: Bei Crashes, AutoreleasePool- oder Speicherfehlern gezielt lldb vor
 alwaysApply: true
 ---
 
-# Debugging: Crashes, AutoreleasePool, Speicherfehler
+# Debugging: Crashes, AutoreleasePool, Speicherfehler, Double Releases
 
-Bei **Crashes** (SIGABRT, SIGSEGV, Exit 134), **AutoreleasePoolError** („still in autorelease pool; will double-release“, „autorelease called during drain“) oder **Speicherfehlern** (UseAfterFree, Doppel-Release, Zombie) in diesem Projekt:
+Bei **Crashes** (SIGABRT, SIGSEGV, Exit 134), **AutoreleasePoolError** („still in autorelease pool; will double-release“, „autorelease called during drain“), **Double Releases** oder **Speicherfehlern** (UseAfterFree, Doppel-Release, Zombie) in diesem Projekt:
+
+**Double Releases debuggen (Kurz-Checkliste):**
+- Debug-Build mit ZOMBIE_ENABLED (Standard). Beim Treffen der Problemstelle (rc==0 oder rc<=pool_count) wird automatisch „retain/release history for %p“ nach stderr geschrieben (R=retain, L=release, A=autorelease, neueste zuerst).
+- Caller-Adressen in lldb auflösen: `image lookup -a <caller>`.
+- Optional: Objekt früh fangen (z. B. seq.c:553 make_seq), `p heap_seq` → Adresse, dann retain/release-Breakpoints nur für diese Adresse setzen (Skript `.lldb-debug-double-free-address`).
 
 1. **lldb gezielt vorschlagen und nutzen**
    - `./build/unit-tests` unter lldb starten oder mit `-test` einen einzelnen Test
@@ -16,8 +21,14 @@ Bei **Crashes** (SIGABRT, SIGSEGV, Exit 134), **AutoreleasePoolError** („still
    - **Doppeltes AUTORELEASE**: `native_seq`/`make_seq` bei schon CLJ_SEQ (ohne erneutes AUTORELEASE zurückgeben); `to_string`/`print_helper`/`print_result` wenn der String schon im Pool ist; `apply_metadata_to_object` / `vector_conj` + äußeres AUTORELEASE; in Tests: `AUTORELEASE(make_seq(result))` wenn `result` schon CLJ_SEQ → `(TAG(result)==CLJ_SEQ) ? result : AUTORELEASE(make_seq(result))`
    - **autorelease during drain**: `zombie_desc` oder andere Aufrufe von `clj_to_string`/`to_string`/`autorelease` im `release`-Pfad oder während `autorelease_pool_drain_to_depth`; `zombie_desc` bei `g_in_drain` überspringen
 
-3. **Hilfreiche lldb-Skripte**
-   - `.lldb-trace-astnode`, `.lldb-debug-closure` etc. für Breakpoints mit Bedingungen (z.B. `v->type == 14` für ASTNode, `autorelease_count(v) > 0`)
+3. **Double-Free: Objektadresse in retain/release beobachten**
+   - **Früh fangen (empfohlen):** Wenn Du erst bei release/skipping RELEASE stoppst, ist das Problem schon passiert. Besser: bei Erzeugung stoppen (z. B. `seq.c:553` make_seq oder `seq.c:589` seq_rest), `p heap_seq` bzw. `p rest_seq` → Adresse, dann in demselben Lauf Breakpoints in `retain`/`release` mit dieser Adresse setzen und weiterlaufen – so siehst Du jedes retain/release von Geburt an.
+   - Skript `.lldb-debug-double-free-address`: Strategie A (früh fangen) und B (Adresse ersetzen) beschrieben; Adressen sind pro Lauf anders (ASLR/Heap), daher Adresse im selben Lauf aus „p heap_seq“ holen.
+   - **Rückwärts lesen:** Bei DEBUG+ZOMBIE_ENABLED zeichnet ein Ringpuffer in `memory.c` die letzten retain/release/autorelease auf; an der Problemstelle wird die Historie nach stderr gedruckt (neueste zuerst). Caller werden automatisch symbolisiert (backtrace_symbols) – lldb ist dafür nicht nötig. Nach Adresse filtern: `RCHIST_FILTER_ADDR=0x<addr>` (Adresse aus „obj=%p“ in der Ausgabe).
 
-4. **Nach Fix**
+4. **Hilfreiche lldb-Skripte**
+   - `.lldb-trace-astnode`, `.lldb-debug-closure` etc. für Breakpoints mit Bedingungen (z.B. `v->type == 14` für ASTNode, `autorelease_count(v) > 0`)
+   - `.lldb-debug-double-free-address` für adressbasiertes Double-Free-Debugging
+
+5. **Nach Fix**
    - `./build/unit-tests` ausführen, betroffene Test-Gruppen mit `-test` prüfen, Code aufräumen (kein Debug-Code, kein Dead-Code).

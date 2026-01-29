@@ -7,7 +7,7 @@
 // Plan: remove shared `struct CljVector` layout. Keep only:
 // - CljPersistentVector: TAG CLJ_VECTOR_PERSISTENT or CLJ_VECTOR_TRANSIENT_WEAK, owns `data[]`.
 // - CljTransientVector: wrapper (TAG CLJ_VECTOR_TRANSIENT) with `backing` (always persistent tag).
-//   Transient mutation API: vector_push, vector_pop, clj_conj, and vector_set_nth_transient.
+//   Transient mutation API: vector_push, vector_pop, vector_set_nth_transient, vector_remove_at, vector_insert_at.
 
 typedef struct CljPersistentVector CljPersistentVector;
 
@@ -69,8 +69,8 @@ CljPersistentVector* make_vector_copy(CljPersistentVector* vec, unsigned capacit
 CljPersistentVector* vector_popped(CljPersistentVector* vec);
 /** Returns owned (no AUTORELEASE). Use with ASSIGN for slot update. */
 CljPersistentVector* vector_popped_owned(CljPersistentVector* vec);
-CljPersistentVector* vector_insert_at(CljPersistentVector* vec, unsigned int index, ID item);
-CljPersistentVector* vector_remove_at(CljPersistentVector* vec, unsigned int index);
+CljPersistentVector* vector_by_inserting_at(CljPersistentVector* vec, unsigned int index, ID item);
+CljPersistentVector* vector_by_removing_at(CljPersistentVector* vec, unsigned int index);
 void vector_clear(CljPersistentVector *vec);
 /** n<=count; caller releases [n,count) when vec retains. */
 void vector_truncate(CljPersistentVector *vec, unsigned int n);
@@ -99,6 +99,11 @@ void vector_pop(CljTransientVector *tvec);
  * - Out of bounds: throws index-out-of-bounds exception.
  */
 void vector_set_nth_transient(CljTransientVector *tvec, unsigned int index, ID value);
+
+/** Remove element at index from transient vector (in-place via backing). */
+void vector_remove_at(CljTransientVector *tvec, unsigned int index);
+/** Insert item at index in transient vector (in-place via backing). */
+void vector_insert_at(CljTransientVector *tvec, unsigned int index, ID item);
 
 size_t vector_make_copy_count(void);
 void vector_make_copy_count_reset(void);

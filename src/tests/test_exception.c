@@ -231,8 +231,8 @@ TEST(test_throw_existing_exception) {
                                            __FILE__, __LINE__, 0);
         TEST_ASSERT_NOT_NULL(original_exception);
         
-        // Throw it
-        throw_exception_object(original_exception);
+        // Throw it (AUTORELEASE so pool owns; END_TRY does not release)
+        throw_exception_object(AUTORELEASE(original_exception));
         
         // Should not reach here
         TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here after throw");

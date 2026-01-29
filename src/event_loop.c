@@ -356,8 +356,8 @@ static void timer_insert_sorted_map(CljMap *task_map) {
         RELEASE(existing_map);
     }
     
-    // Use vector_insert_at to insert at the correct position
-    // vector_insert_at handles capacity growth, element shifting, and RETAIN automatically
+    // Use vector_insert_at_inplace to insert at the correct position
+    // vector_by_inserting_at semantics (capacity growth, element shifting, RETAIN) via _inplace
 
     vector_insert_at_inplace(&g_runtime.timer_queue, (unsigned int)insert_pos, task_map);
 }

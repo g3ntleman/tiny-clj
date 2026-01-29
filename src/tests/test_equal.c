@@ -95,7 +95,7 @@ TEST_SHARED(test_equal_different_types) {
     WITH_MEMORY_PROFILING({
     
     // Test different types
-    CljValue vec_val = make_vector(1, CLJ_VECTOR_PERSISTENT);
+    CljValue vec_val = make_vector(1, false);
     CljMap *map = (CljMap*)make_map(16);
     CljList *list = empty_list();
     

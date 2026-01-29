@@ -191,15 +191,15 @@ static void throw_unresolved_symbol_exception_parts(const char *ns_name,
         if (suggest_require && should_suggest_require_for_ns(ns_name)) {
             throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Unable to resolve symbol: %s/%s in this context. (require '%s) missing?",
-                ns_name, name, ns_name);
+                ns_name, name, ns_name); return NULL;
             return;
         }
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-            "Unable to resolve symbol: %s/%s in this context", ns_name, name);
+            "Unable to resolve symbol: %s/%s in this context", ns_name, name); return NULL;
         return;
     }
     throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-        "Unable to resolve symbol: %s in this context", name);
+        "Unable to resolve symbol: %s in this context", name); return NULL;
 }
 
 static void throw_unresolved_symbol_exception_symbol(const CljSymbol *sym) {
@@ -293,6 +293,17 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     int current_argc = effective_count;
     int recur_arg_count = -1;
 
+    // Own refs for initial args so they stay valid across recur iterations and frame_set_bindings
+    // (caller may pass pool-only refs; frame_set_bindings_init RETAINs for the frame, but on recur
+    // we call frame_release first and need the old values to have at least one non-pool ref).
+    ID initial_args[16];
+    const int initial_argc = current_argc;
+    for (int i = 0; i < initial_argc; i++) {
+        initial_args[i] = current_args[i];
+        if (initial_args[i] && !IS_IMMEDIATE(initial_args[i]))
+            RETAIN(initial_args[i]);
+    }
+
     // Create call frame with parameters (fixed-size stack variable)
     CLJ_ASSERT(effective_count <= CALLFRAME_MAX_PARAMS && "Too many parameters");
     CallFrame call_frame_storage;
@@ -377,7 +388,13 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
 
     // Cleanup call frame (stack-allocated, but may contain retained values)
     frame_release(call_frame);
-    
+
+    // Release refs we took for initial args
+    for (int i = 0; i < initial_argc; i++) {
+        if (initial_args[i] && !IS_IMMEDIATE(initial_args[i]))
+            RELEASE(initial_args[i]);
+    }
+
     RELEASE(call_env_stack);
 
     return result;
@@ -1152,8 +1169,8 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
                 CljSymbol *s = as_symbol(op);
                 if (s && s->cname) kw_name = s->cname;
             }
-            return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                "Wrong number of args (%d) passed to: %s", argc, kw_name);
+            throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                "Wrong number of args (%d) passed to: %s", argc, kw_name); return NULL;
         }
 
         ID target = eval_arg_with_context(list, 1, env, st, ctx);
@@ -1191,14 +1208,14 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
         CljObject *fn = eval_symbol(as_symbol(op), st);
         if (!fn) {
             if (op == SYM_NIL) {
-                return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                        "Cannot call nil as a function");
+                throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                        "Cannot call nil as a function"); return NULL;
             }
             return NULL;
         }
         if ((ID)fn == (ID)SYM_NIL) {
-            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call nil as a function");
+            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                    "Cannot call nil as a function"); return NULL;
         }
 
         unsigned char fn_tag = TAG(fn);
@@ -1222,8 +1239,8 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
         }
 
         if (fn_tag == CLJ_LIST) {
-            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call list as a function");
+            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                    "Cannot call list as a function"); return NULL;
         }
 
         // If fn is still a symbol, it means eval_symbol couldn't resolve it as a function
@@ -1232,7 +1249,7 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
             CljSymbol *sym = as_symbol(fn);
             if (sym == SYM_UNQUOTE_SPLICE) {
                 throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                        "unquote-splice can only be used inside quasiquote");
+                        "unquote-splice can only be used inside quasiquote"); return NULL;
                 return NULL;
             }
             // Check if it's a builtin function that should be handled via native_function_lookup
@@ -1260,13 +1277,13 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
             }
             const char *sym_name = sym && sym->cname ? sym->cname : "unknown";
             throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call %s as a function", sym_name);
+                    "Cannot call %s as a function", sym_name); return NULL;
             return NULL;
         }
 
         // Unknown type - should not happen, but throw exception to be safe
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call object of type %d as a function", fn_tag);
+                "Cannot call object of type %d as a function", fn_tag); return NULL;
         return NULL;
     }
 
@@ -1366,13 +1383,13 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         if (list_empty(list)) {
             return NULL;
         }
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call nil as a function");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Cannot call nil as a function"); return NULL;
     }
     
     if (!op) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call nil as a function");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Cannot call nil as a function"); return NULL;
     }
 
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
@@ -1381,14 +1398,14 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         op = eval_list(as_list(op), effective_env, effective_st, ctx);
         if (!op) {
             // Evaluation returned nil (NULL) - cannot call nil as a function
-            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call nil as a function");
+            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                    "Cannot call nil as a function"); return NULL;
         }
         // Check if result is an immediate value (macro expansion may return incorrectly)
         if (IS_IMMEDIATE(op)) {
             const char *type_name = is_fixed((CljValue)op) ? "number" : (is_bool((CljValue)op) ? "boolean" : "immediate value");
-            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call %s as a function (this may indicate a macro expansion error)", type_name);
+            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                    "Cannot call %s as a function (this may indicate a macro expansion error)", type_name); return NULL;
         }
     }
 
@@ -1415,8 +1432,8 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Clojure compatibility: Vectors are seqable, but not callable as functions
     if (TAG(op) == CLJ_VECTOR_PERSISTENT || TAG(op) == CLJ_VECTOR_TRANSIENT || TAG(op) == CLJ_VECTOR_TRANSIENT_WEAK) {
         // If the operator is a vector, throw a Clojure-compatible error
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-            "Cannot call Vector as a function");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+            "Cannot call Vector as a function"); return NULL;
     }
 
     // Check if op is a symbol and resolve it
@@ -1577,23 +1594,23 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Check if op is an immediate value (macro expansion may return incorrectly)
     if (IS_IMMEDIATE(op)) {
         const char *type_name = is_fixed((CljValue)op) ? "number" : (is_bool((CljValue)op) ? "boolean" : "immediate value");
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call %s as a function (this may indicate a macro expansion error)", type_name);
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Cannot call %s as a function (this may indicate a macro expansion error)", type_name); return NULL;
     }
 
     // Error: op is a list (should have been evaluated earlier)
     if (is_list_type(op_tag)) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call list as a function");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Cannot call list as a function"); return NULL;
     }
 
     // Error: first element is not a function and not a symbol
     if (!op) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call nil as a function");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Cannot call nil as a function"); return NULL;
     }
-    return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-            "Cannot call %s as a function", clj_type_name(op->type));
+    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+            "Cannot call %s as a function", clj_type_name(op->type)); return NULL;
 }
 
 ID eval_def(CljList *list, CljMap *env, EvalState *st) {
@@ -2320,6 +2337,7 @@ ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx)
     CljObject *coll_expr = list_get_element(binding_data, 1);
 
     // Evaluate collection expression in current env (preserve ctx for lexical lookup)
+    // eval_body returns a reference usable in the current syntactic scope; caller does not manage it.
     ID coll_eval = eval_body(coll_expr, env, st, ctx);
     if (!coll_eval) {
         return NULL;
@@ -2361,7 +2379,6 @@ ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx)
         }
         RELEASE(seq);
     }
-    RELEASE(coll_eval);
     return AUTORELEASE(NULL); // doseq always returns nil
 }
 
@@ -2402,8 +2419,8 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     CljMap *eval_env = eval_env_or_ns_mappings(env, st);
     if (!eval_env) {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "let requires a valid environment");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "let requires a valid environment"); return NULL;
     }
 
     // Get bindings vector (second element): (let [x 10 y 20] ...)

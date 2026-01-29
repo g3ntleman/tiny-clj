@@ -327,8 +327,8 @@ ID nth2(ID *args, unsigned int argc)
     // Validate index
     if (!idx || TAG(idx) != CLJ_FIXNUM)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "nth requires an integer index");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "nth requires an integer index"); return NULL;
     }
     int i = AS_FIXNUM(idx);
 
@@ -343,8 +343,8 @@ ID nth2(ID *args, unsigned int argc)
     {
         if (has_not_found)
             return not_found;
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "nth index %d is negative", i);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                         "nth index %d is negative", i); return NULL;
     }
 
     // Fast path: Vectors (O(1) access) - includes transient vectors (via backing)
@@ -360,8 +360,8 @@ ID nth2(ID *args, unsigned int argc)
         {
             if (has_not_found)
                 return not_found;
-            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                             "nth index %d is out of bounds for collection with %d elements", i, count);
+            throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                             "nth index %d is out of bounds for collection with %d elements", i, count); return NULL;
         }
         return vector_nth(v, i);
     }
@@ -387,8 +387,8 @@ ID nth2(ID *args, unsigned int argc)
     // Slow path: Sequences (O(n) access via iterator)
     if (!is_seqable(coll))
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "nth not supported on this type");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "nth not supported on this type"); return NULL;
     }
 
     SeqIterator iter;
@@ -396,8 +396,8 @@ ID nth2(ID *args, unsigned int argc)
     {
         if (has_not_found)
             return not_found;
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "nth index %d is out of bounds for empty sequence", i);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                         "nth index %d is out of bounds for empty sequence", i); return NULL;
     }
 
     // Iterate to index i
@@ -407,8 +407,8 @@ ID nth2(ID *args, unsigned int argc)
         {
             if (has_not_found)
                 return not_found;
-            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                             "nth index %d is out of bounds for sequence (reached end at index %d)", i, j);
+            throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                             "nth index %d is out of bounds for sequence (reached end at index %d)", i, j); return NULL;
         }
         seq_iter_next(&iter);
     }
@@ -417,8 +417,8 @@ ID nth2(ID *args, unsigned int argc)
     {
         if (has_not_found)
             return not_found;
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "nth index %d is out of bounds for sequence", i);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                         "nth index %d is out of bounds for sequence", i); return NULL;
     }
 
     return seq_iter_first(&iter);
@@ -492,14 +492,14 @@ ID native_subvec(ID *args, unsigned int argc)
     // Type validation
     if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "subvec requires a vector as first argument");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "subvec requires a vector as first argument"); return NULL;
     }
 
     if (!start_idx || TAG(start_idx) != CLJ_FIXNUM)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "subvec requires a number as start index");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "subvec requires a number as start index"); return NULL;
     }
 
     CljPersistentVector *v = as_persistent_vector(vec);
@@ -512,8 +512,8 @@ ID native_subvec(ID *args, unsigned int argc)
     {
         if (TAG(end_idx) != CLJ_FIXNUM)
         {
-            return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                             "subvec requires a number as end index");
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                             "subvec requires a number as end index"); return NULL;
         }
         end = AS_FIXNUM(end_idx);
     }
@@ -525,21 +525,21 @@ ID native_subvec(ID *args, unsigned int argc)
     // Bounds validation
     if (start < 0)
     {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "subvec start index %d is negative", start);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                         "subvec start index %d is negative", start); return NULL;
     }
 
     int v_count = vector_count(v);
     if (end > v_count)
     {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "subvec end index %d is greater than vector count %d", end, v_count);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                         "subvec end index %d is greater than vector count %d", end, v_count); return NULL;
     }
 
     if (start > end)
     {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "subvec start index %d is greater than end index %d", start, end);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                         "subvec start index %d is greater than end index %d", start, end); return NULL;
     }
 
     // Calculate sub-vector size
@@ -1177,7 +1177,7 @@ ID native_map(ID *args, unsigned int argc)
     if (argc < 2)
     {
         throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "map requires at least 2 arguments, got %u", argc);
+                                  "map requires at least 2 arguments, got %u", argc); return NULL;
         return NULL;
     }
 
@@ -1193,7 +1193,7 @@ ID native_map(ID *args, unsigned int argc)
     if (ncolls > 8)
     {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "map supports up to 8 collections, got %u", ncolls);
+                                  "map supports up to 8 collections, got %u", ncolls); return NULL;
         return NULL;
     }
 
@@ -1833,7 +1833,7 @@ ID native_contains_p(ID *args, unsigned int argc)
     if (argc != 2)
     {
         throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "contains? expects 2 arguments, got %u", argc);
+                                  "contains? expects 2 arguments, got %u", argc); return NULL;
         return NULL;
     }
 
@@ -1879,7 +1879,7 @@ ID native_update(ID *args, unsigned int argc)
     if (argc < 3)
     {
         throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "update expects at least 3 arguments, got %u", argc);
+                                  "update expects at least 3 arguments, got %u", argc); return NULL;
         return NULL;
     }
 
@@ -1929,7 +1929,7 @@ ID native_into(ID *args, unsigned int argc)
     if (argc < 2 || argc > 3)
     {
         throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "into expects 2 or 3 arguments, got %u", argc);
+                                  "into expects 2 or 3 arguments, got %u", argc); return NULL;
         return NULL;
     }
 
@@ -2078,7 +2078,7 @@ ID native_select_keys(ID *args, unsigned int argc)
     if (argc != 2)
     {
         throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "select-keys expects 2 arguments, got %u", argc);
+                                  "select-keys expects 2 arguments, got %u", argc); return NULL;
         return NULL;
     }
 
@@ -2149,7 +2149,7 @@ ID native_find(ID *args, unsigned int argc)
     if (argc != 2)
     {
         throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "find expects 2 arguments, got %u", argc);
+                                  "find expects 2 arguments, got %u", argc); return NULL;
         return NULL;
     }
 
@@ -2559,8 +2559,8 @@ ID native_vec(ID *args, unsigned int argc)
     // Check if collection is seqable
     if (!is_seqable(coll))
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "vec requires a seqable collection");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "vec requires a seqable collection"); return NULL;
     }
 
     // Use stack-based iterator to iterate through collection (avoid code duplication)
@@ -2584,8 +2584,8 @@ ID native_vec(ID *args, unsigned int argc)
     CljPersistentVector *vec = make_vector(4, false);
     if (!vec)
     {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "Failed to create vector");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "Failed to create vector"); return NULL;
     }
     CljPersistentVector *initial_vec = vec;
 
@@ -2937,13 +2937,15 @@ static ID create_fixed_result(int32_t acc_fixed)
 // Helper function to throw arithmetic overflow exceptions (DRY principle)
 static ID throw_arithmetic_overflow(const char *err_msg, int a, int b)
 {
-    return throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg, a, b);
+    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg, a, b return NULL;
+
 }
 
 // Helper function to throw fixed-point overflow exceptions
 static ID throw_fixed_overflow(const char *err_msg)
 {
-    return throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg);
+    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg return NULL;
+
 }
 
 // Helper function to create fixnum result
@@ -2981,7 +2983,7 @@ ID native_ns_map(ID *args, unsigned int argc)
     if (argc != 1)
     {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "ns-map expects exactly 1 argument, got %u", argc);
+                                  "ns-map expects exactly 1 argument, got %u", argc); return NULL;
         return NULL;
     }
 
@@ -2989,7 +2991,7 @@ ID native_ns_map(ID *args, unsigned int argc)
     if (!ns_arg)
     {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "ns-map: argument must not be nil");
+                                  "ns-map: argument must not be nil"); return NULL;
         return NULL;
     }
 
@@ -3011,14 +3013,14 @@ ID native_ns_map(ID *args, unsigned int argc)
     else
     {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "ns-map: argument must be a symbol, string, or namespace");
+                                  "ns-map: argument must be a symbol, string, or namespace"); return NULL;
         return NULL;
     }
 
     if (!target_ns)
     {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "Namespace not found");
+                                  "Namespace not found"); return NULL;
         return NULL;
     }
 
@@ -3034,7 +3036,7 @@ ID native_find_ns(ID *args, unsigned int argc)
     if (argc != 1)
     {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "find-ns expects exactly 1 argument, got %u", argc);
+                                  "find-ns expects exactly 1 argument, got %u", argc); return NULL;
         return NULL;
     }
 
@@ -3053,7 +3055,7 @@ ID native_find_ns(ID *args, unsigned int argc)
     }
 
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                              "find-ns: argument must be a symbol or string");
+                              "find-ns: argument must be a symbol or string"); return NULL;
     return NULL;
 }
 
@@ -3065,7 +3067,7 @@ ID native_all_ns(ID *args, unsigned int argc)
     if (argc != 0)
     {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "all-ns expects no arguments, got %u", argc);
+                                  "all-ns expects no arguments, got %u", argc); return NULL;
         return NULL;
     }
 
@@ -4076,14 +4078,14 @@ ID native_symbol(ID *args, unsigned int argc)
         if (ns_arg && TAG(ns_arg) != CLJ_STRING)
         {
             throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                      "symbol namespace must be a string or nil");
+                                      "symbol namespace must be a string or nil"); return NULL;
             return NULL;
         }
 
         if (!name_arg || TAG(name_arg) != CLJ_STRING)
         {
             throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                      "symbol requires a string for name");
+                                      "symbol requires a string for name"); return NULL;
             return NULL;
         }
 
@@ -4107,7 +4109,7 @@ ID native_symbol(ID *args, unsigned int argc)
         if (!name_arg || TAG(name_arg) != CLJ_STRING)
         {
             throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                      "symbol requires a string argument");
+                                      "symbol requires a string argument"); return NULL;
             return NULL;
         }
 
@@ -4121,7 +4123,7 @@ ID native_symbol(ID *args, unsigned int argc)
     if (!sym)
     {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "Failed to create symbol from string");
+                                  "Failed to create symbol from string"); return NULL;
         return NULL;
     }
 
@@ -5306,13 +5308,15 @@ ID native_sub_variadic(ID *args, unsigned int argc)
     {
         if (!args[0])
         {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER return NULL;
+
             return NULL;
         }
         uint16_t tag = TAG(args[0]);
         if (tag != CLJ_FIXNUM && tag != CLJ_FLOAT)
         {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER return NULL;
+
             return NULL;
         }
         switch (tag)
@@ -5420,7 +5424,7 @@ ID native_mod(ID *args, unsigned int argc)
         if (b == 0)
         {
             throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                      "Division by zero: %d %% %d", a, b);
+                                      "Division by zero: %d %% %d", a, b); return NULL;
             return NULL;
         }
         return create_fixnum_result(a % b);
@@ -5451,7 +5455,7 @@ ID native_mod(ID *args, unsigned int argc)
     if (b_fixed == 0)
     {
         throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                  "Division by zero in mod");
+                                  "Division by zero in mod"); return NULL;
         return NULL;
     }
 
@@ -5462,7 +5466,7 @@ ID native_mod(ID *args, unsigned int argc)
     if (b_int == 0)
     {
         throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                  "Division by zero: %d %% %d", a_int, b_int);
+                                  "Division by zero: %d %% %d", a_int, b_int); return NULL;
         return NULL;
     }
     return create_fixnum_result(a_int % b_int);
@@ -5482,7 +5486,7 @@ ID native_quot(ID *args, unsigned int argc)
         if (b == 0)
         {
             throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                      "Division by zero: %d / %d", a, b);
+                                      "Division by zero: %d / %d", a, b); return NULL;
             return NULL;
         }
         // Clojure quot truncates toward zero (C integer division already does this)
@@ -5514,7 +5518,7 @@ ID native_quot(ID *args, unsigned int argc)
     if (b_fixed == 0)
     {
         throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                  "Division by zero in quot");
+                                  "Division by zero in quot"); return NULL;
         return NULL;
     }
 
@@ -5524,7 +5528,7 @@ ID native_quot(ID *args, unsigned int argc)
     if (b_int == 0)
     {
         throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                  "Division by zero: %d / %d", a_int, b_int);
+                                  "Division by zero: %d / %d", a_int, b_int); return NULL;
         return NULL;
     }
     return create_fixnum_result(a_int / b_int);
@@ -5859,13 +5863,15 @@ ID native_div_variadic(ID *args, unsigned int argc)
     {
         if (!args[0])
         {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER return NULL;
+
             return NULL;
         }
         uint16_t tag = TAG(args[0]);
         if (tag != CLJ_FIXNUM && tag != CLJ_FLOAT)
         {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER return NULL;
+
             return NULL;
         }
         switch (tag)
@@ -5877,7 +5883,7 @@ ID native_div_variadic(ID *args, unsigned int argc)
             {
                 // Division by zero - throw exception
                 throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                          "Division by zero: 1 / %d", x);
+                                          "Division by zero: 1 / %d", x); return NULL;
                 return NULL;
             }
             if (1 % x == 0)
@@ -5892,7 +5898,7 @@ ID native_div_variadic(ID *args, unsigned int argc)
             {
                 // Division by zero - throw exception
                 throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                          "Division by zero: 1 / %d", x >> 13);
+                                          "Division by zero: 1 / %d", x >> 13); return NULL;
                 return NULL;
             }
             return create_fixed_result(fixnum_to_fixed(1) / x);
@@ -5929,7 +5935,7 @@ ID native_div_variadic(ID *args, unsigned int argc)
                 {
                     // Division by zero - throw exception
                     throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                              "Division by zero: %d / %d", acc_i, d);
+                                              "Division by zero: %d / %d", acc_i, d); return NULL;
                     return NULL;
                 }
                 if (acc_i % d == 0)
@@ -5965,7 +5971,7 @@ ID native_div_variadic(ID *args, unsigned int argc)
                 {
                     // Division by zero - throw exception
                     throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                              "Division by zero: %d / %d", acc_fixed >> 13, d >> 13);
+                                              "Division by zero: %d / %d", acc_fixed >> 13, d >> 13); return NULL;
                     return NULL;
                 }
                 else
@@ -5992,7 +5998,7 @@ ID native_div_variadic(ID *args, unsigned int argc)
             {
                 // Division by zero - throw exception
                 throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
-                                          "Division by zero: %d / %d", acc_fixed >> 13, d >> 13);
+                                          "Division by zero: %d / %d", acc_fixed >> 13, d >> 13); return NULL;
                 return NULL;
             }
             else
@@ -6025,7 +6031,7 @@ ID native_byte_array(ID *args, unsigned int argc)
         if (size < 0)
         {
             throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                      "byte-array size must be non-negative, got %d", size);
+                                      "byte-array size must be non-negative, got %d", size); return NULL;
             return NULL;
         }
         return make_byte_array(size);
@@ -6071,7 +6077,7 @@ ID native_byte_array(ID *args, unsigned int argc)
             {
                 RELEASE(arr);
                 throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                          "byte values must be 0-255, got %d", val);
+                                          "byte values must be 0-255, got %d", val); return NULL;
                 return NULL;
             }
             byte_array_set(arr, i, (uint8_t)val);
@@ -6144,7 +6150,7 @@ ID native_aset(ID *args, unsigned int argc)
     if (value < 0 || value > 255)
     {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "byte value must be 0-255, got %d", value);
+                                  "byte value must be 0-255, got %d", value); return NULL;
         return NULL;
     }
 
@@ -6891,8 +6897,8 @@ ID native_instant_days(ID *args, unsigned int argc)
         return NULL;
     if (TAG(args[0]) != CLJ_INSTANT)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "instant-days expects an Instant");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "instant-days expects an Instant"); return NULL;
     }
     return fixnum(clj_instant_days(args[0]));
 }
@@ -6903,8 +6909,8 @@ ID native_instant_ms(ID *args, unsigned int argc)
         return NULL;
     if (TAG(args[0]) != CLJ_INSTANT)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "instant-ms expects an Instant");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "instant-ms expects an Instant"); return NULL;
     }
     return fixnum((int32_t)clj_instant_ms(args[0]));
 }
@@ -6916,8 +6922,8 @@ ID native_datetime_civil_from_days(ID *args, unsigned int argc)
         return NULL;
     if (!is_fixnum(args[0]))
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "civil-from-days expects an integer days value");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "civil-from-days expects an integer days value"); return NULL;
     }
 
     int32_t unix_days = (int32_t)as_fixnum(args[0]);
@@ -6942,8 +6948,8 @@ ID native_datetime_days_from_civil(ID *args, unsigned int argc)
         return NULL;
     if (!is_fixnum(args[0]) || !is_fixnum(args[1]) || !is_fixnum(args[2]))
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "days-from-civil expects integer year month day");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "days-from-civil expects integer year month day"); return NULL;
     }
 
     int year = as_fixnum(args[0]);
@@ -6967,8 +6973,8 @@ ID native_datetime_format_iso(ID *args, unsigned int argc)
     unsigned char tag = TAG(map);
     if (tag != CLJ_MAP && tag != CLJ_MAP_TRANSIENT)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "format-iso expects a map");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "format-iso expects a map"); return NULL;
     }
 
     if (!SYM_KW_YEAR || !SYM_KW_MONTH || !SYM_KW_DAY || !SYM_KW_HOUR || !SYM_KW_MINUTE || !SYM_KW_SECOND)
@@ -6984,8 +6990,8 @@ ID native_datetime_format_iso(ID *args, unsigned int argc)
     if (!is_fixnum(v_year) || !is_fixnum(v_month) || !is_fixnum(v_day) ||
         !is_fixnum(v_hour) || !is_fixnum(v_minute) || !is_fixnum(v_second))
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "format-iso expects integer :year :month :day :hour :minute :second");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "format-iso expects integer :year :month :day :hour :minute :second"); return NULL;
     }
 
     int year = as_fixnum(v_year);
@@ -7005,8 +7011,8 @@ ID native_datetime_format_iso(ID *args, unsigned int argc)
         minute < 0 || minute > 99 ||
         second < 0 || second > 99)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "format-iso expects :year in [0,9999] and other fields in [0,99]");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "format-iso expects :year in [0,9999] and other fields in [0,99]"); return NULL;
     }
 
     buf[0] = (char)('0' + (year / 1000) % 10);

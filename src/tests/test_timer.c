@@ -383,7 +383,7 @@ TEST(test_timer_enqueue_zero_delay_enqueues_task) {
             "data[0] should contain the enqueued task");
         
         // Cleanup - manually remove the task
-        vector_remove_at(task_vec, 0);
+        vector_by_removing_at(task_vec, 0);
         RELEASE(fn);
     });
 }
@@ -429,7 +429,7 @@ TEST(test_timer_enqueue_zero_delay_with_run_next) {
             "Count should be 1 before event_loop_run_next");
         
         // Cleanup - manually remove the task to avoid memory issues
-        vector_remove_at(task_vec, 0);
+        vector_by_removing_at(task_vec, 0);
         RELEASE(fn);
     });
 }

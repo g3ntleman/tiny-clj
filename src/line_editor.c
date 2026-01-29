@@ -1076,12 +1076,12 @@ int line_editor_get_history_size(const LineEditor *editor) {
     return 0;
 }
 
-CljVector* line_editor_get_history_vector(LineEditor *editor) {
+CljPersistentVector* line_editor_get_history_vector(LineEditor *editor) {
     (void)editor;
     return empty_vector();
 }
 
-void line_editor_set_history_from_vector(LineEditor *editor, CljVector *vec) {
+void line_editor_set_history_from_vector(LineEditor *editor, CljPersistentVector *vec) {
     (void)editor; (void)vec;
 }
 
