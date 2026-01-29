@@ -245,7 +245,8 @@ void release(CljObject *v) {
             fflush(stderr);
             (void)throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0, "%s", msg);
         }
-        /* Mark as zombie: do not DEALLOC; avoids crashes when debugging at cost of RAM */
+        release_object_deep(v);  /* Release nested refs so rc counts match Clojure semantics */
+        MEMORY_PROFILER_TRACK_OBJECT_ZOMBIFY(v);  /* Realistic stats; no free – keep object as zombie */
 #else
         release_object_deep(v);
         DEALLOC(v);

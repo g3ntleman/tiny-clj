@@ -907,10 +907,8 @@ TEST_SHARED(test_transient_vector_assoc_keeps_pointer_and_updates_backing_store)
         TEST_ASSERT_NOT_NULL(tvec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
 
-        vector_assoc_inplace(&vec, 1, fixnum(99));
-        TEST_ASSERT_NOT_NULL(vec);
-
-        CljPersistentVector *backing = vec;
+        vector_assoc_inplace(&tvec->backing, 1, fixnum(99));
+        CljPersistentVector *backing = tvec->backing;
         TEST_ASSERT_NOT_NULL(backing);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(backing));
         TEST_ASSERT_EQUAL_INT(1, retain_count(backing));

@@ -531,11 +531,11 @@ TEST(test_vector_conj_cow_capacity_growth) {
     });
 }
 
-// Ensure we don't accidentally force full copies via persistent(transient(pv)).
+// Ensure we don't accidentally force full copies via persistent conj when rc=1.
 // The vector implementation exposes a copy counter (make_vector_copy) for this.
+// Note: vector_transient shares backing (COW on first mutation); copy is not required.
 TEST(test_vector_copy_counter_detects_forced_copy_patterns) {
     WITH_AUTORELEASE_POOL({
-        // Setup: a small persistent vector with enough capacity for a conj without growth.
         CljPersistentVector *pv = make_vector(8, false);
         TEST_ASSERT_NOT_NULL(pv);
 
@@ -547,14 +547,11 @@ TEST(test_vector_copy_counter_detects_forced_copy_patterns) {
         TEST_ASSERT_EQUAL_UINT64_MESSAGE(0, (uint64_t)vector_make_copy_count(),
                                         "vector_conj on RC=1 (no growth) should not call make_vector_copy");
 
-        // Converting persistent -> transient should copy backing storage (by design).
+        // Transient shares backing (COW on first mutation); no copy required here.
         CljTransientVector *tv = vector_transient(pv);
         TEST_ASSERT_NOT_NULL(tv);
         TEST_ASSERT_TRUE(TAG(tv) == CLJ_VECTOR_TRANSIENT);
-        TEST_ASSERT_TRUE_MESSAGE(vector_make_copy_count() > 0,
-                                 "vector_transient should copy backing storage (make_vector_copy_count must increase)");
 
-        // Cleanup
         RELEASE(tv);
         RELEASE(pv);
     });

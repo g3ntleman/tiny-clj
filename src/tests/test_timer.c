@@ -368,7 +368,8 @@ TEST(test_timer_enqueue_zero_delay_enqueues_task) {
         TEST_ASSERT_TRUE_MESSAGE(timer_id > 0,
             "timer_enqueue should return a valid timer ID");
         
-        // Check that count is now 1 (timer with delay 0 should be enqueued immediately)
+        // Check that count is now 1 (re-read queue; conj_inplace may replace it)
+        task_vec = g_runtime.task_queue;
         unsigned int count_after = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after,
             "timer_enqueue with delay 0 should increment count from 0 to 1");
@@ -382,8 +383,8 @@ TEST(test_timer_enqueue_zero_delay_enqueues_task) {
         TEST_ASSERT_NOT_NULL_MESSAGE(data[0],
             "data[0] should contain the enqueued task");
         
-        // Cleanup - manually remove the task
-        vector_by_removing_at(task_vec, 0);
+        // Cleanup - remove the task from the queue
+        vector_remove_at_inplace(&g_runtime.task_queue, 0);
         RELEASE(fn);
     });
 }
@@ -410,7 +411,8 @@ TEST(test_timer_enqueue_zero_delay_with_run_next) {
         TEST_ASSERT_TRUE_MESSAGE(timer_id > 0,
             "timer_enqueue should return a valid timer ID");
         
-        // Check that count is now 1 (timer with delay 0 should be enqueued immediately)
+        // Re-read queue; conj_inplace may replace it
+        task_vec = g_runtime.task_queue;
         unsigned int count_after_enqueue = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after_enqueue,
             "timer_enqueue with delay 0 should increment count from 0 to 1");
@@ -421,15 +423,14 @@ TEST(test_timer_enqueue_zero_delay_with_run_next) {
             "vector_as_array should return non-NULL after timer_enqueue");
         
         // Now test event_loop_run_next - it should see the count and return true
-        // But first, get a fresh reference to task_vec (like event_loop_run_next does)
         CljPersistentVector *task_vec_fresh = g_runtime.task_queue;
         TEST_ASSERT_NOT_NULL(task_vec_fresh);
         unsigned int count_before_run = vector_count(task_vec_fresh);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_before_run,
             "Count should be 1 before event_loop_run_next");
         
-        // Cleanup - manually remove the task to avoid memory issues
-        vector_by_removing_at(task_vec, 0);
+        // Cleanup - remove the task from the queue
+        vector_remove_at_inplace(&g_runtime.task_queue, 0);
         RELEASE(fn);
     });
 }

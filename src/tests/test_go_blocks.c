@@ -551,7 +551,8 @@ TEST(test_event_loop_enqueue_updates_count) {
         // Enqueue the task
         event_loop_enqueue(fn, chan);
         
-        // Check that count is now 1
+        // Check that count is now 1 (re-read queue; conj_inplace may replace it)
+        task_vec = g_runtime.task_queue;
         unsigned int count_after = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after,
             "event_loop_enqueue should increment count from 0 to 1");
@@ -568,8 +569,8 @@ TEST(test_event_loop_enqueue_updates_count) {
         // Don't run the task (to avoid memory issues), just verify count is correct
         // The count check above is the main test
         
-        // Cleanup - manually remove the task to avoid memory issues
-        vector_by_removing_at(task_vec, 0);
+        // Cleanup - remove the task from the queue
+        vector_remove_at_inplace(&g_runtime.task_queue, 0);
         RELEASE(fn);
         RELEASE(chan);
     });

@@ -3195,11 +3195,10 @@ ID native_ns_unload(ID *args, unsigned int argc)
         ns->macro_mappings = NULL;
     }
 
-    // Remove from registry; releasing the old registry map releases the namespace object
-    // (and thus its mappings), ensuring resources are freed.
+    // Remove from registry; releasing the old registry map releases the namespace object.
     map_remove_inplace(&g_runtime.ns_registry, name_sym);
 
-    // Clear resolve cache (unqualified symbol resolution relies on it)
+    // Invalidate resolve cache so cached refs to unloaded namespace values are released.
     ns_invalidate_resolve_cache();
 
     return (ID)clj_true;
@@ -6763,8 +6762,13 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     ID k_raw_blocks_current = (ID)intern_symbol_global(":raw-blocks-current");
     ID k_raw_blocks_peak = (ID)intern_symbol_global(":raw-blocks-peak");
     ID k_bytes_by_type = (ID)intern_symbol_global(":bytes-by-type");
+    ID k_alloc_count = (ID)intern_symbol_global(":alloc-count");
+    ID k_dealloc_count = (ID)intern_symbol_global(":dealloc-count");
+    ID k_total_allocations = (ID)intern_symbol_global(":total-allocations");
+    ID k_total_deallocations = (ID)intern_symbol_global(":total-deallocations");
+    ID k_memory_leaks = (ID)intern_symbol_global(":memory-leaks");
 
-    CljMap *ms = make_map(8);
+    CljMap *ms = make_map(12);
     if (ms)
     {
         // Fixnum range is limited; clamp to avoid overflow/truncation surprises.
@@ -6791,9 +6795,15 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         ASSIGN(ms, map_assoc(ms, k_raw_blocks_current, fixnum(frbc)));
         ASSIGN(ms, map_assoc(ms, k_raw_blocks_peak, fixnum(frbp)));
 
-        // Bytes by object TAG/type (objects only; excludes raw blocks).
-        // Vector of [type-id bytes-current bytes-peak alloc-count dealloc-count].
-        CljPersistentVector *by_type = make_vector(0, false);
+        int32_t talloc = (g_memory_stats.total_allocations > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)g_memory_stats.total_allocations;
+        int32_t tdealloc = (g_memory_stats.total_deallocations > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)g_memory_stats.total_deallocations;
+        int32_t mleaks = (g_memory_stats.memory_leaks > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)g_memory_stats.memory_leaks;
+        ASSIGN(ms, map_assoc(ms, k_total_allocations, fixnum(talloc)));
+        ASSIGN(ms, map_assoc(ms, k_total_deallocations, fixnum(tdealloc)));
+        ASSIGN(ms, map_assoc(ms, k_memory_leaks, fixnum(mleaks)));
+
+        // Bytes by type: map of type-name (keyword) -> {:bytes-current :bytes-peak :alloc-count :dealloc-count}.
+        CljMap *by_type = make_map(0);
         if (by_type) {
             for (int ti = 0; ti < CLJ_TYPE_COUNT; ti++) {
                 size_t bc = g_memory_stats.bytes_current_by_type[ti];
@@ -6808,13 +6818,15 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
                 int32_t ac_i = (ac > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)ac;
                 int32_t dc_i = (dc > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)dc;
 
-                ID entry[5] = { fixnum(ti), fixnum(bc_i), fixnum(bp_i), fixnum(ac_i), fixnum(dc_i) };
-                CljPersistentVector *row = make_vector(5, false);
+                ID k_type = (ID)make_string(clj_type_name((CljType)ti));
+
+                CljMap *row = make_map(4);
                 if (!row) break;
-                for (int i = 0; i < 5; i++) {
-                    ASSIGN(row, vector_conj(row, entry[i]));
-                }
-                ASSIGN(by_type, vector_conj(by_type, row));
+                ASSIGN(row, map_assoc(row, k_bytes_current, fixnum(bc_i)));
+                ASSIGN(row, map_assoc(row, k_bytes_peak, fixnum(bp_i)));
+                ASSIGN(row, map_assoc(row, k_alloc_count, fixnum(ac_i)));
+                ASSIGN(row, map_assoc(row, k_dealloc_count, fixnum(dc_i)));
+                ASSIGN(by_type, map_assoc(by_type, k_type, (ID)row));
             }
             ASSIGN(ms, map_assoc(ms, k_bytes_by_type, by_type));
         }

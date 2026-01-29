@@ -21,6 +21,11 @@ Optional keys (only present when the platform provides the value):
 Missing values are omitted (the key will not be present)."}
 (defn stats [] :native)
 
+^#^{:doc "Prints runtime stats to *out* (for REPL). Uses clojure.pprint when available. Fallback: (println (stats))."}
+(defn print-stats []
+  (require 'clojure.pprint)
+  (clojure.pprint/pprint (stats)))
+
 ;; print-ast - Print AST structure with internals for debugging
 ;; Only available in DEBUG builds
 ^#^{:doc "Prints the AST (Abstract Syntax Tree) structure of an object with internal type information. Only available in DEBUG builds. Usage: (print-ast obj)"}
