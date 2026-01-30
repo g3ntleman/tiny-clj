@@ -24,12 +24,7 @@ TEST(test_cond_structure_debug) {
     CljObject *parsed = eval_string("'(cond true 1 false 2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
     
-#ifdef DEBUG
-    // Print the structure to see the nesting
-    const char *ast_str = print_ast(parsed);
-    fprintf(stderr, "[TEST] Parsed cond structure:\n%s\n", ast_str);
-    CLJ_FREE((void*)ast_str);
-#endif
+    (void)parsed;
     
     // The structure should be: (cond true 1 false 2)
     // Not: (cond [List: (true 1 false 2)])
