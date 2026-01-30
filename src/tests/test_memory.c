@@ -66,6 +66,21 @@ TEST(test_memory_deallocation) {
     }
 }
 
+TEST(test_memory_list_alloc_release) {
+#if !MEMORY_PROFILING_ENABLED
+    TEST_IGNORE_MESSAGE("memory profiling disabled");
+#else
+    MemoryStats before = memory_profiler_get_stats();
+    CljList *list = make_list(fixnum(1), make_list(fixnum(2), NULL));
+    TEST_ASSERT_NOT_NULL(list);
+    RELEASE(list);
+    MemoryStats after = memory_profiler_get_stats();
+
+    // Expect at least one deallocation to have happened.
+    TEST_ASSERT_TRUE(after.total_deallocations >= before.total_deallocations + 1);
+#endif
+}
+
 TEST(test_memory_leak_detection) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {

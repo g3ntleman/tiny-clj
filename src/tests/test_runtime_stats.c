@@ -109,3 +109,39 @@ TEST(test_runtime_stats_contains_memory_stats_map)
 #endif
 }
 #endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_current_ram_under_200kb_after_core_load)
+{
+    ID stats = eval_string("(do (require 'clojure.core) (require 'tinyclj.runtime) (tinyclj.runtime/stats))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(stats);
+    TEST_ASSERT_TRUE(is_map(stats));
+
+    ID k_memory_stats = (ID)intern_symbol_global(":memory-stats");
+    ID v_memory_stats = map_get_sentinel((CljMap *)stats, k_memory_stats, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_memory_stats);
+    TEST_ASSERT_TRUE(is_map(v_memory_stats));
+
+    ID k_bytes_current = (ID)intern_symbol_global(":bytes-current");
+    ID v_bytes_current = map_get_sentinel((CljMap *)v_memory_stats, k_bytes_current, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_bytes_current);
+    TEST_ASSERT_TRUE(is_fixnum(v_bytes_current));
+
+    int32_t bytes_current = as_fixnum(v_bytes_current);
+    int32_t raw_bytes_current = -1;
+    ID k_raw_bytes_current = (ID)intern_symbol_global(":raw-bytes-current");
+    ID v_raw_bytes_current = map_get_sentinel((CljMap *)v_memory_stats, k_raw_bytes_current, NOT_FOUND);
+    if (v_raw_bytes_current != NOT_FOUND && is_fixnum(v_raw_bytes_current)) {
+        raw_bytes_current = as_fixnum(v_raw_bytes_current);
+    }
+
+    fprintf(stderr, "[runtime-stats] bytes-current=%d raw-bytes-current=%d\n", bytes_current, raw_bytes_current);
+
+    TEST_ASSERT_TRUE_MESSAGE(bytes_current >= 0, "bytes-current must be non-negative");
+    {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "bytes-current must be under 200KB (got %d)", bytes_current);
+        TEST_ASSERT_TRUE_MESSAGE(bytes_current < 200 * 1024, msg);
+    }
+}
+#endif

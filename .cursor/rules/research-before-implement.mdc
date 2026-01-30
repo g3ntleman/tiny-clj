@@ -1,0 +1,19 @@
+---
+description: Vor Implementierung betroffene Code-Stellen und Nutzungsmuster recherchieren
+alwaysApply: true
+---
+
+# Recherche vor Implementierung
+
+**Regel:** Bevor mit einer Implementierung begonnen wird, müssen die **betroffenen Code-Stellen** und **Usage-Patterns** ausführlich recherchiert und verstanden werden. Dieses Wissen ist zu berücksichtigen und im Kontext zu behalten.
+
+## Vorgehen
+
+1. **Betroffene Stellen finden:** Welche Dateien, Funktionen, Structs oder Typen sind von der Änderung betroffen? (z. B. Suche, Grep, Code-Navigation.)
+2. **Nutzungsmuster erfassen:** Wo und wie werden diese Stellen verwendet? Aufrufer, Call-Chains, typische Parameter, Randbedingungen.
+3. **Abhängigkeiten prüfen:** Welcher Code hängt von Layout, Signatur oder Verhalten ab? (z. B. `offsetof`, Makros, Tests.)
+4. **Erst dann implementieren:** Die Implementierung baut auf der Recherche auf; keine Änderungen „ins Blaue“.
+
+## Merken
+
+Die Ergebnisse der Recherche (betroffene Dateien, wichtige Call-Sites, Randfälle) sind für die Dauer der Aufgabe im Kontext zu behalten und bei der Umsetzung zu beachten.

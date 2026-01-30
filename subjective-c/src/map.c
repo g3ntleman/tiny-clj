@@ -48,10 +48,12 @@ CljMap* make_map(int capacity) {
   map->count = 0;
   map->capacity = capacity;
 
-  // Initialize embedded array to NULL
+#ifdef DEBUG
+  // Initialize embedded array to NULL (debug-only)
   for (int i = 0; i < capacity * 2; i++) {
     map->data[i] = NULL;
   }
+#endif
 
   return map;
 }
@@ -119,8 +121,8 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
     if (map->count < map->capacity) {
       // Direct in-place mutation (no branches after this)
       int idx = map->count;
-      ASSIGN(KV_KEY(map->data, idx), key_obj);
-      ASSIGN(KV_VALUE(map->data, idx), value_obj);
+      KV_KEY(map->data, idx) = RETAIN(key_obj);
+      KV_VALUE(map->data, idx) = RETAIN(value_obj);
       map->count++;
       return map;  // Return SAME map
     }
@@ -149,10 +151,12 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
   new_map->count = 0;  // Start with 0, will be set correctly below
   new_map->capacity = new_capacity;
 
-  // Initialize new data array
+#ifdef DEBUG
+  // Initialize new data array (debug-only)
   for (int i = 0; i < new_capacity * 2; i++) {
     new_map->data[i] = NULL;
   }
+#endif
 
   // Copy existing entries
   bool key_found = false;
@@ -164,22 +168,22 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
     
     if (key_matches) {
       // Key found - update value
-      ASSIGN(KV_KEY(new_map->data, new_idx), k);
-      ASSIGN(KV_VALUE(new_map->data, new_idx), value_obj);
+      KV_KEY(new_map->data, new_idx) = RETAIN(k);
+      KV_VALUE(new_map->data, new_idx) = RETAIN(value_obj);
       key_found = true;
       new_idx++;
     } else {
       // Copy existing entry
-      ASSIGN(KV_KEY(new_map->data, new_idx), k);
-      ASSIGN(KV_VALUE(new_map->data, new_idx), v);
+      KV_KEY(new_map->data, new_idx) = RETAIN(k);
+      KV_VALUE(new_map->data, new_idx) = RETAIN(v);
       new_idx++;
     }
   }
 
   // Add new key if not found
   if (!key_found && new_idx < new_map->capacity) {
-    ASSIGN(KV_KEY(new_map->data, new_idx), key_obj);
-    ASSIGN(KV_VALUE(new_map->data, new_idx), value_obj);
+    KV_KEY(new_map->data, new_idx) = RETAIN(key_obj);
+    KV_VALUE(new_map->data, new_idx) = RETAIN(value_obj);
     new_idx++;
   }
 
@@ -245,10 +249,8 @@ ID map_keys(CljMap *map) {
   if (!keys_vec)
     return NULL;
   MAP_FOR_EACH(map_data, key, value) {
-    if (key) {
-      CljPersistentVector *next = vector_conj_owned(keys_vec, RETAIN(key));
-      if (next != keys_vec) { RELEASE(keys_vec); keys_vec = next; }
-    }
+    CljPersistentVector *next = vector_conj_owned(keys_vec, RETAIN(key));
+    if (next != keys_vec) { RELEASE(keys_vec); keys_vec = next; }
   }
   return keys_vec;
 }
@@ -371,17 +373,19 @@ static CljMap* map_remove_core(CljMap *map, ID key) {
   new_map->count = 0;
   new_map->capacity = map_data->capacity;
 
-  // Initialize new data array
+  // Initialize new data array (debug-only)
+#ifdef DEBUG
   for (int i = 0; i < map_data->capacity * 2; i++) {
     new_map->data[i] = NULL;
   }
+#endif
 
   // Copy all entries except the one at index
   MAP_FOR_EACH(map_data, k, v) {
     if (_i != index) {
       // Copy entry to new map
-      ASSIGN(KV_KEY(new_map->data, new_map->count), k);
-      ASSIGN(KV_VALUE(new_map->data, new_map->count), v);
+      KV_KEY(new_map->data, new_map->count) = RETAIN(k);
+      KV_VALUE(new_map->data, new_map->count) = RETAIN(v);
       new_map->count++;
     }
   }
@@ -532,16 +536,16 @@ static CljMap* map_copy(CljMap *src, CljType new_type) {
     new_map->count = src->count;
     new_map->capacity = src->capacity;
 
-    // Initialize data array
+    // Initialize data array (debug-only)
+#ifdef DEBUG
     for (int i = 0; i < src->capacity * 2; i++) {
         new_map->data[i] = NULL;
     }
+#endif
 
-    // Copy all entries with ASSIGN (handles RETAIN automatically)
+    // Copy all entries (nil is a valid value)
     for (int i = 0; i < src->count * 2; i++) {
-        if (src->data[i]) {
-            ASSIGN(new_map->data[i], src->data[i]);
-        }
+        new_map->data[i] = RETAIN(src->data[i]);
     }
 
     return new_map;
@@ -576,18 +580,18 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
     tmap->count = 0;
     tmap->capacity = total_capacity;
 
-    // Initialize data array
+    // Initialize data array (debug-only)
+#ifdef DEBUG
     for (int i = 0; i < total_capacity * 2; i++) {
         tmap->data[i] = NULL;
     }
+#endif
 
     // First, copy all parent bindings in-place
     if (parent_map) {
         MAP_FOR_EACH(parent_map, key, value) {
-            if (key) {
-                // Use map_conj for in-place addition (no heap allocation)
-                map_conj(tmap, key, value);
-            }
+            // Use map_conj for in-place addition (no heap allocation)
+            map_conj(tmap, key, value);
         }
     }
 
@@ -689,8 +693,8 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
         return NULL;  // Out of capacity
     }
 
-    ASSIGN(m->data[m->count * 2], key);
-    ASSIGN(m->data[m->count * 2 + 1], value ? (CljObject*)value : NULL);
+    m->data[m->count * 2] = RETAIN(key);
+    m->data[m->count * 2 + 1] = RETAIN(value ? (CljObject*)value : NULL);
     m->count++;
 
     // ASSERT removed for performance - was verifying with map_get after every map_conj
@@ -717,4 +721,3 @@ CljMap* map_persistent(CljMap *tmap) {
 
     return new_map; // NEW persistent collection
 }
-
