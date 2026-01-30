@@ -50,10 +50,10 @@ void result_channel_put(CljMap *chan, ID value) {
     // Assertion: Only transient maps (and persistent maps with RC=1 in COW cases) can be mutated
     CljObject *obj = (CljObject*)chan;
     CLJ_ASSERT(obj != NULL);
-    CLJ_ASSERT(obj->type == CLJ_MAP_TRANSIENT || obj->type == CLJ_MAP);
+    CLJ_ASSERT(obj->type == CLJ_MAP_TRANSIENT || obj->type == CLJ_MAP_PERSISTENT);
     
     // In COW cases, persistent maps with RC=1 can be mutated, but we use transient maps for channels
-    if (obj->type == CLJ_MAP) {
+    if (obj->type == CLJ_MAP_PERSISTENT) {
         CLJ_ASSERT(obj->rc == 1);
     }
     
@@ -79,10 +79,10 @@ void result_channel_close(CljMap *chan) {
     // Assertion: Only transient maps (and persistent maps with RC=1 in COW cases) can be mutated
     CljObject *obj = (CljObject*)chan;
     CLJ_ASSERT(obj != NULL);
-    CLJ_ASSERT(obj->type == CLJ_MAP_TRANSIENT || obj->type == CLJ_MAP);
+    CLJ_ASSERT(obj->type == CLJ_MAP_TRANSIENT || obj->type == CLJ_MAP_PERSISTENT);
     
     // In COW cases, persistent maps with RC=1 can be mutated, but we use transient maps for channels
-    if (obj->type == CLJ_MAP) {
+    if (obj->type == CLJ_MAP_PERSISTENT) {
         CLJ_ASSERT(obj->rc == 1);
     }
     

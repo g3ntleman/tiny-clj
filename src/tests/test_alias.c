@@ -21,6 +21,7 @@ static void load_clojure_string_namespace(void) {
 }
 
 // Helper functions for file operations
+static int ensure_dir(const char *path) __attribute__((unused));
 static int ensure_dir(const char *path) {
     // Create directory if it does not exist (0777 perms)
     // Ignore EEXIST
@@ -29,6 +30,7 @@ static int ensure_dir(const char *path) {
     return -1;
 }
 
+static int write_file(const char *path, const char *content) __attribute__((unused));
 static int write_file(const char *path, const char *content) {
     FILE *fp = fopen(path, "w");
     if (!fp) return -1;

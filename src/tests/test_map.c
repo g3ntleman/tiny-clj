@@ -94,7 +94,7 @@ TEST(test_update_basic) {
     // Test: (update {:a 1} :a inc) => {:a 2}
     CljObject *result = eval_string("(update {:a 1} :a inc)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
     
     // Verify the updated value
     CljSymbol *key = intern_symbol(NULL, ":a");
@@ -108,7 +108,7 @@ TEST(test_update_with_function) {
     // Test: (update {:count 5} :count (fn [x] (* x 2))) => {:count 10}
     CljObject *result = eval_string("(update {:count 5} :count (fn [x] (* x 2)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
     
     // Verify the updated value
     CljSymbol *key = intern_symbol(NULL, ":count");
@@ -139,7 +139,7 @@ TEST(test_update_missing_key_simple) {
     // Step 4: Use map_assoc to add the new key
     CljMap *result = map_assoc(map, (CljValue)key_b, (CljValue)new_val_b);
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "map_assoc should return a map");
-    TEST_ASSERT_TRUE(TAG((CljObject*)result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)result) == CLJ_MAP_PERSISTENT);
     
     CljMap *result_map = result;
     TEST_ASSERT_EQUAL_INT(2, result_map->count);
@@ -190,7 +190,7 @@ TEST(test_update_missing_key) {
         return;
     }
     
-    TEST_ASSERT_TRUE_MESSAGE(TAG(result) == CLJ_MAP, "update result should be a map");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(result) == CLJ_MAP_PERSISTENT, "update result should be a map");
     
     CljMap *result_map = as_map((CljObject*)result);
     TEST_ASSERT_EQUAL_INT(2, result_map->count);
@@ -233,7 +233,7 @@ TEST(test_assoc_map_isolated) {
         return;
     }
 
-    TEST_ASSERT_TRUE_MESSAGE(TAG(result) == CLJ_MAP, "assoc result should be a map");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(result) == CLJ_MAP_PERSISTENT, "assoc result should be a map");
 
     // Verify the new key was added
     CljSymbol *key_b = intern_symbol(NULL, ":b");
@@ -333,7 +333,7 @@ TEST(test_map_transient_comprehensive) {
         persistent_map = map_assoc(persistent_map, (CljValue)keys[i], fixnum(i * 10));
     }
     TEST_ASSERT_EQUAL_INT(5, persistent_map->count);
-    TEST_ASSERT_TRUE(TAG((CljObject*)persistent_map) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)persistent_map) == CLJ_MAP_PERSISTENT);
     
     // Convert to transient
     CljMap *transient_map = map_transient(persistent_map);
@@ -345,7 +345,7 @@ TEST(test_map_transient_comprehensive) {
     TEST_ASSERT_NOT_EQUAL((CljValue)persistent_map, (CljValue)transient_map);
     
     // Verify original map is unchanged
-    TEST_ASSERT_TRUE(TAG((CljObject*)persistent_map) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)persistent_map) == CLJ_MAP_PERSISTENT);
     TEST_ASSERT_EQUAL_INT(5, persistent_map->count);
     
     // Verify all entries are preserved
@@ -601,7 +601,7 @@ TEST(test_dissoc_single_key) {
         // Remove key :b
         CljObject *result = eval_string("(dissoc {:a 1 :b 2 :c 3} :b)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
         
         CljMap *result_map = (CljMap*)result;
         TEST_ASSERT_EQUAL_INT(2, result_map->count);
@@ -626,7 +626,7 @@ TEST(test_dissoc_multiple_keys) {
         // Remove multiple keys
         CljObject *result = eval_string("(dissoc {:a 1 :b 2 :c 3} :a :c)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
         
         CljMap *result_map = (CljMap*)result;
         TEST_ASSERT_EQUAL_INT(1, result_map->count);
@@ -652,7 +652,7 @@ TEST(test_dissoc_no_keys) {
     WITH_AUTORELEASE_POOL({
         CljObject *result = eval_string("(dissoc {:a 1 :b 2})", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
         
         CljMap *result_map = (CljMap*)result;
         TEST_ASSERT_EQUAL_INT(2, result_map->count);
@@ -664,7 +664,7 @@ TEST(test_dissoc_non_existent_key) {
     WITH_AUTORELEASE_POOL({
         CljObject *result = eval_string("(dissoc {:a 1 :b 2} :c)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
         
         CljMap *result_map = (CljMap*)result;
         TEST_ASSERT_EQUAL_INT(2, result_map->count);
@@ -709,7 +709,7 @@ TEST(test_map_literal_nil_key) {
         // Create map literal with nil key: {nil "nil-value"}
         CljObject *result = eval_string("{nil \"nil-value\"}", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
         
         CljMap *map = (CljMap*)result;
         TEST_ASSERT_EQUAL_INT(1, map->count);
@@ -731,7 +731,7 @@ TEST(test_map_get_nil_key_exists) {
         // Create map with nil key using assoc
         CljObject *result = eval_string("(assoc {} nil \"nil-value\")", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
         
         // get nil key should return "nil-value"
         CljObject *value = eval_string("(get (assoc {} nil \"nil-value\") nil)", g_test_eval_state);
@@ -750,7 +750,7 @@ TEST(test_map_get_missing_key_returns_nil) {
         // Create map without nil key
         CljObject *result = eval_string("(assoc {} :key \"value\")", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
         
         // get missing key should return nil
         CljObject *value = eval_string("(get {:key \"value\"} :missing)", g_test_eval_state);
@@ -821,7 +821,7 @@ TEST(test_map_literal_nil_and_regular_key) {
         // Create map literal: {nil "nil-value" :key "key-value"}
         CljObject *result = eval_string("{nil \"nil-value\" :key \"key-value\"}", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
         
         CljMap *map = (CljMap*)result;
         TEST_ASSERT_EQUAL_INT(2, map->count);
@@ -850,7 +850,7 @@ TEST(test_map_literal_nil_key_stored_as_null) {
         // Create map literal with nil key
         CljObject *result = eval_string("{nil \"test\"}", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
         
         CljMap *map = (CljMap*)result;
         TEST_ASSERT_EQUAL_INT(1, map->count);
@@ -873,7 +873,7 @@ TEST(test_get_nil_key_from_map_literal) {
         // Create map with nil key: {nil "nil-value"}
         CljObject *map_obj = eval_string("{nil \"nil-value\"}", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(map_obj);
-        TEST_ASSERT_TRUE(TAG(map_obj) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(map_obj) == CLJ_MAP_PERSISTENT);
         
         CljMap *map = (CljMap*)map_obj;
         TEST_ASSERT_EQUAL_INT(1, map->count);
@@ -1273,7 +1273,7 @@ TEST(test_make_map_kv) {
     // Create persistent map with NOT_FOUND sentinel termination
     CljMap *map = make_map_kv(kw1, fixnum(10), kw2, fixnum(20), NOT_FOUND);
     TEST_ASSERT_NOT_NULL(map);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(map));  // persistent, not transient!
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(map));  // persistent, not transient!
     TEST_ASSERT_EQUAL_INT(2, map_count(map));
     
     CljValue v1 = map_get_sentinel(map, kw1, NULL);

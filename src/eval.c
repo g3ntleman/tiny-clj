@@ -90,7 +90,7 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
         return;
     }
 
-    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+    if (tag == CLJ_VECTOR_PERSISTENT) {
         CljPersistentVector *vec = as_persistent_vector(expr);
         if (vec) {
             unsigned int count = vector_count(vec);
@@ -691,7 +691,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             // AST-Nodes can contain vectors as first element
             // Check if first element is a vector (by tag, not is_vector which may have additional checks)
             CljASTNode *node = as_ast_node(body);
-            if (node && node->first && (TAG(node->first) == CLJ_VECTOR_PERSISTENT || TAG(node->first) == CLJ_VECTOR_TRANSIENT || TAG(node->first) == CLJ_VECTOR_TRANSIENT_WEAK)) {
+            if (node && node->first && (TAG(node->first) == CLJ_VECTOR_PERSISTENT || TAG(node->first) == CLJ_VECTOR_TRANSIENT)) {
                 // AST-Node wrapping a vector - evaluate the vector
                 return eval_body_with_params(node->first, ctx);
             }
@@ -712,9 +712,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             return eval_list(as_list(body), env_map, ctx_state, ctx);
         }
 
-        case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK:
-        case CLJ_VECTOR_TRANSIENT: {
+        case CLJ_VECTOR_PERSISTENT:case CLJ_VECTOR_TRANSIENT: {
             // Vector literals need to have their elements evaluated
             CljPersistentVector *vec =
                 (TAG(body) == CLJ_VECTOR_TRANSIENT)
@@ -744,7 +742,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             return AUTORELEASE(result);
         }
 
-        case CLJ_MAP: {
+        case CLJ_MAP_PERSISTENT: {
             CljMap *map = (CljMap*)body;
             CljMap *result = map_empty();
             RETAIN(result);
@@ -865,8 +863,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             return NULL;
         }
 
-        case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: {
+        case CLJ_VECTOR_PERSISTENT:{
             // Vector literals need to have their elements evaluated
             // This is necessary for cases like [(f x) (g x)] where f and g should be called
             CljPersistentVector *vec = as_persistent_vector(body);
@@ -896,7 +893,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             return (ID)result;
         }
 
-        case CLJ_MAP: {
+        case CLJ_MAP_PERSISTENT: {
             // Map literals need to have their keys and values evaluated
             // This is necessary for cases like {nil "value"} where nil should be evaluated to NULL
             CljMap *map = (CljMap*)body;
@@ -970,7 +967,7 @@ static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
     unsigned int depth = vector_count(vector_persistent(st->dynamic_bindings));
     for (unsigned int i = depth; i > 0; i--) {
         ID frame_id = vector_nth(vector_persistent(st->dynamic_bindings), i - 1);
-        if (!frame_id || TAG(frame_id) != CLJ_MAP) {
+        if (!frame_id || TAG(frame_id) != CLJ_MAP_PERSISTENT) {
             continue;
         }
         ID v = map_get((CljMap*)frame_id, (ID)symbol);
@@ -1185,7 +1182,7 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
         }
 
         unsigned char fn_tag = TAG(fn);
-        if (fn_tag == CLJ_MAP) {
+        if (fn_tag == CLJ_MAP_PERSISTENT) {
             return eval_map_lookup(list, env, st, ctx, fn);
         }
 
@@ -1396,7 +1393,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 #endif
 
     // Clojure compatibility: Vectors are seqable, but not callable as functions
-    if (TAG(op) == CLJ_VECTOR_PERSISTENT || TAG(op) == CLJ_VECTOR_TRANSIENT || TAG(op) == CLJ_VECTOR_TRANSIENT_WEAK) {
+    if (TAG(op) == CLJ_VECTOR_PERSISTENT || TAG(op) == CLJ_VECTOR_TRANSIENT) {
         // If the operator is a vector, throw a Clojure-compatible error
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
             "Cannot call Vector as a function"); return NULL;
@@ -2743,7 +2740,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         return eval_list(as_list(expr), eval_env, list_st, ctx);
     }
 
-    if (expr_tag == CLJ_MAP) {
+    if (expr_tag == CLJ_MAP_PERSISTENT) {
         CljMap *map = (CljMap*)expr;
         CljMap *result = map_empty();
 
@@ -2758,7 +2755,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         return AUTORELEASE(result);
     }
 
-    if (expr_tag == CLJ_VECTOR_PERSISTENT || expr_tag == CLJ_VECTOR_TRANSIENT_WEAK || expr_tag == CLJ_VECTOR_TRANSIENT) {
+    if (expr_tag == CLJ_VECTOR_PERSISTENT || expr_tag == CLJ_VECTOR_TRANSIENT) {
         CljPersistentVector *vec =
             (expr_tag == CLJ_VECTOR_TRANSIENT)
                 ? vector_persistent(as_transient_vector(expr))

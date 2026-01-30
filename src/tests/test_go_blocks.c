@@ -252,7 +252,7 @@ TEST(test_go_returns_transient_map_channel) {
     
     // Verify it's a transient map (channel is a transient map)
     // Clojure-compatibility: Channels are maps, but transient for in-place mutation
-    TEST_ASSERT_TRUE(TAG((CljObject*)chan) == CLJ_MAP_TRANSIENT || TAG((CljObject*)chan) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)chan) == CLJ_MAP_TRANSIENT || TAG((CljObject*)chan) == CLJ_MAP_PERSISTENT);
     
     // Cleanup
     RELEASE(chan);

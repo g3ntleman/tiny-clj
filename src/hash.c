@@ -103,8 +103,7 @@ uint32_t clj_hash_full(ID value) {
         case CLJ_STRING: return hash_string((CljString*)value);
         case CLJ_SYMBOL: return hash_symbol((CljSymbol*)value);
         case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: {
+        case CLJ_VECTOR_TRANSIENT:{
             CljType t = TAG(value);
             CljPersistentVector *vec =
                 (t == CLJ_VECTOR_TRANSIENT)
@@ -112,7 +111,7 @@ uint32_t clj_hash_full(ID value) {
                     : as_persistent_vector(value);
             return hash_vector(vec);
         }
-        case CLJ_MAP:
+        case CLJ_MAP_PERSISTENT:
         case CLJ_MAP_TRANSIENT: return hash_map((CljMap*)value);
         case CLJ_LIST: return hash_list((CljList*)value);
         case CLJ_INSTANT: {

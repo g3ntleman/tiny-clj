@@ -113,12 +113,12 @@ TEST(test_edn_file_all_supported_types)
     ID parsed = parse_expr(&reader, g_test_eval_state);
 
     TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(parsed));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(parsed));
     
     // Canonicalize the parsed map (interns symbol tokens, etc.)
     parsed = canonicalize_ast(parsed, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(parsed));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(parsed));
 
     reader_skip_all(&reader);
     TEST_ASSERT_TRUE(reader_is_eof(&reader));

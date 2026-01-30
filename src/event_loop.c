@@ -293,9 +293,9 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         
         CLJ_ASSERT(chan != NULL);
         CLJ_ASSERT(obj != NULL);
-        CLJ_ASSERT(obj->type == CLJ_MAP_TRANSIENT || obj->type == CLJ_MAP);
+        CLJ_ASSERT(obj->type == CLJ_MAP_TRANSIENT || obj->type == CLJ_MAP_PERSISTENT);
         
-        if (obj->type == CLJ_MAP) {
+        if (obj->type == CLJ_MAP_PERSISTENT) {
             CLJ_ASSERT(obj->rc == 1);
         }
         

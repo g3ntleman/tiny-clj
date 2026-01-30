@@ -204,7 +204,7 @@ static inline void assert_vector(CljObject *obj) {
 // Helper: Assert that object is a map
 static inline void assert_map(CljObject *obj) {
     TEST_ASSERT_NOT_NULL(obj);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(obj));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(obj));
 }
 
 static inline ID parse_canonicalized(const char *input, EvalState *st) {

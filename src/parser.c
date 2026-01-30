@@ -526,7 +526,7 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
         // For symbols, use eval_symbol (uses current_ns->mappings internally)
         result = eval_symbol(as_symbol(parsed_expr), eval_state);
         // eval_symbol already returns autoreleased object
-    } else if (parsed_expr && TAG(parsed_expr) == CLJ_MAP) {
+    } else if (parsed_expr && TAG(parsed_expr) == CLJ_MAP_PERSISTENT) {
         // Map literals need to have their keys and values evaluated
         // Use provided env or fall back to current_ns->mappings
         CljMap *eval_env = env;

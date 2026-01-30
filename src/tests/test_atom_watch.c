@@ -45,7 +45,7 @@ TEST(test_watcher_registry_starts_empty) {
     CljAtom *reg_atom = (CljAtom *)reg_value;
     ID reg_contents = atom_deref(reg_atom);
     TEST_ASSERT_NOT_NULL_MESSAGE(reg_contents, "watcher-registry should deref to a map");
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(reg_contents));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(reg_contents));
     TEST_ASSERT_EQUAL_INT(0, map_count((CljMap *)reg_contents));
     RELEASE(reg_contents);
 }
@@ -84,7 +84,7 @@ TEST(test_add_watch_adds_watcher) {
     CljAtom *registry_atom = (CljAtom *)require_core_var("watcher-registry");
     ID reg_contents = atom_deref(registry_atom);
     TEST_ASSERT_NOT_NULL(reg_contents);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(reg_contents));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(reg_contents));
     CljMap *reg_map = (CljMap *)reg_contents;
     TEST_ASSERT_EQUAL_INT(1, map_count(reg_map));
 
@@ -95,7 +95,7 @@ TEST(test_add_watch_adds_watcher) {
 
     CljObject *watcher_map_obj = map_get_sentinel(reg_map, atom_obj, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(watcher_map_obj, "Registry should contain entry for test-atom");
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(watcher_map_obj));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(watcher_map_obj));
 
     CljSymbol *kw_test = intern_symbol_global(":test");
     CljObject *watcher_fn = map_get_sentinel((CljMap *)watcher_map_obj, kw_test, NULL);
@@ -171,7 +171,7 @@ TEST(test_remove_watch_removes_watcher) {
     CljAtom *registry_atom = (CljAtom *)require_core_var("watcher-registry");
     ID reg_contents = atom_deref(registry_atom);
     TEST_ASSERT_NOT_NULL(reg_contents);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(reg_contents));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(reg_contents));
 
     TEST_ASSERT_EQUAL_INT(0, map_count((CljMap *)reg_contents));
     RELEASE(reg_contents);
@@ -211,7 +211,7 @@ TEST(test_remove_watch_cleans_up_empty) {
     CljAtom *registry_atom = (CljAtom *)require_core_var("watcher-registry");
     ID reg_contents = atom_deref(registry_atom);
     TEST_ASSERT_NOT_NULL(reg_contents);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(reg_contents));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(reg_contents));
     TEST_ASSERT_EQUAL_INT(0, map_count((CljMap *)reg_contents));
     RELEASE(reg_contents);
 }
