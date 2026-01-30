@@ -244,7 +244,7 @@ CljPersistentVector* make_vector(unsigned int capacity, bool weakElements) {
     CljPersistentVector *vec = (CljPersistentVector*)alloc(total, 1, type);
     vec->base.type = type;
     vec->base.flags = weakElements ? CLJ_FLAG_WEAK_ELEMENTS : 0;
-    vec->base.rc = 1;
+    vec
     vec->count = 0;
     vec->capacity = (int)capacity;
     // data[] is zeroed by alloc(...,1,...) ? alloc uses malloc, not calloc. So we must memset.
@@ -436,7 +436,7 @@ CljTransientVector* vector_transient(CljPersistentVector *vec) {
 
     CljTransientVector *tvec = (CljTransientVector*)alloc(sizeof(CljTransientVector), 1, CLJ_VECTOR_TRANSIENT);
     tvec->base.type = CLJ_VECTOR_TRANSIENT;
-    tvec->base.rc = 1;
+    tvec
 
     // For empty singleton, start with a fresh backing so we can grow.
     if (vector_count(vec) == 0 && vector_capacity(vec) == 0) {

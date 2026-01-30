@@ -20,38 +20,38 @@ CljObject g_hashmap_tombstone_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC }
 static unsigned int next_power_of_2(unsigned int n) {
     if (n < 8) return 8;
     n--;
-    n |= n >> 1; 
-    n |= n >> 2; 
+    n |= n >> 1;
+    n |= n >> 2;
     n |= n >> 4;
-    n |= n >> 8; 
+    n |= n >> 8;
     n |= n >> 16;
     return n + 1;
 }
 
 CljHashMap* make_hashmap(unsigned int capacity) {
     unsigned int cap = next_power_of_2(capacity);
-    
+
     // Allocate struct + embedded data array in ONE malloc (like CljPersistentMap)
     size_t struct_size = sizeof(CljHashMap);
     size_t data_size = (size_t)cap * 2 * sizeof(CljObject*);
     size_t total_size = struct_size + data_size;
-    
+
     CljHashMap *map = (CljHashMap*)ALLOC_BYTES(CLJ_HASHMAP, total_size);
     if (!map) {
         throw_oom();
     }
-    
+
     map->base.type = CLJ_HASHMAP;
-    map->base.rc = 1;
+    map
     map->count = 0;
     map->capacity = cap;
     map->tombstones = 0;
-    
+
     // Initialize embedded array to HASHMAP_EMPTY (NULL is a valid key: nil)
     for (unsigned int i = 0; i < cap * 2; i++) {
         map->data[i] = HASHMAP_EMPTY;
     }
-    
+
     return map;
 }
 
@@ -63,25 +63,25 @@ static unsigned int find_slot(CljHashMap *map, ID key) {
     unsigned int mask = map->capacity - 1;  // 2^n - 1 for fast modulo
     unsigned int start_idx = clj_hash(key) & mask;   // Start index
     unsigned int idx = start_idx;
-    
+
     // Linear Probing: on collision simply +1
     // IMPORTANT: Check for wraparound to avoid infinite loops
     do {
         ID stored_key = KV_KEY(map->data, idx);
-        
+
         if (stored_key == HASHMAP_EMPTY) {
             return idx;  // Empty slot found
         }
-        
+
         if (stored_key != HASHMAP_TOMBSTONE) {
             // Use clj_equal for comparison (supports all types)
             if (clj_equal(stored_key, key)) return idx;  // Found
         }
-        
+
         // Collision or tombstone: Linear Probing
         idx = (idx + 1) & mask;  // Wraps around at 2^n
     } while (idx != start_idx);  // Stop when we're back at start
-    
+
     // Map is full (all slots occupied or tombstones)
     // This should not happen if we rehash at Load > 0.75
     // But for safety: return start_idx (will cause error in put())
@@ -116,7 +116,7 @@ unsigned int hashmap_count(CljHashMap *map) {
 // Caller must handle tombstone accounting before calling
 static void hashmap_insert_at(CljHashMap *map, unsigned int idx, ID key, ID value) {
     CLJ_ASSERT(KV_KEY(map->data, idx) != HASHMAP_TOMBSTONE);
-    
+
     ASSIGN(KV_KEY(map->data, idx), key);
     ASSIGN(KV_VALUE(map->data, idx), value);
     map->count++;
@@ -132,7 +132,7 @@ static void hashmap_put_direct(CljHashMap *map, ID key, ID value) {
 // Rehashing: Copy all entries into a new map with larger capacity
 static CljHashMap* hashmap_rehash(CljHashMap *map, unsigned int new_capacity) {
     CljHashMap *new_map = make_hashmap(new_capacity);
-    
+
     ID key;
     ID val;
     HASHMAP_FOR_EACH(map, key, val) {
@@ -157,7 +157,7 @@ static CljHashMap* hashmap_copy(CljHashMap *map) {
     CljHashMap *copy = make_hashmap(map->count);
     copy->count = 0;
     copy->tombstones = 0;
-    
+
     ID key;
     ID val;
     HASHMAP_FOR_EACH(map, key, val) {
@@ -170,12 +170,12 @@ static CljHashMap* hashmap_copy(CljHashMap *map) {
 CljHashMap* hashmap_assoc(CljHashMap *map, ID key, ID value) {
     if (!map) return map;
     // key can be NULL (nil is a valid key)
-    
+
     // Rehash if needed (before COW check)
     if (needs_rehash(map)) {
         map = hashmap_rehash(map, map->capacity * 2);
     }
-    
+
     // COW: RC>1 → create copy
     // Note: We do NOT release the original map here - the caller is responsible
     // for managing the old reference (e.g., via adopt_hashmap helper)
@@ -183,32 +183,32 @@ CljHashMap* hashmap_assoc(CljHashMap *map, ID key, ID value) {
         CljHashMap *copy = hashmap_copy(map);
         map = copy;
     }
-    
+
     // Linear Probing: Find slot (with tombstone reuse)
     unsigned int mask = map->capacity - 1;
     unsigned int idx = clj_hash(key) & mask;
     unsigned int start_idx = idx;
-    
+
     do {
         ID stored_key = KV_KEY(map->data, idx);
-        
+
         if (stored_key == HASHMAP_EMPTY) {
             // Empty slot found - insert here
             break;
         }
-        
+
         if (stored_key != HASHMAP_TOMBSTONE && clj_equal(stored_key, key)) {
             // Key exists - update value
             ASSIGN(KV_VALUE(map->data, idx), value);
             return map;
         }
-        
+
         // Linear Probing: skip tombstones and collisions
         idx = (idx + 1) & mask;
     } while (idx != start_idx);
-    
+
     hashmap_insert_at(map, idx, key, value);
-    
+
     return map;
 }
 
@@ -216,14 +216,14 @@ CljHashMap* hashmap_assoc(CljHashMap *map, ID key, ID value) {
 CljHashMap* hashmap_remove(CljHashMap *map, ID key) {
     if (!map) return map;
     // key can be NULL (nil is a valid key)
-    
+
     // Linear Probing: Find slot
     unsigned int idx = find_slot(map, key);
     ID stored = KV_KEY(map->data, idx);
     if (stored == HASHMAP_EMPTY || stored == HASHMAP_TOMBSTONE) {
         return map;  // Not found
     }
-    
+
     // COW: RC>1 → Clean copy without this key
     if (map->base.rc > 1) {
         CljHashMap *copy = make_hashmap(map->count > 1 ? map->count - 1 : 0);
@@ -236,7 +236,7 @@ CljHashMap* hashmap_remove(CljHashMap *map, ID key) {
         }
         return copy;
     }
-    
+
     // RC=1: In-place tombstone (Linear Probing can jump over it)
     RELEASE(KV_KEY(map->data, idx));
     RELEASE(KV_VALUE(map->data, idx));
@@ -244,7 +244,7 @@ CljHashMap* hashmap_remove(CljHashMap *map, ID key) {
     KV_SET_VALUE(map->data, idx, NULL);
     map->count--;
     map->tombstones++;
-    
+
     return map;
 }
 

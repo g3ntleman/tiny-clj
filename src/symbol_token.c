@@ -13,7 +13,7 @@ CljSymbolToken* make_symbol_token_with_loc(const char *str, uint16_t line, uint1
 
     CljSymbolToken *token = (CljSymbolToken*)alloc(sizeof(CljSymbolToken) + len + 1, 1, CLJ_SYMBOL_TOKEN);
     token->base.type = CLJ_SYMBOL_TOKEN;
-    token->base.rc = 1;
+    token
     token->length = (uint16_t)len;
     token->line = line;
     token->col = col;

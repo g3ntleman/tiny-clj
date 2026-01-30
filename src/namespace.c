@@ -51,21 +51,21 @@ static bool ambiguity_should_throw(const struct ns_search_ctx *ctx) {
 static void search_namespace_callback(ID key, ID value) {
     (void)key; // Unused - we only need the value (namespace)
     if (!g_ns_search_ctx) return;
-    
+
     // OPTIMIZATION: If already ambiguous, we can stop searching
     // (We need second_ns for the error message, so we continue until we find it)
     // Actually, we already have second_ns when ambiguous is true, so we can stop
     if (g_ns_search_ctx->ambiguous) {
         return; // Already found ambiguity, no need to search further
     }
-    
+
     CljNamespace *ns = (CljNamespace*)value;
     // Skip current namespace - we already know the symbol exists there
     if (ns == g_ns_search_ctx->current_ns) {
         return;  // Skip current namespace
     }
-    
-    if (ns && ns->mappings && ns->name && ns->name->cname && 
+
+    if (ns && ns->mappings && ns->name && ns->name->cname &&
         g_ns_search_ctx->sym && g_ns_search_ctx->sym->cname) {
         // CRITICAL: For clojure.core, use unqualified symbol (ns_name = NULL)
         // Other namespaces use fully qualified symbols as keys
@@ -82,7 +82,7 @@ static void search_namespace_callback(ID key, ID value) {
                 return; // Failed to qualify - skip this namespace
             }
         }
-        
+
         // IMPORTANT: mapping values may legitimately be nil (NULL), so we must
         // not use pointer-truthiness to detect presence.
         if (map_contains(ns->mappings, lookup_sym)) {
@@ -127,34 +127,34 @@ __attribute__((unused)) static void release_namespace_callback(ID key, ID value)
 /** Initialize namespace registry if not already initialized.
  * This is a helper function to ensure the registry exists before use.
  * Follows DRY principle - used by ns_get_or_create(), ns_register(), and runtime_init().
- * 
+ *
  * @return 0 on success, -1 on error
  */
 static int ns_init_registry(void) {
     if (g_runtime.ns_registry) {
         return 0; // Already initialized
     }
-    
+
     CljPersistentMap *ns_map = make_map(16);
     CljTransientMap *transient_map = map_transient(ns_map);
     RELEASE(ns_map); // map_transient() retains the result
     g_runtime.ns_registry = transient_map;
-    
+
     return 0;
 }
 
 /** Reset namespace registry (cleanup and reinitialize).
  * This is used by runtime_init() to reset the registry.
- * 
+ *
  * @return 0 on success, -1 on error
  */
 int ns_reset_registry(void) {
     // Cleanup existing registry if present
     RELEASE(g_runtime.ns_registry);
     g_runtime.ns_registry = NULL;
-    
+
     // Cache will be automatically rebuilt when needed via ns_find_by_symbol
-    
+
     // Initialize new registry
     return ns_init_registry();
 }
@@ -162,14 +162,14 @@ int ns_reset_registry(void) {
 /** Create a new namespace object (does not register it in the registry).
  * This is the low-level constructor for namespaces, following the pattern
  * of make_map(), make_symbol(), etc.
- * 
+ *
  * @param name Namespace name (must not be NULL)
  * @param file Optional filename associated with the namespace (can be NULL)
  * @return New namespace object with rc=1, or NULL on error
  */
 CljNamespace* make_namespace(const char *cname, const char *file) {
     if (!cname) return NULL;
-    
+
     // Create a new namespace using ALLOC (initializes base.type and base.rc)
     CljNamespace *ns = ALLOC(CljNamespace, 1);
     if (!ns) return NULL;
@@ -177,8 +177,8 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
     // Ensure namespace starts as a valid retained object.
     // Zombie mode uses rc==0 to detect freed objects, so rc must not be 0 here.
     ns->base.type = CLJ_NAMESPACE;
-    ns->base.rc = 1;
-    
+    ns
+
     // Get or intern the namespace name symbol
     CljSymbol *name_symbol = intern_symbol_global(cname);
     if (!name_symbol) {
@@ -188,17 +188,17 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
         free(ns);
         return NULL;
     }
-    
+
     ns->name = name_symbol; // Use the interned symbol
     ns->mappings = make_map(32); // Increased capacity for clojure.core
-    
+
     ns->macro_mappings = NULL;  // Lazy initialization in register_macro
-    
+
     ns->aliases = make_map(16);
 
     ns->loaded = false;
 
-    
+
     ns->filename = file ? clj_strdup(file) : NULL;
     if (file && !ns->filename) {
         // strdup failed - OOM
@@ -207,22 +207,22 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
         free(ns);
         return NULL;
     }
-    
+
     return ns;
 }
 
 CljNamespace* ns_get_or_create(const char *cname, const char *file) {
     if (!cname) return NULL;
-    
+
     // Ensure registry is initialized (DRY: use helper function)
     if (ns_init_registry() != 0) {
         return NULL; // Failed to initialize registry
     }
-    
+
     // Look up namespace by name in the map
     CljSymbol *name_symbol = intern_symbol_global(cname);
     if (!name_symbol) return NULL;
-    
+
     CljObject *ns_obj = map_get_sentinel(g_runtime.ns_registry, name_symbol, NULL);
     if (ns_obj) {
         return (CljNamespace*)ns_obj;
@@ -233,28 +233,28 @@ CljNamespace* ns_get_or_create(const char *cname, const char *file) {
     if (!ns) return NULL;
 
     map_conj(g_runtime.ns_registry, name_symbol, ns);
-    
+
     if (ns->name == SYM_CLOJURE_CORE) {
         map_conj(g_runtime.ns_registry, NULL, ns);
     }
-    
+
     return ns;
 }
 
 ID ns_resolve(EvalState *st, CljSymbol *sym) {
     CLJ_ASSERT(sym != NULL);
-    
+
     // Keywords evaluate to themselves - no namespace resolution needed
     if (IS_KEYWORD(sym)) {
         return sym;
     }
-    
+
     // Use default namespace if st is NULL (eliminates need for temporary EvalState instances)
     CljNamespace *current_ns = st ? st->current_ns : ns_get_or_create("user", NULL);
     if (!current_ns) {
         return NOT_FOUND;
     }
-    
+
     // Handle qualified symbols (symbol->ns_name is set during parsing or interning)
     // For qualified symbols like clojure.string/trim, we need to:
     // 1. Find the target namespace (clojure.string)
@@ -310,7 +310,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         // Qualified symbol not found in target namespace
         return NOT_FOUND;
     }
-    
+
     // Unqualified symbol - check current namespace first (before cache)
     // This ensures that redefined symbols in current namespace take precedence over cached values
     // OPTIMIZATION: Fast path - try direct lookup with existing symbol pointer first
@@ -324,7 +324,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             return v;
         }
     }
-    
+
     // CRITICAL: Namespace mappings now use fully qualified symbols as keys
     // For unqualified symbols, we need to qualify them with the current namespace
     // Use sentinel to distinguish "key not found" from "value is nil"
@@ -339,7 +339,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             qualified_sym = sym;
         }
     }
-    
+
     // CRITICAL: For def, symbols are stored qualified (e.g., user/my-var)
     // For :refer :all, symbols are also stored qualified (clojure.core is handled separately)
     if (current_ns && current_ns->mappings) {
@@ -358,7 +358,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             }
         }
     }
-    
+
     // CRITICAL: In Clojure, unqualified symbols are only resolved in the current namespace
     // The only exception is clojure.core, which is automatically available
     // Other namespaces must be explicitly referred with :refer or :refer :all
@@ -378,13 +378,13 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             return resolved;
         }
     }
-    
+
     // Symbol not found in current namespace or clojure.core
     // In Clojure/JVM, unqualified symbols are ONLY resolved in:
     // 1. Current namespace
     // 2. clojure.core (automatically available)
     // Other namespaces must be explicitly referred with :refer or :refer :all
-    // 
+    //
     // However, we need to check for ambiguity to provide helpful error messages.
     // If a symbol exists in multiple namespaces (including clojure.core), we should
     // throw an error suggesting the user to qualify the symbol.
@@ -399,24 +399,24 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             .ambiguous = false
         };
         g_ns_search_ctx = &search_ctx;
-        
+
         // Search all namespaces to check for ambiguity
         // This includes clojure.core and other namespaces
         map_foreach(g_runtime.ns_registry, search_namespace_callback);
-        
+
         g_ns_search_ctx = NULL;
-        
+
         // If ambiguous (found in 2+ namespaces), throw error with helpful message
         if (ambiguity_should_throw(&search_ctx)) {
             return throw_ambiguous_symbol_error(sym, search_ctx.result_ns, search_ctx.second_ns);
         }
-        
+
         // CRITICAL: Even if found in exactly one namespace, we do NOT return it.
         // In Clojure/JVM, unqualified symbols must be in current namespace or clojure.core.
         // Other namespaces require explicit qualification or :refer.
         // This ensures Clojure-compatible behavior.
     }
-    
+
     // Symbol not found - don't cache NULL values (would waste cache space)
     return NOT_FOUND;
 }
@@ -424,34 +424,34 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
 CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filename) {
     (void)st;
     if (!ns_name) return NULL;
-    
+
     CljNamespace *ns = ns_get_or_create(ns_name, filename);
     if (!ns) return NULL;
-    
+
     // TODO: Parse file and add definitions to namespace mappings
-    
+
     return ns;
 }
 
 void ns_register(CljNamespace *ns) {
     if (!ns || !ns->name) return;
-    
+
     // Ensure registry is initialized (DRY: use helper function)
     if (ns_init_registry() != 0) {
         return; // Failed to initialize registry
     }
-    
+
     // Check if namespace is already registered
     CljObject *existing = map_get_sentinel(g_runtime.ns_registry, ns->name, NULL);
     if (existing == (CljObject*)ns) {
         return; // Already registered
     }
-    
+
     // Add namespace to registry map (Key: ns->name, Value: ns)
     // map_conj() retains the value, so we need to retain ns before adding
     RETAIN(ns);
     map_conj(g_runtime.ns_registry, ns->name, ns);
-    
+
     if (ns->name == SYM_CLOJURE_CORE) {
         RETAIN(ns);
         map_conj(g_runtime.ns_registry, NULL, ns);
@@ -461,7 +461,7 @@ void ns_register(CljNamespace *ns) {
 // Helper function to find namespace containing a given object
 CljNamespace* ns_find_for_object(CljObject *obj) {
     if (!obj || !g_runtime.ns_registry) return NULL;
-    
+
     MAP_FOR_EACH(g_runtime.ns_registry, ns_key, ns_val) {
         if (ns_val && TAG(ns_val) == CLJ_NAMESPACE) {
             CljNamespace *ns = (CljNamespace*)ns_val;
@@ -490,7 +490,7 @@ CljNamespace* ns_find_by_symbol(CljSymbol *name_symbol) {
 // Lookup with string (for convenience - delegates to symbol version)
 // NOTE: cname cannot be NULL for namespace names, but if intern_symbol_global returns NULL,
 // it will be passed to ns_find_by_symbol which accepts NULL as a valid key
-CljNamespace* ns_find(const char *cname) {    
+CljNamespace* ns_find(const char *cname) {
     // OPTIMIZATION: Use SYM_CLOJURE_CORE directly for "clojure.core" (no intern_symbol call needed)
     CljSymbol *name_symbol;
     if (strcmp(cname, "clojure.core") == 0) {
@@ -500,7 +500,7 @@ CljNamespace* ns_find(const char *cname) {
         // NOTE: intern_symbol_global may return NULL, which is a valid key for map_get
         name_symbol = intern_symbol_global(cname);
     }
-    
+
     // ns_find_by_symbol accepts NULL as a valid key (nil can be used as key in Clojure)
     return ns_find_by_symbol(name_symbol);
 }
@@ -580,17 +580,17 @@ void reset_eval_state_current_ns(void) {
 EvalState* evalstate_new(bool load_core) {
     EvalState *st = get_global_eval_state();
     if (!st) return NULL;
-    
+
     // Load clojure.core automatically if requested (functions available via ns_resolve)
     if (load_core) {
         WITH_AUTORELEASE_POOL({
             load_clojure_core(st);
         });
-        
+
         // Ensure current_ns is "user" (not clojure.core)
         evalstate_set_ns(st, "user");
     }
-    
+
     return st;
 }
 
@@ -605,13 +605,13 @@ void evalstate_free(EvalState *st) {
 
 void evalstate_set_ns(EvalState *st, const char *ns_name) {
     if (!st || !ns_name) return;
-    
+
     // Get or create namespace
     CljNamespace *ns = ns_find(ns_name);
     if (!ns) {
         ns = ns_get_or_create(ns_name, NULL);
     }
-    
+
     if (ns) {
         CljNamespace *old_current_ns = st->current_ns;
         st->current_ns = ns;
@@ -625,18 +625,18 @@ void evalstate_set_ns(EvalState *st, const char *ns_name) {
 
 void evalstate_reset(EvalState **st_ptr, bool load_core) {
     if (!st_ptr) return;
-    
+
     // Reset global state
     reset_eval_state();
     EvalState *st = get_global_eval_state();
     if (!st) return;
-    
+
     // Always load clojure.core if requested (for test isolation)
     if (load_core) {
         evalstate_set_ns(st, "clojure.core");
         load_clojure_core(st);
     }
-    
+
     // Reset all fields
     st->expr = NULL;
     st->result = NULL;
@@ -644,10 +644,10 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
     st->step_budget = 0;
     st->sp = 0;
     st->finished = 0;
-    
+
     // Set pointer to global state
     *st_ptr = st;
-    
+
     // Reset user namespace for isolation
     // evalstate_new already created a new user namespace, but we need to ensure it's clean
     // (no definitions from previous tests). We must reset it AFTER evalstate_new creates it.
@@ -669,7 +669,7 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
         ASSIGN(user_ns->mappings, fresh);
         RELEASE(fresh);
     }
-    
+
     // Ensure current_ns is set to "user" (with clean mappings)
     // The user_ns we reset above should be the same one that evalstate_set_ns will find
     evalstate_set_ns(st, "user");
@@ -685,14 +685,14 @@ void evalstate_pop_dynamic_bindings_to(EvalState *st, unsigned int depth) {
 // Exception handling
 void eval_error(const char *msg, EvalState *st) {
     if (!st) return;
-    
+
     // Use throw_exception which handles the exception_stack correctly
     throw_exception(EXCEPTION_RUNTIME, msg, NULL, 0, 0);
 }
 
 void parse_error(const char *msg, EvalState *st) {
     if (!st) return;
-    
+
     // Use throw_exception which handles the exception_stack correctly
     throw_exception(EXCEPTION_PARSE, msg, NULL, 0, 0);
 }
@@ -710,9 +710,9 @@ static INLINE bool sym_cname_eq(ID obj, const char *name) {
 // Try/Catch-Implementierung using TRY/CATCH macros
 CljObject* eval_try(CljObject *form, EvalState *st) {
     if (!form || form->type != CLJ_LIST) return NULL;
-    
+
     ID result = NULL;
-    
+
     TRY {
         // normaler Body (zweites Element)
         CljObject *body = list_nth(as_list(form), 1);
@@ -775,11 +775,11 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
             return result;
         }
         // No catch clause found - re-throw (handler is already popped!)
-        throw_exception(ex->type[0] != '\0' ? ex->type : "Error", 
+        throw_exception(ex->type[0] != '\0' ? ex->type : "Error",
                    ex->message[0] != '\0' ? ex->message : "Unknown error",
                        ex->file, ex->line, ex->col);
     } END_TRY
-    
+
     return result;
 }
 
@@ -815,13 +815,13 @@ void ns_invalidate_resolve_cache(void) {
 
 /**
  * @brief Get the canonical symbol pointer for namespace mapping lookup (DRY helper)
- * 
+ *
  * For fully qualified symbols (ns_name set), returns the symbol pointer directly
  * without re-interning. For unqualified symbols, qualifies and interns them.
- * 
+ *
  * This eliminates unnecessary strcmp calls in hot paths by avoiding re-interning
  * of already-qualified symbols.
- * 
+ *
  * @param ns Target namespace
  * @param symbol Input symbol (may be qualified or unqualified)
  * @return Canonical symbol pointer for use in map_get/map_assoc, or NULL on error
@@ -859,26 +859,26 @@ static CljSymbol* get_namespace_mapping_key(CljNamespace *ns, CljSymbol *symbol)
 void ns_define(CljNamespace *ns, ID symbol, ID value) {
     CLJ_ASSERT(ns != NULL);
     CLJ_ASSERT(symbol != NULL);
-    
+
     CljSymbol *sym = as_symbol(symbol);
     if (!sym) {
         return;
     }
-    
+
     // DRY: Use helper function to get canonical symbol pointer for namespace mapping
     // This eliminates duplicate interning logic and avoids re-interning fully qualified symbols
     CljSymbol *qualified_symbol = get_namespace_mapping_key(ns, sym);
     if (!qualified_symbol) {
         qualified_symbol = sym;  // Fallback to original if helper fails
     }
-    
+
     CLJ_ASSERT(ns->mappings != NULL);
 
     // Store symbol-value binding (overwrites existing)
     // For def: store qualified symbol (e.g., user/my-var)
     // IMPORTANT: Use owned/in-place update to keep rc==1 during core load (COW hot path).
     map_assoc_inplace(&ns->mappings, qualified_symbol, value);
-    
+
     // OPTIMIZATION: Invalidate resolve cache completely instead of removing individual symbols
     // This avoids ~23 map_assoc() calls per require and is more efficient.
     // The cache will be automatically rebuilt on the next ns_resolve() call.
@@ -889,14 +889,14 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
 void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
     CLJ_ASSERT(ns != NULL);
     CLJ_ASSERT(symbol != NULL);
-    
+
     CljSymbol *sym = as_symbol(symbol);
     if (!sym || !sym->cname) {
         return;
     }
-    
+
     CLJ_ASSERT(ns->mappings != NULL);
- 
+
 
     // DRY: Use helper function for qualified symbol (for consistency with def/defn entries)
     // Store qualified symbol for consistency with def/defn entries
@@ -918,7 +918,7 @@ void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
  */
 ID ns_get_alias(CljNamespace *ns, ID alias) {
     if (!ns || !alias || !ns->aliases) return NULL;
-    
+
     // Look up alias in aliases map
     ID ns_name = map_get_sentinel(ns->aliases, alias, NULL);
     return ns_name;
@@ -932,12 +932,12 @@ ID ns_get_alias(CljNamespace *ns, ID alias) {
  */
 void ns_set_alias(CljNamespace *ns, ID alias, ID ns_name) {
     if (!ns || !alias || !ns_name) return;
-    
+
     // Create or update aliases map
     if (!ns->aliases) {
         ns->aliases = make_map(16);
     }
-    
+
     // Store alias-namespace binding (overwrites existing)
     map_assoc_inplace(&ns->aliases, alias, ns_name);
 }

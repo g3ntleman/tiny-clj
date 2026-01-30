@@ -44,7 +44,7 @@ CljPersistentMap* make_map(int capacity) {
   }
 
   map->base.type = CLJ_MAP_PERSISTENT;
-  map->base.rc = 1;
+  map
   map->count = 0;
   map->capacity = capacity;
 
@@ -87,9 +87,7 @@ ID map_get_sentinel(ID map, ID key, ID not_found) {
  * Returns owned object (rc=1, no AUTORELEASE).
  */
 static CljPersistentMap* map_assoc_core(CljPersistentMap* map, ID key, ID value) {
-  if (!map || map->base.type != CLJ_MAP_PERSISTENT) {
-    return map;
-  }
+  CLJ_ASSERT(map && map->base.type == CLJ_MAP_PERSISTENT);
     CljObject *key_obj = (CljObject*)key;
     CljObject *value_obj = (CljObject*)value;
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
@@ -150,7 +148,7 @@ static CljPersistentMap* map_assoc_core(CljPersistentMap* map, ID key, ID value)
   }
 
   new_map->base.type = CLJ_MAP_PERSISTENT;
-  new_map->base.rc = 1;
+  new_map
   new_map->count = 0;  // Start with 0, will be set correctly below
   new_map->capacity = new_capacity;
 
@@ -167,8 +165,8 @@ static CljPersistentMap* map_assoc_core(CljPersistentMap* map, ID key, ID value)
 
   MAP_FOR_EACH(map, k, v) {
     // Check if key matches (pointer comparison first, then structural)
-    bool key_matches = (k == key_obj) || (k && key_obj && clj_equal(k, key_obj));
-    
+    bool key_matches = (k == key_obj) || (clj_equal(k, key_obj));
+
     if (key_matches) {
       // Key found - update value
       KV_KEY(new_map->data, new_idx) = RETAIN(k);
@@ -235,7 +233,7 @@ CljPersistentMap* map_merge(CljPersistentMap* a, CljPersistentMap* b, bool overw
     // If result == old_result, map_assoc modified in-place
     // Original 'a' stays alive (caller's responsibility in single-threaded system)
   }
-  
+
   // Return result (autoreleased from map_assoc if new, or original 'a' if in-place)
   // If result was retained, caller must release it
   return result;
@@ -369,7 +367,7 @@ static CljPersistentMap* map_remove_core(CljPersistentMap *map, ID key) {
   }
 
   new_map->base.type = CLJ_MAP_PERSISTENT;
-  new_map->base.rc = 1;
+  new_map
   new_map->count = 0;
   new_map->capacity = map_data->capacity;
 
@@ -464,7 +462,7 @@ CljPersistentMap* make_map_kv(ID first_key, ...) {
     if (first_key == NOT_FOUND) {
         return RETAIN(map_empty());
     }
-    
+
     // First pass: count pairs
     va_list args;
     va_start(args, first_key);
@@ -475,10 +473,10 @@ CljPersistentMap* make_map_kv(ID first_key, ...) {
         count++;
     }
     va_end(args);
-    
+
     // Second pass: build map
     CljPersistentMap *map = make_map(count);
-    
+
     va_start(args, first_key);
     ID key = first_key;
     for (unsigned int i = 0; i < count; i++) {
@@ -489,7 +487,7 @@ CljPersistentMap* make_map_kv(ID first_key, ...) {
         }
     }
     va_end(args);
-    
+
     return map;  // rc=1 from make_map
 }
 
@@ -533,7 +531,7 @@ static CljPersistentMap* map_copy(CljPersistentMap *src) {
 
     // Initialize new map
     new_map->base.type = CLJ_MAP_PERSISTENT;
-    new_map->base.rc = 1;
+    new_map
     new_map->count = src->count;
     new_map->capacity = src->capacity;
 
@@ -615,7 +613,7 @@ CljTransientMap* map_transient(CljPersistentMap *map) {
         return NULL;
     }
     tmap->base.type = CLJ_MAP_TRANSIENT;
-    tmap->base.rc = 1;
+    tmap
     tmap->backing = (CljPersistentMap*)RETAIN(map);
     return tmap;
 }

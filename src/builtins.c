@@ -1478,7 +1478,7 @@ ID native_cons(ID *args, unsigned int argc)
             tail = (ID)make_seq(coll); // may be NULL if empty
         }
 
-        CljLazySeq *lazy = (CljLazySeq *)malloc(sizeof(CljLazySeq));
+        CljLazySeq *lazy = ALLOC(CljLazySeq, 1);
         if (!lazy)
         {
             RELEASE(tail);
@@ -1486,7 +1486,6 @@ ID native_cons(ID *args, unsigned int argc)
         }
 
         lazy->base.type = CLJ_LAZY_SEQ;
-        lazy->base.rc = 1;
         lazy->base.flags = 0;
 
         // Preserve nil elements using SYM_NIL internally.
