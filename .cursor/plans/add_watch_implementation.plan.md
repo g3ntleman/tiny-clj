@@ -112,7 +112,7 @@ TEST(test_watcher_registry_starts_empty) {
     CljSymbol *reg_sym = intern_symbol_global("watcher-registry");
     ID reg = ns_resolve(NULL, reg_sym);
     CljAtom *reg_atom = (CljAtom*)reg;
-    CljMap *reg_value = (CljMap*)atom_deref(reg_atom);
+    CljPersistentMap *reg_value = (CljPersistentMap*)atom_deref(reg_atom);
     
     TEST_ASSERT_NOT_NULL(reg_value);
     TEST_ASSERT_EQUAL(0, map_count(reg_value));
@@ -181,7 +181,7 @@ TEST(test_add_watch_adds_watcher) {
     CljSymbol *reg_sym = intern_symbol_global("watcher-registry");
     ID reg = ns_resolve(NULL, reg_sym);
     CljAtom *reg_atom = (CljAtom*)reg;
-    CljMap *reg_value = (CljMap*)atom_deref(reg_atom);
+    CljPersistentMap *reg_value = (CljPersistentMap*)atom_deref(reg_atom);
     
     TEST_ASSERT_EQUAL(1, map_count(reg_value));
     
@@ -319,7 +319,7 @@ TEST(test_remove_watch_removes_watcher) {
     CljSymbol *reg_sym = intern_symbol_global("watcher-registry");
     ID reg = ns_resolve(NULL, reg_sym);
     CljAtom *reg_atom = (CljAtom*)reg;
-    CljMap *reg_value = (CljMap*)atom_deref(reg_atom);
+    CljPersistentMap *reg_value = (CljPersistentMap*)atom_deref(reg_atom);
     
     TEST_ASSERT_EQUAL(0, map_count(reg_value));
 }
@@ -354,7 +354,7 @@ TEST(test_remove_watch_cleans_up_empty) {
     CljSymbol *reg_sym = intern_symbol_global("watcher-registry");
     ID reg = ns_resolve(NULL, reg_sym);
     CljAtom *reg_atom = (CljAtom*)reg;
-    CljMap *reg_value = (CljMap*)atom_deref(reg_atom);
+    CljPersistentMap *reg_value = (CljPersistentMap*)atom_deref(reg_atom);
     
     TEST_ASSERT_EQUAL(0, map_count(reg_value));
 }
@@ -577,7 +577,7 @@ void atom_notify_watchers(CljAtom *atom, ID old_value, ID new_value) {
     
     // Call Clojure function (exception handling in Clojure)
     EvalState *st = get_global_eval_state();
-    CljMap *env = st ? (CljMap*)st->current_ns->mappings : NULL;
+    CljPersistentMap *env = st ? (CljPersistentMap*)st->current_ns->mappings : NULL;
     eval_function_call(g_notify_watchers_fn, args, 3, env, st);
     
     // Cleanup arguments

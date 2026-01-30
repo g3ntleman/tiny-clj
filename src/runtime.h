@@ -46,8 +46,8 @@ typedef ID (*BuiltinFn)(ID *args, unsigned int argc);
 // Runtime state management
 typedef struct TinyClJRuntime {
     // Namespaces
-    CljMap *ns_registry;            // transient Map: Symbol → CljNamespace*
-    CljMap *resolve_cache;          // Symbol resolution cache
+    CljTransientMap *ns_registry;             // transient Map: Symbol → CljNamespace*
+    CljPersistentMap *resolve_cache;          // Symbol resolution cache
     uint64_t resolve_cache_epoch;   // Epoch for call-site cache invalidation
     
     // Symbol Table (HashMap for O(1) lookup)

@@ -49,7 +49,7 @@ TEST(test_atom_create_with_nil) {
 }
 
 TEST(test_atom_create_with_string) {
-    CljObject *str = (CljObject*)make_string("hello");
+    CljString *str = make_string("hello");
     CljAtom *atom = make_atom(str);
     TEST_ASSERT_NOT_NULL(atom);
     TEST_ASSERT_NOT_NULL(atom->value);
@@ -256,7 +256,7 @@ TEST(test_atom_builtin_swap_bang) {
 // ============================================================================
 
 TEST(test_atom_memory_management) {
-    CljObject *str = (CljObject*)make_string("test");
+    CljString *str = make_string("test");
     CljAtom *atom = make_atom(str);
     
     // Atom should retain the string (rc=1 from make_string, +1 from make_atom)

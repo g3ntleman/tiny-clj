@@ -16,31 +16,31 @@ static inline CljList make_pseudo_list(ID head, ID rest) {
     return l;
 }
 
-ID eval_compiled_if(CljASTNode *node, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_compiled_if(CljASTNode *node, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     if (!node) return NULL;
     CljList pseudo = make_pseudo_list((ID)SYM_IF, node->rest);
     return eval_special_if(&pseudo, env, st, ctx);
 }
 
-ID eval_compiled_do(CljASTNode *node, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_compiled_do(CljASTNode *node, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     if (!node) return NULL;
     CljList pseudo = make_pseudo_list((ID)SYM_DO, node->rest);
     return eval_special_do(&pseudo, env, st, ctx);
 }
 
-ID eval_compiled_let(CljASTNode *node, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_compiled_let(CljASTNode *node, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     if (!node) return NULL;
     CljList pseudo = make_pseudo_list((ID)SYM_LET, node->rest);
     return eval_special_let(&pseudo, env, st, ctx);
 }
 
-ID eval_compiled_fn(CljASTNode *node, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_compiled_fn(CljASTNode *node, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     if (!node) return NULL;
     CljList pseudo = make_pseudo_list((ID)SYM_FN, node->rest);
     return eval_special_fn(&pseudo, env, st, ctx);
 }
 
-ID eval_compiled_call(CljASTNode *node, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_compiled_call(CljASTNode *node, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     if (!node) return NULL;
     // Operator lives in node->first; arguments are in node->rest (plain list).
     ID fn = eval_arg_from_expr_with_context(node->first, env, st, ctx);

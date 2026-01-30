@@ -210,7 +210,7 @@ TEST(test_pr_str_escapes_quotes) {
 
   // Create a string with quotes inside
   const char *test_input = "(list 1 1.0 \"1\" \"one\")";
-  CljObject *str = (CljObject *)make_string(test_input);
+  CljString *str = make_string(test_input);
   TEST_ASSERT_NOT_NULL(str);
 
   // Test pr_str on the string
@@ -234,7 +234,7 @@ TEST(test_history_save_escapes_quotes) {
 
   // Create a vector with a string containing quotes
   const char *test_input = "(list 1 1.0 \"1\" \"one\")";
-  CljObject *str = (CljObject *)make_string(test_input);
+  CljString *str = make_string(test_input);
   TEST_ASSERT_NOT_NULL(str);
 
   CljPersistentVector *vec = make_vector(1, false);
@@ -806,12 +806,12 @@ TEST(test_fs_layer_write_read_stat_list_delete)
     ID kw_meta = (ID)intern_symbol_global(":meta");
     ID kw_size = (ID)intern_symbol_global(":size");
     ID kw_chunks = (ID)intern_symbol_global(":chunks");
-    ID p0 = map_get((CljMap*)entry0, kw_path);
+    ID p0 = map_get((CljPersistentMap*)entry0, kw_path);
     assert_string((CljObject*)p0, "/data/file.bin");
-    ID m0 = map_get((CljMap*)entry0, kw_meta);
+    ID m0 = map_get((CljPersistentMap*)entry0, kw_meta);
     assert_map((CljObject*)m0);
-    assert_fixnum((CljObject*)map_get((CljMap*)m0, kw_size), (int)sizeof(bytes));
-    assert_fixnum((CljObject*)map_get((CljMap*)m0, kw_chunks), 1);
+    assert_fixnum((CljObject*)map_get((CljPersistentMap*)m0, kw_size), (int)sizeof(bytes));
+    assert_fixnum((CljObject*)map_get((CljPersistentMap*)m0, kw_chunks), 1);
 
     /* delete meta only */
     TEST_ASSERT_TRUE(fs_delete(st, "/data/file.bin"));
@@ -876,7 +876,7 @@ TEST(test_fs_list_dir_batch_many_files)
         TEST_ASSERT_NOT_NULL(elem);
         assert_map((CljObject*)elem);
         ID kw_path = (ID)intern_symbol_global(":path");
-        ID p = map_get((CljMap*)elem, kw_path);
+        ID p = map_get((CljPersistentMap*)elem, kw_path);
         assert_string((CljObject*)p, expected);
     }
 

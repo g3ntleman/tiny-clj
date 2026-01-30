@@ -23,12 +23,12 @@
 
 static void assert_meta_has_line_info(CljObject *meta_result, const char *context) {
     TEST_ASSERT_NOT_NULL_MESSAGE(meta_result, context);
-    TEST_ASSERT_TRUE_MESSAGE(TAG(meta_result) == CLJ_MAP, context);
+    TEST_ASSERT_TRUE_MESSAGE(TAG(meta_result) == CLJ_MAP_PERSISTENT, context);
 
     CljSymbol *kw_line = intern_symbol_global(":line");
     TEST_ASSERT_NOT_NULL(kw_line);
 
-    CljMap *meta_map = (CljMap*)meta_result;
+    CljPersistentMap *meta_map = (CljPersistentMap*)meta_result;
     ID line_value = map_get_sentinel(meta_map, kw_line, NULL);
 
     TEST_ASSERT_NOT_NULL_MESSAGE(line_value, context);
@@ -70,7 +70,7 @@ TEST(test_meta_function_set_and_get) {
     TEST_ASSERT_NOT_NULL(test_obj);
     
     // Create metadata map
-    CljMap *meta_map = make_map(4);
+    CljPersistentMap *meta_map = make_map(4);
     TEST_ASSERT_NOT_NULL(meta_map);
     
     // Add a key-value pair to metadata
@@ -134,7 +134,7 @@ TEST(test_meta_returns_metadata) {
     TEST_ASSERT_NOT_NULL(test_obj);
     
     // Create metadata map
-    CljMap *meta_map = make_map(4);
+    CljPersistentMap *meta_map = make_map(4);
     TEST_ASSERT_NOT_NULL(meta_map);
     
     // Add a key-value pair to metadata
@@ -181,7 +181,7 @@ TEST(test_meta_resolves_symbols) {
     TEST_ASSERT_NOT_NULL(test_value);
     
     // Create metadata map
-    CljMap *meta_map = make_map(4);
+    CljPersistentMap *meta_map = make_map(4);
     TEST_ASSERT_NOT_NULL(meta_map);
     
     // Add a key-value pair to metadata
@@ -367,7 +367,7 @@ TEST(test_meta_qualified_symbol) {
                                  "(meta 'clojure.string/trim) should return metadata map");
     
     // Metadata should be a map
-    TEST_ASSERT_TRUE_MESSAGE(TAG(meta_result) == CLJ_MAP, 
+    TEST_ASSERT_TRUE_MESSAGE(TAG(meta_result) == CLJ_MAP_PERSISTENT, 
                             "meta result should be a map");
     
     // Check that metadata contains :name and :ns keys
@@ -376,7 +376,7 @@ TEST(test_meta_qualified_symbol) {
     TEST_ASSERT_NOT_NULL(kw_name);
     TEST_ASSERT_NOT_NULL(kw_ns);
     
-    CljMap *meta_map = (CljMap*)meta_result;
+    CljPersistentMap *meta_map = (CljPersistentMap*)meta_result;
     ID name_value = map_get_sentinel(meta_map, kw_name, NULL);
     ID ns_value = map_get_sentinel(meta_map, kw_ns, NULL);
     
@@ -459,4 +459,3 @@ TEST(test_meta_disabled) {
     TEST_PASS_MESSAGE("meta tests skipped when META_ENABLED=0");
 }
 #endif
-

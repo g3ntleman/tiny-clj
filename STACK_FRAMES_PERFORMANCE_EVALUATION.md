@@ -2,7 +2,7 @@
 
 ## Summary
 
-Implementation of stack-based call frames (`CallFrame`) to eliminate heap allocation per function call, replacing the previous `env_extend_stack` approach that created a new `CljMap` for each function invocation.
+Implementation of stack-based call frames (`CallFrame`) to eliminate heap allocation per function call, replacing the previous `env_extend_stack` approach that created a new `CljPersistentMap` for each function invocation.
 
 ## Baseline (Before Implementation)
 
@@ -57,7 +57,7 @@ Implementation of stack-based call frames (`CallFrame`) to eliminate heap alloca
 ### Allocation Reduction
 
 **Before**: Each function call allocated:
-- 1x `CljMap` (via `map_copy_with_additions`)
+- 1x `CljPersistentMap` (via `map_copy_with_additions`)
 - 1x `CljList` node (for environment stack)
 - Associated `retain`/`release` calls for map entries
 
@@ -68,7 +68,7 @@ Implementation of stack-based call frames (`CallFrame`) to eliminate heap alloca
 ### Expected Impact
 
 For `fib(20)`, which makes approximately 21,891 function calls:
-- **Eliminated allocations**: ~21,891 `CljMap` allocations + ~21,891 `CljList` allocations
+- **Eliminated allocations**: ~21,891 `CljPersistentMap` allocations + ~21,891 `CljList` allocations
 - **Reduced retain/release calls**: Significant reduction (exact numbers require memory profiling in Debug build)
 
 ### Current Limitations

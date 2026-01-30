@@ -82,9 +82,9 @@ const char *cname;
 ```c
 CljObject base;
 CljSymbol *name;
-CljMap *mappings;
-CljMap *macro_mappings;
-CljMap *aliases;
+CljPersistentMap *mappings;
+CljPersistentMap *macro_mappings;
+CljPersistentMap *aliases;
 bool loaded;
 const char *filename;
 ```
@@ -104,7 +104,7 @@ const char *filename;
 
 ---
 
-## 7. CljMap (map.h)
+## 7. CljPersistentMap (map.h)
 
 ```c
 CljObject base;
@@ -258,7 +258,7 @@ bool line_ready;
 | **CljFunction**  | 28 B          | 3 B         | Reorder: `variadic_index` direkt nach base (0 B, Erweiterbarkeit) |
 | **CLJException** | 460–468 B     | 0 B         | Nur durch kürzere Puffer (type/message/file) spürbar |
 | **LineEditorState** | 524 B     | 3 B         | 0–4 B bei uint16_t für cursor_pos/length  |
-| CljObject … CljMap, CljList, CljASTNode, Vector, HashMap | siehe Abschnitte | 0 B auf 32-bit | Kein Layout-Padding durch 32-bit-Alignment |
+| CljObject … CljPersistentMap, CljList, CljASTNode, Vector, HashMap | siehe Abschnitte | 0 B auf 32-bit | Kein Layout-Padding durch 32-bit-Alignment |
 
 **Schlussfolgerungen (32-bit):** Weil wir auf 32-bit sind, haben Structs nur 4-Byte-Pointer und 4-Byte-Alignment; viele Structs haben **kein** Padding (im Gegensatz zu LP64). Trotzdem lohnt Reordering (Namespace, Function, SlotRef) für klare Nutzung von Lücken und spätere Erweiterung ohne Struct-Vergrößerung. Auf dem RAM-limitierten 32-bit-Target zählen zusätzlich: **CLJException**-Puffer kürzen und **LineEditorState**-Puffer/Feldtypen prüfen.
 

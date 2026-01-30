@@ -60,7 +60,7 @@ int event_loop_get_next_timer_delay_ms(void) {
     }
     
     // Get first timer (they're sorted by scheduled time)
-    CljMap *task_map = (CljMap*)vector_nth(timer_vec, 0);
+    CljPersistentMap *task_map = (CljPersistentMap*)vector_nth(timer_vec, 0);
     if (!task_map) return -1;
     
     int scheduled_sec = task_get_scheduled_sec(task_map);

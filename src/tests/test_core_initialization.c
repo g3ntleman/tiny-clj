@@ -27,7 +27,7 @@ TEST(test_core_initialization_inc_loaded) {
     TEST_ASSERT_NOT_NULL(inc_sym);
     
     // Check if inc is in clojure.core mappings
-    CljMap *map = clojure_core->mappings;
+    CljPersistentMap *map = clojure_core->mappings;
     TEST_ASSERT_NOT_NULL(map);
     
     int symbol_count = 0;
@@ -148,7 +148,7 @@ TEST(test_clojure_core_loads_inc) {
         CljObject *inc_value = map_get_sentinel(clojure_core->mappings, inc_sym, NULL);
         
         if (!inc_value) {
-            CljMap *map = clojure_core->mappings;
+            CljPersistentMap *map = clojure_core->mappings;
             int symbol_count = 0;
             const char *first_symbol = NULL;
             const char *inc_symbol_found = NULL;
@@ -278,7 +278,7 @@ TEST(test_def_inc_evaluation_during_load) {
                                       "inc symbol should be interned");
         
         // Evaluate the def expression
-        CljMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
+        CljPersistentMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
         TEST_ASSERT_NOT_NULL(env);
         
         TRY {
@@ -293,7 +293,7 @@ TEST(test_def_inc_evaluation_during_load) {
             CljObject *inc_value = qualified_inc_sym ? map_get_sentinel(g_test_eval_state->current_ns->mappings, qualified_inc_sym, NULL) : NULL;
             
             if (!inc_value) {
-                CljMap *map = g_test_eval_state->current_ns->mappings;
+                CljPersistentMap *map = g_test_eval_state->current_ns->mappings;
                 int symbol_count = 0;
                 const char *first_symbol = NULL;
                 MAP_FOR_EACH(map, key, value) {
@@ -364,7 +364,7 @@ TEST(test_plus_available_during_fn_evaluation) {
     TEST_ASSERT_NOT_NULL(canonical_form);
     
     // Evaluate the fn expression
-    CljMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
+    CljPersistentMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
@@ -402,7 +402,7 @@ TEST(test_def_stores_symbol_even_if_value_null) {
     TEST_ASSERT_NOT_NULL(canonical_form);
     
     // Evaluate the def expression
-    CljMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
+    CljPersistentMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {

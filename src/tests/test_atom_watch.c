@@ -46,7 +46,7 @@ TEST(test_watcher_registry_starts_empty) {
     ID reg_contents = atom_deref(reg_atom);
     TEST_ASSERT_NOT_NULL_MESSAGE(reg_contents, "watcher-registry should deref to a map");
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(reg_contents));
-    TEST_ASSERT_EQUAL_INT(0, map_count((CljMap *)reg_contents));
+    TEST_ASSERT_EQUAL_INT(0, map_count((CljPersistentMap *)reg_contents));
     RELEASE(reg_contents);
 }
 
@@ -85,7 +85,7 @@ TEST(test_add_watch_adds_watcher) {
     ID reg_contents = atom_deref(registry_atom);
     TEST_ASSERT_NOT_NULL(reg_contents);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(reg_contents));
-    CljMap *reg_map = (CljMap *)reg_contents;
+    CljPersistentMap *reg_map = (CljPersistentMap *)reg_contents;
     TEST_ASSERT_EQUAL_INT(1, map_count(reg_map));
 
     CljSymbol *atom_sym = intern_symbol_global("test-atom");
@@ -98,7 +98,7 @@ TEST(test_add_watch_adds_watcher) {
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(watcher_map_obj));
 
     CljSymbol *kw_test = intern_symbol_global(":test");
-    CljObject *watcher_fn = map_get_sentinel((CljMap *)watcher_map_obj, kw_test, NULL);
+    CljObject *watcher_fn = map_get_sentinel((CljPersistentMap *)watcher_map_obj, kw_test, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(watcher_fn, "Watcher map should contain :test");
     TEST_ASSERT_TRUE_MESSAGE(
         TAG(watcher_fn) == CLJ_FUNC || TAG(watcher_fn) == CLJ_CLOSURE,
@@ -173,7 +173,7 @@ TEST(test_remove_watch_removes_watcher) {
     TEST_ASSERT_NOT_NULL(reg_contents);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(reg_contents));
 
-    TEST_ASSERT_EQUAL_INT(0, map_count((CljMap *)reg_contents));
+    TEST_ASSERT_EQUAL_INT(0, map_count((CljPersistentMap *)reg_contents));
     RELEASE(reg_contents);
 }
 
@@ -212,7 +212,7 @@ TEST(test_remove_watch_cleans_up_empty) {
     ID reg_contents = atom_deref(registry_atom);
     TEST_ASSERT_NOT_NULL(reg_contents);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(reg_contents));
-    TEST_ASSERT_EQUAL_INT(0, map_count((CljMap *)reg_contents));
+    TEST_ASSERT_EQUAL_INT(0, map_count((CljPersistentMap *)reg_contents));
     RELEASE(reg_contents);
 }
 

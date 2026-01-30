@@ -49,7 +49,8 @@ static uint32_t hash_vector(CljPersistentVector *vec) {
     return h;
 }
 
-static uint32_t hash_map(CljMap *map) {
+static uint32_t hash_map(ID map_obj) {
+    CljPersistentMap *map = map_backing(map_obj);
     if (!map) return 0;
     int cnt = map_count(map);
     if (cnt <= 0) return 0;
@@ -61,7 +62,9 @@ static uint32_t hash_map(CljMap *map) {
     ID last_key  = data[2 * (cnt - 1)];
     ID last_val  = data[2 * (cnt - 1) + 1];
 
+    CljType map_tag = TAG(map_obj);
     uint32_t h = FNV1A_OFFSET;
+    h = FNV_MIX(h, (uint32_t)map_tag);
     h = FNV_MIX(h, (uint32_t)cnt);
     h = FNV_MIX(h, clj_hash_full(first_key));
     h = FNV_MIX(h, clj_hash_full(first_val));
@@ -103,16 +106,15 @@ uint32_t clj_hash_full(ID value) {
         case CLJ_STRING: return hash_string((CljString*)value);
         case CLJ_SYMBOL: return hash_symbol((CljSymbol*)value);
         case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT:{
-            CljType t = TAG(value);
-            CljPersistentVector *vec =
-                (t == CLJ_VECTOR_TRANSIENT)
-                    ? vector_persistent(as_transient_vector(value))
-                    : as_persistent_vector(value);
-            return hash_vector(vec);
-        }
+            return hash_vector(as_persistent_vector(value));
+        case CLJ_VECTOR_TRANSIENT:
+            // Transients do not have value semantics; hash by identity.
+            return (uint32_t)(uintptr_t)value;
         case CLJ_MAP_PERSISTENT:
-        case CLJ_MAP_TRANSIENT: return hash_map((CljMap*)value);
+            return hash_map(value);
+        case CLJ_MAP_TRANSIENT:
+            // Transients do not have value semantics; hash by identity.
+            return (uint32_t)(uintptr_t)value;
         case CLJ_LIST: return hash_list((CljList*)value);
         case CLJ_INSTANT: {
             CljInstant *inst = (CljInstant*)value;

@@ -139,7 +139,7 @@ static INLINE ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) {
     if (ns_cache_id == NOT_FOUND || !ns_cache_id) {
         return NULL;
     }
-    CljMap *ns_cache = (CljMap*)ns_cache_id;
+    CljPersistentMap *ns_cache = (CljPersistentMap*)ns_cache_id;
     ID cached = map_get(ns_cache, op);
     if (cached == NOT_FOUND || !cached) {
         return NULL;
@@ -152,7 +152,7 @@ static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
         return;
     }
     ID ns_cache_id = map_get(g_runtime.resolve_cache, ns_key);
-    CljMap *ns_cache = (ns_cache_id == NOT_FOUND) ? NULL : (CljMap*)ns_cache_id;
+    CljPersistentMap *ns_cache = (ns_cache_id == NOT_FOUND) ? NULL : (CljPersistentMap*)ns_cache_id;
     if (!ns_cache) {
         ns_cache = make_map(RESOLVE_CACHE_SIZE);
     }
@@ -162,15 +162,15 @@ static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
 
 // Forward declarations
 ID eval_body_with_params(ID body, const EvalContext *ctx);
-ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
-ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 // is_special_symbol is now in symbol.c
 static INLINE bool is_builtin_function(CljSymbol *symbol);
 
 
 
 // Forward declarations for loop evaluation
-ID eval_body_with_env(ID body, CljMap *env, EvalState *st);
+ID eval_body_with_env(ID body, CljPersistentMap *env, EvalState *st);
 
 
 
@@ -215,7 +215,7 @@ static void throw_unresolved_symbol_exception_symbol(const CljSymbol *sym) {
 
 // Extended function call implementation with complete evaluation
 /** @brief Main function call evaluator */
-ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState *st) {
+ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env, EvalState *st) {
     // for Clojure functions. For native functions, env is not used.
     (void)env; // Suppress unused parameter warning
 
@@ -369,15 +369,15 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
 
 // DRY: Central symbol resolution function with environment stack support
 // Resolves symbol by searching through environment stack (vector of maps)
-static INLINE CljMap* env_stack_head(CljPersistentVector *stack) {
+static INLINE CljPersistentMap* env_stack_head(CljPersistentVector *stack) {
     return env_stack_top(stack);
 }
 
-static INLINE CljMap *get_closure_env(const EvalContext *ctx) {
+static INLINE CljPersistentMap *get_closure_env(const EvalContext *ctx) {
     if (!ctx) {
         return NULL;
     }
-    CljMap *from_stack = env_stack_head(ctx->env_stack);
+    CljPersistentMap *from_stack = env_stack_head(ctx->env_stack);
     if (from_stack) {
         return from_stack;
     }
@@ -391,7 +391,7 @@ static INLINE EvalState *get_eval_state(const EvalContext *ctx, EvalState *fallb
     return fallback;
 }
 
-static const EvalContext* ensure_eval_context(CljMap *env,
+static const EvalContext* ensure_eval_context(CljPersistentMap *env,
                                               EvalState *st,
                                               const EvalContext *ctx,
                                               EvalContext *local_ctx,
@@ -437,7 +437,7 @@ static INLINE bool is_dynamic_var_symbol(const CljSymbol *symbol);
 static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol);
 
 // Extended version that also searches in CallFrame
-static INLINE ID resolve_symbol_in_env_with_frame(CljPersistentVector *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
+static INLINE ID resolve_symbol_in_env_with_frame(CljPersistentVector *env_stack, CljPersistentMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
     if (!sym || TAG(sym) != CLJ_SYMBOL) {
         return NOT_FOUND;
     }
@@ -489,7 +489,7 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljPersistentVector *env_stack
     // Search env_stack (for let bindings, closure captures)
     ENV_STACK_FOR_EACH_REVERSE(env_stack, env_obj_id) {
         if (is_map(env_obj_id)) {
-            CljMap *env = (CljMap*)env_obj_id;
+            CljPersistentMap *env = (CljPersistentMap*)env_obj_id;
             ID resolved = map_get(env, sym);
             if (resolved != NOT_FOUND) {
                 return resolved ? resolved : (ID)SYM_NIL;
@@ -540,7 +540,7 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljPersistentVector *env_stack
 // Helper: Add namespace mappings to environment
 
 // Evaluate body with environment lookup (for loops)
-ID eval_body_with_env(ID body, CljMap *env, EvalState *st) {
+ID eval_body_with_env(ID body, CljPersistentMap *env, EvalState *st) {
     CLJ_ASSERT(env != NULL);
     CLJ_ASSERT(body != NULL);
 
@@ -553,7 +553,7 @@ ID eval_body_with_env(ID body, CljMap *env, EvalState *st) {
     switch (body_obj->type) {
         case CLJ_SYMBOL: {
             // Look up symbol in environment
-            return map_get_sentinel((CljMap*)env, body, NULL);
+            return map_get_sentinel((CljPersistentMap*)env, body, NULL);
         }
 
         case CLJ_LIST:
@@ -610,7 +610,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
 
         // Use central symbol resolution function (DRY: handles environment stack and frames)
         if (ctx) {
-            CljMap *ctx_env_map = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
+            CljPersistentMap *ctx_env_map = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
             // First check frame directly - frame lookups can legitimately return symbols
             // (e.g., macro parameters like (defmacro m [name] name) called with (m name))
             if (ctx->frame) {
@@ -630,7 +630,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             // Then check env_stack and namespace.
             // If there is no env_stack, we still must use ctx->env as the fallback environment
             // (e.g. eval_body_vector_with_base_env tests pass bindings via ctx->env only).
-            CljMap *fallback_env = ctx_env_map ? ctx_env_map : ctx->env;
+            CljPersistentMap *fallback_env = ctx_env_map ? ctx_env_map : ctx->env;
             ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, fallback_env, NULL, body, get_eval_state(ctx, NULL));
             if (resolved_id != NOT_FOUND) {
                 if (!resolved_id || resolved_id == SYM_NIL) {
@@ -696,7 +696,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 return eval_body_with_params(node->first, ctx);
             }
             // Otherwise treat as list
-            CljMap *env_map = get_closure_env(ctx);
+            CljPersistentMap *env_map = get_closure_env(ctx);
             EvalState *ctx_state = get_eval_state(ctx, NULL);
             // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
             if (!ctx_state) ctx_state = builtin_get_eval_state();
@@ -705,7 +705,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         
         case CLJ_LIST: {
             // Evaluate list with context (ctx preserves recur)
-            CljMap *env_map = get_closure_env(ctx);
+            CljPersistentMap *env_map = get_closure_env(ctx);
             EvalState *ctx_state = get_eval_state(ctx, NULL);
             // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
             if (!ctx_state) ctx_state = builtin_get_eval_state();
@@ -743,8 +743,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         }
 
         case CLJ_MAP_PERSISTENT: {
-            CljMap *map = (CljMap*)body;
-            CljMap *result = map_empty();
+            CljPersistentMap *map = (CljPersistentMap*)body;
+            CljPersistentMap *result = map_empty();
             RETAIN(result);
             MAP_FOR_EACH(map, key, value) {
                 ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
@@ -762,7 +762,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
 
 // Simplified body evaluation (basic implementation)
 /** @brief Evaluate function body expressions */
-ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     // CRITICAL: If EvalContext is provided, use eval_body_with_params to preserve RecurContext
     // eval_body_with_params can handle ctx->params == NULL
     if (ctx) {
@@ -772,7 +772,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
         return NULL;
     }
 
-    CljMap *eval_env = eval_env_or_ns_mappings(env, st);
+    CljPersistentMap *eval_env = eval_env_or_ns_mappings(env, st);
     if (!eval_env) {
         throw_exception(EXCEPTION_RUNTIME, "Missing evaluation environment", __FILE__, __LINE__, 0);
         return NULL;
@@ -807,7 +807,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             if (ctx) {
                 // Use st from context if available, otherwise fall back to parameter
                 EvalState *eval_st = get_eval_state(ctx, st);
-                CljMap *fallback_env = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
+                CljPersistentMap *fallback_env = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
                 ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, fallback_env, ctx->frame, body, eval_st);
                 if (resolved_id != NOT_FOUND) {
                     return AUTORELEASE(RETAIN(resolved_id));
@@ -820,7 +820,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // because nil (NULL) is a valid value
             if (is_map(eval_env)) {
                 // Use sentinel to distinguish "key not found" from "value is nil"
-                ID result_id = map_get((CljMap*)eval_env, body);
+                ID result_id = map_get((CljPersistentMap*)eval_env, body);
                 if (result_id != NOT_FOUND) {
                     return (CljObject*)result_id;
                 }
@@ -896,8 +896,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
         case CLJ_MAP_PERSISTENT: {
             // Map literals need to have their keys and values evaluated
             // This is necessary for cases like {nil "value"} where nil should be evaluated to NULL
-            CljMap *map = (CljMap*)body;
-            CljMap *result = map_empty();
+            CljPersistentMap *map = (CljPersistentMap*)body;
+            CljPersistentMap *result = map_empty();
             RETAIN(result);
 
             MAP_FOR_EACH(map, key, value) {
@@ -939,9 +939,9 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
 }
 
 // Helper functions for eval_list optimization
-static ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
-static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx, CljASTNode *call_node);
-static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx);
+static ID call_function_with_args_and_context(ID fn, CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+static ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *st, const EvalContext *ctx, CljASTNode *call_node);
+static ID eval_function_call_from_list(CljList *list, CljPersistentMap *env, EvalState *st, ID op, const EvalContext *ctx);
 
 // Thread-local recursion depth tracking for eval_arg and eval_list
 static _Thread_local int g_eval_arg_depth = 0;
@@ -970,7 +970,7 @@ static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
         if (!frame_id || TAG(frame_id) != CLJ_MAP_PERSISTENT) {
             continue;
         }
-        ID v = map_get((CljMap*)frame_id, (ID)symbol);
+        ID v = map_get((CljPersistentMap*)frame_id, (ID)symbol);
         if (v != NOT_FOUND) {
             // v may be NULL (nil) - that's a valid binding value.
             return v;
@@ -983,7 +983,7 @@ static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
 // Handle recur special form
 // Resolve operator symbol from environment or namespace
 // DRY: Uses central resolve_symbol_in_env function
-static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx, CljASTNode *call_node) {
+static INLINE ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *st, const EvalContext *ctx, CljASTNode *call_node) {
     if (!op) return op;
 
     // Lexical addressing: operator can be a SlotRef (e.g. higher-order calls like (pred x)).
@@ -1070,7 +1070,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
     if (!is_qualified && resolve_stack) {
         ENV_STACK_FOR_EACH_REVERSE(resolve_stack, env_obj) {
             if (is_map(env_obj)) {
-                ID found = map_get((CljMap*)env_obj, op);
+                ID found = map_get((CljPersistentMap*)env_obj, op);
                 if (found != NOT_FOUND) {
                     resolved = found;
                     break;
@@ -1107,7 +1107,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
 }
 
 // Handle function call from resolved operator
-static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx) {
+static INLINE ID eval_function_call_from_list(CljList *list, CljPersistentMap *env, EvalState *st, ID op, const EvalContext *ctx) {
     if (!op) return NULL;
 
     // Fast path: op already resolved to a callable (common with callsite cache).
@@ -1144,13 +1144,13 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
 
         // nil target: behave like (get nil :k) => nil, (get nil :k default) => default
         if (!target || !is_map(target)) {
-            if (target) RELEASE(target);
+            RELEASE(target);
             // Return default (may be NULL/nil) when provided; otherwise nil.
             return default_val;
         }
 
         // Distinguish "missing" from "present with nil value" using NOT_FOUND sentinel.
-        ID found = map_get_sentinel((CljMap*)target, op, NOT_FOUND);
+        ID found = map_get_sentinel((CljPersistentMap*)target, op, NOT_FOUND);
         RELEASE(target);
 
         if (found == NOT_FOUND) {
@@ -1222,7 +1222,7 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
                     // Extract and evaluate arguments from list
                     ID args[16];
                     unsigned int argc = 0;
-                    CljMap *eval_env = is_map(env) ? env : eval_env_or_ns_mappings(env, st);
+                    CljPersistentMap *eval_env = is_map(env) ? env : eval_env_or_ns_mappings(env, st);
                     LIST_FOR_EACH(LIST_REST(list), arg_expr) {
                         if (argc >= 16) break;
                         // Evaluate argument (nil is a valid value, so NULL is acceptable)
@@ -1253,11 +1253,11 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
     return NULL; // Not a function
 }
 
-static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     ID args[16];
     unsigned int argc = 0;
     unsigned char fn_tag = TAG(fn);
-    CljMap *eval_env = is_map(env) ? env : eval_env_or_ns_mappings(env, st);
+    CljPersistentMap *eval_env = is_map(env) ? env : eval_env_or_ns_mappings(env, st);
 
     // Hot path: Most calls have <= 2 args (fib, +, -, <, etc.)
     // Avoid a loop in the common case: unroll traversal for 0..2 args.
@@ -1320,7 +1320,7 @@ static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljMa
 }
 
 // List evaluation (optionally accepts EvalContext for recur support)
-ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_list(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     if (!list) {
         return NULL;
     }
@@ -1334,7 +1334,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     }
 
     // Prefer the current head of env_stack (closures/let frames), fall back to env parameter
-    CljMap *effective_env = ctx ? get_closure_env(ctx) : NULL;
+    CljPersistentMap *effective_env = ctx ? get_closure_env(ctx) : NULL;
     if (!effective_env) effective_env = env;
     effective_env = eval_env_or_ns_mappings(effective_env, effective_st);
 
@@ -1576,7 +1576,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
             "Cannot call %s as a function", clj_type_name(op->type)); return NULL;
 }
 
-ID eval_def(CljList *list, CljMap *env, EvalState *st) {
+ID eval_def(CljList *list, CljPersistentMap *env, EvalState *st) {
     CLJ_ASSERT(env != NULL);
     CLJ_ASSERT(is_list_like(list));
 
@@ -1607,7 +1607,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // Evaluate the value expression
     // Use current namespace mappings as environment for evaluation
     // This ensures that builtin functions like + are available during evaluation
-    CljMap *eval_env = (st && st->current_ns) ? st->current_ns->mappings : env;
+    CljPersistentMap *eval_env = (st && st->current_ns) ? st->current_ns->mappings : env;
     ID value = NULL;
     if (value_expr) {
         value = is_list_type(TAG(value_expr))
@@ -1668,7 +1668,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
         // For non-functions, just copy form metadata if present
         if (value_tag == CLJ_CLOSURE || value_tag == CLJ_FUNC) {
             if (is_map(form_meta)) {
-                CljMap *meta_map = (CljMap*)RETAIN(form_meta);
+                CljPersistentMap *meta_map = (CljPersistentMap*)RETAIN(form_meta);
                 // Add :name and :ns directly (map_assoc overwrites if present, :name/:ns are rare)
                 if (SYM_KW_NAME && sym && sym->cname && sym->cname[0] != '\0') {
                     CljString *name_str = make_string(sym->cname);
@@ -1708,7 +1708,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     return ret_sym;
 }
 
-ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
+ID eval_ns(CljList *list, CljPersistentMap *env, EvalState *st) {
     CLJ_ASSERT(env != NULL);
     (void)env;
     CLJ_ASSERT(list != NULL);
@@ -1774,7 +1774,7 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
     return NULL;
 }
 
-ID eval_var(CljList *list, CljMap *env, EvalState *st) {
+ID eval_var(CljList *list, CljPersistentMap *env, EvalState *st) {
     (void)env;  // Not used
 
     // Get symbol name (first argument)
@@ -1794,7 +1794,7 @@ ID eval_var(CljList *list, CljMap *env, EvalState *st) {
     ID value = ns_resolve(st, sym);
     if (value == NOT_FOUND) {
         // Try to find the symbol in the current namespace mappings
-        CljMap *mappings = st->current_ns->mappings;
+        CljPersistentMap *mappings = st->current_ns->mappings;
         if (mappings) {
             value = map_get(mappings, sym_obj);
         }
@@ -1819,7 +1819,7 @@ ID eval_var(CljList *list, CljMap *env, EvalState *st) {
 // ============================================================================
 // TCO functions moved to optimize.c
 
-ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_fn(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     // Some call paths (notably during bootstrap / lazy builder thunks) may not have
     // an explicit EvalState or lexical env map available.
     if (!st) st = builtin_get_eval_state();
@@ -1969,7 +1969,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     } else {
         // Fallback: capture env only when it's not the current namespace mappings.
         // Avoid capturing namespace mappings to prevent cycles (fn -> env_stack -> ns map -> fn).
-        CljMap *env_source = eval_env_or_ns_mappings(env, st);
+        CljPersistentMap *env_source = eval_env_or_ns_mappings(env, st);
         bool is_current_ns_env = st && st->current_ns && st->current_ns->mappings == env_source;
         if (env_source && !is_current_ns_env) {
             fn_env_stack = NULL;
@@ -1992,7 +1992,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
             if (f->param_count > 0) total += (unsigned int)f->param_count;
         }
 
-        CljMap *param_map = make_map((int)total);
+        CljPersistentMap *param_map = make_map((int)total);
         // Apply outer frames first, then inner frames so shadowing works.
         for (int di = depth - 1; di >= 0; di--) {
             CallFrame *f = frames[di];
@@ -2027,7 +2027,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     // If this is a named function, bind it to its own name in closure for recursion
     if (fn_name) {
-        CljMap *self_binding = map_assoc(map_empty(), fn_name, fn);
+        CljPersistentMap *self_binding = map_assoc(map_empty(), fn_name, fn);
         RELEASE(fn);  // Balance map_assoc's RETAIN
 
         // Push self-binding as the innermost frame.
@@ -2201,7 +2201,7 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     return NULL;
 }
 
-ID eval_seq(CljList *list, CljMap *env) {
+ID eval_seq(CljList *list, CljPersistentMap *env) {
     CLJ_ASSERT(env != NULL);
     CljObject *arg = eval_arg(list, 1, env, NULL);
     if (!arg) return NULL;
@@ -2247,21 +2247,21 @@ ID eval_seq(CljList *list, CljMap *env) {
  * @param element The value to bind to the variable
  * @return A new environment with the binding added
  */
-static CljMap* extend_env_with_binding(CljMap *env, CljObject *var, CljObject *element) {
+static CljPersistentMap* extend_env_with_binding(CljPersistentMap *env, CljObject *var, CljObject *element) {
     // Estimate capacity: existing bindings + new binding
-    int capacity = env ? ((CljMap*)env)->count + 1 : 4;
-    CljMap *new_env = (CljMap*)make_map(capacity);
+    int capacity = env ? ((CljPersistentMap*)env)->count + 1 : 4;
+    CljPersistentMap *new_env = (CljPersistentMap*)make_map(capacity);
     if (new_env) {
         // Copy existing environment bindings
         if (env) {
             MAP_FOR_EACH(env, key, value) {
-                CljMap *updated = map_assoc(new_env, key, value);
+                CljPersistentMap *updated = map_assoc(new_env, key, value);
                 ASSIGN(new_env, updated);
             }
         }
         // Add new binding (overwrites the existing value if the key already exists)
         // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-        CljMap *updated_env = map_assoc(new_env, var, element);
+        CljPersistentMap *updated_env = map_assoc(new_env, var, element);
         ASSIGN(new_env, updated_env);
     }
     return new_env;
@@ -2270,7 +2270,7 @@ static CljMap* extend_env_with_binding(CljMap *env, CljObject *var, CljObject *e
 // NOTE: Legacy native `for`/`for*` special forms were removed.
 // `for` is implemented as a Clojure macro in `clojure.core` and expands to lazy primitives.
 
-ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_doseq(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(env != NULL);
     // (doseq [binding coll] expr)
     // Executes expr for side effects, returns nil
@@ -2316,7 +2316,7 @@ ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx)
                 if (ctx) {
                     // Push binding onto a copy of env_stack so lexical lookup works
                     CljPersistentVector *new_stack = (CljPersistentVector*)RETAIN(ctx->env_stack);
-                    CljMap *self_bind = map_assoc(map_empty(), var, element);
+                    CljPersistentMap *self_bind = map_assoc(map_empty(), var, element);
                     env_stack_push_inplace(&new_stack, self_bind);
                     RELEASE(self_bind);
 
@@ -2324,10 +2324,10 @@ ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx)
                     inner_ctx.env_stack = new_stack;
 
                     ID body_result = eval_body(body, NULL, st, &inner_ctx);
-                    if (new_stack) RELEASE(new_stack);
+                    RELEASE(new_stack);
                     RELEASE(body_result);
                 } else {
-                    CljMap *new_env = extend_env_with_binding(env, var, element);
+                    CljPersistentMap *new_env = extend_env_with_binding(env, var, element);
                     if (new_env) {
                         ID body_result = eval_body_with_env(body, new_env, st);
                         RELEASE(body_result);
@@ -2345,7 +2345,7 @@ ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx)
     return AUTORELEASE(NULL); // doseq always returns nil
 }
 
-ID eval_list_function(CljList *list, CljMap *env) {
+ID eval_list_function(CljList *list, CljPersistentMap *env) {
     CLJ_ASSERT(env != NULL);
     (void)env; // Suppress unused parameter warning
     // (list arg1 arg2 ...)
@@ -2372,7 +2372,7 @@ ID eval_list_function(CljList *list, CljMap *env) {
 // using Clojure's (destructure ...) function. By the time we get here,
 // all bindings are simple symbol-value pairs.
 // ============================================================================
-ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_let(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     // (let [bindings*] body*)
     // bindings* => binding-form init-expr
 
@@ -2380,7 +2380,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         return NULL;
     }
 
-    CljMap *eval_env = eval_env_or_ns_mappings(env, st);
+    CljPersistentMap *eval_env = eval_env_or_ns_mappings(env, st);
     if (!eval_env) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "let requires a valid environment"); return NULL;
@@ -2435,7 +2435,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     }
 
     // Let locals map (heap) stored as top frame in env_stack.
-    CljMap *let_env_map = NULL;
+    CljPersistentMap *let_env_map = NULL;
     if (has_frame) {
         let_env_map = make_map(pair_count);
         env_stack_push_inplace(&let_stack, let_env_map);
@@ -2463,7 +2463,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         unsigned char sym_tag = TAG(sym_val);
         if (!sym_val || sym_tag != CLJ_SYMBOL) {
             if (has_frame) frame_release(let_frame);
-            if (let_stack_owned) RELEASE(let_stack);
+            RELEASE(let_stack);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                            "let binding must be a symbol",
                            NULL, 0, 0);
@@ -2496,7 +2496,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 // Use map_assoc (COW-aware) instead of map_put (deprecated, no growth/duplicate checks).
                 // This should remain in-place for rc=1 + sufficient capacity, but we still
                 // handle the "new pointer" case defensively to keep env_stack consistent.
-                CljMap *updated = map_assoc(let_env_map, sym_val, value);
+                CljPersistentMap *updated = map_assoc(let_env_map, sym_val, value);
                 if (updated && updated != let_env_map && let_ctx.env_stack) {
                     unsigned int top_idx = vector_count(let_ctx.env_stack) - 1;
                     vector_assoc_inplace(&let_ctx.env_stack, top_idx, (ID)updated);
@@ -2520,7 +2520,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     bool already_bound = false;
                     ENV_STACK_FOR_EACH_REVERSE(f->env_stack, env_obj) {
                         if (is_map(env_obj)) {
-                            ID found = map_get((CljMap*)env_obj, sym_val);
+                            ID found = map_get((CljPersistentMap*)env_obj, sym_val);
                             if (found != NOT_FOUND) {
                                 already_bound = true;
                                 break;
@@ -2529,7 +2529,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     }
 
                     if (!already_bound) {
-                        CljMap *self_bind = map_assoc(map_empty(), sym_val, stored_value);
+                        CljPersistentMap *self_bind = map_assoc(map_empty(), sym_val, stored_value);
                         env_stack_push_inplace(&f->env_stack, self_bind);
                         RELEASE(self_bind);
                     }
@@ -2550,7 +2550,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     }
 
     ID result = NULL;
-    CljMap *body_env = let_ctx.env ? let_ctx.env : env;
+    CljPersistentMap *body_env = let_ctx.env ? let_ctx.env : env;
     CljList *args = list_or_null(as_list(LIST_REST(list)));
     CljList *body_node = args ? list_or_null(as_list(LIST_REST(args))) : NULL;
     for (CljList *node = body_node; node; node = list_or_null(as_list(LIST_REST(node)))) {
@@ -2569,16 +2569,16 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     if (has_frame) {
         frame_release(let_frame);
     }
-    if (let_stack_owned) RELEASE(let_stack);
+    RELEASE(let_stack);
     return result;
 }
 
 // Helper function for evaluating arguments
-ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
+ID eval_arg(CljList *list, int index, CljPersistentMap *env, EvalState *st) {
     return eval_arg_with_context(list, index, env, st, NULL);
 }
 
-ID eval_arg_with_context(CljList *list, int index, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_arg_with_context(CljList *list, int index, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL);
     if (!list || !is_list_type(TAG(list))) return NULL;
 
@@ -2589,7 +2589,7 @@ ID eval_arg_with_context(CljList *list, int index, CljMap *env, EvalState *st, c
     return eval_arg_from_expr_with_context(element, env, st, ctx);
 }
 
-ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     if (expr == SYM_NIL) return NULL;
     if (!expr) return NULL;
 
@@ -2597,7 +2597,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         return expr;
     }
     EvalState *eval_st = get_eval_state(ctx, st);
-    CljMap *eval_env = env;
+    CljPersistentMap *eval_env = env;
     if (!eval_env && ctx) {
         eval_env = get_closure_env(ctx);
     }
@@ -2741,8 +2741,8 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     }
 
     if (expr_tag == CLJ_MAP_PERSISTENT) {
-        CljMap *map = (CljMap*)expr;
-        CljMap *result = map_empty();
+        CljPersistentMap *map = (CljPersistentMap*)expr;
+        CljPersistentMap *result = map_empty();
 
         MAP_FOR_EACH(map, key, value) {
             ID key_id = key;
@@ -2775,7 +2775,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     return expr;
 }
 
-ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_dotimes(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(env != NULL);
     // (dotimes [var n] expr)
     // Executes expr n times with var bound to 0, 1, ..., n-1
@@ -2868,14 +2868,14 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
     }
 
     frame_release(&dotimes_frame);
-    if (owned_stack) RELEASE(owned_stack);
+    RELEASE(owned_stack);
     return NULL;
 }
 
 // ============================================================================
 // EVAL_TIME - Time measurement special form implementation
 // ============================================================================
-ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     // (time expr)
     if (!list || !st) {
         return NULL;
@@ -2898,7 +2898,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     gettimeofday(&start, NULL);
 
     // Use provided env or fall back to current_ns->mappings (like eval_parsed does)
-    CljMap *eval_env = eval_env_or_ns_mappings(env, st);
+    CljPersistentMap *eval_env = eval_env_or_ns_mappings(env, st);
 
     // Evaluate the expression in the current lexical context.
     // Use eval_env so namespace-bound symbols (e.g. +) are available.
@@ -3009,5 +3009,4 @@ void free_obj_array(ID *array, ID *stack_buffer) {
         free((void*)array);
     }
 }
-
 

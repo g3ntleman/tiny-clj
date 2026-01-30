@@ -20,7 +20,7 @@ static void ast_compile_vector_inplace(CljPersistentVector *vec, EvalState *st) 
     }
 }
 
-static void ast_compile_map_inplace(CljMap *map, EvalState *st) {
+static void ast_compile_map_inplace(CljPersistentMap *map, EvalState *st) {
     if (!map) return;
     MAP_FOR_EACH(map, k, v) {
         ast_compile_expr_inplace(k, st);

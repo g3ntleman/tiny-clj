@@ -107,7 +107,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     
     // Call function with current value and additional args
     EvalState *st = get_global_eval_state();
-    CljMap *env = st ? (CljMap*)st->current_ns->mappings : NULL;
+    CljPersistentMap *env = st ? (CljPersistentMap*)st->current_ns->mappings : NULL;
     
     ID new_value = NULL;
     TRY {

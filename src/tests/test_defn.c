@@ -486,7 +486,7 @@ TEST(test_defn_test_fn_evaluated) {
         TEST_ASSERT_NOT_NULL(canonical_form);
 
         // Evaluate the form
-        CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
+        CljPersistentMap *env = g_test_eval_state->current_ns ? (CljPersistentMap*)g_test_eval_state->current_ns->mappings : NULL;
         ID result = eval_list(as_list(canonical_form), env, g_test_eval_state, NULL);
 
         // Should return the symbol 'test-fn'

@@ -164,7 +164,7 @@ TEST(test_get_thread_bindings_snapshot_contains_dynamic_binding) {
     CljSymbol *x = intern_symbol_global("*x*");
     TEST_ASSERT_NOT_NULL(x);
 
-    ID val = map_get((CljMap*)snapshot, (ID)x);
+    ID val = map_get((CljPersistentMap*)snapshot, (ID)x);
     TEST_ASSERT_NOT_NULL(val);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));

@@ -421,8 +421,14 @@ static void release_object_default(CljObject *v) {
             }
             break;
         case CLJ_MAP_PERSISTENT: {
-            CljMap *map = (CljMap*)v;
+            CljPersistentMap *map = (CljPersistentMap*)v;
             MAP_FOR_EACH(map, key, value) { RELEASE(key); RELEASE(value); }
+            break;
+        }
+        case CLJ_MAP_TRANSIENT: {
+            CljTransientMap *tmap = (CljTransientMap*)v;
+            RELEASE(tmap->backing);
+            tmap->backing = NULL;
             break;
         }
             

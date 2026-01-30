@@ -76,7 +76,7 @@ TEST(test_string_creation) {
     // Test direct string creation (bypassing eval_string)
 
     // Test direct string creation
-    CljObject *str = AUTORELEASE((CljObject *)make_string("hello world"));
+    CljString *str = AUTORELEASE(make_string("hello world"));
     TEST_ASSERT_NOT_NULL(str);
     TEST_ASSERT_EQUAL_INT(CLJ_STRING, str->type);
 
@@ -102,7 +102,7 @@ TEST(test_vector_creation) {
 
 TEST(test_map_creation) {
     // Test map creation using CljValue API
-    CljMap *map = AUTORELEASE(make_map(16));
+    CljPersistentMap *map = AUTORELEASE(make_map(16));
     TEST_ASSERT_NOT_NULL(map);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, map->base.type);
 }
@@ -120,7 +120,7 @@ TEST(test_array_map_builtin) {
         CljObject *eval1 = eval_string("(array-map \"a\" 1)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(eval1);
         TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, eval1->type);
-        TEST_ASSERT_EQUAL_INT(1, map_count((CljMap*)eval1));
+        TEST_ASSERT_EQUAL_INT(1, map_count((CljPersistentMap*)eval1));
 
         // Test multiple pairs: (array-map "a" 1 "b" 2)
         CljObject *result2 = parse("(array-map \"a\" 1 \"b\" 2)", g_test_eval_state);

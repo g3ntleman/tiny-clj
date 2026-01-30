@@ -17,7 +17,7 @@
 // test_dotimes_basic removed - duplicate of test_dotimes_simple_iteration_count in test_loops.c
 
 TEST(test_doseq_basic) {
-    CljMap *env = make_map(4);
+    CljPersistentMap *env = make_map(4);
     CljObject *result = eval_doseq(NULL, env, g_test_eval_state, NULL);
     TEST_ASSERT_NULL(result);
     RELEASE(env);
@@ -41,7 +41,7 @@ TEST(test_dotimes_missing_body) {
     CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, NULL)));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
@@ -65,7 +65,7 @@ TEST(test_doseq_with_environment) {
         ID binding_list = (ID)make_list(sym_x, make_list((ID)vec, NULL));
         ID doseq_call = (ID)make_list(SYM_DOSEQ, make_list(binding_list, make_list(sym_x, NULL)));
         RELEASE(vec);
-        CljMap *env = make_map(4);
+        CljPersistentMap *env = make_map(4);
         
         CljObject *result = eval_doseq(as_list(doseq_call), env, eval_state, NULL);
         TEST_ASSERT_NULL(result);

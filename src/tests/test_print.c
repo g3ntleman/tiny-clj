@@ -30,7 +30,7 @@ TEST_SHARED(test_print_str_basic_functionality) {
         TEST_ASSERT_EQUAL_STRING("42", string_data(result));
         
         // Test: print_str() with string should return string WITHOUT quotes
-        CljObject *str = (CljObject*)make_string("Hello");
+        CljString *str = make_string("Hello");
         result = print_str(str);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_STRING("Hello", string_data(result));  // No quotes!
@@ -43,7 +43,7 @@ TEST_SHARED(test_print_str_basic_functionality) {
 // ============================================================================
 TEST_SHARED(test_print_str_vs_pr_str_difference) {
     WITH_AUTORELEASE_POOL({
-        CljObject *str = (CljObject*)make_string("Hello");
+        CljString *str = make_string("Hello");
         
         // print_str() should return string without quotes
         CljString *print_result = print_str(str);
@@ -66,8 +66,8 @@ TEST_SHARED(test_pr_str_with_containers) {
     WITH_AUTORELEASE_POOL({
         // Test: pr_str with vector containing strings
         CljPersistentVector *vec = make_vector(0, false);
-        CljObject *str1 = (CljObject*)make_string("hello");
-        CljObject *str2 = (CljObject*)make_string("world");
+        CljString *str1 = make_string("hello");
+        CljString *str2 = make_string("world");
         vec = vector_conj(vec, str1);
         vec = vector_conj(vec, str2);
         
@@ -83,9 +83,9 @@ TEST_SHARED(test_pr_str_with_containers) {
         RELEASE(str2);
         
         // Test: pr_str with map containing strings
-        CljMap *map = make_map(2);
-        CljObject *key_str = (CljObject*)make_string("a");
-        CljObject *val_str = (CljObject*)make_string("hello");
+        CljPersistentMap *map = make_map(2);
+        CljString *key_str = make_string("a");
+        CljString *val_str = make_string("hello");
         ASSIGN(map, map_assoc(map, (ID)key_str, (ID)val_str));
         
         result = pr_str((CljObject*)map);
@@ -99,7 +99,7 @@ TEST_SHARED(test_pr_str_with_containers) {
         // Test: pr_str with nested containers
         CljPersistentVector *outer_vec = make_vector(0, false);
         CljPersistentVector *inner_vec = make_vector(0, false);
-        CljObject *nested_str = (CljObject*)make_string("nested");
+        CljString *nested_str = make_string("nested");
         inner_vec = vector_conj(inner_vec, nested_str);
         outer_vec = vector_conj(outer_vec, inner_vec);
         
@@ -129,7 +129,7 @@ TEST_SHARED(test_print_str_different_types) {
         RELEASE(vec);
         
         // Test with map (simplified - just test basic functionality)
-        CljMap *map = make_map(2);
+        CljPersistentMap *map = make_map(2);
         ASSIGN(map, map_assoc(map, (ID)make_string("a"), fixnum(1)));
         ASSIGN(map, map_assoc(map, (ID)make_string("b"), fixnum(2)));
         

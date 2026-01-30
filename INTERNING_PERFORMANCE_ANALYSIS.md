@@ -76,7 +76,7 @@ int vector_index_of(CljVector *vec, ID value) {
 CljVector *symbol_table;  // O(n) Suche
 
 // Hash-Map:
-CljMap *symbol_table;  // O(1) Lookup
+CljPersistentMap *symbol_table;  // O(1) Lookup
 ```
 
 ### Option 3: Cache für häufig verwendete Symbole
@@ -153,7 +153,7 @@ CljSymbol* intern_symbol_global_fast(const char *name) {
 - Professionelle Lösung
 
 **Implementierung**:
-- Symbol-Tabelle als `CljMap` statt `CljVector`
+- Symbol-Tabelle als `CljPersistentMap` statt `CljVector`
 - Hash-Funktion für Symbol-Namen
 - Migration der bestehenden Symbole
 

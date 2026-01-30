@@ -29,7 +29,7 @@ static INLINE bool sym_name_eq(ID obj, const char *name) {
 }
 
 static void eval_finally_clause(CljList *finally_clause,
-                                CljMap *env,
+                                CljPersistentMap *env,
                                 EvalState *st,
                                 const EvalContext *ctx) {
     if (!finally_clause) return;
@@ -45,7 +45,7 @@ static void eval_finally_clause(CljList *finally_clause,
 }
 
 // Special Form evaluation functions with unified signature (exported for symbol initialization)
-ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_cond(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_cond: list must not be NULL");
 
     // `cond` expects pairs: test expr test expr ...
@@ -144,7 +144,7 @@ ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContex
     return NULL;
 }
 
-ID eval_special_if(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_if(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     // Hot-path: avoid repeated list_get_element/list_nth traversals.
     // Structure: (if cond then else?)
     CLJ_ASSERT(list != NULL && "eval_special_if: list must not be NULL");
@@ -169,7 +169,7 @@ ID eval_special_if(CljList *list, CljMap *env, EvalState *st, const EvalContext 
     return eval_body(branch, env, st, ctx);
 }
 
-ID eval_special_when(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_when(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_when: list must not be NULL");
     ID cond_val = eval_arg_with_context(list, 1, env, st, ctx);
     bool truthy = cond_val ? clj_is_truthy(cond_val) : false;
@@ -194,7 +194,7 @@ ID eval_special_when(CljList *list, CljMap *env, EvalState *st, const EvalContex
     return result;
 }
 
-ID eval_special_while(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_while(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_while: list must not be NULL");
 
     CljList *args = list_rest_normalized(list);
@@ -242,7 +242,7 @@ ID eval_special_while(CljList *list, CljMap *env, EvalState *st, const EvalConte
     }
 }
 
-ID eval_special_do(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_do(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_do: list must not be NULL");
     ID result = NULL;
     for (CljList *node = list_rest_normalized(list); node; 
@@ -255,7 +255,7 @@ ID eval_special_do(CljList *list, CljMap *env, EvalState *st, const EvalContext 
     return result;
 }
 
-ID eval_special_and(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_and(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_and: list must not be NULL");
 
     CljList *node = list_rest_normalized(list);
@@ -274,7 +274,7 @@ ID eval_special_and(CljList *list, CljMap *env, EvalState *st, const EvalContext
     return result;
 }
 
-ID eval_special_or(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_or(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_or: list must not be NULL");
 
     CljList *node = list_rest_normalized(list);
@@ -293,7 +293,7 @@ ID eval_special_or(CljList *list, CljMap *env, EvalState *st, const EvalContext 
     return result;
 }
 
-ID eval_special_quote(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_quote(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_quote: list must not be NULL");
     (void)env; (void)st; (void)ctx;  // Unused
     ID quoted_expr = list_get_element(list, 1);
@@ -301,7 +301,7 @@ ID eval_special_quote(CljList *list, CljMap *env, EvalState *st, const EvalConte
     return RETAIN(quoted_expr);
 }
 
-ID eval_special_throw(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_throw(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_throw: list must not be NULL");
 
     // Shape: (throw expr)
@@ -333,7 +333,7 @@ ID eval_special_throw(CljList *list, CljMap *env, EvalState *st, const EvalConte
     return NULL;
 }
 
-ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_go(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_go: list must not be NULL");
     (void)ctx;  // Unused
     CljList *do_list = NULL;
@@ -364,7 +364,7 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
         RELEASE(fn_list);
         return NULL;
     }
-    CljMap *chan = make_result_channel();
+    CljTransientMap *chan = make_result_channel();
     event_loop_enqueue(fn_obj, chan);
     RELEASE(fn_list);
     RELEASE(do_list);
@@ -372,29 +372,29 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 }
 
 // Wrapper functions for existing special form evaluators
-ID eval_special_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_fn(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_fn: list must not be NULL");
     return eval_fn(list, eval_env_or_ns_mappings(env, st), st, ctx);
 }
 
-ID eval_special_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_let(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_let: list must not be NULL");
     return eval_let(list, env, st, ctx);
 }
 
-ID eval_special_var(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_var(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_var: list must not be NULL");
     (void)ctx;  // Unused
     return eval_var(list, env, st);
 }
 
-ID eval_special_recur(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_recur(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_recur: list must not be NULL");
     (void)env; (void)st;  // Unused
     return eval_handle_recur(list, ctx);
 }
 
-ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_loop(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_loop: list must not be NULL");
     CLJ_ASSERT(st != NULL && "eval_special_loop: st must not be NULL");
     if (!list || !st) return NULL;
@@ -436,7 +436,7 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
     ID *binding_values = binding_slots + pair_count;
 
     // Let locals map stored as top frame in env_stack.
-    CljMap *loop_env_map = NULL;
+    CljPersistentMap *loop_env_map = NULL;
     if (pair_count > 0) {
         loop_env_map = make_map(pair_count);
         env_stack_push_inplace(&loop_stack, loop_env_map);
@@ -455,7 +455,7 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
         ID sym = vector_nth(bindings, i);
         ID init_expr = vector_nth(bindings, i + 1);
         if (!sym || TAG(sym) != CLJ_SYMBOL) {
-            if (loop_stack) RELEASE(loop_stack);
+        RELEASE(loop_stack);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop binding must be a symbol", __FILE__, __LINE__, 0);
             return NULL;
         }
@@ -481,7 +481,7 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
 
         // Expose bindings via the top env_stack map for closures and symbol resolution.
         if (loop_env_map) {
-            CljMap *updated = map_assoc(loop_env_map, sym, value);
+            CljPersistentMap *updated = map_assoc(loop_env_map, sym, value);
             if (updated && updated != loop_env_map && loop_ctx.env_stack) {
                 unsigned int top_idx = vector_count(loop_ctx.env_stack) - 1;
                 vector_assoc_inplace(&loop_ctx.env_stack, top_idx, (ID)updated);
@@ -538,7 +538,7 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
 
         if (loop_env_map) {
             for (int i = 0; i < pair_count; i++) {
-                CljMap *updated = map_assoc(loop_env_map, binding_params[i], recur_args[i]);
+                CljPersistentMap *updated = map_assoc(loop_env_map, binding_params[i], recur_args[i]);
                 if (updated && updated != loop_env_map && loop_ctx.env_stack) {
                     unsigned int top_idx = vector_count(loop_ctx.env_stack) - 1;
                     vector_assoc_inplace(&loop_ctx.env_stack, top_idx, (ID)updated);
@@ -557,29 +557,29 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
             RELEASE(recur_args[i]);
         }
     }
-    if (loop_stack) RELEASE(loop_stack);
+    RELEASE(loop_stack);
 
     return result;
 }
 
-ID eval_special_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_time: list must not be NULL");
     return eval_time(list, eval_env_or_ns_mappings(env, st), st, ctx);
 }
 
-ID eval_special_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_dotimes(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_dotimes: list must not be NULL");
     (void)ctx;  // Unused
         return eval_dotimes(list, env, st, ctx);
 }
 
-ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_try(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_try: list must not be NULL");
     CljList *args = list_rest_normalized(list);
     if (!args) return NULL;
 
     // Establish base env (match other wrappers: fall back to current namespace mappings).
-    CljMap *base_env = eval_env_or_ns_mappings(env, st);
+    CljPersistentMap *base_env = eval_env_or_ns_mappings(env, st);
 
     // Split body expressions from catch/finally clauses.
     // Avoid list_nth in a loop (linked lists would make this O(n^2)).
@@ -667,11 +667,11 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
                 continue;
             }
 
-            CljMap *catch_env = NULL;
+            CljPersistentMap *catch_env = NULL;
             if (is_map(base_env)) {
                 catch_env = RETAIN(map_assoc(base_env, binding_sym, ex_obj));
             } else {
-                catch_env = (CljMap*)make_map(4);
+                catch_env = (CljPersistentMap*)make_map(4);
                 if (catch_env) {
                     ASSIGN(catch_env, map_assoc(catch_env, binding_sym, ex_obj));
                 }
@@ -724,7 +724,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
     return result;
 }
 
-ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_binding(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_binding: list must not be NULL");
 
     CljList *args = list_rest_normalized(list);
@@ -739,7 +739,7 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
     }
 
     // Base env for evaluating init forms and body (match other wrappers).
-    CljMap *base_env = eval_env_or_ns_mappings(env, st);
+    CljPersistentMap *base_env = eval_env_or_ns_mappings(env, st);
 
     ID bindings_obj = LIST_FIRST(args);
     if (!is_vector(bindings_obj)) {
@@ -759,7 +759,7 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
 
     // Build a single frame map: Symbol -> value.
     // NOTE: nil values are stored as DYNAMIC_BINDING_NIL so they remain distinguishable from missing.
-    CljMap *frame = make_map((int)(bind_count / 2));
+    CljPersistentMap *frame = make_map((int)(bind_count / 2));
     if (!frame) {
         return NULL;
     }
@@ -928,7 +928,7 @@ ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
 // Legacy dispatch function - kept for backward compatibility but deprecated
 // New code should use direct function pointer access via CljSpecialSymbol
 ID eval_special_form_dispatch(CljList *list,
-                              CljMap *env,
+                              CljPersistentMap *env,
                               EvalState *st,
                               const EvalContext *ctx,
                               CljSymbol *op_sym) {
@@ -946,7 +946,7 @@ ID eval_special_form_dispatch(CljList *list,
 // Cached Clojure quasiquote-fn (resolved after bootstrap)
 static CljFunction *g_quasiquote_fn = NULL;
 
-ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_quasiquote(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_quasiquote: list must not be NULL");
     CLJ_ASSERT(st != NULL && "eval_special_quasiquote: st must not be NULL");
     if (!st) return NULL;
@@ -996,7 +996,7 @@ ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const Eval
 // defmacro Special Form - defines a macro in the current namespace
 // ============================================================================
 
-ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_special_defmacro(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_defmacro: list must not be NULL");
     CLJ_ASSERT(st != NULL && "eval_special_defmacro: st must not be NULL");
     if (!st) return NULL;
@@ -1084,7 +1084,7 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
     CljFunction *macro_fn = as_function(fn_result);
     
     // Set :macro true in metadata
-    CljMap *meta = make_map(4);
+    CljPersistentMap *meta = make_map(4);
     CljSymbol *kw_macro = intern_symbol_global(":macro");
     ASSIGN(meta, map_assoc(meta, kw_macro, clj_true));
     meta_set((CljObject*)macro_fn, (CljObject*)meta);

@@ -99,7 +99,7 @@ TEST(test_repl_doc_extracts_metadata) {
     CljSymbol *doc_key = intern_symbol_global(":doc");
     TEST_ASSERT_NOT_NULL_MESSAGE(doc_key, ":doc keyword should exist");
     
-    CljMap *meta_map = (CljMap*)meta_meta;
+    CljPersistentMap *meta_map = (CljPersistentMap*)meta_meta;
     ID doc_value = map_get_sentinel(meta_map, doc_key, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(doc_value, ":doc should exist in metadata");
     TEST_ASSERT_TRUE_MESSAGE(TAG(doc_value) == CLJ_STRING, ":doc should be a string");
