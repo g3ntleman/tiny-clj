@@ -84,7 +84,7 @@ ID map_get_sentinel(ID map, ID key, ID not_found) {
 
 
 /** Associate key->value with COW: RC=1 → in-place mutation, RC>1 → COW.
- * Returns owned object (rc=1, no AUTORELEASE).
+ * Returns a usable reference (RC=1). Callers must release if they keep it.
  */
 static CljPersistentMap* map_assoc_core(CljPersistentMap* map, ID key, ID value) {
   CLJ_ASSERT(map && map->base.type == CLJ_MAP_PERSISTENT);
@@ -223,19 +223,16 @@ CljPersistentMap* map_merge(CljPersistentMap* a, CljPersistentMap* b, bool overw
       }
     }
     CljPersistentMap *old_result = result;
-    // map_assoc returns autoreleased object
+    // map_assoc returns RC=1 (owned) when it allocates; otherwise same pointer
     result = map_assoc(result, key, value);
     if (result != old_result) {
-      // map_assoc returned a new map (autoreleased)
-      // Retain it to ensure it stays alive during iteration
-      result = RETAIN(result);
+      // New map produced; keep using it without extra retain/release churn
     }
     // If result == old_result, map_assoc modified in-place
     // Original 'a' stays alive (caller's responsibility in single-threaded system)
   }
 
-  // Return result (autoreleased from map_assoc if new, or original 'a' if in-place)
-  // If result was retained, caller must release it
+  // Return result (owned rc=1 if a new map was produced, or original 'a' if in-place)
   return result;
 }
 
@@ -592,10 +589,9 @@ CljPersistentMap* map_copy_with_additions(CljPersistentMap *parent_map, CljObjec
         map_conj(tmap, key, value);
     }
 
-    CljPersistentMap *result = map_persistent(tmap);
-    RETAIN(result);
-    RELEASE(tmap);
-    return result;
+  CljPersistentMap *result = map_persistent(tmap);
+  RELEASE(tmap);
+  return result;
 }
 
 // === Transient API (Phase 2) ===
@@ -627,7 +623,6 @@ void map_conj(CljTransientMap *tmap, ID key, ID value) {
     CljPersistentMap *updated = map_assoc_core(backing, key, value);
     if (updated && updated != backing) {
         ASSIGN(tmap->backing, updated);
-        RELEASE(updated);
     }
 }
 
@@ -640,7 +635,6 @@ void map_dissoc(CljTransientMap *tmap, ID key) {
     CljPersistentMap *updated = map_remove_core(backing, key);
     if (updated && updated != backing) {
         ASSIGN(tmap->backing, updated);
-        RELEASE(updated);
     }
 }
 
