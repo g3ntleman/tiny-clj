@@ -41,12 +41,12 @@ Ziel
 - Implementiere eine `thunk`-only Variante für `(for ...)`, bei der der 0‑Arg‑Thunk (eine `CljFunction`/Closure) seinen Iterations‑State in der Closure‑Env hält. Erwartung: Normalfall ist `rc == 1`, daher optimieren wir für Single‑Consumer. Falls `rc > 1`, kopieren wir die Closure inkl. des State‑Teils.
 
 Kernentscheidungen
-- Keine neuen C‑Structs: State wird als `CljObject` im Closure‑Env gehalten (z.B. `CljMap` oder `CljVector`).
+- Keine neuen C‑Structs: State wird als `CljObject` im Closure‑Env gehalten (z.B. `CljPersistentMap` oder `CljVector`).
 - Mutate‑in‑place: native Helfer `mutate_closure_state_inplace(thunk)` ändert den Iterator/Index im State nur wenn `thunk->base.rc == 1`.
 - Clone‑on‑share: native Helfer `clone_closure_with_state(thunk)` kopiert die Closure und deep‑kopiert nur den iterator‑spezifischen Teil des State (persistent Sub‑Objekte werden nur `RETAIN`ed).
 
 Designübersicht (Kurz)
-- `eval_for` baut ein `state_obj` (CljMap/CljVector) mit: `container`, iterator index/snapshot, `binding_spec`, `env_template`, `body_ref`.
+- `eval_for` baut ein `state_obj` (CljPersistentMap/CljVector) mit: `container`, iterator index/snapshot, `binding_spec`, `env_template`, `body_ref`.
 - `eval_for` erstellt eine native 0‑arity Thunk/Closure (`make_thunk_with_state(state_obj)`) und gibt `make_lazy_seq(thunk)` zurück.
 - Beim Realisieren ruft `lazy_seq_realize` den Thunk (Standardpfad). Der Thunk erzeugt `first` und einen `rest_thunk` basierend auf `state_obj`:
   - Wenn `thunk->base.rc == 1`: advance `state_obj` in‑place via `mutate_closure_state_inplace`, und `rest_thunk` re‑referenziert dieselbe Closure (günstig).
@@ -86,7 +86,7 @@ Implementierungs‑Schritte (konkret)
   - `clone_closure_with_state(thunk)`
   - `mutate_closure_state_inplace(thunk)`
 3. `eval_for` anpassen (0.5h)
-  - Baue `state_obj` (CljMap/CljVector) und erstelle `thunk = make_thunk_with_state(state_obj)`; return `make_lazy_seq(thunk)`.
+  - Baue `state_obj` (CljPersistentMap/CljVector) und erstelle `thunk = make_thunk_with_state(state_obj)`; return `make_lazy_seq(thunk)`.
 4. `lazy_seq_realize` anpassen (0.5h)
   - Nach Rückkehr des thunks: falls `lazy->base.rc > 1`, ersetze `cached_rest->thunk` durch `clone_closure_with_state(old_thunk)` (und `RELEASE` old thunk).
 5. Tests & Validierung (1–2h)

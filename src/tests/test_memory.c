@@ -45,7 +45,7 @@ TEST(test_memory_deallocation) {
     {
         // Test object lifecycle with heap-allocated object (not immediate)
         // Use a string object since symbols are singletons and don't use reference counting
-        CljObject *obj = (CljObject*)make_string("test_string_for_reference_counting");
+        CljString *obj = make_string("test_string_for_reference_counting");
         TEST_ASSERT_NOT_NULL(obj);
         
         // Test retain counting
@@ -183,10 +183,10 @@ TEST(test_cow_assumptions_rc_behavior) {
     // Test critical assumptions for Copy-on-Write implementation
     WITH_AUTORELEASE_POOL({
         // Test 1: AUTORELEASE does NOT increase RC
-        CljMap *map = (CljMap*)make_map(4);
+        CljPersistentMap *map = (CljPersistentMap*)make_map(4);
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
-        CljMap *same = AUTORELEASE((CljValue)map);
+        CljPersistentMap *same = AUTORELEASE((CljValue)map);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // RC bleibt 1!
         TEST_ASSERT_EQUAL_PTR(map, same);
         
@@ -293,7 +293,7 @@ TEST(test_zombie_detection) {
     // - releasing a zombie triggers UseAfterFreeError (double-free protection)
     
     // Create an object (rc = 1)
-    CljObject *obj = (CljObject*)make_string("test_zombie_object");
+    CljString *obj = make_string("test_zombie_object");
     TEST_ASSERT_NOT_NULL(obj);
     TEST_ASSERT_EQUAL_INT(1, obj->rc);
     

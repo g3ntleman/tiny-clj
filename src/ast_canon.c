@@ -916,7 +916,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     }
     
     if (tag == CLJ_MAP_PERSISTENT) {
-        CljMap *map = (CljMap*)expr;
+        CljPersistentMap *map = (CljPersistentMap*)expr;
         CLJ_ASSERT(map != NULL);
         int cnt = map_count(map);
         if (cnt <= 0) {
@@ -947,7 +947,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             return expr;  // No changes needed
         }
 
-        CljMap *new_map = make_map(cnt);
+        CljPersistentMap *new_map = make_map(cnt);
         for (int j = 0; j < cnt; j++) {
             ID k = pairs[j * 2];
             ID v = pairs[j * 2 + 1];

@@ -853,7 +853,7 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
     ID state_id = args[0];
     if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
 
-    CljMap *state = as_map(state_id);
+    CljPersistentMap *state = as_map(state_id);
     ID x_seqable = map_get_sentinel(state, SYM_CONCAT_X, NULL);
     ID y = map_get_sentinel(state, SYM_CONCAT_Y, NULL);
 
@@ -870,7 +870,7 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
     ID next_x = native_rest(&x_seq, 1);
 
     // Build next-state for rest thunk.
-    CljMap *rest_state = map_empty();
+    CljPersistentMap *rest_state = map_empty();
     map_assoc_inplace(&rest_state, SYM_CONCAT_X, next_x);
     map_assoc_inplace(&rest_state, SYM_CONCAT_Y, y);
 
@@ -901,7 +901,7 @@ ID native_concat(ID *args, unsigned int argc)
     if (!x && !y) return empty_list();
 
     // Build thunk state.
-    CljMap *state = map_empty();
+    CljPersistentMap *state = map_empty();
     map_assoc_inplace(&state, SYM_CONCAT_X, x);
     map_assoc_inplace(&state, SYM_CONCAT_Y, y);
 
@@ -1049,7 +1049,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     ID state_id = args[0];
     if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
 
-    CljMap *state = as_map(state_id);
+    CljPersistentMap *state = as_map(state_id);
     ID fn = map_get_sentinel(state, SYM_MAP_FN, NULL);
     ID seqs_vec_id = map_get_sentinel(state, SYM_MAP_SEQS, NULL);
     if (!fn || !seqs_vec_id || TAG(seqs_vec_id) != CLJ_VECTOR_PERSISTENT) return NULL;
@@ -1083,7 +1083,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     }
 
     // Build rest thunk state.
-    CljMap *rest_state = map_empty();
+    CljPersistentMap *rest_state = map_empty();
     map_assoc_inplace(&rest_state, SYM_MAP_FN, fn);
     map_assoc_inplace(&rest_state, SYM_MAP_SEQS, next_seqs);
     RELEASE(next_seqs);
@@ -1108,7 +1108,7 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
     ID state_id = args[0];
     if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
 
-    CljMap *state = as_map(state_id);
+    CljPersistentMap *state = as_map(state_id);
     ID fn = map_get_sentinel(state, SYM_MAPCAT_FN, NULL);
     ID coll = map_get_sentinel(state, SYM_MAPCAT_COLL, NULL);
     ID inner = map_get_sentinel(state, SYM_MAPCAT_INNER, NULL);
@@ -1127,7 +1127,7 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
                 ID inner_rest = native_rest(&inner_seq, 1);
 
                 // Build rest thunk state
-                CljMap *rest_state = map_empty();
+                CljPersistentMap *rest_state = map_empty();
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_FN, fn);
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_COLL, coll);
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_INNER, inner_rest);
@@ -1217,7 +1217,7 @@ ID native_map(ID *args, unsigned int argc)
     }
 
     // Build thunk state and return a LazySeq immediately.
-    CljMap *state = map_empty();
+    CljPersistentMap *state = map_empty();
     map_assoc_inplace(&state, SYM_MAP_FN, fn);
     map_assoc_inplace(&state, SYM_MAP_SEQS, seqs);
     RELEASE(seqs);
@@ -1257,7 +1257,7 @@ ID native_mapcat(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    CljMap *state = map_empty();
+    CljPersistentMap *state = map_empty();
     map_assoc_inplace(&state, SYM_MAPCAT_FN, fn);
     map_assoc_inplace(&state, SYM_MAPCAT_COLL, coll);
     map_assoc_inplace(&state, SYM_MAPCAT_INNER, NULL);
@@ -1741,7 +1741,7 @@ ID native_dissoc(ID *args, unsigned int argc)
     }
 
     // Remove keys one by one (Clojure semantics: multiple keys supported)
-    CljMap *result = map;
+    CljPersistentMap *result = map;
     for (unsigned int i = 1; i < argc; i++)
     {
         ID key = args[i];
@@ -1749,7 +1749,7 @@ ID native_dissoc(ID *args, unsigned int argc)
             continue; // Skip NULL keys
 
         // map_remove returns a new map (or original if key not found)
-        CljMap *new_result = map_remove(result, key);
+        CljPersistentMap *new_result = map_remove(result, key);
         if (new_result != result)
         {
             // New map was created - release old one if it was retained
@@ -1778,7 +1778,7 @@ ID native_merge(ID *args, unsigned int argc)
         return NULL;
 
     // Start with first non-nil map
-    CljMap *result = NULL;
+    CljPersistentMap *result = NULL;
     unsigned int start_idx = 0;
 
     for (unsigned int i = 0; i < argc; i++)
@@ -1815,7 +1815,7 @@ ID native_merge(ID *args, unsigned int argc)
             return NULL;
         }
 
-        CljMap *new_result = map_merge(result, m, true); // overwrite=true
+        CljPersistentMap *new_result = map_merge(result, m, true); // overwrite=true
         if (new_result != result && i > start_idx)
         {
             // Don't release original arg
@@ -1989,7 +1989,7 @@ ID native_into(ID *args, unsigned int argc)
         else if (from_tag == CLJ_MAP_PERSISTENT || from_tag == CLJ_MAP_TRANSIENT)
         {
             // Map entries become [k v] vectors
-            CljMap *m = from;
+            CljPersistentMap *m = from;
             for (int i = 0; i < m->capacity; i++)
             {
                 ID key = KV_KEY(m->data, i);
@@ -2027,7 +2027,7 @@ ID native_into(ID *args, unsigned int argc)
     // Handle map target
     if (to_tag == CLJ_MAP_PERSISTENT || to_tag == CLJ_MAP_TRANSIENT)
     {
-        CljMap *result = to;
+        CljPersistentMap *result = to;
 
         CljType from_tag = TAG(from);
         if (from_tag == CLJ_MAP_PERSISTENT || from_tag == CLJ_MAP_TRANSIENT)
@@ -2110,8 +2110,8 @@ ID native_select_keys(ID *args, unsigned int argc)
         return NULL;
     }
 
-    CljMap *result = map_empty();
-    CljMap *source = m;
+    CljPersistentMap *result = map_empty();
+    CljPersistentMap *source = m;
 
     if (keys_tag == CLJ_VECTOR_PERSISTENT || keys_tag == CLJ_VECTOR_TRANSIENT)
     {
@@ -2167,7 +2167,7 @@ ID native_find(ID *args, unsigned int argc)
         return NULL;
     }
 
-    CljMap *map = m;
+    CljPersistentMap *map = m;
 
     if (!map_contains(map, key))
     {
@@ -2200,7 +2200,7 @@ ID native_transient(ID *args, unsigned int argc)
     case CLJ_VECTOR_PERSISTENT:
         return vector_transient(as_persistent_vector(coll));
     case CLJ_MAP_PERSISTENT:
-        return map_transient(coll);
+        return (ID)map_transient(as_persistent_map(coll));
     case CLJ_VECTOR_TRANSIENT:
     case CLJ_MAP_TRANSIENT:
         // transient on transient returns the same object
@@ -2231,7 +2231,7 @@ ID native_persistent_bang(ID *args, unsigned int argc)
     case CLJ_VECTOR_TRANSIENT:
         return vector_persistent(coll);
     case CLJ_MAP_TRANSIENT:
-        return map_persistent(coll);
+        return (ID)map_persistent(as_transient_map(coll));
     case CLJ_VECTOR_PERSISTENT:
     case CLJ_MAP_PERSISTENT:
         // persistent! on persistent returns the same object
@@ -2270,7 +2270,8 @@ ID native_conj_bang(ID *args, unsigned int argc)
     {
         if (argc != 3)
             return NULL; // conj! for maps needs key-value pair
-        return map_conj(coll, args[1], args[2]);
+        map_conj(as_transient_map(coll), args[1], args[2]);
+        return coll;
     }
 
     // Throw exception for unsupported collection type
@@ -2490,7 +2491,7 @@ ID native_array_map(ID *args, unsigned int argc)
         return make_map(0);
     }
 
-    CljMap *map = make_map(pair_count);
+    CljPersistentMap *map = make_map(pair_count);
 
     // Add all key-value pairs
     // CRITICAL: map_assoc may return a new map (COW), so we must use the result
@@ -2498,7 +2499,7 @@ ID native_array_map(ID *args, unsigned int argc)
     {
         ID key = args[i];
         ID value = args[i + 1];
-        CljMap *updated_map = map_assoc(map, key, value);
+        CljPersistentMap *updated_map = map_assoc(map, key, value);
         ASSIGN(map, updated_map);
     }
 
@@ -2611,7 +2612,7 @@ ID native_run_next_task(ID *args, unsigned int argc)
     if (argc != 0)
         return NULL;
     EvalState *st = get_global_eval_state();
-    CljMap *env = NULL;
+    CljPersistentMap *env = NULL;
     bool ran = false;
     TRY
     {
@@ -3158,13 +3159,13 @@ ID native_ns_unload(ID *args, unsigned int argc)
             ID top_id = vector_nth(fn->env_stack, (int)(sc - 1));
             if (!top_id || TAG(top_id) != CLJ_MAP_PERSISTENT) continue;
 
-            CljMap *top_map = (CljMap*)top_id;
+            CljPersistentMap *top_map = (CljPersistentMap*)top_id;
 
             // Only clear the simplest self-binding case: a single-entry map that points back to fn.
             if (map_count(top_map) == 1) {
                 MAP_FOR_EACH(top_map, sk, sv) {
                     if (sv == (ID)fn) {
-                        CljMap *tmp = top_map;
+                        CljPersistentMap *tmp = top_map;
                         map_assoc_inplace(&tmp, (ID)sk, NULL);
                         if (tmp && tmp != top_map) {
                             vector_assoc_inplace(&fn->env_stack, sc - 1, (ID)tmp);
@@ -3192,7 +3193,7 @@ ID native_ns_unload(ID *args, unsigned int argc)
     }
 
     // Remove from registry; releasing the old registry map releases the namespace object.
-    map_remove_inplace(&g_runtime.ns_registry, name_sym);
+    map_dissoc(g_runtime.ns_registry, name_sym);
 
     // Invalidate resolve cache so cached refs to unloaded namespace values are released.
     ns_invalidate_resolve_cache();
@@ -3420,7 +3421,7 @@ ID native_get_thread_bindings(ID *args, unsigned int argc)
     // Prefer the current eval state when running inside evaluation.
     EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
 
-    CljMap *out = map_empty();
+    CljPersistentMap *out = map_empty();
     RETAIN(out);
 
     if (st && st->dynamic_bindings) {
@@ -3429,7 +3430,7 @@ ID native_get_thread_bindings(ID *args, unsigned int argc)
         for (unsigned int i = 0; i < depth; i++) {
             ID frame_id = vector_nth(backing, i);
             if (!frame_id || TAG(frame_id) != CLJ_MAP_PERSISTENT) continue;
-            ASSIGN(out, map_merge(out, (CljMap*)frame_id, true));
+            ASSIGN(out, map_merge(out, (CljPersistentMap*)frame_id, true));
         }
     }
 
@@ -4454,7 +4455,7 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
     if (!source_ns || !target_ns || !source_ns->mappings)
         return;
 
-    CljMap *map = source_ns->mappings;
+    CljPersistentMap *map = source_ns->mappings;
     if (!map)
         return;
 
@@ -5568,13 +5569,13 @@ static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {
     ID state_id = targs[0];
     if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
 
-    CljMap *state = as_map(state_id);
+    CljPersistentMap *state = as_map(state_id);
     ID cur_id = map_get_sentinel(state, SYM_RANGE_CUR, NULL);
     if (!is_fixnum(cur_id)) return NULL;
     int cur = AS_FIXNUM(cur_id);
 
     // Next state
-    CljMap *rest_state = map_empty();
+    CljPersistentMap *rest_state = map_empty();
     map_assoc_inplace(&rest_state, SYM_RANGE_CUR, fixnum(cur + 1));
 
     ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
@@ -5598,7 +5599,7 @@ ID native_range(ID *args, unsigned int argc)
 
     // 0-arity: infinite lazy range starting at 0, step 1.
     if (argc == 0) {
-        CljMap *state = map_empty();
+        CljPersistentMap *state = map_empty();
         map_assoc_inplace(&state, SYM_RANGE_CUR, fixnum(0));
 
         ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
@@ -6719,7 +6720,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         return NULL;
     }
 
-    CljMap *m = make_map(8);
+    CljPersistentMap *m = make_map(8);
     if (!m)
         return NULL;
 
@@ -6770,7 +6771,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     ID k_total_deallocations = (ID)intern_symbol_global(":total-deallocations");
     ID k_memory_leaks = (ID)intern_symbol_global(":memory-leaks");
 
-    CljMap *ms = make_map(12);
+    CljPersistentMap *ms = make_map(12);
     if (ms)
     {
         // Fixnum range is limited; clamp to avoid overflow/truncation surprises.
@@ -6805,7 +6806,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         ASSIGN(ms, map_assoc(ms, k_memory_leaks, fixnum(mleaks)));
 
         // Bytes by type: map of type-name (keyword) -> {:bytes-current :bytes-peak :alloc-count :dealloc-count}.
-        CljMap *by_type = make_map(0);
+        CljPersistentMap *by_type = make_map(0);
         if (by_type) {
             for (int ti = 0; ti < CLJ_TYPE_COUNT; ti++) {
                 size_t bc = g_memory_stats.bytes_current_by_type[ti];
@@ -6822,7 +6823,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 
                 ID k_type = (ID)make_string(clj_type_name((CljType)ti));
 
-                CljMap *row = make_map(4);
+                CljPersistentMap *row = make_map(4);
                 if (!row) break;
                 ASSIGN(row, map_assoc(row, k_bytes_current, fixnum(bc_i)));
                 ASSIGN(row, map_assoc(row, k_bytes_peak, fixnum(bp_i)));
@@ -6856,7 +6857,7 @@ static ID native_clojure_pprint_pprint_str(ID *args, unsigned int argc)
     if (tag == CLJ_MAP_PERSISTENT)
     {
         pos = format_append(out, pos, sizeof(out), "{\n");
-        CljMap *m = (CljMap *)x;
+        CljPersistentMap *m = (CljPersistentMap *)x;
         MAP_FOR_EACH(m, k, v)
         {
             pos = format_append(out, pos, sizeof(out), "  ");
@@ -6948,7 +6949,7 @@ ID native_datetime_civil_from_days(ID *args, unsigned int argc)
     if (!SYM_KW_YEAR || !SYM_KW_MONTH || !SYM_KW_DAY)
         return NULL;
 
-    CljMap *m = map_empty();
+    CljPersistentMap *m = map_empty();
     ASSIGN(m, map_assoc(m, SYM_KW_YEAR, fixnum(year)));
     ASSIGN(m, map_assoc(m, SYM_KW_MONTH, fixnum(month)));
     ASSIGN(m, map_assoc(m, SYM_KW_DAY, fixnum(day)));
@@ -7128,7 +7129,7 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func)
         init_special_symbols();
 
         // Create metadata map with :name and :ns
-        CljMap *meta_map = make_map(4);
+        CljPersistentMap *meta_map = make_map(4);
         if (meta_map)
         {
             // Add :name (function name as string)

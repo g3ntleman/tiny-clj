@@ -3,7 +3,7 @@
 #include "symbol.h"
 #include "value.h"
 
-ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 TEST_SHARED(test_time_basic_functionality) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -18,7 +18,7 @@ TEST_SHARED(test_time_basic_functionality) {
 
 TEST_SHARED(test_time_arity_validation) {
     CljList *time_list = AUTORELEASE(make_list(SYM_TIME, NULL));
-    CljMap *env = AUTORELEASE(make_map(16));
+    CljPersistentMap *env = AUTORELEASE(make_map(16));
     
     TRY {
         ID result = eval_time(time_list, env, g_test_eval_state, NULL);
@@ -31,7 +31,7 @@ TEST_SHARED(test_time_arity_validation) {
 TEST_SHARED(test_time_with_too_many_arguments) {
     CljList *time_list = AUTORELEASE(make_list(SYM_TIME, 
         make_list(fixnum(1), make_list(fixnum(2), NULL))));
-    CljMap *env = AUTORELEASE(make_map(16));
+    CljPersistentMap *env = AUTORELEASE(make_map(16));
     
     TRY {
         ID result = eval_time(time_list, env, g_test_eval_state, NULL);

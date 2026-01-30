@@ -335,11 +335,11 @@ TEST(test_truthiness_comprehensive) {
         TEST_ASSERT_TRUE(clj_is_truthy(char_zero));
         
         // Strings are truthy (including empty strings)
-        CljObject *empty_string = AUTORELEASE(make_string(""));
+        CljString *empty_string = AUTORELEASE(make_string(""));
         TEST_ASSERT_NOT_NULL(empty_string);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_string));
         
-        CljObject *non_empty_string = AUTORELEASE(make_string("hello"));
+        CljString *non_empty_string = AUTORELEASE(make_string("hello"));
         TEST_ASSERT_NOT_NULL(non_empty_string);
         TEST_ASSERT_TRUE(clj_is_truthy(non_empty_string));
         
@@ -375,15 +375,15 @@ TEST(test_truthiness_comprehensive) {
         TEST_ASSERT_TRUE(clj_is_truthy(non_empty_vec));
         
         // Empty map is truthy
-        CljMap *empty_map = AUTORELEASE(make_map(0));
+        CljPersistentMap *empty_map = AUTORELEASE(make_map(0));
         TEST_ASSERT_NOT_NULL(empty_map);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_map));
         
         // Non-empty map is truthy
-        CljMap *non_empty_map = AUTORELEASE(make_map(4));
+        CljPersistentMap *non_empty_map = AUTORELEASE(make_map(4));
         TEST_ASSERT_NOT_NULL(non_empty_map);
         // map_assoc always returns a new map (COW disabled)
-        CljMap *new_map = AUTORELEASE(map_assoc(non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1)));
+        CljPersistentMap *new_map = AUTORELEASE(map_assoc(non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1)));
         TEST_ASSERT_NOT_NULL(new_map);
         TEST_ASSERT_TRUE(clj_is_truthy(new_map));
         

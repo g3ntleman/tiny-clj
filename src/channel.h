@@ -10,21 +10,20 @@
 /** Create a channel (promise-like) as a transient map.
  * @return New transient map channel with RC=1 (caller must release)
  */
-CljMap* make_result_channel(void);
+CljTransientMap* make_result_channel(void);
 
 /** Put a value into the channel (mutates in-place using map_conj).
  * @param chan Channel (transient map)
  * @param value Value to put (can be NULL/nil or immediate)
  */
-void result_channel_put(CljMap *chan, ID value);
+void result_channel_put(CljTransientMap *chan, ID value);
 
 /** Close the channel (mutates in-place using map_conj).
  * @param chan Channel (transient map)
  */
-void result_channel_close(CljMap *chan);
+void result_channel_close(CljTransientMap *chan);
 
 #endif
-
 
 
 

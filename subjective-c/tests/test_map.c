@@ -1,12 +1,12 @@
 #include "test_common.h"
-static CljMap* adopt_map(CljMap *current, CljMap *updated) {
+static CljPersistentMap* adopt_map(CljPersistentMap *current, CljPersistentMap *updated) {
     if (!updated) return current;
     if (current && current != updated) RELEASE(current);
     return updated;
 }
 
-static CljMap* make_map_or_fail(int capacity) {
-    CljMap *map = make_map(capacity);
+static CljPersistentMap* make_map_or_fail(int capacity) {
+    CljPersistentMap *map = make_map(capacity);
     TEST_ASSERT_NOT_NULL(map);
     return map;
 }
@@ -17,7 +17,7 @@ static void expect_special(CljValue value, uint8_t expected) {
 }
 
 TEST(test_map_assoc_updates_interned_symbol_key) {
-    CljMap *map = make_map_or_fail(2);
+    CljPersistentMap *map = make_map_or_fail(2);
     ID kw = make_string(":closed");
     TEST_ASSERT_NOT_NULL(kw);
 
@@ -35,7 +35,7 @@ TEST(test_map_assoc_updates_interned_symbol_key) {
 }
 
 TEST(test_map_assoc_channel_pattern) {
-    CljMap *chan = make_map_or_fail(2);
+    CljPersistentMap *chan = make_map_or_fail(2);
     ID kw_value = make_string(":value");
     ID kw_closed = make_string(":closed");
 
@@ -75,7 +75,7 @@ TEST(test_assign_with_immediates) {
 }
 
 TEST(test_assign_immediates_in_map) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID kw = make_string(":test");
 
     map = adopt_map(map, map_assoc(map, kw, clj_false));
@@ -98,7 +98,7 @@ TEST(test_assign_immediates_in_map) {
 }
 
 TEST(test_map_assoc_with_different_intern_calls) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID kw_value = make_string(":value");
     ID kw_closed = make_string(":closed");
 
@@ -119,7 +119,7 @@ TEST(test_map_assoc_with_different_intern_calls) {
 }
 
 TEST(test_map_assoc_with_null_value) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID kw = make_string(":value");
 
     map = adopt_map(map, map_assoc(map, kw, NULL));
@@ -139,7 +139,7 @@ TEST(test_map_assoc_with_null_value) {
 }
 
 TEST(test_exact_channel_pattern) {
-    CljMap *chan = make_map_or_fail(4);
+    CljPersistentMap *chan = make_map_or_fail(4);
     ID kw_value = make_string(":value");
     ID kw_closed = make_string(":closed");
 
@@ -159,7 +159,7 @@ TEST(test_exact_channel_pattern) {
 }
 
 TEST(test_map_assoc_with_pointer_equality) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID kw = make_string(":test");
 
     map = adopt_map(map, map_assoc(map, kw, fixnum(42)));
@@ -178,7 +178,7 @@ TEST(test_map_assoc_with_pointer_equality) {
 }
 
 TEST(test_map_assoc_with_structural_equality) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     CljString *str1 = make_clj_string("test-key");
     CljString *str2 = make_clj_string("test-key");
     ID key1 = str1;
@@ -201,7 +201,7 @@ TEST(test_map_assoc_with_structural_equality) {
 }
 
 TEST(test_map_assoc_performance_unchanged) {
-    CljMap *map = make_map_or_fail(100);
+    CljPersistentMap *map = make_map_or_fail(100);
     ID kw = make_string(":test");
 
     for (int i = 0; i < 50; i++) {
@@ -220,7 +220,7 @@ TEST(test_map_assoc_performance_unchanged) {
 }
 
 TEST(test_map_remove_behavior) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID kw1 = AUTORELEASE(make_string(":key1"));
     ID kw2 = AUTORELEASE(make_string(":key2"));
     ID kw3 = AUTORELEASE(make_string(":key3"));
@@ -229,7 +229,7 @@ TEST(test_map_remove_behavior) {
     map = adopt_map(map, map_assoc(map, kw2, fixnum(2)));
     TEST_ASSERT_EQUAL_INT(2, map->count);
 
-    CljMap *removed_map = map_remove(map, kw1);
+    CljPersistentMap *removed_map = map_remove(map, kw1);
     TEST_ASSERT_NOT_NULL(removed_map);
     TEST_ASSERT_TRUE(removed_map != map);
     TEST_ASSERT_EQUAL_INT(1, removed_map->count);
@@ -239,7 +239,7 @@ TEST(test_map_remove_behavior) {
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(val_kw2));
     RELEASE(removed_map);
 
-    CljMap *unchanged_map = map_remove(map, kw3);
+    CljPersistentMap *unchanged_map = map_remove(map, kw3);
     TEST_ASSERT_EQUAL_PTR(map, unchanged_map);
     TEST_ASSERT_EQUAL_INT(2, map->count);
 
@@ -247,8 +247,8 @@ TEST(test_map_remove_behavior) {
 }
 
 TEST(test_map_merge_overwrite_flag) {
-    CljMap *map1 = make_map_or_fail(4);
-    CljMap *map2 = make_map_or_fail(4);
+    CljPersistentMap *map1 = make_map_or_fail(4);
+    CljPersistentMap *map2 = make_map_or_fail(4);
     ID kw = AUTORELEASE(make_string(":shared"));
     ID kw1 = AUTORELEASE(make_string(":key1"));
     ID kw2 = AUTORELEASE(make_string(":key2"));
@@ -265,7 +265,7 @@ TEST(test_map_merge_overwrite_flag) {
     CljValue test_kw2 = map_get(map2, kw);
     TEST_ASSERT_TRUE(test_kw2 != NOT_FOUND);
 
-    CljMap *merged_no_overwrite = map_merge(map1, map2, false);
+    CljPersistentMap *merged_no_overwrite = map_merge(map1, map2, false);
     TEST_ASSERT_NOT_NULL(merged_no_overwrite);
     CljValue val_shared = map_get_sentinel(merged_no_overwrite, kw, NULL);
     TEST_ASSERT_NOT_NULL(val_shared);
@@ -285,7 +285,7 @@ TEST(test_map_merge_overwrite_flag) {
         RELEASE(merged_no_overwrite);
     }
 
-    CljMap *merged_overwrite = map_merge(map1, map2, true);
+    CljPersistentMap *merged_overwrite = map_merge(map1, map2, true);
     TEST_ASSERT_NOT_NULL(merged_overwrite);
     
     // Verify merge worked - the merged map should have keys from both maps
@@ -335,7 +335,7 @@ TEST(test_map_merge_overwrite_flag) {
 }
 
 TEST(test_map_contains_structural_match) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     CljString *str1 = (CljString*)AUTORELEASE(make_clj_string("test-symbol"));
     CljString *str2 = (CljString*)AUTORELEASE(make_clj_string("test-symbol"));
     ID key1 = str1;
@@ -354,7 +354,7 @@ TEST(test_map_contains_structural_match) {
 }
 
 TEST(test_map_copy_capacity_growth) {
-    CljMap *map = make_map_or_fail(2);
+    CljPersistentMap *map = make_map_or_fail(2);
     ID kw1 = AUTORELEASE(make_string(":key1"));
     ID kw2 = AUTORELEASE(make_string(":key2"));
     ID kw3 = AUTORELEASE(make_string(":key3"));
@@ -364,7 +364,7 @@ TEST(test_map_copy_capacity_growth) {
     TEST_ASSERT_EQUAL_INT(2, map->count);
     TEST_ASSERT_EQUAL_INT(2, map->capacity);
 
-    CljMap *expanded_map = map_assoc(map, kw3, fixnum(3));
+    CljPersistentMap *expanded_map = map_assoc(map, kw3, fixnum(3));
     TEST_ASSERT_NOT_NULL(expanded_map);
     TEST_ASSERT_TRUE(expanded_map != map);
     TEST_ASSERT_EQUAL_INT(3, expanded_map->count);
@@ -372,7 +372,7 @@ TEST(test_map_copy_capacity_growth) {
     RELEASE(expanded_map);
 
     RETAIN(map);
-    CljMap *copied_map = map_assoc(map, kw1, fixnum(10));
+    CljPersistentMap *copied_map = map_assoc(map, kw1, fixnum(10));
     TEST_ASSERT_NOT_NULL(copied_map);
     TEST_ASSERT_TRUE(copied_map != map);
     TEST_ASSERT_EQUAL_INT(2, copied_map->count);
@@ -386,7 +386,7 @@ TEST(test_map_copy_capacity_growth) {
 }
 
 TEST(test_map_keys) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID kw1 = AUTORELEASE(make_string(":key1"));
     ID kw2 = AUTORELEASE(make_string(":key2"));
     ID kw3 = AUTORELEASE(make_string(":key3"));
@@ -407,7 +407,7 @@ TEST(test_map_keys) {
 }
 
 TEST(test_map_vals) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID kw1 = AUTORELEASE(make_string(":key1"));
     ID kw2 = AUTORELEASE(make_string(":key2"));
     ID kw3 = AUTORELEASE(make_string(":key3"));
@@ -428,7 +428,7 @@ TEST(test_map_vals) {
 }
 
 TEST(test_map_put) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID kw = AUTORELEASE(make_string(":test"));
     
     map_put(map, kw, fixnum(42));
@@ -453,7 +453,7 @@ static void foreach_callback(ID key, ID value) {
 }
 
 TEST(test_map_foreach) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID kw1 = AUTORELEASE(make_string(":key1"));
     ID kw2 = AUTORELEASE(make_string(":key2"));
     ID kw3 = AUTORELEASE(make_string(":key3"));
@@ -476,7 +476,7 @@ TEST(test_make_transient_map_from_kv) {
     ID val1 = fixnum(10);
     ID val2 = fixnum(20);
     
-    CljMap *tmap = make_transient_map_from_kv(2, kw1, val1, kw2, val2);
+    CljTransientMap *tmap = make_transient_map_from_kv(2, kw1, val1, kw2, val2);
     TEST_ASSERT_NOT_NULL(tmap);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_TRANSIENT, TAG(tmap));
     TEST_ASSERT_EQUAL_INT(2, map_count(tmap));
@@ -504,7 +504,7 @@ TEST(test_make_map_from_stack) {
     pairs[4] = (CljObject*)kw3;
     pairs[5] = (CljObject*)fixnum(3);
     
-    CljMap *map = make_map_from_stack(pairs, 3);
+    CljPersistentMap *map = make_map_from_stack(pairs, 3);
     TEST_ASSERT_NOT_NULL(map);
     TEST_ASSERT_EQUAL_INT(3, map->count);
     
@@ -522,7 +522,7 @@ TEST(test_make_map_from_stack) {
 }
 
 TEST(test_map_copy_with_additions) {
-    CljMap *parent = make_map_or_fail(4);
+    CljPersistentMap *parent = make_map_or_fail(4);
     ID kw1 = AUTORELEASE(make_string(":key1"));
     
     parent = adopt_map(parent, map_assoc(parent, kw1, fixnum(10)));
@@ -536,7 +536,7 @@ TEST(test_map_copy_with_additions) {
     additions[2] = (CljObject*)kw4;
     additions[3] = (CljObject*)fixnum(40);
     
-    CljMap *result = map_copy_with_additions(parent, additions, 2);
+    CljPersistentMap *result = map_copy_with_additions(parent, additions, 2);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(3, map_count(result));
     
@@ -555,12 +555,12 @@ TEST(test_map_copy_with_additions) {
 }
 
 TEST(test_map_transient) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID kw = AUTORELEASE(make_string(":test"));
     map = adopt_map(map, map_assoc(map, kw, fixnum(42)));
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(map));
     
-    CljMap *tmap = map_transient(map);
+    CljTransientMap *tmap = map_transient(map);
     TEST_ASSERT_NOT_NULL(tmap);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_TRANSIENT, TAG(tmap));
     TEST_ASSERT_EQUAL_INT(1, map_count(tmap));
@@ -574,22 +574,18 @@ TEST(test_map_transient) {
 }
 
 TEST(test_map_conj) {
-    CljMap *map = make_map_or_fail(4);
-    CljMap *tmap = map_transient(map);
+    CljPersistentMap *map = make_map_or_fail(4);
+    CljTransientMap *tmap = map_transient(map);
     RELEASE(map);
     
     ID kw1 = AUTORELEASE(make_string(":key1"));
     ID kw2 = AUTORELEASE(make_string(":key2"));
     
-    CljMap *result1 = map_conj(tmap, kw1, fixnum(10));
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_EQUAL_PTR(tmap, result1);
-    TEST_ASSERT_EQUAL_INT(1, map_count(result1));
+    map_conj(tmap, kw1, fixnum(10));
+    TEST_ASSERT_EQUAL_INT(1, map_count(tmap));
     
-    CljMap *result2 = map_conj(tmap, kw2, fixnum(20));
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_PTR(tmap, result2);
-    TEST_ASSERT_EQUAL_INT(2, map_count(result2));
+    map_conj(tmap, kw2, fixnum(20));
+    TEST_ASSERT_EQUAL_INT(2, map_count(tmap));
     
     CljValue v1 = map_get_sentinel(tmap, kw1, NULL);
     CljValue v2 = map_get_sentinel(tmap, kw2, NULL);
@@ -598,8 +594,7 @@ TEST(test_map_conj) {
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(v1));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(v2));
     
-    CljMap *result3 = map_conj(tmap, kw1, fixnum(100));
-    TEST_ASSERT_EQUAL_PTR(tmap, result3);
+    map_conj(tmap, kw1, fixnum(100));
     CljValue v1_updated = map_get_sentinel(tmap, kw1, NULL);
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(v1_updated));
     
@@ -607,16 +602,17 @@ TEST(test_map_conj) {
 }
 
 TEST(test_map_persistent) {
-    CljMap *map = make_map_or_fail(4);
-    CljMap *tmap = map_transient(map);
+    CljPersistentMap *map = make_map_or_fail(4);
+    CljTransientMap *tmap = map_transient(map);
     RELEASE(map);
     
     ID kw = AUTORELEASE(make_string(":test"));
     map_conj(tmap, kw, fixnum(42));
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_TRANSIENT, TAG(tmap));
     
-    CljMap *persistent = map_persistent(tmap);
+    CljPersistentMap *persistent = map_persistent(tmap);
     TEST_ASSERT_NOT_NULL(persistent);
+    RETAIN(persistent);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(persistent));
     TEST_ASSERT_EQUAL_INT(1, map_count(persistent));
     
@@ -624,12 +620,12 @@ TEST(test_map_persistent) {
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
     
-    RELEASE(persistent);
     RELEASE(tmap);
+    RELEASE(persistent);
 }
 
 TEST(test_map_nil_as_key_assoc_and_get) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID value = AUTORELEASE(fixnum(42));
     
     // Add nil (NULL) as key
@@ -650,7 +646,7 @@ TEST(test_map_nil_as_key_assoc_and_get) {
 }
 
 TEST(test_map_nil_as_key_remove) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID value = AUTORELEASE(fixnum(42));
     
     // Add nil (NULL) as key
@@ -658,7 +654,7 @@ TEST(test_map_nil_as_key_remove) {
     TEST_ASSERT_EQUAL_INT(1, map->count);
     
     // Remove nil key
-    CljMap *removed_map = map_remove(map, NULL);
+    CljPersistentMap *removed_map = map_remove(map, NULL);
     TEST_ASSERT_NOT_NULL(removed_map);
     TEST_ASSERT_EQUAL_INT(0, removed_map->count);
     
@@ -671,7 +667,7 @@ TEST(test_map_nil_as_key_remove) {
 }
 
 TEST(test_map_nil_as_value_assoc_and_get) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID key = AUTORELEASE(make_string(":test"));
     
     // Add nil (NULL) as value
@@ -700,7 +696,7 @@ TEST(test_map_nil_as_value_assoc_and_get) {
 }
 
 TEST(test_map_nil_as_value_remove) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID key = AUTORELEASE(make_string(":test"));
     
     // Add nil (NULL) as value
@@ -708,7 +704,7 @@ TEST(test_map_nil_as_value_remove) {
     TEST_ASSERT_EQUAL_INT(1, map->count);
     
     // Remove the key
-    CljMap *removed_map = map_remove(map, key);
+    CljPersistentMap *removed_map = map_remove(map, key);
     TEST_ASSERT_NOT_NULL(removed_map);
     TEST_ASSERT_EQUAL_INT(0, removed_map->count);
     
@@ -721,7 +717,7 @@ TEST(test_map_nil_as_value_remove) {
 }
 
 TEST(test_map_nil_key_and_value_together) {
-    CljMap *map = make_map_or_fail(4);
+    CljPersistentMap *map = make_map_or_fail(4);
     ID non_nil_key = AUTORELEASE(make_string(":other"));
     
     // Add nil key with nil value
@@ -744,7 +740,7 @@ TEST(test_map_nil_key_and_value_together) {
     TEST_ASSERT_EQUAL_INT(99, as_fixnum(other_result));
     
     // Remove nil key
-    CljMap *removed_map = map_remove(map, NULL);
+    CljPersistentMap *removed_map = map_remove(map, NULL);
     TEST_ASSERT_EQUAL_INT(1, removed_map->count);
     
     // Verify nil key is gone but other key remains

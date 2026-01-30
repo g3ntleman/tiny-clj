@@ -124,40 +124,6 @@ __attribute__((unused)) static void release_namespace_callback(ID key, ID value)
     RELEASE(ns);
 }
 
-// Helper function to grow transient map when capacity is exceeded
-// Returns new transient map with doubled capacity, or NULL on error
-static CljMap* grow_transient_map(CljMap *old_map) {
-    if (!old_map) return NULL;
-    
-    // Calculate new capacity (double the old capacity, minimum 4)
-    int new_capacity = old_map->capacity * 2;
-    if (new_capacity < 4) new_capacity = 4;
-    
-    // Allocate new map with larger capacity
-    size_t struct_size = sizeof(CljMap);
-    size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
-    CljMap *new_map = malloc(struct_size + data_size);
-    if (!new_map) return NULL;
-    
-    // Initialize new transient map
-    new_map->base.type = CLJ_MAP_TRANSIENT;
-    new_map->base.rc = 1;
-    new_map->count = 0;
-    new_map->capacity = new_capacity;
-    
-    // Initialize data array
-    for (int i = 0; i < new_capacity * 2; i++) {
-        new_map->data[i] = NULL;
-    }
-    
-    for (int i = 0; i < old_map->count; i++) {
-        map_conj(new_map, KV_KEY(old_map->data, i), KV_VALUE(old_map->data, i));
-    }
-    
-    return new_map;
-}
-
-
 /** Initialize namespace registry if not already initialized.
  * This is a helper function to ensure the registry exists before use.
  * Follows DRY principle - used by ns_get_or_create(), ns_register(), and runtime_init().
@@ -169,8 +135,8 @@ static int ns_init_registry(void) {
         return 0; // Already initialized
     }
     
-    CljMap *ns_map = make_map(16);
-    CljMap *transient_map = map_transient(ns_map);
+    CljPersistentMap *ns_map = make_map(16);
+    CljTransientMap *transient_map = map_transient(ns_map);
     RELEASE(ns_map); // map_transient() retains the result
     g_runtime.ns_registry = transient_map;
     
@@ -266,33 +232,10 @@ CljNamespace* ns_get_or_create(const char *cname, const char *file) {
     CljNamespace *ns = make_namespace(cname, file);
     if (!ns) return NULL;
 
-    CljMap *new_registry = map_conj(g_runtime.ns_registry, name_symbol, ns);
-    if (!new_registry) {
-        // Capacity exceeded - grow the map
-        CljMap *grown_map = grow_transient_map(g_runtime.ns_registry);
-        if (grown_map) {
-            RELEASE(g_runtime.ns_registry);
-            g_runtime.ns_registry = grown_map;
-            // Try again with the grown map
-            new_registry = map_conj(g_runtime.ns_registry, name_symbol, ns);
-            if (!new_registry) {
-                // Still failed - this should not happen, but handle gracefully
-                RELEASE(ns);
-                return NULL;
-            }
-        } else {
-            // Failed to grow map - OOM
-            RELEASE(ns);
-            return NULL;
-        }
-    }
-    g_runtime.ns_registry = new_registry;
+    map_conj(g_runtime.ns_registry, name_symbol, ns);
     
     if (ns->name == SYM_CLOJURE_CORE) {
-        CljMap *new_registry_with_null = map_conj(g_runtime.ns_registry, NULL, ns);
-        if (new_registry_with_null) {
-            g_runtime.ns_registry = new_registry_with_null;
-        }
+        map_conj(g_runtime.ns_registry, NULL, ns);
     }
     
     return ns;
@@ -507,36 +450,11 @@ void ns_register(CljNamespace *ns) {
     // Add namespace to registry map (Key: ns->name, Value: ns)
     // map_conj() retains the value, so we need to retain ns before adding
     RETAIN(ns);
-    CljMap *new_registry = map_conj(g_runtime.ns_registry, ns->name, ns);
-    if (!new_registry) {
-        // Capacity exceeded - grow the map
-        CljMap *grown_map = grow_transient_map(g_runtime.ns_registry);
-        if (grown_map) {
-            RELEASE(g_runtime.ns_registry);
-            g_runtime.ns_registry = grown_map;
-            // Try again with the grown map
-            new_registry = map_conj(g_runtime.ns_registry, ns->name, ns);
-            if (!new_registry) {
-                // Still failed - this should not happen, but handle gracefully
-                RELEASE(ns);
-                return;
-            }
-        } else {
-            // Failed to grow map - OOM
-            RELEASE(ns);
-            return;
-        }
-    }
-    g_runtime.ns_registry = new_registry;
+    map_conj(g_runtime.ns_registry, ns->name, ns);
     
     if (ns->name == SYM_CLOJURE_CORE) {
         RETAIN(ns);
-        CljMap *new_registry_with_null = map_conj(g_runtime.ns_registry, NULL, ns);
-        if (new_registry_with_null) {
-            g_runtime.ns_registry = new_registry_with_null;
-        } else {
-            RELEASE(ns);
-        }
+        map_conj(g_runtime.ns_registry, NULL, ns);
     }
 }
 
@@ -589,7 +507,7 @@ CljNamespace* ns_find(const char *cname) {
 
 void ns_cleanup() {
     if (g_runtime.ns_registry) {
-        CljMap *registry_to_free = g_runtime.ns_registry;
+        CljTransientMap *registry_to_free = g_runtime.ns_registry;
         g_runtime.ns_registry = NULL;
         RELEASE(registry_to_free);
     }
@@ -747,7 +665,7 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
         // Replace mappings with a fresh map for test isolation.
         // make_map() returns an owned object (rc=1). ASSIGN() retains the new value,
         // so we balance that retain to keep the adopted map at rc=1.
-        CljMap *fresh = make_map(16);
+        CljPersistentMap *fresh = make_map(16);
         ASSIGN(user_ns->mappings, fresh);
         RELEASE(fresh);
     }
@@ -845,7 +763,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
 
             // Bind variable (sym = err) - simplified
             // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-            CljMap *updated_mappings = map_assoc(st->current_ns->mappings, binding_sym, ex);
+            CljPersistentMap *updated_mappings = map_assoc(st->current_ns->mappings, binding_sym, ex);
             ASSIGN(st->current_ns->mappings, updated_mappings);
 
             // Evaluate catch body (support multiple expressions)

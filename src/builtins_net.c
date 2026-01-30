@@ -133,7 +133,7 @@ static void net_udp_recv_bridge(void *ctx,
         return;
     }
 
-    CljMap *m = make_map(3);
+    CljPersistentMap *m = make_map(3);
     if (!m) {
         RELEASE((ID)payload);
         return;
@@ -167,7 +167,7 @@ ID native_tinyclj_net_udp_socket(ID *args, unsigned int argc) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "tinyclj.net/udp-socket expects an options map {:port N}"); return NULL;
     }
-    CljMap *opts = (CljMap*)args[0];
+    CljPersistentMap *opts = (CljPersistentMap*)args[0];
     ID port_val = map_get_sentinel(opts, (ID)SYM_KW_PORT, NOT_FOUND);
     if (port_val == NOT_FOUND || !is_fixnum(port_val)) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
@@ -243,7 +243,7 @@ ID native_tinyclj_net_send_bang(ID *args, unsigned int argc) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "tinyclj.net/send! expects a map {:to \"ip\" :port N :data byte-array}"); return NULL;
     }
-    CljMap *m = (CljMap*)args[1];
+    CljPersistentMap *m = (CljPersistentMap*)args[1];
 
     ID to_val = map_get_sentinel(m, (ID)SYM_KW_TO, NOT_FOUND);
     ID port_val = map_get_sentinel(m, (ID)SYM_KW_PORT, NOT_FOUND);
@@ -337,7 +337,7 @@ static void net_tcp_event_bridge(void *ctx,
         return;
     }
 
-    CljMap *m = make_map(1);
+    CljPersistentMap *m = make_map(1);
     if (!m) {
         RELEASE((ID)payload);
         return;
@@ -365,7 +365,7 @@ ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "tinyclj.net/tcp-connect expects {:host \"...\" :port N}"); return NULL;
     }
-    CljMap *opts = (CljMap*)args[0];
+    CljPersistentMap *opts = (CljPersistentMap*)args[0];
     ID host_val = map_get_sentinel(opts, (ID)SYM_KW_HOST, NOT_FOUND);
     ID port_val = map_get_sentinel(opts, (ID)SYM_KW_PORT, NOT_FOUND);
     if (host_val == NOT_FOUND || !host_val) {
@@ -444,7 +444,7 @@ ID native_tinyclj_net_tcp_send_bang(ID *args, unsigned int argc) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "tinyclj.net/tcp-send! expects {:data byte-array}"); return NULL;
     }
-    CljMap *m = (CljMap*)args[1];
+    CljPersistentMap *m = (CljPersistentMap*)args[1];
     ID data_val = map_get_sentinel(m, (ID)SYM_KW_DATA, NOT_FOUND);
     if (data_val == NOT_FOUND || !data_val || TAG(data_val) != CLJ_BYTE_ARRAY) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,

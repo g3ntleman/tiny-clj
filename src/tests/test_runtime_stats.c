@@ -9,7 +9,7 @@ TEST(test_runtime_stats_basic_keys_present)
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_map(result));
 
-    CljMap *m = (CljMap *)result;
+    CljPersistentMap *m = (CljPersistentMap *)result;
 
     ID k_host_os = (ID)intern_symbol_global(":host-os");
     ID k_host_os_version = (ID)intern_symbol_global(":host-os-version");
@@ -40,7 +40,7 @@ TEST(test_runtime_stats_build_time_before_now)
     TEST_ASSERT_TRUE(is_map(stats));
     
     ID k_build_time = (ID)intern_symbol_global(":build-time");
-    ID v_build_time = map_get_sentinel((CljMap *)stats, k_build_time, NOT_FOUND);
+    ID v_build_time = map_get_sentinel((CljPersistentMap *)stats, k_build_time, NOT_FOUND);
     TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_build_time);
     TEST_ASSERT_EQUAL_INT(CLJ_INSTANT, TAG(v_build_time));
     
@@ -75,11 +75,11 @@ TEST(test_runtime_stats_contains_memory_stats_map)
     TEST_ASSERT_TRUE(is_map(stats));
 
     ID k_memory_stats = (ID)intern_symbol_global(":memory-stats");
-    ID v_memory_stats = map_get_sentinel((CljMap *)stats, k_memory_stats, NOT_FOUND);
+    ID v_memory_stats = map_get_sentinel((CljPersistentMap *)stats, k_memory_stats, NOT_FOUND);
     TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_memory_stats);
     TEST_ASSERT_TRUE(is_map(v_memory_stats));
 
-    CljMap *ms = (CljMap *)v_memory_stats;
+    CljPersistentMap *ms = (CljPersistentMap *)v_memory_stats;
     ID k_enabled = (ID)intern_symbol_global(":enabled?");
     ID v_enabled = map_get_sentinel(ms, k_enabled, NOT_FOUND);
     TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_enabled);
@@ -118,19 +118,19 @@ TEST(test_runtime_stats_current_ram_under_200kb_after_core_load)
     TEST_ASSERT_TRUE(is_map(stats));
 
     ID k_memory_stats = (ID)intern_symbol_global(":memory-stats");
-    ID v_memory_stats = map_get_sentinel((CljMap *)stats, k_memory_stats, NOT_FOUND);
+    ID v_memory_stats = map_get_sentinel((CljPersistentMap *)stats, k_memory_stats, NOT_FOUND);
     TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_memory_stats);
     TEST_ASSERT_TRUE(is_map(v_memory_stats));
 
     ID k_bytes_current = (ID)intern_symbol_global(":bytes-current");
-    ID v_bytes_current = map_get_sentinel((CljMap *)v_memory_stats, k_bytes_current, NOT_FOUND);
+    ID v_bytes_current = map_get_sentinel((CljPersistentMap *)v_memory_stats, k_bytes_current, NOT_FOUND);
     TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_bytes_current);
     TEST_ASSERT_TRUE(is_fixnum(v_bytes_current));
 
     int32_t bytes_current = as_fixnum(v_bytes_current);
     int32_t raw_bytes_current = -1;
     ID k_raw_bytes_current = (ID)intern_symbol_global(":raw-bytes-current");
-    ID v_raw_bytes_current = map_get_sentinel((CljMap *)v_memory_stats, k_raw_bytes_current, NOT_FOUND);
+    ID v_raw_bytes_current = map_get_sentinel((CljPersistentMap *)v_memory_stats, k_raw_bytes_current, NOT_FOUND);
     if (v_raw_bytes_current != NOT_FOUND && is_fixnum(v_raw_bytes_current)) {
         raw_bytes_current = as_fixnum(v_raw_bytes_current);
     }

@@ -123,7 +123,8 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
     lazy->thunk = NULL;
 }
 
-static ID make_map_entry_vector(CljMap *map, int index) {
+static ID make_map_entry_vector(ID map_obj, int index) {
+    CljPersistentMap *map = map_backing(map_obj);
     if (!map || index < 0 || index >= map->count) {
         return NULL;
     }
@@ -255,16 +256,18 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
             return true;
         }
         
-        case CLJ_MAP_PERSISTENT: {
-            CljMap *map = as_map(obj);
+        case CLJ_MAP_PERSISTENT:
+        case CLJ_MAP_TRANSIENT: {
+            CljPersistentMap *map = map_backing(obj);
             if (map->count == 0) {
                 return true;  // Empty map
             }
 
-            iter->state.map.map = (struct CljMap *)map;
+            iter->state.map.map = (struct CljPersistentMap *)map;
             iter->state.map.index = 0;
             iter->state.map.count = map->count;
             iter->seq_type = CLJ_MAP_PERSISTENT;
+            iter->container = (CljObject*)map;
             return true;
         }
 
@@ -326,7 +329,7 @@ ID seq_iter_first(const SeqIterator *iter) {
 
         case CLJ_MAP_PERSISTENT: {
             if (iter->state.map.index < iter->state.map.count) {
-                return make_map_entry_vector((CljMap *)iter->state.map.map, iter->state.map.index);
+                return make_map_entry_vector((ID)iter->state.map.map, iter->state.map.index);
             }
             return NULL;
         }
@@ -515,7 +518,7 @@ CljSeqIterator* make_seq(ID obj) {
         CljList *list = as_list((CljObject*)obj);
         if (list_empty(list)) return NULL;
     } else if (obj_tag == CLJ_MAP_PERSISTENT || obj_tag == CLJ_MAP_TRANSIENT) {
-        CljMap *map = as_map(obj);
+        CljPersistentMap *map = as_map(obj);
         if (!map || map->count == 0) return NULL;
     }
     

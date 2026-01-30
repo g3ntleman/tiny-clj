@@ -13,7 +13,7 @@
 // H1/H2/H3: Test map_assoc with AUTORELEASE returns correct value
 TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum) {
     // This test must run FIRST to verify AUTORELEASE behavior
-    CljMap *map = make_map(4);
+    CljPersistentMap *map = make_map(4);
     TEST_ASSERT_NOT_NULL(map);
     
     CljSymbol *key = intern_symbol_global("debug-key");
@@ -79,9 +79,9 @@ TEST_SHARED(test_equal_different_strings) {
     WITH_MEMORY_PROFILING({
     
     // Test different strings
-    CljObject *str1 = (CljObject *)make_string("hello");
-    CljObject *str2 = (CljObject *)make_string("world");
-    CljObject *str3 = (CljObject *)make_string("hello");
+    CljString *str1 = make_string("hello");
+    CljString *str2 = make_string("world");
+    CljString *str3 = make_string("hello");
     
     TEST_ASSERT_FALSE(clj_equal(str1, str2));
     TEST_ASSERT_TRUE(clj_equal(str1, str3));
@@ -96,7 +96,7 @@ TEST_SHARED(test_equal_different_types) {
     
     // Test different types
     CljValue vec_val = make_vector(1, false);
-    CljMap *map = (CljMap*)make_map(16);
+    CljPersistentMap *map = (CljPersistentMap*)make_map(16);
     CljList *list = empty_list();
     
     CljObject *vec = (CljObject*)vec_val;
@@ -261,9 +261,9 @@ TEST_SHARED(test_clj_equal_id_function) {
     TEST_ASSERT_FALSE(clj_equal(fix1, fix3));
     
     // Test heap objects (CljObject*)
-    CljObject *str1 = (CljObject *)make_string("hello");
-    CljObject *str2 = (CljObject *)make_string("hello");
-    CljObject *str3 = (CljObject *)make_string("world");
+    CljString *str1 = make_string("hello");
+    CljString *str2 = make_string("hello");
+    CljString *str3 = make_string("world");
     
     // Test same heap objects (pointer equality)
     TEST_ASSERT_TRUE(clj_equal(str1, str1));
@@ -296,10 +296,10 @@ TEST_SHARED(test_vector_equal_with_strings) {
     CljObject *vec2 = (CljObject*)vec2_val;
     
     // Create string objects
-    CljObject *str1 = (CljObject *)make_string("hello");
-    CljObject *str2 = (CljObject *)make_string("world");
-    CljObject *str3 = (CljObject *)make_string("hello");
-    CljObject *str4 = (CljObject *)make_string("world");
+    CljString *str1 = make_string("hello");
+    CljString *str2 = make_string("world");
+    CljString *str3 = make_string("hello");
+    CljString *str4 = make_string("world");
     
     // Fill vectors with strings
     CljPersistentVector *vec1_vec = as_persistent_vector(vec1_val);
@@ -325,6 +325,34 @@ TEST_SHARED(test_vector_equal_with_strings) {
     });
 }
 
+TEST_SHARED(test_vector_equal_persistent_vs_transient) {
+    WITH_MEMORY_PROFILING({
+
+    CljPersistentVector *vec = make_vector(3, false);
+    vec = vector_conj(vec, fixnum(1));
+    vec = vector_conj(vec, fixnum(2));
+    vec = vector_conj(vec, fixnum(3));
+
+    CljTransientVector *tvec = vector_transient(vec);
+    TEST_ASSERT_NOT_NULL(tvec);
+    TEST_ASSERT_FALSE(clj_equal((CljValue)vec, (CljValue)tvec));
+
+    CljPersistentVector *vec2 = make_vector(3, false);
+    vec2 = vector_conj(vec2, fixnum(1));
+    vec2 = vector_conj(vec2, fixnum(2));
+    vec2 = vector_conj(vec2, fixnum(3));
+    CljTransientVector *tvec2 = vector_transient(vec2);
+    TEST_ASSERT_NOT_NULL(tvec2);
+    TEST_ASSERT_FALSE(clj_equal((CljValue)tvec, (CljValue)tvec2));
+
+    RELEASE(tvec);
+    RELEASE(vec);
+    RELEASE(tvec2);
+    RELEASE(vec2);
+
+    });
+}
+
 // ============================================================================
 // MAP EQUALITY TESTS
 // ============================================================================
@@ -333,14 +361,14 @@ TEST_SHARED(test_map_equal_same_maps) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical maps using old API
-    CljMap *map1 = (CljMap*)make_map(16);
-    CljMap *map2 = (CljMap*)make_map(16);
+    CljPersistentMap *map1 = (CljPersistentMap*)make_map(16);
+    CljPersistentMap *map2 = (CljPersistentMap*)make_map(16);
     
     // Create keys and values
-    CljObject *key1 = (CljObject *)make_string("key1");
-    CljObject *key2 = (CljObject *)make_string("key2");
-    CljObject *val1 = (CljObject *)make_string("value1");
-    CljObject *val2 = (CljObject *)make_string("value2");
+    CljString *key1 = make_string("key1");
+    CljString *key2 = make_string("key2");
+    CljString *val1 = make_string("value1");
+    CljString *val2 = make_string("value2");
     
     // Add same key-value pairs to both maps
     map1 = map_assoc(map1, key1, val1);
@@ -363,18 +391,81 @@ TEST_SHARED(test_map_equal_same_maps) {
     });
 }
 
+TEST_SHARED(test_map_equal_persistent_vs_transient) {
+    WITH_MEMORY_PROFILING({
+
+    CljPersistentMap *map = make_map(4);
+    CljString *key1 = make_string("key1");
+    CljString *key2 = make_string("key2");
+    map = map_assoc(map, key1, fixnum(1));
+    map = map_assoc(map, key2, fixnum(2));
+
+    CljTransientMap *tmap = map_transient(map);
+    TEST_ASSERT_NOT_NULL(tmap);
+    TEST_ASSERT_FALSE(clj_equal((CljValue)map, (CljValue)tmap));
+
+    CljPersistentMap *map2 = make_map(4);
+    map2 = map_assoc(map2, key1, fixnum(1));
+    map2 = map_assoc(map2, key2, fixnum(2));
+    CljTransientMap *tmap2 = map_transient(map2);
+    TEST_ASSERT_NOT_NULL(tmap2);
+    TEST_ASSERT_FALSE(clj_equal((CljValue)tmap, (CljValue)tmap2));
+
+    RELEASE(tmap);
+    RELEASE(map);
+    RELEASE(tmap2);
+    RELEASE(map2);
+    RELEASE(key1);
+    RELEASE(key2);
+
+    });
+}
+
+TEST_SHARED(test_map_equal_after_add_and_remove) {
+    WITH_MEMORY_PROFILING({
+
+    CljPersistentMap *map = (CljPersistentMap*)make_map(8);
+    CljString *key1 = make_string("key1");
+    CljString *key2 = make_string("key2");
+    CljString *val1 = make_string("value1");
+    CljString *val2 = make_string("value2");
+
+    map = map_assoc(map, key1, val1);
+    map = map_assoc(map, key2, val2);
+
+    CljString *temp_key = make_string("temp-key");
+    CljString *temp_val = make_string("temp-val");
+
+    CljPersistentMap *with_temp = map_assoc(map, temp_key, temp_val);
+    CljPersistentMap *back_to_orig = map_remove(with_temp, temp_key);
+
+    TEST_ASSERT_TRUE(clj_equal((CljValue)map, (CljValue)back_to_orig));
+
+    RELEASE(map);
+    RELEASE(with_temp);
+    RELEASE(back_to_orig);
+    RELEASE(key1);
+    RELEASE(key2);
+    RELEASE(val1);
+    RELEASE(val2);
+    RELEASE(temp_key);
+    RELEASE(temp_val);
+
+    });
+}
+
 TEST_SHARED(test_map_equal_different_keys) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = (CljMap*)make_map(16);
-    CljMap *map2 = (CljMap*)make_map(16);
+    CljPersistentMap *map1 = (CljPersistentMap*)make_map(16);
+    CljPersistentMap *map2 = (CljPersistentMap*)make_map(16);
     
     // Create different keys
-    CljObject *key1 = (CljObject *)make_string("key1");
-    CljObject *key2 = (CljObject *)make_string("key2");
-    CljObject *key3 = (CljObject *)make_string("key3");
-    CljObject *val1 = (CljObject *)make_string("value1");
-    CljObject *val2 = (CljObject *)make_string("value2");
+    CljString *key1 = make_string("key1");
+    CljString *key2 = make_string("key2");
+    CljString *key3 = make_string("key3");
+    CljString *val1 = make_string("value1");
+    CljString *val2 = make_string("value2");
     
     // Add different key-value pairs
     map1 = map_assoc(map1, key1, val1);
@@ -401,15 +492,15 @@ TEST_SHARED(test_map_equal_different_keys) {
 TEST_SHARED(test_map_equal_different_values) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = (CljMap*)make_map(16);
-    CljMap *map2 = (CljMap*)make_map(16);
+    CljPersistentMap *map1 = (CljPersistentMap*)make_map(16);
+    CljPersistentMap *map2 = (CljPersistentMap*)make_map(16);
     
     // Create keys and different values
-    CljObject *key1 = (CljObject *)make_string("key1");
-    CljObject *key2 = (CljObject *)make_string("key2");
-    CljObject *val1 = (CljObject *)make_string("value1");
-    CljObject *val2 = (CljObject *)make_string("value2");
-    CljObject *val3 = (CljObject *)make_string("value3");
+    CljString *key1 = make_string("key1");
+    CljString *key2 = make_string("key2");
+    CljString *val1 = make_string("value1");
+    CljString *val2 = make_string("value2");
+    CljString *val3 = make_string("value3");
     
     // Add same keys but different values
     map1 = map_assoc(map1, key1, val1);
@@ -436,14 +527,14 @@ TEST_SHARED(test_map_equal_different_values) {
 TEST_SHARED(test_map_equal_different_sizes) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = (CljMap*)make_map(16);
-    CljMap *map2 = (CljMap*)make_map(16);
+    CljPersistentMap *map1 = (CljPersistentMap*)make_map(16);
+    CljPersistentMap *map2 = (CljPersistentMap*)make_map(16);
     
     // Create keys and values
-    CljObject *key1 = (CljObject *)make_string("key1");
-    CljObject *key2 = (CljObject *)make_string("key2");
-    CljObject *val1 = (CljObject *)make_string("value1");
-    CljObject *val2 = (CljObject *)make_string("value2");
+    CljString *key1 = make_string("key1");
+    CljString *key2 = make_string("key2");
+    CljString *val1 = make_string("value1");
+    CljString *val2 = make_string("value2");
     
     // Add different number of entries
     map1 = map_assoc(map1, key1, val1);
@@ -469,8 +560,8 @@ TEST_SHARED(test_map_equal_different_sizes) {
 TEST_SHARED(test_map_equal_with_nested_vectors) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = (CljMap*)make_map(16);
-    CljMap *map2 = (CljMap*)make_map(16);
+    CljPersistentMap *map1 = (CljPersistentMap*)make_map(16);
+    CljPersistentMap *map2 = (CljPersistentMap*)make_map(16);
     
     // Create nested vectors
     CljValue vec1_val = (CljValue)make_vector(2, false);
@@ -493,8 +584,8 @@ TEST_SHARED(test_map_equal_with_nested_vectors) {
     CljObject *vec2 = (CljObject*)vec2_val;
     
     // Create keys
-    CljObject *key1 = (CljObject *)make_string("nested");
-    CljObject *val_str = (CljObject *)make_string("value");
+    CljString *key1 = make_string("nested");
+    CljString *val_str = make_string("value");
     
     // Add to maps
     map1 = map_assoc(map1, key1, vec1);

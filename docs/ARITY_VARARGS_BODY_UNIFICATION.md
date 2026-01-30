@@ -207,7 +207,7 @@ static inline CljVector* get_arity_bodies(CljFunction *func) {
 }
 
 // Dispatch-Logik
-ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
+ID eval_function_call(ID fn, ID *args, int argc, CljPersistentMap *env, EvalState *st) {
     CljFunction *func = as_function(fn);
     
     if (unlikely(has_multiple_arities(func))) {

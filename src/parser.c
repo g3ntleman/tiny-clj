@@ -482,7 +482,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
  * @param env Optional environment (if NULL, uses eval_state->current_ns->mappings)
  * @return The evaluated result (autoreleased) or NULL only if result is nil
  */
-ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
+ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljPersistentMap *env) {
     CLJ_ASSERT(eval_state != NULL);
 
     // NULL means nil (e.g., () parses to nil) - return NULL
@@ -515,10 +515,10 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
     
     if (parsed_expr && is_list_type(TAG(parsed_expr))) {
         // Use provided env or fall back to current_ns->mappings
-        CljMap *eval_env = env;
+        CljPersistentMap *eval_env = env;
         if (!eval_env) {
             CLJ_ASSERT(eval_state->current_ns != NULL);
-            eval_env = (CljMap*)eval_state->current_ns->mappings;
+            eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
         }
         result = eval_list(as_list(parsed_expr), eval_env, eval_state, NULL);
         // eval_list returns AUTORELEASE objects
@@ -529,20 +529,20 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
     } else if (parsed_expr && TAG(parsed_expr) == CLJ_MAP_PERSISTENT) {
         // Map literals need to have their keys and values evaluated
         // Use provided env or fall back to current_ns->mappings
-        CljMap *eval_env = env;
+        CljPersistentMap *eval_env = env;
         if (!eval_env) {
             CLJ_ASSERT(eval_state->current_ns != NULL);
-            eval_env = (CljMap*)eval_state->current_ns->mappings;
+            eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
         }
         result = eval_body(parsed_expr, eval_env, eval_state, NULL);
         // eval_body returns AUTORELEASE objects
     } else if (parsed_expr && TAG(parsed_expr) == CLJ_VECTOR_PERSISTENT) {
         // Vector literals need to have their elements evaluated
         // Use provided env or fall back to current_ns->mappings
-        CljMap *eval_env = env;
+        CljPersistentMap *eval_env = env;
         if (!eval_env) {
             CLJ_ASSERT(eval_state->current_ns != NULL);
-            eval_env = (CljMap*)eval_state->current_ns->mappings;
+            eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
         }
         result = eval_body(parsed_expr, eval_env, eval_state, NULL);
         // eval_body returns AUTORELEASE objects
@@ -620,7 +620,7 @@ static ID parse_map(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   // Build the map incrementally to avoid relying on a fixed-size stack buffer.
   // This also matches Clojure semantics for duplicate keys (later entries win).
-  CljMap *map = make_map(8);
+  CljPersistentMap *map = make_map(8);
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
     ID key = parse_expr(reader, st);
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
@@ -1389,10 +1389,10 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
   ID existing_meta = meta_get((CljObject*)obj);
   if (existing_meta) {
     // Merge existing metadata with new metadata (existing takes precedence)
-    CljMap *existing_map = as_map(existing_meta);
-    CljMap *new_map = as_map(new_meta);
+    CljPersistentMap *existing_map = as_map(existing_meta);
+    CljPersistentMap *new_map = as_map(new_meta);
     if (existing_map && new_map) {
-      CljMap *merged_meta = (CljMap*)meta_merge(existing_map, new_map);
+      CljPersistentMap *merged_meta = (CljPersistentMap*)meta_merge(existing_map, new_map);
       if (merged_meta) {
         if (merged_meta != existing_meta) {
           // Apply merged metadata to object
@@ -1434,14 +1434,14 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
 
 #if defined(META_ENABLED) && META_ENABLED
   // Automatically add source code location metadata
-  CljMap *location_meta = (CljMap*)make_location_meta(reader, st);
+  CljPersistentMap *location_meta = (CljPersistentMap*)make_location_meta(reader, st);
   if (location_meta) {
     // Get current metadata (might be from meta parameter or existing)
     ID current_meta = meta ? meta : meta_get((CljObject*)obj);
-    CljMap *current_map = current_meta ? as_map(current_meta) : NULL;
+    CljPersistentMap *current_map = current_meta ? as_map(current_meta) : NULL;
     if (current_map) {
       // Merge location metadata with existing metadata (doesn't overwrite)
-      CljMap *merged_meta = (CljMap*)meta_merge(current_map, location_meta);
+      CljPersistentMap *merged_meta = (CljPersistentMap*)meta_merge(current_map, location_meta);
       if (merged_meta) {
         if (merged_meta != current_meta) {
           // Update meta if it was merged
@@ -1493,7 +1493,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
 
     // Convert keyword to metadata map {:keyword true}
     // In Clojure, ^:keyword means ^{:keyword true}
-    CljMap *meta_map = make_map(4);
+    CljPersistentMap *meta_map = make_map(4);
     if (!meta_map) {
       RELEASE(keyword_meta);
       return NULL;
@@ -1537,7 +1537,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   ID obj = parse_expr(reader, st);
   if (!obj) {
-    if (meta_owned) RELEASE(meta);
+    RELEASE(meta);
     return NULL;
   }
   ID result = merge_metadata_with_object(obj, meta);
@@ -1646,4 +1646,3 @@ static ID parse_meta_map(Reader *reader,
   }
   return apply_metadata_to_object(reader, st, meta, obj);
 }
-

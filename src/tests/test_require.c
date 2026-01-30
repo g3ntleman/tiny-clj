@@ -375,7 +375,7 @@ TEST(test_require_trim_metadata) {
         CljSymbol *doc_key = intern_symbol_global(":doc");
         TEST_ASSERT_NOT_NULL(doc_key);
         
-        ID doc_value = map_get((CljMap*)trim_meta, doc_key);
+        ID doc_value = map_get((CljPersistentMap*)trim_meta, doc_key);
         
         TEST_ASSERT_TRUE_MESSAGE(doc_value != NOT_FOUND, 
                                  "trim metadata should have :doc key");

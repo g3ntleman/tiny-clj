@@ -131,7 +131,7 @@ Avoid:
 - building new maps/vectors per step
 - building a closure per element
 
-Instead: a compact, RC-managed `ForState` (or minimal: a single persistent `CljMap`) containing:
+Instead: a compact, RC-managed `ForState` (or minimal: a single persistent `CljPersistentMap`) containing:
 
 - `ops`: precomputed binding ops (AST pointers / small C structs)
 - `depth`: current binding level

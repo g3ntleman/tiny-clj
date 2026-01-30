@@ -378,7 +378,7 @@ TEST(test_with_memory) {
 ```c
 // ❌ Schlecht: Spezifische Typen mit Casts
 CljSeqIterator *seq = AUTORELEASE(make_seq(vec));
-CljMap *map = AUTORELEASE(make_map(4));
+CljPersistentMap *map = AUTORELEASE(make_map(4));
 
 // ✅ Gut: ID verwenden, as_*() für Zugriffe
 ID seq = AUTORELEASE(make_seq(vec));
@@ -438,7 +438,7 @@ TEST(test_cow_example) {
 ```c
 // ❌ Low-level: Viele Zeilen, viele Casts
 TEST(test_seq_map_count_low) {
-    CljMap *map = AUTORELEASE(make_map(4));
+    CljPersistentMap *map = AUTORELEASE(make_map(4));
     map = map_assoc(map, intern_symbol_global("a"), fixnum(1));
     map = map_assoc(map, intern_symbol_global("b"), fixnum(2));
     CljSeqIterator *seq = AUTORELEASE(make_seq(map));

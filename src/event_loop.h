@@ -13,10 +13,10 @@ void event_loop_init(void);
 void event_loop_clear(void);
 
 // Enqueue go task for later execution. Takes ownership via RETAIN; releases after run.
-void event_loop_enqueue(CljObject *fn_zero_arity, CljMap *result_channel);
+void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channel);
 
 // Run next enqueued task. Returns true if a task was executed, false if queue empty.
-bool event_loop_run_next(CljMap *env, EvalState *st);
+bool event_loop_run_next(CljPersistentMap *env, EvalState *st);
 
 // Timer API
 // Enqueue a timer task for execution after delay_ms milliseconds
@@ -28,7 +28,6 @@ int timer_enqueue(CljObject *fn_zero_arity, int64_t delay_ms, bool periodic, int
 bool timer_cancel(int timer_id);
 
 #endif
-
 
 
 

@@ -31,7 +31,7 @@ static unsigned int next_power_of_2(unsigned int n) {
 CljHashMap* make_hashmap(unsigned int capacity) {
     unsigned int cap = next_power_of_2(capacity);
     
-    // Allocate struct + embedded data array in ONE malloc (like CljMap)
+    // Allocate struct + embedded data array in ONE malloc (like CljPersistentMap)
     size_t struct_size = sizeof(CljHashMap);
     size_t data_size = (size_t)cap * 2 * sizeof(CljObject*);
     size_t total_size = struct_size + data_size;
