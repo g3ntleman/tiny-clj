@@ -34,7 +34,7 @@
 #include <execinfo.h>
 #endif
 
-// AUTORELEASE POOL: CLJ_VECTOR_TRANSIENT_WEAK (implemented as CljPersistentVector). _restore=vector_count at block start;
+// AUTORELEASE POOL: CljPersistentVector with CLJ_FLAG_WEAK_ELEMENTS. _restore=vector_count at block start;
 // drain_to_depth(mark) RELEASEs [mark,count) and truncates.
 
 #define POOL_INITIAL_CAPACITY 1024
@@ -400,9 +400,11 @@ static void release_object_default(CljObject *v) {
                 // Using as_vector() would call TAG() which fails when rc=0 (zombie mode)
                 CljPersistentVector *vec = (CljPersistentVector*)v;
                 if (vec) {
-                    // Release all vector elements
-                    VECTOR_FOR_EACH(vec, elem) {
-                        RELEASE(elem);
+                    if (!has_weak_elements((const CljObject*)vec)) {
+                        // Release all vector elements
+                        VECTOR_FOR_EACH(vec, elem) {
+                            RELEASE(elem);
+                        }
                     }
                     // Note: data array is automatically freed
                 }
@@ -418,9 +420,7 @@ static void release_object_default(CljObject *v) {
                 }
             }
             break;
-        case CLJ_VECTOR_TRANSIENT_WEAK:
-            break;
-        case CLJ_MAP: {
+        case CLJ_MAP_PERSISTENT: {
             CljMap *map = (CljMap*)v;
             MAP_FOR_EACH(map, key, value) { RELEASE(key); RELEASE(value); }
             break;

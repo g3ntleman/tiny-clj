@@ -104,7 +104,7 @@ TEST(test_map_creation) {
     // Test map creation using CljValue API
     CljMap *map = AUTORELEASE(make_map(16));
     TEST_ASSERT_NOT_NULL(map);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->base.type);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, map->base.type);
 }
 
 TEST(test_array_map_builtin) {
@@ -119,7 +119,7 @@ TEST(test_array_map_builtin) {
         // Test single key-value: (array-map "a" 1)
         CljObject *eval1 = eval_string("(array-map \"a\" 1)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(eval1);
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, eval1->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, eval1->type);
         TEST_ASSERT_EQUAL_INT(1, map_count((CljMap*)eval1));
 
         // Test multiple pairs: (array-map "a" 1 "b" 2)
@@ -510,7 +510,7 @@ TEST(test_load_multiline_file) {
     const char *multiline_map = "{:a 1\n :b 2\n :c 3}";
     CljObject *parsed4 = parse(multiline_map, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed4);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, parsed4->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, parsed4->type);
 
     // Test 5: Multiline nested structures
     const char *multiline_nested = "[\n  {:a 1\n   :b 2}\n  (+ 1\n     2)\n  3\n]";
@@ -556,7 +556,7 @@ TEST(test_identity_function) {
     // Test with map
     CljObject *result6 = eval_string("(identity {:a 1 :b 2})", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result6);
-    TEST_ASSERT_TRUE(TAG(result6) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result6) == CLJ_MAP_PERSISTENT);
 }
 
 // Count function tests moved to test_core.c
@@ -1063,7 +1063,7 @@ TEST(test_type_check_all_types) {
 
     ID map_val = parse("{}", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(map_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(map_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(map_val));
 
     ID string_val = parse("\"hello\"", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(string_val);
@@ -1090,7 +1090,7 @@ TEST(test_type_check_all_types) {
 
     ID map_with_elems = parse("{:a 1 :b 2}", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(map_with_elems);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(map_with_elems));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(map_with_elems));
 }
 
 // ============================================================================

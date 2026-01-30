@@ -463,6 +463,7 @@ void tiny_clj_tests_set_quiet_output(bool quiet) {
 
 // Tiny-CLJ specific cleanup function (called from test_runner.c)
 void tiny_clj_test_cleanup(bool show_memory_summary) {
+    (void)show_memory_summary;
 #if MEMORY_PROFILING_ENABLED
     if (show_memory_summary) {
         // Memory profiling without printf output (silent mode for tests)

@@ -706,7 +706,8 @@ TEST_SHARED(test_vec_with_nil_elements) {
 static CljPersistentVector* make_weak_vector(unsigned int cap) {
     CljPersistentVector *v = make_vector(cap, true);
     TEST_ASSERT_NOT_NULL(v);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT_WEAK, TAG((ID)v));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG((ID)v));
+    TEST_ASSERT_TRUE(has_weak_elements((const CljObject*)v));
     return v;
 }
 
@@ -1078,14 +1079,14 @@ TEST_SHARED(test_persistent_on_persistent_returns_same_object) {
         map = map_assoc(map, key1, fixnum(1));
         map = map_assoc(map, key2, fixnum(2));
         TEST_ASSERT_NOT_NULL(map);
-        TEST_ASSERT_TRUE(TAG(map) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(map) == CLJ_MAP_PERSISTENT);
         
         // Call persistent! on the persistent map - should return same object
         ID map_args[] = {map};
         CljObject *map_result = (CljObject*)native_persistent_bang(map_args, 1);
         TEST_ASSERT_NOT_NULL(map_result);
         TEST_ASSERT_EQUAL_PTR(map, map_result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG(map_result) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(map_result) == CLJ_MAP_PERSISTENT);
         
         RELEASE(map);
     });

@@ -206,8 +206,7 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
             return true;
         }
         
-        case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: {
+        case CLJ_VECTOR_PERSISTENT:{
             CljPersistentVector *vec = as_persistent_vector(obj);
 
             // Initialize vector iterator using public API
@@ -256,7 +255,7 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
             return true;
         }
         
-        case CLJ_MAP: {
+        case CLJ_MAP_PERSISTENT: {
             CljMap *map = as_map(obj);
             if (map->count == 0) {
                 return true;  // Empty map
@@ -265,7 +264,7 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
             iter->state.map.map = (struct CljMap *)map;
             iter->state.map.index = 0;
             iter->state.map.count = map->count;
-            iter->seq_type = CLJ_MAP;
+            iter->seq_type = CLJ_MAP_PERSISTENT;
             return true;
         }
 
@@ -305,9 +304,7 @@ ID seq_iter_first(const SeqIterator *iter) {
             return (first == SYM_NIL) ? NULL : first;
         }
         
-        case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK:
-        case CLJ_VECTOR_TRANSIENT: {
+        case CLJ_VECTOR_PERSISTENT:case CLJ_VECTOR_TRANSIENT: {
             if (iter->state.vec.index < iter->state.vec.count) {
                 // vector_nth returns element with lifetime tied to vector - no retain needed
                 CljPersistentVector *vec = (CljPersistentVector*)iter->container;
@@ -327,7 +324,7 @@ ID seq_iter_first(const SeqIterator *iter) {
             return NULL;
         }
 
-        case CLJ_MAP: {
+        case CLJ_MAP_PERSISTENT: {
             if (iter->state.map.index < iter->state.map.count) {
                 return make_map_entry_vector((CljMap *)iter->state.map.map, iter->state.map.index);
             }
@@ -388,9 +385,7 @@ bool seq_iter_next(SeqIterator *iter) {
             return !seq_iter_empty(iter);
         }
         
-        case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK:
-        case CLJ_VECTOR_TRANSIENT: {
+        case CLJ_VECTOR_PERSISTENT:case CLJ_VECTOR_TRANSIENT: {
             if (iter->state.vec.index < iter->state.vec.count - 1) {
                 iter->state.vec.index++;
                 return true;
@@ -410,7 +405,7 @@ bool seq_iter_next(SeqIterator *iter) {
             return false;
         }
 
-        case CLJ_MAP: {
+        case CLJ_MAP_PERSISTENT: {
             if (iter->state.map.index < iter->state.map.count - 1) {
                 iter->state.map.index++;
                 return true;
@@ -434,9 +429,7 @@ bool seq_iter_empty(const SeqIterator *iter) {
     if (is_singleton(iter->container)) {
         // Check if it's actually empty based on type
         switch (iter->container->type) {
-        case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK:
-        case CLJ_VECTOR_TRANSIENT: {
+        case CLJ_VECTOR_PERSISTENT:case CLJ_VECTOR_TRANSIENT: {
             CljPersistentVector *vec = (CljPersistentVector*)iter->container;
             return vector_count(vec) == 0;
         }
@@ -466,15 +459,13 @@ bool seq_iter_empty(const SeqIterator *iter) {
             return lazy->first == NULL && lazy->cached_rest == NULL;
         }
         
-        case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK:
-        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_PERSISTENT:case CLJ_VECTOR_TRANSIENT:
             return iter->state.vec.index >= iter->state.vec.count;
         
         case CLJ_STRING:
             return iter->state.str.index >= iter->state.str.length;
 
-        case CLJ_MAP:
+        case CLJ_MAP_PERSISTENT:
             return iter->state.map.index >= iter->state.map.count;
         
         default:
@@ -489,13 +480,11 @@ int seq_iter_position(const SeqIterator *iter) {
     switch (iter->seq_type) {
         case CLJ_LIST:
             return iter->state.list.index;
-        case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK:
-        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_PERSISTENT:case CLJ_VECTOR_TRANSIENT:
             return iter->state.vec.index;
         case CLJ_STRING:
             return iter->state.str.index;
-        case CLJ_MAP:
+        case CLJ_MAP_PERSISTENT:
             return iter->state.map.index;
         default:
             return 0;
@@ -519,13 +508,13 @@ CljSeqIterator* make_seq(ID obj) {
     }
     
     // Check if collection is empty
-    if (obj_tag == CLJ_VECTOR_PERSISTENT || obj_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+    if (obj_tag == CLJ_VECTOR_PERSISTENT) {
         CljPersistentVector *vec = as_persistent_vector(obj);
         if (vec && vector_count(vec) == 0) return NULL;
     } else if (is_list_type(obj_tag)) {
         CljList *list = as_list((CljObject*)obj);
         if (list_empty(list)) return NULL;
-    } else if (obj_tag == CLJ_MAP || obj_tag == CLJ_MAP_TRANSIENT) {
+    } else if (obj_tag == CLJ_MAP_PERSISTENT || obj_tag == CLJ_MAP_TRANSIENT) {
         CljMap *map = as_map(obj);
         if (!map || map->count == 0) return NULL;
     }
@@ -661,9 +650,7 @@ int seq_count(ID obj) {
         
         // Get count from embedded iterator state (remaining elements)
         switch (seq->iter.seq_type) {
-            case CLJ_VECTOR_PERSISTENT:
-            case CLJ_VECTOR_TRANSIENT_WEAK:
-            case CLJ_VECTOR_TRANSIENT:
+            case CLJ_VECTOR_PERSISTENT:case CLJ_VECTOR_TRANSIENT:
                 // Return remaining elements, not total count
                 return seq->iter.state.vec.count - seq->iter.state.vec.index;
             case CLJ_LIST:
@@ -672,7 +659,7 @@ int seq_count(ID obj) {
             case CLJ_STRING:
                 // Return remaining characters, not total length
                 return seq->iter.state.str.length - seq->iter.state.str.index;
-            case CLJ_MAP:
+            case CLJ_MAP_PERSISTENT:
                 // Return remaining entries, not total count
                 return seq->iter.state.map.count - seq->iter.state.map.index;
             default:
@@ -681,7 +668,7 @@ int seq_count(ID obj) {
     }
     
     // Fast path for vectors - O(1)
-    if (TAG(obj) == CLJ_VECTOR_PERSISTENT || TAG(obj) == CLJ_VECTOR_TRANSIENT_WEAK) {
+    if (TAG(obj) == CLJ_VECTOR_PERSISTENT) {
         CljPersistentVector *vec = as_persistent_vector(obj);
         return vec ? (int)vector_count(vec) : 0;
     }
@@ -708,10 +695,8 @@ bool is_seqable(ID obj) {
     switch (((CljObject*)obj)->type) {
         case CLJ_LIST:
         case CLJ_AST_NODE:
-        case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK:
-        case CLJ_VECTOR_TRANSIENT:
-        case CLJ_MAP:
+        case CLJ_VECTOR_PERSISTENT:case CLJ_VECTOR_TRANSIENT:
+        case CLJ_MAP_PERSISTENT:
         case CLJ_STRING:
         case CLJ_SEQ:  // Sequences are seqable
         case CLJ_LAZY_SEQ:
@@ -757,4 +742,3 @@ static void release_lazy_seq(CljObject *v) {
 void seq_register_release_fn(void) {
     subjective_c_register_release_fn(CLJ_LAZY_SEQ, release_lazy_seq);
 }
-

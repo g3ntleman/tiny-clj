@@ -17,7 +17,7 @@ typedef struct {
 static inline bool is_map(ID obj) {
     if (!obj) return false;
     CljType tag = TAG(obj);
-    return tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT;
+    return tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT;
 }
 
 // Type-safe casting
@@ -27,7 +27,7 @@ static inline CljMap* as_map(ID obj) {
     // CLJ_ASSERT already has #ifdef DEBUG internally
 #ifdef DEBUG
     CljType tag;
-    CLJ_ASSERT(((tag = TAG(obj)), (obj == NULL || tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT)));
+    CLJ_ASSERT(((tag = TAG(obj)), (obj == NULL || tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT)));
 #endif
     return (CljMap*)obj;
 }

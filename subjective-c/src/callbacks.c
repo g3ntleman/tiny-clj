@@ -50,8 +50,7 @@ uint32_t clj_hash_default(ID value) {
             return fnv1a(((CljString*)value)->data);
         
         case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: {
+        case CLJ_VECTOR_TRANSIENT: {
             CljPersistentVector *vec =
                 (type == CLJ_VECTOR_TRANSIENT)
                     ? vector_persistent(as_transient_vector(value))
@@ -61,7 +60,7 @@ uint32_t clj_hash_default(ID value) {
             return hash_container(count, elem_hash);
         }
         
-        case CLJ_MAP:
+        case CLJ_MAP_PERSISTENT:
         case CLJ_MAP_TRANSIENT: {
             CljMap *map = (CljMap*)value;
             int count = map_count(map);
@@ -152,8 +151,7 @@ bool clj_equal_default(ID a, ID b) {
         }
         
         case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: {
+        case CLJ_VECTOR_TRANSIENT: {
             CljPersistentVector *vec_a =
                 (tag == CLJ_VECTOR_TRANSIENT)
                     ? vector_persistent(as_transient_vector(a))
@@ -172,7 +170,7 @@ bool clj_equal_default(ID a, ID b) {
             return true;
         }
         
-        case CLJ_MAP:
+        case CLJ_MAP_PERSISTENT:
         case CLJ_MAP_TRANSIENT: {
             CljMap *map_a = (CljMap*)a;
             CljMap *map_b = (CljMap*)b;
@@ -260,7 +258,7 @@ CljString* clj_to_string_default(ID value) {
             return make_string(((CljString*)value)->data);
         case CLJ_VECTOR_PERSISTENT:
             return make_string("[...]");
-        case CLJ_MAP:
+        case CLJ_MAP_PERSISTENT:
         case CLJ_HASHMAP:
             return make_string("{...}");
         case CLJ_EXCEPTION:

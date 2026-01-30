@@ -163,7 +163,7 @@ static void net_udp_recv_bridge(void *ctx,
 
 ID native_tinyclj_net_udp_socket(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "tinyclj.net/udp-socket");
-    if (!args[0] || TAG(args[0]) != CLJ_MAP) {
+    if (!args[0] || TAG(args[0]) != CLJ_MAP_PERSISTENT) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "tinyclj.net/udp-socket expects an options map {:port N}"); return NULL;
     }
@@ -239,7 +239,7 @@ ID native_tinyclj_net_send_bang(ID *args, unsigned int argc) {
     NetCtx *c = require_net_ctx(args[0], NET_TYPE_UDP, "tinyclj.net/send!");
     if (!c || !c->handle.udp_sock) return NULL;
 
-    if (!args[1] || TAG(args[1]) != CLJ_MAP) {
+    if (!args[1] || TAG(args[1]) != CLJ_MAP_PERSISTENT) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "tinyclj.net/send! expects a map {:to \"ip\" :port N :data byte-array}"); return NULL;
     }
@@ -361,7 +361,7 @@ static void net_tcp_event_bridge(void *ctx,
 
 ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "tinyclj.net/tcp-connect");
-    if (!args[0] || TAG(args[0]) != CLJ_MAP) {
+    if (!args[0] || TAG(args[0]) != CLJ_MAP_PERSISTENT) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "tinyclj.net/tcp-connect expects {:host \"...\" :port N}"); return NULL;
     }
@@ -440,7 +440,7 @@ ID native_tinyclj_net_tcp_send_bang(ID *args, unsigned int argc) {
     NetCtx *c = require_net_ctx(args[0], NET_TYPE_TCP, "tinyclj.net/tcp-send!");
     if (!c || !c->handle.tcp_conn) return NULL;
 
-    if (!args[1] || TAG(args[1]) != CLJ_MAP) {
+    if (!args[1] || TAG(args[1]) != CLJ_MAP_PERSISTENT) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "tinyclj.net/tcp-send! expects {:data byte-array}"); return NULL;
     }

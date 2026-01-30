@@ -88,9 +88,7 @@ bool clj_equal_full(ID a, ID b) {
             return strcmp(str_a->data, str_b->data) == 0;
         }
 
-        case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK:
-        case CLJ_VECTOR_TRANSIENT: {
+        case CLJ_VECTOR_PERSISTENT:case CLJ_VECTOR_TRANSIENT: {
             CljPersistentVector *vec_a =
                 (a_obj->type == CLJ_VECTOR_TRANSIENT)
                     ? vector_persistent(as_transient_vector(a))
@@ -111,7 +109,7 @@ bool clj_equal_full(ID a, ID b) {
             return true;
         }
 
-        case CLJ_MAP: {
+        case CLJ_MAP_PERSISTENT: {
             CljMap *map_a = as_map(a);
             CljMap *map_b = as_map(b);
             if (map_a->count != map_b->count) return false;

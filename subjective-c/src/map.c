@@ -15,7 +15,7 @@
 // Empty-map singleton: CLJ_MAP with rc=SINGLETON_RC, statically initialized
 // Note: Flexible array member data[] is not used when capacity=0
 static CljMap map_empty_singleton_data = {
-    .base = { .type = CLJ_MAP, .rc = SINGLETON_RC },
+    .base = { .type = CLJ_MAP_PERSISTENT, .rc = SINGLETON_RC },
     .count = 0,
     .capacity = 0
     // data[] flexible array member not initialized (not needed for capacity=0)
@@ -38,12 +38,12 @@ CljMap* make_map(int capacity) {
   size_t data_size = (size_t)capacity * 2 * sizeof(CljObject*);
   size_t total_size = struct_size + data_size;
 
-  CljMap *map = (CljMap*)alloc(total_size, 1, CLJ_MAP);
+  CljMap *map = (CljMap*)alloc(total_size, 1, CLJ_MAP_PERSISTENT);
   if (!map) {
     throw_oom();
   }
 
-  map->base.type = CLJ_MAP;
+  map->base.type = CLJ_MAP_PERSISTENT;
   map->base.rc = 1;
   map->count = 0;
   map->capacity = capacity;
@@ -86,7 +86,7 @@ ID map_get_sentinel(CljMap *map, ID key, ID not_found) {
  * Returns owned object (rc=1, no AUTORELEASE).
  */
 static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
-  if (TAG(map) == CLJ_MAP) {
+  if (TAG(map) == CLJ_MAP_PERSISTENT) {
     CljObject *key_obj = (CljObject*)key;
     CljObject *value_obj = (CljObject*)value;
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
@@ -141,12 +141,12 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
   // Allocate new map with embedded data array
   size_t struct_size = sizeof(CljMap);
   size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
-  CljMap *new_map = (CljMap*)ALLOC_BYTES(CLJ_MAP, struct_size + data_size);
+  CljMap *new_map = (CljMap*)ALLOC_BYTES(CLJ_MAP_PERSISTENT, struct_size + data_size);
   if (!new_map) {
     throw_oom();
   }
 
-  new_map->base.type = CLJ_MAP;
+  new_map->base.type = CLJ_MAP_PERSISTENT;
   new_map->base.rc = 1;
   new_map->count = 0;  // Start with 0, will be set correctly below
   new_map->capacity = new_capacity;
@@ -368,7 +368,7 @@ static CljMap* map_remove_core(CljMap *map, ID key) {
     throw_oom();
   }
 
-  new_map->base.type = CLJ_MAP;
+  new_map->base.type = CLJ_MAP_PERSISTENT;
   new_map->base.rc = 1;
   new_map->count = 0;
   new_map->capacity = map_data->capacity;
@@ -606,7 +606,7 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
     }
 
     // Make immutable by simply changing the type (no copy needed!)
-    tmap->base.type = CLJ_MAP;
+    tmap->base.type = CLJ_MAP_PERSISTENT;
 
     return tmap;
 }
@@ -617,7 +617,7 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
 CljMap* map_transient(CljMap *map) {
     if (!map) return NULL;
     CljObject *obj = (CljObject*)map;
-    if (obj->type != CLJ_MAP) {
+    if (obj->type != CLJ_MAP_PERSISTENT) {
         return NULL;
     }
 
@@ -635,16 +635,16 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
     CljObject *obj = (CljObject*)tmap;
 
     // Assertion: Only transient maps (and persistent maps with RC=1 in COW cases) can be mutated
-    CLJ_ASSERT((obj->type == CLJ_MAP_TRANSIENT || obj->type == CLJ_MAP) && "map_conj requires transient map or persistent map with RC=1");
+    CLJ_ASSERT((obj->type == CLJ_MAP_TRANSIENT || obj->type == CLJ_MAP_PERSISTENT) && "map_conj requires transient map or persistent map with RC=1");
     // In COW cases, persistent maps with RC=1 can be mutated, but map_conj is primarily for transient maps
-    if (obj->type == CLJ_MAP) {
+    if (obj->type == CLJ_MAP_PERSISTENT) {
         CLJ_ASSERT(obj->rc == 1 && "map_conj on persistent map requires RC=1 for COW");
     }
 
     // Runtime check: map_conj is primarily for transient maps
     if (obj->type != CLJ_MAP_TRANSIENT) {
         // Allow persistent maps with RC=1 for COW cases (but this should be rare)
-        if (obj->type == CLJ_MAP && obj->rc == 1) {
+        if (obj->type == CLJ_MAP_PERSISTENT && obj->rc == 1) {
             // COW case: persistent map with RC=1 can be mutated in-place
             // This is allowed but not recommended - use transient maps instead
         } else {
@@ -714,7 +714,7 @@ CljMap* map_persistent(CljMap *tmap) {
     if (!m) return NULL;
 
     // Use map_copy helper (DRY) - Clojure semantics: Create NEW persistent collection
-    CljMap *new_map = map_copy(m, CLJ_MAP);
+    CljMap *new_map = map_copy(m, CLJ_MAP_PERSISTENT);
 
     // Original transient becomes "invalidated" (can be implemented later)
     // m->base.type = CLJ_INVALID;  // TODO: Implement invalidation

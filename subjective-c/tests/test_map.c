@@ -558,7 +558,7 @@ TEST(test_map_transient) {
     CljMap *map = make_map_or_fail(4);
     ID kw = AUTORELEASE(make_string(":test"));
     map = adopt_map(map, map_assoc(map, kw, fixnum(42)));
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(map));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(map));
     
     CljMap *tmap = map_transient(map);
     TEST_ASSERT_NOT_NULL(tmap);
@@ -617,7 +617,7 @@ TEST(test_map_persistent) {
     
     CljMap *persistent = map_persistent(tmap);
     TEST_ASSERT_NOT_NULL(persistent);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(persistent));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(persistent));
     TEST_ASSERT_EQUAL_INT(1, map_count(persistent));
     
     CljValue val = map_get_sentinel(persistent, kw, NULL);

@@ -67,7 +67,7 @@ TEST(test_parse_collections) {
     // Test map parsing with keywords
     CljMap *map_result = (CljMap*)parse("{:a 1 :b 2}", eval_state);
     TEST_ASSERT_NOT_NULL(map_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, map_result->base.type);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, map_result->base.type);
 
     evalstate_free(eval_state);
 }
@@ -112,7 +112,7 @@ TEST(test_parse_metadata) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains the key-value pair
     CljSymbol *kw_key = intern_symbol_global(":key");
@@ -141,7 +141,7 @@ TEST(test_parse_metadata_keyword_shorthand) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains :private -> true
     CljSymbol *kw_private = intern_symbol_global(":private");
@@ -169,7 +169,7 @@ TEST(test_parse_metadata_hash_caret) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains the key-value pair
     CljSymbol *kw_key = intern_symbol_global(":key");
@@ -198,7 +198,7 @@ TEST(test_parse_metadata_combined) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains the key-value pair
     CljSymbol *kw_key = intern_symbol_global(":key");
@@ -227,7 +227,7 @@ TEST(test_parse_metadata_multiple_keywords) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains both :private and :dynamic
     CljSymbol *kw_private = intern_symbol_global(":private");
@@ -259,7 +259,7 @@ TEST(test_parse_metadata_mixed) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains both :private and :doc
     CljSymbol *kw_private = intern_symbol_global(":private");
@@ -320,7 +320,7 @@ TEST(test_keyword_map_access) {
     // Test keyword as map key access: (:key map)
     CljMap *map = (CljMap*)parse("{:a 1 :b 2}", eval_state);
     if (map) {
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->base.type);
+        TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, map->base.type);
 
         // Test (:a map) should return 1
         CljObject *key_access = parse("(:a {:a 1 :b 2})", eval_state);
@@ -354,7 +354,7 @@ TEST(test_parse_multiline_expressions) {
     // Test 3: Multiline map
     CljMap *map_result = (CljMap*)parse("{:a 1\n :b 2\n :c 3}", eval_state);
     TEST_ASSERT_NOT_NULL(map_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, map_result->base.type);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, map_result->base.type);
 
     // Test 4: Multiline function definition
     CljObject *fn_result = parse("(def foo\n  (fn [x]\n    (* x 2)))", eval_state);
@@ -616,7 +616,7 @@ TEST(test_meta_set_and_get) {
     // Get metadata
     ID retrieved_meta = meta_get(obj);
     TEST_ASSERT_NOT_NULL(retrieved_meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)retrieved_meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)retrieved_meta) == CLJ_MAP_PERSISTENT);
 
     // Verify metadata content
     if (kw_doc) {
@@ -646,7 +646,7 @@ TEST(test_meta_automatic_sourcecode_references) {
     // Get metadata
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Check for automatic source code references
     if (SYM_KW_LINE) {

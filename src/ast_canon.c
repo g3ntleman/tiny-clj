@@ -191,7 +191,7 @@ static CljPersistentVector* transform_params(EvalState *st, CljPersistentVector 
     
     VECTOR_FOR_EACH(params, param) {
         unsigned char tag = TAG(param);
-        if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_MAP) {
+        if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_MAP_PERSISTENT) {
             char name[64];
             snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
             CljSymbol *gsym = intern_symbol_global(name);
@@ -915,7 +915,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         return AUTORELEASE(new_vec);
     }
     
-    if (tag == CLJ_MAP) {
+    if (tag == CLJ_MAP_PERSISTENT) {
         CljMap *map = (CljMap*)expr;
         CLJ_ASSERT(map != NULL);
         int cnt = map_count(map);

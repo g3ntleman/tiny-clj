@@ -204,8 +204,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         }
 
         case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: {
+        case CLJ_VECTOR_TRANSIENT:{
             CljPersistentVector *vec =
                 (v->type == CLJ_VECTOR_TRANSIENT)
                     ? vector_persistent(as_transient_vector((ID)v))
@@ -238,7 +237,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             return len;
         }
 
-        case CLJ_MAP:
+        case CLJ_MAP_PERSISTENT:
         case CLJ_MAP_TRANSIENT: {
             CljMap *map = as_map(v);
             size_t len = 2; // "{ }"
@@ -305,7 +304,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             // Avoid hidden allocations when iterating maps: seq_iter_first() for CLJ_MAP
             // materializes a temporary entry vector ([k v]). For printing, we can
             // format that representation directly.
-            if (temp_iter.seq_type == CLJ_MAP) {
+            if (temp_iter.seq_type == CLJ_MAP_PERSISTENT) {
                 CljMap *map = (CljMap*)temp_iter.state.map.map;
                 int index = temp_iter.state.map.index;
                 int count = temp_iter.state.map.count;
@@ -495,8 +494,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
         }
 
         case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: {
+        case CLJ_VECTOR_TRANSIENT:{
             CljPersistentVector *vec =
                 (v->type == CLJ_VECTOR_TRANSIENT)
                     ? vector_persistent(as_transient_vector((ID)v))
@@ -546,7 +544,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             return;
         }
 
-        case CLJ_MAP:
+        case CLJ_MAP_PERSISTENT:
         case CLJ_MAP_TRANSIENT: {
             CljMap *map = as_map(v);
             if (v->type == CLJ_MAP_TRANSIENT) {
@@ -637,7 +635,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             bool first = true;
 
             // Avoid hidden allocations for map sequences (see calc_length variant).
-            if (temp_iter.seq_type == CLJ_MAP) {
+            if (temp_iter.seq_type == CLJ_MAP_PERSISTENT) {
                 CljMap *map = (CljMap*)temp_iter.state.map.map;
                 int index = temp_iter.state.map.index;
                 int count = temp_iter.state.map.count;

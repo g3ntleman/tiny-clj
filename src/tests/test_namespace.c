@@ -1284,7 +1284,7 @@ TEST(test_ns_map_returns_mappings) {
     // Call ns-map via eval_string
     CljObject *result = eval_string("(ns-map 'test-ns-map)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
 
     // Verify the mappings are in the result (must use qualified symbols for map_get)
     CljMap *mappings = (CljMap*)result;
@@ -1319,7 +1319,7 @@ TEST(test_ns_map_empty_namespace) {
     // Test ns-map with namespace symbol
     CljObject *result = eval_string("(ns-map 'test-empty-ns)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
 
     // Verify it's an empty map
     CljMap *mappings = (CljMap*)result;
@@ -1346,7 +1346,7 @@ TEST(test_ns_map_current_namespace) {
     test_snprintf(expr, sizeof(expr), "(ns-map '%s)", current_ns_name);
     CljObject *result = eval_string(expr, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
 
     // Verify the mapping is in the result (must use qualified symbol for map_get)
     CljMap *mappings = (CljMap*)result;

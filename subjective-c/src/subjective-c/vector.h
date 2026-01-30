@@ -5,7 +5,7 @@
 #include "common.h"
 
 // Plan: remove shared `struct CljVector` layout. Keep only:
-// - CljPersistentVector: TAG CLJ_VECTOR_PERSISTENT or CLJ_VECTOR_TRANSIENT_WEAK, owns `data[]`.
+// - CljPersistentVector: TAG CLJ_VECTOR_PERSISTENT, owns `data[]`.
 // - CljTransientVector: wrapper (TAG CLJ_VECTOR_TRANSIENT) with `backing` (always persistent tag).
 //   Transient mutation API: vector_push, vector_pop, vector_set_nth_transient, vector_remove_at, vector_insert_at.
 
@@ -19,7 +19,7 @@ typedef struct CljTransientVector {
 static inline bool is_persistent_vector(ID obj) {
     if (!obj) return false;
     CljType tag = TAG(obj);
-    return (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT_WEAK);
+    return (tag == CLJ_VECTOR_PERSISTENT);
 }
 
 static inline bool is_transient_vector(ID obj) {
@@ -29,7 +29,7 @@ static inline bool is_transient_vector(ID obj) {
 static inline bool is_vector(ID obj) {
     if (!obj) return false;
     CljType tag = TAG(obj);
-    return (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT);
+    return (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT);
 }
 
 static inline CljPersistentVector* as_persistent_vector(ID obj) {
@@ -55,7 +55,8 @@ ID* vector_as_array(CljPersistentVector *vec);
 extern CljPersistentVector* vector_empty_singleton;
 CljPersistentVector* empty_vector(void);
 /** Create a vector with given capacity.
- * If weakElements is true, vector stores elements without retaining/releasing them.
+ * If weakElements is true, vector stores elements without retaining/releasing them
+ * and sets CLJ_FLAG_WEAK_ELEMENTS on the vector object.
  * Returns empty-vector singleton if capacity == 0 and weakElements == false.
  */
 CljPersistentVector* make_vector(unsigned int capacity, bool weakElements);
