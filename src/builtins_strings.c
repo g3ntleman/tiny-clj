@@ -86,14 +86,14 @@ ID native_subs(ID *args, unsigned int argc) {
 
     // Validate string argument
     if (!str_arg || TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "subs requires a string as first argument"); return NULL;
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                "subs requires a string as first argument");
     }
 
     // Validate start index
-    if (!start_arg || TAG(start_arg) != CLJ_FIXNUM) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "subs requires a number as start index"); return NULL;
+    if (!start_arg || TAG(start_arg) != CLJ_INT) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                "subs requires a number as start index");
     }
 
     CljString *str = as_clj_string(str_arg);
@@ -105,9 +105,9 @@ ID native_subs(ID *args, unsigned int argc) {
 
     // Determine end index: if not provided, use string length
     if (end_arg) {
-        if (TAG(end_arg) != CLJ_FIXNUM) {
-            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                    "subs requires a number as end index"); return NULL;
+        if (TAG(end_arg) != CLJ_INT) {
+            return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                    "subs requires a number as end index");
         }
         end = AS_FIXNUM(end_arg);
     } else {
@@ -116,18 +116,18 @@ ID native_subs(ID *args, unsigned int argc) {
 
     // Bounds validation
     if (start < 0) {
-        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "subs start index %d is negative", start); return NULL;
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                "subs start index %d is negative", start);
     }
 
     if (end > str_len) {
-        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "subs end index %d is greater than string length %d", end, str_len); return NULL;
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                "subs end index %d is greater than string length %d", end, str_len);
     }
 
     if (start > end) {
-        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "subs start index %d is greater than end index %d", start, end); return NULL;
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                "subs start index %d is greater than end index %d", start, end);
     }
 
     // Calculate substring length
@@ -167,7 +167,7 @@ ID native_trim(ID *args, unsigned int argc) {
     // Validate string argument
     if (TAG(str_arg) != CLJ_STRING) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "trim requires a string argument"); return NULL;
+                "trim requires a string argument");
         return NULL;
     }
 
@@ -218,7 +218,7 @@ ID native_upper_case(ID *args, unsigned int argc) {
     // Validate string argument
     if (TAG(str_arg) != CLJ_STRING) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "upper-case requires a string argument"); return NULL;
+                                  "upper-case requires a string argument");
         return NULL;
     }
 
@@ -253,7 +253,7 @@ ID native_lower_case(ID *args, unsigned int argc) {
     // Validate string argument
     if (TAG(str_arg) != CLJ_STRING) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "lower-case requires a string argument"); return NULL;
+                                  "lower-case requires a string argument");
         return NULL;
     }
 
@@ -287,21 +287,21 @@ ID native_pad_left(ID *args, unsigned int argc) {
     // Validate string argument
     if (!str_arg || TAG(str_arg) != CLJ_STRING) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "pad-left requires a string as first argument"); return NULL;
+                                  "pad-left requires a string as first argument");
         return NULL;
     }
     
     // Validate width argument
     if (!is_fixnum(width_arg)) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "pad-left requires an integer width as second argument"); return NULL;
+                                  "pad-left requires an integer width as second argument");
         return NULL;
     }
     
     // Validate pad-char argument
     if (!pad_char_arg || TAG(pad_char_arg) != CLJ_STRING) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "pad-left requires a string as third argument (pad-char)"); return NULL;
+                                  "pad-left requires a string as third argument (pad-char)");
         return NULL;
     }
     
@@ -351,14 +351,14 @@ ID native_last_index_of(ID *args, unsigned int argc) {
     // Validate string argument
     if (!str_arg || TAG(str_arg) != CLJ_STRING) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "last-index-of requires a string as first argument"); return NULL;
+                                  "last-index-of requires a string as first argument");
         return NULL;
     }
 
     // Validate value argument
     if (!value_arg || TAG(value_arg) != CLJ_STRING) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "last-index-of requires a string as second argument"); return NULL;
+                                  "last-index-of requires a string as second argument");
         return NULL;
     }
 
@@ -380,9 +380,9 @@ ID native_last_index_of(ID *args, unsigned int argc) {
     // Validate from-index if provided
     int from_index = str_len - 1; // Default: search from end
     if (from_index_arg) {
-        if (TAG(from_index_arg) != CLJ_FIXNUM) {
+        if (TAG(from_index_arg) != CLJ_INT) {
             throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                      "last-index-of requires an integer as from-index"); return NULL;
+                                      "last-index-of requires an integer as from-index");
             return NULL;
         }
         from_index = as_fixnum(from_index_arg);
@@ -426,7 +426,7 @@ ID native_string_reverse(ID *args, unsigned int argc) {
     // Validate string argument
     if (TAG(str_arg) != CLJ_STRING) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "reverse requires a string argument"); return NULL;
+                                  "reverse requires a string argument");
         return NULL;
     }
 
@@ -515,7 +515,7 @@ ID native_format(ID *args, unsigned int argc) {
                     }
                     case 'f': {
                         // Float
-                        float val = (TAG(args[arg_idx]) == CLJ_FIXNUM) ?
+                        float val = (TAG(args[arg_idx]) == CLJ_INT) ?
                                    (float)AS_FIXNUM(args[arg_idx]) :
                                    as_fixed((CljValue)args[arg_idx]);
                         int n = snprintf(out, remaining, "%f", val);

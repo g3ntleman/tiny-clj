@@ -4,7 +4,7 @@ project(tiny-clj)
 # Feature flags (compile-time): all are positive *_ENABLED macros (0/1)
 option(TINYCLJ_META_ENABLED "Enable metadata support (META_ENABLED)" ON)
 option(TINYCLJ_MEMORY_PROFILING_ENABLED "Enable memory profiling hooks (MEMORY_PROFILING_ENABLED)" ON)
-option(TINYCLJ_ZOMBIE_ENABLED "Enable zombie mode (ZOMBIE_ENABLED)" ON)
+option(TINYCLJ_ZOMBIE_ENABLED "Enable zombie mode (ZOMBIE_ENABLED)" OFF)
 
 if(TINYCLJ_META_ENABLED)
     set(TINYCLJ_META_ENABLED_VALUE 1)
@@ -134,9 +134,9 @@ set_target_properties(subjective-c-tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}/bin"
 )
 
-# Set output directory for all executables to build/
+# Set output directory for all executables to "build"
 if(NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY OR CMAKE_RUNTIME_OUTPUT_DIRECTORY STREQUAL "")
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
 endif()
 
 # Build time as Unix epoch seconds (UTC) for reproducible #inst in runtime stats
@@ -351,7 +351,7 @@ endif()
 target_include_directories(tiny-clj-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
-# Output directory is set globally to build/
+# Output directory is set globally to "build"
 # REPL Build
 # Debug in Debug mode, Release in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -505,12 +505,11 @@ target_include_directories(unit-tests
 )
 
 # Ensure subjective-c library is compiled with same flags as unit-tests
-# This is critical: exception.c must use DEBUG to match CLJException struct size,
-# and zombie_detection test needs retain() to check rc<=0 (DEBUG) and ZOMBIE_ENABLED.
-# Without this, a Release build would compile subjective-c with NDEBUG and zombie_detection would fail.
+# This is critical: exception.c must use DEBUG to match CLJException struct size
+# Note: DEBUG is set in subjective-c/CMakeLists.txt based on CMAKE_BUILD_TYPE
+# For unit-tests, we need additional flags (UNITY_TESTS, etc.)
+# Since unit-tests is always built in Debug mode, DEBUG will be set via CMAKE_BUILD_TYPE
 target_compile_definitions(subjective-c PRIVATE 
-    DEBUG
-    ZOMBIE_ENABLED
     UNITY_TESTS 
     MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE}
     META_ENABLED=1

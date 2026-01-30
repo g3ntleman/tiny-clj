@@ -478,7 +478,7 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         CljAtom *atom = make_atom(fixnum(0));
         TEST_ASSERT_NOT_NULL(atom);
         
-        CljMap *new_let_env = (CljMap*)map_assoc((CljMap*)let_env, i_sym, (CljObject*)atom);
+        CljMap *new_let_env = (CljMap*)map_by_associng_kv((CljMap*)let_env, i_sym, (CljObject*)atom);
         ASSIGN(let_env, new_let_env);
         
         bool contains = map_contains((CljMap*)let_env, (CljValue)i_sym);

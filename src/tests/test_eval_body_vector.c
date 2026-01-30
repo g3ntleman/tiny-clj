@@ -29,8 +29,8 @@ TEST_SHARED(test_eval_body_vector_with_env_stack) {
     
     // Create env_stack with bindings: x=1, y=2
     CljPersistentVector *env_stack = NULL;
-    CljMap *x_binding = map_assoc(map_empty(), (ID)x_sym, fixnum(1));
-    CljMap *y_binding = map_assoc(map_empty(), (ID)y_sym, fixnum(2));
+    CljMap *x_binding = map_by_associng_kv(map_empty(), (ID)x_sym, fixnum(1));
+    CljMap *y_binding = map_by_associng_kv(map_empty(), (ID)y_sym, fixnum(2));
     env_stack_push_inplace(&env_stack, x_binding);
     env_stack_push_inplace(&env_stack, y_binding);
     RELEASE(x_binding);
@@ -86,8 +86,8 @@ TEST_SHARED(test_eval_body_vector_with_base_env) {
     ASSIGN(vec, vector_conj(vec, (ID)y_sym));
     
     // Create base_env with bindings: x=1, y=2
-    CljMap *base_env = map_assoc(map_empty(), x_sym, fixnum(1));
-    ASSIGN(base_env, map_assoc(base_env, y_sym, fixnum(2)));
+    CljMap *base_env = map_by_associng_kv(map_empty(), x_sym, fixnum(1));
+    ASSIGN(base_env, map_by_associng_kv(base_env, y_sym, fixnum(2)));
     
     // Evaluate vector using eval_body with base_env
     EvalContext ctx = {
@@ -144,8 +144,8 @@ TEST_SHARED(test_eval_body_nested_vector_with_env_stack) {
     
     // Create env_stack with bindings: x=1, y=2
     CljPersistentVector *env_stack = NULL;
-    CljMap *x_binding = map_assoc(map_empty(), (ID)x_sym, fixnum(1));
-    CljMap *y_binding = map_assoc(map_empty(), (ID)y_sym, fixnum(2));
+    CljMap *x_binding = map_by_associng_kv(map_empty(), (ID)x_sym, fixnum(1));
+    CljMap *y_binding = map_by_associng_kv(map_empty(), (ID)y_sym, fixnum(2));
     env_stack_push_inplace(&env_stack, x_binding);
     env_stack_push_inplace(&env_stack, y_binding);
     RELEASE(x_binding);

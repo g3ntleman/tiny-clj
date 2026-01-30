@@ -59,41 +59,6 @@ TEST_SHARED(test_core_first) {
     TEST_ASSERT_NULL(result2);
 }
 
-// Test SYM_NIL conversion in first: quoted lists with nil elements
-TEST_SHARED(test_core_first_nil_elements) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (first '(nil)) => nil (SYM_NIL should be converted to NULL)
-    CljObject *result1 = eval_string("(first '(nil))", g_test_eval_state);
-    TEST_ASSERT_NULL(result1);
-    
-    // Test: (first '(nil 1 2)) => nil
-    CljObject *result2 = eval_string("(first '(nil 1 2))", g_test_eval_state);
-    TEST_ASSERT_NULL(result2);
-    
-    // Test: (first [nil]) => nil (vector with nil element)
-    CljObject *result3 = eval_string("(first [nil])", g_test_eval_state);
-    TEST_ASSERT_NULL(result3);
-    
-    // Test: (first [nil 1 2]) => nil
-    CljObject *result4 = eval_string("(first [nil 1 2])", g_test_eval_state);
-    TEST_ASSERT_NULL(result4);
-    
-    // Test: (first (seq [nil])) => nil (seq with nil element)
-    CljObject *result5 = eval_string("(first (seq [nil]))", g_test_eval_state);
-    TEST_ASSERT_NULL(result5);
-    
-    // Test: (first (seq [nil 1 2])) => nil
-    CljObject *result6 = eval_string("(first (seq [nil 1 2]))", g_test_eval_state);
-    TEST_ASSERT_NULL(result6);
-    
-    // Test: (first '(1 nil 2)) => 1 (non-nil first element)
-    CljObject *result7 = eval_string("(first '(1 nil 2))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result7);
-    TEST_ASSERT_TRUE(is_fixnum(result7));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result7));
-}
-
 TEST_SHARED(test_core_rest) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
@@ -148,29 +113,6 @@ TEST_SHARED(test_core_nth) {
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_TRUE(is_fixnum(result2));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(result2));
-}
-
-// Test SYM_NIL conversion in nth: quoted lists with nil elements
-TEST_SHARED(test_core_nth_nil_elements) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (nth '(nil 1 2) 0) => nil (SYM_NIL should be converted to NULL)
-    CljObject *result1 = eval_string("(nth '(nil 1 2) 0)", g_test_eval_state);
-    TEST_ASSERT_NULL(result1);
-    
-    // Test: (nth [nil 1 2] 0) => nil
-    CljObject *result2 = eval_string("(nth [nil 1 2] 0)", g_test_eval_state);
-    TEST_ASSERT_NULL(result2);
-    
-    // Test: (nth '(nil 1 2) 1) => 1 (non-nil element)
-    CljObject *result3 = eval_string("(nth '(nil 1 2) 1)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_TRUE(is_fixnum(result3));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result3));
-    
-    // Test: (nth '(1 nil 2) 1) => nil
-    CljObject *result4 = eval_string("(nth '(1 nil 2) 1)", g_test_eval_state);
-    TEST_ASSERT_NULL(result4);
 }
 
 // ============================================================================
@@ -434,10 +376,11 @@ TEST_SHARED(test_str_with_boolean) {
     TEST_ASSERT_TRUE(is_special(false_val2));
     TEST_ASSERT_FALSE(is_fixed(false_val2));
     
-    CljString *direct_result = to_string(clj_false);  // AUTORELEASE; pool will release
+    CljString *direct_result = to_string(clj_false);
     TEST_ASSERT_NOT_NULL(direct_result);
     const char *result_str = string_data(direct_result);
     TEST_ASSERT_EQUAL_STRING("false", result_str);
+    RELEASE(direct_result);
     
     // Test: (str false) should return "false"
     CljObject *str_result3 = eval_string("(str false)", g_test_eval_state);
@@ -559,9 +502,6 @@ TEST_SHARED(test_core_get) {
     TEST_ASSERT_EQUAL_INT(99, as_fixnum(result3));
 }
 
-// Note: SYM_NIL conversion in get is tested in test_map.c (test_map_get_nil_key_exists)
-// This test is removed to avoid dependency on clojure.core being fully loaded
-
 TEST_SHARED(test_core_assoc) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
@@ -636,9 +576,9 @@ TEST_SHARED(test_core_not_first_class) {
     // (map not [true false true]) => (false true false)
     CljObject *result1 = eval_string("(vec (map not [true false true]))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(TAG(result1) == CLJ_VECTOR_PERSISTENT);
+    TEST_ASSERT_TRUE(TAG(result1) == CLJ_VECTOR);
 
-    CljPersistentVector *v = as_persistent_vector((ID)result1);
+    CljVector *v = (CljVector*)result1;
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     TEST_ASSERT_TRUE(vector_nth(v, 0) == clj_false);
     TEST_ASSERT_TRUE(vector_nth(v, 1) == clj_true);

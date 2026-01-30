@@ -42,7 +42,7 @@ ID map_get_sentinel(CljMap *map, ID key, ID not_found);
 static inline ID map_get(CljMap *map, ID key) {
     return map_get_sentinel(map, key, NOT_FOUND);
 }
-CljMap* map_assoc(CljMap* map, ID key, ID value);
+CljMap* map_by_associng_kv(CljMap* map, ID key, ID value);
 CljMap* map_merge(CljMap* a, CljMap* b, bool overwrite);
 ID map_keys(CljMap *map);
 ID map_vals(CljMap *map);
@@ -50,7 +50,7 @@ int map_count(CljMap *map);
 void map_put(CljMap *map, ID key, ID value);
 void map_foreach(CljMap *map, void (*func)(ID, ID));
 int map_contains(CljMap *map, ID key);
-CljMap* map_remove(CljMap *map, ID key);
+CljMap* map_by_removing_key(CljMap *map, ID key);
 
 // In-place helpers for long-lived slots (no AUTORELEASE + releases old map on replacement).
 // These functions update the pointer stored in *map_slot and RELEASE the old map

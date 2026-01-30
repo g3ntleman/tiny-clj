@@ -140,9 +140,9 @@ static void net_udp_recv_bridge(void *ctx,
     }
 
     // Build message map: {:data <byte-array> :from "ip" :port N}
-    ASSIGN(m, map_assoc(m, (ID)SYM_KW_DATA, (ID)payload));
-    ASSIGN(m, map_assoc(m, (ID)SYM_KW_FROM, (ID)make_string(from_addr ? from_addr : "")));
-    ASSIGN(m, map_assoc(m, (ID)SYM_KW_PORT, fixnum((int32_t)from_port)));
+    ASSIGN(m, map_by_associng_kv(m, (ID)SYM_KW_DATA, (ID)payload));
+    ASSIGN(m, map_by_associng_kv(m, (ID)SYM_KW_FROM, (ID)make_string(from_addr ? from_addr : "")));
+    ASSIGN(m, map_by_associng_kv(m, (ID)SYM_KW_PORT, fixnum((int32_t)from_port)));
 
     // Invoke user callback with the message.
     EvalState *st = builtin_get_eval_state();
@@ -342,7 +342,7 @@ static void net_tcp_event_bridge(void *ctx,
         RELEASE((ID)payload);
         return;
     }
-    ASSIGN(m, map_assoc(m, (ID)SYM_KW_DATA, (ID)payload));
+    ASSIGN(m, map_by_associng_kv(m, (ID)SYM_KW_DATA, (ID)payload));
 
     EvalState *st = builtin_get_eval_state();
     if (!st) st = get_global_eval_state();

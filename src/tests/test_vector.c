@@ -1017,8 +1017,8 @@ TEST_SHARED(test_transient_on_transient_returns_same_object) {
         CljMap *map = make_map(4);
         CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
         CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
-        map = map_assoc(map, key1, fixnum(1));
-        map = map_assoc(map, key2, fixnum(2));
+        map = map_by_associng_kv(map, key1, fixnum(1));
+        map = map_by_associng_kv(map, key2, fixnum(2));
         CljMap *tmap = map_transient(map);
         RELEASE(map);
         TEST_ASSERT_NOT_NULL(tmap);
@@ -1075,8 +1075,8 @@ TEST_SHARED(test_persistent_on_persistent_returns_same_object) {
         CljMap *map = make_map(4);
         CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
         CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
-        map = map_assoc(map, key1, fixnum(1));
-        map = map_assoc(map, key2, fixnum(2));
+        map = map_by_associng_kv(map, key1, fixnum(1));
+        map = map_by_associng_kv(map, key2, fixnum(2));
         TEST_ASSERT_NOT_NULL(map);
         TEST_ASSERT_TRUE(TAG(map) == CLJ_MAP);
         

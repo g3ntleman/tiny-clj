@@ -16,7 +16,7 @@
 #include "symbol.h"         // For init_special_symbols()
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
-#include "to_string.h"      // For to_string()
+#include "to_string.h"      // For to_string(), pr_str; strings.h for string_data
 #include "callbacks.h"  // For clj_set_callbacks
 #include <stdint.h>
 #include <stdbool.h>
@@ -38,6 +38,19 @@ TinyClJRuntime g_runtime = {
 // Monotonic epoch for callsite + resolve cache invalidation.
 // Must never be reset to avoid re-validating stale cached pointers across runtime_reset().
 static uint64_t g_resolve_cache_epoch_counter = 1;
+
+#if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
+static void zombie_log_fn(CljObject *v, bool is_double_free) {
+    WITH_AUTORELEASE_POOL({
+        CljString *s = pr_str((ID)v);
+        if (s) {
+            fputs(is_double_free ? "DOUBLE-FREE pr_str: " : "ZOMBIE pr_str: ", stderr);
+            fputs(string_data((CljObject *)s), stderr);
+            fputc('\n', stderr);
+        }
+    });
+}
+#endif
 
 void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime) return;
@@ -71,17 +84,21 @@ void runtime_init(TinyClJRuntime *runtime) {
         runtime->resolve_cache_epoch = ++g_resolve_cache_epoch_counter;
     }
     
-    // Initialize event loop queues as persistent vectors (only if not already set)
+    // Initialize event loop queues as transient vectors (only if not already set)
     if (!runtime->task_queue) {
-        CljPersistentVector* task_vec = make_vector(8, false);
+        CljVector* task_vec = make_vector(8, CLJ_VECTOR);
         if (task_vec) {
-            ASSIGN(runtime->task_queue, task_vec);
+            CljVector* transient_task = vector_transient(task_vec);
+            RELEASE(task_vec); // vector_transient() retains the result
+            ASSIGN(runtime->task_queue, transient_task);
         }
     }
     if (!runtime->timer_queue) {
-        CljPersistentVector* timer_vec = make_vector(8, false);
+        CljVector* timer_vec = make_vector(8, CLJ_VECTOR);
         if (timer_vec) {
-            ASSIGN(runtime->timer_queue, timer_vec);
+            CljVector* transient_timer = vector_transient(timer_vec);
+            RELEASE(timer_vec); // vector_transient() retains the result
+            ASSIGN(runtime->timer_queue, transient_timer);
         }
     }
     
@@ -101,6 +118,10 @@ void runtime_init(TinyClJRuntime *runtime) {
         .equal = clj_equal_full,
         .to_string = to_string
     });
+
+#if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
+    subjective_c_set_zombie_log_fn(zombie_log_fn);
+#endif
 
     // Initialize special symbols/keywords early, before any code can intern the same names.
     // This must happen AFTER callbacks are set, because the symbol table is a HashMap that

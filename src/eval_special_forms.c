@@ -350,7 +350,7 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
             }
         }
     }
-    CljPersistentVector* empty_params_vec = make_vector(0, false);
+    CljVector* empty_params_vec = make_vector(0, CLJ_VECTOR);
     CljList *fn_list = make_list((CljObject*)SYM_FN, NULL);
     if (!fn_list) return NULL;
     fn_list->rest = (CljObject*)make_list(empty_params_vec, NULL);
@@ -374,7 +374,7 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 // Wrapper functions for existing special form evaluators
 ID eval_special_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_fn: list must not be NULL");
-    return eval_fn(list, eval_env_or_ns_mappings(env, st), st, ctx);
+    return AUTORELEASE(eval_fn(list, eval_env_or_ns_mappings(env, st), st, ctx));
 }
 
 ID eval_special_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
@@ -401,12 +401,12 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
 
     // Shape: (loop [sym1 init1 sym2 init2 ...] body...)
     ID bindings_vec = list_get_element(list, 1);
-    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR_PERSISTENT) {
+    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop requires a vector for bindings", __FILE__, __LINE__, 0);
         return NULL;
     }
 
-    CljPersistentVector *bindings = as_persistent_vector(bindings_vec);
+    CljVector *bindings = as_vector(bindings_vec);
     int binding_count = bindings ? (int)vector_count(bindings) : 0;
     if (!bindings || (binding_count % 2) != 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop requires an even number of forms in binding vector",
@@ -421,7 +421,7 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
     }
 
     // Start from captured env_stack (if any), but do NOT mutate it.
-    CljPersistentVector *loop_stack = ctx ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
+    CljVector *loop_stack = (ctx && ctx->env_stack) ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
 
     // Frame for fast local lookups.
     CallFrame loop_frame_storage;
@@ -685,10 +685,10 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
             // explicit env argument. Make the catch binding visible by extending env_stack.
             EvalContext catch_ctx_storage;
             const EvalContext *catch_ctx = ctx;
-            CljPersistentVector *catch_stack = NULL;
+            CljVector *catch_stack = NULL;
             if (ctx) {
                 catch_ctx_storage = *ctx;
-                catch_stack = (CljPersistentVector*)RETAIN(ctx->env_stack);
+                catch_stack = ctx->env_stack ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
                 env_stack_push_inplace(&catch_stack, catch_env);
                 catch_ctx_storage.env_stack = catch_stack;
                 catch_ctx = &catch_ctx_storage;
@@ -747,14 +747,14 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
         return NULL;
     }
 
-    CljPersistentVector *bindings_vec = as_persistent_vector(bindings_obj);
+    CljVector *bindings_vec = as_vector(bindings_obj);
     unsigned int bind_count = vector_count(bindings_vec);
     if ((bind_count % 2) != 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding vector must contain an even number of forms", __FILE__, __LINE__, 0);
         return NULL;
     }
 
-    unsigned int base_depth = vector_count(vector_persistent(st->dynamic_bindings));
+    unsigned int base_depth = vector_count(st->dynamic_bindings);
     CljNamespace *saved_ns = st->current_ns;
 
     // Build a single frame map: Symbol -> value.
@@ -828,7 +828,7 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
     }
 
     // Push the new frame and run body; unwind stack even if an exception escapes.
-    vector_push(st->dynamic_bindings, frame);
+    vector_conj_inplace(&st->dynamic_bindings, frame);
     RELEASE(frame);
 
     if (bound_ns) {

@@ -73,7 +73,7 @@ static inline ID frame_get_slot(CallFrame *frame, uint8_t depth, uint8_t slot) {
     return frame_decode_value(cur->values[slot]);
 }
 
-/** Release all values in a frame (for cleanup). MEMORY_POLICY: values must have been RETAINed when stored. */
+/** Release all values in a frame (for cleanup) */
 void frame_release(CallFrame *frame);
 
 #endif

@@ -605,7 +605,7 @@ TEST(test_meta_set_and_get) {
     CljSymbol *kw_doc = intern_symbol_global(":doc");
     ID doc_str = make_string("Test documentation");
     if (kw_doc && doc_str) {
-        ASSIGN(meta_map, map_assoc(meta_map, (CljValue)kw_doc, (CljValue)doc_str));
+        ASSIGN(meta_map, map_by_associng_kv(meta_map, (CljValue)kw_doc, (CljValue)doc_str));
         RELEASE(doc_str);
     }
 
@@ -687,7 +687,7 @@ TEST(test_meta_merge_does_not_overwrite) {
     TEST_ASSERT_NOT_NULL(existing_meta);
 
     if (SYM_KW_LINE) {
-        ASSIGN(existing_meta, map_assoc(existing_meta, (CljValue)SYM_KW_LINE, fixnum(100)));
+        ASSIGN(existing_meta, map_by_associng_kv(existing_meta, (CljValue)SYM_KW_LINE, fixnum(100)));
     }
 
     // Create location metadata with :line
@@ -765,7 +765,7 @@ TEST(test_meta_clear) {
     CljSymbol *kw_doc = intern_symbol_global(":doc");
     ID doc_str = make_string("Test");
     if (kw_doc && doc_str) {
-        ASSIGN(meta_map, map_assoc(meta_map, (CljValue)kw_doc, (CljValue)doc_str));
+        ASSIGN(meta_map, map_by_associng_kv(meta_map, (CljValue)kw_doc, (CljValue)doc_str));
         RELEASE(doc_str);
     }
 

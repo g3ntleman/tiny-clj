@@ -226,20 +226,19 @@ TEST_SHARED(test_doseq_with_vector_binding) {
 // Regression: for with vector binding (basic list comprehension)
 TEST_SHARED(test_for_basic_list_comprehension) {
     ID result = eval_string(
-        "(for [x [1 2 3 4]] (* x x))",
+        "(for [x [1 2 3]] (* x x))",
         g_test_eval_state);
-    // Accept both lazy sequences and lists; normalize to a seq. If result is already
-    // CLJ_SEQ, make_seq returns it as-is — do not AUTORELEASE again (it is from eval).
-    ID seq = (TAG(result) == CLJ_SEQ) ? result : AUTORELEASE(make_seq(result));
+    // Accept both lazy sequences and lists; normalize to a seq iterator
+    ID seq = AUTORELEASE(make_seq(result));
     TEST_ASSERT_NOT_NULL(seq);
-    int expected[] = {1, 4, 9, 16};
+    int expected[] = {1, 4, 9};
     int i = 0;
     for (ID cur = seq; cur && !seq_empty(cur); cur = seq_next(cur), ++i) {
         ID first = seq_first(cur);
         TEST_ASSERT_TRUE(is_fixnum(first));
         TEST_ASSERT_EQUAL_INT(expected[i], as_fixnum(first));
     }
-    TEST_ASSERT_EQUAL_INT(4, i); // Should have 4 elements
+    TEST_ASSERT_EQUAL_INT(3, i); // Should have 3 elements
 }
 
 // ============================================================================
@@ -257,13 +256,13 @@ TEST_SHARED(test_for_multiple_bindings) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
-    CljPersistentVector *vec = as_persistent_vector(result);
+    CljVector *vec = as_vector(result);
     TEST_ASSERT_EQUAL_INT(4, vector_count(vec));
     
     // Check first element: [1 3]
     ID first = vector_nth(vec, 0);
     TEST_ASSERT_TRUE(is_vector(first));
-    CljPersistentVector *first_vec = as_persistent_vector(first);
+    CljVector *first_vec = as_vector(first);
     TEST_ASSERT_EQUAL_INT(2, vector_count(first_vec));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(first_vec, 0)));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(vector_nth(first_vec, 1)));
@@ -271,7 +270,7 @@ TEST_SHARED(test_for_multiple_bindings) {
     // Check last element: [2 4]
     ID last = vector_nth(vec, 3);
     TEST_ASSERT_TRUE(is_vector(last));
-    CljPersistentVector *last_vec = as_persistent_vector(last);
+    CljVector *last_vec = as_vector(last);
     TEST_ASSERT_EQUAL_INT(2, vector_count(last_vec));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(last_vec, 0)));
     TEST_ASSERT_EQUAL_INT(4, as_fixnum(vector_nth(last_vec, 1)));
@@ -288,7 +287,7 @@ TEST_SHARED(test_for_when_modifier) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
-    CljPersistentVector *vec = as_persistent_vector(result);
+    CljVector *vec = as_vector(result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(vec, 0)));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(vec, 1)));
@@ -306,7 +305,7 @@ TEST_SHARED(test_for_let_modifier) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
-    CljPersistentVector *vec = as_persistent_vector(result);
+    CljVector *vec = as_vector(result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(vec, 0)));
     TEST_ASSERT_EQUAL_INT(4, as_fixnum(vector_nth(vec, 1)));
@@ -324,7 +323,7 @@ TEST_SHARED(test_for_while_modifier) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
-    CljPersistentVector *vec = as_persistent_vector(result);
+    CljVector *vec = as_vector(result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(vec, 0)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(vec, 1)));
@@ -355,7 +354,7 @@ TEST_SHARED(test_for_lazy_infinite) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
-    CljPersistentVector *vec = as_persistent_vector(result);
+    CljVector *vec = as_vector(result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(vec, 0)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(vec, 1)));
