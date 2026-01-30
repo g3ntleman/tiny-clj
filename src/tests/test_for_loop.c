@@ -18,7 +18,7 @@
 
 TEST(test_doseq_basic) {
     CljMap *env = make_map(4);
-    CljObject *result = eval_doseq(NULL, env);
+    CljObject *result = eval_doseq(NULL, env, g_test_eval_state, NULL);
     TEST_ASSERT_NULL(result);
     RELEASE(env);
 }
@@ -55,27 +55,24 @@ TEST(test_doseq_with_environment) {
         EvalState *eval_state = evalstate_new(false);
         TEST_ASSERT_NOT_NULL(eval_state);
         
-        CljValue vec = make_vector(3, false);
-        CljVector *vec_data = as_vector(vec);
-        TEST_ASSERT_NOT_NULL(vec_data);
+        CljPersistentVector *vec = make_vector(0, false);
+        TEST_ASSERT_NOT_NULL(vec);
+        vec = vector_conj(vec, fixnum(1));
+        vec = vector_conj(vec, fixnum(2));
+        vec = vector_conj(vec, fixnum(3));
         
-        vec_data->data[0] = fixnum(1);
-        vec_data->data[1] = fixnum(2);
-        vec_data->data[2] = fixnum(3);
-        vec_data->count = 3;
-        
-        CljObject *binding_list = make_list(intern_symbol_global("x"), make_list(vec, NULL));
-        CljSymbol *body = intern_symbol_global("x");
-        CljObject *doseq_call = make_list(SYM_DOSEQ, make_list(binding_list, make_list(body, NULL)));
+        ID sym_x = (ID)intern_symbol_global("x");
+        ID binding_list = (ID)make_list(sym_x, make_list((ID)vec, NULL));
+        ID doseq_call = (ID)make_list(SYM_DOSEQ, make_list(binding_list, make_list(sym_x, NULL)));
+        RELEASE(vec);
         CljMap *env = make_map(4);
         
-        CljObject *result = eval_doseq(as_list(doseq_call), env);
+        CljObject *result = eval_doseq(as_list(doseq_call), env, eval_state, NULL);
         TEST_ASSERT_NULL(result);
         
         RELEASE(env);
         evalstate_free(eval_state);
         RELEASE(binding_list);
-        RELEASE(body);
         RELEASE(doseq_call);
     });
 }

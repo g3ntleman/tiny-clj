@@ -3,7 +3,7 @@ project(tiny-clj)
 
 # Feature flags (compile-time): all are positive *_ENABLED macros (0/1)
 option(TINYCLJ_META_ENABLED "Enable metadata support (META_ENABLED)" ON)
-option(TINYCLJ_MEMORY_PROFILING_ENABLED "Enable memory profiling hooks (MEMORY_PROFILING_ENABLED)" ON)
+option(TINYCLJ_MEMORY_PROFILING_ENABLED "Enable memory profiling hooks (MEMORY_PROFILING_ENABLED)" OFF)
 option(TINYCLJ_ZOMBIE_ENABLED "Enable zombie mode (ZOMBIE_ENABLED)" ON)
 
 if(TINYCLJ_META_ENABLED)
@@ -420,6 +420,7 @@ add_executable(unit-tests
     src/tests/test_call_frame.c
     src/tests/test_slot_ref.c
     src/tests/test_compiled_ast.c
+    src/tests/test_cond_nesting.c
     src/tests/test_line_editor_serial.c
     src/tests/test_do.c
     src/tests/test_defn.c
@@ -431,8 +432,10 @@ add_executable(unit-tests
     src/tests/test_edn_file_all_types.c
     src/tests/test_loops.c
     src/tests/test_eval_body_vector.c
+    src/tests/test_eval_context.c
     src/tests/test_go_blocks.c
     src/tests/test_fixed_point.c
+    src/tests/test_for_loop.c
     src/tests/test_arithmetic.c
     src/tests/test_sequences.c
     src/tests/test_list_resolution.c
@@ -446,6 +449,7 @@ add_executable(unit-tests
     src/tests/test_require.c
     src/tests/test_require_perf.c
     src/tests/test_qualified_symbol_resolution.c
+    src/tests/test_recursive_resolution.c
     src/tests/test_repl.c
     src/tests/test_file_io.c
     src/tests/test_rrd_scripts.c
@@ -460,15 +464,20 @@ add_executable(unit-tests
     src/tests/test_dynamic_binding.c
     src/tests/test_core_functions.c
     src/tests/test_regex.c
+    src/tests/test_alias.c
     src/tests/test_alias_lowlevel.c
     src/tests/test_string.c
     src/tests/test_vector.c
+    src/tests/test_values.c
     src/tests/test_time.c
     src/tests/test_yield_sleep_hooks.c
     src/tests/test_yield_sleep.c
     src/tests/test_runtime_stats.c
+    src/tests/test_plan_trackA_scripts.c
     src/tests/test_pprint.c
+    src/tests/test_print.c
     src/tests/test_static_keywords.c
+    src/tests/test_byte_array.c
     src/tests/test_byte_array_view.c
     src/tests/test_platform_net.c
     src/tests/test_mdns_codec.c
@@ -487,6 +496,7 @@ target_compile_definitions(unit-tests PRIVATE
     TINY_CLJ_TEST_RUNNER
     UNITY_USE_COMMAND_LINE_ARGS
     LINE_EDITING_ENABLED=1
+    MEMORY_PROFILING_ENABLED=0
 )
 target_link_libraries(unit-tests PRIVATE subjective-c)
 target_link_libraries(unit-tests PRIVATE tiny-db)
@@ -512,7 +522,7 @@ target_compile_definitions(subjective-c PRIVATE
     DEBUG
     ZOMBIE_ENABLED
     UNITY_TESTS 
-    MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE}
+    MEMORY_PROFILING_ENABLED=0
     META_ENABLED=1
     UNITY_INCLUDE_EXEC_TIME 
 )
@@ -531,7 +541,7 @@ if(ENABLE_ASAN)
         # Use target_link_options to properly set linker flags
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE};META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;LINE_EDITING_ENABLED=1"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=0;META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;LINE_EDITING_ENABLED=1"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -554,7 +564,7 @@ if(ENABLE_ASAN)
         # Linux/other: disable gc-sections to preserve all functions
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE};META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;LINE_EDITING_ENABLED=1"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=0;META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;LINE_EDITING_ENABLED=1"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -571,7 +581,7 @@ else()
         # macOS: disable dead_strip to preserve all functions (including test registrations)
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE};META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;LINE_EDITING_ENABLED=1"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=0;META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;LINE_EDITING_ENABLED=1"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -591,7 +601,7 @@ else()
         # Linux/other: disable gc-sections to preserve all functions
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE};META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;LINE_EDITING_ENABLED=1"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=0;META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;LINE_EDITING_ENABLED=1"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"

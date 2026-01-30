@@ -7,7 +7,6 @@
 #include "tests_common.h"
 #include "symbol.h"
 #include "namespace.h"
-#include "function_call.h"
 #include "value.h"
 #include <sys/stat.h>
 #include <errno.h>
@@ -275,4 +274,3 @@ TEST(test_hypothesis_parser_no_resolution_when_alias_missing) {
     TEST_ASSERT_EQUAL_STRING_MESSAGE("nonexistent", kw->ns_name->cname,
         "Parser should NOT resolve when alias doesn't exist");
 }
-

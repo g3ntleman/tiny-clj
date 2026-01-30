@@ -22,7 +22,7 @@ TEST(test_recursive_function_ctx_propagation) {
     TRY {
         // Define a recursive function that calls itself
         // This will test if ctx is correctly passed through recursive calls
-        eval_string("(defn my-join [sep coll] (if (empty? coll) \"\" (str (first coll) sep (my-join sep (rest coll)))))", g_test_eval_state);
+        eval_string("(defn my-join [sep coll] (if (empty? coll) \"\" (if (empty? (rest coll)) (first coll) (str (first coll) sep (my-join sep (rest coll))))))", g_test_eval_state);
         
         // Call it - this should trigger recursive calls where ctx might be lost
         // If ctx is NULL when resolve_list_operator is called, the assertion will fail

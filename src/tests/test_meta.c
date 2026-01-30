@@ -1,7 +1,6 @@
 /*
  * Unity Tests for meta function in Tiny-CLJ
- * 
- * Test-First: These tests verify that meta works correctly
+ * Only compiled/run when META_ENABLED is set.
  */
 
 #include "tests_common.h"
@@ -19,6 +18,8 @@
 #include "../builtins.h"
 #include "../meta.h"
 #include <sys/time.h>
+
+#if defined(META_ENABLED) && META_ENABLED
 
 static void assert_meta_has_line_info(CljObject *meta_result, const char *context) {
     TEST_ASSERT_NOT_NULL_MESSAGE(meta_result, context);
@@ -403,12 +404,9 @@ TEST(test_meta_contains_line_info) {
     assert_meta_has_line_info(meta_result, "(meta nil?) should include :line metadata");
 }
 
-#if defined(META_ENABLED) && META_ENABLED
 // ============================================================================
-// TEST: Clojure metadata semantics
+// Clojure metadata semantics
 // ============================================================================
-
-// Symbols can have metadata
 TEST(test_meta_symbol_has_metadata) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljObject *meta_result = eval_string("(meta 'inc)", g_test_eval_state);
@@ -453,6 +451,12 @@ TEST(test_meta_list_can_have_metadata) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljObject *meta_result = eval_string("(meta (with-meta '(1 2 3) {:custom true}))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(meta_result, "List with-meta should have metadata");
+}
+
+#else
+// META_ENABLED=0: meta API is stubbed; skip all meta tests
+TEST(test_meta_disabled) {
+    TEST_PASS_MESSAGE("meta tests skipped when META_ENABLED=0");
 }
 #endif
 

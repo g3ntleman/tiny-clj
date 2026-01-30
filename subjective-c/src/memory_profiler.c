@@ -353,10 +353,10 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
         size_t r = stats->retains_by_type[i], rl = stats->releases_by_type[i], ar = stats->autoreleases_by_type[i];
         if (a || d || r || rl || ar) {
             any = true;
-            LOGF(stdout, "📋 %s: A:%zu/%zu", clj_type_name((CljType)i), a, d);
-            if (r) LOGF(stdout, " R:%zu", r);
-            if (rl) LOGF(stdout, " Rel:%zu", rl);
-            if (ar) LOGF(stdout, " AR:%zu", ar);
+            LOGF(stdout, "📋 %s: Alloc:%zu Dealloc:%zu", clj_type_name((CljType)i), a, d);
+            if (r) LOGF(stdout, " Retain:%zu", r);
+            if (rl) LOGF(stdout, " Release:%zu", rl);
+            if (ar) LOGF(stdout, " Autorelease:%zu", ar);
             LOGF(stdout, "\n");
         }
     }

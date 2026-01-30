@@ -477,7 +477,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
 
 /**
  * @brief Evaluate a parsed Clojure expression
- * @param parsed_expr The parsed AST
+ * @param parsed_expr The parsed AST (expected autoreleased, e.g. from parse(); canonicalize may replace it; old AST is cleaned by caller's autorelease pool)
  * @param eval_state The evaluation state
  * @param env Optional environment (if NULL, uses eval_state->current_ns->mappings)
  * @return The evaluated result (autoreleased) or NULL only if result is nil
@@ -499,7 +499,10 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
         result = parsed_expr;
     } else {
         // Canonicalize the AST before evaluation
-        // This converts symbol tokens to symbols and handles quote forms properly
+        // This converts symbol tokens to symbols and handles quote forms properly.
+        // parsed_expr is expected autoreleased (e.g. from parse()); when we replace it
+        // with the canonical result (also autoreleased), the old AST is cleaned up by
+        // the caller's autorelease pool (see MEMORY_POLICY.md Parse/Eval Functions).
 #ifdef PROFILE_STARTUP
         extern double g_canon_time_ms;
         clock_t canon_start = clock();
@@ -632,6 +635,7 @@ static ID parse_map(Reader *reader, EvalState *st) {
     }
   }
   if (reader_eof(reader) || !reader_match(reader, '}')) {
+    RELEASE(map);
     throw_parser_exception("Unclosed map - missing closing '}'", reader);
     return NULL;
   }
@@ -742,6 +746,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
 
       // Build (let [binding test] (if binding then else?))
       ID expanded = AUTORELEASE(make_ast_list(SYM_LET, make_ast_list(let_binding_vec, make_ast_list(if_expr, NULL))));
+      RELEASE(if_expr);  // Tree now owns the reference
 
       // Skip whitespace before checking for closing parenthesis
       reader_skip_all(reader);
@@ -1583,7 +1588,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   if (!body) {
     // Empty function body - return (fn [] ())
     CljSymbol *fn_sym = intern_symbol_global("fn");
-    CljValue empty_vec = make_vector(0, false);
+    CljValue empty_vec = AUTORELEASE(make_vector(0, false));
     ID empty_list_val = NULL; // () is nil in Clojure
     return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
   }
@@ -1597,15 +1602,14 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // This is a simplified approach - in a full implementation, we'd traverse the AST
 
   // Simple approach: create (fn [%] body) for #(...)
-  // This handles the most common case: #(+ % 1)
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
   CljSymbol *fn_sym = intern_symbol_global("fn");
   CljSymbol *percent_sym = intern_symbol_global("%");
-  CljPersistentVector *param_vec = make_vector(1, false);
+  CljPersistentVector *param_vec = AUTORELEASE(make_vector(1, false));
   vector_conj_inplace(&param_vec, percent_sym);
 
-  // Create (fn [%] body)
-  return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(param_vec, make_ast_list(body, NULL))));
+  // Create (fn [%] body); param_vec may have been replaced by vector_conj_inplace, autorelease in same scope
+  return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(AUTORELEASE(param_vec), make_ast_list(body, NULL))));
 }
 
 /**

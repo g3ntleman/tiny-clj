@@ -32,6 +32,9 @@ static bool g_batch_mode = false;
 // Quiet output mode: suppress PASS lines and stdout from passing tests
 static bool g_quiet_output = false;
 
+// Single test mode: enable verbose memory stats when only one test runs
+static bool g_single_test_mode = false;
+
 // Global test EvalState (available in all tests via tests_common.h)
 EvalState *g_test_eval_state = NULL;
 
@@ -83,7 +86,7 @@ void setUp(void) {
 #if MEMORY_PROFILING_ENABLED
         MEMORY_PROFILER_INIT();
         enable_memory_profiling(true);
-        set_memory_verbose_mode(false);
+        set_memory_verbose_mode(g_single_test_mode);
         memory_set_debug_output_enabled(memory_get_debug_output_enabled());
 #endif
 
@@ -283,6 +286,17 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
         fclose(captured_stdout);
         captured_stdout = NULL;
     }
+
+#if MEMORY_PROFILING_ENABLED
+    // In quiet mode, stdout was captured during the test. Emit per-type stats
+    // after restoring stdout so they are visible for single-test runs.
+    if (g_single_test_mode && g_quiet_output && g_memory_profiling_enabled) {
+        bool old_verbose = g_memory_verbose_mode;
+        g_memory_verbose_mode = true;
+        memory_profiler_print_stats("Single Test");
+        g_memory_verbose_mode = old_verbose;
+    }
+#endif
 }
 
 // Run shared tests in batches (one setUp/tearDown per batch)
@@ -345,6 +359,7 @@ void run_shared_tests_batched(void) {
 void run_tests_by_registry_impl(void) {
     size_t test_count;
     const SubjectiveCTestEntry *all_tests = subjective_c_test_registry_entries(&test_count);
+    g_single_test_mode = false;
     
     // First: Run shared tests batched (one setUp/tearDown per group)
     run_shared_tests_batched();
@@ -365,6 +380,7 @@ static bool contains_wildcard(const char *pattern) {
 }
 
 void run_specific_test_impl(const char *test_name_or_pattern) {
+    g_single_test_mode = false;
     // Check if it's a wildcard pattern
     if (contains_wildcard(test_name_or_pattern)) {
         // Use pattern matching logic
@@ -397,6 +413,10 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
             Unity.TestFailures++;
             return;
         }
+
+        if (found == 1) {
+            g_single_test_mode = true;
+        }
         
         // One-line output for pattern matching
         for (size_t i = 0; i < test_count; i++) {
@@ -419,6 +439,7 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
         }
         
         if (test) {
+            g_single_test_mode = true;
             set_unity_test_file_info(test);
             run_test_with_exception_handling(test);
             // Summary will be printed at end of main()

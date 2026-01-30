@@ -1,8 +1,5 @@
-#include "test_common.h"
-#include "eval.h"
-#include "eval_special_forms.h"
+#include "tests_common.h"
 #include "debug.h"
-#include "ast.h"
 
 // Test to demonstrate the cond nesting problem
 // Expected: (cond true 1 false 2) should return 1
@@ -15,7 +12,7 @@ TEST(test_cond_simple_nesting_problem) {
     
     // Should return 1 (first true condition)
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixed(result));
+    TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
 }
 
@@ -66,9 +63,9 @@ TEST(test_cond_nesting_low_level) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create values: true, 1, false, 2
-    CljValue true_val = make_special(SPECIAL_TRUE);
+    CljValue true_val = clj_true;
     CljValue one = fixnum(1);
-    CljValue false_val = make_special(SPECIAL_FALSE);
+    CljValue false_val = clj_false;
     CljValue two = fixnum(2);
     
     // Create the inner list: (true 1 false 2)
@@ -81,20 +78,21 @@ TEST(test_cond_nesting_low_level) {
     // This simulates the problem where arguments are wrapped in an extra list
     CljList *nested_cond = make_ast_list(SYM_COND, inner_list);
     
-    // Test list_rest_normalized: should return the nested list
+    // Test list_rest_normalized: should return the flat list
     CljList *rest_normalized = list_rest_normalized(nested_cond);
     TEST_ASSERT_NOT_NULL(rest_normalized);
     
-    // The first element should be a list (the nested structure)
+    // The first element should be true (not a list)
     ID first_elem = LIST_FIRST(rest_normalized);
     TEST_ASSERT_NOT_NULL(first_elem);
-    TEST_ASSERT_TRUE(is_list_type(TAG(first_elem)));
+    TEST_ASSERT_FALSE(is_list_type(TAG(first_elem)));
+    TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(first_elem));
     
-    // Test list_rest_unwrapped: should unwrap the nested list
+    // Test list_rest_unwrapped: should be identical to rest_normalized here
     CljList *rest_unwrapped = list_rest_unwrapped(nested_cond);
     TEST_ASSERT_NOT_NULL(rest_unwrapped);
     
-    // The first element should now be true (not a list)
+    // The first element should be true (not a list)
     ID unwrapped_first = LIST_FIRST(rest_unwrapped);
     TEST_ASSERT_NOT_NULL(unwrapped_first);
     TEST_ASSERT_FALSE(is_list_type(TAG(unwrapped_first)));

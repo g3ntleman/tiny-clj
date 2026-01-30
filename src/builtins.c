@@ -3301,6 +3301,12 @@ ID native_source(ID *args, unsigned int argc)
             RETAIN(params_repr);
             RETAIN(body_repr);
 
+            platform_put_string(NULL, "(fn [");
+            platform_put_string(NULL, string_data(params_repr));
+            platform_put_string(NULL, "] ");
+            platform_put_string(NULL, string_data(body_repr));
+            platform_put_string(NULL, ")\n");
+
             RELEASE(body_repr);
             RELEASE(params_repr);
             return NULL;

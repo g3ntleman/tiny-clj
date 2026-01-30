@@ -37,81 +37,66 @@ TEST(test_cljvalue_immediate_helpers) {
 TEST(test_cljvalue_vector_api) {
     WITH_AUTORELEASE_POOL({
         // Test vector API
-        CljValue vec = make_vector(3, false);
+        CljPersistentVector *vec = make_vector(0, false);
         TEST_ASSERT_NOT_NULL(vec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
-        
-        CljVector *vec_data = as_vector((CljObject*)vec);
-        TEST_ASSERT_NOT_NULL(vec_data);
-        // Capacity is implementation detail, only test that vector was created
-        
+
         // Test vector operations using vector_conj
-        vec_data = vector_conj(vec_data, fixnum(1));
-        vec_data = vector_conj(vec_data, fixnum(2));
-        vec_data = vector_conj(vec_data, fixnum(3));
+        vec = vector_conj(vec, fixnum(1));
+        vec = vector_conj(vec, fixnum(2));
+        vec = vector_conj(vec, fixnum(3));
         
-        TEST_ASSERT_EQUAL_INT(3, vector_count(vec_data));
-        ID elem0 = vector_nth(vec_data, 0);
-        ID elem1 = vector_nth(vec_data, 1);
-        ID elem2 = vector_nth(vec_data, 2);
+        TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+        ID elem0 = vector_nth(vec, 0);
+        ID elem1 = vector_nth(vec, 1);
+        ID elem2 = vector_nth(vec, 2);
         TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)elem0));
         TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)elem1));
         TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)elem2));
-        RELEASE(elem0);
-        RELEASE(elem1);
-        RELEASE(elem2);
     });
 }
 
 TEST(test_cljvalue_transient_vector) {
     WITH_AUTORELEASE_POOL({
         // Test transient vector operations
-        CljValue vec = AUTORELEASE(make_vector(5, false));  // Create persistent vector first
+        CljPersistentVector *vec = AUTORELEASE(make_vector(0, false));  // Create persistent vector first
         TEST_ASSERT_NOT_NULL(vec);
-        CljValue tvec = AUTORELEASE(vector_transient((CljVector*)vec));  // Convert to transient
+        CljTransientVector *tvec = AUTORELEASE(vector_transient(vec));  // Convert to transient
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
-        
-        CljTransientVector *tvec_data = (CljTransientVector*)tvec;
-        TEST_ASSERT_NOT_NULL(tvec_data);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, TAG(tvec));
         // Capacity is implementation detail, only test that vector was created
         
         // Test transient operations using clj_conj
         // clj_conj mutates the transient vector in-place
-        vector_push(tvec_data, fixnum(10));
-        vector_push(tvec_data, fixnum(20));
-        CljPersistentVector *backing = vector_persistent(tvec_data);
+        vector_push(tvec, fixnum(10));
+        vector_push(tvec, fixnum(20));
+        CljPersistentVector *backing = vector_persistent(tvec);
         TEST_ASSERT_NOT_NULL(backing);
         TEST_ASSERT_EQUAL_INT(2, vector_count(backing));
         ID elem0 = vector_nth(backing, 0);
         ID elem1 = vector_nth(backing, 1);
         TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)elem0));
         TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)elem1));
-        RELEASE(elem0);
-        RELEASE(elem1);
     });
 }
 
 TEST(test_cljvalue_clojure_semantics) {
     WITH_AUTORELEASE_POOL({
         // Test Clojure semantics
-        CljValue vec = make_vector(2, false);
-        CljVector *vec_data = as_vector((CljObject*)vec);
+        CljPersistentVector *vec = make_vector(0, false);
         
         // Add elements using vector_conj
-        vec_data = vector_conj(vec_data, fixnum(1));
-        vec_data = vector_conj(vec_data, fixnum(2));
+        vec = vector_conj(vec, fixnum(1));
+        vec = vector_conj(vec, fixnum(2));
         
         // Test vector access
-        ID elem0 = vector_nth(vec_data, 0);
-        ID elem1 = vector_nth(vec_data, 1);
+        ID elem0 = vector_nth(vec, 0);
+        ID elem1 = vector_nth(vec, 1);
         TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)elem0));
         TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)elem1));
-        RELEASE(elem0);
-        RELEASE(elem1);
         
         // Test vector count
-        TEST_ASSERT_EQUAL_INT(2, vector_count(vec_data));
+        TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
     });
 }
 
@@ -272,21 +257,19 @@ TEST(test_cljvalue_memory_efficiency) {
 TEST(test_cljvalue_vectors_high_level) {
     WITH_AUTORELEASE_POOL({
         // Test vectors at high level
-        CljValue vec = make_vector(3, false);
+        CljPersistentVector *vec = make_vector(0, false);
         TEST_ASSERT_NOT_NULL(vec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
-        
-        CljVector *vec_data = as_vector((CljObject*)vec);
-        TEST_ASSERT_NOT_NULL(vec_data);
+
         // Capacity is implementation detail, only test that vector was created
-        TEST_ASSERT_EQUAL_INT(0, vector_count(vec_data));
-        
+        TEST_ASSERT_EQUAL_INT(0, vector_count(vec));
+
         // Test vector operations using vector_conj
-        vec_data = vector_conj(vec_data, fixnum(1));
-        vec_data = vector_conj(vec_data, fixnum(2));
-        vec_data = vector_conj(vec_data, fixnum(3));
+        vec = vector_conj(vec, fixnum(1));
+        vec = vector_conj(vec, fixnum(2));
+        vec = vector_conj(vec, fixnum(3));
         
-        TEST_ASSERT_EQUAL_INT(3, vector_count(vec_data));
+        TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     });
 }
 
@@ -381,12 +364,12 @@ TEST(test_truthiness_comprehensive) {
         TEST_ASSERT_TRUE(clj_is_truthy(non_empty_list));
         
         // Empty vector is truthy
-        CljVector *empty_vec = AUTORELEASE(make_vector(0, false));
+        CljPersistentVector *empty_vec = AUTORELEASE(make_vector(0, false));
         TEST_ASSERT_NOT_NULL(empty_vec);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_vec));
         
         // Non-empty vector is truthy
-        CljVector *non_empty_vec = AUTORELEASE(make_vector(1, false));
+        CljPersistentVector *non_empty_vec = AUTORELEASE(make_vector(0, false));
         TEST_ASSERT_NOT_NULL(non_empty_vec);
         non_empty_vec = vector_conj(non_empty_vec, fixnum(1));
         TEST_ASSERT_TRUE(clj_is_truthy(non_empty_vec));
