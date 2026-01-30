@@ -26,11 +26,10 @@ __attribute__((weak)) EvalState* g_test_eval_state = NULL;
 CljLazySeq* make_lazy_seq(ID thunk) {
     if (!thunk) return NULL;
 
-    CljLazySeq *lazy = (CljLazySeq*)malloc(sizeof(CljLazySeq));
+    CljLazySeq *lazy = ALLOC(CljLazySeq, 1);
     if (!lazy) return NULL;
 
     lazy->base.type = CLJ_LAZY_SEQ;
-    lazy->base.rc = 1;
     lazy->base.flags = 0;
 
     // NOT_FOUND indicates "not realized".
@@ -524,11 +523,10 @@ CljSeqIterator* make_seq(ID obj) {
     
     // Allocate heap wrapper
     // Use malloc instead of calloc - all fields are immediately initialized
-    CljSeqIterator *heap_seq = (CljSeqIterator*)malloc(sizeof(CljSeqIterator));
+    CljSeqIterator *heap_seq = ALLOC(CljSeqIterator, 1);
     if (!heap_seq) return NULL;
     
     heap_seq->base.type = CLJ_SEQ;
-    heap_seq->base.rc = 1;
     
     // Initialize embedded stack iterator
     if (!seq_iter_init(&heap_seq->iter, (CljObject*)obj)) {
@@ -569,11 +567,10 @@ ID seq_rest(ID seq_obj) {
     
     // Create new heap wrapper with advanced iterator
     // Use malloc instead of calloc - all fields are immediately initialized
-    CljSeqIterator *rest_seq = (CljSeqIterator*)malloc(sizeof(CljSeqIterator));
+    CljSeqIterator *rest_seq = ALLOC(CljSeqIterator, 1);
     if (!rest_seq) return NULL;
     
     rest_seq->base.type = CLJ_SEQ;
-    rest_seq->base.rc = 1;
     
     // Copy iterator state
     rest_seq->iter = seq->iter;  // Struct copy

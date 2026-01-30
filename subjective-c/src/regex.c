@@ -108,7 +108,7 @@ CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
 
     // alloc() sets type/flags, but does not initialize rc.
     // Most constructors explicitly set rc=1; regex objects must do the same.
-    re->header.rc = 1;
+    re
 
     // Copy pattern
     memcpy(re->pattern, pattern, len + 1);

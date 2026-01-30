@@ -10,7 +10,7 @@ CljASTNode* make_ast_node(ID first, ID rest) {
     }
 
     node->base.type = CLJ_AST_NODE;
-    node->base.rc = 1;
+    node
     node->first = RETAIN(first);
     node->rest = RETAIN(rest);
     node->callsite_cache = NULL;
@@ -25,7 +25,7 @@ CljSlotRef* make_slot_ref(CljSymbol *symbol, uint8_t depth, uint8_t slot) {
 
     // alloc() sets type, but keep this explicit for robustness.
     ref->base.type = CLJ_SLOT_REF;
-    ref->base.rc = 1;
+    ref
     ref->symbol = symbol;
     ref->depth = depth;
     ref->slot = slot;
@@ -66,7 +66,7 @@ CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint64_t e
     }
 
     cache->base.type = CLJ_CALLSITE_CACHE;
-    cache->base.rc = 1;
+    cache
     cache->symbol = symbol;
     cache->resolved = NULL;
     cache->epoch = epoch;

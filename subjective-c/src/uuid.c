@@ -15,7 +15,7 @@ ID clj_uuid_from_bytes(const uint8_t bytes[16]) {
     CljUUID *u = ALLOC(CljUUID, 1);
     u->base.type = CLJ_UUID;
     u->base.flags = 0;
-    u->base.rc = 1;
+    u
     memcpy(u->bytes, bytes, 16);
     u->hash = 0;
     return (ID)u;
