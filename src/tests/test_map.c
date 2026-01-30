@@ -21,7 +21,7 @@ TEST(test_map_get_finds_let_binding) {
     TEST_ASSERT_NOT_NULL(fn_value);
     
     // Bind step in let_env
-    let_env = map_assoc(let_env, (CljValue)step_sym, (CljValue)fn_value);
+    let_env = map_by_associng_kv(let_env, (CljValue)step_sym, (CljValue)fn_value);
     
     // Verify step is in let_env
     CljValue found = map_get_sentinel((CljMap*)let_env, (CljValue)step_sym, NULL);
@@ -56,7 +56,7 @@ TEST(test_map_get_structural_comparison) {
     TEST_ASSERT_NOT_NULL(fn_value);
     
     // Bind step in let_env
-    let_env = map_assoc(let_env, (CljValue)step_sym, (CljValue)fn_value);
+    let_env = map_by_associng_kv(let_env, (CljValue)step_sym, (CljValue)fn_value);
     
     // Create another "step" symbol (should be same pointer if interned)
     CljObject *step_sym2 = (CljObject*)intern_symbol_global("step");
@@ -76,11 +76,11 @@ TEST(test_map_assoc_performance_unchanged) {
     // Fill map with many entries
     for (int i = 0; i < 50; i++) {
         CljObject *key = (CljObject*)intern_symbol(NULL, ":key");
-        map = map_assoc(map, (CljValue)key, fixnum(i));
+        map = map_by_associng_kv(map, (CljValue)key, fixnum(i));
     }
     
     // Update existing key - should be fast (clj_equal() does == check first)
-    map = map_assoc(map, (CljValue)kw, fixnum(42));
+    map = map_by_associng_kv(map, (CljValue)kw, fixnum(42));
     CljValue val = (CljValue)map_get_sentinel((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_NOT_NULL(val);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
@@ -137,7 +137,7 @@ TEST(test_update_missing_key_simple) {
     CljObject *new_val_b = (CljObject*)fixnum(0);
     
     // Step 4: Use map_assoc to add the new key
-    CljMap *result = map_assoc(map, (CljValue)key_b, (CljValue)new_val_b);
+    CljMap *result = map_by_associng_kv(map, (CljValue)key_b, (CljValue)new_val_b);
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "map_assoc should return a map");
     TEST_ASSERT_TRUE(TAG((CljObject*)result) == CLJ_MAP);
     
@@ -284,7 +284,7 @@ TEST(test_map_assoc_direct) {
     CljSymbol *key_b = intern_symbol(NULL, ":b");
     CljObject *val_b = (CljObject*)fixnum(2);
     
-    CljValue result = map_assoc((CljValue)map, (CljValue)key_b, (CljValue)val_b);
+    CljValue result = map_by_associng_kv((CljValue)map, (CljValue)key_b, (CljValue)val_b);
     TEST_ASSERT_NOT_NULL(result);
     
     // Verify the new key was added
@@ -330,7 +330,7 @@ TEST(test_map_transient_comprehensive) {
         char key_name[16];
         test_snprintf(key_name, sizeof(key_name), ":key%d", i);
         keys[i] = (CljObject*)intern_symbol(NULL, key_name);
-        persistent_map = map_assoc(persistent_map, (CljValue)keys[i], fixnum(i * 10));
+        persistent_map = map_by_associng_kv(persistent_map, (CljValue)keys[i], fixnum(i * 10));
     }
     TEST_ASSERT_EQUAL_INT(5, persistent_map->count);
     TEST_ASSERT_TRUE(TAG((CljObject*)persistent_map) == CLJ_MAP);
@@ -442,7 +442,7 @@ TEST(test_map_conj_comprehensive) {
     // Test 7: Persistent map with RC=1 (COW case) - should work but not recommended
     CljMap *persistent = AUTORELEASE(make_map(4));
     CljObject *key_p = (CljObject*)intern_symbol(NULL, ":p");
-    persistent = map_assoc(persistent, (CljValue)key_p, fixnum(10));
+    persistent = map_by_associng_kv(persistent, (CljValue)key_p, fixnum(10));
     TEST_ASSERT_EQUAL_INT(1, persistent->base.rc);
     
     CljMap *result7 = map_conj(persistent, (CljValue)key_p, fixnum(20));
@@ -592,9 +592,9 @@ TEST(test_dissoc_single_key) {
         CljObject *key_b = (CljObject*)intern_symbol(NULL, ":b");
         CljObject *key_c = (CljObject*)intern_symbol(NULL, ":c");
         
-        map = map_assoc(map, key_a, fixnum(1));
-        map = map_assoc(map, key_b, fixnum(2));
-        map = map_assoc(map, key_c, fixnum(3));
+        map = map_by_associng_kv(map, key_a, fixnum(1));
+        map = map_by_associng_kv(map, key_b, fixnum(2));
+        map = map_by_associng_kv(map, key_c, fixnum(3));
         
         TEST_ASSERT_EQUAL_INT(3, map->count);
         
@@ -692,7 +692,7 @@ TEST(test_map_assoc_nil_key) {
         // assoc nil key with value
         CljObject *value = AUTORELEASE(intern_symbol(NULL, "nil-value"));
         RETAIN(value);
-        map = map_assoc(map, NULL, value);
+        map = map_by_associng_kv(map, NULL, value);
         TEST_ASSERT_NOT_NULL(map);
         TEST_ASSERT_EQUAL_INT(1, map->count);
         
@@ -766,7 +766,7 @@ TEST(test_map_contains_nil_key) {
         CljMap *map = map_empty();
         CljObject *value = (CljObject*)intern_symbol(NULL, "nil-value");
         RETAIN(value);
-        map = map_assoc(map, NULL, value);
+        map = map_by_associng_kv(map, NULL, value);
         TEST_ASSERT_NOT_NULL(map);
         
         // map_contains should return true for nil key
@@ -787,7 +787,7 @@ TEST(test_map_contains_nil_key_not_exists) {
         CljObject *value = AUTORELEASE(intern_symbol(NULL, "value"));
         RETAIN(key);
         RETAIN(value);
-        map = map_assoc(map, key, value);
+        map = map_by_associng_kv(map, key, value);
         TEST_ASSERT_NOT_NULL(map);
         
         // map_contains should return false for nil key
@@ -801,7 +801,7 @@ TEST(test_map_nil_key_nil_value) {
     WITH_AUTORELEASE_POOL({
         // Create map with nil key and nil value
         CljMap *map = AUTORELEASE(map_empty());
-        map = map_assoc(map, NULL, NULL);
+        map = map_by_associng_kv(map, NULL, NULL);
         TEST_ASSERT_NOT_NULL(map);
         TEST_ASSERT_EQUAL_INT(1, map->count);
         
@@ -908,14 +908,14 @@ TEST(test_map_get_not_found_sentinel_edge_cases) {
         
         // Add key1 with non-nil value
         CljObject *value1 = (CljObject*)fixnum(42);
-        map = map_assoc(map, key1, value1);
+        map = map_by_associng_kv(map, key1, value1);
         
         // Add key2 with nil value (NULL)
-        map = map_assoc(map, key2, NULL);
+        map = map_by_associng_kv(map, key2, NULL);
         
         // Add key3 with another non-nil value
         CljObject *value3 = (CljObject*)fixnum(100);
-        map = map_assoc(map, key3, value3);
+        map = map_by_associng_kv(map, key3, value3);
         
         TEST_ASSERT_EQUAL_INT(3, map->count);
         
@@ -964,9 +964,9 @@ TEST(test_map_for_each_macro) {
     CljValue val3 = fixnum(3);
     
     // Add key-value pairs to map
-    map = map_assoc(map, key1, val1);
-    map = map_assoc(map, key2, val2);
-    map = map_assoc(map, key3, val3);
+    map = map_by_associng_kv(map, key1, val1);
+    map = map_by_associng_kv(map, key2, val2);
+    map = map_by_associng_kv(map, key3, val3);
     
     TEST_ASSERT_EQUAL_INT(3, map_count(map));
     
@@ -1043,9 +1043,9 @@ TEST(test_map_for_each_with_null_keys_and_values) {
     CljValue val3 = fixnum(3);
     
     // Add key-value pairs to map
-    map = map_assoc(map, key1, val1);
-    map = map_assoc(map, key2, val2);  // NULL key, NULL value
-    map = map_assoc(map, key3, val3);
+    map = map_by_associng_kv(map, key1, val1);
+    map = map_by_associng_kv(map, key2, val2);  // NULL key, NULL value
+    map = map_by_associng_kv(map, key3, val3);
     
     TEST_ASSERT_EQUAL_INT(3, map_count(map));
     
@@ -1311,7 +1311,7 @@ TEST(test_map_assoc_autorelease_assign_hypothesis) {
     CljObject *value = fixnum(42);
     
     // This is the pattern used in ns_define
-    ASSIGN(map, map_assoc(map, key, value));
+    ASSIGN(map, map_by_associng_kv(map, key, value));
     
     // H1: Map should still be valid after ASSIGN
     TEST_ASSERT_NOT_NULL(map);
@@ -1339,9 +1339,9 @@ TEST(test_map_assoc_multiple_assign_hypothesis) {
     CljSymbol *key2 = intern_symbol_global("var2");
     CljSymbol *key3 = intern_symbol_global("var3");
     
-    ASSIGN(map, map_assoc(map, key1, fixnum(10)));
-    ASSIGN(map, map_assoc(map, key2, fixnum(20)));
-    ASSIGN(map, map_assoc(map, key3, fixnum(30)));
+    ASSIGN(map, map_by_associng_kv(map, key1, fixnum(10)));
+    ASSIGN(map, map_by_associng_kv(map, key2, fixnum(20)));
+    ASSIGN(map, map_by_associng_kv(map, key3, fixnum(30)));
     
     // All values should be retrievable
     ID v1 = map_get(map, key1);
@@ -1375,8 +1375,8 @@ TEST(test_embedded_array_single_malloc) {
         TEST_ASSERT_EQUAL(0, map->count);
         
         // Add entries to test embedded array
-        map = map_assoc(map, fixnum(1), fixnum(10));
-        map = map_assoc(map, fixnum(2), fixnum(20));
+        map = map_by_associng_kv(map, fixnum(1), fixnum(10));
+        map = map_by_associng_kv(map, fixnum(2), fixnum(20));
         
         // Verify entries in embedded array
         CljValue val1 = map_get_sentinel((CljMap*)map, fixnum(1), NULL);
@@ -1396,9 +1396,9 @@ TEST(test_embedded_array_memory_efficiency) {
         CljMap *map3 = make_map(8);
         
         // Add entries to each map
-        map1 = map_assoc(map1, fixnum(1), fixnum(10));
-        map2 = map_assoc(map2, fixnum(2), fixnum(20));
-        map3 = map_assoc(map3, fixnum(3), fixnum(30));
+        map1 = map_by_associng_kv(map1, fixnum(1), fixnum(10));
+        map2 = map_by_associng_kv(map2, fixnum(2), fixnum(20));
+        map3 = map_by_associng_kv(map3, fixnum(3), fixnum(30));
         
         // Verify all maps work independently
         TEST_ASSERT_NOT_NULL(map_get_sentinel((CljMap*)map1, fixnum(1), NULL));
@@ -1415,14 +1415,14 @@ TEST(test_embedded_array_memory_efficiency) {
 TEST(test_embedded_array_cow) {
     WITH_AUTORELEASE_POOL({
         CljMap *map = make_map(4);
-        map = map_assoc(map, fixnum(1), fixnum(10));
+        map = map_by_associng_kv(map, fixnum(1), fixnum(10));
         
         // Simulate sharing (RC=2)
         RETAIN(map);
         TEST_ASSERT_EQUAL(2, map->base.rc);
         
         // COW operation should create new map with embedded array
-        CljMap *new_map = map_assoc(map, fixnum(2), fixnum(20));
+        CljMap *new_map = map_by_associng_kv(map, fixnum(2), fixnum(20));
         
         // Verify new map has embedded array
         TEST_ASSERT_NOT_NULL(new_map->data);
@@ -1450,14 +1450,14 @@ TEST(test_embedded_array_capacity_growth) {
         CljMap *map = make_map(2);  // Small capacity
         
         // Fill initial capacity
-        map = map_assoc(map, fixnum(1), fixnum(10));
-        map = map_assoc(map, fixnum(2), fixnum(20));
+        map = map_by_associng_kv(map, fixnum(1), fixnum(10));
+        map = map_by_associng_kv(map, fixnum(2), fixnum(20));
         
         // Simulate sharing to trigger COW with growth
         RETAIN(map);
         
         // Add more entries - should trigger COW with capacity growth
-        CljMap *new_map = map_assoc(map, fixnum(3), fixnum(30));
+        CljMap *new_map = map_by_associng_kv(map, fixnum(3), fixnum(30));
         
         // Verify new map has larger capacity
         TEST_ASSERT_TRUE(new_map->capacity > map->capacity);
@@ -1477,7 +1477,7 @@ TEST(test_embedded_array_performance) {
         
         // Simulate loop pattern with embedded arrays
         for (int i = 0; i < 50; i++) {
-            env = AUTORELEASE(map_assoc(env, fixnum(i), fixnum(i * 10)));
+            env = AUTORELEASE(map_by_associng_kv(env, fixnum(i), fixnum(i * 10)));
             
             // RC should stay 1 (in-place optimization)
             TEST_ASSERT_EQUAL(1, env->base.rc);

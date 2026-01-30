@@ -75,7 +75,7 @@ TEST(test_autorelease_in_loop_realistic) {
         // Test 7: Realistic loop; map_assoc returns AUTORELEASE'd, do not wrap. Update env.
         CljMap *env = (CljMap*)make_map(4);
         for (int i = 0; i < 100; i++) {
-            CljValue new_env = map_assoc((CljValue)env, fixnum(i), fixnum(i * 10));
+            CljValue new_env = map_by_associng_kv((CljValue)env, fixnum(i), fixnum(i * 10));
             env = (CljMap*)new_env;
         }
     });
@@ -93,19 +93,19 @@ TEST(test_cow_inplace_mutation_rc_one) {
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         // First assoc: RC=1 → in-place mutation (same pointer)
-        CljMap *new_map1 = map_assoc(map, fixnum(1), fixnum(10));
+        CljMap *new_map1 = map_by_associng_kv(map, fixnum(1), fixnum(10));
         TEST_ASSERT_EQUAL(1, new_map1->base.rc);
         TEST_ASSERT_EQUAL_PTR((CljValue)map, (CljValue)new_map1); // Same pointer! (in-place)
         map = new_map1; // Update map reference
         
         // Second assoc: RC=1 → in-place mutation (same pointer)
-        CljMap *new_map2 = map_assoc(map, fixnum(2), fixnum(20));
+        CljMap *new_map2 = map_by_associng_kv(map, fixnum(2), fixnum(20));
         TEST_ASSERT_EQUAL(1, new_map2->base.rc);
         TEST_ASSERT_EQUAL_PTR((CljValue)map, (CljValue)new_map2); // Same pointer! (in-place)
         map = new_map2; // Update map reference
         
         // Third assoc: Update existing key, RC=1 → in-place mutation
-        CljMap *new_map3 = map_assoc(map, fixnum(1), fixnum(11));
+        CljMap *new_map3 = map_by_associng_kv(map, fixnum(1), fixnum(11));
         TEST_ASSERT_EQUAL(1, new_map3->base.rc);
         TEST_ASSERT_EQUAL_PTR((CljValue)map, (CljValue)new_map3); // Same pointer! (in-place)
         
@@ -128,14 +128,14 @@ TEST(test_cow_copy_on_write_rc_greater_one) {
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         // Add some entries
-        map = map_assoc(map, fixnum(1), fixnum(10));
+        map = map_by_associng_kv(map, fixnum(1), fixnum(10));
         
         // RETAIN to increase RC
         RETAIN(map);
         TEST_ASSERT_EQUAL(2, map->base.rc);
         
         // Now COW should trigger
-        CljMap *new_map = map_assoc(map, fixnum(2), fixnum(20));
+        CljMap *new_map = map_by_associng_kv(map, fixnum(2), fixnum(20));
         TEST_ASSERT_EQUAL(2, map->base.rc);  // Original RC unchanged
         TEST_ASSERT_NOT_EQUAL((CljValue)map, (CljValue)new_map); // NEW pointer!
         
@@ -165,14 +165,14 @@ TEST(test_cow_original_map_unchanged) {
     WITH_AUTORELEASE_POOL({
         // Test 3: Original map unchanged after COW
         CljMap *map = (CljMap*)make_map(4);
-        map = map_assoc(map, fixnum(1), fixnum(10));
-        map = map_assoc(map, fixnum(2), fixnum(20));
+        map = map_by_associng_kv(map, fixnum(1), fixnum(10));
+        map = map_by_associng_kv(map, fixnum(2), fixnum(20));
         
         TEST_ASSERT_EQUAL(2, map->count);
         
         // RETAIN to trigger COW
         RETAIN(map);
-        CljMap *new_map = map_assoc(map, fixnum(3), fixnum(30));
+        CljMap *new_map = map_by_associng_kv(map, fixnum(3), fixnum(30));
         
         // Original should be unchanged
         TEST_ASSERT_EQUAL(2, map->count); // Original unchanged
@@ -198,7 +198,7 @@ TEST(test_cow_with_autorelease) {
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         // COW with AUTORELEASE
-        CljValue new_map = map_assoc((CljValue)map, fixnum(1), fixnum(10));
+        CljValue new_map = map_by_associng_kv((CljValue)map, fixnum(1), fixnum(10));
         AUTORELEASE(new_map);
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
@@ -210,16 +210,16 @@ TEST(test_cow_memory_leak_detection) {
     WITH_AUTORELEASE_POOL({
         // Test 5: Memory Leak Detection
         CljMap *map = (CljMap*)make_map(4);
-        map = map_assoc(map, fixnum(1), fixnum(10));
-        map = map_assoc(map, fixnum(2), fixnum(20));
-        map = map_assoc(map, fixnum(3), fixnum(30));
-        map = map_assoc(map, fixnum(4), fixnum(40));
+        map = map_by_associng_kv(map, fixnum(1), fixnum(10));
+        map = map_by_associng_kv(map, fixnum(2), fixnum(20));
+        map = map_by_associng_kv(map, fixnum(3), fixnum(30));
+        map = map_by_associng_kv(map, fixnum(4), fixnum(40));
         
         TEST_ASSERT_EQUAL(4, map->count);
         
         // RETAIN to trigger COW
         RETAIN(map);
-        CljMap *new_map = map_assoc(map, fixnum(5), fixnum(50));
+        CljMap *new_map = map_by_associng_kv(map, fixnum(5), fixnum(50));
         AUTORELEASE(new_map);
         
         // Cleanup
@@ -239,7 +239,7 @@ TEST(test_cow_environment_loop_mutation) {
         CljMap *env = (CljMap*)make_map(4);
         
         for (int i = 0; i < 100; i++) {
-            CljValue new_env = map_assoc((CljValue)env, fixnum(i), fixnum(i * 10));
+            CljValue new_env = map_by_associng_kv((CljValue)env, fixnum(i), fixnum(i * 10));
             AUTORELEASE(new_env);
             
             if (i % 20 == 0) {
@@ -254,14 +254,14 @@ TEST(test_cow_closure_environment_sharing) {
     WITH_AUTORELEASE_POOL({
         // Test 2: Closure-Environment-Sharing
         CljMap *env = (CljMap*)make_map(4);
-        env = map_assoc(env, intern_symbol_global("x"), fixnum(1));
+        env = map_by_associng_kv(env, intern_symbol_global("x"), fixnum(1));
         
         // Simulate closure holding reference
         RETAIN((CljValue)env);
         TEST_ASSERT_EQUAL(2, env->base.rc);
         
         // Closure-Operation sollte COW triggern
-        CljMap *new_env = map_assoc(env, intern_symbol_global("y"), fixnum(2));
+        CljMap *new_env = map_by_associng_kv(env, intern_symbol_global("y"), fixnum(2));
         TEST_ASSERT_EQUAL(2, env->base.rc);  // Original unchanged
         TEST_ASSERT_NOT_EQUAL((CljValue)env, (CljValue)new_env); // NEW pointer!
         
@@ -285,7 +285,7 @@ TEST(test_cow_memory_efficiency_benchmark) {
         CljMap *env = (CljMap*)make_map(4);
         
         for (int i = 0; i < 100; i++) {
-            CljValue new_env = map_assoc((CljValue)env, fixnum(i), fixnum(i * 10));
+            CljValue new_env = map_by_associng_kv((CljValue)env, fixnum(i), fixnum(i * 10));
             AUTORELEASE(new_env);
             
             if (i % 10 == 0) {
@@ -304,7 +304,7 @@ TEST(test_cow_real_clojure_simulation) {
         CljValue current_env = (CljValue)env;
         
         for (int i = 0; i < 100; i++) {
-            CljValue new_env = map_assoc(current_env, fixnum(i), fixnum(i * 10));
+            CljValue new_env = map_by_associng_kv(current_env, fixnum(i), fixnum(i * 10));
             AUTORELEASE(new_env);
             current_env = new_env; // Update to the new map
             
@@ -329,15 +329,15 @@ TEST(test_cow_actual_cow_demonstration) {
         CljMap *map = (CljMap*)make_map(4);
         
         // Add some entries
-        map = map_assoc(map, fixnum(1), fixnum(10));
-        map = map_assoc(map, fixnum(2), fixnum(20));
+        map = map_by_associng_kv(map, fixnum(1), fixnum(10));
+        map = map_by_associng_kv(map, fixnum(2), fixnum(20));
         
         // RETAIN to trigger COW
         RETAIN(map);
         TEST_ASSERT_EQUAL(2, map->base.rc);
         
         // COW operation
-        CljMap *new_map = map_assoc(map, fixnum(3), fixnum(30));
+        CljMap *new_map = map_by_associng_kv(map, fixnum(3), fixnum(30));
         TEST_ASSERT_EQUAL(2, map->base.rc);
         TEST_ASSERT_NOT_EQUAL((CljValue)map, (CljValue)new_map);
         
@@ -375,7 +375,7 @@ TEST(test_map_assoc_autorelease_with_assign) {
         CljObject *value = fixnum(42);
         
         // This is the pattern used in ns_define
-        ASSIGN(map, map_assoc(map, key, value));
+        ASSIGN(map, map_by_associng_kv(map, key, value));
         
         // H1: Map should still be valid after ASSIGN
         TEST_ASSERT_NOT_NULL(map);
@@ -405,9 +405,9 @@ TEST(test_map_assoc_multiple_assign_sequence) {
         CljSymbol *key2 = intern_symbol_global("var2");
         CljSymbol *key3 = intern_symbol_global("var3");
         
-        ASSIGN(map, map_assoc(map, key1, fixnum(10)));
-        ASSIGN(map, map_assoc(map, key2, fixnum(20)));
-        ASSIGN(map, map_assoc(map, key3, fixnum(30)));
+        ASSIGN(map, map_by_associng_kv(map, key1, fixnum(10)));
+        ASSIGN(map, map_by_associng_kv(map, key2, fixnum(20)));
+        ASSIGN(map, map_by_associng_kv(map, key3, fixnum(30)));
         
         // All values should be retrievable
         ID v1 = map_get(map, key1);

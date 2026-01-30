@@ -150,7 +150,7 @@ static CljList* transform_list(CljList *list, CljObject *func_name,
 
         if (transformed != expr) {
             RELEASE(expr);
-            current->first = RETAIN(transformed);
+            current->first = transformed ? RETAIN(transformed) : NULL;
         }
     }
 

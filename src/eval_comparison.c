@@ -20,7 +20,7 @@ static inline bool compare_fixnums(int va, int vb, ComparisonOp op) {
 
 static inline bool extract_numeric_value(ID obj, float *val) {
     unsigned char tag = TAG(obj);
-    if (tag == CLJ_FIXNUM) {
+    if (tag == CLJ_INT) {
         *val = (float)as_fixnum((CljValue)obj);
     return true;
 }
@@ -58,8 +58,7 @@ static CljObject* eval_numeric_comparison(CljList *list,
     // Generic numeric comparison
         float val_a, val_b;
     if (!extract_numeric_value(a, &val_a) || !extract_numeric_value(b, &val_b)) {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return NULL;
-
+            return throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
         }
 
     bool result;
@@ -91,8 +90,8 @@ ID eval_comparison_dispatch(CljList *list,
         }
     }
     if (!eval_env) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "Missing evaluation environment"); return NULL;
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "Missing evaluation environment");
     }
 
     // Numeric comparisons: <, >, <=, >= - O(1) dispatch via flags

@@ -46,8 +46,8 @@ bool clj_equal_full(ID a, ID b) {
     // even across different concrete types (e.g. '(1 2) == [1 2]).
     const unsigned char ta = TAG(a_obj);
     const unsigned char tb = TAG(b_obj);
-    const bool a_seq = (ta == CLJ_LIST || ta == CLJ_VECTOR_PERSISTENT|| ta == CLJ_SEQ || ta == CLJ_LAZY_SEQ);
-    const bool b_seq = (tb == CLJ_LIST || tb == CLJ_VECTOR_PERSISTENT|| tb == CLJ_SEQ || tb == CLJ_LAZY_SEQ);
+    const bool a_seq = (ta == CLJ_LIST || ta == CLJ_VECTOR || ta == CLJ_SEQ || ta == CLJ_LAZY_SEQ);
+    const bool b_seq = (tb == CLJ_LIST || tb == CLJ_VECTOR || tb == CLJ_SEQ || tb == CLJ_LAZY_SEQ);
     if (a_seq && b_seq) {
         SeqIterator ia, ib;
         if (!seq_iter_init(&ia, a_obj) || !seq_iter_init(&ib, b_obj)) {
@@ -88,24 +88,18 @@ bool clj_equal_full(ID a, ID b) {
             return strcmp(str_a->data, str_b->data) == 0;
         }
 
-        case CLJ_VECTOR_PERSISTENT:
+        case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT: {
-            CljPersistentVector *vec_a =
-                (a_obj->type == CLJ_VECTOR_TRANSIENT)
-                    ? vector_persistent(as_transient_vector(a))
-                    : as_persistent_vector(a);
-            CljPersistentVector *vec_b =
-                (b_obj->type == CLJ_VECTOR_TRANSIENT)
-                    ? vector_persistent(as_transient_vector(b))
-                    : as_persistent_vector(b);
-            int count_a = (int)vector_count(vec_a);
-            int count_b = (int)vector_count(vec_b);
+            CljVector *vec_a = (CljVector*)a;
+            CljVector *vec_b = (CljVector*)b;
+            int count_a = vector_count(vec_a);
+            int count_b = vector_count(vec_b);
             if (count_a != count_b) return false;
             for (int i = 0; i < count_a; i++) {
                 // Vector elements can be immediates or heap objects
-                ID elem_a = vector_nth(vec_a, (unsigned int)i);
-                ID elem_b = vector_nth(vec_b, (unsigned int)i);
+                ID elem_a = vector_nth(vec_a, i);
+                ID elem_b = vector_nth(vec_b, i);
                 if (!clj_equal(elem_a, elem_b)) return false;
             }
             return true;

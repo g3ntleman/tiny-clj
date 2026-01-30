@@ -109,9 +109,9 @@ static ID throw_ambiguous_symbol_error(CljSymbol *sym,
         ? first_ns->name->cname : "unknown";
     const char *ns2_name = (second_ns && second_ns->name && second_ns->name->cname)
         ? second_ns->name->cname : "unknown";
-    throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
+    return throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
         "Unable to resolve symbol: %s in this context, perhaps you meant: %s/%s or %s/%s",
-        sym_name, ns1_name, sym_name, ns2_name, sym_name); return NULL;
+        sym_name, ns1_name, sym_name, ns2_name, sym_name);
 }
 
 // Helper context for namespace cleanup in ns_cleanup()
@@ -759,8 +759,8 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
 
 void evalstate_pop_dynamic_bindings_to(EvalState *st, unsigned int depth) {
     if (!st) return;
-    while (st->dynamic_bindings && vector_count(vector_persistent(st->dynamic_bindings)) > depth) {
-        vector_pop(st->dynamic_bindings);
+    while (st->dynamic_bindings && vector_count(st->dynamic_bindings) > depth) {
+        vector_pop_inplace(&st->dynamic_bindings);
     }
 }
 

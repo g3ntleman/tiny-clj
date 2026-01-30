@@ -78,7 +78,7 @@ TEST(test_meta_function_set_and_get) {
     CljString *value = make_string("value");
     TEST_ASSERT_NOT_NULL(value);
     
-    ASSIGN(meta_map, map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value));
+    ASSIGN(meta_map, map_by_associng_kv((CljValue)meta_map, (CljValue)key, (CljValue)value));
     TEST_ASSERT_NOT_NULL(meta_map);
     
     // Set metadata
@@ -142,7 +142,7 @@ TEST(test_meta_returns_metadata) {
     CljString *value = make_string("value");
     TEST_ASSERT_NOT_NULL(value);
     
-    ASSIGN(meta_map, map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value));
+    ASSIGN(meta_map, map_by_associng_kv((CljValue)meta_map, (CljValue)key, (CljValue)value));
     TEST_ASSERT_NOT_NULL(meta_map);
     
     // Set metadata
@@ -189,7 +189,7 @@ TEST(test_meta_resolves_symbols) {
     CljString *value = make_string("Test variable");
     TEST_ASSERT_NOT_NULL(value);
     
-    ASSIGN(meta_map, map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value));
+    ASSIGN(meta_map, map_by_associng_kv((CljValue)meta_map, (CljValue)key, (CljValue)value));
     TEST_ASSERT_NOT_NULL(meta_map);
     
     // Set metadata on the value

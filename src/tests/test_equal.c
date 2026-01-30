@@ -20,7 +20,7 @@ TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum) {
     CljObject *value = fixnum(42);
     
     // Use ASSIGN pattern like ns_define does
-    ASSIGN(map, map_assoc(map, key, value));
+    ASSIGN(map, map_by_associng_kv(map, key, value));
     
     // Retrieve value - this is what fails in namespace tests
     ID retrieved = map_get(map, key);
@@ -343,11 +343,11 @@ TEST_SHARED(test_map_equal_same_maps) {
     CljObject *val2 = (CljObject *)make_string("value2");
     
     // Add same key-value pairs to both maps
-    map1 = map_assoc(map1, key1, val1);
-    map1 = map_assoc(map1, key2, val2);
+    map1 = map_by_associng_kv(map1, key1, val1);
+    map1 = map_by_associng_kv(map1, key2, val2);
     
-    map2 = map_assoc(map2, key1, val1);
-    map2 = map_assoc(map2, key2, val2);
+    map2 = map_by_associng_kv(map2, key1, val1);
+    map2 = map_by_associng_kv(map2, key2, val2);
     
     // Test equality
     TEST_ASSERT_TRUE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -377,11 +377,11 @@ TEST_SHARED(test_map_equal_different_keys) {
     CljObject *val2 = (CljObject *)make_string("value2");
     
     // Add different key-value pairs
-    map1 = map_assoc(map1, key1, val1);
-    map1 = map_assoc(map1, key2, val2);
+    map1 = map_by_associng_kv(map1, key1, val1);
+    map1 = map_by_associng_kv(map1, key2, val2);
     
-    map2 = map_assoc(map2, key1, val1);
-    map2 = map_assoc(map2, key3, val2); // Different key
+    map2 = map_by_associng_kv(map2, key1, val1);
+    map2 = map_by_associng_kv(map2, key3, val2); // Different key
     
     // Test inequality
     TEST_ASSERT_FALSE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -412,11 +412,11 @@ TEST_SHARED(test_map_equal_different_values) {
     CljObject *val3 = (CljObject *)make_string("value3");
     
     // Add same keys but different values
-    map1 = map_assoc(map1, key1, val1);
-    map1 = map_assoc(map1, key2, val2);
+    map1 = map_by_associng_kv(map1, key1, val1);
+    map1 = map_by_associng_kv(map1, key2, val2);
     
-    map2 = map_assoc(map2, key1, val1);
-    map2 = map_assoc(map2, key2, val3); // Different value
+    map2 = map_by_associng_kv(map2, key1, val1);
+    map2 = map_by_associng_kv(map2, key2, val3); // Different value
     
     // Test inequality
     TEST_ASSERT_FALSE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -446,10 +446,10 @@ TEST_SHARED(test_map_equal_different_sizes) {
     CljObject *val2 = (CljObject *)make_string("value2");
     
     // Add different number of entries
-    map1 = map_assoc(map1, key1, val1);
-    map1 = map_assoc(map1, key2, val2);
+    map1 = map_by_associng_kv(map1, key1, val1);
+    map1 = map_by_associng_kv(map1, key2, val2);
     
-    map2 = map_assoc(map2, key1, val1);
+    map2 = map_by_associng_kv(map2, key1, val1);
     // map2 has only one entry
     
     // Test inequality
@@ -497,11 +497,11 @@ TEST_SHARED(test_map_equal_with_nested_vectors) {
     CljObject *val_str = (CljObject *)make_string("value");
     
     // Add to maps
-    map1 = map_assoc(map1, key1, vec1);
-    map1 = map_assoc(map1, val_str, val_str);
+    map1 = map_by_associng_kv(map1, key1, vec1);
+    map1 = map_by_associng_kv(map1, val_str, val_str);
     
-    map2 = map_assoc(map2, key1, vec2);
-    map2 = map_assoc(map2, val_str, val_str);
+    map2 = map_by_associng_kv(map2, key1, vec2);
+    map2 = map_by_associng_kv(map2, val_str, val_str);
     
     // Test equality (should be true due to structural equality of vectors)
     TEST_ASSERT_TRUE(clj_equal((CljValue)map1, (CljValue)map2));

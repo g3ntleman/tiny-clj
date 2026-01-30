@@ -50,13 +50,13 @@ static INLINE void move_meta(ID src, ID dst) {
 #endif
 }
 
-static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, CljTransientVector *scope_stack);
+static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, CljVector **scope_stack);
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
 
 // Canonicalize a list tail (rest chain) into plain CLJ_LIST cons cells.
 // Important: This must NOT run macro expansion / destructuring on the tail itself.
 // It only canonicalizes each element (which may itself be a list expression).
-static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, bool in_quote, CljTransientVector *scope_stack) {
+static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, bool in_quote, CljVector **scope_stack) {
     if (!rest_expr) return NULL;
     if (!is_list_type(TAG(rest_expr))) return NULL;
 
@@ -84,7 +84,7 @@ static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, boo
 
 // Check if vector elements need destructuring (any element is not a simple symbol)
 // pairs_only: for bindings [name1 val1 name2 val2 ...] check only names (even indices)
-static bool vector_needs_destructuring(CljPersistentVector *vec, bool pairs_only) {
+static bool vector_needs_destructuring(CljVector *vec, bool pairs_only) {
     int i = 0;
     VECTOR_FOR_EACH(vec, elem) {
         if ((!pairs_only || (i++ & 1) == 0) && TAG(elem) != CLJ_SYMBOL) return true;
@@ -101,38 +101,35 @@ static bool vector_needs_destructuring(CljPersistentVector *vec, bool pairs_only
 
 // Scope stack: vector of vectors, stack semantics.
 // Top = innermost scope (depth=0).
-static inline unsigned int scope_stack_count(CljTransientVector *stack) {
-    if (!stack) return 0;
-    CljPersistentVector *backing = vector_persistent(stack);
-    return backing ? vector_count(backing) : 0;
+static inline unsigned int scope_stack_count(CljVector *stack) {
+    return vector_count(stack);
 }
 
-static inline CljPersistentVector* scope_stack_get_from_top(CljTransientVector *stack, unsigned int depth) {
-    if (!stack) return NULL;
-    CljPersistentVector *backing = vector_persistent(stack);
-    unsigned int cnt = backing ? vector_count(backing) : 0;
+static inline CljVector* scope_stack_get_from_top(CljVector *stack, unsigned int depth) {
+    unsigned int cnt = vector_count(stack);
     if (cnt == 0 || depth >= cnt) return NULL;
-    ID scope_id = vector_nth(backing, (cnt - 1) - depth);
-    if (!scope_id || TAG(scope_id) != CLJ_VECTOR_PERSISTENT) return NULL;
-    return as_persistent_vector(scope_id);
+    return (CljVector*)vector_nth(stack, (cnt - 1) - depth);
 }
 
-static inline void scope_stack_push(CljTransientVector *stack, CljPersistentVector *scope_vec) {
-    if (!stack) return;
-    // Scope stack is a transient vector wrapper.
-    vector_push(stack, (ID)scope_vec);
+static inline void scope_stack_push_inplace(CljVector **stack_slot, CljVector *scope_vec) {
+    if (!stack_slot) return;
+    if (!*stack_slot) {
+        *stack_slot = make_vector(4, CLJ_VECTOR);
+    }
+    vector_conj_inplace(stack_slot, scope_vec);
 }
 
-static inline void scope_stack_pop(CljTransientVector *stack) {
-    if (!stack) return;
-    vector_pop(stack);
+static inline void scope_stack_pop_inplace(CljVector **stack_slot) {
+    if (!stack_slot || !*stack_slot) return;
+    if (vector_count(*stack_slot) == 0) return;
+    vector_pop_inplace(stack_slot);
 }
 
-static bool lexical_lookup(CljTransientVector *scope_stack, CljSymbol *sym, uint8_t *out_depth, uint8_t *out_slot) {
+static bool lexical_lookup(CljVector *scope_stack, CljSymbol *sym, uint8_t *out_depth, uint8_t *out_slot) {
     if (!scope_stack || !sym || !out_depth || !out_slot) return false;
     unsigned int cnt = scope_stack_count(scope_stack);
     for (unsigned int d = 0; d < cnt && d < 255; d++) {
-        CljPersistentVector *scope = scope_stack_get_from_top(scope_stack, d);
+        CljVector *scope = scope_stack_get_from_top(scope_stack, d);
         if (!scope) continue;
         unsigned int sc = vector_count(scope);
         ID *data = vector_as_array(scope);
@@ -166,7 +163,7 @@ static bool lexical_lookup(CljTransientVector *scope_stack, CljSymbol *sym, uint
 static ID destructure_fn = NULL;
 
 // Call Clojure (destructure bindings), returns NULL if not available (bootstrap)
-static CljPersistentVector* destructure(EvalState *st, CljPersistentVector *bindings) {
+static CljVector* destructure(EvalState *st, CljVector *bindings) {
     if (!destructure_fn) {
         ID resolved = ns_resolve(st, SYM_DESTRUCTURE);
         if (resolved == NOT_FOUND || !resolved) return NULL;  // Bootstrap: not loaded yet
@@ -175,7 +172,7 @@ static CljPersistentVector* destructure(EvalState *st, CljPersistentVector *bind
     
     ID args[] = { bindings };
     ID result = eval_function_call(destructure_fn, args, 1, NULL, st);
-    return (TAG(result) == CLJ_VECTOR_PERSISTENT) ? as_persistent_vector(result) : NULL;
+    return (TAG(result) == CLJ_VECTOR) ? as_vector(result) : NULL;
 }
 
 // Gensym counter for fn/defn/loop param destructuring
@@ -183,15 +180,15 @@ static unsigned long param_gensym_counter = 0;
 
 // Transform params with destructuring, returns new_params and let_bindings
 // Returns NULL for let_bindings if no destructuring needed
-static CljPersistentVector* transform_params(EvalState *st, CljPersistentVector *params, CljPersistentVector **out_let_bindings) {
+static CljVector* transform_params(EvalState *st, CljVector *params, CljVector **out_let_bindings) {
     unsigned int count = vector_count(params);
-    CljPersistentVector *new_params = make_vector(count, false);
-    CljPersistentVector *let_bindings = make_vector(count * 2, false);
+    CljVector *new_params = make_vector(count, CLJ_VECTOR);
+    CljVector *let_bindings = make_vector(count * 2, CLJ_VECTOR);
     bool has_destructuring = false;
     
     VECTOR_FOR_EACH(params, param) {
         unsigned char tag = TAG(param);
-        if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_MAP) {
+        if (tag == CLJ_VECTOR || tag == CLJ_MAP) {
             char name[64];
             snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
             CljSymbol *gsym = intern_symbol_global(name);
@@ -345,7 +342,7 @@ static CljSymbol* canonicalize_symbol_token(CljSymbolToken *token, EvalState *st
  * @param in_quote If true, lists stay as CljList (not converted to ASTNode)
  * @return Canonicalized expression (CljSymbol for strings, ASTNode for lists) or original if unchanged
  */
-static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, CljTransientVector *scope_stack) {
+static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, CljVector **scope_stack) {
     CLJ_ASSERT(st != NULL);
     
     if (!expr) {
@@ -377,7 +374,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 
     // Lexical addressing: rewrite *current-scope* symbol references to (depth=0, slot).
     // NOTE: We intentionally do NOT rewrite depth>0 here yet (closure-capture comes later).
-    if (!in_quote && tag == CLJ_SYMBOL && scope_stack) {
+    if (!in_quote && tag == CLJ_SYMBOL && scope_stack && *scope_stack) {
         // Keywords evaluate to themselves and must never be rewritten.
         if (!IS_KEYWORD(expr)) {
             CljSymbol *sym = (CljSymbol*)expr;
@@ -388,7 +385,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             // Dynamic vars are late-bound and must not be lexicalized.
             if (!(sym->base.flags & CLJ_FLAG_DYNAMIC)) {
                 uint8_t depth = 0, slot = 0;
-                if (lexical_lookup(scope_stack, sym, &depth, &slot)) {
+                if (lexical_lookup(*scope_stack, sym, &depth, &slot)) {
                     if (depth == 0) {
                         ID ref = (ID)make_slot_ref(sym, 0, slot);
                         if (ref) return AUTORELEASE(ref);
@@ -466,15 +463,9 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     return canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
                 }
                 
-                // CRITICAL: If expanded is a CLJ_SEQ, it might be in the pool from macro expansion.
-                // RETAIN it before recursively canonicalizing to ensure it survives.
-                unsigned char expanded_tag = TAG(expanded);
-                if (expanded_tag == CLJ_SEQ) {
-                    RETAIN(expanded);
-                }
-                
                 // CRITICAL: Ensure expanded form is a list-like type (CLJ_LIST or CLJ_AST_NODE)
                 // Macros can return PersistentList (CLJ_LIST) which needs to be canonicalized
+                unsigned char expanded_tag = TAG(expanded);
                 if (!is_list_type(expanded_tag)) {
                     // Expanded form is not a list - this shouldn't happen for threading macros
                     // but handle it gracefully by wrapping in a list
@@ -483,14 +474,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 
                 // Recursively canonicalize the expanded form
                 // This will convert CLJ_LIST to CLJ_AST_NODE and canonicalize all elements
-                ID result = canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
-                
-                // RELEASE the RETAIN'd expanded if it was a CLJ_SEQ
-                if (expanded_tag == CLJ_SEQ) {
-                    RELEASE(expanded);
-                }
-                
-                return result;
+                return canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
             }
         }
         
@@ -502,10 +486,10 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             // (let [bindings] body...) - expand bindings using Clojure destructure
             if (head_sym == SYM_LET) {
                 CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
-                    CljPersistentVector *bindings = as_persistent_vector(rest1->first);
+                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+                    CljVector *bindings = as_vector(rest1->first);
                     if (bindings_need_destructuring(bindings)) {
-                        CljPersistentVector *expanded = destructure(st, bindings);
+                        CljVector *expanded = destructure(st, bindings);
                         if (expanded) {
                             // Rebuild: (let expanded-bindings body...)
                             ID new_rest = AUTORELEASE(make_list(expanded, rest1->rest ? as_list(rest1->rest) : NULL));
@@ -522,13 +506,13 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             //       To: (loop [loop__1 init, sum 0] (let [expanded-bindings] body))
             if (head_sym == SYM_LOOP) {
                 CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
-                    CljPersistentVector *bindings = as_persistent_vector(rest1->first);
+                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+                    CljVector *bindings = as_vector(rest1->first);
                     if (bindings_need_destructuring(bindings)) {
                         static unsigned long gensym_counter = 0;
                         unsigned int count = vector_count(bindings);
-                        CljPersistentVector *loop_bindings = make_vector(count, false);
-                        CljPersistentVector *let_bindings = make_vector(count, false);
+                        CljVector *loop_bindings = make_vector(count, CLJ_VECTOR);
+                        CljVector *let_bindings = make_vector(count, CLJ_VECTOR);
                         
                         // Process each binding pair
                         for (unsigned int i = 0; i < count; i += 2) {
@@ -552,7 +536,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                         }
                         
                         // Expand let_bindings using Clojure destructure
-                        CljPersistentVector *expanded_let_bindings = NULL;
+                        CljVector *expanded_let_bindings = NULL;
                         if (vector_count(let_bindings) > 0) {
                             expanded_let_bindings = destructure(st, let_bindings);
                             if (!expanded_let_bindings) {
@@ -587,7 +571,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
                 if (rest1) {
                     ID second = rest1->first;
-                    CljPersistentVector *params = NULL;
+                    CljVector *params = NULL;
                     CljList *body_rest = NULL;
                     bool named = false;
                     
@@ -595,19 +579,19 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                         // Named fn: (fn name [params] body)
                         named = true;
                         CljList *rest2 = rest1->rest ? as_list(rest1->rest) : NULL;
-                        if (rest2 && rest2->first && TAG(rest2->first) == CLJ_VECTOR_PERSISTENT) {
-                            params = as_persistent_vector(rest2->first);
+                        if (rest2 && rest2->first && TAG(rest2->first) == CLJ_VECTOR) {
+                            params = as_vector(rest2->first);
                             body_rest = rest2->rest ? as_list(rest2->rest) : NULL;
                         }
-                    } else if (second && TAG(second) == CLJ_VECTOR_PERSISTENT) {
+                    } else if (second && TAG(second) == CLJ_VECTOR) {
                         // Anonymous fn: (fn [params] body)
-                        params = as_persistent_vector(second);
+                        params = as_vector(second);
                         body_rest = rest1->rest ? as_list(rest1->rest) : NULL;
                     }
                     
                     if (params && params_need_destructuring(params)) {
-                        CljPersistentVector *expanded_let_bindings = NULL;
-                        CljPersistentVector *new_params = transform_params(st, params, &expanded_let_bindings);
+                        CljVector *expanded_let_bindings = NULL;
+                        CljVector *new_params = transform_params(st, params, &expanded_let_bindings);
                         
                         if (expanded_let_bindings && vector_count(expanded_let_bindings) > 0) {
                             ID body = body_rest ? body_rest->first : NULL;
@@ -632,17 +616,15 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         // then push a scope of the let binding names for the body.
         if (!in_quote && first == SYM_LET && scope_stack) {
             CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
+            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
                 // Canonicalize bindings vector without lexical rewrite.
                 ID canon_bindings = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
 
                 // Build let-scope from binding names (even indices): [x expr y expr] -> scope [x y]
-                CljPersistentVector *bindings_vec = as_persistent_vector(canon_bindings);
+                CljVector *bindings_vec = as_vector(canon_bindings);
                 unsigned int bc = bindings_vec ? vector_count(bindings_vec) : 0;
                 unsigned int pair_count = (bc / 2);
-                // let_scope wird innerhalb eines WITH_AUTORELEASE_POOL erstellt
-                // Füge es zum Pool hinzu, damit es automatisch freigegeben wird
-                CljPersistentVector *let_scope = AUTORELEASE(make_vector((int)pair_count, false));
+                CljVector *let_scope = make_vector((int)pair_count, CLJ_VECTOR);
                 if (bindings_vec && let_scope) {
                     for (unsigned int i = 0; i + 1 < bc; i += 2) {
                         ID k = vector_nth(bindings_vec, (int)i);
@@ -657,14 +639,14 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     }
                 }
 
-                scope_stack_push(scope_stack, let_scope);
-                // let_scope ist bereits im Pool, kein RELEASE nötig
+                scope_stack_push_inplace(scope_stack, let_scope);
+                RELEASE(let_scope);
 
                 CljList *canon_body = rest1->rest
                     ? canonicalize_rest_to_plain_list((ID)rest1->rest, st, child_in_quote, scope_stack)
                     : NULL;
 
-                scope_stack_pop(scope_stack);
+                scope_stack_pop_inplace(scope_stack);
 
                 CljList *tail = (CljList*)AUTORELEASE(make_list(canon_bindings, canon_body));
                 ID result = in_quote
@@ -682,15 +664,15 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         // then read from the loop frame instead of the parent function frame.
         if (!in_quote && first == SYM_LOOP && scope_stack) {
             CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
+            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
                 // Canonicalize bindings vector without lexical rewrite.
                 ID canon_bindings = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
 
                 // Build loop-scope from binding names (even indices): [i init acc init] -> scope [i acc]
-                CljPersistentVector *bindings_vec = as_persistent_vector(canon_bindings);
+                CljVector *bindings_vec = as_vector(canon_bindings);
                 unsigned int bc = bindings_vec ? vector_count(bindings_vec) : 0;
                 unsigned int pair_count = (bc / 2);
-                CljPersistentVector *loop_scope = make_vector((int)pair_count, false);
+                CljVector *loop_scope = make_vector((int)pair_count, CLJ_VECTOR);
                 if (bindings_vec && loop_scope) {
                     for (unsigned int i = 0; i + 1 < bc; i += 2) {
                         ID k = vector_nth(bindings_vec, (int)i);
@@ -704,7 +686,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     }
                 }
 
-                scope_stack_push(scope_stack, loop_scope);
+                scope_stack_push_inplace(scope_stack, loop_scope);
                 RELEASE(loop_scope);
 
                 // Canonicalize body forms with loop-scope active.
@@ -712,7 +694,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     ? canonicalize_rest_to_plain_list((ID)rest1->rest, st, child_in_quote, scope_stack)
                     : NULL;
 
-                scope_stack_pop(scope_stack);
+                scope_stack_pop_inplace(scope_stack);
 
                 CljList *tail = (CljList*)AUTORELEASE(make_list(canon_bindings, canon_body));
                 ID result = in_quote
@@ -729,9 +711,9 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         // then push a scope with just the loop var for the body.
         if (!in_quote && first == SYM_DOTIMES && scope_stack) {
             CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR_PERSISTENT) {
+            if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
                 ID canon_binding_vec = canonicalize_expr_with_scope(rest1->first, st, child_in_quote, NULL);
-                CljPersistentVector *binding_vec = as_persistent_vector(canon_binding_vec);
+                CljVector *binding_vec = as_vector(canon_binding_vec);
 
                 // Extract loop var (first element in [i n]).
                 ID loop_var = (binding_vec && vector_count(binding_vec) >= 1)
@@ -739,22 +721,20 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     : NULL;
 
                 // Push scope [i] for the dotimes body so `i` can become a SlotRef.
-                // dotimes_scope wird innerhalb eines WITH_AUTORELEASE_POOL erstellt
-                // Füge es zum Pool hinzu, damit es automatisch freigegeben wird
-                CljPersistentVector *dotimes_scope = AUTORELEASE(make_vector(1, false));
+                CljVector *dotimes_scope = make_vector(1, CLJ_VECTOR);
                 if (loop_var && TAG(loop_var) == CLJ_SYMBOL && !IS_KEYWORD(loop_var)) {
                     vector_conj_inplace(&dotimes_scope, loop_var);
                 } else {
                     vector_conj_inplace(&dotimes_scope, NULL);
                 }
-                scope_stack_push(scope_stack, dotimes_scope);
-                // dotimes_scope ist bereits im Pool, kein RELEASE nötig
+                scope_stack_push_inplace(scope_stack, dotimes_scope);
+                RELEASE(dotimes_scope);
 
                 CljList *canon_body = rest1->rest
                     ? canonicalize_rest_to_plain_list((ID)rest1->rest, st, child_in_quote, scope_stack)
                     : NULL;
 
-                scope_stack_pop(scope_stack);
+                scope_stack_pop_inplace(scope_stack);
 
                 CljList *tail = (CljList*)AUTORELEASE(make_list(canon_binding_vec, canon_body));
                 ID result = in_quote
@@ -786,11 +766,11 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     body_rest = rest1->rest ? as_list(rest1->rest) : NULL;
                 }
 
-                if (params_form && TAG(params_form) == CLJ_VECTOR_PERSISTENT) {
+                if (params_form && TAG(params_form) == CLJ_VECTOR) {
                     // Canonicalize fn-name/params with lexical rewrite disabled.
                     ID name_canon = named ? canonicalize_expr_with_scope(second, st, child_in_quote, NULL) : NULL;
                     ID params_canon_id = canonicalize_expr_with_scope(params_form, st, child_in_quote, NULL);
-                    CljPersistentVector *params_vec = as_persistent_vector(params_canon_id);
+                    CljVector *params_vec = as_vector(params_canon_id);
 
                     // Only handle non-variadic, simple-symbol parameter vectors for now.
                     bool ok = params_vec != NULL;
@@ -805,9 +785,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     if (ok && !variadic) {
                         // Build a scope-vector where index == CallFrame slot index.
                         unsigned int pc = vector_count(params_vec);
-                        // param_scope wird innerhalb eines WITH_AUTORELEASE_POOL erstellt
-                        // Füge es zum Pool hinzu, damit es automatisch freigegeben wird
-                        CljPersistentVector *param_scope = AUTORELEASE(make_vector((int)pc, false));
+                        CljVector *param_scope = make_vector((int)pc, CLJ_VECTOR);
                         VECTOR_FOR_EACH(params_vec, p) {
                             vector_conj_inplace(&param_scope, p);
                         }
@@ -815,20 +793,16 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                         // IMPORTANT: Each fn gets its own scope stack for now (depth=0 only).
                         // This prevents accidentally rewriting free variables (depth>0) before
                         // closure-capture support exists.
-                        // Initialgröße 8: verschachtelte Scopes innerhalb einer fn
-                        CljPersistentVector *persistent_fn_vec = make_vector(8, false);
-                        CljTransientVector *fn_scope_stack = as_transient_vector(vector_transient(persistent_fn_vec));
-                        RELEASE(persistent_fn_vec);
-                        
-                        scope_stack_push(fn_scope_stack, param_scope);
-                        // param_scope ist bereits im Pool, kein RELEASE nötig
+                        CljVector *fn_scope_stack = NULL;
+                        scope_stack_push_inplace(&fn_scope_stack, param_scope);
+                        RELEASE(param_scope);
 
                         // Canonicalize body with param scope active.
                         CljList *canon_body = body_rest
-                            ? canonicalize_rest_to_plain_list((ID)body_rest, st, child_in_quote, fn_scope_stack)
+                            ? canonicalize_rest_to_plain_list((ID)body_rest, st, child_in_quote, &fn_scope_stack)
                             : NULL;
 
-                        scope_stack_pop(fn_scope_stack);
+                        scope_stack_pop_inplace(&fn_scope_stack);
                         RELEASE(fn_scope_stack);
 
                         // Rebuild rest list: (name? params body...)
@@ -879,8 +853,8 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     }
     
     // For other types (vectors, maps), recursively canonicalize elements
-    if (tag == CLJ_VECTOR_PERSISTENT) {
-        CljPersistentVector *vec = (CljPersistentVector*)expr;
+    if (tag == CLJ_VECTOR) {
+        CljVector *vec = (CljVector*)expr;
         CLJ_ASSERT(vec != NULL);
         int count = vector_count(vec);
         
@@ -905,7 +879,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
         
         // Create new vector with canonicalized elements
-        CljPersistentVector *new_vec = make_vector(count, false);
+        CljVector *new_vec = make_vector(count, CLJ_VECTOR);
         for (int i = 0; i < count; i++) {
             ASSIGN(new_vec, vector_conj(new_vec, canon_elems[i]));
         }
@@ -964,19 +938,9 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 }
 
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
-    // Erstelle transient vector für scope_stack außerhalb des WITH_AUTORELEASE_POOL
-    // Transient vectors sind für in-place Modifikationen optimiert
-    // Initialgröße 8: typische verschachtelte Scopes (let, loop, dotimes, fn) passen hinein
-    CljPersistentVector *persistent_vec = make_vector(8, false);
-    CljTransientVector *scope_stack = as_transient_vector(vector_transient(persistent_vec));
-    RELEASE(persistent_vec);
-    
-    ID out = canonicalize_expr_with_scope(expr, st, in_quote, scope_stack);
-    
-    // scope_stack ist ein transient vector, der außerhalb des Pools erstellt wurde
-    // Freigeben nach Verwendung
+    CljVector *scope_stack = NULL;
+    ID out = canonicalize_expr_with_scope(expr, st, in_quote, &scope_stack);
     RELEASE(scope_stack);
-    
     return out;
 }
 
@@ -989,6 +953,8 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
 ID canonicalize_ast(ID parsed_expr, EvalState *st) {
     CLJ_ASSERT(st != NULL);
     ID result = NULL;
+    bool needs_escape = false;
+    int rc_after_retain = 0;
 
     // Canonicalization can allocate a lot of temporary AUTORELEASE containers.
     // Scope that churn to a nested pool so it doesn't inflate the caller's pool.
@@ -998,12 +964,31 @@ ID canonicalize_ast(ID parsed_expr, EvalState *st) {
     WITH_AUTORELEASE_POOL({
         result = canonicalize_expr(parsed_expr, st, false);
 
-        RETAIN(result);
-
+        if (result && !IS_IMMEDIATE(result) && result != parsed_expr) {
+            unsigned char tag = TAG(result);
+            if (is_list_type(tag) || tag == CLJ_VECTOR || tag == CLJ_MAP) {
+                needs_escape = true;
+                RETAIN(result);
+                rc_after_retain = retain_count(result);
+            }
+        }
     });
-    // result->rc should be at least 1
 
-    return AUTORELEASE(result);
+    if (needs_escape) {
+        // Current implementation uses weak pool semantics (pop doesn't release).
+        // If the pool didn't drain, balance our retain to avoid leaking.
+        int rc_after_pop = retain_count(result);
+        if (rc_after_pop == rc_after_retain) {
+            RELEASE(result);
+        }
+
+        // Only re-autorelease if there is an outer pool.
+        if (is_autorelease_pool_active()) {
+            AUTORELEASE(result);
+        }
+    }
+
+    return result;
 }
 
 

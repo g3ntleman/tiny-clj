@@ -81,7 +81,7 @@ ID map_get_sentinel(CljMap *map, ID key, ID not_found) {
 
 
 /** Associate key->value with COW: RC=1 → in-place mutation, RC>1 → COW.
- * Returns owned object (rc=1, no AUTORELEASE).
+ * Returns autoreleased object per MEMORY_POLICY.md (new objects are autoreleased).
  */
 static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
   if (TAG(map) == CLJ_MAP) {
@@ -188,19 +188,20 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
 
   // ASSERT removed for performance - was verifying with map_get after every map_assoc
 
-  return new_map;  // owned (rc=1)
+  return AUTORELEASE(new_map);  // autoreleased per MEMORY_POLICY.md
   }
 
   // Error case: invalid map or wrong type
   return map;  // Return original map on error
 }
 
-CljMap* map_assoc(CljMap* map, ID key, ID value) {
+CljMap* map_by_associng_kv(CljMap* map, ID key, ID value) {
   return map_assoc_core(map, key, value);
 }
 
 static CljMap* map_assoc_owned(CljMap* map, ID key, ID value) {
-  return map_assoc_core(map, key, value);
+  // Return owned object for _inplace functions
+  return RETAIN(map_assoc_core(map, key, value));
 }
 
 /** Merge two maps with optional overwrite. */
@@ -209,6 +210,7 @@ CljMap* map_merge(CljMap* a, CljMap* b, bool overwrite) {
   if (!b) return a;
 
   CljMap *result = a;
+  CljMap *retained_result = NULL;  // Track retained result from previous iteration
 
   MAP_FOR_EACH(b, key, value) {
     // nil keys are valid in Clojure maps - don't skip them
@@ -220,19 +222,28 @@ CljMap* map_merge(CljMap* a, CljMap* b, bool overwrite) {
     }
     CljMap *old_result = result;
     // map_assoc returns autoreleased object
-    result = map_assoc(result, key, value);
+    result = map_by_associng_kv(result, key, value);
     if (result != old_result) {
       // map_assoc returned a new map (autoreleased)
-      // Retain it to ensure it stays alive during iteration
+      // Release previous retained result if it exists (and it's not 'a')
+      if (retained_result && retained_result != a) {
+        RELEASE(retained_result);
+      }
+      // Retain new result to ensure it stays alive during iteration
       result = RETAIN(result);
+      retained_result = result;
     }
     // If result == old_result, map_assoc modified in-place
     // Original 'a' stays alive (caller's responsibility in single-threaded system)
   }
   
-  // Return result (autoreleased from map_assoc if new, or original 'a' if in-place)
-  // If result was retained, caller must release it
-  return result;
+  // Return result: autorelease if we retained it during iteration, otherwise return as-is
+  // (original 'a' if in-place, or autoreleased from map_assoc if new)
+  if (retained_result) {
+    // We retained result during iteration - autorelease it per MEMORY_POLICY.md
+    return AUTORELEASE(result);
+  }
+  return result;  // Original 'a' or autoreleased from map_assoc - caller's responsibility
 }
 
 /** Return a vector of keys (retained). Owned (no AUTORELEASE); caller must RELEASE. */
@@ -341,7 +352,7 @@ int map_contains(CljMap *map, ID key) {
 
 /** Remove key if present - always returns a new map (COW disabled).
  * Returns the original map if key is not found.
- * Returns owned object (rc=1, no AUTORELEASE).
+ * Returns autoreleased object per MEMORY_POLICY.md (new objects are autoreleased).
  */
 static CljMap* map_remove_core(CljMap *map, ID key) {
   CLJ_ASSERT(map);
@@ -386,35 +397,27 @@ static CljMap* map_remove_core(CljMap *map, ID key) {
     }
   }
 
-  return new_map;  // owned (rc=1)
+  return AUTORELEASE(new_map);  // autoreleased per MEMORY_POLICY.md
 }
 
-CljMap* map_remove(CljMap *map, ID key) {
+CljMap* map_by_removing_key(CljMap *map, ID key) {
   return map_remove_core(map, key);
 }
 
 static CljMap* map_remove_owned(CljMap *map, ID key) {
-  return map_remove_core(map, key);
+  // Return owned object for _inplace functions
+  return RETAIN(map_remove_core(map, key));
 }
 
 void map_assoc_inplace(CljMap **map_slot, ID key, ID value) {
   if (!map_slot || !*map_slot) return;
-  CljMap *current = *map_slot;
-  CljMap *updated = map_assoc_owned(current, key, value);
-  if (updated && updated != current) {
-    RELEASE(current);
-    *map_slot = updated;
-  }
+  ASSIGN(*map_slot, map_assoc_owned(*map_slot, key, value));
 }
 
 void map_remove_inplace(CljMap **map_slot, ID key) {
   if (!map_slot || !*map_slot) return;
-  CljMap *current = *map_slot;
-  CljMap *updated = map_remove_owned(current, key);
-  if (updated && updated != current) {
-    RELEASE(current);
-    *map_slot = updated;
-  }
+
+  ASSIGN(*map_slot, map_remove_owned(*map_slot, key));
 }
 
 /** Create a transient map from variable number of key-value pairs.

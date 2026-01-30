@@ -90,8 +90,8 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
         return;
     }
 
-    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-        CljPersistentVector *vec = as_persistent_vector(expr);
+    if (tag == CLJ_VECTOR) {
+        CljVector *vec = as_vector(expr);
         if (vec) {
             unsigned int count = vector_count(vec);
             ID *data = vector_as_array(vec);
@@ -231,7 +231,13 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         builtin_set_eval_state(st);
         ID result = native_func->fn(args, argc);
         builtin_set_eval_state(NULL); // Clear after call
-        // args come from eval_arg (AUTORELEASE'd, in pool). Do not RELEASE – pool will drain.
+        // Native functions do not retain args; caller must release. (eval_arg returns
+        // AUTORELEASE'd values; pool is weak/track-only, so we release here to avoid
+        // leaks for temporaries like (range 4000) in (reduce + (range 4000)).)
+        for (unsigned int i = 0; i < argc; i++) {
+            if (args[i] && !IS_IMMEDIATE(args[i]) && args[i] != result)
+                RELEASE(args[i]);
+        }
         return result;
     }
 
@@ -293,8 +299,6 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     int current_argc = effective_count;
     int recur_arg_count = -1;
 
-    // Frame owns arg refs (frame_set_bindings_init RETAINs); frame_release at end frees them.
-
     // Create call frame with parameters (fixed-size stack variable)
     CLJ_ASSERT(effective_count <= CALLFRAME_MAX_PARAMS && "Too many parameters");
     CallFrame call_frame_storage;
@@ -306,17 +310,19 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     ID result = NULL;
     // Local owned env_stack for this call. We RETAIN the function's captured env_stack
     // so any mutations we do for nested lets will COW instead of mutating the function.
-    CljPersistentVector *call_env_stack = (CljPersistentVector*)RETAIN(func->env_stack);
+    CljVector *call_env_stack = func->env_stack ? (CljVector*)RETAIN(func->env_stack) : NULL;
     do {
         // Reset recur state for each iteration
         recur_arg_count = -1;  // -1 = no tail call
 
+        // OPTIMIZATION: Only cleanup recur_args if recur was actually used in previous iteration
+        // For functions without recur (like fib), this check is always false - zero overhead
         if (used_recur_slots > 0) {
-            for (int i = 0; i < used_recur_slots; i++) {
-                RELEASE(recur_args[i]);
-                recur_args[i] = NULL;
-            }
-            used_recur_slots = 0;
+        for (int i = 0; i < used_recur_slots; i++) {
+            RELEASE(recur_args[i]);
+            recur_args[i] = NULL;
+        }
+        used_recur_slots = 0;
         }
 
         // Evaluate function body with context (stack-only, no allocations)
@@ -336,16 +342,24 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         // With C stack, nested functions have their own stack frames, so recur_arg_count
         // only changes if recur was used in THIS function
         if (recur_arg_count >= 0) {
+            // Tail call detected: recur was used in this function
             CLJ_ASSERT(recur_arg_count <= param_count);
+            // RELEASE handles NULL and immediates automatically
+            RELEASE(new_result);
+
+            // Update argc and copy new arguments from recur_args
+            CLJ_ASSERT(recur_arg_count >= 0 && recur_arg_count <= param_count);
             current_argc = recur_arg_count;
             for (int i = 0; i < current_argc; i++) {
-                current_args[i] = recur_args[i];
-                recur_args[i] = NULL;
+                current_args[i] = recur_args[i]; // Already retained in recur evaluation
+                recur_args[i] = NULL; // Clear to prevent double-release
             }
             used_recur_slots = current_argc;
+
+            // Recreate call frame with new parameters (stack-allocated)
             frame_set_bindings(call_frame, NULL, effective_params, current_args, current_argc);
-            for (int i = 0; i < current_argc; i++)
-                RELEASE(current_args[i]);
+
+            // Continue loop - recur_arg_count will be reset at the start of the next iteration
             continue;
         }
 
@@ -355,12 +369,22 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         break;
     } while (true);
 
-    if (used_recur_slots > 0) {
-        for (int i = 0; i < used_recur_slots; i++)
-            RELEASE(recur_args[i]);
-    }
-    frame_release(call_frame);
+    // current_args[i] is stored in call_env, and call_env holds a reference to it.
+    // If we release current_args[i] here, the object might be freed, but call_env
+    // still holds a pointer to it. When call_env is released later, RELEASE will
+    // be called on the already-freed object, causing a use-after-free error.
+    // The call_env will be released below, which will properly release all stored values.
 
+    // OPTIMIZATION: Only cleanup if recur args were actually set
+    if (used_recur_slots > 0) {
+    for (int i = 0; i < used_recur_slots; i++) {
+        RELEASE(recur_args[i]);
+        }
+    }
+
+    // Cleanup call frame (stack-allocated, but may contain retained values)
+    frame_release(call_frame);
+    
     RELEASE(call_env_stack);
 
     return result;
@@ -369,7 +393,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
 
 // DRY: Central symbol resolution function with environment stack support
 // Resolves symbol by searching through environment stack (vector of maps)
-static INLINE CljMap* env_stack_head(CljPersistentVector *stack) {
+static INLINE CljMap* env_stack_head(CljVector *stack) {
     return env_stack_top(stack);
 }
 
@@ -395,7 +419,7 @@ static const EvalContext* ensure_eval_context(CljMap *env,
                                               EvalState *st,
                                               const EvalContext *ctx,
                                               EvalContext *local_ctx,
-                                              CljPersistentVector **owned_stack) {
+                                              CljVector **owned_stack) {
     *owned_stack = NULL;
     if (!ctx) {
         *local_ctx = (EvalContext){
@@ -437,7 +461,7 @@ static INLINE bool is_dynamic_var_symbol(const CljSymbol *symbol);
 static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol);
 
 // Extended version that also searches in CallFrame
-static INLINE ID resolve_symbol_in_env_with_frame(CljPersistentVector *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
+static INLINE ID resolve_symbol_in_env_with_frame(CljVector *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
     if (!sym || TAG(sym) != CLJ_SYMBOL) {
         return NOT_FOUND;
     }
@@ -691,7 +715,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             // AST-Nodes can contain vectors as first element
             // Check if first element is a vector (by tag, not is_vector which may have additional checks)
             CljASTNode *node = as_ast_node(body);
-            if (node && node->first && (TAG(node->first) == CLJ_VECTOR_PERSISTENT || TAG(node->first) == CLJ_VECTOR_TRANSIENT || TAG(node->first) == CLJ_VECTOR_TRANSIENT_WEAK)) {
+            if (node && node->first && (TAG(node->first) == CLJ_VECTOR || TAG(node->first) == CLJ_VECTOR_TRANSIENT || TAG(node->first) == CLJ_VECTOR_TRANSIENT_WEAK)) {
                 // AST-Node wrapping a vector - evaluate the vector
                 return eval_body_with_params(node->first, ctx);
             }
@@ -712,14 +736,11 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             return eval_list(as_list(body), env_map, ctx_state, ctx);
         }
 
-        case CLJ_VECTOR_PERSISTENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK:
-        case CLJ_VECTOR_TRANSIENT: {
+        case CLJ_VECTOR:
+        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_TRANSIENT_WEAK: {
             // Vector literals need to have their elements evaluated
-            CljPersistentVector *vec =
-                (TAG(body) == CLJ_VECTOR_TRANSIENT)
-                    ? vector_persistent(as_transient_vector(body))
-                    : as_persistent_vector(body);
+            CljVector *vec = (CljVector*)body;
             unsigned int count = vector_count(vec);
             
             // Empty vector - return as-is
@@ -728,7 +749,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             }
             
             // Create new vector with evaluated elements
-            CljPersistentVector *result = make_vector(count, false);
+            CljVector *result = make_vector(count, CLJ_VECTOR);
+            RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
@@ -739,25 +761,30 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 }
                 
                 // Add evaluated element to result vector
-                vector_conj_inplace(&result, eval_elem);
+                ASSIGN(result, vector_conj(result, eval_elem));
             }
+            
             return AUTORELEASE(result);
         }
 
         case CLJ_MAP: {
+            // Map literals need to have their keys and values evaluated
             CljMap *map = (CljMap*)body;
             CljMap *result = map_empty();
             RETAIN(result);
+            
             MAP_FOR_EACH(map, key, value) {
                 ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
                 ID eval_value = value ? eval_body_with_params(value, ctx) : NULL;
+                
                 ASSIGN(result, map_assoc(result, eval_key, eval_value));
             }
-            // result after ASSIGN is from map_assoc (callee)
-            return result;
+            
+            return AUTORELEASE(result);
         }
 
         default:
+            // Literal value
             return RETAIN(body);
     }
 }
@@ -865,11 +892,12 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             return NULL;
         }
 
-        case CLJ_VECTOR_PERSISTENT:
+        case CLJ_VECTOR:
+        case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
             // Vector literals need to have their elements evaluated
             // This is necessary for cases like [(f x) (g x)] where f and g should be called
-            CljPersistentVector *vec = as_persistent_vector(body);
+            CljVector *vec = (CljVector*)body;
             unsigned int count = vector_count(vec);
             
             // Empty vector - return as-is
@@ -877,8 +905,9 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 return body;
             }
             
-            // Create new vector with evaluated elements; AUTORELEASE here (make_*) so return is simple
-            CljPersistentVector *result = AUTORELEASE(make_vector(count, false));
+            // Create new vector with evaluated elements
+            CljVector *result = make_vector(count, CLJ_VECTOR);
+            RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
@@ -890,10 +919,11 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     eval_elem = eval_body(elem, env, st, ctx);
                 }
                 
-                // In-place append (capacity was sized to `count`)
-                vector_conj_inplace(&result, eval_elem);
+                // Add evaluated element to result vector
+                ASSIGN(result, vector_conj(result, eval_elem));
             }
-            return (ID)result;
+            
+            return AUTORELEASE(result);
         }
 
         case CLJ_MAP: {
@@ -967,9 +997,9 @@ static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
         return NOT_FOUND;
     }
 
-    unsigned int depth = vector_count(vector_persistent(st->dynamic_bindings));
+    unsigned int depth = vector_count(st->dynamic_bindings);
     for (unsigned int i = depth; i > 0; i--) {
-        ID frame_id = vector_nth(vector_persistent(st->dynamic_bindings), i - 1);
+        ID frame_id = vector_nth(st->dynamic_bindings, i - 1);
         if (!frame_id || TAG(frame_id) != CLJ_MAP) {
             continue;
         }
@@ -1044,11 +1074,11 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
 
     // === COLD PATH: ctx fehlt oder Cache-Miss ===
     EvalContext local_ctx;
-    CljPersistentVector *owned_env_stack = NULL;
+    CljVector *owned_env_stack = NULL;
     const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &owned_env_stack);
     ID resolved = NULL;
     EvalState *ctx_st = get_eval_state(effective_ctx, st);
-    CljPersistentVector *resolve_stack = effective_ctx ? effective_ctx->env_stack : NULL;
+    CljVector *resolve_stack = effective_ctx ? effective_ctx->env_stack : NULL;
     
     // NOTE: We intentionally do NOT drop a single-frame env_stack here.
     // A single map frame can still hold real lexical bindings (e.g. let-recursion self-binding).
@@ -1117,8 +1147,8 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
     unsigned char op_tag = TAG(op);
     if (op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE) {
         ID result = call_function_with_args_and_context(op, list, env, st, ctx);
-        // call_function_with_args_and_context already handles SYM_NIL conversion
-        return result;
+        // Convert SYM_NIL to NULL (nil representation)
+        return (result == SYM_NIL) ? NULL : result;
     }
 
     // Handle keywords as functions (Clojure semantics: (:k m) and (:k m default))
@@ -1135,8 +1165,8 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
                 CljSymbol *s = as_symbol(op);
                 if (s && s->cname) kw_name = s->cname;
             }
-            throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                "Wrong number of args (%d) passed to: %s", argc, kw_name); return NULL;
+            return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                "Wrong number of args (%d) passed to: %s", argc, kw_name);
         }
 
         ID target = eval_arg_with_context(list, 1, env, st, ctx);
@@ -1166,7 +1196,7 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
         }
 
         // Found value may be nil (NULL). Retain non-nil values so they survive target release.
-        return RETAIN(found);
+        return found ? RETAIN(found) : NULL;
     }
 
     // Resolve symbol to get function
@@ -1174,14 +1204,14 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
         CljObject *fn = eval_symbol(as_symbol(op), st);
         if (!fn) {
             if (op == SYM_NIL) {
-                throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                        "Cannot call nil as a function"); return NULL;
+                return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                        "Cannot call nil as a function");
             }
             return NULL;
         }
         if ((ID)fn == (ID)SYM_NIL) {
-            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call nil as a function"); return NULL;
+            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                    "Cannot call nil as a function");
         }
 
         unsigned char fn_tag = TAG(fn);
@@ -1199,57 +1229,34 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
             g_eval_arg_depth++;
             ID result = call_function_with_args_and_context(fn, list, env, st, ctx);
             g_eval_arg_depth--;
-            // call_function_with_args_and_context already handles SYM_NIL conversion
-            return result;
+            // Convert SYM_NIL to NULL (nil representation)
+            return (result == SYM_NIL) ? NULL : result;
             // Exception propagates automatically - no cleanup needed!
         }
 
         if (fn_tag == CLJ_LIST) {
-            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call list as a function"); return NULL;
+            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                    "Cannot call list as a function");
         }
 
         // If fn is still a symbol, it means eval_symbol couldn't resolve it as a function
-        // Check if it's a builtin function first
+        // Check if it's unquote-splice (only valid inside quasiquote)
         if (fn_tag == CLJ_SYMBOL) {
             CljSymbol *sym = as_symbol(fn);
             if (sym == SYM_UNQUOTE_SPLICE) {
                 throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                        "unquote-splice can only be used inside quasiquote"); return NULL;
+                        "unquote-splice can only be used inside quasiquote");
                 return NULL;
-            }
-            // Check if it's a builtin function that should be handled via native_function_lookup
-            if (is_builtin_function(sym)) {
-                BuiltinFn native_func = native_function_lookup(sym);
-                if (native_func) {
-                    // Extract and evaluate arguments from list
-                    ID args[16];
-                    unsigned int argc = 0;
-                    CljMap *eval_env = is_map(env) ? env : eval_env_or_ns_mappings(env, st);
-                    LIST_FOR_EACH(LIST_REST(list), arg_expr) {
-                        if (argc >= 16) break;
-                        // Evaluate argument (nil is a valid value, so NULL is acceptable)
-                        ID arg = eval_arg_from_expr_with_context(arg_expr, eval_env, st, ctx);
-                        args[argc++] = arg;  // arg can be NULL (nil)
-                    }
-                    // Call native function
-                    // Note: eval_arg_from_expr_with_context returns AUTORELEASE'd values
-                    // that are valid until the pool drains - no manual RELEASE needed
-                    ID result = native_func(args, argc);
-                    // Return result directly - native functions can return NULL (nil) or SYM_NIL (symbol "nil")
-                    // return nil (NULL) never indicates an error - errors use exceptions
-                    return result;
-                }
             }
             const char *sym_name = sym && sym->cname ? sym->cname : "unknown";
             throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call %s as a function", sym_name); return NULL;
+                    "Cannot call %s as a function", sym_name);
             return NULL;
         }
 
         // Unknown type - should not happen, but throw exception to be safe
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call object of type %d as a function", fn_tag); return NULL;
+                "Cannot call object of type %d as a function", fn_tag);
         return NULL;
     }
 
@@ -1318,8 +1325,7 @@ static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljMa
     if (result == SYM_NIL) {
         return NULL;
     }
-    // result from callee: builtin/Clojure that created it does AUTORELEASE; we do not (no make_* or RETAIN here)
-    return result;
+    return AUTORELEASE(result);
 }
 
 // List evaluation (optionally accepts EvalContext for recur support)
@@ -1349,13 +1355,13 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         if (list_empty(list)) {
             return NULL;
         }
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call nil as a function"); return NULL;
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Cannot call nil as a function");
     }
     
     if (!op) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call nil as a function"); return NULL;
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Cannot call nil as a function");
     }
 
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
@@ -1364,14 +1370,14 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         op = eval_list(as_list(op), effective_env, effective_st, ctx);
         if (!op) {
             // Evaluation returned nil (NULL) - cannot call nil as a function
-            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call nil as a function"); return NULL;
+            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                    "Cannot call nil as a function");
         }
         // Check if result is an immediate value (macro expansion may return incorrectly)
         if (IS_IMMEDIATE(op)) {
             const char *type_name = is_fixed((CljValue)op) ? "number" : (is_bool((CljValue)op) ? "boolean" : "immediate value");
-            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call %s as a function (this may indicate a macro expansion error)", type_name); return NULL;
+            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                    "Cannot call %s as a function (this may indicate a macro expansion error)", type_name);
         }
     }
 
@@ -1396,10 +1402,10 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 #endif
 
     // Clojure compatibility: Vectors are seqable, but not callable as functions
-    if (TAG(op) == CLJ_VECTOR_PERSISTENT || TAG(op) == CLJ_VECTOR_TRANSIENT || TAG(op) == CLJ_VECTOR_TRANSIENT_WEAK) {
+    if (TAG(op) == CLJ_VECTOR || TAG(op) == CLJ_VECTOR_TRANSIENT || TAG(op) == CLJ_VECTOR_TRANSIENT_WEAK) {
         // If the operator is a vector, throw a Clojure-compatible error
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-            "Cannot call Vector as a function"); return NULL;
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+            "Cannot call Vector as a function");
     }
 
     // Check if op is a symbol and resolve it
@@ -1560,23 +1566,23 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Check if op is an immediate value (macro expansion may return incorrectly)
     if (IS_IMMEDIATE(op)) {
         const char *type_name = is_fixed((CljValue)op) ? "number" : (is_bool((CljValue)op) ? "boolean" : "immediate value");
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call %s as a function (this may indicate a macro expansion error)", type_name); return NULL;
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Cannot call %s as a function (this may indicate a macro expansion error)", type_name);
     }
 
     // Error: op is a list (should have been evaluated earlier)
     if (is_list_type(op_tag)) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call list as a function"); return NULL;
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Cannot call list as a function");
     }
 
     // Error: first element is not a function and not a symbol
     if (!op) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call nil as a function"); return NULL;
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Cannot call nil as a function");
     }
-    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-            "Cannot call %s as a function", clj_type_name(op->type)); return NULL;
+    return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+            "Cannot call %s as a function", clj_type_name(op->type));
 }
 
 ID eval_def(CljList *list, CljMap *env, EvalState *st) {
@@ -1916,16 +1922,15 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     // Convert parameter list/vector to array
     // NOTE: Destructuring is handled at AST canonicalization time, so params are always symbols here
     int param_count = is_vector_params 
-        ? (int)vector_count(as_persistent_vector(params_list))
+        ? vector_count(as_vector(params_list))
         : list_count(as_list(params_list));
 
     ID params_stack[16];
     ID *params = alloc_obj_array(param_count, params_stack);
 
     if (is_vector_params) {
-        CljPersistentVector *pvec = as_persistent_vector(params_list);
         for (int i = 0; i < param_count; i++) {
-            params[i] = vector_nth(pvec, (unsigned int)i);
+            params[i] = vector_nth(as_vector(params_list), i);
             if (!params[i] || TAG(params[i]) != CLJ_SYMBOL) {
                 free_obj_array(params, params_stack);
                 return NULL;
@@ -1965,7 +1970,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     }
 
     // Capture env_stack from context if available (vector of maps).
-    CljPersistentVector *fn_env_stack = NULL;
+    CljVector *fn_env_stack = NULL;
     bool fn_env_stack_owned = false;
     if (ctx && ctx->env_stack) {
         fn_env_stack = ctx->env_stack;
@@ -2007,7 +2012,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         }
 
         unsigned int base_cnt = vector_count(fn_env_stack);
-        CljPersistentVector *combined = NULL;
+        CljVector *combined = NULL;
         env_stack_push_inplace(&combined, param_map);
         RELEASE(param_map);
         for (unsigned int i = 0; i < base_cnt; i++) {
@@ -2032,11 +2037,16 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     if (fn_name) {
         CljMap *self_binding = map_assoc(map_empty(), fn_name, fn);
         RELEASE(fn);  // Balance map_assoc's RETAIN
-
+        
+        // Rewrite recursive calls: For def, use qualified name (TCO optimization)
+        // For let, keep unqualified (function not in namespace, so qualified lookup would fail)
+        // The rewrite still happens to ensure recursive calls work correctly
+        // Note: eval_def will do the qualified rewrite when the function is stored in namespace
+        // Here we only handle the closure binding for let-based recursive functions
+        
         // Push self-binding as the innermost frame.
         env_stack_push_inplace(&fn->env_stack, self_binding);
         RELEASE(self_binding);
-        RETAIN(fn);  // Need a ref to return to caller
     }
 
     free_obj_array(params, params_stack);
@@ -2060,8 +2070,6 @@ static INLINE bool is_builtin_function(CljSymbol *symbol) {
             symbol == SYM_GT ||
             symbol == SYM_LE ||
             symbol == SYM_GE ||
-            symbol == SYM_NOT_EQ ||
-            symbol == SYM_IDENTICAL ||
             symbol == SYM_PRINT ||
             symbol == SYM_PRINTLN ||
             symbol == SYM_STR ||
@@ -2226,16 +2234,12 @@ ID eval_seq(CljList *list, CljMap *env) {
             return arg;
         }
 
-        case CLJ_SEQ: {
-            // Already a seq: make_seq returns it as-is. Do not AUTORELEASE again (avoids double pool entry).
-            // Return as-is - caller manages lifetime
-            return arg;
-        }
         default: {
             // For other seqable types, return SeqIterator directly
-            CljSeqIterator *seq = make_seq(arg);
+            CljSeqIterator *seq = (CljSeqIterator*)AUTORELEASE(make_seq(arg));
             if (!seq) return NULL;
-            return AUTORELEASE(seq);
+
+            return (CljObject*)seq;
         }
     }
 }
@@ -2289,8 +2293,8 @@ ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx)
     }
     // Convert vector binding to list if needed
     CljList *binding_data = NULL;
-    if (TAG(binding_list) == CLJ_VECTOR_PERSISTENT) {
-        binding_data = as_list(vector_to_list(as_persistent_vector(binding_list)));
+    if (TAG(binding_list) == CLJ_VECTOR) {
+        binding_data = as_list(vector_to_list((CljVector*)binding_list));
     } else if (TAG(binding_list) == CLJ_LIST) {
         binding_data = as_list(binding_list);
     } else {
@@ -2303,7 +2307,6 @@ ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx)
     CljObject *coll_expr = list_get_element(binding_data, 1);
 
     // Evaluate collection expression in current env (preserve ctx for lexical lookup)
-    // eval_body returns a reference usable in the current syntactic scope; caller does not manage it.
     ID coll_eval = eval_body(coll_expr, env, st, ctx);
     if (!coll_eval) {
         return NULL;
@@ -2318,7 +2321,7 @@ ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx)
             WITH_AUTORELEASE_POOL({
                 if (ctx) {
                     // Push binding onto a copy of env_stack so lexical lookup works
-                    CljPersistentVector *new_stack = (CljPersistentVector*)RETAIN(ctx->env_stack);
+                    CljVector *new_stack = ctx->env_stack ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
                     CljMap *self_bind = map_assoc(map_empty(), var, element);
                     env_stack_push_inplace(&new_stack, self_bind);
                     RELEASE(self_bind);
@@ -2345,6 +2348,7 @@ ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx)
         }
         RELEASE(seq);
     }
+    RELEASE(coll_eval);
     return AUTORELEASE(NULL); // doseq always returns nil
 }
 
@@ -2385,20 +2389,20 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     CljMap *eval_env = eval_env_or_ns_mappings(env, st);
     if (!eval_env) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "let requires a valid environment"); return NULL;
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "let requires a valid environment");
     }
 
     // Get bindings vector (second element): (let [x 10 y 20] ...)
     CljObject *bindings_vec = list_get_element(list, 1);
-    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR_PERSISTENT) {
+    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "let requires a vector for bindings",
                        NULL, 0, 0);
         return NULL;
     }
 
-    CljPersistentVector *bindings = as_persistent_vector((CljValue)bindings_vec);
+    CljVector *bindings = as_vector((CljValue)bindings_vec);
     if (!bindings) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "let bindings must be a valid vector",
@@ -2420,7 +2424,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     // Start from captured env_stack (if any), but do NOT mutate it.
     // We take an owned ref so later pushes can COW without touching the original.
-    CljPersistentVector *let_stack = ctx ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
+    CljVector *let_stack = (ctx && ctx->env_stack) ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
     bool let_stack_owned = true;
 
     // Frame for fast local lookups during initializer evaluation.
@@ -2610,13 +2614,6 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
 
     CLJ_ASSERT(expr_tag != CLJ_SYMBOL_TOKEN && "Symbol tokens must be canonicalized before evaluation");
 
-    // CRITICAL: If expr is already a CLJ_SEQ that might be in the pool, RETAIN it before returning
-    // to prevent double-AUTORELEASE when the caller AUTORELEASE's the return value.
-    // This must be checked early, before other cases that might return expr directly.
-    if (expr_tag == CLJ_SEQ) {
-        return AUTORELEASE(RETAIN(expr));
-    }
-
     if (expr_tag == CLJ_SLOT_REF) {
         const CljSlotRef *ref = (const CljSlotRef*)expr;
         if (!ctx || !ctx->frame) return NULL;
@@ -2758,21 +2755,18 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         return AUTORELEASE(result);
     }
 
-    if (expr_tag == CLJ_VECTOR_PERSISTENT || expr_tag == CLJ_VECTOR_TRANSIENT_WEAK || expr_tag == CLJ_VECTOR_TRANSIENT) {
-        CljPersistentVector *vec =
-            (expr_tag == CLJ_VECTOR_TRANSIENT)
-                ? vector_persistent(as_transient_vector(expr))
-                : as_persistent_vector(expr);
+    if (expr_tag == CLJ_VECTOR || expr_tag == CLJ_VECTOR_TRANSIENT || expr_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+        CljVector *vec = (CljVector*)expr;
         unsigned int count = vector_count(vec);
         if (count == 0) return expr;
         
-        // AUTORELEASE here (make_*) so return is simple
-        CljPersistentVector *result = AUTORELEASE(make_vector(count, false));
+        CljVector *result = make_vector(count, CLJ_VECTOR);
+        RETAIN(result);
         VECTOR_FOR_EACH(vec, elem) {
             ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, eval_env, eval_st, ctx) : NULL;
-            vector_conj_inplace(&result, eval_elem);
+            ASSIGN(result, vector_conj(result, eval_elem));
         }
-        return (ID)result;
+        return AUTORELEASE(result);
     }
 
     return expr;
@@ -2804,11 +2798,7 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
     ID n_obj = NULL;
 
     if (is_vector(binding_list)) {
-        CljType bt = TAG(binding_list);
-        CljPersistentVector *vec =
-            (bt == CLJ_VECTOR_TRANSIENT)
-                ? vector_persistent(as_transient_vector(binding_list))
-                : as_persistent_vector(binding_list);
+        CljVector *vec = as_vector(binding_list);
         if (!vec || vector_count(vec) < 2) return NULL;
         var = vector_nth(vec, 0);
         n_obj = vector_nth(vec, 1);
@@ -2826,15 +2816,15 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
     if (!var || TAG(var) != CLJ_SYMBOL || !n_obj) return NULL;
 
     EvalContext local_ctx = {0};
-    CljPersistentVector *owned_stack = NULL;
+    CljVector *owned_stack = NULL;
     const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &owned_stack);
 
     // Evaluate n (once) using the current lexical context.
     ID n_evaluated = eval_arg_from_expr_with_context(n_obj, env, st, effective_ctx);
 
-    if (!n_evaluated || !is_fixnum(n_evaluated)) return NULL;
+    if (!n_evaluated || TAG(n_evaluated) != CLJ_INT) return NULL;
     int n = as_fixnum((CljValue)n_evaluated);
-    if (n <= 0) return NULL;
+    if (n <= 0) return AUTORELEASE(NULL);
 
     // Loop var binding: use a stack CallFrame to avoid allocating a new map/env each iteration.
     CallFrame dotimes_frame;
@@ -2872,7 +2862,7 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
 
     frame_release(&dotimes_frame);
     if (owned_stack) RELEASE(owned_stack);
-    return NULL;
+    return AUTORELEASE(NULL);
 }
 
 // ============================================================================
