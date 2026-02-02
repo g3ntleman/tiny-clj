@@ -31,12 +31,12 @@ CljList* empty_list(void) {
     return clj_empty_list_singleton;
 }
 
+/** Allocate list node (rc=1, caller releases). */
 CljList* make_list(ID first, CljList *rest) {
     CljList *list = ALLOC(CljList, 1);
     if (!list) throw_oom();
 
     list->base.type = CLJ_LIST;
-    list
     list->first = RETAIN(first);
     list->rest = RETAIN(rest);
 
@@ -148,4 +148,3 @@ CljObject* list_get_element(CljList *list, int index) {
     }
     return LIST_FIRST(node);
 }
-

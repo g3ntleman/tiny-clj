@@ -2,6 +2,7 @@
 #include "memory.h"
 #include "list.h"
 
+/** Construct AST cons cell (rc=1, caller releases). */
 CljASTNode* make_ast_node(ID first, ID rest) {
     CljASTNode *node = ALLOC(CljASTNode, 1);
     if (!node) {
@@ -10,7 +11,6 @@ CljASTNode* make_ast_node(ID first, ID rest) {
     }
 
     node->base.type = CLJ_AST_NODE;
-    node
     node->first = RETAIN(first);
     node->rest = RETAIN(rest);
     node->callsite_cache = NULL;
@@ -18,6 +18,7 @@ CljASTNode* make_ast_node(ID first, ID rest) {
     return node;
 }
 
+/** Create slot reference for closures; rc=1, caller releases. */
 CljSlotRef* make_slot_ref(CljSymbol *symbol, uint8_t depth, uint8_t slot) {
     // Can't use ALLOC(CljSlotRef, ...) because TYPE_OF_CljSlotRef isn't defined in subjective-c.
     CljSlotRef *ref = (CljSlotRef*)alloc(sizeof(CljSlotRef), 1, CLJ_SLOT_REF);
@@ -25,7 +26,6 @@ CljSlotRef* make_slot_ref(CljSymbol *symbol, uint8_t depth, uint8_t slot) {
 
     // alloc() sets type, but keep this explicit for robustness.
     ref->base.type = CLJ_SLOT_REF;
-    ref
     ref->symbol = symbol;
     ref->depth = depth;
     ref->slot = slot;
@@ -58,6 +58,7 @@ ID ast_node_get_callsite_cache(const CljASTNode *node) {
     return node->callsite_cache;
 }
 
+/** Allocate callsite cache entry; rc=1, caller releases. */
 CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint64_t epoch) {
     CljCallsiteCache *cache = ALLOC(CljCallsiteCache, 1);
     if (!cache) {
@@ -66,7 +67,6 @@ CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint64_t e
     }
 
     cache->base.type = CLJ_CALLSITE_CACHE;
-    cache
     cache->symbol = symbol;
     cache->resolved = NULL;
     cache->epoch = epoch;
@@ -112,4 +112,3 @@ void ast_node_clear_callsite_cache(CljASTNode *node) {
     if (!node) return;
     ast_node_set_callsite_cache(node, NULL);
 }
-

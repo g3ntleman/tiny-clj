@@ -120,45 +120,19 @@ void set_suppress_time_output(bool suppress) {
     g_suppress_time_output = suppress;
 }
 
-// Resolve cache helpers ----------------------------------------------------
-static INLINE CljSymbol* resolve_cache_ns_key(CljSymbol *op_sym, EvalState *st) {
-    if (op_sym && op_sym->ns_name) {
-        return op_sym->ns_name;
-    }
-    if (st && st->current_ns && st->current_ns->name) {
-        return st->current_ns->name;
-    }
-    return NULL;
-}
+// Resolve cache helpers disabled (stubs kept for API compatibility).
+#if defined(__GNUC__)
+#define UNUSED_FN __attribute__((unused))
+#else
+#define UNUSED_FN
+#endif
+static INLINE CljSymbol* resolve_cache_ns_key(CljSymbol *op_sym, EvalState *st) UNUSED_FN;
+static INLINE ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) UNUSED_FN;
+static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) UNUSED_FN;
 
-static INLINE ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) {
-    if (!ns_key || !g_runtime.resolve_cache) {
-        return NULL;
-    }
-    ID ns_cache_id = map_get(g_runtime.resolve_cache, ns_key);
-    if (ns_cache_id == NOT_FOUND || !ns_cache_id) {
-        return NULL;
-    }
-    CljPersistentMap *ns_cache = (CljPersistentMap*)ns_cache_id;
-    ID cached = map_get(ns_cache, op);
-    if (cached == NOT_FOUND || !cached) {
-        return NULL;
-    }
-    return cached;
-}
-
-static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
-    if (!ns_key || !g_runtime.resolve_cache) {
-        return;
-    }
-    ID ns_cache_id = map_get(g_runtime.resolve_cache, ns_key);
-    CljPersistentMap *ns_cache = (ns_cache_id == NOT_FOUND) ? NULL : (CljPersistentMap*)ns_cache_id;
-    if (!ns_cache) {
-        ns_cache = make_map(RESOLVE_CACHE_SIZE);
-    }
-    ASSIGN(ns_cache, map_assoc(ns_cache, op, resolved));
-    ASSIGN(g_runtime.resolve_cache, map_assoc(g_runtime.resolve_cache, ns_key, ns_cache));
-}
+static INLINE CljSymbol* resolve_cache_ns_key(CljSymbol *op_sym, EvalState *st) { (void)op_sym; (void)st; return NULL; }
+static INLINE ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) { (void)ns_key; (void)op; return NULL; }
+static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) { (void)ns_key; (void)op; (void)resolved; }
 
 // Forward declarations
 ID eval_body_with_params(ID body, const EvalContext *ctx);
@@ -1023,20 +997,7 @@ static INLINE ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *
             }
         }
         
-        // 3) Resolve cache (global cache for namespace symbols)
-        // IMPORTANT: Dynamic vars must never use the resolve cache.
-        EvalState *ctx_st = get_eval_state(ctx, st);
-        if (!op_is_dynamic && g_runtime.resolve_cache && ctx_st) {
-            CljSymbol *cache_ns_key = resolve_cache_ns_key(op_sym, ctx_st);
-            ID cached = resolve_cache_lookup_value(cache_ns_key, op);
-            if (cached) {
-                // Populate callsite cache for future hits
-                if (call_node) {
-                    ast_node_update_callsite_cache(call_node, op_sym, cached, g_runtime.resolve_cache_epoch);
-                }
-                return cached;
-            }
-        }
+        // Resolve cache disabled: skip global cache lookup
     }
 
     // === COLD PATH: ctx fehlt oder Cache-Miss ===
@@ -1059,8 +1020,8 @@ static INLINE ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *
         return return_value;
     }
 
-    CljSymbol *cache_ns_key = resolve_cache_ns_key(op_sym, ctx_st);
-    bool allow_callsite_cache = call_node && op_sym && !op_is_dynamic && !resolve_stack && g_runtime.resolve_cache_epoch != 0;
+    bool cache_enabled = g_runtime.resolve_cache_epoch != 0;
+    bool allow_callsite_cache = call_node && op_sym && !op_is_dynamic && !resolve_stack && cache_enabled;
 
     // OPTIMIZATION: Qualified symbols skip env_stack - go direct to namespace
     // Unqualified symbols check env_stack first (let bindings, closures)
@@ -1089,17 +1050,9 @@ static INLINE ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *
     // For unqualified symbols, this is the fallback after env_stack
     resolved = eval_symbol(op_sym, ctx_st);
     
-    // Cache namespace lookups for future calls
-    if (!op_is_dynamic && resolved && ctx_st && ctx_st->current_ns && TAG(resolved) != CLJ_SYMBOL) {
-        if (!g_runtime.resolve_cache) {
-            ASSIGN(g_runtime.resolve_cache, make_map(RESOLVE_CACHE_SIZE));
-        }
-        if (g_runtime.resolve_cache) {
-            resolve_cache_store_value(cache_ns_key, op, resolved);
-            if (allow_callsite_cache) {
-                ast_node_update_callsite_cache(call_node, op_sym, resolved, g_runtime.resolve_cache_epoch);
-            }
-        }
+    // Cache namespace lookups for future calls (callsite cache only; resolve_cache disabled)
+    if (cache_enabled && allow_callsite_cache && !op_is_dynamic && resolved && ctx_st && ctx_st->current_ns && TAG(resolved) != CLJ_SYMBOL) {
+        ast_node_update_callsite_cache(call_node, op_sym, resolved, g_runtime.resolve_cache_epoch);
     }
     
     RELEASE(owned_env_stack);
@@ -2418,7 +2371,7 @@ ID eval_let(CljList *list, CljPersistentMap *env, EvalState *st, const EvalConte
     // Start from captured env_stack (if any), but do NOT mutate it.
     // We take an owned ref so later pushes can COW without touching the original.
     CljPersistentVector *let_stack = ctx ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
-    bool let_stack_owned = true;
+    // let_stack_owned previously tracked ownership; now unused with global pools.
 
     // Frame for fast local lookups during initializer evaluation.
     CallFrame *let_frame = NULL;
@@ -3009,4 +2962,3 @@ void free_obj_array(ID *array, ID *stack_buffer) {
         free((void*)array);
     }
 }
-

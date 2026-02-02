@@ -22,6 +22,7 @@
 #include "function.h"  // For CljFunction
 #include "namespace.h"  // For CljNamespace
 #include "hashmap.h"  // For CljHashMap
+#include "byte_array.h"  // For CljByteArray and external buffer flags
 #include "thread_local.h"
 #include "mini_format.h"
 #include <string.h>
@@ -53,7 +54,8 @@ static THREAD_LOCAL RcHistEntry g_rchist[RCHIST_SIZE];
 static THREAD_LOCAL unsigned int g_rchist_head = 0;
 
 static void rchist_push(CljObject *v, char op, int rc_after) {
-    g_rchist[g_rchist_head] = (RcHistEntry){ v, op, rc_after, __builtin_return_address(0) };
+    // capture caller of retain/release (one frame up) to aid debug
+    g_rchist[g_rchist_head] = (RcHistEntry){ v, op, rc_after, __builtin_return_address(1) };
     g_rchist_head = (g_rchist_head + 1) % RCHIST_SIZE;
 }
 
@@ -149,8 +151,9 @@ static void init_release_dispatch(void) {
     g_release_dispatch_initialized = true;
 }
 
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
 /** Fills buf with clj_to_string(v), trunc to size-1. Uses injected to_string. No RELEASE: app to_string returns AUTORELEASE'd. */
-static void zombie_desc(CljObject *v, char *buf, size_t size) {
+static void zombie_description(CljObject *v, char *buf, size_t size) {
     if (!buf || !size) return;
     buf[0] = '\0';
     CljString *s = clj_to_string((ID)v);
@@ -163,16 +166,23 @@ static void zombie_desc(CljObject *v, char *buf, size_t size) {
         buf[n] = '\0';
     }
 }
+#endif
 
 void retain(CljObject *v) {
     if (is_singleton(v)) return;
 #ifdef DEBUG
     if (v->rc <= 0) {
-        char message[512], z[384];
-        zombie_desc(v, z, sizeof(z));
+        char message[512];
+#if defined(ZOMBIE_ENABLED)
+        char z[384];
+        zombie_description(v, z, sizeof(z));
+        const char *zmsg = z;
+#else
+        const char *zmsg = "";
+#endif
         (void)mini_snprintf(message, sizeof(message),
             "RETAIN: rc must be > 0 (got rc=%d). Zombie or corrupted refcount. Object %p (type=%s).%s%s",
-            (int)v->rc, v, clj_type_name(v->type), z[0] ? " " : "", z);
+            (int)v->rc, v, clj_type_name(v->type), zmsg[0] ? " " : "", zmsg);
         CLJException *ex = make_exception(EXCEPTION_ZOMBIE_ACCESS, message, __FILE__, __LINE__, 0);
         if (ex) {
             ex->object = (uintptr_t)v;
@@ -197,14 +207,18 @@ void release(CljObject *v) {
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
         rchist_dump_for_object(v);
 #endif
+        const char *zmsg = "";
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
         char z[384];
-        if (!g_in_drain) zombie_desc(v, z, sizeof(z));
+        if (!g_in_drain) zombie_description(v, z, sizeof(z));
         else z[0] = '\0';
+        zmsg = z;
+#endif
         throw_exception_formatted("UseAfterFreeError", __FILE__, __LINE__, 0,
             "Double-free detected! Object %p (type=%s) was already freed (rc=0). "
             "This indicates the object was released more times than retained, "
             "likely due to duplicate AUTORELEASE or incorrect memory management. %s",
-            v, clj_type_name(v->type), z);
+            v, clj_type_name(v->type), zmsg);
         return;
     }
 

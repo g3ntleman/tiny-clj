@@ -90,4 +90,3 @@ TEST(test_closure_dynamic_var_not_captured) {
     TEST_ASSERT_TRUE(is_fixnum(out));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(out));
 }
-

@@ -20,7 +20,6 @@ CljAtom* make_atom(ID value) {
     }
 
     atom->base.type = CLJ_ATOM;
-    atom
     // RETAIN handles nil and immediates safely (ignores them)
     atom->value = RETAIN(value);
 
@@ -142,4 +141,3 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     // RETAIN handles nil and immediates safely (ignores them)
     return RETAIN(new_value);
 }
-

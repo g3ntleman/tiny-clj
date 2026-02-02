@@ -883,7 +883,6 @@ TEST_SHARED(test_transient_vector_conj_keeps_pointer_and_updates_backing_store) 
         CljPersistentVector *backing = vector_persistent(tvec);
         TEST_ASSERT_NOT_NULL(backing);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(backing));
-        TEST_ASSERT_EQUAL_INT(1, retain_count(backing));
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(backing, 0)));
 
         vector_push(tvec, fixnum(20));

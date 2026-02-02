@@ -482,14 +482,21 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 }
                 
                 // Recursively canonicalize the expanded form
-                // This will convert CLJ_LIST to CLJ_AST_NODE and canonicalize all elements
+                // This will convert CLJ_LIST to CLJ_AST_NODE and canonicalize all elements.
+                // Keep the original form retained while we recurse so temporary hash maps or
+                // autorelease pools can't drop its rc to zero prematurely.
+                if (list) {
+                    RETAIN(list);
+                }
                 ID result = canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
                 
                 // RELEASE the RETAIN'd expanded if it was a CLJ_SEQ
                 if (expanded_tag == CLJ_SEQ) {
                     RELEASE(expanded);
                 }
-                
+                if (list) {
+                    RELEASE(list);
+                }
                 return result;
             }
         }
@@ -997,13 +1004,7 @@ ID canonicalize_ast(ID parsed_expr, EvalState *st) {
     // caller's pool.
     WITH_AUTORELEASE_POOL({
         result = canonicalize_expr(parsed_expr, st, false);
-
-        RETAIN(result);
-
     });
-    // result->rc should be at least 1
-
+    // Return autoreleased; caller's pool owns one ref.
     return AUTORELEASE(result);
 }
-
-

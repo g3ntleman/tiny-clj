@@ -60,7 +60,7 @@ target_compile_features(subjective-c PUBLIC c_std_99)
 # This is critical for struct layout compatibility (e.g., CLJException size)
 target_compile_options(subjective-c PRIVATE
     -Wall -Wextra
-    $<$<CONFIG:Debug>:-g;-O0;-DDEBUG;-DZOMBIE_ENABLED;-fno-omit-frame-pointer>
+    $<$<CONFIG:Debug>:-g;-O0;-DDEBUG;-fno-omit-frame-pointer>
     $<$<CONFIG:Release>:-O3;-DNDEBUG;-ffunction-sections;-fdata-sections;-fvisibility=hidden>
     $<$<CONFIG:MinSizeRel>:-Os;-DNDEBUG;-ffunction-sections;-fdata-sections;-fvisibility=hidden>
     $<$<CONFIG:Embedded>:-Os;-DNDEBUG;-ffunction-sections;-fdata-sections;-fvisibility=hidden;-flto;-fno-unwind-tables;-fno-asynchronous-unwind-tables;-fno-stack-protector;-fomit-frame-pointer;-fno-ident;-fno-common>
@@ -68,10 +68,17 @@ target_compile_options(subjective-c PRIVATE
 
 # Ensure DEBUG is defined for Debug builds (critical for CLJException struct layout)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
-    target_compile_definitions(subjective-c PUBLIC DEBUG ZOMBIE_ENABLED)
-    message(STATUS "subjective-c: DEBUG and ZOMBIE_ENABLED (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
+    target_compile_definitions(subjective-c PUBLIC DEBUG)
+    message(STATUS "subjective-c: DEBUG build (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
 else()
     message(STATUS "subjective-c: DEBUG disabled (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
+endif()
+
+if(TINYCLJ_ZOMBIE_ENABLED_VALUE EQUAL 1)
+    target_compile_definitions(subjective-c PUBLIC ZOMBIE_ENABLED)
+    message(STATUS "subjective-c: ZOMBIE_ENABLED")
+else()
+    message(STATUS "subjective-c: ZOMBIE_DISABLED")
 endif()
 
 # Unity compatibility: flush stdout for error messages
@@ -137,8 +144,10 @@ target_compile_definitions(subjective-c-tests PRIVATE
     MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE}
     META_ENABLED=${TINYCLJ_META_ENABLED_VALUE}
     UNITY_INCLUDE_EXEC_TIME
-    ZOMBIE_ENABLED
 )
+if(TINYCLJ_ZOMBIE_ENABLED_VALUE EQUAL 1)
+    target_compile_definitions(subjective-c-tests PRIVATE ZOMBIE_ENABLED)
+endif()
 # Force Debug compiler flags for all build types
 target_compile_options(subjective-c-tests PRIVATE
     $<$<CONFIG:Debug>:-g;-O0;-DDEBUG;-fno-omit-frame-pointer>

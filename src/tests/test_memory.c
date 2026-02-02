@@ -295,7 +295,7 @@ TEST(test_zombie_detection) {
     // Create an object (rc = 1)
     CljString *obj = make_string("test_zombie_object");
     TEST_ASSERT_NOT_NULL(obj);
-    TEST_ASSERT_EQUAL_INT(1, obj->rc);
+    TEST_ASSERT_EQUAL_INT(1, obj->base.rc);
     
     // Release once (rc = 0, object becomes zombie if zombie mode enabled)
     RELEASE(obj);
@@ -315,7 +315,7 @@ TEST(test_zombie_detection) {
         TEST_ASSERT_TRUE(ex->object == (uintptr_t)obj);
         
         // Verify object is marked as zombie
-        TEST_ASSERT_EQUAL_INT(ZOMBIE_RC, obj->rc);
+        TEST_ASSERT_EQUAL_INT(ZOMBIE_RC, obj->base.rc);
         
         // Verify stacktrace is present (DEBUG builds only)
         TEST_ASSERT_NOT_NULL(ex->stacktrace);

@@ -73,11 +73,16 @@ CljPersistentVector* vector_popped_owned(CljPersistentVector* vec);
 CljPersistentVector* vector_by_inserting_at(CljPersistentVector* vec, unsigned int index, ID item);
 CljPersistentVector* vector_by_removing_at(CljPersistentVector* vec, unsigned int index);
 void vector_clear(CljPersistentVector *vec);
-/** n<=count; caller releases [n,count) when vec retains. */
+/** n<=count; releases elements in [n,count) when vector owns them (non-weak). */
 void vector_truncate(CljPersistentVector *vec, unsigned int n);
 
 // Transient wrapper API (wrapper pointer remains stable; `backing` may be replaced/grown).
+/** Create a transient wrapper. Returns AUTORELEASE'd transient (rc stays 1). */
 CljTransientVector* vector_transient(CljPersistentVector *vec);
+/** Convert transient to persistent snapshot.
+ * NOTE: The returned backing is borrowed from the transient; it remains valid
+ * only until the transient is mutated or released. RETAIN it if you need to
+ * keep it beyond further transient operations or pool drains. */
 CljPersistentVector* vector_persistent(CljTransientVector *tvec);
 // (internal) backing replacement helper is intentionally not part of the public API.
 

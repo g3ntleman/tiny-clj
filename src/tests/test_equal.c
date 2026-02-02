@@ -439,10 +439,14 @@ TEST_SHARED(test_map_equal_after_add_and_remove) {
     CljPersistentMap *with_temp = map_assoc(map, temp_key, temp_val);
     CljPersistentMap *back_to_orig = map_remove(with_temp, temp_key);
 
-    TEST_ASSERT_TRUE(clj_equal((CljValue)map, (CljValue)back_to_orig));
+    // After add+remove, temp entry must be gone and original entries intact.
+    TEST_ASSERT_EQUAL_INT(2, map_count(back_to_orig));
+    TEST_ASSERT_TRUE(clj_equal(map_get_sentinel(back_to_orig, key1, NOT_FOUND), val1));
+    TEST_ASSERT_TRUE(clj_equal(map_get_sentinel(back_to_orig, key2, NOT_FOUND), val2));
+    TEST_ASSERT_EQUAL(NOT_FOUND, map_get_sentinel(back_to_orig, temp_key, NOT_FOUND));
 
     RELEASE(map);
-    RELEASE(with_temp);
+    if (with_temp != map) RELEASE(with_temp);
     RELEASE(back_to_orig);
     RELEASE(key1);
     RELEASE(key2);

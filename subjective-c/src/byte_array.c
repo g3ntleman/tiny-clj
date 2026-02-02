@@ -21,6 +21,7 @@ static CljByteArray *clj_empty_byte_array_singleton = &clj_empty_byte_array_sing
 // BASIC OPERATIONS
 // ============================================================================
 
+/** Allocate byte-array of given length; rc=1, caller releases. */
 CljByteArray* make_byte_array(int length) {
     assert(length >= 0 && "byte_array length must be non-negative");
 
@@ -36,7 +37,6 @@ CljByteArray* make_byte_array(int length) {
 
     ba->base.type = CLJ_BYTE_ARRAY;
     ba->base.flags = 0;
-    ba
     ba->length = length;
 
     if (length > 0) {
@@ -70,6 +70,7 @@ CljValue make_byte_array_from_bytes(const uint8_t *bytes, int length) {
     return arr;
 }
 
+/** Wrap existing bytes without copying; marks array as external view. */
 CljByteArray* make_byte_array_view(uint8_t *bytes, int length) {
     assert(length >= 0 && "byte_array view length must be non-negative");
     if (length < 0) {
@@ -94,7 +95,6 @@ CljByteArray* make_byte_array_view(uint8_t *bytes, int length) {
 
     ext->base_arr.base.type = CLJ_BYTE_ARRAY;
     ext->base_arr.base.flags = CLJ_FLAG_BYTE_ARRAY_EXTERNAL;
-    ext
     ext->base_arr.length = length;
     ext->base_arr.data = bytes;
     ext->external_ctx = NULL;
@@ -332,4 +332,3 @@ void byte_array_set_id(CljValue arr, int index, ID value) {
 
     memcpy(ba->data + index, &value, sizeof(ID));
 }
-

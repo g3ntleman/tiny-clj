@@ -21,10 +21,30 @@ Optional keys (only present when the platform provides the value):
 Missing values are omitted (the key will not be present)."}
 (defn stats [] :native)
 
-^#^{:doc "Prints runtime stats to *out* (for REPL). Uses clojure.pprint when available. Fallback: (println (stats))."}
-(defn print-stats []
+^#^{:doc "Pretty-prints runtime stats with sensible margins and sorted keys (more readable nested :memory-stats)."}
+(defn pprint-stats []
   (require 'clojure.pprint)
-  (clojure.pprint/pprint (stats)))
+  (let [sort-map (fn [m] (when m (into (sorted-map) m)))
+        s (stats)
+        s (-> s
+              (update :memory-stats
+                      (fn [ms]
+                        (some-> ms
+                                (update :bytes-by-type
+                                        (fn [bt]
+                                          (when bt
+                                            (into (sorted-map)
+                                                  (for [[k v] bt]
+                                                    [k (sort-map v)])))))
+                                sort-map)))
+              sort-map)]
+    (binding [clojure.pprint/*print-right-margin* 90
+              clojure.pprint/*print-miser-width* 60]
+      (clojure.pprint/pprint s))))
+
+;; Backward compatibility: alias
+(defn print-stats []
+  (pprint-stats))
 
 ;; print-ast - Print AST structure with internals for debugging
 ;; Only available in DEBUG builds

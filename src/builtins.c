@@ -3024,7 +3024,8 @@ ID native_ns_map(ID *args, unsigned int argc)
 }
 
 // find-ns: Returns the namespace object for the given name
-// Usage: (find-ns 'ns-name) or (find-ns "ns-name")
+// Usage: (find-ns 'ns-name)
+// Clojure-compatible: only symbols are accepted; strings cause a type error.
 // Returns the namespace object or nil if not found
 ID native_find_ns(ID *args, unsigned int argc)
 {
@@ -3045,13 +3046,9 @@ ID native_find_ns(ID *args, unsigned int argc)
     {
         return ns_find_by_symbol(as_symbol(ns_arg));
     }
-    else if (tag == CLJ_STRING)
-    {
-        return ns_find(string_data(ns_arg));
-    }
 
-    throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                              "find-ns: argument must be a symbol or string"); return NULL;
+    throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0,
+                              "find-ns: argument must be a symbol"); return NULL;
     return NULL;
 }
 
@@ -6840,6 +6837,107 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     return AUTORELEASE(m);
 }
 
+// tiny pprint helpers (file-local)
+static const int PPRINT_INDENT = 2;
+static const size_t PPRINT_INLINE_MAX = 0; // force multiline layout to match clojure.pprint expectations in tests
+
+struct pprint_ctx {
+    char *buf;
+    size_t *pos;
+    size_t max;
+};
+
+static void pprint_append(struct pprint_ctx *ctx, const char *s)
+{
+    *(ctx->pos) = format_append(ctx->buf, *(ctx->pos), ctx->max, s);
+}
+
+static int pprint_fits_inline(ID v)
+{
+    CljString *s = to_string(v);
+    if (!s) return 0;
+    const char *data = string_data(s);
+    return data && strlen(data) <= PPRINT_INLINE_MAX;
+}
+
+static void pprint_walk(ID v, int indent, struct pprint_ctx *ctx)
+{
+    unsigned char tag = v ? TAG(v) : CLJ_NIL;
+
+    // Maps
+    if (tag == CLJ_MAP_PERSISTENT) {
+        if (pprint_fits_inline(v)) {
+            CljString *s = to_string(v);
+            pprint_append(ctx, s ? string_data(s) : "nil");
+            return;
+        }
+        pprint_append(ctx, "{\n");
+        CljPersistentMap *m = (CljPersistentMap*)v;
+        MAP_FOR_EACH(m, k, val) {
+            for (int i = 0; i < indent + PPRINT_INDENT; i++) pprint_append(ctx, " ");
+            CljString *ks = to_string(k);
+            pprint_append(ctx, ks ? string_data(ks) : "nil");
+            pprint_append(ctx, " ");
+            // Recurse for value
+            pprint_walk(val, indent + PPRINT_INDENT, ctx);
+            pprint_append(ctx, "\n");
+        }
+        for (int i = 0; i < indent; i++) pprint_append(ctx, " ");
+        pprint_append(ctx, "}");
+        return;
+    }
+
+    // Vectors
+    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT) {
+        if (pprint_fits_inline(v)) {
+            CljString *s = to_string(v);
+            pprint_append(ctx, s ? string_data(s) : "nil");
+            return;
+        }
+        pprint_append(ctx, "[\n");
+        CljPersistentVector *vec = (tag == CLJ_VECTOR_TRANSIENT)
+            ? vector_persistent(as_transient_vector(v))
+            : as_persistent_vector(v);
+        unsigned int cnt = vector_count(vec);
+        for (unsigned int i = 0; i < cnt; i++) {
+            ID elem = vector_nth(vec, i);
+            for (int j = 0; j < indent + PPRINT_INDENT; j++) pprint_append(ctx, " ");
+            pprint_walk(elem, indent + PPRINT_INDENT, ctx);
+            pprint_append(ctx, "\n");
+        }
+        for (int i = 0; i < indent; i++) pprint_append(ctx, " ");
+        pprint_append(ctx, "]");
+        return;
+    }
+
+    // Lists / seqs
+    if (tag == CLJ_LIST || tag == CLJ_AST_NODE || tag == CLJ_SEQ || tag == CLJ_LAZY_SEQ) {
+        if (pprint_fits_inline(v)) {
+            CljString *s = to_string(v);
+            pprint_append(ctx, s ? string_data(s) : "nil");
+            return;
+        }
+        pprint_append(ctx, "(\n");
+        SeqIterator it;
+        if (v && seq_iter_init(&it, v)) {
+            while (!seq_iter_empty(&it)) {
+                ID e = seq_iter_first(&it);
+                for (int j = 0; j < indent + PPRINT_INDENT; j++) pprint_append(ctx, " ");
+                pprint_walk(e, indent + PPRINT_INDENT, ctx);
+                pprint_append(ctx, "\n");
+                seq_iter_next(&it);
+            }
+        }
+        for (int i = 0; i < indent; i++) pprint_append(ctx, " ");
+        pprint_append(ctx, ")");
+        return;
+    }
+
+    // Fallback: render with to_string
+    CljString *s = to_string(v);
+    pprint_append(ctx, s ? string_data(s) : "nil");
+}
+
 static ID native_clojure_pprint_pprint_str(ID *args, unsigned int argc)
 {
     if (!validate_builtin_args(argc, 1, "clojure.pprint/pprint-str"))
@@ -6851,51 +6949,10 @@ static ID native_clojure_pprint_pprint_str(ID *args, unsigned int argc)
     char out[4096];
     size_t pos = 0;
 
-    unsigned char tag = x ? TAG(x) : CLJ_NIL;
+    struct pprint_ctx ctx = { .buf = out, .pos = &pos, .max = sizeof(out) };
+    pprint_walk(x, 0, &ctx);
 
-    if (tag == CLJ_MAP_PERSISTENT)
-    {
-        pos = format_append(out, pos, sizeof(out), "{\n");
-        CljPersistentMap *m = (CljPersistentMap *)x;
-        MAP_FOR_EACH(m, k, v)
-        {
-            pos = format_append(out, pos, sizeof(out), "  ");
-            CljString *ks = to_string(k);
-            CljString *vs = to_string(v);
-            pos = format_append(out, pos, sizeof(out), ks ? string_data(ks) : "nil");
-            pos = format_append(out, pos, sizeof(out), " ");
-            pos = format_append(out, pos, sizeof(out), vs ? string_data(vs) : "nil");
-            pos = format_append(out, pos, sizeof(out), "\n");
-        }
-        pos = format_append(out, pos, sizeof(out), "}");
-        return (ID)make_string(out);
-    }
-
-    if (tag == CLJ_LIST || tag == CLJ_AST_NODE || tag == CLJ_SEQ || tag == CLJ_LAZY_SEQ)
-    {
-        pos = format_append(out, pos, sizeof(out), "(\n");
-        SeqIterator it;
-        if (x && seq_iter_init(&it, x))
-        {
-            while (!seq_iter_empty(&it))
-            {
-                ID e = seq_iter_first(&it);
-                CljString *es = to_string(e);
-                pos = format_append(out, pos, sizeof(out), "  ");
-                pos = format_append(out, pos, sizeof(out), es ? string_data(es) : "nil");
-                pos = format_append(out, pos, sizeof(out), "\n");
-                seq_iter_next(&it);
-            }
-        }
-        pos = format_append(out, pos, sizeof(out), ")");
-        return (ID)make_string(out);
-    }
-
-    // Fallback: just use normal to_string
-    {
-        CljString *s = to_string(x);
-        return s ? (ID)s : (ID)make_string("nil");
-    }
+    return (ID)make_string(out);
 }
 
 ID native_instant_p(ID *args, unsigned int argc)
@@ -7116,7 +7173,13 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func)
     // No need for special cache handling
 
     // Register the builtin in target namespace
-    ID symbol = intern_symbol_global(symbol_name);
+    ID symbol = NULL;
+    if (slash && slash > cname) {
+        // Qualified: store with explicit namespace so ns mappings use qualified keys
+        symbol = intern_symbol(target_ns->name, symbol_name);
+    } else {
+        symbol = intern_symbol_global(symbol_name);
+    }
     ID func_obj = make_named_func(func, intern_symbol_global(cname));
     if (symbol && func_obj)
     {
@@ -7217,6 +7280,9 @@ void register_builtins()
     // Meta functions
     register_builtin_in_core("meta", native_meta);
     register_builtin_in_core("with-meta", native_with_meta);
+
+    // tinyclj.runtime
+    register_builtin_in_core("tinyclj.runtime/stats", native_tinyclj_runtime_stats);
 
     // Time functions
     register_builtin_in_core("now", native_now);

@@ -6,6 +6,7 @@
 #include "reader.h"
 #include "list.h"
 #include "map.h"
+#include "to_string.h"
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -1386,22 +1387,20 @@ TEST(test_find_ns_returns_nil_for_nonexistent) {
     TEST_ASSERT_NIL(result); // Should return nil (NULL)
 }
 
-// Test: Verify find-ns with string argument
-TEST(test_find_ns_with_string) {
+// Test: find-ns with string should throw type error (Clojure-compatible)
+TEST(test_find_ns_with_string_throws) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Create a test namespace
-    CljNamespace *test_ns = ns_get_or_create("test-find-ns-string", NULL);
-    TEST_ASSERT_NOT_NULL(test_ns);
-
-    // Test find-ns with string
-    CljObject *result = eval_string("(find-ns \"test-find-ns-string\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_NAMESPACE);
-    TEST_ASSERT_EQUAL_PTR(test_ns, (CljNamespace*)result);
-
-    // Cleanup
-    RELEASE(result);
+    CLJException *ex = NULL;
+    TRY {
+        (void)eval_string("(find-ns \"test-find-ns-string\")", g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected type error for string argument to find-ns");
+    } CATCH(e) {
+        ex = e;
+    } END_TRY
+    TEST_ASSERT_NOT_NULL(ex);
+    TEST_ASSERT_EQUAL_STRING(EXCEPTION_TYPE, ex->type);
+    TEST_ASSERT_NOT_NULL(strstr(ex->message, "symbol"));
+    RELEASE(ex);
 }
 
 // Test: Verify find-ns with nil argument returns nil
@@ -1411,6 +1410,19 @@ TEST(test_find_ns_with_nil) {
     // Test find-ns with nil
     CljObject *result = eval_string("(find-ns nil)", g_test_eval_state);
     TEST_ASSERT_NIL(result); // Should return nil (NULL)
+}
+
+// Regression: printed namespace name should not be truncated
+TEST(test_find_ns_print_repr_full_name) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Ensure namespace is loaded
+    (void)eval_string("(require 'clojure.string)", g_test_eval_state);
+
+    // pr-str should return full namespace name
+    CljString *repr = pr_str(eval_string("(find-ns 'clojure.string)", g_test_eval_state));
+    TEST_ASSERT_NOT_NULL(repr);
+    TEST_ASSERT_EQUAL_STRING("clojure.string", string_data(repr));
 }
 
 // ============================================================================

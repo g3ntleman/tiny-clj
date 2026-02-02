@@ -36,7 +36,6 @@ static void* make_string_like(const char *str, CljType type, bool allow_empty_si
     CljString *s = (CljString*)alloc(sizeof(CljString) + len + 1, 1, type);
 
     s->base.type = type;
-    s
     s->length = (uint16_t)len;
     memcpy(s->data, source, len + 1);
 
@@ -81,7 +80,6 @@ CljString* make_string_buffer(size_t length) {
     }
 
     s->base.type = CLJ_STRING;
-    s
     s->length = (uint16_t)length;
     // Zero-initialize the buffer (including null terminator)
     memset(s->data, 0, length + 1);
@@ -123,6 +121,5 @@ void escape_string_write(CljString *s, char *buffer, size_t *offset) {
     buffer[*offset] = '"';
     (*offset)++;
 }
-
 
 

@@ -49,15 +49,8 @@ uint64_t runtime_next_resolve_epoch(void) {
 }
 
 void runtime_ensure_resolve_cache(TinyClJRuntime *runtime) {
-    if (!runtime) {
-        return;
-    }
-    if (!runtime->resolve_cache) {
-        ASSIGN(runtime->resolve_cache, make_map(RESOLVE_CACHE_SIZE));
-    }
-    if (runtime->resolve_cache && runtime->resolve_cache_epoch == 0) {
-        runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
-    }
+    // Resolve cache is disabled; stub retained for API compatibility.
+    (void)runtime;
 }
 
 void runtime_init(TinyClJRuntime *runtime) {
@@ -81,8 +74,9 @@ void runtime_init(TinyClJRuntime *runtime) {
         runtime->symbol_table = make_hashmap(512);  // HashMap for O(1) symbol lookup
     }
     
-    // Enable resolve_cache for bootstrap to avoid stale pointers during core load.
-    runtime_ensure_resolve_cache(runtime);
+    // Disable resolve_cache; keep epoch non-zero for callsite caches.
+    ASSIGN(runtime->resolve_cache, NULL);
+    runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
     
     // Initialize event loop queues as persistent vectors (only if not already set)
     if (!runtime->task_queue) {
@@ -133,9 +127,8 @@ void runtime_reset(TinyClJRuntime *runtime) {
     ASSIGN(runtime->task_queue, NULL);
     ASSIGN(runtime->timer_queue, NULL);
     ASSIGN(runtime->resolve_cache, NULL);
-    // Disable cache and bump global epoch counter to invalidate stale callsites.
-    runtime->resolve_cache_epoch = 0;
-    runtime_next_resolve_epoch();
+    // Invalidate callsite caches; resolve cache remains disabled.
+    runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
     ASSIGN(runtime->pool_stack, NULL);
     ASSIGN(runtime->meta_registry, NULL);
     

@@ -155,7 +155,9 @@ static char reader_consume(Reader *reader) {
 // Forward declarations for Reader-based parser functions
 static ID parse_meta(Reader *reader, EvalState *st);
 static ID parse_meta_map(Reader *reader, EvalState *st);
+#if defined(META_ENABLED) && META_ENABLED
 static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID obj);
+#endif
 static ID parse_anon_fn(Reader *reader, EvalState *st);
 static ID parse_vector(Reader *reader, EvalState *st);
 static ID parse_map(Reader *reader, EvalState *st);
@@ -221,6 +223,12 @@ static ID parse_tagged_literal(Reader *reader, EvalState *st) {
 }
 static ID parse_character(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
+
+// Parser is single-threaded. Track when we're consuming metadata so we can
+// avoid allocations in META-disabled builds.
+#if !(defined(META_ENABLED) && META_ENABLED)
+static bool parser_in_meta = false;
+#endif
 
 
 // Ensure that every parse step advances the reader or hits EOF, otherwise throw
@@ -618,6 +626,32 @@ static ID parse_map(Reader *reader, EvalState *st) {
   if (!reader_match(reader, '{'))
     return NULL;
   reader_skip_all(reader);
+#if !(defined(META_ENABLED) && META_ENABLED)
+  if (parser_in_meta) {
+    // Fast path: consume balanced map contents without allocating.
+    int depth = 1;
+    while (!reader_eof(reader) && depth > 0) {
+      char c = reader_current(reader);
+      reader_next(reader);
+      if (c == '{') depth++;
+      else if (c == '}') depth--;
+      else if (c == '"') {
+        // Skip string literal to ignore braces inside strings
+        while (!reader_eof(reader)) {
+          char s = reader_current(reader);
+          reader_next(reader);
+          if (s == '\\' && !reader_eof(reader)) {
+            reader_next(reader); // skip escaped char
+            continue;
+          }
+          if (s == '"') break;
+        }
+      }
+    }
+    reader_skip_all(reader);
+    return NULL; // No map object produced when metadata is disabled
+  }
+#endif
   // Build the map incrementally to avoid relying on a fixed-size stack buffer.
   // This also matches Clojure semantics for duplicate keys (later entries win).
   CljPersistentMap *map = make_map(8);
@@ -1378,6 +1412,7 @@ ID parse(const char *input, EvalState *st) {
  * @param new_meta New metadata to merge (will be released)
  * @return Object with merged metadata or NULL on error (caller must handle RELEASE/AUTORELEASE)
  */
+#if defined(META_ENABLED) && META_ENABLED
 static ID merge_metadata_with_object(ID obj, ID new_meta) {
   if (!obj || !new_meta) {
     RELEASE(new_meta);
@@ -1410,6 +1445,7 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
   RELEASE(new_meta);
   return obj;  // Return object (caller will handle AUTORELEASE)
 }
+#endif
 
 /**
  * @brief Apply metadata to object and merge location metadata (DRY helper)
@@ -1419,6 +1455,7 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
  * @param obj Object to apply metadata to
  * @return obj (pass-through; already autoreleased by inner parse_expr) or NULL on error
  */
+#if defined(META_ENABLED) && META_ENABLED
 static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID obj) {
   (void)reader;  // Unused parameter
   (void)st;      // Unused parameter
@@ -1460,6 +1497,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
   RELEASE(meta);
   return obj;  /* obj is already AUTORELEASE'd by caller (parse_expr); do not add again */
 }
+#endif
 
 /**
  * @brief Parse metadata ^meta using Reader
@@ -1471,6 +1509,30 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   // Consume the '^' character (we know it's '^' because parse_expr checked it)
   reader_next(reader);
 
+#if !(defined(META_ENABLED) && META_ENABLED)
+  bool was_in_meta = parser_in_meta;
+  parser_in_meta = true;
+
+  // Metadata is compiled out: parse the metadata form (without allocating) and ignore it,
+  // then parse the target object.
+  reader_skip_all(reader);
+  if (!reader_eof(reader) && reader_current(reader) == '#') {
+    char next = reader_peek_ahead(reader, 1);
+    if (next == '^') {
+      reader_next(reader);  // consume '#'
+      ID result = parse_meta_map(reader, st);
+      parser_in_meta = was_in_meta;
+      return result;
+    }
+  }
+  // Parse and discard the metadata expression (parse_map will skip allocs when parser_in_meta)
+  ID ignored_meta = parse_expr(reader, st);
+  RELEASE(ignored_meta);
+  reader_skip_all(reader);
+  ID obj = parse_expr(reader, st);
+  parser_in_meta = was_in_meta;
+  return obj;
+#else
   // Check if this is ^#^{...} syntax (metadata map)
   reader_skip_all(reader);
   if (!reader_eof(reader) && reader_current(reader) == '#') {
@@ -1525,10 +1587,8 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   // ^other: parse_expr returns autoreleased; merge RELEASEs (ok for e.g. interned symbols).
   reader_skip_all(reader);
   ID meta;
-  bool meta_owned = false;
   if (!reader_eof(reader) && reader_peek_char(reader) == '{') {
     meta = parse_map(reader, st);
-    meta_owned = true;
   } else {
     meta = parse_expr(reader, st);
   }
@@ -1546,6 +1606,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   }
   // Apply location metadata if enabled
   return apply_metadata_to_object(reader, st, NULL, result);
+#endif
 }
 
 /**
@@ -1620,6 +1681,34 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
  */
 static ID parse_meta_map(Reader *reader,
                                         EvalState *st) {
+#if !(defined(META_ENABLED) && META_ENABLED)
+  bool was_in_meta = parser_in_meta;
+  parser_in_meta = true;
+
+  reader_skip_all(reader);
+  if (!reader_eof(reader) && reader_current(reader) == '#') {
+    // Called from parse_expr - consume '#'
+    reader_next(reader);
+  }
+  reader_skip_all(reader);
+  if (reader_eof(reader) || reader_current(reader) != '^') {
+    return NULL;
+  }
+  reader_next(reader);  // Consume '^'
+
+  reader_skip_all(reader);
+  if (reader_eof(reader) || reader_current(reader) != '{') {
+    ID obj = parse_expr(reader, st);
+    parser_in_meta = was_in_meta;
+    return obj;
+  }
+  ID ignored_meta = parse_map(reader, st); // parse_map will skip allocations under parser_in_meta
+  RELEASE(ignored_meta);
+  reader_skip_all(reader);
+  ID obj = parse_expr(reader, st);
+  parser_in_meta = was_in_meta;
+  return obj;
+#else
   // When called from parse_expr, we need to consume '#' and '^'
   // When called from parse_meta, we're already past '#' and at '^'
   reader_skip_all(reader);
@@ -1645,4 +1734,5 @@ static ID parse_meta_map(Reader *reader,
     return NULL;
   }
   return apply_metadata_to_object(reader, st, meta, obj);
+#endif
 }
