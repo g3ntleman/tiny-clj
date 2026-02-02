@@ -44,7 +44,6 @@ CljPersistentMap* make_map(int capacity) {
   }
 
   map->base.type = CLJ_MAP_PERSISTENT;
-  map
   map->count = 0;
   map->capacity = capacity;
 
@@ -86,51 +85,40 @@ ID map_get_sentinel(ID map, ID key, ID not_found) {
 /** Associate key->value with COW: RC=1 → in-place mutation, RC>1 → COW.
  * Returns a usable reference (RC=1). Callers must release if they keep it.
  */
+static inline int map_find_index_eq(CljPersistentMap *m, CljObject *target) {
+  int found_idx = -1;
+  MAP_FOR_EACH(m, k, v) {
+    (void)v;
+    if (k == target || (k && target && clj_equal(k, target))) {
+      found_idx = _i;
+      break;
+    }
+  }
+  return found_idx;
+}
+
 static CljPersistentMap* map_assoc_core(CljPersistentMap* map, ID key, ID value) {
   CLJ_ASSERT(map && map->base.type == CLJ_MAP_PERSISTENT);
-    CljObject *key_obj = (CljObject*)key;
-    CljObject *value_obj = (CljObject*)value;
-    // Note: key can be NULL (nil) - that's a valid key in Clojure!
+  CljObject *key_obj = (CljObject*)key;
+  CljObject *value_obj = (CljObject*)value;
+  // Note: key can be NULL (nil) - that's a valid key in Clojure!
 
-#if 1
-  // COW HOT-PATH: RC=1 → in-place mutation
+  // Fast path: in-place update when rc==1 and capacity allows.
   if (map->base.rc == 1) {
-    // Check if key exists - update value (linear search necessary)
-    // OPTIMIZATION: Fast path for pointer equality (interned symbols/keywords)
-    int found_idx = -1;
-    MAP_FOR_EACH(map, k, v) {
-      (void)v;  // unused
-      // Fast path: pointer comparison first (for interned symbols/keywords)
-      if (k == key_obj) {
-        found_idx = _i;
-        break;
-      }
-      // Fallback: structural comparison for non-interned objects
-      // Note: If key_obj is NULL, k must also be NULL to match (already handled above)
-      if (k && key_obj && clj_equal(k, key_obj)) {
-        found_idx = _i;
-        break;
-      }
-    }
+    int found_idx = map_find_index_eq(map, key_obj);
     if (found_idx >= 0) {
-      // Key found: update in-place (no branches after this)
       ASSIGN(KV_VALUE(map->data, found_idx), value_obj);
-      return map;  // Return SAME map
+      return map; // in-place
     }
-
-    // Key not found: add new entry if capacity allows
     if (map->count < map->capacity) {
-      // Direct in-place mutation (no branches after this)
       int idx = map->count;
       KV_KEY(map->data, idx) = RETAIN(key_obj);
       KV_VALUE(map->data, idx) = RETAIN(value_obj);
       map->count++;
-      return map;  // Return SAME map
+      return map; // in-place append
     }
-
-    // Out of capacity - need to grow (fall through to COW path)
+    // else fall through to COW grow
   }
-#endif
 
   // COW path: RC>1 or capacity insufficient → create new map
   int new_capacity = map->capacity;
@@ -142,13 +130,12 @@ static CljPersistentMap* map_assoc_core(CljPersistentMap* map, ID key, ID value)
   // Allocate new map with embedded data array
   size_t struct_size = sizeof(CljPersistentMap);
   size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
-  CljPersistentMap *new_map = (CljPersistentMap*)ALLOC_BYTES(CLJ_MAP_PERSISTENT, struct_size + data_size);
+  CljPersistentMap *new_map = (CljPersistentMap*)alloc(struct_size + data_size, 1, CLJ_MAP_PERSISTENT);
   if (!new_map) {
     throw_oom();
   }
 
   new_map->base.type = CLJ_MAP_PERSISTENT;
-  new_map
   new_map->count = 0;  // Start with 0, will be set correctly below
   new_map->capacity = new_capacity;
 
@@ -358,13 +345,12 @@ static CljPersistentMap* map_remove_core(CljPersistentMap *map, ID key) {
   // Allocate new map with same capacity
   size_t struct_size = sizeof(CljPersistentMap);
   size_t data_size = (size_t)map_data->capacity * 2 * sizeof(CljObject*);
-  CljPersistentMap *new_map = (CljPersistentMap*)ALLOC_BYTES(CLJ_MAP_PERSISTENT, struct_size + data_size);
+  CljPersistentMap *new_map = (CljPersistentMap*)alloc(struct_size + data_size, 1, CLJ_MAP_PERSISTENT);
   if (!new_map) {
     throw_oom();
   }
 
   new_map->base.type = CLJ_MAP_PERSISTENT;
-  new_map
   new_map->count = 0;
   new_map->capacity = map_data->capacity;
 
@@ -521,16 +507,15 @@ static CljPersistentMap* map_copy(CljPersistentMap *src) {
     // Allocate new map with embedded data array
     size_t struct_size = sizeof(CljPersistentMap);
     size_t data_size = (size_t)src->capacity * 2 * sizeof(CljObject*);
-    CljPersistentMap *new_map = (CljPersistentMap*)ALLOC_BYTES(CLJ_MAP_PERSISTENT, struct_size + data_size);
+    CljPersistentMap *new_map = (CljPersistentMap*)alloc(struct_size + data_size, 1, CLJ_MAP_PERSISTENT);
     if (!new_map) {
         throw_oom();
     }
 
     // Initialize new map
-    new_map->base.type = CLJ_MAP_PERSISTENT;
-    new_map
-    new_map->count = src->count;
-    new_map->capacity = src->capacity;
+  new_map->base.type = CLJ_MAP_PERSISTENT;
+  new_map->count = src->count;
+  new_map->capacity = src->capacity;
 
     // Initialize data array (debug-only)
 #ifdef DEBUG
@@ -608,10 +593,9 @@ CljTransientMap* map_transient(CljPersistentMap *map) {
         throw_oom();
         return NULL;
     }
-    tmap->base.type = CLJ_MAP_TRANSIENT;
-    tmap
-    tmap->backing = (CljPersistentMap*)RETAIN(map);
-    return tmap;
+  tmap->base.type = CLJ_MAP_TRANSIENT;
+  tmap->backing = (CljPersistentMap*)RETAIN(map);
+  return tmap;
 }
 
 /** Associate key->value in transient map. */

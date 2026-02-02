@@ -130,7 +130,7 @@ CLJException* make_exception(const char *type, const char *message, const char *
 
     // Initialize base object
     exc->base.type = CLJ_EXCEPTION;
-    exc  // Start with reference count 1
+    // rc already set to 1 by ALLOC
 
     // Copy strings directly into the structure (no strdup needed)
     safe_strncpy(exc->type, type, sizeof(exc->type));

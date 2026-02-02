@@ -118,35 +118,65 @@ static void update_memory_leak_stats(void) {
     }
 }
 
+// Hash-table for O(1) object tracking (replaces O(n) linear array)
 typedef struct { void *ptr; size_t size; uint8_t type; } ObjBlock;
-static ObjBlock *g_obj_blocks = NULL;
-static size_t g_obj_blocks_count = 0, g_obj_blocks_capacity = 0;
+static ObjBlock *g_obj_ht = NULL;        // Hash table (open addressing)
+static size_t g_obj_ht_capacity = 0;     // Always power of 2
+static size_t g_obj_ht_count = 0;        // Number of entries
 
-static bool obj_blocks_ensure_capacity(size_t needed) {
-    if (needed <= g_obj_blocks_capacity) return true;
-    size_t new_cap = (g_obj_blocks_capacity == 0) ? 256 : g_obj_blocks_capacity * 2;
-    while (new_cap < needed) new_cap *= 2;
-    ObjBlock *nb = (ObjBlock*)realloc(g_obj_blocks, new_cap * sizeof(ObjBlock));
-    if (!nb) return false;
-    g_obj_blocks = nb;
-    g_obj_blocks_capacity = new_cap;
+#define OBJ_HT_EMPTY   ((void*)0)
+#define OBJ_HT_DELETED ((void*)(uintptr_t)-1)
+
+static inline size_t obj_ht_hash(void *ptr) {
+    uintptr_t x = (uintptr_t)ptr;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    return (size_t)((x >> 16) ^ x);
+}
+
+static bool obj_ht_grow(void) {
+    size_t new_cap = (g_obj_ht_capacity == 0) ? 512 : g_obj_ht_capacity * 2;
+    ObjBlock *new_ht = (ObjBlock*)calloc(new_cap, sizeof(ObjBlock));
+    if (!new_ht) return false;
+    // Rehash existing entries
+    for (size_t i = 0; i < g_obj_ht_capacity; i++) {
+        void *p = g_obj_ht[i].ptr;
+        if (p && p != OBJ_HT_DELETED) {
+            size_t idx = obj_ht_hash(p) & (new_cap - 1);
+            while (new_ht[idx].ptr) idx = (idx + 1) & (new_cap - 1);
+            new_ht[idx] = g_obj_ht[i];
+        }
+    }
+    free(g_obj_ht);
+    g_obj_ht = new_ht;
+    g_obj_ht_capacity = new_cap;
     return true;
 }
 
 static void obj_blocks_track(void *ptr, size_t size, uint8_t type) {
-    if (!ptr || !obj_blocks_ensure_capacity(g_obj_blocks_count + 1)) return;
-    g_obj_blocks[g_obj_blocks_count++] = (ObjBlock){ .ptr = ptr, .size = size, .type = type };
+    if (!ptr) return;
+    if (g_obj_ht_count * 2 >= g_obj_ht_capacity && !obj_ht_grow()) return;
+    size_t idx = obj_ht_hash(ptr) & (g_obj_ht_capacity - 1);
+    while (g_obj_ht[idx].ptr && g_obj_ht[idx].ptr != OBJ_HT_DELETED && g_obj_ht[idx].ptr != ptr)
+        idx = (idx + 1) & (g_obj_ht_capacity - 1);
+    if (!g_obj_ht[idx].ptr || g_obj_ht[idx].ptr == OBJ_HT_DELETED) g_obj_ht_count++;
+    g_obj_ht[idx] = (ObjBlock){ .ptr = ptr, .size = size, .type = type };
 }
 
 static bool obj_blocks_untrack(void *ptr, size_t *size_out, uint8_t *type_out) {
-    if (!ptr || !g_obj_blocks || g_obj_blocks_count == 0) return false;
-    for (size_t i = 0; i < g_obj_blocks_count; i++) {
-        if (g_obj_blocks[i].ptr == ptr) {
-            if (size_out) *size_out = g_obj_blocks[i].size;
-            if (type_out) *type_out = g_obj_blocks[i].type;
-            g_obj_blocks[i] = g_obj_blocks[--g_obj_blocks_count];
+    if (!ptr || !g_obj_ht || g_obj_ht_capacity == 0) return false;
+    size_t idx = obj_ht_hash(ptr) & (g_obj_ht_capacity - 1);
+    for (size_t probes = 0; probes < g_obj_ht_capacity; probes++) {
+        void *p = g_obj_ht[idx].ptr;
+        if (!p) return false;  // Empty slot = not found
+        if (p == ptr) {
+            if (size_out) *size_out = g_obj_ht[idx].size;
+            if (type_out) *type_out = g_obj_ht[idx].type;
+            g_obj_ht[idx].ptr = OBJ_HT_DELETED;
+            g_obj_ht_count--;
             return true;
         }
+        idx = (idx + 1) & (g_obj_ht_capacity - 1);
     }
     return false;
 }

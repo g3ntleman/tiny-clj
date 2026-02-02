@@ -28,6 +28,7 @@ static unsigned int next_power_of_2(unsigned int n) {
     return n + 1;
 }
 
+/** Create hash map with capacity rounded up to next power of two. */
 CljHashMap* make_hashmap(unsigned int capacity) {
     unsigned int cap = next_power_of_2(capacity);
 
@@ -36,13 +37,12 @@ CljHashMap* make_hashmap(unsigned int capacity) {
     size_t data_size = (size_t)cap * 2 * sizeof(CljObject*);
     size_t total_size = struct_size + data_size;
 
-    CljHashMap *map = (CljHashMap*)ALLOC_BYTES(CLJ_HASHMAP, total_size);
+    CljHashMap *map = (CljHashMap*)alloc(total_size, 1, CLJ_HASHMAP);
     if (!map) {
         throw_oom();
     }
 
     map->base.type = CLJ_HASHMAP;
-    map
     map->count = 0;
     map->capacity = cap;
     map->tombstones = 0;
@@ -273,4 +273,3 @@ void hashmap_register_release_fn(void) {
     // HashMap destructor is already implemented in memory.c release_object_default()
     // This function exists for API consistency with other types
 }
-

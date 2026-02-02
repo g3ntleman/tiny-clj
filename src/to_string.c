@@ -396,6 +396,14 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             return 7 + strlen(uuid) + 1; // "#uuid \"" + uuid + "\""
         }
 
+        case CLJ_NAMESPACE: {
+            CljNamespace *ns = (CljNamespace*)v;
+            if (ns && ns->name && ns->name->cname) {
+                return strlen(ns->name->cname);
+            }
+            return 12; // "#<namespace>"
+        }
+
         default:
             return 10; // "#<unknown>"
     }

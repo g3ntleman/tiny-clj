@@ -177,7 +177,6 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
     // Ensure namespace starts as a valid retained object.
     // Zombie mode uses rc==0 to detect freed objects, so rc must not be 0 here.
     ns->base.type = CLJ_NAMESPACE;
-    ns
 
     // Get or intern the namespace name symbol
     CljSymbol *name_symbol = intern_symbol_global(cname);
@@ -801,15 +800,10 @@ CljObject* eval_catch(CljObject *form, EvalState *st) {
  * The cache will be automatically rebuilt on the next ns_resolve() call.
  */
 void ns_invalidate_resolve_cache(void) {
-    // Invalidate callsite caches by incrementing epoch
-    // All existing callsite caches will be invalidated on next access
-    uint64_t next_epoch = g_runtime.resolve_cache_epoch + 1;
-    if (next_epoch == 0) {
-        next_epoch = 1;
-    }
-    g_runtime.resolve_cache_epoch = next_epoch;
+    // Invalidate callsite caches by bumping the global epoch counter.
+    g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch();
 
-    // Release current cache map so it will be lazily rebuilt on next use
+    // Resolve cache disabled: ensure pointer remains NULL
     ASSIGN(g_runtime.resolve_cache, NULL);
 }
 

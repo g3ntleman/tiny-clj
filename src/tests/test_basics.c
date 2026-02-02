@@ -78,7 +78,7 @@ TEST(test_string_creation) {
     // Test direct string creation
     CljString *str = AUTORELEASE(make_string("hello world"));
     TEST_ASSERT_NOT_NULL(str);
-    TEST_ASSERT_EQUAL_INT(CLJ_STRING, str->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, str->base.type);
 
     // Clean up
 }

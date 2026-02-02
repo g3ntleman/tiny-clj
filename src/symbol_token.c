@@ -4,6 +4,7 @@
 #include <string.h>
 #include <assert.h>
 
+/** Create symbol token with source position; rc=1, caller releases. */
 CljSymbolToken* make_symbol_token_with_loc(const char *str, uint16_t line, uint16_t col) {
     CLJ_ASSERT(str != NULL);
 
@@ -13,7 +14,6 @@ CljSymbolToken* make_symbol_token_with_loc(const char *str, uint16_t line, uint1
 
     CljSymbolToken *token = (CljSymbolToken*)alloc(sizeof(CljSymbolToken) + len + 1, 1, CLJ_SYMBOL_TOKEN);
     token->base.type = CLJ_SYMBOL_TOKEN;
-    token
     token->length = (uint16_t)len;
     token->line = line;
     token->col = col;
@@ -22,7 +22,7 @@ CljSymbolToken* make_symbol_token_with_loc(const char *str, uint16_t line, uint1
     return token;
 }
 
+/** Create symbol token without location (line/col = 0). */
 CljSymbolToken* make_symbol_token(const char *str) {
     return make_symbol_token_with_loc(str, 0, 0);  // No location info
 }
-

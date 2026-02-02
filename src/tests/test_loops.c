@@ -335,13 +335,19 @@ TEST_SHARED(test_for_while_modifier) {
 TEST_SHARED(test_for_large_sequence) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
-    // (count (vec (for [x (range 10000)] x))) => 10000
-    ID result = eval_string(
-        "(count (vec (for [x (range 10000)] x)))",
-        g_test_eval_state);
+    // (count (vec (for [x (range N)] x))) => N
+    // Profiling builds run slower; keep N smaller to avoid timeouts.
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    const char *expr = "(count (vec (for [x (range 2000)] x)))";
+    const int expected = 2000;
+#else
+    const char *expr = "(count (vec (for [x (range 10000)] x)))";
+    const int expected = 10000;
+#endif
+    ID result = eval_string(expr, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(10000, as_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(expected, as_fixnum(result));
 }
 
 // Test: Lazy sequence (take from infinite)

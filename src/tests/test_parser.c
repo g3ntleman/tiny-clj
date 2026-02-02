@@ -18,7 +18,6 @@
 // ============================================================================
 // PARSER TESTS
 // ============================================================================
-
 TEST(test_parse_basic_types) {
     EvalState *eval_state = evalstate_new(false);
 
@@ -816,7 +815,6 @@ TEST(test_anon_fn_reader_macro) {
     TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result3));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result3));
 }
-
 // ============================================================================
 // TEST GROUPS
 // ============================================================================

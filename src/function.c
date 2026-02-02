@@ -49,6 +49,7 @@ static int allocate_function_params(CljFunction *func, ID *params, int param_cou
     return 0;
 }
 
+/** Create interpreted function closure; rc=1, caller releases. */
 CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVector *env_stack, CljSymbol *name_sym, struct CljNamespace *ns) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
 
@@ -65,7 +66,6 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVe
     if (!func) throw_oom();
 
     func->base.type = CLJ_CLOSURE;  // Interpreted functions use CLJ_CLOSURE type
-    func
     func->body = RETAIN(body);
     // Persistent env_stack is always heap-managed (vector of maps).
     // It may be shared across closures; RETAIN is required for correctness.
@@ -86,6 +86,7 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVe
 // -----------------------------------------------------------------------------
 // Native function constructor (CljCFunc)
 // -----------------------------------------------------------------------------
+/** Wrap C builtin as callable function; rc=1, caller releases. */
 ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
 {
     CljCFunc *func = ALLOC(CljCFunc, 1);
@@ -94,7 +95,6 @@ ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
     }
 
     func->base.type = CLJ_FUNC;
-    func
     func->fn = fn;
 
     // Name is stored as an interned symbol (singleton), so we can safely borrow it.
@@ -102,4 +102,3 @@ ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
 
     return (ID)func;
 }
-
