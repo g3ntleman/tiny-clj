@@ -5,6 +5,7 @@
 #include "eval.h"
 #include "reader.h"
 #include "list.h"
+#include "../ast.h"
 #include "map.h"
 #include "to_string.h"
 #include <sys/time.h>
@@ -636,8 +637,8 @@ TEST(test_ns_resolve_symbol_cache) {
     RELEASE(resolved1);
 }
 
-// Test that resolve_list_operator uses resolve_cache for function calls
-// This test verifies that function calls benefit from the resolve_cache optimization
+// Test that resolve_list_operator populates callsite cache for function calls
+// This test verifies that function calls benefit from the callsite cache optimization
 TEST(test_resolve_list_operator_uses_cache) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -648,10 +649,9 @@ TEST(test_resolve_list_operator_uses_cache) {
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
 
-    // Clear resolve_cache to start fresh
-    if (g_runtime.resolve_cache) {
-        RELEASE(g_runtime.resolve_cache);
-        g_runtime.resolve_cache = make_map(16);
+    // Ensure callsite cache is enabled
+    if (g_runtime.resolve_cache_epoch == 0) {
+        g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch();
     }
 
     // Test with a builtin function that should be in clojure.core
@@ -659,36 +659,34 @@ TEST(test_resolve_list_operator_uses_cache) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
 
+    // Parse and canonicalize once so the same AST node can cache the callsite
+    ID parsed = parse_canonicalized("(inc 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(is_list_like(parsed));
+    CljASTNode *call_node = is_ast_node(parsed) ? (CljASTNode*)parsed : NULL;
+    TEST_ASSERT_NOT_NULL_MESSAGE(call_node, "expected AST list node for callsite caching");
+
+    // Cache should be empty before evaluation
+    ID cached_before = ast_node_get_cached_resolution(call_node, inc_sym, g_runtime.resolve_cache_epoch);
+    TEST_ASSERT_NULL_MESSAGE(cached_before, "callsite cache should be empty before evaluation");
+
     // First function call - should populate cache
-    // Parse and evaluate (inc 1) - this will call resolve_list_operator
-    CljObject *result1 = eval_string("(inc 1)", g_test_eval_state);
+    CljObject *result1 = eval_list(as_list(parsed), g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
     TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
 
-    // Verify that cache was populated
-    // The resolve_cache is hierarchical: namespace_symbol -> symbol -> resolved_value
-    TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
-    CljSymbol *ns_key = g_test_eval_state->current_ns->name;
-    CljPersistentMap *ns_cache = (CljPersistentMap*)map_get_sentinel(g_runtime.resolve_cache, ns_key, NULL);
-    CljObject *cached_inc = ns_cache ? (CljObject*)map_get_sentinel(ns_cache, inc_sym, NULL) : NULL;
-    TEST_ASSERT_NOT_NULL_MESSAGE(cached_inc, "resolve_cache should contain 'inc' after first function call");
+    // Verify that callsite cache was populated
+    ID cached_inc = ast_node_get_cached_resolution(call_node, inc_sym, g_runtime.resolve_cache_epoch);
+    TEST_ASSERT_NOT_NULL_MESSAGE(cached_inc, "callsite cache should contain 'inc' after first function call");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(cached_inc) == CLJ_FUNC || TAG(cached_inc) == CLJ_CLOSURE,
+                             "callsite cache should store a callable");
 
-    // Second function call - should use cache (faster path)
-    CljObject *result2 = eval_string("(inc 2)", g_test_eval_state);
+    // Second function call - should reuse callsite cache
+    CljObject *result2 = eval_list(as_list(parsed), g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
-    TEST_ASSERT_EQUAL(3, as_fixnum((CljValue)result2));
-
-    // Multiple calls to verify cache is being used
-    for (int i = 0; i < 3; i++) {
-        char expr[32];
-        test_snprintf(expr, sizeof(expr), "(inc %d)", i);
-        CljObject *result = eval_string(expr, g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-        TEST_ASSERT_EQUAL(i + 1, as_fixnum((CljValue)result));
-    }
+    TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result2));
 
     // Cleanup
     RELEASE(inc_sym);
@@ -697,7 +695,7 @@ TEST(test_resolve_list_operator_uses_cache) {
 }
 
 // Test that cache invalidation works correctly when symbols are redefined
-// This verifies that the optimization maintains Clojure semantics
+// This verifies that the callsite cache is invalidated via epoch updates
 TEST(test_resolve_cache_invalidation_on_redefinition) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -708,10 +706,9 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
 
-    // Clear resolve_cache to start fresh
-    if (g_runtime.resolve_cache) {
-        RELEASE(g_runtime.resolve_cache);
-        g_runtime.resolve_cache = make_map(16);
+    // Ensure callsite cache is enabled
+    if (g_runtime.resolve_cache_epoch == 0) {
+        g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch();
     }
 
     // Test with a builtin function that we can redefine
@@ -719,28 +716,34 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
 
+    // Parse and canonicalize once so the same AST node can cache the callsite
+    ID parsed = parse_canonicalized("(inc 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(is_list_like(parsed));
+    CljASTNode *call_node = is_ast_node(parsed) ? (CljASTNode*)parsed : NULL;
+    TEST_ASSERT_NOT_NULL_MESSAGE(call_node, "expected AST list node for callsite caching");
+
     // First function call - should populate cache
-    CljObject *result1 = eval_string("(inc 1)", g_test_eval_state);
+    CljObject *result1 = eval_list(as_list(parsed), g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
     TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
 
-    // Verify cache was populated
-    // The resolve_cache is hierarchical: namespace_symbol -> symbol -> resolved_value
-    TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
-    CljSymbol *ns_key = g_test_eval_state->current_ns->name;
-    CljPersistentMap *ns_cache = (CljPersistentMap*)map_get_sentinel(g_runtime.resolve_cache, ns_key, NULL);
-    CljObject *cached = ns_cache ? (CljObject*)map_get_sentinel(ns_cache, inc_sym, NULL) : NULL;
-    TEST_ASSERT_NOT_NULL_MESSAGE(cached, "resolve_cache should contain 'inc' after first function call");
+    // Verify callsite cache was populated
+    ID cached = ast_node_get_cached_resolution(call_node, inc_sym, g_runtime.resolve_cache_epoch);
+    TEST_ASSERT_NOT_NULL_MESSAGE(cached, "callsite cache should contain 'inc' after first function call");
 
     // Now redefine 'inc' in user namespace (shadowing clojure.core)
     // Create a simple value (fixnum) that shadows the function
+    uint64_t epoch_before = g_runtime.resolve_cache_epoch;
     ID new_inc_value = fixnum(999);
     ns_define(g_test_eval_state->current_ns, inc_sym, new_inc_value);
 
-    // Verify cache was invalidated (entire cache set to NULL after ns_define)
-    // ns_define invalidates the entire cache by setting it to NULL
-    TEST_ASSERT_NULL_MESSAGE(g_runtime.resolve_cache, "resolve_cache should be NULL after redefinition (cache invalidation)");
+    // Verify cache was invalidated (epoch bumped after ns_define)
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(epoch_before, g_runtime.resolve_cache_epoch,
+                                  "resolve_cache_epoch should change after redefinition (cache invalidation)");
+    ID cached_after = ast_node_get_cached_resolution(call_node, inc_sym, g_runtime.resolve_cache_epoch);
+    TEST_ASSERT_NULL_MESSAGE(cached_after, "callsite cache should be invalid after redefinition");
 
     // Second function call - should resolve from user namespace (not cached old value)
     // Note: This will fail because we defined a fixnum, not a function
