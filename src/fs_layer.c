@@ -1099,14 +1099,14 @@ ID fs_list_dir_batch(FsKvStore *st,
             FsFileMeta meta = {0};
             bool has_formal = fs_meta_get(st, kstr, &meta);
 
-            CljMap *meta_map = make_map(4);
+            CljPersistentMap *meta_map = make_map(4);
             if (!meta_map) { tdb_kv_cursor_close(cur); return NULL; }
             if (has_formal) {
                 map_assoc_inplace(&meta_map, (ID)SYM_KW_SIZE, fixnum((int32_t)meta.size));
                 map_assoc_inplace(&meta_map, (ID)SYM_KW_CHUNKS, fixnum((int32_t)meta.chunks));
             }
 
-            CljMap *entry_map = make_map(2);
+            CljPersistentMap *entry_map = make_map(2);
             if (!entry_map) { RELEASE(meta_map); tdb_kv_cursor_close(cur); return NULL; }
 
             ID path_str = (ID)make_string(kstr);

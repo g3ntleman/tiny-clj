@@ -27,7 +27,7 @@
 
 **Integration in `eval_parsed()`:**
 ```c
-ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
+ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljPersistentMap *env) {
     // 1. Macro-Expansion (NEU)
     CljObject *expanded = macroexpand(parsed_expr, eval_state);
     
@@ -65,7 +65,7 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
 3. Arithmetic-Dispatch (Pointer-Vergleiche - sehr schnell)
 4. Function-Call (Interpreter-Aufruf)
 
-**Hinweis:** `CljMap` ist eine **Array-Map** (keine Hash-Map), daher O(n) Lookup durch gesamtes Array. Hash-Maps (Open Hashing/Linear Probing) wären typischerweise schneller, da sie an einer speziellen Stelle (Hash-Index) starten und dann linear suchen, statt durch das gesamte Array zu iterieren. Der Hashing-Overhead könnte bei sehr kleinen Maps (<4-8 Einträge) dominieren, aber bei typischen Map-Größen (>8 Einträge) wären Hash-Maps schneller.
+**Hinweis:** `CljPersistentMap` ist eine **Array-Map** (keine Hash-Map), daher O(n) Lookup durch gesamtes Array. Hash-Maps (Open Hashing/Linear Probing) wären typischerweise schneller, da sie an einer speziellen Stelle (Hash-Index) starten und dann linear suchen, statt durch das gesamte Array zu iterieren. Der Hashing-Overhead könnte bei sehr kleinen Maps (<4-8 Einträge) dominieren, aber bei typischen Map-Größen (>8 Einträge) wären Hash-Maps schneller.
 
 **Mit Macro-Expansion (NICHT im Hot-Path!):**
 - **Macro-Expansion erfolgt NACH Parsing, VOR Evaluation**
@@ -198,7 +198,7 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
 ```c
 // Cache-Struktur
 typedef struct {
-    CljMap *expansion_cache;  // AST → expandierter AST
+    CljPersistentMap *expansion_cache;  // AST → expandierter AST
 } MacroExpansionCache;
 
 // Bei Macro-Aufruf:

@@ -153,8 +153,7 @@ void autorelease_pool_peak_reset(void);
 #endif
 
 #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
-#define ALLOC_SIMPLE(obj_type) (ID) alloc(sizeof(CljObject), 1, obj_type)
-#define ALLOC_BYTES(obj_type, bytes) ((void*) alloc((bytes), 1, (obj_type)))
+#define ALLOC_BYTES(obj_type, bytes) ((obj_type*) alloc((bytes), 1, (obj_type)))
 
 #ifdef DEBUG
     #ifdef ZOMBIE_ENABLED

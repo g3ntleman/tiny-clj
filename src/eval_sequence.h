@@ -9,13 +9,13 @@ extern "C" {
 #endif
 
 ID eval_and_call_native_with_context(CljList *list,
-                                     CljMap *env,
+                                     CljPersistentMap *env,
                                      ID (*native_func)(ID*, unsigned int),
                                      unsigned int max_args,
                                      const EvalContext *ctx);
 
 ID eval_map_lookup(CljList *list,
-                   CljMap *env,
+                   CljPersistentMap *env,
                    EvalState *st,
                    const EvalContext *ctx,
                    ID map);

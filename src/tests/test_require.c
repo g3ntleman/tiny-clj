@@ -369,13 +369,13 @@ TEST(test_require_trim_metadata) {
     
     if (trim_meta) {
         // Check that metadata is a map
-        TEST_ASSERT_TRUE_MESSAGE(TAG(trim_meta) == CLJ_MAP, "metadata should be a map");
+        TEST_ASSERT_TRUE_MESSAGE(TAG(trim_meta) == CLJ_MAP_PERSISTENT, "metadata should be a map");
         
         // Check for :doc key
         CljSymbol *doc_key = intern_symbol_global(":doc");
         TEST_ASSERT_NOT_NULL(doc_key);
         
-        ID doc_value = map_get((CljMap*)trim_meta, doc_key);
+        ID doc_value = map_get((CljPersistentMap*)trim_meta, doc_key);
         
         TEST_ASSERT_TRUE_MESSAGE(doc_value != NOT_FOUND, 
                                  "trim metadata should have :doc key");
@@ -403,7 +403,7 @@ TEST(test_require_trim_meta_function) {
     TEST_ASSERT_NOT_NULL_MESSAGE(meta_result, "meta should return a result");
     
     if (meta_result) {
-        TEST_ASSERT_TRUE_MESSAGE(TAG(meta_result) == CLJ_MAP, 
+        TEST_ASSERT_TRUE_MESSAGE(TAG(meta_result) == CLJ_MAP_PERSISTENT, 
                                  "meta result should be a map");
         
         // Check for :doc key

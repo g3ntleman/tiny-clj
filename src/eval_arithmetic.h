@@ -15,7 +15,7 @@ typedef enum {
 } ArithOp;
 
 CljObject* eval_arithmetic_generic_with_context(CljList *list,
-                                                CljMap *env,
+                                                CljPersistentMap *env,
                                                 ArithOp op,
                                                 EvalState *st,
                                                 const EvalContext *ctx);

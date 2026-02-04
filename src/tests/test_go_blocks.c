@@ -22,7 +22,7 @@ TEST(test_go_enqueues_and_result_channel_receives_value) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Use eval_string to evaluate (go (do 1 2 3)) - high-level approach
-    CljMap *chan = NULL;
+    CljTransientMap *chan = NULL;
     TRY {
         chan = eval_string("(go (do 1 2 3))", g_test_eval_state);
     } CATCH(ex) {
@@ -92,7 +92,7 @@ TEST(test_go_exception_closes_channel_without_value) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Use eval_string to evaluate (go (/ 1 0)) - high-level approach
-    CljMap *chan = NULL;
+    CljTransientMap *chan = NULL;
     TRY {
         chan = eval_string("(go (/ 1 0))", g_test_eval_state);
     } CATCH(ex) {
@@ -138,7 +138,7 @@ TEST(test_go_success_puts_value_high_level) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create channel with go-block that succeeds
-    CljMap *chan = NULL;
+    CljTransientMap *chan = NULL;
     TRY {
         chan = eval_string("(go (+ 1 2))", g_test_eval_state);
     } CATCH(ex) {
@@ -184,7 +184,7 @@ TEST(test_go_nil_value_in_channel) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create channel with go-block that returns nil
-    CljMap *chan = NULL;
+    CljTransientMap *chan = NULL;
     TRY {
         chan = eval_string("(go nil)", g_test_eval_state);
     } CATCH(ex) {
@@ -239,7 +239,7 @@ TEST(test_go_returns_transient_map_channel) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test if eval_string("(go 42)") returns a channel
-    CljMap *chan = NULL;
+    CljTransientMap *chan = NULL;
     TRY {
         chan = eval_string("(go 42)", g_test_eval_state);
     } CATCH(ex) {
@@ -252,7 +252,7 @@ TEST(test_go_returns_transient_map_channel) {
     
     // Verify it's a transient map (channel is a transient map)
     // Clojure-compatibility: Channels are maps, but transient for in-place mutation
-    TEST_ASSERT_TRUE(TAG((CljObject*)chan) == CLJ_MAP_TRANSIENT || TAG((CljObject*)chan) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)chan) == CLJ_MAP_TRANSIENT || TAG((CljObject*)chan) == CLJ_MAP_PERSISTENT);
     
     // Cleanup
     RELEASE(chan);
@@ -263,7 +263,7 @@ TEST(test_channel_is_transient_map_and_mutable) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create a channel (transient map)
-    CljMap *chan = make_result_channel();
+    CljTransientMap *chan = make_result_channel();
     TEST_ASSERT_NOT_NULL(chan);
     
     // Verify it's a transient map
@@ -292,7 +292,7 @@ TEST(test_channel_mutation_after_run_next_task) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create go-block
-    CljMap *chan = NULL;
+    CljTransientMap *chan = NULL;
     TRY {
         chan = eval_string("(go 42)", g_test_eval_state);
     } CATCH(ex) {
@@ -338,7 +338,7 @@ TEST(test_channel_mutation_after_run_next_task) {
 // Channels are transient maps, so they can be mutated in-place
 TEST(test_direct_channel_creation_and_mutation) {
     // Create channel directly (transient map)
-    CljMap *chan = make_result_channel();
+    CljTransientMap *chan = make_result_channel();
     TEST_ASSERT_NOT_NULL(chan);
     
     // Verify it's a transient map
@@ -386,7 +386,7 @@ TEST(test_event_loop_run_next_mutates_channel) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create go-block
-    CljMap *chan = NULL;
+    CljTransientMap *chan = NULL;
     TRY {
         chan = eval_string("(go 42)", g_test_eval_state);
     } CATCH(ex) {
@@ -434,7 +434,7 @@ TEST(test_run_next_task_recursive_in_go_block) {
     
     // Create a go-block that calls run-next-task (yield-like behavior)
     // This simulates using run-next-task as a yield mechanism within a go-block
-    CljMap *chan = NULL;
+    CljTransientMap *chan = NULL;
     TRY {
         // Create a go-block that calls run-next-task inside
         // When this go-block executes, it will call run-next-task, which tries
@@ -490,7 +490,7 @@ TEST(test_run_next_task_recursive_with_nested_go_block) {
     
     // Create a go-block that enqueues another go-block and then calls run-next-task
     // This should NOT crash
-    CljMap *chan1 = NULL;
+    CljTransientMap *chan1 = NULL;
     TRY {
         // Create first go-block that enqueues another and calls run-next-task
         chan1 = eval_string("(go (do (go 100) (run-next-task) 42))", g_test_eval_state);
@@ -538,7 +538,7 @@ TEST(test_event_loop_enqueue_updates_count) {
         TEST_ASSERT_NOT_NULL(fn);
         
         // Create a result channel
-        CljMap *chan = make_result_channel();
+        CljTransientMap *chan = make_result_channel();
         TEST_ASSERT_NOT_NULL(chan);
         
         // Check initial count (should be 0)

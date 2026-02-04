@@ -40,12 +40,12 @@ if (map_data->base.rc == 1) {
 
 **Before (Two Heap Objects):**
 ```
-CljMap struct (heap) -> data array (heap)
+CljPersistentMap struct (heap) -> data array (heap)
 ```
 
 **After (Single Heap Object):**
 ```
-CljMap struct + embedded data array (single malloc)
+CljPersistentMap struct + embedded data array (single malloc)
 ```
 
 **Memory Benefits:**
@@ -80,11 +80,11 @@ CljMap struct + embedded data array (single malloc)
 ```c
 CljObject* make_map(int capacity) {
     // Single malloc for struct + data array
-    size_t struct_size = sizeof(CljMap);
+    size_t struct_size = sizeof(CljPersistentMap);
     size_t data_size = (size_t)capacity * 2 * sizeof(CljObject*);
     size_t total_size = struct_size + data_size;
     
-    CljMap *map = (CljMap*)malloc(total_size);
+    CljPersistentMap *map = (CljPersistentMap*)malloc(total_size);
     // Initialize embedded array
     return (CljObject*)map;
 }
@@ -227,7 +227,7 @@ if isKnownUniquelyReferenced(&storage) {
 
 ### Core Implementation
 - `src/map.c`: `map_assoc_cow()`, `make_map()`
-- `src/object.h`: `CljMap` structure with embedded array
+- `src/object.h`: `CljPersistentMap` structure with embedded array
 - `src/object.c`: `clj_equal()` for CljValue parameters
 
 ### Test Coverage

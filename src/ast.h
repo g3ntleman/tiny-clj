@@ -28,9 +28,9 @@ ID ast_node_get_callsite_cache(const CljASTNode *node);
 // - depth=1: parent CallFrame, etc.
 typedef struct CljSlotRef {
     CljObject base;
-    CljSymbol *symbol;  // For debugging/errors only (symbols are interned)
     uint8_t depth;
     uint8_t slot;
+    CljSymbol *symbol;  // For debugging/errors only (symbols are interned)
 } CljSlotRef;
 
 CljSlotRef* make_slot_ref(CljSymbol *symbol, uint8_t depth, uint8_t slot);

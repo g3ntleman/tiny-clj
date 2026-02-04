@@ -868,7 +868,7 @@ int line_editor_get_state(const LineEditor *editor, LineEditorState *state) {
     strncpy(state->buffer, src, sizeof(state->buffer) - 1);
     state->buffer[sizeof(state->buffer) - 1] = '\0';
     state->cursor_pos = editor->cursor_pos;
-    state->length = (int)editor->buffer.length;
+    state->length = editor->buffer.length;
     state->line_ready = editor->line_ready;
     
     return LINE_EDITOR_SUCCESS;

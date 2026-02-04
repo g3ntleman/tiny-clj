@@ -130,7 +130,7 @@ CLJException* make_exception(const char *type, const char *message, const char *
 
     // Initialize base object
     exc->base.type = CLJ_EXCEPTION;
-    exc->base.rc = 1;  // Start with reference count 1
+    // rc already set to 1 by ALLOC
 
     // Copy strings directly into the structure (no strdup needed)
     safe_strncpy(exc->type, type, sizeof(exc->type));
@@ -143,7 +143,7 @@ CLJException* make_exception(const char *type, const char *message, const char *
 #ifdef DEBUG
     // Always generate stacktrace in DEBUG builds; exception must retain it
     exc->stacktrace = stacktrace();
-    if (exc->stacktrace) RETAIN(exc->stacktrace);
+    RETAIN(exc->stacktrace);
     exc->object = 0;  // Initialize to 0 (unset)
 #else
     // Release builds: no stacktrace field
@@ -180,7 +180,7 @@ CLJException *clj_oom_exception = &clj_oom_exception_data;
 
 /**
  * Convenience function for throwing exceptions with printf-style formatting
- * 
+ *
  * @param type Exception type (NULL for generic "RuntimeException")
  * @param file Source file name (use __FILE__)
  * @param line Line number (use __LINE__)
@@ -188,7 +188,7 @@ CLJException *clj_oom_exception = &clj_oom_exception_data;
  * @param format printf-style format string
  * @param ... Variable arguments for formatting
  */
-void throw_exception_formatted(const char *type, const char *file, int line, int code, 
+void throw_exception_formatted(const char *type, const char *file, int line, int code,
                               const char *format, ...) {
     // Use generic RuntimeException if type is NULL
     const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
@@ -260,12 +260,12 @@ struct CljString* stacktrace(void) {
     void *array[32];
     size_t size = backtrace(array, 32);
     char **symbols = backtrace_symbols(array, size);
-    
+
     if (!symbols || size == 0) {
         if (symbols) CLJ_FREE(symbols);
         return NULL;
     }
-    
+
     // Calculate total length needed
     size_t total_len = 0;
     for (size_t i = 0; i < size; i++) {
@@ -274,14 +274,14 @@ struct CljString* stacktrace(void) {
             total_len += 1;  // newline
         }
     }
-    
+
     // Allocate buffer for stacktrace string
     char *buffer = (char*)CLJ_MALLOC(total_len + 1);
     if (!buffer) {
         CLJ_FREE(symbols);
         return NULL;
     }
-    
+
     // Build stacktrace string, skipping the last line (often contains loader frames).
     size_t pos = 0;
     size_t last_index = (size > 0) ? size - 1 : 0;
@@ -294,13 +294,13 @@ struct CljString* stacktrace(void) {
         }
     }
     buffer[pos] = '\0';
-    
+
     CLJ_FREE(symbols);
-    
+
     // Create CljString from buffer
     struct CljString *result = make_string(buffer);
     CLJ_FREE(buffer);
-    
+
     return result;
 #else
     // No stacktrace support on this platform
@@ -352,16 +352,16 @@ void print_exception(CLJException *ex) {
     // Print basic exception information (compact) using mini_format everywhere.
     errf("%s: %s at %s:%d:%d",
          ex->type, ex->message, shorten_file_path(ex->file), ex->line, ex->col);
-    
+
 #ifdef DEBUG
     // Print object if available (but skip for zombie objects to avoid secondary errors)
     if (ex->object != 0) {
         // Address-only: never dereference here (may be a zombie/invalid pointer)
         errf(" object: @%p", (void*)(uintptr_t)ex->object);
     }
-    
+
     fputc('\n', stderr);
-    
+
     // Print stacktrace if available (compact)
     // Default: enabled (Clojure/JVM-like). Can be disabled via env var.
     bool print_stacktrace = true;
@@ -382,7 +382,7 @@ void print_exception(CLJException *ex) {
             fputs(stacktrace_str, stderr);
         }
     }
-    
+
     fputs("\n", stderr);  // Empty line after exception for readability
 #else
     // Release builds: no stacktrace or object fields
@@ -398,17 +398,17 @@ void throw_exception_object(CLJException *ex) {
 #endif
         exit(1);
     }
-    
+
     if (!global_exception_stack.top) {
         // No handler - unhandled exception
         fputs("UNHANDLED: ", stderr);
         print_exception(ex);
-        
+
         // No handler - unhandled exception (exit as before)
         // Tests should use TRY/CATCH to catch exceptions
         CLJ_FREE(ex); exit(1);
     }
-    
+
     // Don't print exception details if there's a handler (expected exceptions in tests)
     // Only print for unhandled exceptions above
     // Store exception in handler
@@ -431,4 +431,3 @@ void throw_exception_object(CLJException *ex) {
 CLJException* exception(const char *msg, const char *file, int line, int col) {
     return make_exception(EXCEPTION_ERROR, msg, file, line, col);
 }
-

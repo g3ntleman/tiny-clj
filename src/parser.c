@@ -155,7 +155,9 @@ static char reader_consume(Reader *reader) {
 // Forward declarations for Reader-based parser functions
 static ID parse_meta(Reader *reader, EvalState *st);
 static ID parse_meta_map(Reader *reader, EvalState *st);
+#if defined(META_ENABLED) && META_ENABLED
 static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID obj);
+#endif
 static ID parse_anon_fn(Reader *reader, EvalState *st);
 static ID parse_vector(Reader *reader, EvalState *st);
 static ID parse_map(Reader *reader, EvalState *st);
@@ -221,6 +223,12 @@ static ID parse_tagged_literal(Reader *reader, EvalState *st) {
 }
 static ID parse_character(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
+
+// Parser is single-threaded. Track when we're consuming metadata so we can
+// avoid allocations in META-disabled builds.
+#if !(defined(META_ENABLED) && META_ENABLED)
+static bool parser_in_meta = false;
+#endif
 
 
 // Ensure that every parse step advances the reader or hits EOF, otherwise throw
@@ -477,12 +485,12 @@ ID parse_expr(Reader *reader, EvalState *st) {
 
 /**
  * @brief Evaluate a parsed Clojure expression
- * @param parsed_expr The parsed AST
+ * @param parsed_expr The parsed AST (expected autoreleased, e.g. from parse(); canonicalize may replace it; old AST is cleaned by caller's autorelease pool)
  * @param eval_state The evaluation state
  * @param env Optional environment (if NULL, uses eval_state->current_ns->mappings)
  * @return The evaluated result (autoreleased) or NULL only if result is nil
  */
-ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
+ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljPersistentMap *env) {
     CLJ_ASSERT(eval_state != NULL);
 
     // NULL means nil (e.g., () parses to nil) - return NULL
@@ -499,7 +507,10 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
         result = parsed_expr;
     } else {
         // Canonicalize the AST before evaluation
-        // This converts symbol tokens to symbols and handles quote forms properly
+        // This converts symbol tokens to symbols and handles quote forms properly.
+        // parsed_expr is expected autoreleased (e.g. from parse()); when we replace it
+        // with the canonical result (also autoreleased), the old AST is cleaned up by
+        // the caller's autorelease pool (see MEMORY_POLICY.md Parse/Eval Functions).
 #ifdef PROFILE_STARTUP
         extern double g_canon_time_ms;
         clock_t canon_start = clock();
@@ -512,10 +523,10 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
     
     if (parsed_expr && is_list_type(TAG(parsed_expr))) {
         // Use provided env or fall back to current_ns->mappings
-        CljMap *eval_env = env;
+        CljPersistentMap *eval_env = env;
         if (!eval_env) {
             CLJ_ASSERT(eval_state->current_ns != NULL);
-            eval_env = (CljMap*)eval_state->current_ns->mappings;
+            eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
         }
         result = eval_list(as_list(parsed_expr), eval_env, eval_state, NULL);
         // eval_list returns AUTORELEASE objects
@@ -523,23 +534,23 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
         // For symbols, use eval_symbol (uses current_ns->mappings internally)
         result = eval_symbol(as_symbol(parsed_expr), eval_state);
         // eval_symbol already returns autoreleased object
-    } else if (parsed_expr && TAG(parsed_expr) == CLJ_MAP) {
+    } else if (parsed_expr && TAG(parsed_expr) == CLJ_MAP_PERSISTENT) {
         // Map literals need to have their keys and values evaluated
         // Use provided env or fall back to current_ns->mappings
-        CljMap *eval_env = env;
+        CljPersistentMap *eval_env = env;
         if (!eval_env) {
             CLJ_ASSERT(eval_state->current_ns != NULL);
-            eval_env = (CljMap*)eval_state->current_ns->mappings;
+            eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
         }
         result = eval_body(parsed_expr, eval_env, eval_state, NULL);
         // eval_body returns AUTORELEASE objects
     } else if (parsed_expr && TAG(parsed_expr) == CLJ_VECTOR) {
         // Vector literals need to have their elements evaluated
         // Use provided env or fall back to current_ns->mappings
-        CljMap *eval_env = env;
+        CljPersistentMap *eval_env = env;
         if (!eval_env) {
             CLJ_ASSERT(eval_state->current_ns != NULL);
-            eval_env = (CljMap*)eval_state->current_ns->mappings;
+            eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
         }
         result = eval_body(parsed_expr, eval_env, eval_state, NULL);
         // eval_body returns AUTORELEASE objects
@@ -619,9 +630,35 @@ static ID parse_map(Reader *reader, EvalState *st) {
   if (!reader_match(reader, '{'))
     return NULL;
   reader_skip_all(reader);
+#if !(defined(META_ENABLED) && META_ENABLED)
+  if (parser_in_meta) {
+    // Fast path: consume balanced map contents without allocating.
+    int depth = 1;
+    while (!reader_eof(reader) && depth > 0) {
+      char c = reader_current(reader);
+      reader_next(reader);
+      if (c == '{') depth++;
+      else if (c == '}') depth--;
+      else if (c == '"') {
+        // Skip string literal to ignore braces inside strings
+        while (!reader_eof(reader)) {
+          char s = reader_current(reader);
+          reader_next(reader);
+          if (s == '\\' && !reader_eof(reader)) {
+            reader_next(reader); // skip escaped char
+            continue;
+          }
+          if (s == '"') break;
+        }
+      }
+    }
+    reader_skip_all(reader);
+    return NULL; // No map object produced when metadata is disabled
+  }
+#endif
   // Build the map incrementally to avoid relying on a fixed-size stack buffer.
   // This also matches Clojure semantics for duplicate keys (later entries win).
-  CljMap *map = make_map(8);
+  CljPersistentMap *map = make_map(8);
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
     ID key = parse_expr(reader, st);
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
@@ -636,6 +673,7 @@ static ID parse_map(Reader *reader, EvalState *st) {
     }
   }
   if (reader_eof(reader) || !reader_match(reader, '}')) {
+    RELEASE(map);
     throw_parser_exception("Unclosed map - missing closing '}'", reader);
     return NULL;
   }
@@ -747,6 +785,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
 
       // Build (let [binding test] (if binding then else?))
       ID expanded = AUTORELEASE(make_ast_list(SYM_LET, make_ast_list(let_binding_vec, make_ast_list(if_expr, NULL))));
+      RELEASE(if_expr);  // Tree now owns the reference
 
       // Skip whitespace before checking for closing parenthesis
       reader_skip_all(reader);
@@ -1378,6 +1417,7 @@ ID parse(const char *input, EvalState *st) {
  * @param new_meta New metadata to merge (will be released)
  * @return Object with merged metadata or NULL on error (caller must handle RELEASE/AUTORELEASE)
  */
+#if defined(META_ENABLED) && META_ENABLED
 static ID merge_metadata_with_object(ID obj, ID new_meta) {
   if (!obj || !new_meta) {
     RELEASE(new_meta);
@@ -1389,10 +1429,10 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
   ID existing_meta = meta_get((CljObject*)obj);
   if (existing_meta) {
     // Merge existing metadata with new metadata (existing takes precedence)
-    CljMap *existing_map = as_map(existing_meta);
-    CljMap *new_map = as_map(new_meta);
+    CljPersistentMap *existing_map = as_map(existing_meta);
+    CljPersistentMap *new_map = as_map(new_meta);
     if (existing_map && new_map) {
-      CljMap *merged_meta = (CljMap*)meta_merge(existing_map, new_map);
+      CljPersistentMap *merged_meta = (CljPersistentMap*)meta_merge(existing_map, new_map);
       if (merged_meta) {
         if (merged_meta != existing_meta) {
           // Apply merged metadata to object
@@ -1410,6 +1450,7 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
   RELEASE(new_meta);
   return obj;  // Return object (caller will handle AUTORELEASE)
 }
+#endif
 
 /**
  * @brief Apply metadata to object and merge location metadata (DRY helper)
@@ -1419,6 +1460,7 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
  * @param obj Object to apply metadata to
  * @return Object with applied metadata (autoreleased) or NULL on error
  */
+#if defined(META_ENABLED) && META_ENABLED
 static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID obj) {
   (void)reader;  // Unused parameter
   (void)st;      // Unused parameter
@@ -1434,14 +1476,14 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
 
 #if defined(META_ENABLED) && META_ENABLED
   // Automatically add source code location metadata
-  CljMap *location_meta = (CljMap*)make_location_meta(reader, st);
+  CljPersistentMap *location_meta = (CljPersistentMap*)make_location_meta(reader, st);
   if (location_meta) {
     // Get current metadata (might be from meta parameter or existing)
     ID current_meta = meta ? meta : meta_get((CljObject*)obj);
-    CljMap *current_map = current_meta ? as_map(current_meta) : NULL;
+    CljPersistentMap *current_map = current_meta ? as_map(current_meta) : NULL;
     if (current_map) {
       // Merge location metadata with existing metadata (doesn't overwrite)
-      CljMap *merged_meta = (CljMap*)meta_merge(current_map, location_meta);
+      CljPersistentMap *merged_meta = (CljPersistentMap*)meta_merge(current_map, location_meta);
       if (merged_meta) {
         if (merged_meta != current_meta) {
           // Update meta if it was merged
@@ -1460,6 +1502,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
   RELEASE(meta);
   return AUTORELEASE(obj);
 }
+#endif
 
 /**
  * @brief Parse metadata ^meta using Reader
@@ -1471,6 +1514,30 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   // Consume the '^' character (we know it's '^' because parse_expr checked it)
   reader_next(reader);
 
+#if !(defined(META_ENABLED) && META_ENABLED)
+  bool was_in_meta = parser_in_meta;
+  parser_in_meta = true;
+
+  // Metadata is compiled out: parse the metadata form (without allocating) and ignore it,
+  // then parse the target object.
+  reader_skip_all(reader);
+  if (!reader_eof(reader) && reader_current(reader) == '#') {
+    char next = reader_peek_ahead(reader, 1);
+    if (next == '^') {
+      reader_next(reader);  // consume '#'
+      ID result = parse_meta_map(reader, st);
+      parser_in_meta = was_in_meta;
+      return result;
+    }
+  }
+  // Parse and discard the metadata expression (parse_map will skip allocs when parser_in_meta)
+  ID ignored_meta = parse_expr(reader, st);
+  RELEASE(ignored_meta);
+  reader_skip_all(reader);
+  ID obj = parse_expr(reader, st);
+  parser_in_meta = was_in_meta;
+  return obj;
+#else
   // Check if this is ^#^{...} syntax (metadata map)
   reader_skip_all(reader);
   if (!reader_eof(reader) && reader_current(reader) == '#') {
@@ -1493,7 +1560,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
 
     // Convert keyword to metadata map {:keyword true}
     // In Clojure, ^:keyword means ^{:keyword true}
-    CljMap *meta_map = make_map(4);
+    CljPersistentMap *meta_map = make_map(4);
     if (!meta_map) {
       RELEASE(keyword_meta);
       return NULL;
@@ -1522,7 +1589,12 @@ static ID parse_meta(Reader *reader, EvalState *st) {
 
   // Regular ^meta syntax (map or other expression)
   reader_skip_all(reader);
-  ID meta = parse_expr(reader, st);
+  ID meta;
+  if (!reader_eof(reader) && reader_peek_char(reader) == '{') {
+    meta = parse_map(reader, st);
+  } else {
+    meta = parse_expr(reader, st);
+  }
   if (!meta)
     return NULL;
   reader_skip_all(reader);
@@ -1539,6 +1611,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   }
   // Apply location metadata if enabled
   return apply_metadata_to_object(reader, st, NULL, result);
+#endif
 }
 
 /**
@@ -1581,7 +1654,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   if (!body) {
     // Empty function body - return (fn [] ())
     CljSymbol *fn_sym = intern_symbol_global("fn");
-    CljValue empty_vec = make_vector(0, CLJ_VECTOR);
+    CljValue empty_vec = AUTORELEASE(make_vector(0, false));
     ID empty_list_val = NULL; // () is nil in Clojure
     return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
   }
@@ -1595,15 +1668,14 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // This is a simplified approach - in a full implementation, we'd traverse the AST
 
   // Simple approach: create (fn [%] body) for #(...)
-  // This handles the most common case: #(+ % 1)
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
   CljSymbol *fn_sym = intern_symbol_global("fn");
   CljSymbol *percent_sym = intern_symbol_global("%");
-  CljVector *param_vec = make_vector(1, CLJ_VECTOR);
+  CljPersistentVector *param_vec = AUTORELEASE(make_vector(1, false));
   vector_conj_inplace(&param_vec, percent_sym);
 
-  // Create (fn [%] body)
-  return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(param_vec, make_ast_list(body, NULL))));
+  // Create (fn [%] body); param_vec may have been replaced by vector_conj_inplace, autorelease in same scope
+  return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(AUTORELEASE(param_vec), make_ast_list(body, NULL))));
 }
 
 /**
@@ -1614,6 +1686,34 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
  */
 static ID parse_meta_map(Reader *reader,
                                         EvalState *st) {
+#if !(defined(META_ENABLED) && META_ENABLED)
+  bool was_in_meta = parser_in_meta;
+  parser_in_meta = true;
+
+  reader_skip_all(reader);
+  if (!reader_eof(reader) && reader_current(reader) == '#') {
+    // Called from parse_expr - consume '#'
+    reader_next(reader);
+  }
+  reader_skip_all(reader);
+  if (reader_eof(reader) || reader_current(reader) != '^') {
+    return NULL;
+  }
+  reader_next(reader);  // Consume '^'
+
+  reader_skip_all(reader);
+  if (reader_eof(reader) || reader_current(reader) != '{') {
+    ID obj = parse_expr(reader, st);
+    parser_in_meta = was_in_meta;
+    return obj;
+  }
+  ID ignored_meta = parse_map(reader, st); // parse_map will skip allocations under parser_in_meta
+  RELEASE(ignored_meta);
+  reader_skip_all(reader);
+  ID obj = parse_expr(reader, st);
+  parser_in_meta = was_in_meta;
+  return obj;
+#else
   // When called from parse_expr, we need to consume '#' and '^'
   // When called from parse_meta, we're already past '#' and at '^'
   reader_skip_all(reader);
@@ -1640,5 +1740,5 @@ static ID parse_meta_map(Reader *reader,
   }
 
   return apply_metadata_to_object(reader, st, meta, obj);
+#endif
 }
-

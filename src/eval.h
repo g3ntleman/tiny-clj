@@ -13,7 +13,7 @@
 // EvalContext instances themselves live on the stack and require no retain/release.
 typedef struct {
     // Environment (direct pointers, no nested structs)
-    CljMap *env;           // Current environment map (can be NULL)
+    CljPersistentMap *env;           // Current environment map (can be NULL)
     CljPersistentVector *env_stack;  // Environment stack for closures (can be NULL)
     CallFrame *frame;      // Stack-based call frame for parameters (can be NULL)
     CljPersistentVector *captured_frames; // Closure-captured CallFrame chain for SlotRef depth>0 (can be NULL)
@@ -28,38 +28,38 @@ typedef struct {
 } EvalContext;
 
 // Special Form evaluation function pointer type (defined here where types are known)
-typedef ID (*SpecialFormEvalFn)(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+typedef ID (*SpecialFormEvalFn)(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 // Extended function-call entry points
-ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState *st);
-ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env, EvalState *st);
+ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 // Internal function - uses EvalContext for parameter substitution
 ID eval_body_with_params(ID body, const EvalContext *ctx);
 // List evaluation (optionally accepts EvalContext for recur support)
-ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_list(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 // Special form evaluators
-ID eval_def(CljList *list, CljMap *env, EvalState *st);
-ID eval_ns(CljList *list, CljMap *env, EvalState *st);
-ID eval_var(CljList *list, CljMap *env, EvalState *st);
-ID eval_list_function(CljList *list, CljMap *env);
-ID eval_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_def(CljList *list, CljPersistentMap *env, EvalState *st);
+ID eval_ns(CljList *list, CljPersistentMap *env, EvalState *st);
+ID eval_var(CljList *list, CljPersistentMap *env, EvalState *st);
+ID eval_list_function(CljList *list, CljPersistentMap *env);
+ID eval_fn(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_symbol(CljSymbol *symbol, EvalState *st);
-ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 // Additional built-in helpers
 
 // For-loop functions
-ID eval_doseq(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
-ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_doseq(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_dotimes(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 // Let bindings
-ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_let(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 // Helper functions
-ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st);
-ID eval_arg_with_context(CljList *list, int index, CljMap *env, EvalState *st, const EvalContext *ctx);
-ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_arg(CljList *list, int index, CljPersistentMap *env, EvalState *st);
+ID eval_arg_with_context(CljList *list, int index, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 // Time output suppression (for tests)
 void set_suppress_time_output(bool suppress);

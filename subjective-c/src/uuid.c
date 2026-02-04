@@ -11,16 +11,17 @@ static inline int hex_val(char c) {
     return -1;
 }
 
+/** Create UUID object from 16-byte array (rc=1, caller releases). */
 ID clj_uuid_from_bytes(const uint8_t bytes[16]) {
     CljUUID *u = ALLOC(CljUUID, 1);
     u->base.type = CLJ_UUID;
     u->base.flags = 0;
-    u->base.rc = 1;
     memcpy(u->bytes, bytes, 16);
     u->hash = 0;
     return (ID)u;
 }
 
+/** Parse 16 raw UUID bytes into a CLJ_UUID object (rc=1, caller releases). */
 ID clj_uuid_from_string(const char *s) {
     if (!s) return NULL;
     // Expected: 8-4-4-4-12 = 36 chars
@@ -44,6 +45,7 @@ ID clj_uuid_from_string(const char *s) {
     return clj_uuid_from_bytes(bytes);
 }
 
+/** Format UUID value into canonical 36-char string (out must be size 37). */
 void clj_uuid_to_cstring(ID v, char out[37]) {
     static const char *hex = "0123456789abcdef";
     CljUUID *u = as_uuid(v);

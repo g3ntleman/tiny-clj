@@ -349,7 +349,7 @@ ID nth2(ID *args, unsigned int argc)
 
     // Fast path: Vectors (O(1) access) - includes transient vectors
     int tag = TAG(coll);
-    if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT)
+    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT)
     {
         CljVector *v = as_vector(coll);
         int count = vector_count(v);
@@ -841,9 +841,9 @@ ID native_rest(ID *args, unsigned int argc)
 static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
     if (argc != 1) return NULL;
     ID state_id = args[0];
-    if (!state_id || TAG(state_id) != CLJ_MAP) return NULL;
+    if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
 
-    CljMap *state = as_map(state_id);
+    CljPersistentMap *state = as_map(state_id);
     ID x_seqable = map_get_sentinel(state, SYM_CONCAT_X, NULL);
     ID y = map_get_sentinel(state, SYM_CONCAT_Y, NULL);
 
@@ -860,7 +860,7 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
     ID next_x = native_rest(&x_seq, 1);
 
     // Build next-state for rest thunk.
-    CljMap *rest_state = map_empty();
+    CljPersistentMap *rest_state = map_empty();
     map_assoc_inplace(&rest_state, SYM_CONCAT_X, next_x);
     map_assoc_inplace(&rest_state, SYM_CONCAT_Y, y);
 
@@ -891,7 +891,7 @@ ID native_concat(ID *args, unsigned int argc)
     if (!x && !y) return empty_list();
 
     // Build thunk state.
-    CljMap *state = map_empty();
+    CljPersistentMap *state = map_empty();
     map_assoc_inplace(&state, SYM_CONCAT_X, x);
     map_assoc_inplace(&state, SYM_CONCAT_Y, y);
 
@@ -1037,9 +1037,9 @@ ID native_partition(ID *args, unsigned int argc)
 static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     if (argc != 1) return NULL;
     ID state_id = args[0];
-    if (!state_id || TAG(state_id) != CLJ_MAP) return NULL;
+    if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
 
-    CljMap *state = as_map(state_id);
+    CljPersistentMap *state = as_map(state_id);
     ID fn = map_get_sentinel(state, SYM_MAP_FN, NULL);
     ID seqs_vec_id = map_get_sentinel(state, SYM_MAP_SEQS, NULL);
     if (!fn || !seqs_vec_id || TAG(seqs_vec_id) != CLJ_VECTOR) return NULL;
@@ -1073,7 +1073,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     }
 
     // Build rest thunk state.
-    CljMap *rest_state = map_empty();
+    CljPersistentMap *rest_state = map_empty();
     map_assoc_inplace(&rest_state, SYM_MAP_FN, fn);
     map_assoc_inplace(&rest_state, SYM_MAP_SEQS, next_seqs);
     RELEASE(next_seqs);
@@ -1096,9 +1096,9 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
 static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
     if (argc != 1) return NULL;
     ID state_id = args[0];
-    if (!state_id || TAG(state_id) != CLJ_MAP) return NULL;
+    if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
 
-    CljMap *state = as_map(state_id);
+    CljPersistentMap *state = as_map(state_id);
     ID fn = map_get_sentinel(state, SYM_MAPCAT_FN, NULL);
     ID coll = map_get_sentinel(state, SYM_MAPCAT_COLL, NULL);
     ID inner = map_get_sentinel(state, SYM_MAPCAT_INNER, NULL);
@@ -1117,7 +1117,7 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
                 ID inner_rest = native_rest(&inner_seq, 1);
 
                 // Build rest thunk state
-                CljMap *rest_state = map_empty();
+                CljPersistentMap *rest_state = map_empty();
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_FN, fn);
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_COLL, coll);
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_INNER, inner_rest);
@@ -1200,7 +1200,7 @@ ID native_map(ID *args, unsigned int argc)
     }
 
     // Build thunk state and return a LazySeq immediately.
-    CljMap *state = map_empty();
+    CljPersistentMap *state = map_empty();
     map_assoc_inplace(&state, SYM_MAP_FN, fn);
     map_assoc_inplace(&state, SYM_MAP_SEQS, seqs);
     RELEASE(seqs);
@@ -1240,7 +1240,7 @@ ID native_mapcat(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    CljMap *state = map_empty();
+    CljPersistentMap *state = map_empty();
     map_assoc_inplace(&state, SYM_MAPCAT_FN, fn);
     map_assoc_inplace(&state, SYM_MAPCAT_COLL, coll);
     map_assoc_inplace(&state, SYM_MAPCAT_INNER, NULL);
@@ -1334,8 +1334,9 @@ ID native_last(ID *args, unsigned int argc)
     if (!coll || IS_IMMEDIATE(coll))
         return NULL;
 
-    // Fast path: vector O(1)
-    if (TAG(coll) == CLJ_VECTOR)
+    // Fast path: vector O(1) (including transient via backing)
+    CljType tag = TAG(coll);
+    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT)
     {
         CljVector *v = as_vector(coll);
         unsigned int n = vector_count(v);
@@ -1457,7 +1458,7 @@ ID native_cons(ID *args, unsigned int argc)
             tail = (ID)make_seq(coll); // may be NULL if empty
         }
 
-        CljLazySeq *lazy = (CljLazySeq *)malloc(sizeof(CljLazySeq));
+        CljLazySeq *lazy = ALLOC(CljLazySeq, 1);
         if (!lazy)
         {
             RELEASE(tail);
@@ -1465,7 +1466,6 @@ ID native_cons(ID *args, unsigned int argc)
         }
 
         lazy->base.type = CLJ_LAZY_SEQ;
-        lazy->base.rc = 1;
         lazy->base.flags = 0;
 
         // Preserve nil elements using SYM_NIL internally.
@@ -1645,7 +1645,7 @@ ID assoc3(ID *args, unsigned int argc)
     }
 
     // Handle maps
-    if (coll_tag == CLJ_MAP || coll_tag == CLJ_MAP_TRANSIENT)
+    if (coll_tag == CLJ_MAP_PERSISTENT || coll_tag == CLJ_MAP_TRANSIENT)
     {
         // Note: key can be NULL (nil) - that's a valid key in Clojure!
         return map_assoc(coll, key, val);
@@ -1711,7 +1711,7 @@ ID native_dissoc(ID *args, unsigned int argc)
 
     unsigned char map_tag = TAG(map);
     // Only support maps
-    if (map_tag != CLJ_MAP && map_tag != CLJ_MAP_TRANSIENT)
+    if (map_tag != CLJ_MAP_PERSISTENT && map_tag != CLJ_MAP_TRANSIENT)
     {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                         "dissoc only works on maps",
@@ -1726,7 +1726,7 @@ ID native_dissoc(ID *args, unsigned int argc)
     }
 
     // Remove keys one by one (Clojure semantics: multiple keys supported)
-    CljMap *result = map;
+    CljPersistentMap *result = map;
     for (unsigned int i = 1; i < argc; i++)
     {
         ID key = args[i];
@@ -1734,7 +1734,7 @@ ID native_dissoc(ID *args, unsigned int argc)
             continue; // Skip NULL keys
 
         // map_remove returns a new map (or original if key not found)
-        CljMap *new_result = map_remove(result, key);
+        CljPersistentMap *new_result = map_remove(result, key);
         if (new_result != result)
         {
             // New map was created - release old one if it was retained
@@ -1763,7 +1763,7 @@ ID native_merge(ID *args, unsigned int argc)
         return NULL;
 
     // Start with first non-nil map
-    CljMap *result = NULL;
+    CljPersistentMap *result = NULL;
     unsigned int start_idx = 0;
 
     for (unsigned int i = 0; i < argc; i++)
@@ -1771,7 +1771,7 @@ ID native_merge(ID *args, unsigned int argc)
         if (args[i])
         {
             unsigned char tag = TAG(args[i]);
-            if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT)
+            if (tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT)
             {
                 result = args[i];
                 start_idx = i + 1;
@@ -1792,7 +1792,7 @@ ID native_merge(ID *args, unsigned int argc)
             continue; // Skip nil
 
         unsigned char m_tag = TAG(m);
-        if (m_tag != CLJ_MAP && m_tag != CLJ_MAP_TRANSIENT)
+        if (m_tag != CLJ_MAP_PERSISTENT && m_tag != CLJ_MAP_TRANSIENT)
         {
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                             "merge only works on maps",
@@ -1800,7 +1800,7 @@ ID native_merge(ID *args, unsigned int argc)
             return NULL;
         }
 
-        CljMap *new_result = map_merge(result, m, true); // overwrite=true
+        CljPersistentMap *new_result = map_merge(result, m, true); // overwrite=true
         if (new_result != result && i > start_idx)
         {
             // Don't release original arg
@@ -1832,16 +1832,17 @@ ID native_contains_p(ID *args, unsigned int argc)
     CljType tag = TAG(coll);
     switch (tag)
     {
-    case CLJ_MAP:
+    case CLJ_MAP_PERSISTENT:
     case CLJ_MAP_TRANSIENT:
         return map_contains(coll, key) ? clj_true : clj_false;
 
-    case CLJ_VECTOR:
-    case CLJ_VECTOR_TRANSIENT:
-    case CLJ_VECTOR_TRANSIENT_WEAK:
-    {
-        // For vectors, key must be an integer index
-        if (!is_fixnum(key))
+    case CLJ_VECTOR_PERSISTENT:
+    case CLJ_VECTOR_TRANSIENT:{
+        // For vectors, contains? checks if the index exists (not the value).
+        // In Clojure: (contains? [3 4 5] 0) => true (index 0 exists)
+        //            (contains? [3 4 5] 3) => false (index 3 doesn't exist, only 0,1,2)
+        // Key must be an integer index (fixnum or CLJ_FIXNUM)
+        if (TAG(key) != CLJ_FIXNUM)
             return clj_false;
         long idx = as_fixnum(key);
         unsigned int count = vector_count(coll);
@@ -1876,7 +1877,7 @@ ID native_update(ID *args, unsigned int argc)
         return NULL;
 
     CljType tag = TAG(coll);
-    if (tag != CLJ_MAP && tag != CLJ_MAP_TRANSIENT)
+    if (tag != CLJ_MAP_PERSISTENT && tag != CLJ_MAP_TRANSIENT)
     {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                         "update only works on maps",
@@ -1940,23 +1941,23 @@ ID native_into(ID *args, unsigned int argc)
     CljType to_tag = TAG(to);
 
     // Handle vector target
-    if (to_tag == CLJ_VECTOR || to_tag == CLJ_VECTOR_TRANSIENT || to_tag == CLJ_VECTOR_TRANSIENT_WEAK)
+    if (to_tag == CLJ_VECTOR_PERSISTENT || to_tag == CLJ_VECTOR_TRANSIENT)
     {
         CljVector *result = to;
 
         // Iterate over source
         CljType from_tag = TAG(from);
-        if (from_tag == CLJ_VECTOR || from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK)
+        if (from_tag == CLJ_VECTOR_PERSISTENT || from_tag == CLJ_VECTOR_TRANSIENT)
         {
             VECTOR_FOR_EACH(from, elem)
             {
                 result = vector_conj(result, elem);
             }
         }
-        else if (from_tag == CLJ_MAP || from_tag == CLJ_MAP_TRANSIENT)
+        else if (from_tag == CLJ_MAP_PERSISTENT || from_tag == CLJ_MAP_TRANSIENT)
         {
             // Map entries become [k v] vectors
-            CljMap *m = from;
+            CljPersistentMap *m = from;
             for (int i = 0; i < m->capacity; i++)
             {
                 ID key = KV_KEY(m->data, i);
@@ -1984,23 +1985,23 @@ ID native_into(ID *args, unsigned int argc)
     }
 
     // Handle map target
-    if (to_tag == CLJ_MAP || to_tag == CLJ_MAP_TRANSIENT)
+    if (to_tag == CLJ_MAP_PERSISTENT || to_tag == CLJ_MAP_TRANSIENT)
     {
-        CljMap *result = to;
+        CljPersistentMap *result = to;
 
         CljType from_tag = TAG(from);
-        if (from_tag == CLJ_MAP || from_tag == CLJ_MAP_TRANSIENT)
+        if (from_tag == CLJ_MAP_PERSISTENT || from_tag == CLJ_MAP_TRANSIENT)
         {
             // Merge maps
             result = map_merge(result, from, true);
         }
-        else if (from_tag == CLJ_VECTOR || from_tag == CLJ_VECTOR_TRANSIENT)
+        else if (from_tag == CLJ_VECTOR_PERSISTENT || from_tag == CLJ_VECTOR_TRANSIENT)
         {
             // Vector of [k v] pairs
             VECTOR_FOR_EACH(from, entry)
             {
                 unsigned char entry_tag = entry ? TAG(entry) : 0;
-                if (entry_tag == CLJ_VECTOR || entry_tag == CLJ_VECTOR_TRANSIENT)
+                if (entry_tag == CLJ_VECTOR_PERSISTENT || entry_tag == CLJ_VECTOR_TRANSIENT)
                 {
                     CljVector *pair = entry;
                     if (vector_count(pair) >= 2)
@@ -2039,7 +2040,7 @@ ID native_select_keys(ID *args, unsigned int argc)
         return map_empty();
 
     CljType tag = TAG(m);
-    if (tag != CLJ_MAP && tag != CLJ_MAP_TRANSIENT)
+    if (tag != CLJ_MAP_PERSISTENT && tag != CLJ_MAP_TRANSIENT)
     {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                         "select-keys first argument must be a map",
@@ -2052,8 +2053,8 @@ ID native_select_keys(ID *args, unsigned int argc)
         return map_empty();
 
     CljType keys_tag = TAG(keys);
-    if (keys_tag != CLJ_VECTOR && keys_tag != CLJ_VECTOR_TRANSIENT &&
-        keys_tag != CLJ_VECTOR_TRANSIENT_WEAK && keys_tag != CLJ_LIST && keys_tag != CLJ_AST_NODE)
+    if (keys_tag != CLJ_VECTOR_PERSISTENT && keys_tag != CLJ_VECTOR_TRANSIENT &&
+        keys_tag != CLJ_LIST && keys_tag != CLJ_AST_NODE)
     {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                         "select-keys second argument must be a sequence",
@@ -2061,10 +2062,10 @@ ID native_select_keys(ID *args, unsigned int argc)
         return NULL;
     }
 
-    CljMap *result = map_empty();
-    CljMap *source = m;
+    CljPersistentMap *result = map_empty();
+    CljPersistentMap *source = m;
 
-    if (keys_tag == CLJ_VECTOR || keys_tag == CLJ_VECTOR_TRANSIENT || keys_tag == CLJ_VECTOR_TRANSIENT_WEAK)
+    if (keys_tag == CLJ_VECTOR_PERSISTENT || keys_tag == CLJ_VECTOR_TRANSIENT)
     {
         VECTOR_FOR_EACH(keys, key)
         {
@@ -2110,7 +2111,7 @@ ID native_find(ID *args, unsigned int argc)
         return NULL;
 
     CljType tag = TAG(m);
-    if (tag != CLJ_MAP && tag != CLJ_MAP_TRANSIENT)
+    if (tag != CLJ_MAP_PERSISTENT && tag != CLJ_MAP_TRANSIENT)
     {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                         "find first argument must be a map",
@@ -2118,7 +2119,7 @@ ID native_find(ID *args, unsigned int argc)
         return NULL;
     }
 
-    CljMap *map = m;
+    CljPersistentMap *map = m;
 
     if (!map_contains(map, key))
     {
@@ -2148,10 +2149,10 @@ ID native_transient(ID *args, unsigned int argc)
     uint16_t tag = TAG(coll);
     switch (tag)
     {
-    case CLJ_VECTOR:
-        return vector_transient(coll);
-    case CLJ_MAP:
-        return map_transient(coll);
+    case CLJ_VECTOR_PERSISTENT:
+        return vector_transient(as_persistent_vector(coll));
+    case CLJ_MAP_PERSISTENT:
+        return (ID)map_transient(as_persistent_map(coll));
     case CLJ_VECTOR_TRANSIENT:
     case CLJ_MAP_TRANSIENT:
         // transient on transient returns the same object
@@ -2182,9 +2183,9 @@ ID native_persistent_bang(ID *args, unsigned int argc)
     case CLJ_VECTOR_TRANSIENT:
         return vector_persistent(coll);
     case CLJ_MAP_TRANSIENT:
-        return map_persistent(coll);
-    case CLJ_VECTOR:
-    case CLJ_MAP:
+        return (ID)map_persistent(as_transient_map(coll));
+    case CLJ_VECTOR_PERSISTENT:
+    case CLJ_MAP_PERSISTENT:
         // persistent! on persistent returns the same object
         return coll;
     default:
@@ -2224,7 +2225,8 @@ ID native_conj_bang(ID *args, unsigned int argc)
     {
         if (argc != 3)
             return NULL; // conj! for maps needs key-value pair
-        return map_conj(coll, args[1], args[2]);
+        map_conj(as_transient_map(coll), args[1], args[2]);
+        return coll;
     }
 
     // Throw exception for unsupported collection type
@@ -2256,7 +2258,7 @@ ID native_get(ID *args, unsigned int argc)
                  : key_obj;
 
     int tag = TAG(map);
-    if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT)
+    if (tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT)
     {
         return map_get_sentinel(map, key, not_found);
     }
@@ -2287,11 +2289,11 @@ ID native_count(ID *args, unsigned int argc)
 
     if (coll)
     {
-        if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT)
+        if (tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT)
         {
             return (fixnum(map_count(coll)));
         }
-        else if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT)
+        else if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT)
         {
             CljVector *vec = as_vector(coll);
             return (fixnum(vec ? vector_count(vec) : 0));
@@ -2322,7 +2324,7 @@ ID native_keys(ID *args, unsigned int argc)
         return (NULL);
 
     int tag = TAG(map);
-    if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT)
+    if (tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT)
     {
         return map_keys(map);
     }
@@ -2339,7 +2341,7 @@ ID native_vals(ID *args, unsigned int argc)
         return (NULL);
 
     int tag = TAG(map);
-    if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT)
+    if (tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT)
     {
         return map_vals(map);
     }
@@ -2402,12 +2404,10 @@ ID native_type(ID *args, unsigned int argc)
         return intern_symbol(SYM_CLOJURE_LANG, "String");
     case CLJ_VECTOR:
         return intern_symbol(SYM_CLOJURE_LANG, "PersistentVector");
-    case CLJ_VECTOR_TRANSIENT:
-    case CLJ_VECTOR_TRANSIENT_WEAK:
-        return intern_symbol(SYM_CLOJURE_LANG, "TransientVector");
+    case CLJ_VECTOR_TRANSIENT:return intern_symbol(SYM_CLOJURE_LANG, "TransientVector");
     case CLJ_MAP_TRANSIENT:
         return intern_symbol(SYM_CLOJURE_LANG, "TransientArrayMap");
-    case CLJ_MAP:
+    case CLJ_MAP_PERSISTENT:
         return intern_symbol(SYM_CLOJURE_LANG, "PersistentArrayMap");
     case CLJ_LIST:
         return intern_symbol(SYM_CLOJURE_LANG, "PersistentList");
@@ -2441,7 +2441,7 @@ ID native_array_map(ID *args, unsigned int argc)
         return make_map(0);
     }
 
-    CljMap *map = make_map(pair_count);
+    CljPersistentMap *map = make_map(pair_count);
 
     // Add all key-value pairs
     // CRITICAL: map_assoc may return a new map (COW), so we must use the result
@@ -2449,7 +2449,7 @@ ID native_array_map(ID *args, unsigned int argc)
     {
         ID key = args[i];
         ID value = args[i + 1];
-        CljMap *updated_map = map_assoc(map, key, value);
+        CljPersistentMap *updated_map = map_assoc(map, key, value);
         ASSIGN(map, updated_map);
     }
 
@@ -2561,7 +2561,7 @@ ID native_run_next_task(ID *args, unsigned int argc)
     if (argc != 0)
         return NULL;
     EvalState *st = get_global_eval_state();
-    CljMap *env = NULL;
+    CljPersistentMap *env = NULL;
     bool ran = false;
     TRY
     {
@@ -2975,7 +2975,8 @@ ID native_ns_map(ID *args, unsigned int argc)
 }
 
 // find-ns: Returns the namespace object for the given name
-// Usage: (find-ns 'ns-name) or (find-ns "ns-name")
+// Usage: (find-ns 'ns-name)
+// Clojure-compatible: only symbols are accepted; strings cause a type error.
 // Returns the namespace object or nil if not found
 ID native_find_ns(ID *args, unsigned int argc)
 {
@@ -2996,14 +2997,9 @@ ID native_find_ns(ID *args, unsigned int argc)
     {
         return ns_find_by_symbol(as_symbol(ns_arg));
     }
-    else if (tag == CLJ_STRING)
-    {
-        return ns_find(string_data(ns_arg));
-    }
 
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                              "find-ns: argument must be a symbol or string");
-    return NULL;
+                              "find-ns: argument must be a symbol"); return NULL;
 }
 
 // all-ns: Returns a list of all namespace objects
@@ -3107,15 +3103,15 @@ ID native_ns_unload(ID *args, unsigned int argc)
             if (sc == 0) continue;
 
             ID top_id = vector_nth(fn->env_stack, (int)(sc - 1));
-            if (!top_id || TAG(top_id) != CLJ_MAP) continue;
+            if (!top_id || TAG(top_id) != CLJ_MAP_PERSISTENT) continue;
 
-            CljMap *top_map = (CljMap*)top_id;
+            CljPersistentMap *top_map = (CljPersistentMap*)top_id;
 
             // Only clear the simplest self-binding case: a single-entry map that points back to fn.
             if (map_count(top_map) == 1) {
                 MAP_FOR_EACH(top_map, sk, sv) {
                     if (sv == (ID)fn) {
-                        CljMap *tmp = top_map;
+                        CljPersistentMap *tmp = top_map;
                         map_assoc_inplace(&tmp, (ID)sk, NULL);
                         if (tmp && tmp != top_map) {
                             vector_assoc_inplace(&fn->env_stack, sc - 1, (ID)tmp);
@@ -3142,9 +3138,8 @@ ID native_ns_unload(ID *args, unsigned int argc)
         ns->macro_mappings = NULL;
     }
 
-    // Remove from registry; releasing the old registry map releases the namespace object
-    // (and thus its mappings), ensuring resources are freed.
-    map_remove_inplace(&g_runtime.ns_registry, name_sym);
+    // Remove from registry; releasing the old registry map releases the namespace object.
+    map_dissoc(g_runtime.ns_registry, name_sym);
 
     // Clear resolve cache (unqualified symbol resolution relies on it)
     ns_invalidate_resolve_cache();
@@ -3248,6 +3243,12 @@ ID native_source(ID *args, unsigned int argc)
 
             RETAIN(params_repr);
             RETAIN(body_repr);
+
+            platform_put_string(NULL, "(fn [");
+            platform_put_string(NULL, string_data(params_repr));
+            platform_put_string(NULL, "] ");
+            platform_put_string(NULL, string_data(body_repr));
+            platform_put_string(NULL, ")\n");
 
             RELEASE(body_repr);
             RELEASE(params_repr);
@@ -3366,15 +3367,15 @@ ID native_get_thread_bindings(ID *args, unsigned int argc)
     // Prefer the current eval state when running inside evaluation.
     EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
 
-    CljMap *out = map_empty();
+    CljPersistentMap *out = map_empty();
     RETAIN(out);
 
     if (st && st->dynamic_bindings) {
         unsigned int depth = vector_count(st->dynamic_bindings);
         for (unsigned int i = 0; i < depth; i++) {
             ID frame_id = vector_nth(st->dynamic_bindings, i);
-            if (!frame_id || TAG(frame_id) != CLJ_MAP) continue;
-            ASSIGN(out, map_merge(out, (CljMap*)frame_id, true));
+            if (!frame_id || TAG(frame_id) != CLJ_MAP_PERSISTENT) continue;
+            ASSIGN(out, map_merge(out, (CljPersistentMap*)frame_id, true));
         }
     }
 
@@ -3975,7 +3976,7 @@ ID native_apply(ID *args, unsigned int argc)
                 call_args[n++] = l->first;
             }
         }
-        else if (tag == CLJ_VECTOR)
+        else if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT)
         {
             CljVector *v = as_vector(last);
             int cnt = vector_count(v);
@@ -4396,7 +4397,7 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
     if (!source_ns || !target_ns || !source_ns->mappings)
         return;
 
-    CljMap *map = source_ns->mappings;
+    CljPersistentMap *map = source_ns->mappings;
     if (!map)
         return;
 
@@ -5510,15 +5511,15 @@ ID native_bit_shift_left(ID *args, unsigned int argc)
 static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {
     if (targc != 1) return NULL;
     ID state_id = targs[0];
-    if (!state_id || TAG(state_id) != CLJ_MAP) return NULL;
+    if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
 
-    CljMap *state = as_map(state_id);
+    CljPersistentMap *state = as_map(state_id);
     ID cur_id = map_get_sentinel(state, SYM_RANGE_CUR, NULL);
     if (!is_fixnum(cur_id)) return NULL;
     int cur = AS_FIXNUM(cur_id);
 
     // Next state
-    CljMap *rest_state = map_empty();
+    CljPersistentMap *rest_state = map_empty();
     map_assoc_inplace(&rest_state, SYM_RANGE_CUR, fixnum(cur + 1));
 
     ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
@@ -5542,7 +5543,7 @@ ID native_range(ID *args, unsigned int argc)
 
     // 0-arity: infinite lazy range starting at 0, step 1.
     if (argc == 0) {
-        CljMap *state = map_empty();
+        CljPersistentMap *state = map_empty();
         map_assoc_inplace(&state, SYM_RANGE_CUR, fixnum(0));
 
         ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
@@ -5993,7 +5994,8 @@ ID native_byte_array(ID *args, unsigned int argc)
     }
 
     // For now, only support vectors as sequences
-    if (TAG(seq) == CLJ_VECTOR)
+    CljType seq_tag = TAG(seq);
+    if (seq_tag == CLJ_VECTOR_PERSISTENT || seq_tag == CLJ_VECTOR_TRANSIENT)
     {
         CljVector *vec = as_vector(seq);
         int count = vector_count(vec);
@@ -6303,7 +6305,7 @@ ID native_map_p(ID *args, unsigned int argc)
 {
     if (!validate_builtin_args(argc, 1, "map?"))
         return clj_false;
-    return (args[0] && TAG(args[0]) == CLJ_MAP) ? clj_true : clj_false;
+    return (args[0] && TAG(args[0]) == CLJ_MAP_PERSISTENT) ? clj_true : clj_false;
 }
 
 // ============================================================================
@@ -6657,7 +6659,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         return NULL;
     }
 
-    CljMap *m = make_map(8);
+    CljPersistentMap *m = make_map(8);
     if (!m)
         return NULL;
 
@@ -6703,7 +6705,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     ID k_raw_blocks_peak = (ID)intern_symbol_global(":raw-blocks-peak");
     ID k_bytes_by_type = (ID)intern_symbol_global(":bytes-by-type");
 
-    CljMap *ms = make_map(8);
+    CljPersistentMap *ms = make_map(12);
     if (ms)
     {
         // Fixnum range is limited; clamp to avoid overflow/truncation surprises.
@@ -6730,9 +6732,15 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         ASSIGN(ms, map_assoc(ms, k_raw_blocks_current, fixnum(frbc)));
         ASSIGN(ms, map_assoc(ms, k_raw_blocks_peak, fixnum(frbp)));
 
-        // Bytes by object TAG/type (objects only; excludes raw blocks).
-        // Vector of [type-id bytes-current bytes-peak alloc-count dealloc-count].
-        CljVector *by_type = make_vector(0, CLJ_VECTOR);
+        int32_t talloc = (g_memory_stats.total_allocations > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)g_memory_stats.total_allocations;
+        int32_t tdealloc = (g_memory_stats.total_deallocations > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)g_memory_stats.total_deallocations;
+        int32_t mleaks = (g_memory_stats.memory_leaks > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)g_memory_stats.memory_leaks;
+        ASSIGN(ms, map_assoc(ms, k_total_allocations, fixnum(talloc)));
+        ASSIGN(ms, map_assoc(ms, k_total_deallocations, fixnum(tdealloc)));
+        ASSIGN(ms, map_assoc(ms, k_memory_leaks, fixnum(mleaks)));
+
+        // Bytes by type: map of type-name (keyword) -> {:bytes-current :bytes-peak :alloc-count :dealloc-count}.
+        CljPersistentMap *by_type = make_map(0);
         if (by_type) {
             for (int ti = 0; ti < CLJ_TYPE_COUNT; ti++) {
                 size_t bc = g_memory_stats.bytes_current_by_type[ti];
@@ -6747,13 +6755,15 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
                 int32_t ac_i = (ac > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)ac;
                 int32_t dc_i = (dc > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)dc;
 
-                ID entry[5] = { fixnum(ti), fixnum(bc_i), fixnum(bp_i), fixnum(ac_i), fixnum(dc_i) };
-                CljVector *row = make_vector(5, CLJ_VECTOR);
+                ID k_type = (ID)make_string(clj_type_name((CljType)ti));
+
+                CljPersistentMap *row = make_map(4);
                 if (!row) break;
-                for (int i = 0; i < 5; i++) {
-                    ASSIGN(row, vector_conj(row, entry[i]));
-                }
-                ASSIGN(by_type, vector_conj(by_type, row));
+                ASSIGN(row, map_assoc(row, (ID)intern_symbol_global(":bytes-current"), fixnum(bc_i)));
+                ASSIGN(row, map_assoc(row, (ID)intern_symbol_global(":bytes-peak"), fixnum(bp_i)));
+                ASSIGN(row, map_assoc(row, (ID)intern_symbol_global(":alloc-count"), fixnum(ac_i)));
+                ASSIGN(row, map_assoc(row, (ID)intern_symbol_global(":dealloc-count"), fixnum(dc_i)));
+                ASSIGN(by_type, map_assoc(by_type, k_type, (ID)row));
             }
             ASSIGN(ms, map_assoc(ms, k_bytes_by_type, by_type));
         }
@@ -6763,6 +6773,107 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 #endif
 
     return AUTORELEASE(m);
+}
+
+// tiny pprint helpers (file-local)
+static const int PPRINT_INDENT = 2;
+static const size_t PPRINT_INLINE_MAX = 0; // force multiline layout to match clojure.pprint expectations in tests
+
+struct pprint_ctx {
+    char *buf;
+    size_t *pos;
+    size_t max;
+};
+
+static void pprint_append(struct pprint_ctx *ctx, const char *s)
+{
+    *(ctx->pos) = format_append(ctx->buf, *(ctx->pos), ctx->max, s);
+}
+
+static int pprint_fits_inline(ID v)
+{
+    CljString *s = to_string(v);
+    if (!s) return 0;
+    const char *data = string_data(s);
+    return data && strlen(data) <= PPRINT_INLINE_MAX;
+}
+
+static void pprint_walk(ID v, int indent, struct pprint_ctx *ctx)
+{
+    unsigned char tag = v ? TAG(v) : CLJ_NIL;
+
+    // Maps
+    if (tag == CLJ_MAP_PERSISTENT) {
+        if (pprint_fits_inline(v)) {
+            CljString *s = to_string(v);
+            pprint_append(ctx, s ? string_data(s) : "nil");
+            return;
+        }
+        pprint_append(ctx, "{\n");
+        CljPersistentMap *m = (CljPersistentMap*)v;
+        MAP_FOR_EACH(m, k, val) {
+            for (int i = 0; i < indent + PPRINT_INDENT; i++) pprint_append(ctx, " ");
+            CljString *ks = to_string(k);
+            pprint_append(ctx, ks ? string_data(ks) : "nil");
+            pprint_append(ctx, " ");
+            // Recurse for value
+            pprint_walk(val, indent + PPRINT_INDENT, ctx);
+            pprint_append(ctx, "\n");
+        }
+        for (int i = 0; i < indent; i++) pprint_append(ctx, " ");
+        pprint_append(ctx, "}");
+        return;
+    }
+
+    // Vectors
+    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT) {
+        if (pprint_fits_inline(v)) {
+            CljString *s = to_string(v);
+            pprint_append(ctx, s ? string_data(s) : "nil");
+            return;
+        }
+        pprint_append(ctx, "[\n");
+        CljPersistentVector *vec = (tag == CLJ_VECTOR_TRANSIENT)
+            ? vector_persistent(as_transient_vector(v))
+            : as_persistent_vector(v);
+        unsigned int cnt = vector_count(vec);
+        for (unsigned int i = 0; i < cnt; i++) {
+            ID elem = vector_nth(vec, i);
+            for (int j = 0; j < indent + PPRINT_INDENT; j++) pprint_append(ctx, " ");
+            pprint_walk(elem, indent + PPRINT_INDENT, ctx);
+            pprint_append(ctx, "\n");
+        }
+        for (int i = 0; i < indent; i++) pprint_append(ctx, " ");
+        pprint_append(ctx, "]");
+        return;
+    }
+
+    // Lists / seqs
+    if (tag == CLJ_LIST || tag == CLJ_AST_NODE || tag == CLJ_SEQ || tag == CLJ_LAZY_SEQ) {
+        if (pprint_fits_inline(v)) {
+            CljString *s = to_string(v);
+            pprint_append(ctx, s ? string_data(s) : "nil");
+            return;
+        }
+        pprint_append(ctx, "(\n");
+        SeqIterator it;
+        if (v && seq_iter_init(&it, v)) {
+            while (!seq_iter_empty(&it)) {
+                ID e = seq_iter_first(&it);
+                for (int j = 0; j < indent + PPRINT_INDENT; j++) pprint_append(ctx, " ");
+                pprint_walk(e, indent + PPRINT_INDENT, ctx);
+                pprint_append(ctx, "\n");
+                seq_iter_next(&it);
+            }
+        }
+        for (int i = 0; i < indent; i++) pprint_append(ctx, " ");
+        pprint_append(ctx, ")");
+        return;
+    }
+
+    // Fallback: render with to_string
+    CljString *s = to_string(v);
+    pprint_append(ctx, s ? string_data(s) : "nil");
 }
 
 static ID native_clojure_pprint_pprint_str(ID *args, unsigned int argc)
@@ -6776,51 +6887,10 @@ static ID native_clojure_pprint_pprint_str(ID *args, unsigned int argc)
     char out[4096];
     size_t pos = 0;
 
-    unsigned char tag = x ? TAG(x) : CLJ_NIL;
+    struct pprint_ctx ctx = { .buf = out, .pos = &pos, .max = sizeof(out) };
+    pprint_walk(x, 0, &ctx);
 
-    if (tag == CLJ_MAP)
-    {
-        pos = format_append(out, pos, sizeof(out), "{\n");
-        CljMap *m = (CljMap *)x;
-        MAP_FOR_EACH(m, k, v)
-        {
-            pos = format_append(out, pos, sizeof(out), "  ");
-            CljString *ks = to_string(k);
-            CljString *vs = to_string(v);
-            pos = format_append(out, pos, sizeof(out), ks ? string_data(ks) : "nil");
-            pos = format_append(out, pos, sizeof(out), " ");
-            pos = format_append(out, pos, sizeof(out), vs ? string_data(vs) : "nil");
-            pos = format_append(out, pos, sizeof(out), "\n");
-        }
-        pos = format_append(out, pos, sizeof(out), "}");
-        return (ID)make_string(out);
-    }
-
-    if (tag == CLJ_LIST || tag == CLJ_AST_NODE || tag == CLJ_SEQ || tag == CLJ_LAZY_SEQ)
-    {
-        pos = format_append(out, pos, sizeof(out), "(\n");
-        SeqIterator it;
-        if (x && seq_iter_init(&it, x))
-        {
-            while (!seq_iter_empty(&it))
-            {
-                ID e = seq_iter_first(&it);
-                CljString *es = to_string(e);
-                pos = format_append(out, pos, sizeof(out), "  ");
-                pos = format_append(out, pos, sizeof(out), es ? string_data(es) : "nil");
-                pos = format_append(out, pos, sizeof(out), "\n");
-                seq_iter_next(&it);
-            }
-        }
-        pos = format_append(out, pos, sizeof(out), ")");
-        return (ID)make_string(out);
-    }
-
-    // Fallback: just use normal to_string
-    {
-        CljString *s = to_string(x);
-        return s ? (ID)s : (ID)make_string("nil");
-    }
+    return (ID)make_string(out);
 }
 
 ID native_instant_p(ID *args, unsigned int argc)
@@ -6873,7 +6943,7 @@ ID native_datetime_civil_from_days(ID *args, unsigned int argc)
     if (!SYM_KW_YEAR || !SYM_KW_MONTH || !SYM_KW_DAY)
         return NULL;
 
-    CljMap *m = map_empty();
+    CljPersistentMap *m = map_empty();
     ASSIGN(m, map_assoc(m, SYM_KW_YEAR, fixnum(year)));
     ASSIGN(m, map_assoc(m, SYM_KW_MONTH, fixnum(month)));
     ASSIGN(m, map_assoc(m, SYM_KW_DAY, fixnum(day)));
@@ -6910,7 +6980,7 @@ ID native_datetime_format_iso(ID *args, unsigned int argc)
         return NULL;
 
     unsigned char tag = TAG(map);
-    if (tag != CLJ_MAP && tag != CLJ_MAP_TRANSIENT)
+    if (tag != CLJ_MAP_PERSISTENT && tag != CLJ_MAP_TRANSIENT)
     {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                          "format-iso expects a map");
@@ -7041,7 +7111,13 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func)
     // No need for special cache handling
 
     // Register the builtin in target namespace
-    ID symbol = intern_symbol_global(symbol_name);
+    ID symbol = NULL;
+    if (slash && slash > cname) {
+        // Qualified: store with explicit namespace so ns mappings use qualified keys
+        symbol = intern_symbol(target_ns->name, symbol_name);
+    } else {
+        symbol = intern_symbol_global(symbol_name);
+    }
     ID func_obj = make_named_func(func, intern_symbol_global(cname));
     if (symbol && func_obj)
     {
@@ -7053,7 +7129,7 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func)
         init_special_symbols();
 
         // Create metadata map with :name and :ns
-        CljMap *meta_map = make_map(4);
+        CljPersistentMap *meta_map = make_map(4);
         if (meta_map)
         {
             // Add :name (function name as string)
@@ -7142,6 +7218,9 @@ void register_builtins()
     // Meta functions
     register_builtin_in_core("meta", native_meta);
     register_builtin_in_core("with-meta", native_with_meta);
+
+    // tinyclj.runtime
+    register_builtin_in_core("tinyclj.runtime/stats", native_tinyclj_runtime_stats);
 
     // Time functions
     register_builtin_in_core("now", native_now);

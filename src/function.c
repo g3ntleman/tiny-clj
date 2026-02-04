@@ -1,6 +1,6 @@
 /*
  * Function Creation and Management
- * 
+ *
  * Functions for creating Clojure function objects (CljFunction).
  */
 
@@ -31,8 +31,8 @@ static int allocate_function_params(CljFunction *func, ID *params, int param_cou
             throw_oom();
             return -1;
         }
-        
-        // Add all parameters to vector (vector_conj retains elements)
+
+        // Add all parameters to vector (vector retains elements when not WEAK)
         for (int i = 0; i < param_count; i++) {
             CljVector *new_vec = vector_conj(vec, RETAIN(params[i]));
             if (!new_vec) {
@@ -47,7 +47,7 @@ static int allocate_function_params(CljFunction *func, ID *params, int param_cou
                 vec = new_vec;
             }
         }
-        
+
         func->params = vec;  // Vector is already retained (rc=1 from make_vector)
     } else {
         func->params = NULL;
@@ -55,9 +55,10 @@ static int allocate_function_params(CljFunction *func, ID *params, int param_cou
     return 0;
 }
 
-CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_stack, CljSymbol *name_sym, struct CljNamespace *ns) {
+/** Create interpreted function closure; rc=1, caller releases. */
+CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVector *env_stack, CljSymbol *name_sym, struct CljNamespace *ns) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
-    
+
     // Find variadic index (position of & in params), -1 if not variadic
     int8_t variadic_index = -1;
     for (int i = 0; i < param_count; i++) {
@@ -66,12 +67,11 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_
             break;
         }
     }
-    
+
     CljFunction *func = (CljFunction*)alloc(sizeof(CljFunction), 1, CLJ_CLOSURE);
     if (!func) throw_oom();
-    
+
     func->base.type = CLJ_CLOSURE;  // Interpreted functions use CLJ_CLOSURE type
-    func->base.rc = 1;
     func->body = RETAIN(body);
     // Persistent env_stack is always heap-managed (vector of maps).
     // It may be shared across closures; RETAIN is required for correctness.
@@ -80,18 +80,19 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljVector *env_
     func->name_sym = name_sym;
     func->ns = ns ? (struct CljNamespace*)RETAIN(ns) : NULL;
     func->variadic_index = variadic_index;
-    
+
     // Allocate and initialize parameter array
     if (allocate_function_params(func, params, param_count) != 0) {
         return NULL;
     }
-    
+
     return func;
 }
 
 // -----------------------------------------------------------------------------
 // Native function constructor (CljCFunc)
 // -----------------------------------------------------------------------------
+/** Wrap C builtin as callable function; rc=1, caller releases. */
 ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
 {
     CljCFunc *func = ALLOC(CljCFunc, 1);
@@ -100,7 +101,6 @@ ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
     }
 
     func->base.type = CLJ_FUNC;
-    func->base.rc = 1;
     func->fn = fn;
 
     // Name is stored as an interned symbol (singleton), so we can safely borrow it.
@@ -108,4 +108,3 @@ ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
 
     return (ID)func;
 }
-

@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "object.h"
 #include "vector.h"
 #include "strings.h"  // For CljString
@@ -17,10 +18,10 @@ typedef void (*PutStringFunc)(void *ctx, const char*);
 
 // Line editor state structure for reduced API
 typedef struct {
-    char buffer[512];
-    int cursor_pos;
-    int length;
+    uint16_t cursor_pos;
+    uint16_t length;
     bool line_ready;
+    char buffer[512];
 } LineEditorState;
 
 // Return codes for line editor operations

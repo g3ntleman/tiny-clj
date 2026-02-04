@@ -22,7 +22,7 @@ TEST_SHARED(test_dotimes_zero_iterations) {
     CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, (CljList*)make_list(body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
@@ -37,7 +37,7 @@ TEST_SHARED(test_dotimes_negative_iterations) {
     CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, (CljList*)make_list(body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
@@ -52,7 +52,7 @@ TEST_SHARED(test_dotimes_large_iterations) {
     CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, (CljList*)make_list(body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
@@ -67,7 +67,7 @@ TEST_SHARED(test_dotimes_invalid_binding_format) {
     CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, (CljList*)make_list(body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
@@ -82,7 +82,7 @@ TEST_SHARED(test_dotimes_non_numeric_count) {
     CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, (CljList*)make_list(body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
@@ -91,7 +91,7 @@ TEST_SHARED(test_dotimes_non_numeric_count) {
 
 TEST_SHARED(test_dotimes_null_input) {
     // Test eval_dotimes with NULL input
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation with NULL
     CljObject *result = eval_dotimes(NULL, env, g_test_eval_state, NULL);
@@ -113,7 +113,7 @@ TEST_SHARED(test_dotimes_simple_iteration_count) {
                                                          (CljList*)make_list(body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
@@ -334,13 +334,19 @@ TEST_SHARED(test_for_while_modifier) {
 TEST_SHARED(test_for_large_sequence) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
-    // (count (vec (for [x (range 10000)] x))) => 10000
-    ID result = eval_string(
-        "(count (vec (for [x (range 10000)] x)))",
-        g_test_eval_state);
+    // (count (vec (for [x (range N)] x))) => N
+    // Profiling builds run slower; keep N smaller to avoid timeouts.
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    const char *expr = "(count (vec (for [x (range 2000)] x)))";
+    const int expected = 2000;
+#else
+    const char *expr = "(count (vec (for [x (range 10000)] x)))";
+    const int expected = 10000;
+#endif
+    ID result = eval_string(expr, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(10000, as_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(expected, as_fixnum(result));
 }
 
 // Test: Lazy sequence (take from infinite)

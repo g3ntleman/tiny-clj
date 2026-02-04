@@ -57,8 +57,7 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 #define TYPE_OF_CljFunction CLJ_CLOSURE
 #define TYPE_OF_CljCFunc CLJ_FUNC
 #define TYPE_OF_CljVector CLJ_VECTOR_PERSISTENT
-#define TYPE_OF_CljPersistentMap CLJ_MAP
-#define TYPE_OF_CljMap CLJ_MAP
+#define TYPE_OF_CljPersistentMap CLJ_MAP_PERSISTENT
 #define TYPE_OF_CLJException CLJ_EXCEPTION
 #define TYPE_OF_CljSeqIterator CLJ_SEQ
 #define TYPE_OF_CljLazySeq CLJ_LAZY_SEQ
@@ -95,10 +94,15 @@ extern CljObject g_not_found_sentinel;
 #define CLJ_FLAG_ARITHMETIC 0x02
 #define CLJ_FLAG_COMPARISON 0x04
 #define CLJ_FLAG_NATIVE 0x08 // Native/builtin function (no macro lookup needed)
+#define CLJ_FLAG_WEAK_ELEMENTS 0x20 // Vectors that store elements without retaining/releasing.
 #define CLJ_ARITH_OP_SHIFT 4
 #define CLJ_ARITH_OP_MASK 0x30
 #define CLJ_COMP_OP_SHIFT 6
 #define CLJ_COMP_OP_MASK 0xC0
+
+static inline bool has_weak_elements(const CljObject *obj) {
+    return obj && (obj->flags & CLJ_FLAG_WEAK_ELEMENTS) != 0;
+}
 
 static inline CljType TAG(ID obj)
 {

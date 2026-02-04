@@ -352,8 +352,15 @@ int __bt_crsrdel(BTREE* t, EPGNO* c) {
     int status;
 
     CLR(t, B_DELCRSR); /* Don't try twice. */
+    if (c->pgno == P_INVALID)
+        return (RET_SUCCESS);
     if ((h = mpool_get(t->bt_mp, c->pgno, 0)) == NULL)
         return (RET_ERROR);
+    /* Only delete from leaf pages; index must be in range (stale cursor guard). */
+    if ((h->flags & P_TYPE) != P_BLEAF || c->index >= NEXTINDEX(h)) {
+        mpool_put(t->bt_mp, h, 0);
+        return (RET_SUCCESS);
+    }
     status = __bt_dleaf(t, h, c->index);
     mpool_put(t->bt_mp, h, MPOOL_DIRTY);
     return (status);

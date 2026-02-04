@@ -25,4 +25,4 @@ Assert `"Object v still in autorelease pool; will double-release"`: Das Objekt w
 ## Praktische Tipps
 
 - **Relevante Signale:** Exception bei Double-Free, Pool-Assert, Crashes in `release` / `DEALLOC` / `autorelease_pool_drain`
-- **Zombie-Mode abschalten:** CMake `-DTINYCLJ_ZOMBIE_ENABLED=OFF` bzw. subjective-c ohne `ZOMBIE_ENABLED` – dann wird wirklich `free` aufgerufen, weniger RAM, aber Crashes bei Fehlern.
+- **Zombie-Mode abschalten:** CMake `-DZOMBIE_ENABLED=OFF` bzw. subjective-c ohne `ZOMBIE_ENABLED` – dann wird wirklich `free` aufgerufen, weniger RAM, aber Crashes bei Fehlern.

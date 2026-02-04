@@ -30,7 +30,7 @@ TEST_SHARED(test_print_str_basic_functionality) {
         TEST_ASSERT_EQUAL_STRING("42", string_data(result));
         
         // Test: print_str() with string should return string WITHOUT quotes
-        CljObject *str = make_string("Hello");
+        CljString *str = make_string("Hello");
         result = print_str(str);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_STRING("Hello", string_data(result));  // No quotes!
@@ -43,7 +43,7 @@ TEST_SHARED(test_print_str_basic_functionality) {
 // ============================================================================
 TEST_SHARED(test_print_str_vs_pr_str_difference) {
     WITH_AUTORELEASE_POOL({
-        CljObject *str = make_string("Hello");
+        CljString *str = make_string("Hello");
         
         // print_str() should return string without quotes
         CljString *print_result = print_str(str);
@@ -65,9 +65,9 @@ TEST_SHARED(test_print_str_vs_pr_str_difference) {
 TEST_SHARED(test_pr_str_with_containers) {
     WITH_AUTORELEASE_POOL({
         // Test: pr_str with vector containing strings
-        CljVector vec = make_vector(2, false);
-        CljObject *str1 = make_string("hello");
-        CljObject *str2 = make_string("world");
+        CljPersistentVector *vec = make_vector(0, false);
+        CljString *str1 = make_string("hello");
+        CljString *str2 = make_string("world");
         vec = vector_conj(vec, str1);
         vec = vector_conj(vec, str2);
         
@@ -83,10 +83,10 @@ TEST_SHARED(test_pr_str_with_containers) {
         RELEASE(str2);
         
         // Test: pr_str with map containing strings
-        CljMap *map = (CljMap*)make_map(2);
-        CljObject *key_str = make_string("a");
-        CljObject *val_str = make_string("hello");
-        map_assoc((CljValue)map, (CljValue)key_str, (CljValue)val_str);
+        CljPersistentMap *map = make_map(2);
+        CljString *key_str = make_string("a");
+        CljString *val_str = make_string("hello");
+        ASSIGN(map, map_assoc(map, (ID)key_str, (ID)val_str));
         
         result = pr_str((CljObject*)map);
         TEST_ASSERT_NOT_NULL(result);
@@ -97,9 +97,9 @@ TEST_SHARED(test_pr_str_with_containers) {
         RELEASE(val_str);
         
         // Test: pr_str with nested containers
-        CljVector outer_vec = make_vector(1, false);
-        CljVector inner_vec = make_vector(1, false);
-        CljObject *nested_str = make_string("nested");
+        CljPersistentVector *outer_vec = make_vector(0, false);
+        CljPersistentVector *inner_vec = make_vector(0, false);
+        CljString *nested_str = make_string("nested");
         inner_vec = vector_conj(inner_vec, nested_str);
         outer_vec = vector_conj(outer_vec, inner_vec);
         
@@ -119,11 +119,9 @@ TEST_SHARED(test_pr_str_with_containers) {
 TEST_SHARED(test_print_str_different_types) {
     WITH_AUTORELEASE_POOL({
         // Test with vector
-        CljObject *vec = make_vector(2, false);
-        CljVector *vec_data = as_vector(vec);
-        vec_data->data[0] = (CljObject*)fixnum(1);
-        vec_data->data[1] = (CljObject*)fixnum(2);
-        vec_data->count = 2;
+        CljPersistentVector *vec = make_vector(0, false);
+        vec = vector_conj(vec, fixnum(1));
+        vec = vector_conj(vec, fixnum(2));
         
         CljString *result = print_str(vec);
         TEST_ASSERT_NOT_NULL(result);
@@ -131,9 +129,9 @@ TEST_SHARED(test_print_str_different_types) {
         RELEASE(vec);
         
         // Test with map (simplified - just test basic functionality)
-        CljMap *map = (CljMap*)make_map(2);
-        map_assoc((CljValue)map, (CljValue)make_string("a"), fixnum(1));
-        map_assoc((CljValue)map, (CljValue)make_string("b"), fixnum(2));
+        CljPersistentMap *map = make_map(2);
+        ASSIGN(map, map_assoc(map, (ID)make_string("a"), fixnum(1)));
+        ASSIGN(map, map_assoc(map, (ID)make_string("b"), fixnum(2)));
         
         result = print_str((CljObject*)map);
         TEST_ASSERT_NOT_NULL(result);
@@ -149,13 +147,13 @@ TEST_SHARED(test_print_str_different_types) {
 TEST_SHARED(test_print_str_special_values) {
     WITH_AUTORELEASE_POOL({
         // Test with boolean true
-        CljValue true_val = make_special(SPECIAL_TRUE);
+        CljValue true_val = clj_true;
         CljString *result = print_str((CljObject*)true_val);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_STRING("true", string_data(result));
         
         // Test with boolean false
-        CljValue false_val = make_special(SPECIAL_FALSE);
+        CljValue false_val = clj_false;
         result = print_str((CljObject*)false_val);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_STRING("false", string_data(result));
@@ -177,22 +175,22 @@ TEST_SHARED(test_native_print_functions) {
         // Note: This test captures stdout, but for now we just test that it doesn't crash
         // Use global st from setUp
         const char *code1 = "(print \"Hello\")";
-        CljValue result1 = eval_string(code1, st);
+        CljValue result1 = eval_string(code1, g_test_eval_state);
         TEST_ASSERT_NIL(result1);  // print returns nil
         
         // Test: (println "Hello") should print without quotes, with newline
         const char *code2 = "(println \"Hello\")";
-        CljValue result2 = eval_string(code2, st);
+        CljValue result2 = eval_string(code2, g_test_eval_state);
         TEST_ASSERT_NIL(result2);  // println returns nil
         
         // Test: (pr "Hello") should print with quotes, without newline
         const char *code3 = "(pr \"Hello\")";
-        CljValue result3 = eval_string(code3, st);
+        CljValue result3 = eval_string(code3, g_test_eval_state);
         TEST_ASSERT_NIL(result3);  // pr returns nil
         
         // Test: (prn "Hello") should print with quotes, with newline
         const char *code4 = "(prn \"Hello\")";
-        CljValue result4 = eval_string(code4, st);
+        CljValue result4 = eval_string(code4, g_test_eval_state);
         TEST_ASSERT_NIL(result4);  // prn returns nil
     });
 }
@@ -205,12 +203,12 @@ TEST_SHARED(test_native_print_multiple_args) {
         // Test: (println "a" "b" "c") should print "a b c" with newline
         // Use global st from setUp
         const char *code = "(println \"a\" \"b\" \"c\")";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         TEST_ASSERT_NIL(result);  // println returns nil
         
         // Test: (print 1 2 3) should print "1 2 3" without newline
         const char *code2 = "(print 1 2 3)";
-        CljValue result2 = eval_string(code2, st);
+        CljValue result2 = eval_string(code2, g_test_eval_state);
         TEST_ASSERT_NIL(result2);  // print returns nil
     });
 }

@@ -31,15 +31,15 @@ CljList* empty_list(void) {
     return clj_empty_list_singleton;
 }
 
+/** Allocate list node (rc=1, caller releases). */
 CljList* make_list(ID first, CljList *rest) {
     CljList *list = ALLOC(CljList, 1);
     if (!list) throw_oom();
-    
+
     list->base.type = CLJ_LIST;
-    list->base.rc = 1;
     list->first = RETAIN(first);
     list->rest = RETAIN(rest);
-    
+
     return list;
 }
 
@@ -57,8 +57,8 @@ CljList* as_list_checked(ID obj) {
     // Error case: wrong type
     char error_msg[128];
     const char *type_name = clj_type_name(((CljObject*)obj)->type);
-    snprintf(error_msg, sizeof(error_msg), 
-            "Type mismatch: expected List, got %s", 
+    snprintf(error_msg, sizeof(error_msg),
+            "Type mismatch: expected List, got %s",
             type_name);
     printf("[STACKTRACE] as_list failed at %s:%d - obj=%p, type=%d (%s)\n", __FILE__, __LINE__, obj, ((CljObject*)obj)->type, type_name);
     // Print stacktrace
@@ -83,16 +83,16 @@ ID list_nth(CljList *list, int n) {
         return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is out of bounds for list", n);
     }
-    
+
     // Check if list is empty (both first and rest are NULL)
     if (list_empty(list)) {
         // Empty list - index is out of bounds
         return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is out of bounds for list", n);
     }
-    
+
     CljObject *current = (CljObject*)list;
-    
+
     // Traverse the list properly
     for (int i = 0; i <= n && current && is_list_type(TAG(current)); i++) {
         if (i == n) {
@@ -106,7 +106,7 @@ ID list_nth(CljList *list, int n) {
             current = NULL; // Stop if rest is not a list
         }
     }
-    
+
     // Index not found - out of bounds
     return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
             "nth index %d is out of bounds for list", n);
@@ -116,17 +116,17 @@ ID list_nth(CljList *list, int n) {
 // Prefer single-pass traversal (e.g. LIST_FOR_EACH) in hot paths.
 int list_count(CljList *list) {
     if (!list) return 0;
-    
+
     // Programmierfehler: list muss CLJ_LIST sein, wenn es nicht NULL ist
     CLJ_ASSERT(is_list_type(TAG(list)));
-    
+
     // Empty list has first = NULL and rest = NULL
     // A list with nil as element has first = NULL but rest != NULL
     // Check if this is the empty list singleton (both first and rest are NULL)
     if (list_empty(list)) {
         return 0;
     }
-    
+
     int count = 0;
     LIST_FOR_EACH(list, elem) {
         (void)elem;  // unused - we count all elements, even nil
@@ -148,4 +148,3 @@ CljObject* list_get_element(CljList *list, int index) {
     }
     return LIST_FIRST(node);
 }
-

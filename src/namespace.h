@@ -6,9 +6,9 @@
 #include "symbol.h"  // Include symbol.h for CljSymbol definition
 #include <stdbool.h>
 
-// Include map.h for CljMap type
+// Include map.h for CljPersistentMap type
 // Note: This may create a circular dependency if value.h includes namespace.h
-// But since CljMap is an anonymous struct typedef, we can't use forward declaration
+// But since CljPersistentMap is an anonymous struct typedef, we can't use forward declaration
 #include "map.h"
 
 // Namespace structure - subtype of CljObject
@@ -16,12 +16,12 @@
 #pragma GCC diagnostic ignored "-Wtypedef-redefinition"
 typedef struct CljNamespace {
     CljObject base;           // type + rc (4 bytes) - must be first field
-    CljSymbol *name;          // z.B. 'user', 'math' (Symbol instead of CljObject* for type safety)
-    CljMap *mappings;         // Map: Symbol → CljObject (def, defn, vars)
-    CljMap *macro_mappings;   // Map: Symbol → CljFunction (Macro-Registry)
-    CljMap *aliases;          // Map: Symbol → Symbol (Alias → full namespace name)
     bool loaded;              // true once namespace source has been loaded/evaluated
-    const char *filename;    // optional: associated file
+    CljSymbol *name;          // z.B. 'user', 'math'
+    CljPersistentMap *mappings;         // Map: Symbol → CljObject (def, defn, vars)
+    CljPersistentMap *macro_mappings;   // Map: Symbol → CljFunction (Macro-Registry)
+    CljPersistentMap *aliases;          // Map: Symbol → Symbol (Alias → full namespace name)
+    const char *filename;     // optional: associated file
 } CljNamespace;
 #pragma GCC diagnostic pop
 
@@ -41,7 +41,7 @@ typedef struct {
     CljNamespace *resolve_ns; // namespace used for unqualified symbol resolution (defaults to current_ns)
 } EvalState;
 
-// Global namespace registry is now in g_runtime.ns_registry (CljMap*)
+// Global namespace registry is now in g_runtime.ns_registry (CljTransientMap*)
 
 // Namespace functions
 CljNamespace* make_namespace(const char *cname, const char *file);

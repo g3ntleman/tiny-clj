@@ -210,7 +210,7 @@ TEST(test_pr_str_escapes_quotes) {
 
   // Create a string with quotes inside
   const char *test_input = "(list 1 1.0 \"1\" \"one\")";
-  CljObject *str = (CljObject *)make_string(test_input);
+  CljString *str = make_string(test_input);
   TEST_ASSERT_NOT_NULL(str);
 
   // Test pr_str on the string
@@ -234,7 +234,7 @@ TEST(test_history_save_escapes_quotes) {
 
   // Create a vector with a string containing quotes
   const char *test_input = "(list 1 1.0 \"1\" \"one\")";
-  CljObject *str = (CljObject *)make_string(test_input);
+  CljString *str = make_string(test_input);
   TEST_ASSERT_NOT_NULL(str);
 
   CljPersistentVector *vec = make_vector(1, false);
@@ -806,12 +806,12 @@ TEST(test_fs_layer_write_read_stat_list_delete)
     ID kw_meta = (ID)intern_symbol_global(":meta");
     ID kw_size = (ID)intern_symbol_global(":size");
     ID kw_chunks = (ID)intern_symbol_global(":chunks");
-    ID p0 = map_get((CljMap*)entry0, kw_path);
+    ID p0 = map_get((CljPersistentMap*)entry0, kw_path);
     assert_string((CljObject*)p0, "/data/file.bin");
-    ID m0 = map_get((CljMap*)entry0, kw_meta);
+    ID m0 = map_get((CljPersistentMap*)entry0, kw_meta);
     assert_map((CljObject*)m0);
-    assert_fixnum((CljObject*)map_get((CljMap*)m0, kw_size), (int)sizeof(bytes));
-    assert_fixnum((CljObject*)map_get((CljMap*)m0, kw_chunks), 1);
+    assert_fixnum((CljObject*)map_get((CljPersistentMap*)m0, kw_size), (int)sizeof(bytes));
+    assert_fixnum((CljObject*)map_get((CljPersistentMap*)m0, kw_chunks), 1);
 
     /* delete meta only */
     TEST_ASSERT_TRUE(fs_delete(st, "/data/file.bin"));
@@ -876,10 +876,130 @@ TEST(test_fs_list_dir_batch_many_files)
         TEST_ASSERT_NOT_NULL(elem);
         assert_map((CljObject*)elem);
         ID kw_path = (ID)intern_symbol_global(":path");
-        ID p = map_get((CljMap*)elem, kw_path);
+        ID p = map_get((CljPersistentMap*)elem, kw_path);
         assert_string((CljObject*)p, expected);
     }
 
+    fs_kv_store_free(st);
+}
+
+// ============================================================================
+// Cursor edge cases: list_dir + delete + close (DEALLOC). Regression for
+// B_DELCRSR / bt_bcursor on tdb_kv_close.
+// ============================================================================
+
+TEST(test_fs_cursor_list_empty_dir_then_close)
+{
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+    char last_key[FS_KEY_MAX] = {0};
+    ID lst = fs_list_dir_batch(st, "/empty/", NULL, 32, last_key, sizeof(last_key));
+    TEST_ASSERT_NOT_NULL(lst);
+    TEST_ASSERT_EQUAL_INT(0, vector_count(as_persistent_vector(lst)));
+    fs_kv_store_free(st);
+}
+
+TEST(test_fs_cursor_list_one_file_delete_it_then_close)
+{
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+    uint8_t b = 1;
+    TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_write_bytes(st, "/x/only.bin", &b, 1));
+    char last_key[FS_KEY_MAX] = {0};
+    ID lst = fs_list_dir_batch(st, "/x/", NULL, 32, last_key, sizeof(last_key));
+    TEST_ASSERT_NOT_NULL(lst);
+    TEST_ASSERT_EQUAL_INT(1, vector_count(as_persistent_vector(lst)));
+    TEST_ASSERT_TRUE(fs_delete(st, "/x/only.bin"));
+    fs_kv_store_free(st);
+}
+
+TEST(test_fs_cursor_list_then_delete_other_then_close)
+{
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+    uint8_t b = 0;
+    TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_write_bytes(st, "/d/a.bin", &b, 1));
+    TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_write_bytes(st, "/d/b.bin", &b, 1));
+    char last_key[FS_KEY_MAX] = {0};
+    ID lst = fs_list_dir_batch(st, "/d/", NULL, 32, last_key, sizeof(last_key));
+    TEST_ASSERT_NOT_NULL(lst);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(as_persistent_vector(lst)));
+    TEST_ASSERT_TRUE(fs_delete(st, "/d/b.bin"));
+    TEST_ASSERT_FALSE(fs_exists(st, "/d/b.bin"));
+    fs_kv_store_free(st);
+}
+
+TEST(test_fs_cursor_list_then_delete_first_listed_then_close)
+{
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+    uint8_t b = 0;
+    TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_write_bytes(st, "/d/first.bin", &b, 1));
+    TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_write_bytes(st, "/d/second.bin", &b, 1));
+    char last_key[FS_KEY_MAX] = {0};
+    ID lst = fs_list_dir_batch(st, "/d/", NULL, 32, last_key, sizeof(last_key));
+    TEST_ASSERT_NOT_NULL(lst);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(as_persistent_vector(lst)));
+    TEST_ASSERT_TRUE(fs_delete(st, "/d/first.bin"));
+    fs_kv_store_free(st);
+}
+
+TEST(test_fs_cursor_list_batch_partial_then_delete_then_close)
+{
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+    uint8_t b = 0;
+    for (int i = 0; i < 10; i++) {
+        char path[FS_KEY_MAX];
+        mini_snprintf(path, sizeof(path), "/batch/f_%02d.bin", i);
+        TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_write_bytes(st, path, &b, 1));
+    }
+    char last_key[FS_KEY_MAX] = {0};
+    ID batch = fs_list_dir_batch(st, "/batch/", NULL, 4, last_key, sizeof(last_key));
+    TEST_ASSERT_NOT_NULL(batch);
+    TEST_ASSERT_EQUAL_INT(4, vector_count(as_persistent_vector(batch)));
+    TEST_ASSERT_TRUE(last_key[0] != '\0');
+    TEST_ASSERT_TRUE(fs_delete(st, "/batch/f_01.bin"));
+    fs_kv_store_free(st);
+}
+
+TEST(test_fs_cursor_two_lists_then_delete_then_close)
+{
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+    uint8_t b = 0;
+    TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_write_bytes(st, "/two/a.bin", &b, 1));
+    TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_write_bytes(st, "/two/b.bin", &b, 1));
+    char last[FS_KEY_MAX] = {0};
+    ID l1 = fs_list_dir_batch(st, "/two/", NULL, 32, last, sizeof(last));
+    TEST_ASSERT_NOT_NULL(l1);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(as_persistent_vector(l1)));
+    ID l2 = fs_list_dir_batch(st, "/two/", NULL, 32, last, sizeof(last));
+    TEST_ASSERT_NOT_NULL(l2);
+    TEST_ASSERT_TRUE(fs_delete(st, "/two/a.bin"));
+    fs_kv_store_free(st);
+}
+
+TEST(test_fs_cursor_list_exhaust_then_delete_all_then_close)
+{
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+    uint8_t b = 0;
+    for (int i = 0; i < 5; i++) {
+        char path[FS_KEY_MAX];
+        mini_snprintf(path, sizeof(path), "/exhaust/e_%d.bin", i);
+        TEST_ASSERT_EQUAL_INT(FS_NO_ERR, fs_write_bytes(st, path, &b, 1));
+    }
+    char last_key[FS_KEY_MAX] = {0};
+    ID lst = fs_list_dir_batch(st, "/exhaust/", NULL, 32, last_key, sizeof(last_key));
+    TEST_ASSERT_NOT_NULL(lst);
+    TEST_ASSERT_EQUAL_INT(5, vector_count(as_persistent_vector(lst)));
+    TEST_ASSERT_TRUE(last_key[0] == '\0');
+    for (int i = 0; i < 5; i++) {
+        char path[FS_KEY_MAX];
+        mini_snprintf(path, sizeof(path), "/exhaust/e_%d.bin", i);
+        TEST_ASSERT_TRUE(fs_delete(st, path));
+    }
     fs_kv_store_free(st);
 }
 

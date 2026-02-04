@@ -88,13 +88,13 @@ bool clj_equal_full(ID a, ID b) {
             return strcmp(str_a->data, str_b->data) == 0;
         }
 
-        case CLJ_VECTOR:
-        case CLJ_VECTOR_TRANSIENT_WEAK:
-        case CLJ_VECTOR_TRANSIENT: {
-            CljVector *vec_a = (CljVector*)a;
-            CljVector *vec_b = (CljVector*)b;
-            int count_a = vector_count(vec_a);
-            int count_b = vector_count(vec_b);
+        case CLJ_VECTOR_PERSISTENT: {
+            CljPersistentVector *vec_a =
+                as_persistent_vector(a);
+            CljPersistentVector *vec_b =
+                as_persistent_vector(b);
+            int count_a = (int)vector_count(vec_a);
+            int count_b = (int)vector_count(vec_b);
             if (count_a != count_b) return false;
             for (int i = 0; i < count_a; i++) {
                 // Vector elements can be immediates or heap objects
@@ -104,10 +104,13 @@ bool clj_equal_full(ID a, ID b) {
             }
             return true;
         }
+        case CLJ_VECTOR_TRANSIENT:
+            // Transients do not have value semantics (only identity via a==b)
+            return false;
 
-        case CLJ_MAP: {
-            CljMap *map_a = as_map(a);
-            CljMap *map_b = as_map(b);
+        case CLJ_MAP_PERSISTENT: {
+            CljPersistentMap *map_a = as_map(a);
+            CljPersistentMap *map_b = as_map(b);
             if (map_a->count != map_b->count) return false;
             MAP_FOR_EACH(map_a, key_a, val_a) {
                 ID val_b = map_get(map_b, key_a);
@@ -174,4 +177,3 @@ bool clj_equal_full(ID a, ID b) {
             return false;
     }
 }
-
