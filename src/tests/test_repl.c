@@ -93,13 +93,13 @@ TEST(test_repl_doc_extracts_metadata) {
     // Get metadata directly
     CljObject *meta_meta = eval_string("(meta meta)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(meta_meta, "meta should have metadata");
-    TEST_ASSERT_TRUE_MESSAGE(TAG(meta_meta) == CLJ_MAP, "metadata should be a map");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(meta_meta) == CLJ_MAP_PERSISTENT, "metadata should be a map");
     
     // Verify that metadata contains :doc
     CljSymbol *doc_key = intern_symbol_global(":doc");
     TEST_ASSERT_NOT_NULL_MESSAGE(doc_key, ":doc keyword should exist");
     
-    CljMap *meta_map = (CljMap*)meta_meta;
+    CljPersistentMap *meta_map = (CljPersistentMap*)meta_meta;
     ID doc_value = map_get_sentinel(meta_map, doc_key, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(doc_value, ":doc should exist in metadata");
     TEST_ASSERT_TRUE_MESSAGE(TAG(doc_value) == CLJ_STRING, ":doc should be a string");

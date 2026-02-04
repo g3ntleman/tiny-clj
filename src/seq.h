@@ -12,7 +12,7 @@
 #include "object.h"
 #include <stdbool.h>
 
-struct CljMap;  // Forward declaration to avoid including map.h here
+struct CljPersistentMap;  // Forward declaration to avoid including map.h here
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,7 +46,7 @@ typedef struct {
             int length;          // Total length
         } str;
         struct {
-            struct CljMap *map;  // Map being iterated
+            struct CljPersistentMap *map;  // Map being iterated
             int index;           // Current entry index
             int count;           // Total entries
         } map;

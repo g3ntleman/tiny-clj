@@ -74,9 +74,11 @@ int __bt_close(DB* dbp) {
 
     /*
      * Delete any already deleted record that we've been saving
-     * because the cursor pointed to it.
+     * because the cursor pointed to it.  Skip if cursor pgno is invalid
+     * (e.g. seq never ran or cursor was reset).
      */
-    if (ISSET(t, B_DELCRSR) && __bt_crsrdel(t, &t->bt_bcursor))
+    if (ISSET(t, B_DELCRSR) && t->bt_bcursor.pgno != P_INVALID &&
+        __bt_crsrdel(t, &t->bt_bcursor))
         return (RET_ERROR);
 
     if (__bt_sync(dbp, 0) == RET_ERROR)
@@ -137,31 +139,42 @@ int __bt_sync(const DB* dbp, u_int flags) {
      * Nastiness.  If the cursor has been marked for deletion, but not
      * actually deleted, we have to make a copy of the page, delete the
      * key/data item, sync the file, and then restore the original page
-     * contents.
+     * contents.  Skip if cursor pgno is invalid or page/index not valid.
      */
-    if (ISSET(t, B_DELCRSR)) {
+    if (ISSET(t, B_DELCRSR) && t->bt_bcursor.pgno != P_INVALID) {
         if ((p = (void*)malloc(t->bt_psize)) == NULL)
             return (RET_ERROR);
-        if ((h = mpool_get(t->bt_mp, t->bt_bcursor.pgno, 0)) == NULL)
+        if ((h = mpool_get(t->bt_mp, t->bt_bcursor.pgno, 0)) == NULL) {
+            free(p);
             return (RET_ERROR);
-        memmove(p, h, t->bt_psize);
-        if ((status = __bt_dleaf(t, h, t->bt_bcursor.index)) == RET_ERROR)
-            goto ecrsr;
-        mpool_put(t->bt_mp, h, MPOOL_DIRTY);
+        }
+        if ((h->flags & P_TYPE) == P_BLEAF &&
+            t->bt_bcursor.index < NEXTINDEX(h)) {
+            memmove(p, h, t->bt_psize);
+            if ((status = __bt_dleaf(t, h, t->bt_bcursor.index)) == RET_ERROR) {
+                free(p);
+                mpool_put(t->bt_mp, h, 0);
+                return (RET_ERROR);
+            }
+            mpool_put(t->bt_mp, h, MPOOL_DIRTY);
+        } else {
+            mpool_put(t->bt_mp, h, 0);
+            free(p);
+            p = NULL;
+        }
     }
 
     if ((status = mpool_sync(t->bt_mp)) == RET_SUCCESS)
         CLR(t, B_MODIFIED);
 
-ecrsr:
-    if (ISSET(t, B_DELCRSR)) {
-        if ((h = mpool_get(t->bt_mp, t->bt_bcursor.pgno, 0)) == NULL)
-            return (RET_ERROR);
-        if (p) {
-            memmove(h, p, t->bt_psize);
+    if (ISSET(t, B_DELCRSR) && p != NULL) {
+        if ((h = mpool_get(t->bt_mp, t->bt_bcursor.pgno, 0)) == NULL) {
             free(p);
-            p = NULL;
+            return (RET_ERROR);
         }
+        memmove(h, p, t->bt_psize);
+        free(p);
+        p = NULL;
         mpool_put(t->bt_mp, h, MPOOL_DIRTY);
     }
     return (status);

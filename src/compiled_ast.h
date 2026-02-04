@@ -3,7 +3,7 @@
 
 #include "ast.h"
 #include "eval.h"      // EvalContext
-#include "map.h"       // CljMap
+#include "map.h"       // CljPersistentMap
 #include "namespace.h" // EvalState
 
 typedef enum {
@@ -15,7 +15,7 @@ typedef enum {
     CLJ_COMPILED_KIND_FN,
 } CljCompiledKind;
 
-typedef ID (*CljCompiledEvalFn)(CljASTNode *node, CljMap *env, EvalState *st, const EvalContext *ctx);
+typedef ID (*CljCompiledEvalFn)(CljASTNode *node, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 typedef struct {
     CljCompiledKind kind;

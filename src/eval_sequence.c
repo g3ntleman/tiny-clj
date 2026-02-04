@@ -9,7 +9,7 @@
 #include "strings.h"
 
 ID eval_and_call_native_with_context(CljList *list,
-                                     CljMap *env,
+                                     CljPersistentMap *env,
                                      ID (*native_func)(ID*, unsigned int),
                                      unsigned int max_args,
                                      const EvalContext *ctx) {
@@ -47,7 +47,7 @@ ID eval_and_call_native_with_context(CljList *list,
     return result;
 }
 
-ID eval_map_lookup(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx, ID map) {
+ID eval_map_lookup(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx, ID map) {
     CljList *args = list_rest_normalized(list);
     if (!args || list_rest_normalized(args)) {
         int argc = 0;

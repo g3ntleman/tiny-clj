@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 ID eval_comparison_dispatch(CljList *list,
-                             CljMap *env,
+                             CljPersistentMap *env,
                              EvalState *st,
                              const EvalContext *ctx,
                              ID op);

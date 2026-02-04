@@ -2,7 +2,7 @@
  * High-Level HashMap Tests using Clojure Source Code
  * 
  * NOTE: These tests can only INDIRECTLY verify HashMap functionality via symbol table.
- * They cannot prove that HashMap is used (could be CljMap) or that specific HashMap
+ * They cannot prove that HashMap is used (could be CljPersistentMap) or that specific HashMap
  * features (Linear Probing, Rehashing, COW, Tombstones) work correctly.
  * 
  * These tests are only useful AFTER HashMap is integrated into symbol table to verify

@@ -469,7 +469,7 @@ TEST(test_let_recursive_function_namespace_access) {
 TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
     WITH_AUTORELEASE_POOL({
         // Create a let_env manually (simulating what eval_let does)
-        CljMap *let_env = (CljMap*)make_map(4);
+        CljPersistentMap *let_env = (CljPersistentMap*)make_map(4);
         TEST_ASSERT_NOT_NULL(let_env);
         
         CljSymbol *i_sym = intern_symbol_global("i");
@@ -478,13 +478,13 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         CljAtom *atom = make_atom(fixnum(0));
         TEST_ASSERT_NOT_NULL(atom);
         
-        CljMap *new_let_env = (CljMap*)map_by_associng_kv((CljMap*)let_env, i_sym, (CljObject*)atom);
+        CljPersistentMap *new_let_env = (CljPersistentMap*)map_assoc((CljPersistentMap*)let_env, i_sym, (CljObject*)atom);
         ASSIGN(let_env, new_let_env);
         
-        bool contains = map_contains((CljMap*)let_env, (CljValue)i_sym);
+        bool contains = map_contains((CljPersistentMap*)let_env, (CljValue)i_sym);
         TEST_ASSERT_TRUE_MESSAGE(contains, "map_contains should find symbol 'i' in let_env");
         
-        CljValue found = map_get_sentinel((CljMap*)let_env, (CljValue)i_sym, NULL);
+        CljValue found = map_get_sentinel((CljPersistentMap*)let_env, (CljValue)i_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(found, "map_get should find symbol 'i' in let_env");
         TEST_ASSERT_TRUE(TAG(found) == CLJ_ATOM);
         

@@ -71,7 +71,7 @@ static void build_fixture_path(char *out, size_t out_size)
     test_path_join_prefix(out, out_size, self, dir_len, "/fixtures/all_types.edn");
 }
 
-static ID map_get_required(CljMap *m, const char *kw_name)
+static ID map_get_required(CljPersistentMap *m, const char *kw_name)
 {
     CljSymbol *kw = intern_symbol_global(kw_name);
     TEST_ASSERT_NOT_NULL(kw);
@@ -113,17 +113,17 @@ TEST(test_edn_file_all_supported_types)
     ID parsed = parse_expr(&reader, g_test_eval_state);
 
     TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(parsed));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(parsed));
     
     // Canonicalize the parsed map (interns symbol tokens, etc.)
     parsed = canonicalize_ast(parsed, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(parsed));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(parsed));
 
     reader_skip_all(&reader);
     TEST_ASSERT_TRUE(reader_is_eof(&reader));
 
-    CljMap *m = as_map(parsed);
+    CljPersistentMap *m = as_map(parsed);
     TEST_ASSERT_NOT_NULL(m);
 
     // Test :true first to check if map lookup works at all
@@ -178,7 +178,7 @@ TEST(test_edn_file_all_supported_types)
 
     ID v_map = map_get_required(m, ":map");
     assert_map((CljObject *)v_map);
-    CljMap *inner = as_map(v_map);
+    CljPersistentMap *inner = as_map(v_map);
     ID a_val = map_get(inner, (ID)intern_symbol_global(":a"));
     ID b_val = map_get(inner, (ID)intern_symbol_global(":b"));
     TEST_ASSERT_NOT_EQUAL((ID)NOT_FOUND, a_val);

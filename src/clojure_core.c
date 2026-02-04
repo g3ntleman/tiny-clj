@@ -12,6 +12,8 @@
 #include "map.h"     // For map_get
 #include "parser.h"  // For eval_parsed
 #include "to_string.h" // For pr_str debug printing
+#include "types.h"  // For clj_type_name
+#include "memory_profiler.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -33,6 +35,51 @@ static int getenv_int(const char *name, int default_value) {
   if (end == v) return default_value;
   return (int)n;
 }
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+static void core_mem_print_top_types(const char *label, int top_n) {
+  if (top_n <= 0) return;
+  // Track top-N by bytes_current.
+  size_t top_bytes[8];
+  int top_types[8];
+  const int max_n = (top_n > 8) ? 8 : top_n;
+  for (int i = 0; i < max_n; i++) {
+    top_bytes[i] = 0;
+    top_types[i] = -1;
+  }
+
+  for (int ti = 0; ti < CLJ_TYPE_COUNT; ti++) {
+    size_t bc = g_memory_stats.bytes_current_by_type[ti];
+    if (bc == 0) continue;
+    for (int slot = 0; slot < max_n; slot++) {
+      if (bc > top_bytes[slot]) {
+        // Shift down.
+        for (int k = max_n - 1; k > slot; k--) {
+          top_bytes[k] = top_bytes[k - 1];
+          top_types[k] = top_types[k - 1];
+        }
+        top_bytes[slot] = bc;
+        top_types[slot] = ti;
+        break;
+      }
+    }
+  }
+
+  fprintf(stderr, "[core-mem] %s total=%zu peak=%zu\n",
+          label ? label : "<core>",
+          g_memory_stats.current_memory_usage,
+          g_memory_stats.peak_memory_usage);
+  for (int i = 0; i < max_n; i++) {
+    if (top_types[i] < 0 || top_bytes[i] == 0) continue;
+    int ti = top_types[i];
+    fprintf(stderr, "  %s: bytes=%zu alloc=%zu dealloc=%zu\n",
+            clj_type_name((CljType)ti),
+            g_memory_stats.bytes_current_by_type[ti],
+            g_memory_stats.allocations_by_type[ti],
+            g_memory_stats.deallocations_by_type[ti]);
+  }
+}
+#endif
 
 
 
@@ -134,6 +181,9 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
   // - TINYCLJ_DEBUG_CORE_STOP_AFTER=N returns after completing form N (useful to avoid crashes).
   const int debug_form = getenv_int("TINYCLJ_DEBUG_CORE_FORM", 0);
   const int stop_after_form = getenv_int("TINYCLJ_DEBUG_CORE_STOP_AFTER", 0);
+  // Memory diagnostics: print top types every N forms and/or a final summary.
+  const int debug_mem_every = getenv_int("TINYCLJ_DEBUG_CORE_MEM_EVERY", 0);
+  const int debug_mem_summary = getenv_int("TINYCLJ_DEBUG_CORE_MEM_SUMMARY", 0);
   // Autorelease diagnostics (compile-time gated):
   // Build with -DTINYCLJ_AUTORELEASE_DIAGNOSTICS=1 to enable.
 #if defined(DEBUG) && defined(TINYCLJ_AUTORELEASE_DIAGNOSTICS) && TINYCLJ_AUTORELEASE_DIAGNOSTICS
@@ -273,6 +323,14 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
       }
     expr_count++;
 
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    if (debug_mem_every > 0 && (expr_count % debug_mem_every) == 0) {
+      char label_buf[64];
+      snprintf(label_buf, sizeof(label_buf), "after form %d", expr_count);
+      core_mem_print_top_types(label_buf, 5);
+    }
+#endif
+
     if (stop_after_form > 0 && expr_count >= stop_after_form) {
       if (!g_core_quiet) {
         fprintf(stderr, "[%s] DEBUG stopping after core form #%d (TINYCLJ_DEBUG_CORE_STOP_AFTER)\n",
@@ -309,6 +367,12 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
 #ifdef PROFILE_STARTUP
   fprintf(stderr, "[PROFILE] Parse: %.2f ms, Canon: %.2f ms, Eval: %.2f ms, Forms: %d\n",
           g_parse_time_ms, g_canon_time_ms, g_eval_time_ms, g_form_count);
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+  if (debug_mem_summary > 0) {
+    core_mem_print_top_types("core load summary", 8);
+  }
 #endif
 
   // Ensure Math alias points to clojure.core so Math/sqrt style symbols resolve
@@ -374,6 +438,9 @@ int load_clojure_core(EvalState *st) {
   if (ok) {
     clojure_core->loaded = true;
   }
+ 
+  // Create resolve cache after bootstrap to keep startup memory low.
+  runtime_ensure_resolve_cache(&g_runtime);
   
   // Restore original namespace after loading
   if (original_ns) {

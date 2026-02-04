@@ -6,6 +6,7 @@
 #include "reader.h"
 #include "list.h"
 #include "map.h"
+#include "to_string.h"
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -171,7 +172,7 @@ TEST(test_inc_symbol_interning_during_load) {
         CljObject *inc_value = map_get_sentinel(clojure_core->mappings, inc_sym_after, NULL);
         
         if (!inc_value) {
-            CljMap *map = clojure_core->mappings;
+            CljPersistentMap *map = clojure_core->mappings;
             int symbol_count = 0;
             const char *first_symbol = NULL;
             MAP_FOR_EACH(map, key, value) {
@@ -252,7 +253,7 @@ TEST(test_inc_symbol_pointer_consistency) {
                                      "Symbol after parsing should be same as symbol in form");
         
         // Now evaluate the def
-        CljMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
+        CljPersistentMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
         ID def_result = eval_list(list, env, g_test_eval_state, NULL);  // Evaluate def - returns the symbol
         
         // Check if inc is now in the mappings with the same symbol pointer
@@ -669,7 +670,7 @@ TEST(test_resolve_list_operator_uses_cache) {
     // The resolve_cache is hierarchical: namespace_symbol -> symbol -> resolved_value
     TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
     CljSymbol *ns_key = g_test_eval_state->current_ns->name;
-    CljMap *ns_cache = (CljMap*)map_get_sentinel(g_runtime.resolve_cache, ns_key, NULL);
+    CljPersistentMap *ns_cache = (CljPersistentMap*)map_get_sentinel(g_runtime.resolve_cache, ns_key, NULL);
     CljObject *cached_inc = ns_cache ? (CljObject*)map_get_sentinel(ns_cache, inc_sym, NULL) : NULL;
     TEST_ASSERT_NOT_NULL_MESSAGE(cached_inc, "resolve_cache should contain 'inc' after first function call");
 
@@ -728,7 +729,7 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     // The resolve_cache is hierarchical: namespace_symbol -> symbol -> resolved_value
     TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
     CljSymbol *ns_key = g_test_eval_state->current_ns->name;
-    CljMap *ns_cache = (CljMap*)map_get_sentinel(g_runtime.resolve_cache, ns_key, NULL);
+    CljPersistentMap *ns_cache = (CljPersistentMap*)map_get_sentinel(g_runtime.resolve_cache, ns_key, NULL);
     CljObject *cached = ns_cache ? (CljObject*)map_get_sentinel(ns_cache, inc_sym, NULL) : NULL;
     TEST_ASSERT_NOT_NULL_MESSAGE(cached, "resolve_cache should contain 'inc' after first function call");
 
@@ -1086,7 +1087,7 @@ TEST(test_ns_registry_is_map) {
     TEST_ASSERT_TRUE(TAG(g_runtime.ns_registry) == CLJ_MAP_TRANSIENT);
 
     // Verify it's a transient map
-    CljMap *registry = g_runtime.ns_registry;
+    CljTransientMap *registry = g_runtime.ns_registry;
     TEST_ASSERT_NOT_NULL(registry);
 }
 
@@ -1185,11 +1186,8 @@ TEST(test_ns_registry_iteration) {
     TEST_ASSERT_EQUAL_PTR(ns2, (CljNamespace*)found2);
 }
 
-// Test: Verify that map_conj return value is handled correctly (may return new instance)
-TEST(test_ns_registry_map_conj_handles_new_instance) {
-    // This test verifies that we correctly handle the case where map_conj might
-    // need to grow the map (though with initial capacity 16, this is unlikely)
-    // The important thing is that we always use the return value of map_conj
+// Test: Verify ns_registry can grow and still resolve entries
+TEST(test_ns_registry_growth_and_lookup) {
 
     // Create multiple namespaces to potentially trigger map growth
     // Create enough to exceed initial capacity (16) and test map growth
@@ -1284,10 +1282,10 @@ TEST(test_ns_map_returns_mappings) {
     // Call ns-map via eval_string
     CljObject *result = eval_string("(ns-map 'test-ns-map)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
 
     // Verify the mappings are in the result (must use qualified symbols for map_get)
-    CljMap *mappings = (CljMap*)result;
+    CljPersistentMap *mappings = (CljPersistentMap*)result;
     CljSymbol *sym1_qualified = intern_symbol(intern_symbol_global("test-ns-map"), "test-var1");
     CljSymbol *sym2_qualified = intern_symbol(intern_symbol_global("test-ns-map"), "test-var2");
     TEST_ASSERT_NOT_NULL(sym1_qualified);
@@ -1319,10 +1317,10 @@ TEST(test_ns_map_empty_namespace) {
     // Test ns-map with namespace symbol
     CljObject *result = eval_string("(ns-map 'test-empty-ns)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
 
     // Verify it's an empty map
-    CljMap *mappings = (CljMap*)result;
+    CljPersistentMap *mappings = (CljPersistentMap*)result;
     TEST_ASSERT_EQUAL(0, map_count(mappings));
 
     // Cleanup
@@ -1346,10 +1344,10 @@ TEST(test_ns_map_current_namespace) {
     test_snprintf(expr, sizeof(expr), "(ns-map '%s)", current_ns_name);
     CljObject *result = eval_string(expr, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP_PERSISTENT);
 
     // Verify the mapping is in the result (must use qualified symbol for map_get)
-    CljMap *mappings = (CljMap*)result;
+    CljPersistentMap *mappings = (CljPersistentMap*)result;
     CljSymbol *test_sym_qualified = intern_symbol(intern_symbol_global(current_ns_name), "current-ns-var");
     TEST_ASSERT_NOT_NULL(test_sym_qualified);
     CljObject *found = (CljObject*)map_get_sentinel(mappings, test_sym_qualified, NULL);
@@ -1389,22 +1387,20 @@ TEST(test_find_ns_returns_nil_for_nonexistent) {
     TEST_ASSERT_NIL(result); // Should return nil (NULL)
 }
 
-// Test: Verify find-ns with string argument
-TEST(test_find_ns_with_string) {
+// Test: find-ns with string should throw type error (Clojure-compatible)
+TEST(test_find_ns_with_string_throws) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Create a test namespace
-    CljNamespace *test_ns = ns_get_or_create("test-find-ns-string", NULL);
-    TEST_ASSERT_NOT_NULL(test_ns);
-
-    // Test find-ns with string
-    CljObject *result = eval_string("(find-ns \"test-find-ns-string\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_NAMESPACE);
-    TEST_ASSERT_EQUAL_PTR(test_ns, (CljNamespace*)result);
-
-    // Cleanup
-    RELEASE(result);
+    CLJException *ex = NULL;
+    TRY {
+        (void)eval_string("(find-ns \"test-find-ns-string\")", g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected type error for string argument to find-ns");
+    } CATCH(e) {
+        ex = e;
+    } END_TRY
+    TEST_ASSERT_NOT_NULL(ex);
+    TEST_ASSERT_EQUAL_STRING(EXCEPTION_TYPE, ex->type);
+    TEST_ASSERT_NOT_NULL(strstr(ex->message, "symbol"));
+    RELEASE(ex);
 }
 
 // Test: Verify find-ns with nil argument returns nil
@@ -1414,6 +1410,19 @@ TEST(test_find_ns_with_nil) {
     // Test find-ns with nil
     CljObject *result = eval_string("(find-ns nil)", g_test_eval_state);
     TEST_ASSERT_NIL(result); // Should return nil (NULL)
+}
+
+// Regression: printed namespace name should not be truncated
+TEST(test_find_ns_print_repr_full_name) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Ensure namespace is loaded
+    (void)eval_string("(require 'clojure.string)", g_test_eval_state);
+
+    // pr-str should return full namespace name
+    CljString *repr = pr_str(eval_string("(find-ns 'clojure.string)", g_test_eval_state));
+    TEST_ASSERT_NOT_NULL(repr);
+    TEST_ASSERT_EQUAL_STRING("clojure.string", string_data(repr));
 }
 
 // ============================================================================

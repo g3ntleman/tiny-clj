@@ -244,8 +244,8 @@ CljValue num = make_fixnum(42);  // No RELEASE() needed
 ### Available `_inplace` Functions
 
 **Maps:**
-- `map_assoc_inplace(CljMap **map_slot, ID key, ID value)`
-- `map_remove_inplace(CljMap **map_slot, ID key)`
+- `map_assoc_inplace(CljPersistentMap **map_slot, ID key, ID value)`
+- `map_remove_inplace(CljPersistentMap **map_slot, ID key)`
 
 **Vectors:**
 - `vector_conj_inplace(CljVector **vec_slot, ID item)`

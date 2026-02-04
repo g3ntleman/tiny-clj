@@ -203,12 +203,13 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             return strlen(sym->cname);
         }
 
-        case CLJ_VECTOR:
-        case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: {
-            void *vec_ptr = as_vector(v);
-            CljVector *vec = (CljVector*)vec_ptr;
-            int count = vector_count(vec);
+        case CLJ_VECTOR_PERSISTENT:
+        case CLJ_VECTOR_TRANSIENT:{
+            CljPersistentVector *vec =
+                (v->type == CLJ_VECTOR_TRANSIENT)
+                    ? vector_persistent(as_transient_vector((ID)v))
+                    : as_persistent_vector((ID)v);
+            int count = (int)vector_count(vec);
             size_t len = 2; // "[ ]"
             int i = 0;
             VECTOR_FOR_EACH(vec, elem) {
@@ -236,9 +237,9 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             return len;
         }
 
-        case CLJ_MAP:
+        case CLJ_MAP_PERSISTENT:
         case CLJ_MAP_TRANSIENT: {
-            CljMap *map = as_map(v);
+            CljPersistentMap *map = as_map(v);
             size_t len = 2; // "{ }"
             bool first = true;
             MAP_FOR_EACH(map, k, val) {
@@ -300,11 +301,11 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             SeqIterator temp_iter = seq->iter;
             bool first = true;
 
-            // Avoid hidden allocations when iterating maps: seq_iter_first() for CLJ_MAP
+            // Avoid hidden allocations when iterating maps: seq_iter_first() for CLJ_MAP_PERSISTENT
             // materializes a temporary entry vector ([k v]). For printing, we can
             // format that representation directly.
-            if (temp_iter.seq_type == CLJ_MAP) {
-                CljMap *map = (CljMap*)temp_iter.state.map.map;
+            if (temp_iter.seq_type == CLJ_MAP_PERSISTENT) {
+                CljPersistentMap *map = map_backing((ID)temp_iter.state.map.map);
                 int index = temp_iter.state.map.index;
                 int count = temp_iter.state.map.count;
                 while (map && index < count) {
@@ -393,6 +394,14 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             char uuid[37];
             clj_uuid_to_cstring(v, uuid);
             return 7 + strlen(uuid) + 1; // "#uuid \"" + uuid + "\""
+        }
+
+        case CLJ_NAMESPACE: {
+            CljNamespace *ns = (CljNamespace*)v;
+            if (ns && ns->name && ns->name->cname) {
+                return strlen(ns->name->cname);
+            }
+            return 12; // "#<namespace>"
         }
 
         default:
@@ -492,11 +501,12 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             return;
         }
 
-        case CLJ_VECTOR:
-        case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_TRANSIENT_WEAK: {
-            void *vec_ptr = as_vector(v);
-            CljVector *vec = (CljVector*)vec_ptr;
+        case CLJ_VECTOR_PERSISTENT:
+        case CLJ_VECTOR_TRANSIENT:{
+            CljPersistentVector *vec =
+                (v->type == CLJ_VECTOR_TRANSIENT)
+                    ? vector_persistent(as_transient_vector((ID)v))
+                    : as_persistent_vector((ID)v);
             if (v->type == CLJ_VECTOR_TRANSIENT) {
                 memcpy(buffer + *offset, "<transient ", 11);
                 *offset += 11;
@@ -542,9 +552,9 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             return;
         }
 
-        case CLJ_MAP:
+        case CLJ_MAP_PERSISTENT:
         case CLJ_MAP_TRANSIENT: {
-            CljMap *map = as_map(v);
+            CljPersistentMap *map = as_map(v);
             if (v->type == CLJ_MAP_TRANSIENT) {
                 memcpy(buffer + *offset, "<transient ", 11);
                 *offset += 11;
@@ -633,8 +643,8 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             bool first = true;
 
             // Avoid hidden allocations for map sequences (see calc_length variant).
-            if (temp_iter.seq_type == CLJ_MAP) {
-                CljMap *map = (CljMap*)temp_iter.state.map.map;
+            if (temp_iter.seq_type == CLJ_MAP_PERSISTENT) {
+                CljPersistentMap *map = map_backing((ID)temp_iter.state.map.map);
                 int index = temp_iter.state.map.index;
                 int count = temp_iter.state.map.count;
                 while (map && index < count) {
@@ -820,4 +830,3 @@ CljString* pr_str(ID v) {
 CljString* print_str(ID v) {
     return to_string_with_escape(v, false);
 }
-

@@ -198,6 +198,7 @@ int main(int argc, char **argv) {
     bool show_help = false;
     bool list_tests = false;
     bool show_memory_summary = false;
+    (void)show_memory_summary;
     const char **test_patterns = NULL;
     int test_pattern_count = 0;
 
@@ -344,4 +345,3 @@ int main(int argc, char **argv) {
     
     return result;
 }
-

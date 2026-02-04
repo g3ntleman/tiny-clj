@@ -16,21 +16,21 @@ static inline unsigned int env_stack_count(CljPersistentVector *stack) {
     return vector_count(stack);
 }
 
-static inline CljMap *env_stack_top(CljPersistentVector *stack) {
+static inline CljPersistentMap *env_stack_top(CljPersistentVector *stack) {
     unsigned int cnt = vector_count(stack);
     if (cnt == 0) return NULL;
-    return (CljMap*)vector_nth(stack, cnt - 1);
+    return (CljPersistentMap*)vector_nth(stack, cnt - 1);
 }
 
 // depth=0 returns top, depth=1 returns one below top, etc.
-static inline CljMap *env_stack_get_from_top(CljPersistentVector *stack, unsigned int depth) {
+static inline CljPersistentMap *env_stack_get_from_top(CljPersistentVector *stack, unsigned int depth) {
     unsigned int cnt = vector_count(stack);
     if (cnt == 0 || depth >= cnt) return NULL;
-    return (CljMap*)vector_nth(stack, (cnt - 1) - depth);
+    return (CljPersistentMap*)vector_nth(stack, (cnt - 1) - depth);
 }
 
 // Push/pop update the slot in-place without retaining the stack.
-static inline void env_stack_push_inplace(CljPersistentVector **stack_slot, CljMap *env) {
+static inline void env_stack_push_inplace(CljPersistentVector **stack_slot, CljPersistentMap *env) {
     if (!stack_slot) return;
     if (!*stack_slot) {
         // Start with a small capacity to avoid immediate growth copies.

@@ -18,11 +18,18 @@
 struct CljString;
 
 // CLJException struct definition
+// Release: smaller buffers to save RAM (ESP32 etc.); DEBUG keeps full sizes for stacktraces/debugging.
 typedef struct {
     CljObject base;
+#ifdef DEBUG
     char type[64];
     char message[256];
     char file[128];
+#else
+    char type[32];
+    char message[128];
+    char file[64];
+#endif
     int line;
     int col;
 #ifdef DEBUG

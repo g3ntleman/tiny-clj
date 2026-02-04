@@ -188,7 +188,7 @@ static CljVector* transform_params(EvalState *st, CljVector *params, CljVector *
     
     VECTOR_FOR_EACH(params, param) {
         unsigned char tag = TAG(param);
-        if (tag == CLJ_VECTOR || tag == CLJ_MAP) {
+        if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_MAP_PERSISTENT) {
             char name[64];
             snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
             CljSymbol *gsym = intern_symbol_global(name);
@@ -473,8 +473,22 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 }
                 
                 // Recursively canonicalize the expanded form
-                // This will convert CLJ_LIST to CLJ_AST_NODE and canonicalize all elements
-                return canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
+                // This will convert CLJ_LIST to CLJ_AST_NODE and canonicalize all elements.
+                // Keep the original form retained while we recurse so temporary hash maps or
+                // autorelease pools can't drop its rc to zero prematurely.
+                if (list) {
+                    RETAIN(list);
+                }
+                ID result = canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
+                
+                // RELEASE the RETAIN'd expanded if it was a CLJ_SEQ
+                if (expanded_tag == CLJ_SEQ) {
+                    RELEASE(expanded);
+                }
+                if (list) {
+                    RELEASE(list);
+                }
+                return result;
             }
         }
         
@@ -889,8 +903,8 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         return AUTORELEASE(new_vec);
     }
     
-    if (tag == CLJ_MAP) {
-        CljMap *map = (CljMap*)expr;
+    if (tag == CLJ_MAP_PERSISTENT) {
+        CljPersistentMap *map = (CljPersistentMap*)expr;
         CLJ_ASSERT(map != NULL);
         int cnt = map_count(map);
         if (cnt <= 0) {
@@ -921,7 +935,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             return expr;  // No changes needed
         }
 
-        CljMap *new_map = make_map(cnt);
+        CljPersistentMap *new_map = make_map(cnt);
         for (int j = 0; j < cnt; j++) {
             ID k = pairs[j * 2];
             ID v = pairs[j * 2 + 1];
@@ -963,32 +977,7 @@ ID canonicalize_ast(ID parsed_expr, EvalState *st) {
     // caller's pool.
     WITH_AUTORELEASE_POOL({
         result = canonicalize_expr(parsed_expr, st, false);
-
-        if (result && !IS_IMMEDIATE(result) && result != parsed_expr) {
-            unsigned char tag = TAG(result);
-            if (is_list_type(tag) || tag == CLJ_VECTOR || tag == CLJ_MAP) {
-                needs_escape = true;
-                RETAIN(result);
-                rc_after_retain = retain_count(result);
-            }
-        }
     });
-
-    if (needs_escape) {
-        // Current implementation uses weak pool semantics (pop doesn't release).
-        // If the pool didn't drain, balance our retain to avoid leaking.
-        int rc_after_pop = retain_count(result);
-        if (rc_after_pop == rc_after_retain) {
-            RELEASE(result);
-        }
-
-        // Only re-autorelease if there is an outer pool.
-        if (is_autorelease_pool_active()) {
-            AUTORELEASE(result);
-        }
-    }
-
-    return result;
+    // Return autoreleased; caller's pool owns one ref.
+    return AUTORELEASE(result);
 }
-
-

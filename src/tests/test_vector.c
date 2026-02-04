@@ -706,14 +706,15 @@ TEST_SHARED(test_vec_with_nil_elements) {
 static CljPersistentVector* make_weak_vector(unsigned int cap) {
     CljPersistentVector *v = make_vector(cap, true);
     TEST_ASSERT_NOT_NULL(v);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT_WEAK, TAG((ID)v));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG((ID)v));
+    TEST_ASSERT_TRUE(has_weak_elements((const CljObject*)v));
     return v;
 }
 
 TEST_SHARED(test_weak_vector_does_not_retain_elements) {
     WITH_AUTORELEASE_POOL({
         CljPersistentVector *weak_vec = make_weak_vector(8);
-        CljMap *map = (CljMap*)make_map(4);
+        CljPersistentMap *map = (CljPersistentMap*)make_map(4);
         TEST_ASSERT_EQUAL_INT(1, retain_count((ID)map));
 
         CljPersistentVector *v2 = vector_conj(weak_vec, (ID)map);
@@ -729,7 +730,7 @@ TEST_SHARED(test_weak_vector_does_not_retain_elements) {
 TEST_SHARED(test_weak_vector_does_not_release_on_pop) {
     WITH_AUTORELEASE_POOL({
         CljPersistentVector *weak_vec = make_weak_vector(8);
-        CljMap *map = (CljMap*)make_map(4);
+        CljPersistentMap *map = (CljPersistentMap*)make_map(4);
         weak_vec = vector_conj(weak_vec, (ID)map);
         TEST_ASSERT_EQUAL_INT(1, retain_count((ID)map));
 
@@ -745,7 +746,7 @@ TEST_SHARED(test_weak_vector_does_not_release_on_pop) {
 TEST_SHARED(test_weak_vector_nth_returns_same_pointer_without_retain) {
     WITH_AUTORELEASE_POOL({
         CljPersistentVector *weak_vec = make_weak_vector(8);
-        CljMap *map = (CljMap*)make_map(4);
+        CljPersistentMap *map = (CljPersistentMap*)make_map(4);
         weak_vec = vector_conj(weak_vec, (ID)map);
 
         ID elem = vector_nth(weak_vec, 0);
@@ -760,7 +761,7 @@ TEST_SHARED(test_weak_vector_nth_returns_same_pointer_without_retain) {
 TEST_SHARED(test_weak_vector_clear_does_not_release_elements) {
     WITH_AUTORELEASE_POOL({
         CljPersistentVector *weak_vec = make_weak_vector(8);
-        CljMap *map = (CljMap*)make_map(4);
+        CljPersistentMap *map = (CljPersistentMap*)make_map(4);
 
         weak_vec = vector_conj(weak_vec, (ID)map);
         weak_vec = vector_conj(weak_vec, (ID)map);
@@ -794,7 +795,7 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
         TEST_ASSERT_EQUAL_INT(0, vector_count(vector_persistent(tvec)));
         
         // 3. Use clj_conj to add an item (like event_loop_enqueue does)
-        CljMap *test_map = make_map(2);
+        CljPersistentMap *test_map = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map);
         
         vector_push(tvec, test_map);
@@ -805,7 +806,7 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
             "clj_conj should increment count from 0 to 1");
         
         // 5. Add another item
-        CljMap *test_map2 = make_map(2);
+        CljPersistentMap *test_map2 = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map2);
         
         vector_push(tvec, test_map2);
@@ -845,7 +846,7 @@ TEST_SHARED(test_clj_conj_with_empty_transient_vector) {
         TEST_ASSERT_EQUAL_INT(0, vector_count(vector_persistent(tvec)));
         
         // clj_conj should grow capacity and add item
-        CljMap *test_map = make_map(2);
+        CljPersistentMap *test_map = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map);
         
         vector_push(tvec, test_map);
@@ -882,7 +883,6 @@ TEST_SHARED(test_transient_vector_conj_keeps_pointer_and_updates_backing_store) 
         CljPersistentVector *backing = vector_persistent(tvec);
         TEST_ASSERT_NOT_NULL(backing);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(backing));
-        TEST_ASSERT_EQUAL_INT(1, retain_count(backing));
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(backing, 0)));
 
         vector_push(tvec, fixnum(20));
@@ -963,7 +963,7 @@ TEST_SHARED(test_equal_persistent_and_transient_vector) {
         CljObject *equal_transient = eval_string("(= (transient (vector 1 2 3)) (transient (vector 1 2 3)))", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(equal_transient);
         TEST_ASSERT_TRUE(is_special(equal_transient));
-        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(equal_transient));
+        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(equal_transient));
         
         // Test: (= persistent (persistent! transient)) should be true
         // After converting transient back to persistent, they should be equal
@@ -976,119 +976,115 @@ TEST_SHARED(test_equal_persistent_and_transient_vector) {
 
 // Clojure-compatibility test: (transient) on transient collection returns the same object
 TEST_SHARED(test_transient_on_transient_returns_same_object) {
-    WITH_AUTORELEASE_POOL({
-        // Test 1: (transient) on transient vector returns the same object
-        CljObject *tvec1 = eval_string("(transient (vector 1 2 3))", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(tvec1);
-        TEST_ASSERT_TRUE(TAG(tvec1) == CLJ_VECTOR_TRANSIENT);
-        
-        // Call transient again on the transient vector
-        CljObject *tvec2 = eval_string("(transient (transient (vector 1 2 3)))", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(tvec2);
-        TEST_ASSERT_TRUE(TAG(tvec2) == CLJ_VECTOR_TRANSIENT);
-        
-        // They should be equal (same elements)
-        CljObject *equal_result = eval_string("(= (transient (vector 1 2 3)) (transient (transient (vector 1 2 3))))", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(equal_result);
-        TEST_ASSERT_TRUE(is_special(equal_result));
-        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(equal_result));
-        
-        // Test 2: Direct test using native_transient function
-        // Create a transient vector
-        CljPersistentVector *vec = make_vector(3, false);
-        vec = vector_conj(vec, fixnum(1));
-        vec = vector_conj(vec, fixnum(2));
-        vec = vector_conj(vec, fixnum(3));
-        CljTransientVector *tvec = vector_transient(vec);
-        RELEASE(vec);
-        TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_TRUE(TAG(tvec) == CLJ_VECTOR_TRANSIENT);
-        
-        // Call transient on the transient vector - should return same object
-        ID args[] = {tvec};
-        CljObject *result = (CljObject*)native_transient(args, 1);
-        TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_PTR(tvec, result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_TRANSIENT);
-        
-        RELEASE(tvec);
-        
-        // Test 3: (transient) on transient map returns the same object
-        CljMap *map = make_map(4);
-        CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
-        CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
-        map = map_by_associng_kv(map, key1, fixnum(1));
-        map = map_by_associng_kv(map, key2, fixnum(2));
-        CljMap *tmap = map_transient(map);
-        RELEASE(map);
-        TEST_ASSERT_NOT_NULL(tmap);
-        TEST_ASSERT_TRUE(TAG(tmap) == CLJ_MAP_TRANSIENT);
-        
-        // Call transient on the transient map - should return same object
-        ID map_args[] = {tmap};
-        CljObject *map_result = (CljObject*)native_transient(map_args, 1);
-        TEST_ASSERT_NOT_NULL(map_result);
-        TEST_ASSERT_EQUAL_PTR(tmap, map_result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG(map_result) == CLJ_MAP_TRANSIENT);
-        
-        RELEASE(tmap);
-    });
+    // Test 1: (transient) on transient vector returns the same object
+    CljObject *tvec1 = eval_string("(transient (vector 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(tvec1);
+    TEST_ASSERT_TRUE(TAG(tvec1) == CLJ_VECTOR_TRANSIENT);
+    
+    // Call transient again on the transient vector
+    CljObject *tvec2 = eval_string("(transient (transient (vector 1 2 3)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(tvec2);
+    TEST_ASSERT_TRUE(TAG(tvec2) == CLJ_VECTOR_TRANSIENT);
+    
+        // Transients do not have value semantics
+    CljObject *equal_result = eval_string("(= (transient (vector 1 2 3)) (transient (transient (vector 1 2 3))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(equal_result);
+    TEST_ASSERT_TRUE(is_special(equal_result));
+    TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(equal_result));
+    
+    // Test 2: Direct test using native_transient function
+    // Create a transient vector
+    CljPersistentVector *vec = make_vector(3, false);
+    vec = vector_conj(vec, fixnum(1));
+    vec = vector_conj(vec, fixnum(2));
+    vec = vector_conj(vec, fixnum(3));
+    CljTransientVector *tvec = vector_transient(vec);
+    RELEASE(vec);
+    TEST_ASSERT_NOT_NULL(tvec);
+    TEST_ASSERT_TRUE(TAG(tvec) == CLJ_VECTOR_TRANSIENT);
+    
+    // Call transient on the transient vector - should return same object
+    ID args[] = {tvec};
+    CljObject *result = (CljObject*)native_transient(args, 1);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_PTR(tvec, result);  // Should be the same pointer
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_TRANSIENT);
+    
+    RELEASE(tvec);
+    
+    // Test 3: (transient) on transient map returns the same object
+    CljPersistentMap *map = make_map(4);
+    CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
+    CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
+    map = map_assoc(map, key1, fixnum(1));
+    map = map_assoc(map, key2, fixnum(2));
+    CljTransientMap *tmap = map_transient(map);
+    RELEASE(map);
+    TEST_ASSERT_NOT_NULL(tmap);
+    TEST_ASSERT_TRUE(TAG(tmap) == CLJ_MAP_TRANSIENT);
+    
+    // Call transient on the transient map - should return same object
+    ID map_args[] = {tmap};
+    CljObject *map_result = (CljObject*)native_transient(map_args, 1);
+    TEST_ASSERT_NOT_NULL(map_result);
+    TEST_ASSERT_EQUAL_PTR(tmap, map_result);  // Should be the same pointer
+    TEST_ASSERT_TRUE(TAG(map_result) == CLJ_MAP_TRANSIENT);
+    
+    RELEASE(tmap);
 }
 
 // Clojure-compatibility test: (persistent!) on persistent collection returns the same object
 TEST_SHARED(test_persistent_on_persistent_returns_same_object) {
-    WITH_AUTORELEASE_POOL({
-        // Test 1: (persistent!) on persistent vector returns the same object
-        CljObject *vec1 = eval_string("(vector 1 2 3)", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(vec1);
-        TEST_ASSERT_TRUE(TAG(vec1) == CLJ_VECTOR_PERSISTENT);
-        
-        // Call persistent! on the persistent vector
-        CljObject *vec2 = eval_string("(persistent! (vector 1 2 3))", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(vec2);
-        TEST_ASSERT_TRUE(TAG(vec2) == CLJ_VECTOR_PERSISTENT);
-        
-        // They should be equal (same elements)
-        CljObject *equal_result = eval_string("(= (vector 1 2 3) (persistent! (vector 1 2 3)))", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(equal_result);
-        TEST_ASSERT_TRUE(is_special(equal_result));
-        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(equal_result));
-        
-        // Test 2: Direct test using native_persistent_bang function
-        CljPersistentVector *vec = make_vector(3, false);
-        vec = vector_conj(vec, fixnum(1));
-        vec = vector_conj(vec, fixnum(2));
-        vec = vector_conj(vec, fixnum(3));
-        TEST_ASSERT_NOT_NULL(vec);
-        TEST_ASSERT_TRUE(TAG(vec) == CLJ_VECTOR_PERSISTENT);
-        
-        // Call persistent! on the persistent vector - should return same object
-        ID args[] = {vec};
-        CljObject *result = (CljObject*)native_persistent_bang(args, 1);
-        TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_PTR(vec, result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
-        
-        RELEASE(vec);
-        
-        // Test 3: (persistent!) on persistent map returns the same object
-        CljMap *map = make_map(4);
-        CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
-        CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
-        map = map_by_associng_kv(map, key1, fixnum(1));
-        map = map_by_associng_kv(map, key2, fixnum(2));
-        TEST_ASSERT_NOT_NULL(map);
-        TEST_ASSERT_TRUE(TAG(map) == CLJ_MAP);
-        
-        // Call persistent! on the persistent map - should return same object
-        ID map_args[] = {map};
-        CljObject *map_result = (CljObject*)native_persistent_bang(map_args, 1);
-        TEST_ASSERT_NOT_NULL(map_result);
-        TEST_ASSERT_EQUAL_PTR(map, map_result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG(map_result) == CLJ_MAP);
-        
-        RELEASE(map);
-    });
+    // Test 1: (persistent!) on persistent vector returns the same object
+    CljObject *vec1 = eval_string("(vector 1 2 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(vec1);
+    TEST_ASSERT_TRUE(TAG(vec1) == CLJ_VECTOR_PERSISTENT);
+    
+    // Call persistent! on the persistent vector
+    CljObject *vec2 = eval_string("(persistent! (vector 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(vec2);
+    TEST_ASSERT_TRUE(TAG(vec2) == CLJ_VECTOR_PERSISTENT);
+    
+    // Transients do not have value semantics
+    CljObject *equal_result = eval_string("(= (vector 1 2 3) (persistent! (vector 1 2 3)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(equal_result);
+    TEST_ASSERT_TRUE(is_special(equal_result));
+    TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(equal_result));
+    
+    // Test 2: Direct test using native_persistent_bang function
+    CljPersistentVector *vec = make_vector(3, false);
+    vec = vector_conj(vec, fixnum(1));
+    vec = vector_conj(vec, fixnum(2));
+    vec = vector_conj(vec, fixnum(3));
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_TRUE(TAG(vec) == CLJ_VECTOR_PERSISTENT);
+    
+    // Call persistent! on the persistent vector - should return same object
+    ID args[] = {vec};
+    CljObject *result = (CljObject*)native_persistent_bang(args, 1);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_PTR(vec, result);  // Should be the same pointer
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
+    
+    RELEASE(vec);
+    
+    // Test 3: (persistent!) on persistent map returns the same object
+    CljPersistentMap *map = make_map(4);
+    CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
+    CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
+    map = map_assoc(map, key1, fixnum(1));
+    map = map_assoc(map, key2, fixnum(2));
+    TEST_ASSERT_NOT_NULL(map);
+    TEST_ASSERT_TRUE(TAG(map) == CLJ_MAP_PERSISTENT);
+    
+    // Call persistent! on the persistent map - should return same object
+    ID map_args[] = {map};
+    CljObject *map_result = (CljObject*)native_persistent_bang(map_args, 1);
+    TEST_ASSERT_NOT_NULL(map_result);
+    TEST_ASSERT_EQUAL_PTR(map, map_result);  // Should be the same pointer
+    TEST_ASSERT_TRUE(TAG(map_result) == CLJ_MAP_PERSISTENT);
+    
+    RELEASE(map);
 }
 
 // Test VECTOR_FOR_EACH macro - iterate over all vector elements

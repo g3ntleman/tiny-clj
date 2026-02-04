@@ -68,6 +68,7 @@ static const char *validate_pattern(const char *pattern) {
     return NULL; // Pattern is valid
 }
 
+/** Compile pattern; returns regex object (rc=1) or NULL with error message. */
 CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
     if (!pattern) {
         if (error && error_size > 0) {
@@ -105,10 +106,6 @@ CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
     // Allocate CljRegex object using alloc (handles type and profiling)
     CljRegex *re = (CljRegex *)alloc(sizeof(CljRegex), 1, CLJ_REGEX);
     // alloc() throws on OOM, so no NULL check needed
-
-    // alloc() sets type/flags, but does not initialize rc.
-    // Most constructors explicitly set rc=1; regex objects must do the same.
-    re->header.rc = 1;
 
     // Copy pattern
     memcpy(re->pattern, pattern, len + 1);

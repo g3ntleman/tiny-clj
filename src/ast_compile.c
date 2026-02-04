@@ -20,7 +20,7 @@ static void ast_compile_vector_inplace(CljPersistentVector *vec, EvalState *st) 
     }
 }
 
-static void ast_compile_map_inplace(CljMap *map, EvalState *st) {
+static void ast_compile_map_inplace(CljPersistentMap *map, EvalState *st) {
     if (!map) return;
     MAP_FOR_EACH(map, k, v) {
         ast_compile_expr_inplace(k, st);
@@ -54,7 +54,7 @@ static void ast_compile_expr_inplace(ID expr, EvalState *st) {
         return;
     }
 
-    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT) {
+    if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT) {
         CljPersistentVector *vec =
             (tag == CLJ_VECTOR_TRANSIENT)
                 ? vector_persistent(as_transient_vector(expr))
@@ -63,7 +63,7 @@ static void ast_compile_expr_inplace(ID expr, EvalState *st) {
         return;
     }
 
-    if (tag == CLJ_MAP) {
+    if (tag == CLJ_MAP_PERSISTENT) {
         ast_compile_map_inplace(as_map(expr), st);
         return;
     }

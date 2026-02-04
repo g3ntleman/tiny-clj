@@ -10,7 +10,7 @@
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
-ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -102,7 +102,7 @@ TEST_SHARED(test_time_arity_validation) {
     CljObject *time_symbol = (CljObject *)SYM_TIME;
     CljList *time_list = make_list(time_symbol, NULL);
     
-    CljMap *env = make_map(16);
+    CljPersistentMap *env = make_map(16);
     
     // This should throw an exception for insufficient arguments
     TRY {
@@ -128,7 +128,7 @@ TEST_SHARED(test_time_with_too_many_arguments) {
         make_list(expr1, 
         make_list(expr2, NULL)));
     
-    CljMap *env = make_map(16);
+    CljPersistentMap *env = make_map(16);
     
     // This should throw an exception for too many arguments
     TRY {
@@ -203,7 +203,7 @@ TEST_SHARED(test_time_with_dotimes) {
         make_list(dotimes_call, NULL));
     
     // Create environment
-    CljMap *env = make_map(4);
+    CljPersistentMap *env = make_map(4);
     
     // Test time evaluation with dotimes
     CljObject *result = eval_time(as_list(time_call), env, g_test_eval_state, NULL);

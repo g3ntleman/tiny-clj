@@ -20,7 +20,7 @@ while (current_stack && TAG(current_stack) == CLJ_LIST) {
     ID env_obj_id = LIST_FIRST(current_stack);
     
     if (env_obj_id && TAG(env_obj_id) == CLJ_MAP) {
-        CljMap *env = (CljMap*)env_obj_id;
+        CljPersistentMap *env = (CljPersistentMap*)env_obj_id;
         
         // Search for symbol in current environment
         ID resolved = map_get(env, interned_sym, &not_found);

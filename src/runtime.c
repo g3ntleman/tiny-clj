@@ -52,6 +52,20 @@ static void zombie_log_fn(CljObject *v, bool is_double_free) {
 }
 #endif
 
+uint64_t runtime_next_resolve_epoch(void) {
+    uint64_t next = ++g_resolve_cache_epoch_counter;
+    // Protect against overflow to 0 (epoch 0 means disabled)
+    if (next == 0) {
+        next = ++g_resolve_cache_epoch_counter;
+    }
+    return next;
+}
+
+void runtime_ensure_resolve_cache(TinyClJRuntime *runtime) {
+    // Resolve cache is disabled; stub retained for API compatibility.
+    (void)runtime;
+}
+
 void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime) return;
     
@@ -73,16 +87,9 @@ void runtime_init(TinyClJRuntime *runtime) {
         runtime->symbol_table = make_hashmap(512);  // HashMap for O(1) symbol lookup
     }
     
-    // Initialize/reset CljObject* fields
-    // NOTE: meta_registry is managed by meta_registry_init/meta_registry_cleanup
-    // and should not be cleared here to avoid losing metadata across runtime_init()
-    if (!runtime->resolve_cache) {
-        ASSIGN(runtime->resolve_cache, make_map(RESOLVE_CACHE_SIZE));
-    }
-    // Ensure epoch is non-zero and monotonic across resets (prevents stale callsite caches).
-    if (runtime->resolve_cache_epoch == 0) {
-        runtime->resolve_cache_epoch = ++g_resolve_cache_epoch_counter;
-    }
+    // Disable resolve_cache; keep epoch non-zero for callsite caches.
+    ASSIGN(runtime->resolve_cache, NULL);
+    runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
     
     // Initialize event loop queues as transient vectors (only if not already set)
     if (!runtime->task_queue) {
@@ -141,8 +148,8 @@ void runtime_reset(TinyClJRuntime *runtime) {
     ASSIGN(runtime->task_queue, NULL);
     ASSIGN(runtime->timer_queue, NULL);
     ASSIGN(runtime->resolve_cache, NULL);
-    // Bump epoch to invalidate all cached callsites (AST nodes may outlive the runtime).
-    runtime->resolve_cache_epoch = ++g_resolve_cache_epoch_counter;
+    // Invalidate callsite caches; resolve cache remains disabled.
+    runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
     ASSIGN(runtime->pool_stack, NULL);
     ASSIGN(runtime->meta_registry, NULL);
     
@@ -150,4 +157,3 @@ void runtime_reset(TinyClJRuntime *runtime) {
     runtime->timer_id_counter = 0;
     event_loop_clear();
 }
-

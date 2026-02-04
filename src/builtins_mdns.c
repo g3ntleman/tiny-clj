@@ -516,7 +516,7 @@ static void mdns_emit_event(void *ctx, MdnsEventType type, const MdnsResolvedSer
     WITH_AUTORELEASE_POOL({
     mdns_init_keywords();
 
-    CljMap *ev = make_map(6);
+    CljPersistentMap *ev = make_map(6);
     if (!ev) { autorelease_pool_drain_to_depth(_restore); return; }
 
     ID type_val = NULL;

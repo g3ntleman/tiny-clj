@@ -49,7 +49,7 @@ typedef struct {
 **Implementierung**:
 ```c
 // In eval_function_call():
-ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
+ID eval_function_call(ID fn, ID *args, int argc, CljPersistentMap *env, EvalState *st) {
     CljFunction *func = as_function(fn);
     
     // Arity-Dispatch
@@ -188,7 +188,7 @@ typedef struct {
 
 **Implementierung in eval_function_call()**:
 ```c
-ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
+ID eval_function_call(ID fn, ID *args, int argc, CljPersistentMap *env, EvalState *st) {
     CljFunction *func = as_function(fn);
     
     // Prüfe feste Parameter (aus params ableiten, spart 4 Bytes)

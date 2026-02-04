@@ -65,7 +65,7 @@ flowchart TB
     S1 -->|"linear probe +1"| S4
 ```
 
-**Struktur (gleiches Layout wie CljMap, aber mit String-Keys):**
+**Struktur (gleiches Layout wie CljPersistentMap, aber mit String-Keys):**
 
 ```c
 typedef struct {
@@ -82,7 +82,7 @@ typedef struct {
 
 **Vorteile des gleichen Layouts:**
 
-- Konsistenz mit CljMap (gleiche KV_MACROS)
+- Konsistenz mit CljPersistentMap (gleiche KV_MACROS)
 - Bessere Cache-Lokalität (ein Array statt zwei)
 - Einfacheres Memory-Management (ein malloc)
 - Gleiche Zugriffs-Patterns wie Maps
@@ -197,7 +197,7 @@ static unsigned int next_power_of_2(unsigned int n) {
 CljHashMap* make_hashmap(unsigned int initial_capacity) {  // Like make_map, but with unsigned int (semantically correct)
     unsigned int cap = next_power_of_2(initial_capacity);
     
-    // Allocate struct + embedded data array in ONE malloc (wie CljMap)
+    // Allocate struct + embedded data array in ONE malloc (wie CljPersistentMap)
     size_t struct_size = sizeof(CljHashMap);
     size_t data_size = (size_t)cap * 2 * sizeof(CljObject*);
     size_t total_size = struct_size + data_size;

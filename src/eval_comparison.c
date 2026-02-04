@@ -32,13 +32,13 @@ static inline bool extract_numeric_value(ID obj, float *val) {
 }
 
 static CljObject* eval_numeric_comparison(CljList *list,
-                                          CljMap *env,
+                                          CljPersistentMap *env,
                                           EvalState *st,
                                           const EvalContext *ctx,
                                           ComparisonOp op) {
-    CljMap *eval_env = env;
+    CljPersistentMap *eval_env = env;
     if (!eval_env && st && st->current_ns) {
-        eval_env = (CljMap*)st->current_ns->mappings;
+        eval_env = (CljPersistentMap*)st->current_ns->mappings;
     }
     CljList *rest = as_list(LIST_REST(list));
     if (!rest) return NULL;
@@ -73,19 +73,19 @@ static CljObject* eval_numeric_comparison(CljList *list,
 }
 
 ID eval_comparison_dispatch(CljList *list,
-                             CljMap *env,
+                             CljPersistentMap *env,
                              EvalState *st,
                              const EvalContext *ctx,
                              ID op) {
     CljSymbol *op_sym = (CljSymbol*)op;
-    CljMap *eval_env = env;
+    CljPersistentMap *eval_env = env;
     if (!eval_env) {
         if (st && st->current_ns && st->current_ns->mappings) {
-        eval_env = (CljMap*)st->current_ns->mappings;
+        eval_env = (CljPersistentMap*)st->current_ns->mappings;
         } else {
             CljNamespace *fallback_ns = ns_get_or_create("user", NULL);
             if (fallback_ns) {
-                eval_env = (CljMap*)fallback_ns->mappings;
+                eval_env = (CljPersistentMap*)fallback_ns->mappings;
             }
         }
     }

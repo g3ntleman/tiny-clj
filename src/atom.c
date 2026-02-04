@@ -18,12 +18,11 @@ CljAtom* make_atom(ID value) {
         throw_oom();
         return NULL;
     }
-    
+
     atom->base.type = CLJ_ATOM;
-    atom->base.rc = 1;
     // RETAIN handles nil and immediates safely (ignores them)
     atom->value = RETAIN(value);
-    
+
     return atom;
 }
 
@@ -44,10 +43,10 @@ ID atom_deref(CljAtom *atom) {
  */
 ID atom_reset(CljAtom *atom, ID new_value) {
     if (!atom) return NULL;
-    
+
     // Use ASSIGN to safely replace atom value (releases old, retains new)
     ASSIGN(atom->value, new_value);
-    
+
     // Return new value (RETAIN handles nil and immediates safely)
     return RETAIN(new_value);
 }
@@ -62,11 +61,11 @@ ID atom_reset(CljAtom *atom, ID new_value) {
 ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     // Validate arguments (Clojure/JVM behavior: throw IllegalArgumentException)
     if (!atom) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires an atom", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires an atom",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    
+
     // Resolve symbol to function if necessary (Clojure/JVM behavior)
     // ns_resolve automatically searches clojure.core, so we don't need to set current_ns
     if (fn && TAG(fn) == CLJ_SYMBOL) {
@@ -79,17 +78,17 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
             fn = resolved;
         }
     }
-    
+
     // Validate that fn is a valid function (Clojure/JVM throws IllegalArgumentException/ClassCastException)
     if (!fn || (TAG(fn) != CLJ_FUNC && TAG(fn) != CLJ_CLOSURE)) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires a function", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires a function",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    
+
     // Get current value (RETAIN handles nil and immediates safely)
     ID current_value = RETAIN(atom->value);
-    
+
     // Prepare function call arguments: [current_value, ...args]
     // Use malloc instead of calloc - array is immediately filled
     ID *fn_args = (ID*)malloc((argc + 1) * sizeof(ID));
@@ -98,17 +97,17 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
         throw_oom();
         return NULL;
     }
-    
+
     fn_args[0] = current_value;  // First argument is current atom value
     for (unsigned int i = 0; i < argc; i++) {
         // RETAIN handles nil and immediates safely (ignores them)
         fn_args[i + 1] = RETAIN(args[i]);
     }
-    
+
     // Call function with current value and additional args
     EvalState *st = get_global_eval_state();
-    CljMap *env = st ? (CljMap*)st->current_ns->mappings : NULL;
-    
+    CljPersistentMap *env = st ? (CljPersistentMap*)st->current_ns->mappings : NULL;
+
     ID new_value = NULL;
     TRY {
         new_value = eval_function_call(fn, fn_args, argc + 1, env, st);
@@ -121,25 +120,24 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
         RELEASE(current_value);
         return NULL;
     } END_TRY
-    
+
     // Cleanup function arguments (RELEASE handles nil and immediates safely)
     for (unsigned int i = 0; i < argc + 1; i++) {
         RELEASE(fn_args[i]);
     }
     free(fn_args);
-    
+
     RELEASE(current_value);
-    
+
     if (!new_value) {
         // Function returned nil or error
         return NULL;
     }
-    
+
     // Update atom with new value
     atom_reset(atom, new_value);
-    
+
     // Return new value (already retained by atom_reset, but we need another retain for caller)
     // RETAIN handles nil and immediates safely (ignores them)
     return RETAIN(new_value);
 }
-

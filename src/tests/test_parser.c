@@ -18,7 +18,6 @@
 // ============================================================================
 // PARSER TESTS
 // ============================================================================
-
 TEST(test_parse_basic_types) {
     EvalState *eval_state = evalstate_new(false);
 
@@ -65,9 +64,9 @@ TEST(test_parse_collections) {
     assert_list(list_result);
 
     // Test map parsing with keywords
-    CljMap *map_result = (CljMap*)parse("{:a 1 :b 2}", eval_state);
+    CljPersistentMap *map_result = (CljPersistentMap*)parse("{:a 1 :b 2}", eval_state);
     TEST_ASSERT_NOT_NULL(map_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, map_result->base.type);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, map_result->base.type);
 
     evalstate_free(eval_state);
 }
@@ -112,13 +111,13 @@ TEST(test_parse_metadata) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains the key-value pair
     CljSymbol *kw_key = intern_symbol_global(":key");
     CljSymbol *kw_value = intern_symbol_global(":value");
     if (kw_key && kw_value) {
-        CljValue meta_value = map_get_sentinel((CljMap*)meta, (CljValue)kw_key, NULL);
+        CljValue meta_value = map_get_sentinel((CljPersistentMap*)meta, (CljValue)kw_key, NULL);
         TEST_ASSERT_NOT_NULL(meta_value);
         TEST_ASSERT_TRUE(clj_equal((CljObject*)meta_value, (CljObject*)kw_value));
     }
@@ -141,12 +140,12 @@ TEST(test_parse_metadata_keyword_shorthand) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains :private -> true
     CljSymbol *kw_private = intern_symbol_global(":private");
     if (kw_private) {
-        CljValue meta_value = map_get_sentinel((CljMap*)meta, (CljValue)kw_private, NULL);
+        CljValue meta_value = map_get_sentinel((CljPersistentMap*)meta, (CljValue)kw_private, NULL);
         TEST_ASSERT_NOT_NULL(meta_value);
         TEST_ASSERT_TRUE(meta_value == clj_true);
     }
@@ -169,13 +168,13 @@ TEST(test_parse_metadata_hash_caret) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains the key-value pair
     CljSymbol *kw_key = intern_symbol_global(":key");
     CljSymbol *kw_value = intern_symbol_global(":value");
     if (kw_key && kw_value) {
-        CljValue meta_value = map_get_sentinel((CljMap*)meta, (CljValue)kw_key, NULL);
+        CljValue meta_value = map_get_sentinel((CljPersistentMap*)meta, (CljValue)kw_key, NULL);
         TEST_ASSERT_NOT_NULL(meta_value);
         TEST_ASSERT_TRUE(clj_equal((CljObject*)meta_value, (CljObject*)kw_value));
     }
@@ -198,13 +197,13 @@ TEST(test_parse_metadata_combined) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains the key-value pair
     CljSymbol *kw_key = intern_symbol_global(":key");
     CljSymbol *kw_value = intern_symbol_global(":value");
     if (kw_key && kw_value) {
-        CljValue meta_value = map_get_sentinel((CljMap*)meta, (CljValue)kw_key, NULL);
+        CljValue meta_value = map_get_sentinel((CljPersistentMap*)meta, (CljValue)kw_key, NULL);
         TEST_ASSERT_NOT_NULL(meta_value);
         TEST_ASSERT_TRUE(clj_equal((CljObject*)meta_value, (CljObject*)kw_value));
     }
@@ -227,14 +226,14 @@ TEST(test_parse_metadata_multiple_keywords) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains both :private and :dynamic
     CljSymbol *kw_private = intern_symbol_global(":private");
     CljSymbol *kw_dynamic = intern_symbol_global(":dynamic");
     if (kw_private && kw_dynamic) {
-        CljValue private_value = map_get_sentinel((CljMap*)meta, (CljValue)kw_private, NULL);
-        CljValue dynamic_value = map_get_sentinel((CljMap*)meta, (CljValue)kw_dynamic, NULL);
+        CljValue private_value = map_get_sentinel((CljPersistentMap*)meta, (CljValue)kw_private, NULL);
+        CljValue dynamic_value = map_get_sentinel((CljPersistentMap*)meta, (CljValue)kw_dynamic, NULL);
         TEST_ASSERT_NOT_NULL(private_value);
         TEST_ASSERT_NOT_NULL(dynamic_value);
         TEST_ASSERT_TRUE(private_value == clj_true);
@@ -259,14 +258,14 @@ TEST(test_parse_metadata_mixed) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Test that metadata contains both :private and :doc
     CljSymbol *kw_private = intern_symbol_global(":private");
     CljSymbol *kw_doc = intern_symbol_global(":doc");
     if (kw_private && kw_doc) {
-        CljValue private_value = map_get_sentinel((CljMap*)meta, (CljValue)kw_private, NULL);
-        CljValue doc_value = map_get_sentinel((CljMap*)meta, (CljValue)kw_doc, NULL);
+        CljValue private_value = map_get_sentinel((CljPersistentMap*)meta, (CljValue)kw_private, NULL);
+        CljValue doc_value = map_get_sentinel((CljPersistentMap*)meta, (CljValue)kw_doc, NULL);
         TEST_ASSERT_NOT_NULL(private_value);
         TEST_ASSERT_NOT_NULL(doc_value);
         TEST_ASSERT_TRUE(private_value == clj_true);
@@ -318,9 +317,9 @@ TEST(test_keyword_map_access) {
     EvalState *eval_state = evalstate_new(false);
 
     // Test keyword as map key access: (:key map)
-    CljMap *map = (CljMap*)parse("{:a 1 :b 2}", eval_state);
+    CljPersistentMap *map = (CljPersistentMap*)parse("{:a 1 :b 2}", eval_state);
     if (map) {
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->base.type);
+        TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, map->base.type);
 
         // Test (:a map) should return 1
         CljObject *key_access = parse("(:a {:a 1 :b 2})", eval_state);
@@ -352,9 +351,9 @@ TEST(test_parse_multiline_expressions) {
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
 
     // Test 3: Multiline map
-    CljMap *map_result = (CljMap*)parse("{:a 1\n :b 2\n :c 3}", eval_state);
+    CljPersistentMap *map_result = (CljPersistentMap*)parse("{:a 1\n :b 2\n :c 3}", eval_state);
     TEST_ASSERT_NOT_NULL(map_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, map_result->base.type);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, map_result->base.type);
 
     // Test 4: Multiline function definition
     CljObject *fn_result = parse("(def foo\n  (fn [x]\n    (* x 2)))", eval_state);
@@ -599,7 +598,7 @@ TEST(test_meta_set_and_get) {
     TEST_ASSERT_NOT_NULL(obj);
 
     // Create metadata map
-    CljMap *meta_map = make_map(2);
+    CljPersistentMap *meta_map = make_map(2);
     TEST_ASSERT_NOT_NULL(meta_map);
 
     CljSymbol *kw_doc = intern_symbol_global(":doc");
@@ -616,11 +615,11 @@ TEST(test_meta_set_and_get) {
     // Get metadata
     ID retrieved_meta = meta_get(obj);
     TEST_ASSERT_NOT_NULL(retrieved_meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)retrieved_meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)retrieved_meta) == CLJ_MAP_PERSISTENT);
 
     // Verify metadata content
     if (kw_doc) {
-        CljValue doc_value = map_get_sentinel((CljMap*)retrieved_meta, (CljValue)kw_doc, NULL);
+        CljValue doc_value = map_get_sentinel((CljPersistentMap*)retrieved_meta, (CljValue)kw_doc, NULL);
         TEST_ASSERT_NOT_NULL(doc_value);
         TEST_ASSERT_TRUE(TAG((CljObject*)doc_value) == CLJ_STRING);
     }
@@ -646,11 +645,11 @@ TEST(test_meta_automatic_sourcecode_references) {
     // Get metadata
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG((CljObject*)meta) == CLJ_MAP_PERSISTENT);
 
     // Check for automatic source code references
     if (SYM_KW_LINE) {
-        CljValue line_value = map_get_sentinel((CljMap*)meta, (CljValue)SYM_KW_LINE, NULL);
+        CljValue line_value = map_get_sentinel((CljPersistentMap*)meta, (CljValue)SYM_KW_LINE, NULL);
         TEST_ASSERT_NOT_NULL(line_value);
         TEST_ASSERT_TRUE(is_fixnum(line_value));
         TEST_ASSERT_TRUE(as_fixnum(line_value) > 0);
@@ -659,7 +658,7 @@ TEST(test_meta_automatic_sourcecode_references) {
     // Check :column (not a special symbol, use intern_symbol_global)
     CljSymbol *kw_column = intern_symbol_global(":column");
     if (kw_column) {
-        CljValue column_value = map_get_sentinel((CljMap*)meta, (CljValue)kw_column, NULL);
+        CljValue column_value = map_get_sentinel((CljPersistentMap*)meta, (CljValue)kw_column, NULL);
         TEST_ASSERT_NOT_NULL(column_value);
         TEST_ASSERT_TRUE(is_fixnum(column_value));
         TEST_ASSERT_TRUE(as_fixnum(column_value) > 0);
@@ -669,7 +668,7 @@ TEST(test_meta_automatic_sourcecode_references) {
     // File information would need to come from Reader or other source if needed
 
     if (SYM_KW_NS && eval_state->current_ns && eval_state->current_ns->name) {
-        CljValue ns_value = map_get_sentinel((CljMap*)meta, (CljValue)SYM_KW_NS, NULL);
+        CljValue ns_value = map_get_sentinel((CljPersistentMap*)meta, (CljValue)SYM_KW_NS, NULL);
         TEST_ASSERT_NOT_NULL(ns_value);
         // Namespace name should be a symbol
         TEST_ASSERT_TRUE(TAG((CljObject*)ns_value) == CLJ_SYMBOL);
@@ -683,7 +682,7 @@ TEST(test_meta_merge_does_not_overwrite) {
     EvalState *eval_state = evalstate_new(false);
 
     // Create existing metadata with :line
-    CljMap *existing_meta = make_map(2);
+    CljPersistentMap *existing_meta = make_map(2);
     TEST_ASSERT_NOT_NULL(existing_meta);
 
     if (SYM_KW_LINE) {
@@ -693,16 +692,16 @@ TEST(test_meta_merge_does_not_overwrite) {
     // Create location metadata with :line
     Reader reader;
     reader_init(&reader, "test");
-    CljMap *location_meta = (CljMap*)make_location_meta(&reader, eval_state);
+    CljPersistentMap *location_meta = (CljPersistentMap*)make_location_meta(&reader, eval_state);
     TEST_ASSERT_NOT_NULL(location_meta);
 
     // Merge - existing :line should not be overwritten
-    CljMap *merged = (CljMap*)meta_merge(existing_meta, location_meta);
+    CljPersistentMap *merged = (CljPersistentMap*)meta_merge(existing_meta, location_meta);
     TEST_ASSERT_NOT_NULL(merged);
 
     // Check that existing :line is preserved
     if (SYM_KW_LINE) {
-        CljValue line_value = map_get_sentinel((CljMap*)merged, (CljValue)SYM_KW_LINE, NULL);
+        CljValue line_value = map_get_sentinel((CljPersistentMap*)merged, (CljValue)SYM_KW_LINE, NULL);
         TEST_ASSERT_NOT_NULL(line_value);
         TEST_ASSERT_TRUE(is_fixnum(line_value));
         TEST_ASSERT_EQUAL_INT(100, as_fixnum(line_value)); // Should be original value, not location value
@@ -733,18 +732,18 @@ TEST(test_meta_clojure_compatible_keys) {
     // Create location metadata
     Reader reader;
     reader_init(&reader, "test");
-    CljMap *location_meta = (CljMap*)make_location_meta(&reader, eval_state);
+    CljPersistentMap *location_meta = (CljPersistentMap*)make_location_meta(&reader, eval_state);
     TEST_ASSERT_NOT_NULL(location_meta);
 
     // Verify all Clojure-compatible keys are present
     if (SYM_KW_LINE) {
-        CljValue line_value = map_get_sentinel((CljMap*)location_meta, (CljValue)SYM_KW_LINE, NULL);
+        CljValue line_value = map_get_sentinel((CljPersistentMap*)location_meta, (CljValue)SYM_KW_LINE, NULL);
         TEST_ASSERT_NOT_NULL(line_value);
         TEST_ASSERT_TRUE(is_fixnum(line_value));
     }
 
     if (kw_column) {
-        CljValue column_value = map_get_sentinel((CljMap*)location_meta, (CljValue)kw_column, NULL);
+        CljValue column_value = map_get_sentinel((CljPersistentMap*)location_meta, (CljValue)kw_column, NULL);
         TEST_ASSERT_NOT_NULL(column_value);
         TEST_ASSERT_TRUE(is_fixnum(column_value));
     }
@@ -761,7 +760,7 @@ TEST(test_meta_clear) {
     TEST_ASSERT_NOT_NULL(obj);
 
     // Create and set metadata
-    CljMap *meta_map = make_map(1);
+    CljPersistentMap *meta_map = make_map(1);
     CljSymbol *kw_doc = intern_symbol_global(":doc");
     ID doc_str = make_string("Test");
     if (kw_doc && doc_str) {
@@ -816,7 +815,6 @@ TEST(test_anon_fn_reader_macro) {
     TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result3));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result3));
 }
-
 // ============================================================================
 // TEST GROUPS
 // ============================================================================
