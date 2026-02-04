@@ -6739,7 +6739,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 
     // Keep simple: tests only require a string to be present.
     ASSIGN(m, map_assoc(m, k_host_os_version, (ID)make_string("unknown")));
-    ASSIGN(m, map_assoc(m, k_tiny_clj_version, (ID)make_string("0.2")));
+    ASSIGN(m, map_assoc(m, k_tiny_clj_version, (ID)make_string("0.3")));
 
     // Use now() as a conservative proxy (must be <= now in tests).
     ASSIGN(m, map_assoc(m, k_build_time, native_now(NULL, 0)));
