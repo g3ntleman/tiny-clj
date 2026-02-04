@@ -195,6 +195,12 @@ void memory_profiler_track_object_creation(CljObject *obj) {
 void memory_profiler_track_object_creation_sized(CljObject *obj, size_t size) {
     if (!g_memory_profiling_enabled || !obj) return;
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;
+    if (obj->type < 0 || obj->type >= CLJ_TYPE_COUNT) {
+        fprintf(stderr, "memory_profiler: invalid type %d for object %p\n",
+                (int)obj->type, (void*)obj);
+        exception_print_native_backtrace();
+        abort();
+    }
     g_memory_stats.total_allocations++;
     size_t obj_size = (size > 0) ? size : sizeof(CljObject);
     { size_t r = platform_allocated_size(obj); if (r > 0) obj_size = r; }
@@ -214,6 +220,12 @@ void memory_profiler_track_object_creation_sized(CljObject *obj, size_t size) {
 void memory_profiler_track_object_destruction(CljObject *obj) {
     if (!g_memory_profiling_enabled || !obj) return;
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;
+    if (obj->type < 0 || obj->type >= CLJ_TYPE_COUNT) {
+        fprintf(stderr, "memory_profiler: invalid type %d for object %p in destruction\n",
+                (int)obj->type, (void*)obj);
+        exception_print_native_backtrace();
+        abort();
+    }
     g_memory_stats.object_destructions++;
     size_t obj_size = sizeof(CljObject);
     uint8_t tt = obj->type;
@@ -232,6 +244,12 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
 void memory_profiler_track_object_zombify(CljObject *obj) {
     if (!g_memory_profiling_enabled || !obj) return;
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;
+    if (obj->type < 0 || obj->type >= CLJ_TYPE_COUNT) {
+        fprintf(stderr, "memory_profiler: invalid type %d for object %p in zombify\n",
+                (int)obj->type, (void*)obj);
+        exception_print_native_backtrace();
+        abort();
+    }
     g_memory_stats.object_destructions++;
     size_t obj_size = sizeof(CljObject);
     uint8_t tt = obj->type;

@@ -220,7 +220,6 @@ TEST(test_tagged_literals_roundtrip_inst_uuid)
     ID inst_parsed = parse_expr(&inst_reader, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(inst_parsed);
     TEST_ASSERT_TRUE(clj_equal(inst, inst_parsed));
-    RELEASE(inst_str);
 
     ID uuid = AUTORELEASE(clj_uuid_from_string("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"));
     TEST_ASSERT_NOT_NULL(uuid);
@@ -232,5 +231,4 @@ TEST(test_tagged_literals_roundtrip_inst_uuid)
     ID uuid_parsed = parse_expr(&uuid_reader, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(uuid_parsed);
     TEST_ASSERT_TRUE(clj_equal(uuid, uuid_parsed));
-    RELEASE(uuid_str);
 }

@@ -13,6 +13,19 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef enum {
+    STRONG = 0,
+    WEAK = 1
+} ElementRetention;
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 void exception_print_native_backtrace(void);
 #ifdef __cplusplus
 }

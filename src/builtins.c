@@ -22,6 +22,7 @@
 #include "value.h"
 #include "error_messages.h"
 #include "symbol.h" // Must be included before namespace.h for CljSymbol definition
+#include "symbol_token.h"
 #include "namespace.h"
 #include "seq.h"
 #include "byte_array.h"
@@ -65,6 +66,13 @@ static ID g_concat_thunk_fn_obj = NULL;
 static ID g_map_thunk_fn_obj = NULL;
 static ID g_mapcat_thunk_fn_obj = NULL;
 static ID g_range_inf_thunk_fn_obj = NULL;
+
+void builtins_reset_cached_funcs(void) {
+    g_concat_thunk_fn_obj = NULL;
+    g_map_thunk_fn_obj = NULL;
+    g_mapcat_thunk_fn_obj = NULL;
+    g_range_inf_thunk_fn_obj = NULL;
+}
 
 // tinyclj.datetime native functions (used by :native stubs)
 ID native_datetime_civil_from_days(ID *args, unsigned int argc);
@@ -145,6 +153,7 @@ ID native_some(ID *args, unsigned int argc);
 ID native_cons(ID *args, unsigned int argc);
 ID native_list(ID *args, unsigned int argc);
 ID native_reduce(ID *args, unsigned int argc);
+ID native_group_by(ID *args, unsigned int argc);
 ID native_count(ID *args, unsigned int argc);
 ID native_nilp(ID *args, unsigned int argc);
 ID native_reverse(ID *args, unsigned int argc);
@@ -266,7 +275,6 @@ static bool validate_builtin_args(unsigned int argc, unsigned int expected, cons
         pos = format_append(error_msg, pos, sizeof(error_msg), ", got ");
         pos = format_append_uint(error_msg, pos, sizeof(error_msg), argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
-        return false;
     }
     return true;
 }
@@ -317,7 +325,6 @@ ID nth2(ID *args, unsigned int argc)
         pos = format_append(error_msg, pos, sizeof(error_msg), ", got ");
         pos = format_append_uint(error_msg, pos, sizeof(error_msg), argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
-        return NULL;
     }
     ID coll = args[0];
     ID idx = args[1];
@@ -327,8 +334,9 @@ ID nth2(ID *args, unsigned int argc)
     // Validate index
     if (!idx || TAG(idx) != CLJ_INT)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "nth requires an integer index");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "nth requires an integer index");
+        return NULL;
     }
     int i = AS_FIXNUM(idx);
 
@@ -343,22 +351,24 @@ ID nth2(ID *args, unsigned int argc)
     {
         if (has_not_found)
             return not_found;
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "nth index %d is negative", i);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                  "nth index %d is negative", i);
+        return NULL;
     }
 
     // Fast path: Vectors (O(1) access) - includes transient vectors
     int tag = TAG(coll);
     if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT)
     {
-        CljVector *v = as_vector(coll);
+        CljPersistentVector *v = as_vector(coll);
         int count = vector_count(v);
         if (i >= count)
         {
             if (has_not_found)
                 return not_found;
-            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                             "nth index %d is out of bounds for collection with %d elements", i, count);
+            throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                      "nth index %d is out of bounds for collection with %d elements", i, count);
+            return NULL;
         }
         return vector_nth(v, i);
     }
@@ -384,8 +394,9 @@ ID nth2(ID *args, unsigned int argc)
     // Slow path: Sequences (O(n) access via iterator)
     if (!is_seqable(coll))
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "nth not supported on this type");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "nth not supported on this type");
+        return NULL;
     }
 
     SeqIterator iter;
@@ -393,8 +404,9 @@ ID nth2(ID *args, unsigned int argc)
     {
         if (has_not_found)
             return not_found;
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "nth index %d is out of bounds for empty sequence", i);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                  "nth index %d is out of bounds for empty sequence", i);
+        return NULL;
     }
 
     // Iterate to index i
@@ -404,8 +416,9 @@ ID nth2(ID *args, unsigned int argc)
         {
             if (has_not_found)
                 return not_found;
-            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                             "nth index %d is out of bounds for sequence (reached end at index %d)", i, j);
+            throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                      "nth index %d is out of bounds for sequence (reached end at index %d)", i, j);
+            return NULL;
         }
         seq_iter_next(&iter);
     }
@@ -414,8 +427,9 @@ ID nth2(ID *args, unsigned int argc)
     {
         if (has_not_found)
             return not_found;
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "nth index %d is out of bounds for sequence", i);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                  "nth index %d is out of bounds for sequence", i);
+        return NULL;
     }
 
     return seq_iter_first(&iter);
@@ -427,9 +441,9 @@ ID native_peek(ID *args, unsigned int argc)
     if (!validate_builtin_args(argc, 1, "peek"))
         return NULL;
     ID vec = args[0];
-    if (!vec || TAG(vec) != CLJ_VECTOR)
+    if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT)
         return NULL;
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_vector(vec);
     int count = vector_count(v);
     if (!count)
         return NULL; // nil for empty vector
@@ -444,21 +458,21 @@ ID native_pop(ID *args, unsigned int argc)
     if (!validate_builtin_args(argc, 1, "pop"))
         return NULL;
     ID vec = args[0];
-    if (!vec || TAG(vec) != CLJ_VECTOR)
+    if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT)
         return NULL;
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_vector(vec);
     int count = vector_count(v);
     if (count == 0)
     {
         // Return empty vector singleton (no memory management needed)
-        return make_vector(0, CLJ_VECTOR);
+        return make_vector(0, false);
     }
 
-    // Use vector_pop() which handles RC=1 (in-place) and RC>1 (COW) automatically
-    CljVector *result = vector_pop(v);
+    // Persistent pop: return new vector without last element.
+    CljPersistentVector *result = vector_popped(v);
     if (!result)
         return NULL;
-    return result; // vec is retained by caller, result is already retained
+    return (ID)result;
 }
 
 // subvec: returns sub-vector from start (inclusive) to end (exclusive)
@@ -487,19 +501,21 @@ ID native_subvec(ID *args, unsigned int argc)
     ID end_idx = argc == 3 ? args[2] : NULL;
 
     // Type validation
-    if (!vec || TAG(vec) != CLJ_VECTOR)
+    if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "subvec requires a vector as first argument");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "subvec requires a vector as first argument");
+        return NULL;
     }
 
     if (!start_idx || TAG(start_idx) != CLJ_INT)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "subvec requires a number as start index");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "subvec requires a number as start index");
+        return NULL;
     }
 
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_vector(vec);
 
     int start = AS_FIXNUM(start_idx);
     int end;
@@ -509,8 +525,9 @@ ID native_subvec(ID *args, unsigned int argc)
     {
         if (TAG(end_idx) != CLJ_INT)
         {
-            return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                             "subvec requires a number as end index");
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                      "subvec requires a number as end index");
+            return NULL;
         }
         end = AS_FIXNUM(end_idx);
     }
@@ -522,21 +539,24 @@ ID native_subvec(ID *args, unsigned int argc)
     // Bounds validation
     if (start < 0)
     {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "subvec start index %d is negative", start);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                  "subvec start index %d is negative", start);
+        return NULL;
     }
 
     int v_count = vector_count(v);
     if (end > v_count)
     {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "subvec end index %d is greater than vector count %d", end, v_count);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                  "subvec end index %d is greater than vector count %d", end, v_count);
+        return NULL;
     }
 
     if (start > end)
     {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                                         "subvec start index %d is greater than end index %d", start, end);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                  "subvec start index %d is greater than end index %d", start, end);
+        return NULL;
     }
 
     // Calculate sub-vector size
@@ -545,11 +565,11 @@ ID native_subvec(ID *args, unsigned int argc)
     // Special case: empty sub-vector (start == end)
     if (subvec_count == 0)
     {
-        return make_vector(0, CLJ_VECTOR); // Returns empty-vector singleton (no memory management needed)
+        return make_vector(0, STRONG); // Returns empty-vector singleton (no memory management needed)
     }
 
     // Create new vector and add elements using vector_conj_inplace
-    CljVector *new_vec = make_vector(subvec_count, CLJ_VECTOR);
+    CljPersistentVector *new_vec = make_vector(subvec_count, STRONG);
 
     // Copy elements from start to end using vector_conj_inplace
     // This keeps rc=1 for COW optimizations
@@ -581,7 +601,7 @@ ID conj2_wrapper(ID *args, unsigned int argc)
 
 ID conj2(ID vec, ID val)
 {
-    if (!vec || TAG(vec) != CLJ_VECTOR)
+    if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT)
         return NULL;
     return vector_conj(vec, val);
 }
@@ -620,7 +640,7 @@ ID native_conj(ID *args, unsigned int argc)
 
     unsigned char tag = TAG(coll);
 
-    if (tag == CLJ_VECTOR)
+    if (tag == CLJ_VECTOR_PERSISTENT)
     {
         CljObject *result = coll;
         for (unsigned int i = 1; i < argc; i++)
@@ -754,7 +774,7 @@ ID native_next(ID *args, unsigned int argc)
     // EAT-YOUR-OWN-DOG-FOOD: Use seq_next for all seqable types
     // This consolidates the logic and eliminates duplication
     // For CLJ_LIST, seq_next handles it efficiently (returns CLJ_LIST directly)
-    // For CLJ_VECTOR, CLJ_SEQ, and other seqable types, seq_next handles them via seq_rest
+    // For CLJ_VECTOR_PERSISTENT, CLJ_SEQ, and other seqable types, seq_next handles them via seq_rest
 
     // Check if collection is seqable before trying to create seq
     if (!is_seqable(coll))
@@ -999,11 +1019,11 @@ ID native_partition(ID *args, unsigned int argc)
     }
 
     // Use vectors for building (efficient), convert to list at end
-    CljVector *partitions = make_vector(0, CLJ_VECTOR);
+    CljPersistentVector *partitions = make_vector(0, STRONG);
 
     while (!seq_iter_empty(&iter))
     {
-        CljVector *part = make_vector(n, CLJ_VECTOR);
+        CljPersistentVector *part = make_vector(n, STRONG);
         int count = 0;
 
         for (int i = 0; i < n && !seq_iter_empty(&iter); i++, count++)
@@ -1042,9 +1062,9 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     CljPersistentMap *state = as_map(state_id);
     ID fn = map_get_sentinel(state, SYM_MAP_FN, NULL);
     ID seqs_vec_id = map_get_sentinel(state, SYM_MAP_SEQS, NULL);
-    if (!fn || !seqs_vec_id || TAG(seqs_vec_id) != CLJ_VECTOR) return NULL;
+    if (!fn || !seqs_vec_id || TAG(seqs_vec_id) != CLJ_VECTOR_PERSISTENT) return NULL;
 
-    CljVector *seqs_vec = as_vector(seqs_vec_id);
+    CljPersistentVector *seqs_vec = as_vector(seqs_vec_id);
     unsigned int ncolls = vector_count(seqs_vec);
     if (ncolls == 0 || ncolls > 8) return NULL;
 
@@ -1066,7 +1086,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     ID mapped = eval_function_call(fn, call_args, ncolls, NULL, st);
 
     // Advance collections (store rest for each).
-    CljVector *next_seqs = make_vector(ncolls, CLJ_VECTOR);
+    CljPersistentVector *next_seqs = make_vector(ncolls, STRONG);
     if (!next_seqs) return NULL;
     for (unsigned int i = 0; i < ncolls; i++) {
         vector_conj_inplace(&next_seqs, next_colls[i]);
@@ -1182,7 +1202,7 @@ ID native_map(ID *args, unsigned int argc)
 
     // Validate and normalize inputs to sequences (one per coll).
     // If any input is nil, map returns empty.
-    CljVector *seqs = make_vector(ncolls, CLJ_VECTOR);
+    CljPersistentVector *seqs = make_vector(ncolls, STRONG);
     if (!seqs) return NULL;
 
     for (unsigned int i = 0; i < ncolls; i++) {
@@ -1296,7 +1316,7 @@ ID native_filter(ID *args, unsigned int argc)
         return empty_list();
     }
 
-    CljVector *kept = make_vector(0, CLJ_VECTOR);
+    CljPersistentVector *kept = make_vector(0, STRONG);
     if (!kept)
         return NULL;
 
@@ -1338,7 +1358,7 @@ ID native_last(ID *args, unsigned int argc)
     CljType tag = TAG(coll);
     if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT)
     {
-        CljVector *v = as_vector(coll);
+        CljPersistentVector *v = as_vector(coll);
         unsigned int n = vector_count(v);
         if (n == 0)
             return NULL;
@@ -1511,7 +1531,6 @@ ID native_reduce(ID *args, unsigned int argc)
                             "reduce requires exactly 2 or 3 arguments, got ");
         pos = format_append_uint(error_msg, pos, sizeof(error_msg), argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
-        return NULL;
     }
 
     EvalState *st = g_current_eval_state;
@@ -1559,6 +1578,70 @@ ID native_reduce(ID *args, unsigned int argc)
     }
 
     return acc;
+}
+
+// group-by: group elements of coll by f
+ID native_group_by(ID *args, unsigned int argc)
+{
+    if (!validate_builtin_args(argc, 2, "group-by"))
+        return NULL;
+
+    ID fn = args[0];
+    ID coll = args[1];
+
+    if (!fn || IS_IMMEDIATE(fn) || !(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "group-by requires a function as first argument",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    // Empty coll -> empty map
+    if (!coll) {
+        return make_map(4);
+    }
+
+    SeqIterator iter;
+    if (!seq_iter_init(&iter, coll) || seq_iter_empty(&iter)) {
+        return make_map(4);
+    }
+
+    EvalState *st = builtin_get_eval_state();
+    if (!st) st = get_global_eval_state();
+
+    CljPersistentMap *result = make_map(8);
+    if (!result) return NULL;
+
+    while (!seq_iter_empty(&iter)) {
+        ID elem = seq_iter_first(&iter);
+        ID key = eval_function_call(fn, &elem, 1, NULL, st);
+
+        ID existing = map_get_sentinel(result, key, NULL);
+        CljPersistentVector *vec = NULL;
+        if (!existing) {
+            vec = make_vector(0, STRONG);
+        } else {
+            vec = as_vector(existing);
+        }
+        if (!vec) {
+            RELEASE(result);
+            return NULL;
+        }
+
+        CljPersistentVector *new_vec = vector_conj(vec, elem);
+        if (!new_vec) {
+            RELEASE(result);
+            return NULL;
+        }
+
+        ASSIGN(result, map_assoc(result, key, new_vec));
+        if (!existing) {
+            RELEASE(vec);
+        }
+
+        seq_iter_next(&iter);
+    }
+
+    return result;
 }
 
 // nil? function that checks if a value is nil
@@ -1629,16 +1712,16 @@ ID assoc3(ID *args, unsigned int argc)
     unsigned char coll_tag = TAG(coll);
 
     // Handle vectors
-    if (coll_tag == CLJ_VECTOR)
+    if (coll_tag == CLJ_VECTOR_PERSISTENT)
     {
         if (!key || TAG(key) != CLJ_INT)
             return NULL;
         int i = AS_FIXNUM(key);
-        CljVector *v = as_vector(coll);
+        CljPersistentVector *v = as_vector(coll);
         if (i < 0 || (unsigned int)i >= vector_count(v))
             return NULL;
         // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
-        CljVector *result = vector_assoc(coll, i, val);
+        CljPersistentVector *result = vector_assoc(coll, i, val);
         if (!result)
             return NULL;
         return result;
@@ -1666,7 +1749,6 @@ ID native_assoc(ID *args, unsigned int argc)
         pos = format_append_uint(error_msg, pos, sizeof(error_msg), argc);
         (void)pos;
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
-        return NULL;
     }
 
     ID result = args[0];
@@ -1935,7 +2017,7 @@ ID native_into(ID *args, unsigned int argc)
     if (!to)
     {
         // Default to vector if target is nil
-        to = make_vector(0, CLJ_VECTOR);
+        to = make_vector(0, STRONG);
     }
 
     CljType to_tag = TAG(to);
@@ -1943,7 +2025,7 @@ ID native_into(ID *args, unsigned int argc)
     // Handle vector target
     if (to_tag == CLJ_VECTOR_PERSISTENT || to_tag == CLJ_VECTOR_TRANSIENT)
     {
-        CljVector *result = to;
+    CljPersistentVector *result = to;
 
         // Iterate over source
         CljType from_tag = TAG(from);
@@ -1964,7 +2046,7 @@ ID native_into(ID *args, unsigned int argc)
                 if (key)
                 {
                     ID val = KV_VALUE(m->data, i);
-                    CljVector *entry = make_vector(2, CLJ_VECTOR);
+                    CljPersistentVector *entry = make_vector(2, STRONG);
                     entry = vector_conj(entry, key);
                     entry = vector_conj(entry, val);
                     result = vector_conj(result, entry);
@@ -2003,7 +2085,7 @@ ID native_into(ID *args, unsigned int argc)
                 unsigned char entry_tag = entry ? TAG(entry) : 0;
                 if (entry_tag == CLJ_VECTOR_PERSISTENT || entry_tag == CLJ_VECTOR_TRANSIENT)
                 {
-                    CljVector *pair = entry;
+                    CljPersistentVector *pair = entry;
                     if (vector_count(pair) >= 2)
                     {
                         ASSIGN(result, map_assoc(result, vector_nth(pair, 0), vector_nth(pair, 1)));
@@ -2129,7 +2211,7 @@ ID native_find(ID *args, unsigned int argc)
     ID val = map_get(map, key);
 
     // Return [key value] vector
-    CljVector *entry = make_vector(2, CLJ_VECTOR);
+    CljPersistentVector *entry = make_vector(2, STRONG);
     entry = vector_conj(entry, key);
     entry = vector_conj(entry, val);
 
@@ -2150,7 +2232,7 @@ ID native_transient(ID *args, unsigned int argc)
     switch (tag)
     {
     case CLJ_VECTOR_PERSISTENT:
-        return vector_transient(as_persistent_vector(coll));
+        return AUTORELEASE(vector_transient(as_persistent_vector(coll)));
     case CLJ_MAP_PERSISTENT:
         return (ID)map_transient(as_persistent_map(coll));
     case CLJ_VECTOR_TRANSIENT:
@@ -2209,9 +2291,9 @@ ID native_conj_bang(ID *args, unsigned int argc)
         return NULL;
 
     int tag = TAG(coll);
-    if (tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_TRANSIENT_WEAK)
+    if (tag == CLJ_VECTOR_TRANSIENT)
     {
-        CljVector *result = coll;
+        CljPersistentVector *result = coll;
         // vector_conj automatically handles transient vectors correctly (always in-place)
         for (unsigned int i = 1; i < argc; i++)
         {
@@ -2295,7 +2377,7 @@ ID native_count(ID *args, unsigned int argc)
         }
         else if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT)
         {
-            CljVector *vec = as_vector(coll);
+            CljPersistentVector *vec = as_vector(coll);
             return (fixnum(vec ? vector_count(vec) : 0));
         }
         else if (is_list_type(tag))
@@ -2402,7 +2484,7 @@ ID native_type(ID *args, unsigned int argc)
         return intern_symbol(SYM_CLOJURE_LANG, "Symbol");
     case CLJ_STRING:
         return intern_symbol(SYM_CLOJURE_LANG, "String");
-    case CLJ_VECTOR:
+    case CLJ_VECTOR_PERSISTENT:
         return intern_symbol(SYM_CLOJURE_LANG, "PersistentVector");
     case CLJ_VECTOR_TRANSIENT:return intern_symbol(SYM_CLOJURE_LANG, "TransientVector");
     case CLJ_MAP_TRANSIENT:
@@ -2458,7 +2540,7 @@ ID native_array_map(ID *args, unsigned int argc)
 
 ID native_vector(ID *args, unsigned int argc)
 {
-    // This is the same singleton returned by make_vector(0, CLJ_VECTOR)
+    // This is the same singleton returned by make_vector(0, STRONG)
     if (argc == 0)
     {
         return vector_empty_singleton; // Returns empty-vector singleton (no memory management needed)
@@ -2466,7 +2548,7 @@ ID native_vector(ID *args, unsigned int argc)
 
     // Create vector with capacity+1 to avoid COW when adding all elements
     // (vector_conj uses COW when count >= capacity, so we need capacity > argc)
-    CljVector *v = make_vector(argc + 1, CLJ_VECTOR);
+    CljPersistentVector *v = make_vector(argc + 1, STRONG);
 
     // Add all elements using vector_conj
     for (unsigned int i = 0; i < argc; i++)
@@ -2498,7 +2580,7 @@ ID native_vec(ID *args, unsigned int argc)
     // If already a vector, return same object (No-Op - Clojure behavior)
     // Note: coll is already AUTORELEASEd by eval_arg, so we need to AUTORELEASE it again
     // to ensure it's in the caller's pool
-    if (TAG(coll) == CLJ_VECTOR)
+    if (TAG(coll) == CLJ_VECTOR_PERSISTENT)
     {
         return AUTORELEASE(coll);
     }
@@ -2506,8 +2588,9 @@ ID native_vec(ID *args, unsigned int argc)
     // Check if collection is seqable
     if (!is_seqable(coll))
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "vec requires a seqable collection");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "vec requires a seqable collection");
+        return NULL;
     }
 
     // Use stack-based iterator to iterate through collection (avoid code duplication)
@@ -2528,11 +2611,12 @@ ID native_vec(ID *args, unsigned int argc)
 
     // Create vector with default capacity (vector_conj will grow automatically)
     // make_vector throws OOM exception or returns valid object
-    CljVector *vec = make_vector(4, CLJ_VECTOR);
+    CljPersistentVector *vec = make_vector(4, STRONG);
     if (!vec)
     {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "Failed to create vector");
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                  "Failed to create vector");
+        return NULL;
     }
 
     // Iterate through sequence and add elements using vector_conj (reuse existing logic)
@@ -2764,7 +2848,6 @@ static void print_helper(ID *args, unsigned int argc, bool readable, bool newlin
             if (str)
             {
                 platform_put_string(NULL, string_data(str));
-                RELEASE(str);
             }
 
             // Add space between arguments (except for the last one)
@@ -2886,13 +2969,15 @@ static ID create_fixed_result(int32_t acc_fixed)
 // Helper function to throw arithmetic overflow exceptions (DRY principle)
 static ID throw_arithmetic_overflow(const char *err_msg, int a, int b)
 {
-    return throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg, a, b);
+    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg, a, b);
+    return NULL;
 }
 
 // Helper function to throw fixed-point overflow exceptions
 static ID throw_fixed_overflow(const char *err_msg)
 {
-    return throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg);
+    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg);
+    return NULL;
 }
 
 // Helper function to create fixnum result
@@ -2998,7 +3083,7 @@ ID native_find_ns(ID *args, unsigned int argc)
         return ns_find_by_symbol(as_symbol(ns_arg));
     }
 
-    throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+    throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0,
                               "find-ns: argument must be a symbol"); return NULL;
 }
 
@@ -3086,42 +3171,6 @@ ID native_ns_unload(ID *args, unsigned int argc)
     if (!ns)
         return (ID)clj_false;
 
-    // If the namespace contains named functions, they may have a self-binding frame
-    // (fn-name -> fn) in their env_stack. That frame is intended to support recursion but
-    // must not keep objects alive after ns-unload. Clear the self-binding so the function
-    // can be released when the namespace mappings are released.
-    if (ns->mappings) {
-        MAP_FOR_EACH(ns->mappings, k, v) {
-            (void)k;
-            if (!v) continue;
-            if (TAG((ID)v) != CLJ_CLOSURE) continue;
-
-            CljFunction *fn = (CljFunction*)v;
-            if (!fn->env_stack) continue;
-
-            unsigned int sc = vector_count(fn->env_stack);
-            if (sc == 0) continue;
-
-            ID top_id = vector_nth(fn->env_stack, (int)(sc - 1));
-            if (!top_id || TAG(top_id) != CLJ_MAP_PERSISTENT) continue;
-
-            CljPersistentMap *top_map = (CljPersistentMap*)top_id;
-
-            // Only clear the simplest self-binding case: a single-entry map that points back to fn.
-            if (map_count(top_map) == 1) {
-                MAP_FOR_EACH(top_map, sk, sv) {
-                    if (sv == (ID)fn) {
-                        CljPersistentMap *tmp = top_map;
-                        map_assoc_inplace(&tmp, (ID)sk, NULL);
-                        if (tmp && tmp != top_map) {
-                            vector_assoc_inplace(&fn->env_stack, sc - 1, (ID)tmp);
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-    }
 
     // Explicitly release namespace-owned maps so objects stored in mappings are released
     // immediately (tests assert that function objects are released after ns-unload).
@@ -3137,6 +3186,7 @@ ID native_ns_unload(ID *args, unsigned int argc)
         RELEASE(ns->macro_mappings);
         ns->macro_mappings = NULL;
     }
+
 
     // Remove from registry; releasing the old registry map releases the namespace object.
     map_dissoc(g_runtime.ns_registry, name_sym);
@@ -3311,7 +3361,6 @@ ID native_repl_dir(ID *args, unsigned int argc)
     if (!names)
     {
         throw_oom();
-        return NULL;
     }
 
     int idx_names = 0;
@@ -3371,9 +3420,10 @@ ID native_get_thread_bindings(ID *args, unsigned int argc)
     RETAIN(out);
 
     if (st && st->dynamic_bindings) {
-        unsigned int depth = vector_count(st->dynamic_bindings);
+        CljPersistentVector *bindings = vector_persistent(st->dynamic_bindings);
+        unsigned int depth = bindings ? vector_count(bindings) : 0;
         for (unsigned int i = 0; i < depth; i++) {
-            ID frame_id = vector_nth(st->dynamic_bindings, i);
+            ID frame_id = vector_nth(bindings, i);
             if (!frame_id || TAG(frame_id) != CLJ_MAP_PERSISTENT) continue;
             ASSIGN(out, map_merge(out, (CljPersistentMap*)frame_id, true));
         }
@@ -3590,6 +3640,11 @@ static StaticSymbolData sym_filter_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "filter"}};
+static StaticSymbolData sym_group_by_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "group-by"}};
 static StaticSymbolData sym_last_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -3658,6 +3713,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_map_data.sym, native_map},
     {&sym_mapcat_data.sym, native_mapcat},
     {&sym_filter_data.sym, native_filter},
+    {&sym_group_by_data.sym, native_group_by},
     {&sym_last_data.sym, native_last},
     {&sym_ns_unload_data.sym, native_ns_unload},
     {&sym_plus_data.sym, native_add_variadic},
@@ -3943,7 +3999,6 @@ ID native_apply(ID *args, unsigned int argc)
     if (argc < 2)
     {
         throw_exception(EXCEPTION_ARITY, "apply requires at least 2 arguments", __FILE__, __LINE__, 0);
-        return NULL;
     }
 
     ID fn = args[0];
@@ -3978,7 +4033,7 @@ ID native_apply(ID *args, unsigned int argc)
         }
         else if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT)
         {
-            CljVector *v = as_vector(last);
+            CljPersistentVector *v = as_vector(last);
             int cnt = vector_count(v);
             for (int i = 0; i < cnt && n < 64; i++)
             {
@@ -4006,7 +4061,6 @@ ID native_symbol(ID *args, unsigned int argc)
         pos = format_append(error_msg, pos, sizeof(error_msg), ", got ");
         pos = format_append_uint(error_msg, pos, sizeof(error_msg), argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
-        return NULL;
     }
 
     const char *ns = NULL;
@@ -4345,10 +4399,10 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     if (!source_ns || !target_ns || !symbols)
         return;
 
-    if (!symbols || TAG(symbols) != CLJ_VECTOR)
+    if (!symbols || TAG(symbols) != CLJ_VECTOR_PERSISTENT)
         return;
 
-    CljVector *vec = as_vector(symbols);
+    CljPersistentVector *vec = as_vector(symbols);
     VECTOR_FOR_EACH(vec, sym)
     {
         if (!sym || TAG(sym) != CLJ_SYMBOL)
@@ -4456,7 +4510,7 @@ static bool process_require_spec(ID spec, EvalState *st)
     CljObject *refer_syms = NULL;
     bool refer_all = false;
 
-    CljVector *vec = NULL;
+    CljPersistentVector *vec = NULL;
 
     // Handle simple Symbol case: (require 'namespace)
     if (TAG(spec) == CLJ_SYMBOL)
@@ -4467,7 +4521,7 @@ static bool process_require_spec(ID spec, EvalState *st)
         ns_name = sym->cname;
     }
     // Handle Vector case: [namespace :as alias] or [namespace :refer [syms]]
-    else if (TAG(spec) == CLJ_VECTOR)
+    else if (TAG(spec) == CLJ_VECTOR_PERSISTENT)
     {
         vec = as_vector(spec);
         if (vector_count(vec) < 1)
@@ -4549,7 +4603,7 @@ static bool process_require_spec(ID spec, EvalState *st)
                                 RELEASE(refer_arg);
                             }
                         }
-                        else if (refer_arg && TAG(refer_arg) == CLJ_VECTOR)
+                        else if (refer_arg && TAG(refer_arg) == CLJ_VECTOR_PERSISTENT)
                         {
                             refer_syms = refer_arg;
                             // Don't release refer_syms - it's stored for later use
@@ -4667,8 +4721,6 @@ static bool process_require_spec(ID spec, EvalState *st)
         pos = format_append(error_msg, pos, sizeof(error_msg), rel);
         format_append_char(error_msg, pos, sizeof(error_msg), ')');
         throw_exception(EXCEPTION_FILE_NOT_FOUND, error_msg, __FILE__, __LINE__, 0);
-        free(rel);
-        return false;
     }
 
     // Evaluate source in current state
@@ -4766,7 +4818,7 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
     }
 
     unsigned int tag = TAG(spec);
-    if (tag == CLJ_SYMBOL || tag == CLJ_VECTOR)
+    if (tag == CLJ_SYMBOL || tag == CLJ_VECTOR_PERSISTENT)
     {
         return spec;
     }
@@ -4787,7 +4839,7 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
                 // (quote x) => x
                 ID quoted = LIST_REST(list) ? LIST_FIRST(as_list(LIST_REST(list))) : NULL;
                 unsigned char quoted_tag = quoted ? TAG(quoted) : 0;
-                if (quoted_tag == CLJ_SYMBOL || quoted_tag == CLJ_VECTOR)
+                if (quoted_tag == CLJ_SYMBOL || quoted_tag == CLJ_VECTOR_PERSISTENT)
                 {
                     return quoted;
                 }
@@ -4795,12 +4847,12 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
         }
 
         // Convert list to vector for other cases
-        CljVector *vec = make_vector(4, CLJ_VECTOR);
+        CljPersistentVector *vec = make_vector(4, STRONG);
         if (!vec)
         {
             return NULL;
         }
-        CljVector *transient_vec = vector_transient(vec);
+        CljTransientVector *transient_vec = vector_transient(vec);
         RELEASE(vec);
         if (!transient_vec)
         {
@@ -4810,14 +4862,13 @@ static ID normalize_require_spec(ID spec, bool *needs_release)
         CljList *current = list;
         LIST_FOR_EACH(current, elem)
         {
-            transient_vec = vector_conj(transient_vec, elem);
-            if (!transient_vec)
-            {
-                return NULL;
-            }
+            vector_push(transient_vec, elem);
         }
 
-        CljVector *persistent_vec = vector_persistent(transient_vec);
+        CljPersistentVector *persistent_vec = vector_persistent(transient_vec);
+        if (persistent_vec) {
+            RETAIN(persistent_vec);
+        }
         RELEASE(transient_vec);
         if (!persistent_vec)
         {
@@ -4838,7 +4889,6 @@ ID native_require(ID *args, unsigned int argc)
     if (argc == 0)
     {
         throw_exception(EXCEPTION_ARITY, "require requires at least 1 argument", __FILE__, __LINE__, 0);
-        return NULL;
     }
 
     ID normalized_specs[argc];
@@ -4866,7 +4916,7 @@ ID native_require(ID *args, unsigned int argc)
         needs_release[i] = release_spec;
 
         unsigned char spec_tag = spec ? TAG(spec) : 0;
-        if (spec && spec_tag != CLJ_SYMBOL && spec_tag != CLJ_VECTOR)
+        if (spec && spec_tag != CLJ_SYMBOL && spec_tag != CLJ_VECTOR_PERSISTENT)
         {
             throw_exception(EXCEPTION_TYPE, "require expects a symbol or vector", __FILE__, __LINE__, 0);
             for (unsigned int j = 0; j <= i; j++)
@@ -5257,13 +5307,11 @@ ID native_sub_variadic(ID *args, unsigned int argc)
         if (!args[0])
         {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return NULL;
         }
         uint16_t tag = TAG(args[0]);
         if (tag != CLJ_INT && tag != CLJ_FLOAT)
         {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return NULL;
         }
         switch (tag)
         {
@@ -5616,8 +5664,8 @@ ID native_range(ID *args, unsigned int argc)
     }
 
     // Create vector with calculated capacity
-    ID vec = make_vector(size, CLJ_VECTOR);
-    CljVector *v = as_vector(vec);
+    ID vec = make_vector(size, STRONG);
+    CljPersistentVector *v = as_vector(vec);
 
     // Fill vector
     for (int i = start; (step > 0) ? (i < end) : (i > end); i += step)
@@ -5633,7 +5681,7 @@ ID native_repeat(ID *args, unsigned int argc)
 {
     CLJ_ASSERT(args != NULL);
 
-    int count;
+    int count = 0;
     ID value;
 
     if (argc == 1)
@@ -5678,8 +5726,8 @@ ID native_repeat(ID *args, unsigned int argc)
         return empty_vector();
     }
 
-    ID vec = make_vector(count, CLJ_VECTOR);
-    CljVector *v = as_vector(vec);
+    ID vec = make_vector(count, STRONG);
+    CljPersistentVector *v = as_vector(vec);
 
     for (int i = 0; i < count; i++)
     {
@@ -5810,13 +5858,11 @@ ID native_div_variadic(ID *args, unsigned int argc)
         if (!args[0])
         {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return NULL;
         }
         uint16_t tag = TAG(args[0]);
         if (tag != CLJ_INT && tag != CLJ_FLOAT)
         {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return NULL;
         }
         switch (tag)
         {
@@ -5997,7 +6043,7 @@ ID native_byte_array(ID *args, unsigned int argc)
     CljType seq_tag = TAG(seq);
     if (seq_tag == CLJ_VECTOR_PERSISTENT || seq_tag == CLJ_VECTOR_TRANSIENT)
     {
-        CljVector *vec = as_vector(seq);
+        CljPersistentVector *vec = as_vector(seq);
         int count = vector_count(vec);
         CljValue arr = (CljValue)make_byte_array(count);
 
@@ -6298,7 +6344,7 @@ ID native_vector_p(ID *args, unsigned int argc)
 {
     if (!validate_builtin_args(argc, 1, "vector?"))
         return clj_false;
-    return (args[0] && TAG(args[0]) == CLJ_VECTOR) ? clj_true : clj_false;
+    return (args[0] && TAG(args[0]) == CLJ_VECTOR_PERSISTENT) ? clj_true : clj_false;
 }
 
 ID native_map_p(ID *args, unsigned int argc)
@@ -6339,7 +6385,14 @@ ID native_string_p(ID *args, unsigned int argc)
 ID native_keyword_p(ID *args, unsigned int argc)
 {
     CHECK_ARITY(argc, 1, "keyword?");
-    return IS_KEYWORD(args[0]) ? clj_true : clj_false;
+    ID arg = args[0];
+    if (IS_KEYWORD(arg)) return clj_true;
+    if (arg && TAG(arg) == CLJ_SYMBOL_TOKEN) {
+        CljSymbolToken *tok = (CljSymbolToken*)arg;
+        const char *name = symbol_token_data(tok);
+        return (name && name[0] == ':') ? clj_true : clj_false;
+    }
+    return clj_false;
 }
 
 // (keyword name) - creates a keyword from a string or symbol
@@ -6388,26 +6441,34 @@ ID native_name(ID *args, unsigned int argc)
 {
     CHECK_ARITY(argc, 1, "name");
     ID arg = args[0];
+    const unsigned char tag = TAG(arg);
 
     if (!arg)
         return NULL;
 
-    // String? Return as-is
-    if (TAG(arg) == CLJ_STRING)
-        return arg;
+    switch (tag) {
+        case CLJ_STRING:
+            return arg;  // String? Return as-is
+        case CLJ_SYMBOL: {
+            CljSymbol *sym = as_symbol(arg);
+            if (!sym || !sym->cname)
+                return NULL;
 
-    if (TAG(arg) == CLJ_SYMBOL)
-    {
-        CljSymbol *sym = as_symbol(arg);
-        if (!sym || !sym->cname)
-            return NULL;
+            const char *name = sym->cname;
+            // Skip leading colon for keywords
+            if (name[0] == ':')
+                name++;
 
-        const char *name = sym->cname;
-        // Skip leading colon for keywords
-        if (name[0] == ':')
-            name++;
-
-        return make_string(name);
+            return make_string(name);
+        }
+        case CLJ_SYMBOL_TOKEN: {
+            const char *name = symbol_token_data((CljSymbolToken*)arg);
+            if (!name || !*name) return NULL;
+            if (name[0] == ':') name++;
+            return make_string(name);
+        }
+        default:
+            break;
     }
 
     return NULL;
@@ -6601,7 +6662,6 @@ ID native_swap_bang(ID *args, unsigned int argc)
         if (!fn_args)
         {
             throw_oom();
-            return NULL;
         }
 
         for (unsigned int i = 0; i < fn_argc; i++)
@@ -6656,7 +6716,6 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     if (argc != 0)
     {
         throw_exception(EXCEPTION_ARITY, "tinyclj.runtime/stats takes no arguments", __FILE__, __LINE__, 0);
-        return NULL;
     }
 
     CljPersistentMap *m = make_map(8);
@@ -6696,7 +6755,6 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     ID k_memory_stats = (ID)intern_symbol_global(":memory-stats");
-    ID k_enabled = (ID)intern_symbol_global(":enabled?");
     ID k_bytes_current = (ID)intern_symbol_global(":bytes-current");
     ID k_bytes_peak = (ID)intern_symbol_global(":bytes-peak");
     ID k_raw_bytes_current = (ID)intern_symbol_global(":raw-bytes-current");
@@ -6704,6 +6762,9 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     ID k_raw_blocks_current = (ID)intern_symbol_global(":raw-blocks-current");
     ID k_raw_blocks_peak = (ID)intern_symbol_global(":raw-blocks-peak");
     ID k_bytes_by_type = (ID)intern_symbol_global(":bytes-by-type");
+    ID k_total_allocations = (ID)intern_symbol_global(":total-allocations");
+    ID k_total_deallocations = (ID)intern_symbol_global(":total-deallocations");
+    ID k_memory_leaks = (ID)intern_symbol_global(":memory-leaks");
 
     CljPersistentMap *ms = make_map(12);
     if (ms)
@@ -6724,7 +6785,6 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         int32_t frbc = (raw_blocks_current > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_blocks_current;
         int32_t frbp = (raw_blocks_peak > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_blocks_peak;
 
-        ASSIGN(ms, map_assoc(ms, k_enabled, g_memory_profiling_enabled ? (ID)clj_true : (ID)clj_false));
         ASSIGN(ms, map_assoc(ms, k_bytes_current, fixnum(fc)));
         ASSIGN(ms, map_assoc(ms, k_bytes_peak, fixnum(fp)));
         ASSIGN(ms, map_assoc(ms, k_raw_bytes_current, fixnum(frc)));
@@ -6906,8 +6966,9 @@ ID native_instant_days(ID *args, unsigned int argc)
         return NULL;
     if (TAG(args[0]) != CLJ_INSTANT)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "instant-days expects an Instant");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "instant-days expects an Instant");
+        return NULL;
     }
     return fixnum(clj_instant_days(args[0]));
 }
@@ -6918,8 +6979,9 @@ ID native_instant_ms(ID *args, unsigned int argc)
         return NULL;
     if (TAG(args[0]) != CLJ_INSTANT)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "instant-ms expects an Instant");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "instant-ms expects an Instant");
+        return NULL;
     }
     return fixnum((int32_t)clj_instant_ms(args[0]));
 }
@@ -6931,8 +6993,9 @@ ID native_datetime_civil_from_days(ID *args, unsigned int argc)
         return NULL;
     if (!is_fixnum(args[0]))
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "civil-from-days expects an integer days value");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "civil-from-days expects an integer days value");
+        return NULL;
     }
 
     int32_t unix_days = (int32_t)as_fixnum(args[0]);
@@ -6957,8 +7020,9 @@ ID native_datetime_days_from_civil(ID *args, unsigned int argc)
         return NULL;
     if (!is_fixnum(args[0]) || !is_fixnum(args[1]) || !is_fixnum(args[2]))
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "days-from-civil expects integer year month day");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "days-from-civil expects integer year month day");
+        return NULL;
     }
 
     int year = as_fixnum(args[0]);
@@ -6982,8 +7046,9 @@ ID native_datetime_format_iso(ID *args, unsigned int argc)
     unsigned char tag = TAG(map);
     if (tag != CLJ_MAP_PERSISTENT && tag != CLJ_MAP_TRANSIENT)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "format-iso expects a map");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "format-iso expects a map");
+        return NULL;
     }
 
     if (!SYM_KW_YEAR || !SYM_KW_MONTH || !SYM_KW_DAY || !SYM_KW_HOUR || !SYM_KW_MINUTE || !SYM_KW_SECOND)
@@ -6999,8 +7064,9 @@ ID native_datetime_format_iso(ID *args, unsigned int argc)
     if (!is_fixnum(v_year) || !is_fixnum(v_month) || !is_fixnum(v_day) ||
         !is_fixnum(v_hour) || !is_fixnum(v_minute) || !is_fixnum(v_second))
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "format-iso expects integer :year :month :day :hour :minute :second");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "format-iso expects integer :year :month :day :hour :minute :second");
+        return NULL;
     }
 
     int year = as_fixnum(v_year);
@@ -7020,8 +7086,9 @@ ID native_datetime_format_iso(ID *args, unsigned int argc)
         minute < 0 || minute > 99 ||
         second < 0 || second > 99)
     {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "format-iso expects :year in [0,9999] and other fields in [0,99]");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "format-iso expects :year in [0,9999] and other fields in [0,99]");
+        return NULL;
     }
 
     buf[0] = (char)('0' + (year / 1000) % 10);

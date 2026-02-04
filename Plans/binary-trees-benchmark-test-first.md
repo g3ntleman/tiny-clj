@@ -48,7 +48,7 @@ Der [`benchmarks/binarytrees.clj`](benchmarks/binarytrees.clj) Benchmark crasht 
 
 ❌ **Broken:**
 
-- **`doseq`**: Erwartet `CLJ_LIST` für binding_list, bekommt aber `CLJ_VECTOR` → keine Iteration
+- **`doseq`**: Erwartet `CLJ_LIST` für binding_list, bekommt aber `CLJ_VECTOR_PERSISTENT` → keine Iteration
 - **`for`**: Verwendet `eval_arg()` das Bindings evaluiert statt zu parsen → "Unable to resolve symbol"
 
 ### Root Cause
@@ -63,7 +63,7 @@ if (!binding_list || binding_list->type != CLJ_LIST || !body) {
 }
 ```
 
-- Erwartet `CLJ_LIST`, aber `(doseq [x coll] ...) `hat einen `CLJ_VECTOR` als Bindung
+- Erwartet `CLJ_LIST`, aber `(doseq [x coll] ...) `hat einen `CLJ_VECTOR_PERSISTENT` als Bindung
 - Gibt `NULL` zurück → keine Iteration → Body wird nie ausgeführt
 
 **Problem 2: `eval_for` in [`src/eval.c:2239`](src/eval.c)**
@@ -93,8 +93,8 @@ CljObject *binding_list = eval_arg(list, 1, env, NULL);
 
 2. **`eval_doseq` in [`src/eval.c`](src/eval.c) anpassen**
 
-   - Binding-List als `CLJ_VECTOR` akzeptieren (nicht nur `CLJ_LIST`)
-   - Check ändern: `|| (binding_list->type != CLJ_LIST && TAG(binding_list) != CLJ_VECTOR)`
+   - Binding-List als `CLJ_VECTOR_PERSISTENT` akzeptieren (nicht nur `CLJ_LIST`)
+   - Check ändern: `|| (binding_list->type != CLJ_LIST && TAG(binding_list) != CLJ_VECTOR_PERSISTENT)`
    - Vector-Elemente mit `vector_nth()` statt List-Traversal extrahieren
 
 ### Phase 3: Test für for mit Vector-Bindings

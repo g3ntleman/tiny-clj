@@ -357,7 +357,8 @@ TEST(test_timer_enqueue_zero_delay_enqueues_task) {
         TEST_ASSERT_NOT_NULL(fn);
         
         // Check initial count (should be 0)
-        CljPersistentVector *task_vec = g_runtime.task_queue;
+        CljTransientVector *task_queue = g_runtime.task_queue;
+        CljPersistentVector *task_vec = task_queue ? vector_persistent(task_queue) : NULL;
         TEST_ASSERT_NOT_NULL(task_vec);
         unsigned int count_before = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,
@@ -369,7 +370,8 @@ TEST(test_timer_enqueue_zero_delay_enqueues_task) {
             "timer_enqueue should return a valid timer ID");
         
         // Check that count is now 1 (re-read queue; conj_inplace may replace it)
-        task_vec = g_runtime.task_queue;
+        task_queue = g_runtime.task_queue;
+        task_vec = task_queue ? vector_persistent(task_queue) : NULL;
         unsigned int count_after = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after,
             "timer_enqueue with delay 0 should increment count from 0 to 1");
@@ -384,7 +386,9 @@ TEST(test_timer_enqueue_zero_delay_enqueues_task) {
             "data[0] should contain the enqueued task");
         
         // Cleanup - remove the task from the queue
-        vector_remove_at_inplace(&g_runtime.task_queue, 0);
+        if (g_runtime.task_queue) {
+            vector_remove_at(g_runtime.task_queue, 0);
+        }
         RELEASE(fn);
     });
 }
@@ -400,7 +404,8 @@ TEST(test_timer_enqueue_zero_delay_with_run_next) {
         TEST_ASSERT_NOT_NULL(fn);
         
         // Check initial count (should be 0)
-        CljPersistentVector *task_vec = g_runtime.task_queue;
+        CljTransientVector *task_queue = g_runtime.task_queue;
+        CljPersistentVector *task_vec = task_queue ? vector_persistent(task_queue) : NULL;
         TEST_ASSERT_NOT_NULL(task_vec);
         unsigned int count_before = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,
@@ -412,7 +417,8 @@ TEST(test_timer_enqueue_zero_delay_with_run_next) {
             "timer_enqueue should return a valid timer ID");
         
         // Re-read queue; conj_inplace may replace it
-        task_vec = g_runtime.task_queue;
+        task_queue = g_runtime.task_queue;
+        task_vec = task_queue ? vector_persistent(task_queue) : NULL;
         unsigned int count_after_enqueue = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after_enqueue,
             "timer_enqueue with delay 0 should increment count from 0 to 1");
@@ -423,14 +429,17 @@ TEST(test_timer_enqueue_zero_delay_with_run_next) {
             "vector_as_array should return non-NULL after timer_enqueue");
         
         // Now test event_loop_run_next - it should see the count and return true
-        CljPersistentVector *task_vec_fresh = g_runtime.task_queue;
+        task_queue = g_runtime.task_queue;
+        CljPersistentVector *task_vec_fresh = task_queue ? vector_persistent(task_queue) : NULL;
         TEST_ASSERT_NOT_NULL(task_vec_fresh);
         unsigned int count_before_run = vector_count(task_vec_fresh);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_before_run,
             "Count should be 1 before event_loop_run_next");
         
         // Cleanup - remove the task from the queue
-        vector_remove_at_inplace(&g_runtime.task_queue, 0);
+        if (g_runtime.task_queue) {
+            vector_remove_at(g_runtime.task_queue, 0);
+        }
         RELEASE(fn);
     });
 }

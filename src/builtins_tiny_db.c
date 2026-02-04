@@ -88,7 +88,7 @@ ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
     if (size < 0) return NULL;
 
     // Build result map: {:path "..." :size N :type :file}
-    CljPersistentMap *m = make_map(4);
+    CljPersistentMap *m = make_map(4, STRONG);
     m = map_assoc(m, (ID)SYM_KW_PATH, (ID)make_string(path));
     m = map_assoc(m, (ID)SYM_KW_SIZE, fixnum((int32_t)size));
     m = map_assoc(m, (ID)SYM_KW_TYPE, (ID)SYM_KW_FILE);
@@ -124,7 +124,7 @@ ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc)
     ID entries = fs_list_dir_batch(st, dir_path, after_key, (size_t)bs, last_key, sizeof(last_key));
     if (!entries) return NULL;
 
-    CljPersistentMap *m = make_map(4);
+    CljPersistentMap *m = make_map(4, STRONG);
     m = map_assoc(m, (ID)SYM_KW_ENTRIES, entries);
     if (last_key[0] != '\0') {
         m = map_assoc(m, (ID)SYM_KW_LAST_KEY, (ID)make_string(last_key));
@@ -170,7 +170,7 @@ ID native_tinyclj_fs_set_size(ID *args, unsigned int argc)
     int64_t size = fs_stat_size(st, path);
     if (size < 0) return NULL;
 
-    CljPersistentMap *m = make_map(4);
+    CljPersistentMap *m = make_map(4, STRONG);
     m = map_assoc(m, (ID)SYM_KW_PATH, (ID)make_string(path));
     m = map_assoc(m, (ID)SYM_KW_SIZE, fixnum((int32_t)size));
     m = map_assoc(m, (ID)SYM_KW_TYPE, (ID)SYM_KW_FILE);

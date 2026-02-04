@@ -28,7 +28,7 @@ CljObject g_not_found_sentinel = { .type = CLJ_NIL, .flags = 0, .rc = SINGLETON_
 // === CljValue API (Phase 1: Parallel) ===
 
 /** Create a map with given capacity; capacity<=0 returns empty-map singleton. */
-CljPersistentMap* make_map(int capacity) {
+CljPersistentMap* make_map_impl(int capacity, ElementRetention retention) {
   if (capacity <= 0) {
     return map_empty();
   }
@@ -44,6 +44,7 @@ CljPersistentMap* make_map(int capacity) {
   }
 
   map->base.type = CLJ_MAP_PERSISTENT;
+  map->base.flags = (retention == WEAK) ? CLJ_FLAG_WEAK_ELEMENTS : 0;
   map->count = 0;
   map->capacity = capacity;
 
@@ -227,7 +228,7 @@ CljPersistentMap* map_merge(CljPersistentMap* a, CljPersistentMap* b, bool overw
 ID map_keys(ID map) {
   CljPersistentMap *map_data = map_backing(map);
   if (!map_data) return NULL;
-  CljPersistentVector* keys_vec = make_vector(map_data->count, false);
+  CljPersistentVector* keys_vec = make_vector(map_data->count, STRONG);
   if (!keys_vec)
     return NULL;
   MAP_FOR_EACH(map_data, key, value) {
@@ -241,7 +242,7 @@ ID map_keys(ID map) {
 ID map_vals(ID map) {
   CljPersistentMap *map_data = map_backing(map);
   if (!map_data) return NULL;
-  CljPersistentVector* vals_vec = make_vector(map_data->count, false);
+  CljPersistentVector* vals_vec = make_vector(map_data->count, STRONG);
   if (!vals_vec)
     return NULL;
   MAP_FOR_EACH(map_data, key, val) {
@@ -415,7 +416,7 @@ CljTransientMap* make_transient_map_from_kv(unsigned int count, ...) {
         return tmap;
     }
 
-    CljPersistentMap *map = make_map(count);  // throws OOM exception if allocation fails
+    CljPersistentMap *map = make_map(count, STRONG);  // throws OOM exception if allocation fails
 
     CljTransientMap *tmap = map_transient(map);
     RELEASE(map);
@@ -458,7 +459,7 @@ CljPersistentMap* make_map_kv(ID first_key, ...) {
     va_end(args);
 
     // Second pass: build map
-    CljPersistentMap *map = make_map(count);
+    CljPersistentMap *map = make_map(count, STRONG);
 
     va_start(args, first_key);
     ID key = first_key;
@@ -481,7 +482,7 @@ CljPersistentMap* make_map_from_stack(CljObject **pairs, int pair_count) {
     // Create map with extra capacity to allow adding new keys
     // Capacity should be at least pair_count + some headroom for growth
     int capacity = MAX(4, pair_count * 2);
-    CljPersistentMap *map = make_map(capacity);
+    CljPersistentMap *map = make_map(capacity, STRONG);
     for (int i = 0; i < pair_count; i++) {
         CljObject *key = KV_KEY(pairs, i);
         CljObject *value = KV_VALUE(pairs, i);
@@ -547,7 +548,7 @@ CljPersistentMap* map_copy_with_additions(CljPersistentMap *parent_map, CljObjec
     int total_capacity = parent_count + addition_count + 4;  // Extra headroom
     if (total_capacity < 4) total_capacity = 4;
 
-    CljPersistentMap *base = make_map(total_capacity);
+    CljPersistentMap *base = make_map(total_capacity, STRONG);
     if (!base) {
         return NULL;  // OOM
     }

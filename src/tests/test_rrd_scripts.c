@@ -22,6 +22,28 @@ static int script_path_exists(const char *path)
     return 0;
 }
 
+static const char *rrd_script_path(char *out, size_t out_sz, const char *script_name)
+{
+    TEST_ASSERT_NOT_NULL_MESSAGE(script_name, "script_name must not be NULL");
+    if (!out || out_sz == 0) return NULL;
+    out[0] = '\0';
+
+    // Prefer deriving repo root from __FILE__ to avoid cwd dependency.
+    const char *marker = "/src/tests/";
+    const char *pos = strstr(__FILE__, marker);
+    if (pos) {
+        size_t prefix_len = (size_t)(pos - __FILE__);
+        char suffix[256];
+        test_snprintf(suffix, sizeof(suffix), "/libs/test/rrd/%s", script_name);
+        test_path_join_prefix(out, out_sz, __FILE__, prefix_len, suffix);
+        return out;
+    }
+
+    // Fallback: relative path (requires cwd = repo root).
+    test_snprintf(out, out_sz, "libs/test/rrd/%s", script_name);
+    return out;
+}
+
 static void assert_load_file_ok(const char *path)
 {
     TEST_ASSERT_NOT_NULL_MESSAGE(path, "path must not be NULL");
@@ -42,22 +64,24 @@ static void assert_load_file_ok(const char *path)
 TEST(test_rrd_smoke_script)
 {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    const char *path = "libs/test/rrd/smoke.clj";
-    if (!script_path_exists(path)) {
+    char path[512];
+    const char *resolved = rrd_script_path(path, sizeof(path), "smoke.clj");
+    if (!resolved || !script_path_exists(resolved)) {
         TEST_IGNORE_MESSAGE("RRD script not found (run from project root)");
         return;
     }
-    assert_load_file_ok(path);
+    assert_load_file_ok(resolved);
 }
 
 TEST(test_rrd_spline_script)
 {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    const char *path = "libs/test/rrd/spline_test.clj";
-    if (!script_path_exists(path)) {
+    char path[512];
+    const char *resolved = rrd_script_path(path, sizeof(path), "spline_test.clj");
+    if (!resolved || !script_path_exists(resolved)) {
         TEST_IGNORE_MESSAGE("RRD script not found (run from project root)");
         return;
     }
-    assert_load_file_ok(path);
+    assert_load_file_ok(resolved);
 }
 

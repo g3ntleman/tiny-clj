@@ -257,8 +257,8 @@ TEST(test_metadata_transferred_from_defn_to_function) {
     TEST_ASSERT_NOT_NULL_MESSAGE(fn_meta, 
                                  "metadata should be on the function");
     
-    RELEASE(parsed);
-    RELEASE(result);
+    (void)parsed;
+    (void)result;
 }
 
 // ============================================================================
@@ -299,8 +299,8 @@ TEST(test_metadata_transferred_from_defn_to_native_function) {
     TEST_ASSERT_NOT_NULL_MESSAGE(fn_meta, 
                                  "metadata should be on the native function");
     
-    RELEASE(parsed);
-    RELEASE(result);
+    (void)parsed;
+    (void)result;
 }
 
 // ============================================================================

@@ -35,6 +35,33 @@ static void load_repl_namespace(void) {
 }
 
 // ============================================================================
+// REPL STARTUP (CORE LOAD) DEBUG TEST
+// ============================================================================
+
+TEST(test_repl_startup_core_load_debug) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Recreate REPL startup sequence on a clean state (no auto core load).
+    evalstate_reset(&g_test_eval_state, false);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Ensure profiling is enabled for this run.
+    enable_memory_profiling(true);
+
+    WITH_AUTORELEASE_POOL({
+        register_builtins();
+        load_clojure_core(g_test_eval_state);
+        load_clojure_repl(g_test_eval_state);
+        evalstate_set_ns(g_test_eval_state, "user");
+        (void)eval_string("(require '[clojure.repl :refer :all])", g_test_eval_state);
+    });
+}
+
+// Ensure this debug test is not stripped by the linker.
+static SubjectiveCTestFn s_force_repl_startup_core_load_debug __attribute__((used)) =
+    test_repl_startup_core_load_debug;
+
+// ============================================================================
 // DOC FUNCTION TESTS
 // ============================================================================
 
@@ -235,14 +262,10 @@ TEST(test_repl_source_shows_qualified_recursive_call) {
         "      (+ (repl-source-foo (- n 1))"
         "         (repl-source-foo (- n 2))))))",
         g_test_eval_state);
-    if (defn_result && !IS_IMMEDIATE(defn_result)) {
-        RELEASE(defn_result);
-    }
+    (void)defn_result;
 
     CljObject *call_result = eval_string("(repl-source-foo 3)", g_test_eval_state);
-    if (call_result && !IS_IMMEDIATE(call_result)) {
-        RELEASE(call_result);
-    }
+    (void)call_result;
 
     CljSymbol *foo_sym = intern_symbol_global("repl-source-foo");
     TEST_ASSERT_NOT_NULL(foo_sym);
@@ -262,8 +285,7 @@ TEST(test_repl_source_shows_qualified_recursive_call) {
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(body_cstr, "user/repl-source-foo"),
         "Function body should contain qualified recursive call");
 
-    RELEASE(body_str);
-    RELEASE(foo_fn_obj);
+    // body_str and foo_fn_obj are not owned here.
 }
 
 // ============================================================================
@@ -412,9 +434,18 @@ TEST(test_repl_find_doc_can_be_called) {
 
 TEST(test_repl_namespace_loads_automatically) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Load clojure.repl namespace
-    load_repl_namespace();
+
+    // Recreate REPL startup sequence on a clean state (no auto core load).
+    evalstate_reset(&g_test_eval_state, false);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    enable_memory_profiling(true);
+    WITH_AUTORELEASE_POOL({
+        register_builtins();
+        load_clojure_core(g_test_eval_state);
+        load_clojure_repl(g_test_eval_state);
+        evalstate_set_ns(g_test_eval_state, "user");
+        (void)eval_string("(require '[clojure.repl :refer :all])", g_test_eval_state);
+    });
     
     // Test: clojure.repl namespace should exist
     CljNamespace *repl_ns = ns_find("clojure.repl");
@@ -515,8 +546,8 @@ TEST(test_stacktrace_stack_trace_returns_vector_of_strings) {
     TEST_ASSERT_NOT_NULL_MESSAGE(trace_obj, "stack-trace should return a vector (possibly empty)");
 
     // 4) assert it returns a vector and that every element is a string
-    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR, TAG(trace_obj), "stack-trace should return a vector");
-    CljVector *trace_vec = as_vector(trace_obj);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR_PERSISTENT, TAG(trace_obj), "stack-trace should return a vector");
+    CljPersistentVector *trace_vec = as_vector(trace_obj);
     TEST_ASSERT_NOT_NULL(trace_vec);
 
     int n = vector_count(trace_vec);

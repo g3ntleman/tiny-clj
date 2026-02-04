@@ -182,8 +182,15 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
   const int debug_form = getenv_int("TINYCLJ_DEBUG_CORE_FORM", 0);
   const int stop_after_form = getenv_int("TINYCLJ_DEBUG_CORE_STOP_AFTER", 0);
   // Memory diagnostics: print top types every N forms and/or a final summary.
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
   const int debug_mem_every = getenv_int("TINYCLJ_DEBUG_CORE_MEM_EVERY", 0);
   const int debug_mem_summary = getenv_int("TINYCLJ_DEBUG_CORE_MEM_SUMMARY", 0);
+#else
+  const int debug_mem_every = 0;
+  const int debug_mem_summary = 0;
+  (void)debug_mem_every;
+  (void)debug_mem_summary;
+#endif
   // Autorelease diagnostics (compile-time gated):
   // Build with -DTINYCLJ_AUTORELEASE_DIAGNOSTICS=1 to enable.
 #if defined(DEBUG) && defined(TINYCLJ_AUTORELEASE_DIAGNOSTICS) && TINYCLJ_AUTORELEASE_DIAGNOSTICS

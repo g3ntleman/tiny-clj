@@ -76,4 +76,7 @@ ID parse(const char *input, EvalState *st);
  */
 CljSymbol* resolve_alias_in_namespace(EvalState *st, const char *alias_str);
 
+// Disable metadata parsing (used for core-load diagnostics/compat).
+void parser_set_disable_meta(bool disable);
+
 #endif

@@ -109,9 +109,10 @@ static ID throw_ambiguous_symbol_error(CljSymbol *sym,
         ? first_ns->name->cname : "unknown";
     const char *ns2_name = (second_ns && second_ns->name && second_ns->name->cname)
         ? second_ns->name->cname : "unknown";
-    return throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
-        "Unable to resolve symbol: %s in this context, perhaps you meant: %s/%s or %s/%s",
-        sym_name, ns1_name, sym_name, ns2_name, sym_name);
+    throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
+                              "Unable to resolve symbol: %s in this context, perhaps you meant: %s/%s or %s/%s",
+                              sym_name, ns1_name, sym_name, ns2_name, sym_name);
+    return NULL;
 }
 
 // Helper context for namespace cleanup in ns_cleanup()
@@ -676,8 +677,9 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
 
 void evalstate_pop_dynamic_bindings_to(EvalState *st, unsigned int depth) {
     if (!st) return;
-    while (st->dynamic_bindings && vector_count(st->dynamic_bindings) > depth) {
-        vector_pop_inplace(&st->dynamic_bindings);
+    while (st->dynamic_bindings && st->dynamic_bindings->backing &&
+           vector_count(st->dynamic_bindings->backing) > depth) {
+        vector_pop(st->dynamic_bindings);
     }
 }
 
@@ -872,6 +874,11 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // For def: store qualified symbol (e.g., user/my-var)
     // IMPORTANT: Use owned/in-place update to keep rc==1 during core load (COW hot path).
     map_assoc_inplace(&ns->mappings, qualified_symbol, value);
+
+    // For clojure.core, also keep an unqualified binding for compatibility.
+    if (ns->name == SYM_CLOJURE_CORE && sym->ns_name == NULL) {
+        map_assoc_inplace(&ns->mappings, sym, value);
+    }
 
     // OPTIMIZATION: Invalidate resolve cache completely instead of removing individual symbols
     // This avoids ~23 map_assoc() calls per require and is more efficient.

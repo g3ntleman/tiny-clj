@@ -133,7 +133,7 @@ CljFunction* clone_closure_with_env(CljFunction *src) {
     // env_stack: Shallow clone (Maps werden geteilt, aber Vector ist neu)
     if (src->env_stack) {
         unsigned int count = vector_count(src->env_stack);
-        dst->env_stack = make_vector(count, CLJ_VECTOR);
+        dst->env_stack = make_vector(count, CLJ_VECTOR_PERSISTENT);
         for (unsigned int i = 0; i < count; i++) {
             ID env_map = vector_nth(src->env_stack, i);
             // Maps werden nur RETAIN'd, nicht deep-copied

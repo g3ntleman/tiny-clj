@@ -282,7 +282,6 @@ FsKvStore *fs_kv_store_new(void)
     if (!st->ram.buf) {
         CLJ_FREE(st);
         throw_oom();
-        return NULL;
     }
     st->ram.len = ram_bytes;
     memset(st->ram.buf, 0xFF, ram_bytes);
@@ -1060,7 +1059,7 @@ ID fs_list_dir_batch(FsKvStore *st,
     size_t prefix_len = strlen(dir_path);
     size_t after_len = after_key ? strlen(after_key) : 0;
 
-    CljVector *vec = make_vector(8, CLJ_VECTOR);
+    CljPersistentVector *vec = make_vector(8, STRONG);
     if (!vec) return NULL;
 
     tdb_kv_cursor_t* cur = NULL;

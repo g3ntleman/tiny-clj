@@ -25,6 +25,7 @@ ID native_vector(ID *args, unsigned int argc);
 
 // Builtins registration
 void register_builtins(void);
+void builtins_reset_cached_funcs(void);
 
 // Native function lookup for stubs
 // Returns NULL if not found

@@ -38,7 +38,7 @@ static uint32_t hash_symbol(CljSymbol *sym) {
     return fnv1a(sym->cname);
 }
 
-static uint32_t hash_vector(CljVector *vec) {
+static uint32_t hash_vector(CljPersistentVector *vec) {
     if (!vec) return 0;
     uint32_t h = 0;
     int n = vector_count(vec);
