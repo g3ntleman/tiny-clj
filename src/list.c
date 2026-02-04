@@ -14,6 +14,28 @@
 // Forward declaration
 extern const char* clj_type_name(CljType type);
 
+#ifdef DEBUG
+static bool trace_list_alloc_enabled(void) {
+    static int cached = -1;
+    if (cached == -1) {
+        const char *env = getenv("TINYCLJ_TRACE_LIST_ALLOC");
+        cached = (env && env[0] && strcmp(env, "0") != 0) ? 1 : 0;
+    }
+    return cached == 1;
+}
+
+#if defined(__GNUC__) && !defined(ESP32_BUILD) && !defined(ESP_PLATFORM)
+static bool trace_list_backtrace_enabled(void) {
+    static int cached = -1;
+    if (cached == -1) {
+        const char *env = getenv("TINYCLJ_TRACE_LIST_ALLOC_BT");
+        cached = (env && env[0] && strcmp(env, "0") != 0) ? 1 : 0;
+    }
+    return cached == 1;
+}
+#endif
+#endif
+
 // Empty-list singleton: CLJ_LIST with rc=SINGLETON_RC, statically initialized
 static struct {
     CljList list;
@@ -39,6 +61,30 @@ CljList* make_list(ID first, CljList *rest) {
     list->base.type = CLJ_LIST;
     list->first = RETAIN(first);
     list->rest = RETAIN(rest);
+
+#ifdef DEBUG
+    if (trace_list_alloc_enabled()) {
+        static int trace_count = 0;
+        if (trace_count < 200) {
+            fprintf(stderr, "[list-alloc] %p first=%p rest=%p\n",
+                    (void*)list, (void*)list->first, (void*)list->rest);
+#if defined(__GNUC__) && !defined(ESP32_BUILD) && !defined(ESP_PLATFORM)
+            if (trace_list_backtrace_enabled()) {
+                void *bt[16];
+                int n = backtrace(bt, 16);
+                char **symbols = backtrace_symbols(bt, n);
+                if (symbols) {
+                    for (int i = 0; i < n; i++) {
+                        fprintf(stderr, "  %s\n", symbols[i]);
+                    }
+                    free(symbols);
+                }
+            }
+#endif
+            trace_count++;
+        }
+    }
+#endif
 
     return list;
 }
@@ -80,15 +126,17 @@ CljList* as_list_checked(ID obj) {
 // List operations for try/catch
 ID list_nth(CljList *list, int n) {
     if (!list || n < 0) {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "nth index %d is out of bounds for list", n);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                  "nth index %d is out of bounds for list", n);
+        return NULL;
     }
 
     // Check if list is empty (both first and rest are NULL)
     if (list_empty(list)) {
         // Empty list - index is out of bounds
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "nth index %d is out of bounds for list", n);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                  "nth index %d is out of bounds for list", n);
+        return NULL;
     }
 
     CljObject *current = (CljObject*)list;
@@ -108,8 +156,9 @@ ID list_nth(CljList *list, int n) {
     }
 
     // Index not found - out of bounds
-    return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-            "nth index %d is out of bounds for list", n);
+    throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                              "nth index %d is out of bounds for list", n);
+    return NULL;
 }
 
 // NOTE: O(n) traversal for linked lists.

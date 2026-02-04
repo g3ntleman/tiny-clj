@@ -4,6 +4,7 @@
  * Consolidated tests for core Clojure functions from clojure.core namespace
  */
 
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 1700
 #include "tests_common.h"
 #include "namespace.h"
 #include "symbol.h"
@@ -380,7 +381,6 @@ TEST_SHARED(test_str_with_boolean) {
     TEST_ASSERT_NOT_NULL(direct_result);
     const char *result_str = string_data(direct_result);
     TEST_ASSERT_EQUAL_STRING("false", result_str);
-    RELEASE(direct_result);
     
     // Test: (str false) should return "false"
     CljObject *str_result3 = eval_string("(str false)", g_test_eval_state);
@@ -576,9 +576,9 @@ TEST_SHARED(test_core_not_first_class) {
     // (map not [true false true]) => (false true false)
     CljObject *result1 = eval_string("(vec (map not [true false true]))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(TAG(result1) == CLJ_VECTOR);
+    TEST_ASSERT_TRUE(TAG(result1) == CLJ_VECTOR_PERSISTENT);
 
-    CljVector *v = (CljVector*)result1;
+    CljPersistentVector *v = (CljPersistentVector*)result1;
     TEST_ASSERT_EQUAL_INT(3, vector_count(v));
     TEST_ASSERT_TRUE(vector_nth(v, 0) == clj_false);
     TEST_ASSERT_TRUE(vector_nth(v, 1) == clj_true);

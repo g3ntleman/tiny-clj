@@ -46,6 +46,10 @@ void subjective_c_test_registry_add(const char *name, const char *file, int line
 
 // Extended registration with group and file info
 void subjective_c_test_registry_add_with_file_info(const char *name, SubjectiveCTestFn fn, const char *group, const char *file, int line) {
+    subjective_c_test_registry_add_with_file_info_ex(name, fn, group, file, line, SUBJECTIVE_C_TEST_HEAP_GROWTH_UNSPECIFIED);
+}
+
+void subjective_c_test_registry_add_with_file_info_ex(const char *name, SubjectiveCTestFn fn, const char *group, const char *file, int line, size_t heap_growth_limit_bytes) {
     if (!name || !fn) {
         fprintf(stderr, "subjective-c test registration error: invalid entry\n");
         abort();
@@ -115,6 +119,7 @@ void subjective_c_test_registry_add_with_file_info(const char *name, SubjectiveC
     g_entries[g_entry_count].file = file_copy;
     g_entries[g_entry_count].line = line;
     g_entries[g_entry_count].fn = fn;
+    g_entries[g_entry_count].heap_growth_limit_bytes = heap_growth_limit_bytes;
     g_entry_count++;
 }
 

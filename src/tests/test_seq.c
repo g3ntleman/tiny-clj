@@ -4,6 +4,7 @@
  * Tests for sequence semantics and iterator-based implementation.
  */
 
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 900
 #include "tests_common.h"
 #include "../list.h"
 #include "../seq.h"
