@@ -1,17 +1,26 @@
+/**
+ * @file test_registry.c
+ * @brief Test registry implementation with dynamic allocation and grouping.
+ */
+
 #include "test_registry.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// Registry state - dynamic allocation for flexibility
 static SubjectiveCTestEntry *g_entries = NULL;
 static size_t g_entry_count = 0;
 static size_t g_entry_capacity = 0;
 
 #define INITIAL_CAPACITY 64
 
-// Helper function to create qualified name (removes "test_" prefix if present)
+/**
+ * @brief Create qualified test name (group/name, strips "test_" prefix).
+ * @param group Group name
+ * @param name Test name
+ * @return Allocated qualified name, caller must free
+ */
 static char* create_qualified_name(const char *group, const char *name) {
     size_t group_len = strlen(group);
     
@@ -33,7 +42,13 @@ static char* create_qualified_name(const char *group, const char *name) {
     return qualified;
 }
 
-// Basic registration (backward compatible)
+/**
+ * @brief Register test with basic info (backward compatible).
+ * @param name Test name
+ * @param file Source file
+ * @param line Source line
+ * @param fn Test function pointer
+ */
 void subjective_c_test_registry_add(const char *name, const char *file, int line, SubjectiveCTestFn fn) {
     if (!name || !fn) {
         fprintf(stderr, "subjective-c test registration error: invalid entry\n");
@@ -44,11 +59,27 @@ void subjective_c_test_registry_add(const char *name, const char *file, int line
     subjective_c_test_registry_add_with_file_info(name, fn, "unknown", file, line);
 }
 
-// Extended registration with group and file info
+/**
+ * @brief Register test with group info (delegates to _ex).
+ * @param name Test name
+ * @param fn Test function
+ * @param group Test group
+ * @param file Source file
+ * @param line Source line
+ */
 void subjective_c_test_registry_add_with_file_info(const char *name, SubjectiveCTestFn fn, const char *group, const char *file, int line) {
     subjective_c_test_registry_add_with_file_info_ex(name, fn, group, file, line, SUBJECTIVE_C_TEST_HEAP_GROWTH_UNSPECIFIED);
 }
 
+/**
+ * @brief Register test with full metadata including heap limit.
+ * @param name Test name
+ * @param fn Test function
+ * @param group Test group
+ * @param file Source file
+ * @param line Source line
+ * @param heap_growth_limit_bytes Max heap growth allowed (or _UNSPECIFIED/_UNLIMITED)
+ */
 void subjective_c_test_registry_add_with_file_info_ex(const char *name, SubjectiveCTestFn fn, const char *group, const char *file, int line, size_t heap_growth_limit_bytes) {
     if (!name || !fn) {
         fprintf(stderr, "subjective-c test registration error: invalid entry\n");
@@ -123,7 +154,11 @@ void subjective_c_test_registry_add_with_file_info_ex(const char *name, Subjecti
     g_entry_count++;
 }
 
-// Get all entries
+/**
+ * @brief Get all registered test entries.
+ * @param count Output parameter for entry count (may be NULL)
+ * @return Array of test entries
+ */
 const SubjectiveCTestEntry* subjective_c_test_registry_entries(size_t *count) {
     if (count) {
         *count = g_entry_count;
@@ -131,7 +166,11 @@ const SubjectiveCTestEntry* subjective_c_test_registry_entries(size_t *count) {
     return g_entries;
 }
 
-// Find by name
+/**
+ * @brief Find test by simple name.
+ * @param name Test name to find
+ * @return Test entry or NULL if not found
+ */
 SubjectiveCTestEntry* subjective_c_test_registry_find(const char *name) {
     for (size_t i = 0; i < g_entry_count; i++) {
         if (strcmp(g_entries[i].name, name) == 0) {
@@ -151,7 +190,11 @@ SubjectiveCTestEntry* subjective_c_test_registry_find_by_qualified_name(const ch
     return NULL;
 }
 
-// Find by pattern
+/**
+ * @brief Find first test matching pattern (supports * wildcard).
+ * @param pattern Pattern to match
+ * @return First matching test entry or NULL
+ */
 SubjectiveCTestEntry* subjective_c_test_registry_find_by_pattern(const char *pattern) {
     for (size_t i = 0; i < g_entry_count; i++) {
         if (subjective_c_test_name_matches_pattern(g_entries[i].qualified_name, pattern)) {
@@ -161,7 +204,12 @@ SubjectiveCTestEntry* subjective_c_test_registry_find_by_pattern(const char *pat
     return NULL;
 }
 
-// Get by group
+/**
+ * @brief Get all tests in a group (returns allocated array, caller frees).
+ * @param group Group name
+ * @param count Output parameter for array size
+ * @return Allocated array of test entries or NULL
+ */
 SubjectiveCTestEntry* subjective_c_test_registry_get_by_group(const char *group, size_t *count) {
     size_t filtered_count = 0;
     for (size_t i = 0; i < g_entry_count; i++) {
@@ -192,7 +240,7 @@ SubjectiveCTestEntry* subjective_c_test_registry_get_by_group(const char *group,
     return filtered;
 }
 
-// List all tests
+/** @brief Print all registered tests to stdout. */
 void subjective_c_test_registry_list_all(void) {
     printf("Available tests (%zu total):\n", g_entry_count);
     for (size_t i = 0; i < g_entry_count; i++) {
@@ -224,7 +272,11 @@ void subjective_c_test_registry_list_groups(void) {
     }
 }
 
-// Extract filename from path
+/**
+ * @brief Extract filename stem from path (strips directory and extension).
+ * @param file_path File path to parse
+ * @return Allocated filename stem or "unknown", caller must free
+ */
 char *subjective_c_test_extract_filename_from_path(const char *file_path) {
     if (!file_path) {
         char *result = malloc(8);
@@ -263,7 +315,12 @@ char *subjective_c_test_extract_filename_from_path(const char *file_path) {
     return result;
 }
 
-// Pattern matching with * wildcard
+/**
+ * @brief Match name against pattern with * wildcard support.
+ * @param name Name to match
+ * @param pattern Pattern (* matches any sequence)
+ * @return true if match, false otherwise
+ */
 bool subjective_c_test_name_matches_pattern(const char *name, const char *pattern) {
     const char *name_ptr = name;
     const char *pattern_ptr = pattern;

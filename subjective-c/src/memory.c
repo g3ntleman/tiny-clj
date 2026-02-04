@@ -1,8 +1,9 @@
-/*
- * Memory Management Implementation for Tiny-CLJ
- * 
- * Centralized memory management with reference counting and autorelease pools.
- * Provides retain/release semantics similar to Objective-C ARC.
+/**
+ * @file memory.c
+ * @brief Reference counting and autorelease pool implementation.
+ *
+ * Provides manual reference counting with RETAIN/RELEASE macros and
+ * automatic cleanup via autorelease pools (WITH_AUTORELEASE_POOL).
  */
 
 #include "memory.h"
@@ -103,17 +104,30 @@ static inline void update_debug_output_active(void) {
 }
 
 static SubjectiveCZombieLogFn g_zombie_log_fn = NULL;
-void subjective_c_set_zombie_log_fn(SubjectiveCZombieLogFn fn) { g_zombie_log_fn = fn; }
 
+/** @brief Set zombie logging callback. */
+void subjective_c_set_zombie_log_fn(SubjectiveCZombieLogFn fn) { 
+    g_zombie_log_fn = fn; 
+}
+
+/** @brief Enable/disable debug output for memory operations. */
 void memory_set_debug_output_enabled(bool enabled) {
     g_debug_output_enabled = enabled;
     update_debug_output_active();
 }
 
+/** @brief Check if debug output is enabled. */
 bool memory_get_debug_output_enabled(void) {
     return g_debug_output_enabled;
 }
 
+/**
+ * @brief Allocate memory for Clojure objects.
+ * @param type_size Size of object type
+ * @param count Number of objects
+ * @param obj_type Clojure type tag
+ * @return Allocated object with rc=1, throws on OOM
+ */
 void* alloc(size_t type_size, size_t count, CljType obj_type) {
     void *result = malloc(type_size * count);
     if (!result) throw_oom();
@@ -138,6 +152,9 @@ static void init_release_dispatch(void);
 static SubjectiveCReleaseFn g_release_dispatch[CLJ_TYPE_COUNT];
 static bool g_release_dispatch_initialized = false;
 
+/**
+ * @brief Initialize global autorelease pool (called once at startup).
+ */
 void autorelease_pool_init(void) {
     if (g_pool) return;
     g_pool = make_vector(POOL_INITIAL_CAPACITY, WEAK);
@@ -155,7 +172,12 @@ static void init_release_dispatch(void) {
 }
 
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
-/** Fills buf with clj_to_string(v), trunc to size-1. Uses injected to_string. No RELEASE: app to_string returns AUTORELEASE'd. */
+/**
+ * @brief Fill buffer with string representation for zombie debugging.
+ * @param v Object to describe
+ * @param buf Output buffer
+ * @param size Buffer size
+ */
 static void zombie_description(CljObject *v, char *buf, size_t size) {
     if (!buf || !size) return;
     buf[0] = '\0';
@@ -171,6 +193,10 @@ static void zombie_description(CljObject *v, char *buf, size_t size) {
 }
 #endif
 
+/**
+ * @brief Increment reference count (ignores singletons/immediates).
+ * @param v Object to retain (NULL-safe)
+ */
 void retain(CljObject *v) {
     if (is_singleton(v)) return;
 #ifdef DEBUG
@@ -231,6 +257,10 @@ void retain(CljObject *v) {
 #endif
 }
 
+/**
+ * @brief Decrement reference count and free if zero (ignores singletons).
+ * @param v Object to release (NULL-safe)
+ */
 void release(CljObject *v) {
     if (is_singleton(v)) return;
 #ifdef DEBUG

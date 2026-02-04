@@ -14,6 +14,7 @@
 #include "to_string.h" // For pr_str debug printing
 #include "types.h"  // For clj_type_name
 #include "memory_profiler.h"
+#include "mini_format.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -333,7 +334,7 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     if (debug_mem_every > 0 && (expr_count % debug_mem_every) == 0) {
       char label_buf[64];
-      snprintf(label_buf, sizeof(label_buf), "after form %d", expr_count);
+      mini_snprintf(label_buf, sizeof(label_buf), "after form %d", expr_count);
       core_mem_print_top_types(label_buf, 5);
     }
 #endif
@@ -507,7 +508,7 @@ int load_clojure_repl(EvalState *st) {
   
   // Search order: libs/<rel>, <rel>, ../libs/<rel>, ../<rel>
   char libs_path[512];
-  snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
+  mini_snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
   char parent_libs_path[512];
   // Avoid -Werror=format-truncation: "../" + libs_path must fit.
   // Keep this robust on toolchains that treat warnings as errors (ESP-IDF).
@@ -516,9 +517,9 @@ int load_clojure_repl(EvalState *st) {
     free(rel);
     return 0;
   }
-  snprintf(parent_libs_path, sizeof(parent_libs_path), "../%.*s", (int)max_copy, libs_path);
+  mini_snprintf(parent_libs_path, sizeof(parent_libs_path), "../%.*s", (int)max_copy, libs_path);
   char parent_rel_path[512];
-  snprintf(parent_rel_path, sizeof(parent_rel_path), "../%s", rel);
+  mini_snprintf(parent_rel_path, sizeof(parent_rel_path), "../%s", rel);
   const char *candidates[] = {
     libs_path,
     rel,

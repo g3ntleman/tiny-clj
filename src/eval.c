@@ -25,7 +25,6 @@
 #include "namespace.h"
 #include "memory.h"
 #include "meta.h"
-#include "list.h"
 #include "value.h"
 #include "environment.h"
 #include "ast.h"

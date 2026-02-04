@@ -22,6 +22,7 @@
 #include "file_utils.h"
 #include "meta.h"
 #include "build_info.h"
+#include "mini_format.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -119,7 +120,7 @@ static void print_prompt(EvalState *st, bool balanced) {
         }
     }
     char prompt[128];
-    (void)snprintf(prompt, sizeof(prompt), "%s%s ", ns_name, balanced ? "=>" : "...");
+    (void)mini_snprintf(prompt, sizeof(prompt), "%s%s ", ns_name, balanced ? "=>" : "...");
     // Ensure the prompt starts at column 1, even if previous output did not end with '\n'.
     // This is best-effort: we track stdout line-start via platform stdout hooks.
     bool at_line_start = g_repl_stdout_at_line_start;

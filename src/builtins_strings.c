@@ -21,6 +21,7 @@
 #include "exception.h"
 #include "builtins.h"
 #include "symbol.h"
+#include "mini_format.h"
 
 // ============================================================================
 // STRING FUNCTIONS
@@ -73,7 +74,7 @@ ID native_str(ID *args, unsigned int argc) {
 ID native_subs(ID *args, unsigned int argc) {
     if (argc != 2 && argc != 3) {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
+        mini_snprintf(error_msg, sizeof(error_msg),
                 "subs requires exactly 2 or 3 argument%s, got %u",
                 argc == 2 ? "" : "s", argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
@@ -157,7 +158,7 @@ ID native_subs(ID *args, unsigned int argc) {
 ID native_trim(ID *args, unsigned int argc) {
     if (argc != 1) {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
+        mini_snprintf(error_msg, sizeof(error_msg),
                 "trim requires exactly 1 argument, got %u", argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
     }
@@ -478,7 +479,7 @@ ID native_format(ID *args, unsigned int argc) {
     // Format arguments based on format string
     if (argc == 1) {
         // No arguments, just copy format string
-        snprintf(buffer, buf_size, "%s", fmt_str->data);
+        mini_snprintf(buffer, buf_size, "%s", fmt_str->data);
     } else {
         // We need to handle variadic arguments
         // For simplicity, support common format specifiers: %d, %f, %s
@@ -498,7 +499,7 @@ ID native_format(ID *args, unsigned int argc) {
                     case 'd': {
                         // Integer
                         int val = AS_FIXNUM(args[arg_idx]);
-                        int n = snprintf(out, remaining, "%d", val);
+                        int n = mini_snprintf(out, remaining, "%d", val);
                         if (n < 0 || n >= (int)remaining) {
                             // Buffer too small, reallocate
                             size_t used = out - buffer;
@@ -511,7 +512,7 @@ ID native_format(ID *args, unsigned int argc) {
                             }
                             out = buffer + used;
                             remaining = buf_size - used - 1;
-                            n = snprintf(out, remaining, "%d", val);
+                            n = mini_snprintf(out, remaining, "%d", val);
                         }
                         out += n;
                         remaining -= n;
@@ -523,7 +524,7 @@ ID native_format(ID *args, unsigned int argc) {
                         float val = (TAG(args[arg_idx]) == CLJ_INT) ?
                                    (float)AS_FIXNUM(args[arg_idx]) :
                                    as_fixed((CljValue)args[arg_idx]);
-                        int n = snprintf(out, remaining, "%f", val);
+                        int n = mini_snprintf(out, remaining, "%f", val);
                         if (n < 0 || n >= (int)remaining) {
                             size_t used = out - buffer;
                             buf_size *= 2;
@@ -535,7 +536,7 @@ ID native_format(ID *args, unsigned int argc) {
                             }
                             out = buffer + used;
                             remaining = buf_size - used - 1;
-                            n = snprintf(out, remaining, "%f", val);
+                            n = mini_snprintf(out, remaining, "%f", val);
                         }
                         out += n;
                         remaining -= n;
@@ -549,7 +550,7 @@ ID native_format(ID *args, unsigned int argc) {
                             // Try to convert to string
                             CljString *str_repr = print_str(args[arg_idx]);
                             if (str_repr) {
-                                int n = snprintf(out, remaining, "%s", string_data(str_repr));
+                                int n = mini_snprintf(out, remaining, "%s", string_data(str_repr));
                                 if (n < 0 || n >= (int)remaining) {
                                     size_t used = out - buffer;
                                     buf_size *= 2;
@@ -561,13 +562,13 @@ ID native_format(ID *args, unsigned int argc) {
                                     }
                                     out = buffer + used;
                                     remaining = buf_size - used - 1;
-                                    n = snprintf(out, remaining, "%s", string_data(str_repr));
+                                    n = mini_snprintf(out, remaining, "%s", string_data(str_repr));
                                 }
                                 out += n;
                                 remaining -= n;
                             }
                         } else {
-                            int n = snprintf(out, remaining, "%s", str->data);
+                            int n = mini_snprintf(out, remaining, "%s", str->data);
                             if (n < 0 || n >= (int)remaining) {
                                 size_t used = out - buffer;
                                 buf_size *= 2;
@@ -579,7 +580,7 @@ ID native_format(ID *args, unsigned int argc) {
                                 }
                                 out = buffer + used;
                                 remaining = buf_size - used - 1;
-                                n = snprintf(out, remaining, "%s", str->data);
+                                n = mini_snprintf(out, remaining, "%s", str->data);
                             }
                             out += n;
                             remaining -= n;
@@ -649,7 +650,7 @@ BuiltinFn builtins_strings_native_function_lookup(CljSymbol *symbol) {
 
     char qualified_name[128];
     if (ns_name) {
-        snprintf(qualified_name, sizeof(qualified_name), "%s/%s", ns_name, cname);
+        mini_snprintf(qualified_name, sizeof(qualified_name), "%s/%s", ns_name, cname);
     }
 
     for (int i = 0; builtins_strings_native_function_table[i].clojure_symbol != NULL; i++) {
