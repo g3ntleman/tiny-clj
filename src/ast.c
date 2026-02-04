@@ -1,19 +1,70 @@
 #include "ast.h"
 #include "memory.h"
 #include "list.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#if defined(__GNUC__) && !defined(ESP32_BUILD) && !defined(ESP_PLATFORM)
+#include <execinfo.h>
+#endif
+
+#ifdef DEBUG
+static bool trace_ast_alloc_enabled(void) {
+    static int cached = -1;
+    if (cached == -1) {
+        const char *env = getenv("TINYCLJ_TRACE_AST_ALLOC");
+        cached = (env && env[0] && strcmp(env, "0") != 0) ? 1 : 0;
+    }
+    return cached == 1;
+}
+
+#if defined(__GNUC__) && !defined(ESP32_BUILD) && !defined(ESP_PLATFORM)
+static bool trace_ast_backtrace_enabled(void) {
+    static int cached = -1;
+    if (cached == -1) {
+        const char *env = getenv("TINYCLJ_TRACE_AST_ALLOC_BT");
+        cached = (env && env[0] && strcmp(env, "0") != 0) ? 1 : 0;
+    }
+    return cached == 1;
+}
+#endif
+#endif
 
 /** Construct AST cons cell (rc=1, caller releases). */
 CljASTNode* make_ast_node(ID first, ID rest) {
     CljASTNode *node = ALLOC(CljASTNode, 1);
     if (!node) {
         throw_oom();
-        return NULL;
     }
 
     node->base.type = CLJ_AST_NODE;
     node->first = RETAIN(first);
     node->rest = RETAIN(rest);
     node->callsite_cache = NULL;
+
+#ifdef DEBUG
+    if (trace_ast_alloc_enabled()) {
+        static int trace_count = 0;
+        if (trace_count < 200) {
+            fprintf(stderr, "[ast-alloc] %p first=%p rest=%p\n",
+                    (void*)node, (void*)node->first, (void*)node->rest);
+#if defined(__GNUC__) && !defined(ESP32_BUILD) && !defined(ESP_PLATFORM)
+            if (trace_ast_backtrace_enabled()) {
+                void *bt[16];
+                int n = backtrace(bt, 16);
+                char **symbols = backtrace_symbols(bt, n);
+                if (symbols) {
+                    for (int i = 0; i < n; i++) {
+                        fprintf(stderr, "  %s\n", symbols[i]);
+                    }
+                    free(symbols);
+                }
+            }
+#endif
+            trace_count++;
+        }
+    }
+#endif
 
     return node;
 }
@@ -63,7 +114,6 @@ CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint64_t e
     CljCallsiteCache *cache = ALLOC(CljCallsiteCache, 1);
     if (!cache) {
         throw_oom();
-        return NULL;
     }
 
     cache->base.type = CLJ_CALLSITE_CACHE;

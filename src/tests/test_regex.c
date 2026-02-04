@@ -5,6 +5,7 @@
  * Based on tiny-regex-c (Public Domain)
  */
 
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 600
 #include "tests_common.h"
 
 // ============================================================================

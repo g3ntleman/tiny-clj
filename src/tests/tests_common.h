@@ -61,6 +61,8 @@
 #define test_registry_add subjective_c_test_registry_add
 #define test_registry_add_with_group(name, fn, group) \
     subjective_c_test_registry_add_with_file_info(name, fn, group, __FILE__, __LINE__)
+#define test_registry_add_with_group_ex(name, fn, group, heap_growth_limit_bytes) \
+    subjective_c_test_registry_add_with_file_info_ex(name, fn, group, __FILE__, __LINE__, heap_growth_limit_bytes)
 #define test_registry_add_with_file_info subjective_c_test_registry_add_with_file_info
 #define test_registry_find subjective_c_test_registry_find
 #define test_registry_find_by_qualified_name subjective_c_test_registry_find_by_qualified_name
@@ -80,6 +82,7 @@ typedef struct {
     const char *group;
     const char *file;
     int line;
+    size_t heap_growth_limit_bytes;
 } Test;
 typedef void (*TestFunc)(void);
 
@@ -91,6 +94,10 @@ extern EvalState* g_test_eval_state;
 
 // Function to get global test EvalState (for backwards compatibility)
 extern EvalState* test_get_eval_state(void);
+
+// Heap growth checks (used by test runner)
+void test_heap_growth_disable(void);
+void test_heap_growth_allow_all(void);
 
 // Registration macro for automatic test discovery
 // Note: __attribute__((used)) prevents dead-strip from removing these functions
@@ -108,7 +115,7 @@ extern EvalState* test_get_eval_state(void);
 // TEST_SHARED macro for tests that can share clojure.core state (read-only tests)
 // These tests are batched together with only one setUp/tearDown per batch
 // Use for tests that don't define new functions/vars via defn/def
-#define TEST_SHARED(name) \
+#define TEST_SHARED_IMPL(name, heap_growth_limit_bytes) \
     static void name##_impl(void); \
     static void name(void) { \
         WITH_AUTORELEASE_POOL({ name##_impl(); }); \
@@ -119,11 +126,24 @@ extern EvalState* test_get_eval_state(void);
         if (filename) { \
             char group[128]; \
             (void)mini_snprintf(group, sizeof(group), "shared_%s", filename); \
-            test_registry_add_with_file_info(#name, name, group, __FILE__, __LINE__); \
+            test_registry_add_with_group_ex(#name, name, group, heap_growth_limit_bytes); \
             CLJ_FREE(filename); \
         } \
     } \
     static void name##_impl(void)
+
+#ifndef TEST_DEFAULT_HEAP_GROWTH_LIMIT
+#define TEST_DEFAULT_HEAP_GROWTH_LIMIT SUBJECTIVE_C_TEST_HEAP_GROWTH_UNSPECIFIED
+#endif
+
+#ifndef TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT SUBJECTIVE_C_TEST_HEAP_GROWTH_UNSPECIFIED
+#endif
+
+#define TEST_SHARED_1(name) TEST_SHARED_IMPL(name, TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT)
+#define TEST_SHARED_2(name, heap_growth_limit_bytes) TEST_SHARED_IMPL(name, heap_growth_limit_bytes)
+#define TEST_SHARED_GET_MACRO(_1, _2, NAME, ...) NAME
+#define TEST_SHARED(...) TEST_SHARED_GET_MACRO(__VA_ARGS__, TEST_SHARED_2, TEST_SHARED_1)(__VA_ARGS__)
 
 // -----------------------------------------------------------------------------
 // mini_format helpers for tests (avoid libc printf-family)

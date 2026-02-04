@@ -16,7 +16,7 @@ TEST_SHARED(test_time_basic_functionality) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
 }
 
-TEST_SHARED(test_time_arity_validation) {
+TEST_SHARED(test_time_arity_validation, 1100) {
     CljList *time_list = AUTORELEASE(make_list(SYM_TIME, NULL));
     CljPersistentMap *env = AUTORELEASE(make_map(16));
     
@@ -28,7 +28,7 @@ TEST_SHARED(test_time_arity_validation) {
     } END_TRY
 }
 
-TEST_SHARED(test_time_with_too_many_arguments) {
+TEST_SHARED(test_time_with_too_many_arguments, 1400) {
     CljList *time_list = AUTORELEASE(make_list(SYM_TIME, 
         make_list(fixnum(1), make_list(fixnum(2), NULL))));
     CljPersistentMap *env = AUTORELEASE(make_map(16));
@@ -48,7 +48,7 @@ TEST_SHARED(test_time_no_double_evaluation) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
 }
 
-TEST_SHARED(test_time_with_dotimes) {
+TEST_SHARED(test_time_with_dotimes, 500) {
     // Simpler: use eval_string instead of manual AST construction
     ID result = eval_string("(time (dotimes [i 1000] (+ 1 2 3 4 5)))", g_test_eval_state);
     TEST_ASSERT_NIL(result);  // dotimes returns nil
@@ -140,8 +140,8 @@ TEST(test_datetime_civil_from_days_epoch) {
         "      (vector (:year c) (:month c) (:day c))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
-    CljVector *v = as_vector(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(1970, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 2)));
@@ -155,8 +155,8 @@ TEST(test_datetime_civil_from_days_y2k) {
         "      (vector (:year c) (:month c) (:day c))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
-    CljVector *v = as_vector(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(2000, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 2)));
@@ -186,8 +186,8 @@ TEST(test_datetime_time_from_millis_midnight) {
         "      (vector (:hour t) (:minute t) (:second t))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
-    CljVector *v = as_vector(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 2)));
@@ -201,8 +201,8 @@ TEST(test_datetime_time_from_millis_noon) {
         "      (vector (:hour t) (:minute t))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
-    CljVector *v = as_vector(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(12, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
 }
@@ -215,8 +215,8 @@ TEST(test_datetime_time_from_millis_specific) {
         "      (vector (:hour t) (:minute t) (:second t) (:millis t))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
-    CljVector *v = as_vector(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(result);
     TEST_ASSERT_EQUAL_INT(14, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(30, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_INT(45, as_fixnum(vector_nth(v, 2)));

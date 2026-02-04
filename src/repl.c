@@ -31,11 +31,23 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
 
 // Tracks whether stdout is currently at the start of a new line.
 // Best-effort: updated via platform_macos stdout observer hook (for most prints)
 // and by REPL's own printing.
 static bool g_repl_stdout_at_line_start = true;
+
+// Crash diagnostics for SIGTRAP during core load.
+extern volatile sig_atomic_t g_clojure_core_last_form;
+#ifndef UNITY_TESTS
+static void repl_sigtrap_handler(int signo) {
+    fprintf(stderr, "REPL SIGTRAP (signal %d) during core load; last form=%d\n",
+            signo, (int)g_clojure_core_last_form);
+    exception_print_native_backtrace();
+    _exit(128 + signo);
+}
+#endif
 
 void tinyclj_stdout_observe_bytes(const char *data, size_t n) {
     if (!data || n == 0) return;
@@ -53,7 +65,7 @@ extern CljObject* line_editor_history_load_default(void);
 extern bool line_editor_history_save_default(CljObject *vec);
 extern void set_line_editor(LineEditor *editor);
 extern LineEditor* get_line_editor(void);
-extern CljVector* line_editor_get_history_vector(LineEditor *editor);
+extern CljPersistentVector* line_editor_get_history_vector(LineEditor *editor);
 extern int line_editor_get_history_size(const LineEditor *editor);
 extern void line_editor_clear_history(LineEditor *editor);
 
@@ -148,7 +160,6 @@ static void print_result(CljObject *v) {
     if (s) {
         platform_put_string(NULL, string_data(s));
         platform_put_char(NULL, '\n');
-        RELEASE(s);
     }
 }
 
@@ -276,13 +287,13 @@ bool repl_eval_arg(const char *raw_code, EvalState *st) {
  *  @param limit Maximum number of elements to keep
  *  @return New vector with last N elements (or original if smaller)
  */
-CljObject* history_trim_last_n(CljObject *vec, int limit) {
-    if (!vec || TAG(vec) != CLJ_VECTOR || limit <= 0) return (CljObject*)empty_vector();
-    CljVector *v = as_vector(vec);
+CljObject* history_trim_last_n(CljPersistentVector *vec, int limit) {
+    if (!vec || limit <= 0) return (CljObject*)empty_vector();
+    CljPersistentVector *v = vec;
     int count = vector_count(v);
     if (count <= limit) return RETAIN(vec);
     int start = count - limit;
-    CljVector* out = make_vector(limit, CLJ_VECTOR);
+    CljPersistentVector* out = make_vector(limit, STRONG);
     ID nth_args[2];
     nth_args[0] = v;
     for (int i = 0; i < limit; i++) {
@@ -301,25 +312,10 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
  *  @param path File path
  *  @return true if successful
  */
-bool history_save_to_file(CljVector *vec, const char *path) {
+bool history_save_to_file(CljPersistentVector *vec, const char *path) {
     if (!path || !vec) return false;
 
-    CljObject *persistent_vec = (CljObject*)vec;
-    if (TAG((CljObject*)vec) == CLJ_VECTOR_TRANSIENT) {
-        persistent_vec = (CljObject*)vector_persistent(vec);
-        if (!persistent_vec || TAG(persistent_vec) != CLJ_VECTOR) {
-            if (persistent_vec != (CljObject*)vec) RELEASE(persistent_vec);
-            return false;
-        }
-    }
-
-    if (TAG(persistent_vec) != CLJ_VECTOR) {
-        if (persistent_vec != (CljObject*)vec) RELEASE(persistent_vec);
-        return false;
-    }
-
-    CljObject *trimmed = history_trim_last_n(persistent_vec, 50);
-    if (persistent_vec != (CljObject*)vec) RELEASE(persistent_vec);
+    CljObject *trimmed = history_trim_last_n(vec, 50);
     if (!trimmed) return false;
 
     CljString *s = pr_str(trimmed);
@@ -346,13 +342,13 @@ bool history_save_to_file(CljVector *vec, const char *path) {
  *  @param path File path
  *  @return Vector loaded from file, or empty vector on error
  */
-CljVector* history_load_from_file(const char *path) {
+CljPersistentVector* history_load_from_file(const char *path) {
     if (!path) return empty_vector();
 
     EvalState *st = get_global_eval_state();
     if (!st) return empty_vector();
 
-    CljVector *string_history = NULL;
+    CljPersistentVector *string_history = NULL;
 
     WITH_AUTORELEASE_POOL({
         TRY {
@@ -369,8 +365,8 @@ CljVector* history_load_from_file(const char *path) {
                 ID parsed = value_by_parsing_expr(&rd, st);
 
                 // Validate it's a vector
-                if (parsed && TAG(parsed) == CLJ_VECTOR) {
-                    string_history = as_vector((CljObject*)parsed);
+                if (parsed && TAG(parsed) == CLJ_VECTOR_PERSISTENT) {
+                    string_history = as_persistent_vector((CljObject*)parsed);
 
                     // RETAIN before pool pop to keep it alive
                     RETAIN(string_history);
@@ -473,7 +469,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         TRY {
             CljObject *loaded = line_editor_history_load_default();
             // Only use loaded history if it has content
-            if (loaded && TAG(loaded) == CLJ_VECTOR && vector_count((CljVector*)loaded) > 0) {
+            if (loaded && TAG(loaded) == CLJ_VECTOR_PERSISTENT && vector_count((CljPersistentVector*)loaded) > 0) {
                 // loaded is already retained from history_load_from_file, transfer to outer pool
                 ASSIGN(history_vec, AUTORELEASE(loaded));
             }
@@ -485,9 +481,9 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     });
     // Verwende die geladene History
     // line_editor_set_history_from_vector ruft clj_conj auf, das AUTORELEASE verwendet
-    if (history_vec && TAG(history_vec) == CLJ_VECTOR) {
+    if (history_vec && TAG(history_vec) == CLJ_VECTOR_PERSISTENT) {
         WITH_AUTORELEASE_POOL({
-            line_editor_set_history_from_vector(editor, (CljVector*)history_vec);
+            line_editor_set_history_from_vector(editor, (CljPersistentVector*)history_vec);
         });
         RELEASE(history_vec);  // Release nach Verwendung
     } else {
@@ -601,10 +597,8 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                 line_editor_add_to_history(editor, acc);
                 // Save history after each expression (fsync removed to avoid blocking)
                 WITH_AUTORELEASE_POOL({
-                    CljVector *vec = line_editor_get_history_vector(editor);
+                    CljPersistentVector *vec = line_editor_get_history_vector(editor);
                     if (vec) {
-                        // RETAIN before passing to save function (it may convert transient to persistent)
-                        RETAIN(vec);
                         line_editor_history_save_default((CljObject*)vec);
                         RELEASE(vec);
                     }
@@ -626,10 +620,8 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     WITH_AUTORELEASE_POOL({
         LineEditor *ed = get_line_editor();
         if (ed) {
-            CljVector *vec = line_editor_get_history_vector(ed);
+            CljPersistentVector *vec = line_editor_get_history_vector(ed);
             if (vec) {
-                // RETAIN before passing to save function (it may convert transient to persistent)
-                RETAIN(vec);
                 line_editor_history_save_default((CljObject*)vec);
                 RELEASE(vec);
             }
@@ -657,6 +649,8 @@ int main(int argc, char **argv) {
     set_memory_verbose_mode(false);
     memory_set_debug_output_enabled(memory_get_debug_output_enabled());
 #endif
+    // Install SIGTRAP handler for startup diagnostics.
+    signal(SIGTRAP, repl_sigtrap_handler);
     platform_init();
     runtime_init(&g_runtime);
     meta_registry_init();  // Initialize metadata registry
@@ -734,6 +728,10 @@ int main(int argc, char **argv) {
 #endif
 
         if (!no_core) {
+            bool profiling_enabled = is_memory_profiling_enabled();
+            if (profiling_enabled) {
+                enable_memory_profiling(false);
+            }
 #ifdef PROFILE_STARTUP
             clock_t t4 = clock();
 #endif
@@ -770,6 +768,9 @@ int main(int argc, char **argv) {
             fprintf(stderr, "[PROFILE] require clojure.repl: %.2f ms\n", (double)(t7 - t6) * 1000.0 / CLOCKS_PER_SEC);
             fprintf(stderr, "[PROFILE] TOTAL startup: %.2f ms\n", (double)(t7 - t0) * 1000.0 / CLOCKS_PER_SEC);
 #endif
+            if (profiling_enabled) {
+                enable_memory_profiling(true);
+            }
         }
     });
 
