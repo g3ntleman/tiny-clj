@@ -64,6 +64,7 @@ set(SUBJECTIVE_C_SOURCES
     src/instant.c
     src/uuid.c
     src/regex.c
+    src/debug_trace.c
 
         # Regex engine (tiny-regex-c) compiled into subjective-c
         ${CMAKE_SOURCE_DIR}/external/tiny_regex.c

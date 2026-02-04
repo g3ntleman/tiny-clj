@@ -31,6 +31,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "mini_format.h"
 
 // ============================================================================
 // ============================================================================
@@ -190,7 +191,7 @@ static CljPersistentVector* transform_params(EvalState *st, CljPersistentVector 
         unsigned char tag = TAG(param);
         if (tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_MAP_PERSISTENT) {
             char name[64];
-            snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
+            mini_snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
             CljSymbol *gsym = intern_symbol_global(name);
             ASSIGN(new_params, vector_conj(new_params, gsym));
             ASSIGN(let_bindings, vector_conj(let_bindings, param));
@@ -299,7 +300,7 @@ static CljSymbol* canonicalize_symbol_token(CljSymbolToken *token, EvalState *st
             if (sym_buf_len + 2 > sizeof(keyword_with_colon)) {
                 return NULL;
             }
-            snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%.*s",
+            mini_snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%.*s",
                      (int)(sizeof(keyword_with_colon) - 2), sym_buf);
             return intern_symbol(ns_name_sym, keyword_with_colon);
         } else {
@@ -316,7 +317,7 @@ static CljSymbol* canonicalize_symbol_token(CljSymbolToken *token, EvalState *st
             if (kw_len + 2 > sizeof(keyword_with_colon)) {
                 return NULL;
             }
-            snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%.*s",
+            mini_snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%.*s",
                      (int)(sizeof(keyword_with_colon) - 2), keyword_name);
             return intern_symbol(ns_name_sym, keyword_with_colon);
         }
@@ -533,7 +534,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                             if (TAG(binding_form) != CLJ_SYMBOL) {
                                 // Destructuring binding - create gensym
                                 char name[64];
-                                snprintf(name, sizeof(name), "loop__%lu", ++gensym_counter);
+                                mini_snprintf(name, sizeof(name), "loop__%lu", ++gensym_counter);
                                 CljSymbol *gsym = intern_symbol_global(name);
                                 ASSIGN(loop_bindings, vector_conj(loop_bindings, gsym));
                                 ASSIGN(loop_bindings, vector_conj(loop_bindings, init_expr));

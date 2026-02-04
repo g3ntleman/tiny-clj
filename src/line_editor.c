@@ -3,6 +3,7 @@
 #include "value.h"  // For make_string, fixnum, CljString
 #include "builtins.h"  // For nth2
 #include "strings.h"  // For to_cstring and string functions
+#include "mini_format.h"
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
@@ -241,13 +242,13 @@ static void editor_move_cursor_abs(LineEditor *editor, uint16_t row, uint16_t co
     if (!editor) return;
     char seq[16];
     if (current_row > row) {
-        snprintf(seq, sizeof(seq), ESC_CURSOR_UP_FMT, (unsigned int)(current_row - row));
+        mini_snprintf(seq, sizeof(seq), ESC_CURSOR_UP_FMT, (unsigned int)(current_row - row));
         editor->put_string(editor->ctx, seq);
     } else if (row > current_row) {
-        snprintf(seq, sizeof(seq), ESC_CURSOR_DOWN_FMT, (unsigned int)(row - current_row));
+        mini_snprintf(seq, sizeof(seq), ESC_CURSOR_DOWN_FMT, (unsigned int)(row - current_row));
         editor->put_string(editor->ctx, seq);
     }
-    snprintf(seq, sizeof(seq), ESC_CURSOR_POS_FMT, (unsigned int)col);
+    mini_snprintf(seq, sizeof(seq), ESC_CURSOR_POS_FMT, (unsigned int)col);
     editor->put_string(editor->ctx, seq);
 }
 
@@ -311,7 +312,7 @@ static void editor_redraw_with_cursor(LineEditor *editor, uint16_t target_pos) {
     // Clear previously rendered rows (best-effort, assumes no scrollback).
     if (current_row > 0) {
         char seq[16];
-        snprintf(seq, sizeof(seq), ESC_CURSOR_UP_FMT, (unsigned int)current_row);
+        mini_snprintf(seq, sizeof(seq), ESC_CURSOR_UP_FMT, (unsigned int)current_row);
         editor->put_string(editor->ctx, seq);
     }
     editor->put_string(editor->ctx, "\r");
@@ -1018,10 +1019,10 @@ void line_editor_reset_history_index(LineEditor *editor) {
 // Optional: Default persistence path (~/.tiny-clj/history.edn)
 static void build_default_history_path(char *out, size_t out_sz) {
     const char *home = getenv("HOME") ? getenv("HOME") : ".";
-    snprintf(out, out_sz, "%s/.tiny-clj", home);
+    mini_snprintf(out, out_sz, "%s/.tiny-clj", home);
     // Ensure directory exists
     mkdir(out, 0700);
-    snprintf(out, out_sz, "%s/.tiny-clj/history.edn", home);
+    mini_snprintf(out, out_sz, "%s/.tiny-clj/history.edn", home);
 }
 
 // External persistence functions (defined in repl.c)
