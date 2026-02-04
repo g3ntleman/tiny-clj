@@ -21,30 +21,67 @@ typedef struct {
                             // Access via KV_KEY() and KV_VALUE() macros
 } CljHashMap;
 
-// Factory
+/** @brief Create hashmap with specified capacity
+ * @param capacity Initial capacity (must be power of 2)
+ * @return New hashmap
+ */
 CljHashMap* make_hashmap(unsigned int capacity);
 
-// Lookup - O(1) amortized with Linear Probing
+/** @brief Get value with custom not-found sentinel
+ * @param map Hashmap to query
+ * @param key Key to lookup
+ * @param not_found Value to return if not found
+ * @return Value or not_found
+ */
 ID hashmap_get_sentinel(CljHashMap *map, ID key, ID not_found);
+
 static inline ID hashmap_get(CljHashMap *map, ID key) {
     return hashmap_get_sentinel(map, key, NOT_FOUND);
 }
-int hashmap_contains(CljHashMap *map, ID key);  // Returns int (like map_contains)
 
-// Modification (COW) - returns new or same map
-CljHashMap* hashmap_assoc(CljHashMap *map, ID key, ID value);  // COW (like map_assoc)
+/** @brief Check if hashmap contains key
+ * @param map Hashmap to query
+ * @param key Key to check
+ * @return Non-zero if key exists
+ */
+int hashmap_contains(CljHashMap *map, ID key);
+
+/** @brief Associate key-value (COW, returns new/same map)
+ * @param map Source hashmap
+ * @param key Key to associate
+ * @param value Value to associate
+ * @return New or same hashmap (AUTORELEASE'd)
+ */
+CljHashMap* hashmap_assoc(CljHashMap *map, ID key, ID value);
+
+/** @brief Remove key (COW, returns new/same map)
+ * @param map Source hashmap
+ * @param key Key to remove
+ * @return New or same hashmap (AUTORELEASE'd)
+ */
 CljHashMap* hashmap_remove(CljHashMap *map, ID key);
 
-// In-place modification helpers (no AUTORELEASE, safe for long-lived slots)
-// These functions update the pointer stored in *map_slot and RELEASE the old map
-// if a new map instance is produced (rehash/COW).
+/** @brief Associate key-value in-place (updates slot)
+ * @param map_slot Pointer to hashmap slot
+ * @param key Key to associate
+ * @param value Value to associate
+ */
 void hashmap_assoc_inplace(CljHashMap **map_slot, ID key, ID value);
+
+/** @brief Remove key in-place (updates slot)
+ * @param map_slot Pointer to hashmap slot
+ * @param key Key to remove
+ */
 void hashmap_remove_inplace(CljHashMap **map_slot, ID key);
 
-// Utility
-unsigned int hashmap_count(CljHashMap *map);  // Returns unsigned int (never negative)
+/** @brief Get number of entries
+ * @param map Hashmap to count
+ * @return Number of entries
+ */
+unsigned int hashmap_count(CljHashMap *map);
 
-// Memory management registration
+/** @brief Register hashmap release function
+ */
 void hashmap_register_release_fn(void);
 
 // Iteration (skips EMPTY and TOMBSTONE)

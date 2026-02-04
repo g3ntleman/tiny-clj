@@ -43,6 +43,7 @@ ID eval_special_dotimes(CljList *list, CljPersistentMap *env, EvalState *st, con
 ID eval_special_try(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_binding(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_quasiquote(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+void eval_special_forms_reset_caches(void);
 ID eval_special_defmacro(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 #ifdef __cplusplus

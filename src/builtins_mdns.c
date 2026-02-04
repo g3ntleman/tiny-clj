@@ -516,7 +516,7 @@ static void mdns_emit_event(void *ctx, MdnsEventType type, const MdnsResolvedSer
     WITH_AUTORELEASE_POOL({
     mdns_init_keywords();
 
-    CljPersistentMap *ev = make_map(6);
+    CljPersistentMap *ev = make_map(6, STRONG);
     if (!ev) { autorelease_pool_drain_to_depth(_restore); return; }
 
     ID type_val = NULL;
@@ -592,7 +592,7 @@ ID native_tinyclj_net_mdns_open(ID *args, unsigned int argc) {
     (void)args;
 
     MdnsCtx *m = (MdnsCtx*)CLJ_MALLOC(sizeof(MdnsCtx));
-    if (!m) { throw_oom(); return NULL; }
+    if (!m) { throw_oom(); }
     memset(m, 0, sizeof(*m));
 
 #ifdef __APPLE__
@@ -607,7 +607,7 @@ ID native_tinyclj_net_mdns_open(ID *args, unsigned int argc) {
         // Allocate resolver storage.
         size_t need = mdns_resolver_storage_size();
         void *storage = CLJ_MALLOC(need);
-        if (!storage) { mdns_ctx_free(m); throw_oom(); return NULL; }
+        if (!storage) { mdns_ctx_free(m); throw_oom(); }
         m->resolver_storage = storage;
         m->resolver = mdns_resolver_init(storage, need, mdns_emit_event, m);
         if (!m->resolver) { mdns_ctx_free(m); return NULL; }
@@ -623,7 +623,7 @@ ID native_tinyclj_net_mdns_open(ID *args, unsigned int argc) {
 
     // Store ctx pointer bytes for debugging/inspection only.
     m->handle_bytes = (uint8_t*)CLJ_MALLOC(sizeof(ID));
-    if (!m->handle_bytes) { mdns_ctx_free(m); throw_oom(); return NULL; }
+    if (!m->handle_bytes) { mdns_ctx_free(m); throw_oom(); }
     memcpy(m->handle_bytes, &m, sizeof(ID));
 
     CljByteArray *handle = make_byte_array_external(m->handle_bytes, (int)sizeof(ID), m, mdns_ctx_free);

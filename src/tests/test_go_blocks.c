@@ -542,7 +542,8 @@ TEST(test_event_loop_enqueue_updates_count) {
         TEST_ASSERT_NOT_NULL(chan);
         
         // Check initial count (should be 0)
-        CljPersistentVector *task_vec = g_runtime.task_queue;
+        CljTransientVector *task_queue = g_runtime.task_queue;
+        CljPersistentVector *task_vec = task_queue ? vector_persistent(task_queue) : NULL;
         TEST_ASSERT_NOT_NULL(task_vec);
         unsigned int count_before = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,
@@ -552,7 +553,8 @@ TEST(test_event_loop_enqueue_updates_count) {
         event_loop_enqueue(fn, chan);
         
         // Check that count is now 1 (re-read queue; conj_inplace may replace it)
-        task_vec = g_runtime.task_queue;
+        task_queue = g_runtime.task_queue;
+        task_vec = task_queue ? vector_persistent(task_queue) : NULL;
         unsigned int count_after = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after,
             "event_loop_enqueue should increment count from 0 to 1");
@@ -570,7 +572,9 @@ TEST(test_event_loop_enqueue_updates_count) {
         // The count check above is the main test
         
         // Cleanup - remove the task from the queue
-        vector_remove_at_inplace(&g_runtime.task_queue, 0);
+        if (g_runtime.task_queue) {
+            vector_remove_at(g_runtime.task_queue, 0);
+        }
         RELEASE(fn);
         RELEASE(chan);
     });

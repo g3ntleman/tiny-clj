@@ -10,6 +10,9 @@
 #include "unity.h"
 #include "unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
 #include "build_info.h"
+#ifdef TINY_CLJ_TEST_RUNNER
+#include "platform.h"
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -17,11 +20,13 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <execinfo.h>
+#include <unistd.h>
 
 // Flag to track if summary was already printed
 static bool g_summary_printed = false;
 static clock_t g_start_time = 0;
 static bool g_unity_started = false;
+static volatile sig_atomic_t g_in_signal_handler = 0;
 
 // Signal handler to print summary on crash
 static void print_summary_on_exit(void) {
@@ -49,6 +54,10 @@ static void print_summary_on_exit(void) {
 }
 
 static void signal_handler(int sig) {
+    if (g_in_signal_handler) {
+        _exit(128 + sig);
+    }
+    g_in_signal_handler = 1;
     // Print summary immediately
     print_summary_on_exit();
     // Also print a backtrace for debugging.
@@ -265,10 +274,15 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+#ifdef TINY_CLJ_TEST_RUNNER
+    printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.2", platform_name());
+    print_build_info();
+#else
     // Print build information at startup (skip in quiet mode)
     if (!quiet) {
         print_build_info();
     }
+#endif
     
     // Initialize autorelease pool before running tests
     autorelease_pool_init();

@@ -17,22 +17,40 @@
 // Forward declaration for compiled regex pattern
 typedef struct CljRegex CljRegex;
 
-// Compile a regex pattern from string
-// Returns NULL and sets error message on failure
+/** @brief Compile regex pattern from string
+ * @param pattern Regex pattern string
+ * @param error Error buffer
+ * @param error_size Error buffer size
+ * @return Compiled regex or NULL on error
+ */
 CljRegex *regex_compile(const char *pattern, char *error, size_t error_size);
 
-// Free a compiled regex pattern
+/** @brief Free compiled regex pattern
+ * @param re Regex to free
+ */
 void regex_free(CljRegex *re);
 
-// Find first match in string, returns matched substring or NULL
-// If match_start/match_end are non-NULL, they are set to the match boundaries
+/** @brief Find first match in string
+ * @param re Compiled regex
+ * @param str String to search
+ * @param match_start Output for match start (can be NULL)
+ * @param match_end Output for match end (can be NULL)
+ * @return Matched substring or NULL
+ */
 const char *regex_find(CljRegex *re, const char *str,
                        const char **match_start, const char **match_end);
 
-// Check if entire string matches the pattern
+/** @brief Check if entire string matches pattern
+ * @param re Compiled regex
+ * @param str String to match
+ * @return True if entire string matches
+ */
 bool regex_matches(CljRegex *re, const char *str);
 
-// Get the pattern string from a compiled regex
+/** @brief Get pattern string from compiled regex
+ * @param re Compiled regex
+ * @return Pattern string
+ */
 const char *regex_pattern_string(CljRegex *re);
 
 #endif // SUBJECTIVE_C_REGEX_H

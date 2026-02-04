@@ -21,22 +21,62 @@ typedef struct {
 // Globaler Callback-Struct
 extern CljCallbacks g_clj_callbacks;
 
-// Wrapper-Funktionen (rufen Callbacks auf)
+/** @brief Compute hash of value
+ * @param value Value to hash
+ * @return Hash code
+ */
 uint32_t clj_hash(ID value);
+
+/** @brief Check equality of two values
+ * @param a First value
+ * @param b Second value
+ * @return True if equal
+ */
 bool clj_equal(ID a, ID b);
+
+/** @brief Convert value to string
+ * @param value Value to convert
+ * @return String representation
+ */
 CljString* clj_to_string(ID value);
 
-// Default-Implementierungen (nur für subjective-c Typen)
+/** @brief Default hash implementation
+ * @param value Value to hash
+ * @return Hash code
+ */
 uint32_t clj_hash_default(ID value);
+
+/** @brief Default equality implementation
+ * @param a First value
+ * @param b Second value
+ * @return True if equal
+ */
 bool clj_equal_default(ID a, ID b);
+
+/** @brief Default string conversion
+ * @param value Value to convert
+ * @return String representation
+ */
 CljString* clj_to_string_default(ID value);
 
-// Gemeinsamer Setter (von tiny-clj runtime_init aufgerufen)
+/** @brief Set all callbacks at once
+ * @param callbacks Callback struct
+ */
 void clj_set_callbacks(CljCallbacks callbacks);
 
-// Legacy einzelne Setter (für Abwärtskompatibilität)
+/** @brief Set hash function callback
+ * @param fn Hash function
+ */
 void clj_set_hash_fn(CljHashFn fn);
+
+/** @brief Set equality function callback
+ * @param fn Equality function
+ */
 void clj_set_equal_fn(CljEqualFn fn);
+
+/** @brief Set string conversion callback
+ * @param fn String conversion function
+ */
 void clj_set_to_string_fn(CljToStringFn fn);
 
 #endif // SUBJECTIVE_C_CALLBACKS_H

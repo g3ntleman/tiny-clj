@@ -65,8 +65,22 @@ static inline int as_fixnum(CljValue val) {
 #define CHAR_BITS 21
 #define CLJ_CHAR_MAX ((1 << CHAR_BITS) - 1)
 
+/** @brief Create character value from codepoint
+ * @param codepoint Unicode codepoint
+ * @return Character value
+ */
 CljValue character(uint32_t codepoint);
+
+/** @brief Create fixed-point number from float
+ * @param value Float value
+ * @return Fixed-point value
+ */
 CljValue fixed(float value);
+
+/** @brief Create string from C string
+ * @param str C string
+ * @return New string object
+ */
 struct CljString* make_string(const char *str);
 
 static inline bool is_character(CljValue val) {

@@ -81,7 +81,7 @@ todos:
 
 **Änderungen in `to_string_calc_length()`**:
 - Zeile 104: `if (!sym)` nach `as_symbol(v)` in `case CLJ_SYMBOL:` - **REDUNDANT** (Typ garantiert durch switch)
-- Zeile 128: `if (!vec_ptr)` nach `as_vector(v)` in `case CLJ_VECTOR:` - **REDUNDANT**
+- Zeile 128: `if (!vec_ptr)` nach `as_vector(v)` in `case CLJ_VECTOR_PERSISTENT:` - **REDUNDANT**
 - Zeile 160: `if (!map)` nach `as_map(v)` in `case CLJ_MAP:` - **REDUNDANT**
 - Zeile 211: `if (!seq)` nach `as_seq(v)` in `case CLJ_SEQ:` - **REDUNDANT**
 - Zeile 248: `if (!ba)` nach `as_byte_array(v)` in `case CLJ_BYTE_ARRAY:` - **REDUNDANT**
@@ -89,7 +89,7 @@ todos:
 **Änderungen in `to_string_build_string()`**:
 - Zeile 326: `if (!sym)` nach `as_symbol(v)` in `case CLJ_SYMBOL:` - **REDUNDANT**
 - Zeile 331: `if (!sym->cname)` - **BEHALTEN** (semantisch notwendig, kann NULL sein)
-- Zeile 370: `if (!vec_ptr)` nach `as_vector(v)` in `case CLJ_VECTOR:` - **REDUNDANT**
+- Zeile 370: `if (!vec_ptr)` nach `as_vector(v)` in `case CLJ_VECTOR_PERSISTENT:` - **REDUNDANT**
 - Zeile 423: `if (!map)` nach `as_map(v)` in `case CLJ_MAP:` - **REDUNDANT**
 - Zeile 499: `if (!seq)` nach `as_seq(v)` in `case CLJ_SEQ:` - **REDUNDANT**
 - Zeile 552: `if (!ba)` nach `as_byte_array(v)` in `case CLJ_BYTE_ARRAY:` - **REDUNDANT**
@@ -103,7 +103,7 @@ todos:
 
 **Änderungen**:
 - Zeile 83: `if (!seq)` nach `as_seq(obj)` in `case CLJ_SEQ:` - **REDUNDANT** (Typ garantiert durch switch)
-- Zeile 97: `if (!vec)` nach `as_vector(obj)` in `case CLJ_VECTOR:` - **REDUNDANT**
+- Zeile 97: `if (!vec)` nach `as_vector(obj)` in `case CLJ_VECTOR_PERSISTENT:` - **REDUNDANT**
 - Zeile 127: `if (!map || map->count == 0)` - `!map` Teil ist **REDUNDANT**, aber `map->count == 0` muss bleiben
 
 **Tests**: Alle `test_seq_*` Tests
@@ -115,7 +115,7 @@ todos:
 
 **Änderungen**:
 - Zeile 53: `if (!str_a || !str_b)` nach Cast in `case CLJ_STRING:` - **REDUNDANT** (Typ garantiert durch switch)
-- Zeile 69: `if (!vec_a || !vec_b)` nach Cast in `case CLJ_VECTOR:` - **REDUNDANT**
+- Zeile 69: `if (!vec_a || !vec_b)` nach Cast in `case CLJ_VECTOR_PERSISTENT:` - **REDUNDANT**
 - Zeile 85: `if (!map_a || !map_b)` nach `as_map()` in `case CLJ_MAP:` - **REDUNDANT**
 - Zeile 98: `if (!list_a || !list_b)` nach `as_list()` in `case CLJ_LIST:` - **REDUNDANT**
 

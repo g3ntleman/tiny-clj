@@ -416,14 +416,14 @@ ID seq2 = ...;
 ```c
 // ✅ Korrekt: AUTORELEASE explizit am Call-Site
 TEST(test_example) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR));
+    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
     ID seq = AUTORELEASE(make_seq(vec));
     // ...
 }
 
 // ✅ Korrekt: Explizite RETAIN/RELEASE für COW-Tests
 TEST(test_cow_example) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR));
+    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
     ID seq = AUTORELEASE(make_seq(vec));
     RETAIN(vec);  // Explizit für COW-Test
     // ... COW-Operation ...
@@ -692,7 +692,7 @@ static ID make_sample_map_with_entries(void) {
 
 // Objekt-Identität prüfen (wichtig für COW-Tests)
 TEST(test_cow_object_identity) {
-    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR));
+    ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR_PERSISTENT));
     ID seq = AUTORELEASE(make_seq(vec));
     RETAIN(vec);
     CljVector *new_vec = vector_conj(as_vector(vec), fixnum(4));

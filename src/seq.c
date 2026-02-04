@@ -131,7 +131,7 @@ static ID make_map_entry_vector(ID map_obj, int index) {
     CljObject *key = map->data[index * 2];
     CljObject *value = map->data[index * 2 + 1];
 
-    CljVector *entry = make_vector(2, CLJ_VECTOR);
+    CljPersistentVector *entry = make_vector(2, STRONG);
     if (!entry) {
         return NULL;
     }
@@ -218,7 +218,7 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
             iter->state.vec.index = 0;
             iter->state.vec.count = count;
             iter->state.vec.data = NULL;  // Don't expose internal pointer
-            iter->seq_type = CLJ_VECTOR;
+            iter->seq_type = CLJ_VECTOR_PERSISTENT;
             return true;
         }
         
@@ -294,7 +294,7 @@ ID seq_iter_first(const SeqIterator *iter) {
         case CLJ_VECTOR_TRANSIENT: {
             if (iter->state.vec.index < iter->state.vec.count) {
                 // vector_nth returns element with lifetime tied to vector - no retain needed
-                CljVector *vec = (CljVector*)iter->container;
+                CljPersistentVector *vec = (CljPersistentVector*)iter->container;
                 ID elem = vector_nth(vec, iter->state.vec.index);
                 // Convert SYM_NIL to NULL (nil representation)
                 return (elem == SYM_NIL) ? NULL : elem;
@@ -589,7 +589,7 @@ ID seq_next(ID seq_obj) {
         return NULL;
     }
 
-    // For other types (CLJ_VECTOR, CLJ_STRING, etc.), use seq_rest
+    // For other types (CLJ_VECTOR_PERSISTENT, CLJ_STRING, etc.), use seq_rest
     // Get rest sequence (DRY: reuse seq_rest implementation)
     ID rest_seq = seq_rest(seq_obj);
     if (!rest_seq) return NULL;

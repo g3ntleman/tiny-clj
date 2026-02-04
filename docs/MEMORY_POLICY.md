@@ -222,6 +222,8 @@ ID safe_return(ID obj) {
 - **Object Creation** (`make_vector`, `make_list`, etc.): Return objects with `rc=1` - must be released or autoreleased
 - **Immediate Values** (`make_fixnum`, `make_char`, etc.): No memory management needed
 
+**Invariant:** All `make_*` functions return a valid object or throw an exception (never a silent NULL).
+
 ```c
 // ✅ CORRECT: API functions return autoreleased objects
 ID result = eval_string(expr, eval_state);
@@ -258,13 +260,13 @@ CljValue num = make_fixnum(42);  // No RELEASE() needed
 
 **Before (Problem - RC increases):**
 ```c
-CljVector *vec = make_vector(10, CLJ_VECTOR);
+CljVector *vec = make_vector(10, CLJ_VECTOR_PERSISTENT);
 ASSIGN(vec, vector_conj(vec, item));  // rc becomes 2 → COW fails
 ```
 
 **After (Solution - RC stays 1):**
 ```c
-CljVector *vec = make_vector(10, CLJ_VECTOR);
+CljVector *vec = make_vector(10, CLJ_VECTOR_PERSISTENT);
 vector_conj_inplace(&vec, item);  // rc stays 1 → COW works!
 ```
 
@@ -272,7 +274,7 @@ vector_conj_inplace(&vec, item);  // rc stays 1 → COW works!
 
 1. **For long-lived variables**: Use `_inplace` functions
    ```c
-   CljVector *stack = make_vector(100, CLJ_VECTOR);
+   CljVector *stack = make_vector(100, CLJ_VECTOR_PERSISTENT);
    vector_conj_inplace(&stack, item1);  // rc stays 1
    vector_conj_inplace(&stack, item2);  // rc stays 1, COW works
    vector_pop_inplace(&stack);  // Removes item2, rc stays 1
@@ -280,7 +282,7 @@ vector_conj_inplace(&vec, item);  // rc stays 1 → COW works!
 
 2. **In loops**: `_inplace` for performance
    ```c
-   CljVector *result = make_vector(1000, CLJ_VECTOR);
+   CljVector *result = make_vector(1000, CLJ_VECTOR_PERSISTENT);
    for (int i = 0; i < 1000; i++) {
        vector_conj_inplace(&result, item(i));  // rc stays 1, in-place possible
    }

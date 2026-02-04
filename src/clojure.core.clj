@@ -919,11 +919,7 @@ R"CLOJURE(
           {} coll))
 
 ^#^{:doc "Returns a map of the elements of coll keyed by the result of f on each element."}
-(defn group-by [f coll]
-  (reduce (fn [ret x]
-            (let [k (f x)]
-              (assoc ret k (conj (get ret k []) x))))
-          {} coll))
+(defn group-by [f coll] :native)
 
 ^#^{:doc "Returns a lazy sequence of the elements of coll with duplicates removed."}
 (defn distinct [coll]
@@ -1113,11 +1109,11 @@ R"CLOJURE(
 (def for-build
   (fn for-build [clauses body]
     (if (empty? clauses)
-      (list 'clojure.core/list body)
+      (list 'list body)
       (let [sym (first clauses)
             expr (second clauses)
             more (nnext clauses)
-            base-coll (list 'clojure.core/seq expr)
+            base-coll (list 'seq expr)
             parse-mods (fn parse-mods [coll cs lets]
                          (if (or (empty? cs) (not (keyword? (first cs))))
                            (list coll cs lets)
@@ -1125,14 +1121,14 @@ R"CLOJURE(
                              (cond
                                (= kw :when)
                                  (parse-mods
-                                   (list 'clojure.core/filter
+                                  (list 'filter
                                          (list 'fn (vec [sym]) (second cs))
                                          coll)
                                    (nnext cs)
                                    lets)
                                (= kw :while)
                                  (parse-mods
-                                   (list 'clojure.core/take-while
+                                  (list 'take-while
                                          (list 'fn (vec [sym]) (second cs))
                                          coll)
                                    (nnext cs)
@@ -1149,7 +1145,7 @@ R"CLOJURE(
               inner-with-lets (reduce (fn [acc b] (list 'let b acc))
                                       inner
                                       (reverse lets))]
-          (list 'clojure.core/mapcat
+          (list 'mapcat
                 (list 'fn (vec [sym]) inner-with-lets)
                 coll2))))))
 
@@ -1192,11 +1188,9 @@ R"CLOJURE(
   (fn [form]
     (let [unquote? (fn [x]
                      (and (list? x)
-                          (symbol? (first x))
                           (= (name (first x)) "unquote")))
           unquote-splice? (fn [x]
                             (and (list? x)
-                                 (symbol? (first x))
                                  (= (name (first x)) "unquote-splice")))]
       (cond
         ; Check for unquote: (unquote x) -> x
@@ -1215,15 +1209,15 @@ R"CLOJURE(
                                    ; Splice: concat2 acc with elements of (second elem)
                                    ; Use clojure.core/concat2 directly (macro-free) because quasiquote
                                    ; evaluates the builder expression at runtime.
-                                   (list 'clojure.core/concat2 acc (list 'clojure.core/seq (second elem)))
+                                  (list 'concat2 acc (list 'seq (second elem)))
 
                                  :else
                                    ; Normal element: append one element in order
-                                   (list 'clojure.core/concat2
-                                         acc
-                                         (list 'clojure.core/list
-                                         (quasiquote-fn elem)))))]
-            (reduce process-elem (list 'clojure.core/list) form))
+                                  (list 'concat2
+                                        acc
+                                        (list 'list
+                                        (quasiquote-fn elem)))))]
+            (reduce process-elem (list 'list) form))
 
         ; Handle vectors - similar to lists but return vector
         (vector? form)

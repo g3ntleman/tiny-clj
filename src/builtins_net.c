@@ -133,7 +133,7 @@ static void net_udp_recv_bridge(void *ctx,
         return;
     }
 
-    CljPersistentMap *m = make_map(3);
+    CljPersistentMap *m = make_map(3, STRONG);
     if (!m) {
         RELEASE((ID)payload);
         return;
@@ -337,7 +337,7 @@ static void net_tcp_event_bridge(void *ctx,
         return;
     }
 
-    CljPersistentMap *m = make_map(1);
+    CljPersistentMap *m = make_map(1, STRONG);
     if (!m) {
         RELEASE((ID)payload);
         return;

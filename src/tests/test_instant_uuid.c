@@ -27,7 +27,6 @@ TEST(test_instant_pr_str_shape) {
     CljString *s = pr_str(a);
     TEST_ASSERT_NOT_NULL(s);
     TEST_ASSERT_EQUAL_STRING("#inst \"1970-01-02T00:00:00.002Z\"", clj_string_data(s));
-    RELEASE(s);
 }
 
 TEST(test_uuid_parse_print_equal) {
@@ -44,5 +43,4 @@ TEST(test_uuid_parse_print_equal) {
     CljString *s = pr_str(u1);
     TEST_ASSERT_NOT_NULL(s);
     TEST_ASSERT_EQUAL_STRING("#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\"", clj_string_data(s));
-    RELEASE(s);
 }

@@ -86,14 +86,16 @@ ID native_subs(ID *args, unsigned int argc) {
 
     // Validate string argument
     if (!str_arg || TAG(str_arg) != CLJ_STRING) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "subs requires a string as first argument");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "subs requires a string as first argument");
+        return NULL;
     }
 
     // Validate start index
     if (!start_arg || TAG(start_arg) != CLJ_INT) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "subs requires a number as start index");
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "subs requires a number as start index");
+        return NULL;
     }
 
     CljString *str = as_clj_string(str_arg);
@@ -106,8 +108,9 @@ ID native_subs(ID *args, unsigned int argc) {
     // Determine end index: if not provided, use string length
     if (end_arg) {
         if (TAG(end_arg) != CLJ_INT) {
-            return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                    "subs requires a number as end index");
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                      "subs requires a number as end index");
+            return NULL;
         }
         end = AS_FIXNUM(end_arg);
     } else {
@@ -116,18 +119,21 @@ ID native_subs(ID *args, unsigned int argc) {
 
     // Bounds validation
     if (start < 0) {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "subs start index %d is negative", start);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                  "subs start index %d is negative", start);
+        return NULL;
     }
 
     if (end > str_len) {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "subs end index %d is greater than string length %d", end, str_len);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                  "subs end index %d is greater than string length %d", end, str_len);
+        return NULL;
     }
 
     if (start > end) {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "subs start index %d is greater than end index %d", start, end);
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                                  "subs start index %d is greater than end index %d", start, end);
+        return NULL;
     }
 
     // Calculate substring length
@@ -154,7 +160,6 @@ ID native_trim(ID *args, unsigned int argc) {
         snprintf(error_msg, sizeof(error_msg),
                 "trim requires exactly 1 argument, got %u", argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
-        return NULL;
     }
 
     ID str_arg = args[0];

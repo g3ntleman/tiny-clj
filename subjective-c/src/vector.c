@@ -99,6 +99,7 @@ void vector_truncate(CljPersistentVector *vec, unsigned int n) {
     vec->count = n;
 }
 
+
 static size_t g_make_vector_copy_count = 0;
 
 size_t vector_make_copy_count(void) {
@@ -113,12 +114,13 @@ CljPersistentVector* make_vector_copy(CljPersistentVector* vec, unsigned capacit
     g_make_vector_copy_count++;
     if (!vec) return NULL;
     unsigned count = MIN(capacity, vec->count);
-    bool weak = has_weak_elements((const CljObject*)vec);
-    CljPersistentVector *vec_copy = make_vector(capacity, weak);
+    bool is_weak = has_weak_elements((const CljObject*)vec);
+    CljPersistentVector *vec_copy = make_vector(capacity,
+        is_weak ? WEAK : STRONG);
     vec_copy->count = count;
     for (unsigned i = 0; i < count; i++) {
         ID src = vec->data[i];
-        vec_copy->data[i] = weak ? src : RETAIN(src);
+        vec_copy->data[i] = is_weak ? src : RETAIN(src);
     }
     return vec_copy;
 }
@@ -159,7 +161,7 @@ static CljPersistentVector* vector_insert_at_core(CljPersistentVector* vec, unsi
     if (!vec) return NULL;
     if (index > vec->count) return vec;
 
-    bool weak = has_weak_elements((const CljObject*)vec);
+    bool is_weak = has_weak_elements((const CljObject*)vec);
     bool needs_growth = (vec->count >= (unsigned int)vec->capacity);
 
     if (((CljObject*)vec)->rc == 1) {
@@ -171,7 +173,7 @@ static CljPersistentVector* vector_insert_at_core(CljPersistentVector* vec, unsi
             vec = grown;
         }
         for (unsigned int i = vec->count; i > index; i--) vec->data[i] = vec->data[i - 1];
-        vec->data[index] = weak ? item : RETAIN(item);
+        vec->data[index] = is_weak ? item : RETAIN(item);
         vec->count++;
         return vec;
     }
@@ -181,17 +183,18 @@ static CljPersistentVector* vector_insert_at_core(CljPersistentVector* vec, unsi
         nc = vec->capacity * 2;
         if (nc < 4) nc = 4;
     }
-    CljPersistentVector *new_vec = make_vector((unsigned)nc, weak);
+    CljPersistentVector *new_vec = make_vector((unsigned)nc,
+        is_weak ? WEAK : STRONG);
     if (!new_vec) return vec;
     new_vec->count = vec->count + 1;
     for (unsigned int i = 0; i < index; i++) {
         ID src = vec->data[i];
-        new_vec->data[i] = weak ? src : RETAIN(src);
+        new_vec->data[i] = is_weak ? src : RETAIN(src);
     }
-    new_vec->data[index] = weak ? item : RETAIN(item);
+    new_vec->data[index] = is_weak ? item : RETAIN(item);
     for (unsigned int i = index; i < vec->count; i++) {
         ID src = vec->data[i];
-        new_vec->data[i + 1] = weak ? src : RETAIN(src);
+        new_vec->data[i + 1] = is_weak ? src : RETAIN(src);
     }
     return new_vec;
 }
@@ -206,10 +209,10 @@ static CljPersistentVector* vector_remove_at_core(CljPersistentVector* vec, unsi
     if (!vec) return NULL;
     if (index >= vec->count) return vec;
 
-    bool weak = has_weak_elements((const CljObject*)vec);
+    bool is_weak = has_weak_elements((const CljObject*)vec);
 
     if (((CljObject*)vec)->rc == 1) {
-        if (!weak) {
+        if (!is_weak) {
             RELEASE(vec->data[index]);
         }
         for (unsigned int i = index + 1; i < vec->count; i++) vec->data[i - 1] = vec->data[i];
@@ -218,7 +221,8 @@ static CljPersistentVector* vector_remove_at_core(CljPersistentVector* vec, unsi
     }
 
     unsigned new_count = vec->count - 1;
-    CljPersistentVector *new_vec = make_vector((unsigned)vec->capacity, weak);
+    CljPersistentVector *new_vec = make_vector((unsigned)vec->capacity,
+        is_weak ? WEAK : STRONG);
     if (!new_vec) return vec;
     if (autorelease_new) new_vec = AUTORELEASE(new_vec);
     new_vec->count = new_count;
@@ -226,7 +230,7 @@ static CljPersistentVector* vector_remove_at_core(CljPersistentVector* vec, unsi
     for (unsigned int i = 0, j = 0; i < vec->count; i++) {
         if (i == index) continue;
         ID src = vec->data[i];
-        new_vec->data[j++] = weak ? src : RETAIN(src);
+        new_vec->data[j++] = is_weak ? src : RETAIN(src);
     }
     return new_vec;
 }
@@ -241,7 +245,8 @@ static CljPersistentVector* vector_remove_at_owned(CljPersistentVector* vec, uns
 
 static size_t g_make_vector_count = 0;
 
-CljPersistentVector* make_vector(unsigned int capacity, bool weakElements) {
+CljPersistentVector* make_vector(unsigned int capacity, ElementRetention retention) {
+    bool weakElements = (retention == WEAK);
     if (capacity == 0 && !weakElements) {
         return clj_empty_vector_singleton;
     }
@@ -263,20 +268,20 @@ CljPersistentVector* make_vector(unsigned int capacity, bool weakElements) {
 CljPersistentVector* vector_conj_owned(CljPersistentVector* vec, ID item) {
     if (!vec) return NULL;
 
-    bool weak = has_weak_elements((const CljObject*)vec);
+    bool is_weak = has_weak_elements((const CljObject*)vec);
 
     // Empty singleton: create new vector (owned).
     if (is_singleton((CljObject*)vec)) {
-        CljPersistentVector *new_vec = make_vector(4, false);
+        CljPersistentVector *new_vec = make_vector(4, STRONG);
         if (!new_vec) return vec;
-        new_vec->data[0] = weak ? item : RETAIN(item);
+        new_vec->data[0] = is_weak ? item : RETAIN(item);
         new_vec->count = 1;
         return new_vec;
     }
 
     // In-place append if unique and room.
     if (((CljObject*)vec)->rc == 1 && vec->count < (unsigned int)vec->capacity) {
-        vec->data[vec->count++] = weak ? item : RETAIN(item);
+        vec->data[vec->count++] = is_weak ? item : RETAIN(item);
         return vec;
     }
 
@@ -287,7 +292,7 @@ CljPersistentVector* vector_conj_owned(CljPersistentVector* vec, ID item) {
     }
     CljPersistentVector *new_vec = make_vector_copy(vec, (unsigned)new_capacity);
     if (!new_vec) return vec;
-    new_vec->data[new_vec->count++] = weak ? item : RETAIN(item);
+    new_vec->data[new_vec->count++] = is_weak ? item : RETAIN(item);
     return new_vec;
 }
 
@@ -306,11 +311,11 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
         return NULL;
     }
 
-    bool weak = has_weak_elements((const CljObject*)vec);
+    bool is_weak = has_weak_elements((const CljObject*)vec);
 
     if (index >= vec->count) {
         // For weak vectors we allow append via index == count (matches previous behavior).
-        if (!(weak && index == vec->count)) {
+        if (!(is_weak && index == vec->count)) {
             throw_index_out_of_bounds("vector_assoc", index, vec->count, "vector");
             return NULL;
         }
@@ -326,7 +331,7 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
 
     if (((CljObject*)vec)->rc == 1) {
         // Append for weak at index==count: ensure capacity and increment count.
-        if (weak && index == vec->count) {
+        if (is_weak && index == vec->count) {
             if (vec->capacity <= (int)index) {
                 int newcap = MAX(MAX(vec->capacity * 2, (int)index + 1), 4);
                 CljPersistentVector *grown = make_vector_copy(vec, (unsigned)newcap);
@@ -336,7 +341,7 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
         }
 
         CLJ_ASSERT(index < (unsigned int)vec->capacity);
-        if (index < vec->count && !weak) {
+        if (index < vec->count && !is_weak) {
             ID old = vec->data[index];
             if (old) {
                 CljObject *o = (CljObject*)old;
@@ -345,20 +350,20 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
                 }
             }
         }
-        vec->data[index] = weak ? value : RETAIN(value);
+        vec->data[index] = is_weak ? value : RETAIN(value);
         return vec;
     }
 
     int newcap = vec->capacity;
-    if (weak && index == vec->count) {
+    if (is_weak && index == vec->count) {
         newcap = MAX(MAX(vec->capacity * 2, (int)index + 1), 4);
     }
     CljPersistentVector *new_vec = make_vector_copy(vec, (unsigned)newcap);
-    if (weak && index == vec->count) {
+    if (is_weak && index == vec->count) {
         new_vec->count++;
     }
     CLJ_ASSERT(index < (unsigned int)new_vec->capacity);
-    if (index < vec->count && !weak) {
+    if (index < vec->count && !is_weak) {
         ID old = new_vec->data[index];
         if (old) {
             CljObject *o = (CljObject*)old;
@@ -367,7 +372,7 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
             }
         }
     }
-    new_vec->data[index] = weak ? value : RETAIN(value);
+    new_vec->data[index] = is_weak ? value : RETAIN(value);
     return new_vec;
 }
 
@@ -454,13 +459,8 @@ CljTransientVector* vector_transient(CljPersistentVector *vec) {
 
     CljTransientVector *tvec = (CljTransientVector*)alloc(sizeof(CljTransientVector), 1, CLJ_VECTOR_TRANSIENT);
     tvec->base.type = CLJ_VECTOR_TRANSIENT;
-    // For empty singleton, start with a fresh backing so we can grow.
-    if (vector_count(vec) == 0 && vector_capacity(vec) == 0) {
-        tvec->backing = make_vector(4, false);
-    } else {
-        tvec->backing = (CljPersistentVector*)RETAIN(vec);
-    }
-    return AUTORELEASE(tvec);
+    tvec->backing = RETAIN(vec);
+    return tvec;
 }
 
 CljPersistentVector* vector_persistent(CljTransientVector *tvec) {
@@ -474,13 +474,14 @@ CljPersistentVector* vector_persistent(CljTransientVector *tvec) {
 static void transient_vector_set_backing(CljTransientVector *tvec, CljPersistentVector *new_backing) {
     if (!tvec) return;
     CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
-    if (!new_backing) return;
-    if (new_backing == tvec->backing) return;
-
+    CLJ_ASSERT(new_backing != NULL);
     // Use ASSIGN to keep RC semantics consistent. Caller provides an *owned* new_backing,
     // so we must RELEASE it after ASSIGN's RETAIN to avoid leaking a ref.
+    CljPersistentVector *old_backing = tvec->backing;
     ASSIGN(tvec->backing, new_backing);
-    RELEASE(new_backing);
+    if (new_backing != old_backing) {
+        RELEASE(new_backing);
+    }
 }
 
 void vector_push(CljTransientVector *tvec, ID item) {
@@ -535,7 +536,6 @@ void vector_set_nth_transient(CljTransientVector *tvec, unsigned int index, ID v
     unsigned int cnt = vector_count(backing);
     if (index >= cnt) {
         throw_index_out_of_bounds("vector_set_nth_transient", index, cnt, "vector");
-        return;
     }
 
     // Use owned assoc core so we can safely replace backing (COW if necessary).
@@ -581,7 +581,6 @@ void vector_insert_at(CljTransientVector *tvec, unsigned int index, ID item) {
     unsigned int cnt = vector_count(backing);
     if (index > cnt) {
         throw_index_out_of_bounds("vector_insert_at", index, cnt, "vector");
-        return;
     }
 
     CljPersistentVector *new_backing = vector_insert_at_owned(backing, index, item);

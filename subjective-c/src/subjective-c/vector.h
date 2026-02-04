@@ -39,6 +39,22 @@ static inline CljPersistentVector* as_persistent_vector(ID obj) {
     return (CljPersistentVector*)obj;
 }
 
+// Forward declaration for compatibility helper.
+/** @brief Convert transient vector to persistent snapshot
+ * @param tvec Transient vector to convert
+ * @return Persistent vector (borrowed reference, RETAIN if keeping)
+ */
+CljPersistentVector* vector_persistent(CljTransientVector *tvec);
+
+static inline CljPersistentVector* as_vector(ID obj) {
+    if (!obj) return NULL;
+    CljType tag = TAG(obj);
+    if (tag == CLJ_VECTOR_TRANSIENT) {
+        return vector_persistent((CljTransientVector*)obj);
+    }
+    return as_persistent_vector(obj);
+}
+
 static inline CljTransientVector* as_transient_vector(ID obj) {
 #ifdef DEBUG
     CLJ_ASSERT(obj == NULL || TAG(obj) == CLJ_VECTOR_TRANSIENT);
@@ -46,34 +62,126 @@ static inline CljTransientVector* as_transient_vector(ID obj) {
     return (CljTransientVector*)obj;
 }
 
+
+/** @brief Get number of elements in vector
+ * @param vec Vector to count
+ * @return Number of elements
+ */
 unsigned int vector_count(CljPersistentVector *vec);
+
+/** @brief Get capacity (allocated size) of vector
+ * @param vec Vector to query
+ * @return Allocated capacity
+ */
 unsigned int vector_capacity(CljPersistentVector *vec);
+
+
+/** @brief Get element at index
+ * @param vec Vector to access
+ * @param index Index of element (must be < count)
+ * @return Element at index
+ */
 ID vector_nth(CljPersistentVector *vec, unsigned int index);
+
+/** @brief Find index of value in vector
+ * @param vec Vector to search
+ * @param value Value to find (uses clj_equal)
+ * @return Index of first occurrence or -1 if not found
+ */
 int vector_index_of(CljPersistentVector *vec, ID value);
+
+/** @brief Get direct pointer to internal array
+ * @param vec Vector to access
+ * @return Pointer to internal array (do not modify)
+ */
 ID* vector_as_array(CljPersistentVector *vec);
 
 extern CljPersistentVector* vector_empty_singleton;
+
+/** @brief Get empty vector singleton
+ * @return Singleton empty vector
+ */
 CljPersistentVector* empty_vector(void);
 /** Create a vector with given capacity.
- * If weakElements is true, vector stores elements without retaining/releasing them
+ * weak stores elements without retaining/releasing them
  * and sets CLJ_FLAG_WEAK_ELEMENTS on the vector object.
- * Returns empty-vector singleton if capacity == 0 and weakElements == false.
+ * Returns empty-vector singleton if capacity == 0 and retention is strong.
  */
-CljPersistentVector* make_vector(unsigned int capacity, bool weakElements);
+CljPersistentVector* make_vector(unsigned int capacity, ElementRetention retention);
 
+/** @brief Append item to vector (persistent, returns new vector)
+ * @param vec Source vector
+ * @param item Item to append
+ * @return New vector with item appended (AUTORELEASE'd)
+ */
 CljPersistentVector* vector_conj(CljPersistentVector* vec, ID item);
-/** Append; returns owned (no AUTORELEASE). Use ASSIGN(slot, vector_conj_owned(slot, item)) to update. */
+
+/** @brief Append item to vector, returns owned reference
+ * @param vec Source vector
+ * @param item Item to append
+ * @return New vector (owned, no AUTORELEASE)
+ */
 CljPersistentVector* vector_conj_owned(CljPersistentVector* vec, ID item);
+
+/** @brief Update element at index (persistent, returns new vector)
+ * @param vec Source vector
+ * @param index Index to update
+ * @param value New value
+ * @return New vector with updated element (AUTORELEASE'd)
+ */
 CljPersistentVector* vector_assoc(CljPersistentVector* vec, unsigned int index, ID value);
+
+/** @brief Update element at index (persistent, returns new vector)
+ * @param vec Source vector
+ * @param index Index to update
+ * @param value New value
+ * @return New vector with updated element (AUTORELEASE'd)
+ */
 CljPersistentVector* vector_set_nth(CljPersistentVector* vec, unsigned int index, ID value);
+
+/** @brief Create copy of vector with specified capacity
+ * @param vec Source vector
+ * @param capacity Capacity for new vector
+ * @return New vector copy
+ */
 CljPersistentVector* make_vector_copy(CljPersistentVector* vec, unsigned capacity);
+
+/** @brief Remove last element (persistent, returns new vector)
+ * @param vec Source vector
+ * @return New vector without last element (AUTORELEASE'd)
+ */
 CljPersistentVector* vector_popped(CljPersistentVector* vec);
-/** Returns owned (no AUTORELEASE). Use with ASSIGN for slot update. */
+
+/** @brief Remove last element, returns owned reference
+ * @param vec Source vector
+ * @return New vector (owned, no AUTORELEASE)
+ */
 CljPersistentVector* vector_popped_owned(CljPersistentVector* vec);
+
+/** @brief Insert item at index (persistent, returns new vector)
+ * @param vec Source vector
+ * @param index Index to insert at
+ * @param item Item to insert
+ * @return New vector with item inserted (AUTORELEASE'd)
+ */
 CljPersistentVector* vector_by_inserting_at(CljPersistentVector* vec, unsigned int index, ID item);
+
+/** @brief Remove element at index (persistent, returns new vector)
+ * @param vec Source vector
+ * @param index Index to remove
+ * @return New vector with element removed (AUTORELEASE'd)
+ */
 CljPersistentVector* vector_by_removing_at(CljPersistentVector* vec, unsigned int index);
+
+/** @brief Clear all elements from vector (in-place)
+ * @param vec Vector to clear
+ */
 void vector_clear(CljPersistentVector *vec);
-/** n<=count; releases elements in [n,count) when vector owns them (non-weak). */
+
+/** @brief Truncate vector to n elements (in-place)
+ * @param vec Vector to truncate
+ * @param n New size (must be <= count)
+ */
 void vector_truncate(CljPersistentVector *vec, unsigned int n);
 
 // Transient wrapper API (wrapper pointer remains stable; `backing` may be replaced/grown).
@@ -106,18 +214,57 @@ void vector_pop(CljTransientVector *tvec);
  */
 void vector_set_nth_transient(CljTransientVector *tvec, unsigned int index, ID value);
 
-/** Remove element at index from transient vector (in-place via backing). */
+/** @brief Remove element at index from transient vector
+ * @param tvec Transient vector (must be CLJ_VECTOR_TRANSIENT)
+ * @param index Index to remove
+ */
 void vector_remove_at(CljTransientVector *tvec, unsigned int index);
-/** Insert item at index in transient vector (in-place via backing). */
+
+/** @brief Insert item at index in transient vector
+ * @param tvec Transient vector (must be CLJ_VECTOR_TRANSIENT)
+ * @param index Index to insert at
+ * @param item Item to insert
+ */
 void vector_insert_at(CljTransientVector *tvec, unsigned int index, ID item);
 
+/** @brief Get count of vector copies made (for profiling)
+ * @return Number of copies
+ */
 size_t vector_make_copy_count(void);
+
+/** @brief Reset vector copy counter
+ */
 void vector_make_copy_count_reset(void);
 
+/** @brief Append item in-place (updates slot)
+ * @param vec_slot Pointer to vector slot
+ * @param item Item to append
+ */
 void vector_conj_inplace(CljPersistentVector **vec_slot, ID item);
+
+/** @brief Update element in-place (updates slot)
+ * @param vec_slot Pointer to vector slot
+ * @param index Index to update
+ * @param value New value
+ */
 void vector_assoc_inplace(CljPersistentVector **vec_slot, unsigned int index, ID value);
+
+/** @brief Insert item in-place (updates slot)
+ * @param vec_slot Pointer to vector slot
+ * @param index Index to insert at
+ * @param item Item to insert
+ */
 void vector_insert_at_inplace(CljPersistentVector **vec_slot, unsigned int index, ID item);
+
+/** @brief Remove element in-place (updates slot)
+ * @param vec_slot Pointer to vector slot
+ * @param index Index to remove
+ */
 void vector_remove_at_inplace(CljPersistentVector **vec_slot, unsigned int index);
+
+/** @brief Pop last element in-place (updates slot)
+ * @param vec_slot Pointer to vector slot
+ */
 void vector_pop_inplace(CljPersistentVector **vec_slot);
 
 #define VECTOR_FOR_EACH(vector, elem_var) \

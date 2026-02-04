@@ -21,22 +21,64 @@
 #endif
 
 typedef void (*SubjectiveCReleaseFn)(CljObject *obj);
+
+/** @brief Register custom release function for a type
+ * @param type Type to register release function for
+ * @param fn Release function to call when object is deallocated
+ */
 void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn);
 
 /** When ZOMBIE_ENABLED: optional callback (object, is_double_free) to log pr_str for inspection. */
 typedef void (*SubjectiveCZombieLogFn)(CljObject *v, bool is_double_free);
+
+/** @brief Set zombie log callback for debugging double-free issues
+ * @param fn Callback function called when zombie objects are accessed
+ */
 void subjective_c_set_zombie_log_fn(SubjectiveCZombieLogFn fn);
 
 // Zombie mode is controlled by ZOMBIE_ENABLED macro at compile time
 // No runtime API needed
 
+/** @brief Increment reference count of object
+ * @param v Object to retain (NULL-safe, skips immediates)
+ */
 void retain(CljObject *v);
+
+/** @brief Decrement reference count, deallocates when reaching zero
+ * @param v Object to release (NULL-safe, skips immediates)
+ */
 void release(CljObject *v);
+
+/** @brief Enable/disable debug output for memory operations
+ * @param enabled True to enable debug output
+ */
 void memory_set_debug_output_enabled(bool enabled);
+
+/** @brief Get current debug output state
+ * @return True if debug output is enabled
+ */
 bool memory_get_debug_output_enabled(void);
+
+/** @brief Add object to autorelease pool for deferred release
+ * @param v Object to autorelease
+ * @return The same object (for convenience)
+ */
 CljObject *autorelease(CljObject *v);
+
+/** @brief Check if pointer is in the data segment
+ * @param ptr Pointer to check
+ * @return True if pointer is in data segment
+ */
 bool is_pointer_in_data_segment(const void *ptr);
+
+/** @brief Check if pointer is on the stack
+ * @param ptr Pointer to check
+ * @return True if pointer is on stack
+ */
 bool is_pointer_on_stack(const void *ptr);
+
+/** @brief Throw out-of-memory exception (never returns)
+ */
 void throw_oom(void) __attribute__((noreturn));
 
 // -----------------------------------------------------------------------------
@@ -135,20 +177,52 @@ static inline char *clj_strdup(const char *s) {
  */
 int retain_count(ID obj);
 
+/** @brief Initialize the autorelease pool system
+ */
 void autorelease_pool_init(void);
+
+/** @brief Ensure autorelease pool is active, creating if needed
+ */
 void autorelease_pool_ensure_active(void);
+
+/** @brief Free the autorelease pool and all contained objects
+ */
 void autorelease_pool_free(void);
+
+/** @brief Check if autorelease pool is currently active
+ * @return True if pool is active
+ */
 bool is_autorelease_pool_active(void);
 
+/** @brief Mark current autorelease pool depth for later restoration
+ * @return Current pool depth marker
+ */
 uint32_t autorelease_pool_mark(void);
+
+/** @brief Get current autorelease pool depth
+ * @return Current depth (number of autoreleased objects)
+ */
 uint32_t autorelease_pool_depth(void);
+
+/** @brief Drain autorelease pool to a previously marked depth
+ * @param mark Depth marker from autorelease_pool_mark()
+ */
 void autorelease_pool_drain_to_depth(uint32_t mark);
 
 #ifdef DEBUG
-/** Number of times obj appears in the current autorelease pool (for release() policy: prefer leak over double-free).
- *  DEBUG only; must not be used in Release builds. */
+/** @brief Get number of times obj appears in current autorelease pool
+ * @param obj Object to count
+ * @return Number of times obj is in autorelease pool (DEBUG only)
+ */
 uint32_t autorelease_count(CljObject *obj);
+
+/** @brief Get peak autorelease pool count since last reset
+ * @return Peak count (DEBUG only)
+ */
 uint32_t autorelease_pool_peak_count(void);
+
+/** @brief Reset peak autorelease pool counter
+ */
 void autorelease_pool_peak_reset(void);
 #endif
 
@@ -171,13 +245,13 @@ void autorelease_pool_peak_reset(void);
     #else
     #define DEALLOC(obj) do { \
         typeof(obj) _tmp = (obj); \
-        if (_tmp && (void*)_tmp != (void*)0x1 && !IS_IMMEDIATE(_tmp)) { \
-            CljObject *_obj = (CljObject*)_tmp; \
-            if (!is_singleton(_obj)) { \
-                memory_profiler_track_object_destruction(_obj); \
-                free(_obj); \
-            } \
-        } \
+        CLJ_ASSERT(_tmp && "DEALLOC requires non-NULL object"); \
+        CLJ_ASSERT((void*)_tmp != (void*)0x1 && "DEALLOC received sentinel pointer"); \
+        CLJ_ASSERT(!IS_IMMEDIATE(_tmp) && "DEALLOC received immediate value"); \
+        CljObject *_obj = (CljObject*)_tmp; \
+        CLJ_ASSERT(!is_singleton(_obj) && "DEALLOC received singleton object"); \
+        memory_profiler_track_object_destruction(_obj); \
+        free(_obj); \
     } while(0)
     #endif
 
@@ -204,7 +278,15 @@ void autorelease_pool_peak_reset(void);
         ID _id = (obj); \
         /* Skip immediates, NULL, and singletons (SINGLETON_RC) */ \
         if (_id && !IS_IMMEDIATE(_id) && !is_singleton((CljObject*)_id)) { \
+            const char *_trace = getenv("TINYCLJ_TRACE_AUTORELEASE_CALL"); \
+            if (_trace && _trace[0] && strcmp(_trace, "0") != 0) { \
+                fprintf(stderr, "[autorelease-call] %p\n", (void*)_id); \
+            } \
+            autorelease_pool_ensure_active(); \
             autorelease((CljObject*)_id); \
+            if (_trace && _trace[0] && strcmp(_trace, "0") != 0) { \
+                fprintf(stderr, "[autorelease-called] %p\n", (void*)_id); \
+            } \
         } \
         _id; \
     })
@@ -221,7 +303,11 @@ void autorelease_pool_peak_reset(void);
     #define DEALLOC(obj) do { \
         ID _obj = (obj); \
         if (_obj && !IS_IMMEDIATE(_obj)) { \
-            free((void*)_obj); \
+            CljObject *_o = (CljObject*)_obj; \
+            if (!is_singleton(_o)) { \
+                memory_profiler_track_object_destruction(_o); \
+                free((void*)_o); \
+            } \
         } \
     } while(0)
 
@@ -246,7 +332,15 @@ void autorelease_pool_peak_reset(void);
         ID _id = (obj); \
         /* Skip immediates, NULL, and singletons (SINGLETON_RC) */ \
         if (_id && !IS_IMMEDIATE(_id) && !is_singleton((CljObject*)_id)) { \
+            const char *_trace = getenv("TINYCLJ_TRACE_AUTORELEASE_CALL"); \
+            if (_trace && _trace[0] && strcmp(_trace, "0") != 0) { \
+                fprintf(stderr, "[autorelease-call] %p\n", (void*)_id); \
+            } \
+            autorelease_pool_ensure_active(); \
             autorelease((CljObject*)_id); \
+            if (_trace && _trace[0] && strcmp(_trace, "0") != 0) { \
+                fprintf(stderr, "[autorelease-called] %p\n", (void*)_id); \
+            } \
         } \
         _id; \
     })
@@ -284,6 +378,12 @@ void autorelease_pool_peak_reset(void);
     } \
 } while(0)
 
+/** @brief Allocate memory for object(s) with reference counting
+ * @param type_size Size of each object
+ * @param count Number of objects
+ * @param obj_type Type tag for the object
+ * @return Allocated memory or throws OOM exception
+ */
 void* alloc(size_t type_size, size_t count, CljType obj_type);
 
 #define WITH_AUTORELEASE_POOL(code) do { \

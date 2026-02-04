@@ -317,7 +317,6 @@ ID eval_special_throw(CljList *list, CljPersistentMap *env, EvalState *st, const
     // Rethrow exception objects directly.
     if (thrown && TAG(thrown) == CLJ_EXCEPTION) {
         throw_exception_object((CLJException*)thrown);
-        return NULL;
     }
 
     // Otherwise throw a RuntimeException with a readable message.
@@ -350,7 +349,7 @@ ID eval_special_go(CljList *list, CljPersistentMap *env, EvalState *st, const Ev
             }
         }
     }
-    CljVector* empty_params_vec = make_vector(0, CLJ_VECTOR);
+    CljPersistentVector* empty_params_vec = make_vector(0, STRONG);
     CljList *fn_list = make_list((CljObject*)SYM_FN, NULL);
     if (!fn_list) return NULL;
     fn_list->rest = (CljObject*)make_list(empty_params_vec, NULL);
@@ -401,12 +400,12 @@ ID eval_special_loop(CljList *list, CljPersistentMap *env, EvalState *st, const 
 
     // Shape: (loop [sym1 init1 sym2 init2 ...] body...)
     ID bindings_vec = list_get_element(list, 1);
-    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR) {
+    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR_PERSISTENT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop requires a vector for bindings", __FILE__, __LINE__, 0);
         return NULL;
     }
 
-    CljVector *bindings = as_vector(bindings_vec);
+    CljPersistentVector *bindings = as_vector(bindings_vec);
     int binding_count = bindings ? (int)vector_count(bindings) : 0;
     if (!bindings || (binding_count % 2) != 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop requires an even number of forms in binding vector",
@@ -417,11 +416,10 @@ ID eval_special_loop(CljList *list, CljPersistentMap *env, EvalState *st, const 
     int pair_count = binding_count / 2;
     if (pair_count > CALLFRAME_MAX_PARAMS) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop has too many bindings", __FILE__, __LINE__, 0);
-        return NULL;
     }
 
     // Start from captured env_stack (if any), but do NOT mutate it.
-    CljVector *loop_stack = (ctx && ctx->env_stack) ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
+    CljPersistentVector *loop_stack = (ctx && ctx->env_stack) ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
 
     // Frame for fast local lookups.
     CallFrame loop_frame_storage;
@@ -457,7 +455,6 @@ ID eval_special_loop(CljList *list, CljPersistentMap *env, EvalState *st, const 
         if (!sym || TAG(sym) != CLJ_SYMBOL) {
         RELEASE(loop_stack);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop binding must be a symbol", __FILE__, __LINE__, 0);
-            return NULL;
         }
 
         ID value = NULL;
@@ -685,10 +682,10 @@ ID eval_special_try(CljList *list, CljPersistentMap *env, EvalState *st, const E
             // explicit env argument. Make the catch binding visible by extending env_stack.
             EvalContext catch_ctx_storage;
             const EvalContext *catch_ctx = ctx;
-            CljVector *catch_stack = NULL;
+            CljPersistentVector *catch_stack = NULL;
             if (ctx) {
                 catch_ctx_storage = *ctx;
-                catch_stack = ctx->env_stack ? (CljVector*)RETAIN(ctx->env_stack) : NULL;
+                catch_stack = ctx->env_stack ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
                 env_stack_push_inplace(&catch_stack, catch_env);
                 catch_ctx_storage.env_stack = catch_stack;
                 catch_ctx = &catch_ctx_storage;
@@ -735,7 +732,6 @@ ID eval_special_binding(CljList *list, CljPersistentMap *env, EvalState *st, con
 
     if (!st || !st->dynamic_bindings) {
         throw_exception(EXCEPTION_RUNTIME, "binding requires an evaluation state with dynamic bindings", __FILE__, __LINE__, 0);
-        return NULL;
     }
 
     // Base env for evaluating init forms and body (match other wrappers).
@@ -744,17 +740,16 @@ ID eval_special_binding(CljList *list, CljPersistentMap *env, EvalState *st, con
     ID bindings_obj = LIST_FIRST(args);
     if (!is_vector(bindings_obj)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding expects a vector of bindings", __FILE__, __LINE__, 0);
-        return NULL;
     }
 
-    CljVector *bindings_vec = as_vector(bindings_obj);
+    CljPersistentVector *bindings_vec = as_vector(bindings_obj);
     unsigned int bind_count = vector_count(bindings_vec);
     if ((bind_count % 2) != 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding vector must contain an even number of forms", __FILE__, __LINE__, 0);
         return NULL;
     }
 
-    unsigned int base_depth = vector_count(st->dynamic_bindings);
+    unsigned int base_depth = vector_count(st->dynamic_bindings->backing);
     CljNamespace *saved_ns = st->current_ns;
 
     // Build a single frame map: Symbol -> value.
@@ -774,7 +769,6 @@ ID eval_special_binding(CljList *list, CljPersistentMap *env, EvalState *st, con
         if (!is_symbol(sym_id)) {
             RELEASE(frame);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding keys must be symbols", __FILE__, __LINE__, 0);
-            return NULL;
         }
 
         CljSymbol *sym = as_symbol(sym_id);
@@ -818,7 +812,6 @@ ID eval_special_binding(CljList *list, CljPersistentMap *env, EvalState *st, con
             if (!bound_ns) {
                 RELEASE(frame);
                 throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "Namespace not found", __FILE__, __LINE__, 0);
-                return NULL;
             }
             value = (ID)bound_ns;
         }
@@ -828,7 +821,7 @@ ID eval_special_binding(CljList *list, CljPersistentMap *env, EvalState *st, con
     }
 
     // Push the new frame and run body; unwind stack even if an exception escapes.
-    vector_conj_inplace(&st->dynamic_bindings, frame);
+    vector_push(st->dynamic_bindings, frame);
     RELEASE(frame);
 
     if (bound_ns) {
@@ -863,7 +856,6 @@ ID eval_special_binding(CljList *list, CljPersistentMap *env, EvalState *st, con
 ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
     if (!ctx || !ctx->recur_args || !ctx->recur_arg_count) {
         throw_exception(EXCEPTION_RUNTIME, "recur can only be used inside function bodies", NULL, 0, 0);
-        return NULL;
     }
 
     // Get expected param count from recur context (set by function call)
@@ -913,7 +905,6 @@ ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
             RELEASE(evaluated_args[i]);
         }
         throw_exception(EXCEPTION_ARITY, "recur arity mismatch", NULL, 0, 0);
-        return NULL;
     }
 
     for (int i = 0; i < expected; i++) {
@@ -945,6 +936,10 @@ ID eval_special_form_dispatch(CljList *list,
 
 // Cached Clojure quasiquote-fn (resolved after bootstrap)
 static CljFunction *g_quasiquote_fn = NULL;
+
+void eval_special_forms_reset_caches(void) {
+    g_quasiquote_fn = NULL;
+}
 
 ID eval_special_quasiquote(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_quasiquote: list must not be NULL");

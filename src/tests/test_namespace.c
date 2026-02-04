@@ -636,8 +636,8 @@ TEST(test_ns_resolve_symbol_cache) {
     RELEASE(resolved1);
 }
 
-// Test that resolve_list_operator uses resolve_cache for function calls
-// This test verifies that function calls benefit from the resolve_cache optimization
+// Resolve-cache is disabled; callsite caches handle hot paths.
+// This test verifies function calls still resolve correctly without resolve_cache.
 TEST(test_resolve_list_operator_uses_cache) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -648,10 +648,10 @@ TEST(test_resolve_list_operator_uses_cache) {
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
 
-    // Clear resolve_cache to start fresh
+    // Ensure resolve_cache remains disabled
     if (g_runtime.resolve_cache) {
         RELEASE(g_runtime.resolve_cache);
-        g_runtime.resolve_cache = make_map(16);
+        g_runtime.resolve_cache = NULL;
     }
 
     // Test with a builtin function that should be in clojure.core
@@ -666,38 +666,14 @@ TEST(test_resolve_list_operator_uses_cache) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
     TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
 
-    // Verify that cache was populated
-    // The resolve_cache is hierarchical: namespace_symbol -> symbol -> resolved_value
-    TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
-    CljSymbol *ns_key = g_test_eval_state->current_ns->name;
-    CljPersistentMap *ns_cache = (CljPersistentMap*)map_get_sentinel(g_runtime.resolve_cache, ns_key, NULL);
-    CljObject *cached_inc = ns_cache ? (CljObject*)map_get_sentinel(ns_cache, inc_sym, NULL) : NULL;
-    TEST_ASSERT_NOT_NULL_MESSAGE(cached_inc, "resolve_cache should contain 'inc' after first function call");
-
-    // Second function call - should use cache (faster path)
-    CljObject *result2 = eval_string("(inc 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
-    TEST_ASSERT_EQUAL(3, as_fixnum((CljValue)result2));
-
-    // Multiple calls to verify cache is being used
-    for (int i = 0; i < 3; i++) {
-        char expr[32];
-        test_snprintf(expr, sizeof(expr), "(inc %d)", i);
-        CljObject *result = eval_string(expr, g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-        TEST_ASSERT_EQUAL(i + 1, as_fixnum((CljValue)result));
-    }
+    TEST_ASSERT_NULL(g_runtime.resolve_cache);
 
     // Cleanup
     RELEASE(inc_sym);
     RELEASE(result1);
-    RELEASE(result2);
 }
 
-// Test that cache invalidation works correctly when symbols are redefined
-// This verifies that the optimization maintains Clojure semantics
+// Resolve-cache is disabled; ensure redefinition still works without it.
 TEST(test_resolve_cache_invalidation_on_redefinition) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -708,10 +684,10 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
 
-    // Clear resolve_cache to start fresh
+    // Ensure resolve_cache remains disabled
     if (g_runtime.resolve_cache) {
         RELEASE(g_runtime.resolve_cache);
-        g_runtime.resolve_cache = make_map(16);
+        g_runtime.resolve_cache = NULL;
     }
 
     // Test with a builtin function that we can redefine
@@ -725,22 +701,14 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
     TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
 
-    // Verify cache was populated
-    // The resolve_cache is hierarchical: namespace_symbol -> symbol -> resolved_value
-    TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
-    CljSymbol *ns_key = g_test_eval_state->current_ns->name;
-    CljPersistentMap *ns_cache = (CljPersistentMap*)map_get_sentinel(g_runtime.resolve_cache, ns_key, NULL);
-    CljObject *cached = ns_cache ? (CljObject*)map_get_sentinel(ns_cache, inc_sym, NULL) : NULL;
-    TEST_ASSERT_NOT_NULL_MESSAGE(cached, "resolve_cache should contain 'inc' after first function call");
+    TEST_ASSERT_NULL(g_runtime.resolve_cache);
 
     // Now redefine 'inc' in user namespace (shadowing clojure.core)
     // Create a simple value (fixnum) that shadows the function
     ID new_inc_value = fixnum(999);
     ns_define(g_test_eval_state->current_ns, inc_sym, new_inc_value);
 
-    // Verify cache was invalidated (entire cache set to NULL after ns_define)
-    // ns_define invalidates the entire cache by setting it to NULL
-    TEST_ASSERT_NULL_MESSAGE(g_runtime.resolve_cache, "resolve_cache should be NULL after redefinition (cache invalidation)");
+    TEST_ASSERT_NULL(g_runtime.resolve_cache);
 
     // Second function call - should resolve from user namespace (not cached old value)
     // Note: This will fail because we defined a fixnum, not a function
@@ -1298,12 +1266,8 @@ TEST(test_ns_map_returns_mappings) {
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)found_val2));
 
     // Cleanup
-    RELEASE(sym1);
-    RELEASE(sym2);
     RELEASE(val1);
     RELEASE(val2);
-    RELEASE(ns_sym);
-    RELEASE(result);
 }
 
 // Test: Verify ns-map with empty namespace returns empty map
@@ -1324,7 +1288,6 @@ TEST(test_ns_map_empty_namespace) {
     TEST_ASSERT_EQUAL(0, map_count(mappings));
 
     // Cleanup
-    RELEASE(result);
 }
 
 // Test: Verify ns-map with current namespace (using namespace name)
@@ -1355,9 +1318,7 @@ TEST(test_ns_map_current_namespace) {
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)found));
 
     // Cleanup
-    RELEASE(test_sym);
     RELEASE(test_val);
-    RELEASE(result);
 }
 
 // Test: Verify find-ns returns namespace object
@@ -1375,7 +1336,6 @@ TEST(test_find_ns_returns_namespace) {
     TEST_ASSERT_EQUAL_PTR(test_ns, (CljNamespace*)result);
 
     // Cleanup
-    RELEASE(result);
 }
 
 // Test: Verify find-ns returns nil for non-existent namespace
@@ -1400,7 +1360,6 @@ TEST(test_find_ns_with_string_throws) {
     TEST_ASSERT_NOT_NULL(ex);
     TEST_ASSERT_EQUAL_STRING(EXCEPTION_TYPE, ex->type);
     TEST_ASSERT_NOT_NULL(strstr(ex->message, "symbol"));
-    RELEASE(ex);
 }
 
 // Test: Verify find-ns with nil argument returns nil

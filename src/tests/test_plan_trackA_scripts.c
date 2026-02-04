@@ -29,20 +29,20 @@ static void assert_load_file_ok(const char *path) {
 
 TEST(test_plan_trackA_core_async_smoke_script) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    assert_load_file_ok("../libs/test/core_async/smoke.clj");
+    assert_load_file_ok("libs/test/core_async/smoke.clj");
 }
 
 TEST(test_plan_trackA_core_async_callbacks_script) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    assert_load_file_ok("../libs/test/core_async/callbacks.clj");
+    assert_load_file_ok("libs/test/core_async/callbacks.clj");
 }
 
 TEST(test_plan_trackA_core_async_go_unsupported_script) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    assert_load_file_ok("../libs/test/core_async/go_unsupported.clj");
+    assert_load_file_ok("libs/test/core_async/go_unsupported.clj");
 }
 
 TEST(test_plan_trackA_gpio_smoke_script) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    assert_load_file_ok("../libs/test/gpio/smoke.clj");
+    assert_load_file_ok("libs/test/gpio/smoke.clj");
 }

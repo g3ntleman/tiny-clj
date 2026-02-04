@@ -4,6 +4,7 @@
 #include "object.h"
 #include "memory.h"
 #include "symbol.h"  // Include symbol.h for CljSymbol definition
+#include "vector.h"
 #include <stdbool.h>
 
 // Include map.h for CljPersistentMap type
@@ -34,8 +35,8 @@ typedef struct {
     CljObject **stack;
     int sp;
     int stack_capacity;
-    struct CljVector *pool;
-    struct CljVector *dynamic_bindings; // transient vector: stack of binding frame maps
+    CljPersistentVector *pool;
+    CljTransientVector *dynamic_bindings; // transient vector: stack of binding frame maps
     int finished;
     CljNamespace *current_ns; // dynamic current namespace (*ns*)
     CljNamespace *resolve_ns; // namespace used for unqualified symbol resolution (defaults to current_ns)
