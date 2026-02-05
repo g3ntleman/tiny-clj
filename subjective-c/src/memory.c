@@ -136,11 +136,8 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
         obj->type = obj_type;
         obj->flags = 0;
         obj->rc = 1;
-#if MEMORY_PROFILING_ENABLED
+        // Always call the function; in DEBUG it tracks heap even without full profiling.
         memory_profiler_track_object_creation_sized(obj, type_size * count);
-#else
-        MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj);
-#endif
     }
     
     return result;
