@@ -11,7 +11,7 @@
 // ============================================================================
 
 // H1/H2/H3: Test map_assoc with AUTORELEASE returns correct value
-TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum) {
+TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum, 900) {
     // This test must run FIRST to verify AUTORELEASE behavior
     CljPersistentMap *map = make_map(4);
     TEST_ASSERT_NOT_NULL(map);
@@ -20,7 +20,7 @@ TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum) {
     CljObject *value = fixnum(42);
     
     // Use ASSIGN pattern like ns_define does
-    ASSIGN(map, map_assoc(map, key, value));
+    ASSIGN(map, map_by_associng_kv(map, key, value));
     
     // Retrieve value - this is what fails in namespace tests
     ID retrieved = map_get(map, key);
@@ -34,7 +34,7 @@ TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum) {
 }
 
 // H6: Test ns_define and ns_resolve pattern
-TEST_SHARED(test_aab_ns_define_resolve_pattern) {
+TEST_SHARED(test_aab_ns_define_resolve_pattern, 900) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     TEST_ASSERT_NOT_NULL(g_test_eval_state->current_ns);
     
@@ -371,11 +371,11 @@ TEST_SHARED(test_map_equal_same_maps) {
     CljString *val2 = make_string("value2");
     
     // Add same key-value pairs to both maps
-    map1 = map_assoc(map1, key1, val1);
-    map1 = map_assoc(map1, key2, val2);
+    map1 = map_by_associng_kv(map1, key1, val1);
+    map1 = map_by_associng_kv(map1, key2, val2);
     
-    map2 = map_assoc(map2, key1, val1);
-    map2 = map_assoc(map2, key2, val2);
+    map2 = map_by_associng_kv(map2, key1, val1);
+    map2 = map_by_associng_kv(map2, key2, val2);
     
     // Test equality
     TEST_ASSERT_TRUE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -472,11 +472,11 @@ TEST_SHARED(test_map_equal_different_keys) {
     CljString *val2 = make_string("value2");
     
     // Add different key-value pairs
-    map1 = map_assoc(map1, key1, val1);
-    map1 = map_assoc(map1, key2, val2);
+    map1 = map_by_associng_kv(map1, key1, val1);
+    map1 = map_by_associng_kv(map1, key2, val2);
     
-    map2 = map_assoc(map2, key1, val1);
-    map2 = map_assoc(map2, key3, val2); // Different key
+    map2 = map_by_associng_kv(map2, key1, val1);
+    map2 = map_by_associng_kv(map2, key3, val2); // Different key
     
     // Test inequality
     TEST_ASSERT_FALSE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -507,11 +507,11 @@ TEST_SHARED(test_map_equal_different_values) {
     CljString *val3 = make_string("value3");
     
     // Add same keys but different values
-    map1 = map_assoc(map1, key1, val1);
-    map1 = map_assoc(map1, key2, val2);
+    map1 = map_by_associng_kv(map1, key1, val1);
+    map1 = map_by_associng_kv(map1, key2, val2);
     
-    map2 = map_assoc(map2, key1, val1);
-    map2 = map_assoc(map2, key2, val3); // Different value
+    map2 = map_by_associng_kv(map2, key1, val1);
+    map2 = map_by_associng_kv(map2, key2, val3); // Different value
     
     // Test inequality
     TEST_ASSERT_FALSE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -541,10 +541,10 @@ TEST_SHARED(test_map_equal_different_sizes) {
     CljString *val2 = make_string("value2");
     
     // Add different number of entries
-    map1 = map_assoc(map1, key1, val1);
-    map1 = map_assoc(map1, key2, val2);
+    map1 = map_by_associng_kv(map1, key1, val1);
+    map1 = map_by_associng_kv(map1, key2, val2);
     
-    map2 = map_assoc(map2, key1, val1);
+    map2 = map_by_associng_kv(map2, key1, val1);
     // map2 has only one entry
     
     // Test inequality
@@ -592,11 +592,11 @@ TEST_SHARED(test_map_equal_with_nested_vectors) {
     CljString *val_str = make_string("value");
     
     // Add to maps
-    map1 = map_assoc(map1, key1, vec1);
-    map1 = map_assoc(map1, val_str, val_str);
+    map1 = map_by_associng_kv(map1, key1, vec1);
+    map1 = map_by_associng_kv(map1, val_str, val_str);
     
-    map2 = map_assoc(map2, key1, vec2);
-    map2 = map_assoc(map2, val_str, val_str);
+    map2 = map_by_associng_kv(map2, key1, vec2);
+    map2 = map_by_associng_kv(map2, val_str, val_str);
     
     // Test equality (should be true due to structural equality of vectors)
     TEST_ASSERT_TRUE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -668,7 +668,7 @@ TEST_SHARED(test_list_equal_empty_lists) {
 // NOT= TESTS
 // ============================================================================
 
-TEST_SHARED(test_not_eq) {
+TEST_SHARED(test_not_eq, 900) {
     if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
@@ -709,49 +709,49 @@ TEST_SHARED(test_not_eq) {
 // HIGH-LEVEL COLLECTION EQUALITY TESTS (using eval_string)
 // ============================================================================
 
-TEST_SHARED(test_equal_quoted_lists) {
+TEST_SHARED(test_equal_quoted_lists, 900) {
     // Test: (= '(1 2 3) '(1 2 3)) => true
     CljObject *result = eval_string("(= '(1 2 3) '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= '(1 2 3) '(1 2 3)) should be true");
 }
 
-TEST_SHARED(test_equal_quoted_lists_different) {
+TEST_SHARED(test_equal_quoted_lists_different, 900) {
     // Test: (= '(1 2) '(1 2 3)) => false
     CljObject *result = eval_string("(= '(1 2) '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= '(1 2) '(1 2 3)) should be false");
 }
 
-TEST_SHARED(test_equal_vectors) {
+TEST_SHARED(test_equal_vectors, 900) {
     // Test: (= [1 2 3] [1 2 3]) => true
     CljObject *result = eval_string("(= [1 2 3] [1 2 3])", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= [1 2 3] [1 2 3]) should be true");
 }
 
-TEST_SHARED(test_equal_vectors_different) {
+TEST_SHARED(test_equal_vectors_different, 900) {
     // Test: (= [1 2] [1 2 3]) => false
     CljObject *result = eval_string("(= [1 2] [1 2 3])", g_test_eval_state);
     TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= [1 2] [1 2 3]) should be false");
 }
 
-TEST_SHARED(test_equal_maps) {
+TEST_SHARED(test_equal_maps, 900) {
     // Test: (= {:a 1 :b 2} {:a 1 :b 2}) => true
     CljObject *result = eval_string("(= {:a 1 :b 2} {:a 1 :b 2})", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= {:a 1 :b 2} {:a 1 :b 2}) should be true");
 }
 
-TEST_SHARED(test_equal_maps_different) {
+TEST_SHARED(test_equal_maps_different, 900) {
     // Test: (= {:a 1} {:a 2}) => false
     CljObject *result = eval_string("(= {:a 1} {:a 2})", g_test_eval_state);
     TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= {:a 1} {:a 2}) should be false");
 }
 
-TEST_SHARED(test_equal_list_function_result) {
+TEST_SHARED(test_equal_list_function_result, 900) {
     // Test: (= (list 1 2 3) '(1 2 3)) => true
     CljObject *result = eval_string("(= (list 1 2 3) '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= (list 1 2 3) '(1 2 3)) should be true");
 }
 
-TEST_SHARED(test_equal_take_result) {
+TEST_SHARED(test_equal_take_result, 1000) {
     // Test: take result equality via first/last comparison
     // Direct list comparison may fail due to structural differences
     CljObject *take_exists = eval_string("(fn? take)", g_test_eval_state);
@@ -765,7 +765,7 @@ TEST_SHARED(test_equal_take_result) {
     }
 }
 
-TEST_SHARED(test_equal_empty_collections) {
+TEST_SHARED(test_equal_empty_collections, 100) {
     // Test: (= [] []) => true (vectors work)
     CljObject *result2 = eval_string("(= [] [])", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result2), "(= [] []) should be true");

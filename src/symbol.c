@@ -72,8 +72,6 @@ CljSymbol *SYM_LT = NULL;
 CljSymbol *SYM_GT = NULL;
 CljSymbol *SYM_LE = NULL;
 CljSymbol *SYM_GE = NULL;
-CljSymbol *SYM_NOT_EQ = NULL;
-CljSymbol *SYM_IDENTICAL = NULL;
 CljSymbol *SYM_PRINTLN = NULL;
 CljSymbol *SYM_PRINT = NULL;
 CljSymbol *SYM_STR = NULL;
@@ -603,10 +601,6 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_GE, sym_ge_data);
     SYM_GE->base.flags |= CLJ_FLAG_COMPARISON | (3 << CLJ_COMP_OP_SHIFT);
 
-    // Additional comparison symbols (not= and identical?)
-    INIT_SYMBOL(SYM_NOT_EQ, sym_not_eq_data);
-    INIT_SYMBOL(SYM_IDENTICAL, sym_identical_data);
-
     INIT_SYMBOL(SYM_PRINTLN, sym_println_data);
 
     INIT_SYMBOL(SYM_PRINT, sym_print_data);
@@ -922,7 +916,8 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     
     if (!cname) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "make_symbol: name cannot be NULL"); return NULL;
+                                  "make_symbol: name cannot be NULL");
+        return NULL;
     }
 
     // Assertion: name must not be empty
@@ -933,8 +928,9 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     // Range check for name length (keep for safety)
     if (cname_len >= SYMBOL_NAME_MAX_LEN) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "Symbol name '%s' exceeds maximum length of %d characters",
-                cname, SYMBOL_NAME_MAX_LEN - 1); return NULL;
+                                  "Symbol name '%s' exceeds maximum length of %d characters",
+                                  cname, SYMBOL_NAME_MAX_LEN - 1);
+        return NULL;
     }
 
     // Allocate as raw heap block (symbols are singletons and never released).
@@ -942,7 +938,8 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     CljSymbol *sym = (CljSymbol*)CLJ_MALLOC(sizeof(CljSymbol));
     if (!sym) {
         throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
-                "Failed to allocate memory for symbol '%s'", cname); return NULL;
+                                  "Failed to allocate memory for symbol '%s'", cname);
+        return NULL;
     }
 
     sym->base.type = CLJ_SYMBOL;
@@ -958,7 +955,8 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     if (!sym->cname) {
         CLJ_FREE(sym);
         throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
-                "Failed to duplicate string for symbol '%s'", cname); return NULL;
+                                  "Failed to duplicate string for symbol '%s'", cname);
+        return NULL;
     }
 
     // Enforce invariant: symbols always have a name

@@ -79,7 +79,7 @@ TEST(test_meta_function_set_and_get) {
     CljString *value = make_string("value");
     TEST_ASSERT_NOT_NULL(value);
     
-    ASSIGN(meta_map, map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value));
+    ASSIGN(meta_map, map_by_associng_kv((CljValue)meta_map, (CljValue)key, (CljValue)value));
     TEST_ASSERT_NOT_NULL(meta_map);
     
     // Set metadata
@@ -143,7 +143,7 @@ TEST(test_meta_returns_metadata) {
     CljString *value = make_string("value");
     TEST_ASSERT_NOT_NULL(value);
     
-    ASSIGN(meta_map, map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value));
+    ASSIGN(meta_map, map_by_associng_kv((CljValue)meta_map, (CljValue)key, (CljValue)value));
     TEST_ASSERT_NOT_NULL(meta_map);
     
     // Set metadata
@@ -190,7 +190,7 @@ TEST(test_meta_resolves_symbols) {
     CljString *value = make_string("Test variable");
     TEST_ASSERT_NOT_NULL(value);
     
-    ASSIGN(meta_map, map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value));
+    ASSIGN(meta_map, map_by_associng_kv((CljValue)meta_map, (CljValue)key, (CljValue)value));
     TEST_ASSERT_NOT_NULL(meta_map);
     
     // Set metadata on the value
@@ -257,8 +257,8 @@ TEST(test_metadata_transferred_from_defn_to_function) {
     TEST_ASSERT_NOT_NULL_MESSAGE(fn_meta, 
                                  "metadata should be on the function");
     
-    RELEASE(parsed);
-    RELEASE(result);
+    (void)parsed;
+    (void)result;
 }
 
 // ============================================================================
@@ -299,8 +299,8 @@ TEST(test_metadata_transferred_from_defn_to_native_function) {
     TEST_ASSERT_NOT_NULL_MESSAGE(fn_meta, 
                                  "metadata should be on the native function");
     
-    RELEASE(parsed);
-    RELEASE(result);
+    (void)parsed;
+    (void)result;
 }
 
 // ============================================================================

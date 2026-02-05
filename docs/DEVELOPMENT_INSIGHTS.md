@@ -268,7 +268,7 @@ mu_assert_obj_int(result, 3);  // ← enthält NULL- und Typ-Check
 #### Fail-Fast Principle
 ```c
 // Setup code with fail-fast validation
-if (!shared_string_vector || shared_string_vector->type != CLJ_VECTOR) {
+if (!shared_string_vector || shared_string_vector->type != CLJ_VECTOR_PERSISTENT) {
     printf("Error: Failed to parse Clojure vector\n");
     exit(1); // Fail fast if parsing fails
 }
@@ -647,12 +647,12 @@ if (!params_list || params_list->type != CLJ_LIST) {
 
 // ✅ After: Accept both vectors and lists
 if (!params_list || 
-    (params_list->type != CLJ_LIST && params_list->type != CLJ_VECTOR)) {
+    (params_list->type != CLJ_LIST && params_list->type != CLJ_VECTOR_PERSISTENT)) {
     return NULL;
 }
 
 // Handle both types when extracting parameters
-if (params_list->type == CLJ_VECTOR) {
+if (params_list->type == CLJ_VECTOR_PERSISTENT) {
     CljPersistentVector *vec = as_vector(params_list);
     params[i] = vec->data[i];
 } else {

@@ -10,7 +10,7 @@
 // Forward declarations from repl.c
 extern bool history_save_to_file(CljPersistentVector *vec, const char *path);
 extern CljObject *history_load_from_file(const char *path);
-extern CljObject *history_trim_last_n(CljObject *vec, int limit);
+extern CljObject *history_trim_last_n(CljPersistentVector *vec, int limit);
 
 static const char *tmp_hist_path = "/tmp/tiny_clj_history_test.edn";
 
@@ -71,7 +71,7 @@ TEST(test_history_trim_to_50) {
 
   // RETAIN vec to keep it alive while trimmed references its elements
   RETAIN(vec);
-  CljObject *trimmed = history_trim_last_n(vec, 50);
+  CljObject *trimmed = history_trim_last_n(as_persistent_vector((ID)vec), 50);
   TEST_ASSERT_NOT_NULL(trimmed);
   // RETAIN trimmed to keep it alive outside of autorelease pool
   RETAIN(trimmed);
@@ -671,14 +671,12 @@ TEST(test_history_load_from_file_scenario) {
         if (TAG(elem) != CLJ_STRING) {
           all_strings = false;
         }
-        RELEASE(elem);
       }
       if (all_strings) {
         CljPersistentVector* new_vec = make_vector((unsigned int)count, false);
         for (int i = 0; i < count; i++) {
           ID elem = vector_nth(v, (unsigned int)i);
           new_vec = vector_conj(new_vec, elem);
-          RELEASE(elem);
         }
 
                         // Verify strings are valid using nth2 (Clojure-compatible API)

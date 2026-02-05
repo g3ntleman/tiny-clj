@@ -18,6 +18,12 @@
 #define FNV1A_PRIME  16777619u
 #define FNV_MIX(h, v) (((h) ^ (v)) * FNV1A_PRIME)
 
+static inline uint32_t fnv1a(const char *s) {
+    uint32_t h = FNV1A_OFFSET;
+    for (; *s; s++) h = FNV_MIX(h, (uint8_t)*s);
+    return h;
+}
+
 static inline uint32_t fnv1a_continue(uint32_t h, const char *s) {
     for (; *s; s++) h = FNV_MIX(h, (uint8_t)*s);
     return h;
@@ -26,26 +32,18 @@ static inline uint32_t fnv1a_continue(uint32_t h, const char *s) {
 static uint32_t hash_symbol(CljSymbol *sym) {
     if (!sym || !sym->cname) return 0;
     if (sym->ns_name && sym->ns_name->cname) {
-        uint32_t h = fnv1a_continue(FNV1A_OFFSET, sym->ns_name->cname);
+        uint32_t h = fnv1a(sym->ns_name->cname);
         return fnv1a_continue(FNV_MIX(h, '/'), sym->cname);
     }
-    return fnv1a_continue(FNV1A_OFFSET, sym->cname);
+    return fnv1a(sym->cname);
 }
 
 static uint32_t hash_vector(CljPersistentVector *vec) {
     if (!vec) return 0;
-    unsigned int n = vector_count(vec);
-    if (n == 0) return 0;
-
-    ID first = vector_nth(vec, 0);
-    ID last  = (n > 1) ? vector_nth(vec, n - 1) : first;
-
-    uint32_t h = FNV1A_OFFSET;
-    h = FNV_MIX(h, (uint32_t)n);
-    h = FNV_MIX(h, clj_hash_full(first));
-    if (n > 1) {
-        h = FNV_MIX(h, clj_hash_full(last));
-    }
+    uint32_t h = 0;
+    int n = vector_count(vec);
+    for (int i = 0; i < n; i++)
+        h = FNV_MIX(h, clj_hash_full(vector_nth(vec, i)));
     return h;
 }
 
@@ -87,7 +85,7 @@ static uint32_t hash_list(CljList *list) {
 
 static uint32_t hash_string(CljString *str) {
     uint16_t len = str->length;
-    if (len <= 16) return fnv1a_continue(FNV1A_OFFSET, str->data);
+    if (len <= 16) return fnv1a(str->data);
     // O(1): length + first 8 + last 8 chars
     const char *d = str->data;
     uint32_t h = FNV_MIX(FNV_MIX(FNV1A_OFFSET, len), len >> 8);

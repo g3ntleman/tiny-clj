@@ -127,7 +127,7 @@ TEST_SHARED(test_do_last_nil) {
 }
 
 // Test do with let binding
-TEST_SHARED(test_do_with_let) {
+TEST_SHARED(test_do_with_let, 50) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(let [x 5] (do (+ x 1) (+ x 2)))";

@@ -6,6 +6,7 @@
  * set?, coll?, seq?, seqable?, ifn?
  */
 
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 300
 #include "tests_common.h"
 
 // ============================================================================

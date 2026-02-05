@@ -17,6 +17,7 @@
 #include "to_string.h"
 #include "object.h"
 #include "strings.h"
+#include "common.h"
 #include "namespace.h"
 #include "value.h"
 #include "symbol.h"
@@ -42,7 +43,15 @@
 #include "numeric_utils.h"
 
 
+static size_t g_to_string_limit = 0;
+
 static void append_bytes(char *buffer, size_t *offset, const char *data, size_t len) {
+    if (g_to_string_limit > 0 && (*offset + len) > g_to_string_limit) {
+        fprintf(stderr,
+                "to_string write overflow: limit=%zu offset=%zu write=%zu\n",
+                g_to_string_limit, *offset, len);
+        CLJ_ASSERT((*offset + len) <= g_to_string_limit && "to_string write overflow");
+    }
     memcpy(buffer + *offset, data, len);
     *offset += len;
 }
@@ -513,7 +522,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             }
             buffer[*offset] = '[';
             *offset += 1;
-            int count = (int)vector_count(vec);
+            int count = vector_count(vec);
             int i = 0;
             VECTOR_FOR_EACH(vec, elem) {
                 to_string_build_string((CljObject*)elem, buffer, offset, escape_strings);
@@ -812,11 +821,18 @@ CljString* to_string_with_escape(ID v, bool escape_strings) {
     CljString *result = (CljString*)AUTORELEASE(make_string_buffer(len));
 
     size_t offset = 0;
+    g_to_string_limit = len;
     to_string_build_string((CljObject*)v, result->data, &offset, escape_strings);
     // Safety check: ensure we don't write beyond allocated buffer
     if (offset > len) {
+        CljObject *obj = (CljObject*)v;
+        fprintf(stderr,
+                "to_string overflow: type=%s len=%zu offset=%zu\n",
+                obj ? clj_type_name(obj->type) : "nil", len, offset);
+        CLJ_ASSERT(offset <= len && "to_string overflow");
         offset = len;  // Truncate to allocated size
     }
+    g_to_string_limit = 0;
     result->data[offset] = '\0';
     result->length = (uint16_t)offset;
 

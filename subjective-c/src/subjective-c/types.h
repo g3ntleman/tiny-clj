@@ -52,6 +52,14 @@ typedef enum {
 
 #define CLJ_TYPE_COUNT (CLJ_SLOT_REF + 1)
 
+#ifndef CLJ_INT
+#define CLJ_INT CLJ_FIXNUM
+#endif
+
+/** @brief Get human-readable name for type
+ * @param type Type to get name for
+ * @return Type name string
+ */
 const char* clj_type_name(CljType type);
 
 #endif // SUBJECTIVE_C_TYPES_H

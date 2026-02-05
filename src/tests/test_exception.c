@@ -157,7 +157,7 @@ TEST(test_map_arity_exception_zero_args) {
         CljValue map_obj = AUTORELEASE(make_map(2));
         CljObject *key = AUTORELEASE(intern_symbol_global(":a"));
         CljObject *val = fixnum(1);
-        (void)map_assoc(map_obj, key, val);
+        (void)map_by_associng_kv(map_obj, key, val);
         
         // Define 'm' in current namespace (use global g_test_eval_state from setUp)
         CljObject *m_sym = AUTORELEASE(intern_symbol_global("m"));

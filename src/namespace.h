@@ -4,13 +4,13 @@
 #include "object.h"
 #include "memory.h"
 #include "symbol.h"  // Include symbol.h for CljSymbol definition
+#include "vector.h"
 #include <stdbool.h>
 
 // Include map.h for CljPersistentMap type
 // Note: This may create a circular dependency if value.h includes namespace.h
 // But since CljPersistentMap is an anonymous struct typedef, we can't use forward declaration
 #include "map.h"
-#include "vector.h"
 
 // Namespace structure - subtype of CljObject
 #pragma GCC diagnostic push
@@ -35,8 +35,8 @@ typedef struct {
     CljObject **stack;
     int sp;
     int stack_capacity;
-    struct CljVector *pool;
-    CljTransientVector *dynamic_bindings; // stack of binding frame maps (use vector_push/vector_pop)
+    CljPersistentVector *pool;
+    CljTransientVector *dynamic_bindings; // transient vector: stack of binding frame maps
     int finished;
     CljNamespace *current_ns; // dynamic current namespace (*ns*)
     CljNamespace *resolve_ns; // namespace used for unqualified symbol resolution (defaults to current_ns)

@@ -12,6 +12,7 @@
 #include "vector.h"
 #include "map.h"
 #include "strings.h"
+#include "symbol_token.h"
 #include "kv_macros.h"
 #include "list.h"
 #include "seq.h"
@@ -46,8 +47,8 @@ bool clj_equal_full(ID a, ID b) {
     // even across different concrete types (e.g. '(1 2) == [1 2]).
     const unsigned char ta = TAG(a_obj);
     const unsigned char tb = TAG(b_obj);
-    const bool a_seq = (ta == CLJ_LIST || ta == CLJ_VECTOR_PERSISTENT|| ta == CLJ_SEQ || ta == CLJ_LAZY_SEQ);
-    const bool b_seq = (tb == CLJ_LIST || tb == CLJ_VECTOR_PERSISTENT|| tb == CLJ_SEQ || tb == CLJ_LAZY_SEQ);
+    const bool a_seq = (ta == CLJ_LIST || ta == CLJ_VECTOR_PERSISTENT || ta == CLJ_SEQ || ta == CLJ_LAZY_SEQ);
+    const bool b_seq = (tb == CLJ_LIST || tb == CLJ_VECTOR_PERSISTENT || tb == CLJ_SEQ || tb == CLJ_LAZY_SEQ);
     if (a_seq && b_seq) {
         SeqIterator ia, ib;
         if (!seq_iter_init(&ia, a_obj) || !seq_iter_init(&ib, b_obj)) {
@@ -64,16 +65,30 @@ bool clj_equal_full(ID a, ID b) {
         return seq_iter_empty(&ia) && seq_iter_empty(&ib);
     }
 
+    // Special-case symbol tokens vs interned symbols (compare by name).
+    if (ta == CLJ_SYMBOL_TOKEN && tb == CLJ_SYMBOL) {
+        const char *tok = symbol_token_data((CljSymbolToken*)a);
+        const CljSymbol *sym = (const CljSymbol*)b;
+        return tok && sym && sym->cname && strcmp(tok, sym->cname) == 0;
+    }
+    if (tb == CLJ_SYMBOL_TOKEN && ta == CLJ_SYMBOL) {
+        const char *tok = symbol_token_data((CljSymbolToken*)b);
+        const CljSymbol *sym = (const CljSymbol*)a;
+        return tok && sym && sym->cname && strcmp(tok, sym->cname) == 0;
+    }
+    if (ta == CLJ_SYMBOL_TOKEN && tb == CLJ_SYMBOL_TOKEN) {
+        const char *a_tok = symbol_token_data((CljSymbolToken*)a);
+        const char *b_tok = symbol_token_data((CljSymbolToken*)b);
+        return a_tok && b_tok && strcmp(a_tok, b_tok) == 0;
+    }
+
     // Otherwise require same concrete type for structural equality.
     if (a_obj->type != b_obj->type) return false;
 
     // Content comparison based on type
-    // Note: CLJ_BOOL, CLJ_SYMBOL are handled by pointer comparison (line 23)
-    // Symbols are interned - only identity (pointer comparison) is needed
+    // Note: CLJ_BOOL handled by pointer comparison (line 23)
     switch (a_obj->type) {
         // CLJ_INT, CLJ_FLOAT removed - handled as immediates
-        // CLJ_SYMBOL removed - handled by pointer comparison (line 23) due to interning
-
         // Complex types - content comparison
         case CLJ_STRING: {
             CljString *str_a = (CljString*)a;
@@ -98,16 +113,35 @@ bool clj_equal_full(ID a, ID b) {
             if (count_a != count_b) return false;
             for (int i = 0; i < count_a; i++) {
                 // Vector elements can be immediates or heap objects
-                ID elem_a = vector_nth(vec_a, (unsigned int)i);
-                ID elem_b = vector_nth(vec_b, (unsigned int)i);
+                ID elem_a = vector_nth(vec_a, i);
+                ID elem_b = vector_nth(vec_b, i);
                 if (!clj_equal(elem_a, elem_b)) return false;
             }
             return true;
         }
+
         case CLJ_VECTOR_TRANSIENT:
             // Transients do not have value semantics (only identity via a==b)
             return false;
 
+        case CLJ_SYMBOL: {
+            const CljSymbol *sa = (const CljSymbol*)a;
+            const CljSymbol *sb = (const CljSymbol*)b;
+            if (!sa || !sb) return false;
+            if (sa->cname == sb->cname) {
+                // Fast path: shared name pointer (interned)
+            } else {
+                if (!sa->cname || !sb->cname) return false;
+                if (strcmp(sa->cname, sb->cname) != 0) return false;
+            }
+            const CljSymbol *nsa = (const CljSymbol*)sa->ns_name;
+            const CljSymbol *nsb = (const CljSymbol*)sb->ns_name;
+            if (nsa == nsb) return true; // includes both NULL
+            if (!nsa || !nsb) return false;
+            if (!nsa->cname || !nsb->cname) return false;
+            CLJ_ASSERT(strcmp(nsa->cname, nsb->cname) == 0 && "Symbol namespaces differ; interning may be broken");
+            return strcmp(nsa->cname, nsb->cname) == 0;
+        }
         case CLJ_MAP_PERSISTENT: {
             CljPersistentMap *map_a = as_map(a);
             CljPersistentMap *map_b = as_map(b);

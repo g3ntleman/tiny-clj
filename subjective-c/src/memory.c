@@ -1,8 +1,9 @@
-/*
- * Memory Management Implementation for Tiny-CLJ
- * 
- * Centralized memory management with reference counting and autorelease pools.
- * Provides retain/release semantics similar to Objective-C ARC.
+/**
+ * @file memory.c
+ * @brief Reference counting and autorelease pool implementation.
+ *
+ * Provides manual reference counting with RETAIN/RELEASE macros and
+ * automatic cleanup via autorelease pools (WITH_AUTORELEASE_POOL).
  */
 
 #include "memory.h"
@@ -18,6 +19,9 @@
 #include "map.h"
 #include "list.h"
 #include "ast.h"
+#if defined(__GNUC__) && !defined(ESP32_BUILD) && !defined(ESP_PLATFORM)
+#include <execinfo.h>
+#endif
 #include "atom.h"
 #include "function.h"  // For CljFunction
 #include "namespace.h"  // For CljNamespace
@@ -54,8 +58,8 @@ static THREAD_LOCAL RcHistEntry g_rchist[RCHIST_SIZE];
 static THREAD_LOCAL unsigned int g_rchist_head = 0;
 
 static void rchist_push(CljObject *v, char op, int rc_after) {
-    // capture caller of retain/release (one frame up) to aid debug
-    g_rchist[g_rchist_head] = (RcHistEntry){ v, op, rc_after, __builtin_return_address(1) };
+    // capture caller of retain/release (best-effort) to aid debug
+    g_rchist[g_rchist_head] = (RcHistEntry){ v, op, rc_after, __builtin_return_address(0) };
     g_rchist_head = (g_rchist_head + 1) % RCHIST_SIZE;
 }
 
@@ -100,17 +104,30 @@ static inline void update_debug_output_active(void) {
 }
 
 static SubjectiveCZombieLogFn g_zombie_log_fn = NULL;
-void subjective_c_set_zombie_log_fn(SubjectiveCZombieLogFn fn) { g_zombie_log_fn = fn; }
 
+/** @brief Set zombie logging callback. */
+void subjective_c_set_zombie_log_fn(SubjectiveCZombieLogFn fn) { 
+    g_zombie_log_fn = fn; 
+}
+
+/** @brief Enable/disable debug output for memory operations. */
 void memory_set_debug_output_enabled(bool enabled) {
     g_debug_output_enabled = enabled;
     update_debug_output_active();
 }
 
+/** @brief Check if debug output is enabled. */
 bool memory_get_debug_output_enabled(void) {
     return g_debug_output_enabled;
 }
 
+/**
+ * @brief Allocate memory for Clojure objects.
+ * @param type_size Size of object type
+ * @param count Number of objects
+ * @param obj_type Clojure type tag
+ * @return Allocated object with rc=1, throws on OOM
+ */
 void* alloc(size_t type_size, size_t count, CljType obj_type) {
     void *result = malloc(type_size * count);
     if (!result) throw_oom();
@@ -135,9 +152,12 @@ static void init_release_dispatch(void);
 static SubjectiveCReleaseFn g_release_dispatch[CLJ_TYPE_COUNT];
 static bool g_release_dispatch_initialized = false;
 
+/**
+ * @brief Initialize global autorelease pool (called once at startup).
+ */
 void autorelease_pool_init(void) {
     if (g_pool) return;
-    g_pool = make_vector(POOL_INITIAL_CAPACITY, true);
+    g_pool = make_vector(POOL_INITIAL_CAPACITY, WEAK);
 #ifdef DEBUG
     g_pool_peak_count = 0;
 #endif
@@ -152,7 +172,12 @@ static void init_release_dispatch(void) {
 }
 
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
-/** Fills buf with clj_to_string(v), trunc to size-1. Uses injected to_string. No RELEASE: app to_string returns AUTORELEASE'd. */
+/**
+ * @brief Fill buffer with string representation for zombie debugging.
+ * @param v Object to describe
+ * @param buf Output buffer
+ * @param size Buffer size
+ */
 static void zombie_description(CljObject *v, char *buf, size_t size) {
     if (!buf || !size) return;
     buf[0] = '\0';
@@ -168,8 +193,42 @@ static void zombie_description(CljObject *v, char *buf, size_t size) {
 }
 #endif
 
+/**
+ * @brief Increment reference count (ignores singletons/immediates).
+ * @param v Object to retain (NULL-safe)
+ */
 void retain(CljObject *v) {
     if (is_singleton(v)) return;
+#ifdef DEBUG
+    {
+        const char *trace_list = getenv("TINYCLJ_TRACE_LIST_RETAIN");
+        const char *trace_ast = getenv("TINYCLJ_TRACE_AST_RETAIN");
+        if ((v->type == CLJ_LIST && trace_list && trace_list[0] && strcmp(trace_list, "0") != 0) ||
+            (v->type == CLJ_AST_NODE && trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
+            static int trace_count = 0;
+            if (trace_count < 200) {
+                fprintf(stderr, "[retain] %s %p rc=%d\n", clj_type_name(v->type), (void*)v, (int)v->rc);
+#if defined(__GNUC__) && !defined(ESP32_BUILD) && !defined(ESP_PLATFORM)
+                const char *trace_bt = (v->type == CLJ_LIST)
+                    ? getenv("TINYCLJ_TRACE_LIST_RETAIN_BT")
+                    : getenv("TINYCLJ_TRACE_AST_RETAIN_BT");
+                if (trace_bt && trace_bt[0] && strcmp(trace_bt, "0") != 0) {
+                    void *bt[16];
+                    int n = backtrace(bt, 16);
+                    char **symbols = backtrace_symbols(bt, n);
+                    if (symbols) {
+                        for (int i = 0; i < n; i++) {
+                            fprintf(stderr, "  %s\n", symbols[i]);
+                        }
+                        free(symbols);
+                    }
+                }
+#endif
+                trace_count++;
+            }
+        }
+    }
+#endif
 #ifdef DEBUG
     if (v->rc <= 0) {
         char message[512];
@@ -198,8 +257,23 @@ void retain(CljObject *v) {
 #endif
 }
 
+/**
+ * @brief Decrement reference count and free if zero (ignores singletons).
+ * @param v Object to release (NULL-safe)
+ */
 void release(CljObject *v) {
     if (is_singleton(v)) return;
+#ifdef DEBUG
+    {
+        const char *trace_list = getenv("TINYCLJ_TRACE_LIST_RELEASE");
+        const char *trace_ast = getenv("TINYCLJ_TRACE_AST_RELEASE");
+        if ((v->type == CLJ_LIST && trace_list && trace_list[0] && strcmp(trace_list, "0") != 0) ||
+            (v->type == CLJ_AST_NODE && trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
+            fprintf(stderr, "[release] %s %p rc=%d\n",
+                    clj_type_name(v->type), (void*)v, (int)v->rc);
+        }
+    }
+#endif
     if (g_debug_output_active)
         LOGF(stdout, "🔍 release: Object %p, type=%d (%s), rc=%d -> ",
              v, (int)v->type, clj_type_name(v->type), (int)v->rc);
@@ -246,6 +320,16 @@ void release(CljObject *v) {
     MEMORY_PROFILER_TRACK_RELEASE(v);
     if (v->rc == 0) {
         if (g_debug_output_active) LOGF(stdout, "🔍 release: Object %p will be freed (rc=0)\n", v);
+#ifdef DEBUG
+        {
+            const char *trace_list = getenv("TINYCLJ_TRACE_LIST_FREE");
+            const char *trace_ast = getenv("TINYCLJ_TRACE_AST_FREE");
+            if ((v->type == CLJ_LIST && trace_list && trace_list[0] && strcmp(trace_list, "0") != 0) ||
+                (v->type == CLJ_AST_NODE && trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
+                fprintf(stderr, "[free] %s %p\n", clj_type_name(v->type), (void*)v);
+            }
+        }
+#endif
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
         if (autorelease_count(v) != 0) {
             char msg[256];
@@ -281,10 +365,38 @@ uint32_t autorelease_pool_mark(void) {
 CljObject *autorelease(CljObject *v) {
     if (!v) return NULL;
     CLJ_ASSERT(g_pool && "autorelease_pool_init() not called");
-    if (g_in_drain)
+    if (g_in_drain) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
             "autorelease called during drain");
         return (CljObject*)NULL;
+    }
+    if (v->flags & CLJ_FLAG_IN_AUTORELEASE) {
+        return v;
+    }
+#ifdef DEBUG
+    {
+        const char *trace_list = getenv("TINYCLJ_TRACE_LIST_AUTORELEASE");
+        const char *trace_ast = getenv("TINYCLJ_TRACE_AST_AUTORELEASE");
+        if ((v->type == CLJ_LIST && trace_list && trace_list[0] && strcmp(trace_list, "0") != 0) ||
+            (v->type == CLJ_AST_NODE && trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
+            fprintf(stderr, "[autorelease] %s %p rc=%d\n", clj_type_name(v->type), (void*)v, (int)v->rc);
+        }
+    }
+#endif
+#if defined(DEBUG)
+    {
+        const char *dup_trace = getenv("TINYCLJ_TRACE_AUTORELEASE_DUP");
+        if (dup_trace && dup_trace[0] && strcmp(dup_trace, "0") != 0) {
+            uint32_t pool_count = autorelease_count(v);
+            if (pool_count > 0) {
+                fprintf(stderr, "autorelease: Object %p (type=%s) already %u times in pool\n",
+                        (void*)v, clj_type_name(v->type), pool_count);
+                exception_print_native_backtrace();
+                fflush(stderr);
+            }
+        }
+    }
+#endif
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
     // Check that object has enough references to survive all autorelease pool entries
     // After adding to pool, we'll have (pool_count + 1) entries, so we need rc > pool_count
@@ -311,6 +423,7 @@ CljObject *autorelease(CljObject *v) {
     }
 #endif
     ASSIGN(g_pool, vector_conj_owned(g_pool, v));
+    v->flags |= CLJ_FLAG_IN_AUTORELEASE;
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
     rchist_push(v, 'A', v->rc);
 #endif
@@ -319,6 +432,15 @@ CljObject *autorelease(CljObject *v) {
         g_pool_peak_count = vector_count(g_pool);
 #endif
     MEMORY_PROFILER_TRACK_AUTORELEASE(v);
+#ifdef DEBUG
+    {
+        const char *trace_any = getenv("TINYCLJ_TRACE_POOL_DRAIN");
+        if (trace_any && trace_any[0] && strcmp(trace_any, "0") != 0) {
+            fprintf(stderr, "[pool-add] %s %p count=%u\n",
+                    clj_type_name(v->type), (void*)v, (unsigned)vector_count(g_pool));
+        }
+    }
+#endif
     return v;
 }
 
@@ -362,6 +484,14 @@ void autorelease_pool_drain_to_depth(uint32_t mark) {
     if (!g_pool) return;
     unsigned int c = vector_count(g_pool);
     if (g_debug_output_active && c > mark) LOGF(stdout, "🔍 autorelease_pool_drain: [%u..%u)\n", (unsigned)mark, (unsigned)c);
+#ifdef DEBUG
+    {
+        const char *trace_any = getenv("TINYCLJ_TRACE_POOL_DRAIN");
+        if (trace_any && trace_any[0] && strcmp(trace_any, "0") != 0) {
+            fprintf(stderr, "[pool-drain-start] mark=%u count=%u\n", (unsigned)mark, (unsigned)c);
+        }
+    }
+#endif
     g_in_drain = true;
     TRY {
         for (unsigned int i = c; i > mark; ) {
@@ -369,6 +499,29 @@ void autorelease_pool_drain_to_depth(uint32_t mark) {
             ID e = vector_nth(g_pool, i);
             CLJ_ASSERT(e && "pool entry must not be NULL");
             vector_truncate(g_pool, i);
+#ifdef DEBUG
+            {
+                const char *trace_any = getenv("TINYCLJ_TRACE_POOL_DRAIN");
+                const char *trace_list = getenv("TINYCLJ_TRACE_LIST_POOL_DRAIN");
+                const char *trace_ast = getenv("TINYCLJ_TRACE_AST_POOL_DRAIN");
+                if (trace_any && trace_any[0] && strcmp(trace_any, "0") != 0) {
+                    if (!IS_IMMEDIATE(e)) {
+                        fprintf(stderr, "[pool-drain] %s %p rc=%d\n",
+                                clj_type_name(((CljObject*)e)->type), (void*)e, (int)((CljObject*)e)->rc);
+                    } else {
+                        fprintf(stderr, "[pool-drain] immediate %p\n", (void*)e);
+                    }
+                } else if ((!IS_IMMEDIATE(e)) &&
+                           ((TAG(e) == CLJ_LIST && trace_list && trace_list[0] && strcmp(trace_list, "0") != 0) ||
+                            (TAG(e) == CLJ_AST_NODE && trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0))) {
+                    fprintf(stderr, "[pool-drain] %s %p rc=%d\n",
+                            clj_type_name(((CljObject*)e)->type), (void*)e, (int)((CljObject*)e)->rc);
+                }
+            }
+#endif
+            if (!IS_IMMEDIATE(e)) {
+                ((CljObject*)e)->flags &= (uint8_t)~CLJ_FLAG_IN_AUTORELEASE;
+            }
             RELEASE(e);
         }
     }
@@ -436,7 +589,9 @@ static void release_object_default(CljObject *v) {
             break;
         case CLJ_MAP_PERSISTENT: {
             CljPersistentMap *map = (CljPersistentMap*)v;
-            MAP_FOR_EACH(map, key, value) { RELEASE(key); RELEASE(value); }
+            if (map && !has_weak_elements((const CljObject*)map)) {
+                MAP_FOR_EACH(map, key, value) { RELEASE(key); RELEASE(value); }
+            }
             break;
         }
         case CLJ_MAP_TRANSIENT: {
@@ -460,12 +615,81 @@ static void release_object_default(CljObject *v) {
             
         case CLJ_LIST: {
             CljList *list = (CljList*)v;
+#ifdef DEBUG
+            {
+                const char *trace_deep = getenv("TINYCLJ_TRACE_LIST_RELEASE_DEEP");
+                if (trace_deep && trace_deep[0] && strcmp(trace_deep, "0") != 0) {
+                    fprintf(stderr, "[list-release] %p first=%p rest=%p\n",
+                            (void*)list, (void*)list->first, (void*)list->rest);
+                    if (list->first) {
+                        if (IS_IMMEDIATE(list->first)) {
+                            fprintf(stderr, "  first: immediate %p\n", (void*)list->first);
+                        } else {
+                            CljObject *o = (CljObject*)list->first;
+                            fprintf(stderr, "  first: %s %p rc=%d\n",
+                                    clj_type_name(o->type), (void*)o, (int)o->rc);
+                        }
+                    } else {
+                        fprintf(stderr, "  first: NULL\n");
+                    }
+                    if (list->rest) {
+                        if (IS_IMMEDIATE(list->rest)) {
+                            fprintf(stderr, "  rest: immediate %p\n", (void*)list->rest);
+                        } else {
+                            CljObject *o = (CljObject*)list->rest;
+                            fprintf(stderr, "  rest: %s %p rc=%d\n",
+                                    clj_type_name(o->type), (void*)o, (int)o->rc);
+                        }
+                    } else {
+                        fprintf(stderr, "  rest: NULL\n");
+                    }
+                }
+            }
+#endif
             RELEASE(list->first);
             RELEASE(list->rest);
             break;
         }
         case CLJ_AST_NODE: {
             CljASTNode *node = (CljASTNode*)v;
+#ifdef DEBUG
+            {
+                const char *trace_deep = getenv("TINYCLJ_TRACE_AST_RELEASE_DEEP");
+                if (trace_deep && trace_deep[0] && strcmp(trace_deep, "0") != 0) {
+                    fprintf(stderr, "[ast-release] %p first=%p rest=%p cache=%p\n",
+                            (void*)node, (void*)node->first, (void*)node->rest, (void*)node->callsite_cache);
+                    if (node->first) {
+                        if (IS_IMMEDIATE(node->first)) {
+                            fprintf(stderr, "  first: immediate %p\n", (void*)node->first);
+                        } else {
+                            CljObject *o = (CljObject*)node->first;
+                            fprintf(stderr, "  first: %s %p rc=%d\n",
+                                    clj_type_name(o->type), (void*)o, (int)o->rc);
+                        }
+                    } else {
+                        fprintf(stderr, "  first: NULL\n");
+                    }
+                    if (node->rest) {
+                        if (IS_IMMEDIATE(node->rest)) {
+                            fprintf(stderr, "  rest: immediate %p\n", (void*)node->rest);
+                        } else {
+                            CljObject *o = (CljObject*)node->rest;
+                            fprintf(stderr, "  rest: %s %p rc=%d\n",
+                                    clj_type_name(o->type), (void*)o, (int)o->rc);
+                        }
+                    } else {
+                        fprintf(stderr, "  rest: NULL\n");
+                    }
+                    if (node->callsite_cache) {
+                        CljObject *o = (CljObject*)node->callsite_cache;
+                        fprintf(stderr, "  cache: %s %p rc=%d\n",
+                                clj_type_name(o->type), (void*)o, (int)o->rc);
+                    } else {
+                        fprintf(stderr, "  cache: NULL\n");
+                    }
+                }
+            }
+#endif
             RELEASE(node->first);
             RELEASE(node->rest);
             RELEASE(node->callsite_cache);

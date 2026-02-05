@@ -38,14 +38,12 @@ TEST(test_lowlevel_alias_sym_extraction) {
     TEST_ASSERT_NOT_NULL(as_kw);
     TEST_ASSERT_NOT_NULL(str_alias);
     
-    // Create vector: [clojure.string :as str]
-    CljPersistentVector *vec = make_vector(3, false);
-    CljPersistentVector *initial_vec = vec;
-    ASSIGN(vec, vector_conj(vec, (ID)ns_sym));
-    ASSIGN(vec, vector_conj(vec, (ID)as_kw));
-    ASSIGN(vec, vector_conj(vec, (ID)str_alias));
-    if (vec == initial_vec) AUTORELEASE(vec);
-
+    // Create vector
+    CljPersistentVector *vec = AUTORELEASE(make_vector(3, STRONG));
+    vec = AUTORELEASE(vector_conj(vec, ns_sym));
+    vec = AUTORELEASE(vector_conj(vec, as_kw));
+    vec = AUTORELEASE(vector_conj(vec, str_alias));
+    
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     
@@ -105,21 +103,19 @@ TEST(test_lowlevel_native_require_sets_alias_preloaded) {
     CljSymbol *as_kw = AUTORELEASE(intern_symbol_global(":as"));
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
-    CljPersistentVector *vec = make_vector(3, false);
-    CljPersistentVector *initial_vec = vec;
-    ASSIGN(vec, vector_conj(vec, (ID)ns_sym));
-    ASSIGN(vec, vector_conj(vec, (ID)as_kw));
-    ASSIGN(vec, vector_conj(vec, (ID)str_alias));
-    if (vec == initial_vec) AUTORELEASE(vec);
-
+    CljPersistentVector *vec = AUTORELEASE(make_vector(3, STRONG));
+    vec = AUTORELEASE(vector_conj(vec, ns_sym));
+    vec = AUTORELEASE(vector_conj(vec, as_kw));
+    vec = AUTORELEASE(vector_conj(vec, str_alias));
+    
     // Call native_require
     builtin_set_eval_state(g_test_eval_state);
-    ID args[1] = { (ID)vec };
+    ID args[1] = { vec };
     ID result = native_require(args, 1);
     builtin_set_eval_state(NULL);
-
+    
     (void)result; // require returns nil
-
+    
     // Verify: Alias should be set in current namespace
     CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)str_alias);
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name, "Alias 'str' should be set after native_require");
@@ -178,13 +174,11 @@ TEST(test_lowlevel_alias_sym_not_null_when_preloaded) {
     CljSymbol *as_kw = AUTORELEASE(intern_symbol_global(":as"));
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
-    CljPersistentVector *vec = make_vector(3, false);
-    CljPersistentVector *initial_vec = vec;
-    ASSIGN(vec, vector_conj(vec, (ID)ns_sym));
-    ASSIGN(vec, vector_conj(vec, (ID)as_kw));
-    ASSIGN(vec, vector_conj(vec, (ID)str_alias));
-    if (vec == initial_vec) AUTORELEASE(vec);
-
+    CljPersistentVector *vec = AUTORELEASE(make_vector(3, STRONG));
+    vec = AUTORELEASE(vector_conj(vec, ns_sym));
+    vec = AUTORELEASE(vector_conj(vec, as_kw));
+    vec = AUTORELEASE(vector_conj(vec, str_alias));
+    
     // Verify vector is correct before calling native_require
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
@@ -198,7 +192,7 @@ TEST(test_lowlevel_alias_sym_not_null_when_preloaded) {
     
     // Call native_require - this should extract alias_sym and set it
     builtin_set_eval_state(g_test_eval_state);
-    ID args[1] = { (ID)vec };
+    ID args[1] = { vec };
     ID result = native_require(args, 1);
     builtin_set_eval_state(NULL);
     
@@ -231,21 +225,19 @@ TEST(test_lowlevel_current_ns_correct_when_alias_set) {
     CljSymbol *as_kw = AUTORELEASE(intern_symbol_global(":as"));
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
-    CljPersistentVector *vec = make_vector(3, false);
-    CljPersistentVector *initial_vec = vec;
-    ASSIGN(vec, vector_conj(vec, (ID)ns_sym));
-    ASSIGN(vec, vector_conj(vec, (ID)as_kw));
-    ASSIGN(vec, vector_conj(vec, (ID)str_alias));
-    if (vec == initial_vec) AUTORELEASE(vec);
-
+    CljPersistentVector *vec = AUTORELEASE(make_vector(3, STRONG));
+    vec = AUTORELEASE(vector_conj(vec, ns_sym));
+    vec = AUTORELEASE(vector_conj(vec, as_kw));
+    vec = AUTORELEASE(vector_conj(vec, str_alias));
+    
     // Call native_require
     builtin_set_eval_state(g_test_eval_state);
-    ID args[1] = { (ID)vec };
+    ID args[1] = { vec };
     ID result = native_require(args, 1);
     builtin_set_eval_state(NULL);
-
+    
     (void)result;
-
+    
     // Verify: current_ns should still be the new namespace
     TEST_ASSERT_EQUAL_MESSAGE(new_ns, g_test_eval_state->current_ns,
         "current_ns should remain the same after native_require");

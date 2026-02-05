@@ -189,7 +189,7 @@ CLJException *clj_oom_exception = &clj_oom_exception_data;
  * @param ... Variable arguments for formatting
  */
 void throw_exception_formatted(const char *type, const char *file, int line, int code,
-                              const char *format, ...) {
+                               const char *format, ...) {
     // Use generic RuntimeException if type is NULL
     const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
 
@@ -225,7 +225,6 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 #endif
     if (!exception) {
         throw_exception_object(AUTORELEASE(clj_oom_exception));  /* Singleton: no-op */
-        return;
     }
     throw_exception_object(AUTORELEASE(exception));
 }
@@ -245,9 +244,9 @@ void throw_exception(const char *type, const char *message, const char *file, in
     CLJException *exception = make_exception(exception_type, message, file, line, col);
     if (!exception) {
         throw_exception_object(AUTORELEASE(clj_oom_exception));
-        return;
     }
     throw_exception_object(AUTORELEASE(exception));
+    return;
 }
 
 /** @brief Generate stacktrace as CljString

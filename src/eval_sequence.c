@@ -24,7 +24,8 @@ ID eval_and_call_native_with_context(CljList *list,
                 node = list_rest_normalized(node);
             }
             throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                "Wrong number of args (%u) passed to: %s", argc, native_func ? "sequence-op" : "unknown"); return NULL;
+                                      "Wrong number of args (%u) passed to: %s", argc, native_func ? "sequence-op" : "unknown");
+            return NULL;
         }
         node = list_rest_normalized(node);
     }
@@ -55,7 +56,8 @@ ID eval_map_lookup(CljList *list, CljPersistentMap *env, EvalState *st, const Ev
             argc++;
         }
         throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-            "Wrong number of args (%d) passed to: clojure.lang.PersistentArrayMap", argc); return NULL;
+                                  "Wrong number of args (%d) passed to: clojure.lang.PersistentArrayMap", argc);
+        return NULL;
     }
 
     ID key = eval_arg_with_context(list, 1, env, st, ctx);

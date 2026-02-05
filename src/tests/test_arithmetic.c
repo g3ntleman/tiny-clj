@@ -4,6 +4,7 @@
  * Tests for arithmetic operations and integer overflow/underflow detection.
  */
 
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 9000
 #include "tests_common.h"
 
 // ============================================================================

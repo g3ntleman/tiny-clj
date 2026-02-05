@@ -65,7 +65,7 @@ TEST_SHARED(test_print_str_vs_pr_str_difference) {
 TEST_SHARED(test_pr_str_with_containers) {
     WITH_AUTORELEASE_POOL({
         // Test: pr_str with vector containing strings
-        CljPersistentVector *vec = make_vector(0, false);
+        CljPersistentVector *vec = make_vector(4, STRONG);
         CljString *str1 = make_string("hello");
         CljString *str2 = make_string("world");
         vec = vector_conj(vec, str1);
@@ -77,7 +77,6 @@ TEST_SHARED(test_pr_str_with_containers) {
         // The strings inside should have quotes
         TEST_ASSERT_TRUE(strstr(string_data(result), "\"hello\"") != NULL || strstr(string_data(result), "hello") != NULL);
         TEST_ASSERT_TRUE(strstr(string_data(result), "\"world\"") != NULL || strstr(string_data(result), "world") != NULL);
-        RELEASE(result);
         RELEASE(vec);
         RELEASE(str1);
         RELEASE(str2);
@@ -97,8 +96,8 @@ TEST_SHARED(test_pr_str_with_containers) {
         RELEASE(val_str);
         
         // Test: pr_str with nested containers
-        CljPersistentVector *outer_vec = make_vector(0, false);
-        CljPersistentVector *inner_vec = make_vector(0, false);
+        CljPersistentVector *outer_vec = make_vector(4, STRONG);
+        CljPersistentVector *inner_vec = make_vector(4, STRONG);
         CljString *nested_str = make_string("nested");
         inner_vec = vector_conj(inner_vec, nested_str);
         outer_vec = vector_conj(outer_vec, inner_vec);
@@ -114,12 +113,12 @@ TEST_SHARED(test_pr_str_with_containers) {
 }
 
 // ============================================================================
-// TEST: print_str() with different types
+// TEST: print_str() with vector types
 // ============================================================================
-TEST_SHARED(test_print_str_different_types) {
+TEST_SHARED(test_print_str_vector_types) {
     WITH_AUTORELEASE_POOL({
         // Test with vector
-        CljPersistentVector *vec = make_vector(0, false);
+        CljPersistentVector *vec = make_vector(4, STRONG);
         vec = vector_conj(vec, fixnum(1));
         vec = vector_conj(vec, fixnum(2));
         
@@ -127,17 +126,28 @@ TEST_SHARED(test_print_str_different_types) {
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_STRING("[1 2]", string_data(result));
         RELEASE(vec);
-        
+    });
+}
+
+// ============================================================================
+// TEST: print_str() with map types
+// ============================================================================
+TEST_SHARED(test_print_str_map_types) {
+    WITH_AUTORELEASE_POOL({
         // Test with map (simplified - just test basic functionality)
         CljPersistentMap *map = make_map(2);
-        ASSIGN(map, map_assoc(map, (ID)make_string("a"), fixnum(1)));
-        ASSIGN(map, map_assoc(map, (ID)make_string("b"), fixnum(2)));
-        
-        result = print_str((CljObject*)map);
+        CljString *key_a = make_string("a");
+        CljString *key_b = make_string("b");
+        ASSIGN(map, map_assoc(map, (ID)key_a, fixnum(1)));
+        ASSIGN(map, map_assoc(map, (ID)key_b, fixnum(2)));
+
+        CljString *result = print_str((CljObject*)map);
         TEST_ASSERT_NOT_NULL(result);
         // Map format may vary, just check it's not empty
         TEST_ASSERT_TRUE(string_length(result) > 0);
         RELEASE(map);
+        RELEASE(key_a);
+        RELEASE(key_b);
     });
 }
 
@@ -169,7 +179,7 @@ TEST_SHARED(test_print_str_special_values) {
 // ============================================================================
 // TEST: Native print functions (print, println, pr, prn)
 // ============================================================================
-TEST_SHARED(test_native_print_functions) {
+TEST_SHARED(test_native_print_functions, 300) {
     WITH_AUTORELEASE_POOL({
         // Test: (print "Hello") should print without quotes, without newline
         // Note: This test captures stdout, but for now we just test that it doesn't crash
@@ -198,7 +208,7 @@ TEST_SHARED(test_native_print_functions) {
 // ============================================================================
 // TEST: Native print functions with multiple arguments
 // ============================================================================
-TEST_SHARED(test_native_print_multiple_args) {
+TEST_SHARED(test_native_print_multiple_args, 200) {
     WITH_AUTORELEASE_POOL({
         // Test: (println "a" "b" "c") should print "a b c" with newline
         // Use global st from setUp

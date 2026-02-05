@@ -12,6 +12,9 @@
 #include "unity/src/unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
 #include <time.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include <malloc/malloc.h>
+#endif
 
 // Forward declaration for clojure_core_set_quiet
 extern void clojure_core_set_quiet(bool quiet);
@@ -38,6 +41,90 @@ static bool g_single_test_mode = false;
 // Global test EvalState (available in all tests via tests_common.h)
 EvalState *g_test_eval_state = NULL;
 
+// Current test entry (set by test runner)
+static const SubjectiveCTestEntry *g_current_test_entry = NULL;
+
+// Per-test heap growth baseline (profiling enabled)
+#if MEMORY_PROFILING_ENABLED
+static MemoryStats g_heap_baseline;
+#endif
+static bool g_heap_check_enabled = false;
+static size_t g_heap_growth_limit_bytes = 0;
+
+static bool is_shared_test_entry(const SubjectiveCTestEntry *entry) {
+    if (!entry || !entry->group) return false;
+    return strncmp(entry->group, "shared_", 7) == 0;
+}
+
+void test_heap_growth_disable(void) { g_heap_check_enabled = false; }
+void test_heap_growth_allow_all(void) {
+    g_heap_check_enabled = true;
+    g_heap_growth_limit_bytes = SUBJECTIVE_C_TEST_HEAP_GROWTH_UNLIMITED;
+}
+
+static void test_heap_growth_mark_baseline(void) {
+#if MEMORY_PROFILING_ENABLED
+    if (g_heap_check_enabled && is_memory_profiling_enabled()) {
+        g_heap_baseline = memory_profiler_get_stats();
+    }
+#endif
+}
+
+static void test_heap_growth_check(void) {
+#if MEMORY_PROFILING_ENABLED
+    if (!g_heap_check_enabled || !is_memory_profiling_enabled()) {
+        return;
+    }
+    if (g_heap_growth_limit_bytes == SUBJECTIVE_C_TEST_HEAP_GROWTH_UNLIMITED) {
+        return;
+    }
+
+    MemoryStats after = memory_profiler_get_stats();
+    bool failed = false;
+    char msg[1024];
+    size_t off = 0;
+    size_t total_delta = 0;
+    msg[0] = '\0';
+
+    for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+        size_t before_bytes = g_heap_baseline.bytes_current_by_type[i];
+        size_t after_bytes = after.bytes_current_by_type[i];
+        if (after_bytes > before_bytes && i != CLJ_CALLSITE_CACHE) {
+            size_t delta = after_bytes - before_bytes;
+            const char *name = clj_type_name((CljType)i);
+            off = format_append(msg, off, sizeof(msg), " ");
+            off = format_append(msg, off, sizeof(msg), name ? name : "unknown");
+            off = format_append(msg, off, sizeof(msg), "+");
+            off = format_append_ulong(msg, off, sizeof(msg), (unsigned long)delta);
+            total_delta += delta;
+            failed = true;
+        }
+    }
+
+    if (after.raw_bytes_current > g_heap_baseline.raw_bytes_current) {
+        size_t delta = after.raw_bytes_current - g_heap_baseline.raw_bytes_current;
+        off = format_append(msg, off, sizeof(msg), " raw+");
+        off = format_append_ulong(msg, off, sizeof(msg), (unsigned long)delta);
+        total_delta += delta;
+        failed = true;
+    }
+
+    if (failed && total_delta > g_heap_growth_limit_bytes) {
+        char full[1200];
+        const char *tname = g_current_test_entry && g_current_test_entry->qualified_name
+            ? g_current_test_entry->qualified_name
+            : (g_current_test_entry ? g_current_test_entry->name : "unknown");
+        test_snprintf(full, sizeof(full),
+                      "Heap grew by %lu bytes (limit %lu) in %s:%s",
+                      (unsigned long)total_delta,
+                      (unsigned long)g_heap_growth_limit_bytes,
+                      tname ? tname : "unknown",
+                      msg[0] ? msg : " (no details)");
+        TEST_FAIL_MESSAGE(full);
+    }
+#endif
+}
+
 // ============================================================================
 // GLOBAL SETUP/TEARDOWN
 // ============================================================================
@@ -46,9 +133,26 @@ EvalState *g_test_eval_state = NULL;
 void setUp(void) {
     // Always reset memory profiler statistics BEFORE each test
     memory_profiler_reset();
+
+    // Default: enforce heap growth checks for shared (read-only) tests only
+    g_heap_check_enabled = is_shared_test_entry(g_current_test_entry);
+    g_heap_growth_limit_bytes = 0;
+    if (g_current_test_entry) {
+        size_t limit = g_current_test_entry->heap_growth_limit_bytes;
+        if (limit == SUBJECTIVE_C_TEST_HEAP_GROWTH_UNLIMITED) {
+            g_heap_check_enabled = true;
+            g_heap_growth_limit_bytes = SUBJECTIVE_C_TEST_HEAP_GROWTH_UNLIMITED;
+        } else if (limit != SUBJECTIVE_C_TEST_HEAP_GROWTH_UNSPECIFIED) {
+            g_heap_check_enabled = true;
+            g_heap_growth_limit_bytes = limit;
+        } else if (g_heap_check_enabled) {
+            g_heap_growth_limit_bytes = 0;
+        }
+    }
     
     // In batch mode, skip heavy initialization (clojure.core already loaded)
     if (g_batch_mode) {
+        test_heap_growth_mark_baseline();
         return;
     }
     
@@ -107,6 +211,8 @@ void setUp(void) {
         }
         // Continue anyway - some tests may not need clojure.core
     } END_TRY
+
+    test_heap_growth_mark_baseline();
 }
 
 // Get the global test evalState (with inc available)
@@ -117,6 +223,7 @@ EvalState* test_get_eval_state(void) {
 void tearDown(void) {
     // In batch mode, skip heavy teardown
     if (g_batch_mode) {
+        test_heap_growth_check();
         return;
     }
     
@@ -129,9 +236,20 @@ void tearDown(void) {
     if (g_memory_verbose_mode) {
         memory_profiler_print_stats("Test Complete");
     }
+    test_heap_growth_check();
     memory_profiler_check_leaks("Test Complete");
     
     runtime_reset(&g_runtime);
+    // Reset symbol table between tests to avoid cross-test contamination.
+    symbol_table_cleanup();
+#ifdef __APPLE__
+    int heap_ok = malloc_zone_check(malloc_default_zone());
+    if (heap_ok != 1) {
+        test_fprintf(stderr, "Heap check failed after test (malloc_zone_check=%d)\n", heap_ok);
+        fflush(stderr);
+        abort();
+    }
+#endif
 }
 
 // ============================================================================
@@ -207,12 +325,15 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
     // Save initial failure count to detect if this test failed
     UNITY_COUNTER_TYPE initial_failures = Unity.TestFailures;
     
+    g_current_test_entry = entry;
     TRY {
         // Call Unity directly with the line number from the test registry.
         // This avoids using RUN_TEST(__LINE__) from this file, so that the
         // reported line matches the TEST() macro in the test source file.
         const char *cname = entry->qualified_name ? entry->qualified_name : entry->name;
-        UnityDefaultTestRun(entry->fn, cname, (UNITY_LINE_TYPE)entry->line);
+        WITH_AUTORELEASE_POOL({
+            UnityDefaultTestRun(entry->fn, cname, (UNITY_LINE_TYPE)entry->line);
+        });
         
         // Check if test failed by comparing failure count
         // UnityConcludeTest() is called inside UnityDefaultTestRun() and increments
@@ -240,6 +361,7 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
 
         UnityConcludeTest();
     } END_TRY
+    g_current_test_entry = NULL;
 
     // Restore stdout if we captured it
     if (capturing_stdout && saved_stdout >= 0) {
@@ -361,17 +483,9 @@ void run_tests_by_registry_impl(void) {
     const SubjectiveCTestEntry *all_tests = subjective_c_test_registry_entries(&test_count);
     g_single_test_mode = false;
     
-    // First: Run shared tests batched (one setUp/tearDown per group)
-    run_shared_tests_batched();
-    
-    // Then: Run non-shared tests normally (one setUp/tearDown per test)
     for (size_t i = 0; i < test_count; i++) {
-        if (strncmp(all_tests[i].group, "shared_", 7) != 0) {
-            // UnityDefaultTestRun() already calls setUp()/tearDown().
-            // run_test_with_exception_handling() wraps UnityDefaultTestRun() in TRY/CATCH.
-            set_unity_test_file_info(&all_tests[i]);
-            run_test_with_exception_handling(&all_tests[i]);
-        }
+        set_unity_test_file_info(&all_tests[i]);
+        run_test_with_exception_handling(&all_tests[i]);
     }
 }
 

@@ -4,6 +4,7 @@
  * Tests for sequence semantics and iterator-based implementation.
  */
 
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 900
 #include "tests_common.h"
 #include "../list.h"
 #include "../seq.h"
@@ -18,8 +19,8 @@
 
 static ID make_sample_map_with_entries(void) {
     ID map = AUTORELEASE(make_map(4));
-    map = map_assoc(as_map(map), intern_symbol_global("k1"), fixnum(10));
-    map = map_assoc(as_map(map), intern_symbol_global("k2"), fixnum(20));
+    map = map_by_associng_kv(as_map(map), intern_symbol_global("k1"), fixnum(10));
+    map = map_by_associng_kv(as_map(map), intern_symbol_global("k2"), fixnum(20));
     return map;
 }
 

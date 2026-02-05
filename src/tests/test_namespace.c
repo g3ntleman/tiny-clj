@@ -637,8 +637,8 @@ TEST(test_ns_resolve_symbol_cache) {
     RELEASE(resolved1);
 }
 
-// Test that resolve_list_operator populates callsite cache for function calls
-// This test verifies that function calls benefit from the callsite cache optimization
+// Resolve-cache is disabled; callsite caches handle hot paths.
+// This test verifies function calls still resolve correctly without resolve_cache.
 TEST(test_resolve_list_operator_uses_cache) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -649,9 +649,10 @@ TEST(test_resolve_list_operator_uses_cache) {
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
 
-    // Ensure callsite cache is enabled
-    if (g_runtime.resolve_cache_epoch == 0) {
-        g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch();
+    // Ensure resolve_cache remains disabled
+    if (g_runtime.resolve_cache) {
+        RELEASE(g_runtime.resolve_cache);
+        g_runtime.resolve_cache = NULL;
     }
 
     // Test with a builtin function that should be in clojure.core
@@ -676,26 +677,14 @@ TEST(test_resolve_list_operator_uses_cache) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
     TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
 
-    // Verify that callsite cache was populated
-    ID cached_inc = ast_node_get_cached_resolution(call_node, inc_sym, g_runtime.resolve_cache_epoch);
-    TEST_ASSERT_NOT_NULL_MESSAGE(cached_inc, "callsite cache should contain 'inc' after first function call");
-    TEST_ASSERT_TRUE_MESSAGE(TAG(cached_inc) == CLJ_FUNC || TAG(cached_inc) == CLJ_CLOSURE,
-                             "callsite cache should store a callable");
-
-    // Second function call - should reuse callsite cache
-    CljObject *result2 = eval_list(as_list(parsed), g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
-    TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result2));
+    TEST_ASSERT_NULL(g_runtime.resolve_cache);
 
     // Cleanup
     RELEASE(inc_sym);
     RELEASE(result1);
-    RELEASE(result2);
 }
 
-// Test that cache invalidation works correctly when symbols are redefined
-// This verifies that the callsite cache is invalidated via epoch updates
+// Resolve-cache is disabled; ensure redefinition still works without it.
 TEST(test_resolve_cache_invalidation_on_redefinition) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -706,9 +695,10 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
 
-    // Ensure callsite cache is enabled
-    if (g_runtime.resolve_cache_epoch == 0) {
-        g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch();
+    // Ensure resolve_cache remains disabled
+    if (g_runtime.resolve_cache) {
+        RELEASE(g_runtime.resolve_cache);
+        g_runtime.resolve_cache = NULL;
     }
 
     // Test with a builtin function that we can redefine
@@ -729,21 +719,14 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
     TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
 
-    // Verify callsite cache was populated
-    ID cached = ast_node_get_cached_resolution(call_node, inc_sym, g_runtime.resolve_cache_epoch);
-    TEST_ASSERT_NOT_NULL_MESSAGE(cached, "callsite cache should contain 'inc' after first function call");
+    TEST_ASSERT_NULL(g_runtime.resolve_cache);
 
     // Now redefine 'inc' in user namespace (shadowing clojure.core)
     // Create a simple value (fixnum) that shadows the function
-    uint64_t epoch_before = g_runtime.resolve_cache_epoch;
     ID new_inc_value = fixnum(999);
     ns_define(g_test_eval_state->current_ns, inc_sym, new_inc_value);
 
-    // Verify cache was invalidated (epoch bumped after ns_define)
-    TEST_ASSERT_NOT_EQUAL_MESSAGE(epoch_before, g_runtime.resolve_cache_epoch,
-                                  "resolve_cache_epoch should change after redefinition (cache invalidation)");
-    ID cached_after = ast_node_get_cached_resolution(call_node, inc_sym, g_runtime.resolve_cache_epoch);
-    TEST_ASSERT_NULL_MESSAGE(cached_after, "callsite cache should be invalid after redefinition");
+    TEST_ASSERT_NULL(g_runtime.resolve_cache);
 
     // Second function call - should resolve from user namespace (not cached old value)
     // Note: This will fail because we defined a fixnum, not a function
@@ -1301,12 +1284,8 @@ TEST(test_ns_map_returns_mappings) {
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)found_val2));
 
     // Cleanup
-    RELEASE(sym1);
-    RELEASE(sym2);
     RELEASE(val1);
     RELEASE(val2);
-    RELEASE(ns_sym);
-    RELEASE(result);
 }
 
 // Test: Verify ns-map with empty namespace returns empty map
@@ -1327,7 +1306,6 @@ TEST(test_ns_map_empty_namespace) {
     TEST_ASSERT_EQUAL(0, map_count(mappings));
 
     // Cleanup
-    RELEASE(result);
 }
 
 // Test: Verify ns-map with current namespace (using namespace name)
@@ -1358,9 +1336,7 @@ TEST(test_ns_map_current_namespace) {
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)found));
 
     // Cleanup
-    RELEASE(test_sym);
     RELEASE(test_val);
-    RELEASE(result);
 }
 
 // Test: Verify find-ns returns namespace object
@@ -1378,7 +1354,6 @@ TEST(test_find_ns_returns_namespace) {
     TEST_ASSERT_EQUAL_PTR(test_ns, (CljNamespace*)result);
 
     // Cleanup
-    RELEASE(result);
 }
 
 // Test: Verify find-ns returns nil for non-existent namespace
@@ -1403,7 +1378,6 @@ TEST(test_find_ns_with_string_throws) {
     TEST_ASSERT_NOT_NULL(ex);
     TEST_ASSERT_EQUAL_STRING(EXCEPTION_TYPE, ex->type);
     TEST_ASSERT_NOT_NULL(strstr(ex->message, "symbol"));
-    RELEASE(ex);
 }
 
 // Test: Verify find-ns with nil argument returns nil

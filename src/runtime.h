@@ -63,9 +63,9 @@ typedef struct TinyClJRuntime {
     // Builtins
     bool builtins_registered;
     
-    // Event Loop (persistent vectors used as queues)
-    CljPersistentVector *task_queue;
-    CljPersistentVector *timer_queue;
+    // Event Loop
+    CljTransientVector *task_queue;    // transient vector for normal tasks
+    CljTransientVector *timer_queue;  // transient vector for timer tasks
     int timer_id_counter;
 } TinyClJRuntime;
 

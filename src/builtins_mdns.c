@@ -516,7 +516,7 @@ static void mdns_emit_event(void *ctx, MdnsEventType type, const MdnsResolvedSer
     WITH_AUTORELEASE_POOL({
     mdns_init_keywords();
 
-    CljPersistentMap *ev = make_map(6);
+    CljPersistentMap *ev = make_map(6, STRONG);
     if (!ev) { autorelease_pool_drain_to_depth(_restore); return; }
 
     ID type_val = NULL;
@@ -524,14 +524,14 @@ static void mdns_emit_event(void *ctx, MdnsEventType type, const MdnsResolvedSer
     else if (type == MDNS_EVENT_RESOLVED) type_val = kw_resolved;
     else if (type == MDNS_EVENT_EXPIRED) type_val = kw_expired;
 
-    ASSIGN(ev, map_assoc(ev, (ID)SYM_KW_TYPE, type_val));
-    ASSIGN(ev, map_assoc(ev, kw_instance, (ID)make_string(svc->instance)));
-    ASSIGN(ev, map_assoc(ev, kw_service, (ID)make_string(svc->service)));
+    ASSIGN(ev, map_by_associng_kv(ev, (ID)SYM_KW_TYPE, type_val));
+    ASSIGN(ev, map_by_associng_kv(ev, kw_instance, (ID)make_string(svc->instance)));
+    ASSIGN(ev, map_by_associng_kv(ev, kw_service, (ID)make_string(svc->service)));
 
     // Optional fields for resolved.
     if (type == MDNS_EVENT_RESOLVED) {
-        ASSIGN(ev, map_assoc(ev, (ID)SYM_KW_HOST, (ID)make_string(svc->host)));
-        ASSIGN(ev, map_assoc(ev, (ID)SYM_KW_PORT, fixnum((int32_t)svc->port)));
+        ASSIGN(ev, map_by_associng_kv(ev, (ID)SYM_KW_HOST, (ID)make_string(svc->host)));
+        ASSIGN(ev, map_by_associng_kv(ev, (ID)SYM_KW_PORT, fixnum((int32_t)svc->port)));
 
         // :addrs => vector of strings
         CljPersistentVector *addrs = make_vector((unsigned int)svc->addr_count, false);
@@ -542,7 +542,7 @@ static void mdns_emit_event(void *ctx, MdnsEventType type, const MdnsResolvedSer
                 vector_conj_inplace(&addrs, s);
                 RELEASE(s);
             }
-            ASSIGN(ev, map_assoc(ev, kw_addrs, (ID)addrs));
+            ASSIGN(ev, map_by_associng_kv(ev, kw_addrs, (ID)addrs));
             RELEASE((ID)addrs);
         }
 
@@ -550,7 +550,7 @@ static void mdns_emit_event(void *ctx, MdnsEventType type, const MdnsResolvedSer
         CljByteArray *txt = make_byte_array((int)svc->txt_len);
         if (txt && svc->txt_len > 0) {
             memcpy(txt->data, svc->txt, svc->txt_len);
-            ASSIGN(ev, map_assoc(ev, kw_txt, (ID)txt));
+            ASSIGN(ev, map_by_associng_kv(ev, kw_txt, (ID)txt));
             RELEASE((ID)txt);
         }
     }
@@ -592,7 +592,7 @@ ID native_tinyclj_net_mdns_open(ID *args, unsigned int argc) {
     (void)args;
 
     MdnsCtx *m = (MdnsCtx*)CLJ_MALLOC(sizeof(MdnsCtx));
-    if (!m) { throw_oom(); return NULL; }
+    if (!m) { throw_oom(); }
     memset(m, 0, sizeof(*m));
 
 #ifdef __APPLE__
@@ -607,7 +607,7 @@ ID native_tinyclj_net_mdns_open(ID *args, unsigned int argc) {
         // Allocate resolver storage.
         size_t need = mdns_resolver_storage_size();
         void *storage = CLJ_MALLOC(need);
-        if (!storage) { mdns_ctx_free(m); throw_oom(); return NULL; }
+        if (!storage) { mdns_ctx_free(m); throw_oom(); }
         m->resolver_storage = storage;
         m->resolver = mdns_resolver_init(storage, need, mdns_emit_event, m);
         if (!m->resolver) { mdns_ctx_free(m); return NULL; }
@@ -623,7 +623,7 @@ ID native_tinyclj_net_mdns_open(ID *args, unsigned int argc) {
 
     // Store ctx pointer bytes for debugging/inspection only.
     m->handle_bytes = (uint8_t*)CLJ_MALLOC(sizeof(ID));
-    if (!m->handle_bytes) { mdns_ctx_free(m); throw_oom(); return NULL; }
+    if (!m->handle_bytes) { mdns_ctx_free(m); throw_oom(); }
     memcpy(m->handle_bytes, &m, sizeof(ID));
 
     CljByteArray *handle = make_byte_array_external(m->handle_bytes, (int)sizeof(ID), m, mdns_ctx_free);

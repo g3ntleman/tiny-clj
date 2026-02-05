@@ -15,7 +15,7 @@ ID body_or_bodies;  // Entweder AST-Node (feste Arity) oder Vector (mehrere Arit
 
 **Dispatch zur Laufzeit:**
 ```c
-if (TAG(body_or_bodies) == CLJ_VECTOR) {
+if (TAG(body_or_bodies) == CLJ_VECTOR_PERSISTENT) {
     // Mehrere Aritäten
     CljVector *arity_bodies = (CljVector*)body_or_bodies;
     // ...
@@ -103,7 +103,7 @@ eval_body_with_params(body, ...);
 **Mit Vereinigung:**
 ```c
 // 1× TAG-Check pro Aufruf
-if (TAG(func->body_or_bodies) == CLJ_VECTOR) {
+if (TAG(func->body_or_bodies) == CLJ_VECTOR_PERSISTENT) {
     // Sollte nie passieren bei festen Aritäten
     CLJ_ASSERT(0);
 } else {
@@ -116,7 +116,7 @@ if (TAG(func->body_or_bodies) == CLJ_VECTOR) {
 ```c
 // Branch-Prediction: Fast Path ist wahrscheinlich
 ID body_or_bodies = func->body_or_bodies;
-if (likely(TAG(body_or_bodies) != CLJ_VECTOR)) {
+if (likely(TAG(body_or_bodies) != CLJ_VECTOR_PERSISTENT)) {
     // Fast Path: feste Arity
     eval_body_with_params(body_or_bodies, ...);
 } else {
@@ -135,7 +135,7 @@ if (func->arity_bodies) {  // Pointer-Check
 
 **Mit Vereinigung:**
 ```c
-if (TAG(func->body_or_bodies) == CLJ_VECTOR) {  // Tag-Check
+if (TAG(func->body_or_bodies) == CLJ_VECTOR_PERSISTENT) {  // Tag-Check
     // ...
 }
 ```
@@ -191,7 +191,7 @@ typedef struct {
 
 // Helper: Prüfe ob mehrere Aritäten
 static inline bool has_multiple_arities(CljFunction *func) {
-    return func->body_or_bodies && TAG(func->body_or_bodies) == CLJ_VECTOR;
+    return func->body_or_bodies && TAG(func->body_or_bodies) == CLJ_VECTOR_PERSISTENT;
 }
 
 // Helper: Hole Body für feste Arity

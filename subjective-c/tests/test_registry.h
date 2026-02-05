@@ -3,8 +3,12 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef void (*SubjectiveCTestFn)(void);
+
+#define SUBJECTIVE_C_TEST_HEAP_GROWTH_UNSPECIFIED ((size_t)-1)
+#define SUBJECTIVE_C_TEST_HEAP_GROWTH_UNLIMITED ((size_t)-2)
 
 // Test entry structure with groups and qualified names
 typedef struct {
@@ -14,6 +18,7 @@ typedef struct {
     const char *file;           // Source file path
     int line;                   // Source line number
     SubjectiveCTestFn fn;      // Test function pointer
+    size_t heap_growth_limit_bytes; // Max allowed heap growth bytes
 } SubjectiveCTestEntry;
 
 // Basic registration (backward compatible)
@@ -21,6 +26,7 @@ void subjective_c_test_registry_add(const char *name, const char *file, int line
 
 // Extended registration with group and file info
 void subjective_c_test_registry_add_with_file_info(const char *name, SubjectiveCTestFn fn, const char *group, const char *file, int line);
+void subjective_c_test_registry_add_with_file_info_ex(const char *name, SubjectiveCTestFn fn, const char *group, const char *file, int line, size_t heap_growth_limit_bytes);
 
 // Registry query functions
 const SubjectiveCTestEntry* subjective_c_test_registry_entries(size_t *count);
@@ -45,7 +51,7 @@ bool subjective_c_test_name_matches_pattern(const char *name, const char *patter
 #define SUBJECTIVE_C_TEST_WITH_POOL(block) WITH_AUTORELEASE_POOL(block)
 
 // TEST macro with automatic group extraction from filename
-#define TEST(name) \
+#define SUBJECTIVE_C_TEST_IMPL(name, heap_growth_limit_bytes) \
     static void name##_impl(void); \
     static void name(void) { \
         SUBJECTIVE_C_TEST_WITH_POOL({ name##_impl(); }); \
@@ -54,12 +60,21 @@ bool subjective_c_test_name_matches_pattern(const char *name, const char *patter
     static void register_##name(void) { \
         char *filename = subjective_c_test_extract_filename_from_path(__FILE__); \
         if (filename) { \
-            subjective_c_test_registry_add_with_file_info(#name, name, filename, __FILE__, __LINE__); \
+            subjective_c_test_registry_add_with_file_info_ex(#name, name, filename, __FILE__, __LINE__, heap_growth_limit_bytes); \
             free(filename); \
         } else { \
             subjective_c_test_registry_add(#name, __FILE__, __LINE__, name); \
         } \
     } \
     static void name##_impl(void)
+
+#ifndef TEST_DEFAULT_HEAP_GROWTH_LIMIT
+#define TEST_DEFAULT_HEAP_GROWTH_LIMIT SUBJECTIVE_C_TEST_HEAP_GROWTH_UNSPECIFIED
+#endif
+
+#define SUBJECTIVE_C_TEST_1(name) SUBJECTIVE_C_TEST_IMPL(name, TEST_DEFAULT_HEAP_GROWTH_LIMIT)
+#define SUBJECTIVE_C_TEST_2(name, heap_growth_limit_bytes) SUBJECTIVE_C_TEST_IMPL(name, heap_growth_limit_bytes)
+#define SUBJECTIVE_C_TEST_GET_MACRO(_1, _2, NAME, ...) NAME
+#define TEST(...) SUBJECTIVE_C_TEST_GET_MACRO(__VA_ARGS__, SUBJECTIVE_C_TEST_2, SUBJECTIVE_C_TEST_1)(__VA_ARGS__)
 
 #endif // SUBJECTIVE_C_TEST_REGISTRY_H
