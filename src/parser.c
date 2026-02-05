@@ -1547,8 +1547,10 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   ID ignored_meta = parse_expr(reader, st);
   RELEASE(ignored_meta);
   reader_skip_all(reader);
-  ID obj = parse_expr(reader, st);
+  // Reset parser_in_meta BEFORE parsing the target object,
+  // otherwise maps in the object body would be skipped too!
   parser_in_meta = was_in_meta;
+  ID obj = parse_expr(reader, st);
   return obj;
 #else
   // Check if this is ^#^{...} syntax (metadata map)
@@ -1732,8 +1734,9 @@ static ID parse_meta_map(Reader *reader,
   ID ignored_meta = parse_map(reader, st); // parse_map will skip allocations under parser_in_meta
   RELEASE(ignored_meta);
   reader_skip_all(reader);
-  ID obj = parse_expr(reader, st);
+  // Reset parser_in_meta BEFORE parsing the target object
   parser_in_meta = was_in_meta;
+  ID obj = parse_expr(reader, st);
   return obj;
 #else
   // When called from parse_expr, we need to consume '#' and '^'
