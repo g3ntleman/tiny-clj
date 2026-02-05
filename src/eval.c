@@ -1,5 +1,4 @@
 #include "list.h"
-#include "vector_to_list.h"
 #include "object.h"
 #include "eval.h"
 #include "symbol.h"
@@ -2286,20 +2285,25 @@ ID eval_doseq(CljList *list, CljPersistentMap *env, EvalState *st, const EvalCon
     if (!binding_list || !body) {
         return NULL;
     }
-    // Convert vector binding to list if needed
-    CljList *binding_data = NULL;
-    if (TAG(binding_list) == CLJ_VECTOR_PERSISTENT) {
-        binding_data = as_list(vector_to_list((CljPersistentVector*)binding_list));
-    } else if (TAG(binding_list) == CLJ_LIST) {
-        binding_data = as_list(binding_list);
+    // Parse binding: [var coll] - support both vectors and lists without allocations
+    ID var = NULL;
+    ID coll_expr = NULL;
+
+    if (is_vector(binding_list)) {
+        CljPersistentVector *vec = as_vector(binding_list);
+        if (!vec || vector_count(vec) < 2) return NULL;
+        var = vector_nth(vec, 0);
+        coll_expr = vector_nth(vec, 1);
+    } else if (is_list_type(TAG(binding_list))) {
+        CljList *binding_data = as_list(binding_list);
+        if (!binding_data || !binding_data->first) return NULL;
+        var = binding_data->first;
+        CljList *rest_list = as_list(binding_data->rest);
+        if (!rest_list) return NULL;
+        coll_expr = rest_list->first;
     } else {
         return NULL;
     }
-    if (!binding_data->first || !binding_data->rest) {
-        return NULL;
-    }
-    CljObject *var = binding_data->first;
-    CljObject *coll_expr = list_get_element(binding_data, 1);
 
     // Evaluate collection expression in current env (preserve ctx for lexical lookup)
     ID coll_eval = eval_body(coll_expr, env, st, ctx);
