@@ -7137,11 +7137,15 @@ ID native_do(ID *args, unsigned int argc)
 // REGEX FUNCTIONS - moved to builtins_regex.c
 // ============================================================================
 
-// Helper function to register a builtin in clojure.core namespace (DRY principle)
-// Also supports qualified symbols like "Math/sqrt" for other namespaces
-static void register_builtin_in_core(const char *cname, BuiltinFn func)
+// Register a native builtin function.
+// - Unqualified symbols (e.g. "count") → registered in clojure.core
+// - Qualified clojure.* symbols (e.g. "clojure.repl/source") → registered in their namespace
+// - Other qualified symbols (e.g. "tinyclj.runtime/stats") → NOT registered here;
+//   they remain in native_function_table only and require explicit (require 'ns)
+//   followed by (defn ... :native) to become available (Clojure-compatible behavior).
+static void register_builtin(const char *cname, BuiltinFn func)
 {
-    // Check if name is a qualified symbol (e.g., "Math/sqrt")
+    // Check if name is a qualified symbol (e.g., "clojure.repl/source")
     const char *slash = strchr(cname, '/');
     CljNamespace *target_ns;
     const char *symbol_name;
@@ -7150,6 +7154,17 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func)
     {
         // Qualified symbol: split into namespace and name
         size_t ns_len = slash - cname;
+
+        // CLOJURE COMPATIBILITY: Only auto-register clojure.* namespaces.
+        // Other namespaces (tinyclj.*, user libs) must use (require 'ns) first,
+        // then (defn ... :native) will look up the function in native_function_table.
+        if (ns_len < 8 || strncmp(cname, "clojure.", 8) != 0) {
+            // Not a clojure.* namespace - skip direct registration.
+            // The function is already in native_function_table and will be
+            // activated when the .clj file defines (defn foo [] :native).
+            return;
+        }
+
         char *ns_name = (char *)malloc(ns_len + 1);
         if (!ns_name)
         {
@@ -7238,68 +7253,68 @@ void register_builtins()
     // Only functions needed in --no-core mode are registered here directly.
 
     // Functions needed before clojure.core.clj is loaded (--no-core mode)
-    register_builtin_in_core("eval", native_eval);
-    register_builtin_in_core("read-string", native_read_string);
+    register_builtin("eval", native_eval);
+    register_builtin("read-string", native_read_string);
 #ifndef ESP32_BUILD
-    register_builtin_in_core("require", native_require);
-    register_builtin_in_core("load-file", native_load_file);
+    register_builtin("require", native_require);
+    register_builtin("load-file", native_load_file);
 #endif
 
     // Arithmetic functions - needed for tests and --no-core mode
-    register_builtin_in_core("+", native_add_variadic);
-    register_builtin_in_core("-", native_sub_variadic);
-    register_builtin_in_core("*", native_mul_variadic);
-    register_builtin_in_core("/", native_div_variadic);
-    register_builtin_in_core("mod", native_mod);
-    register_builtin_in_core("quot", native_quot);
+    register_builtin("+", native_add_variadic);
+    register_builtin("-", native_sub_variadic);
+    register_builtin("*", native_mul_variadic);
+    register_builtin("/", native_div_variadic);
+    register_builtin("mod", native_mod);
+    register_builtin("quot", native_quot);
 
     // Only register functions needed for macro expansion: defn uses (list 'def name (cons 'fn ...))
     // seq is used by first, rest, next
-    register_builtin_in_core("list", native_list);
-    register_builtin_in_core("cons", native_cons);
-    register_builtin_in_core("seq", native_seq);
+    register_builtin("list", native_list);
+    register_builtin("cons", native_cons);
+    register_builtin("seq", native_seq);
 
     // NOTE: clojure.string functions are NOT registered here as builtins.
     // They are defined in libs/clojure/string.clj and loaded via require.
 
     // Regex functions (needed for clojure.string and general regex support)
-    register_builtin_in_core("regex?", native_regex_p);
-    register_builtin_in_core("re-pattern", native_re_pattern);
-    register_builtin_in_core("re-find", native_re_find);
-    register_builtin_in_core("re-matches", native_re_matches);
-    register_builtin_in_core("re-seq", native_re_seq);
+    register_builtin("regex?", native_regex_p);
+    register_builtin("re-pattern", native_re_pattern);
+    register_builtin("re-find", native_re_find);
+    register_builtin("re-matches", native_re_matches);
+    register_builtin("re-seq", native_re_seq);
     // This allows metadata (docstrings) to be properly attached.
 
     // NOTE: clojure.repl/source is registered here because it's in a different namespace
     // and needs to be available before clojure.repl.clj is loaded.
-    register_builtin_in_core("clojure.repl/source", native_source);
-    register_builtin_in_core("clojure.repl/dir", native_repl_dir);
-    register_builtin_in_core("tinyclj/retain-count", native_retain_count);
+    register_builtin("clojure.repl/source", native_source);
+    register_builtin("clojure.repl/dir", native_repl_dir);
+    register_builtin("tinyclj/retain-count", native_retain_count);
 
 #ifdef DEBUG
     // Debug functions for tinyclj.runtime namespace
-    register_builtin_in_core("tinyclj.runtime/print-ast", native_print_ast);
-    register_builtin_in_core("tinyclj.runtime/ast-string", native_ast_string);
+    register_builtin("tinyclj.runtime/print-ast", native_print_ast);
+    register_builtin("tinyclj.runtime/ast-string", native_ast_string);
 #endif
 
     // Meta functions
-    register_builtin_in_core("meta", native_meta);
-    register_builtin_in_core("with-meta", native_with_meta);
+    register_builtin("meta", native_meta);
+    register_builtin("with-meta", native_with_meta);
 
     // tinyclj.runtime
-    register_builtin_in_core("tinyclj.runtime/stats", native_tinyclj_runtime_stats);
+    register_builtin("tinyclj.runtime/stats", native_tinyclj_runtime_stats);
 
     // Time functions
-    register_builtin_in_core("now", native_now);
-    register_builtin_in_core("inst?", native_instant_p);
-    register_builtin_in_core("instant-days", native_instant_days);
-    register_builtin_in_core("instant-ms", native_instant_ms);
+    register_builtin("now", native_now);
+    register_builtin("inst?", native_instant_p);
+    register_builtin("instant-days", native_instant_days);
+    register_builtin("instant-ms", native_instant_ms);
 
     // Macro functions
-    register_builtin_in_core("get-macro", native_get_macro);
+    register_builtin("get-macro", native_get_macro);
 
     // Apply function
-    register_builtin_in_core("apply", native_apply);
+    register_builtin("apply", native_apply);
 
     });
 }
