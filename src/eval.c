@@ -1135,26 +1135,24 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljPersistentMap *e
 
         // nil target: behave like (get nil :k) => nil, (get nil :k default) => default
         if (!target || !is_map(target)) {
-            RELEASE(target);
-            // Return default (may be NULL/nil) when provided; otherwise nil.
+            // Do not RELEASE(target): eval_arg returns autoreleased values.
             return default_val;
         }
 
         // Distinguish "missing" from "present with nil value" using NOT_FOUND sentinel.
         ID found = map_get_sentinel((CljPersistentMap*)target, op, NOT_FOUND);
-        RELEASE(target);
+        // Retain found so return value survives; do not RELEASE(target) - eval_arg returns autoreleased values.
+        if (found && found != NOT_FOUND) RETAIN(found);
 
         if (found == NOT_FOUND) {
             return default_val;
         }
 
-        // Key exists. If a default was provided, it is not used.
         if (default_val) {
             RELEASE(default_val);
         }
 
-        // Found value may be nil (NULL). Retain non-nil values so they survive target release.
-        return found ? RETAIN(found) : NULL;
+        return found;
     }
 
     // Resolve symbol to get function
