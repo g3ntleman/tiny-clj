@@ -25,6 +25,7 @@
 #include "list.h"
 #include "map.h"
 #include "function.h"
+#include "ast.h"
 #include "seq.h"
 #include "exception.h"
 #include "atom.h"
@@ -210,6 +211,14 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
                 }
             }
             return strlen(sym->cname);
+        }
+
+        case CLJ_SLOT_REF: {
+            CljSlotRef *ref = (CljSlotRef*)v;
+            if (ref && ref->symbol && ref->symbol->cname) {
+                return strlen(ref->symbol->cname);
+            }
+            return 11; // "#<slot-ref>"
         }
 
         case CLJ_VECTOR_PERSISTENT:
@@ -507,6 +516,19 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             size_t name_len = strlen(sym->cname);
             memcpy(buffer + *offset, sym->cname, name_len);
             *offset += name_len;
+            return;
+        }
+
+        case CLJ_SLOT_REF: {
+            CljSlotRef *ref = (CljSlotRef*)v;
+            if (ref && ref->symbol && ref->symbol->cname) {
+                size_t name_len = strlen(ref->symbol->cname);
+                memcpy(buffer + *offset, ref->symbol->cname, name_len);
+                *offset += name_len;
+            } else {
+                memcpy(buffer + *offset, "#<slot-ref>", 11);
+                *offset += 11;
+            }
             return;
         }
 
