@@ -1,0 +1,1682 @@
+{
+  "failed_test_runs": [
+    {
+      "argv": [
+        "/Users/theisen/Projects/tiny-clj/build-deadcode-coverage/out/unit-tests-prof",
+        "--test",
+        "test_map*"
+      ],
+      "returncode": 7
+    },
+    {
+      "argv": [
+        "/Users/theisen/Projects/tiny-clj/build-deadcode-coverage/out/unit-tests-prof",
+        "--test",
+        "test_string*"
+      ],
+      "returncode": 7
+    }
+  ],
+  "never_called_core_functions": [
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/args_utils.c",
+      "name": "allocate_args_array"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/args_utils.c",
+      "name": "cleanup_args_array"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/ast.c",
+      "name": "ast_node_clear_callsite_cache"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/ast.c",
+      "name": "ast_node_get_callsite_cache"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/ast_canon.c",
+      "name": "ast_canon.c:canonicalize_symbol_token"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/ast_compile.c",
+      "name": "ast_compile.c:ast_compile_expr_inplace"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/ast_compile.c",
+      "name": "ast_compile.c:ast_compile_list_inplace"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/ast_compile.c",
+      "name": "ast_compile.c:ast_compile_map_inplace"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/ast_compile.c",
+      "name": "ast_compile.c:ast_compile_vector_inplace"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/ast_compile.c",
+      "name": "ast_compile_inplace"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/atom.c",
+      "name": "atom_reset"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/atom.c",
+      "name": "atom_swap"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:apply_saturation"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:compare_symbol_names"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:create_fixed_result"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:extract_fixed_value"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:fixnum_to_fixed"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:namespace_from_value"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:native_clojure_pprint_pprint_str"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:native_concat_thunk_executor"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:native_range_infinite_thunk_executor"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:native_tinyclj_runtime_stats"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:pprint_append"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:pprint_fits_inline"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:pprint_walk"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:print_helper"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:throw_arithmetic_overflow"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "builtins.c:throw_fixed_overflow"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "conj2_wrapper"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_aclone"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_aget"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_alength"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_all_ns"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_apply"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_aset"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_ast_string"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_atom_p"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_bit_shift_left"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_byte_array"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_cancel_timer"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_char_p"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_concat"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_conj_bang"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_current_time_ms"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_datetime_civil_from_days"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_datetime_days_from_civil"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_datetime_format_iso"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_div_variadic"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_do"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_eq"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_float_p"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_ge"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_get_macro"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_get_thread_bindings"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_group_by"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_gt"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_instant_days"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_instant_ms"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_instant_p"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_integer_p"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_keyword"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_keyword_p"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_last"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_lazy_seq_star"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_le"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_list_p"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_load_file"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_lt"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_math_sqrt"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_meta"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_name"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_now"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_nthnext"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_number_p"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_peek"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_persistent_bang"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_pop"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_pr"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_print"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_print_ast"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_println"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_prn"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_quot"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_repeat"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_repl_dir"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_reset_bang"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_retain_count"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_run_next_task"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_schedule"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_schedule_periodic"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_slurp"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_some"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_source"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_spit"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_stacktrace_str"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_string_p"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_subvec"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_swap_bang"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_symbol"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_transient"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_type"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_with_meta"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "native_yield"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "tinyclj_current_time_ms_for_sleep"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins.c",
+      "name": "tinyclj_runloop_once_for_yield"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_addr_cb"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_alloc_op"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_cleanup_op"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_endswith_local"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_fd_cb"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_finalize_op_if_ready"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_is_services_meta_query"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_parse_browse_service"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_resolve_cb"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_schedule"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_trim_trailing_dot"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:dnssd_unschedule"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:mdns_ctx_free"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:mdns_emit_event"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:mdns_init_keywords"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:mdns_recv_bridge"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:require_mdns_ctx"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "builtins_mdns.c:tinyclj_dnssd_browse_cb"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "native_tinyclj_net_mdns_browse_bang"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "native_tinyclj_net_mdns_close_bang"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "native_tinyclj_net_mdns_on_event"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_mdns.c",
+      "name": "native_tinyclj_net_mdns_open"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "builtins_net.c:net_ctx_free"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "builtins_net.c:net_packet_release_cb"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "builtins_net.c:net_tcp_event_bridge"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "builtins_net.c:net_udp_recv_bridge"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "builtins_net.c:require_net_ctx"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "native_tinyclj_net_close_bang"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "native_tinyclj_net_on_receive"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "native_tinyclj_net_send_bang"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "native_tinyclj_net_tcp_close_bang"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "native_tinyclj_net_tcp_connect"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "native_tinyclj_net_tcp_on_receive"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "native_tinyclj_net_tcp_send_bang"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_net.c",
+      "name": "native_tinyclj_net_udp_socket"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_regex.c",
+      "name": "native_re_seq"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_strings.c",
+      "name": "native_format"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_tiny_db.c",
+      "name": "builtins_tiny_db.c:require_c_string_arg"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_tiny_db.c",
+      "name": "builtins_tiny_db.c:tinyclj_kv_throw_ft"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_tiny_db.c",
+      "name": "native_tinyclj_fs_delete"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_tiny_db.c",
+      "name": "native_tinyclj_fs_list_batch"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_tiny_db.c",
+      "name": "native_tinyclj_fs_set_size"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_tiny_db.c",
+      "name": "native_tinyclj_fs_slurp_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_tiny_db.c",
+      "name": "native_tinyclj_fs_spit_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_tiny_db.c",
+      "name": "native_tinyclj_fs_stat"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_tiny_db.c",
+      "name": "native_tinyclj_kv_delete"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_tiny_db.c",
+      "name": "native_tinyclj_kv_get_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/builtins_tiny_db.c",
+      "name": "native_tinyclj_kv_put_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/channel.c",
+      "name": "make_result_channel"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/channel.c",
+      "name": "result_channel_close"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/channel.c",
+      "name": "result_channel_put"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/clojure_core.c",
+      "name": "clojure_core.c:core_mem_print_top_types"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/clojure_core.c",
+      "name": "clojure_core.c:read_file_cstr_local"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/clojure_core.c",
+      "name": "clojure_core_set_source"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/clojure_core.c",
+      "name": "load_clojure_repl"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/debug.c",
+      "name": "debug.c:print_ast_recursive"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/debug.c",
+      "name": "is_zombie"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/debug.c",
+      "name": "print_ast"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval.c:dynamic_binding_lookup"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval.c:extend_env_with_binding"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval.c:resolve_cache_lookup_value"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval.c:resolve_cache_ns_key"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval.c:resolve_cache_store_value"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval.c:should_suggest_require_for_ns"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval.c:throw_unresolved_symbol_exception_symbol"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval_arg"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval_body_with_env"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval_doseq"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval_dotimes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval_heap"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval_list_function"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval_seq"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval_set_use_compiled_ast"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval_time"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval.c",
+      "name": "eval_var"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_arithmetic.c",
+      "name": "eval_arithmetic.c:throw_non_numeric_argument"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_compiled.c",
+      "name": "eval_compiled.c:make_pseudo_list"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_compiled.c",
+      "name": "eval_compiled_call"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_compiled.c",
+      "name": "eval_compiled_do"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_compiled.c",
+      "name": "eval_compiled_fn"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_compiled.c",
+      "name": "eval_compiled_if"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_compiled.c",
+      "name": "eval_compiled_let"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_sequence.c",
+      "name": "eval_map_lookup"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_binding"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_dotimes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_form_dispatch"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_forms.c:eval_finally_clause"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_forms.c:sym_name_eq"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_go"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_heap"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_loop"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_quasiquote"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_throw"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_time"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_try"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_var"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/eval_special_forms.c",
+      "name": "eval_special_while"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:task_from_map"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:task_get_fn"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:task_get_period_ms"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:task_get_periodic"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:task_get_scheduled_msec"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:task_get_scheduled_sec"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:task_get_timer_id"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:task_timer_to_map"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:task_to_map"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:timer_insert_sorted_map"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:timer_process"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:timer_queue_get"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop.c:timer_queue_remove_at"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop_enqueue"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "event_loop_run_next"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "timer_cancel"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/event_loop.c",
+      "name": "timer_enqueue"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/file_utils.c",
+      "name": "file_slurp"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_delete"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_exists"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_file_stream_read"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_file_stream_read_from"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_file_stream_write"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_global_store"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_global_store_reset"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_del"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_del_key_bytes_status"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_del_status"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_get"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_get_key_bytes_status"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_get_status"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_put"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_put_key_bytes_status"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_put_status"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_store_free"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_store_new"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_stream_read_key_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_stream_read_key_bytes_from"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_kv_stream_write_key_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_clamp_app_chunk"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_emit_sliced"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_is_dir_path"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_is_valid_path"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_kv_get_chunked_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_kv_make_chunk_key_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_kv_put_chunked_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_kv_read_meta_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_list_dir_key_is_direct_child"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_make_chunk_key"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_meta_get"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_meta_put"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_ram_erase"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_ram_prog"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_ram_read"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_layer.c:fs_write_be32"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_list_dir_batch"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_read_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_set_size"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_stat_size"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_stream_stats_get"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_stream_stats_reset"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/fs_layer.c",
+      "name": "fs_write_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_codec.c",
+      "name": "mdns_build_ptr_query"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_codec.c",
+      "name": "mdns_codec.c:write_be16"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_codec.c",
+      "name": "mdns_decode_name"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_codec.c",
+      "name": "mdns_encode_qname"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_resolver.c",
+      "name": "mdns_resolver.c:entry_try_emit_resolved"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_resolver.c",
+      "name": "mdns_resolver.c:find_or_alloc_entry"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_resolver.c",
+      "name": "mdns_resolver.c:find_or_alloc_host"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_resolver.c",
+      "name": "mdns_resolver.c:format_ipv6_full"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_resolver.c",
+      "name": "mdns_resolver_init"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_resolver.c",
+      "name": "mdns_resolver_on_message"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_resolver.c",
+      "name": "mdns_resolver_start_browse"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_resolver.c",
+      "name": "mdns_resolver_storage_size"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/mdns_resolver.c",
+      "name": "mdns_resolver_tick"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/meta.c",
+      "name": "meta_merge_with_precedence"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/namespace.c",
+      "name": "eval_catch"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/namespace.c",
+      "name": "eval_error"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/namespace.c",
+      "name": "eval_try"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/namespace.c",
+      "name": "evalstate_pop_dynamic_bindings_to"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/namespace.c",
+      "name": "namespace.c:release_namespace_callback"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/namespace.c",
+      "name": "namespace.c:sym_cname_eq"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/namespace.c",
+      "name": "namespace.c:throw_ambiguous_symbol_error"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/namespace.c",
+      "name": "ns_find_for_object"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/namespace.c",
+      "name": "ns_load_file"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/namespace.c",
+      "name": "parse_error"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/numeric_utils.c",
+      "name": "clj_ftoa"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/numeric_utils.c",
+      "name": "clj_itoa"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/numeric_utils.c",
+      "name": "clj_uitoa"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/numeric_utils.c",
+      "name": "compare_numeric_values"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/numeric_utils.c",
+      "name": "extract_numeric_values"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/numeric_utils.c",
+      "name": "numeric_utils.c:clj_write_unsigned"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/object.c",
+      "name": "reference_count"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/optimize.c",
+      "name": "validate_recur_positions"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/parser.c",
+      "name": "parser.c:format_append_hex_byte"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/parser.c",
+      "name": "parser.c:parse_tagged_literal"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/parser.c",
+      "name": "parser.c:throw_parser_exception"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/parser.c",
+      "name": "parser.c:throw_parser_exceptionf"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/parser.c",
+      "name": "parser_set_disable_meta"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/reader.c",
+      "name": "reader.c:reader_check_codepoint_property"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/reader.c",
+      "name": "reader_get_source_name"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/reader.c",
+      "name": "reader_init_with_source"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/reader.c",
+      "name": "reader_is_delimiter"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/reader.c",
+      "name": "reader_is_symbol_char"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/reader.c",
+      "name": "reader_skip_all_including_newlines"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/reader.c",
+      "name": "reader_skip_whitespace_including_newlines"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/seq.c",
+      "name": "is_seq"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/seq.c",
+      "name": "seq_iter_position"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/symbol.c",
+      "name": "is_earmuffed_dynamic_symbol"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/symbol.c",
+      "name": "symbol_get_namespace_name"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/symbol_token.c",
+      "name": "make_symbol_token"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/symbol_token.c",
+      "name": "make_symbol_token_with_loc"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "print_str"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "strings_clear_special_forms"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "strings_get_special_form_rendering"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "strings_register_special_form"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "strings_set_special_form_rendering"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "to_string.c:append_byte_hex2"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "to_string.c:append_bytes"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "to_string.c:append_char"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "to_string.c:append_cstr"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "to_string.c:append_fixed2"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "to_string.c:append_int32"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "to_string.c:append_ptr_hex"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "to_string.c:format_instant_iso_utc"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "to_string.c:hex_len_no_prefix_uintptr"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/to_string.c",
+      "name": "to_string.c:write_hex_no_prefix_uintptr"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/validation.c",
+      "name": "throw_index_out_of_bounds"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/validation.c",
+      "name": "validate_arity"
+    },
+    {
+      "count": 0,
+      "file": "/Users/theisen/Projects/tiny-clj/src/validation.c",
+      "name": "validate_min_arity"
+    }
+  ]
+}

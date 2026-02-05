@@ -1,0 +1,1047 @@
+{
+  "tiny-clj-repl": {
+    "binary": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/out/tiny-clj-repl",
+    "core_object_files": [
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/builtins.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_arithmetic.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/macro.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/environment.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/clojure_core.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/builtins_strings.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_comparison.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/optimize.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/builtins_net.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast_canon.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/validation.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/symbol.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/repl.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/line_editor.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/symbol_token.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/seq.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast_compile.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_sequence.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/channel.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/atom.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/mdns_resolver.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/mdns_codec.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/object.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/args_utils.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/reader.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/list.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/debug.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/meta.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/builtins_tiny_db.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/error_messages.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/function.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/event_loop.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/builtins_regex.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/equality.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/builtins_mdns.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/parser.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/numeric_utils.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_compiled.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/to_string.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_special_forms.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/hash.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/file_utils.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/runtime.c.o"
+    ],
+    "defined_text_symbols_in_binary": 1011,
+    "defined_text_symbols_in_objects": 815,
+    "object_root": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir",
+    "stripped_symbols": [
+      {
+        "name": "allocate_args_array",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/args_utils.c.o"
+      },
+      {
+        "name": "as_special_symbol",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_special_forms.c.o"
+      },
+      {
+        "name": "ast_compile_expr_inplace",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast_compile.c.o"
+      },
+      {
+        "name": "ast_compile_inplace",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast_compile.c.o"
+      },
+      {
+        "name": "ast_compile_list_inplace",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast_compile.c.o"
+      },
+      {
+        "name": "ast_compile_map_inplace",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast_compile.c.o"
+      },
+      {
+        "name": "ast_compile_vector_inplace",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast_compile.c.o"
+      },
+      {
+        "name": "ast_node_clear_callsite_cache",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast.c.o"
+      },
+      {
+        "name": "ast_node_get_callsite_cache",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast.c.o"
+      },
+      {
+        "name": "builtins_reset_cached_funcs",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/builtins.c.o"
+      },
+      {
+        "name": "cleanup_args_array",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/args_utils.c.o"
+      },
+      {
+        "name": "clj_uitoa",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/numeric_utils.c.o"
+      },
+      {
+        "name": "clojure_core_set_source",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/clojure_core.c.o"
+      },
+      {
+        "name": "conj2_wrapper",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/builtins.c.o"
+      },
+      {
+        "name": "eval_arg",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval.c.o"
+      },
+      {
+        "name": "eval_catch",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "name": "eval_compiled_call",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "eval_compiled_do",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "eval_compiled_fn",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "eval_compiled_if",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "eval_compiled_let",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "eval_list_function",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval.c.o"
+      },
+      {
+        "name": "eval_seq",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval.c.o"
+      },
+      {
+        "name": "eval_set_use_compiled_ast",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval.c.o"
+      },
+      {
+        "name": "eval_special_dotimes",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_special_forms.c.o"
+      },
+      {
+        "name": "eval_special_form_dispatch",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_special_forms.c.o"
+      },
+      {
+        "name": "eval_special_forms_reset_caches",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_special_forms.c.o"
+      },
+      {
+        "name": "eval_string",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval.c.o"
+      },
+      {
+        "name": "eval_try",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "name": "evalstate_new",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "name": "evalstate_reset",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "name": "event_loop_clear",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/event_loop.c.o"
+      },
+      {
+        "name": "event_loop_init",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/event_loop.c.o"
+      },
+      {
+        "name": "fs_clamp_app_chunk",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_emit_sliced",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_exists",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_file_stream_read",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_file_stream_read_from",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_file_stream_write",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_global_store_reset",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_kv_store_free",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_kv_stream_read_key_bytes",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_kv_stream_read_key_bytes_from",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_kv_stream_write_key_bytes",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_stream_stats_get",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "fs_stream_stats_reset",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "name": "is_seq",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/seq.c.o"
+      },
+      {
+        "name": "is_zombie",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/debug.c.o"
+      },
+      {
+        "name": "line_editor_get_history_size",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "line_editor_get_state",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "line_editor_reset_history_index",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "macro_cache_reset",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/macro.c.o"
+      },
+      {
+        "name": "make_pseudo_list",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "make_symbol_token",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/symbol_token.c.o"
+      },
+      {
+        "name": "make_symbol_token_with_loc",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/symbol_token.c.o"
+      },
+      {
+        "name": "mdns_resolver_tick",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/mdns_resolver.c.o"
+      },
+      {
+        "name": "meta_merge_with_precedence",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/meta.c.o"
+      },
+      {
+        "name": "meta_registry_cleanup",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/meta.c.o"
+      },
+      {
+        "name": "ns_cleanup",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "name": "ns_load_file",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "name": "ns_register",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "name": "parse_error",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "name": "parser_set_disable_meta",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/parser.c.o"
+      },
+      {
+        "name": "platform_flash_bytes_free",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_flash_bytes_total",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_heap_bytes_free",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_heap_bytes_total",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_print",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_readline_nb",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_sleep_ms",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "reader_check_codepoint_property",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/reader.c.o"
+      },
+      {
+        "name": "reader_init_with_source",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/reader.c.o"
+      },
+      {
+        "name": "reader_is_delimiter",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/reader.c.o"
+      },
+      {
+        "name": "reader_is_symbol_char",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/reader.c.o"
+      },
+      {
+        "name": "reader_skip_all_including_newlines",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/reader.c.o"
+      },
+      {
+        "name": "reader_skip_whitespace_including_newlines",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/reader.c.o"
+      },
+      {
+        "name": "reference_count",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/object.c.o"
+      },
+      {
+        "name": "reset_eval_arg_depth",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval.c.o"
+      },
+      {
+        "name": "reset_eval_state",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "name": "reset_eval_state_current_ns",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "name": "runtime_reset",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/runtime.c.o"
+      },
+      {
+        "name": "seq_iter_position",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/seq.c.o"
+      },
+      {
+        "name": "set_suppress_time_output",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval.c.o"
+      },
+      {
+        "name": "strings_clear_special_forms",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/to_string.c.o"
+      },
+      {
+        "name": "strings_get_special_form_rendering",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/to_string.c.o"
+      },
+      {
+        "name": "strings_register_special_form",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/to_string.c.o"
+      },
+      {
+        "name": "sym_cname_eq",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "name": "symbol_get_namespace",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/symbol.c.o"
+      },
+      {
+        "name": "symbol_get_namespace_name",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/symbol.c.o"
+      },
+      {
+        "name": "symbol_table_cleanup",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/symbol.c.o"
+      },
+      {
+        "name": "utf8_is_delimiter",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/reader.c.o"
+      },
+      {
+        "name": "validate_min_arity",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/validation.c.o"
+      },
+      {
+        "name": "validate_recur_positions",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/optimize.c.o"
+      }
+    ],
+    "top_objects_by_stripped_count": [
+      {
+        "count": 13,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/fs_layer.c.o"
+      },
+      {
+        "count": 11,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o"
+      },
+      {
+        "count": 7,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval.c.o"
+      },
+      {
+        "count": 7,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.o"
+      },
+      {
+        "count": 7,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/reader.c.o"
+      },
+      {
+        "count": 6,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_compiled.c.o"
+      },
+      {
+        "count": 5,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast_compile.c.o"
+      },
+      {
+        "count": 4,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/eval_special_forms.c.o"
+      },
+      {
+        "count": 3,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/line_editor.c.o"
+      },
+      {
+        "count": 3,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/to_string.c.o"
+      },
+      {
+        "count": 3,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/symbol.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/args_utils.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/ast.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/builtins.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/event_loop.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/seq.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/symbol_token.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/meta.c.o"
+      },
+      {
+        "count": 1,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/numeric_utils.c.o"
+      },
+      {
+        "count": 1,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/tiny-clj-repl.dir/src/clojure_core.c.o"
+      }
+    ]
+  },
+  "unit-tests": {
+    "binary": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/out/unit-tests-prof",
+    "core_object_files": [
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/builtins.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/fs_layer.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_arithmetic.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/macro.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/environment.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/clojure_core.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/builtins_strings.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_comparison.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/optimize.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/builtins_net.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast_canon.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/validation.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/symbol.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/repl.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/symbol_token.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/seq.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/namespace.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast_compile.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_sequence.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/channel.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/atom.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/mdns_resolver.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/mdns_codec.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/object.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/args_utils.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/reader.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/list.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/debug.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/meta.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/builtins_tiny_db.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/error_messages.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/function.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/event_loop.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/builtins_regex.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/equality.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/builtins_mdns.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/parser.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/numeric_utils.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_compiled.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/to_string.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_special_forms.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/hash.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/file_utils.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/runtime.c.o",
+      "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+    ],
+    "defined_text_symbols_in_binary": 4988,
+    "defined_text_symbols_in_objects": 869,
+    "object_root": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir",
+    "stripped_symbols": [
+      {
+        "name": "UnityAssertBits",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityAssertEqualIntArray",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityAssertEqualStringArray",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityAssertEqualStringLen",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityAssertFloatSpecial",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityAssertFloatsNotWithin",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityAssertGreaterOrLessFloat",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityAssertIntNumbersWithin",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityAssertNumbersArrayWithin",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityAssertUintNumbersWithin",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityAssertWithinFloatArray",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityFloatToPtr",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityMessage",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityNumToPtr",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityPrintExpectedAndActualStringsLen",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityPrintLen",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnityPrintMask",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "UnitySetTestFile",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "name": "allocate_args_array",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/args_utils.c.o"
+      },
+      {
+        "name": "ast_compile_expr_inplace",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast_compile.c.o"
+      },
+      {
+        "name": "ast_compile_inplace",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast_compile.c.o"
+      },
+      {
+        "name": "ast_compile_list_inplace",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast_compile.c.o"
+      },
+      {
+        "name": "ast_compile_map_inplace",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast_compile.c.o"
+      },
+      {
+        "name": "ast_compile_vector_inplace",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast_compile.c.o"
+      },
+      {
+        "name": "ast_node_clear_callsite_cache",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast.c.o"
+      },
+      {
+        "name": "ast_node_get_callsite_cache",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast.c.o"
+      },
+      {
+        "name": "buffer_clear",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "build_default_history_path",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "cleanup_args_array",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/args_utils.c.o"
+      },
+      {
+        "name": "cleanup_line_editor",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "clj_uitoa",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/numeric_utils.c.o"
+      },
+      {
+        "name": "clojure_core_set_source",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/clojure_core.c.o"
+      },
+      {
+        "name": "conj2_wrapper",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/builtins.c.o"
+      },
+      {
+        "name": "eval_arg",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval.c.o"
+      },
+      {
+        "name": "eval_catch",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/namespace.c.o"
+      },
+      {
+        "name": "eval_compiled_call",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "eval_compiled_do",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "eval_compiled_fn",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "eval_compiled_if",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "eval_compiled_let",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "eval_list_function",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval.c.o"
+      },
+      {
+        "name": "eval_seq",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval.c.o"
+      },
+      {
+        "name": "eval_special_dotimes",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_special_forms.c.o"
+      },
+      {
+        "name": "eval_special_form_dispatch",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_special_forms.c.o"
+      },
+      {
+        "name": "eval_try",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/namespace.c.o"
+      },
+      {
+        "name": "get_line_editor",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "inject_append_bytes",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "inject_count",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "inject_reset_if_empty",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "is_seq",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/seq.c.o"
+      },
+      {
+        "name": "is_zombie",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/debug.c.o"
+      },
+      {
+        "name": "line_editor_clear",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "line_editor_clear_history",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "line_editor_get_history_size",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "line_editor_get_history_vector",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "line_editor_history_load_default",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "line_editor_history_save_default",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "line_editor_reset_history_index",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "line_editor_set_history_from_vector",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "make_pseudo_list",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_compiled.c.o"
+      },
+      {
+        "name": "make_symbol_token",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/symbol_token.c.o"
+      },
+      {
+        "name": "make_symbol_token_with_loc",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/symbol_token.c.o"
+      },
+      {
+        "name": "meta_merge_with_precedence",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/meta.c.o"
+      },
+      {
+        "name": "ns_load_file",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/namespace.c.o"
+      },
+      {
+        "name": "parse_error",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/namespace.c.o"
+      },
+      {
+        "name": "parser_set_disable_meta",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/parser.c.o"
+      },
+      {
+        "name": "platform_flash_bytes_free",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_flash_bytes_total",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_get_char",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_heap_bytes_free",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_heap_bytes_total",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_init",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_print",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_readline_nb",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_set_raw_mode",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_set_stdin_nonblocking",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_sleep_ms",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "platform_try_get_cursor_position",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "reader_check_codepoint_property",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/reader.c.o"
+      },
+      {
+        "name": "reader_is_delimiter",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/reader.c.o"
+      },
+      {
+        "name": "reader_is_symbol_char",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/reader.c.o"
+      },
+      {
+        "name": "reader_skip_all_including_newlines",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/reader.c.o"
+      },
+      {
+        "name": "reader_skip_whitespace_including_newlines",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/reader.c.o"
+      },
+      {
+        "name": "reference_count",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/object.c.o"
+      },
+      {
+        "name": "seq_iter_position",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/seq.c.o"
+      },
+      {
+        "name": "set_line_editor",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "name": "stdin_read_cb",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "stdin_ring_count",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "stdin_ring_pop",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "stdin_ring_push",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "name": "strings_clear_special_forms",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/to_string.c.o"
+      },
+      {
+        "name": "strings_get_special_form_rendering",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/to_string.c.o"
+      },
+      {
+        "name": "strings_register_special_form",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/to_string.c.o"
+      },
+      {
+        "name": "sym_cname_eq",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/namespace.c.o"
+      },
+      {
+        "name": "symbol_get_namespace_name",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/symbol.c.o"
+      },
+      {
+        "name": "utf8_is_delimiter",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/reader.c.o"
+      },
+      {
+        "name": "validate_min_arity",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/validation.c.o"
+      },
+      {
+        "name": "validate_recur_positions",
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/optimize.c.o"
+      }
+    ],
+    "top_objects_by_stripped_count": [
+      {
+        "count": 19,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/platform_macos.c.o"
+      },
+      {
+        "count": 18,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/external/unity/src/unity.c.o"
+      },
+      {
+        "count": 13,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/line_editor.c.o"
+      },
+      {
+        "count": 6,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_compiled.c.o"
+      },
+      {
+        "count": 6,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/reader.c.o"
+      },
+      {
+        "count": 5,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast_compile.c.o"
+      },
+      {
+        "count": 5,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/namespace.c.o"
+      },
+      {
+        "count": 3,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval.c.o"
+      },
+      {
+        "count": 3,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/to_string.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/args_utils.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/ast.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/eval_special_forms.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/seq.c.o"
+      },
+      {
+        "count": 2,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/symbol_token.c.o"
+      },
+      {
+        "count": 1,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/numeric_utils.c.o"
+      },
+      {
+        "count": 1,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/clojure_core.c.o"
+      },
+      {
+        "count": 1,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/builtins.c.o"
+      },
+      {
+        "count": 1,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/debug.c.o"
+      },
+      {
+        "count": 1,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/meta.c.o"
+      },
+      {
+        "count": 1,
+        "object": "/Users/theisen/Projects/tiny-clj/build-deadcode-linker-noinline/CMakeFiles/unit-tests.dir/src/parser.c.o"
+      }
+    ]
+  }
+}

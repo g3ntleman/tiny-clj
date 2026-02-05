@@ -1,0 +1,378 @@
+# Dead Code Audit: CMake Inventory
+
+Generated from `CMakeLists.txt`.
+
+## SOURCES (C-Core)
+
+- **Total entries in `SOURCES`**: 45
+- **C-Core `.c` files in `SOURCES`**: 45
+
+- `src/args_utils.c`
+- `src/ast.c`
+- `src/ast_canon.c`
+- `src/ast_compile.c`
+- `src/atom.c`
+- `src/builtins.c`
+- `src/builtins_mdns.c`
+- `src/builtins_net.c`
+- `src/builtins_regex.c`
+- `src/builtins_strings.c`
+- `src/builtins_tiny_db.c`
+- `src/channel.c`
+- `src/clojure_core.c`
+- `src/debug.c`
+- `src/environment.c`
+- `src/equality.c`
+- `src/error_messages.c`
+- `src/eval.c`
+- `src/eval_arithmetic.c`
+- `src/eval_comparison.c`
+- `src/eval_compiled.c`
+- `src/eval_sequence.c`
+- `src/eval_special_forms.c`
+- `src/event_loop.c`
+- `src/file_utils.c`
+- `src/fs_layer.c`
+- `src/function.c`
+- `src/hash.c`
+- `src/list.c`
+- `src/macro.c`
+- `src/mdns_codec.c`
+- `src/mdns_resolver.c`
+- `src/meta.c`
+- `src/namespace.c`
+- `src/numeric_utils.c`
+- `src/object.c`
+- `src/optimize.c`
+- `src/parser.c`
+- `src/reader.c`
+- `src/runtime.c`
+- `src/seq.c`
+- `src/symbol.c`
+- `src/symbol_token.c`
+- `src/to_string.c`
+- `src/validation.c`
+
+## Executables (expanded)
+
+### `tiny-clj`
+
+- **Raw items**: 4
+- **Expanded items**: 48
+- **C-Core `.c` files**: 47
+
+- `src/args_utils.c`
+- `src/ast.c`
+- `src/ast_canon.c`
+- `src/ast_compile.c`
+- `src/atom.c`
+- `src/builtins.c`
+- `src/builtins_mdns.c`
+- `src/builtins_net.c`
+- `src/builtins_regex.c`
+- `src/builtins_strings.c`
+- `src/builtins_tiny_db.c`
+- `src/channel.c`
+- `src/clojure_core.c`
+- `src/debug.c`
+- `src/environment.c`
+- `src/equality.c`
+- `src/error_messages.c`
+- `src/eval.c`
+- `src/eval_arithmetic.c`
+- `src/eval_comparison.c`
+- `src/eval_compiled.c`
+- `src/eval_sequence.c`
+- `src/eval_special_forms.c`
+- `src/event_loop.c`
+- `src/file_utils.c`
+- `src/fs_layer.c`
+- `src/function.c`
+- `src/hash.c`
+- `src/list.c`
+- `src/macro.c`
+- `src/main.c`
+- `src/mdns_codec.c`
+- `src/mdns_resolver.c`
+- `src/meta.c`
+- `src/namespace.c`
+- `src/numeric_utils.c`
+- `src/object.c`
+- `src/optimize.c`
+- `src/parser.c`
+- `src/platform_macos.c`
+- `src/reader.c`
+- `src/runtime.c`
+- `src/seq.c`
+- `src/symbol.c`
+- `src/symbol_token.c`
+- `src/to_string.c`
+- `src/validation.c`
+
+### `tiny-clj-esp32`
+
+- **Raw items**: 41
+- **Expanded items**: 41
+- **C-Core `.c` files**: 40
+
+- `src/args_utils.c`
+- `src/ast.c`
+- `src/ast_canon.c`
+- `src/atom.c`
+- `src/builtins.c`
+- `src/builtins_regex.c`
+- `src/builtins_strings.c`
+- `src/builtins_tiny_db.c`
+- `src/channel.c`
+- `src/clojure_core.c`
+- `src/debug.c`
+- `src/environment.c`
+- `src/equality.c`
+- `src/error_messages.c`
+- `src/eval.c`
+- `src/eval_arithmetic.c`
+- `src/eval_comparison.c`
+- `src/eval_sequence.c`
+- `src/eval_special_forms.c`
+- `src/event_loop.c`
+- `src/file_utils.c`
+- `src/fs_layer.c`
+- `src/function.c`
+- `src/list.c`
+- `src/macro.c`
+- `src/main_esp32.c`
+- `src/meta.c`
+- `src/namespace.c`
+- `src/numeric_utils.c`
+- `src/object.c`
+- `src/optimize.c`
+- `src/parser.c`
+- `src/platform_esp32_embedded.c`
+- `src/reader.c`
+- `src/runtime.c`
+- `src/seq.c`
+- `src/symbol.c`
+- `src/symbol_token.c`
+- `src/to_string.c`
+- `src/validation.c`
+
+### `tiny-clj-esp32-repl`
+
+- **Raw items**: 5
+- **Expanded items**: 49
+- **C-Core `.c` files**: 48
+
+- `src/args_utils.c`
+- `src/ast.c`
+- `src/ast_canon.c`
+- `src/ast_compile.c`
+- `src/atom.c`
+- `src/builtins.c`
+- `src/builtins_mdns.c`
+- `src/builtins_net.c`
+- `src/builtins_regex.c`
+- `src/builtins_strings.c`
+- `src/builtins_tiny_db.c`
+- `src/channel.c`
+- `src/clojure_core.c`
+- `src/debug.c`
+- `src/environment.c`
+- `src/equality.c`
+- `src/error_messages.c`
+- `src/eval.c`
+- `src/eval_arithmetic.c`
+- `src/eval_comparison.c`
+- `src/eval_compiled.c`
+- `src/eval_sequence.c`
+- `src/eval_special_forms.c`
+- `src/event_loop.c`
+- `src/file_utils.c`
+- `src/fs_layer.c`
+- `src/function.c`
+- `src/hash.c`
+- `src/line_editor.c`
+- `src/list.c`
+- `src/macro.c`
+- `src/mdns_codec.c`
+- `src/mdns_resolver.c`
+- `src/meta.c`
+- `src/namespace.c`
+- `src/numeric_utils.c`
+- `src/object.c`
+- `src/optimize.c`
+- `src/parser.c`
+- `src/platform_esp32_uart.c`
+- `src/reader.c`
+- `src/repl.c`
+- `src/runtime.c`
+- `src/seq.c`
+- `src/symbol.c`
+- `src/symbol_token.c`
+- `src/to_string.c`
+- `src/validation.c`
+
+### `tiny-clj-repl`
+
+- **Raw items**: 4
+- **Expanded items**: 48
+- **C-Core `.c` files**: 48
+
+- `src/args_utils.c`
+- `src/ast.c`
+- `src/ast_canon.c`
+- `src/ast_compile.c`
+- `src/atom.c`
+- `src/builtins.c`
+- `src/builtins_mdns.c`
+- `src/builtins_net.c`
+- `src/builtins_regex.c`
+- `src/builtins_strings.c`
+- `src/builtins_tiny_db.c`
+- `src/channel.c`
+- `src/clojure_core.c`
+- `src/debug.c`
+- `src/environment.c`
+- `src/equality.c`
+- `src/error_messages.c`
+- `src/eval.c`
+- `src/eval_arithmetic.c`
+- `src/eval_comparison.c`
+- `src/eval_compiled.c`
+- `src/eval_sequence.c`
+- `src/eval_special_forms.c`
+- `src/event_loop.c`
+- `src/file_utils.c`
+- `src/fs_layer.c`
+- `src/function.c`
+- `src/hash.c`
+- `src/line_editor.c`
+- `src/list.c`
+- `src/macro.c`
+- `src/mdns_codec.c`
+- `src/mdns_resolver.c`
+- `src/meta.c`
+- `src/namespace.c`
+- `src/numeric_utils.c`
+- `src/object.c`
+- `src/optimize.c`
+- `src/parser.c`
+- `src/platform_macos.c`
+- `src/reader.c`
+- `src/repl.c`
+- `src/runtime.c`
+- `src/seq.c`
+- `src/symbol.c`
+- `src/symbol_token.c`
+- `src/to_string.c`
+- `src/validation.c`
+
+### `tiny-clj-profile`
+
+- **Raw items**: 4
+- **Expanded items**: 48
+- **C-Core `.c` files**: 48
+
+- `src/args_utils.c`
+- `src/ast.c`
+- `src/ast_canon.c`
+- `src/ast_compile.c`
+- `src/atom.c`
+- `src/builtins.c`
+- `src/builtins_mdns.c`
+- `src/builtins_net.c`
+- `src/builtins_regex.c`
+- `src/builtins_strings.c`
+- `src/builtins_tiny_db.c`
+- `src/channel.c`
+- `src/clojure_core.c`
+- `src/debug.c`
+- `src/environment.c`
+- `src/equality.c`
+- `src/error_messages.c`
+- `src/eval.c`
+- `src/eval_arithmetic.c`
+- `src/eval_comparison.c`
+- `src/eval_compiled.c`
+- `src/eval_sequence.c`
+- `src/eval_special_forms.c`
+- `src/event_loop.c`
+- `src/file_utils.c`
+- `src/fs_layer.c`
+- `src/function.c`
+- `src/hash.c`
+- `src/line_editor.c`
+- `src/list.c`
+- `src/macro.c`
+- `src/mdns_codec.c`
+- `src/mdns_resolver.c`
+- `src/meta.c`
+- `src/namespace.c`
+- `src/numeric_utils.c`
+- `src/object.c`
+- `src/optimize.c`
+- `src/parser.c`
+- `src/platform_macos.c`
+- `src/reader.c`
+- `src/repl.c`
+- `src/runtime.c`
+- `src/seq.c`
+- `src/symbol.c`
+- `src/symbol_token.c`
+- `src/to_string.c`
+- `src/validation.c`
+
+### `unit-tests`
+
+- **Raw items**: 89
+- **Expanded items**: 133
+- **C-Core `.c` files**: 48
+
+- `src/args_utils.c`
+- `src/ast.c`
+- `src/ast_canon.c`
+- `src/ast_compile.c`
+- `src/atom.c`
+- `src/builtins.c`
+- `src/builtins_mdns.c`
+- `src/builtins_net.c`
+- `src/builtins_regex.c`
+- `src/builtins_strings.c`
+- `src/builtins_tiny_db.c`
+- `src/channel.c`
+- `src/clojure_core.c`
+- `src/debug.c`
+- `src/environment.c`
+- `src/equality.c`
+- `src/error_messages.c`
+- `src/eval.c`
+- `src/eval_arithmetic.c`
+- `src/eval_comparison.c`
+- `src/eval_compiled.c`
+- `src/eval_sequence.c`
+- `src/eval_special_forms.c`
+- `src/event_loop.c`
+- `src/file_utils.c`
+- `src/fs_layer.c`
+- `src/function.c`
+- `src/hash.c`
+- `src/line_editor.c`
+- `src/list.c`
+- `src/macro.c`
+- `src/mdns_codec.c`
+- `src/mdns_resolver.c`
+- `src/meta.c`
+- `src/namespace.c`
+- `src/numeric_utils.c`
+- `src/object.c`
+- `src/optimize.c`
+- `src/parser.c`
+- `src/platform_macos.c`
+- `src/reader.c`
+- `src/repl.c`
+- `src/runtime.c`
+- `src/seq.c`
+- `src/symbol.c`
+- `src/symbol_token.c`
+- `src/to_string.c`
+- `src/validation.c`
+
