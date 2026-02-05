@@ -142,7 +142,7 @@ R"CLOJURE(
 ; ============================================================================
 ; Higher-Order Functions
 ; ============================================================================
-^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Returns a transducer when no collection is provided."}
+^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Requires at least f and one coll (transducers not supported)."}
 (defn map [f & colls] :native)
 
 ^#^{:doc "Returns a sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects."}
@@ -803,7 +803,7 @@ R"CLOJURE(
 ; ============================================================================
 ; Higher-Order Functions (using now-defined list, cons, first, rest, empty?)
 ; ============================================================================
-^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Returns a transducer when no collection is provided."}
+^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Requires at least f and one coll (transducers not supported)."}
 (defn map [f & colls] :native)
 
 ^#^{:doc "Returns a sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects."}
