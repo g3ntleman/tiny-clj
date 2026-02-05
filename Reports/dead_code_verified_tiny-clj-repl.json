@@ -1,0 +1,583 @@
+[
+  {
+    "symbol": "allocate_args_array",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "ast_compile_expr_inplace",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 9,
+    "in_public_header": false,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "ast_compile_inplace",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "ast_node_clear_callsite_cache",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "ast_node_get_callsite_cache",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "atom_reset",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 12,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "cleanup_args_array",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "clj_ftoa",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 4,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "clj_uitoa",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "clojure_core_set_source",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 1,
+    "in_public_header": false,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "compare_numeric_values",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 6,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "conj2_wrapper",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 1,
+    "in_public_header": false,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_arg",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 93,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_body_with_env",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": false,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_catch",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_compiled_call",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_compiled_do",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_compiled_fn",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_compiled_if",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_compiled_let",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_error",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 8,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_list_function",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_seq",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": false,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_set_use_compiled_ast",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 4,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_special_dotimes",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_special_form_dispatch",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "eval_try",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "extract_numeric_values",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_exists",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 4,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_file_stream_read",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 7,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_file_stream_read_from",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 4,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_file_stream_write",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 5,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_global_store",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 22,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_global_store_reset",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 4,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_kv_del",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 12,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_kv_del_key_bytes_status",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_kv_del_status",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_kv_get",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 21,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_kv_get_status",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 5,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_kv_put",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 18,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_kv_put_status",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_kv_store_free",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 19,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_kv_stream_read_key_bytes",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 6,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_kv_stream_read_key_bytes_from",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_kv_stream_write_key_bytes",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_make_chunk_key",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 11,
+    "in_public_header": false,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_meta_put",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 5,
+    "in_public_header": false,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_stream_stats_get",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 6,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "fs_stream_stats_reset",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 6,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "is_earmuffed_dynamic_symbol",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "is_seq",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 19,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "is_zombie",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "make_symbol_token",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 5,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "make_symbol_token_with_loc",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "mdns_decode_name",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 10,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "mdns_encode_qname",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "mdns_resolver_init",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 8,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "mdns_resolver_start_browse",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 7,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "mdns_resolver_storage_size",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "mdns_resolver_tick",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 5,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "meta_merge_with_precedence",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "ns_load_file",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "parse_error",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "parser_set_disable_meta",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "print_str",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 35,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "reader_get_source_name",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "reader_init_with_source",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 5,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "reader_is_delimiter",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "reader_is_symbol_char",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "reader_skip_all_including_newlines",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "reader_skip_whitespace_including_newlines",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": false,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "reference_count",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": false,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "seq_iter_position",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "should_suggest_require_for_ns",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 4,
+    "in_public_header": false,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "strings_clear_special_forms",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "strings_get_special_form_rendering",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "strings_register_special_form",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "strings_set_special_form_rendering",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 6,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "symbol_get_namespace_name",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "throw_index_out_of_bounds",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "validate_arity",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 4,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "validate_min_arity",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 2,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  },
+  {
+    "symbol": "validate_recur_positions",
+    "confidence": "FALSE_POSITIVE",
+    "callsites_matches": 3,
+    "in_public_header": true,
+    "recommendation": "Keep (has call-sites)"
+  }
+]

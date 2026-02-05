@@ -10,7 +10,6 @@
  */
 
 #include "tests_common.h"
-#include <stdio.h>
 
 static void assert_load_file_ok(const char *path) {
     TEST_ASSERT_NOT_NULL_MESSAGE(path, "path must not be NULL");
