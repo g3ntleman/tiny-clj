@@ -343,9 +343,9 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
             continue;
         }
 
-        // No recur - this is the final result
-        // Use ASSIGN for proper refcounting (handles retain/release automatically)
-        ASSIGN(result, new_result);
+        // No recur - this is the final result.
+        // Do not retain here: callee results are already safe for the caller's pool.
+        result = new_result;
         break;
     } while (true);
 

@@ -730,7 +730,10 @@ ID native_seq(ID *args, unsigned int argc)
     if (TAG(coll) == CLJ_LIST || TAG(coll) == CLJ_AST_NODE)
     {
         CljList *list_data = as_list(coll);
-        return list_empty(list_data) ? NULL : AUTORELEASE(RETAIN(coll));
+        if (list_empty(list_data)) return NULL;
+        if (((CljObject*)coll)->flags & CLJ_FLAG_IN_AUTORELEASE)
+            return coll;
+        return AUTORELEASE(RETAIN(coll));
     }
     CljSeqIterator *seq = make_seq(coll);
     return seq ? AUTORELEASE((ID)seq) : NULL;
@@ -891,9 +894,12 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
     CljFunction *rest_thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
     CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
     RELEASE(rest_thunk);
+    RELEASE(thunk_body);
+    RELEASE(quoted_rest_state);
 
     // Build dotted result: (elem . rest_lazy)
     CljList *result = make_list(elem, (CljList*)rest_lazy);
+    RELEASE(rest_lazy);
 
     RELEASE(rest_state);
     return result;
@@ -923,6 +929,8 @@ ID native_concat(ID *args, unsigned int argc)
     CljLazySeq *lazy = make_lazy_seq((ID)thunk);
 
     RELEASE(thunk);
+    RELEASE(thunk_body);
+    RELEASE(quoted_state);
     RELEASE(state);
 
     return lazy ? AUTORELEASE(lazy) : empty_list();
@@ -1105,8 +1113,11 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     CljFunction *rest_thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
     CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
     RELEASE(rest_thunk);
+    RELEASE(thunk_body);
+    RELEASE(quoted_rest_state);
 
     CljList *result = make_list(mapped, (CljList*)rest_lazy);
+    RELEASE(rest_lazy);
 
     RELEASE(rest_state);
     return result;
@@ -1148,11 +1159,14 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
                 CljFunction *rest_thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
                 CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
                 RELEASE(rest_thunk);
+                RELEASE(thunk_body);
+                RELEASE(quoted_rest_state);
 
                 CljList *result = make_list(v, (CljList*)rest_lazy);
+                RELEASE(rest_lazy);
 
                 RELEASE(rest_state);
-                return result;
+                return AUTORELEASE(result);
             }
             // inner exhausted -> fall through to advance outer
             inner = NULL;
@@ -1233,6 +1247,8 @@ ID native_map(ID *args, unsigned int argc)
     CljLazySeq *lazy = make_lazy_seq((ID)thunk);
 
     RELEASE(thunk);
+    RELEASE(thunk_body);
+    RELEASE(quoted_state);
     RELEASE(state);
 
     return lazy ? AUTORELEASE(lazy) : empty_list();
@@ -1273,6 +1289,8 @@ ID native_mapcat(ID *args, unsigned int argc) {
     CljLazySeq *lazy = make_lazy_seq((ID)thunk);
 
     RELEASE(thunk);
+    RELEASE(thunk_body);
+    RELEASE(quoted_state);
     RELEASE(state);
 
     return lazy ? AUTORELEASE(lazy) : empty_list();
@@ -5577,8 +5595,11 @@ static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {
     CljFunction *rest_thunk = make_function(NULL, 0, (ID)thunk_body, NULL, NULL, NULL);
     CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
     RELEASE(rest_thunk);
+    RELEASE(thunk_body);
+    RELEASE(quoted_rest_state);
 
     CljList *result = make_list(fixnum(cur), (CljList*)rest_lazy);
+    RELEASE(rest_lazy);
 
     RELEASE(rest_state);
     return result;
@@ -5602,6 +5623,8 @@ ID native_range(ID *args, unsigned int argc)
         CljLazySeq *lazy = make_lazy_seq((ID)thunk);
 
         RELEASE(thunk);
+        RELEASE(thunk_body);
+        RELEASE(quoted_state);
         RELEASE(state);
 
         return lazy ? AUTORELEASE(lazy) : NULL;
