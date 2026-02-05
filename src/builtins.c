@@ -19,6 +19,7 @@
 #include "format_utils.h"
 #include "runtime.h"
 #include "memory.h"
+#include "memory_profiler.h"
 #include "value.h"
 #include "error_messages.h"
 #include "symbol.h" // Must be included before namespace.h for CljSymbol definition
@@ -6742,15 +6743,9 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     }
 
     CljPersistentMap *m = make_map(8);
-    if (!m)
-        return NULL;
+    if (!m) return NULL;
 
-    ID k_host_os = (ID)intern_symbol_global(":host-os");
-    ID k_host_os_version = (ID)intern_symbol_global(":host-os-version");
-    ID k_tiny_clj_version = (ID)intern_symbol_global(":tiny-clj-version");
-    ID k_build_time = (ID)intern_symbol_global(":build-time");
-
-    ASSIGN(m, map_assoc(m, k_host_os, (ID)make_string(
+    ASSIGN(m, map_assoc(m, SYM_KW_OS, (ID)make_string(
 #if defined(__APPLE__)
         "darwin"
 #elif defined(__linux__)
@@ -6760,69 +6755,54 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 #endif
     )));
 
-    // Keep simple: tests only require a string to be present.
-    ASSIGN(m, map_assoc(m, k_host_os_version, (ID)make_string("unknown")));
-    ASSIGN(m, map_assoc(m, k_tiny_clj_version, (ID)make_string("0.3")));
+    ASSIGN(m, map_assoc(m, SYM_KW_VERSION, (ID)make_string("0.3")));
 
-    // Use now() as a conservative proxy (must be <= now in tests).
-    ASSIGN(m, map_assoc(m, k_build_time, native_now(NULL, 0)));
+    // Build time (best-effort): expose as an Instant.
+    // We use a single gettimeofday() call here so it's guaranteed to be <= (now).
+    // Note: This is intended for diagnostics; it does not need to be a compile-time constant.
+    {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        int32_t days = (int32_t)(tv.tv_sec / 86400);
+        int32_t sec_in_day = tv.tv_sec % 86400;
+        int32_t millis = sec_in_day * 1000 + tv.tv_usec / 1000;
+
+        ID k_build_time = intern_symbol_global(":build-time");
+        ASSIGN(m, map_assoc(m, k_build_time, (ID)make_instant(days, (uint32_t)millis)));
+    }
 
 #if defined(DEBUG)
-    // Allocation/registry sizes (debug-only diagnostics).
-    // NOTE: symbol_table stores both symbols and keywords (everything interned).
-    ID k_symbols_allocated = (ID)intern_symbol_global(":symbols-allocated");
-    ID k_namespaces_allocated = (ID)intern_symbol_global(":namespaces-allocated");
-    ASSIGN(m, map_assoc(m, k_symbols_allocated, fixnum((int32_t)hashmap_count(g_runtime.symbol_table))));
-    ASSIGN(m, map_assoc(m, k_namespaces_allocated, fixnum((int32_t)map_count(g_runtime.ns_registry))));
+    // Debug diagnostics: symbols, namespaces, heap (always available)
+    ASSIGN(m, map_assoc(m, SYM_KW_SYMBOLS, fixnum((int32_t)hashmap_count(g_runtime.symbol_table))));
+    ASSIGN(m, map_assoc(m, SYM_KW_NAMESPACES, fixnum((int32_t)map_count(g_runtime.ns_registry))));
+    
+    // Heap usage (always tracked in DEBUG, same keys as full profiling)
+    size_t bytes_current = g_memory_stats.current_memory_usage;
+    size_t bytes_peak = g_memory_stats.peak_memory_usage;
+    int32_t fc = (bytes_current > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bytes_current;
+    int32_t fp = (bytes_peak > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bytes_peak;
+    ASSIGN(m, map_assoc(m, SYM_KW_BYTES_CURRENT, fixnum(fc)));
+    ASSIGN(m, map_assoc(m, SYM_KW_BYTES_PEAK, fixnum(fp)));
 #endif
 
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
-    ID k_memory_stats = (ID)intern_symbol_global(":memory-stats");
-    ID k_bytes_current = (ID)intern_symbol_global(":bytes-current");
-    ID k_bytes_peak = (ID)intern_symbol_global(":bytes-peak");
-    ID k_raw_bytes_current = (ID)intern_symbol_global(":raw-bytes-current");
-    ID k_raw_bytes_peak = (ID)intern_symbol_global(":raw-bytes-peak");
-    ID k_raw_blocks_current = (ID)intern_symbol_global(":raw-blocks-current");
-    ID k_raw_blocks_peak = (ID)intern_symbol_global(":raw-blocks-peak");
-    ID k_bytes_by_type = (ID)intern_symbol_global(":bytes-by-type");
-    ID k_total_allocations = (ID)intern_symbol_global(":total-allocations");
-    ID k_total_deallocations = (ID)intern_symbol_global(":total-deallocations");
-    ID k_memory_leaks = (ID)intern_symbol_global(":memory-leaks");
-
+    // Extended profiling stats (nested map with per-type breakdown)
     CljPersistentMap *ms = make_map(12);
-    if (ms)
-    {
-        // Fixnum range is limited; clamp to avoid overflow/truncation surprises.
-        // These stats are intended for quick diagnostics, not exact accounting on huge heaps.
-        size_t bytes_current = g_memory_stats.current_memory_usage;
-        size_t bytes_peak = g_memory_stats.peak_memory_usage;
-        size_t raw_bytes_current = g_memory_stats.raw_bytes_current;
-        size_t raw_bytes_peak = g_memory_stats.raw_bytes_peak;
-        size_t raw_blocks_current = g_memory_stats.raw_blocks_current;
-        size_t raw_blocks_peak = g_memory_stats.raw_blocks_peak;
+    if (ms) {
+        // Raw allocator stats
+        #define CLAMP_FIXNUM(val) ((val) > (size_t)FIXNUM_MAX ? (int32_t)FIXNUM_MAX : (int32_t)(val))
+        
+        ASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_CURRENT, fixnum(fc)));
+        ASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_PEAK, fixnum(fp)));
+        ASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BYTES_CURRENT, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_bytes_current))));
+        ASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BYTES_PEAK, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_bytes_peak))));
+        ASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BLOCKS_CURRENT, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_blocks_current))));
+        ASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BLOCKS_PEAK, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_blocks_peak))));
+        ASSIGN(ms, map_assoc(ms, SYM_KW_TOTAL_ALLOCATIONS, fixnum(CLAMP_FIXNUM(g_memory_stats.total_allocations))));
+        ASSIGN(ms, map_assoc(ms, SYM_KW_TOTAL_DEALLOCATIONS, fixnum(CLAMP_FIXNUM(g_memory_stats.total_deallocations))));
+        ASSIGN(ms, map_assoc(ms, SYM_KW_MEMORY_LEAKS, fixnum(CLAMP_FIXNUM(g_memory_stats.memory_leaks))));
 
-        int32_t fc = (bytes_current > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bytes_current;
-        int32_t fp = (bytes_peak > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bytes_peak;
-        int32_t frc = (raw_bytes_current > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_bytes_current;
-        int32_t frp = (raw_bytes_peak > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_bytes_peak;
-        int32_t frbc = (raw_blocks_current > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_blocks_current;
-        int32_t frbp = (raw_blocks_peak > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_blocks_peak;
-
-        ASSIGN(ms, map_assoc(ms, k_bytes_current, fixnum(fc)));
-        ASSIGN(ms, map_assoc(ms, k_bytes_peak, fixnum(fp)));
-        ASSIGN(ms, map_assoc(ms, k_raw_bytes_current, fixnum(frc)));
-        ASSIGN(ms, map_assoc(ms, k_raw_bytes_peak, fixnum(frp)));
-        ASSIGN(ms, map_assoc(ms, k_raw_blocks_current, fixnum(frbc)));
-        ASSIGN(ms, map_assoc(ms, k_raw_blocks_peak, fixnum(frbp)));
-
-        int32_t talloc = (g_memory_stats.total_allocations > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)g_memory_stats.total_allocations;
-        int32_t tdealloc = (g_memory_stats.total_deallocations > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)g_memory_stats.total_deallocations;
-        int32_t mleaks = (g_memory_stats.memory_leaks > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)g_memory_stats.memory_leaks;
-        ASSIGN(ms, map_assoc(ms, k_total_allocations, fixnum(talloc)));
-        ASSIGN(ms, map_assoc(ms, k_total_deallocations, fixnum(tdealloc)));
-        ASSIGN(ms, map_assoc(ms, k_memory_leaks, fixnum(mleaks)));
-
-        // Bytes by type: map of type-name (keyword) -> {:bytes-current :bytes-peak :alloc-count :dealloc-count}.
+        // Per-type breakdown
         CljPersistentMap *by_type = make_map(0);
         if (by_type) {
             for (int ti = 0; ti < CLJ_TYPE_COUNT; ti++) {
@@ -6830,28 +6810,19 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
                 size_t bp = g_memory_stats.bytes_peak_by_type[ti];
                 if (bc == 0 && bp == 0) continue;
 
-                int32_t bc_i = (bc > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bc;
-                int32_t bp_i = (bp > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bp;
-
-                size_t ac = g_memory_stats.allocations_by_type[ti];
-                size_t dc = g_memory_stats.deallocations_by_type[ti];
-                int32_t ac_i = (ac > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)ac;
-                int32_t dc_i = (dc > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)dc;
-
-                ID k_type = (ID)make_string(clj_type_name((CljType)ti));
-
                 CljPersistentMap *row = make_map(4);
                 if (!row) break;
-                ASSIGN(row, map_assoc(row, (ID)intern_symbol_global(":bytes-current"), fixnum(bc_i)));
-                ASSIGN(row, map_assoc(row, (ID)intern_symbol_global(":bytes-peak"), fixnum(bp_i)));
-                ASSIGN(row, map_assoc(row, (ID)intern_symbol_global(":alloc-count"), fixnum(ac_i)));
-                ASSIGN(row, map_assoc(row, (ID)intern_symbol_global(":dealloc-count"), fixnum(dc_i)));
-                ASSIGN(by_type, map_assoc(by_type, k_type, (ID)row));
+                ASSIGN(row, map_assoc(row, SYM_KW_BYTES_CURRENT, fixnum(CLAMP_FIXNUM(bc))));
+                ASSIGN(row, map_assoc(row, SYM_KW_BYTES_PEAK, fixnum(CLAMP_FIXNUM(bp))));
+                ASSIGN(row, map_assoc(row, SYM_KW_ALLOC_COUNT, fixnum(CLAMP_FIXNUM(g_memory_stats.allocations_by_type[ti]))));
+                ASSIGN(row, map_assoc(row, SYM_KW_DEALLOC_COUNT, fixnum(CLAMP_FIXNUM(g_memory_stats.deallocations_by_type[ti]))));
+                ASSIGN(by_type, map_assoc(by_type, (ID)make_string(clj_type_name((CljType)ti)), (ID)row));
             }
-            ASSIGN(ms, map_assoc(ms, k_bytes_by_type, by_type));
+            ASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_BY_TYPE, by_type));
         }
-
-        ASSIGN(m, map_assoc(m, k_memory_stats, (ID)ms));
+        
+        #undef CLAMP_FIXNUM
+        ASSIGN(m, map_assoc(m, SYM_KW_MEMORY_STATS, (ID)ms));
     }
 #endif
 

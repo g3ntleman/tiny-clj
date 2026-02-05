@@ -1,5 +1,4 @@
 #include "list.h"
-#include "vector_to_list.h"
 #include "object.h"
 #include "eval.h"
 #include "symbol.h"
@@ -24,6 +23,7 @@
 #include "seq.h"
 #include "namespace.h"
 #include "memory.h"
+#include "memory_profiler.h"
 #include "meta.h"
 #include "value.h"
 #include "environment.h"
@@ -2285,20 +2285,25 @@ ID eval_doseq(CljList *list, CljPersistentMap *env, EvalState *st, const EvalCon
     if (!binding_list || !body) {
         return NULL;
     }
-    // Convert vector binding to list if needed
-    CljList *binding_data = NULL;
-    if (TAG(binding_list) == CLJ_VECTOR_PERSISTENT) {
-        binding_data = as_list(vector_to_list((CljPersistentVector*)binding_list));
-    } else if (TAG(binding_list) == CLJ_LIST) {
-        binding_data = as_list(binding_list);
+    // Parse binding: [var coll] - support both vectors and lists without allocations
+    ID var = NULL;
+    ID coll_expr = NULL;
+
+    if (is_vector(binding_list)) {
+        CljPersistentVector *vec = as_vector(binding_list);
+        if (!vec || vector_count(vec) < 2) return NULL;
+        var = vector_nth(vec, 0);
+        coll_expr = vector_nth(vec, 1);
+    } else if (is_list_type(TAG(binding_list))) {
+        CljList *binding_data = as_list(binding_list);
+        if (!binding_data || !binding_data->first) return NULL;
+        var = binding_data->first;
+        CljList *rest_list = as_list(binding_data->rest);
+        if (!rest_list) return NULL;
+        coll_expr = rest_list->first;
     } else {
         return NULL;
     }
-    if (!binding_data->first || !binding_data->rest) {
-        return NULL;
-    }
-    CljObject *var = binding_data->first;
-    CljObject *coll_expr = list_get_element(binding_data, 1);
 
     // Evaluate collection expression in current env (preserve ctx for lexical lookup)
     ID coll_eval = eval_body(coll_expr, env, st, ctx);
@@ -2922,6 +2927,76 @@ ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalCont
     // eval_list already returns AUTORELEASE, so we just return it
     return result;
 }
+
+/**
+ * @brief Evaluate an expression and print heap memory growth
+ * 
+ * Special form: (heap expr)
+ * Measures heap memory consumption before and after evaluating expr.
+ * Prints: "Heap growth: X bytes (current: Y, peak: Z)"
+ * Returns the result of evaluating expr.
+ * 
+ * @param list The heap form list (heap expr)
+ * @param env The evaluation environment
+ * @param st The evaluation state
+ * @param ctx The evaluation context
+ * @return The result of evaluating expr (autoreleased) or NULL (nil)
+ */
+#ifdef DEBUG
+ID eval_heap(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+    // (heap expr)
+    if (!list || !st) {
+        return NULL;
+    }
+
+    // Validate arity: exactly 1 argument
+    int argc = list_count(list);
+    if (!validate_arity(argc - 1, 1, "heap")) { // -1 because list includes the 'heap' symbol
+        return NULL;
+    }
+
+    // Get the expression to measure (second element): (heap expr)
+    CljObject *expr = list_get_element(list, 1);
+    if (!expr) {
+        return NULL;
+    }
+
+    // Capture heap stats before evaluation
+    MemoryStats stats_before = memory_profiler_get_stats();
+    size_t bytes_before = stats_before.current_memory_usage;
+    size_t peak_before = stats_before.peak_memory_usage;
+
+    // Use provided env or fall back to current_ns->mappings (like eval_parsed does)
+    CljPersistentMap *eval_env = eval_env_or_ns_mappings(env, st);
+
+    // Evaluate the expression in the current lexical context.
+    ID result = eval_body((ID)expr, eval_env, st, ctx);
+
+    // Capture heap stats after evaluation
+    MemoryStats stats_after = memory_profiler_get_stats();
+    size_t bytes_after = stats_after.current_memory_usage;
+    size_t peak_after = stats_after.peak_memory_usage;
+
+    // Calculate heap growth
+    long long growth = (long long)bytes_after - (long long)bytes_before;
+    long long peak_growth = (long long)peak_after - (long long)peak_before;
+
+    // Print heap information
+    // Suppress output in test context (similar to time)
+    if (!g_suppress_time_output) {
+        printf("Heap growth: %lld bytes (current: %zu, peak: %zu, peak-growth: %lld)\n", 
+               growth, bytes_after, peak_after, peak_growth);
+    }
+    // Return the result of the evaluated expression
+    if (!result) {
+        return NULL;
+    }
+    if (IS_IMMEDIATE(result)) {
+        return result;
+    }
+    return result;
+}
+#endif // DEBUG
 
 // ============================================================================
 // FUNCTION CALL IMPLEMENTATION

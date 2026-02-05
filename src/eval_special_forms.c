@@ -564,6 +564,13 @@ ID eval_special_time(CljList *list, CljPersistentMap *env, EvalState *st, const 
     return eval_time(list, eval_env_or_ns_mappings(env, st), st, ctx);
 }
 
+#ifdef DEBUG
+ID eval_special_heap(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_heap: list must not be NULL");
+    return eval_heap(list, eval_env_or_ns_mappings(env, st), st, ctx);
+}
+#endif
+
 ID eval_special_dotimes(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_dotimes: list must not be NULL");
     (void)ctx;  // Unused

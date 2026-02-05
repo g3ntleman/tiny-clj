@@ -83,6 +83,9 @@ extern CljSymbol *SYM_NS;
 extern CljSymbol *SYM_BINDING;
 extern CljSymbol *SYM_GO;
 extern CljSymbol *SYM_TIME;
+#ifdef DEBUG
+extern CljSymbol *SYM_HEAP;
+#endif
 extern CljSymbol *SYM_DEREF;
 extern CljSymbol *SYM_NIL;
 extern CljSymbol *SYM_AMP;  // & for variadic parameters
@@ -160,6 +163,34 @@ extern CljSymbol *SYM_KW_DAY;
 extern CljSymbol *SYM_KW_HOUR;
 extern CljSymbol *SYM_KW_MINUTE;
 extern CljSymbol *SYM_KW_SECOND;
+
+// Runtime stats keyword symbols
+// Runtime stats keywords (always available)
+extern CljSymbol *SYM_KW_OS;
+extern CljSymbol *SYM_KW_VERSION;
+
+#ifdef DEBUG
+// Runtime stats keywords (DEBUG only)
+extern CljSymbol *SYM_KW_SYMBOLS;
+extern CljSymbol *SYM_KW_NAMESPACES;
+extern CljSymbol *SYM_KW_BYTES_CURRENT;
+extern CljSymbol *SYM_KW_BYTES_PEAK;
+
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+// Extended memory profiling keywords (DEBUG + MEMORY_PROFILING_ENABLED only)
+extern CljSymbol *SYM_KW_MEMORY_STATS;
+extern CljSymbol *SYM_KW_RAW_BYTES_CURRENT;
+extern CljSymbol *SYM_KW_RAW_BYTES_PEAK;
+extern CljSymbol *SYM_KW_RAW_BLOCKS_CURRENT;
+extern CljSymbol *SYM_KW_RAW_BLOCKS_PEAK;
+extern CljSymbol *SYM_KW_BYTES_BY_TYPE;
+extern CljSymbol *SYM_KW_TOTAL_ALLOCATIONS;
+extern CljSymbol *SYM_KW_TOTAL_DEALLOCATIONS;
+extern CljSymbol *SYM_KW_MEMORY_LEAKS;
+extern CljSymbol *SYM_KW_ALLOC_COUNT;
+extern CljSymbol *SYM_KW_DEALLOC_COUNT;
+#endif // MEMORY_PROFILING_ENABLED
+#endif // DEBUG
 
 // Namespace name symbols
 extern CljSymbol *SYM_CLOJURE_CORE;

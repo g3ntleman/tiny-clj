@@ -57,6 +57,9 @@ CljSymbol *SYM_VAR = NULL;
 CljSymbol *SYM_NS = NULL;
 CljSymbol *SYM_BINDING = NULL;
 CljSymbol *SYM_TIME = NULL;
+#ifdef DEBUG
+CljSymbol *SYM_HEAP = NULL;
+#endif
 CljSymbol *SYM_GO = NULL;
 CljSymbol *SYM_DEREF = NULL;
 CljSymbol *SYM_NIL = NULL;
@@ -135,6 +138,34 @@ CljSymbol *SYM_KW_DAY = NULL;
 CljSymbol *SYM_KW_HOUR = NULL;
 CljSymbol *SYM_KW_MINUTE = NULL;
 CljSymbol *SYM_KW_SECOND = NULL;
+
+// Runtime stats keywords
+// Runtime stats keywords (always available)
+CljSymbol *SYM_KW_OS = NULL;
+CljSymbol *SYM_KW_VERSION = NULL;
+
+#ifdef DEBUG
+// Runtime stats keywords (DEBUG only)
+CljSymbol *SYM_KW_SYMBOLS = NULL;
+CljSymbol *SYM_KW_NAMESPACES = NULL;
+CljSymbol *SYM_KW_BYTES_CURRENT = NULL;
+CljSymbol *SYM_KW_BYTES_PEAK = NULL;
+
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+// Extended memory profiling keywords (DEBUG + MEMORY_PROFILING_ENABLED only)
+CljSymbol *SYM_KW_MEMORY_STATS = NULL;
+CljSymbol *SYM_KW_RAW_BYTES_CURRENT = NULL;
+CljSymbol *SYM_KW_RAW_BYTES_PEAK = NULL;
+CljSymbol *SYM_KW_RAW_BLOCKS_CURRENT = NULL;
+CljSymbol *SYM_KW_RAW_BLOCKS_PEAK = NULL;
+CljSymbol *SYM_KW_BYTES_BY_TYPE = NULL;
+CljSymbol *SYM_KW_TOTAL_ALLOCATIONS = NULL;
+CljSymbol *SYM_KW_TOTAL_DEALLOCATIONS = NULL;
+CljSymbol *SYM_KW_MEMORY_LEAKS = NULL;
+CljSymbol *SYM_KW_ALLOC_COUNT = NULL;
+CljSymbol *SYM_KW_DEALLOC_COUNT = NULL;
+#endif // MEMORY_PROFILING_ENABLED
+#endif // DEBUG
 
 // Global symbols for namespace names (for fast comparison)
 CljSymbol *SYM_CLOJURE_CORE = NULL;
@@ -218,6 +249,7 @@ static struct {
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "ns" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "binding" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "time" }, .eval_fn = NULL } },
+    { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "heap" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "go" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "and" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "or" }, .eval_fn = NULL } },
@@ -264,9 +296,10 @@ static struct {
 #define SYM_NS_IDX 19
 #define SYM_BINDING_IDX 20
 #define SYM_TIME_IDX 21
-#define SYM_GO_IDX 22
-#define SYM_AND_IDX 23
-#define SYM_OR_IDX 24
+#define SYM_HEAP_IDX 22
+#define SYM_GO_IDX 23
+#define SYM_AND_IDX 24
+#define SYM_OR_IDX 25
 
 #define G_SPECIAL_SYMBOLS_COUNT (sizeof(g_special_symbols) / sizeof(g_special_symbols[0]))
 
@@ -486,6 +519,34 @@ DEFINE_STATIC_SYMBOL(sym_kw_hour_data, ":hour");
 DEFINE_STATIC_SYMBOL(sym_kw_minute_data, ":minute");
 DEFINE_STATIC_SYMBOL(sym_kw_second_data, ":second");
 
+// Runtime stats keywords
+// Runtime stats keywords (always available)
+DEFINE_STATIC_SYMBOL(sym_kw_os_data, ":os");
+DEFINE_STATIC_SYMBOL(sym_kw_version_data, ":version");
+
+#ifdef DEBUG
+// Runtime stats keywords (DEBUG only)
+DEFINE_STATIC_SYMBOL(sym_kw_symbols_data, ":symbols");
+DEFINE_STATIC_SYMBOL(sym_kw_namespaces_data, ":namespaces");
+DEFINE_STATIC_SYMBOL(sym_kw_bytes_current_data, ":bytes-current");
+DEFINE_STATIC_SYMBOL(sym_kw_bytes_peak_data, ":bytes-peak");
+
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+// Extended memory profiling keywords (DEBUG + MEMORY_PROFILING_ENABLED only)
+DEFINE_STATIC_SYMBOL(sym_kw_memory_stats_data, ":memory-stats");
+DEFINE_STATIC_SYMBOL(sym_kw_raw_bytes_current_data, ":raw-bytes-current");
+DEFINE_STATIC_SYMBOL(sym_kw_raw_bytes_peak_data, ":raw-bytes-peak");
+DEFINE_STATIC_SYMBOL(sym_kw_raw_blocks_current_data, ":raw-blocks-current");
+DEFINE_STATIC_SYMBOL(sym_kw_raw_blocks_peak_data, ":raw-blocks-peak");
+DEFINE_STATIC_SYMBOL(sym_kw_bytes_by_type_data, ":bytes-by-type");
+DEFINE_STATIC_SYMBOL(sym_kw_total_allocations_data, ":total-allocations");
+DEFINE_STATIC_SYMBOL(sym_kw_total_deallocations_data, ":total-deallocations");
+DEFINE_STATIC_SYMBOL(sym_kw_memory_leaks_data, ":memory-leaks");
+DEFINE_STATIC_SYMBOL(sym_kw_alloc_count_data, ":alloc-count");
+DEFINE_STATIC_SYMBOL(sym_kw_dealloc_count_data, ":dealloc-count");
+#endif // MEMORY_PROFILING_ENABLED
+#endif // DEBUG
+
 // Additional symbols for optimization (used in hot path)
 DEFINE_STATIC_SYMBOL(sym_ns_star_data, "*ns*");
 
@@ -540,6 +601,9 @@ void init_special_symbols() {
     SYM_NS = (CljSymbol*)&g_special_symbols[SYM_NS_IDX].sym;
     SYM_BINDING = (CljSymbol*)&g_special_symbols[SYM_BINDING_IDX].sym;
     SYM_TIME = (CljSymbol*)&g_special_symbols[SYM_TIME_IDX].sym;
+#ifdef DEBUG
+    SYM_HEAP = (CljSymbol*)&g_special_symbols[SYM_HEAP_IDX].sym;
+#endif
     SYM_GO = (CljSymbol*)&g_special_symbols[SYM_GO_IDX].sym;
     SYM_AND = (CljSymbol*)&g_special_symbols[SYM_AND_IDX].sym;
     SYM_OR = (CljSymbol*)&g_special_symbols[SYM_OR_IDX].sym;
@@ -753,6 +817,34 @@ void init_special_symbols() {
 
     INIT_SYMBOL(SYM_KW_SECOND, sym_kw_second_data);
 
+    // Runtime stats keywords
+    // Runtime stats keywords (always available)
+    INIT_SYMBOL(SYM_KW_OS, sym_kw_os_data);
+    INIT_SYMBOL(SYM_KW_VERSION, sym_kw_version_data);
+
+#ifdef DEBUG
+    // Runtime stats keywords (DEBUG only)
+    INIT_SYMBOL(SYM_KW_SYMBOLS, sym_kw_symbols_data);
+    INIT_SYMBOL(SYM_KW_NAMESPACES, sym_kw_namespaces_data);
+    INIT_SYMBOL(SYM_KW_BYTES_CURRENT, sym_kw_bytes_current_data);
+    INIT_SYMBOL(SYM_KW_BYTES_PEAK, sym_kw_bytes_peak_data);
+
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    // Extended memory profiling keywords (DEBUG + MEMORY_PROFILING_ENABLED only)
+    INIT_SYMBOL(SYM_KW_MEMORY_STATS, sym_kw_memory_stats_data);
+    INIT_SYMBOL(SYM_KW_RAW_BYTES_CURRENT, sym_kw_raw_bytes_current_data);
+    INIT_SYMBOL(SYM_KW_RAW_BYTES_PEAK, sym_kw_raw_bytes_peak_data);
+    INIT_SYMBOL(SYM_KW_RAW_BLOCKS_CURRENT, sym_kw_raw_blocks_current_data);
+    INIT_SYMBOL(SYM_KW_RAW_BLOCKS_PEAK, sym_kw_raw_blocks_peak_data);
+    INIT_SYMBOL(SYM_KW_BYTES_BY_TYPE, sym_kw_bytes_by_type_data);
+    INIT_SYMBOL(SYM_KW_TOTAL_ALLOCATIONS, sym_kw_total_allocations_data);
+    INIT_SYMBOL(SYM_KW_TOTAL_DEALLOCATIONS, sym_kw_total_deallocations_data);
+    INIT_SYMBOL(SYM_KW_MEMORY_LEAKS, sym_kw_memory_leaks_data);
+    INIT_SYMBOL(SYM_KW_ALLOC_COUNT, sym_kw_alloc_count_data);
+    INIT_SYMBOL(SYM_KW_DEALLOC_COUNT, sym_kw_dealloc_count_data);
+#endif // MEMORY_PROFILING_ENABLED
+#endif // DEBUG
+
     // Additional symbols for hot path optimization
     INIT_SYMBOL(SYM_NS_STAR, sym_ns_star_data);
     SYM_NS_STAR->base.flags |= CLJ_FLAG_DYNAMIC;
@@ -813,6 +905,11 @@ void init_special_symbols() {
     if (is_special_symbol(SYM_TIME)) {
         ((CljSpecialSymbol*)SYM_TIME)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_time;
     }
+#ifdef DEBUG
+    if (is_special_symbol(SYM_HEAP)) {
+        ((CljSpecialSymbol*)SYM_HEAP)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_heap;
+    }
+#endif
     if (is_special_symbol(SYM_BINDING)) {
         ((CljSpecialSymbol*)SYM_BINDING)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_binding;
     }

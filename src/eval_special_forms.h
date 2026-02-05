@@ -39,6 +39,9 @@ ID eval_special_loop(CljList *list, CljPersistentMap *env, EvalState *st, const 
 ID eval_special_throw(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_go(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+#ifdef DEBUG
+ID eval_special_heap(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+#endif
 ID eval_special_dotimes(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_try(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_binding(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);

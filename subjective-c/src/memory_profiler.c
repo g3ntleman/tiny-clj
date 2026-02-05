@@ -20,6 +20,23 @@ bool g_memory_profiling_enabled = false;
 bool g_memory_leak_reporting_enabled = true;
 bool g_memory_verbose_mode = false;
 
+// Lightweight heap tracking (always enabled in DEBUG, even without full profiling)
+#ifdef DEBUG
+static inline void memory_track_heap_simple(void *obj, size_t size, bool is_alloc) {
+    if (!obj || size == 0) return;
+    if (is_alloc) {
+        g_memory_stats.current_memory_usage += size;
+        if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage)
+            g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
+    } else {
+        if (g_memory_stats.current_memory_usage >= size)
+            g_memory_stats.current_memory_usage -= size;
+        else
+            g_memory_stats.current_memory_usage = 0;
+    }
+}
+#endif
+
 #if MEMORY_PROFILING_ENABLED
 
 #if defined(memory_profiler_track_raw_alloc)
@@ -98,8 +115,13 @@ void memory_profiler_cleanup(void) {
 }
 
 MemoryStats memory_profiler_get_stats(void) {
+#ifdef DEBUG
+    // In DEBUG, always return current/peak heap usage (even without full profiling)
+    return g_memory_stats;
+#else
     if (!g_memory_profiling_enabled) { MemoryStats e = {0}; return e; }
     return g_memory_stats;
+#endif
 }
 
 static void update_memory_leak_stats(void) {
@@ -193,8 +215,20 @@ void memory_profiler_track_object_creation(CljObject *obj) {
 }
 
 void memory_profiler_track_object_creation_sized(CljObject *obj, size_t size) {
-    if (!g_memory_profiling_enabled || !obj) return;
+    if (!obj) return;
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;
+    
+    size_t obj_size = (size > 0) ? size : sizeof(CljObject);
+    { size_t r = platform_allocated_size(obj); if (r > 0) obj_size = r; }
+    
+#ifdef DEBUG
+    // Lightweight heap tracking (always in DEBUG, even without full profiling)
+    memory_track_heap_simple(obj, obj_size, true);
+#endif
+    
+    // Full profiling (only when enabled)
+    if (!g_memory_profiling_enabled) return;
+    
     if (obj->type < 0 || obj->type >= CLJ_TYPE_COUNT) {
         fprintf(stderr, "memory_profiler: invalid type %d for object %p\n",
                 (int)obj->type, (void*)obj);
@@ -202,11 +236,6 @@ void memory_profiler_track_object_creation_sized(CljObject *obj, size_t size) {
         abort();
     }
     g_memory_stats.total_allocations++;
-    size_t obj_size = (size > 0) ? size : sizeof(CljObject);
-    { size_t r = platform_allocated_size(obj); if (r > 0) obj_size = r; }
-    g_memory_stats.current_memory_usage += obj_size;
-    if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage)
-        g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
     if (obj->type < CLJ_TYPE_COUNT) {
         g_memory_stats.bytes_current_by_type[obj->type] += obj_size;
         if (g_memory_stats.bytes_current_by_type[obj->type] > g_memory_stats.bytes_peak_by_type[obj->type])
@@ -218,8 +247,20 @@ void memory_profiler_track_object_creation_sized(CljObject *obj, size_t size) {
 }
 
 void memory_profiler_track_object_destruction(CljObject *obj) {
-    if (!g_memory_profiling_enabled || !obj) return;
+    if (!obj) return;
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;
+    
+    size_t obj_size = sizeof(CljObject);
+    
+#ifdef DEBUG
+    // Lightweight heap tracking (always in DEBUG, even without full profiling)
+    { size_t r = platform_allocated_size(obj); if (r > 0) obj_size = r; }
+    memory_track_heap_simple(obj, obj_size, false);
+#endif
+    
+    // Full profiling (only when enabled)
+    if (!g_memory_profiling_enabled) return;
+    
     if (obj->type < 0 || obj->type >= CLJ_TYPE_COUNT) {
         fprintf(stderr, "memory_profiler: invalid type %d for object %p in destruction\n",
                 (int)obj->type, (void*)obj);
@@ -227,7 +268,6 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
         abort();
     }
     g_memory_stats.object_destructions++;
-    size_t obj_size = sizeof(CljObject);
     uint8_t tt = obj->type;
     (void)obj_blocks_untrack(obj, &obj_size, &tt);
     memory_profiler_track_deallocation(obj_size);
@@ -242,8 +282,20 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
 }
 
 void memory_profiler_track_object_zombify(CljObject *obj) {
-    if (!g_memory_profiling_enabled || !obj) return;
+    if (!obj) return;
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;
+    
+    size_t obj_size = sizeof(CljObject);
+    
+#ifdef DEBUG
+    // Lightweight heap tracking (always in DEBUG, even without full profiling)
+    { size_t r = platform_allocated_size(obj); if (r > 0) obj_size = r; }
+    memory_track_heap_simple(obj, obj_size, false);
+#endif
+    
+    // Full profiling (only when enabled)
+    if (!g_memory_profiling_enabled) return;
+    
     if (obj->type < 0 || obj->type >= CLJ_TYPE_COUNT) {
         fprintf(stderr, "memory_profiler: invalid type %d for object %p in zombify\n",
                 (int)obj->type, (void*)obj);
@@ -251,7 +303,6 @@ void memory_profiler_track_object_zombify(CljObject *obj) {
         abort();
     }
     g_memory_stats.object_destructions++;
-    size_t obj_size = sizeof(CljObject);
     uint8_t tt = obj->type;
     (void)obj_blocks_untrack(obj, &obj_size, &tt);
     memory_profiler_track_deallocation(obj_size);
@@ -478,15 +529,63 @@ void memory_profiling_cleanup_with_hooks(void) {}
 void memory_test_start(const char *n) { (void)n; }
 void memory_test_end(const char *n) { (void)n; }
 void memory_profiler_init(void) {}
-void memory_profiler_reset(void) {}
+void memory_profiler_reset(void) {
+#ifdef DEBUG
+    // Reset lightweight heap tracking (always in DEBUG)
+    g_memory_stats.current_memory_usage = 0;
+    g_memory_stats.peak_memory_usage = 0;
+#endif
+}
 void memory_profiler_cleanup(void) {}
-MemoryStats memory_profiler_get_stats(void) { MemoryStats e = {0}; return e; }
+MemoryStats memory_profiler_get_stats(void) {
+#ifdef DEBUG
+    // In DEBUG, always return current/peak heap usage (even without full profiling)
+    return g_memory_stats;
+#else
+    MemoryStats e = {0}; return e;
+#endif
+}
 void memory_profiler_print_stats(const char *n) { (void)n; }
 void memory_profiler_track_deallocation(size_t s) { (void)s; }
 void memory_profiler_track_object_creation(CljObject *o) { (void)o; }
-void memory_profiler_track_object_creation_sized(CljObject *o, size_t s) { (void)o;(void)s; }
-void memory_profiler_track_object_destruction(CljObject *o) { (void)o; }
-void memory_profiler_track_object_zombify(CljObject *o) { (void)o; }
+void memory_profiler_track_object_creation_sized(CljObject *o, size_t s) {
+#ifdef DEBUG
+    // Lightweight heap tracking (always in DEBUG, even without full profiling)
+    if (o && !is_immediate((CljValue)o) && !is_singleton(o)) {
+        size_t obj_size = (s > 0) ? s : sizeof(CljObject);
+        { size_t r = platform_allocated_size(o); if (r > 0) obj_size = r; }
+        memory_track_heap_simple(o, obj_size, true);
+    }
+#else
+    (void)o;(void)s;
+#endif
+}
+
+void memory_profiler_track_object_destruction(CljObject *o) {
+#ifdef DEBUG
+    // Lightweight heap tracking (always in DEBUG, even without full profiling)
+    if (o && !is_immediate((CljValue)o) && !is_singleton(o)) {
+        size_t obj_size = sizeof(CljObject);
+        { size_t r = platform_allocated_size(o); if (r > 0) obj_size = r; }
+        memory_track_heap_simple(o, obj_size, false);
+    }
+#else
+    (void)o;
+#endif
+}
+
+void memory_profiler_track_object_zombify(CljObject *o) {
+#ifdef DEBUG
+    // Lightweight heap tracking: treat zombify as deallocation for heap stats
+    if (o && !is_immediate((CljValue)o) && !is_singleton(o)) {
+        size_t obj_size = sizeof(CljObject);
+        { size_t r = platform_allocated_size(o); if (r > 0) obj_size = r; }
+        memory_track_heap_simple(o, obj_size, false);
+    }
+#else
+    (void)o;
+#endif
+}
 void memory_profiler_track_retain(CljObject *o) { (void)o; }
 void memory_profiler_track_release(CljObject *o) { (void)o; }
 void memory_profiler_track_autorelease(CljObject *o) { (void)o; }
