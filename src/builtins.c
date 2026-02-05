@@ -120,6 +120,11 @@ ID native_last(ID *args, unsigned int argc);
 // clojure.core namespace management (used by :native stubs)
 ID native_ns_unload(ID *args, unsigned int argc);
 
+// GPIO functions
+ID native_gpio_watch(ID *args, unsigned int argc);
+ID native_gpio_unwatch(ID *args, unsigned int argc);
+ID native_gpio_simulate(ID *args, unsigned int argc);
+
 ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
 ID native_mul_variadic(ID *args, unsigned int argc);
@@ -1525,19 +1530,15 @@ ID native_list(ID *args, unsigned int argc)
 {
     CLJ_ASSERT(args != NULL);
 
-    // If no arguments, return empty list
-    if (argc == 0)
-    {
-        return empty_list();
-    }
+    if (argc == 0) return empty_list();
 
-    // Build list backwards (from end to start) using make_list
+    // Build list backwards. Each node must be autoreleased so the chain
+    // is properly balanced: make_list RETAINs rest, pool drain RELEASEs it.
     CljList *result = NULL;
-    for (int i = argc - 1; i >= 0; i--)
-    {
-        result = make_list(args[i], result);
+    for (int i = argc - 1; i >= 0; i--) {
+        result = AUTORELEASE(make_list(args[i], result));
     }
-    return AUTORELEASE(result);
+    return result;
 }
 
 ID native_reduce(ID *args, unsigned int argc)
@@ -3682,6 +3683,23 @@ static StaticSymbolData sym_get_thread_bindings_data = {
             .unqualified = NULL,
             .cname = "get-thread-bindings"}};
 
+// GPIO functions
+static StaticSymbolData sym_gpio_watch_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "gpio-watch"}};
+static StaticSymbolData sym_gpio_unwatch_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "gpio-unwatch"}};
+static StaticSymbolData sym_gpio_simulate_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "gpio-simulate!"}};
+
 // Compile-time initialized lookup table (DRY: avoids runtime initialization)
 // Uses static symbol data structures (&sym_*_data.sym) for compile-time references
 static const NativeFunctionEntry native_function_table[] = {
@@ -3734,6 +3752,9 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_filter_data.sym, native_filter},
     {&sym_group_by_data.sym, native_group_by},
     {&sym_last_data.sym, native_last},
+    {&sym_gpio_watch_data.sym, native_gpio_watch},
+    {&sym_gpio_unwatch_data.sym, native_gpio_unwatch},
+    {&sym_gpio_simulate_data.sym, native_gpio_simulate},
     {&sym_ns_unload_data.sym, native_ns_unload},
     {&sym_plus_data.sym, native_add_variadic},
     {&sym_minus_data.sym, native_sub_variadic},
@@ -6742,34 +6763,39 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         throw_exception(EXCEPTION_ARITY, "tinyclj.runtime/stats takes no arguments", __FILE__, __LINE__, 0);
     }
 
-    CljPersistentMap *m = make_map(8);
-    if (!m) return NULL;
-
-    ASSIGN(m, map_assoc(m, SYM_KW_OS, (ID)make_string(
+    const char *os_name =
 #if defined(__APPLE__)
-        "darwin"
+        "darwin";
 #elif defined(__linux__)
-        "linux"
+        "linux";
 #else
-        "unknown"
+        "unknown";
 #endif
-    )));
-
-    ASSIGN(m, map_assoc(m, SYM_KW_VERSION, (ID)make_string("0.3")));
 
     // Build time (best-effort): expose as an Instant.
     // We use a single gettimeofday() call here so it's guaranteed to be <= (now).
-    // Note: This is intended for diagnostics; it does not need to be a compile-time constant.
-    {
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        int32_t days = (int32_t)(tv.tv_sec / 86400);
-        int32_t sec_in_day = tv.tv_sec % 86400;
-        int32_t millis = sec_in_day * 1000 + tv.tv_usec / 1000;
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int32_t days = (int32_t)(tv.tv_sec / 86400);
+    int32_t sec_in_day = tv.tv_sec % 86400;
+    int32_t millis = sec_in_day * 1000 + tv.tv_usec / 1000;
 
-        ID k_build_time = intern_symbol_global(":build-time");
-        ASSIGN(m, map_assoc(m, k_build_time, (ID)make_instant(days, (uint32_t)millis)));
-    }
+    ID v_os = (ID)make_string(os_name);
+    ID v_ver = (ID)make_string("0.3");
+    ID k_build_time = intern_symbol_global(":build-time");
+    ID v_build_time = (ID)make_instant(days, (uint32_t)millis);
+
+    // Compact construction (rc=1)
+    CljPersistentMap *m = make_map_from_kv(3,
+        SYM_KW_OS, v_os,
+        SYM_KW_VERSION, v_ver,
+        k_build_time, v_build_time);
+
+    RELEASE(v_os);
+    RELEASE(v_ver);
+    RELEASE(v_build_time);
+
+    if (!m) return NULL;
 
 #if defined(DEBUG)
     // Debug diagnostics: symbols, namespaces, heap (always available)
@@ -7238,6 +7264,33 @@ static void register_builtin(const char *cname, BuiltinFn func)
         // Failed to register builtin
     }
 }
+
+// GPIO functions for clojure.core
+//
+// - Host builds: keep lightweight stubs (used by macOS tests via gpio-simulate!)
+// - ESP32 builds: real implementations live in src/gpio_esp32.c
+#ifndef ESP32_BUILD
+ID native_gpio_watch(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 2, "gpio-watch");
+    (void)args;
+    return fixnum(1);
+}
+
+ID native_gpio_unwatch(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "gpio-unwatch");
+    (void)args;
+    return NULL;
+}
+
+ID native_gpio_simulate(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 2, "gpio-simulate!");
+    (void)args;
+    return NULL;
+}
+#endif
 
 void register_builtins()
 {

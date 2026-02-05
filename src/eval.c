@@ -2847,18 +2847,14 @@ ID eval_dotimes(CljList *list, CljPersistentMap *env, EvalState *st, const EvalC
         dotimes_frame.values[0] = frame_encode_value(fixnum((int32_t)i));
 
         WITH_AUTORELEASE_POOL({
-            ID body_result = NULL;
             if (is_list_like(body_list)) {
                 CljList *body_items = as_list(body_list);
                 LIST_FOR_EACH(body_items, body_expr) {
-                    if (!body_expr) continue;
-                    RELEASE(body_result);
-                    body_result = eval_body(body_expr, env, eval_st, &dotimes_ctx);
+                    if (body_expr) eval_body(body_expr, env, eval_st, &dotimes_ctx);
                 }
             } else if (body_list) {
-                body_result = eval_body(body_list, env, eval_st, &dotimes_ctx);
+                eval_body(body_list, env, eval_st, &dotimes_ctx);
             }
-            RELEASE(body_result);
         });
     }
 
@@ -2944,57 +2940,35 @@ ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalCont
  */
 #ifdef DEBUG
 ID eval_heap(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
-    // (heap expr)
-    if (!list || !st) {
-        return NULL;
-    }
+    // (heap expr) - Memory leak detector.
+    // Evaluates expr twice: first to warm up caches, second to measure.
+    // Returns nil. Any non-zero growth indicates a leak.
+    if (!list || !st) return NULL;
 
-    // Validate arity: exactly 1 argument
     int argc = list_count(list);
-    if (!validate_arity(argc - 1, 1, "heap")) { // -1 because list includes the 'heap' symbol
-        return NULL;
-    }
+    if (!validate_arity(argc - 1, 1, "heap")) return NULL;
 
-    // Get the expression to measure (second element): (heap expr)
     CljObject *expr = list_get_element(list, 1);
-    if (!expr) {
-        return NULL;
-    }
-
-    // Capture heap stats before evaluation
-    MemoryStats stats_before = memory_profiler_get_stats();
-    size_t bytes_before = stats_before.current_memory_usage;
-    size_t peak_before = stats_before.peak_memory_usage;
-
-    // Use provided env or fall back to current_ns->mappings (like eval_parsed does)
     CljPersistentMap *eval_env = eval_env_or_ns_mappings(env, st);
 
-    // Evaluate the expression in the current lexical context.
-    ID result = eval_body((ID)expr, eval_env, st, ctx);
+    // Warmup pass - clears any accumulated autoreleases from previous evals
+    WITH_AUTORELEASE_POOL({ (void)eval_body((ID)expr, eval_env, st, ctx); });
 
-    // Capture heap stats after evaluation
+    // Measurement pass
+    size_t bytes_before = memory_profiler_get_stats().current_memory_usage;
+    size_t peak_before = memory_profiler_get_stats().peak_memory_usage;
+    WITH_AUTORELEASE_POOL({ (void)eval_body((ID)expr, eval_env, st, ctx); });
     MemoryStats stats_after = memory_profiler_get_stats();
-    size_t bytes_after = stats_after.current_memory_usage;
-    size_t peak_after = stats_after.peak_memory_usage;
 
-    // Calculate heap growth
-    long long growth = (long long)bytes_after - (long long)bytes_before;
-    long long peak_growth = (long long)peak_after - (long long)peak_before;
+    long long growth = (long long)stats_after.current_memory_usage - (long long)bytes_before;
+    long long peak_growth = (long long)stats_after.peak_memory_usage - (long long)peak_before;
 
-    // Print heap information
-    // Suppress output in test context (similar to time)
     if (!g_suppress_time_output) {
-        printf("Heap growth: %lld bytes (current: %zu, peak: %zu, peak-growth: %lld)\n", 
-               growth, bytes_after, peak_after, peak_growth);
+        printf("Heap growth: %lld bytes (current: %zu, peak: %zu, peak-growth: %lld)\n",
+               growth, stats_after.current_memory_usage, stats_after.peak_memory_usage, peak_growth);
     }
-    // Return the result of the evaluated expression
-    if (!result) {
-        return NULL;
-    }
-    if (IS_IMMEDIATE(result)) {
-        return result;
-    }
-    return result;
+
+    return NULL;
 }
 #endif // DEBUG
 
