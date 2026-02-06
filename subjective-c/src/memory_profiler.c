@@ -37,6 +37,45 @@ static inline void memory_track_heap_simple(void *obj, size_t size, bool is_allo
 }
 #endif
 
+#if defined(DEBUG) || MEMORY_PROFILING_ENABLED
+typedef struct { void *ptr; size_t size; } RawBlock;
+static RawBlock *g_raw_blocks = NULL;
+static size_t g_raw_blocks_count = 0, g_raw_blocks_capacity = 0;
+
+static bool raw_blocks_ensure_capacity(size_t needed) {
+    if (needed <= g_raw_blocks_capacity) return true;
+    size_t nc = (g_raw_blocks_capacity == 0) ? 256 : g_raw_blocks_capacity * 2;
+    while (nc < needed) nc *= 2;
+    RawBlock *nb = (RawBlock*)realloc(g_raw_blocks, nc * sizeof(RawBlock));
+    if (!nb) return false;
+    g_raw_blocks = nb;
+    g_raw_blocks_capacity = nc;
+    return true;
+}
+
+static long raw_blocks_find(void *ptr) {
+    if (!ptr) return -1;
+    for (size_t i = 0; i < g_raw_blocks_count; i++)
+        if (g_raw_blocks[i].ptr == ptr) return (long)i;
+    return -1;
+}
+
+static void raw_blocks_update_peaks(void) {
+    if (g_memory_stats.raw_bytes_current > g_memory_stats.raw_bytes_peak)
+        g_memory_stats.raw_bytes_peak = g_memory_stats.raw_bytes_current;
+    if (g_memory_stats.raw_blocks_current > g_memory_stats.raw_blocks_peak)
+        g_memory_stats.raw_blocks_peak = g_memory_stats.raw_blocks_current;
+}
+
+static void raw_blocks_reset(void) {
+    g_raw_blocks_count = 0;
+    g_memory_stats.raw_blocks_current = 0;
+    g_memory_stats.raw_bytes_current = 0;
+    g_memory_stats.raw_blocks_peak = 0;
+    g_memory_stats.raw_bytes_peak = 0;
+}
+#endif
+
 #if MEMORY_PROFILING_ENABLED
 
 #if defined(memory_profiler_track_raw_alloc)
@@ -344,36 +383,6 @@ void memory_profiler_track_autorelease(CljObject *obj) {
     if (obj->type < CLJ_TYPE_COUNT) g_memory_stats.autoreleases_by_type[obj->type]++;
 }
 
-/* Raw heap (malloc/calloc/realloc/free) */
-typedef struct { void *ptr; size_t size; } RawBlock;
-static RawBlock *g_raw_blocks = NULL;
-static size_t g_raw_blocks_count = 0, g_raw_blocks_capacity = 0;
-
-static bool raw_blocks_ensure_capacity(size_t needed) {
-    if (needed <= g_raw_blocks_capacity) return true;
-    size_t nc = (g_raw_blocks_capacity == 0) ? 256 : g_raw_blocks_capacity * 2;
-    while (nc < needed) nc *= 2;
-    RawBlock *nb = (RawBlock*)realloc(g_raw_blocks, nc * sizeof(RawBlock));
-    if (!nb) return false;
-    g_raw_blocks = nb;
-    g_raw_blocks_capacity = nc;
-    return true;
-}
-
-static long raw_blocks_find(void *ptr) {
-    if (!ptr) return -1;
-    for (size_t i = 0; i < g_raw_blocks_count; i++)
-        if (g_raw_blocks[i].ptr == ptr) return (long)i;
-    return -1;
-}
-
-static void raw_blocks_update_peaks(void) {
-    if (g_memory_stats.raw_bytes_current > g_memory_stats.raw_bytes_peak)
-        g_memory_stats.raw_bytes_peak = g_memory_stats.raw_bytes_current;
-    if (g_memory_stats.raw_blocks_current > g_memory_stats.raw_blocks_peak)
-        g_memory_stats.raw_blocks_peak = g_memory_stats.raw_blocks_current;
-}
-
 void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, int line) {
     (void)file;(void)line;
     if (!g_memory_profiling_enabled || !ptr) return;
@@ -544,6 +553,7 @@ void memory_profiler_reset(void) {
     // Reset lightweight heap tracking (always in DEBUG)
     g_memory_stats.current_memory_usage = 0;
     g_memory_stats.peak_memory_usage = 0;
+    raw_blocks_reset();
 #endif
 }
 void memory_profiler_cleanup(void) {}

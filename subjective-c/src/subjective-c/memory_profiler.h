@@ -83,11 +83,9 @@ void memory_profiler_track_retain(CljObject *obj);
 void memory_profiler_track_release(CljObject *obj);
 void memory_profiler_track_autorelease(CljObject *obj);
 
-#if MEMORY_PROFILING_ENABLED
 void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, int line);
 void memory_profiler_track_raw_free(void *ptr, const char *file, int line);
 void memory_profiler_track_raw_realloc(void *old_ptr, void *new_ptr, size_t new_size, const char *file, int line);
-#endif
 
 void memory_profiler_check_leaks(const char *location);
 bool memory_profiler_has_leaks(void);

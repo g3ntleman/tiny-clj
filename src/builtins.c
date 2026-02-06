@@ -6811,15 +6811,17 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     ASSIGN(m, map_assoc(m, SYM_KW_BYTES_PEAK, fixnum(fp)));
 #endif
 
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
-    // Extended profiling stats (nested map with per-type breakdown)
+#if defined(DEBUG)
+    // Memory stats: always include a minimal map; extend when profiling is enabled.
     CljPersistentMap *ms = make_map(12);
     if (ms) {
-        // Raw allocator stats
-        #define CLAMP_FIXNUM(val) ((val) > (size_t)FIXNUM_MAX ? (int32_t)FIXNUM_MAX : (int32_t)(val))
-        
         ASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_CURRENT, fixnum(fc)));
         ASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_PEAK, fixnum(fp)));
+
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+        // Extended profiling stats (nested map with per-type breakdown)
+        #define CLAMP_FIXNUM(val) ((val) > (size_t)FIXNUM_MAX ? (int32_t)FIXNUM_MAX : (int32_t)(val))
+
         ASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BYTES_CURRENT, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_bytes_current))));
         ASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BYTES_PEAK, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_bytes_peak))));
         ASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BLOCKS_CURRENT, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_blocks_current))));
@@ -6846,8 +6848,10 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
             }
             ASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_BY_TYPE, by_type));
         }
-        
+
         #undef CLAMP_FIXNUM
+#endif
+
         ASSIGN(m, map_assoc(m, SYM_KW_MEMORY_STATS, (ID)ms));
     }
 #endif

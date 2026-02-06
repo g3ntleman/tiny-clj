@@ -152,10 +152,10 @@ CljSymbol *SYM_KW_SYMBOLS = NULL;
 CljSymbol *SYM_KW_NAMESPACES = NULL;
 CljSymbol *SYM_KW_BYTES_CURRENT = NULL;
 CljSymbol *SYM_KW_BYTES_PEAK = NULL;
+CljSymbol *SYM_KW_MEMORY_STATS = NULL;
 
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 // Extended memory profiling keywords (DEBUG + MEMORY_PROFILING_ENABLED only)
-CljSymbol *SYM_KW_MEMORY_STATS = NULL;
 CljSymbol *SYM_KW_RAW_BYTES_CURRENT = NULL;
 CljSymbol *SYM_KW_RAW_BYTES_PEAK = NULL;
 CljSymbol *SYM_KW_RAW_BLOCKS_CURRENT = NULL;
@@ -534,10 +534,10 @@ DEFINE_STATIC_SYMBOL(sym_kw_symbols_data, ":symbols");
 DEFINE_STATIC_SYMBOL(sym_kw_namespaces_data, ":namespaces");
 DEFINE_STATIC_SYMBOL(sym_kw_bytes_current_data, ":bytes-current");
 DEFINE_STATIC_SYMBOL(sym_kw_bytes_peak_data, ":bytes-peak");
+DEFINE_STATIC_SYMBOL(sym_kw_memory_stats_data, ":memory-stats");
 
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 // Extended memory profiling keywords (DEBUG + MEMORY_PROFILING_ENABLED only)
-DEFINE_STATIC_SYMBOL(sym_kw_memory_stats_data, ":memory-stats");
 DEFINE_STATIC_SYMBOL(sym_kw_raw_bytes_current_data, ":raw-bytes-current");
 DEFINE_STATIC_SYMBOL(sym_kw_raw_bytes_peak_data, ":raw-bytes-peak");
 DEFINE_STATIC_SYMBOL(sym_kw_raw_blocks_current_data, ":raw-blocks-current");
@@ -834,10 +834,10 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_NAMESPACES, sym_kw_namespaces_data);
     INIT_SYMBOL(SYM_KW_BYTES_CURRENT, sym_kw_bytes_current_data);
     INIT_SYMBOL(SYM_KW_BYTES_PEAK, sym_kw_bytes_peak_data);
+    INIT_SYMBOL(SYM_KW_MEMORY_STATS, sym_kw_memory_stats_data);
 
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     // Extended memory profiling keywords (DEBUG + MEMORY_PROFILING_ENABLED only)
-    INIT_SYMBOL(SYM_KW_MEMORY_STATS, sym_kw_memory_stats_data);
     INIT_SYMBOL(SYM_KW_RAW_BYTES_CURRENT, sym_kw_raw_bytes_current_data);
     INIT_SYMBOL(SYM_KW_RAW_BYTES_PEAK, sym_kw_raw_bytes_peak_data);
     INIT_SYMBOL(SYM_KW_RAW_BLOCKS_CURRENT, sym_kw_raw_blocks_current_data);

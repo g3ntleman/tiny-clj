@@ -98,26 +98,26 @@ target_compile_options(subjective-c PRIVATE
 
 # Ensure DEBUG is defined for Debug builds (critical for CLJException struct layout)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
-    target_compile_definitions(subjective-c PUBLIC DEBUG)
+    target_compile_definitions(subjective-c PRIVATE DEBUG)
     message(STATUS "subjective-c: DEBUG build (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
 else()
     message(STATUS "subjective-c: DEBUG disabled (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
 endif()
 
 if(ZOMBIE_ENABLED)
-    target_compile_definitions(subjective-c PUBLIC ZOMBIE_ENABLED)
+    target_compile_definitions(subjective-c PRIVATE ZOMBIE_ENABLED)
     message(STATUS "subjective-c: ZOMBIE_ENABLED")
 else()
     message(STATUS "subjective-c: ZOMBIE_DISABLED")
 endif()
 
 # Unity compatibility: flush stdout for error messages
-target_compile_definitions(subjective-c PUBLIC UNITY_USE_FLUSH_STDOUT)
+target_compile_definitions(subjective-c PRIVATE UNITY_USE_FLUSH_STDOUT)
 
 # Size-focused embedded builds: avoid pulling in printf-style formatting code.
 # Enable this for the embedded configuration and when cross-compiling with the ESP32 toolchain.
 if(CMAKE_BUILD_TYPE STREQUAL "Embedded" OR (DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "esp32\\.cmake"))
-    target_compile_definitions(subjective-c PUBLIC STRING_FORMATTING_ENABLED=0)
+    target_compile_definitions(subjective-c PRIVATE STRING_FORMATTING_ENABLED=0)
     message(STATUS "subjective-c: STRING_FORMATTING_ENABLED=0")
 endif()
 

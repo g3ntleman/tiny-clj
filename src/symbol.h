@@ -177,10 +177,10 @@ extern CljSymbol *SYM_KW_SYMBOLS;
 extern CljSymbol *SYM_KW_NAMESPACES;
 extern CljSymbol *SYM_KW_BYTES_CURRENT;
 extern CljSymbol *SYM_KW_BYTES_PEAK;
+extern CljSymbol *SYM_KW_MEMORY_STATS;
 
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 // Extended memory profiling keywords (DEBUG + MEMORY_PROFILING_ENABLED only)
-extern CljSymbol *SYM_KW_MEMORY_STATS;
 extern CljSymbol *SYM_KW_RAW_BYTES_CURRENT;
 extern CljSymbol *SYM_KW_RAW_BYTES_PEAK;
 extern CljSymbol *SYM_KW_RAW_BLOCKS_CURRENT;

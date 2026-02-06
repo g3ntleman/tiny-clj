@@ -643,17 +643,12 @@ int main(int argc, char **argv) {
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     // Build-time switch: if memory profiling hooks are compiled in, enable them
     // for the whole process so we can inspect current/peak after core loading.
-    // (No output unless verbose/debug is enabled explicitly.)
+    // Keep stats cumulative from process start (no reset here).
     MEMORY_PROFILER_INIT();
-    enable_memory_profiling(true);
+    g_memory_profiling_enabled = true;
     set_memory_leak_reporting_enabled(false);
     set_memory_verbose_mode(false);
     memory_set_debug_output_enabled(memory_get_debug_output_enabled());
-#else
-#ifdef DEBUG
-    // Keep a consistent baseline when profiling is compiled out.
-    memory_profiler_reset();
-#endif
 #endif
     // Install SIGTRAP handler for startup diagnostics.
     signal(SIGTRAP, repl_sigtrap_handler);

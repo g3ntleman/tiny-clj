@@ -9,15 +9,20 @@
 #include <stdlib.h> // malloc/free/realloc/calloc
 #include <string.h> // strlen/memcpy
 
-// memory_profiler.h lives in subjective-c. Include when profiling enabled.
+// memory_profiler.h lives in subjective-c. Include when profiling is enabled
+// (and also in DEBUG for raw tracking).
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 #include "memory_profiler.h"
 // Functions are declared in memory_profiler.h, no need for no-op macros
 #else
-// Default no-op definitions for memory profiler functions when profiling is disabled
+#include "memory_profiler.h"
+// Default no-op definitions for memory profiler functions when profiling is disabled.
+// In DEBUG we still want raw tracking, so keep real functions there.
+#ifndef DEBUG
 #define memory_profiler_track_raw_alloc(p, n, file, line) ((void)0)
 #define memory_profiler_track_raw_free(ptr, file, line) ((void)0)
 #define memory_profiler_track_raw_realloc(old_ptr, new_ptr, n, file, line) ((void)0)
+#endif
 #endif
 
 typedef void (*SubjectiveCReleaseFn)(CljObject *obj);
@@ -91,7 +96,7 @@ void throw_oom(void) __attribute__((noreturn));
 //
 
 
-#if MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED || defined(DEBUG)
 
 static inline void* clj_malloc_impl(size_t n, const char *file, int line) {
     (void)file; (void)line;
@@ -352,7 +357,7 @@ void autorelease_pool_peak_reset(void);
     #define REFERENCE_COUNT(obj) (0)  // Not available in release builds
 #endif
 
-#if MEMORY_PROFILING_ENABLED
+#if MEMORY_PROFILING_ENABLED || defined(DEBUG)
     #include "mini_format.h"
     // Use mini_format everywhere (host + embedded) to keep formatter complexity low.
     static inline void logf_impl(FILE *stream, const char *fmt, ...) {
