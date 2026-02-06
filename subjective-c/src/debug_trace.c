@@ -4,6 +4,7 @@
  */
 
 #include "debug_trace.h"
+#include "memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -94,7 +95,7 @@ void debug_trace_allocation(const DebugTraceConfig *cfg, void *ptr, void *first,
             for (int i = 0; i < n; i++) {
                 fprintf(stderr, "  %s\n", symbols[i]);
             }
-            free(symbols);
+            CLJ_FREE(symbols);
         }
     }
 #endif

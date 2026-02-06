@@ -133,19 +133,17 @@ extern GlobalExceptionStack global_exception_stack;
 //
 
 static inline ExceptionHandler* exception_handler_alloc_or_abort(void) {
-    ExceptionHandler *h = (ExceptionHandler*)malloc(sizeof(ExceptionHandler));
+    ExceptionHandler *h = (ExceptionHandler*)CLJ_MALLOC(sizeof(ExceptionHandler));
     if (!h) {
-        fputs("FATAL: malloc failed in TRY block\n", stderr);
+        fputs("FATAL: CLJ_MALLOC failed in TRY block\n", stderr);
         abort();
     }
-    memory_profiler_track_raw_alloc(h, sizeof(ExceptionHandler), __FILE__, __LINE__);
     return h;
 }
 
 static inline void exception_handler_free(ExceptionHandler *h) {
     if (!h) return;
-    memory_profiler_track_raw_free(h, __FILE__, __LINE__);
-    free(h);
+    CLJ_FREE(h);
 }
 
 #define TRY { \
@@ -175,9 +173,9 @@ static inline void exception_handler_free(ExceptionHandler *h) {
 // -----------------------------------------------------------------------------
 
 #define TRY { \
-    ExceptionHandler *_h = (ExceptionHandler*)malloc(sizeof(ExceptionHandler)); \
+    ExceptionHandler *_h = (ExceptionHandler*)CLJ_MALLOC(sizeof(ExceptionHandler)); \
     if (!_h) { \
-        fputs("FATAL: malloc failed in TRY block\n", stderr); \
+        fputs("FATAL: CLJ_MALLOC failed in TRY block\n", stderr); \
         abort(); \
     } \
     _h->next = global_exception_stack.top; \
@@ -189,13 +187,13 @@ static inline void exception_handler_free(ExceptionHandler *h) {
         /* Success path: pop stack only */ \
         ExceptionHandler *_success_handler = global_exception_stack.top; \
         global_exception_stack.top = _success_handler->next; \
-        free(_success_handler); \
+        CLJ_FREE(_success_handler); \
     } else { \
         /* Exception path: get exception from handler */ \
         ExceptionHandler *_caught_h = global_exception_stack.top; \
         CLJException *ex = _caught_h ? _caught_h->exception : NULL; \
         global_exception_stack.top = _caught_h->next; \
-        free(_caught_h); \
+        CLJ_FREE(_caught_h); \
         if (ex) { \
             /* Exception will be manually released in END_TRY */
 

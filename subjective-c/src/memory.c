@@ -80,10 +80,10 @@ static void rchist_dump_for_object(CljObject *v) {
             char **syms = backtrace_symbols(arr, 1);
             if (syms && syms[0]) {
                 fprintf(stderr, "  %c rc=%d  %s\n", e->op, e->rc_after, syms[0]);
-                free(syms);
+                CLJ_FREE(syms);
             } else {
                 fprintf(stderr, "  %c rc=%d caller=%p\n", e->op, e->rc_after, e->caller);
-                if (syms) free(syms);
+                if (syms) CLJ_FREE(syms);
             }
         } else
             fprintf(stderr, "  %c rc=%d caller=NULL\n", e->op, e->rc_after);
@@ -217,7 +217,7 @@ void retain(CljObject *v) {
                         for (int i = 0; i < n; i++) {
                             fprintf(stderr, "  %s\n", symbols[i]);
                         }
-                        free(symbols);
+                        CLJ_FREE(symbols);
                     }
                 }
 #endif

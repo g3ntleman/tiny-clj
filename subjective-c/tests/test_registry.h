@@ -1,6 +1,7 @@
 #ifndef SUBJECTIVE_C_TEST_REGISTRY_H
 #define SUBJECTIVE_C_TEST_REGISTRY_H
 
+#include "memory.h"
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -61,7 +62,7 @@ bool subjective_c_test_name_matches_pattern(const char *name, const char *patter
         char *filename = subjective_c_test_extract_filename_from_path(__FILE__); \
         if (filename) { \
             subjective_c_test_registry_add_with_file_info_ex(#name, name, filename, __FILE__, __LINE__, heap_growth_limit_bytes); \
-            free(filename); \
+            CLJ_FREE(filename); \
         } else { \
             subjective_c_test_registry_add(#name, __FILE__, __LINE__, name); \
         } \

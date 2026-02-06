@@ -4,7 +4,7 @@
  */
 
 #include "test_registry.h"
-
+#include "memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,7 +33,7 @@ static char* create_qualified_name(const char *group, const char *name) {
     size_t name_len = strlen(name_start);
     size_t total_len = group_len + 1 + name_len; // group + '/' + name
     
-    char *qualified = malloc(total_len + 1);
+    char *qualified = (char*)CLJ_MALLOC(total_len + 1);
     if (!qualified) {
         return NULL;
     }
@@ -89,7 +89,7 @@ void subjective_c_test_registry_add_with_file_info_ex(const char *name, Subjecti
     // Grow registry if needed
     if (g_entry_count >= g_entry_capacity) {
         size_t new_capacity = g_entry_capacity == 0 ? INITIAL_CAPACITY : g_entry_capacity * 2;
-        SubjectiveCTestEntry *new_entries = realloc(g_entries, new_capacity * sizeof(SubjectiveCTestEntry));
+        SubjectiveCTestEntry *new_entries = (SubjectiveCTestEntry*)CLJ_REALLOC(g_entries, new_capacity * sizeof(SubjectiveCTestEntry));
         if (!new_entries) {
             fprintf(stderr, "subjective-c test registry: failed to allocate memory\n");
             abort();
@@ -105,7 +105,7 @@ void subjective_c_test_registry_add_with_file_info_ex(const char *name, Subjecti
     
     // Copy strings to ensure they're permanently stored
     size_t name_len = strlen(name);
-    char *name_copy = malloc(name_len + 1);
+    char *name_copy = (char*)CLJ_MALLOC(name_len + 1);
     if (!name_copy) {
         fprintf(stderr, "subjective-c test registry: failed to allocate name\n");
         abort();
@@ -113,9 +113,9 @@ void subjective_c_test_registry_add_with_file_info_ex(const char *name, Subjecti
     strcpy(name_copy, name);
     
     size_t group_len = strlen(group);
-    char *group_copy = malloc(group_len + 1);
+    char *group_copy = (char*)CLJ_MALLOC(group_len + 1);
     if (!group_copy) {
-        free(name_copy);
+        CLJ_FREE(name_copy);
         fprintf(stderr, "subjective-c test registry: failed to allocate group\n");
         abort();
     }
@@ -123,8 +123,8 @@ void subjective_c_test_registry_add_with_file_info_ex(const char *name, Subjecti
     
     char *qualified_name = create_qualified_name(group_copy, name);
     if (!qualified_name) {
-        free(group_copy);
-        free(name_copy);
+        CLJ_FREE(group_copy);
+        CLJ_FREE(name_copy);
         fprintf(stderr, "subjective-c test registry: failed to create qualified name\n");
         abort();
     }
@@ -132,11 +132,11 @@ void subjective_c_test_registry_add_with_file_info_ex(const char *name, Subjecti
     char *file_copy = NULL;
     if (file) {
         size_t file_len = strlen(file);
-        file_copy = malloc(file_len + 1);
+        file_copy = (char*)CLJ_MALLOC(file_len + 1);
         if (!file_copy) {
-            free(qualified_name);
-            free(group_copy);
-            free(name_copy);
+            CLJ_FREE(qualified_name);
+            CLJ_FREE(group_copy);
+            CLJ_FREE(name_copy);
             fprintf(stderr, "subjective-c test registry: failed to allocate file\n");
             abort();
         }
@@ -223,7 +223,7 @@ SubjectiveCTestEntry* subjective_c_test_registry_get_by_group(const char *group,
         return NULL;
     }
     
-    SubjectiveCTestEntry *filtered = malloc(filtered_count * sizeof(SubjectiveCTestEntry));
+    SubjectiveCTestEntry *filtered = (SubjectiveCTestEntry*)CLJ_MALLOC(filtered_count * sizeof(SubjectiveCTestEntry));
     if (!filtered) {
         *count = 0;
         return NULL;
@@ -279,7 +279,7 @@ void subjective_c_test_registry_list_groups(void) {
  */
 char *subjective_c_test_extract_filename_from_path(const char *file_path) {
     if (!file_path) {
-        char *result = malloc(8);
+        char *result = (char*)CLJ_MALLOC(8);
         if (result) {
             strcpy(result, "unknown");
         }
@@ -297,7 +297,7 @@ char *subjective_c_test_extract_filename_from_path(const char *file_path) {
     
     if (last_dot) {
         size_t len = last_dot - filename;
-        char *result = malloc(len + 1);
+        char *result = (char*)CLJ_MALLOC(len + 1);
         if (!result) {
             return NULL;
         }
@@ -307,7 +307,7 @@ char *subjective_c_test_extract_filename_from_path(const char *file_path) {
     }
     
     size_t len = strlen(filename);
-    char *result = malloc(len + 1);
+    char *result = (char*)CLJ_MALLOC(len + 1);
     if (!result) {
         return NULL;
     }

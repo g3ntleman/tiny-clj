@@ -7,6 +7,7 @@
 
 #include "test_common.h"
 #include "test_registry.h"
+#include "memory.h"
 #include "unity.h"
 #include "unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
 #include "build_info.h"
@@ -212,7 +213,7 @@ int main(int argc, char **argv) {
     int test_pattern_count = 0;
 
     if (argc > 1) {
-        test_patterns = (const char**)calloc((size_t)argc, sizeof(const char*));
+        test_patterns = (const char**)CLJ_CALLOC((size_t)argc, sizeof(const char*));
         if (!test_patterns) {
             fprintf(stderr, "ERROR: out of memory\n");
             return 1;
@@ -239,38 +240,38 @@ int main(int argc, char **argv) {
             show_memory_summary = true;
 #else
             printf("--memory-summary is only available for tiny-clj tests\n");
-            free((void*)test_patterns);
+            CLJ_FREE((void*)test_patterns);
             return 1;
 #endif
         } else if (strcmp(arg, "--test") == 0 || strcmp(arg, "-test") == 0) {
             if (i + 1 >= argc) {
                 print_usage(argv[0]);
-                free((void*)test_patterns);
+                CLJ_FREE((void*)test_patterns);
                 return 1;
             }
             const char *pattern = argv[++i];
             if (!pattern) {
                 print_usage(argv[0]);
-                free((void*)test_patterns);
+                CLJ_FREE((void*)test_patterns);
                 return 1;
             }
             test_patterns[test_pattern_count++] = pattern;
         } else {
             fprintf(stderr, "ERROR: unknown option '%s'\n\n", arg);
             print_usage(argv[0]);
-            free((void*)test_patterns);
+            CLJ_FREE((void*)test_patterns);
             return 1;
         }
     }
 
     if (show_help) {
         print_usage(argv[0]);
-        free((void*)test_patterns);
+        CLJ_FREE((void*)test_patterns);
         return 0;
     }
     if (list_tests) {
         subjective_c_test_registry_list_all();
-        free((void*)test_patterns);
+        CLJ_FREE((void*)test_patterns);
         return 0;
     }
 
@@ -333,7 +334,7 @@ int main(int argc, char **argv) {
         run_tests_by_registry();
     }
 
-    free((void*)test_patterns);
+    CLJ_FREE((void*)test_patterns);
     
     clock_t end_time = clock();
     double elapsed = ((double)(end_time - start_time)) / CLOCKS_PER_SEC;
