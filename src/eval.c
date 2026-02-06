@@ -134,20 +134,6 @@ void set_suppress_time_output(bool suppress) {
     g_suppress_time_output = suppress;
 }
 
-// Resolve cache helpers disabled (stubs kept for API compatibility).
-#if defined(__GNUC__)
-#define UNUSED_FN __attribute__((unused))
-#else
-#define UNUSED_FN
-#endif
-static INLINE CljSymbol* resolve_cache_ns_key(CljSymbol *op_sym, EvalState *st) UNUSED_FN;
-static INLINE ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) UNUSED_FN;
-static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) UNUSED_FN;
-
-static INLINE CljSymbol* resolve_cache_ns_key(CljSymbol *op_sym, EvalState *st) { (void)op_sym; (void)st; return NULL; }
-static INLINE ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) { (void)ns_key; (void)op; return NULL; }
-static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) { (void)ns_key; (void)op; (void)resolved; }
-
 // Forward declarations
 ID eval_body_with_params(ID body, const EvalContext *ctx);
 ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
@@ -1584,15 +1570,7 @@ ID eval_list(CljList *list, CljPersistentMap *env, EvalState *st, const EvalCont
     // First element is the operator
     CljObject *op = head;
     if (!op) {
-        if (list_empty(list)) {
-            return NULL;
-        }
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "Cannot call nil as a function");
-        return NULL;
-    }
-    
-    if (!op) {
+        if (list_empty(list)) return NULL;
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                   "Cannot call nil as a function");
         return NULL;
