@@ -505,6 +505,7 @@ DEFINE_STATIC_SYMBOL(sym_kw_host_data, ":host");
 DEFINE_STATIC_SYMBOL(sym_kw_column_data, ":column");
 DEFINE_STATIC_SYMBOL(sym_kw_fn_data, ":fn");
 DEFINE_STATIC_SYMBOL(sym_kw_path_data, ":path");
+/* GPIO watcher map keys (:callback-fn, :watcher-id) */
 DEFINE_STATIC_SYMBOL(sym_kw_callback_fn_data, ":callback-fn");
 DEFINE_STATIC_SYMBOL(sym_kw_watcher_id_data, ":watcher-id");
 DEFINE_STATIC_SYMBOL(sym_kw_meta_data, ":meta");

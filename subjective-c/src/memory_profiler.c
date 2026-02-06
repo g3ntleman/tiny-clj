@@ -116,17 +116,20 @@ void memory_profiling_cleanup_with_hooks(void) {
     memory_profiler_cleanup();
 }
 
+/** Start a memory test phase: reset stats and optionally log. */
 void memory_test_start(const char *test_name) {
     memory_profiler_reset();
     if (g_memory_verbose_mode) printf("🔍 Memory Test Start: %s\n", test_name);
 }
 
+/** End phase: print stats if leaks or verbose; check leaks. */
 void memory_test_end(const char *test_name) {
     if (g_memory_stats.memory_leaks > 0 || g_memory_verbose_mode)
         memory_profiler_print_stats(test_name);
     memory_profiler_check_leaks(test_name);
 }
 
+/** Zero all stats and per-type counters. */
 void memory_profiler_init(void) {
     memset(&g_memory_stats, 0, sizeof(MemoryStats));
     memset(g_memory_stats.allocations_by_type, 0, sizeof(g_memory_stats.allocations_by_type));
@@ -134,6 +137,7 @@ void memory_profiler_init(void) {
     memset(g_memory_stats.autoreleases_by_type, 0, sizeof(g_memory_stats.autoreleases_by_type));
 }
 
+/** Reset all stats and raw block tracking for a new test phase. */
 void memory_profiler_reset(void) {
     memset(&g_memory_stats, 0, sizeof(MemoryStats));
     memset(g_memory_stats.allocations_by_type, 0, sizeof(g_memory_stats.allocations_by_type));
@@ -143,11 +147,13 @@ void memory_profiler_reset(void) {
     memset(g_memory_stats.autoreleases_by_type, 0, sizeof(g_memory_stats.autoreleases_by_type));
     memset(g_memory_stats.bytes_current_by_type, 0, sizeof(g_memory_stats.bytes_current_by_type));
     memset(g_memory_stats.bytes_peak_by_type, 0, sizeof(g_memory_stats.bytes_peak_by_type));
+    raw_blocks_reset();
 #ifdef DEBUG
     autorelease_pool_peak_reset();
 #endif
 }
 
+/** Log warning if leaks detected; no-op otherwise. */
 void memory_profiler_cleanup(void) {
     if (g_memory_stats.memory_leaks > 0)
         LOGF(stdout, "⚠️  Memory Profiler: %zu potential memory leaks detected!\n", g_memory_stats.memory_leaks);
@@ -249,10 +255,12 @@ void memory_profiler_track_deallocation(size_t size) {
     update_memory_leak_stats();
 }
 
+/** Track object creation with default size. */
 void memory_profiler_track_object_creation(CljObject *obj) {
     memory_profiler_track_object_creation_sized(obj, sizeof(CljObject));
 }
 
+/** Track object creation with given size; update heap and per-type stats when profiling enabled. */
 void memory_profiler_track_object_creation_sized(CljObject *obj, size_t size) {
     if (!obj) return;
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;
@@ -285,6 +293,7 @@ void memory_profiler_track_object_creation_sized(CljObject *obj, size_t size) {
     g_memory_stats.allocations_by_type[obj->type]++;
 }
 
+/** Track object destruction; untrack and update stats when profiling enabled. */
 void memory_profiler_track_object_destruction(CljObject *obj) {
     if (!obj) return;
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;
@@ -383,6 +392,7 @@ void memory_profiler_track_autorelease(CljObject *obj) {
     if (obj->type < CLJ_TYPE_COUNT) g_memory_stats.autoreleases_by_type[obj->type]++;
 }
 
+/** Track raw (CLJ_MALLOC) allocation; update raw block list and peaks. */
 void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, int line) {
     (void)file;(void)line;
     if (!g_memory_profiling_enabled || !ptr) return;
@@ -412,6 +422,7 @@ void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, i
         g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
 }
 
+/** Track raw free; remove from block list and subtract from current bytes. */
 void memory_profiler_track_raw_free(void *ptr, const char *file, int line) {
     (void)file;(void)line;
     if (!g_memory_profiling_enabled || !ptr) return;
@@ -487,11 +498,13 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
         LOGF(stdout, "🚨 LEAK: %zu objects, %zu bytes\n", stats->memory_leaks, stats->current_memory_usage);
 }
 
+/** Print current stats table if profiling and (leaks or verbose). */
 void memory_profiler_print_stats(const char *test_name) {
     if (!g_memory_profiling_enabled) return;
     print_memory_table(&g_memory_stats, test_name, false);
 }
 
+/** If leaks > 0 and reporting enabled, print leak report for location. */
 void memory_profiler_check_leaks(const char *location) {
     if (!g_memory_profiling_enabled) return;
     if (g_memory_stats.memory_leaks > 0 && g_memory_leak_reporting_enabled) {
@@ -604,6 +617,80 @@ void memory_profiler_track_object_zombify(CljObject *o) {
     }
 #else
     (void)o;
+#endif
+}
+void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, int line) {
+    (void)file; (void)line; (void)size;
+#ifdef DEBUG
+    if (!ptr) return;
+    g_memory_stats.raw_allocations++;
+    size_t actual = size;
+    { size_t r = platform_allocated_size(ptr); if (r > 0) actual = r; }
+    long idx = raw_blocks_find(ptr);
+    if (idx >= 0) {
+        size_t old = g_raw_blocks[(size_t)idx].size;
+        g_raw_blocks[(size_t)idx].size = actual;
+        g_memory_stats.raw_bytes_current = (g_memory_stats.raw_bytes_current >= old) ? g_memory_stats.raw_bytes_current - old : 0;
+        g_memory_stats.raw_bytes_current += actual;
+        raw_blocks_update_peaks();
+        g_memory_stats.current_memory_usage = (g_memory_stats.current_memory_usage >= old) ? g_memory_stats.current_memory_usage - old : 0;
+        g_memory_stats.current_memory_usage += actual;
+        if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage)
+            g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
+        return;
+    }
+    if (!raw_blocks_ensure_capacity(g_raw_blocks_count + 1)) return;
+    g_raw_blocks[g_raw_blocks_count++] = (RawBlock){ .ptr = ptr, .size = actual };
+    g_memory_stats.raw_blocks_current++;
+    g_memory_stats.raw_bytes_current += actual;
+    raw_blocks_update_peaks();
+    g_memory_stats.current_memory_usage += actual;
+    if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage)
+        g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
+#endif
+}
+
+void memory_profiler_track_raw_free(void *ptr, const char *file, int line) {
+    (void)file; (void)line;
+#ifdef DEBUG
+    if (!ptr) return;
+    g_memory_stats.raw_frees++;
+    long idx = raw_blocks_find(ptr);
+    if (idx < 0) return;
+    size_t old = g_raw_blocks[(size_t)idx].size;
+    g_raw_blocks[(size_t)idx] = g_raw_blocks[--g_raw_blocks_count];
+    if (g_memory_stats.raw_blocks_current > 0) g_memory_stats.raw_blocks_current--;
+    g_memory_stats.raw_bytes_current = (g_memory_stats.raw_bytes_current >= old) ? g_memory_stats.raw_bytes_current - old : 0;
+    g_memory_stats.current_memory_usage = (g_memory_stats.current_memory_usage >= old) ? g_memory_stats.current_memory_usage - old : 0;
+#endif
+}
+
+void memory_profiler_track_raw_realloc(void *old_ptr, void *new_ptr, size_t new_size, const char *file, int line) {
+    (void)file; (void)line;
+#ifdef DEBUG
+    g_memory_stats.raw_reallocations++;
+    if (!old_ptr) { memory_profiler_track_raw_alloc(new_ptr, new_size, file, line); return; }
+    if (new_size == 0) { memory_profiler_track_raw_free(old_ptr, file, line); return; }
+    if (old_ptr == new_ptr) {
+        long idx = raw_blocks_find(old_ptr);
+        if (idx >= 0) {
+            size_t old = g_raw_blocks[(size_t)idx].size;
+            g_raw_blocks[(size_t)idx].size = new_size;
+            g_memory_stats.raw_bytes_current = (g_memory_stats.raw_bytes_current >= old) ? g_memory_stats.raw_bytes_current - old : 0;
+            g_memory_stats.raw_bytes_current += new_size;
+            raw_blocks_update_peaks();
+            g_memory_stats.current_memory_usage = (g_memory_stats.current_memory_usage >= old) ? g_memory_stats.current_memory_usage - old : 0;
+            g_memory_stats.current_memory_usage += new_size;
+            if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage)
+                g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
+        } else
+            memory_profiler_track_raw_alloc(new_ptr, new_size, file, line);
+        return;
+    }
+    memory_profiler_track_raw_free(old_ptr, file, line);
+    memory_profiler_track_raw_alloc(new_ptr, new_size, file, line);
+#else
+    (void)old_ptr; (void)new_ptr; (void)new_size;
 #endif
 }
 void memory_profiler_track_retain(CljObject *o) { (void)o; }

@@ -64,9 +64,9 @@ static _Atomic bool g_gpio_drain_scheduled = false;
 static ID g_gpio_drain_fn_obj = NULL;
 static CljSymbol *SYM_GPIO_DRAIN = NULL;
 
-// Forward declare drain builtin (zero-arity task).
 static ID native_gpio_drain_events(ID *args, unsigned int argc);
 
+/** Ensure watcher map and keywords are initialized (once). */
 static inline void gpio_ensure_initialized(void) {
     if (g_gpio_watchers) return;
     g_gpio_watchers = make_map(4, STRONG);
@@ -77,6 +77,7 @@ static inline void gpio_ensure_initialized(void) {
     g_gpio_drain_fn_obj = make_named_func(native_gpio_drain_events, SYM_GPIO_DRAIN);
 }
 
+/** Push one event from ISR into ring; callback_fn_retained is consumed. Returns false if ring full. */
 static inline bool gpio_event_ring_push_from_isr(int32_t pin, int32_t value, ID callback_fn_retained) {
     uint32_t w = atomic_load_explicit(&g_gpio_event_w, memory_order_relaxed);
     uint32_t r = atomic_load_explicit(&g_gpio_event_r, memory_order_acquire);
@@ -90,6 +91,7 @@ static inline bool gpio_event_ring_push_from_isr(int32_t pin, int32_t value, ID 
     return true;
 }
 
+/** Pop next event from ring into *out. Returns false if empty. */
 static inline bool gpio_event_ring_pop(GpioEvent *out) {
     uint32_t r = atomic_load_explicit(&g_gpio_event_r, memory_order_relaxed);
     uint32_t w = atomic_load_explicit(&g_gpio_event_w, memory_order_acquire);
@@ -100,6 +102,7 @@ static inline bool gpio_event_ring_pop(GpioEvent *out) {
     return true;
 }
 
+/** If not already scheduled, enqueue one drain task (called from ISR). */
 static inline void gpio_schedule_drain_from_isr(void) {
     bool expected = false;
     if (atomic_compare_exchange_strong_explicit(&g_gpio_drain_scheduled, &expected, true, memory_order_acq_rel, memory_order_relaxed)) {
@@ -109,6 +112,7 @@ static inline void gpio_schedule_drain_from_isr(void) {
     }
 }
 
+/** ISR: read pin level, retain callback, push event, schedule drain. */
 static void IRAM_ATTR gpio_isr_handler(void *arg) {
     CljPersistentMap *watcher_map = (CljPersistentMap*)arg;
     if (!watcher_map) return;
@@ -131,6 +135,7 @@ static void IRAM_ATTR gpio_isr_handler(void *arg) {
     gpio_schedule_drain_from_isr();
 }
 
+/** Drain all queued GPIO events; invoke each callback with [pin value]; release callbacks. */
 static ID native_gpio_drain_events(ID *args, unsigned int argc) {
     (void)args;
     CHECK_ARITY(argc, 0, "tinyclj.gpio/drain-events");
@@ -160,6 +165,7 @@ static ID native_gpio_drain_events(ID *args, unsigned int argc) {
     return NULL;
 }
 
+/** Install ESP32 GPIO ISR service once; throw on failure. */
 static inline void gpio_ensure_isr_service(void) {
     if (g_gpio_isr_service_installed) return;
     esp_err_t err = gpio_install_isr_service(0);
@@ -170,6 +176,11 @@ static inline void gpio_ensure_isr_service(void) {
     throw_exception(EXCEPTION_RUNTIME, "gpio_install_isr_service failed", __FILE__, __LINE__, 0);
 }
 
+/**
+ * @brief Register a watcher for a GPIO pin (Clojure: gpio-watch).
+ * @param args [pin fixnum, callback fn]
+ * @return Watcher ID (fixnum) or NULL on error
+ */
 ID native_gpio_watch(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 2, "gpio-watch");
 
@@ -231,6 +242,11 @@ ID native_gpio_watch(ID *args, unsigned int argc) {
     return fixnum(watcher_id);
 }
 
+/**
+ * @brief Remove watcher by ID (Clojure: gpio-unwatch).
+ * @param args [watcher-id fixnum]
+ * @return nil
+ */
 ID native_gpio_unwatch(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "gpio-unwatch");
 
@@ -257,7 +273,7 @@ ID native_gpio_unwatch(ID *args, unsigned int argc) {
     return NULL;
 }
 
-// ESP32: no gpio-simulate! (used by macOS tests). Keep as no-op.
+/** No-op on ESP32 (macOS tests use gpio-simulate! for mock). */
 ID native_gpio_simulate(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 2, "gpio-simulate!");
     (void)args;
