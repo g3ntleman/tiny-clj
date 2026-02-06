@@ -80,7 +80,9 @@ CljSlotRef* make_slot_ref(CljSymbol *symbol, uint8_t depth, uint8_t slot) {
 
     // alloc() sets type, but keep this explicit for robustness.
     ref->base.type = CLJ_SLOT_REF;
+#ifdef DEBUG
     ref->symbol = symbol;
+#endif
     ref->depth = depth;
     ref->slot = slot;
     return ref;

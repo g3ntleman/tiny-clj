@@ -43,7 +43,9 @@ typedef struct CljSlotRef {
     CljObject base;       // object header
     uint8_t depth;        // lexical depth (0 = current frame)
     uint8_t slot;         // slot index in that frame
+#ifdef DEBUG
     CljSymbol *symbol;    // for debugging/errors only (symbols are interned)
+#endif
 } CljSlotRef;
 
 CljSlotRef* make_slot_ref(CljSymbol *symbol, uint8_t depth, uint8_t slot);

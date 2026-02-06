@@ -35,6 +35,7 @@
 #include "event_loop.h"
 #include "reader.h"
 #include "parser.h"
+#include "ast_canon.h"
 #include "meta.h"
 #include "eval.h"
 #include "platform.h"
@@ -6080,13 +6081,11 @@ ID native_eval(ID *args, unsigned int argc)
         return NULL;
     }
 
-    // Evaluate the argument (which should be a quoted form)
-    // In Clojure, (eval 'form) means the form is already quoted
-    // So we just evaluate it directly
+    // Same canonicalization as require/load: symbol tokens, quote, non-special calls -> AST_CALL
     ID form = args[0];
-
-    // Use eval_parsed to evaluate the form
-    return eval_parsed(form, g_current_eval_state, NULL);
+    if (IS_IMMEDIATE(form)) return form;
+    form = canonicalize_ast(form, g_current_eval_state);
+    return eval_canonical_form(form, g_current_eval_state, NULL);
 }
 
 ID native_read_string(ID *args, unsigned int argc)

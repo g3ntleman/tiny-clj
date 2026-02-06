@@ -26,13 +26,14 @@
 // Convenience API
 
 /**
- * @brief Evaluate a parsed Clojure expression
- * @param parsed_expr The parsed AST
- * @param eval_state The evaluation state
- * @param env Optional environment (if NULL, uses eval_state->current_ns->mappings)
- * @return The evaluated result (autoreleased) or NULL on error
+ * @brief Evaluate a parsed Clojure expression (canonicalizes then evaluates, same as require/load).
  */
 ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljPersistentMap *env);
+
+/**
+ * @brief Evaluate an already-canonical expression (for use after canonicalize_ast, e.g. in eval).
+ */
+ID eval_canonical_form(ID expr, EvalState *eval_state, CljPersistentMap *env);
 
 // === CljValue API (Phase 1: Immediates) ===
 

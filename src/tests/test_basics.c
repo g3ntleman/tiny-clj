@@ -1102,18 +1102,23 @@ TEST(test_type_check_all_types) {
 // ============================================================================
 
 TEST(test_eval) {
-    // Test: (eval '(+ 1 2)) => 3
+    // (eval) uses same canonicalization as require/load; quoted form is evaluated after canonicalize.
+    // (eval '(inc 1)) => 2
+    CljObject *inc_result = eval_string("(eval '(inc 1))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(inc_result, "(eval '(inc 1)) should return 2");
+    assert_fixnum(inc_result, 2);
+
+    // (eval '(+ 1 2)) => 3
     CljObject *result1 = eval_string("(eval '(+ 1 2))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result1));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result1));
 
-    // Test: (eval '(def x 42)) => should define x
+    // (eval '(def x 42)) => defines x
     CljObject *result2 = eval_string("(eval '(def x 42))", g_test_eval_state);
-    // def returns the var, so result should not be NULL
     TEST_ASSERT_NOT_NULL(result2);
 
-    // Test: (eval 'x) => 42 (after defining x)
+    // (eval 'x) => 42 (after defining x)
     CljObject *result3 = eval_string("(eval 'x)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
     TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result3));

@@ -215,9 +215,10 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
 
         case CLJ_SLOT_REF: {
             CljSlotRef *ref = (CljSlotRef*)v;
-            if (ref && ref->symbol && ref->symbol->cname) {
+#ifdef DEBUG
+            if (ref && ref->symbol && ref->symbol->cname)
                 return strlen(ref->symbol->cname);
-            }
+#endif
             return 11; // "#<slot-ref>"
         }
 
@@ -541,14 +542,16 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
 
         case CLJ_SLOT_REF: {
             CljSlotRef *ref = (CljSlotRef*)v;
+#ifdef DEBUG
             if (ref && ref->symbol && ref->symbol->cname) {
                 size_t name_len = strlen(ref->symbol->cname);
                 memcpy(buffer + *offset, ref->symbol->cname, name_len);
                 *offset += name_len;
-            } else {
-                memcpy(buffer + *offset, "#<slot-ref>", 11);
-                *offset += 11;
+                return;
             }
+#endif
+            memcpy(buffer + *offset, "#<slot-ref>", 11);
+            *offset += 11;
             return;
         }
 

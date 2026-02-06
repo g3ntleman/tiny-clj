@@ -479,6 +479,33 @@ ID parse_expr(Reader *reader, EvalState *st) {
 
 
 /**
+ * @brief Evaluate an already-canonical expression (same dispatch as after canonicalize in require/load).
+ * @param expr Canonical AST (e.g. from canonicalize_ast)
+ * @param eval_state The evaluation state
+ * @param env Optional environment (if NULL, uses eval_state->current_ns->mappings)
+ * @return The evaluated result (autoreleased) or NULL only if result is nil
+ */
+ID eval_canonical_form(ID expr, EvalState *eval_state, CljPersistentMap *env) {
+    CLJ_ASSERT(eval_state != NULL);
+    if (!expr) return NULL;
+    CljPersistentMap *eval_env = env;
+    if (!eval_env) {
+        CLJ_ASSERT(eval_state->current_ns != NULL);
+        eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
+    }
+    CljType expr_tag = TAG(expr);
+    if (expr_tag == CLJ_AST_CALL)
+        return eval_body(expr, eval_env, eval_state, NULL);
+    if (is_list_type(expr_tag))
+        return eval_list(as_list(expr), eval_env, eval_state, NULL);
+    if (expr_tag == CLJ_SYMBOL)
+        return eval_symbol(as_symbol(expr), eval_state);
+    if (TAG(expr) == CLJ_MAP_PERSISTENT || TAG(expr) == CLJ_VECTOR_PERSISTENT)
+        return eval_body(expr, eval_env, eval_state, NULL);
+    return expr;
+}
+
+/**
  * @brief Evaluate a parsed Clojure expression
  * @param parsed_expr The parsed AST (expected autoreleased, e.g. from parse(); canonicalize may replace it; old AST is cleaned by caller's autorelease pool)
  * @param eval_state The evaluation state
@@ -487,85 +514,18 @@ ID parse_expr(Reader *reader, EvalState *st) {
  */
 ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljPersistentMap *env) {
     CLJ_ASSERT(eval_state != NULL);
-
-    // NULL means nil (e.g., () parses to nil) - return NULL
-    if (parsed_expr == NULL) {
-        return NULL;
-    }
-
-    CljObject *result = NULL;
-
-    // Don't catch exceptions here - let them propagate to the caller
-    // Check if parsed_expr is an immediate value first
-    if (IS_IMMEDIATE(parsed_expr)) {
-        // For immediate values, return them as CljObject* (they're already evaluated)
-        result = parsed_expr;
-    } else {
-        // Canonicalize the AST before evaluation
-        // This converts symbol tokens to symbols and handles quote forms properly.
-        // parsed_expr is expected autoreleased (e.g. from parse()); when we replace it
-        // with the canonical result (also autoreleased), the old AST is cleaned up by
-        // the caller's autorelease pool (see MEMORY_POLICY.md Parse/Eval Functions).
+    if (!parsed_expr) return NULL;
+    if (IS_IMMEDIATE(parsed_expr)) return parsed_expr;
+    // Same canonicalization as require/load: convert symbol tokens, quote, and non-special calls to AST_CALL
 #ifdef PROFILE_STARTUP
-        extern double g_canon_time_ms;
-        clock_t canon_start = clock();
-        parsed_expr = canonicalize_ast(parsed_expr, eval_state);
-        g_canon_time_ms += (double)(clock() - canon_start) * 1000.0 / CLOCKS_PER_SEC;
+    extern double g_canon_time_ms;
+    clock_t canon_start = clock();
+    parsed_expr = canonicalize_ast(parsed_expr, eval_state);
+    g_canon_time_ms += (double)(clock() - canon_start) * 1000.0 / CLOCKS_PER_SEC;
 #else
-        parsed_expr = canonicalize_ast(parsed_expr, eval_state);
+    parsed_expr = canonicalize_ast(parsed_expr, eval_state);
 #endif
-    }
-    
-    CljType expr_tag = parsed_expr ? TAG(parsed_expr) : CLJ_NIL;
-    if (parsed_expr && expr_tag == CLJ_AST_CALL) {
-        CljPersistentMap *eval_env = env;
-        if (!eval_env) {
-            CLJ_ASSERT(eval_state->current_ns != NULL);
-            eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
-        }
-        result = eval_body(parsed_expr, eval_env, eval_state, NULL);
-    } else if (parsed_expr && is_list_type(expr_tag)) {
-        // Use provided env or fall back to current_ns->mappings
-        CljPersistentMap *eval_env = env;
-        if (!eval_env) {
-            CLJ_ASSERT(eval_state->current_ns != NULL);
-            eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
-        }
-        result = eval_list(as_list(parsed_expr), eval_env, eval_state, NULL);
-        // eval_list returns AUTORELEASE objects
-    } else if (parsed_expr && expr_tag == CLJ_SYMBOL) {
-        // For symbols, use eval_symbol (uses current_ns->mappings internally)
-        result = eval_symbol(as_symbol(parsed_expr), eval_state);
-        // eval_symbol already returns autoreleased object
-    } else if (parsed_expr && TAG(parsed_expr) == CLJ_MAP_PERSISTENT) {
-        // Map literals need to have their keys and values evaluated
-        // Use provided env or fall back to current_ns->mappings
-        CljPersistentMap *eval_env = env;
-        if (!eval_env) {
-            CLJ_ASSERT(eval_state->current_ns != NULL);
-            eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
-        }
-        result = eval_body(parsed_expr, eval_env, eval_state, NULL);
-        // eval_body returns AUTORELEASE objects
-    } else if (parsed_expr && TAG(parsed_expr) == CLJ_VECTOR_PERSISTENT) {
-        // Vector literals need to have their elements evaluated
-        // Use provided env or fall back to current_ns->mappings
-        CljPersistentMap *eval_env = env;
-        if (!eval_env) {
-            CLJ_ASSERT(eval_state->current_ns != NULL);
-            eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
-        }
-        result = eval_body(parsed_expr, eval_env, eval_state, NULL);
-        // eval_body returns AUTORELEASE objects
-    } else {
-        // Literal value (string, keyword, etc.) - return as-is
-        // parsed_expr is already AUTORELEASEd by parse()
-        result = parsed_expr;
-    }
-
-    // result can be NULL only if the evaluation result is nil
-    // If evaluation fails, it should throw an exception, not return NULL
-    return result;
+    return eval_canonical_form(parsed_expr, eval_state, env);
 }
 
 
