@@ -17,6 +17,7 @@ const char* clj_type_name(CljType type) {
         case CLJ_MAP_PERSISTENT: return "Map";
         case CLJ_LIST: return "List";
         case CLJ_AST_NODE: return "ASTNode";
+        case CLJ_AST_CALL: return "ASTCall";
         case CLJ_CALLSITE_CACHE: return "CallsiteCache";
         case CLJ_FUNC: return "Function";
         case CLJ_CLOSURE: return "Closure";

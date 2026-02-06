@@ -80,6 +80,71 @@ static void core_mem_print_top_types(const char *label, int top_n) {
             g_memory_stats.deallocations_by_type[ti]);
   }
 }
+
+typedef struct {
+  long bytes_delta;
+  long alloc_delta;
+  long dealloc_delta;
+  int type;
+} CoreMemDeltaSlot;
+
+static inline long core_mem_abs_long(long v) {
+  return (v < 0) ? -v : v;
+}
+
+static void core_mem_print_delta(const char *label,
+                                 const MemoryStats *before,
+                                 const MemoryStats *after,
+                                 int top_n) {
+  if (!before || !after || top_n <= 0) return;
+
+  const int max_n = (top_n > 8) ? 8 : top_n;
+  CoreMemDeltaSlot slots[8];
+  for (int i = 0; i < max_n; i++) {
+    slots[i].bytes_delta = 0;
+    slots[i].alloc_delta = 0;
+    slots[i].dealloc_delta = 0;
+    slots[i].type = -1;
+  }
+
+  for (int ti = 0; ti < CLJ_TYPE_COUNT; ti++) {
+    long bytes_delta = (long)after->bytes_current_by_type[ti]
+                     - (long)before->bytes_current_by_type[ti];
+    if (bytes_delta == 0) continue;
+    long abs_bytes = core_mem_abs_long(bytes_delta);
+
+    for (int slot = 0; slot < max_n; slot++) {
+      long slot_abs = core_mem_abs_long(slots[slot].bytes_delta);
+      if (slots[slot].type < 0 || abs_bytes > slot_abs) {
+        for (int k = max_n - 1; k > slot; k--) {
+          slots[k] = slots[k - 1];
+        }
+        slots[slot].bytes_delta = bytes_delta;
+        slots[slot].alloc_delta =
+            (long)after->allocations_by_type[ti] - (long)before->allocations_by_type[ti];
+        slots[slot].dealloc_delta =
+            (long)after->deallocations_by_type[ti] - (long)before->deallocations_by_type[ti];
+        slots[slot].type = ti;
+        break;
+      }
+    }
+  }
+
+  long current_delta = (long)after->current_memory_usage - (long)before->current_memory_usage;
+  long peak_delta = (long)after->peak_memory_usage - (long)before->peak_memory_usage;
+  fprintf(stderr, "[core-mem] %s current=%+ld peak=%+ld\n",
+          label ? label : "<core>", current_delta, peak_delta);
+
+  for (int i = 0; i < max_n; i++) {
+    if (slots[i].type < 0 || slots[i].bytes_delta == 0) continue;
+    int ti = slots[i].type;
+    fprintf(stderr, "  %s: bytes=%+ld alloc=%+ld dealloc=%+ld\n",
+            clj_type_name((CljType)ti),
+            slots[i].bytes_delta,
+            slots[i].alloc_delta,
+            slots[i].dealloc_delta);
+  }
+}
 #endif
 
 
@@ -186,11 +251,14 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
   const int debug_mem_every = getenv_int("TINYCLJ_DEBUG_CORE_MEM_EVERY", 0);
   const int debug_mem_summary = getenv_int("TINYCLJ_DEBUG_CORE_MEM_SUMMARY", 0);
+  const int debug_mem_delta = getenv_int("TINYCLJ_DEBUG_CORE_MEM_DELTA", 0);
 #else
   const int debug_mem_every = 0;
   const int debug_mem_summary = 0;
+  const int debug_mem_delta = 0;
   (void)debug_mem_every;
   (void)debug_mem_summary;
+  (void)debug_mem_delta;
 #endif
   // Autorelease diagnostics (compile-time gated):
   // Build with -DTINYCLJ_AUTORELEASE_DIAGNOSTICS=1 to enable.
@@ -212,6 +280,15 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
 
       // Update crash diagnostics as early as possible for this iteration.
       g_clojure_core_last_form = expr_count + 1;
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+      MemoryStats mem_before = {0};
+      bool mem_before_valid = false;
+      if (debug_mem_delta > 0 && g_memory_profiling_enabled) {
+        mem_before = g_memory_stats;
+        mem_before_valid = true;
+      }
+#endif
 
       // Keep autorelease pool tracking bounded per top-level form.
       // Split parsing and evaluation into separate pools to reduce peak usage.
@@ -330,6 +407,14 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
         RELEASE(form);
       }
     expr_count++;
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    if (debug_mem_delta > 0 && mem_before_valid && g_memory_profiling_enabled) {
+      char label_buf[64];
+      mini_snprintf(label_buf, sizeof(label_buf), "delta form %d", expr_count);
+      core_mem_print_delta(label_buf, &mem_before, &g_memory_stats, debug_mem_delta);
+    }
+#endif
 
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     if (debug_mem_every > 0 && (expr_count % debug_mem_every) == 0) {

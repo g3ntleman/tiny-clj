@@ -145,7 +145,6 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
             *offset += mini_snprintf(buf + *offset, buf_size - (size_t)*offset, ")]");
             break;
         }
-
         default:
             *offset += mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "#<type:%d>", obj->type);
             break;
@@ -178,4 +177,3 @@ bool is_zombie(ID o) {
     CljObject *obj = (CljObject*)o;
     return obj->rc == 0;
 }
-

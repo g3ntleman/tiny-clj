@@ -49,6 +49,16 @@ static void ast_compile_expr_inplace(ID expr, EvalState *st) {
         return;
     }
 
+    if (tag == CLJ_AST_CALL) {
+        CljASTCall *call = as_ast_call(expr);
+        if (call) {
+            ast_compile_expr_inplace(call->op, st);
+            if (call->args) {
+                ast_compile_vector_inplace(call->args, st);
+            }
+        }
+        return;
+    }
     if (tag == CLJ_LIST) {
         ast_compile_list_inplace(as_list(expr), st);
         return;
@@ -72,4 +82,3 @@ static void ast_compile_expr_inplace(ID expr, EvalState *st) {
 void ast_compile_inplace(ID expr, EvalState *st) {
     ast_compile_expr_inplace(expr, st);
 }
-

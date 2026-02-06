@@ -180,14 +180,15 @@ ID native_re_seq(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    // Reverse the list to get correct order
+    // Reverse the list to get correct order.
+    // Build a new list to keep retain/release balanced (avoid in-place pointer rewrites).
     CljList *reversed = NULL;
-    while (result) {
-        CljList *next = as_list(result->rest);
-        result->rest = (ID)reversed;
-        reversed = result;
-        result = next;
+    for (CljList *cur = result; cur; cur = as_list(cur->rest)) {
+        ID elem = cur->first;
+        reversed = make_list(elem, reversed);
     }
+    // Release original list; reversed retains elements.
+    RELEASE(result);
 
-    return AUTORELEASE(reversed);
+    return reversed ? AUTORELEASE(reversed) : NULL;
 }

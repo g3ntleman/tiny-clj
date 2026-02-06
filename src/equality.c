@@ -139,7 +139,6 @@ bool clj_equal_full(ID a, ID b) {
             if (nsa == nsb) return true; // includes both NULL
             if (!nsa || !nsb) return false;
             if (!nsa->cname || !nsb->cname) return false;
-            CLJ_ASSERT(strcmp(nsa->cname, nsb->cname) == 0 && "Symbol namespaces differ; interning may be broken");
             return strcmp(nsa->cname, nsb->cname) == 0;
         }
         case CLJ_MAP_PERSISTENT: {

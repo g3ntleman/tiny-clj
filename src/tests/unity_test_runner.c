@@ -47,6 +47,7 @@ static const SubjectiveCTestEntry *g_current_test_entry = NULL;
 // Per-test heap growth baseline (profiling enabled)
 #if MEMORY_PROFILING_ENABLED
 static MemoryStats g_heap_baseline;
+static bool g_memory_profiler_initialized = false;
 #endif
 static bool g_heap_check_enabled = false;
 static size_t g_heap_growth_limit_bytes = 0;
@@ -131,9 +132,6 @@ static void test_heap_growth_check(void) {
 
 
 void setUp(void) {
-    // Always reset memory profiler statistics BEFORE each test
-    memory_profiler_reset();
-
     // Default: enforce heap growth checks for shared (read-only) tests only
     g_heap_check_enabled = is_shared_test_entry(g_current_test_entry);
     g_heap_growth_limit_bytes = 0;
@@ -188,7 +186,10 @@ void setUp(void) {
     }
         
 #if MEMORY_PROFILING_ENABLED
-        MEMORY_PROFILER_INIT();
+        if (!g_memory_profiler_initialized) {
+            MEMORY_PROFILER_INIT();
+            g_memory_profiler_initialized = true;
+        }
         enable_memory_profiling(true);
         set_memory_verbose_mode(g_single_test_mode);
         memory_set_debug_output_enabled(memory_get_debug_output_enabled());

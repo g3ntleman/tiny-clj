@@ -201,7 +201,8 @@ void retain(CljObject *v) {
         const char *trace_list = getenv("TINYCLJ_TRACE_LIST_RETAIN");
         const char *trace_ast = getenv("TINYCLJ_TRACE_AST_RETAIN");
         if ((v->type == CLJ_LIST && trace_list && trace_list[0] && strcmp(trace_list, "0") != 0) ||
-            (v->type == CLJ_AST_NODE && trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
+            ((v->type == CLJ_AST_NODE || v->type == CLJ_AST_CALL) &&
+             trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
             static int trace_count = 0;
             if (trace_count < 200) {
                 fprintf(stderr, "[retain] %s %p rc=%d\n", clj_type_name(v->type), (void*)v, (int)v->rc);
@@ -265,7 +266,8 @@ void release(CljObject *v) {
         const char *trace_list = getenv("TINYCLJ_TRACE_LIST_RELEASE");
         const char *trace_ast = getenv("TINYCLJ_TRACE_AST_RELEASE");
         if ((v->type == CLJ_LIST && trace_list && trace_list[0] && strcmp(trace_list, "0") != 0) ||
-            (v->type == CLJ_AST_NODE && trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
+            ((v->type == CLJ_AST_NODE || v->type == CLJ_AST_CALL) &&
+             trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
             fprintf(stderr, "[release] %s %p rc=%d\n",
                     clj_type_name(v->type), (void*)v, (int)v->rc);
         }
@@ -322,7 +324,8 @@ void release(CljObject *v) {
             const char *trace_list = getenv("TINYCLJ_TRACE_LIST_FREE");
             const char *trace_ast = getenv("TINYCLJ_TRACE_AST_FREE");
             if ((v->type == CLJ_LIST && trace_list && trace_list[0] && strcmp(trace_list, "0") != 0) ||
-                (v->type == CLJ_AST_NODE && trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
+                ((v->type == CLJ_AST_NODE || v->type == CLJ_AST_CALL) &&
+                 trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
                 fprintf(stderr, "[free] %s %p\n", clj_type_name(v->type), (void*)v);
             }
         }
@@ -375,7 +378,8 @@ CljObject *autorelease(CljObject *v) {
         const char *trace_list = getenv("TINYCLJ_TRACE_LIST_AUTORELEASE");
         const char *trace_ast = getenv("TINYCLJ_TRACE_AST_AUTORELEASE");
         if ((v->type == CLJ_LIST && trace_list && trace_list[0] && strcmp(trace_list, "0") != 0) ||
-            (v->type == CLJ_AST_NODE && trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
+            ((v->type == CLJ_AST_NODE || v->type == CLJ_AST_CALL) &&
+             trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0)) {
             fprintf(stderr, "[autorelease] %s %p rc=%d\n", clj_type_name(v->type), (void*)v, (int)v->rc);
         }
     }
@@ -510,7 +514,8 @@ void autorelease_pool_drain_to_depth(uint32_t mark) {
                     }
                 } else if ((!IS_IMMEDIATE(e)) &&
                            ((TAG(e) == CLJ_LIST && trace_list && trace_list[0] && strcmp(trace_list, "0") != 0) ||
-                            (TAG(e) == CLJ_AST_NODE && trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0))) {
+                            ((TAG(e) == CLJ_AST_NODE || TAG(e) == CLJ_AST_CALL) &&
+                             trace_ast && trace_ast[0] && strcmp(trace_ast, "0") != 0))) {
                     fprintf(stderr, "[pool-drain] %s %p rc=%d\n",
                             clj_type_name(((CljObject*)e)->type), (void*)e, (int)((CljObject*)e)->rc);
                 }
@@ -692,7 +697,47 @@ static void release_object_default(CljObject *v) {
             RELEASE(node->callsite_cache);
             break;
         }
-
+        case CLJ_AST_CALL: {
+            CljASTCall *call = (CljASTCall*)v;
+#ifdef DEBUG
+            {
+                const char *trace_deep = getenv("TINYCLJ_TRACE_AST_RELEASE_DEEP");
+                if (trace_deep && trace_deep[0] && strcmp(trace_deep, "0") != 0) {
+                    fprintf(stderr, "[ast-call-release] %p op=%p args=%p cache=%p\n",
+                            (void*)call, (void*)call->op, (void*)call->args, (void*)call->callsite_cache);
+                    if (call->op) {
+                        if (IS_IMMEDIATE(call->op)) {
+                            fprintf(stderr, "  op: immediate %p\n", (void*)call->op);
+                        } else {
+                            CljObject *o = (CljObject*)call->op;
+                            fprintf(stderr, "  op: %s %p rc=%d\n",
+                                    clj_type_name(o->type), (void*)o, (int)o->rc);
+                        }
+                    } else {
+                        fprintf(stderr, "  op: NULL\n");
+                    }
+                    if (call->args) {
+                        CljObject *o = (CljObject*)call->args;
+                        fprintf(stderr, "  args: %s %p rc=%d\n",
+                                clj_type_name(o->type), (void*)o, (int)o->rc);
+                    } else {
+                        fprintf(stderr, "  args: NULL\n");
+                    }
+                    if (call->callsite_cache) {
+                        CljObject *o = (CljObject*)call->callsite_cache;
+                        fprintf(stderr, "  cache: %s %p rc=%d\n",
+                                clj_type_name(o->type), (void*)o, (int)o->rc);
+                    } else {
+                        fprintf(stderr, "  cache: NULL\n");
+                    }
+                }
+            }
+#endif
+            RELEASE(call->op);
+            RELEASE(call->args);
+            RELEASE(call->callsite_cache);
+            break;
+        }
         case CLJ_CALLSITE_CACHE: {
             CljCallsiteCache *cache = as_callsite_cache(v);
             if (cache) ASSIGN(cache->resolved, NULL);

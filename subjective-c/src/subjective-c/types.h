@@ -14,40 +14,39 @@
 #endif
 
 typedef enum {
+    CLJ_NIL = 0,
     CLJ_FIXNUM = 1,
+    CLJ_SYMBOL = 2,
     CLJ_CHAR = 3,
+    CLJ_STRING = 4,
     CLJ_BOOL = 5,
+    CLJ_VECTOR_PERSISTENT = 6,
     CLJ_FLOAT = 7,
 
-    CLJ_NIL = 0,
-    CLJ_SYMBOL = 2,
-    CLJ_STRING = 4,
-    CLJ_VECTOR_PERSISTENT = 6,
-    CLJ_VECTOR_TRANSIENT = 30,
-    CLJ_MAP_PERSISTENT = 10,
-    CLJ_MAP_TRANSIENT = 32,
-    CLJ_LIST = 12,
-    CLJ_AST_NODE = 14,
-    CLJ_CALLSITE_CACHE = 16,
-    CLJ_SEQ = 18,
-    CLJ_FUNC = 20,
-    CLJ_CLOSURE = 22,
-    CLJ_EXCEPTION = 24,
-    CLJ_BYTE_ARRAY = 26,
-    CLJ_ATOM = 28,
-    CLJ_NAMESPACE = 34,
-    CLJ_RAW_MEMORY = 36,
-    CLJ_SYMBOL_TOKEN = 38,
-    // Reserve 40-49 for subjective-c types
-    CLJ_HASHMAP = 40,
-    // Reserve 50+ for tiny-clj specific types if needed
-    CLJ_REGEX = 50,
-    CLJ_LAZY_SEQ = 52,
-    // New tiny-clj runtime types
-    CLJ_INSTANT = 54,
-    CLJ_UUID = 56,
+    CLJ_VECTOR_TRANSIENT = 8,
+    CLJ_MAP_PERSISTENT = 9,
+    CLJ_MAP_TRANSIENT = 10,
+    CLJ_LIST = 11,
+    CLJ_AST_NODE = 12,
+    CLJ_AST_CALL = 13,
+    CLJ_CALLSITE_CACHE = 14,
+    CLJ_RESERVED_AST_BODY = 15,
+    CLJ_SEQ = 16,
+    CLJ_FUNC = 17,
+    CLJ_CLOSURE = 18,
+    CLJ_EXCEPTION = 19,
+    CLJ_BYTE_ARRAY = 20,
+    CLJ_ATOM = 21,
+    CLJ_NAMESPACE = 22,
+    CLJ_RAW_MEMORY = 23,
+    CLJ_SYMBOL_TOKEN = 24,
+    CLJ_HASHMAP = 25,
+    CLJ_REGEX = 26,
+    CLJ_LAZY_SEQ = 27,
+    CLJ_INSTANT = 28,
+    CLJ_UUID = 29,
     // Lexical addressing: (depth, slot) references for locals
-    CLJ_SLOT_REF = 58
+    CLJ_SLOT_REF = 30
 } CljType;
 
 #define CLJ_TYPE_COUNT (CLJ_SLOT_REF + 1)

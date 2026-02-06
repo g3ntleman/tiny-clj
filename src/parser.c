@@ -517,7 +517,14 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljPersistentMap *env) {
     }
     
     CljType expr_tag = parsed_expr ? TAG(parsed_expr) : CLJ_NIL;
-    if (parsed_expr && is_list_type(expr_tag)) {
+    if (parsed_expr && expr_tag == CLJ_AST_CALL) {
+        CljPersistentMap *eval_env = env;
+        if (!eval_env) {
+            CLJ_ASSERT(eval_state->current_ns != NULL);
+            eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
+        }
+        result = eval_body(parsed_expr, eval_env, eval_state, NULL);
+    } else if (parsed_expr && is_list_type(expr_tag)) {
         // Use provided env or fall back to current_ns->mappings
         CljPersistentMap *eval_env = env;
         if (!eval_env) {

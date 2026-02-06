@@ -51,6 +51,17 @@ static INLINE void move_meta(ID src, ID dst) {
 #endif
 }
 
+static inline bool is_special_form_like(CljSymbol *sym) {
+    if (!sym) return false;
+    if (is_special_symbol(sym)) return true;
+    if (sym == SYM_DOSEQ || sym == SYM_DOTIMES) return true;
+    if (!sym->cname) return false;
+    if (strcmp(sym->cname, "try") == 0) return true;
+    if (strcmp(sym->cname, "loop") == 0) return true;
+    if (strcmp(sym->cname, "recur") == 0) return true;
+    return false;
+}
+
 static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, CljPersistentVector **scope_stack);
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
 
@@ -450,7 +461,6 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 }
                 if (!expanded) return NULL;
 
-                
                 // Transfer metadata from original form to expanded form
                 move_meta(list, expanded);
                 
@@ -461,7 +471,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     return canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
                 }
                 
-                // CRITICAL: Ensure expanded form is a list-like type (CLJ_LIST or CLJ_AST_NODE)
+                // CRITICAL: Ensure expanded form is a list-like type (CLJ_LIST)
                 // Macros can return PersistentList (CLJ_LIST) which needs to be canonicalized
                 unsigned char expanded_tag = TAG(expanded);
                 if (!is_list_type(expanded_tag)) {
@@ -471,7 +481,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 }
                 
                 // Recursively canonicalize the expanded form
-                // This will convert CLJ_LIST to CLJ_AST_NODE and canonicalize all elements.
+                // This will canonicalize the expanded list and its elements.
                 // Keep the original form retained while we recurse so temporary hash maps or
                 // autorelease pools can't drop its rc to zero prematurely.
                 if (list) {
@@ -662,9 +672,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 scope_stack_pop_inplace(scope_stack);
 
                 CljList *tail = (CljList*)AUTORELEASE(make_list(canon_bindings, canon_body));
-                ID result = in_quote
-                    ? AUTORELEASE(make_list(first, tail))
-                    : AUTORELEASE(make_ast_node(first, (ID)tail));
+                ID result = AUTORELEASE(make_list(first, tail));
                 if (!result) return expr;
                 move_meta(expr, result);
                 return result;
@@ -710,9 +718,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 scope_stack_pop_inplace(scope_stack);
 
                 CljList *tail = (CljList*)AUTORELEASE(make_list(canon_bindings, canon_body));
-                ID result = in_quote
-                    ? AUTORELEASE(make_list(first, tail))
-                    : AUTORELEASE(make_ast_node(first, (ID)tail));
+                ID result = AUTORELEASE(make_list(first, tail));
                 if (!result) return expr;
                 move_meta(expr, result);
                 return result;
@@ -750,9 +756,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 scope_stack_pop_inplace(scope_stack);
 
                 CljList *tail = (CljList*)AUTORELEASE(make_list(canon_binding_vec, canon_body));
-                ID result = in_quote
-                    ? AUTORELEASE(make_list(first, tail))
-                    : AUTORELEASE(make_ast_node(first, (ID)tail));
+                ID result = AUTORELEASE(make_list(first, tail));
                 if (!result) return expr;
                 move_meta(expr, result);
                 return result;
@@ -827,9 +831,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                             tail = (CljList*)AUTORELEASE(make_list(params_canon_id, canon_body));
                         }
 
-                        ID result = in_quote
-                            ? AUTORELEASE(make_list(first, tail))
-                            : AUTORELEASE(make_ast_node(first, (ID)tail));
+                        ID result = AUTORELEASE(make_list(first, tail));
                         if (!result) return expr;
                         move_meta(expr, result);
                         return result;
@@ -838,31 +840,58 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             }
         }
         
-        // Canonicalize rest of list into plain CLJ_LIST cons cells.
-        // This ensures only the callsite head becomes CLJ_AST_NODE.
-        CljList *rest_list = list->rest ? canonicalize_rest_to_plain_list(list->rest, st, child_in_quote, scope_stack) : NULL;
+        bool is_special = (!in_quote && first && TAG(first) == CLJ_SYMBOL &&
+                           is_special_form_like(as_symbol(first)));
+        bool is_empty = list_empty(list);
 
-        // Early exit if nothing changed AND representation is already correct.
-        // - in_quote: entire list must be CLJ_LIST
-        // - normal: head must be CLJ_AST_NODE, tail should be CLJ_LIST
-        bool correct_type = in_quote ? (tag == CLJ_LIST) : (tag == CLJ_AST_NODE);
-        bool tail_is_plain_list = (!list->rest) || (TAG(list->rest) == CLJ_LIST);
-        if (correct_type && tail_is_plain_list && first == list->first && (ID)rest_list == list->rest) {
-            return expr;
+        if (in_quote || is_special || is_empty) {
+            // Canonicalize rest of list into plain CLJ_LIST cons cells.
+            CljList *rest_list = list->rest
+                ? canonicalize_rest_to_plain_list(list->rest, st, child_in_quote, scope_stack)
+                : NULL;
+
+            // Early exit if nothing changed AND representation is already correct.
+            bool correct_type = (tag == CLJ_LIST);
+            bool tail_is_plain_list = (!list->rest) || (TAG(list->rest) == CLJ_LIST);
+            if (correct_type && tail_is_plain_list && first == list->first && (ID)rest_list == list->rest) {
+                return expr;
+            }
+
+            ID result = AUTORELEASE(make_list(first, rest_list));
+            if (!result) {
+                return expr;  // Out of memory - return original
+            }
+
+            // Copy metadata (no recursive canonicalization - metadata has no symbol tokens)
+            move_meta(expr, result);
+            return result;
         }
 
-        // Create appropriate container based on context
-        ID result = in_quote
-            ? AUTORELEASE(make_list(first, rest_list))
-            : AUTORELEASE(make_ast_node(first, (CljObject*)rest_list));
-        
-        if (!result) {
-            return expr;  // Out of memory - return original
+        // Non-special call form: build AST_CALL (op + args vector).
+        unsigned int argc = 0;
+        for (CljList *node = list_rest_normalized(list); node; node = list_rest_normalized(node)) {
+            argc++;
         }
-        
-        // Copy metadata (no recursive canonicalization - metadata has no symbol tokens)
-        move_meta(expr, result);
-        return result;
+
+        CljPersistentVector *args = make_vector((int)argc, STRONG);
+        for (CljList *node = list_rest_normalized(list); node; node = list_rest_normalized(node)) {
+            ID arg_expr = LIST_FIRST(node);
+            ID arg = canonicalize_expr_with_scope(arg_expr, st, child_in_quote, scope_stack);
+            vector_conj_inplace(&args, arg);
+        }
+
+        CljASTCall *call = make_ast_call(first, args);
+        RELEASE(args);
+
+        if (TAG(expr) == CLJ_AST_NODE) {
+            CljASTNode *node = as_ast_node(expr);
+            if (node && node->callsite_cache) {
+                ast_call_set_callsite_cache(call, node->callsite_cache);
+            }
+        }
+
+        move_meta(expr, (ID)call);
+        return AUTORELEASE(call);
     }
     
     // For other types (vectors, maps), recursively canonicalize elements

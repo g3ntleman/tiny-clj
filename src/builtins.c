@@ -153,6 +153,7 @@ ID native_rest(ID *args, unsigned int argc);
 ID native_concat(ID *args, unsigned int argc);
 ID native_next(ID *args, unsigned int argc);
 ID native_nnext(ID *args, unsigned int argc);
+ID native_destructure(ID *args, unsigned int argc);
 ID native_gensym(ID *args, unsigned int argc);
 ID native_partition(ID *args, unsigned int argc);
 ID native_some(ID *args, unsigned int argc);
@@ -989,6 +990,216 @@ ID native_nthnext(ID *args, unsigned int argc)
     }
 
     return current;
+}
+
+// ---------------------------------------------------------------------------
+// destructure: native implementation for clojure.core/destructure
+// ---------------------------------------------------------------------------
+static CljString *g_destructure_vec_prefix = NULL;
+static CljString *g_destructure_map_prefix = NULL;
+static CljSymbol *g_destructure_sym_get = NULL;
+static CljSymbol *g_destructure_sym_nthnext = NULL;
+static CljSymbol *g_destructure_kw_keys = NULL;
+static CljSymbol *g_destructure_kw_or = NULL;
+
+static inline CljSymbol* destructure_intern_once(CljSymbol **slot, const char *name) {
+    if (!*slot) {
+        *slot = intern_symbol_global(name);
+    }
+    return *slot;
+}
+
+static inline CljSymbol* destructure_gensym(const char *prefix, CljString **cache) {
+    if (!*cache) {
+        *cache = make_string(prefix);
+    }
+    ID arg = (ID)(*cache);
+    ID args[1] = {arg};
+    return (CljSymbol*)native_gensym(args, 1);
+}
+
+static inline ID destructure_list3(ID a, ID b, ID c) {
+    ID args[3] = {a, b, c};
+    return native_list(args, 3);
+}
+
+static inline ID destructure_list4(ID a, ID b, ID c, ID d) {
+    ID args[4] = {a, b, c, d};
+    return native_list(args, 4);
+}
+
+static CljSymbol* destructure_keyword_from_value(ID value) {
+    if (!value) return NULL;
+
+    const char *name = NULL;
+    if (TAG(value) == CLJ_SYMBOL) {
+        CljSymbol *sym = as_symbol(value);
+        name = sym ? sym->cname : NULL;
+        if (name && name[0] == ':') name++;
+    } else if (TAG(value) == CLJ_STRING) {
+        name = string_data(value);
+    }
+
+    if (!name || !*name) return NULL;
+
+    char kw_buf[SYMBOL_NAME_MAX_LEN + 2];
+    size_t len = strlen(name);
+    if (len > SYMBOL_NAME_MAX_LEN) len = SYMBOL_NAME_MAX_LEN;
+    kw_buf[0] = ':';
+    memcpy(kw_buf + 1, name, len);
+    kw_buf[len + 1] = '\0';
+    return intern_symbol_global(kw_buf);
+}
+
+static void destructure_seq(CljPersistentVector **bvec_slot, ID bform, ID init) {
+    if (!bvec_slot || !*bvec_slot) return;
+
+    CljPersistentVector *bvec = *bvec_slot;
+    CljSymbol *gvec = destructure_gensym("vec__", &g_destructure_vec_prefix);
+    vector_conj_inplace(&bvec, gvec);
+    vector_conj_inplace(&bvec, init);
+
+    CljPersistentVector *elems = NULL;
+    if (bform && (TAG(bform) == CLJ_VECTOR_PERSISTENT || TAG(bform) == CLJ_VECTOR_TRANSIENT)) {
+        elems = as_vector(bform);
+    } else if (bform && is_seqable(bform)) {
+        ID vec_args[1] = {bform};
+        ID vec_id = native_vec(vec_args, 1);
+        if (vec_id && TAG(vec_id) == CLJ_VECTOR_PERSISTENT) {
+            elems = as_vector(vec_id);
+        }
+    }
+
+    if (!elems) {
+        *bvec_slot = bvec;
+        return;
+    }
+
+    CljSymbol *sym_nthnext = destructure_intern_once(&g_destructure_sym_nthnext, "nthnext");
+    unsigned int n = vector_count(elems);
+    int idx = 0;
+    int skip = 0;
+    for (unsigned int i = 0; i < n; i++) {
+        ID elem = vector_nth(elems, i);
+        ID next = (i + 1 < n) ? vector_nth(elems, i + 1) : NULL;
+
+        if (skip > 0) {
+            skip--;
+            continue;
+        }
+
+        if (elem == (ID)SYM_AMP) {
+            vector_conj_inplace(&bvec, next);
+            vector_conj_inplace(&bvec, destructure_list3((ID)sym_nthnext, (ID)gvec, fixnum(idx)));
+            skip = 1;
+        } else if (elem == (ID)SYM_KW_AS) {
+            vector_conj_inplace(&bvec, next);
+            vector_conj_inplace(&bvec, (ID)gvec);
+            skip = 1;
+        } else {
+            vector_conj_inplace(&bvec, elem);
+            vector_conj_inplace(&bvec, destructure_list4((ID)SYM_NTH, (ID)gvec, fixnum(idx), NULL));
+            idx++;
+        }
+    }
+
+    *bvec_slot = bvec;
+}
+
+static void destructure_map(CljPersistentVector **bvec_slot, ID bform, ID init) {
+    if (!bvec_slot || !*bvec_slot) return;
+
+    CljPersistentVector *bvec = *bvec_slot;
+    CljSymbol *gmap = destructure_gensym("map__", &g_destructure_map_prefix);
+    vector_conj_inplace(&bvec, gmap);
+    vector_conj_inplace(&bvec, init);
+
+    CljSymbol *kw_keys = destructure_intern_once(&g_destructure_kw_keys, ":keys");
+    CljSymbol *kw_or = destructure_intern_once(&g_destructure_kw_or, ":or");
+    CljSymbol *sym_get = destructure_intern_once(&g_destructure_sym_get, "get");
+
+    ID defaults = (kw_or && bform) ? map_get_sentinel(bform, (ID)kw_or, NULL) : NULL;
+    ID as_sym = (bform) ? map_get_sentinel(bform, (ID)SYM_KW_AS, NULL) : NULL;
+    if (as_sym) {
+        vector_conj_inplace(&bvec, as_sym);
+        vector_conj_inplace(&bvec, gmap);
+    }
+
+    ID keys_val = (kw_keys && bform) ? map_get_sentinel(bform, (ID)kw_keys, NULL) : NULL;
+    CljPersistentVector *keys_vec = NULL;
+    if (keys_val && (TAG(keys_val) == CLJ_VECTOR_PERSISTENT || TAG(keys_val) == CLJ_VECTOR_TRANSIENT)) {
+        keys_vec = as_vector(keys_val);
+    } else if (keys_val && is_seqable(keys_val)) {
+        ID vec_args[1] = {keys_val};
+        ID vec_id = native_vec(vec_args, 1);
+        if (vec_id && TAG(vec_id) == CLJ_VECTOR_PERSISTENT) {
+            keys_vec = as_vector(vec_id);
+        }
+    }
+
+    if (!keys_vec) {
+        *bvec_slot = bvec;
+        return;
+    }
+
+    VECTOR_FOR_EACH(keys_vec, sym) {
+        if (!sym) continue;
+        if (TAG(sym) != CLJ_SYMBOL && TAG(sym) != CLJ_STRING) continue;
+
+        CljSymbol *kw = destructure_keyword_from_value(sym);
+        if (!kw) continue;
+
+        ID default_val = defaults ? map_get_sentinel(defaults, sym, NULL) : NULL;
+        ID get_form = clj_is_truthy(default_val)
+                          ? destructure_list4((ID)sym_get, (ID)gmap, (ID)kw, default_val)
+                          : destructure_list3((ID)sym_get, (ID)gmap, (ID)kw);
+
+        vector_conj_inplace(&bvec, sym);
+        vector_conj_inplace(&bvec, get_form);
+    }
+
+    *bvec_slot = bvec;
+}
+
+ID native_destructure(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 1, "destructure");
+
+    ID bindings = args[0];
+    if (!bindings || IS_IMMEDIATE(bindings)) {
+        return empty_vector();
+    }
+
+    SeqIterator iter;
+    if (!seq_iter_init(&iter, bindings) || seq_iter_empty(&iter)) {
+        return empty_vector();
+    }
+
+    CljPersistentVector *result = make_vector(0, STRONG);
+
+    while (!seq_iter_empty(&iter)) {
+        ID bform = seq_iter_first(&iter);
+        seq_iter_next(&iter);
+        if (seq_iter_empty(&iter)) {
+            break;
+        }
+        ID init = seq_iter_first(&iter);
+        seq_iter_next(&iter);
+
+        if (bform && TAG(bform) == CLJ_SYMBOL && !IS_KEYWORD(bform)) {
+            vector_conj_inplace(&result, bform);
+            vector_conj_inplace(&result, init);
+        } else if (bform && (TAG(bform) == CLJ_VECTOR_PERSISTENT || TAG(bform) == CLJ_VECTOR_TRANSIENT)) {
+            destructure_seq(&result, bform, init);
+        } else if (bform && (TAG(bform) == CLJ_MAP_PERSISTENT || TAG(bform) == CLJ_MAP_TRANSIENT)) {
+            destructure_map(&result, bform, init);
+        } else {
+            vector_conj_inplace(&result, bform);
+            vector_conj_inplace(&result, init);
+        }
+    }
+
+    return AUTORELEASE(result);
 }
 
 // gensym: Generate unique symbol names
@@ -3747,6 +3958,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_with_meta_data.sym, native_with_meta},
     {&sym_reduce_data.sym, native_reduce},
     {&sym_list_data.sym, native_list},
+    {&sym_destructure_data.sym, native_destructure},
     {&sym_map_data.sym, native_map},
     {&sym_mapcat_data.sym, native_mapcat},
     {&sym_filter_data.sym, native_filter},
@@ -4359,6 +4571,11 @@ static bool eval_source_in_current_state(const char *src, const char *src_name, 
 {
     if (!src || !st)
         return false;
+    static int debug_require_errors = -1;
+    if (debug_require_errors == -1) {
+        const char *v = getenv("TINYCLJ_DEBUG_REQUIRE_ERRORS");
+        debug_require_errors = (v && v[0] && strcmp(v, "0") != 0) ? 1 : 0;
+    }
     int success_count = 0;
     Reader reader;
     reader_init(&reader, src);
@@ -4416,6 +4633,14 @@ static bool eval_source_in_current_state(const char *src, const char *src_name, 
         }
         CATCH(ex)
         {
+            if (debug_require_errors) {
+                const char *etype = (ex && ex->type && ex->type[0]) ? ex->type : "Exception";
+                const char *emsg = (ex && ex->message && ex->message[0]) ? ex->message : "Unknown error";
+                const char *efile = (ex && ex->file && ex->file[0]) ? ex->file : "<unknown>";
+                int eline = ex ? ex->line : 0;
+                const char *label = (src_name && src_name[0]) ? src_name : "<namespace>";
+                fprintf(stderr, "[require] %s: %s (%s:%d) [%s]\n", label, emsg, efile, eline, etype);
+            }
             while (!reader_is_eof(&reader) && reader_current(&reader) != '\n')
                 reader_next(&reader);
             if (!reader_is_eof(&reader))

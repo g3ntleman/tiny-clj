@@ -12,7 +12,6 @@ struct CljSymbol *SYM_KW_META = NULL;
 #include "hashmap.h" // For HashMap symbol table (O(1) lookup)
 #include "symbol_token.h"  // For CljSymbolToken
 #include "common.h"  // For CLJ_ASSERT
-#include "strings.h"  // For string_data()
 #include "eval.h"  // For SpecialFormEvalFn type
 #include "eval_special_forms.h"  // For eval_special_* functions
 #include <stdbool.h>
@@ -371,6 +370,7 @@ DEFINE_EXTERN_SYMBOL(sym_seq_data, "seq");
 DEFINE_EXTERN_SYMBOL(sym_next_data, "next");
 DEFINE_EXTERN_SYMBOL(sym_nnext_data, "nnext");
 DEFINE_EXTERN_SYMBOL(sym_nthnext_data, "nthnext");
+DEFINE_EXTERN_SYMBOL(sym_destructure_data, "destructure");
 DEFINE_EXTERN_SYMBOL(sym_gensym_data, "gensym");
 DEFINE_EXTERN_SYMBOL(sym_partition_data, "partition");
 DEFINE_EXTERN_SYMBOL(sym_some_data, "some");
@@ -937,48 +937,26 @@ void init_special_symbols() {
 }
 
 // -----------------------------------------------------------------------------
-// Symbol-table keys (CljString)
+// Symbol-table lookup keys (CljSymbol)
 // -----------------------------------------------------------------------------
-// NOTE: This deliberately allocates a heap `CljString`. A previous stack-backed
-// key attempt (via alloca) caused crashes during early runtime init.
-static inline CljString* make_symbol_key(CljSymbol *ns_name, const char *cname) {
-    const char *ns_cname = (ns_name && ns_name->cname) ? ns_name->cname : NULL;
-    const size_t ns_len = ns_cname ? strlen(ns_cname) : 0;
-    const size_t name_len = cname ? strlen(cname) : 0;
-    const size_t total_len = ns_len ? (ns_len + 1 + name_len) : name_len;
-
-    if (total_len > UINT16_MAX) {
-        return NULL;
-    }
-
-    CljString *key = make_string_buffer(total_len);
-    if (!key) {
-        return NULL;
-    }
-
-    char *out = key->data;
-    if (ns_len) {
-        memcpy(out, ns_cname, ns_len);
-        out += ns_len;
-        *out++ = '/';
-    }
-    if (name_len) {
-        memcpy(out, cname, name_len);
-        out += name_len;
-    }
-    *out = '\0';
-
+// Build a lightweight, stack-allocated symbol key for hash lookups.
+// This avoids heap allocation during intern_symbol() lookups.
+static inline CljSymbol make_symbol_key(CljSymbol *ns_name, const char *cname) {
+    CljSymbol key = {
+        .base = { .type = CLJ_SYMBOL, .flags = 0, .rc = SINGLETON_RC },
+        .ns_name = ns_name,
+        .unqualified = NULL,
+        .cname = cname,
+    };
     return key;
 }
 
 // Find symbol in the table - O(1) HashMap lookup
 static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *cname) {
     if (!cname || !g_runtime.symbol_table) return NULL;
-    
-    CljString *key = make_symbol_key(ns_name, cname);
-    if (!key) return NULL;
-    ID result = hashmap_get(g_runtime.symbol_table, key);
-    RELEASE(key);
+
+    CljSymbol key = make_symbol_key(ns_name, cname);
+    ID result = hashmap_get(g_runtime.symbol_table, (ID)&key);
     return (result == NOT_FOUND) ? NULL : (CljSymbol*)result;
 }
 
@@ -994,17 +972,12 @@ void symbol_table_add(CljSymbol *symbol) {
         g_runtime.symbol_table = make_hashmap(512);  // 512 = good initial capacity for Linear Probing
     }
 
-    CljString *key = make_symbol_key(ns_name, cname);
-    if (!key) return;
-    if (hashmap_contains(g_runtime.symbol_table, key)) {
-        RELEASE(key);
+    if (hashmap_contains(g_runtime.symbol_table, symbol)) {
         return;  // Already exists
     }
 
-    // Insert symbol into HashMap with CljString key.
-    // NOTE: The HashMap will RETAIN the key, so we can RELEASE our reference.
-    hashmap_assoc_inplace(&g_runtime.symbol_table, key, symbol);
-    RELEASE(key);
+    // Insert symbol into HashMap with CljSymbol key/value.
+    hashmap_assoc_inplace(&g_runtime.symbol_table, symbol, symbol);
 }
 
 /**

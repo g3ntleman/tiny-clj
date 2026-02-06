@@ -14,7 +14,21 @@ R"CLOJURE(
 (def cons (fn cons [x seq] :native))
 
 ; ============================================================================
-; defn Macro (bootstrap-safe: uses only def, fn, cons, list)
+; Bootstrap helpers needed by defn macro expansion (docstring detection)
+; Define these with (def ... (fn ... :native)) so defn macro can run.
+; ============================================================================
+(def first (fn first [coll] :native))
+(def rest (fn rest [coll] :native))
+(def next (fn next [coll] :native))
+(def count (fn count [coll] :native))
+(def vector? (fn vector? [x] :native))
+(def list? (fn list? [x] :native))
+(def symbol? (fn symbol? [x] :native))
+(def nnext (fn nnext [coll] :native))
+(def second (fn second [coll] (first (rest coll))))
+
+; ============================================================================
+; defn Macro (bootstrap-safe: relies only on helpers defined above)
 ; ============================================================================
 ^#^{:doc "Defines a function. Same as (def name (fn name [params] body...)). Supports optional docstring: (defn name \"doc\" [params] body...)"}
 (defmacro defn [name & args]
@@ -1022,51 +1036,7 @@ R"CLOJURE(
 ; ============================================================================
 
 ^#^{:doc "Transforms binding forms with destructuring into flat symbol bindings."}
-(defn destructure [bindings]
-  (let [; Sequential step: state=[result idx skip], no destructuring used
-        seq-step (fn [gvec state elem next-elem]
-                   (let [result (nth state 0 'nil)
-                         idx (nth state 1 'nil)
-                         skip (nth state 2 'nil)]
-                     (if (> skip 0)
-                       [result idx (dec skip)]
-                       (cond
-                         (= elem '&)  [(conj (conj result next-elem) (list 'nthnext gvec idx)) idx 1]
-                         (= elem :as) [(conj (conj result next-elem) gvec) idx 1]
-                         :else        [(conj (conj result elem) (list 'nth gvec idx 'nil)) (inc idx) 0]))))
-        ; Process sequential binding
-        proc-seq (fn [bvec bform init]
-                   (let [gvec (gensym "vec__")
-                         elems (vec bform)
-                         n (count elems)]
-                     (nth (reduce (fn [state i]
-                                    (seq-step gvec state (nth elems i 'nil) (nth elems (inc i) 'nil)))
-                                  [(conj (conj bvec gvec) init) 0 0]
-                                  (range n))
-                          0 'nil)))
-        ; Process map binding
-        proc-map (fn [bvec bform init]
-                   (let [gmap (gensym "map__")
-                         defaults (get bform :or {})
-                         as-sym (get bform :as)
-                         base (conj (conj bvec gmap) init)
-                         with-as (if as-sym (conj (conj base as-sym) gmap) base)]
-                     (reduce (fn [result sym]
-                               (let [kw (keyword (name sym))
-                                     default (get defaults sym)]
-                                 (conj (conj result sym)
-                                       (if default (list 'get gmap kw default) (list 'get gmap kw)))))
-                             with-as (get bform :keys []))))
-        ; Process one entry
-        proc-entry (fn [bvec entry]
-                     (let [bform (first entry)
-                           init (second entry)]
-                       (cond
-                         (symbol? bform) (conj (conj bvec bform) init)
-                         (vector? bform) (proc-seq bvec bform init)
-                         (map? bform)    (proc-map bvec bform init)
-                         :else           (conj (conj bvec bform) init))))]
-    (reduce proc-entry [] (partition 2 bindings))))
+(defn destructure [bindings] :native)
 
 ; ============================================================================
 ; for Macro Helper Function and Macro (requires destructure)

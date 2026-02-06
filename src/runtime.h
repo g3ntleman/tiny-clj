@@ -51,7 +51,7 @@ typedef struct TinyClJRuntime {
     uint64_t resolve_cache_epoch;   // Epoch for call-site cache invalidation (0 = disabled)
     
     // Symbol Table (HashMap for O(1) lookup)
-    CljHashMap *symbol_table;       // HashMap: "ns/name" or "name" → CljSymbol*
+    CljHashMap *symbol_table;       // HashMap: CljSymbol → CljSymbol* (interning table)
     
     // Meta Registry (HashMap for O(1) lookup)
     CljHashMap *meta_registry;

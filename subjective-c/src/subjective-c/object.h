@@ -52,6 +52,7 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 
 #define TYPE_OF_CljList CLJ_LIST
 #define TYPE_OF_CljASTNode CLJ_AST_NODE
+#define TYPE_OF_CljASTCall CLJ_AST_CALL
 #define TYPE_OF_CljCallsiteCache CLJ_CALLSITE_CACHE
 #define TYPE_OF_CljSymbol CLJ_SYMBOL
 #define TYPE_OF_CljFunction CLJ_CLOSURE

@@ -288,6 +288,7 @@ extern StaticSymbolData sym_cons_data;
 extern StaticSymbolData sym_next_data;
 extern StaticSymbolData sym_nnext_data;
 extern StaticSymbolData sym_nthnext_data;
+extern StaticSymbolData sym_destructure_data;
 extern StaticSymbolData sym_gensym_data;
 extern StaticSymbolData sym_partition_data;
 extern StaticSymbolData sym_some_data;

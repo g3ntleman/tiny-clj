@@ -18,6 +18,7 @@ static const DebugTraceConfig ast_trace_cfg = {
     .prefix = "[ast-alloc]",
     .max_traces = 200
 };
+
 #endif
 
 /**
@@ -46,6 +47,26 @@ CljASTNode* make_ast_node(ID first, ID rest) {
 }
 
 /**
+ * @brief Construct AST call node (op + args vector).
+ * @param op Operator (retained)
+ * @param args Args vector (retained)
+ * @return New AST call with rc=1, caller must release
+ */
+CljASTCall* make_ast_call(ID op, CljPersistentVector *args) {
+    CljASTCall *call = ALLOC(CljASTCall, 1);
+    if (!call) {
+        throw_oom();
+    }
+
+    call->base.type = CLJ_AST_CALL;
+    call->op = RETAIN(op);
+    call->args = args ? (CljPersistentVector*)RETAIN(args) : NULL;
+    call->callsite_cache = NULL;
+
+    return call;
+}
+
+/**
  * @brief Create lexical slot reference for closures.
  * @param symbol Symbol for debugging (not retained)
  * @param depth Depth in call frame stack (0=current frame)
@@ -66,13 +87,13 @@ CljSlotRef* make_slot_ref(CljSymbol *symbol, uint8_t depth, uint8_t slot) {
 }
 
 /**
- * @brief Create AST-backed list node.
+ * @brief Create list node (used for special forms and data lists).
  * @param first First element (retained)
  * @param rest Rest list (retained)
- * @return AST list with rc=1, caller must release
+ * @return List node with rc=1, caller must release
  */
 CljList* make_ast_list(ID first, CljList *rest) {
-    return (CljList*)make_ast_node(first, (ID)rest);
+    return make_list(first, rest);
 }
 
 /**
@@ -98,6 +119,28 @@ bool is_ast_node(ID obj) {
 }
 
 /**
+ * @brief Cast object to AST call if valid.
+ * @param obj Object to cast
+ * @return AST call or NULL
+ */
+CljASTCall* as_ast_call(ID obj) {
+    if (!obj) return NULL;
+    if (TAG(obj) == CLJ_AST_CALL) {
+        return (CljASTCall*)obj;
+    }
+    return NULL;
+}
+
+/**
+ * @brief Check if object is an AST call.
+ * @param obj Object to check
+ * @return true if AST call, false otherwise
+ */
+bool is_ast_call(ID obj) {
+    return obj && TAG(obj) == CLJ_AST_CALL;
+}
+
+/**
  * @brief Set callsite cache for AST node.
  * @param node AST node to update
  * @param cache Cache entry (may be NULL to clear)
@@ -115,6 +158,26 @@ void ast_node_set_callsite_cache(CljASTNode *node, ID cache) {
 ID ast_node_get_callsite_cache(const CljASTNode *node) {
     if (!node) return NULL;
     return node->callsite_cache;
+}
+
+/**
+ * @brief Set callsite cache for AST call.
+ * @param call AST call to update
+ * @param cache Cache entry (may be NULL to clear)
+ */
+void ast_call_set_callsite_cache(CljASTCall *call, ID cache) {
+    if (!call) return;
+    ASSIGN(call->callsite_cache, cache);
+}
+
+/**
+ * @brief Get callsite cache from AST call.
+ * @param call AST call
+ * @return Cache entry or NULL
+ */
+ID ast_call_get_callsite_cache(const CljASTCall *call) {
+    if (!call) return NULL;
+    return call->callsite_cache;
 }
 
 /**
@@ -200,10 +263,55 @@ void ast_node_update_callsite_cache(CljASTNode *node, CljSymbol *symbol, ID reso
 }
 
 /**
+ * @brief Get cached resolution from AST call.
+ * @param call AST call with cache
+ * @param symbol Symbol to lookup
+ * @param epoch Current namespace epoch
+ * @return Cached resolved value or NULL if not cached/invalid
+ */
+ID ast_call_get_cached_resolution(const CljASTCall *call, CljSymbol *symbol, uint64_t epoch) {
+    if (!call || !symbol) return NULL;
+    CljCallsiteCache *cache = as_callsite_cache(call->callsite_cache);
+    if (!cache) return NULL;
+    if (!callsite_cache_is_valid(cache, symbol, epoch)) {
+        return NULL;
+    }
+    return cache->resolved;
+}
+
+/**
+ * @brief Update callsite cache for AST call.
+ * @param call AST call to update
+ * @param symbol Symbol being resolved
+ * @param resolved Resolved value (retained)
+ * @param epoch Current namespace epoch
+ */
+void ast_call_update_callsite_cache(CljASTCall *call, CljSymbol *symbol, ID resolved, uint64_t epoch) {
+    if (!call || !symbol || !resolved) return;
+    CljCallsiteCache *cache = as_callsite_cache(call->callsite_cache);
+    if (!cache) {
+        ast_call_set_callsite_cache(call, AUTORELEASE(make_callsite_cache(symbol, resolved, epoch)));
+        return;
+    }
+    cache->symbol = symbol;
+    cache->epoch = epoch;
+    ASSIGN(cache->resolved, resolved);
+}
+
+/**
  * @brief Clear callsite cache from AST node.
  * @param node AST node to clear
  */
 void ast_node_clear_callsite_cache(CljASTNode *node) {
     if (!node) return;
     ast_node_set_callsite_cache(node, NULL);
+}
+
+/**
+ * @brief Clear callsite cache from AST call.
+ * @param call AST call to clear
+ */
+void ast_call_clear_callsite_cache(CljASTCall *call) {
+    if (!call) return;
+    ast_call_set_callsite_cache(call, NULL);
 }

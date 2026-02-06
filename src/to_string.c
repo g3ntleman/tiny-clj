@@ -254,7 +254,25 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             }
             return len;
         }
-
+        case CLJ_AST_CALL: {
+            size_t len = 2; // "( )"
+            int count = 0;
+            CljASTCall *call = (CljASTCall*)v;
+            if (call && call->op) {
+                len += to_string_calc_length((CljObject*)call->op, escape_strings);
+                count = 1;
+            }
+            if (call && call->args) {
+                CljPersistentVector *args = (CljPersistentVector*)call->args;
+                unsigned int argc = vector_count(args);
+                for (unsigned int i = 0; i < argc; i++) {
+                    if (count > 0) len += 1; // space
+                    len += to_string_calc_length((CljObject*)vector_nth(args, i), escape_strings);
+                    count++;
+                }
+            }
+            return len;
+        }
         case CLJ_MAP_PERSISTENT:
         case CLJ_MAP_TRANSIENT: {
             CljPersistentMap *map = as_map(v);
@@ -584,7 +602,31 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             *offset += 1;
             return;
         }
-
+        case CLJ_AST_CALL: {
+            buffer[*offset] = '(';
+            *offset += 1;
+            CljASTCall *call = (CljASTCall*)v;
+            int count = 0;
+            if (call && call->op) {
+                to_string_build_string((CljObject*)call->op, buffer, offset, escape_strings);
+                count = 1;
+            }
+            if (call && call->args) {
+                CljPersistentVector *args = (CljPersistentVector*)call->args;
+                unsigned int argc = vector_count(args);
+                for (unsigned int i = 0; i < argc; i++) {
+                    if (count > 0) {
+                        buffer[*offset] = ' ';
+                        *offset += 1;
+                    }
+                    to_string_build_string((CljObject*)vector_nth(args, i), buffer, offset, escape_strings);
+                    count++;
+                }
+            }
+            buffer[*offset] = ')';
+            *offset += 1;
+            return;
+        }
         case CLJ_MAP_PERSISTENT:
         case CLJ_MAP_TRANSIENT: {
             CljPersistentMap *map = as_map(v);

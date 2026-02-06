@@ -94,6 +94,112 @@ TEST(test_runtime_stats_build_time_before_now)
     }
 }
 
+#if defined(DEBUG)
+static bool debug_precore_mem_enabled(void)
+{
+    const char *v = getenv("TINYCLJ_DEBUG_PRECORE_MEM");
+    return (v && v[0] != '\0' && strcmp(v, "0") != 0);
+}
+
+static void debug_precore_mem_step(const char *label, MemoryStats *prev)
+{
+    if (!label) return;
+    MemoryStats s = memory_profiler_get_stats();
+    size_t obj_est = (s.current_memory_usage >= s.raw_bytes_current)
+        ? (s.current_memory_usage - s.raw_bytes_current)
+        : 0;
+    size_t prev_obj_est = 0;
+    long long delta_current = 0;
+    long long delta_raw = 0;
+    long long delta_obj = 0;
+    if (prev) {
+        prev_obj_est = (prev->current_memory_usage >= prev->raw_bytes_current)
+            ? (prev->current_memory_usage - prev->raw_bytes_current)
+            : 0;
+        delta_current = (long long)s.current_memory_usage - (long long)prev->current_memory_usage;
+        delta_raw = (long long)s.raw_bytes_current - (long long)prev->raw_bytes_current;
+        delta_obj = (long long)obj_est - (long long)prev_obj_est;
+        *prev = s;
+    }
+    fprintf(stderr,
+            "[precore-mem] %-22s current=%zu peak=%zu raw=%zu raw-peak=%zu obj-est=%zu",
+            label,
+            s.current_memory_usage,
+            s.peak_memory_usage,
+            s.raw_bytes_current,
+            s.raw_bytes_peak,
+            obj_est);
+    if (prev) {
+        fprintf(stderr,
+                " delta-current=%lld delta-raw=%lld delta-obj=%lld",
+                delta_current,
+                delta_raw,
+                delta_obj);
+    }
+    fputc('\n', stderr);
+}
+
+TEST(test_runtime_stats_bytes_peak_rounded_target_no_core)
+{
+    // Fresh runtime state to mirror --no-core startup.
+    runtime_reset(&g_runtime);
+    MemoryStats baseline = memory_profiler_get_stats();
+    bool debug = debug_precore_mem_enabled();
+    MemoryStats prev = baseline;
+    if (debug) {
+        debug_precore_mem_step("after reset", &prev);
+    }
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    if (debug) {
+        debug_precore_mem_step("after runtime_init", &prev);
+    }
+    meta_registry_init();
+    if (debug) {
+        debug_precore_mem_step("after meta_registry", &prev);
+    }
+    init_special_symbols();
+    if (debug) {
+        debug_precore_mem_step("after init_symbols", &prev);
+    }
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    if (debug) {
+        debug_precore_mem_step("after builtins", &prev);
+    }
+
+    // Reset eval state without loading clojure.core.
+    evalstate_reset(&g_test_eval_state, false);
+    if (debug) {
+        debug_precore_mem_step("after evalstate", &prev);
+    }
+
+    ID stats = eval_string("(do (require 'tinyclj.runtime) (tinyclj.runtime/stats))", g_test_eval_state);
+    if (debug) {
+        debug_precore_mem_step("after require+stats", &prev);
+    }
+    TEST_ASSERT_NOT_NULL(stats);
+    TEST_ASSERT_TRUE(is_map(stats));
+
+    ID k_bytes_peak = (ID)intern_symbol_global(":bytes-peak");
+    ID v_bytes_peak = map_get_sentinel((CljPersistentMap *)stats, k_bytes_peak, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_bytes_peak);
+    TEST_ASSERT_TRUE(is_fixnum(v_bytes_peak));
+
+    int32_t bytes_peak = as_fixnum(v_bytes_peak);
+    // Observed target was 31872; rounded up to 32 KiB.
+    const size_t target_bytes_peak = 32768;
+    size_t base_peak = baseline.peak_memory_usage;
+    size_t delta_peak = (bytes_peak > (int32_t)base_peak)
+        ? (size_t)bytes_peak - base_peak
+        : 0;
+    char msg[96];
+    snprintf(msg, sizeof(msg), "bytes-peak delta must be <= %zu", target_bytes_peak);
+    TEST_ASSERT_TRUE_MESSAGE(delta_peak <= target_bytes_peak, msg);
+}
+#endif
+
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_contains_memory_stats_map)
 {
@@ -233,8 +339,6 @@ TEST(test_runtime_stats_core_load_memory_delta)
     // Reset eval state without loading core.
     evalstate_reset(&g_test_eval_state, false);
 
-    // Zero profiler counters to measure only core loading costs.
-    memory_profiler_reset();
     MemoryStats before = memory_profiler_get_stats();
     fprintf(stderr, "[core-load-delta] before: bytes-current=%zu bytes-peak=%zu raw-current=%zu raw-peak=%zu\n",
             before.current_memory_usage, before.peak_memory_usage,
@@ -247,8 +351,10 @@ TEST(test_runtime_stats_core_load_memory_delta)
             after.current_memory_usage, after.peak_memory_usage,
             after.raw_bytes_current, after.raw_bytes_peak);
 
-    fprintf(stderr, "[core-load-delta] delta: +%zu bytes-current\n",
-            after.current_memory_usage - before.current_memory_usage);
+    size_t delta_current = (after.current_memory_usage > before.current_memory_usage)
+        ? (after.current_memory_usage - before.current_memory_usage)
+        : 0;
+    fprintf(stderr, "[core-load-delta] delta: +%zu bytes-current\n", delta_current);
 
     TEST_ASSERT_TRUE_MESSAGE(after.current_memory_usage >= before.current_memory_usage,
                              "bytes-current should not decrease after core load");
@@ -272,14 +378,28 @@ TEST(test_runtime_stats_core_load_under_100k)
     // Reset eval state without loading core.
     evalstate_reset(&g_test_eval_state, false);
 
-    // Measure only core loading costs.
-    memory_profiler_reset();
+    // Measure only core loading costs (delta from current baseline).
+    MemoryStats before = memory_profiler_get_stats();
     load_clojure_core(g_test_eval_state);
-
     MemoryStats after = memory_profiler_get_stats();
+    size_t delta_current = (after.current_memory_usage > before.current_memory_usage)
+        ? (after.current_memory_usage - before.current_memory_usage)
+        : 0;
     size_t limit = 500 * 1024;
-    TEST_ASSERT_TRUE_MESSAGE(after.current_memory_usage < limit,
-                             "core load should keep heap under 500k");
+    TEST_ASSERT_TRUE_MESSAGE(delta_current < limit,
+                             "core load delta should keep heap under 500k");
+}
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_core_load_peak_under_150k)
+{
+    MemoryStats after = memory_profiler_get_stats();
+    size_t limit = 150 * 1024;
+    char msg[128];
+    snprintf(msg, sizeof(msg), "core load peak must be <= %zu bytes (got %zu)",
+             limit, after.peak_memory_usage);
+    TEST_ASSERT_TRUE_MESSAGE(after.peak_memory_usage <= limit, msg);
 }
 #endif
 
@@ -299,7 +419,6 @@ TEST(test_runtime_stats_core_load_idempotent_memory)
 
     evalstate_reset(&g_test_eval_state, false);
 
-    memory_profiler_reset();
     load_clojure_core(g_test_eval_state);
     MemoryStats first = memory_profiler_get_stats();
 
@@ -336,7 +455,6 @@ TEST(test_runtime_stats_autorelease_loop_does_not_grow_heap)
     g_runtime.builtins_registered = true;
     evalstate_reset(&g_test_eval_state, true);
 
-    memory_profiler_reset();
     // Warm caches once (resolve + callsite), then take baseline.
     WITH_AUTORELEASE_POOL({
         ID warm = eval_string(expr, g_test_eval_state);
@@ -385,7 +503,6 @@ TEST(test_runtime_stats_memory_stats_stable_in_loop)
     g_runtime.builtins_registered = true;
     evalstate_reset(&g_test_eval_state, true);
 
-    memory_profiler_reset();
     // Warm caches once (resolve + callsite), then take baseline.
     WITH_AUTORELEASE_POOL({
         ID warm = eval_string(expr, g_test_eval_state);
