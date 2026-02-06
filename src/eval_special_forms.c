@@ -991,6 +991,7 @@ ID eval_special_quasiquote(CljList *list, CljPersistentMap *env, EvalState *st, 
 
     CljList *quoted_arg = make_ast_list(value, NULL);
     CljList *quoted_form = make_ast_list(SYM_QUOTE, quoted_arg);
+    RELEASE(quoted_arg);
     return AUTORELEASE(quoted_form);
 }
 
@@ -1072,10 +1073,13 @@ ID eval_special_defmacro(CljList *list, CljPersistentMap *env, EvalState *st, co
     
     // Create (fn [params] body...) list: fn -> [params] -> body1 -> body2 -> ...
     CljList *params_and_body = make_ast_list(params_obj, fn_body);
+    RELEASE(fn_body);
     CljList *fn_form = make_ast_list(SYM_FN, params_and_body);
+    RELEASE(params_and_body);
     
     // Evaluate fn to get CljFunction (CLJ_CLOSURE type)
     ID fn_result = eval_list(fn_form, env, st, ctx);
+    RELEASE(fn_form);
     if (!fn_result || TAG(fn_result) != CLJ_CLOSURE) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
             "defmacro failed to create function",

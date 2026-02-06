@@ -1047,13 +1047,17 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
         sym->base.flags |= CLJ_FLAG_DYNAMIC;
     }
 
-    // Store duplicated name for heap-allocated symbols (tracked allocation)
-    sym->cname = clj_strdup(cname);
-    if (!sym->cname) {
-        CLJ_FREE(sym);
-        throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
-                                  "Failed to duplicate string for symbol '%s'", cname);
-        return NULL;
+    // Use string directly if in data segment (immutable), otherwise duplicate
+    if (is_pointer_in_data_segment(cname)) {
+        sym->cname = cname;
+    } else {
+        sym->cname = clj_strdup(cname);
+        if (!sym->cname) {
+            CLJ_FREE(sym);
+            throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
+                                      "Failed to duplicate string for symbol '%s'", cname);
+            return NULL;
+        }
     }
 
     // Enforce invariant: symbols always have a name

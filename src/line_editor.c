@@ -702,12 +702,12 @@ static void backspace_character(LineEditor *editor) {
 }
 
 LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStringFunc put_string, void *ctx) {
-    LineEditor *editor = malloc(sizeof(LineEditor));
+    LineEditor *editor = (LineEditor*)CLJ_MALLOC(sizeof(LineEditor));
     if (!editor) return NULL;
     
     memset(editor, 0, sizeof(LineEditor));
     if (!buffer_init(&editor->buffer, LINE_EDITOR_BUFFER_INITIAL_CAP)) {
-        free(editor);
+        CLJ_FREE(editor);
         return NULL;
     }
     editor->get_char = get_char;
@@ -736,7 +736,7 @@ void line_editor_free(LineEditor *editor) {
         buffer_free(&editor->buffer);
         // Release history vector (automatically frees all contained strings)
         RELEASE(editor->history);
-        free(editor);
+        CLJ_FREE(editor);
     }
 }
 

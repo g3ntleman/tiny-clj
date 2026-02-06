@@ -859,7 +859,6 @@ ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *c
                     if (resolved == SYM_NIL) {
                         return NULL; // nil evaluates to NULL
                     }
-                    // eval_symbol returns AUTORELEASE - object survives until pool-pop
                     return resolved;
                 }
             }
@@ -2942,7 +2941,7 @@ ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalCont
 ID eval_heap(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     // (heap expr) - Memory leak detector.
     // Evaluates expr twice: first to warm up caches, second to measure.
-    // Returns nil. Any non-zero growth indicates a leak.
+    // Returns a map of type -> bytes delta, or nil if all zero.
     if (!list || !st) return NULL;
 
     int argc = list_count(list);
@@ -2951,24 +2950,58 @@ ID eval_heap(CljList *list, CljPersistentMap *env, EvalState *st, const EvalCont
     CljObject *expr = list_get_element(list, 1);
     CljPersistentMap *eval_env = eval_env_or_ns_mappings(env, st);
 
-    // Warmup pass - clears any accumulated autoreleases from previous evals
+    // Disable callsite cache during heap measurement to avoid cache churn artifacts
+    uint64_t saved_epoch = g_runtime.resolve_cache_epoch;
+    g_runtime.resolve_cache_epoch = 0;
+
+    // Warmup pass - prime caches and drain any accumulated autoreleases
     WITH_AUTORELEASE_POOL({ (void)eval_body((ID)expr, eval_env, st, ctx); });
+
+    // Capture stats before measurement
+    MemoryStats stats_before = memory_profiler_get_stats();
 
     // Measurement pass
-    size_t bytes_before = memory_profiler_get_stats().current_memory_usage;
-    size_t peak_before = memory_profiler_get_stats().peak_memory_usage;
     WITH_AUTORELEASE_POOL({ (void)eval_body((ID)expr, eval_env, st, ctx); });
+
+    // Capture stats after measurement
     MemoryStats stats_after = memory_profiler_get_stats();
 
-    long long growth = (long long)stats_after.current_memory_usage - (long long)bytes_before;
-    long long peak_growth = (long long)stats_after.peak_memory_usage - (long long)peak_before;
+    // Calculate total diff
+    long long total_diff = (long long)stats_after.current_memory_usage - (long long)stats_before.current_memory_usage;
 
-    if (!g_suppress_time_output) {
-        printf("Heap growth: %lld bytes (current: %zu, peak: %zu, peak-growth: %lld)\n",
-               growth, stats_after.current_memory_usage, stats_after.peak_memory_usage, peak_growth);
+    // Restore callsite cache epoch
+    g_runtime.resolve_cache_epoch = saved_epoch;
+
+    // Return nil if no leak detected (zero or negative growth means no leak)
+    // Negative growth can occur due to cross-pool deallocation (not a problem)
+    if (total_diff <= 0) return NULL;
+
+    // Build result map with non-zero type diffs
+    CljPersistentMap *result = map_empty();
+    result = map_assoc(result, intern_symbol_global(":total"), fixnum((int)total_diff));
+
+    // Add per-type diffs (bytes_current_by_type tracks actual bytes)
+    for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+        long long bytes_diff = (long long)stats_after.bytes_current_by_type[i] - (long long)stats_before.bytes_current_by_type[i];
+        if (bytes_diff != 0) {
+            const char *type_name = clj_type_name((CljType)i);
+            // Build keyword with ":" prefix
+            char kw_buf[64];
+            kw_buf[0] = ':';
+            size_t len = strlen(type_name);
+            if (len >= sizeof(kw_buf) - 1) len = sizeof(kw_buf) - 2;
+            memcpy(kw_buf + 1, type_name, len);
+            kw_buf[len + 1] = '\0';
+            result = map_assoc(result, intern_symbol_global(kw_buf), fixnum((int)bytes_diff));
+        }
     }
 
-    return NULL;
+    // Print summary if output is enabled (map will be printed by REPL anyway)
+    if (!g_suppress_time_output) {
+        printf("Heap growth: %lld bytes\n", total_diff);
+    }
+
+    return AUTORELEASE(result);
 }
 #endif // DEBUG
 
@@ -3050,11 +3083,11 @@ ID* alloc_obj_array(int size, ID *stack_buffer) {
     if (size <= 16) {
         return stack_buffer;
     }
-    return malloc((size_t)size * sizeof(*stack_buffer));
+    return (ID*)CLJ_MALLOC((size_t)size * sizeof(*stack_buffer));
 }
 
 void free_obj_array(ID *array, ID *stack_buffer) {
     if (array != stack_buffer) {
-        free((void*)array);
+        CLJ_FREE((void*)array);
     }
 }

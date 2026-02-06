@@ -594,4 +594,3 @@ TEST(test_for_macroexpand_with_cond_else) {
     TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
 }
 
-

@@ -116,7 +116,7 @@ static char* read_file_cstr_local(const char *path) {
     fclose(fp);
     return NULL;
   }
-  char *buffer = (char*)malloc((size_t)sz + 1);
+  char *buffer = (char*)CLJ_MALLOC((size_t)sz + 1);
   if (!buffer) {
     fclose(fp);
     return NULL;
@@ -496,7 +496,7 @@ int load_clojure_repl(EvalState *st) {
   // Convert namespace to relative path (clojure.repl -> clojure/repl.clj)
   const char *ns_name = "clojure.repl";
   size_t len = strlen(ns_name);
-  char *rel = (char*)malloc(len + 5); // +5 for ".clj" and potential slashes
+  char *rel = (char*)CLJ_MALLOC(len + 5); // +5 for ".clj" and potential slashes
   if (!rel) return 0;
   
   // Replace dots with slashes
@@ -514,7 +514,7 @@ int load_clojure_repl(EvalState *st) {
   // Keep this robust on toolchains that treat warnings as errors (ESP-IDF).
   const size_t max_copy = sizeof(parent_libs_path) - 4; // "../" + '\0'
   if (strlen(libs_path) > max_copy) {
-    free(rel);
+    CLJ_FREE(rel);
     return 0;
   }
   mini_snprintf(parent_libs_path, sizeof(parent_libs_path), "../%.*s", (int)max_copy, libs_path);
@@ -538,7 +538,7 @@ int load_clojure_repl(EvalState *st) {
   }
   
   if (!source) {
-    free(rel);
+    CLJ_FREE(rel);
     return 0;
   }
   
@@ -548,8 +548,8 @@ int load_clojure_repl(EvalState *st) {
   // Ensure target namespace exists
   CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
   if (!target_ns) {
-    free(source);
-    free(rel);
+    CLJ_FREE(source);
+    CLJ_FREE(rel);
     return 0;
   }
   
@@ -564,8 +564,8 @@ int load_clojure_repl(EvalState *st) {
     st->current_ns = orig_ns;
   }
   
-  free(source);
-  free(rel);
+  CLJ_FREE(source);
+  CLJ_FREE(rel);
   
   return ok ? 1 : 0;
 }

@@ -25,7 +25,7 @@ static CljSymbol *KW_TIMER_ID;
 
 // Timer-Task Map index constants for direct O(1) access
 // CRITICAL: The order of these enum values MUST match exactly the order of keys
-// in task_timer_to_map() when calling make_transient_map_from_kv().
+// in task_timer_to_map() when calling make_map_from_kv().
 // This pattern (enum for indices, guaranteed key order, direct index access)
 // can be reused for future defrecord implementations.
 enum {
@@ -75,25 +75,21 @@ static bool task_from_map(CljPersistentMap *task_map, CljObject **fn, CljTransie
 // Helper functions for Timer-Tasks as Maps
 // Timer-Task Map keys: :fn, :scheduled-sec, :scheduled-msec, :periodic, :period-ms, :timer-id
 //
-// CRITICAL: The order of keys in make_transient_map_from_kv() MUST match exactly
+// CRITICAL: The order of keys in make_map_from_kv() MUST match exactly
 // the order of the TIMER_TASK_IDX_* enum values defined above.
 // The optimized Getter functions (task_get_scheduled_sec(), etc.) rely on this
 // guaranteed key order for direct O(1) index access instead of O(n) keyword search.
 // If you change the key order here, you MUST also update the enum values accordingly.
 static CljPersistentMap* task_timer_to_map(CljObject *fn, int scheduled_sec, int scheduled_msec, bool periodic, int period_ms, int timer_id) {
-    CljTransientMap *tmap = make_transient_map_from_kv(6,
+    // make_map_from_kv returns PersistentMap with rc=1 (or singleton if empty)
+    CljPersistentMap *pmap = make_map_from_kv(6,
         KW_FN, fn,
         KW_SCHEDULED_SEC, fixnum((int32_t)scheduled_sec),
         KW_SCHEDULED_MSEC, fixnum((int32_t)scheduled_msec),
         KW_PERIODIC, periodic ? clj_true : clj_false,
         KW_PERIOD_MS, fixnum((int32_t)period_ms),
         KW_TIMER_ID, fixnum((int32_t)timer_id));
-    if (!tmap) return NULL;
-    
-    CljPersistentMap *pmap = map_persistent(tmap);
-    RETAIN(pmap);
-    RELEASE(tmap);
-    return pmap;
+    return pmap;  // rc=1, caller takes ownership
 }
 
 // Task Getter functions (static inline for performance)

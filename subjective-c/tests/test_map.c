@@ -470,25 +470,68 @@ TEST(test_map_foreach) {
     RELEASE(map);
 }
 
-TEST(test_make_transient_map_from_kv) {
+TEST(test_make_map_from_kv) {
     ID kw1 = AUTORELEASE(make_string(":key1"));
     ID kw2 = AUTORELEASE(make_string(":key2"));
     ID val1 = fixnum(10);
     ID val2 = fixnum(20);
     
-    CljTransientMap *tmap = make_transient_map_from_kv(2, kw1, val1, kw2, val2);
-    TEST_ASSERT_NOT_NULL(tmap);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP_TRANSIENT, TAG(tmap));
-    TEST_ASSERT_EQUAL_INT(2, map_count(tmap));
+    // Returns PersistentMap with rc=1 (or singleton if empty)
+    CljPersistentMap *pmap = AUTORELEASE(make_map_from_kv(2, kw1, val1, kw2, val2));
+    TEST_ASSERT_NOT_NULL(pmap);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(pmap));
+    TEST_ASSERT_EQUAL_INT(2, map_count(pmap));
     
-    CljValue v1 = map_get_sentinel(tmap, kw1, NULL);
-    CljValue v2 = map_get_sentinel(tmap, kw2, NULL);
+    CljValue v1 = map_get_sentinel(pmap, kw1, NULL);
+    CljValue v2 = map_get_sentinel(pmap, kw2, NULL);
     TEST_ASSERT_TRUE(is_fixnum(v1));
     TEST_ASSERT_TRUE(is_fixnum(v2));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(v1));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(v2));
     
-    RELEASE(tmap);
+    // AUTORELEASE'd by TEST macro, no manual RELEASE needed
+}
+
+TEST(test_make_map_kv_empty) {
+    // NOT_FOUND terminator means empty
+    CljPersistentMap *map = make_map_kv(NOT_FOUND);
+    TEST_ASSERT_NOT_NULL(map);
+    TEST_ASSERT_EQUAL_INT(0, map_count(map));
+    // make_map_kv retains the empty singleton in the empty case
+    RELEASE(map);
+}
+
+TEST(test_make_map_kv_one_pair) {
+    ID kw1 = AUTORELEASE(make_string(":key1"));
+    CljPersistentMap *map = make_map_kv(kw1, fixnum(10), NOT_FOUND);
+    TEST_ASSERT_NOT_NULL(map);
+    TEST_ASSERT_EQUAL_INT(1, map_count(map));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(map_get_sentinel(map, kw1, NULL)));
+    RELEASE(map);
+}
+
+TEST(test_make_map_kv_two_pairs) {
+    ID kw1 = AUTORELEASE(make_string(":key1"));
+    ID kw2 = AUTORELEASE(make_string(":key2"));
+    CljPersistentMap *map = make_map_kv(kw1, fixnum(10), kw2, fixnum(20), NOT_FOUND);
+    TEST_ASSERT_NOT_NULL(map);
+    TEST_ASSERT_EQUAL_INT(2, map_count(map));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(map_get_sentinel(map, kw1, NULL)));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum(map_get_sentinel(map, kw2, NULL)));
+    RELEASE(map);
+}
+
+TEST(test_make_map_from_kv_allows_not_found_as_value) {
+    ID kw1 = AUTORELEASE(make_string(":key1"));
+    ID kw2 = AUTORELEASE(make_string(":key2"));
+
+    // Count-based API: allows NOT_FOUND (or NULL) as a value, unlike make_map_kv().
+    CljPersistentMap *map = AUTORELEASE(make_map_from_kv(2, kw1, NOT_FOUND, kw2, fixnum(42)));
+    TEST_ASSERT_NOT_NULL(map);
+    TEST_ASSERT_EQUAL_INT(2, map_count(map));
+
+    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, map_get_sentinel(map, kw1, NULL));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(map_get_sentinel(map, kw2, NULL)));
 }
 
 TEST(test_make_map_from_stack) {

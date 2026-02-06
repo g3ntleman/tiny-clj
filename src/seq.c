@@ -519,13 +519,13 @@ CljSeqIterator* make_seq(ID obj) {
     
     // Initialize embedded stack iterator
     if (!seq_iter_init(&heap_seq->iter, (CljObject*)obj)) {
-        free(heap_seq);
+        CLJ_FREE(heap_seq);
         return NULL;  // Empty or not seqable
     }
     
     // If iterator is empty, return nil (NULL) - JVM-compatible
     if (seq_iter_empty(&heap_seq->iter)) {
-        free(heap_seq);
+        CLJ_FREE(heap_seq);
         return NULL;
     }
     
@@ -538,7 +538,7 @@ void seq_release(ID seq_obj) {
     if (!seq) return;
     
     // Stack iterator doesn't need cleanup
-    free(seq);
+    CLJ_FREE(seq);
 }
 
 ID seq_first(ID seq_obj) {

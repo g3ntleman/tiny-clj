@@ -167,11 +167,11 @@ void map_assoc_inplace(CljPersistentMap **map_slot, ID key, ID value);
  */
 void map_remove_inplace(CljPersistentMap **map_slot, ID key);
 
-/** @brief Create transient map from varargs key-value pairs
+/** @brief Create persistent map from varargs key-value pairs
  * @param count Number of key-value pairs
- * @return New transient map
+ * @return New persistent map (rc=1, or singleton if empty)
  */
-CljTransientMap* make_transient_map_from_kv(unsigned int count, ...);
+CljPersistentMap* make_map_from_kv(unsigned int count, ...);
 
 /** @brief Create map from varargs key-value pairs
  * @param first_key First key (NOT_FOUND terminated)

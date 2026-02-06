@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(tiny-clj)
 
 # Feature flags (compile-time): all are positive *_ENABLED macros (0/1)
-option(META_ENABLED "Enable metadata support" ON)
+option(META_ENABLED "Enable metadata support" OFF)
 option(MEMORY_PROFILING_ENABLED "Enable memory profiling hooks" ON)
 option(ZOMBIE_ENABLED "Enable zombie mode" OFF)
 
@@ -118,9 +118,10 @@ endif()
 
 add_subdirectory(subjective-c "${TINYCLJ_SUBJECTIVE_C_BINARY_DIR}")
 
-# Ensure core feature flags propagate into subjective-c itself (not just consumers)
-# so structs/layout and conditional code stay consistent.
-target_compile_definitions(subjective-c PUBLIC
+# Ensure core feature flags are set when building subjective-c so structs/layout
+# and conditional code stay consistent. Use PRIVATE so consumers (e.g. tiny-clj-repl
+# with META_ENABLED=0) can override without macro redefinition warnings.
+target_compile_definitions(subjective-c PRIVATE
     MEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE}
     META_ENABLED=${META_ENABLED_VALUE}
     $<$<BOOL:${ZOMBIE_ENABLED_VALUE}>:ZOMBIE_ENABLED>
@@ -276,6 +277,10 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/file_utils.c
     src/fs_layer.c
 )
+# ESP32-only sources (must not be part of host targets)
+target_sources(tiny-clj-esp32 PRIVATE
+    src/gpio_esp32.c
+)
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
 target_link_libraries(tiny-clj-esp32 PRIVATE tiny-db)
 target_include_directories(tiny-clj-esp32 PRIVATE
@@ -308,6 +313,10 @@ add_executable(tiny-clj-esp32-repl EXCLUDE_FROM_ALL
     src/line_editor.c
     src/platform_esp32_uart.c
     ${SOURCES}
+)
+# ESP32-only sources (must not be part of host targets)
+target_sources(tiny-clj-esp32-repl PRIVATE
+    src/gpio_esp32.c
 )
 target_link_libraries(tiny-clj-esp32-repl PRIVATE subjective-c)
 target_link_libraries(tiny-clj-esp32-repl PRIVATE tiny-db)
@@ -358,15 +367,15 @@ target_include_directories(tiny-clj-repl PRIVATE
 # REPL Build
 # Debug in Debug mode, Release in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=${META_ENABLED_VALUE} LINE_EDITING_ENABLED=1)
+    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=0 MEMORY_PROFILING_ENABLED=0 LINE_EDITING_ENABLED=1)
     set_target_properties(tiny-clj-repl PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )
     # Release: use CMAKE_C_FLAGS_RELEASE (set above with -O3 -DNDEBUG)
 else()
-    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=${META_ENABLED_VALUE} DEBUG LINE_EDITING_ENABLED=1 MEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE})
+    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=0 MEMORY_PROFILING_ENABLED=0 DEBUG LINE_EDITING_ENABLED=1)
     set_target_properties(tiny-clj-repl PROPERTIES
-        COMPILE_FLAGS "-g -O0 -DDEBUG -DMEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE} -fno-omit-frame-pointer"
+        COMPILE_FLAGS "-g -O0 -DDEBUG -DMEMORY_PROFILING_ENABLED=0 -fno-omit-frame-pointer"
         LINK_FLAGS ""
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )

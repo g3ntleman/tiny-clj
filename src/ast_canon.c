@@ -564,15 +564,16 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                         // Wrap body in let if there are destructuring bindings
                         ID new_body = body;
                         if (expanded_let_bindings && vector_count(expanded_let_bindings) > 0) {
-                            new_body = make_list(SYM_LET,
-                                                 make_list(expanded_let_bindings,
-                                                           make_list(body, NULL)));
+                            new_body = AUTORELEASE(make_list(SYM_LET,
+                                                 AUTORELEASE(make_list(expanded_let_bindings,
+                                                           AUTORELEASE(make_list(body, NULL))))));
                         }
                         
                         // Rebuild: (loop loop-bindings new-body)
+                        // Each inner make_list must be autoreleased to balance the RETAIN in outer make_list
                         ID loop_form = AUTORELEASE(make_list(first,
-                                                            make_list(loop_bindings,
-                                                                      make_list(new_body, NULL))));
+                                                            AUTORELEASE(make_list(loop_bindings,
+                                                                      AUTORELEASE(make_list(new_body, NULL))))));
                         return canonicalize_expr_with_scope(loop_form, st, in_quote, scope_stack);
                     }
                 }
@@ -872,7 +873,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         
         // Stack buffer for small vectors (avoid malloc)
         ID stack_buf[16];
-        ID *canon_elems = (count <= 16) ? stack_buf : (ID*)malloc(count * sizeof(ID));
+        ID *canon_elems = (count <= 16) ? stack_buf : (ID*)CLJ_MALLOC(count * sizeof(ID));
         CLJ_ASSERT(canon_elems != NULL && "Out of memory");
         
         bool changed = false;
@@ -886,7 +887,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
         
         if (!changed) {
-            if (count > 16) free(canon_elems);
+            if (count > 16) CLJ_FREE(canon_elems);
             return expr;  // No changes needed
         }
         
@@ -897,7 +898,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
         move_meta(vec, new_vec);
         
-        if (count > 16) free(canon_elems);
+        if (count > 16) CLJ_FREE(canon_elems);
         return AUTORELEASE(new_vec);
     }
     
@@ -912,7 +913,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         // Canonicalize keys and values (single pass), but only rebuild the map if something changed.
         // NOTE: We must not drop entries that appear before the first changed entry.
         ID stack_pairs[32 * 2];
-        ID *pairs = (cnt <= 32) ? stack_pairs : (ID*)malloc((size_t)cnt * 2 * sizeof(ID));
+        ID *pairs = (cnt <= 32) ? stack_pairs : (ID*)CLJ_MALLOC((size_t)cnt * 2 * sizeof(ID));
         CLJ_ASSERT(pairs != NULL && "Out of memory");
 
         bool changed = false;
@@ -929,7 +930,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
 
         if (!changed) {
-            if (pairs != stack_pairs) free(pairs);
+            if (pairs != stack_pairs) CLJ_FREE(pairs);
             return expr;  // No changes needed
         }
 
@@ -941,7 +942,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         }
         move_meta(map, new_map);
 
-        if (pairs != stack_pairs) free(pairs);
+        if (pairs != stack_pairs) CLJ_FREE(pairs);
         return AUTORELEASE(new_map);
     }
     

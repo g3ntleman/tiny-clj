@@ -422,8 +422,10 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             return 12; // "#<namespace>"
         }
 
-        default:
-            return 10; // "#<unknown>"
+        default: {
+            const char *type_name = clj_type_name(v->type);
+            return 9 + strlen(type_name); // "#<type: " + name + ">"
+        }
     }
 }
 // Recursive helper: Build string into buffer
@@ -825,10 +827,16 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             return;
         }
 
-        default:
-            memcpy(buffer + *offset, "#<unknown>", 10);
-            *offset += 10;
+        default: {
+            const char *type_name = clj_type_name(v->type);
+            memcpy(buffer + *offset, "#<type: ", 8);
+            *offset += 8;
+            size_t nlen = strlen(type_name);
+            memcpy(buffer + *offset, type_name, nlen);
+            *offset += nlen;
+            buffer[(*offset)++] = '>';
             return;
+        }
     }
 }
 

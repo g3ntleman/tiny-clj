@@ -46,6 +46,7 @@ set(TINYCLJ_SRCS
   "../../../src/macro.c"
   "../../../src/file_utils.c"
   "../../../src/fs_layer.c"
+  "../../../src/gpio_esp32.c"
   "../../../src/line_editor.c"
   "../../../src/mdns_codec.c"
   "../../../src/mdns_resolver.c"
@@ -60,6 +61,7 @@ idf_component_register(
   REQUIRES
     subjective-c
     tiny-db
+    driver
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC

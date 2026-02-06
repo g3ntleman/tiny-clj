@@ -251,15 +251,16 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;
     
     size_t obj_size = sizeof(CljObject);
-    
-#ifdef DEBUG
-    // Lightweight heap tracking (always in DEBUG, even without full profiling)
     { size_t r = platform_allocated_size(obj); if (r > 0) obj_size = r; }
-    memory_track_heap_simple(obj, obj_size, false);
-#endif
     
     // Full profiling (only when enabled)
-    if (!g_memory_profiling_enabled) return;
+    if (!g_memory_profiling_enabled) {
+#ifdef DEBUG
+        // Lightweight heap tracking (always in DEBUG, even without full profiling)
+        memory_track_heap_simple(obj, obj_size, false);
+#endif
+        return;
+    }
     
     if (obj->type < 0 || obj->type >= CLJ_TYPE_COUNT) {
         fprintf(stderr, "memory_profiler: invalid type %d for object %p in destruction\n",
@@ -269,7 +270,11 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
     }
     g_memory_stats.object_destructions++;
     uint8_t tt = obj->type;
+    // Use stored size from hash table for consistency with creation
     (void)obj_blocks_untrack(obj, &obj_size, &tt);
+#ifdef DEBUG
+    memory_track_heap_simple(obj, obj_size, false);
+#endif
     memory_profiler_track_deallocation(obj_size);
     if (tt < CLJ_TYPE_COUNT) {
         if (g_memory_stats.bytes_current_by_type[tt] >= obj_size)
@@ -286,15 +291,16 @@ void memory_profiler_track_object_zombify(CljObject *obj) {
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;
     
     size_t obj_size = sizeof(CljObject);
-    
-#ifdef DEBUG
-    // Lightweight heap tracking (always in DEBUG, even without full profiling)
     { size_t r = platform_allocated_size(obj); if (r > 0) obj_size = r; }
-    memory_track_heap_simple(obj, obj_size, false);
-#endif
     
     // Full profiling (only when enabled)
-    if (!g_memory_profiling_enabled) return;
+    if (!g_memory_profiling_enabled) {
+#ifdef DEBUG
+        // Lightweight heap tracking (always in DEBUG, even without full profiling)
+        memory_track_heap_simple(obj, obj_size, false);
+#endif
+        return;
+    }
     
     if (obj->type < 0 || obj->type >= CLJ_TYPE_COUNT) {
         fprintf(stderr, "memory_profiler: invalid type %d for object %p in zombify\n",
@@ -304,7 +310,11 @@ void memory_profiler_track_object_zombify(CljObject *obj) {
     }
     g_memory_stats.object_destructions++;
     uint8_t tt = obj->type;
+    // Use stored size from hash table for consistency with creation
     (void)obj_blocks_untrack(obj, &obj_size, &tt);
+#ifdef DEBUG
+    memory_track_heap_simple(obj, obj_size, false);
+#endif
     memory_profiler_track_deallocation(obj_size);
     if (tt < CLJ_TYPE_COUNT) {
         if (g_memory_stats.bytes_current_by_type[tt] >= obj_size)

@@ -1,4 +1,5 @@
 #include "platform.h"
+#include "memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -494,7 +495,7 @@ static void udp_socket_cb(CFSocketRef s,
 }
 
 static PlatformUdpSocket* udp_wrap_native_fd(int fd, platform_udp_recv_cb cb, void *cb_ctx) {
-    PlatformUdpSocket *u = (PlatformUdpSocket*)calloc(1, sizeof(PlatformUdpSocket));
+    PlatformUdpSocket *u = (PlatformUdpSocket*)CLJ_CALLOC(1, sizeof(PlatformUdpSocket));
     if (!u) {
         close(fd);
         return NULL;
@@ -518,7 +519,7 @@ static PlatformUdpSocket* udp_wrap_native_fd(int fd, platform_udp_recv_cb cb, vo
                                                 &ctx);
     if (!sock) {
         close(fd);
-        free(u);
+        CLJ_FREE(u);
         return NULL;
     }
 
@@ -532,7 +533,7 @@ static PlatformUdpSocket* udp_wrap_native_fd(int fd, platform_udp_recv_cb cb, vo
     if (!source) {
         CFSocketInvalidate(sock);
         CFRelease(sock);
-        free(u);
+        CLJ_FREE(u);
         return NULL;
     }
     CFRunLoopAddSource(CFRunLoopGetCurrent(), source, kCFRunLoopDefaultMode);
@@ -607,7 +608,7 @@ void platform_udp_close(PlatformUdpSocket *sock) {
         CFRelease(sock->sock);
         sock->sock = NULL;
     }
-    free(sock);
+    CLJ_FREE(sock);
 }
 
 // -----------------------------------------------------------------------------
@@ -618,7 +619,7 @@ PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx) {
     // Best-effort: create IPv4 + IPv6 sockets bound to 5353 with reuse enabled.
     const uint16_t port = 5353;
 
-    PlatformMdns *m = (PlatformMdns*)calloc(1, sizeof(PlatformMdns));
+    PlatformMdns *m = (PlatformMdns*)CLJ_CALLOC(1, sizeof(PlatformMdns));
     if (!m) return NULL;
 
     // Enumerate interfaces so we can join IPv4/IPv6 mDNS multicast groups on all
@@ -754,7 +755,7 @@ PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx) {
     }
 
     if (!m->v4 && !m->v6) {
-        free(m);
+        CLJ_FREE(m);
         return NULL;
     }
     return m;
@@ -869,7 +870,7 @@ void platform_mdns_close(PlatformMdns *m) {
     if (!m) return;
     if (m->v4) { platform_udp_close(m->v4); m->v4 = NULL; }
     if (m->v6) { platform_udp_close(m->v6); m->v6 = NULL; }
-    free(m);
+    CLJ_FREE(m);
 }
 
 // TCP is implemented in later todos (platform + builtins). For now, keep stubs that compile.
@@ -955,7 +956,7 @@ PlatformTcpConn* platform_tcp_connect_async(const char *host, uint16_t port,
                                             platform_tcp_event_cb cb, void *cb_ctx) {
     if (!host || !cb) return NULL;
 
-    PlatformTcpConn *c = (PlatformTcpConn*)calloc(1, sizeof(PlatformTcpConn));
+    PlatformTcpConn *c = (PlatformTcpConn*)CLJ_CALLOC(1, sizeof(PlatformTcpConn));
     if (!c) return NULL;
     c->cb = cb;
     c->cb_ctx = cb_ctx;
@@ -965,7 +966,7 @@ PlatformTcpConn* platform_tcp_connect_async(const char *host, uint16_t port,
     CFWriteStreamRef w = NULL;
     CFStringRef host_str = CFStringCreateWithCString(kCFAllocatorDefault, host, kCFStringEncodingUTF8);
     if (!host_str) {
-        free(c);
+        CLJ_FREE(c);
         return NULL;
     }
 
@@ -975,7 +976,7 @@ PlatformTcpConn* platform_tcp_connect_async(const char *host, uint16_t port,
     if (!r || !w) {
         if (r) CFRelease(r);
         if (w) CFRelease(w);
-        free(c);
+        CLJ_FREE(c);
         return NULL;
     }
 
@@ -994,13 +995,13 @@ PlatformTcpConn* platform_tcp_connect_async(const char *host, uint16_t port,
     if (!CFReadStreamSetClient(r, read_events, tcp_stream_cb, &ctx)) {
         CFRelease(r);
         CFRelease(w);
-        free(c);
+        CLJ_FREE(c);
         return NULL;
     }
     if (!CFWriteStreamSetClient(w, write_events, tcp_write_stream_cb, &ctx)) {
         CFRelease(r);
         CFRelease(w);
-        free(c);
+        CLJ_FREE(c);
         return NULL;
     }
 
@@ -1037,7 +1038,7 @@ void platform_tcp_close(PlatformTcpConn *conn) {
         CFRelease(conn->w);
         conn->w = NULL;
     }
-    free(conn);
+    CLJ_FREE(conn);
 }
 
 void platform_net_packet_release(void *packet_handle) {

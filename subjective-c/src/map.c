@@ -403,24 +403,16 @@ void map_remove_inplace(CljPersistentMap **map_slot, ID key) {
   }
 }
 
-/** Create a transient map from variable number of key-value pairs.
+/** Create a persistent map from variable number of key-value pairs.
  * @param count Number of key-value pairs
  * @param ... Alternating key and value arguments (ID type)
- * @return Transient map with all key-value pairs, or NULL on error
- * @note Example: make_transient_map_from_kv(3, key1, val1, key2, val2, key3, val3)
+ * @return Persistent map with all key-value pairs (rc=1, or singleton if empty)
+ * @note Example: make_map_from_kv(3, key1, val1, key2, val2, key3, val3)
  */
-CljTransientMap* make_transient_map_from_kv(unsigned int count, ...) {
-    if (count == 0) {
-        CljPersistentMap *empty = map_empty();
-        CljTransientMap *tmap = map_transient(empty);
-        return tmap;
-    }
+CljPersistentMap* make_map_from_kv(unsigned int count, ...) {
+    if (count == 0) return map_empty();
 
-    CljPersistentMap *map = make_map(count, STRONG);  // throws OOM exception if allocation fails
-
-    CljTransientMap *tmap = map_transient(map);
-    RELEASE(map);
-    // map_transient throws OOM exception if allocation fails, so no NULL check needed
+    CljPersistentMap *map = map_empty();
 
     va_list args;
     va_start(args, count);
@@ -428,12 +420,13 @@ CljTransientMap* make_transient_map_from_kv(unsigned int count, ...) {
     for (unsigned int i = 0; i < count; i++) {
         ID key = va_arg(args, ID);
         ID value = va_arg(args, ID);
-        map_conj(tmap, key, value);
+        ASSIGN(map, map_assoc(map, key, value));
     }
 
     va_end(args);
 
-    return tmap;
+    RETAIN(map);  // rc=1 for caller
+    return map;
 }
 
 /** Create a persistent map from key-value pairs, terminated by NOT_FOUND.
@@ -576,6 +569,8 @@ CljPersistentMap* map_copy_with_additions(CljPersistentMap *parent_map, CljObjec
     }
 
   CljPersistentMap *result = map_persistent(tmap);
+  // map_persistent returns a borrowed reference; retain before releasing transient wrapper.
+  RETAIN(result);
   RELEASE(tmap);
   return result;
 }

@@ -91,7 +91,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
 
     // Prepare function call arguments: [current_value, ...args]
     // Use malloc instead of calloc - array is immediately filled
-    ID *fn_args = (ID*)malloc((argc + 1) * sizeof(ID));
+    ID *fn_args = (ID*)CLJ_MALLOC((argc + 1) * sizeof(ID));
     if (!fn_args) {
         RELEASE(current_value);
         throw_oom();
@@ -116,7 +116,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
         for (unsigned int i = 0; i < argc + 1; i++) {
             RELEASE(fn_args[i]);
         }
-        free(fn_args);
+        CLJ_FREE(fn_args);
         RELEASE(current_value);
         return NULL;
     } END_TRY
@@ -125,7 +125,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     for (unsigned int i = 0; i < argc + 1; i++) {
         RELEASE(fn_args[i]);
     }
-    free(fn_args);
+    CLJ_FREE(fn_args);
 
     RELEASE(current_value);
 

@@ -190,7 +190,8 @@ void ast_node_update_callsite_cache(CljASTNode *node, CljSymbol *symbol, ID reso
     if (!node || !symbol || !resolved) return;
     CljCallsiteCache *cache = as_callsite_cache(node->callsite_cache);
     if (!cache) {
-        ast_node_set_callsite_cache(node, (ID)make_callsite_cache(symbol, resolved, epoch));
+        // AUTORELEASE balances make_callsite_cache's rc=1; ASSIGN in set_ adds the owning ref
+        ast_node_set_callsite_cache(node, AUTORELEASE(make_callsite_cache(symbol, resolved, epoch)));
         return;
     }
     cache->symbol = symbol;

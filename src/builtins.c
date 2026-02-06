@@ -2930,7 +2930,7 @@ ID native_print_ast(ID *args, unsigned int argc)
     {
         printf("%s\n", ast_str);
         // print_ast returns a newly allocated string that must be freed
-        free((void *)ast_str);
+        CLJ_FREE((void *)ast_str);
     }
     return NULL;
 }
@@ -2957,7 +2957,7 @@ ID native_ast_string(ID *args, unsigned int argc)
     {
         CljString *result = make_string(ast_str);
         // print_ast returns a newly allocated string that must be freed
-        free((void *)ast_str);
+        CLJ_FREE((void *)ast_str);
         return AUTORELEASE(result);
     }
 
@@ -3377,7 +3377,7 @@ ID native_repl_dir(ID *args, unsigned int argc)
         return NULL;
     }
 
-    const char **names = (const char **)malloc(sizeof(char *) * entry_count);
+    const char **names = (const char **)CLJ_MALLOC(sizeof(char *) * entry_count);
     if (!names)
     {
         throw_oom();
@@ -3404,7 +3404,7 @@ ID native_repl_dir(ID *args, unsigned int argc)
             printf("%s\n", names[i]);
         }
     }
-    free(names);
+    CLJ_FREE(names);
     return NULL;
 }
 
@@ -4246,7 +4246,7 @@ static char *namespace_to_relpath(const char *ns_name)
         return NULL;
     size_t len = strlen(ns_name);
     // Worst case: all chars + possible slashes + ".clj" + NUL
-    char *buf = (char *)malloc(len + 5);
+    char *buf = (char *)CLJ_MALLOC(len + 5);
     if (!buf)
         return NULL;
     for (size_t i = 0; i < len; i++)
@@ -4287,7 +4287,7 @@ static char *read_file_once(const char *path)
         fclose(fp);
         return NULL;
     }
-    char *buffer = (char *)malloc((size_t)sz + 1);
+    char *buffer = (char *)CLJ_MALLOC((size_t)sz + 1);
     if (!buffer)
     {
         fclose(fp);
@@ -4777,8 +4777,8 @@ static bool process_require_spec(ID spec, EvalState *st)
     CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
     if (!target_ns)
     {
-        free(source);
-        free(rel);
+        CLJ_FREE(source);
+        CLJ_FREE(rel);
         return false;
     }
 
@@ -4796,8 +4796,8 @@ static bool process_require_spec(ID spec, EvalState *st)
         st->current_ns = orig_ns;
     }
 
-    free(source);
-    free(rel);
+    CLJ_FREE(source);
+    CLJ_FREE(rel);
 
     // CRITICAL: Don't fail completely if some expressions failed to load
     // Some functions may have been successfully defined even if others failed
@@ -6703,7 +6703,7 @@ ID native_swap_bang(ID *args, unsigned int argc)
     {
         fn_argc = argc - 2;
         // Use malloc instead of calloc - array is immediately filled
-        fn_args = (ID *)malloc(fn_argc * sizeof(ID));
+        fn_args = (ID *)CLJ_MALLOC(fn_argc * sizeof(ID));
         if (!fn_args)
         {
             throw_oom();
@@ -6719,7 +6719,7 @@ ID native_swap_bang(ID *args, unsigned int argc)
 
     if (fn_args)
     {
-        free(fn_args);
+        CLJ_FREE(fn_args);
     }
 
     return result; // Returns new value (can be NULL/nil or immediate)
@@ -7185,7 +7185,7 @@ static void register_builtin(const char *cname, BuiltinFn func)
             return;
         }
 
-        char *ns_name = (char *)malloc(ns_len + 1);
+        char *ns_name = (char *)CLJ_MALLOC(ns_len + 1);
         if (!ns_name)
         {
             return;
@@ -7195,7 +7195,7 @@ static void register_builtin(const char *cname, BuiltinFn func)
 
         symbol_name = slash + 1;
         target_ns = ns_get_or_create(ns_name, NULL);
-        free(ns_name);
+        CLJ_FREE(ns_name);
     }
     else
     {

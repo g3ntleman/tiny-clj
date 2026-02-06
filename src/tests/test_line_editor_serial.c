@@ -130,7 +130,7 @@ TEST(test_line_editor_serial_large_paste_uses_dynamic_growth) {
     // Paste a line longer than LineEditorState.buffer[512] and ensure the full
     // buffer is still available via line_editor_get_buffer_cstr().
     const int n = 600;
-    unsigned char *input = (unsigned char*)malloc((size_t)n + 1);
+    unsigned char *input = (unsigned char*)CLJ_MALLOC((size_t)n + 1);
     TEST_ASSERT_NOT_NULL(input);
     for (int i = 0; i < n; i++) input[i] = 'x';
     input[n] = '\r';
@@ -149,7 +149,7 @@ TEST(test_line_editor_serial_large_paste_uses_dynamic_growth) {
     TEST_ASSERT_EQUAL_CHAR('x', buf[n - 1]);
     TEST_ASSERT_EQUAL_CHAR('\0', buf[n]);
 
-    free(input);
+    CLJ_FREE(input);
     line_editor_free(ed);
 }
 
