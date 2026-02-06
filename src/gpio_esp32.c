@@ -42,8 +42,6 @@ static int32_t g_next_watcher_id = 1;
 
 // Watcher map keys (interned keywords; singletons)
 static CljSymbol *KW_PIN = NULL;
-static CljSymbol *KW_CALLBACK_FN = NULL;
-static CljSymbol *KW_WATCHER_ID = NULL;
 
 // ISR service installed once.
 static bool g_gpio_isr_service_installed = false;
@@ -73,8 +71,6 @@ static inline void gpio_ensure_initialized(void) {
     if (g_gpio_watchers) return;
     g_gpio_watchers = make_map(4, STRONG);
     KW_PIN = intern_symbol_global(":pin");
-    KW_CALLBACK_FN = intern_symbol_global(":callback-fn");
-    KW_WATCHER_ID = intern_symbol_global(":watcher-id");
 
     // Create cached drain function object once.
     SYM_GPIO_DRAIN = intern_symbol_global("tinyclj.gpio/drain-events");
@@ -122,7 +118,7 @@ static void IRAM_ATTR gpio_isr_handler(void *arg) {
     int32_t pin = (int32_t)as_fixnum(pin_val);
     int32_t value = gpio_get_level((gpio_num_t)pin);
 
-    ID callback_fn = map_get_sentinel((ID)watcher_map, (ID)KW_CALLBACK_FN, NULL);
+    ID callback_fn = map_get_sentinel((ID)watcher_map, (ID)SYM_KW_CALLBACK_FN, NULL);
     if (!callback_fn || IS_IMMEDIATE(callback_fn)) return;
 
     // Retain callback_fn so unwatch can't free it while event is pending.
@@ -201,8 +197,8 @@ ID native_gpio_watch(ID *args, unsigned int argc) {
     int32_t watcher_id = g_next_watcher_id++;
     CljPersistentMap *watcher_map = make_map_from_kv(3,
         (ID)KW_PIN, pin_key,
-        (ID)KW_CALLBACK_FN, callback,
-        (ID)KW_WATCHER_ID, fixnum(watcher_id));
+        (ID)SYM_KW_CALLBACK_FN, callback,
+        (ID)SYM_KW_WATCHER_ID, fixnum(watcher_id));
 
     // Store watcher_map in global index. Map retains value; we release local afterwards.
     ASSIGN(g_gpio_watchers, map_assoc(g_gpio_watchers, pin_key, (ID)watcher_map));
@@ -247,7 +243,7 @@ ID native_gpio_unwatch(ID *args, unsigned int argc) {
     ID found_pin_key = NULL;
     MAP_FOR_EACH(g_gpio_watchers, k, v) {
         ID watcher_map = (ID)v;
-        ID stored_wid = map_get_sentinel(watcher_map, (ID)KW_WATCHER_ID, NOT_FOUND);
+        ID stored_wid = map_get_sentinel(watcher_map, (ID)SYM_KW_WATCHER_ID, NOT_FOUND);
         if (stored_wid != NOT_FOUND && stored_wid && is_fixnum(stored_wid) && (int32_t)as_fixnum(stored_wid) == wid) {
             found_pin_key = (ID)k;
             break;

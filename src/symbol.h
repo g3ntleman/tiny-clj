@@ -148,6 +148,8 @@ extern CljSymbol *SYM_KW_HOST;
 extern CljSymbol *SYM_KW_COLUMN;
 extern CljSymbol *SYM_KW_FN;
 extern CljSymbol *SYM_KW_PATH;
+extern CljSymbol *SYM_KW_CALLBACK_FN;
+extern CljSymbol *SYM_KW_WATCHER_ID;
 extern CljSymbol *SYM_KW_CHUNKS;
 extern CljSymbol *SYM_KW_HOST_OS;
 extern CljSymbol *SYM_KW_MACRO;

@@ -123,6 +123,8 @@ CljSymbol *SYM_KW_HOST = NULL;
 CljSymbol *SYM_KW_COLUMN = NULL;
 CljSymbol *SYM_KW_FN = NULL;
 CljSymbol *SYM_KW_PATH = NULL;
+CljSymbol *SYM_KW_CALLBACK_FN = NULL;
+CljSymbol *SYM_KW_WATCHER_ID = NULL;
 CljSymbol *SYM_KW_HOST_OS = NULL;
 CljSymbol *SYM_KW_MACRO = NULL;
 CljSymbol *SYM_KW_TYPE = NULL;
@@ -503,6 +505,8 @@ DEFINE_STATIC_SYMBOL(sym_kw_host_data, ":host");
 DEFINE_STATIC_SYMBOL(sym_kw_column_data, ":column");
 DEFINE_STATIC_SYMBOL(sym_kw_fn_data, ":fn");
 DEFINE_STATIC_SYMBOL(sym_kw_path_data, ":path");
+DEFINE_STATIC_SYMBOL(sym_kw_callback_fn_data, ":callback-fn");
+DEFINE_STATIC_SYMBOL(sym_kw_watcher_id_data, ":watcher-id");
 DEFINE_STATIC_SYMBOL(sym_kw_meta_data, ":meta");
 DEFINE_STATIC_SYMBOL(sym_kw_host_os_data, ":host-os");
 DEFINE_STATIC_SYMBOL(sym_kw_macro_data, ":macro");
@@ -789,6 +793,8 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_FN, sym_kw_fn_data);
 
     INIT_SYMBOL(SYM_KW_PATH, sym_kw_path_data);
+    INIT_SYMBOL(SYM_KW_CALLBACK_FN, sym_kw_callback_fn_data);
+    INIT_SYMBOL(SYM_KW_WATCHER_ID, sym_kw_watcher_id_data);
 
     INIT_SYMBOL(SYM_KW_META, sym_kw_meta_data);
 
@@ -925,7 +931,7 @@ void init_special_symbols() {
         ((CljSpecialSymbol*)SYM_DEFMACRO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defmacro;
     }
     
-    // destructure is a Clojure function, not a special form
+    // destructure is a Clojure function, not a special form; intern once at setup
     SYM_DESTRUCTURE = intern_symbol_global("destructure");
 }
 
@@ -1070,7 +1076,14 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     return sym;
 }
 
-// Actual symbol interning
+/**
+ * @brief Intern a symbol in a namespace (setup only).
+ * @param ns_name Namespace symbol (or NULL for global)
+ * @param cname C string name
+ * @return Interned symbol or NULL
+ * @note Use only during setup/initialization. Never use in production hot path;
+ *       use pre-interned static/global symbol pointers (e.g. SYM_IF, KW_FN) instead.
+ */
 CljSymbol* intern_symbol(CljSymbol *ns_name, const char *cname) {
     if (!cname) return NULL;
 
@@ -1087,7 +1100,13 @@ CljSymbol* intern_symbol(CljSymbol *ns_name, const char *cname) {
     return symbol;
 }
 
-// Global symbols (without namespace)
+/**
+ * @brief Intern a global (namespace-less) symbol (setup only).
+ * @param cname C string name
+ * @return Interned symbol or NULL
+ * @note Use only during setup/initialization. Never use in production hot path;
+ *       store result in a static variable and use that in production (see event_loop.c, gpio_esp32.c).
+ */
 CljSymbol* intern_symbol_global(const char *cname) {
     return intern_symbol(NULL, cname);
 }
