@@ -3856,62 +3856,6 @@ static StaticSymbolData sym_tinyclj_net_mdns_close_bang_qualified_data = {
             .unqualified = NULL,
             .cname = "tinyclj.net.mdns/close!"}};
 
-// Unqualified clojure.core entries that are defined as :native stubs but not pre-interned.
-static StaticSymbolData sym_map_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "map"}};
-static StaticSymbolData sym_mapcat_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "mapcat"}};
-static StaticSymbolData sym_filter_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "filter"}};
-static StaticSymbolData sym_group_by_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "group-by"}};
-static StaticSymbolData sym_last_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "last"}};
-static StaticSymbolData sym_ns_unload_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "ns-unload"}};
-
-// Unqualified clojure.core entry: get-thread-bindings
-static StaticSymbolData sym_get_thread_bindings_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "get-thread-bindings"}};
-
-// GPIO functions
-static StaticSymbolData sym_gpio_watch_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "gpio-watch"}};
-static StaticSymbolData sym_gpio_unwatch_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "gpio-unwatch"}};
-static StaticSymbolData sym_gpio_simulate_data = {
-    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
-            .ns_name = NULL,
-            .unqualified = NULL,
-            .cname = "gpio-simulate!"}};
-
 // Compile-time initialized lookup table (DRY: avoids runtime initialization)
 // Uses static symbol data structures (&sym_*_data.sym) for compile-time references
 static const NativeFunctionEntry native_function_table[] = {
@@ -7023,7 +6967,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 
 #if defined(DEBUG)
     // Debug diagnostics: symbols, namespaces, heap (always available)
-    ASSIGN(m, map_assoc(m, SYM_KW_SYMBOLS, fixnum((int32_t)hashmap_count(g_runtime.symbol_table))));
+    ASSIGN(m, map_assoc(m, SYM_KW_SYMBOLS, fixnum((int32_t)hashset_count(g_runtime.symbol_table))));
     ASSIGN(m, map_assoc(m, SYM_KW_NAMESPACES, fixnum((int32_t)map_count(g_runtime.ns_registry))));
     
     // Heap usage (always tracked in DEBUG, same keys as full profiling)

@@ -663,16 +663,18 @@ TEST(test_resolve_list_operator_uses_cache) {
     // Parse and canonicalize once so the same AST node can cache the callsite
     ID parsed = parse_canonicalized("(inc 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_TRUE(is_list_like(parsed));
     CljASTNode *call_node = is_ast_node(parsed) ? (CljASTNode*)parsed : NULL;
-    TEST_ASSERT_NOT_NULL_MESSAGE(call_node, "expected AST list node for callsite caching");
+    CljASTCall *call = is_ast_call(parsed) ? (CljASTCall*)parsed : NULL;
+    TEST_ASSERT_TRUE_MESSAGE(call_node || call, "expected AST node or AST call for callsite caching");
 
     // Cache should be empty before evaluation
-    ID cached_before = ast_node_get_cached_resolution(call_node, inc_sym, g_runtime.resolve_cache_epoch);
+    ID cached_before = call
+        ? ast_call_get_cached_resolution(call, inc_sym, g_runtime.resolve_cache_epoch)
+        : ast_node_get_cached_resolution(call_node, inc_sym, g_runtime.resolve_cache_epoch);
     TEST_ASSERT_NULL_MESSAGE(cached_before, "callsite cache should be empty before evaluation");
 
     // First function call - should populate cache
-    CljObject *result1 = eval_list(as_list(parsed), g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
+    CljObject *result1 = eval_body(parsed, g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
     TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
@@ -709,12 +711,12 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     // Parse and canonicalize once so the same AST node can cache the callsite
     ID parsed = parse_canonicalized("(inc 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_TRUE(is_list_like(parsed));
     CljASTNode *call_node = is_ast_node(parsed) ? (CljASTNode*)parsed : NULL;
-    TEST_ASSERT_NOT_NULL_MESSAGE(call_node, "expected AST list node for callsite caching");
+    CljASTCall *call = is_ast_call(parsed) ? (CljASTCall*)parsed : NULL;
+    TEST_ASSERT_TRUE_MESSAGE(call_node || call, "expected AST node or AST call for callsite caching");
 
     // First function call - should populate cache
-    CljObject *result1 = eval_list(as_list(parsed), g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
+    CljObject *result1 = eval_body(parsed, g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
     TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));

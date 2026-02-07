@@ -25,6 +25,18 @@ typedef struct {
  */
 CljHashSet* make_hashset(unsigned int capacity);
 
+/** @brief Get key with custom not-found sentinel
+ * @param set Hashset to query
+ * @param key Key to lookup
+ * @param not_found Value to return if not found
+ * @return Stored key or not_found
+ */
+ID hashset_get_sentinel(CljHashSet *set, ID key, ID not_found);
+
+static inline ID hashset_get(CljHashSet *set, ID key) {
+    return hashset_get_sentinel(set, key, NOT_FOUND);
+}
+
 /** @brief Check if hashset contains key
  * @param set Hashset to query
  * @param key Key to check

@@ -10,6 +10,7 @@
 #include "object.h"
 #include "kv_macros.h"
 #include "callbacks.h"
+#include "hashset.h"
 
 #include "instant.h"
 #include "uuid.h"
@@ -103,6 +104,24 @@ uint32_t clj_hash_full(ID value) {
     switch (TAG(value)) {
         case CLJ_STRING: return hash_string((CljString*)value);
         case CLJ_SYMBOL: return hash_symbol((CljSymbol*)value);
+        case CLJ_HASHSET: {
+            CljHashSet *hs = (CljHashSet*)value;
+            unsigned int count = hashset_count(hs);
+            uint32_t key_hash = 0;
+            if (count > 0) {
+                for (unsigned int i = 0; i < hs->capacity; i++) {
+                    ID key = hs->data[i];
+                    if (key != HASHSET_EMPTY && key != HASHSET_TOMBSTONE) {
+                        key_hash = clj_hash_full(key);
+                        break;
+                    }
+                }
+            }
+            uint32_t h = FNV1A_OFFSET;
+            h = FNV_MIX(h, (uint32_t)count);
+            h = FNV_MIX(h, key_hash);
+            return h;
+        }
         case CLJ_VECTOR_PERSISTENT:
             return hash_vector(as_persistent_vector(value));
         case CLJ_VECTOR_TRANSIENT:

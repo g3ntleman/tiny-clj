@@ -16,6 +16,7 @@
 #include "memory.h"
 #include "vector.h"
 #include "hashmap.h"
+#include "hashset.h"
 #include "namespace.h"
 #include <alloca.h>
 #include <stdlib.h>
@@ -50,8 +51,8 @@ typedef struct TinyClJRuntime {
     CljPersistentMap *resolve_cache;          // Symbol resolution cache
     uint64_t resolve_cache_epoch;   // Epoch for call-site cache invalidation (0 = disabled)
     
-    // Symbol Table (HashMap for O(1) lookup)
-    CljHashMap *symbol_table;       // HashMap: CljSymbol → CljSymbol* (interning table)
+    // Symbol Table (HashSet for O(1) lookup)
+    CljHashSet *symbol_table;       // HashSet: CljSymbol (interning table)
     
     // Meta Registry (HashMap for O(1) lookup)
     CljHashMap *meta_registry;

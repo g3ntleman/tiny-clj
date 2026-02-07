@@ -9,7 +9,7 @@ struct CljSymbol *SYM_KW_META = NULL;
 #include "types.h"  // For SINGLETON_RC
 #include "memory.h" // For ASSIGN
 #include "vector.h"  // For vector operations
-#include "hashmap.h" // For HashMap symbol table (O(1) lookup)
+#include "hashset.h" // For HashSet symbol table (O(1) lookup)
 #include "symbol_token.h"  // For CljSymbolToken
 #include "common.h"  // For CLJ_ASSERT
 #include "eval.h"  // For SpecialFormEvalFn type
@@ -362,6 +362,16 @@ DEFINE_EXTERN_SYMBOL(sym_rest_data, "rest");
 DEFINE_EXTERN_SYMBOL(sym_concat_data, "concat");
 DEFINE_EXTERN_SYMBOL(sym_concat2_data, "concat2");
 DEFINE_EXTERN_SYMBOL(sym_count_data, "count");
+DEFINE_EXTERN_SYMBOL(sym_map_data, "map");
+DEFINE_EXTERN_SYMBOL(sym_mapcat_data, "mapcat");
+DEFINE_EXTERN_SYMBOL(sym_filter_data, "filter");
+DEFINE_EXTERN_SYMBOL(sym_group_by_data, "group-by");
+DEFINE_EXTERN_SYMBOL(sym_last_data, "last");
+DEFINE_EXTERN_SYMBOL(sym_ns_unload_data, "ns-unload");
+DEFINE_EXTERN_SYMBOL(sym_get_thread_bindings_data, "get-thread-bindings");
+DEFINE_EXTERN_SYMBOL(sym_gpio_watch_data, "gpio-watch");
+DEFINE_EXTERN_SYMBOL(sym_gpio_unwatch_data, "gpio-unwatch");
+DEFINE_EXTERN_SYMBOL(sym_gpio_simulate_data, "gpio-simulate!");
 
 // Extern symbol structs for native functions (compile-time initialization, statically allocated)
 // These are extern so they can be used in builtins.c's native function table
@@ -555,6 +565,84 @@ DEFINE_STATIC_SYMBOL(sym_kw_dealloc_count_data, ":dealloc-count");
 // Additional symbols for optimization (used in hot path)
 DEFINE_STATIC_SYMBOL(sym_ns_star_data, "*ns*");
 
+// All other clojure.core symbols (def/defn/defmacro names) - static to avoid heap on core load
+static struct { CljSymbol sym; } g_core_symbols[] = {
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "inc" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "dec" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "second" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "empty?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "identity" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "constantly" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "take" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "drop" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "zero?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "pos?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "neg?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "even?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "odd?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "max" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "min" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "butlast" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "interleave" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "interleave-repeat" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "lazy-seq" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "defn-" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "mapv" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "->" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "->>" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "as->" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "some->" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "some->>" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "cond->" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "cond->>" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "every?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "not-every?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "not-any?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "take-while" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "drop-while" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "keep" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "reductions" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "frequencies" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "distinct" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "partition-all" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "split-at" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "split-with" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "zipmap" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "get-in" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "partial" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "comp" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "juxt" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "complement" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "repeatedly" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "reduce-kv" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "abs" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "rem" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "normalize-for-bindings-helper" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "normalize-for-bindings" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "for-build" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "for" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "macroexpand-1" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "macroexpand" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "quasiquote-fn" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "watcher-registry" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "get-watcher-map" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "update-watcher-map" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "add-watch" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "remove-watch" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "notify-watchers" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "sleep" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "Math" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "coll?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "seq?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "seqable?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "ifn?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "some?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "true?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "false?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "boolean?" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "set?" } },
+};
+
 // Undef macro to avoid namespace pollution
 #undef DEFINE_STATIC_SYMBOL
 
@@ -730,6 +818,27 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_NEXT, sym_next_data);
 
     INIT_SYMBOL(SYM_LIST, sym_list_data);
+
+    INIT_SYMBOL(SYM_DESTRUCTURE, sym_destructure_data);
+
+    // clojure.core native symbols without SYM_* global (register for intern_symbol_global lookup)
+    symbol_table_add(&sym_reduce_data.sym);
+    symbol_table_add(&sym_meta_data.sym);
+    symbol_table_add(&sym_with_meta_data.sym);
+    symbol_table_add(&sym_concat2_data.sym);
+    symbol_table_add(&sym_map_data.sym);
+    symbol_table_add(&sym_mapcat_data.sym);
+    symbol_table_add(&sym_filter_data.sym);
+    symbol_table_add(&sym_group_by_data.sym);
+    symbol_table_add(&sym_last_data.sym);
+    symbol_table_add(&sym_get_thread_bindings_data.sym);
+    symbol_table_add(&sym_ns_unload_data.sym);
+    symbol_table_add(&sym_gpio_watch_data.sym);
+    symbol_table_add(&sym_gpio_unwatch_data.sym);
+    symbol_table_add(&sym_gpio_simulate_data.sym);
+
+    for (size_t i = 0; i < sizeof(g_core_symbols) / sizeof(g_core_symbols[0]); i++)
+        symbol_table_add(&g_core_symbols[i].sym);
 
     // Internal pre-interned symbols for lazy seq thunk state (hot path)
     INIT_SYMBOL(SYM_CONCAT_X, sym_concat_x_key_data);
@@ -932,8 +1041,6 @@ void init_special_symbols() {
         ((CljSpecialSymbol*)SYM_DEFMACRO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defmacro;
     }
     
-    // destructure is a Clojure function, not a special form; intern once at setup
-    SYM_DESTRUCTURE = intern_symbol_global("destructure");
 }
 
 // -----------------------------------------------------------------------------
@@ -951,16 +1058,16 @@ static inline CljSymbol make_symbol_key(CljSymbol *ns_name, const char *cname) {
     return key;
 }
 
-// Find symbol in the table - O(1) HashMap lookup
+// Find symbol in the table - O(1) HashSet lookup
 static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *cname) {
     if (!cname || !g_runtime.symbol_table) return NULL;
 
     CljSymbol key = make_symbol_key(ns_name, cname);
-    ID result = hashmap_get(g_runtime.symbol_table, (ID)&key);
+    ID result = hashset_get(g_runtime.symbol_table, (ID)&key);
     return (result == NOT_FOUND) ? NULL : (CljSymbol*)result;
 }
 
-// Add symbol to the table - O(1) HashMap insert
+// Add symbol to the table - O(1) HashSet insert
 void symbol_table_add(CljSymbol *symbol) {
     if (!symbol || !symbol->cname) return;
 
@@ -969,15 +1076,15 @@ void symbol_table_add(CljSymbol *symbol) {
     const char *cname = symbol->cname;
 
     if (!g_runtime.symbol_table) {
-        g_runtime.symbol_table = make_hashmap(512);  // 512 = good initial capacity for Linear Probing
+        g_runtime.symbol_table = make_hashset(512);  // 512 = good initial capacity for Linear Probing
     }
 
-    if (hashmap_contains(g_runtime.symbol_table, symbol)) {
+    if (hashset_contains(g_runtime.symbol_table, symbol)) {
         return;  // Already exists
     }
 
-    // Insert symbol into HashMap with CljSymbol key/value.
-    hashmap_assoc_inplace(&g_runtime.symbol_table, symbol, symbol);
+    // Insert symbol into HashSet.
+    hashset_add_inplace(&g_runtime.symbol_table, symbol);
 }
 
 /**

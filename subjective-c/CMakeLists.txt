@@ -59,6 +59,7 @@ set(SUBJECTIVE_C_SOURCES
     src/map.c
     src/byte_array.c
     src/hashmap.c
+    src/hashset.c
     src/callbacks.c
     src/datetime_utc.c
     src/instant.c

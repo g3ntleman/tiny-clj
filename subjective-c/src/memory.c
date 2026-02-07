@@ -26,6 +26,7 @@
 #include "function.h"  // For CljFunction
 #include "namespace.h"  // For CljNamespace
 #include "hashmap.h"  // For CljHashMap
+#include "hashset.h"  // For CljHashSet
 #include "byte_array.h"  // For CljByteArray and external buffer flags
 #include "thread_local.h"
 #include "mini_format.h"
@@ -611,6 +612,16 @@ static void release_object_default(CljObject *v) {
                 HASHMAP_FOR_EACH(map, hm_key, hm_val) {
                     RELEASE(hm_key);
                     RELEASE(hm_val);
+                }
+            }
+            break;
+
+        case CLJ_HASHSET:
+            {
+                CljHashSet *set = (CljHashSet*)v;
+                ID hs_key;
+                HASHSET_FOR_EACH(set, hs_key) {
+                    RELEASE(hs_key);
                 }
             }
             break;

@@ -12,6 +12,8 @@
 #include "exception.h"
 #include "list.h"
 #include "memory.h"
+#include "ast.h"
+#include "vector.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -82,9 +84,17 @@ bool is_tail_position(CljObject *expr, CljObject *body) {
 
 // Check if a function call is recursive
 bool is_recursive_call(CljObject *call_expr, CljObject *func_name) {
-    if (!call_expr || !func_name || !is_list_type(TAG(call_expr))) return false;
-    CljList *call_list = as_list(call_expr);
-    CljObject *called_name = call_list->first;
+    if (!call_expr || !func_name) return false;
+    CljObject *called_name = NULL;
+    if (is_list_type(TAG(call_expr))) {
+        CljList *call_list = as_list(call_expr);
+        called_name = call_list ? call_list->first : NULL;
+    } else if (TAG(call_expr) == CLJ_AST_CALL) {
+        CljASTCall *call = (CljASTCall*)call_expr;
+        called_name = call ? call->op : NULL;
+    } else {
+        return false;
+    }
     if (!called_name || TAG(called_name) != CLJ_SYMBOL) return false;
     CljSymbol *called_sym = as_symbol(called_name);
     CljSymbol *func_sym = as_symbol(func_name);
@@ -183,11 +193,50 @@ static CljList* build_list(CljObject *first, CljObject *second, CljObject *third
     return list;
 }
 
+static CljList* list_from_vector(CljPersistentVector *vec) {
+    if (!vec) return NULL;
+    int count = (int)vector_count(vec);
+    CljList *list = NULL;
+    for (int i = count - 1; i >= 0; i--) {
+        ID elem = vector_nth(vec, i);
+        CljList *node = (CljList*)make_list(elem, list);
+        if (!node) {
+            if (list) RELEASE(list);
+            return NULL;
+        }
+        list = node;
+    }
+    return list;
+}
+
+static CljObject* transform_ast_call_to_recur(CljASTCall *call) {
+    if (!call) return NULL;
+    CljList *args_list = list_from_vector(call->args);
+    CljList *new_list = (CljList*)make_list((CljObject*)SYM_RECUR, args_list);
+    if (!new_list) {
+        if (args_list) RELEASE(args_list);
+        return NULL;
+    }
+    return (CljObject*)new_list;
+}
+
 // Transform recursive tail calls to recur
 CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
                                          CljObject **params, int param_count,
                                          CljObject *parent_body) {
     if (!body) return NULL;
+    if (TAG(body) == CLJ_AST_CALL) {
+        CljObject *context = parent_body ? parent_body : body;
+        bool is_recursive = is_recursive_call(body, func_name);
+        bool is_tail = is_tail_position(body, context);
+        if (is_recursive && is_tail) {
+            CljObject *recur_list = transform_ast_call_to_recur((CljASTCall*)body);
+            if (!recur_list) return NULL;
+            return recur_list;
+        }
+        RETAIN(body);
+        return body;
+    }
     if (!is_list_type(TAG(body))) return RETAIN(body), body;
 
     CljList *body_list = as_list(body);

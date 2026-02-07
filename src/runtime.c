@@ -11,6 +11,7 @@
 #include "macro.h"          // For macro_cache_reset()
 #include "map.h"            // For make_map()
 #include "hashmap.h"        // For hashmap_register_release_fn()
+#include "hashset.h"        // For make_hashset(), hashset_register_release_fn()
 #include "seq.h"            // For seq_register_release_fn()
 #include "hash.h"           // For clj_hash_full()
 #include "symbol.h"         // For init_special_symbols()
@@ -86,7 +87,7 @@ void runtime_init(TinyClJRuntime *runtime) {
     // CRITICAL: Don't reset symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
     // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
     if (!runtime->symbol_table) {
-        runtime->symbol_table = make_hashmap(512);  // HashMap for O(1) symbol lookup
+        runtime->symbol_table = make_hashset(512);  // HashSet for O(1) symbol lookup
     }
     
     // Disable resolve_cache; keep epoch non-zero for callsite caches.
@@ -117,6 +118,7 @@ void runtime_init(TinyClJRuntime *runtime) {
     
     // Register hashmap release function with memory system
     hashmap_register_release_fn();
+    hashset_register_release_fn();
     
     // Register seq release function (CljLazySeq) with memory system
     seq_register_release_fn();

@@ -46,10 +46,11 @@ typedef enum {
     CLJ_INSTANT = 28,
     CLJ_UUID = 29,
     // Lexical addressing: (depth, slot) references for locals
-    CLJ_SLOT_REF = 30
+    CLJ_SLOT_REF = 30,
+    CLJ_HASHSET = 31
 } CljType;
 
-#define CLJ_TYPE_COUNT (CLJ_SLOT_REF + 1)
+#define CLJ_TYPE_COUNT (CLJ_HASHSET + 1)
 
 #ifndef CLJ_INT
 #define CLJ_INT CLJ_FIXNUM

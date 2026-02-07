@@ -495,25 +495,24 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         TEST_ASSERT_NOT_NULL(parsed);
         ID canonical = canonicalize_ast(parsed, g_test_eval_state);
         TEST_ASSERT_NOT_NULL(canonical);
-        CljList *list = as_list(canonical);
         
         atom_reset(atom, fixnum(0));
         
-        ID result2 = eval_list(list, let_env, g_test_eval_state, NULL);
+        ID result2 = eval_body(canonical, let_env, g_test_eval_state, NULL);
         
         if (!result2) {
             CljAtom *atom_after = (CljAtom*)atom;
             ID atom_value = atom_deref(atom_after);
             if (as_fixnum(atom_value) == 0) {
-                TEST_FAIL_MESSAGE("eval_list returned NULL and atom value is still 0.");
+                TEST_FAIL_MESSAGE("eval_body returned NULL and atom value is still 0.");
             } else {
-                TEST_FAIL_MESSAGE("eval_list returned NULL but atom value changed.");
+                TEST_FAIL_MESSAGE("eval_body returned NULL but atom value changed.");
             }
         }
         
         CljAtom *atom_after = (CljAtom*)atom;
         ID atom_value = atom_deref(atom_after);
-        TEST_ASSERT_NOT_NULL_MESSAGE(result2, "eval_list should execute swap! successfully");
+        TEST_ASSERT_NOT_NULL_MESSAGE(result2, "eval_body should execute swap! successfully");
         TEST_ASSERT_TRUE_MESSAGE(is_fixnum(atom_value), "atom value should be a fixnum after swap!");
         TEST_ASSERT_EQUAL_INT_MESSAGE(1, as_fixnum(atom_value), "atom value should be 1 after swap! inc");
     });

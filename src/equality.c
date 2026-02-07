@@ -16,6 +16,7 @@
 #include "kv_macros.h"
 #include "list.h"
 #include "seq.h"
+#include "hashset.h"
 
 #include "instant.h"
 #include "uuid.h"
@@ -149,6 +150,17 @@ bool clj_equal_full(ID a, ID b) {
                 ID val_b = map_get(map_b, key_a);
                 if (val_b == NOT_FOUND) return false;
                 if (!clj_equal(val_a, val_b)) return false;
+            }
+            return true;
+        }
+
+        case CLJ_HASHSET: {
+            CljHashSet *hs_a = (CljHashSet*)a;
+            CljHashSet *hs_b = (CljHashSet*)b;
+            if (hashset_count(hs_a) != hashset_count(hs_b)) return false;
+            ID key;
+            HASHSET_FOR_EACH(hs_a, key) {
+                if (!hashset_contains(hs_b, key)) return false;
             }
             return true;
         }

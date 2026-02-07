@@ -6,6 +6,7 @@
 #include "map.h"
 #include "byte_array.h"
 #include "hashmap.h"
+#include "hashset.h"
 #include "kv_macros.h"
 #include "exception.h"
 #include <string.h>
@@ -85,6 +86,22 @@ uint32_t clj_hash_default(ID value) {
                 for (unsigned int i = 0; i < hm->capacity; i++) {
                     ID key = KV_KEY(hm->data, i);
                     if (key != HASHMAP_EMPTY && key != HASHMAP_TOMBSTONE) {
+                        key_hash = clj_hash_default(key);
+                        break;
+                    }
+                }
+            }
+            return hash_container(count, key_hash);
+        }
+
+        case CLJ_HASHSET: {
+            CljHashSet *hs = (CljHashSet*)value;
+            unsigned int count = hashset_count(hs);
+            uint32_t key_hash = 0;
+            if (count > 0) {
+                for (unsigned int i = 0; i < hs->capacity; i++) {
+                    ID key = hs->data[i];
+                    if (key != HASHSET_EMPTY && key != HASHSET_TOMBSTONE) {
                         key_hash = clj_hash_default(key);
                         break;
                     }
@@ -205,6 +222,17 @@ bool clj_equal_default(ID a, ID b) {
                 ID val_b = hashmap_get(hm_b, key);
                 if (val_b == NOT_FOUND) return false;
                 if (!clj_equal(val_a, val_b)) return false;
+            }
+            return true;
+        }
+
+        case CLJ_HASHSET: {
+            CljHashSet *hs_a = (CljHashSet*)a;
+            CljHashSet *hs_b = (CljHashSet*)b;
+            if (hashset_count(hs_a) != hashset_count(hs_b)) return false;
+            ID key;
+            HASHSET_FOR_EACH(hs_a, key) {
+                if (!hashset_contains(hs_b, key)) return false;
             }
             return true;
         }
