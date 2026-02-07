@@ -24,6 +24,7 @@
 #include "vector.h"
 #include "list.h"
 #include "map.h"
+#include "hashset.h"
 #include "function.h"
 #include "ast.h"
 #include "seq.h"
@@ -658,6 +659,26 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                 buffer[*offset] = '>';
                 *offset += 1;
             }
+            return;
+        }
+        case CLJ_HASHSET: {
+            CljHashSet *set = (CljHashSet*)v;
+            buffer[*offset] = '#';
+            *offset += 1;
+            buffer[*offset] = '{';
+            *offset += 1;
+            bool first = true;
+            ID key;
+            HASHSET_FOR_EACH(set, key) {
+                if (!first) {
+                    buffer[*offset] = ' ';
+                    *offset += 1;
+                }
+                to_string_build_string((CljObject*)key, buffer, offset, escape_strings);
+                first = false;
+            }
+            buffer[*offset] = '}';
+            *offset += 1;
             return;
         }
 

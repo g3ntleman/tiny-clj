@@ -356,6 +356,8 @@ DEFINE_EXTERN_SYMBOL(sym_println_data, "println");
 DEFINE_EXTERN_SYMBOL(sym_print_data, "print");
 DEFINE_EXTERN_SYMBOL(sym_str_data, "str");
 DEFINE_EXTERN_SYMBOL(sym_conj_data, "conj");
+DEFINE_EXTERN_SYMBOL(sym_disj_data, "disj");
+DEFINE_EXTERN_SYMBOL(sym_hash_set_data, "hash-set");
 DEFINE_EXTERN_SYMBOL(sym_nth_data, "nth");
 DEFINE_EXTERN_SYMBOL(sym_first_data, "first");
 DEFINE_EXTERN_SYMBOL(sym_rest_data, "rest");
@@ -468,6 +470,7 @@ DEFINE_EXTERN_SYMBOL(sym_fn_p_data, "fn?");
 DEFINE_EXTERN_SYMBOL(sym_atom_p_data, "atom?");
 DEFINE_EXTERN_SYMBOL(sym_char_p_data, "char?");
 DEFINE_EXTERN_SYMBOL(sym_list_p_data, "list?");
+DEFINE_EXTERN_SYMBOL(sym_set_p_data, "set?");
 DEFINE_EXTERN_SYMBOL(sym_yield_data, "yield");
 DEFINE_EXTERN_SYMBOL(sym_current_time_ms_data, "current-time-ms");
 DEFINE_EXTERN_SYMBOL(sym_ns_map_data, "ns-map");
@@ -836,6 +839,9 @@ void init_special_symbols() {
     symbol_table_add(&sym_gpio_watch_data.sym);
     symbol_table_add(&sym_gpio_unwatch_data.sym);
     symbol_table_add(&sym_gpio_simulate_data.sym);
+    symbol_table_add(&sym_hash_set_data.sym);
+    symbol_table_add(&sym_disj_data.sym);
+    symbol_table_add(&sym_set_p_data.sym);
 
     for (size_t i = 0; i < sizeof(g_core_symbols) / sizeof(g_core_symbols[0]); i++)
         symbol_table_add(&g_core_symbols[i].sym);

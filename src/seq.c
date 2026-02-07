@@ -14,6 +14,7 @@
 #include "vector.h"
 #include "strings.h"
 #include "map.h"
+#include "hashset.h"
 #include "symbol.h"
 #include "memory.h"    // For subjective_c_register_release_fn
 #include <string.h>
@@ -146,6 +147,18 @@ static ID make_map_entry_vector(ID map_obj, int index) {
 // FAST SEQ IMPLEMENTATION
 // ============================================================================
 
+static int hashset_next_slot(const CljHashSet *set, int start) {
+    if (!set) return -1;
+    unsigned int i = start < 0 ? 0u : (unsigned int)start;
+    for (; i < set->capacity; i++) {
+        ID key = set->data[i];
+        if (key != HASHSET_EMPTY && key != HASHSET_TOMBSTONE) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
 bool seq_iter_init(SeqIterator *iter, ID obj) {
     if (!iter) return false;
     
@@ -253,6 +266,22 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
             iter->container = (CljObject*)map;
             return true;
         }
+        case CLJ_HASHSET: {
+            CljHashSet *set = (CljHashSet*)obj;
+            if (!set || hashset_count(set) == 0) {
+                return true;  // Empty set
+            }
+            int idx = hashset_next_slot(set, 0);
+            if (idx < 0) {
+                return true;  // No entries found
+            }
+            iter->state.hset.set = set;
+            iter->state.hset.index = idx;
+            iter->state.hset.capacity = (int)set->capacity;
+            iter->seq_type = CLJ_HASHSET;
+            iter->container = (CljObject*)set;
+            return true;
+        }
 
         // Note: nil is now represented as NULL, handled above
         return true;
@@ -314,6 +343,14 @@ ID seq_iter_first(const SeqIterator *iter) {
         case CLJ_MAP_PERSISTENT: {
             if (iter->state.map.index < iter->state.map.count) {
                 return make_map_entry_vector((ID)iter->state.map.map, iter->state.map.index);
+            }
+            return NULL;
+        }
+        case CLJ_HASHSET: {
+            int idx = iter->state.hset.index;
+            if (idx >= 0 && idx < iter->state.hset.capacity) {
+                ID elem = iter->state.hset.set->data[idx];
+                return (elem == SYM_NIL) ? NULL : elem;
             }
             return NULL;
         }
@@ -402,6 +439,16 @@ bool seq_iter_next(SeqIterator *iter) {
             return false;
         }
         
+        case CLJ_HASHSET: {
+            int next_idx = hashset_next_slot(iter->state.hset.set, iter->state.hset.index + 1);
+            if (next_idx >= 0) {
+                iter->state.hset.index = next_idx;
+                return true;
+            }
+            iter->state.hset.index = iter->state.hset.capacity;
+            return false;
+        }
+        
         default:
             return false;
     }
@@ -458,6 +505,9 @@ bool seq_iter_empty(const SeqIterator *iter) {
         case CLJ_MAP_PERSISTENT:
             return iter->state.map.index >= iter->state.map.count;
         
+        case CLJ_HASHSET:
+            return iter->state.hset.index < 0 || iter->state.hset.index >= iter->state.hset.capacity;
+        
         default:
             // If seq_type is 0 (not set), it's an empty sequence
             return iter->seq_type == 0;
@@ -477,6 +527,8 @@ int seq_iter_position(const SeqIterator *iter) {
             return iter->state.str.index;
         case CLJ_MAP_PERSISTENT:
             return iter->state.map.index;
+        case CLJ_HASHSET:
+            return iter->state.hset.index;
         default:
             return 0;
     }
@@ -508,6 +560,9 @@ CljSeqIterator* make_seq(ID obj) {
     } else if (obj_tag == CLJ_MAP_PERSISTENT || obj_tag == CLJ_MAP_TRANSIENT) {
         CljPersistentMap *map = as_map(obj);
         if (!map || map->count == 0) return NULL;
+    } else if (obj_tag == CLJ_HASHSET) {
+        CljHashSet *set = (CljHashSet*)obj;
+        if (!set || hashset_count(set) == 0) return NULL;
     }
     
     // Allocate heap wrapper
@@ -652,6 +707,19 @@ int seq_count(ID obj) {
             case CLJ_MAP_PERSISTENT:
                 // Return remaining entries, not total count
                 return seq->iter.state.map.count - seq->iter.state.map.index;
+            case CLJ_HASHSET: {
+                CljHashSet *set = seq->iter.state.hset.set;
+                int remaining = 0;
+                if (set) {
+                    for (int i = seq->iter.state.hset.index; i < seq->iter.state.hset.capacity; i++) {
+                        ID key = set->data[i];
+                        if (key != HASHSET_EMPTY && key != HASHSET_TOMBSTONE) {
+                            remaining++;
+                        }
+                    }
+                }
+                return remaining;
+            }
             default:
                 return 0;
         }
@@ -661,6 +729,10 @@ int seq_count(ID obj) {
     if (TAG(obj) == CLJ_VECTOR_PERSISTENT) {
         CljPersistentVector *vec = as_persistent_vector(obj);
         return vec ? (int)vector_count(vec) : 0;
+    }
+
+    if (TAG(obj) == CLJ_HASHSET) {
+        return (int)hashset_count((CljHashSet*)obj);
     }
     
     // Fallback: iterate and count - O(n)
@@ -688,6 +760,7 @@ bool is_seqable(ID obj) {
         case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_MAP_PERSISTENT:
+        case CLJ_HASHSET:
         case CLJ_STRING:
         case CLJ_SEQ:  // Sequences are seqable
         case CLJ_LAZY_SEQ:

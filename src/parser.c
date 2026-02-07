@@ -20,6 +20,7 @@
 #include <time.h>
 #endif
 #include "map.h"
+#include "hashset.h"
 #include <stdbool.h>
 #include "memory.h"
 #include "utf8.h"
@@ -161,6 +162,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
 static ID parse_anon_fn(Reader *reader, EvalState *st);
 static ID parse_vector(Reader *reader, EvalState *st);
 static ID parse_map(Reader *reader, EvalState *st);
+static ID parse_set(Reader *reader, EvalState *st);
 static ID parse_list(Reader *reader, EvalState *st);
 static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open_column);
 static ID parse_string_internal(Reader *reader, EvalState *st);
@@ -265,6 +267,8 @@ ID parse_expr(Reader *reader, EvalState *st) {
         return parse_meta_map(reader, st);
       if (next == '(')
         return parse_anon_fn(reader, st);
+      if (next == '{')
+        return parse_set(reader, st);
       return parse_tagged_literal(reader, st);
     }
 
@@ -641,6 +645,39 @@ static ID parse_map(Reader *reader, EvalState *st) {
   // Return autoreleased object - caller can use until pool is popped
   // No location meta - symbols have inline line/col
   return AUTORELEASE(map);
+}
+
+/**
+ * @brief Parse set literal #{a b c} using Reader
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @return Parsed set CljObject or NULL on error
+ */
+static ID parse_set(Reader *reader, EvalState *st) {
+  // Consume '#'
+  if (!reader_match(reader, '#'))
+    return NULL;
+  if (!reader_match(reader, '{')) {
+    throw_parser_exception("Invalid set literal - expected '{' after '#'", reader);
+    return NULL;
+  }
+  reader_skip_all(reader);
+
+  CljHashSet *set = make_hashset(8);
+  while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
+    ID value = parse_expr(reader, st);
+    reader_skip_all(reader);
+    hashset_add_inplace(&set, value);
+    if (!set) {
+      throw_parser_exception("Failed to build set", reader);
+      return NULL;
+    }
+  }
+  if (reader_eof(reader) || !reader_match(reader, '}')) {
+    RELEASE(set);
+    throw_parser_exception("Unclosed set - missing closing '}'", reader);
+  }
+  return AUTORELEASE(set);
 }
 
 /**

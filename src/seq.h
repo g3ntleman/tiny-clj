@@ -13,6 +13,7 @@
 #include <stdbool.h>
 
 struct CljPersistentMap;  // Forward declaration to avoid including map.h here
+struct CljHashSet;        // Forward declaration to avoid including hashset.h here
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,6 +51,11 @@ typedef struct {
             int index;           // Current entry index
             int count;           // Total entries
         } map;
+        struct {
+            struct CljHashSet *set;  // Set being iterated
+            int index;           // Current slot index
+            int capacity;        // Total slots
+        } hset;
     } state;
     CljType seq_type;        // Type of sequence (for dispatch)
 } SeqIterator;
@@ -203,4 +209,3 @@ void seq_register_release_fn(void);
 #endif
 
 #endif /* TINY_CLJ_SEQ_H */
-

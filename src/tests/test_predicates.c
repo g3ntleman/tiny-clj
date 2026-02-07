@@ -277,8 +277,20 @@ TEST_SHARED(test_quoted_symbol_type) {
 }
 
 // ============================================================================
-// set? - Returns true if x is a set (always false, no set type yet)
+// set? - Returns true if x is a set
 // ============================================================================
+
+TEST_SHARED(test_predicate_set_true_literal) {
+    CljObject *result = eval_string("(set? #{1 2 3})", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST_SHARED(test_predicate_set_true_hash_set) {
+    CljObject *result = eval_string("(set? (hash-set 1 2))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
 
 TEST_SHARED(test_predicate_set_false_map) {
     CljObject *result = eval_string("(set? {:a 1})", g_test_eval_state);
@@ -310,6 +322,12 @@ TEST_SHARED(test_predicate_coll_true_vector) {
 
 TEST_SHARED(test_predicate_coll_true_map) {
     CljObject *result = eval_string("(coll? {:a 1})", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST_SHARED(test_predicate_coll_true_set) {
+    CljObject *result = eval_string("(coll? #{1 2 3})", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(result == clj_true);
 }
@@ -352,6 +370,12 @@ TEST_SHARED(test_predicate_seqable_true_string) {
     TEST_ASSERT_TRUE(result == clj_true);
 }
 
+TEST_SHARED(test_predicate_seqable_true_set) {
+    CljObject *result = eval_string("(seqable? #{1 2})", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
 TEST_SHARED(test_predicate_seqable_true_nil) {
     CljObject *result = eval_string("(seqable? nil)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
@@ -362,6 +386,32 @@ TEST_SHARED(test_predicate_seqable_false_number) {
     CljObject *result = eval_string("(seqable? 42)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(result == clj_false);
+}
+
+// ============================================================================
+// Set Operations (hash-set, conj, disj, contains?)
+// ============================================================================
+
+TEST_SHARED(test_contains_set_true) {
+    CljObject *result = eval_string("(contains? #{1 2} 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST_SHARED(test_contains_set_false) {
+    CljObject *result = eval_string("(contains? #{1 2} 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_false);
+}
+
+TEST_SHARED(test_conj_disj_set) {
+    CljObject *result1 = eval_string("(contains? (conj #{1} 2) 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(result1 == clj_true);
+
+    CljObject *result2 = eval_string("(contains? (disj #{1 2} 2) 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
 // ============================================================================

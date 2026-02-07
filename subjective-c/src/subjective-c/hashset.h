@@ -10,7 +10,7 @@ extern CljObject g_hashset_tombstone_sentinel;
 #define HASHSET_EMPTY (&g_hashset_empty_sentinel)
 #define HASHSET_TOMBSTONE (&g_hashset_tombstone_sentinel)
 
-typedef struct {
+typedef struct CljHashSet {
     CljObject base;
     unsigned int count;     // Active entries (never negative)
     unsigned int capacity;  // Array size (must be 2^n for mask, never negative)

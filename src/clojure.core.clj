@@ -179,8 +179,10 @@ R"CLOJURE(
 (defn string? [x] :native)
 ^#^{:doc "Returns true if x is nil, false otherwise."}
 (defn nil? [x] :native)
+^#^{:doc "Returns true if x is a kind of persistent set."}
+(defn set? [x] :native)
 ^#^{:doc "Returns true if x is a persistent collection."}
-(defn coll? [x] (or (list? x) (vector? x) (map? x)))
+(defn coll? [x] (or (list? x) (vector? x) (map? x) (set? x)))
 ^#^{:doc "Returns true if x implements ISeq."}
 (defn seq? [x] (list? x))
 ^#^{:doc "Returns true if (seq x) will succeed, false otherwise."}
@@ -493,6 +495,10 @@ R"CLOJURE(
 (defn subvec [v start & end] :native)
 ^#^{:doc "Returns a new collection consisting of coll with the xs 'added'. (conj coll item) adds item at an appropriate 'place' in the collection. For lists, conj prepends. For vectors, conj appends."}
 (defn conj [coll & items] :native)
+^#^{:doc "Returns a set of the distinct items."}
+(defn hash-set [& items] :native)
+^#^{:doc "Disjoints. Returns a new set that does not contain the keys."}
+(defn disj [set & keys] :native)
 ^#^{:doc "Returns a seq of the items in coll in reverse order. Not lazy."}
 (defn reverse [coll] :native)
 
@@ -549,7 +555,7 @@ R"CLOJURE(
 ^#^{:doc "Returns true if x is a Boolean."}
 (defn boolean? [x] (or (true? x) (false? x)))
 ^#^{:doc "Returns true if x is a kind of persistent set."}
-(defn set? [x] false)
+(defn set? [x] :native)
 ; coll?, seq?, seqable?, and ifn? are now defined earlier (before Threading Macros)
 
 ; ============================================================================
@@ -835,9 +841,9 @@ R"CLOJURE(
 ^#^{:doc "Returns true if x is a Boolean."}
 (defn boolean? [x] (or (true? x) (false? x)))
 ^#^{:doc "Returns true if x is a kind of persistent set."}
-(defn set? [x] false)
+(defn set? [x] :native)
 ^#^{:doc "Returns true if x is a persistent collection."}
-(defn coll? [x] (or (list? x) (vector? x) (map? x)))
+(defn coll? [x] (or (list? x) (vector? x) (map? x) (set? x)))
 ^#^{:doc "Returns true if x implements ISeq."}
 (defn seq? [x] (list? x))
 ^#^{:doc "Returns true if (seq x) will succeed, false otherwise."}

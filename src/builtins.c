@@ -13,6 +13,7 @@
 #include "object.h"
 #include "vector.h"
 #include "map.h"
+#include "hashset.h"
 #include "atom.h"
 #include "kv_macros.h"
 #include "numeric_utils.h"
@@ -143,6 +144,7 @@ ID native_type(ID *args, unsigned int argc);
 ID native_array_map(ID *args, unsigned int argc);
 ID native_vector(ID *args, unsigned int argc);
 ID native_vec(ID *args, unsigned int argc);
+ID native_hash_set(ID *args, unsigned int argc);
 ID native_peek(ID *args, unsigned int argc);
 ID native_pop(ID *args, unsigned int argc);
 ID native_subvec(ID *args, unsigned int argc);
@@ -168,6 +170,7 @@ ID native_reverse(ID *args, unsigned int argc);
 ID assoc3(ID *args, unsigned int argc);
 ID native_assoc(ID *args, unsigned int argc);
 ID native_dissoc(ID *args, unsigned int argc);
+ID native_disj(ID *args, unsigned int argc);
 ID native_merge(ID *args, unsigned int argc);
 ID native_contains_p(ID *args, unsigned int argc);
 ID native_update(ID *args, unsigned int argc);
@@ -197,6 +200,7 @@ ID native_not_eq(ID *args, unsigned int argc);
 ID native_identical(ID *args, unsigned int argc);
 ID native_vector_p(ID *args, unsigned int argc);
 ID native_map_p(ID *args, unsigned int argc);
+ID native_set_p(ID *args, unsigned int argc);
 ID native_number_p(ID *args, unsigned int argc);
 ID native_integer_p(ID *args, unsigned int argc);
 ID native_float_p(ID *args, unsigned int argc);
@@ -658,6 +662,24 @@ ID native_conj(ID *args, unsigned int argc)
                 return NULL;
         }
         return result;
+    }
+
+    if (tag == CLJ_HASHSET)
+    {
+        CljHashSet *result = (CljHashSet*)coll;
+        for (unsigned int i = 1; i < argc; i++)
+        {
+            CljHashSet *new_result = hashset_add(result, args[i]);
+            if (new_result != result)
+            {
+                if (i > 1 || (ID)result != coll)
+                {
+                    RELEASE(result);
+                }
+                result = new_result;
+            }
+        }
+        return (ID)result;
     }
 
     // Lists: conj adds to front
@@ -2064,6 +2086,52 @@ ID native_dissoc(ID *args, unsigned int argc)
     return result;
 }
 
+// disj: Remove keys from set (supports multiple keys like Clojure)
+ID native_disj(ID *args, unsigned int argc)
+{
+    if (argc < 1)
+    {
+        throw_exception(EXCEPTION_ARITY,
+                        "disj requires at least 1 argument (set), got 0",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ID set_obj = args[0];
+    if (!set_obj)
+        return NULL;
+
+    if (TAG(set_obj) != CLJ_HASHSET)
+    {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "disj only works on sets",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    if (argc == 1)
+    {
+        return set_obj;
+    }
+
+    CljHashSet *result = (CljHashSet*)set_obj;
+    for (unsigned int i = 1; i < argc; i++)
+    {
+        ID key = args[i];
+        CljHashSet *new_result = hashset_remove(result, key);
+        if (new_result != result)
+        {
+            if (i > 1 || (ID)result != set_obj)
+            {
+                RELEASE(result);
+            }
+            result = new_result;
+        }
+    }
+
+    return (ID)result;
+}
+
 // merge: Combines multiple maps (later maps override earlier ones)
 // Usage: (merge) (merge m1) (merge m1 m2) (merge m1 m2 m3 ...)
 ID native_merge(ID *args, unsigned int argc)
@@ -2162,6 +2230,9 @@ ID native_contains_p(ID *args, unsigned int argc)
         unsigned int count = vector_count(coll);
         return (idx >= 0 && (unsigned long)idx < count) ? clj_true : clj_false;
     }
+
+    case CLJ_HASHSET:
+        return hashset_contains((CljHashSet*)coll, key) ? clj_true : clj_false;
 
     default:
         return clj_false;
@@ -2789,6 +2860,18 @@ ID native_vector(ID *args, unsigned int argc)
     }
 
     return AUTORELEASE(v);
+}
+
+ID native_hash_set(ID *args, unsigned int argc)
+{
+    CljHashSet *set = make_hashset(argc > 0 ? argc * 2 : 0);
+    if (!set) return NULL;
+
+    for (unsigned int i = 0; i < argc; i++) {
+        hashset_add_inplace(&set, args[i]);
+    }
+
+    return AUTORELEASE(set);
 }
 
 // vec: converts a sequence to a vector
@@ -3933,6 +4016,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_array_map_data.sym, native_array_map},
     {&sym_vector_data.sym, native_vector},
     {&sym_vec_data.sym, native_vec},
+    {&sym_hash_set_data.sym, native_hash_set},
     {&sym_nth_data.sym, nth2},
     {&sym_peek_data.sym, native_peek},
     {&sym_pop_data.sym, native_pop},
@@ -3957,6 +4041,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_reverse_data.sym, native_reverse},
     {&sym_assoc_data.sym, native_assoc},
     {&sym_dissoc_data.sym, native_dissoc},
+    {&sym_disj_data.sym, native_disj},
     {&sym_merge_data.sym, native_merge},
     {&sym_contains_p_data.sym, native_contains_p},
     {&sym_update_data.sym, native_update},
@@ -3982,6 +4067,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_identical_data.sym, native_identical},
     {&sym_vector_p_data.sym, native_vector_p},
     {&sym_map_p_data.sym, native_map_p},
+    {&sym_set_p_data.sym, native_set_p},
     {&sym_number_p_data.sym, native_number_p},
     {&sym_integer_p_data.sym, native_integer_p},
     {&sym_float_p_data.sym, native_float_p},
@@ -6565,6 +6651,13 @@ ID native_map_p(ID *args, unsigned int argc)
     if (!validate_builtin_args(argc, 1, "map?"))
         return clj_false;
     return (args[0] && TAG(args[0]) == CLJ_MAP_PERSISTENT) ? clj_true : clj_false;
+}
+
+ID native_set_p(ID *args, unsigned int argc)
+{
+    if (!validate_builtin_args(argc, 1, "set?"))
+        return clj_false;
+    return (args[0] && TAG(args[0]) == CLJ_HASHSET) ? clj_true : clj_false;
 }
 
 // ============================================================================
