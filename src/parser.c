@@ -842,40 +842,32 @@ static ID parse_list(Reader *reader, EvalState *st) {
 static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open_column) {
   reader_skip_all(reader);
 
-  // If EOF reached before ')', this is an unclosed list
   if (reader_eof(reader)) {
-    throw_parser_exceptionf(reader, 
+    throw_parser_exceptionf(reader,
                             "Unclosed list - unexpected EOF before ')' (opened at line %d, column %d)",
                             open_line, open_column);
     return NULL;
   }
+  if (reader_peek_char(reader) == ')')
+    return NULL;
 
-  // Check if we're at the end of the list
-  if (reader_peek_char(reader) == ')') {
-    return NULL; // Empty rest
-  }
-
-  // Parse next element (ensure forward progress)
   ID element = parse_expr_with_progress(reader, st);
-
-  // Skip whitespace after parsing element
   reader_skip_all(reader);
-
-  // If next is ')', stop recursion early
-  if (reader_peek_char(reader) == ')') {
-    // Return CLJ_LIST for the tail to prevent double nesting
+  if (reader_peek_char(reader) == ')')
     return make_list(element, NULL);
+
+  CljList *head = make_list(element, NULL);
+  CljList *tail = head;
+
+  while (!reader_eof(reader) && reader_peek_char(reader) != ')') {
+    element = parse_expr_with_progress(reader, st);
+    reader_skip_all(reader);
+    CljList *node = make_list(element, NULL);
+    ASSIGN(tail->rest, node);
+    RELEASE(node);
+    tail = as_list(tail->rest);
   }
-
-  // Parse remaining elements recursively
-  ID rest = parse_list_rest(reader, st, open_line, open_column);
-
-  // Build list node - use CLJ_LIST for the tail (not ASTNode) to prevent double nesting.
-  // The canonicalization expects this structure: ASTNode head with CLJ_LIST tail.
-  CljList *node = make_list(element, rest ? (CljList*)rest : NULL);
-  CLJ_ASSERT(!IS_IMMEDIATE((ID)node) && "List nodes must not be immediates");
-  RELEASE(rest);
-  return node;
+  return (ID)head;
 }
 
 /**
