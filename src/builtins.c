@@ -37,6 +37,8 @@
 #include "reader.h"
 #include "parser.h"
 #include "ast_canon.h"
+#include "source_resolver.h"
+#include "embedded_sources.h"
 #include "meta.h"
 #include "eval.h"
 #include "platform.h"
@@ -239,11 +241,9 @@ ID native_swap_bang(ID *args, unsigned int argc);
 ID native_instant_p(ID *args, unsigned int argc);
 ID native_instant_days(ID *args, unsigned int argc);
 ID native_instant_ms(ID *args, unsigned int argc);
-#ifndef ESP32_BUILD
 ID native_slurp(ID *args, unsigned int argc);
-ID native_spit(ID *args, unsigned int argc);
 ID native_load_file(ID *args, unsigned int argc);
-#endif
+ID native_spit(ID *args, unsigned int argc);
 // (declarations in builtins_strings.h)
 ID native_source(ID *args, unsigned int argc);
 ID native_repl_dir(ID *args, unsigned int argc);
@@ -4110,10 +4110,8 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_deref_data.sym, native_deref},
     {&sym_reset_bang_data.sym, native_reset_bang},
     {&sym_swap_bang_data.sym, native_swap_bang},
-#ifndef ESP32_BUILD
     {&sym_slurp_data.sym, native_slurp},
     {&sym_spit_data.sym, native_spit},
-#endif
 #ifdef DEBUG
     {&sym_ast_string_data.sym, native_ast_string},
 #endif
@@ -4423,14 +4421,14 @@ ID native_symbol(ID *args, unsigned int argc)
     return AUTORELEASE(sym);
 }
 
-// File I/O: slurp - read entire file as string
-#ifndef ESP32_BUILD
-#include "file_utils.h"
-
+// File I/O: slurp - read entire file as string (KV + embedded resolver)
 ID native_slurp(ID *args, unsigned int argc)
 {
     if (!validate_builtin_args(argc, 1, "slurp"))
         return NULL;
+
+    // Ensure embedded sources are available before resolving.
+    embedded_source_map_init();
 
     // Convert argument to CljString, then get C-string data
     CljString *filename_str_obj = to_string(args[0]);
@@ -4443,15 +4441,21 @@ ID native_slurp(ID *args, unsigned int argc)
     }
     const char *filename_str = string_data(filename_str_obj);
 
-    // Use file_slurp utility function
-    // file_slurp throws exceptions on errors (file not found, etc.)
-    CljString *result = file_slurp(filename_str);
+    ID bytes = resolve_path_to_bytes(filename_str);
+    if (!bytes)
+    {
+        throw_exception_formatted(EXCEPTION_FILE_NOT_FOUND, __FILE__, __LINE__, 0,
+                                  "Resource not found: %s", filename_str);
+        return NULL;
+    }
 
-    // file_slurp throws exception on errors, so if we get here, result is valid
+    CljString *result = string_view_from_byte_array(bytes);
+    if (!result)
+        return NULL;
     return AUTORELEASE(result);
 }
 
-static bool eval_source_in_current_state(const char *src, const char *src_name, EvalState *st);
+static bool eval_source_in_current_state(CljString *src, const char *src_name, EvalState *st);
 
 // load-file: read and evaluate all forms in a file (Clojure standard function)
 // DRY: Uses eval_source_in_current_state for the actual evaluation
@@ -4471,29 +4475,32 @@ ID native_load_file(ID *args, unsigned int argc)
     }
     const char *filename = string_data(filename_str_obj);
 
-    // Read file content
-    CljString *content = file_slurp(filename);
-    if (!content)
+    // Resolve file content (KV + embedded)
+    ID bytes = resolve_path_to_bytes(filename);
+    if (!bytes)
     {
-        return NULL; // file_slurp already threw exception
+        throw_exception_formatted(EXCEPTION_FILE_NOT_FOUND, __FILE__, __LINE__, 0,
+                                  "Resource not found: %s", filename);
+        return NULL;
     }
+    CljString *content = string_view_from_byte_array(bytes);
+    if (!content)
+        return NULL;
 
     // Get EvalState (use global state)
     EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
 
     // DRY: Use eval_source_in_current_state (same as require uses)
-    const char *src = string_data(content);
-    bool ok = eval_source_in_current_state(src, filename, st);
+    bool ok = eval_source_in_current_state(content, filename, st);
+    RELEASE(content);
 
     // load-file returns nil (like Clojure)
     return ok ? NULL : NULL;
 }
-#endif // ESP32_BUILD
 
 // ----------------------------------------------------------------------------
 // REQUIRE IMPLEMENTATION (Clojure-like namespace loader)
 // ----------------------------------------------------------------------------
-#ifndef ESP32_BUILD
 static char *namespace_to_relpath(const char *ns_name)
 {
     if (!ns_name)
@@ -4518,98 +4525,7 @@ static char *namespace_to_relpath(const char *ns_name)
     return buf;
 }
 
-static char *read_file_once(const char *path)
-{
-    if (!path)
-        return NULL;
-    FILE *fp = fopen(path, "r");
-    if (!fp)
-        return NULL;
-    if (fseek(fp, 0, SEEK_END) != 0)
-    {
-        fclose(fp);
-        return NULL;
-    }
-    long sz = ftell(fp);
-    if (sz < 0)
-    {
-        fclose(fp);
-        return NULL;
-    }
-    if (fseek(fp, 0, SEEK_SET) != 0)
-    {
-        fclose(fp);
-        return NULL;
-    }
-    char *buffer = (char *)CLJ_MALLOC((size_t)sz + 1);
-    if (!buffer)
-    {
-        fclose(fp);
-        return NULL;
-    }
-    size_t n = fread(buffer, 1, (size_t)sz, fp);
-    buffer[n] = '\0';
-    fclose(fp);
-    return buffer;
-}
-
-static void store_resolved_path(char *dest, size_t dest_size, const char *value)
-{
-    if (!dest || dest_size == 0)
-        return;
-    if (!value)
-    {
-        dest[0] = '\0';
-        return;
-    }
-    strncpy(dest, value, dest_size - 1);
-    dest[dest_size - 1] = '\0';
-}
-
-static char *read_file_cstr(const char *path, char *resolved_path, size_t resolved_path_size)
-{
-    char *buffer = read_file_once(path);
-    if (buffer)
-    {
-        store_resolved_path(resolved_path, resolved_path_size, path);
-        return buffer;
-    }
-
-    // If path is relative, also try "../path" and "../../path" to support running from build directories
-    if (!path || path[0] == '\0')
-    {
-        return NULL;
-    }
-
-    char parent_path[512];
-    size_t path_len = strlen(path);
-    if (path_len + 3 < sizeof(parent_path))
-    {
-        memcpy(parent_path, "../", 3);
-        memcpy(parent_path + 3, path, path_len + 1);
-        buffer = read_file_once(parent_path);
-        if (buffer)
-        {
-            store_resolved_path(resolved_path, resolved_path_size, parent_path);
-            return buffer;
-        }
-    }
-    if (path_len + 6 < sizeof(parent_path))
-    {
-        memcpy(parent_path, "../../", 6);
-        memcpy(parent_path + 6, path, path_len + 1);
-        buffer = read_file_once(parent_path);
-        if (buffer)
-        {
-            store_resolved_path(resolved_path, resolved_path_size, parent_path);
-            return buffer;
-        }
-    }
-
-    return NULL;
-}
-
-static bool eval_source_in_current_state(const char *src, const char *src_name, EvalState *st)
+static bool eval_source_in_current_state(CljString *src, const char *src_name, EvalState *st)
 {
     if (!src || !st)
         return false;
@@ -4620,7 +4536,7 @@ static bool eval_source_in_current_state(const char *src, const char *src_name, 
     }
     int success_count = 0;
     Reader reader;
-    reader_init(&reader, src);
+    reader_init_with_length(&reader, string_data(src), (size_t)string_length(src));
     if (src_name && src_name[0])
     {
         reader_set_source_name(&reader, src_name);
@@ -4991,30 +4907,33 @@ static bool process_require_spec(ID spec, EvalState *st)
         return false;
     }
 
-    // Search order: libs/<rel>, then <rel> (project root)
-    char libs_path[512] = {0};
+    // Search order: /libs/<rel>, then /<rel> (project root)
+    char libs_path[256] = {0};
     size_t libs_pos = 0;
-    libs_pos = format_append(libs_path, libs_pos, sizeof(libs_path), "libs/");
+    libs_pos = format_append(libs_path, libs_pos, sizeof(libs_path), "/libs/");
     format_append(libs_path, libs_pos, sizeof(libs_path), rel);
 
-    char resolved_path[512];
-    resolved_path[0] = '\0';
+    char root_path[256] = {0};
+    size_t root_pos = 0;
+    root_pos = format_append(root_path, root_pos, sizeof(root_path), "/");
+    format_append(root_path, root_pos, sizeof(root_path), rel);
+
     const char *source_path = NULL;
-    char *source = read_file_cstr(libs_path, resolved_path, sizeof(resolved_path));
-    if (source)
+    ID bytes = resolve_path_to_bytes(libs_path);
+    if (bytes)
     {
-        source_path = resolved_path;
+        source_path = libs_path;
     }
     else
     {
-        source = read_file_cstr(rel, resolved_path, sizeof(resolved_path));
-        if (source)
+        bytes = resolve_path_to_bytes(root_path);
+        if (bytes)
         {
-            source_path = resolved_path;
+            source_path = root_path;
         }
     }
 
-    if (!source)
+    if (!bytes)
     {
         char error_msg[256];
         size_t pos = 0;
@@ -5023,11 +4942,25 @@ static bool process_require_spec(ID spec, EvalState *st)
         pos = format_append(error_msg, pos, sizeof(error_msg), ns_name);
         pos = format_append(error_msg, pos, sizeof(error_msg),
                             "' not found (expected file ");
-        pos = format_append(error_msg, pos, sizeof(error_msg), rel);
-        pos = format_append(error_msg, pos, sizeof(error_msg), " or libs/");
-        pos = format_append(error_msg, pos, sizeof(error_msg), rel);
+        pos = format_append(error_msg, pos, sizeof(error_msg), root_path);
+        pos = format_append(error_msg, pos, sizeof(error_msg), " or ");
+        pos = format_append(error_msg, pos, sizeof(error_msg), libs_path);
         format_append_char(error_msg, pos, sizeof(error_msg), ')');
         throw_exception(EXCEPTION_FILE_NOT_FOUND, error_msg, __FILE__, __LINE__, 0);
+    }
+
+    if (TAG(bytes) != CLJ_BYTE_ARRAY) {
+        CLJ_FREE(rel);
+        throw_exception(EXCEPTION_FILE_NOT_FOUND,
+                        "Require: resolved resource is not a byte array (internal error)",
+                        __FILE__, __LINE__, 0);
+        return false;
+    }
+    CljString *source_str = string_view_from_byte_array(bytes);
+    if (!source_str)
+    {
+        CLJ_FREE(rel);
+        return false;
     }
 
     // Evaluate source in current state
@@ -5044,7 +4977,6 @@ static bool process_require_spec(ID spec, EvalState *st)
     CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
     if (!target_ns)
     {
-        CLJ_FREE(source);
         CLJ_FREE(rel);
         return false;
     }
@@ -5054,7 +4986,7 @@ static bool process_require_spec(ID spec, EvalState *st)
     {
         st->current_ns = target_ns;
     }
-    bool ok = eval_source_in_current_state(source, source_path, st);
+    bool ok = eval_source_in_current_state(source_str, source_path, st);
     // Mark as loaded even if partially successful (tiny-clj keeps partial-load tolerance).
     target_ns->loaded = true;
     // Restore original namespace
@@ -5063,7 +4995,7 @@ static bool process_require_spec(ID spec, EvalState *st)
         st->current_ns = orig_ns;
     }
 
-    CLJ_FREE(source);
+    RELEASE(source_str);
     CLJ_FREE(rel);
 
     // CRITICAL: Don't fail completely if some expressions failed to load
@@ -5262,10 +5194,17 @@ ID native_require(ID *args, unsigned int argc)
     return NULL; // Clojure-compatible: require returns nil
 }
 
-#endif // ESP32_BUILD
-
 // File I/O: spit - write string to file
-#ifndef ESP32_BUILD
+#ifdef ESP32_BUILD
+ID native_spit(ID *args, unsigned int argc)
+{
+    if (!validate_builtin_args(argc, 2, "spit"))
+        return NULL;
+    (void)args;
+    // No-op on ESP32 (filesystem may be unavailable).
+    return NULL;
+}
+#else
 ID native_spit(ID *args, unsigned int argc)
 {
     if (!validate_builtin_args(argc, 2, "spit"))
@@ -6154,8 +6093,8 @@ ID native_read_string(ID *args, unsigned int argc)
     if (!str)
         return NULL;
 
-    // Parse the string using parse from parser.c
-    ID parsed = parse(str->data, g_current_eval_state);
+    // Parse the string using parse_from_string (handles non-NUL-terminated views)
+    ID parsed = parse_from_string(str, g_current_eval_state);
 
     // parse returns AUTORELEASE objects
     return parsed;
@@ -7585,10 +7524,8 @@ void register_builtins()
     // Functions needed before clojure.core.clj is loaded (--no-core mode)
     register_builtin("eval", native_eval);
     register_builtin("read-string", native_read_string);
-#ifndef ESP32_BUILD
     register_builtin("require", native_require);
     register_builtin("load-file", native_load_file);
-#endif
 
     // Arithmetic functions - needed for tests and --no-core mode
     register_builtin("+", native_add_variadic);

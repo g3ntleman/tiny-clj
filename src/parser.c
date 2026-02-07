@@ -84,7 +84,7 @@ static void throw_parser_exceptionf(Reader *reader, const char *format, ...) {
   (void)reader;
   throw_parser_exception((format != NULL) ? format : "Parse error", reader);
 #else
-    enum { MSG_LEN = 256 };
+    enum { MSG_LEN = 128 };
     char buffer[MSG_LEN];
     va_list args;
     va_start(args, format);
@@ -94,10 +94,12 @@ static void throw_parser_exceptionf(Reader *reader, const char *format, ...) {
 #endif
 }
 
-// Stack-based parser constants
+// Stack-based parser constants (minimize per-frame stack for deep recursion on ESP32)
 #define MAX_STACK_VECTOR_SIZE 64
 #define MAX_STACK_MAP_PAIRS 32
 #define MAX_STACK_LIST_SIZE 64
+#define PARSER_SYMBOL_BUF 128   /* symbols limited by SYMBOL_NAME_MAX_LEN (64) */
+#define PARSER_NUMBER_BUF 128   /* number literals are short */
 #define MAX_STACK_STRING_SIZE 2048
 
 /** @brief Check if character is a digit */
@@ -292,7 +294,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
     case '.':
       if (isdigit((unsigned char)reader_peek_ahead(reader, 1))) {
         // Check for invalid decimal syntax like .01 (should be 0.01)
-        char invalid_decimal[64];
+        char invalid_decimal[32];
         int pos = 0;
         invalid_decimal[pos++] = c; // include the '.'
         reader_next(reader); // consume '.'
@@ -457,7 +459,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
   }
 
   // Unknown character - throw exception with helpful message
-  char msg[256];
+  char msg[128];
   size_t msg_pos = 0;
   msg_pos = format_append(msg, msg_pos, sizeof(msg), "Unexpected character '");
   msg_pos = format_append_char(msg, msg_pos, sizeof(msg), (c >= 32 && c < 127) ? c : '?');
@@ -992,7 +994,7 @@ CljSymbol* resolve_alias_in_namespace(EvalState *st, const char *alias_str) {
  * map lookups and namespace resolution.
  */
 static ID parse_symbol(Reader *reader, EvalState *st) {
-  char buffer[MAX_STACK_STRING_SIZE];
+  char buffer[PARSER_SYMBOL_BUF];
   int pos = 0;
   int slash_pos = -1;
   bool auto_qualify = false;  // Track if :: was detected
@@ -1006,7 +1008,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
     }
   }
 
-  while (!reader_eof(reader) && pos < MAX_STACK_STRING_SIZE - 1) {
+  while (!reader_eof(reader) && pos < PARSER_SYMBOL_BUF - 1) {
     int cp = reader_peek_codepoint(reader);
     if (cp < 0) break;
 
@@ -1027,7 +1029,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       }
 
       size_t bytes_to_copy = next - current;
-      if (pos + bytes_to_copy >= MAX_STACK_STRING_SIZE) break;
+      if (pos + bytes_to_copy >= PARSER_SYMBOL_BUF) break;
 
       // Copy UTF-8 bytes
       for (size_t i = 0; i < bytes_to_copy; i++) {
@@ -1315,7 +1317,7 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
  */
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
   (void)st;
-  char buf[MAX_STACK_STRING_SIZE];
+  char buf[PARSER_NUMBER_BUF];
   int pos = 0;
   bool has_digit_before_dot = false;
 
@@ -1329,14 +1331,14 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
     }
     return NULL;
   }
-  while (isdigit((unsigned char)reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1) {
+  while (isdigit((unsigned char)reader_peek_char(reader)) && pos < PARSER_NUMBER_BUF - 1) {
     buf[pos++] = reader_next(reader);
     has_digit_before_dot = true;
   }
   if (reader_peek_char(reader) == '.' &&
       isdigit((unsigned char)reader_peek_ahead(reader, 1))) {
     buf[pos++] = reader_next(reader);
-    while (isdigit((unsigned char)reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1)
+    while (isdigit((unsigned char)reader_peek_char(reader)) && pos < PARSER_NUMBER_BUF - 1)
       buf[pos++] = reader_next(reader);
   }
   buf[pos] = '\0';
@@ -1401,6 +1403,19 @@ ID parse(const char *input, EvalState *st) {
 
   // Delegate to parse_from_reader (DRY principle)
   // Don't create autorelease pool here - let caller manage memory
+  return parse_from_reader(&reader, st);
+}
+
+ID parse_from_string(CljString *str, EvalState *st) {
+  if (!str || !st) return NULL;
+  if (TAG((ID)str) != CLJ_STRING) {
+    throw_exception(EXCEPTION_TYPE, "parse_from_string expects a string", __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  Reader reader;
+  reader_init_with_length(&reader, string_data((ID)str), (size_t)string_length((ID)str));
+  reader_set_source_name(&reader, "<string input>");
   return parse_from_reader(&reader, st);
 }
 

@@ -3,6 +3,9 @@
 
 #include "object.h"
 #include "common.h"
+#ifndef CLJ_ASSERT
+#define CLJ_ASSERT(expr) ((void)0)
+#endif
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
