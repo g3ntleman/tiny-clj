@@ -6,6 +6,14 @@
 
 #define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 600000000
 #include "tests_common.h"
+#include "vector.h"
+
+static CljPersistentVector *make_dotimes_args(ID binding_vec, ID body_expr) {
+    CljPersistentVector *args = make_vector(2, STRONG);
+    vector_conj_inplace(&args, binding_vec);
+    vector_conj_inplace(&args, body_expr);
+    return args;
+}
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -20,13 +28,13 @@ TEST_SHARED(test_dotimes_zero_iterations) {
     // Create dotimes call: (dotimes [i 0] (println "Should not print"))
     CljObject *binding_vector = AUTORELEASE(make_list(intern_symbol_global("i"), (CljList*)make_list(fixnum(0), NULL)));
     CljObject *body = AUTORELEASE(make_list(SYM_PRINTLN, (CljList*)make_list(make_string("Should not print"), NULL)));
-    CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, (CljList*)make_list(body, NULL))));
     
     // Create environment
     CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
+    CljPersistentVector *args = AUTORELEASE(make_dotimes_args(binding_vector, body));
+    CljObject *result = eval_dotimes(args, env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
 }
 
@@ -35,13 +43,13 @@ TEST_SHARED(test_dotimes_negative_iterations) {
     // Create dotimes call: (dotimes [i -5] (println "Should not print"))
     CljObject *binding_vector = AUTORELEASE(make_list(intern_symbol_global("i"), (CljList*)make_list(fixnum(-5), NULL)));
     CljObject *body = AUTORELEASE(make_list(SYM_PRINTLN, (CljList*)make_list(make_string("Should not print"), NULL)));
-    CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, (CljList*)make_list(body, NULL))));
     
     // Create environment
     CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
+    CljPersistentVector *args = AUTORELEASE(make_dotimes_args(binding_vector, body));
+    CljObject *result = eval_dotimes(args, env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
 }
 
@@ -50,13 +58,13 @@ TEST_SHARED(test_dotimes_large_iterations) {
     // Create dotimes call: (dotimes [i 1000] i)
     CljObject *binding_vector = AUTORELEASE(make_list(intern_symbol_global("i"), (CljList*)make_list(fixnum(1000), NULL)));
     CljSymbol *body = intern_symbol_global("i");
-    CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, (CljList*)make_list(body, NULL))));
     
     // Create environment
     CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
+    CljPersistentVector *args = AUTORELEASE(make_dotimes_args(binding_vector, body));
+    CljObject *result = eval_dotimes(args, env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
 }
 
@@ -65,13 +73,13 @@ TEST_SHARED(test_dotimes_invalid_binding_format) {
     // Create dotimes call: (dotimes [i] i) - missing count
     CljObject *binding_vector = AUTORELEASE(make_list(intern_symbol_global("i"), NULL));
     CljSymbol *body = intern_symbol_global("i");
-    CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, (CljList*)make_list(body, NULL))));
     
     // Create environment
     CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
+    CljPersistentVector *args = AUTORELEASE(make_dotimes_args(binding_vector, body));
+    CljObject *result = eval_dotimes(args, env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for invalid format
 }
 
@@ -80,13 +88,13 @@ TEST_SHARED(test_dotimes_non_numeric_count) {
     // Create dotimes call: (dotimes [i "not-a-number"] i)
     CljObject *binding_vector = AUTORELEASE(make_list(intern_symbol_global("i"), (CljList*)make_list(make_string("not-a-number"), NULL)));
     CljSymbol *body = intern_symbol_global("i");
-    CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, (CljList*)make_list(body, NULL))));
     
     // Create environment
     CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
+    CljPersistentVector *args = AUTORELEASE(make_dotimes_args(binding_vector, body));
+    CljObject *result = eval_dotimes(args, env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for non-numeric count
 }
 
@@ -109,15 +117,13 @@ TEST_SHARED(test_dotimes_simple_iteration_count) {
     // Create simple body: i (just return the loop variable)
     CljSymbol *body = intern_symbol_global("i");
     
-    CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, 
-                                       (CljList*)make_list(binding_vector, 
-                                                         (CljList*)make_list(body, NULL))));
     
     // Create environment
     CljPersistentMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
+    CljPersistentVector *args = AUTORELEASE(make_dotimes_args(binding_vector, body));
+    CljObject *result = eval_dotimes(args, env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // The test passes if no errors occur and the function returns NULL

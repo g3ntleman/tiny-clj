@@ -13,6 +13,7 @@
 #include "build_info.h"
 #ifdef TINY_CLJ_TEST_RUNNER
 #include "platform.h"
+#include "tiny_clj.h"
 #endif
 #include <stdio.h>
 #include <string.h>
@@ -276,7 +277,7 @@ int main(int argc, char **argv) {
     }
 
 #ifdef TINY_CLJ_TEST_RUNNER
-    printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.2", platform_name());
+    printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", TINY_CLJ_VERSION, platform_name());
     print_build_info();
 #else
     // Print build information at startup (skip in quiet mode)

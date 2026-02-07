@@ -6,7 +6,6 @@
  */
 
 #include "optimize.h"
-#include "common.h"
 #include "object.h"
 #include "symbol.h"
 #include "exception.h"
@@ -24,6 +23,16 @@ static bool is_last_in_list(CljObject *expr, CljList *list) {
     return list->first == expr;
 }
 
+// Get last element and check tail position (for AST_CALL bodies)
+static bool last_arg_tail_position(CljObject *expr, CljPersistentVector *args) {
+    if (!args) return false;
+    unsigned int count = vector_count(args);
+    if (count == 0) return false;
+    ID last = vector_nth(args, count - 1);
+    if (last == expr) return true;
+    return is_tail_position(expr, last);
+}
+
 // Get last element and check tail position (for let bodies)
 static bool last_is_tail_position(CljObject *expr, CljList *list) {
     if (!list) return false;
@@ -33,7 +42,46 @@ static bool last_is_tail_position(CljObject *expr, CljList *list) {
 
 // Check if an expression is in tail position within a body
 bool is_tail_position(CljObject *expr, CljObject *body) {
-    if (!expr || !body || !is_list_type(TAG(body))) return false;
+    if (!expr || !body) return false;
+
+    if (TAG(body) == CLJ_AST_CALL) {
+        CljASTCall *call = (CljASTCall*)body;
+        CljSymbol *head = (call && call->op && TAG(call->op) == CLJ_SYMBOL) ? as_symbol(call->op) : NULL;
+        CljPersistentVector *args = call ? call->args : NULL;
+        unsigned int argc = args ? vector_count(args) : 0;
+
+        if (!head) {
+            return expr == body;
+        }
+
+        if (head == SYM_IF) {
+            if (argc >= 2) {
+                ID then_expr = vector_nth(args, 1);
+                if (then_expr == expr || is_tail_position(expr, then_expr)) return true;
+            }
+            if (argc >= 3) {
+                ID else_expr = vector_nth(args, 2);
+                if (else_expr == expr || is_tail_position(expr, else_expr)) return true;
+            }
+            return false;
+        } else if (head == SYM_WHEN) {
+            return last_arg_tail_position(expr, args);
+        } else if (head == SYM_DO) {
+            return last_arg_tail_position(expr, args);
+        } else if (head == SYM_LET) {
+            return last_arg_tail_position(expr, args);
+        } else if (head == SYM_COND) {
+            for (unsigned int i = 1; i < argc; i += 2) {
+                ID branch = vector_nth(args, i);
+                if (branch == expr || is_tail_position(expr, branch)) return true;
+            }
+            return false;
+        }
+
+        return expr == body;
+    }
+
+    if (!is_list_type(TAG(body))) return false;
 
     CljList *body_list = as_list(body);
 
@@ -143,6 +191,25 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
                                          CljObject **params, int param_count,
                                          CljObject *parent_body);
 
+static bool transform_ast_call_arg(CljASTCall *call, unsigned int index,
+                                   CljObject *func_name,
+                                   CljObject **params, int param_count,
+                                   CljObject *parent_body) {
+    if (!call || !call->args) return true;
+    unsigned int argc = vector_count(call->args);
+    if (index >= argc) return true;
+
+    ID arg = vector_nth(call->args, index);
+    if (!arg) return true;
+
+    CljObject *transformed = transform_recursive_tail_calls(arg, func_name, params, param_count, parent_body);
+    if (!transformed) return false;
+    if (transformed != arg) {
+        vector_assoc_inplace(&call->args, index, transformed);
+    }
+    return true;
+}
+
 // Helper: Transform list of expressions
 // Mutates the list in-place
 // Returns the original list (now mutated) if transformations occurred
@@ -178,7 +245,8 @@ static CljList* build_list(CljObject *first, CljObject *second, CljObject *third
             RELEASE(list);
             return NULL;
         }
-        list->rest = (CljObject*)second_node;
+        ASSIGN(list->rest, second_node);
+        RELEASE(second_node);
 
         if (third) {
             CljList *third_node = (CljList*)make_list(third, NULL);
@@ -186,38 +254,20 @@ static CljList* build_list(CljObject *first, CljObject *second, CljObject *third
                 RELEASE(list);
                 return NULL;
             }
-            second_node->rest = (CljObject*)third_node;
+            ASSIGN(second_node->rest, third_node);
+            RELEASE(third_node);
         }
     }
 
-    return list;
-}
-
-static CljList* list_from_vector(CljPersistentVector *vec) {
-    if (!vec) return NULL;
-    int count = (int)vector_count(vec);
-    CljList *list = NULL;
-    for (int i = count - 1; i >= 0; i--) {
-        ID elem = vector_nth(vec, i);
-        CljList *node = (CljList*)make_list(elem, list);
-        if (!node) {
-            if (list) RELEASE(list);
-            return NULL;
-        }
-        list = node;
-    }
     return list;
 }
 
 static CljObject* transform_ast_call_to_recur(CljASTCall *call) {
     if (!call) return NULL;
-    CljList *args_list = list_from_vector(call->args);
-    CljList *new_list = (CljList*)make_list((CljObject*)SYM_RECUR, args_list);
-    if (!new_list) {
-        if (args_list) RELEASE(args_list);
-        return NULL;
-    }
-    return (CljObject*)new_list;
+    // Preserve AST_CALL representation so recur is evaluated as a special form.
+    CljASTCall *recur_call = make_ast_call((CljObject*)SYM_RECUR, call->args);
+    if (!recur_call) return NULL;
+    return (CljObject*)recur_call;
 }
 
 // Transform recursive tail calls to recur
@@ -226,14 +276,43 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
                                          CljObject *parent_body) {
     if (!body) return NULL;
     if (TAG(body) == CLJ_AST_CALL) {
+        CljASTCall *call = (CljASTCall*)body;
         CljObject *context = parent_body ? parent_body : body;
         bool is_recursive = is_recursive_call(body, func_name);
         bool is_tail = is_tail_position(body, context);
         if (is_recursive && is_tail) {
-            CljObject *recur_list = transform_ast_call_to_recur((CljASTCall*)body);
+            CljObject *recur_list = transform_ast_call_to_recur(call);
             if (!recur_list) return NULL;
             return recur_list;
         }
+
+        CljSymbol *head = (call && call->op && TAG(call->op) == CLJ_SYMBOL) ? as_symbol(call->op) : NULL;
+        if (!head || !call->args) {
+            RETAIN(body);
+            return body;
+        }
+
+        unsigned int argc = vector_count(call->args);
+        if (head == SYM_IF) {
+            for (unsigned int i = 0; i < argc && i < 3; i++) {
+                if (!transform_ast_call_arg(call, i, func_name, params, param_count, body)) {
+                    return NULL;
+                }
+            }
+            RETAIN(body);
+            return body;
+        }
+
+        if (head == SYM_WHEN || head == SYM_DO || head == SYM_LET || head == SYM_COND) {
+            for (unsigned int i = 0; i < argc; i++) {
+                if (!transform_ast_call_arg(call, i, func_name, params, param_count, body)) {
+                    return NULL;
+                }
+            }
+            RETAIN(body);
+            return body;
+        }
+
         RETAIN(body);
         return body;
     }

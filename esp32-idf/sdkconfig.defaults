@@ -1,3 +1,7 @@
+# Main task stack: default 3584 is too small for recursive parser when loading clojure_core.
+# Stack overflow corrupts heap and causes StoreProhibited in tlsf_malloc (0xa5a5a5a5).
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=12288
+
 # Use custom partition table with a reserved tiny-db partition.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"

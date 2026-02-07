@@ -1077,10 +1077,6 @@ static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *cname) {
 void symbol_table_add(CljSymbol *symbol) {
     if (!symbol || !symbol->cname) return;
 
-    // Extract namespace and name from symbol
-    CljSymbol *ns_name = symbol->ns_name;
-    const char *cname = symbol->cname;
-
     if (!g_runtime.symbol_table) {
         g_runtime.symbol_table = make_hashset(512);  // 512 = good initial capacity for Linear Probing
     }
@@ -1123,9 +1119,9 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
         return NULL;
     }
 
-    // Allocate as raw heap block (symbols are singletons and never released).
-    // Use CLJ_MALLOC so the allocation is tracked by the memory profiler.
-    CljSymbol *sym = (CljSymbol*)CLJ_MALLOC(sizeof(CljSymbol));
+    bool in_data_segment = is_pointer_in_data_segment(cname);
+    size_t extra = in_data_segment ? 0 : (cname_len + 1);
+    CljSymbol *sym = (CljSymbol*)alloc(sizeof(CljSymbol) + extra, 1, CLJ_SYMBOL);
     if (!sym) {
         throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
                                   "Failed to allocate memory for symbol '%s'", cname);
@@ -1140,17 +1136,13 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
         sym->base.flags |= CLJ_FLAG_DYNAMIC;
     }
 
-    // Use string directly if in data segment (immutable), otherwise duplicate
-    if (is_pointer_in_data_segment(cname)) {
+    // Store name inline when possible to avoid extra raw allocations.
+    if (in_data_segment) {
         sym->cname = cname;
     } else {
-        sym->cname = clj_strdup(cname);
-        if (!sym->cname) {
-            CLJ_FREE(sym);
-            throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
-                                      "Failed to duplicate string for symbol '%s'", cname);
-            return NULL;
-        }
+        char *dst = (char*)(sym + 1);
+        memcpy(dst, cname, cname_len + 1);
+        sym->cname = dst;
     }
 
     // Enforce invariant: symbols always have a name

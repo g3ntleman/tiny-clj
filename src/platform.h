@@ -51,6 +51,8 @@ uint32_t platform_current_time_ms(void);
 // -----------------------------------------------------------------------------
 size_t platform_heap_bytes_free(void);
 size_t platform_heap_bytes_total(void);
+/** Total installed RAM (e.g. for "xxK RAM SYSTEM" display; C64-style). SIZE_MAX if unknown. */
+size_t platform_ram_bytes_total(void);
 size_t platform_flash_bytes_free(void);
 size_t platform_flash_bytes_total(void);
 

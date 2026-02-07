@@ -15,10 +15,8 @@
 #include "to_string.h"
 #include "line_editor.h"
 #include "event_loop.h"
-
-#if defined(ESP_PLATFORM)
-#include "esp_log.h"
-#endif
+#include "mini_format.h"
+#include "tiny_clj.h"
 
 // No public header exists for these yet (they are used by repl.c and tests too).
 extern void init_special_symbols(void);
@@ -85,11 +83,28 @@ void tinyclj_idf_start(void) {
     });
 
 #if defined(ESP_PLATFORM)
-    ESP_LOGI("tinyclj", "Tiny-CLJ REPL started");
+    {
+        char buf[64];
+        size_t ram_total = platform_ram_bytes_total();
+        size_t free_bytes = platform_heap_bytes_free();
+        unsigned ram_k = (ram_total == (size_t)-1) ? 0u : (unsigned)(ram_total / 1024);
+        (void)mini_snprintf(buf, sizeof(buf), "**** ESP 32 TINY-CLJ V%s ****\n", TINY_CLJ_VERSION);
+        size_t len = strlen(buf) - 1;
+        unsigned pad = (len < 40u) ? (40u - (unsigned)len) / 2u : 0u;
+        if (pad > 0) {
+            char pad_buf[20];
+            memset(pad_buf, ' ', pad);
+            pad_buf[pad] = '\0';
+            platform_put_string(NULL, pad_buf);
+        }
+        platform_put_string(NULL, buf);
+        (void)mini_snprintf(buf, sizeof(buf), "%uK RAM SYSTEM  %zu CLOJURE BYTES FREE\n", ram_k, free_bytes);
+        platform_put_string(NULL, buf);
+    }
 #endif
 
     // Print baseline stats early (this is what we use for RAM baseline checks).
-    eval_and_print("(tinyclj.runtime/stats)", st);
+    eval_and_print("(do (require 'tinyclj.runtime) (tinyclj.runtime/stats))", st);
 
     LineEditor *ed = line_editor_new(platform_get_char, platform_put_char, platform_put_string, NULL);
     set_line_editor(ed);

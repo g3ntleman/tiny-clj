@@ -35,6 +35,7 @@ idf_component_register(
     log
     esp_driver_uart
     spi_flash
+    subjective-c
     tinyclj
 )
 

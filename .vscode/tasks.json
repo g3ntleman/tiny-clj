@@ -83,6 +83,19 @@
       }
     },
     {
+      "label": "ESP32: flash and monitor",
+      "type": "shell",
+      "command": "./build_idf.sh --monitor",
+      "group": "none",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated",
+        "showReuseMessage": false
+      }
+    },
+    {
       "label": "run-repl",
       "type": "shell",
       "command": "pkill -f '/build/tiny-clj-repl' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj-repl && ./build/tiny-clj-repl",

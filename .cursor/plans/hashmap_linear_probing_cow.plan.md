@@ -1,3 +1,10 @@
+---
+name: ""
+overview: ""
+todos: []
+isProject: false
+---
+
 # HashMap mit Linear Probing (Open Addressing) und COW
 
 ## API Design Principle
@@ -65,6 +72,8 @@ flowchart TB
     S1 -->|"linear probe +1"| S4
 ```
 
+
+
 **Struktur (gleiches Layout wie CljPersistentMap, aber mit String-Keys):**
 
 ```c
@@ -98,7 +107,7 @@ typedef struct {
 
 ## Schritt 1: Header definieren
 
-Neue Datei [`subjective-c/public/hashmap.h`](subjective-c/public/hashmap.h):**WICHTIG: API muss genauso sein wie `map.h`, nur mit `hashmap_` Präfix statt `map_`Unterschied:** HashMap verwendet `const char*` Keys (String-Keys), Map verwendet `ID` Keys.
+Neue Datei `[subjective-c/public/hashmap.h](subjective-c/public/hashmap.h)`:**WICHTIG: API muss genauso sein wie `map.h`, nur mit `hashmap_` Präfix statt `map_`Unterschied:** HashMap verwendet `const char*` Keys (String-Keys), Map verwendet `ID` Keys.
 
 ```c
 #ifndef SUBJECTIVE_C_HASHMAP_H
@@ -168,11 +177,11 @@ CljHashMap* hashmap_copy_with_additions(CljHashMap *parent_map, CljObject **addi
 
 ## Schritt 2: Tests schreiben (Test-First)
 
-Neue Datei [`subjective-c/tests/test_hashmap.c`](subjective-c/tests/test_hashmap.c):| Test | Beschreibung ||------|-------------|| `test_hashmap_create` | Erstellen mit verschiedenen Kapazitäten || `test_hashmap_put_get_single` | Ein Element einfügen und abrufen || `test_hashmap_put_get_multiple` | 10 verschiedene Keys || `test_hashmap_linear_probing_collision` | Zwei Keys mit gleichem Hash-Index (Linear Probing) || `test_hashmap_overwrite_same_map` | RC=1: gleiche Map zurück || `test_hashmap_overwrite_cow` | RC>1: neue Map zurück (COW) || `test_hashmap_not_found` | Gibt not_found zurück || `test_hashmap_remove_rc1` | RC=1: in-place mit Tombstone || `test_hashmap_remove_cow` | RC>1: Kopie ohne den Key || `test_hashmap_probe_over_tombstone` | Linear Probing springt über Tombstones || `test_hashmap_rehash_on_load` | Automatisch verdoppeln bei Load > 0.75 || `test_hashmap_contains` | contains true/false || `test_hashmap_cow_independence` | Änderung an Kopie beeinflusst Original nicht || `test_hashmap_many_entries` | 1000 Einträge (Linear Probing Performance) |**Test:** `cmake --build build -j4` (Link-Fehler erwartet - OK)---
+Neue Datei `[subjective-c/tests/test_hashmap.c](subjective-c/tests/test_hashmap.c)`:| Test | Beschreibung ||------|-------------|| `test_hashmap_create` | Erstellen mit verschiedenen Kapazitäten || `test_hashmap_put_get_single` | Ein Element einfügen und abrufen || `test_hashmap_put_get_multiple` | 10 verschiedene Keys || `test_hashmap_linear_probing_collision` | Zwei Keys mit gleichem Hash-Index (Linear Probing) || `test_hashmap_overwrite_same_map` | RC=1: gleiche Map zurück || `test_hashmap_overwrite_cow` | RC>1: neue Map zurück (COW) || `test_hashmap_not_found` | Gibt not_found zurück || `test_hashmap_remove_rc1` | RC=1: in-place mit Tombstone || `test_hashmap_remove_cow` | RC>1: Kopie ohne den Key || `test_hashmap_probe_over_tombstone` | Linear Probing springt über Tombstones || `test_hashmap_rehash_on_load` | Automatisch verdoppeln bei Load > 0.75 || `test_hashmap_contains` | contains true/false || `test_hashmap_cow_independence` | Änderung an Kopie beeinflusst Original nicht || `test_hashmap_many_entries` | 1000 Einträge (Linear Probing Performance) |**Test:** `cmake --build build -j4` (Link-Fehler erwartet - OK)---
 
 ## Schritt 3: Grundimplementierung (create, get, contains) mit Linear Probing
 
-In [`subjective-c/hashmap.c`](subjective-c/hashmap.c):
+In `[subjective-c/hashmap.c](subjective-c/hashmap.c)`:
 
 ```c
 // FNV-1a Hash (embedded-freundlich: schnell, keine Division)
@@ -424,15 +433,15 @@ static CljHashMap* hashmap_rehash(CljHashMap *map, unsigned int new_capacity) {
 
 ## Schritt 7: CMakeLists.txt und Typ-Registrierung
 
-1. [`subjective-c/CMakeLists.txt`](subjective-c/CMakeLists.txt) erweitern
-2. `CLJ_HASHMAP` zu [`subjective-c/public/types.h`](subjective-c/public/types.h) hinzufügen
+1. `[subjective-c/CMakeLists.txt](subjective-c/CMakeLists.txt)` erweitern
+2. `CLJ_HASHMAP` zu `[subjective-c/public/types.h](subjective-c/public/types.h)` hinzufügen
 3. Destruktor in Memory-System registrieren
 
 **Test:** `cmake --build build -j4 && ./subjective-c/subjective-c-tests` - Alle HashMap-Tests grün---
 
 ## Schritt 8: Symbol-Tabelle umstellen
 
-In [`src/symbol.c`](src/symbol.c):
+In `[src/symbol.c](src/symbol.c)`:
 
 ```c
 #include "hashmap.h"
@@ -477,3 +486,4 @@ hänger.time ./build/tiny-clj-Macros.
 repl
  -e "(+ 1 1)"
 ```
+

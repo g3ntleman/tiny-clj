@@ -3295,6 +3295,17 @@ static ID throw_fixed_overflow(const char *err_msg)
     return NULL;
 }
 
+static inline bool is_numeric_tag(uint16_t tag)
+{
+    return tag == CLJ_INT || tag == CLJ_FLOAT;
+}
+
+static inline ID throw_expected_number(void)
+{
+    throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+    return NULL;
+}
+
 // Helper function to create fixnum result
 static ID create_fixnum_result(int acc_i)
 {
@@ -4665,9 +4676,9 @@ static bool eval_source_in_current_state(const char *src, const char *src_name, 
         CATCH(ex)
         {
             if (debug_require_errors) {
-                const char *etype = (ex && ex->type && ex->type[0]) ? ex->type : "Exception";
-                const char *emsg = (ex && ex->message && ex->message[0]) ? ex->message : "Unknown error";
-                const char *efile = (ex && ex->file && ex->file[0]) ? ex->file : "<unknown>";
+                const char *etype = (ex && ex->type[0]) ? ex->type : "Exception";
+                const char *emsg = (ex && ex->message[0]) ? ex->message : "Unknown error";
+                const char *efile = (ex && ex->file[0]) ? ex->file : "<unknown>";
                 int eline = ex ? ex->line : 0;
                 const char *label = (src_name && src_name[0]) ? src_name : "<namespace>";
                 fprintf(stderr, "[require] %s: %s (%s:%d) [%s]\n", label, emsg, efile, eline, etype);
@@ -5360,9 +5371,13 @@ ID native_add_variadic(ID *args, unsigned int argc)
 
     for (unsigned int i = 0; i < argc; i++)
     {
+        uint16_t tag = TAG(args[i]);
+        if (!is_numeric_tag(tag)) {
+            return throw_expected_number();
+        }
         if (!sawFixed)
         {
-            switch (TAG(args[i]))
+            switch (tag)
             {
             case CLJ_INT:
             {
@@ -5398,31 +5413,17 @@ ID native_add_variadic(ID *args, unsigned int argc)
                 acc_fixed = fixnum_to_fixed(acc_i) + extract_fixed_value(args[i]);
                 break;
             }
-            default:
-            {
-                // Heap objects or other types - convert to fixed-point
-                sawFixed = true;
-                float acc_f = (float)acc_i;
-                float val_f = as_fixed(args[i]);
-                float result = acc_f + val_f;
-                if (result > 262144.0f || result < -262144.0f)
-                {
-                    return throw_fixed_overflow(ERR_FIXED_OVERFLOW_ADDITION);
-                }
-                acc_fixed = fixnum_to_fixed(acc_i) + extract_fixed_value(args[i]);
-                break;
-            }
             }
         }
         else
         {
             int32_t val;
-            switch (TAG(args[i]))
+            switch (tag)
             {
             case CLJ_INT:
                 val = fixnum_to_fixed(AS_FIXNUM(args[i]));
                 break;
-            default:
+            case CLJ_FLOAT:
                 val = extract_fixed_value(args[i]);
                 break;
             }
@@ -5430,13 +5431,13 @@ ID native_add_variadic(ID *args, unsigned int argc)
             // Check for fixed-point addition overflow using original values
             float acc_f = (float)acc_fixed / 8192.0f;
             float val_f;
-            switch (TAG(args[i]))
+            switch (tag)
             {
             case CLJ_INT:
                 val_f = (float)AS_FIXNUM(args[i]);
                 break;
-            default:
-                val_f = as_fixed(args[i]);
+            case CLJ_FLOAT:
+                val_f = AS_FIXED(args[i]);
                 break;
             }
             float result = acc_f + val_f;
@@ -5465,9 +5466,13 @@ ID native_mul_variadic(ID *args, unsigned int argc)
 
     for (unsigned int i = 0; i < argc; i++)
     {
+        uint16_t tag = TAG(args[i]);
+        if (!is_numeric_tag(tag)) {
+            return throw_expected_number();
+        }
         if (!sawFixed)
         {
-            switch (TAG(args[i]))
+            switch (tag)
             {
             case CLJ_INT:
             {
@@ -5535,34 +5540,17 @@ ID native_mul_variadic(ID *args, unsigned int argc)
                 acc_fixed = (fixnum_to_fixed(acc_i) * extract_fixed_value(args[i])) >> 13;
                 break;
             }
-            default:
-            {
-                // Heap objects or other types - convert to fixed-point
-                sawFixed = true;
-                float acc_f = (float)acc_i;
-                float val_f = as_fixed(args[i]);
-                if (acc_f != 0.0f && val_f != 0.0f)
-                {
-                    float result = acc_f * val_f;
-                    if (result > 262144.0f || result < -262144.0f)
-                    {
-                        return throw_fixed_overflow(ERR_FIXED_OVERFLOW_MULTIPLICATION);
-                    }
-                }
-                acc_fixed = (fixnum_to_fixed(acc_i) * extract_fixed_value(args[i])) >> 13;
-                break;
-            }
             }
         }
         else
         {
             int32_t val;
-            switch (TAG(args[i]))
+            switch (tag)
             {
             case CLJ_INT:
                 val = fixnum_to_fixed(AS_FIXNUM(args[i]));
                 break;
-            default:
+            case CLJ_FLOAT:
                 val = extract_fixed_value(args[i]);
                 break;
             }
@@ -5570,13 +5558,13 @@ ID native_mul_variadic(ID *args, unsigned int argc)
             // Check for fixed-point multiplication overflow
             float acc_f = (float)acc_fixed / 8192.0f;
             float val_f;
-            switch (TAG(args[i]))
+            switch (tag)
             {
             case CLJ_INT:
                 val_f = (float)AS_FIXNUM(args[i]);
                 break;
-            default:
-                val_f = as_fixed(args[i]);
+            case CLJ_FLOAT:
+                val_f = AS_FIXED(args[i]);
                 break;
             }
             if (acc_f != 0.0f && val_f != 0.0f)
@@ -5605,9 +5593,9 @@ ID native_sub_variadic(ID *args, unsigned int argc)
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
         }
         uint16_t tag = TAG(args[0]);
-        if (tag != CLJ_INT && tag != CLJ_FLOAT)
+        if (!is_numeric_tag(tag))
         {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            return throw_expected_number();
         }
         switch (tag)
         {
@@ -5623,7 +5611,11 @@ ID native_sub_variadic(ID *args, unsigned int argc)
     int32_t acc_fixed = 0;
     int acc_i = 0;
 
-    switch (TAG(args[0]))
+    uint16_t tag0 = TAG(args[0]);
+    if (!is_numeric_tag(tag0)) {
+        return throw_expected_number();
+    }
+    switch (tag0)
     {
     case CLJ_INT:
         acc_i = AS_FIXNUM(args[0]);
@@ -5637,9 +5629,13 @@ ID native_sub_variadic(ID *args, unsigned int argc)
 
     for (unsigned int i = 1; i < argc; i++)
     {
+        uint16_t tag = TAG(args[i]);
+        if (!is_numeric_tag(tag)) {
+            return throw_expected_number();
+        }
         if (!sawFixed)
         {
-            switch (TAG(args[i]))
+            switch (tag)
             {
             case CLJ_INT:
             {
@@ -5662,19 +5658,19 @@ ID native_sub_variadic(ID *args, unsigned int argc)
                 break;
             }
             case CLJ_FLOAT:
-            default:
             {
                 acc_fixed = fixnum_to_fixed(acc_i);
                 sawFixed = true;
-                int32_t val;
-                switch (TAG(args[i]))
-                {
+                int32_t val = 0;
+                switch (tag) {
                 case CLJ_INT:
                     val = fixnum_to_fixed(AS_FIXNUM(args[i]));
                     break;
-                default:
+                case CLJ_FLOAT:
                     val = extract_fixed_value(args[i]);
                     break;
+                default:
+                    return throw_expected_number();
                 }
                 acc_fixed -= val;
                 break;
@@ -5683,15 +5679,16 @@ ID native_sub_variadic(ID *args, unsigned int argc)
         }
         else
         {
-            int32_t val;
-            switch (TAG(args[i]))
-            {
+            int32_t val = 0;
+            switch (tag) {
             case CLJ_INT:
                 val = fixnum_to_fixed(AS_FIXNUM(args[i]));
                 break;
-            default:
+            case CLJ_FLOAT:
                 val = extract_fixed_value(args[i]);
                 break;
+            default:
+                return throw_expected_number();
             }
             acc_fixed -= val;
         }
@@ -5707,6 +5704,9 @@ ID native_mod(ID *args, unsigned int argc)
 
     uint16_t tag_a = TAG(args[0]);
     uint16_t tag_b = TAG(args[1]);
+    if (!is_numeric_tag(tag_a) || !is_numeric_tag(tag_b)) {
+        return throw_expected_number();
+    }
     if (tag_a == CLJ_INT && tag_b == CLJ_INT)
     {
         int a = AS_FIXNUM(args[0]);
@@ -5727,9 +5727,11 @@ ID native_mod(ID *args, unsigned int argc)
     case CLJ_INT:
         a_fixed = fixnum_to_fixed(AS_FIXNUM(args[0]));
         break;
-    default:
+    case CLJ_FLOAT:
         a_fixed = extract_fixed_value(args[0]);
         break;
+    default:
+        return throw_expected_number();
     }
     int32_t b_fixed;
     switch (TAG(args[1]))
@@ -5737,9 +5739,11 @@ ID native_mod(ID *args, unsigned int argc)
     case CLJ_INT:
         b_fixed = fixnum_to_fixed(AS_FIXNUM(args[1]));
         break;
-    default:
+    case CLJ_FLOAT:
         b_fixed = extract_fixed_value(args[1]);
         break;
+    default:
+        return throw_expected_number();
     }
 
     if (b_fixed == 0)
@@ -5769,6 +5773,9 @@ ID native_quot(ID *args, unsigned int argc)
 
     uint16_t tag_a = TAG(args[0]);
     uint16_t tag_b = TAG(args[1]);
+    if (!is_numeric_tag(tag_a) || !is_numeric_tag(tag_b)) {
+        return throw_expected_number();
+    }
     if (tag_a == CLJ_INT && tag_b == CLJ_INT)
     {
         int a = AS_FIXNUM(args[0]);
@@ -5790,9 +5797,11 @@ ID native_quot(ID *args, unsigned int argc)
     case CLJ_INT:
         a_fixed = fixnum_to_fixed(AS_FIXNUM(args[0]));
         break;
-    default:
+    case CLJ_FLOAT:
         a_fixed = extract_fixed_value(args[0]);
         break;
+    default:
+        return throw_expected_number();
     }
     int32_t b_fixed;
     switch (TAG(args[1]))
@@ -5800,9 +5809,11 @@ ID native_quot(ID *args, unsigned int argc)
     case CLJ_INT:
         b_fixed = fixnum_to_fixed(AS_FIXNUM(args[1]));
         break;
-    default:
+    case CLJ_FLOAT:
         b_fixed = extract_fixed_value(args[1]);
         break;
+    default:
+        return throw_expected_number();
     }
 
     if (b_fixed == 0)
@@ -6065,19 +6076,20 @@ ID native_math_sqrt(ID *args, unsigned int argc)
     if (!validate_builtin_args(argc, 1, "Math/sqrt"))
         return NULL;
 
-    // Extract numeric value
-    float val;
-    switch (TAG(args[0]))
-    {
+    float val = 0.f;
+    uint16_t tag = TAG(args[0]);
+    if (!is_numeric_tag(tag)) {
+        return throw_expected_number();
+    }
+    switch (tag) {
     case CLJ_INT:
         val = (float)AS_FIXNUM(args[0]);
         break;
     case CLJ_FLOAT:
-        val = as_fixed((CljValue)args[0]);
+        val = AS_FIXED(args[0]);
         break;
     default:
-        val = extract_fixed_value(args[0]);
-        break;
+        return throw_expected_number();
     }
 
     if (val < 0)
@@ -6159,9 +6171,9 @@ ID native_div_variadic(ID *args, unsigned int argc)
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
         }
         uint16_t tag = TAG(args[0]);
-        if (tag != CLJ_INT && tag != CLJ_FLOAT)
+        if (!is_numeric_tag(tag))
         {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            return throw_expected_number();
         }
         switch (tag)
         {
@@ -6180,7 +6192,6 @@ ID native_div_variadic(ID *args, unsigned int argc)
             return create_fixed_result(fixnum_to_fixed(1) / x);
         }
         case CLJ_FLOAT:
-        default:
         {
             int32_t x = extract_fixed_value(args[0]);
             if (x == 0)
@@ -6199,13 +6210,16 @@ ID native_div_variadic(ID *args, unsigned int argc)
     int32_t acc_fixed = 0;
     int acc_i = 0;
 
-    switch (TAG(args[0]))
+    uint16_t tag0 = TAG(args[0]);
+    if (!is_numeric_tag(tag0)) {
+        return throw_expected_number();
+    }
+    switch (tag0)
     {
     case CLJ_INT:
         acc_i = AS_FIXNUM(args[0]);
         break;
     case CLJ_FLOAT:
-    default:
         sawFixed = true;
         acc_fixed = extract_fixed_value(args[0]);
         break;
@@ -6213,9 +6227,13 @@ ID native_div_variadic(ID *args, unsigned int argc)
 
     for (unsigned int i = 1; i < argc; i++)
     {
+        uint16_t tag = TAG(args[i]);
+        if (!is_numeric_tag(tag)) {
+            return throw_expected_number();
+        }
         if (!sawFixed)
         {
-            switch (TAG(args[i]))
+            switch (tag)
             {
             case CLJ_INT:
             {
@@ -6239,22 +6257,22 @@ ID native_div_variadic(ID *args, unsigned int argc)
                 break;
             }
             case CLJ_FLOAT:
-            default:
             {
                 if (!sawFixed)
                 {
                     acc_fixed = fixnum_to_fixed(acc_i);
                     sawFixed = true;
                 }
-                int32_t d;
-                switch (TAG(args[i]))
-                {
+                int32_t d = 0;
+                switch (tag) {
                 case CLJ_INT:
                     d = fixnum_to_fixed(AS_FIXNUM(args[i]));
                     break;
-                default:
+                case CLJ_FLOAT:
                     d = extract_fixed_value(args[i]);
                     break;
+                default:
+                    return throw_expected_number();
                 }
                 if (d == 0)
                 {
@@ -6986,8 +7004,8 @@ ID native_swap_bang(ID *args, unsigned int argc)
     return result; // Returns new value (can be NULL/nil or immediate)
 }
 
-// Note: def and ns are now special forms (not builtins) because they require non-evaluated arguments
-// They are handled directly in eval_list() via eval_def() and eval_ns()
+// Note: def and ns are special forms (not builtins) because they require non-evaluated arguments.
+// They are handled in eval_ast_call() (AST_CALL dispatch) and eval_list() only for legacy list forms.
 
 // now: Atomic timestamp as map {:days epoch-days :ms millis-in-day}
 // Single gettimeofday() call ensures consistency (no race condition at midnight)

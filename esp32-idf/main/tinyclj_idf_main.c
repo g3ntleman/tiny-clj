@@ -2,10 +2,11 @@
 #include <stddef.h>
 
 #if defined(ESP_PLATFORM) && defined(__has_include)
-#if __has_include(<esp_system.h>) && __has_include(<esp_timer.h>) && __has_include(<esp_heap_caps.h>) && __has_include(<esp_spi_flash.h>) && __has_include(<esp_flash.h>) && __has_include(<driver/uart.h>) && __has_include(<freertos/FreeRTOS.h>) && __has_include(<freertos/task.h>)
+#if __has_include(<esp_system.h>) && __has_include(<esp_timer.h>) && __has_include(<esp_heap_caps.h>) && __has_include(<esp_chip_info.h>) && __has_include(<esp_spi_flash.h>) && __has_include(<esp_flash.h>) && __has_include(<driver/uart.h>) && __has_include(<freertos/FreeRTOS.h>) && __has_include(<freertos/task.h>)
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <esp_heap_caps.h>
+#include <esp_chip_info.h>
 #include <esp_spi_flash.h>
 #include <esp_flash.h>
 #include <driver/uart.h>
@@ -19,6 +20,7 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <esp_heap_caps.h>
+#include <esp_chip_info.h>
 #include <esp_spi_flash.h>
 #include <esp_flash.h>
 #include <driver/uart.h>
@@ -57,6 +59,7 @@ void tinyclj_esp32_sleep_ms(unsigned int ms);
 uint32_t tinyclj_esp32_current_time_ms(void);
 size_t tinyclj_esp32_heap_bytes_free(void);
 size_t tinyclj_esp32_heap_bytes_total(void);
+size_t tinyclj_esp32_ram_bytes_total(void);
 size_t tinyclj_esp32_flash_bytes_free(void);
 size_t tinyclj_esp32_flash_bytes_total(void);
 
@@ -86,6 +89,40 @@ size_t tinyclj_esp32_heap_bytes_free(void) {
 
 size_t tinyclj_esp32_heap_bytes_total(void) {
     return heap_caps_get_total_size(MALLOC_CAP_DEFAULT);
+}
+
+size_t tinyclj_esp32_ram_bytes_total(void) {
+#if TINYCLJ_HAVE_ESP_IDF_HEADERS
+    esp_chip_info_t info;
+    esp_chip_info(&info);
+    size_t internal_kb = 0;
+    switch (info.model) {
+        case CHIP_ESP32:
+        case CHIP_ESP32S2:
+            internal_kb = 320;
+            break;
+        case CHIP_ESP32C3:
+            internal_kb = 400;
+            break;
+        case CHIP_ESP32S3:
+            internal_kb = 512;
+            break;
+        case CHIP_ESP32C2:
+            internal_kb = 272;
+            break;
+        case CHIP_ESP32C6:
+            internal_kb = 512;
+            break;
+        default:
+            internal_kb = 0;
+            break;
+    }
+    size_t total = (internal_kb > 0) ? (size_t)internal_kb * 1024u : heap_caps_get_total_size(MALLOC_CAP_8BIT);
+    total += heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+    return total;
+#else
+    return (size_t)-1;
+#endif
 }
 
 size_t tinyclj_esp32_flash_bytes_total(void) {

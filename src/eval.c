@@ -136,7 +136,7 @@ void set_suppress_time_output(bool suppress) {
 
 // Forward declarations
 ID eval_body_with_params(ID body, const EvalContext *ctx);
-ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 static ID call_function_with_args_and_context_vec(ID fn, CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
@@ -1652,52 +1652,6 @@ ID eval_list(CljList *list, CljPersistentMap *env, EvalState *st, const EvalCont
         }
     }
 
-    // Handle def, defmacro, and ns before symbol resolution
-    if (original_op_sym == SYM_DEF) return eval_def(list, effective_env, effective_st);
-    if (original_op_sym == SYM_DEFMACRO) return eval_special_defmacro(list, effective_env, effective_st, ctx);
-    if (original_op_sym == SYM_NS) return eval_ns(list, effective_env, effective_st);
-
-    // Fast-path: Comparison operators (avoid symbol resolution for <, >, <=, >=, =)
-    if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_COMPARISON)) {
-    CljObject *comparison_result = eval_comparison_dispatch(list, effective_env, effective_st, ctx, (ID)op);
-    if (comparison_result) return comparison_result;
-    }
-
-    // Fast-path: Arithmetic operators - O(1) dispatch via flags
-    if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_ARITHMETIC)) {
-        ArithOp op = (original_op_sym->base.flags >> CLJ_ARITH_OP_SHIFT) & 0x03;
-        return eval_arithmetic_generic_with_context(list, effective_env, op, effective_st, ctx);
-    }
-
-    // Special forms (avoid symbol resolution for if/let/do/recur/etc.)
-    // O(1) dispatch via function pointer (replaces O(n) if-chain)
-    if (original_op_sym && is_special_symbol(original_op_sym)) {
-        CljSpecialSymbol *special = (CljSpecialSymbol*)original_op_sym;
-        if (special->eval_fn) {
-        // NOTE: NULL is a valid result for many special forms (e.g., (when false ...))
-            // Cast function pointer to correct type for call
-            SpecialFormEvalFn fn = (SpecialFormEvalFn)special->eval_fn;
-            return fn(list, effective_env, effective_st, ctx);
-        }
-    }
-
-    // Fallback: Some runtimes may intern "try" before special symbols are registered,
-    // resulting in a non-special symbol (flags unset). Treat it as a special form by name.
-    if (original_op_sym && original_op_sym->cname && strcmp(original_op_sym->cname, "try") == 0) {
-        return eval_special_try(list, effective_env, effective_st, ctx);
-    }
-    // Fallback: clojure.core can be loaded before special symbols are registered, which can
-    // lead to "loop"/"recur" being interned as normal symbols. Treat them as special forms by name.
-    if (original_op_sym && original_op_sym->cname) {
-        if (strcmp(original_op_sym->cname, "loop") == 0) {
-            return eval_special_loop(list, effective_env, effective_st, ctx);
-        }
-        if (strcmp(original_op_sym->cname, "recur") == 0) {
-            return eval_special_recur(list, effective_env, effective_st, ctx);
-        }
-    }
-
-
     // Resolve operator symbol
     // CRITICAL: Pass ctx to allow environment chaining lookup (for functions defined in let)
     ID resolved_op = resolve_list_operator(op, effective_env, effective_st, ctx, call_form);
@@ -1758,16 +1712,6 @@ ID eval_list(CljList *list, CljPersistentMap *env, EvalState *st, const EvalCont
         return str_result;
     }
 
-    // Tier 6: Loop operations (doseq, dotimes) - inline dispatch
-    if (original_op_sym == SYM_DOSEQ) {
-        return eval_doseq(list, effective_env, effective_st, ctx);
-    }
-    if (original_op_sym == SYM_DOTIMES) {
-        // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
-        EvalState *eval_st = effective_st ? effective_st : builtin_get_eval_state();
-        return eval_dotimes(list, effective_env, eval_st, ctx);
-    }
-
     // Try function call
     // CRITICAL: Only try to call if op is a symbol or function
     // If op is not a symbol or function, eval_function_call_from_list will return NULL
@@ -1822,6 +1766,68 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                   "Cannot call nil as a function");
         return NULL;
+    }
+
+    CljPersistentVector *args = call->args;
+
+    if (TAG(op) == CLJ_SYMBOL) {
+        CljSymbol *original_op_sym = as_symbol(op);
+        if (original_op_sym) {
+            ID result = NULL;
+            bool handled = false;
+
+            if (original_op_sym == SYM_DEF) {
+#if defined(META_ENABLED) && META_ENABLED
+                // Preserve def form metadata by attaching it to the args vector.
+                if (call && call->args) {
+                    ID form_meta = meta_get((ID)call);
+                    if (form_meta && !meta_get((ID)call->args)) {
+                        meta_set((CljObject*)call->args, form_meta);
+                    }
+                }
+#endif
+                result = eval_def(args, effective_env, effective_st);
+                handled = true;
+            } else if (original_op_sym == SYM_DEFMACRO) {
+                result = eval_special_defmacro(args, effective_env, effective_st, ctx);
+                handled = true;
+            } else if (original_op_sym == SYM_NS) {
+                result = eval_ns(args, effective_env, effective_st);
+                handled = true;
+            } else if (original_op_sym == SYM_DOSEQ) {
+                result = eval_doseq(args, effective_env, effective_st, ctx);
+                handled = true;
+            } else if (original_op_sym == SYM_DOTIMES) {
+                // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
+                EvalState *eval_st = effective_st ? effective_st : builtin_get_eval_state();
+                result = eval_dotimes(args, effective_env, eval_st, ctx);
+                handled = true;
+            } else if (is_special_symbol(original_op_sym)) {
+                CljSpecialSymbol *special = (CljSpecialSymbol*)original_op_sym;
+                if (special->eval_fn) {
+                    SpecialFormEvalFn fn = (SpecialFormEvalFn)special->eval_fn;
+                    result = fn(args, effective_env, effective_st, ctx);
+                    handled = true;
+                }
+            }
+
+            if (!handled && original_op_sym->cname) {
+                if (strcmp(original_op_sym->cname, "try") == 0) {
+                    result = eval_special_try(args, effective_env, effective_st, ctx);
+                    handled = true;
+                } else if (strcmp(original_op_sym->cname, "loop") == 0) {
+                    result = eval_special_loop(args, effective_env, effective_st, ctx);
+                    handled = true;
+                } else if (strcmp(original_op_sym->cname, "recur") == 0) {
+                    result = eval_special_recur(args, effective_env, effective_st, ctx);
+                    handled = true;
+                }
+            }
+
+            if (handled) {
+                return result;
+            }
+        }
     }
 
     if (is_list_like(op) || TAG(op) == CLJ_AST_CALL) {
@@ -1895,12 +1901,13 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
     return NULL;
 }
 
-ID eval_def(CljList *list, CljPersistentMap *env, EvalState *st) {
+ID eval_def(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
     CLJ_ASSERT(env != NULL);
-    CLJ_ASSERT(is_list_like(list));
 
-    // Get the symbol name (second argument) - don't evaluate it, just get the symbol
-    CljObject *symbol = list_get_element(list, 1);
+    unsigned int argc = args ? vector_count(args) : 0;
+
+    // Get the symbol name (first argument) - don't evaluate it, just get the symbol
+    CljObject *symbol = (argc >= 1) ? (CljObject*)vector_nth(args, 0) : NULL;
     if (!symbol || TAG(symbol) != CLJ_SYMBOL) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "def requires a symbol as first argument",
@@ -1908,20 +1915,16 @@ ID eval_def(CljList *list, CljPersistentMap *env, EvalState *st) {
         return NULL;
     }
 
-    // Get the value (third argument) - evaluate this
+    // Get the value (second argument) - evaluate this
     // Note: value_expr can be NULL if nil was parsed (nil is represented as NULL)
-    CljObject *value_expr = list_get_element(list, 2);
-    // Check if list has at least 3 elements (def, symbol, value)
-    // If value_expr is NULL, it might be nil (valid) or missing (invalid)
-    // We need to check if there are actually 3 elements in the list
-    int list_len = list_count(list);
-    if (list_len < 3) {
+    ID value_expr = (argc >= 2) ? vector_nth(args, 1) : NULL;
+    if (argc < 2) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "def requires a value expression as second argument",
                        NULL, 0, 0);
         return NULL;
     }
-    // If list_len >= 3 but value_expr is NULL, it's nil (valid case)
+    // If argc >= 2 but value_expr is NULL, it's nil (valid case)
 
     // Evaluate the value expression
     // Use current namespace mappings as environment for evaluation
@@ -1929,9 +1932,7 @@ ID eval_def(CljList *list, CljPersistentMap *env, EvalState *st) {
     CljPersistentMap *eval_env = (st && st->current_ns) ? st->current_ns->mappings : env;
     ID value = NULL;
     if (value_expr) {
-        value = is_list_type(TAG(value_expr))
-            ? eval_list(as_list(value_expr), eval_env, st, NULL)
-            : eval_parsed(value_expr, st, eval_env);
+        value = eval_body(value_expr, eval_env, st, NULL);
     }
     // If value_expr is NULL, value remains NULL (nil case)
     // value can be NULL if nil was evaluated (legitimate case)
@@ -1980,7 +1981,7 @@ ID eval_def(CljList *list, CljPersistentMap *env, EvalState *st) {
 #if defined(META_ENABLED) && META_ENABLED
     if (value) {
         unsigned char value_tag = TAG(value);
-        ID form_meta = meta_get(list);
+        ID form_meta = meta_get((ID)args);
         
         // Optimized: Only process metadata for functions (most common case)
         // For non-functions, just copy form metadata if present
@@ -2026,14 +2027,14 @@ ID eval_def(CljList *list, CljPersistentMap *env, EvalState *st) {
     return ret_sym;
 }
 
-ID eval_ns(CljList *list, CljPersistentMap *env, EvalState *st) {
+ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
     CLJ_ASSERT(env != NULL);
     (void)env;
-    CLJ_ASSERT(list != NULL);
     assert(st != NULL);
 
     // Get namespace name (first argument) - use list_get_element like eval_def
-    CljObject *ns_name_obj = list_get_element(list, 1);
+    unsigned int argc = args ? vector_count(args) : 0;
+    CljObject *ns_name_obj = (argc >= 1) ? (CljObject*)vector_nth(args, 0) : NULL;
     if (!ns_name_obj || TAG(ns_name_obj) != CLJ_SYMBOL) {
         eval_error("ns expects a symbol", st);
         return NULL;
@@ -2050,10 +2051,8 @@ ID eval_ns(CljList *list, CljPersistentMap *env, EvalState *st) {
 
     // Process :require clauses: (ns name (:require [ns :as alias]))
     // Avoid list_nth in a loop (linked lists would make this O(n^2)).
-    CljList *args = list_or_null(as_list(LIST_REST(list)));
-    CljList *clause_node = args ? list_or_null(as_list(LIST_REST(args))) : NULL;
-    for (CljList *node = clause_node; node; node = list_or_null(as_list(LIST_REST(node)))) {
-        CljObject *clause = LIST_FIRST(node);
+    for (unsigned int i = 1; i < argc; i++) {
+        CljObject *clause = (CljObject*)vector_nth(args, i);
         if (!clause || !is_list_type(TAG(clause))) continue;
 
         CljList *clause_list = as_list(clause);
@@ -2092,11 +2091,12 @@ ID eval_ns(CljList *list, CljPersistentMap *env, EvalState *st) {
     return NULL;
 }
 
-ID eval_var(CljList *list, CljPersistentMap *env, EvalState *st) {
+ID eval_var(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
     (void)env;  // Not used
 
     // Get symbol name (first argument)
-    CljObject *sym_obj = list_get_element(list, 1);
+    unsigned int argc = args ? vector_count(args) : 0;
+    CljObject *sym_obj = (argc >= 1) ? (CljObject*)vector_nth(args, 0) : NULL;
     if (!sym_obj || TAG(sym_obj) != CLJ_SYMBOL) {
         eval_error("var expects a symbol", st);
         return NULL;
@@ -2137,7 +2137,7 @@ ID eval_var(CljList *list, CljPersistentMap *env, EvalState *st) {
 // ============================================================================
 // TCO functions moved to optimize.c
 
-ID eval_fn(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     // Some call paths (notably during bootstrap / lazy builder thunks) may not have
     // an explicit EvalState or lexical env map available.
     if (!st) st = builtin_get_eval_state();
@@ -2149,37 +2149,44 @@ ID eval_fn(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContex
         // Final fallback: empty environment.
         env = map_empty();
     }
-    CLJ_ASSERT(is_list_like(list));
+    unsigned int argc = args ? vector_count(args) : 0;
 
     // Get potential function name (for named fn like (fn step [x] ...))
-    CljList *rest1 = as_list(LIST_REST(list));     // nach 'fn'
-    ID second = LIST_FIRST(rest1);        // name oder params
+    ID second = (argc >= 1) ? vector_nth(args, 0) : NULL;        // name oder params
     CljSymbol *fn_name = NULL;
     ID params_list = NULL;
     ID body = NULL;
+    unsigned int body_start = 0;
 
     // Check if second element is a symbol (named fn) but NOT a keyword
     // Also check it's not a vector (anonymous fn case)
-    CljList *body_rest = NULL;  // Rest of body expressions (for multiple bodies)
     if (is_symbol(second) && !IS_KEYWORD(second)) {
         // Named fn: (fn name [params] body...)
         fn_name = (CljSymbol*)second;
-        CljList *rest2 = as_list(LIST_REST(rest1));   // nach name
-        params_list = LIST_FIRST(rest2);
-        body_rest = as_list(LIST_REST(rest2));        // body expressions
-        body = body_rest ? LIST_FIRST(body_rest) : NULL;
+        params_list = (argc >= 2) ? vector_nth(args, 1) : NULL;
+        body_start = 2;
     } else {
         // Anonymous fn: (fn [params] body...)
         params_list = second;
-        body_rest = as_list(LIST_REST(rest1));
-        body = body_rest ? LIST_FIRST(body_rest) : NULL;
+        body_start = 1;
     }
+
+    if (body_start >= argc) {
+        return NULL;
+    }
+
+    body = vector_nth(args, body_start);
     
     // Handle multiple body expressions: use a temporary (do ...) for TCO analysis.
     // We'll later store the body as a vector to drop the list nodes.
-    bool body_is_multi = (body_rest && body_rest->rest);
+    bool body_is_multi = ((argc - body_start) > 1);
     if (body_is_multi) {
-        body = (CljObject*)make_list(SYM_DO, body_rest);
+        CljList *body_list = NULL;
+        for (int i = (int)argc - 1; i >= (int)body_start; i--) {
+            ID expr = vector_nth(args, (unsigned int)i);
+            body_list = make_list(expr, body_list);
+        }
+        body = (CljObject*)make_list(SYM_DO, body_list);
     }
 
     // Parameters can be a vector [a b] or a list (a b)
@@ -2622,17 +2629,18 @@ static CljPersistentMap* extend_env_with_binding(CljPersistentMap *env, CljObjec
 // NOTE: Legacy native `for`/`for*` special forms were removed.
 // `for` is implemented as a Clojure macro in `clojure.core` and expands to lazy primitives.
 
-ID eval_doseq(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_doseq(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(env != NULL);
     // (doseq [binding coll] expr)
     // Executes expr for side effects, returns nil
 
-    if (!list) {
+    unsigned int argc = args ? vector_count(args) : 0;
+    if (argc == 0) {
         return NULL;
     }
 
-    CljObject *binding_list = list_get_element(list, 1);
-    CljObject *body = list_get_element(list, 2);
+    CljObject *binding_list = (CljObject*)vector_nth(args, 0);
+    CljObject *body = (argc >= 2) ? (CljObject*)vector_nth(args, 1) : NULL;
     if (!binding_list || !body) {
         return NULL;
     }
@@ -2729,11 +2737,11 @@ ID eval_list_function(CljList *list, CljPersistentMap *env) {
 // using Clojure's (destructure ...) function. By the time we get here,
 // all bindings are simple symbol-value pairs.
 // ============================================================================
-ID eval_let(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_let(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     // (let [bindings*] body*)
     // bindings* => binding-form init-expr
 
-    if (!list || !st) {
+    if (!args || !st) {
         return NULL;
     }
 
@@ -2744,8 +2752,10 @@ ID eval_let(CljList *list, CljPersistentMap *env, EvalState *st, const EvalConte
         return NULL;
     }
 
-    // Get bindings vector (second element): (let [x 10 y 20] ...)
-    CljObject *bindings_vec = list_get_element(list, 1);
+    unsigned int argc = vector_count(args);
+
+    // Get bindings vector (first element): (let [x 10 y 20] ...)
+    CljObject *bindings_vec = (argc >= 1) ? (CljObject*)vector_nth(args, 0) : NULL;
     if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR_PERSISTENT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "let requires a vector for bindings",
@@ -2909,10 +2919,8 @@ ID eval_let(CljList *list, CljPersistentMap *env, EvalState *st, const EvalConte
 
     ID result = NULL;
     CljPersistentMap *body_env = let_ctx.env ? let_ctx.env : env;
-    CljList *args = list_or_null(as_list(LIST_REST(list)));
-    CljList *body_node = args ? list_or_null(as_list(LIST_REST(args))) : NULL;
-    for (CljList *node = body_node; node; node = list_or_null(as_list(LIST_REST(node)))) {
-        ID body_expr = LIST_FIRST(node);
+    for (unsigned int i = 1; i < argc; i++) {
+        ID body_expr = vector_nth(args, i);
         if (!body_expr) continue;
 
         RELEASE(result);
@@ -3130,24 +3138,18 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
     return expr;
 }
 
-ID eval_dotimes(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_dotimes(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(env != NULL);
     // (dotimes [var n] expr)
     // Executes expr n times with var bound to 0, 1, ..., n-1
 
-    if (!list) {
+    unsigned int argc = args ? vector_count(args) : 0;
+    if (argc == 0) {
         return NULL;
     }
 
-    // Parse arguments directly without evaluation
-    CljList *list_data = as_list(list);
-    if (!list_data || !list_data->rest) return NULL;
-
     // Extract binding vector/list (first argument after dotimes) and body forms.
-    CljList *args_list = as_list(list_data->rest);
-    if (!args_list) return NULL;
-    ID binding_list = LIST_FIRST(args_list);
-    ID body_list = LIST_REST(args_list); // list of body expressions (may be NULL)
+    ID binding_list = vector_nth(args, 0);
 
     if (!binding_list) return NULL;
 
@@ -3203,13 +3205,9 @@ ID eval_dotimes(CljList *list, CljPersistentMap *env, EvalState *st, const EvalC
         dotimes_frame.values[0] = frame_encode_value(fixnum((int32_t)i));
 
         WITH_AUTORELEASE_POOL({
-            if (is_list_like(body_list)) {
-                CljList *body_items = as_list(body_list);
-                LIST_FOR_EACH(body_items, body_expr) {
-                    if (body_expr) eval_body(body_expr, env, eval_st, &dotimes_ctx);
-                }
-            } else if (body_list) {
-                eval_body(body_list, env, eval_st, &dotimes_ctx);
+            for (unsigned int b = 1; b < argc; b++) {
+                ID body_expr = vector_nth(args, b);
+                if (body_expr) eval_body(body_expr, env, eval_st, &dotimes_ctx);
             }
         });
     }
@@ -3222,20 +3220,20 @@ ID eval_dotimes(CljList *list, CljPersistentMap *env, EvalState *st, const EvalC
 // ============================================================================
 // EVAL_TIME - Time measurement special form implementation
 // ============================================================================
-ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     // (time expr)
-    if (!list || !st) {
+    if (!args || !st) {
         return NULL;
     }
 
     // Validate arity: exactly 1 argument
-    int argc = list_count(list);
-    if (!validate_arity(argc - 1, 1, "time")) { // -1 because list includes the 'time' symbol
+    unsigned int argc = vector_count(args);
+    if (!validate_arity((int)argc, 1, "time")) {
         return NULL;
     }
 
     // Get the expression to time (second element): (time expr)
-    CljObject *expr = list_get_element(list, 1);
+    CljObject *expr = (CljObject*)vector_nth(args, 0);
     if (!expr) {
         return NULL;
     }
@@ -3295,16 +3293,16 @@ ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalCont
  * @return The result of evaluating expr (autoreleased) or NULL (nil)
  */
 #ifdef DEBUG
-ID eval_heap(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     // (heap expr) - Memory leak detector.
     // Evaluates expr twice: first to warm up caches, second to measure.
     // Returns a map of type -> bytes delta, or nil if all zero.
-    if (!list || !st) return NULL;
+    if (!args || !st) return NULL;
 
-    int argc = list_count(list);
-    if (!validate_arity(argc - 1, 1, "heap")) return NULL;
+    unsigned int argc = vector_count(args);
+    if (!validate_arity((int)argc, 1, "heap")) return NULL;
 
-    CljObject *expr = list_get_element(list, 1);
+    CljObject *expr = (CljObject*)vector_nth(args, 0);
     CljPersistentMap *eval_env = eval_env_or_ns_mappings(env, st);
 
     // Disable callsite cache during heap measurement to avoid cache churn artifacts

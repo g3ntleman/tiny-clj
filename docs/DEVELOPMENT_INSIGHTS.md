@@ -881,7 +881,7 @@ return head ? (RETAIN(head), head) : clj_nil();  // RC+1
 #### `.vscode/launch.json`
 ```json
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "configurations": [
     {
       "name": "Tiny-CLJ REPL",

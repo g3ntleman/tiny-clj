@@ -28,7 +28,7 @@ typedef struct {
 } EvalContext;
 
 // Special Form evaluation function pointer type (defined here where types are known)
-typedef ID (*SpecialFormEvalFn)(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+typedef ID (*SpecialFormEvalFn)(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 // Extended function-call entry points
 ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env, EvalState *st);
@@ -39,25 +39,25 @@ ID eval_body_with_params(ID body, const EvalContext *ctx);
 ID eval_list(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 // Special form evaluators
-ID eval_def(CljList *list, CljPersistentMap *env, EvalState *st);
-ID eval_ns(CljList *list, CljPersistentMap *env, EvalState *st);
-ID eval_var(CljList *list, CljPersistentMap *env, EvalState *st);
+ID eval_def(CljPersistentVector *args, CljPersistentMap *env, EvalState *st);
+ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st);
+ID eval_var(CljPersistentVector *args, CljPersistentMap *env, EvalState *st);
 ID eval_list_function(CljList *list, CljPersistentMap *env);
-ID eval_fn(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_symbol(CljSymbol *symbol, EvalState *st);
-ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 #ifdef DEBUG
-ID eval_heap(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 #endif
 
 // Additional built-in helpers
 
 // For-loop functions
-ID eval_doseq(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
-ID eval_dotimes(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_doseq(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_dotimes(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 // Let bindings
-ID eval_let(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_let(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 // Helper functions
 ID eval_arg(CljList *list, int index, CljPersistentMap *env, EvalState *st);

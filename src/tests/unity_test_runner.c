@@ -90,7 +90,7 @@ static void test_heap_growth_check(void) {
     for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
         size_t before_bytes = g_heap_baseline.bytes_current_by_type[i];
         size_t after_bytes = after.bytes_current_by_type[i];
-        if (after_bytes > before_bytes && i != CLJ_CALLSITE_CACHE) {
+        if (after_bytes > before_bytes && i != CLJ_CALLSITE_CACHE && i != CLJ_SYMBOL) {
             size_t delta = after_bytes - before_bytes;
             const char *name = clj_type_name((CljType)i);
             off = format_append(msg, off, sizeof(msg), " ");

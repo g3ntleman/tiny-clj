@@ -11,7 +11,9 @@
 #include "../symbol.h"
 #include "../reader.h"
 #include "../eval.h"
+#include "../ast.h"
 #include "../list.h"
+#include "../vector.h"
 #include "map.h"
 #include "kv_macros.h"
 #include "../runtime.h"
@@ -85,11 +87,15 @@ TEST(test_defn_with_native_marker_recognized) {
         // Verify it expands to (def ...) - defn is now a macro
         ID canonical_form = canonicalize_ast(form, g_test_eval_state);
         TEST_ASSERT_NOT_NULL(canonical_form);
-        CljList *list = as_list(canonical_form);
-        TEST_ASSERT_NOT_NULL_MESSAGE(list, "expanded form should be a list");
-
         // First element should be 'def' (not 'defn')
-        CljObject *first = LIST_FIRST(list);
+        CljObject *first = NULL;
+        if (canonical_form && TAG(canonical_form) == CLJ_AST_CALL) {
+            CljASTCall *call = as_ast_call(canonical_form);
+            first = call ? call->op : NULL;
+        } else if (canonical_form && is_list_type(TAG(canonical_form))) {
+            CljList *list = as_list(canonical_form);
+            first = list ? LIST_FIRST(list) : NULL;
+        }
         TEST_ASSERT_NOT_NULL(first);
         TEST_ASSERT_TRUE_MESSAGE(TAG(first) == CLJ_SYMBOL, "first element should be a symbol");
         CljSymbol *first_sym = as_symbol(first);
@@ -407,10 +413,15 @@ TEST(test_defn_symbol_recognized) {
         ID canonical_form = canonicalize_ast(form, g_test_eval_state);
         TEST_ASSERT_NOT_NULL(canonical_form);
 
-        // Extract the first symbol from the expanded list
-        CljList *list = as_list(canonical_form);
-        TEST_ASSERT_NOT_NULL(list);
-        CljObject *first_sym = LIST_FIRST(list);
+        // Extract the first symbol from the expanded form
+        CljObject *first_sym = NULL;
+        if (canonical_form && TAG(canonical_form) == CLJ_AST_CALL) {
+            CljASTCall *call = as_ast_call(canonical_form);
+            first_sym = call ? call->op : NULL;
+        } else if (canonical_form && is_list_type(TAG(canonical_form))) {
+            CljList *list = as_list(canonical_form);
+            first_sym = list ? LIST_FIRST(list) : NULL;
+        }
         TEST_ASSERT_NOT_NULL(first_sym);
         TEST_ASSERT_TRUE_MESSAGE(TAG(first_sym) == CLJ_SYMBOL,
                                  "first element should be a symbol");
@@ -439,19 +450,28 @@ TEST(test_defn_test_fn_parsed) {
         ID canonical_form = canonicalize_ast(form, g_test_eval_state);
         TEST_ASSERT_NOT_NULL(canonical_form);
 
-        // Verify it's a list
-        CljList *list = as_list(canonical_form);
-        TEST_ASSERT_NOT_NULL_MESSAGE(list, "parsed form should be a list");
-
-        // Verify first element is 'defn'
-        CljObject *defn_sym = LIST_FIRST(list);
-        TEST_ASSERT_NOT_NULL_MESSAGE(defn_sym, "first element should be 'defn' symbol");
-        TEST_ASSERT_TRUE_MESSAGE(TAG(defn_sym) == CLJ_SYMBOL,
+        // Verify first element is 'def' and second element is 'test-fn'
+        CljObject *def_sym = NULL;
+        CljObject *test_fn_sym = NULL;
+        if (canonical_form && TAG(canonical_form) == CLJ_AST_CALL) {
+            CljASTCall *call = as_ast_call(canonical_form);
+            def_sym = call ? call->op : NULL;
+            if (call && call->args && vector_count(call->args) > 0) {
+                test_fn_sym = vector_nth(call->args, 0);
+            }
+        } else if (canonical_form && is_list_type(TAG(canonical_form))) {
+            CljList *list = as_list(canonical_form);
+            def_sym = list ? LIST_FIRST(list) : NULL;
+            CljList *rest = list ? as_list(list->rest) : NULL;
+            test_fn_sym = rest ? LIST_FIRST(rest) : NULL;
+        }
+        TEST_ASSERT_NOT_NULL_MESSAGE(def_sym, "first element should be 'def' symbol");
+        TEST_ASSERT_TRUE_MESSAGE(TAG(def_sym) == CLJ_SYMBOL,
                                 "first element should be a symbol");
+        TEST_ASSERT_EQUAL_PTR_MESSAGE(SYM_DEF, def_sym,
+                                      "defn should expand to def");
 
         // Verify second element is 'test-fn'
-        CljList *rest = as_list(list->rest);
-        CljObject *test_fn_sym = rest ? LIST_FIRST(rest) : NULL;
         TEST_ASSERT_NOT_NULL_MESSAGE(test_fn_sym, "second element should be 'test-fn' symbol");
         TEST_ASSERT_TRUE_MESSAGE(TAG(test_fn_sym) == CLJ_SYMBOL,
                                 "second element should be a symbol");
@@ -487,7 +507,7 @@ TEST(test_defn_test_fn_evaluated) {
 
         // Evaluate the form
         CljPersistentMap *env = g_test_eval_state->current_ns ? (CljPersistentMap*)g_test_eval_state->current_ns->mappings : NULL;
-        ID result = eval_list(as_list(canonical_form), env, g_test_eval_state, NULL);
+        ID result = eval_body(canonical_form, env, g_test_eval_state, NULL);
 
         // Should return the symbol 'test-fn'
         TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_defn should return the symbol");
@@ -682,4 +702,3 @@ TEST(test_defn_docstring_native_stub_still_works) {
         TEST_ASSERT_TRUE(TAG(r) == CLJ_STRING);
     });
 }
-

@@ -51,15 +51,40 @@ static INLINE void move_meta(ID src, ID dst) {
 #endif
 }
 
-static inline bool is_special_form_like(CljSymbol *sym) {
-    if (!sym) return false;
-    if (is_special_symbol(sym)) return true;
-    if (sym == SYM_DOSEQ || sym == SYM_DOTIMES) return true;
-    if (!sym->cname) return false;
-    if (strcmp(sym->cname, "try") == 0) return true;
-    if (strcmp(sym->cname, "loop") == 0) return true;
-    if (strcmp(sym->cname, "recur") == 0) return true;
-    return false;
+static ID make_ast_call_with_body(ID op,
+                                  ID *prefix_args,
+                                  unsigned int prefix_count,
+                                  CljList *body_list,
+                                  ID src_expr) {
+    unsigned int body_count = 0;
+    for (CljList *node = body_list; node; node = list_rest_normalized(node)) {
+        body_count++;
+    }
+
+    unsigned int total = prefix_count + body_count;
+    CljPersistentVector *args = make_vector((int)total, STRONG);
+    if (!args) return NULL;
+
+    for (unsigned int i = 0; i < prefix_count; i++) {
+        vector_conj_inplace(&args, prefix_args[i]);
+    }
+    for (CljList *node = body_list; node; node = list_rest_normalized(node)) {
+        vector_conj_inplace(&args, LIST_FIRST(node));
+    }
+
+    CljASTCall *call = make_ast_call(op, args);
+    RELEASE(args);
+    if (!call) return NULL;
+
+    if (TAG(src_expr) == CLJ_AST_NODE) {
+        CljASTNode *node = as_ast_node(src_expr);
+        if (node && node->callsite_cache) {
+            ast_call_set_callsite_cache(call, node->callsite_cache);
+        }
+    }
+
+    move_meta(src_expr, (ID)call);
+    return AUTORELEASE(call);
 }
 
 static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, CljPersistentVector **scope_stack);
@@ -671,10 +696,9 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 
                 scope_stack_pop_inplace(scope_stack);
 
-                CljList *tail = (CljList*)AUTORELEASE(make_list(canon_bindings, canon_body));
-                ID result = AUTORELEASE(make_list(first, tail));
+                ID prefix_args[1] = { canon_bindings };
+                ID result = make_ast_call_with_body(first, prefix_args, 1, canon_body, expr);
                 if (!result) return expr;
-                move_meta(expr, result);
                 return result;
             }
         }
@@ -717,10 +741,9 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 
                 scope_stack_pop_inplace(scope_stack);
 
-                CljList *tail = (CljList*)AUTORELEASE(make_list(canon_bindings, canon_body));
-                ID result = AUTORELEASE(make_list(first, tail));
+                ID prefix_args[1] = { canon_bindings };
+                ID result = make_ast_call_with_body(first, prefix_args, 1, canon_body, expr);
                 if (!result) return expr;
-                move_meta(expr, result);
                 return result;
             }
         }
@@ -755,10 +778,9 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
 
                 scope_stack_pop_inplace(scope_stack);
 
-                CljList *tail = (CljList*)AUTORELEASE(make_list(canon_binding_vec, canon_body));
-                ID result = AUTORELEASE(make_list(first, tail));
+                ID prefix_args[1] = { canon_binding_vec };
+                ID result = make_ast_call_with_body(first, prefix_args, 1, canon_body, expr);
                 if (!result) return expr;
-                move_meta(expr, result);
                 return result;
             }
         }
@@ -822,29 +844,26 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                         scope_stack_pop_inplace(&fn_scope_stack);
                         RELEASE(fn_scope_stack);
 
-                        // Rebuild rest list: (name? params body...)
-                        CljList *tail = NULL;
+                        ID prefix_args[2] = { NULL, NULL };
+                        unsigned int prefix_count = named ? 2 : 1;
                         if (named) {
-                            CljList *params_and_body = (CljList*)AUTORELEASE(make_list(params_canon_id, canon_body));
-                            tail = (CljList*)AUTORELEASE(make_list(name_canon, params_and_body));
+                            prefix_args[0] = name_canon;
+                            prefix_args[1] = params_canon_id;
                         } else {
-                            tail = (CljList*)AUTORELEASE(make_list(params_canon_id, canon_body));
+                            prefix_args[0] = params_canon_id;
                         }
 
-                        ID result = AUTORELEASE(make_list(first, tail));
+                        ID result = make_ast_call_with_body(first, prefix_args, prefix_count, canon_body, expr);
                         if (!result) return expr;
-                        move_meta(expr, result);
                         return result;
                     }
                 }
             }
         }
         
-        bool is_special = (!in_quote && first && TAG(first) == CLJ_SYMBOL &&
-                           is_special_form_like(as_symbol(first)));
         bool is_empty = list_empty(list);
 
-        if (in_quote || is_special || is_empty) {
+        if (in_quote || is_empty) {
             // Canonicalize rest of list into plain CLJ_LIST cons cells.
             CljList *rest_list = list->rest
                 ? canonicalize_rest_to_plain_list(list->rest, st, child_in_quote, scope_stack)
@@ -867,7 +886,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
             return result;
         }
 
-        // Non-special call form: build AST_CALL (op + args vector).
+        // Call form: build AST_CALL (op + args vector).
         unsigned int argc = 0;
         for (CljList *node = list_rest_normalized(list); node; node = list_rest_normalized(node)) {
             argc++;

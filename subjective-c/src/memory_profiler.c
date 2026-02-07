@@ -15,6 +15,11 @@
 #include <string.h>
 #include <assert.h>
 
+/* Undef no-op macros from memory.h so this file can define the real functions. */
+#undef memory_profiler_track_raw_alloc
+#undef memory_profiler_track_raw_free
+#undef memory_profiler_track_raw_realloc
+
 MemoryStats g_memory_stats = {0};
 bool g_memory_profiling_enabled = false;
 bool g_memory_leak_reporting_enabled = true;

@@ -6,6 +6,7 @@
 #include "reader.h"
 #include "list.h"
 #include "../ast.h"
+#include "vector.h"
 #include "map.h"
 #include "to_string.h"
 #include <sys/time.h>
@@ -236,71 +237,83 @@ TEST(test_inc_symbol_pointer_consistency) {
     TEST_ASSERT_NOT_NULL(form);
     
     // Extract the symbol from the parsed form
-    if (form && is_list_type(TAG(form))) {
-        CljList *list = as_list(form);
-        ID inc_sym_in_form = list_nth(list, 1);
-        
-        TEST_ASSERT_NOT_NULL(inc_sym_in_form);
-        TEST_ASSERT_TRUE(TAG(inc_sym_in_form) == CLJ_SYMBOL);
-        
-        // Get inc symbol after parsing
-        CljSymbol *inc_sym_after = intern_symbol_global("inc");
-        TEST_ASSERT_NOT_NULL(inc_sym_after);
-        
-        // The symbol in the parsed form should be the same as the interned symbol
-        TEST_ASSERT_EQUAL_PTR_MESSAGE(inc_sym_before, inc_sym_in_form,
-                                     "Symbol in parsed form should be same as interned symbol");
-        TEST_ASSERT_EQUAL_PTR_MESSAGE(inc_sym_after, inc_sym_in_form,
-                                     "Symbol after parsing should be same as symbol in form");
-        
-        // Now evaluate the def
-        CljPersistentMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
-        ID def_result = eval_list(list, env, g_test_eval_state, NULL);  // Evaluate def - returns the symbol
-        
-        // Check if inc is now in the mappings with the same symbol pointer
-        // CRITICAL: eval_def returns the qualified symbol that was stored
-        // For non-clojure.core namespaces, the symbol is qualified with the namespace name
-        if (g_test_eval_state->current_ns && g_test_eval_state->current_ns->mappings) {
-            // Use the symbol returned by def (should be the qualified symbol that was stored)
-            CljSymbol *stored_symbol = def_result ? as_symbol(def_result) : NULL;
-            
-            // Also try to get the qualified symbol from the symbol table
-            CljSymbol *qualified_inc_sym = NULL;
-            if (g_test_eval_state->current_ns->name && g_test_eval_state->current_ns->name->cname) {
-                qualified_inc_sym = intern_symbol(g_test_eval_state->current_ns->name, "inc");
-            }
-            
-            // Try lookup with the symbol returned by def first
-            CljObject *inc_value = NULL;
-            if (stored_symbol) {
-                inc_value = map_get_sentinel(g_test_eval_state->current_ns->mappings, stored_symbol, NULL);
-            }
-            
-            // If not found, try with qualified symbol from symbol table
-            if (!inc_value && qualified_inc_sym) {
-                inc_value = map_get_sentinel(g_test_eval_state->current_ns->mappings, qualified_inc_sym, NULL);
-            }
-            
-            // If still not found, try with unqualified symbol (for clojure.core compatibility)
-            if (!inc_value) {
-                inc_value = map_get_sentinel(g_test_eval_state->current_ns->mappings, inc_sym_after, NULL);
-            }
-            
-            if (!inc_value) {
-                char msg[512];
-                test_snprintf(msg, sizeof(msg),
-                        "inc not found in mappings after def. "
-                        "Form symbol: %p, Interned symbol: %p, Stored symbol: %p, Qualified symbol: %p, Equal: %d",
-                        (void*)inc_sym_in_form, (void*)inc_sym_after, (void*)stored_symbol, (void*)qualified_inc_sym,
-                        ((CljSymbol*)inc_sym_in_form == inc_sym_after) ? 1 : 0);
-                TEST_FAIL_MESSAGE(msg);
-            }
-            
-            TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, "inc should be in mappings after def");
+    CljObject *inc_sym_in_form = NULL;
+    CljObject *op_sym = NULL;
+    if (form && TAG(form) == CLJ_AST_CALL) {
+        CljASTCall *call = as_ast_call(form);
+        op_sym = call ? call->op : NULL;
+        if (call && call->args && vector_count(call->args) > 0) {
+            inc_sym_in_form = vector_nth(call->args, 0);
         }
-        
-        // Don't RELEASE result - eval_list returns autoreleased object
+    } else if (form && is_list_type(TAG(form))) {
+        CljList *list = as_list(form);
+        op_sym = list ? LIST_FIRST(list) : NULL;
+        inc_sym_in_form = list_nth(list, 1);
     }
+
+    TEST_ASSERT_NOT_NULL(inc_sym_in_form);
+    TEST_ASSERT_TRUE(TAG(inc_sym_in_form) == CLJ_SYMBOL);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(TAG(op_sym) == CLJ_SYMBOL);
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(SYM_DEF, op_sym, "form should be a def");
+
+    // Get inc symbol after parsing
+    CljSymbol *inc_sym_after = intern_symbol_global("inc");
+    TEST_ASSERT_NOT_NULL(inc_sym_after);
+
+    // The symbol in the parsed form should be the same as the interned symbol
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(inc_sym_before, inc_sym_in_form,
+                                 "Symbol in parsed form should be same as interned symbol");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(inc_sym_after, inc_sym_in_form,
+                                 "Symbol after parsing should be same as symbol in form");
+
+    // Now evaluate the def
+    CljPersistentMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
+    ID def_result = eval_body(form, env, g_test_eval_state, NULL);  // Evaluate def - returns the symbol
+
+    // Check if inc is now in the mappings with the same symbol pointer
+    // CRITICAL: eval_def returns the qualified symbol that was stored
+    // For non-clojure.core namespaces, the symbol is qualified with the namespace name
+    if (g_test_eval_state->current_ns && g_test_eval_state->current_ns->mappings) {
+        // Use the symbol returned by def (should be the qualified symbol that was stored)
+        CljSymbol *stored_symbol = def_result ? as_symbol(def_result) : NULL;
+
+        // Also try to get the qualified symbol from the symbol table
+        CljSymbol *qualified_inc_sym = NULL;
+        if (g_test_eval_state->current_ns->name && g_test_eval_state->current_ns->name->cname) {
+            qualified_inc_sym = intern_symbol(g_test_eval_state->current_ns->name, "inc");
+        }
+
+        // Try lookup with the symbol returned by def first
+        CljObject *inc_value = NULL;
+        if (stored_symbol) {
+            inc_value = map_get_sentinel(g_test_eval_state->current_ns->mappings, stored_symbol, NULL);
+        }
+
+        // If not found, try with qualified symbol from symbol table
+        if (!inc_value && qualified_inc_sym) {
+            inc_value = map_get_sentinel(g_test_eval_state->current_ns->mappings, qualified_inc_sym, NULL);
+        }
+
+        // If still not found, try with unqualified symbol (for clojure.core compatibility)
+        if (!inc_value) {
+            inc_value = map_get_sentinel(g_test_eval_state->current_ns->mappings, inc_sym_after, NULL);
+        }
+
+        if (!inc_value) {
+            char msg[512];
+            test_snprintf(msg, sizeof(msg),
+                    "inc not found in mappings after def. "
+                    "Form symbol: %p, Interned symbol: %p, Stored symbol: %p, Qualified symbol: %p, Equal: %d",
+                    (void*)inc_sym_in_form, (void*)inc_sym_after, (void*)stored_symbol, (void*)qualified_inc_sym,
+                    ((CljSymbol*)inc_sym_in_form == inc_sym_after) ? 1 : 0);
+            TEST_FAIL_MESSAGE(msg);
+        }
+
+        TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, "inc should be in mappings after def");
+    }
+
+    // Don't RELEASE result - eval_body returns autoreleased object
     
     // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
 }

@@ -414,6 +414,42 @@ TEST_SHARED(test_conj_disj_set) {
     TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
+TEST_SHARED(test_hash_set_dedup_count) {
+    CljObject *result = eval_string("(= 2 (count (hash-set 1 1 2)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST_SHARED(test_conj_set_duplicate_no_growth) {
+    CljObject *result = eval_string("(= 2 (count (conj #{1 2} 2)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST_SHARED(test_disj_set_missing_key_no_change) {
+    CljObject *result = eval_string("(= #{1 2} (disj #{1 2} 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST_SHARED(test_set_seq_empty_nil) {
+    CljObject *result = eval_string("(nil? (seq #{}))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST_SHARED(test_set_seq_count_matches) {
+    CljObject *result = eval_string("(= 3 (count (seq #{1 2 3})))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST_SHARED(test_set_round_trip_read_string) {
+    CljObject *result = eval_string("(= #{1 2 3} (read-string (str #{1 2 3})))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
 // ============================================================================
 // ifn? - Returns true if x implements IFn (fn, keyword, map, vector)
 // ============================================================================

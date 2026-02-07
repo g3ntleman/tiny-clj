@@ -143,7 +143,6 @@ CLJException* make_exception(const char *type, const char *message, const char *
 #ifdef DEBUG
     // Always generate stacktrace in DEBUG builds; exception must retain it
     exc->stacktrace = stacktrace();
-    RETAIN(exc->stacktrace);
     exc->object = 0;  // Initialize to 0 (unset)
 #else
     // Release builds: no stacktrace field

@@ -3,7 +3,7 @@
 #include "symbol.h"
 #include "value.h"
 
-ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 TEST_SHARED(test_time_basic_functionality) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -17,11 +17,11 @@ TEST_SHARED(test_time_basic_functionality) {
 }
 
 TEST_SHARED(test_time_arity_validation, 1100) {
-    CljList *time_list = AUTORELEASE(make_list(SYM_TIME, NULL));
+    CljPersistentVector *time_args = AUTORELEASE(make_vector(0, STRONG));
     CljPersistentMap *env = AUTORELEASE(make_map(16));
     
     TRY {
-        ID result = eval_time(time_list, env, g_test_eval_state, NULL);
+        ID result = eval_time(time_args, env, g_test_eval_state, NULL);
         TEST_ASSERT_NULL(result);
     } CATCH(ex) {
         TEST_ASSERT_TRUE(true);
@@ -29,12 +29,13 @@ TEST_SHARED(test_time_arity_validation, 1100) {
 }
 
 TEST_SHARED(test_time_with_too_many_arguments, 1400) {
-    CljList *time_list = AUTORELEASE(make_list(SYM_TIME, 
-        make_list(fixnum(1), make_list(fixnum(2), NULL))));
+    CljPersistentVector *time_args = AUTORELEASE(make_vector(2, STRONG));
+    vector_conj_inplace(&time_args, fixnum(1));
+    vector_conj_inplace(&time_args, fixnum(2));
     CljPersistentMap *env = AUTORELEASE(make_map(16));
     
     TRY {
-        ID result = eval_time(time_list, env, g_test_eval_state, NULL);
+        ID result = eval_time(time_args, env, g_test_eval_state, NULL);
         TEST_ASSERT_NULL(result);
     } CATCH(ex) {
         TEST_ASSERT_TRUE(true);

@@ -745,6 +745,18 @@ TEST_SHARED(test_equal_maps_different, 900) {
     TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= {:a 1} {:a 2}) should be false");
 }
 
+TEST_SHARED(test_equal_sets, 900) {
+    // Test: (= #{1 2} #{2 1}) => true (order independent)
+    CljObject *result = eval_string("(= #{1 2} #{2 1})", g_test_eval_state);
+    TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= #{1 2} #{2 1}) should be true");
+}
+
+TEST_SHARED(test_equal_sets_different, 900) {
+    // Test: (= #{1 2} #{1 2 3}) => false
+    CljObject *result = eval_string("(= #{1 2} #{1 2 3})", g_test_eval_state);
+    TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= #{1 2} #{1 2 3}) should be false");
+}
+
 TEST_SHARED(test_equal_list_function_result, 900) {
     // Test: (= (list 1 2 3) '(1 2 3)) => true
     CljObject *result = eval_string("(= (list 1 2 3) '(1 2 3))", g_test_eval_state);

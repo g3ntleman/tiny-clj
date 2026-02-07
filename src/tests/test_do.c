@@ -45,7 +45,7 @@ TEST_SHARED(test_do_multiple_exprs) {
 }
 
 // Test do with arithmetic expressions
-TEST_SHARED(test_do_with_arithmetic) {
+TEST_SHARED(test_do_with_arithmetic, 64) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do (+ 1 1) (+ 2 2) (+ 3 3))";
@@ -73,7 +73,7 @@ TEST_SHARED(test_do_nested) {
 }
 
 // Test do in if statement
-TEST_SHARED(test_do_in_if) {
+TEST_SHARED(test_do_in_if, 64) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(if true (do (+ 1 1) 10) 20)";
@@ -87,7 +87,7 @@ TEST_SHARED(test_do_in_if) {
 }
 
 // Test do in if else branch
-TEST_SHARED(test_do_in_if_else) {
+TEST_SHARED(test_do_in_if_else, 64) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(if false 1 (do (+ 2 2) 20))";
@@ -127,7 +127,7 @@ TEST_SHARED(test_do_last_nil) {
 }
 
 // Test do with let binding
-TEST_SHARED(test_do_with_let, 50) {
+TEST_SHARED(test_do_with_let, 128) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(let [x 5] (do (+ x 1) (+ x 2)))";

@@ -6,7 +6,9 @@
 #include "kv_macros.h"
 #include "reader.h"
 #include "eval.h"
+#include "../ast.h"
 #include "list.h"
+#include "vector.h"
 
 // Forward declaration for load_clojure_core
 int load_clojure_core(EvalState *st);
@@ -263,74 +265,93 @@ TEST(test_def_inc_evaluation_during_load) {
     TEST_ASSERT_NOT_NULL(canonical_form);
     
     // Extract the symbol from the parsed form
-    if (canonical_form && is_list_type(TAG(canonical_form))) {
+    CljObject *inc_sym_obj = NULL;
+    CljObject *fn_expr = NULL;
+    CljObject *op_sym = NULL;
+    if (canonical_form && TAG(canonical_form) == CLJ_AST_CALL) {
+        CljASTCall *call = as_ast_call(canonical_form);
+        op_sym = call ? call->op : NULL;
+        if (call && call->args && vector_count(call->args) > 0) {
+            inc_sym_obj = vector_nth(call->args, 0);
+        }
+        if (call && call->args && vector_count(call->args) > 1) {
+            fn_expr = vector_nth(call->args, 1);
+        }
+    } else if (canonical_form && is_list_type(TAG(canonical_form))) {
         CljList *list = as_list(canonical_form);
-        CljSymbol *inc_sym = as_symbol(list_nth(list, 1));
-        CljObject *fn_expr = (CljObject*)list_nth(list, 2);
-        
-        TEST_ASSERT_NOT_NULL(inc_sym);
-        TEST_ASSERT_TRUE(inc_sym && TAG(inc_sym) == CLJ_SYMBOL);
-        TEST_ASSERT_NOT_NULL(fn_expr);
-        
-        // Verify that inc_sym is the same as intern_symbol_global("inc")
-        CljSymbol *inc_sym_interned = intern_symbol_global("inc");
-        TEST_ASSERT_EQUAL_PTR_MESSAGE(inc_sym, inc_sym_interned,
-                                      "inc symbol should be interned");
-        
-        // Evaluate the def expression
-        CljPersistentMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
-        TEST_ASSERT_NOT_NULL(env);
-        
-        TRY {
-            (void)eval_list(list, env, g_test_eval_state, NULL);
-            
-            // CRITICAL: ns_define stores qualified symbols in mappings
-            // Get the qualified symbol from the symbol table for lookup
-            CljSymbol *qualified_inc_sym = NULL;
-            if (g_test_eval_state->current_ns->name && g_test_eval_state->current_ns->name->cname) {
-                qualified_inc_sym = intern_symbol(g_test_eval_state->current_ns->name, "inc");
-            }
-            CljObject *inc_value = qualified_inc_sym ? map_get_sentinel(g_test_eval_state->current_ns->mappings, qualified_inc_sym, NULL) : NULL;
-            
-            if (!inc_value) {
-                CljPersistentMap *map = g_test_eval_state->current_ns->mappings;
-                int symbol_count = 0;
-                const char *first_symbol = NULL;
-                MAP_FOR_EACH(map, key, value) {
-                    (void)value;  // unused
-                    if (key && TAG(key) == CLJ_SYMBOL) {
-                        CljSymbol *sym = as_symbol(key);
-                        symbol_count++;
-                        if (!first_symbol && sym->cname) {
-                            first_symbol = sym->cname;
-                        }
+        op_sym = list ? LIST_FIRST(list) : NULL;
+        inc_sym_obj = list_nth(list, 1);
+        fn_expr = (CljObject*)list_nth(list, 2);
+    }
+
+    TEST_ASSERT_NOT_NULL(inc_sym_obj);
+    TEST_ASSERT_TRUE(inc_sym_obj && TAG(inc_sym_obj) == CLJ_SYMBOL);
+    TEST_ASSERT_NOT_NULL(fn_expr);
+    TEST_ASSERT_NOT_NULL(op_sym);
+    TEST_ASSERT_TRUE(TAG(op_sym) == CLJ_SYMBOL);
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(SYM_DEF, op_sym, "form should be a def");
+
+    CljSymbol *inc_sym = as_symbol(inc_sym_obj);
+    TEST_ASSERT_NOT_NULL(inc_sym);
+
+    // Verify that inc_sym is the same as intern_symbol_global("inc")
+    CljSymbol *inc_sym_interned = intern_symbol_global("inc");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(inc_sym, inc_sym_interned,
+                                  "inc symbol should be interned");
+
+    // Evaluate the def expression
+    CljPersistentMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
+    TEST_ASSERT_NOT_NULL(env);
+
+    TRY {
+        (void)eval_body(canonical_form, env, g_test_eval_state, NULL);
+
+        // CRITICAL: ns_define stores qualified symbols in mappings
+        // Get the qualified symbol from the symbol table for lookup
+        CljSymbol *qualified_inc_sym = NULL;
+        if (g_test_eval_state->current_ns->name && g_test_eval_state->current_ns->name->cname) {
+            qualified_inc_sym = intern_symbol(g_test_eval_state->current_ns->name, "inc");
+        }
+        CljObject *inc_value = qualified_inc_sym ? map_get_sentinel(g_test_eval_state->current_ns->mappings, qualified_inc_sym, NULL) : NULL;
+
+        if (!inc_value) {
+            CljPersistentMap *map = g_test_eval_state->current_ns->mappings;
+            int symbol_count = 0;
+            const char *first_symbol = NULL;
+            MAP_FOR_EACH(map, key, value) {
+                (void)value;  // unused
+                if (key && TAG(key) == CLJ_SYMBOL) {
+                    CljSymbol *sym = as_symbol(key);
+                    symbol_count++;
+                    if (!first_symbol && sym->cname) {
+                        first_symbol = sym->cname;
                     }
                 }
-                
-                char msg[256];
-                snprintf(msg, sizeof(msg),
-                        "'inc' not found in mappings after def evaluation "
-                        "(but %d other symbols exist, first: %s)",
-                        symbol_count, first_symbol ? first_symbol : "unknown");
-                TEST_FAIL_MESSAGE(msg);
             }
-            
-            TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, 
-                                        "inc should be in mappings after def evaluation");
-            
-            // Verify that inc_value is a function
-            TEST_ASSERT_TRUE_MESSAGE(inc_value && TAG(inc_value) == CLJ_FUNC || inc_value && TAG(inc_value) == CLJ_CLOSURE,
-                                    "inc should be a function");
-            
-            // Don't RELEASE result - eval_string returns autoreleased object
-        } CATCH(ex) {
+
             char msg[256];
             snprintf(msg, sizeof(msg),
-                    "Exception during def inc evaluation: %s",
-                    ex && ex->message[0] ? ex->message : "unknown");
+                    "'inc' not found in mappings after def evaluation "
+                    "(but %d other symbols exist, first: %s)",
+                    symbol_count, first_symbol ? first_symbol : "unknown");
             TEST_FAIL_MESSAGE(msg);
-        } END_TRY
-    }
+        }
+
+        TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, 
+                                    "inc should be in mappings after def evaluation");
+
+        // Verify that inc_value is a function
+        TEST_ASSERT_TRUE_MESSAGE(inc_value && TAG(inc_value) == CLJ_FUNC || inc_value && TAG(inc_value) == CLJ_CLOSURE,
+                                "inc should be a function");
+
+        // Don't RELEASE result - eval_body returns autoreleased object
+    } CATCH(ex) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                "Exception during def inc evaluation: %s",
+                ex && ex->message[0] ? ex->message : "unknown");
+        TEST_FAIL_MESSAGE(msg);
+    } END_TRY
     
     // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
 }
@@ -368,7 +389,7 @@ TEST(test_plus_available_during_fn_evaluation) {
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
-        CljValue result = eval_list(as_list(canonical_form), env, g_test_eval_state, NULL);
+        CljValue result = eval_body(canonical_form, env, g_test_eval_state, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(result, 
                                     "fn expression should evaluate to a function");
         TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_FUNC || result && TAG(result) == CLJ_CLOSURE,
@@ -406,7 +427,7 @@ TEST(test_def_stores_symbol_even_if_value_null) {
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
-        (void)eval_list(as_list(canonical_form), env, g_test_eval_state, NULL);
+        (void)eval_body(canonical_form, env, g_test_eval_state, NULL);
         
         // CRITICAL: ns_define stores qualified symbols in mappings
         // Get the qualified symbol from the symbol table for lookup
@@ -437,4 +458,3 @@ TEST(test_def_stores_symbol_even_if_value_null) {
     
     // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
 }
-

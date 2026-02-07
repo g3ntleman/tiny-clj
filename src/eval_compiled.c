@@ -4,40 +4,49 @@
 #include "eval_special_forms.h"
 #include "exception.h"
 #include "function.h"
-#include "list.h"
 #include <stdlib.h>
 
-static inline CljList make_pseudo_list(ID head, ID rest) {
-    CljList l;
-    l.base.type = CLJ_LIST;
-    l.base.rc = 1;
-    l.first = head;
-    l.rest = rest;
-    return l;
+static CljPersistentVector *vector_from_rest(ID rest) {
+    CljList *rest_list = (rest && is_list_type(TAG(rest))) ? as_list(rest) : NULL;
+    unsigned int count = 0;
+    LIST_FOR_EACH(rest_list, elem) { (void)elem; count++; }
+    CljPersistentVector *args = make_vector((int)count, STRONG);
+    LIST_FOR_EACH(rest_list, elem) {
+        vector_conj_inplace(&args, elem);
+    }
+    return args;
 }
 
 ID eval_compiled_if(CljASTNode *node, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     if (!node) return NULL;
-    CljList pseudo = make_pseudo_list((ID)SYM_IF, node->rest);
-    return eval_special_if(&pseudo, env, st, ctx);
+    CljPersistentVector *args = vector_from_rest(node->rest);
+    ID result = eval_special_if(args, env, st, ctx);
+    RELEASE(args);
+    return result;
 }
 
 ID eval_compiled_do(CljASTNode *node, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     if (!node) return NULL;
-    CljList pseudo = make_pseudo_list((ID)SYM_DO, node->rest);
-    return eval_special_do(&pseudo, env, st, ctx);
+    CljPersistentVector *args = vector_from_rest(node->rest);
+    ID result = eval_special_do(args, env, st, ctx);
+    RELEASE(args);
+    return result;
 }
 
 ID eval_compiled_let(CljASTNode *node, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     if (!node) return NULL;
-    CljList pseudo = make_pseudo_list((ID)SYM_LET, node->rest);
-    return eval_special_let(&pseudo, env, st, ctx);
+    CljPersistentVector *args = vector_from_rest(node->rest);
+    ID result = eval_special_let(args, env, st, ctx);
+    RELEASE(args);
+    return result;
 }
 
 ID eval_compiled_fn(CljASTNode *node, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     if (!node) return NULL;
-    CljList pseudo = make_pseudo_list((ID)SYM_FN, node->rest);
-    return eval_special_fn(&pseudo, env, st, ctx);
+    CljPersistentVector *args = vector_from_rest(node->rest);
+    ID result = eval_special_fn(args, env, st, ctx);
+    RELEASE(args);
+    return result;
 }
 
 ID eval_compiled_call(CljASTNode *node, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
@@ -84,4 +93,3 @@ ID eval_compiled_call(CljASTNode *node, CljPersistentMap *env, EvalState *st, co
     }
     return result;
 }
-

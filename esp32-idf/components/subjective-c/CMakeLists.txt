@@ -12,6 +12,7 @@ idf_component_register(
     "../../../subjective-c/src/map.c"
     "../../../subjective-c/src/byte_array.c"
     "../../../subjective-c/src/hashmap.c"
+    "../../../subjective-c/src/hashset.c"
     "../../../subjective-c/src/callbacks.c"
     "../../../subjective-c/src/datetime_utc.c"
     "../../../subjective-c/src/instant.c"

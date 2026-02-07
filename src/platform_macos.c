@@ -199,6 +199,7 @@ const char *platform_name() {
 // -----------------------------------------------------------------------------
 size_t platform_heap_bytes_free(void) { return (size_t)-1; }
 size_t platform_heap_bytes_total(void) { return (size_t)-1; }
+size_t platform_ram_bytes_total(void) { return (size_t)-1; }
 size_t platform_flash_bytes_free(void) { return (size_t)-1; }
 size_t platform_flash_bytes_total(void) { return (size_t)-1; }
 

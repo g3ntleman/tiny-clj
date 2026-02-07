@@ -10,7 +10,7 @@
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
-ID eval_time(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,21 +99,20 @@ TEST_SHARED(test_time_basic_functionality) {
 TEST_SHARED(test_time_arity_validation) {
     // Test that time function validates arity correctly
     // Create (time) with no arguments
-    CljObject *time_symbol = (CljObject *)SYM_TIME;
-    CljList *time_list = make_list(time_symbol, NULL);
+    CljPersistentVector *time_args = make_vector(0, STRONG);
     
     CljPersistentMap *env = make_map(16);
     
     // This should throw an exception for insufficient arguments
     TRY {
-        CljObject *result = eval_time(time_list, env, g_test_eval_state, NULL);
+        CljObject *result = eval_time(time_args, env, g_test_eval_state, NULL);
         TEST_ASSERT_TRUE(result == NULL); // Should return NULL after exception
     } CATCH(ex) {
         // Exception is expected - test passes
         TEST_ASSERT_TRUE(true);
     } END_TRY
     
-    RELEASE(time_list);
+    RELEASE(time_args);
     RELEASE(env);
 }
 
@@ -123,16 +122,15 @@ TEST_SHARED(test_time_with_too_many_arguments) {
     CljObject *expr2 = fixnum(2);
     
     // Create (time 1 2) with too many arguments
-    CljObject *time_symbol = (CljObject *)SYM_TIME;
-    CljList *time_list = make_list(time_symbol, 
-        make_list(expr1, 
-        make_list(expr2, NULL)));
+    CljPersistentVector *time_args = make_vector(2, STRONG);
+    vector_conj_inplace(&time_args, expr1);
+    vector_conj_inplace(&time_args, expr2);
     
     CljPersistentMap *env = make_map(16);
     
     // This should throw an exception for too many arguments
     TRY {
-        CljObject *result = eval_time(time_list, env, g_test_eval_state, NULL);
+        CljObject *result = eval_time(time_args, env, g_test_eval_state, NULL);
         TEST_ASSERT_TRUE(result == NULL); // Should return NULL after exception
     } CATCH(ex) {
         // Exception is expected - test passes
@@ -142,7 +140,7 @@ TEST_SHARED(test_time_with_too_many_arguments) {
     // Clean up
     RELEASE(expr1);
     RELEASE(expr2);
-    RELEASE(time_list);
+    RELEASE(time_args);
     RELEASE(env);
 }
 
@@ -165,7 +163,6 @@ TEST_SHARED(test_time_with_dotimes) {
     // Create: (time (dotimes [i 1000] (+ 1 2 3 4 5)))
     
     // Create symbols
-    CljObject *time_symbol = (CljObject *)SYM_TIME;
     CljObject *dotimes_symbol = (CljObject *)SYM_DOTIMES;
     CljSymbol *i_symbol = intern_symbol_global("i");
     CljObject *plus_symbol = (CljObject *)SYM_PLUS;
@@ -198,15 +195,14 @@ TEST_SHARED(test_time_with_dotimes) {
         make_list(binding_vector, 
         make_list(arithmetic_expr, NULL)));
     
-    // Create time call: (time (dotimes [i 1000] (+ 1 2 3 4 5)))
-    CljObject *time_call = (CljObject *)make_list(time_symbol, 
-        make_list(dotimes_call, NULL));
-    
     // Create environment
     CljPersistentMap *env = make_map(4);
     
     // Test time evaluation with dotimes
-    CljObject *result = eval_time(as_list(time_call), env, g_test_eval_state, NULL);
+    CljPersistentVector *time_args = make_vector(1, STRONG);
+    vector_conj_inplace(&time_args, dotimes_call);
+    CljObject *result = eval_time(time_args, env, g_test_eval_state, NULL);
+    RELEASE(time_args);
     
     // time should return the result of the evaluated expression
     // Since dotimes returns nil, time should also return nil
@@ -216,7 +212,6 @@ TEST_SHARED(test_time_with_dotimes) {
     RELEASE(binding_vector);
     RELEASE(arithmetic_expr);
     RELEASE(dotimes_call);
-    RELEASE(time_call);
     // Don't RELEASE result - eval_time returns autoreleased object
     RELEASE(env);
 }
