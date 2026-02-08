@@ -32,12 +32,12 @@ When `scripts/leak_test.clj` shows linear growth (delta per eval), check these a
 - **Leak risk:** Low if the lazy seq is only referenced from the caller’s expression (and thus in the same autorelease scope). Risk: if the seq or a thunk is stored somewhere (e.g. global, cache) or if a closure captures it.
 - **Check:** Ensure `range` returns an autoreleased value and that `reduce` does not RETAIN the collection or any intermediate seq.
 
-## 5. `(tinyclj.runtime/stats)`
+## 5. `(tiny-clj.runtime/stats)`
 
-- **Where:** `src/builtins.c` – `native_tinyclj_runtime_stats`
+- **Where:** `src/builtins.c` – `native_tiny_clj_runtime_stats`
 - **What:** Builds several maps and strings (`:memory-stats`, `:bytes-by-type`, per-type rows). Return value is autoreleased.
 - **Leak risk:** If the caller or any intermediate code RETAINs the returned map (e.g. stores in a var that outlives the form), those maps/strings leak. Normal use `(get (get (stats) :memory-stats) :bytes-current)` does not retain the whole map if the result is not stored.
-- **Check:** Call sites of `tinyclj.runtime/stats` – ensure the result is not stored in a long-lived binding unless intentional.
+- **Check:** Call sites of `tiny-clj.runtime/stats` – ensure the result is not stored in a long-lived binding unless intentional.
 
 ## 6. Reduce accumulator
 

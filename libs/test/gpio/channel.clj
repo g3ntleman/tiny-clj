@@ -1,11 +1,11 @@
-;; macOS/test helper for tinyclj.gpio
+;; macOS/test helper for tiny-clj.gpio
 ;;
 ;; Run:
 ;;   ./build/tiny-clj-repl -f libs/test/gpio/channel.clj
 
 (do
   (require 'clojure.core.async)
-  (require 'tinyclj.gpio)
+  (require 'tiny-clj.gpio)
 
   (defn drain-events! []
     (if (run-next-task)
@@ -15,7 +15,7 @@
   (let [assert-eq (fn [expected actual msg]
                     (when (not (= expected actual))
                       (throw (str "ASSERT FAIL: " msg " expected=" expected " actual=" actual))))
-        g (tinyclj.gpio/gpio-channel 5)
+        g (tiny-clj.gpio/gpio-channel 5)
         ch (get g :ch)]
     (do
       (clojure.core/gpio-simulate! 5 1)

@@ -1,5 +1,5 @@
 /**
- * builtins_net.c - Native bindings for tinyclj.net
+ * builtins_net.c - Native bindings for tiny-clj.net
  *
  * Channel/callback style networking primitives (UDP first).
  * Designed for low RAM overhead and zero-copy receive buffers:
@@ -162,21 +162,21 @@ static void net_udp_recv_bridge(void *ctx,
 }
 
 ID native_tinyclj_net_udp_socket(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 1, "tinyclj.net/udp-socket");
+    CHECK_ARITY(argc, 1, "tiny-clj.net/udp-socket");
     if (!args[0] || TAG(args[0]) != CLJ_MAP_PERSISTENT) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/udp-socket expects an options map {:port N}"); return NULL;
+                                         "tiny-clj.net/udp-socket expects an options map {:port N}"); return NULL;
     }
     CljPersistentMap *opts = (CljPersistentMap*)args[0];
     ID port_val = map_get_sentinel(opts, (ID)SYM_KW_PORT, NOT_FOUND);
     if (port_val == NOT_FOUND || !is_fixnum(port_val)) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/udp-socket expects :port fixnum"); return NULL;
+                                         "tiny-clj.net/udp-socket expects :port fixnum"); return NULL;
     }
     int port_i = as_fixnum(port_val);
     if (port_i <= 0 || port_i > 65535) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/udp-socket :port out of range: %d", port_i); return NULL;
+                                         "tiny-clj.net/udp-socket :port out of range: %d", port_i); return NULL;
     }
 
     NetCtx *c = (NetCtx*)CLJ_MALLOC(sizeof(NetCtx));
@@ -191,7 +191,7 @@ ID native_tinyclj_net_udp_socket(ID *args, unsigned int argc) {
     if (!sock) {
         CLJ_FREE(c);
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/udp-socket failed to bind port %d", port_i); return NULL;
+                                         "tiny-clj.net/udp-socket failed to bind port %d", port_i); return NULL;
     }
     c->handle.udp_sock = sock;
     c->on_receive_fn = NULL;
@@ -214,14 +214,14 @@ ID native_tinyclj_net_udp_socket(ID *args, unsigned int argc) {
 }
 
 ID native_tinyclj_net_on_receive(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 2, "tinyclj.net/on-receive");
-    NetCtx *u = require_net_ctx(args[0], NET_TYPE_UDP, "tinyclj.net/on-receive");
+    CHECK_ARITY(argc, 2, "tiny-clj.net/on-receive");
+    NetCtx *u = require_net_ctx(args[0], NET_TYPE_UDP, "tiny-clj.net/on-receive");
     if (!u) return NULL;
 
     ID fn = args[1];
     if (fn && !is_callable(fn)) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/on-receive expects nil or a function"); return NULL;
+                                         "tiny-clj.net/on-receive expects nil or a function"); return NULL;
     }
 
     if (u->on_receive_fn) {
@@ -235,13 +235,13 @@ ID native_tinyclj_net_on_receive(ID *args, unsigned int argc) {
 }
 
 ID native_tinyclj_net_send_bang(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 2, "tinyclj.net/send!");
-    NetCtx *c = require_net_ctx(args[0], NET_TYPE_UDP, "tinyclj.net/send!");
+    CHECK_ARITY(argc, 2, "tiny-clj.net/send!");
+    NetCtx *c = require_net_ctx(args[0], NET_TYPE_UDP, "tiny-clj.net/send!");
     if (!c || !c->handle.udp_sock) return NULL;
 
     if (!args[1] || TAG(args[1]) != CLJ_MAP_PERSISTENT) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/send! expects a map {:to \"ip\" :port N :data byte-array}"); return NULL;
+                                         "tiny-clj.net/send! expects a map {:to \"ip\" :port N :data byte-array}"); return NULL;
     }
     CljPersistentMap *m = (CljPersistentMap*)args[1];
 
@@ -251,38 +251,38 @@ ID native_tinyclj_net_send_bang(ID *args, unsigned int argc) {
 
     if (to_val == NOT_FOUND || !to_val) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/send! requires :to"); return NULL;
+                                         "tiny-clj.net/send! requires :to"); return NULL;
     }
     const char *to = string_data(to_string(to_val));
     if (!to) return NULL;
 
     if (port_val == NOT_FOUND || !is_fixnum(port_val)) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/send! requires :port fixnum"); return NULL;
+                                         "tiny-clj.net/send! requires :port fixnum"); return NULL;
     }
     int port_i = as_fixnum(port_val);
     if (port_i <= 0 || port_i > 65535) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/send! :port out of range: %d", port_i); return NULL;
+                                         "tiny-clj.net/send! :port out of range: %d", port_i); return NULL;
     }
 
     if (data_val == NOT_FOUND || !data_val || TAG(data_val) != CLJ_BYTE_ARRAY) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/send! requires :data byte-array"); return NULL;
+                                         "tiny-clj.net/send! requires :data byte-array"); return NULL;
     }
     CljByteArray *ba = as_byte_array(data_val);
 
     int rc = platform_udp_send(c->handle.udp_sock, (const uint8_t*)ba->data, (size_t)ba->length, to, (uint16_t)port_i);
     if (rc != 0) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/send! failed"); return NULL;
+                                         "tiny-clj.net/send! failed"); return NULL;
     }
     return NULL;
 }
 
 ID native_tinyclj_net_close_bang(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 1, "tinyclj.net/close!");
-    NetCtx *c = require_net_ctx(args[0], NET_TYPE_UDP, "tinyclj.net/close!");
+    CHECK_ARITY(argc, 1, "tiny-clj.net/close!");
+    NetCtx *c = require_net_ctx(args[0], NET_TYPE_UDP, "tiny-clj.net/close!");
     if (!c) return NULL;
     if (c->handle.udp_sock) {
         platform_udp_close(c->handle.udp_sock);
@@ -360,28 +360,28 @@ static void net_tcp_event_bridge(void *ctx,
 }
 
 ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 1, "tinyclj.net/tcp-connect");
+    CHECK_ARITY(argc, 1, "tiny-clj.net/tcp-connect");
     if (!args[0] || TAG(args[0]) != CLJ_MAP_PERSISTENT) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/tcp-connect expects {:host \"...\" :port N}"); return NULL;
+                                         "tiny-clj.net/tcp-connect expects {:host \"...\" :port N}"); return NULL;
     }
     CljPersistentMap *opts = (CljPersistentMap*)args[0];
     ID host_val = map_get_sentinel(opts, (ID)SYM_KW_HOST, NOT_FOUND);
     ID port_val = map_get_sentinel(opts, (ID)SYM_KW_PORT, NOT_FOUND);
     if (host_val == NOT_FOUND || !host_val) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/tcp-connect requires :host"); return NULL;
+                                         "tiny-clj.net/tcp-connect requires :host"); return NULL;
     }
     const char *host = string_data(to_string(host_val));
     if (!host) return NULL;
     if (port_val == NOT_FOUND || !is_fixnum(port_val)) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/tcp-connect requires :port fixnum"); return NULL;
+                                         "tiny-clj.net/tcp-connect requires :port fixnum"); return NULL;
     }
     int port_i = as_fixnum(port_val);
     if (port_i <= 0 || port_i > 65535) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/tcp-connect :port out of range: %d", port_i); return NULL;
+                                         "tiny-clj.net/tcp-connect :port out of range: %d", port_i); return NULL;
     }
 
     NetCtx *c = (NetCtx*)CLJ_MALLOC(sizeof(NetCtx));
@@ -396,7 +396,7 @@ ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc) {
     if (!conn) {
         CLJ_FREE(c);
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/tcp-connect failed"); return NULL;
+                                         "tiny-clj.net/tcp-connect failed"); return NULL;
     }
     c->handle.tcp_conn = conn;
     c->on_receive_fn = NULL;
@@ -419,13 +419,13 @@ ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc) {
 }
 
 ID native_tinyclj_net_tcp_on_receive(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 2, "tinyclj.net/tcp-on-receive");
-    NetCtx *c = require_net_ctx(args[0], NET_TYPE_TCP, "tinyclj.net/tcp-on-receive");
+    CHECK_ARITY(argc, 2, "tiny-clj.net/tcp-on-receive");
+    NetCtx *c = require_net_ctx(args[0], NET_TYPE_TCP, "tiny-clj.net/tcp-on-receive");
     if (!c) return NULL;
     ID fn = args[1];
     if (fn && !is_callable(fn)) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/tcp-on-receive expects nil or a function"); return NULL;
+                                         "tiny-clj.net/tcp-on-receive expects nil or a function"); return NULL;
     }
     if (c->on_receive_fn) {
         RELEASE(c->on_receive_fn);
@@ -436,32 +436,32 @@ ID native_tinyclj_net_tcp_on_receive(ID *args, unsigned int argc) {
 }
 
 ID native_tinyclj_net_tcp_send_bang(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 2, "tinyclj.net/tcp-send!");
-    NetCtx *c = require_net_ctx(args[0], NET_TYPE_TCP, "tinyclj.net/tcp-send!");
+    CHECK_ARITY(argc, 2, "tiny-clj.net/tcp-send!");
+    NetCtx *c = require_net_ctx(args[0], NET_TYPE_TCP, "tiny-clj.net/tcp-send!");
     if (!c || !c->handle.tcp_conn) return NULL;
 
     if (!args[1] || TAG(args[1]) != CLJ_MAP_PERSISTENT) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/tcp-send! expects {:data byte-array}"); return NULL;
+                                         "tiny-clj.net/tcp-send! expects {:data byte-array}"); return NULL;
     }
     CljPersistentMap *m = (CljPersistentMap*)args[1];
     ID data_val = map_get_sentinel(m, (ID)SYM_KW_DATA, NOT_FOUND);
     if (data_val == NOT_FOUND || !data_val || TAG(data_val) != CLJ_BYTE_ARRAY) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/tcp-send! requires :data byte-array"); return NULL;
+                                         "tiny-clj.net/tcp-send! requires :data byte-array"); return NULL;
     }
     CljByteArray *ba = as_byte_array(data_val);
     int rc = platform_tcp_send(c->handle.tcp_conn, (const uint8_t*)ba->data, (size_t)ba->length);
     if (rc != 0) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.net/tcp-send! failed"); return NULL;
+                                         "tiny-clj.net/tcp-send! failed"); return NULL;
     }
     return NULL;
 }
 
 ID native_tinyclj_net_tcp_close_bang(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 1, "tinyclj.net/tcp-close!");
-    NetCtx *c = require_net_ctx(args[0], NET_TYPE_TCP, "tinyclj.net/tcp-close!");
+    CHECK_ARITY(argc, 1, "tiny-clj.net/tcp-close!");
+    NetCtx *c = require_net_ctx(args[0], NET_TYPE_TCP, "tiny-clj.net/tcp-close!");
     if (!c) return NULL;
     if (c->handle.tcp_conn) {
         platform_tcp_close(c->handle.tcp_conn);

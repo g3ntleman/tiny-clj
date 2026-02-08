@@ -216,7 +216,7 @@ extern CljSymbol *SYM_MAPCAT_THUNK_FN;
 extern CljSymbol *SYM_RANGE_CUR;
 extern CljSymbol *SYM_RANGE_INF_THUNK_FN;
 
-// tinyclj namespace function symbols
+// tiny-clj namespace function symbols
 extern CljSymbol *SYM_RETAIN_COUNT;
 extern CljSymbol *SYM_LIST_BATCH;
 

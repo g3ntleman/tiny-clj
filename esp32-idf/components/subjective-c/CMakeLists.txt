@@ -2,6 +2,7 @@ idf_component_register(
   SRCS
     "../../../subjective-c/src/platform_allocated_size.c"
     "../../../subjective-c/src/memory_profiler.c"
+    "../../../subjective-c/src/debug_trace.c"
     "../../../subjective-c/src/value.c"
     "../../../subjective-c/src/types.c"
     "../../../subjective-c/src/memory.c"
@@ -28,4 +29,6 @@ idf_component_register(
 
 # Keep stdout flushing behavior consistent with host builds (helps debugging).
 target_compile_definitions(${COMPONENT_LIB} PUBLIC UNITY_USE_FLUSH_STDOUT)
+# tinyclj is built with DEBUG=1 and calls debug_trace_allocation from list.c/ast.c.
+target_compile_definitions(${COMPONENT_LIB} PUBLIC DEBUG=1)
 

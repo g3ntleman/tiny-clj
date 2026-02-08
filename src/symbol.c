@@ -175,7 +175,7 @@ CljSymbol *SYM_CLOJURE_REPL = NULL;
 CljSymbol *SYM_CLOJURE_LANG = NULL;
 CljSymbol *SYM_TINYCLJ = NULL;
 
-// tinyclj namespace function symbols
+// tiny-clj namespace function symbols
 CljSymbol *SYM_RETAIN_COUNT = NULL;
 CljSymbol *SYM_LIST_BATCH = NULL;
 
@@ -265,7 +265,7 @@ static struct {
     { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "clojure.repl" } },
     { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "clojure.core" } },
     { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "clojure.lang" } },
-    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "tinyclj" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "tiny-clj" } },
 };
 
 #define NS_NAME_CLOJURE_STRING_IDX 0
@@ -800,12 +800,12 @@ void init_special_symbols() {
     INIT_SYMBOL_NS(SYM_SOURCE_NATIVE, sym_source_data, SYM_CLOJURE_REPL);
     // clojure.repl native function symbol for dir
     INIT_SYMBOL_NS(SYM_DIR_NATIVE, sym_dir_data, SYM_CLOJURE_REPL);
-    // tinyclj namespace name symbol is pre-allocated in g_namespace_name_symbols[] above.
+    // tiny-clj namespace name symbol is pre-allocated in g_namespace_name_symbols[] above.
     
-    // tinyclj native function symbol for retain-count
+    // tiny-clj native function symbol for retain-count
     INIT_SYMBOL_NS(SYM_RETAIN_COUNT, sym_retain_count_data, SYM_TINYCLJ);
     
-    // list-batch symbol (used in tinyclj.fs namespace)
+    // list-batch symbol (used in tiny-clj.fs namespace)
     INIT_SYMBOL(SYM_LIST_BATCH, sym_list_batch_data);
     
     // clojure.core sqrt native function symbol

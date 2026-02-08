@@ -1,7 +1,11 @@
-(ns tinyclj.datetime)
+
+R"DT(
+(ns tiny-clj.datetime)
 
 ;; Ensure clojure.string utilities are available for formatting
 (require 'clojure.string)
+
+(defn dt-kw [name] (clojure.core/keyword "tiny-clj.datetime" name))
 
 ;; =============================================================================
 ;; Date/Time conversion library for tiny-clj
@@ -31,12 +35,12 @@
 ;; Time conversion functions
 ;; =============================================================================
 
-^#^{:doc "Converts milliseconds within a day (0-86399999) to a time map {:hour h :minute m :second s :millis ms}"}
+^#^{:doc "Converts milliseconds within a day (0-86399999) to a time map with qualified keys :tiny-clj.datetime/hour etc."}
 (defn time-from-millis [ms]
-  {:hour   (quot ms ms-per-hour)
-   :minute (quot (mod ms ms-per-hour) ms-per-minute)
-   :second (quot (mod ms ms-per-minute) ms-per-second)
-   :millis (mod ms ms-per-second)})
+  (assoc {} (dt-kw "hour")   (quot ms ms-per-hour)
+             (dt-kw "minute") (quot (mod ms ms-per-hour) ms-per-minute)
+             (dt-kw "second") (quot (mod ms ms-per-minute) ms-per-second)
+             (dt-kw "millis") (mod ms ms-per-second)))
 
 ^#^{:doc "Converts hour, minute, second, millis to milliseconds within a day (0-86399999)"}
 (defn millis-from-time [hour minute second millis]
@@ -71,7 +75,7 @@
         m (+ mp (if (< mp 10) 3 -9))
         ;; Adjust year for Jan/Feb
         y (if (<= m 2) (+ y 1) y)]
-    {:year y :month m :day d}))
+    (assoc {} (dt-kw "year") y (dt-kw "month") m (dt-kw "day") d)))
 
 ^#^{:doc "Converts year, month, day to days since Unix epoch (1970-01-01). Based on Howard Hinnant's algorithm."}
 (defn days-from-civil [year month day]
@@ -96,32 +100,48 @@
 ;; High-level API
 ;; =============================================================================
 
-^#^{:doc "Converts a raw timestamp {:days d :ms m} to a full date-time map with :year :month :day :hour :minute :second :millis. Original :days and :ms are preserved."}
+^#^{:doc "Converts a raw timestamp {:days d :ms m} to a full date-time map with qualified keys. Original :days and :ms are preserved."}
 (defn date-time [raw]
   (let [raw-map (cond
                   (and raw (map? raw)) raw
-                  (inst? raw) {:days (instant-days raw) :ms (instant-ms raw)}
+                  (inst? raw) (assoc {} (dt-kw "days") (instant-days raw) (dt-kw "ms") (instant-ms raw))
                   :else (to-raw raw))
-        days (:days raw-map)
-        ms   (:ms raw-map)]
+        days (get raw-map (dt-kw "days"))
+        ms   (get raw-map (dt-kw "ms"))]
     (merge raw-map
            (civil-from-days days)
            (time-from-millis ms))))
 
-^#^{:doc "Converts a date-time map back to raw {:days :ms} format. Uses existing :days/:ms if present, otherwise calculates from components."}
-(defn to-raw [{:keys [days ms year month day hour minute second millis] :as dt}]
-  {:days (or days (days-from-civil year month day))
-   :ms   (or ms (millis-from-time hour minute second (or millis 0)))})
+^#^{:doc "Converts a date-time map back to raw {:days :ms} format with qualified keys. Uses existing :days/:ms if present, otherwise calculates from components."}
+(defn to-raw [dt]
+  (let [days   (get dt (dt-kw "days"))
+        ms     (get dt (dt-kw "ms"))
+        year   (get dt (dt-kw "year"))
+        month  (get dt (dt-kw "month"))
+        day    (get dt (dt-kw "day"))
+        hour   (get dt (dt-kw "hour"))
+        minute (get dt (dt-kw "minute"))
+        second (get dt (dt-kw "second"))
+        millis (get dt (dt-kw "millis"))]
+    (assoc {} (dt-kw "days") (or days (days-from-civil year month day))
+             (dt-kw "ms")   (or ms (millis-from-time hour minute second (or millis 0))))))
 
 ;; =============================================================================
 ;; Formatting
 ;; =============================================================================
 
-^#^{:doc "Formats a date-time map as ISO-8601 string like 2024-12-23T14:30:45"}
-(defn format-iso [{:keys [year month day hour minute second]}]
-  (str (clojure.string/pad-left (str year) 4 "0") "-"
-       (clojure.string/pad-left (str month) 2 "0") "-"
-       (clojure.string/pad-left (str day) 2 "0") "T"
-       (clojure.string/pad-left (str hour) 2 "0") ":"
-       (clojure.string/pad-left (str minute) 2 "0") ":"
-       (clojure.string/pad-left (str second) 2 "0")))
+^#^{:doc "Formats a date-time map as ISO-8601 string like 2024-12-23T14:30:45. Expects qualified keys."}
+(defn format-iso [m]
+  (let [year   (get m (dt-kw "year"))
+        month  (get m (dt-kw "month"))
+        day    (get m (dt-kw "day"))
+        hour   (get m (dt-kw "hour"))
+        minute (get m (dt-kw "minute"))
+        second (get m (dt-kw "second"))]
+    (str (clojure.string/pad-left (str year) 4 "0") "-"
+         (clojure.string/pad-left (str month) 2 "0") "-"
+         (clojure.string/pad-left (str day) 2 "0") "T"
+         (clojure.string/pad-left (str hour) 2 "0") ":"
+         (clojure.string/pad-left (str minute) 2 "0") ":"
+         (clojure.string/pad-left (str second) 2 "0"))))
+)DT"

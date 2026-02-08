@@ -4,7 +4,7 @@
 ;;
 ;; Run: ./build/tiny-clj-repl -f scripts/leak_diagnose.clj
 
-(require 'tinyclj.runtime)
+(require 'tiny-clj.runtime)
 
 (defn ms [stats k]
   (get (get stats :memory-stats) k))
@@ -61,28 +61,28 @@
 ;; ---------------------------------------------------------------------------
 ;; 1) Control: stats -> stats (overhead of calling stats itself)
 ;; ---------------------------------------------------------------------------
-(let [s0 (tinyclj.runtime/stats)
-      s1 (tinyclj.runtime/stats)]
+(let [s0 (tiny-clj.runtime/stats)
+      s1 (tiny-clj.runtime/stats)]
   (print-diff "control (stats -> stats)" s1 s0))
 
 ;; ---------------------------------------------------------------------------
 ;; 2) Workload: one big reduce, between two stats snapshots
 ;; ---------------------------------------------------------------------------
-(let [s0 (tinyclj.runtime/stats)
+(let [s0 (tiny-clj.runtime/stats)
       _ (reduce + (range 500))
-      s1 (tinyclj.runtime/stats)]
+      s1 (tiny-clj.runtime/stats)]
   (print-diff "workload (reduce + (range 500))" s1 s0))
 
 ;; ---------------------------------------------------------------------------
 ;; 3) Workload: 20 separate reduces inside one top-level form
 ;;    (helps distinguish per-form pool effects vs retained growth)
 ;; ---------------------------------------------------------------------------
-(let [s0 (tinyclj.runtime/stats)
+(let [s0 (tiny-clj.runtime/stats)
       _ (do
           (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500))
           (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500))
           (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500))
           (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500)) (reduce + (range 500)))
-      s1 (tinyclj.runtime/stats)]
+      s1 (tiny-clj.runtime/stats)]
   (print-diff "workload (20x reduce in one form)" s1 s0))
 

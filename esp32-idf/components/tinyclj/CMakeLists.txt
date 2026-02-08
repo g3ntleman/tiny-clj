@@ -54,6 +54,9 @@ set(TINYCLJ_SRCS
   "../../../src/mdns_resolver.c"
 )
 
+# Build time (UTC epoch seconds) for runtime stats :build-time
+string(TIMESTAMP BUILD_EPOCH_SECONDS "%s" UTC)
+
 idf_component_register(
   SRCS
     ${TINYCLJ_SRCS}
@@ -70,6 +73,8 @@ idf_component_register(
 target_compile_definitions(${COMPONENT_LIB} PUBLIC
   ESP32_BUILD=1
   LINE_EDITING_ENABLED=1
+  DEBUG=1
+  BUILD_EPOCH_SECONDS=${BUILD_EPOCH_SECONDS}
   MEMORY_PROFILING_ENABLED=0
   META_ENABLED=0
 )

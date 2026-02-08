@@ -321,13 +321,13 @@ TEST(test_missing_namespace_doc_suggests_require) {
 
     TRY {
         // Use a namespace that is not loaded by clojure.repl itself.
-        (void)eval_string("(clojure.repl/doc tinyclj.net.mdns/close!)", g_test_eval_state);
+        (void)eval_string("(clojure.repl/doc tiny-clj.net.mdns/close!)", g_test_eval_state);
         TEST_FAIL_MESSAGE("Should have thrown exception for missing namespace in doc");
     } CATCH(ex) {
         TEST_ASSERT_NOT_NULL(ex);
         const char *msg = ex->message;
-        bool has_qualified = (strstr(msg, "tinyclj.net.mdns/close!") != NULL);
-        bool has_hint = (strstr(msg, "(require 'tinyclj.net.mdns) missing?") != NULL);
+        bool has_qualified = (strstr(msg, "tiny-clj.net.mdns/close!") != NULL);
+        bool has_hint = (strstr(msg, "(require 'tiny-clj.net.mdns) missing?") != NULL);
         if (!has_qualified || !has_hint) {
             test_fprintf(stderr, "missing_namespace_doc_suggests_require: got message: %s\n", msg);
         }

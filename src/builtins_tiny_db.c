@@ -1,5 +1,5 @@
 /**
- * builtins_tiny_db.c - Native bindings for tinyclj.fs and tiny-db.kv
+ * builtins_tiny_db.c - Native bindings for tiny-clj.fs and tiny-db.kv
  *
  * Filesystem and key-value store operations for embedded flash storage.
  */
@@ -38,13 +38,13 @@ static const char *require_c_string_arg(ID arg, const char *fn_name, const char 
 }
 
 // -----------------------------------------------------------------------------
-// tinyclj.fs native functions
+// tiny-clj.fs native functions
 // -----------------------------------------------------------------------------
 
 ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
 {
-    CHECK_ARITY(argc, 2, "tinyclj.fs/spit-bytes");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/spit-bytes", "a path string");
+    CHECK_ARITY(argc, 2, "tiny-clj.fs/spit-bytes");
+    const char *path = require_c_string_arg(args[0], "tiny-clj.fs/spit-bytes", "a path string");
     if (!path) return NULL;
     /* If second arg is nil -> delete the file. Otherwise expect a byte-array. */
     FsKvStore *st = fs_global_store();
@@ -56,21 +56,21 @@ ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
     }
     if (TAG(args[1]) != CLJ_BYTE_ARRAY) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/spit-bytes expects a byte-array or nil"); return NULL;
+                                         "tiny-clj.fs/spit-bytes expects a byte-array or nil"); return NULL;
     }
     CljByteArray *ba = as_byte_array(args[1]);
     fs_err_t e = fs_write_bytes(st, path, ba->data, (size_t)ba->length);
     if (e != FS_NO_ERR) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/spit-bytes failed (err=%d)", (int)e); return NULL;
+                                         "tiny-clj.fs/spit-bytes failed (err=%d)", (int)e); return NULL;
     }
     return NULL;
 }
 
 ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc)
 {
-    CHECK_ARITY(argc, 1, "tinyclj.fs/slurp-bytes");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/slurp-bytes", "a path string");
+    CHECK_ARITY(argc, 1, "tiny-clj.fs/slurp-bytes");
+    const char *path = require_c_string_arg(args[0], "tiny-clj.fs/slurp-bytes", "a path string");
     if (!path) return NULL;
     ID bytes = resolve_path_to_bytes(path);
     if (!bytes) {
@@ -83,8 +83,8 @@ ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc)
 
 ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
 {
-    CHECK_ARITY(argc, 1, "tinyclj.fs/stat");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/stat", "a path string");
+    CHECK_ARITY(argc, 1, "tiny-clj.fs/stat");
+    const char *path = require_c_string_arg(args[0], "tiny-clj.fs/stat", "a path string");
     if (!path) return NULL;
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
@@ -102,24 +102,24 @@ ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
 
 ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc)
 {
-    CHECK_ARITY(argc, 3, "tinyclj.fs/list-batch");
-    const char *dir_path = require_c_string_arg(args[0], "tinyclj.fs/list-batch", "a dir path string");
+    CHECK_ARITY(argc, 3, "tiny-clj.fs/list-batch");
+    const char *dir_path = require_c_string_arg(args[0], "tiny-clj.fs/list-batch", "a dir path string");
     if (!dir_path) return NULL;
 
     const char *after_key = NULL;
     if (args[1]) {
-        after_key = require_c_string_arg(args[1], "tinyclj.fs/list-batch", "nil or a continuation key string");
+        after_key = require_c_string_arg(args[1], "tiny-clj.fs/list-batch", "nil or a continuation key string");
         if (!after_key) return NULL;
     }
 
     if (!is_fixnum(args[2])) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/list-batch expects a batch-size fixnum"); return NULL;
+                                         "tiny-clj.fs/list-batch expects a batch-size fixnum"); return NULL;
     }
     int bs = as_fixnum(args[2]);
     if (bs <= 0) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/list-batch batch-size must be > 0"); return NULL;
+                                         "tiny-clj.fs/list-batch batch-size must be > 0"); return NULL;
     }
 
     FsKvStore *st = fs_global_store();
@@ -141,8 +141,8 @@ ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc)
 
 ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
 {
-    CHECK_ARITY(argc, 1, "tinyclj.fs/delete!");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/delete!", "a path string");
+    CHECK_ARITY(argc, 1, "tiny-clj.fs/delete!");
+    const char *path = require_c_string_arg(args[0], "tiny-clj.fs/delete!", "a path string");
     if (!path) return NULL;
     FsKvStore *st = fs_global_store();
     if (!st) return NULL;
@@ -151,17 +151,17 @@ ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
 
 ID native_tinyclj_fs_set_size(ID *args, unsigned int argc)
 {
-    CHECK_ARITY(argc, 2, "tinyclj.fs/set-size!");
-    const char *path = require_c_string_arg(args[0], "tinyclj.fs/set-size!", "a path string");
+    CHECK_ARITY(argc, 2, "tiny-clj.fs/set-size!");
+    const char *path = require_c_string_arg(args[0], "tiny-clj.fs/set-size!", "a path string");
     if (!path) return NULL;
     if (!is_fixnum(args[1])) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/set-size! expects a size fixnum"); return NULL;
+                                         "tiny-clj.fs/set-size! expects a size fixnum"); return NULL;
     }
     int32_t s = as_fixnum(args[1]);
     if (s < 0) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/set-size! size must be >= 0"); return NULL;
+                                         "tiny-clj.fs/set-size! size must be >= 0"); return NULL;
     }
 
     FsKvStore *st = fs_global_store();
@@ -169,7 +169,7 @@ ID native_tinyclj_fs_set_size(ID *args, unsigned int argc)
     fs_err_t e = fs_set_size(st, path, (uint32_t)s);
     if (e != FS_NO_ERR) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tinyclj.fs/set-size! failed (err=%d)", (int)e); return NULL;
+                                         "tiny-clj.fs/set-size! failed (err=%d)", (int)e); return NULL;
     }
 
     int64_t size = fs_stat_size(st, path);

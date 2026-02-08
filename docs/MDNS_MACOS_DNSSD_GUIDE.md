@@ -1,13 +1,13 @@
 # macOS Interactive mDNS/DNS-SD Test Guide (using `dns-sd`)
 
-This guide is an **interactive** (manual) integration test for `tinyclj.net.mdns` on macOS.
+This guide is an **interactive** (manual) integration test for `tiny-clj.net.mdns` on macOS.
 
 It uses macOS' built-in `dns-sd` tool as a responder/advertiser and the Tiny-CLJ REPL as a browser/resolver.
 
 ## What this validates
 
-- `tinyclj.net.mdns/open` returns a native handle (no work happens before this call).
-- `tinyclj.net.mdns/browse!` starts browsing and delivers events via `tinyclj.net.mdns/on-event`.
+- `tiny-clj.net.mdns/open` returns a native handle (no work happens before this call).
+- `tiny-clj.net.mdns/browse!` starts browsing and delivers events via `tiny-clj.net.mdns/on-event`.
 
 On macOS, Tiny-CLJ prefers Apple's DNS-SD API (mDNSResponder) for correctness across interfaces.
 You can force the legacy raw-UDP path via `TINYCLJ_MDNS_USE_DNSSD=0` for debugging.
@@ -60,16 +60,16 @@ TINYCLJ_MDNS_USE_DNSSD=0 ./build/tiny-clj-repl
 Then paste the following forms:
 
 ```clojure
-(require 'tinyclj.net.mdns)
+(require 'tiny-clj.net.mdns)
 
-(def h (tinyclj.net.mdns/open))
+(def h (tiny-clj.net.mdns/open))
 
-(tinyclj.net.mdns/on-event h
+(tiny-clj.net.mdns/on-event h
   (fn [ev]
     ;; ev is a map; print it so we can observe resolution behavior.
     (println ev)))
 
-(tinyclj.net.mdns/browse! h "_matterc._udp.local")
+(tiny-clj.net.mdns/browse! h "_matterc._udp.local")
 ```
 
 ## Expected events
@@ -109,7 +109,7 @@ Example shapes (values will differ):
 Stop browsing and release resources:
 
 ```clojure
-(tinyclj.net.mdns/close! h)
+(tiny-clj.net.mdns/close! h)
 ```
 
 Then stop `dns-sd` in Terminal 1 (`Ctrl+C`).
