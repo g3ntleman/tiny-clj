@@ -470,6 +470,7 @@ add_executable(unit-tests
     src/tests/test_file_io.c
     src/tests/test_embedded_sources.c
     src/tests/test_rrd_scripts.c
+    src/tests/tests_resolver.c
     src/tests/test_atom.c
     src/tests/test_atom_watch.c
     src/tests/test_timer.c

@@ -786,13 +786,7 @@ static int write_file(const char *path, const char *content) {
 TEST(test_require_loads_file) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-    // Prepare libs/test/ns.clj with a simple namespace and var
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
-    const char *file_path = "libs/test/ns.clj";
-    const char *src = "(ns test.ns)\n(def v 42)\n";
-    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
-
+    register_test_namespace_libs();
     // (require 'test.ns)
     CljObject *req_result = eval_string("(require 'test.ns)", g_test_eval_state);
     (void)req_result; // spit/require return nil
@@ -808,12 +802,7 @@ TEST(test_require_loads_file) {
 
 TEST(test_require_quoted_symbol) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Reuse libs/test/ns.clj from previous test or create if missing
-    ensure_dir("libs");
-    ensure_dir("libs/test");
-    write_file("libs/test/ns.clj", "(ns test.ns)\n(def v2 7)\n");
-
+    register_test_namespace_libs();
     (void)eval_string("(require 'test.ns)", g_test_eval_state);
     evalstate_set_ns(g_test_eval_state, "test.ns");
     CljObject *val = eval_string("v2", g_test_eval_state);
@@ -825,15 +814,7 @@ TEST(test_require_quoted_symbol) {
 
 TEST(test_require_is_idempotent_by_default) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Prepare libs/test/require_idempotent.clj.
-    // The loaded value must change if the file is re-evaluated.
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
-    const char *file_path = "libs/test/require_idempotent.clj";
-    const char *src = "(ns test.require-idempotent)\n(def loaded-token (gensym))\n";
-    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
-
+    register_test_namespace_libs();
     // First require captures token.
     CljObject *token1 = eval_string(
         "(do (require 'test.require-idempotent) test.require-idempotent/loaded-token)",
@@ -870,17 +851,7 @@ TEST(test_require_nonexistent_file) {
 
 TEST(test_require_nested_path) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Create a test file with nested path structure (no computation on load)
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test/nested"));
-    const char *file_path = "libs/test/nested/path.clj";
-    const char *src = "(ns test.nested.path)\n(def nested-var 42)\n";
-    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
-
-    // Test require with nested path: test.nested.path
-    // Our resolver uses libs/ as base, so it should find libs/test/nested/path.clj
+    register_test_namespace_libs();
     (void)eval_string("(require 'test.nested.path)", g_test_eval_state);
 
     // After require, we can switch into ns and test the var
@@ -894,14 +865,7 @@ TEST(test_require_nested_path) {
 
 TEST(test_require_with_alias) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Prepare libs/test/alias.clj with a simple namespace and var
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
-    const char *file_path = "libs/test/alias.clj";
-    const char *src = "(ns test.alias)\n(def func 100)\n";
-    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
-
+    register_test_namespace_libs();
     // (require '[test.alias :as ta])
     CljObject *req_result = eval_string("(require '[test.alias :as ta])", g_test_eval_state);
     (void)req_result; // require returns nil
@@ -919,14 +883,7 @@ TEST(test_require_with_alias) {
 
 TEST(test_require_with_refer) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Prepare libs/test/refer.clj with a namespace and function
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
-    const char *file_path = "libs/test/refer.clj";
-    const char *src = "(ns test.refer)\n(def func 200)\n";
-    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
-
+    register_test_namespace_libs();
     // (require '[test.refer :refer [func]])
     CljObject *req_result = eval_string("(require '[test.refer :refer [func]])", g_test_eval_state);
     (void)req_result; // require returns nil
@@ -947,14 +904,7 @@ TEST(test_require_with_refer) {
 
 TEST(test_require_with_refer_all) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Prepare libs/test/referall.clj with a namespace and multiple vars
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
-    const char *file_path = "libs/test/referall.clj";
-    const char *src = "(ns test.referall)\n(def var1 300)\n(def var2 400)\n";
-    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
-
+    register_test_namespace_libs();
     // (require '[test.referall :refer :all])
     CljObject *req_result = eval_string("(require '[test.referall :refer :all])", g_test_eval_state);
     (void)req_result; // require returns nil
@@ -984,15 +934,7 @@ TEST(test_require_with_refer_all) {
 
 TEST(test_require_multiple_namespaces) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Prepare two namespaces
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
-    const char *file1 = "libs/test/multi1.clj";
-    const char *file2 = "libs/test/multi2.clj";
-    TEST_ASSERT_EQUAL_INT(0, write_file(file1, "(ns test.multi1)\n(def x 500)\n"));
-    TEST_ASSERT_EQUAL_INT(0, write_file(file2, "(ns test.multi2)\n(def y 600)\n"));
-
+    register_test_namespace_libs();
     // (require '[test.multi1 :as m1] '[test.multi2 :as m2])
     CljObject *req_result = eval_string("(require '[test.multi1 :as m1] '[test.multi2 :as m2])", g_test_eval_state);
     (void)req_result; // require returns nil
@@ -1018,14 +960,7 @@ TEST(test_require_multiple_namespaces) {
 
 TEST(test_require_alias_resolution) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Prepare libs/test/aliasres.clj with a namespace and var
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
-    const char *file_path = "libs/test/aliasres.clj";
-    const char *src = "(ns test.aliasres)\n(def resvar 700)\n";
-    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
-
+    register_test_namespace_libs();
     // (require '[test.aliasres :as tar])
     CljObject *req_result = eval_string("(require '[test.aliasres :as tar])", g_test_eval_state);
     (void)req_result; // require returns nil
@@ -1471,14 +1406,7 @@ TEST(test_unique_symbol_resolution) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Prepare namespace with unique symbol
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
-    
-    const char *file_path = "libs/test/unique.clj";
-    const char *src = "(ns test.unique)\n(def unique-func 300)\n";
-    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
-
-    // Load namespace
+    register_test_namespace_libs();
     CljObject *req_result = eval_string("(require '[test.unique])", g_test_eval_state);
     (void)req_result;
 
@@ -1511,21 +1439,7 @@ TEST(test_clojure_core_only_symbol) {
 // using it unqualified causes an ambiguity error
 TEST(test_ambiguous_symbol_with_clojure_core) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Use a symbol that exists in clojure.core (e.g., 'map')
-    // We'll define it in another namespace to create ambiguity
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
-    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
-    
-    // Create namespace with a symbol that conflicts with clojure.core
-    // Note: We can't actually redefine clojure.core symbols, but we can test
-    // the ambiguity detection by using a symbol that exists in clojure.core
-    // and defining it in another namespace
-    const char *file_path = "libs/test/conflict.clj";
-    const char *src = "(ns test.conflict)\n(def map 400)\n";
-    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
-
-    // Load namespace
+    register_test_namespace_libs();
     CljObject *req_result = eval_string("(require '[test.conflict])", g_test_eval_state);
     (void)req_result;
 

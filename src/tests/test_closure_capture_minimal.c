@@ -8,9 +8,18 @@
 
 #include "tests_common.h"
 
+static const char capture_minimal_src[] =
+"(ns test.closures.capture-minimal)\n"
+"(defn make-adder [x] (fn [y] (+ x y)))\n"
+"(defn make-adder-let [x] (let [k x] (fn [y] (+ k y))))\n"
+"(defn make-nested [a] (fn [b] (fn [c] (+ a b c))))\n"
+"(defn make-loop-capturer [n]\n"
+"  (let [final ((fn step [i] (if (= i 0) n (step (- i 1)))) n)] (fn [] final)))\n"
+"(def ^:dynamic *dyn* 1)\n"
+"(defn make-dyn-reader [] (fn [] *dyn*))\n";
+
 static void require_capture_minimal(void) {
-    // Ensure the fixture namespace is loaded.
-    // Path mapping: test.closures.capture-minimal -> libs/test/closures/capture_minimal.clj
+    register_resolver_source("/libs/test/closures/capture-minimal.clj", capture_minimal_src);
     (void)eval_string("(require 'test.closures.capture-minimal)", g_test_eval_state);
 }
 

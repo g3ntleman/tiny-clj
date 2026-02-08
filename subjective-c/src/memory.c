@@ -33,6 +33,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 // Optional stack trace support (execinfo/backtrace), gated in object.h.
 // On ESP-IDF/newlib this is not available.
@@ -391,7 +392,7 @@ CljObject *autorelease(CljObject *v) {
         if (dup_trace && dup_trace[0] && strcmp(dup_trace, "0") != 0) {
             uint32_t pool_count = autorelease_count(v);
             if (pool_count > 0) {
-                fprintf(stderr, "autorelease: Object %p (type=%s) already %u times in pool\n",
+                fprintf(stderr, "autorelease: Object %p (type=%s) already %" PRIu32 " times in pool\n",
                         (void*)v, clj_type_name(v->type), pool_count);
                 exception_print_native_backtrace();
                 fflush(stderr);
@@ -550,7 +551,7 @@ int retain_count(ID obj) {
 static void release_object_deep(CljObject *v) {
     if (!v || !TRACKS_RETAINS(v)) return;
     init_release_dispatch();
-    SubjectiveCReleaseFn fn = (v->type >= 0 && v->type < CLJ_TYPE_COUNT)
+    SubjectiveCReleaseFn fn = ((unsigned)v->type < CLJ_TYPE_COUNT)
         ? g_release_dispatch[v->type]
         : NULL;
     if (fn) {

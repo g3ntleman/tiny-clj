@@ -227,6 +227,11 @@ static inline void assert_map(CljObject *obj) {
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(obj));
 }
 
+/** Register source at path so resolve_path_to_bytes (require/load-file) finds it. Uses KV store. */
+void register_resolver_source(const char *path, const char *source);
+/** Register all test.* namespace sources used by test_namespace.c (resolver instead of files). */
+void register_test_namespace_libs(void);
+
 static inline ID parse_canonicalized(const char *input, EvalState *st) {
     ID parsed = parse(input, st);
     if (!parsed) {
