@@ -1,13 +1,16 @@
 #include <stdint.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+#include "platform.h"
 
 #if defined(ESP_PLATFORM) && defined(__has_include)
-#if __has_include(<esp_system.h>) && __has_include(<esp_timer.h>) && __has_include(<esp_heap_caps.h>) && __has_include(<esp_chip_info.h>) && __has_include(<spi_flash_mmap.h>) && __has_include(<esp_flash.h>) && __has_include(<driver/uart.h>) && __has_include(<freertos/FreeRTOS.h>) && __has_include(<freertos/task.h>)
+#if __has_include(<esp_system.h>) && __has_include(<esp_timer.h>) && __has_include(<esp_heap_caps.h>) && __has_include(<esp_chip_info.h>) && __has_include(<esp_spi_flash.h>) && __has_include(<esp_flash.h>) && __has_include(<driver/uart.h>) && __has_include(<freertos/FreeRTOS.h>) && __has_include(<freertos/task.h>)
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <esp_heap_caps.h>
 #include <esp_chip_info.h>
-#include <spi_flash_mmap.h>
+#include <esp_spi_flash.h>
 #include <esp_flash.h>
 #include <driver/uart.h>
 #include <freertos/FreeRTOS.h>
@@ -21,7 +24,7 @@
 #include <esp_timer.h>
 #include <esp_heap_caps.h>
 #include <esp_chip_info.h>
-#include <spi_flash_mmap.h>
+#include <esp_spi_flash.h>
 #include <esp_flash.h>
 #include <driver/uart.h>
 #include <freertos/FreeRTOS.h>
@@ -62,6 +65,7 @@ size_t tinyclj_esp32_heap_bytes_total(void);
 size_t tinyclj_esp32_ram_bytes_total(void);
 size_t tinyclj_esp32_flash_bytes_free(void);
 size_t tinyclj_esp32_flash_bytes_total(void);
+void tinyclj_esp32_hardware_info(PlatformHardwareInfo *out);
 
 int tinyclj_esp32_uart_read_byte_nonblocking(void);
 void tinyclj_esp32_uart_write_bytes(const uint8_t *data, size_t n);
@@ -138,6 +142,39 @@ size_t tinyclj_esp32_flash_bytes_free(void) {
     // "Free flash bytes" is storage-backend specific (partition + filesystem/DB usage).
     // Until tiny-db / FS is wired to a specific partition here, report "unavailable".
     return (size_t)-1;
+}
+
+#if TINYCLJ_HAVE_ESP_IDF_HEADERS
+static const char *esp_chip_model_str(int model) {
+    switch (model) {
+        case 1:  return "ESP32";
+        case 2:  return "ESP32-S2";
+        case 5:  return "ESP32-C3";
+        case 9:  return "ESP32-S3";
+        case 12: return "ESP32-C2";
+        case 13: return "ESP32-C6";
+        case 16: return "ESP32-H2";
+        case 17:
+        case 23: return "ESP32-C5";
+        case 18: return "ESP32-P4";
+        case 20: return "ESP32-C61";
+        default: return "ESP32?";
+    }
+}
+#endif
+
+void tinyclj_esp32_hardware_info(PlatformHardwareInfo *out) {
+#if TINYCLJ_HAVE_ESP_IDF_HEADERS
+    if (!out) return;
+    esp_chip_info_t info;
+    esp_chip_info(&info);
+    (void)snprintf(out->model, sizeof(out->model), "%s", esp_chip_model_str((int)info.model));
+    out->cores = (unsigned)info.cores;
+    out->revision = (unsigned)info.revision;
+    out->valid = true;
+#else
+    (void)out;
+#endif
 }
 
 void app_main(void) {

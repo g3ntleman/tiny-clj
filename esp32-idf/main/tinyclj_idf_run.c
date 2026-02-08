@@ -55,7 +55,7 @@ static void print_build_info_esp32(void) {
 #else
     esp_put_line("  - Meta: Disabled");
 #endif
-    esp_put_line("=======================");
+    esp_put_line("=========================");  /* 25 '=' to match "=== Build Information ===" */
 }
 #endif
 
@@ -126,15 +126,25 @@ void tinyclj_idf_start(void) {
 #if defined(ESP_PLATFORM)
     {
         char buf[80];
-        (void)mini_snprintf(buf, sizeof(buf), "tiny-clj %s REPL (platform = %s). Ctrl-D to exit.\n",
-                            TINY_CLJ_VERSION, platform_name());
-        platform_put_string(NULL, buf);
+        (void)mini_snprintf(buf, sizeof(buf), "**** ESP 32 TINY-CLJ V%s ****", TINY_CLJ_VERSION);
+        size_t len = strlen(buf);
+        unsigned pad = (len < 40u) ? (40u - (unsigned)len) / 2u : 0u;
+        if (pad > 0) {
+            char pad_buf[20];
+            memset(pad_buf, ' ', pad);
+            pad_buf[pad] = '\0';
+            platform_put_string(NULL, pad_buf);
+        }
+        esp_put_line(buf);
+        (void)mini_snprintf(buf, sizeof(buf), "tiny-clj %s REPL (platform = %s).", TINY_CLJ_VERSION, platform_name());
+        esp_put_line(buf);
         print_build_info_esp32();
         size_t ram_total = platform_ram_bytes_total();
         size_t free_bytes = platform_heap_bytes_free();
         unsigned ram_k = (ram_total == (size_t)-1) ? 0u : (unsigned)(ram_total / 1024);
-        (void)mini_snprintf(buf, sizeof(buf), "%uK RAM SYSTEM  %zu CLOJURE BYTES FREE\n", ram_k, free_bytes);
-        platform_put_string(NULL, buf);
+        (void)mini_snprintf(buf, sizeof(buf), "%uK RAM SYSTEM  %zu CLOJURE BYTES FREE", ram_k, free_bytes);
+        esp_put_line(buf);
+        esp_put_line("Ctrl-D to exit.");
     }
 #endif
 
