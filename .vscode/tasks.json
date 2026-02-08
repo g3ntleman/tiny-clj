@@ -85,14 +85,38 @@
     {
       "label": "ESP32: flash and monitor",
       "type": "shell",
-      "command": "./build_idf.sh --monitor",
+      "command": "./build_idf.sh --no-move --monitor",
+      "group": "none",
+      "detail": "Incremental IDF build (tiny + all components), no clean; then flash and monitor.",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "runOptions": {
+        "instanceLimit": 1,
+        "instancePolicy": "terminateOldest"
+      }
+    },
+    {
+      "label": "ESP32: flash and monitor (no build)",
+      "type": "shell",
+      "command": "source ./scripts/esp_env.sh && cd esp32-idf && idf.py flash && idf.py monitor",
       "group": "none",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
         "focus": true,
         "panel": "dedicated",
-        "showReuseMessage": false
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "runOptions": {
+        "instanceLimit": 1,
+        "instancePolicy": "terminateOldest"
       }
     },
     {
