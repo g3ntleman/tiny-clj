@@ -1,0 +1,11 @@
+# Kein Cast von oder nach ID
+
+**Regel:** Es darf **nie** von oder nach dem Typ `ID` gecastet werden.
+
+- Objekte als `ID` übergeben und verwenden; keine Casts wie `(ID)ptr` oder `(CljObject*)id`.
+- Macros (RETAIN, RELEASE, AUTORELEASE) und APIs, die `ID` erwarten, verwenden, sodass am Aufruf kein Cast nötig ist.
+- Wenn eine API einen anderen Zeigertyp verlangt, die API anpassen (Parameter/Signatur auf ID) oder eine Zugriffsfunktion nutzen, die ID akzeptiert – nicht casten.
+
+---
+alwaysApply: true
+---

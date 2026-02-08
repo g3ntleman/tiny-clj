@@ -1,0 +1,29 @@
+# Stil: K&R-Braces und Doxygen
+
+**Regel:** Im Production-Code (z. B. `src/*.c`, ohne Test-Dateien):
+
+1. **K&R-Braces:** Öffnende geschweifte Klammer steht bei Kontrollstrukturen auf derselben Zeile wie das Schlüsselwort (`if (...) {`, `} else {`, `while (...) {`). Bei Funktionen bleibt die Klammer wie im Projekt üblich (oft eigene Zeile).
+
+2. **Doxygen:** Jede Funktion ist mit einem Doxygen-Kommentar zu dokumentieren, **maximal drei Zeilen**:
+   - Kurzbeschreibung (optional @brief oder erste Zeile)
+   - @param pro Parameter (eine Zeile)
+   - @return wenn relevant
+
+Beispiel:
+```c
+/** Returns a sequence over coll; nil if empty or not seqable. */
+static ID seq_for_coll(ID coll);
+```
+
+oder
+```c
+/**
+ * Parse expression from reader.
+ * @param reader  Reader instance
+ * @param st     Eval state
+ * @return Parsed expression or NULL
+ */
+ID parse_expr(Reader *reader, EvalState *st);
+```
+
+Bei Änderungen oder neuen Funktionen im Production-Code diese Regel anwenden.

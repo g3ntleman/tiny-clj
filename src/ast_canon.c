@@ -513,11 +513,8 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     RETAIN(list);
                 }
                 ID result = canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
-                
-                // RELEASE the RETAIN'd expanded if it was a CLJ_SEQ
-                if (expanded_tag == CLJ_SEQ) {
-                    RELEASE(expanded);
-                }
+                // Do not RELEASE(expanded): we did not RETAIN it; it came from eval_function_call
+                // and is managed by the caller's autorelease pool.
                 if (list) {
                     RELEASE(list);
                 }

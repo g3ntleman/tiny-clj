@@ -140,6 +140,12 @@ TEST_SHARED(test_seq_next_with_single_element_list) {
     TEST_ASSERT_NULL(eval_string("(next (seq (list 1)))", g_test_eval_state));
 }
 
+/* Clojure: () is empty list, (seq ()) => nil. */
+TEST_SHARED(test_seq_empty_list_literal_returns_nil) {
+    ID result = eval_string("(seq ())", g_test_eval_state);
+    TEST_ASSERT_TRUE(result == NULL || seq_empty(result));
+}
+
 TEST_SHARED(test_seq_next_with_empty_list) {
     ID result = eval_string("(seq (list))", g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL || seq_empty(result));

@@ -756,37 +756,33 @@ ID native_first(ID *args, unsigned int argc)
     }
 }
 
-// Seq function that works with BuiltinFn signature
-ID native_seq(ID *args, unsigned int argc)
-{
-    if (!validate_builtin_args(argc, 1, "seq"))
-        return NULL;
+/** Returns a sequence over the collection, or NULL if empty/not seqable. */
+ID native_seq(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "seq")) return NULL;
     ID coll = args[0];
-    if (!coll || !is_seqable(coll))
-        return NULL;
-    if (TAG(coll) == CLJ_LIST || TAG(coll) == CLJ_AST_NODE)
-    {
+    if (!coll || !is_seqable(coll)) return NULL;
+    ID result = NULL;
+    if (TAG(coll) == CLJ_LIST || TAG(coll) == CLJ_AST_NODE) {
         CljList *list_data = as_list(coll);
-        if (list_empty(list_data)) return NULL;
-        if (((CljObject*)coll)->flags & CLJ_FLAG_IN_AUTORELEASE)
-            return coll;
-        return AUTORELEASE(RETAIN(coll));
+        if (!list_empty(list_data)) result = coll;
+    } else if (TAG(coll) == CLJ_SEQ) {
+        result = coll;
+    } else {
+        result = AUTORELEASE(make_seq(coll));
     }
-    CljSeqIterator *seq = make_seq(coll);
-    return seq ? AUTORELEASE((ID)seq) : NULL;
+    return result;
 }
 
-ID native_not(ID *args, unsigned int argc)
-{
+/** Builtin "not": returns true if x is nil or false, else false. */
+ID native_not(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "not"))
         return NULL;
     ID x = args[0];
     return (!x || x == clj_false) ? clj_true : clj_false;
 }
 
-// Next function that works with BuiltinFn signature
-ID native_next(ID *args, unsigned int argc)
-{
+/** Returns the rest of the sequence (next), or NULL if empty/nil. */
+ID native_next(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
 
     if (!validate_builtin_args(argc, 1, "next/rest"))

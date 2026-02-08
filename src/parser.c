@@ -702,10 +702,10 @@ static ID parse_list(Reader *reader, EvalState *st) {
   // If column was 1, '(' is at start of line, which is correct
   reader_skip_all(reader);
 
-  // Handle empty list - return nil (Clojure behavior: () is nil)
+  // Handle empty list - return empty list singleton (Clojure: () is the empty list, not nil)
   if (reader_peek_char(reader) == ')') {
     reader_next(reader);
-    return NULL;  // () is nil in Clojure
+    return (ID)empty_list();
   }
 
   // Parse first element
@@ -1684,7 +1684,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
     // Empty function body - return (fn [] ())
     CljSymbol *fn_sym = intern_symbol_global("fn");
     CljValue empty_vec = AUTORELEASE(make_vector(0, false));
-    ID empty_list_val = NULL; // () is nil in Clojure
+    ID empty_list_val = (ID)empty_list();
     return AUTORELEASE(make_ast_list(fn_sym,
                                      AUTORELEASE(make_ast_list(empty_vec,
                                                                AUTORELEASE(make_ast_list(empty_list_val, NULL))))));

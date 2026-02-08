@@ -2224,10 +2224,11 @@ ID eval_seq(CljList *list, CljPersistentMap *env) {
         }
 
         default: {
-            // For other seqable types, return SeqIterator directly
+            // If already a CLJ_SEQ, return as-is (do not AUTORELEASE again - would double-release on drain)
+            if (arg->type == CLJ_SEQ)
+                return arg;
             CljSeqIterator *seq = (CljSeqIterator*)AUTORELEASE(make_seq(arg));
             if (!seq) return NULL;
-
             return (CljObject*)seq;
         }
     }
