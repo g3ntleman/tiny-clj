@@ -122,9 +122,12 @@ realized:
     builtin_set_eval_state(NULL);
 
     // Cache results and release generator.
-    // Use ASSIGN to retain cached values and release previous sentinels safely.
     ASSIGN(lazy->first, first_val);
-    ASSIGN(lazy->cached_rest, rest_val);
+    if (rest_val && !IS_IMMEDIATE(rest_val))
+        autorelease_pool_remove((CljObject*)rest_val);
+    if (lazy->cached_rest != NOT_FOUND)
+        RELEASE(lazy->cached_rest);
+    lazy->cached_rest = rest_val;
     RELEASE(lazy->thunk);
     lazy->thunk = NULL;
 }
@@ -544,52 +547,48 @@ int seq_iter_position(const SeqIterator *iter) {
 // COMPATIBILITY LAYER (Heap-based API)
 // ============================================================================
 
+bool collection_empty(ID obj) {
+    if (!obj) return true;
+    unsigned char t = TAG(obj);
+    if (t == CLJ_VECTOR_PERSISTENT) {
+        CljPersistentVector *v = as_persistent_vector(obj);
+        return !v || vector_count(v) == 0;
+    }
+    if (is_list_type(t)) return list_empty(as_list((CljObject*)obj));
+    if (t == CLJ_MAP_PERSISTENT || t == CLJ_MAP_TRANSIENT) {
+        CljPersistentMap *m = as_map(obj);
+        return !m || m->count == 0;
+    }
+    if (t == CLJ_HASHSET) {
+        CljHashSet *s = (CljHashSet*)obj;
+        return !s || hashset_count(s) == 0;
+    }
+    if (t == CLJ_STRING) return string_length(obj) == 0;
+    if (t == CLJ_SEQ) return seq_empty(obj);
+    return false;
+}
+
+/**
+ * Return a sequence over obj, or NULL if nil/empty. Non-NULL return is always
+ * caller-owned (new with rc=1 or RETAIN(seq)); must be released or autoreleased.
+ * @param obj  Collection or nil
+ * @return     New seq wrapper, or RETAIN(seq) if obj already CLJ_SEQ, or NULL
+ */
 CljSeqIterator* make_seq(ID obj) {
-    // Handle nil and empty collections - return nil singleton
     if (!obj) return NULL;
-    
     unsigned char obj_tag = TAG(obj);
-    
-    // If already a CLJ_SEQ, return it directly (no need to wrap again)
-    if (obj_tag == CLJ_SEQ) {
-        CljSeqIterator *seq = as_seq(obj);
-        return seq;  // Already a seq, return as-is
-    }
-    
-    // Check if collection is empty
-    if (obj_tag == CLJ_VECTOR_PERSISTENT) {
-        CljPersistentVector *vec = as_persistent_vector(obj);
-        if (vec && vector_count(vec) == 0) return NULL;
-    } else if (is_list_type(obj_tag)) {
-        CljList *list = as_list((CljObject*)obj);
-        if (list_empty(list)) return NULL;
-    } else if (obj_tag == CLJ_MAP_PERSISTENT || obj_tag == CLJ_MAP_TRANSIENT) {
-        CljPersistentMap *map = as_map(obj);
-        if (!map || map->count == 0) return NULL;
-    } else if (obj_tag == CLJ_HASHSET) {
-        CljHashSet *set = (CljHashSet*)obj;
-        if (!set || hashset_count(set) == 0) return NULL;
-    }
-    
-    // Allocate heap wrapper
-    // Use malloc instead of calloc - all fields are immediately initialized
-    CljSeqIterator *heap_seq = ALLOC(CljSeqIterator, 1);
-    if (!heap_seq) return NULL;
-    
-    heap_seq->base.type = CLJ_SEQ;
-    
-    // Initialize embedded stack iterator
-    if (!seq_iter_init(&heap_seq->iter, (CljObject*)obj)) {
-        CLJ_FREE(heap_seq);
-        return NULL;  // Empty or not seqable
-    }
-    
-    // If iterator is empty, return nil (NULL) - JVM-compatible
-    if (seq_iter_empty(&heap_seq->iter)) {
-        CLJ_FREE(heap_seq);
+    if (obj_tag == CLJ_SEQ) return (CljSeqIterator*)RETAIN(obj);
+    if (collection_empty(obj)) return NULL;
+
+    SeqIterator stack_iter;
+    if (!seq_iter_init(&stack_iter, (CljObject*)obj) || seq_iter_empty(&stack_iter))
         return NULL;
-    }
-    
+
+    CljSeqIterator *heap_seq = ALLOC(CljSeqIterator, 1);
+    if (!heap_seq) throw_oom();
+    heap_seq->base.type = CLJ_SEQ;
+    heap_seq->base.rc = 1;
+    heap_seq->iter = stack_iter;
     return heap_seq;
 }
 
@@ -665,21 +664,23 @@ ID seq_next(ID seq_obj) {
     return rest_seq;
 }
 
-ID seq_next_inplace(ID seq_obj) {
-    if (!seq_obj) return NULL;
-    
-    CljSeqIterator *seq = as_seq(seq_obj);
-    if (!seq) return NULL;
-    
-    if (seq->iter.seq_type == CLJ_LIST) {
-        return seq_next(seq_obj);
+/**
+ * COW optimization: advance the sequence in the slot. When the iterator is exclusive (rc==1)
+ * and not a list, advance in-place; otherwise ASSIGN(*seq_slot, next). Callers do not need
+ * to implement this copy-on-write / in-place logic themselves.
+ */
+void seq_next_inplace(ID *seq_slot) {
+    if (!seq_slot || !*seq_slot) return;
+    CljSeqIterator *seq = as_seq(*seq_slot);
+    if (!seq) return;
+    if (seq->iter.seq_type == CLJ_LIST || seq->base.rc != 1) {
+        ASSIGN(seq_slot, seq_next(*seq_slot));
+        return;
     }
-    
     if (!seq_iter_next(&seq->iter)) {
-        return NULL;
+        ASSIGN(seq_slot, NULL);
+        return;
     }
-    
-    return seq_obj;
 }
 
 bool seq_empty(ID seq_obj) {

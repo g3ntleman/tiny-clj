@@ -2224,12 +2224,11 @@ ID eval_seq(CljList *list, CljPersistentMap *env) {
         }
 
         default: {
-            // If already a CLJ_SEQ, return as-is (do not AUTORELEASE again - would double-release on drain)
             if (arg->type == CLJ_SEQ)
                 return arg;
-            CljSeqIterator *seq = (CljSeqIterator*)AUTORELEASE(make_seq(arg));
-            if (!seq) return NULL;
-            return (CljObject*)seq;
+            CljSeqIterator *it = (CljSeqIterator*)AUTORELEASE(make_seq(arg));
+            if (!it) return NULL;
+            return (CljObject*)it;
         }
     }
 }
@@ -2308,15 +2307,13 @@ ID eval_doseq(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, c
         return NULL;
     }
 
-    // Iterate over collection using seq
-    CljSeqIterator *seq = make_seq(coll_eval);
-    if (seq) {
-        while (!seq_empty((CljObject*)seq)) {
-            CljObject *element = (CljObject*)seq_first((CljObject*)seq);
+    CljSeqIterator *cur = make_seq(coll_eval);
+    if (cur) {
+        while (!seq_empty((CljObject*)cur)) {
+            CljObject *element = (CljObject*)seq_first((CljObject*)cur);
 
             WITH_AUTORELEASE_POOL({
                 if (ctx) {
-                    // Push binding onto a copy of env_stack so lexical lookup works
                     CljPersistentVector *new_stack = (CljPersistentVector*)RETAIN(ctx->env_stack);
                     CljPersistentMap *self_bind = map_assoc(map_empty(), var, element);
                     env_stack_push_inplace(&new_stack, self_bind);
@@ -2338,11 +2335,11 @@ ID eval_doseq(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, c
                 }
             });
 
-            CljObject *next = (CljObject*)seq_next((CljObject*)seq);
-            RELEASE(seq);
-            seq = (CljSeqIterator*)next;
+            CljObject *next = (CljObject*)seq_next((CljObject*)cur);
+            if (TAG((ID)cur) == CLJ_SEQ) RELEASE(cur);
+            cur = (CljSeqIterator*)next;
         }
-        RELEASE(seq);
+        if (cur && TAG((ID)cur) == CLJ_SEQ) RELEASE(cur);
     }
     RELEASE(coll_eval);
     return AUTORELEASE(NULL); // doseq always returns nil
@@ -2571,6 +2568,17 @@ ID eval_let(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, con
     }
 
     if (has_frame) {
+        bool result_in_frame = false;
+        if (result && !IS_IMMEDIATE(result)) {
+            for (int i = 0; i < binding_index; i++) {
+                if (binding_values[i] == result) {
+                    result_in_frame = true;
+                    break;
+                }
+            }
+            if (result_in_frame)
+                RETAIN(result);
+        }
         frame_release(let_frame);
     }
     RELEASE(let_stack);

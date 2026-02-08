@@ -159,9 +159,7 @@ typedef struct {
  */
 CljLazySeq* make_lazy_seq(ID thunk);
 
-/**
- * @brief Create heap-allocated seq (legacy compatibility)
- */
+bool collection_empty(ID obj);
 CljSeqIterator* make_seq(ID obj);
 
 /**
@@ -170,7 +168,7 @@ CljSeqIterator* make_seq(ID obj);
 ID seq_first(ID seq);
 ID seq_rest(ID seq);
 ID seq_next(ID seq);
-ID seq_next_inplace(ID seq);
+void seq_next_inplace(ID *seq_slot);
 bool seq_empty(ID seq);
 int seq_count(ID obj);
 

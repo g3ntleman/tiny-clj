@@ -61,10 +61,10 @@
 static ID make_thunk_body_ast_call(ID fn_obj) {
     CljPersistentVector *args = make_vector(1, STRONG);
     if (!args) return NULL;
-    vector_conj_inplace(&args, (ID)SYM_THUNK_STATE);
+    vector_conj_inplace(&args, SYM_THUNK_STATE);
     CljASTCall *call = make_ast_call(fn_obj, args);
     RELEASE(args);
-    return call ? (ID)call : NULL;
+    return call ? call : NULL;
 }
 
 static inline ID cached_named_func(BuiltinFn fn, CljSymbol *name_sym, ID *slot) {
@@ -491,7 +491,7 @@ ID native_pop(ID *args, unsigned int argc)
     CljPersistentVector *result = vector_popped(v);
     if (!result)
         return NULL;
-    return (ID)result;
+    return result;
 }
 
 // subvec: returns sub-vector from start (inclusive) to end (exclusive)
@@ -679,14 +679,14 @@ ID native_conj(ID *args, unsigned int argc)
             CljHashSet *new_result = hashset_add(result, args[i]);
             if (new_result != result)
             {
-                if (i > 1 || (ID)result != coll)
+                if (i > 1 || result != coll)
                 {
                     RELEASE(result);
                 }
                 result = new_result;
             }
         }
-        return (ID)result;
+        return result;
     }
 
     // Lists: conj adds to front
@@ -743,14 +743,10 @@ ID native_first(ID *args, unsigned int argc)
 
     default:
     {
-        // Use seq implementation for other types (vectors, maps, strings)
-        CljSeqIterator *seq = make_seq(coll);
-        if (!seq)
-            return NULL;
-
-        ID result = seq_first(seq);
-        RELEASE(seq);
-
+        CljSeqIterator *it = make_seq(coll);
+        if (!it) return NULL;
+        ID result = seq_first(it);
+        RELEASE(it);
         return result;
     }
     }
@@ -788,15 +784,15 @@ ID native_next(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "next/rest"))
         return NULL;
 
-    ID coll_id = args[0];
-    if (!coll_id)
+    ID collection = args[0];
+    if (!collection)
     {
         // next of nil returns nil
         return NULL;
     }
 
-    // Check if coll is an immediate value (fixnum, etc.) - not seqable
-    if (IS_IMMEDIATE(coll_id))
+    // Check if collection is an immediate value (fixnum, etc.) - not seqable
+    if (IS_IMMEDIATE(collection))
     {
         // Immediate values are not seqable - throw exception
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -805,18 +801,11 @@ ID native_next(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    CljObject *coll = coll_id;
-
     // EAT-YOUR-OWN-DOG-FOOD: Use seq_next for all seqable types
-    // This consolidates the logic and eliminates duplication
-    // For CLJ_LIST, seq_next handles it efficiently (returns CLJ_LIST directly)
-    // For CLJ_VECTOR_PERSISTENT, CLJ_SEQ, and other seqable types, seq_next handles them via seq_rest
-
-    // Check if collection is seqable before trying to create seq
-    if (!is_seqable(coll))
+    // For CLJ_LIST, seq_next returns CLJ_LIST directly; other types use seq_rest
+    if (!is_seqable(collection))
     {
-        // Not seqable - throw exception with type name for debugging
-        const char *type_name = clj_type_name(coll->type);
+        const char *type_name = clj_type_name(((CljObject *)collection)->type);
         char error_msg[256];
         size_t pos = 0;
         pos = format_append(error_msg, pos, sizeof(error_msg),
@@ -829,56 +818,14 @@ ID native_next(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    // Try to create a seq from the collection
-    CljSeqIterator *seq = make_seq(coll);
-    if (!seq)
-    {
-        // Empty or not seqable - return nil
-        return NULL;
-    }
-
-    // CRITICAL: Check if make_seq returned the original object (if coll was already a CLJ_SEQ)
-    // If so, we must NOT release it, as it's owned by the caller (args[0])
-    bool seq_is_original = (seq == (CljSeqIterator *)coll);
-
-    bool reused_seq = false;
-    ID result = NULL;
-
-    if (!seq_is_original && seq && seq->iter.seq_type != CLJ_LIST && seq->base.rc == 1)
-    {
-        ID moved = seq_next_inplace(seq);
-        if (moved)
-        {
-            result = moved;
-            reused_seq = true;
-        }
-    }
-
-    if (!reused_seq)
-    {
-        // Return next of the created seq
-        result = seq_next(seq);
-    }
-
-    // seq_next now returns AUTORELEASE objects (already in pool) or NULL
-    // For CLJ_LIST, seq_next returns AUTORELEASE(RETAIN(...)) - already in pool
-    // For other types, seq_next returns new CljSeqIterator objects (rc=1) - need AUTORELEASE
-    // Note: seq_next never returns immediate values, only NULL or heap objects (CLJ_LIST or CLJ_SEQ)
-    if (result && TAG(result) == CLJ_SEQ)
-    {
-        // Only seq_next results that are freshly allocated seq iterators
-        // (TAG == CLJ_SEQ) still need to be autoreleased. LIST results that
-        // came from seq_next are already autoreleased inside seq_next.
-        result = AUTORELEASE(result);
-    }
-
-    // Only release the seq if we created it (not if it was the original object)
-    // If seq_is_original, the caller (eval_and_call_native) will release args[0]
-    if (!seq_is_original && !reused_seq)
-    {
-        RELEASE(seq);
-    }
-    return result;
+    ID it = make_seq(collection);
+    if (!it) return NULL;
+    seq_next_inplace(&it);  /* COW: in-place when possible, else replace slot */
+    if (!it || TAG(it) == CLJ_NIL)
+        return NULL;  /* no more seq; do not return unowned nil/list so caller won't autorelease */
+    if (as_seq(it))
+        it = AUTORELEASE(it);
+    return it;
 }
 
 // Rest function that works with BuiltinFn signature
@@ -935,7 +882,7 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
     map_assoc_inplace(&rest_state, SYM_CONCAT_Y, y);
     CljPersistentVector *rest_env_stack = make_vector(1, STRONG);
     if (!rest_env_stack) { RELEASE(rest_state); return NULL; }
-    vector_conj_inplace(&rest_env_stack, (ID)rest_state);
+    vector_conj_inplace(&rest_env_stack, rest_state);
     RELEASE(rest_state);
     ID fn_obj = cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, &g_concat_thunk_fn_obj);
     ID thunk_body = make_thunk_body_ast_call(fn_obj);
@@ -943,7 +890,7 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
     ID rest_param = SYM_THUNK_STATE;
     CljFunction *rest_thunk = make_function(&rest_param, 1, thunk_body, rest_env_stack, NULL, NULL);
     RELEASE(thunk_body);
-    CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
+    CljLazySeq *rest_lazy = make_lazy_seq(rest_thunk);
     if (rest_lazy && vector_count(rest_env_stack) > 0) rest_lazy->thunk_state = RETAIN(vector_nth(rest_env_stack, 0));
     RELEASE(rest_thunk);
     RELEASE(rest_env_stack);
@@ -969,7 +916,7 @@ ID native_concat(ID *args, unsigned int argc)
 
     CljPersistentVector *env_stack = make_vector(1, STRONG);
     if (!env_stack) { RELEASE(state); return empty_list(); }
-    vector_conj_inplace(&env_stack, (ID)state);
+    vector_conj_inplace(&env_stack, state);
     RELEASE(state);
 
     ID fn_obj = cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, &g_concat_thunk_fn_obj);
@@ -978,7 +925,7 @@ ID native_concat(ID *args, unsigned int argc)
     ID thunk_param = SYM_THUNK_STATE;
     CljFunction *thunk = make_function(&thunk_param, 1, thunk_body, env_stack, NULL, NULL);
     RELEASE(thunk_body);
-    CljLazySeq *lazy = make_lazy_seq((ID)thunk);
+    CljLazySeq *lazy = make_lazy_seq(thunk);
     if (lazy && vector_count(env_stack) > 0) lazy->thunk_state = RETAIN(vector_nth(env_stack, 0));
     RELEASE(thunk);
     RELEASE(env_stack);
@@ -1055,7 +1002,7 @@ static inline CljSymbol* destructure_gensym(const char *prefix, CljString **cach
     if (!*cache) {
         *cache = make_string(prefix);
     }
-    ID arg = (ID)(*cache);
+    ID arg = *cache;
     ID args[1] = {arg};
     return (CljSymbol*)native_gensym(args, 1);
 }
@@ -1130,17 +1077,17 @@ static void destructure_seq(CljPersistentVector **bvec_slot, ID bform, ID init) 
             continue;
         }
 
-        if (elem == (ID)SYM_AMP) {
+        if (elem == SYM_AMP) {
             vector_conj_inplace(&bvec, next);
-            vector_conj_inplace(&bvec, destructure_list3((ID)sym_nthnext, (ID)gvec, fixnum(idx)));
+            vector_conj_inplace(&bvec, destructure_list3(sym_nthnext, gvec, fixnum(idx)));
             skip = 1;
-        } else if (elem == (ID)SYM_KW_AS) {
+        } else if (elem == SYM_KW_AS) {
             vector_conj_inplace(&bvec, next);
-            vector_conj_inplace(&bvec, (ID)gvec);
+            vector_conj_inplace(&bvec, gvec);
             skip = 1;
         } else {
             vector_conj_inplace(&bvec, elem);
-            vector_conj_inplace(&bvec, destructure_list4((ID)SYM_NTH, (ID)gvec, fixnum(idx), NULL));
+            vector_conj_inplace(&bvec, destructure_list4(SYM_NTH, gvec, fixnum(idx), NULL));
             idx++;
         }
     }
@@ -1160,14 +1107,14 @@ static void destructure_map(CljPersistentVector **bvec_slot, ID bform, ID init) 
     CljSymbol *kw_or = destructure_intern_once(&g_destructure_kw_or, ":or");
     CljSymbol *sym_get = destructure_intern_once(&g_destructure_sym_get, "get");
 
-    ID defaults = (kw_or && bform) ? map_get_sentinel(bform, (ID)kw_or, NULL) : NULL;
-    ID as_sym = (bform) ? map_get_sentinel(bform, (ID)SYM_KW_AS, NULL) : NULL;
+    ID defaults = (kw_or && bform) ? map_get_sentinel(bform, kw_or, NULL) : NULL;
+    ID as_sym = (bform) ? map_get_sentinel(bform, SYM_KW_AS, NULL) : NULL;
     if (as_sym) {
         vector_conj_inplace(&bvec, as_sym);
         vector_conj_inplace(&bvec, gmap);
     }
 
-    ID keys_val = (kw_keys && bform) ? map_get_sentinel(bform, (ID)kw_keys, NULL) : NULL;
+    ID keys_val = (kw_keys && bform) ? map_get_sentinel(bform, kw_keys, NULL) : NULL;
     CljPersistentVector *keys_vec = NULL;
     if (keys_val && (TAG(keys_val) == CLJ_VECTOR_PERSISTENT || TAG(keys_val) == CLJ_VECTOR_TRANSIENT)) {
         keys_vec = as_vector(keys_val);
@@ -1193,8 +1140,8 @@ static void destructure_map(CljPersistentVector **bvec_slot, ID bform, ID init) 
 
         ID default_val = defaults ? map_get_sentinel(defaults, sym, NULL) : NULL;
         ID get_form = clj_is_truthy(default_val)
-                          ? destructure_list4((ID)sym_get, (ID)gmap, (ID)kw, default_val)
-                          : destructure_list3((ID)sym_get, (ID)gmap, (ID)kw);
+                          ? destructure_list4(sym_get, gmap, kw, default_val)
+                          : destructure_list3(sym_get, gmap, kw);
 
         vector_conj_inplace(&bvec, sym);
         vector_conj_inplace(&bvec, get_form);
@@ -1365,7 +1312,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     RELEASE(next_seqs);
     CljPersistentVector *rest_env_stack = make_vector(1, STRONG);
     if (!rest_env_stack) { RELEASE(rest_state); return NULL; }
-    vector_conj_inplace(&rest_env_stack, (ID)rest_state);
+    vector_conj_inplace(&rest_env_stack, rest_state);
     RELEASE(rest_state);
     ID fn_obj = cached_named_func(native_map_thunk_executor, SYM_MAP_THUNK_FN, &g_map_thunk_fn_obj);
     ID thunk_body = make_thunk_body_ast_call(fn_obj);
@@ -1373,7 +1320,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     ID rest_param = SYM_THUNK_STATE;
     CljFunction *rest_thunk = make_function(&rest_param, 1, thunk_body, rest_env_stack, NULL, NULL);
     RELEASE(thunk_body);
-    CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
+    CljLazySeq *rest_lazy = make_lazy_seq(rest_thunk);
     if (rest_lazy && vector_count(rest_env_stack) > 0) rest_lazy->thunk_state = RETAIN(vector_nth(rest_env_stack, 0));
     RELEASE(rest_thunk);
     RELEASE(rest_env_stack);
@@ -1412,7 +1359,7 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_INNER, inner_rest);
                 CljPersistentVector *rest_env_stack = make_vector(1, STRONG);
                 if (!rest_env_stack) { RELEASE(rest_state); return NULL; }
-                vector_conj_inplace(&rest_env_stack, (ID)rest_state);
+                vector_conj_inplace(&rest_env_stack, rest_state);
                 RELEASE(rest_state);
                 ID fn_obj = cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN, &g_mapcat_thunk_fn_obj);
                 ID thunk_body = make_thunk_body_ast_call(fn_obj);
@@ -1420,7 +1367,7 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
                 ID rest_param = SYM_THUNK_STATE;
                 CljFunction *rest_thunk = make_function(&rest_param, 1, thunk_body, rest_env_stack, NULL, NULL);
                 RELEASE(thunk_body);
-                CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
+                CljLazySeq *rest_lazy = make_lazy_seq(rest_thunk);
                 if (rest_lazy && vector_count(rest_env_stack) > 0) rest_lazy->thunk_state = RETAIN(vector_nth(rest_env_stack, 0));
                 RELEASE(rest_thunk);
                 RELEASE(rest_env_stack);
@@ -1500,7 +1447,7 @@ ID native_map(ID *args, unsigned int argc)
 
     CljPersistentVector *env_stack = make_vector(1, STRONG);
     if (!env_stack) { RELEASE(state); return empty_list(); }
-    vector_conj_inplace(&env_stack, (ID)state);
+    vector_conj_inplace(&env_stack, state);
     RELEASE(state);
 
     ID fn_obj = cached_named_func(native_map_thunk_executor, SYM_MAP_THUNK_FN, &g_map_thunk_fn_obj);
@@ -1509,7 +1456,7 @@ ID native_map(ID *args, unsigned int argc)
     ID thunk_param = SYM_THUNK_STATE;
     CljFunction *thunk = make_function(&thunk_param, 1, thunk_body, env_stack, NULL, NULL);
     RELEASE(thunk_body);
-    CljLazySeq *lazy = make_lazy_seq((ID)thunk);
+    CljLazySeq *lazy = make_lazy_seq(thunk);
     if (lazy && vector_count(env_stack) > 0) lazy->thunk_state = RETAIN(vector_nth(env_stack, 0));
     RELEASE(thunk);
     RELEASE(env_stack);
@@ -1545,7 +1492,7 @@ ID native_mapcat(ID *args, unsigned int argc) {
 
     CljPersistentVector *env_stack = make_vector(1, STRONG);
     if (!env_stack) { RELEASE(state); return empty_list(); }
-    vector_conj_inplace(&env_stack, (ID)state);
+    vector_conj_inplace(&env_stack, state);
     RELEASE(state);
 
     ID fn_obj = cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN, &g_mapcat_thunk_fn_obj);
@@ -1554,7 +1501,7 @@ ID native_mapcat(ID *args, unsigned int argc) {
     ID thunk_param = SYM_THUNK_STATE;
     CljFunction *thunk = make_function(&thunk_param, 1, thunk_body, env_stack, NULL, NULL);
     RELEASE(thunk_body);
-    CljLazySeq *lazy = make_lazy_seq((ID)thunk);
+    CljLazySeq *lazy = make_lazy_seq(thunk);
     if (lazy && vector_count(env_stack) > 0) lazy->thunk_state = RETAIN(vector_nth(env_stack, 0));
     RELEASE(thunk);
     RELEASE(env_stack);
@@ -1608,7 +1555,7 @@ ID native_filter(ID *args, unsigned int argc)
         ID elem = seq_iter_first(&iter);
         ID pred_result = eval_function_call(pred, &elem, 1, NULL, st);
 
-        if (pred_result && pred_result != (ID)clj_false)
+        if (pred_result && pred_result != clj_false)
         {
             vector_conj_inplace(&kept, elem);
         }
@@ -1758,7 +1705,7 @@ ID native_cons(ID *args, unsigned int argc)
         }
         else
         {
-            tail = (ID)make_seq(coll); // may be NULL if empty
+            tail = make_seq(coll);
         }
 
         CljLazySeq *lazy = ALLOC(CljLazySeq, 1);
@@ -1772,11 +1719,11 @@ ID native_cons(ID *args, unsigned int argc)
         lazy->base.flags = 0;
 
         // Preserve nil elements using SYM_NIL internally.
-        lazy->first = RETAIN(elem ? elem : (ID)SYM_NIL);
+        lazy->first = RETAIN(elem ? elem : SYM_NIL);
         lazy->thunk = NULL;
         lazy->cached_rest = tail; // already a strong ref (or NULL)
 
-        return AUTORELEASE((ID)lazy);
+        return AUTORELEASE(lazy);
     }
 
     // Non-seqable tail: fall back to singleton list (historical behavior)
@@ -2146,7 +2093,7 @@ ID native_disj(ID *args, unsigned int argc)
         CljHashSet *new_result = hashset_remove(result, key);
         if (new_result != result)
         {
-            if (i > 1 || (ID)result != set_obj)
+            if (i > 1 || result != set_obj)
             {
                 RELEASE(result);
             }
@@ -2154,7 +2101,7 @@ ID native_disj(ID *args, unsigned int argc)
         }
     }
 
-    return (ID)result;
+    return result;
 }
 
 // merge: Combines multiple maps (later maps override earlier ones)
@@ -2562,7 +2509,7 @@ ID native_transient(ID *args, unsigned int argc)
     case CLJ_VECTOR_PERSISTENT:
         return AUTORELEASE(vector_transient(as_persistent_vector(coll)));
     case CLJ_MAP_PERSISTENT:
-        return (ID)map_transient(as_persistent_map(coll));
+        return map_transient(as_persistent_map(coll));
     case CLJ_VECTOR_TRANSIENT:
     case CLJ_MAP_TRANSIENT:
         // transient on transient returns the same object
@@ -2593,7 +2540,7 @@ ID native_persistent_bang(ID *args, unsigned int argc)
     case CLJ_VECTOR_TRANSIENT:
         return vector_persistent(coll);
     case CLJ_MAP_TRANSIENT:
-        return (ID)map_persistent(as_transient_map(coll));
+        return map_persistent(as_transient_map(coll));
     case CLJ_VECTOR_PERSISTENT:
     case CLJ_MAP_PERSISTENT:
         // persistent! on persistent returns the same object
@@ -2934,7 +2881,7 @@ ID native_vec(ID *args, unsigned int argc)
     }
 
     // Use stack-based iterator to iterate through collection (avoid code duplication)
-    // This is more efficient than heap-based make_seq and avoids memory leaks
+    // More efficient than heap-based make_seq and avoids extra allocations
     SeqIterator iter;
     if (!seq_iter_init(&iter, coll))
     {
@@ -3484,7 +3431,7 @@ ID native_ns_unload(ID *args, unsigned int argc)
 
     ID ns_arg = args[0];
     if (!ns_arg)
-        return (ID)clj_false;
+        return clj_false;
 
     const char *ns_name = NULL;
     CljSymbol *name_sym = NULL;
@@ -3509,18 +3456,18 @@ ID native_ns_unload(ID *args, unsigned int argc)
     }
 
     if (!ns_name || !name_sym)
-        return (ID)clj_false;
+        return clj_false;
 
     // Never unload clojure.core (or user) - keep runtime stable.
     if (strcmp(ns_name, "clojure.core") == 0 || strcmp(ns_name, "user") == 0)
-        return (ID)clj_false;
+        return clj_false;
 
     if (!g_runtime.ns_registry)
-        return (ID)clj_false;
+        return clj_false;
 
     CljNamespace *ns = ns_find_by_symbol(name_sym);
     if (!ns)
-        return (ID)clj_false;
+        return clj_false;
 
 
     // Explicitly release namespace-owned maps so objects stored in mappings are released
@@ -3545,7 +3492,7 @@ ID native_ns_unload(ID *args, unsigned int argc)
     // Clear resolve cache (unqualified symbol resolution relies on it)
     ns_invalidate_resolve_cache();
 
-    return (ID)clj_true;
+    return clj_true;
 }
 
 // Helper for dir: convert argument to namespace
@@ -3782,7 +3729,7 @@ ID native_get_thread_bindings(ID *args, unsigned int argc)
 
     // Include *ns* as a dynamic binding snapshot (implemented as EvalState.current_ns).
     if (st && st->current_ns) {
-        ASSIGN(out, map_assoc(out, (ID)SYM_NS_STAR, (ID)st->current_ns));
+        ASSIGN(out, map_assoc(out, SYM_NS_STAR, st->current_ns));
     }
 
     return AUTORELEASE(out);
@@ -3807,7 +3754,7 @@ ID native_stacktrace_str(ID *args, unsigned int argc)
         return NULL;
     }
 
-    return AUTORELEASE(RETAIN((ID)ex->stacktrace));
+    return AUTORELEASE(RETAIN(ex->stacktrace));
 }
 #endif
 
@@ -5839,7 +5786,7 @@ static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {
     map_assoc_inplace(&rest_state, SYM_RANGE_CUR, fixnum(cur + 1));
     CljPersistentVector *rest_env_stack = make_vector(1, STRONG);
     if (!rest_env_stack) { RELEASE(rest_state); return NULL; }
-    vector_conj_inplace(&rest_env_stack, (ID)rest_state);
+    vector_conj_inplace(&rest_env_stack, rest_state);
     RELEASE(rest_state);
     ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
     ID thunk_body = make_thunk_body_ast_call(fn_obj);
@@ -5847,7 +5794,7 @@ static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {
     ID rest_param = SYM_THUNK_STATE;
     CljFunction *rest_thunk = make_function(&rest_param, 1, thunk_body, rest_env_stack, NULL, NULL);
     RELEASE(thunk_body);
-    CljLazySeq *rest_lazy = make_lazy_seq((ID)rest_thunk);
+    CljLazySeq *rest_lazy = make_lazy_seq(rest_thunk);
     if (rest_lazy && vector_count(rest_env_stack) > 0) rest_lazy->thunk_state = RETAIN(vector_nth(rest_env_stack, 0));
     RELEASE(rest_thunk);
     RELEASE(rest_env_stack);
@@ -5867,7 +5814,7 @@ ID native_range(ID *args, unsigned int argc)
         map_assoc_inplace(&state, SYM_RANGE_CUR, fixnum(0));
         CljPersistentVector *env_stack = make_vector(1, STRONG);
         if (!env_stack) { RELEASE(state); return NULL; }
-        vector_conj_inplace(&env_stack, (ID)state);
+        vector_conj_inplace(&env_stack, state);
         RELEASE(state);
         ID fn_obj = cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
         ID thunk_body = make_thunk_body_ast_call(fn_obj);
@@ -5875,7 +5822,7 @@ ID native_range(ID *args, unsigned int argc)
         ID thunk_param = SYM_THUNK_STATE;
         CljFunction *thunk = make_function(&thunk_param, 1, thunk_body, env_stack, NULL, NULL);
         RELEASE(thunk_body);
-        CljLazySeq *lazy = make_lazy_seq((ID)thunk);
+        CljLazySeq *lazy = make_lazy_seq(thunk);
         if (lazy && vector_count(env_stack) > 0) lazy->thunk_state = RETAIN(vector_nth(env_stack, 0));
         RELEASE(thunk);
         RELEASE(env_stack);
@@ -6031,7 +5978,7 @@ ID native_lazy_seq_star(ID *args, unsigned int argc)
     }
 
     CljLazySeq *lazy = make_lazy_seq(f);
-    return lazy ? AUTORELEASE((ID)lazy) : NULL;
+    return lazy ? AUTORELEASE(lazy) : NULL;
 }
 
 ID native_math_sqrt(ID *args, unsigned int argc)
@@ -7018,15 +6965,15 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         "unknown";
 #endif
 
-    ID v_os = (ID)make_string(os_name);
-    ID v_ver = (ID)make_string("0.3");
+    ID v_os = make_string(os_name);
+    ID v_ver = make_string("0.3");
 
     CljPersistentMap *m;
 #if defined(BUILD_EPOCH_SECONDS)
     int32_t days = (int32_t)(BUILD_EPOCH_SECONDS / 86400);
     uint32_t millis = (uint32_t)((BUILD_EPOCH_SECONDS % 86400) * 1000);
     ID k_build_time = intern_symbol_global(":build-time");
-    ID v_build_time = (ID)make_instant(days, millis);
+    ID v_build_time = make_instant(days, millis);
     m = make_map_from_kv(3, SYM_KW_OS, v_os, SYM_KW_VERSION, v_ver, k_build_time, v_build_time);
     RELEASE(v_os);
     RELEASE(v_ver);
@@ -7086,7 +7033,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
                 ASSIGN(row, map_assoc(row, SYM_KW_BYTES_PEAK, fixnum(CLAMP_FIXNUM(bp))));
                 ASSIGN(row, map_assoc(row, SYM_KW_ALLOC_COUNT, fixnum(CLAMP_FIXNUM(g_memory_stats.allocations_by_type[ti]))));
                 ASSIGN(row, map_assoc(row, SYM_KW_DEALLOC_COUNT, fixnum(CLAMP_FIXNUM(g_memory_stats.deallocations_by_type[ti]))));
-                ASSIGN(by_type, map_assoc(by_type, (ID)make_string(clj_type_name((CljType)ti)), (ID)row));
+                ASSIGN(by_type, map_assoc(by_type, make_string(clj_type_name((CljType)ti)), row));
             }
             ASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_BY_TYPE, by_type));
         }
@@ -7100,11 +7047,11 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
             if (heap_free != (size_t)-1) {
                 int32_t hf = (heap_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_free;
                 CljSymbol *kw = intern_symbol_global(":heap-bytes-free");
-                if (kw) ASSIGN(ms, map_assoc(ms, (ID)kw, fixnum(hf)));
+                if (kw) ASSIGN(ms, map_assoc(ms, kw, fixnum(hf)));
             }
         }
 
-        ASSIGN(m, map_assoc(m, SYM_KW_MEMORY_STATS, (ID)ms));
+        ASSIGN(m, map_assoc(m, SYM_KW_MEMORY_STATS, ms));
     }
 #endif
 
@@ -7117,15 +7064,15 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
             if (ms) {
                 int32_t hf = (heap_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_free;
                 CljSymbol *kw_free = intern_symbol_global(":heap-bytes-free");
-                if (kw_free) ASSIGN(ms, map_assoc(ms, (ID)kw_free, fixnum(hf)));
+                if (kw_free) ASSIGN(ms, map_assoc(ms, kw_free, fixnum(hf)));
                 size_t heap_total = platform_heap_bytes_total();
                 if (heap_total != (size_t)-1) {
                     int32_t ht = (heap_total > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_total;
                     CljSymbol *kw_total = intern_symbol_global(":heap-bytes-total");
-                    if (kw_total) ASSIGN(ms, map_assoc(ms, (ID)kw_total, fixnum(ht)));
+                    if (kw_total) ASSIGN(ms, map_assoc(ms, kw_total, fixnum(ht)));
                 }
                 CljSymbol *kw_ms = intern_symbol_global(":memory-stats");
-                if (kw_ms) ASSIGN(m, map_assoc(m, (ID)kw_ms, (ID)ms));
+                if (kw_ms) ASSIGN(m, map_assoc(m, kw_ms, ms));
             }
         }
     }
@@ -7142,10 +7089,10 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
                 CljSymbol *kw_cores = intern_symbol_global(":cores");
                 CljSymbol *kw_revision = intern_symbol_global(":revision");
                 CljSymbol *kw_hw = intern_symbol_global(":hardware");
-                if (kw_model) ASSIGN(hm, map_assoc(hm, (ID)kw_model, (ID)make_string(hw.model)));
-                if (kw_cores) ASSIGN(hm, map_assoc(hm, (ID)kw_cores, fixnum((int32_t)hw.cores)));
-                if (kw_revision) ASSIGN(hm, map_assoc(hm, (ID)kw_revision, fixnum((int32_t)hw.revision)));
-                if (kw_hw) ASSIGN(m, map_assoc(m, (ID)kw_hw, (ID)hm));
+                if (kw_model) ASSIGN(hm, map_assoc(hm, kw_model, make_string(hw.model)));
+                if (kw_cores) ASSIGN(hm, map_assoc(hm, kw_cores, fixnum((int32_t)hw.cores)));
+                if (kw_revision) ASSIGN(hm, map_assoc(hm, kw_revision, fixnum((int32_t)hw.revision)));
+                if (kw_hw) ASSIGN(m, map_assoc(m, kw_hw, hm));
             }
         }
     }
@@ -7268,14 +7215,14 @@ static ID native_clojure_pprint_pprint_str(ID *args, unsigned int argc)
     struct pprint_ctx ctx = { .buf = out, .pos = &pos, .max = sizeof(out) };
     pprint_walk(x, 0, &ctx);
 
-    return (ID)make_string(out);
+    return make_string(out);
 }
 
 ID native_instant_p(ID *args, unsigned int argc)
 {
     if (!validate_builtin_args(argc, 1, "inst?"))
         return NULL;
-    return (TAG(args[0]) == CLJ_INSTANT) ? (ID)clj_true : (ID)clj_false;
+    return (TAG(args[0]) == CLJ_INSTANT) ? clj_true : clj_false;
 }
 
 ID native_instant_days(ID *args, unsigned int argc)
@@ -7328,7 +7275,7 @@ ID native_datetime_civil_from_days(ID *args, unsigned int argc)
     ASSIGN(m, map_assoc(m, SYM_KW_YEAR, fixnum(year)));
     ASSIGN(m, map_assoc(m, SYM_KW_MONTH, fixnum(month)));
     ASSIGN(m, map_assoc(m, SYM_KW_DAY, fixnum(day)));
-    return (ID)m;
+    return m;
 }
 
 // tiny-clj.datetime/days-from-civil: (days-from-civil year month day) => unix-days
