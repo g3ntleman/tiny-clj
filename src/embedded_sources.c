@@ -18,8 +18,12 @@ static const char *clojure_repl_code =
 #include "clojure.repl.clj"
     ;
 
-static const char *tinyclj_runtime_code =
-#include "tinyclj.runtime.clj"
+static const char *tiny_clj_runtime_code =
+#include "tiny-clj.runtime.clj"
+    ;
+
+static const char *tiny_db_kv_code =
+#include "tiny-db.kv.clj"
     ;
 
 static void embedded_source_map_add(CljPersistentMap **map, const char *path, const char *data) {
@@ -30,13 +34,9 @@ static void embedded_source_map_add(CljPersistentMap **map, const char *path, co
 
     CljString *key = make_string(path);
     CljByteArray *val = make_byte_array_view((uint8_t*)data, (int)len);
-    if (!key || !val) {
-        RELEASE(key);
-        RELEASE(val);
-        return;
+    if (key && val) {
+        map_assoc_inplace(map, (ID)key, (ID)val);
     }
-
-    map_assoc_inplace(map, (ID)key, (ID)val);
     RELEASE(key);
     RELEASE(val);
 }
@@ -49,7 +49,8 @@ void embedded_source_map_init(void) {
     embedded_source_map_add(&m, "/libs/clojure/core.clj", clojure_core_code);
     embedded_source_map_add(&m, "/libs/clojure/string.clj", clojure_string_code);
     embedded_source_map_add(&m, "/libs/clojure/repl.clj", clojure_repl_code);
-    embedded_source_map_add(&m, "/libs/tinyclj/runtime.clj", tinyclj_runtime_code);
+    embedded_source_map_add(&m, "/libs/tiny-clj/runtime.clj", tiny_clj_runtime_code);
+    embedded_source_map_add(&m, "/libs/tiny-db/kv.clj", tiny_db_kv_code);
 
     ASSIGN(g_runtime.embedded_source_map, m);
     RELEASE(m);

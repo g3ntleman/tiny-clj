@@ -4515,8 +4515,6 @@ static char *namespace_to_relpath(const char *ns_name)
         char c = ns_name[i];
         if (c == '.')
             buf[i] = '/';
-        else if (c == '-')
-            buf[i] = '_'; // Clojure file mapping: hyphen -> underscore
         else
             buf[i] = c;
     }

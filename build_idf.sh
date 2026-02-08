@@ -110,7 +110,16 @@ if [ "${DO_CLEAN}" -eq 1 ]; then
   rm -f sdkconfig
 fi
 
-idf.py set-target "${TARGET}"
+# With --no-move: reuse central build if present so next run is incremental.
+if [ "${DO_MOVE}" -eq 0 ] && [ ! -d build ] && [ -d "${CENTRAL_BUILD_DIR}/build" ]; then
+  mv "${CENTRAL_BUILD_DIR}/build" build
+  echo "Restored build from ${CENTRAL_BUILD_DIR}/build for incremental builds."
+fi
+
+# set-target only when no build (first run or after --clean); else incremental.
+if [ ! -d build ]; then
+  idf.py set-target "${TARGET}"
+fi
 # Nounset-safe array expansion (EXTRA_IDF_ARGS may be unset/non-array in some shells).
 idf.py build ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"}
 
