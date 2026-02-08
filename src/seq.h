@@ -149,8 +149,9 @@ typedef struct {
 typedef struct {
     CljObject base;     // Base object (CLJ_LAZY_SEQ type)
     ID first;           // NOT_FOUND until realized; then first element (may be NULL)
-    ID thunk;           // 0-arity thunk producing the sequence body (released after realization)
+    ID thunk;           // 0-arity or 1-arity thunk (released after realization)
     ID cached_rest;     // NOT_FOUND until realized; then rest sequence (may be NULL for empty)
+    ID thunk_state;     // optional: state map passed as single arg when realizing (embedded thunks)
 } CljLazySeq;
 
 /**

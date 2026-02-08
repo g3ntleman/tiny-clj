@@ -342,12 +342,8 @@ def cmd_linker(args: argparse.Namespace) -> int:
     results: Dict[str, Dict[str, object]] = {}
 
     for target in args.targets:
-        # Resolve binary name (unit-tests can be renamed to unit-tests-prof).
-        candidates = [out_dir / target]
-        if target == "unit-tests":
-            candidates = [out_dir / "unit-tests-prof", out_dir / "unit-tests"]
-        binary = next((c for c in candidates if c.exists()), None)
-        if binary is None:
+        binary = out_dir / target
+        if not binary.exists():
             raise RuntimeError(f"Built target '{target}' but binary not found in {out_dir}")
 
         obj_root = build_dir / "CMakeFiles" / f"{target}.dir"
@@ -596,13 +592,10 @@ def _cov_run(cmd: List[str], cwd: Path, env: Optional[Dict[str, str]] = None) ->
 
 
 def _find_built_binary(runtime_out: Path, target: str) -> Path:
-    cands = [runtime_out / target]
-    if target == "unit-tests":
-        cands = [runtime_out / "unit-tests-prof", runtime_out / "unit-tests"]
-    for c in cands:
-        if c.exists():
-            return c
-    raise RuntimeError(f"Binary for target '{target}' not found in {runtime_out}")
+    p = runtime_out / target
+    if not p.exists():
+        raise RuntimeError(f"Binary for target '{target}' not found in {runtime_out}")
+    return p
 
 
 def _is_core_source_path(path_str: str) -> bool:

@@ -26,6 +26,10 @@ static const char *tiny_db_kv_code =
 #include "tiny-db.kv.clj"
     ;
 
+static const char *tiny_clj_datetime_code =
+#include "tiny-clj.datetime.clj"
+    ;
+
 static void embedded_source_map_add(CljPersistentMap **map, const char *path, const char *data) {
     if (!map || !*map || !path || !data) return;
 
@@ -51,6 +55,7 @@ void embedded_source_map_init(void) {
     embedded_source_map_add(&m, "/libs/clojure/repl.clj", clojure_repl_code);
     embedded_source_map_add(&m, "/libs/tiny-clj/runtime.clj", tiny_clj_runtime_code);
     embedded_source_map_add(&m, "/libs/tiny-db/kv.clj", tiny_db_kv_code);
+    embedded_source_map_add(&m, "/libs/tiny-clj/datetime.clj", tiny_clj_datetime_code);
 
     ASSIGN(g_runtime.embedded_source_map, m);
     RELEASE(m);

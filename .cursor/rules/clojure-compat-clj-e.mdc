@@ -1,0 +1,11 @@
+---
+description: Clojure-Kompatibilität mit clj -e prüfen
+alwaysApply: true
+---
+
+# Clojure-Kompatibilität testen
+
+**Regel:** Für Kompatibilität mit Clojure kannst du immer Tests mit `clj -e` auf der Kommandozeile ausführen.
+
+- Einzelne Ausdrücke mit `clj -e "<expr>"` prüfen.
+- Bei Verhaltensfragen (z. B. keyword, reader, namespaces) zuerst in Clojure JVM nachsehen: `clj -e "(keyword \"ns\" \"name\")"` usw.

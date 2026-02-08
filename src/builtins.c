@@ -6686,7 +6686,9 @@ ID native_keyword_p(ID *args, unsigned int argc)
     return clj_false;
 }
 
-// (keyword name) => :name  or  (keyword "namespace" "name") => :namespace/name
+// Keyword = symbol with cname[0]==':', same interning. Normalize: strip leading ':' from inputs.
+// (keyword "name") => keyword with ns = current namespace, cname = ":name" (like ::name in reader).
+// (keyword "namespace" "name") => :namespace/name. Leading colons stripped from both args.
 ID native_keyword(ID *args, unsigned int argc)
 {
     CHECK_ARITY_RANGE(argc, 1, 2, "keyword");
@@ -6697,10 +6699,14 @@ ID native_keyword(ID *args, unsigned int argc)
         if (TAG(args[1]) == CLJ_STRING) name_str = string_data(args[1]);
         else if (TAG(args[1]) == CLJ_SYMBOL) { CljSymbol *s = as_symbol(args[1]); name_str = s ? s->cname : NULL; }
         if (!ns_str || !*ns_str || !name_str || !*name_str) return NULL;
+        while (*ns_str == ':') ns_str++;
+        if (!*ns_str) return NULL;
+        const char *name_clean = (*name_str == ':') ? name_str + 1 : name_str;
+        if (!*name_clean) return NULL;
         CljSymbol *ns_sym = intern_symbol_global(ns_str);
         char kw_cname[256] = {0};
         size_t pos = format_append_char(kw_cname, 0, sizeof(kw_cname), ':');
-        format_append(kw_cname, pos, sizeof(kw_cname), name_str);
+        format_append(kw_cname, pos, sizeof(kw_cname), name_clean);
         return intern_symbol(ns_sym, kw_cname);
     }
     ID arg = args[0];
@@ -6710,10 +6716,14 @@ ID native_keyword(ID *args, unsigned int argc)
     if (TAG(arg) == CLJ_STRING) name = string_data(arg);
     else if (TAG(arg) == CLJ_SYMBOL) { CljSymbol *sym = as_symbol(arg); name = sym ? sym->cname : NULL; }
     if (!name || !*name) return NULL;
+    while (*name == ':') name++;
+    if (!*name) return NULL;
     char kw_name[256] = {0};
-    size_t pos = 0;
-    pos = format_append_char(kw_name, pos, sizeof(kw_name), ':');
+    size_t pos = format_append_char(kw_name, 0, sizeof(kw_name), ':');
     format_append(kw_name, pos, sizeof(kw_name), name);
+    EvalState *st = g_current_eval_state;
+    if (st && st->current_ns && st->current_ns->name)
+        return intern_symbol(st->current_ns->name, kw_name);
     return intern_symbol_global(kw_name);
 }
 

@@ -974,9 +974,38 @@ ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *c
 }
 
 // Helper functions for eval_list optimization
-static ID call_function_with_args_and_context(ID fn, CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+/** Convert (op arg1 ...) list to CljASTCall. Caller must RELEASE. Used only at eval_list entry. */
+static CljASTCall *list_to_ast_call(CljList *list) {
+    if (!list) return NULL;
+    ID op = LIST_FIRST(list);
+    CljList *rest = list_rest_normalized(as_list(LIST_REST(list)));
+    CljPersistentVector *args = make_vector(0, STRONG);
+    if (!args) return NULL;
+    if (rest) {
+        unsigned int n = 0;
+        for (CljList *node = rest; node && n < 32; ) {
+            n++;
+            ID r = LIST_REST(node);
+            if (!r) break;
+            if (!is_list_type(TAG((CljObject*)r))) { n++; break; }
+            node = as_list(r);
+        }
+        for (CljList *node = rest; node && vector_count(args) < n; ) {
+            vector_conj_inplace(&args, LIST_FIRST(node));
+            ID r = LIST_REST(node);
+            if (!r) break;
+            if (!is_list_type(TAG((CljObject*)r))) {
+                vector_conj_inplace(&args, r);
+                break;
+            }
+            node = as_list(r);
+        }
+    }
+    CljASTCall *call = make_ast_call(op, args);
+    RELEASE(args);
+    return call;
+}
 static ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *st, const EvalContext *ctx, CljObject *call_form);
-static ID eval_function_call_from_list(CljList *list, CljPersistentMap *env, EvalState *st, ID op, const EvalContext *ctx);
 
 // Thread-local recursion depth tracking for eval_arg and eval_list
 static _Thread_local int g_eval_arg_depth = 0;
@@ -1147,155 +1176,6 @@ static INLINE ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *
     return resolved ? resolved : op;
 }
 
-// Handle function call from resolved operator
-static INLINE ID eval_function_call_from_list(CljList *list, CljPersistentMap *env, EvalState *st, ID op, const EvalContext *ctx) {
-    if (!op) return NULL;
-
-    // Fast path: op already resolved to a callable (common with callsite cache).
-    unsigned char op_tag = TAG(op);
-    if (op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE) {
-        ID result = call_function_with_args_and_context(op, list, env, st, ctx);
-        // Convert SYM_NIL to NULL (nil representation)
-        return (result == SYM_NIL) ? NULL : result;
-    }
-
-    // Handle keywords as functions (Clojure semantics: (:k m) and (:k m default))
-    if (is_keyword(op)) {
-        // Count args (supports 1 or 2 args after the keyword).
-        int argc = 0;
-        for (CljList *node = list_rest_normalized(list); node; node = list_rest_normalized(node)) {
-            argc++;
-        }
-
-        if (argc < 1 || argc > 2) {
-            const char *kw_name = "keyword";
-            if (is_symbol(op)) {
-                CljSymbol *s = as_symbol(op);
-                if (s && s->cname) kw_name = s->cname;
-            }
-            throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                      "Wrong number of args (%d) passed to: %s", argc, kw_name);
-            return NULL;
-        }
-
-        ID target = eval_arg_with_context(list, 1, env, st, ctx);
-        ID default_val = NULL;
-        if (argc == 2) {
-            default_val = eval_arg_with_context(list, 2, env, st, ctx);
-        }
-
-        // nil target: behave like (get nil :k) => nil, (get nil :k default) => default
-        if (!target || !is_map(target)) {
-            // Do not RELEASE(target): eval_arg returns autoreleased values.
-            return default_val;
-        }
-
-        // Distinguish "missing" from "present with nil value" using NOT_FOUND sentinel.
-        ID found = map_get_sentinel((CljPersistentMap*)target, op, NOT_FOUND);
-        // Retain found so return value survives; do not RELEASE(target) - eval_arg returns autoreleased values.
-        if (found && found != NOT_FOUND) RETAIN(found);
-
-        if (found == NOT_FOUND) {
-            return default_val;
-        }
-
-        if (default_val) {
-            RELEASE(default_val);
-        }
-
-        return found;
-    }
-
-    // Resolve symbol to get function
-    if (op_tag == CLJ_SYMBOL) {
-        CljObject *fn = eval_symbol(as_symbol(op), st);
-        if (!fn) {
-            if (op == SYM_NIL) {
-                throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                          "Cannot call nil as a function");
-                return NULL;
-            }
-            return NULL;
-        }
-        if ((ID)fn == (ID)SYM_NIL) {
-            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                      "Cannot call nil as a function");
-            return NULL;
-        }
-
-        unsigned char fn_tag = TAG(fn);
-        if (fn_tag == CLJ_MAP_PERSISTENT) {
-            return eval_map_lookup(list, env, st, ctx, fn);
-        }
-
-        if (fn_tag == CLJ_FUNC || fn_tag == CLJ_CLOSURE) {
-            if (g_eval_arg_depth >= MAX_CALL_STACK_DEPTH) {
-                throw_exception(EXCEPTION_STACK_OVERFLOW,
-                              "Maximum evaluation depth exceeded in nested function calls",
-                              __FILE__, __LINE__, 0);
-                return NULL;
-            }
-            g_eval_arg_depth++;
-            ID result = call_function_with_args_and_context(fn, list, env, st, ctx);
-            g_eval_arg_depth--;
-            // Convert SYM_NIL to NULL (nil representation)
-            return (result == SYM_NIL) ? NULL : result;
-            // Exception propagates automatically - no cleanup needed!
-        }
-
-        if (fn_tag == CLJ_LIST) {
-            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                      "Cannot call list as a function");
-            return NULL;
-        }
-
-        // If fn is still a symbol, it means eval_symbol couldn't resolve it as a function
-        // Check if it's unquote-splice (only valid inside quasiquote)
-        if (fn_tag == CLJ_SYMBOL) {
-            CljSymbol *sym = as_symbol(fn);
-            if (sym == SYM_UNQUOTE_SPLICE) {
-                throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                        "unquote-splice can only be used inside quasiquote");
-                return NULL;
-            }
-            // Check if it's a builtin function that should be handled via native_function_lookup
-            if (is_builtin_function(sym)) {
-                BuiltinFn native_func = native_function_lookup(sym);
-                if (native_func) {
-                    // Extract and evaluate arguments from list
-                    ID args[16];
-                    unsigned int argc = 0;
-                    CljPersistentMap *eval_env = is_map(env) ? env : eval_env_or_ns_mappings(env, st);
-                    LIST_FOR_EACH(LIST_REST(list), arg_expr) {
-                        if (argc >= 16) break;
-                        // Evaluate argument (nil is a valid value, so NULL is acceptable)
-                        ID arg = eval_arg_from_expr_with_context(arg_expr, eval_env, st, ctx);
-                        args[argc++] = arg;  // arg can be NULL (nil)
-                    }
-                    // Call native function
-                    // Note: eval_arg_from_expr_with_context returns AUTORELEASE'd values
-                    // that are valid until the pool drains - no manual RELEASE needed
-                    ID result = native_func(args, argc);
-                    // Return result directly - native functions can return NULL (nil) or SYM_NIL (symbol "nil")
-                    // return nil (NULL) never indicates an error - errors use exceptions
-                    return result;
-                }
-            }
-            const char *sym_name = sym && sym->cname ? sym->cname : "unknown";
-            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call %s as a function", sym_name);
-            return NULL;
-        }
-
-        // Unknown type - should not happen, but throw exception to be safe
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call object of type %d as a function", fn_tag);
-        return NULL;
-    }
-
-    return NULL; // Not a function
-}
-
 static INLINE ID eval_map_lookup_vec(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx, ID map) {
     unsigned int argc = args ? vector_count(args) : 0;
     if (argc != 1) {
@@ -1442,71 +1322,6 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
     return NULL;
 }
 
-static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
-    ID args[16];
-    unsigned int argc = 0;
-    unsigned char fn_tag = TAG(fn);
-    CljPersistentMap *eval_env = is_map(env) ? env : eval_env_or_ns_mappings(env, st);
-
-    // Hot path: Most calls have <= 2 args (fib, +, -, <, etc.)
-    // Avoid a loop in the common case: unroll traversal for 0..2 args.
-    CljList *arg0 = list ? as_list(LIST_REST(list)) : NULL;
-    CljList *arg1 = arg0 ? as_list(LIST_REST(arg0)) : NULL;
-    CljList *arg2 = arg1 ? as_list(LIST_REST(arg1)) : NULL;
-
-    // 1 branch into slowpath: anything unusual (non-map env or >2 args)
-    if (LIKELY(is_map(eval_env) && !arg2)) {
-        if (arg0) {
-            args[0] = eval_arg_from_expr_with_context(LIST_FIRST(arg0), eval_env, st, ctx);
-            argc = 1;
-            if (arg1) {
-                args[1] = eval_arg_from_expr_with_context(LIST_FIRST(arg1), eval_env, st, ctx);
-                argc = 2;
-            }
-        }
-    } else if (is_map(eval_env)) {
-        // Slow path: 3+ args (rare) - keep the generic loop
-        CljList *current = arg0;
-        while (current && argc < 16) {
-            args[argc++] = eval_arg_from_expr_with_context(LIST_FIRST(current), eval_env, st, ctx);
-            current = as_list(LIST_REST(current));
-        }
-    } else {
-        // Fallback: evaluate args even if env isn't a map.
-        CljList *current = arg0;
-        while (current && argc < 16) {
-            args[argc++] = eval_arg_from_expr_with_context(LIST_FIRST(current), eval_env, st, ctx);
-            current = as_list(LIST_REST(current));
-        }
-    }
-
-    CljNamespace *saved_ns = st ? st->current_ns : NULL;
-    CljNamespace *target_ns = NULL;
-    if (fn_tag == CLJ_CLOSURE) {
-        CljFunction *closure_fn = (CljFunction*)fn;
-        target_ns = closure_fn->ns;
-    }
-
-    bool switched_ns = false;
-    if (st && target_ns && st->current_ns != target_ns) {
-        st->current_ns = target_ns;
-        switched_ns = true;
-    }
-
-    // Call function - no TRY/CATCH needed, exception cleanup happens in outer handler
-    ID result = eval_function_call(fn, args, argc, env, st);
-
-    // Restore namespace after successful call (st guaranteed non-NULL if switched_ns)
-    if (switched_ns) {
-        st->current_ns = saved_ns;
-    }
-
-    if (result == SYM_NIL) {
-        return NULL;
-    }
-    return AUTORELEASE(result);
-}
-
 static INLINE ID call_function_with_args_and_context_vec(ID fn, CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     ID argv[16];
     unsigned int argc = 0;
@@ -1546,205 +1361,27 @@ static INLINE ID call_function_with_args_and_context_vec(ID fn, CljPersistentVec
     return AUTORELEASE(result);
 }
 
-// List evaluation (optionally accepts EvalContext for recur support)
+// List evaluation: convert to call-site and dispatch.
+//
+// INEFFICIENT: This path allocates a fresh CljASTCall (and args vector) via list_to_ast_call
+// on every call. Prefer call-sites (CljASTCall) so callers use eval_ast_call directly and
+// avoid this conversion. We still need eval_list for self-modifying or runtime-constructed
+// code where the form is a list (e.g. (eval (read-string "...")) or macros that build forms).
 ID eval_list(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
-    if (!list) {
-        return NULL;
-    }
+    if (!list || list_empty(list)) return NULL;
 
-    CljObject *call_form = is_ast_node(list) ? (CljObject*)list : NULL;
-
-    // Use EvalState from context if provided
     EvalState *effective_st = ctx ? get_eval_state(ctx, st) : st;
-    if (!effective_st) {
-        effective_st = builtin_get_eval_state();
-    }
+    if (!effective_st) effective_st = builtin_get_eval_state();
 
-    // Prefer the current head of env_stack (closures/let frames), fall back to env parameter
     CljPersistentMap *effective_env = ctx ? get_closure_env(ctx) : NULL;
     if (!effective_env) effective_env = env;
     effective_env = eval_env_or_ns_mappings(effective_env, effective_st);
 
-    ID head = LIST_FIRST(list);
-
-    // First element is the operator
-    CljObject *op = head;
-    if (!op) {
-        if (list_empty(list)) return NULL;
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "Cannot call nil as a function");
-        return NULL;
-    }
-
-    // If first element is a list, evaluate it first (for nested calls like ((array-map)))
-    // CRITICAL: Pass ctx to preserve RecurContext
-    if (is_list_like(op)) {
-        op = eval_list(as_list(op), effective_env, effective_st, ctx);
-        if (!op) {
-            // Evaluation returned nil (NULL) - cannot call nil as a function
-            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                      "Cannot call nil as a function");
-            return NULL;
-        }
-        // Check if result is an immediate value (macro expansion may return incorrectly)
-        if (IS_IMMEDIATE(op)) {
-            const char *type_name = is_fixed((CljValue)op) ? "number" : (is_bool((CljValue)op) ? "boolean" : "immediate value");
-            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                      "Cannot call %s as a function (this may indicate a macro expansion error)", type_name);
-            return NULL;
-        }
-    }
-
-
-    // Handle maps as functions (for key lookup) - must be first
-    if (is_map(op)) {
-        return eval_map_lookup(list, effective_env, effective_st, ctx, op);
-    }
-
-#ifdef DEBUG
-    {
-        const char *dbg = getenv("TINYCLJ_DEBUG_DOSEQ");
-        if (dbg && dbg[0] == '1') {
-            unsigned char tag = op ? TAG(op) : 0;
-            const char *type_name = "nil";
-            if (op) type_name = clj_type_name(((CljObject*)op)->type);
-            fprintf(stderr, "[debug] eval_list: list=%p op=%p tag=%u type=%s\n",
-                    (void*)list, (void*)op, (unsigned)tag, type_name);
-            fflush(stderr);
-        }
-    }
-#endif
-
-    // Clojure compatibility: Vectors are seqable, but not callable as functions
-    if (TAG(op) == CLJ_VECTOR_PERSISTENT || TAG(op) == CLJ_VECTOR_TRANSIENT) {
-        // If the operator is a vector, throw a Clojure-compatible error
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "Cannot call Vector as a function");
-        return NULL;
-    }
-
-    // Check if op is a symbol and resolve it
-    unsigned char original_op_tag = op ? TAG(op) : 0;
-
-#ifdef DEBUG
-    if (original_op_tag == CLJ_SYMBOL) {
-        const char *dbg = getenv("TINYCLJ_DEBUG_EVAL_LIST_OP");
-        if (dbg && dbg[0] == '1' && (&g_clojure_core_last_form != NULL) && g_clojure_core_last_form == 210) {
-            fprintf(stderr, "[debug] eval_list: form=%d list=%p op=%p tag=%u\n",
-                    (int)g_clojure_core_last_form, (void*)list, (void*)op, (unsigned)original_op_tag);
-            fflush(stderr);
-        }
-    }
-#endif
-    CljSymbol *original_op_sym = (original_op_tag == CLJ_SYMBOL) ? as_symbol(op) : NULL;
-
-    // === HOT PATH: Callsite cache for cached functions (fib, etc.) ===
-    // Check cache BEFORE all other checks to skip symbol resolution entirely.
-    if (call_form && original_op_sym && g_runtime.resolve_cache_epoch != 0) {
-        ID cached_fn = callsite_get_cached_resolution(call_form, original_op_sym, 
-                                                       g_runtime.resolve_cache_epoch);
-        if (cached_fn) {
-            unsigned char cached_tag = TAG(cached_fn);
-            if (cached_tag == CLJ_FUNC || cached_tag == CLJ_CLOSURE) {
-                // Direct call: skip keyword/symbol resolution.
-                return call_function_with_args_and_context(cached_fn, list, effective_env, effective_st, ctx);
-            }
-        }
-    }
-
-    // Resolve operator symbol
-    // CRITICAL: Pass ctx to allow environment chaining lookup (for functions defined in let)
-    ID resolved_op = resolve_list_operator(op, effective_env, effective_st, ctx, call_form);
-    
-    op = resolved_op;
-
-    // After resolution: check if resolved to arithmetic symbol (e.g., clojure.core/+ → SYM_PLUS)
-    if (is_symbol(op)) {
-        CljSymbol *resolved_sym = (CljSymbol*)op;
-        if (resolved_sym->base.flags & CLJ_FLAG_ARITHMETIC) {
-            ArithOp arith_op = (resolved_sym->base.flags >> CLJ_ARITH_OP_SHIFT) & 0x03;
-            return eval_arithmetic_generic_with_context(list, effective_env, arith_op, effective_st, ctx);
-        }
-    }
-
-    // Tier 3: Sequence operations (inline dispatch)
-    // Note: Only return if result is non-NULL, otherwise continue to try other operations
-    ID (*seq_native)(ID*, unsigned int) = NULL;
-    unsigned int seq_max_args = 0;
-    if (original_op_sym == SYM_FIRST) { seq_native = native_first; seq_max_args = 1; }
-    else if (original_op_sym == SYM_REST) { seq_native = native_rest; seq_max_args = 1; }
-    else if (original_op_sym == SYM_CONS) { seq_native = native_cons; seq_max_args = 2; }
-    else if (original_op_sym == SYM_SEQ) { seq_native = native_seq; seq_max_args = 1; }
-    else if (original_op_sym == SYM_NEXT) { seq_native = native_next; seq_max_args = 1; }
-    else if (original_op_sym == SYM_COUNT) { seq_native = native_count; seq_max_args = 1; }
-    if (seq_native) {
-        ID r = eval_and_call_native_with_context(list, effective_env, seq_native, seq_max_args, ctx);
-        if (r) return r;
-    }
-
-    // Tier 4: String and I/O operations
-    if (original_op_sym == SYM_STR) {
-        // Count arguments by traversing once
-        int argc = 0;
-        LIST_FOR_EACH(LIST_REST(list), elem) {
-            (void)elem;  // unused in count phase
-            if (argc < 16) argc++;
-        }
-
-        ID args_stack[16];
-        ID *args = alloc_obj_array(argc, args_stack);
-        if (!args) return NULL;
-
-        // Traverse and evaluate arguments in one pass (O(n) instead of O(n²))
-        int i = 0;
-        LIST_FOR_EACH(LIST_REST(list), elem) {
-            if (i >= argc) break;
-            args[i] = eval_arg_from_expr_with_context(elem, effective_env, effective_st, ctx);
-            if (!args[i]) {
-                free_obj_array(args, args_stack);
-                return NULL;
-            }
-            i++;
-        }
-
-        ID str_result = native_str(args, argc);
-        free_obj_array(args, args_stack);
-        return str_result;
-    }
-
-    // Try function call
-    // CRITICAL: Only try to call if op is a symbol or function
-    // If op is not a symbol or function, eval_function_call_from_list will return NULL
-    // and we should treat it as an error (not a function call)
-    unsigned char op_tag = op ? TAG(op) : 0;
-    if (op && (op_tag == CLJ_SYMBOL || op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE)) {
-        return eval_function_call_from_list(list, effective_env, effective_st, op, ctx);
-    }
-
-    // Check if op is an immediate value (macro expansion may return incorrectly)
-    if (IS_IMMEDIATE(op)) {
-        const char *type_name = is_fixed((CljValue)op) ? "number" : (is_bool((CljValue)op) ? "boolean" : "immediate value");
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "Cannot call %s as a function (this may indicate a macro expansion error)", type_name);
-        return NULL;
-    }
-
-    // Error: op is a list (should have been evaluated earlier)
-    if (is_list_type(op_tag)) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "Cannot call list as a function");
-        return NULL;
-    }
-
-    // Error: first element is not a function and not a symbol
-    if (!op) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "Cannot call nil as a function");
-        return NULL;
-    }
-    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                              "Cannot call %s as a function", clj_type_name(op->type));
-    return NULL;
+    CljASTCall *call = list_to_ast_call(list);
+    if (!call) return NULL;
+    ID result = eval_ast_call(call, effective_env, effective_st, ctx);
+    RELEASE(call);
+    return result;
 }
 
 static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {

@@ -17,6 +17,7 @@
 #include "hashset.h"
 #include "symbol.h"
 #include "memory.h"    // For subjective_c_register_release_fn
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -32,12 +33,10 @@ CljLazySeq* make_lazy_seq(ID thunk) {
 
     lazy->base.type = CLJ_LAZY_SEQ;
     lazy->base.flags = 0;
-
-    // NOT_FOUND indicates "not realized".
     lazy->first = NOT_FOUND;
     lazy->thunk = RETAIN(thunk);
     lazy->cached_rest = NOT_FOUND;
-
+    lazy->thunk_state = NULL;
     return lazy;
 }
 
@@ -81,19 +80,27 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
     CljNamespace *saved_ns = st->current_ns;
     CLJ_ASSERT(lazy->thunk && !IS_IMMEDIATE(lazy->thunk) && 
                (TAG(lazy->thunk) == CLJ_CLOSURE || TAG(lazy->thunk) == CLJ_FUNC));
-    if (TAG(lazy->thunk) == CLJ_CLOSURE) {
-        CljFunction *thunk_fn = (CljFunction*)lazy->thunk;
-        if (thunk_fn->ns) {
-            st->current_ns = thunk_fn->ns;
-        }
-    }
-
-    ID seq_val = eval_function_call(lazy->thunk, NULL, 0, NULL, st);
-
-    st->current_ns = saved_ns;
-
+    ID seq_val;
     ID first_val = NULL;
     ID rest_val = NULL;
+    if (lazy->thunk_state && is_persistent_map(lazy->thunk_state)) {
+        ID state = lazy->thunk_state;
+        if (TAG(lazy->thunk) == CLJ_CLOSURE) {
+            CljFunction *thunk_fn = (CljFunction*)lazy->thunk;
+            if (thunk_fn->ns) st->current_ns = thunk_fn->ns;
+        }
+        seq_val = eval_function_call(lazy->thunk, &state, 1, NULL, st);
+        st->current_ns = saved_ns;
+        goto realized;
+    }
+    if (TAG(lazy->thunk) == CLJ_CLOSURE) {
+        CljFunction *thunk_fn = (CljFunction*)lazy->thunk;
+        if (thunk_fn->ns) st->current_ns = thunk_fn->ns;
+    }
+    seq_val = eval_function_call(lazy->thunk, NULL, 0, NULL, st);  // 0-arity (e.g. lazy-seq*)
+    st->current_ns = saved_ns;
+realized:
+    ;
 
     if (seq_val) {
         // Normalize through seq/first/rest to preserve existing semantics
@@ -105,10 +112,9 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
             first_val = native_first(one_arg, 1);
             rest_val = native_rest(one_arg, 1);
 
-            // Important: if the sequence is non-empty but its first element is
-            // nil, native_first returns NULL. Store SYM_NIL internally so we
-            // can distinguish (nil) from an empty sequence.
-            if (!first_val) {
+            // Empty sequence: first and rest both nil -> leave first_val/rest_val NULL.
+            // Sequence (nil . rest): first is nil but rest non-nil -> store SYM_NIL so we have one element.
+            if (!first_val && rest_val) {
                 first_val = SYM_NIL;
             }
         }
@@ -793,6 +799,7 @@ static void release_lazy_seq(CljObject *v) {
     CljLazySeq *lazy_seq = (CljLazySeq*)v;
     if (lazy_seq) {
         RELEASE(lazy_seq->thunk);
+        RELEASE(lazy_seq->thunk_state);
         RELEASE(lazy_seq->first);
         RELEASE(lazy_seq->cached_rest);
     }

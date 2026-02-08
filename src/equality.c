@@ -53,7 +53,6 @@ bool clj_equal_full(ID a, ID b) {
     if (a_seq && b_seq) {
         SeqIterator ia, ib;
         if (!seq_iter_init(&ia, a_obj) || !seq_iter_init(&ib, b_obj)) {
-            // If either side isn't seqable/initializable, fall back to false.
             return false;
         }
         while (!seq_iter_empty(&ia) && !seq_iter_empty(&ib)) {

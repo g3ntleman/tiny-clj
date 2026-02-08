@@ -4,7 +4,7 @@ project(tiny-clj)
 # Feature flags (compile-time): all are positive *_ENABLED macros (0/1)
 option(META_ENABLED "Enable metadata support" OFF)
 option(MEMORY_PROFILING_ENABLED "Enable memory profiling hooks" ON)
-option(ZOMBIE_ENABLED "Enable zombie mode" OFF)
+option(ZOMBIE_ENABLED "Enable zombie mode (for memory-crash debugging)" ON)
 
 if(META_ENABLED)
     set(META_ENABLED_VALUE 1)
@@ -555,13 +555,7 @@ target_compile_definitions(subjective-c PRIVATE
 # that are called via constructor attributes
 apply_common_settings(unit-tests)
 
-# Give profiling builds a distinct binary name to avoid overwriting the default
-# unit-tests executable (all executables share the same runtime output dir).
-if(MEMORY_PROFILING_ENABLED)
-    set_target_properties(unit-tests PROPERTIES OUTPUT_NAME "unit-tests-prof")
-else()
-    set_target_properties(unit-tests PROPERTIES OUTPUT_NAME "unit-tests")
-endif()
+set_target_properties(unit-tests PROPERTIES OUTPUT_NAME "unit-tests")
 
 # Use release-ish flags for faster runs unless caller overrides.
 target_compile_options(unit-tests PRIVATE

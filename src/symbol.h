@@ -206,6 +206,7 @@ extern CljSymbol *SYM_NS_STAR;
 extern CljSymbol *SYM_CONCAT_X;
 extern CljSymbol *SYM_CONCAT_Y;
 extern CljSymbol *SYM_CONCAT_THUNK_FN;
+extern CljSymbol *SYM_THUNK_STATE;
 extern CljSymbol *SYM_MAP_FN;
 extern CljSymbol *SYM_MAP_SEQS;
 extern CljSymbol *SYM_MAP_THUNK_FN;

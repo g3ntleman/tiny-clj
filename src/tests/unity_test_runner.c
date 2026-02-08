@@ -144,7 +144,8 @@ void setUp(void) {
             g_heap_check_enabled = true;
             g_heap_growth_limit_bytes = limit;
         } else if (g_heap_check_enabled) {
-            g_heap_growth_limit_bytes = 0;
+            // Shared tests with UNSPECIFIED: allow small growth (lazy/concat etc.)
+            g_heap_growth_limit_bytes = 2048;
         }
     }
     
@@ -533,14 +534,21 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
             g_single_test_mode = true;
         }
         
-        // One-line output for pattern matching
-        for (size_t i = 0; i < test_count; i++) {
-            if (subjective_c_test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern) ||
-                subjective_c_test_name_matches_pattern(all_tests[i].name, test_name_or_pattern)) {
-                set_unity_test_file_info(&all_tests[i]);
-                run_test_with_exception_handling(&all_tests[i]);
+        // One-line output for pattern matching (setUp/tearDown so clojure.core is loaded)
+        TRY {
+            setUp();
+            for (size_t i = 0; i < test_count; i++) {
+                if (subjective_c_test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern) ||
+                    subjective_c_test_name_matches_pattern(all_tests[i].name, test_name_or_pattern)) {
+                    set_unity_test_file_info(&all_tests[i]);
+                    run_test_with_exception_handling(&all_tests[i]);
+                }
             }
-        }
+            tearDown();
+        } CATCH(ex) {
+            if (ex) test_fprintf(stderr, "Exception in setUp/tearDown: %s - %s\n", ex->type, ex->message);
+            tearDown();
+        } END_TRY
     } else {
         // Exact name match (existing logic)
         SubjectiveCTestEntry *test = NULL;
@@ -555,8 +563,15 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
         
         if (test) {
             g_single_test_mode = true;
-            set_unity_test_file_info(test);
-            run_test_with_exception_handling(test);
+            TRY {
+                setUp();
+                set_unity_test_file_info(test);
+                run_test_with_exception_handling(test);
+                tearDown();
+            } CATCH(ex) {
+                if (ex) test_fprintf(stderr, "Exception in setUp/tearDown: %s - %s\n", ex->type, ex->message);
+                tearDown();
+            } END_TRY
             // Summary will be printed at end of main()
         } else {
             // Test not found - fail without noisy output.
