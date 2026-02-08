@@ -47,8 +47,8 @@ TEST(test_byte_array_external_calls_finalizer_on_release)
     TEST_ASSERT_FALSE(freed);
 
     // Sanity: external metadata is stored on the object.
-    CljByteArrayExternal *ext = (CljByteArrayExternal*)arr;
-    TEST_ASSERT_TRUE((ext->base_arr.base.flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) != 0);
+    CljByteArrayView *ext = (CljByteArrayView*)arr;
+    TEST_ASSERT_TRUE((ext->base_arr.base.flags & CLJ_FLAG_EXTERNAL_DATA) != 0);
     TEST_ASSERT_EQUAL_PTR(&freed, ext->external_ctx);
     TEST_ASSERT_EQUAL_PTR(external_free_mark_and_free, ext->external_free_fn);
 
@@ -64,4 +64,3 @@ TEST(test_byte_array_external_calls_finalizer_on_release)
     // Clean up payload explicitly (external owner responsibility).
     CLJ_FREE(payload);
 }
-

@@ -13,6 +13,10 @@ extern struct CljSymbol *SYM_KW_SIZE, *SYM_KW_CHUNKS, *SYM_KW_PATH, *SYM_KW_META
 #include "tdb_blockdev.h"
 
 #include <string.h>
+#if defined(ESP_PLATFORM)
+#include <esp_partition.h>
+#include <esp_err.h>
+#endif
 
 #define FS_APP_MAX_CHUNK_SIZE 4096u
 // Internal storage chunk size. This is NOT an app-facing limit.
@@ -210,6 +214,60 @@ static tdb_status_t fs_ram_erase(void* ctx, uint32_t addr, size_t len) {
     return TDB_OK;
 }
 
+#if defined(ESP_PLATFORM)
+#define TINYCLJ_TINYDB_PARTITION_LABEL "tinydb"
+#define TINYCLJ_FLASH_PROG_GRANULARITY 4u
+#define TINYCLJ_FLASH_ERASE_GRANULARITY 4096u
+
+typedef struct {
+    const esp_partition_t* part;
+} FsFlashBdev;
+
+static tdb_status_t fs_flash_read(void* ctx, uint32_t addr, void* out, size_t len) {
+    FsFlashBdev* f = (FsFlashBdev*)ctx;
+    if (!f || !f->part || (!out && len != 0)) return TDB_ERR_INVALID_ARG;
+    if (len == 0) return TDB_OK;
+    return (esp_partition_read(f->part, addr, out, len) == ESP_OK) ? TDB_OK : TDB_ERR_IO;
+}
+
+static tdb_status_t fs_flash_prog(void* ctx, uint32_t addr, const void* data, size_t len) {
+    FsFlashBdev* f = (FsFlashBdev*)ctx;
+    if (!f || !f->part || (!data && len != 0)) return TDB_ERR_INVALID_ARG;
+    if (len == 0) return TDB_OK;
+
+    const uint8_t* in = (const uint8_t*)data;
+    uint32_t start = addr;
+    uint32_t end = addr + (uint32_t)len;
+    uint32_t aligned_start = start & ~(TINYCLJ_FLASH_PROG_GRANULARITY - 1u);
+    uint32_t aligned_end = (end + (TINYCLJ_FLASH_PROG_GRANULARITY - 1u)) &
+                           ~(TINYCLJ_FLASH_PROG_GRANULARITY - 1u);
+
+    for (uint32_t off = aligned_start; off < aligned_end; off += TINYCLJ_FLASH_PROG_GRANULARITY) {
+        uint8_t buf[TINYCLJ_FLASH_PROG_GRANULARITY];
+        if (esp_partition_read(f->part, off, buf, sizeof(buf)) != ESP_OK) {
+            return TDB_ERR_IO;
+        }
+        for (uint32_t i = 0; i < TINYCLJ_FLASH_PROG_GRANULARITY; i++) {
+            uint32_t pos = off + i;
+            if (pos >= start && pos < end) {
+                buf[i] = in[pos - start];
+            }
+        }
+        if (esp_partition_write(f->part, off, buf, sizeof(buf)) != ESP_OK) {
+            return TDB_ERR_IO;
+        }
+    }
+    return TDB_OK;
+}
+
+static tdb_status_t fs_flash_erase(void* ctx, uint32_t addr, size_t len) {
+    FsFlashBdev* f = (FsFlashBdev*)ctx;
+    if (!f || !f->part) return TDB_ERR_INVALID_ARG;
+    if (len == 0) return TDB_OK;
+    return (esp_partition_erase_range(f->part, addr, len) == ESP_OK) ? TDB_OK : TDB_ERR_IO;
+}
+#endif
+
 static bool fs_list_dir_key_is_direct_child(const char* dir_path,
                                             size_t prefix_len,
                                             const void* key, size_t key_len,
@@ -241,7 +299,11 @@ static bool fs_list_dir_key_is_direct_child(const char* dir_path,
 struct FsKvStore {
     tdb_kv_t* db;
     tdb_blockdev_t bdev;
+#if defined(ESP_PLATFORM)
+    FsFlashBdev flash;
+#else
     FsRamBdev ram;
+#endif
     FsStreamStats stats;
 };
 
@@ -252,6 +314,11 @@ FsKvStore *fs_global_store(void)
     if (!g_fs_global_store) {
         g_fs_global_store = fs_kv_store_new();
     }
+    return g_fs_global_store;
+}
+
+FsKvStore *fs_global_store_if_initialized(void)
+{
     return g_fs_global_store;
 }
 
@@ -276,6 +343,24 @@ FsKvStore *fs_kv_store_new(void)
     }
     memset(st, 0, sizeof(*st));
 
+#if defined(ESP_PLATFORM)
+    const esp_partition_t* part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, TINYCLJ_TINYDB_PARTITION_LABEL);
+    if (!part || part->size == 0) {
+        CLJ_FREE(st);
+        return NULL;
+    }
+
+    st->flash.part = part;
+    st->bdev.ctx = &st->flash;
+    st->bdev.ops.read = fs_flash_read;
+    st->bdev.ops.prog = fs_flash_prog;
+    st->bdev.ops.erase = fs_flash_erase;
+    st->bdev.geom.total_size_bytes = part->size;
+    st->bdev.geom.read_granularity = 1;
+    st->bdev.geom.prog_granularity = 1;
+    st->bdev.geom.erase_granularity = TINYCLJ_FLASH_ERASE_GRANULARITY;
+#else
     // Host default: RAM-backed block device for tiny-db.
     const size_t ram_bytes = 128 * 1024;
     st->ram.buf = (uint8_t*)CLJ_MALLOC(ram_bytes);
@@ -297,11 +382,16 @@ FsKvStore *fs_kv_store_new(void)
     // To reliably fit 4KB chunk values inline (no overflow pages), use a larger logical erase
     // granularity than the chunk size.
     st->bdev.geom.erase_granularity = 16384;
+#endif
 
     tdb_status_t fst = tdb_kv_open(&st->db, &st->bdev, NULL);
     if (fst != TDB_OK) {
+#if defined(ESP_PLATFORM)
+    CLJ_FREE(st);
+#else
     CLJ_FREE(st->ram.buf);
     CLJ_FREE(st);
+#endif
         return NULL;
     }
     return st;
@@ -807,9 +897,11 @@ void fs_kv_store_free(FsKvStore *st)
         tdb_kv_close(st->db);
         st->db = NULL;
     }
+#if !defined(ESP_PLATFORM)
     CLJ_FREE(st->ram.buf);
     st->ram.buf = NULL;
     st->ram.len = 0;
+#endif
     CLJ_FREE(st);
 }
 
@@ -1127,4 +1219,3 @@ ID fs_list_dir_batch(FsKvStore *st,
     tdb_kv_cursor_close(cur);
     return AUTORELEASE((ID)vec);
 }
-

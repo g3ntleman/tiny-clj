@@ -13,6 +13,7 @@
 #include "symbol.h"
 #include "to_string.h"
 #include "value.h"
+#include "source_resolver.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -71,9 +72,13 @@ ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc)
     CHECK_ARITY(argc, 1, "tinyclj.fs/slurp-bytes");
     const char *path = require_c_string_arg(args[0], "tinyclj.fs/slurp-bytes", "a path string");
     if (!path) return NULL;
-    FsKvStore *st = fs_global_store();
-    if (!st) return NULL;
-    return fs_read_bytes(st, path);
+    ID bytes = resolve_path_to_bytes(path);
+    if (!bytes) {
+        throw_exception_formatted(EXCEPTION_FILE_NOT_FOUND, __FILE__, __LINE__, 0,
+                                  "Resource not found: %s", path);
+        return NULL;
+    }
+    return bytes;
 }
 
 ID native_tinyclj_fs_stat(ID *args, unsigned int argc)

@@ -56,6 +56,9 @@ typedef struct TinyClJRuntime {
     
     // Meta Registry (HashMap for O(1) lookup)
     CljHashMap *meta_registry;
+
+    // Embedded source map (path -> byte-array view)
+    CljPersistentMap *embedded_source_map;
     
     // Autorelease Pool Stack
     CljTransientVector *pool_stack;  // transient vector for autorelease pools

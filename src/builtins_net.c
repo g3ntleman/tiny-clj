@@ -80,12 +80,12 @@ static NetCtx* require_net_ctx(ID arg, uint8_t expected_type, const char *fn_nam
         return NULL;
     }
     CljByteArray *ba = as_byte_array(arg);
-    if (!ba || (ba->base.flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) == 0) {
+    if (!ba || (ba->base.flags & CLJ_FLAG_EXTERNAL_DATA) == 0) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "%s expects a native %s handle (external byte-array)", fn_name, type_name); return NULL;
         return NULL;
     }
-    CljByteArrayExternal *ext = (CljByteArrayExternal*)ba;
+    CljByteArrayView *ext = (CljByteArrayView*)ba;
     NetCtx *ctx = (NetCtx*)ext->external_ctx;
     if (!ctx) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,

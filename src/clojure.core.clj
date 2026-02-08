@@ -754,10 +754,9 @@ R"CLOJURE(
 (defn swap! [atom f & args] :native)
 
 ; ============================================================================
-; File I/O Functions (Native, non-ESP32)
+; File I/O Functions (Native)
 ; ============================================================================
-; Note: slurp and spit are only available on non-ESP32 builds
-; They are registered conditionally in builtins.c
+; Note: slurp resolves embedded sources on ESP32. spit is a no-op on ESP32.
 ^#^{:doc "Reads the entire contents of filename and returns it as a string."}
 (defn slurp [filename] :native)
 ^#^{:doc "Writes content (and optional more strings) to filename, overwriting existing data."}

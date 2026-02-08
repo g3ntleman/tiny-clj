@@ -6,7 +6,6 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <stdlib.h>
-#include <string.h>
 #include <errno.h>
 #include "mini_format.h"
 
@@ -58,6 +57,8 @@ void exception_print_native_backtrace(void);
 #else
     #define CLJ_ASSERT(expr) ((void)0)
 #endif
+
+#include <string.h>
 
 #ifndef CLJ_UNUSED
 #define CLJ_UNUSED(x) ((void)(x))

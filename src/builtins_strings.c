@@ -23,6 +23,34 @@
 #include "symbol.h"
 #include "mini_format.h"
 
+static bool format_ensure_capacity(char **buffer, size_t *buf_size, char **out, size_t needed) {
+    size_t used = (size_t)(*out - *buffer);
+    size_t required = used + needed + 1; // +1 for null terminator
+    if (required <= *buf_size) return true;
+
+    size_t new_size = *buf_size ? *buf_size : 64;
+    while (new_size < required) {
+        size_t next = new_size * 2;
+        if (next <= new_size) {
+            new_size = required;
+            break;
+        }
+        new_size = next;
+    }
+
+    char *new_buf = CLJ_REALLOC(*buffer, new_size);
+    if (!new_buf) {
+        throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
+                       __FILE__, __LINE__, 0);
+        return false;
+    }
+
+    *buffer = new_buf;
+    *buf_size = new_size;
+    *out = new_buf + used;
+    return true;
+}
+
 // ============================================================================
 // STRING FUNCTIONS
 // ============================================================================
@@ -54,18 +82,28 @@ ID native_str(ID *args, unsigned int argc) {
     // Allocate CljString buffer directly
     CljString *result = make_string_buffer(total_len);
     char *buffer = result->data;
+    size_t offset = 0;
 
     // Concatenate all strings
     for (unsigned int i = 0; i < argc; i++) {
         if (args[i] && TAG(args[i]) == CLJ_STRING) {
-            strcat(buffer, string_data(args[i]));
+            size_t len = string_length(args[i]);
+            if (len > 0) {
+                memcpy(buffer + offset, string_data(args[i]), len);
+                offset += len;
+            }
         } else {
             CljString *s = to_string(args[i]);
             if (s) {
-                strcat(buffer, string_data(s));
+                size_t len = string_length(s);
+                if (len > 0) {
+                    memcpy(buffer + offset, string_data(s), len);
+                    offset += len;
+                }
             }
         }
     }
+    buffer[offset] = '\0';
 
     return (CljObject*)result;
 }
@@ -466,6 +504,8 @@ ID native_format(ID *args, unsigned int argc) {
 
     CljString *fmt_str = (CljString*)args[0];
     if (!fmt_str || TAG(args[0]) != CLJ_STRING) return NULL;
+    const char *fmt_data = string_data(fmt_str);
+    size_t fmt_len = string_length(fmt_str);
 
     // Allocate buffer for formatted string (start with reasonable size)
     size_t buf_size = 256;
@@ -479,43 +519,61 @@ ID native_format(ID *args, unsigned int argc) {
     // Format arguments based on format string
     if (argc == 1) {
         // No arguments, just copy format string
-        mini_snprintf(buffer, buf_size, "%s", fmt_str->data);
+        char *out = buffer;
+        if (!format_ensure_capacity(&buffer, &buf_size, &out, fmt_len)) {
+            CLJ_FREE(buffer);
+            return NULL;
+        }
+        memcpy(out, fmt_data, fmt_len);
+        out[fmt_len] = '\0';
     } else {
         // We need to handle variadic arguments
         // For simplicity, support common format specifiers: %d, %f, %s
         // This is a simplified version - full implementation would need to parse format string
-        const char *fmt = fmt_str->data;
-        const char *p = fmt;
+        size_t idx = 0;
         char *out = buffer;
-        size_t remaining = buf_size - 1;
         int arg_idx = 1;
 
-        while (*p && arg_idx < (int)argc && remaining > 0) {
-            if (*p == '%' && *(p + 1) != '\0') {
-                p++; // Skip '%'
-                char spec = *p++;
+        while (idx < fmt_len) {
+            if (fmt_data[idx] == '%' && (idx + 1) < fmt_len) {
+                char spec = fmt_data[idx + 1];
+                if (spec != '%' && arg_idx >= (int)argc) {
+                    if (!format_ensure_capacity(&buffer, &buf_size, &out, 2)) {
+                        CLJ_FREE(buffer);
+                        return NULL;
+                    }
+                    *out++ = '%';
+                    *out++ = spec;
+                    idx += 2;
+                    continue;
+                }
+                idx += 2; // Consume '%' + spec
 
                 switch (spec) {
                     case 'd': {
                         // Integer
                         int val = AS_FIXNUM(args[arg_idx]);
-                        int n = mini_snprintf(out, remaining, "%d", val);
-                        if (n < 0 || n >= (int)remaining) {
-                            // Buffer too small, reallocate
-                            size_t used = out - buffer;
-                            buf_size *= 2;
-                            buffer = CLJ_REALLOC(buffer, buf_size);
-                            if (!buffer) {
-                                throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
+                        int n = 0;
+                        while (true) {
+                            size_t used = (size_t)(out - buffer);
+                            size_t avail = buf_size - used;
+                            n = mini_snprintf(out, avail, "%d", val);
+                            if (n < 0) {
+                                throw_exception(EXCEPTION_RUNTIME, "format: failed to format integer",
                                                __FILE__, __LINE__, 0);
+                                CLJ_FREE(buffer);
                                 return NULL;
                             }
-                            out = buffer + used;
-                            remaining = buf_size - used - 1;
-                            n = mini_snprintf(out, remaining, "%d", val);
+                            if ((size_t)n < avail) {
+                                out += n;
+                                break;
+                            }
+                            if (!format_ensure_capacity(&buffer, &buf_size, &out,
+                                                       (n > 0) ? (size_t)n : avail)) {
+                                CLJ_FREE(buffer);
+                                return NULL;
+                            }
                         }
-                        out += n;
-                        remaining -= n;
                         arg_idx++;
                         break;
                     }
@@ -524,87 +582,76 @@ ID native_format(ID *args, unsigned int argc) {
                         float val = (TAG(args[arg_idx]) == CLJ_INT) ?
                                    (float)AS_FIXNUM(args[arg_idx]) :
                                    as_fixed((CljValue)args[arg_idx]);
-                        int n = mini_snprintf(out, remaining, "%f", val);
-                        if (n < 0 || n >= (int)remaining) {
-                            size_t used = out - buffer;
-                            buf_size *= 2;
-                            buffer = CLJ_REALLOC(buffer, buf_size);
-                            if (!buffer) {
-                                throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
+                        int n = 0;
+                        while (true) {
+                            size_t used = (size_t)(out - buffer);
+                            size_t avail = buf_size - used;
+                            n = mini_snprintf(out, avail, "%f", val);
+                            if (n < 0) {
+                                throw_exception(EXCEPTION_RUNTIME, "format: failed to format float",
                                                __FILE__, __LINE__, 0);
+                                CLJ_FREE(buffer);
                                 return NULL;
                             }
-                            out = buffer + used;
-                            remaining = buf_size - used - 1;
-                            n = mini_snprintf(out, remaining, "%f", val);
+                            if ((size_t)n < avail) {
+                                out += n;
+                                break;
+                            }
+                            if (!format_ensure_capacity(&buffer, &buf_size, &out,
+                                                       (n > 0) ? (size_t)n : avail)) {
+                                CLJ_FREE(buffer);
+                                return NULL;
+                            }
                         }
-                        out += n;
-                        remaining -= n;
                         arg_idx++;
                         break;
                     }
                     case 's': {
                         // String
-                        CljString *str = (TAG(args[arg_idx]) == CLJ_STRING) ? (CljString*)args[arg_idx] : NULL;
-                        if (!str) {
-                            // Try to convert to string
-                            CljString *str_repr = print_str(args[arg_idx]);
-                            if (str_repr) {
-                                int n = mini_snprintf(out, remaining, "%s", string_data(str_repr));
-                                if (n < 0 || n >= (int)remaining) {
-                                    size_t used = out - buffer;
-                                    buf_size *= 2;
-                                    buffer = CLJ_REALLOC(buffer, buf_size);
-                                    if (!buffer) {
-                                        throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
-                                                       __FILE__, __LINE__, 0);
-                                        return NULL;
-                                    }
-                                    out = buffer + used;
-                                    remaining = buf_size - used - 1;
-                                    n = mini_snprintf(out, remaining, "%s", string_data(str_repr));
-                                }
-                                out += n;
-                                remaining -= n;
+                        CljString *str = (TAG(args[arg_idx]) == CLJ_STRING)
+                            ? (CljString*)args[arg_idx]
+                            : print_str(args[arg_idx]);
+                        if (str) {
+                            const char *sdata = string_data(str);
+                            size_t slen = string_length(str);
+                            if (!format_ensure_capacity(&buffer, &buf_size, &out, slen)) {
+                                CLJ_FREE(buffer);
+                                return NULL;
                             }
-                        } else {
-                            int n = mini_snprintf(out, remaining, "%s", str->data);
-                            if (n < 0 || n >= (int)remaining) {
-                                size_t used = out - buffer;
-                                buf_size *= 2;
-                                buffer = CLJ_REALLOC(buffer, buf_size);
-                                if (!buffer) {
-                                    throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
-                                                   __FILE__, __LINE__, 0);
-                                    return NULL;
-                                }
-                                out = buffer + used;
-                                remaining = buf_size - used - 1;
-                                n = mini_snprintf(out, remaining, "%s", str->data);
+                            if (slen > 0) {
+                                memcpy(out, sdata, slen);
+                                out += slen;
                             }
-                            out += n;
-                            remaining -= n;
                         }
                         arg_idx++;
                         break;
                     }
                     case '%': {
                         // Literal %
+                        if (!format_ensure_capacity(&buffer, &buf_size, &out, 1)) {
+                            CLJ_FREE(buffer);
+                            return NULL;
+                        }
                         *out++ = '%';
-                        remaining--;
                         break;
                     }
                     default: {
                         // Unknown specifier, copy as-is
+                        if (!format_ensure_capacity(&buffer, &buf_size, &out, 2)) {
+                            CLJ_FREE(buffer);
+                            return NULL;
+                        }
                         *out++ = '%';
                         *out++ = spec;
-                        remaining -= 2;
                         break;
                     }
                 }
             } else {
-                *out++ = *p++;
-                remaining--;
+                if (!format_ensure_capacity(&buffer, &buf_size, &out, 1)) {
+                    CLJ_FREE(buffer);
+                    return NULL;
+                }
+                *out++ = fmt_data[idx++];
             }
         }
         *out = '\0';
@@ -684,4 +731,3 @@ BuiltinFn builtins_strings_native_function_lookup(CljSymbol *symbol) {
 
     return NULL;
 }
-

@@ -256,7 +256,7 @@ EPG* __bt_search_insert(BTREE* t, const DBT* key, size_t insert_nbytes, int* exa
  */
 static int bt_snext(BTREE* t, PAGE* h, const DBT* key, int* exactp) {
     EPG e;
-    PAGE* tp;
+    PAGE* tp = NULL;
     pgno_t pg;
 
     /* Skip until reach the end of the tree or a key. */
@@ -274,7 +274,7 @@ static int bt_snext(BTREE* t, PAGE* h, const DBT* key, int* exactp) {
      * The key is either an exact match, or not as good as
      * the one we already have.
      */
-    if (pg != P_INVALID) {
+    if (pg != P_INVALID && tp) {
         e.page = tp;
         e.index = NEXTINDEX(tp) - 1;
         if (__bt_cmp(t, key, &e) == 0) {
@@ -301,7 +301,7 @@ static int bt_snext(BTREE* t, PAGE* h, const DBT* key, int* exactp) {
  */
 static int bt_sprev(BTREE* t, PAGE* h, const DBT* key, int* exactp) {
     EPG e;
-    PAGE* tp;
+    PAGE* tp = NULL;
     pgno_t pg;
 
     /* Skip until reach the beginning of the tree or a key. */
@@ -319,7 +319,7 @@ static int bt_sprev(BTREE* t, PAGE* h, const DBT* key, int* exactp) {
      * The key is either an exact match, or not as good as
      * the one we already have.
      */
-    if (pg != P_INVALID) {
+    if (pg != P_INVALID && tp) {
         e.page = tp;
         e.index = NEXTINDEX(tp) - 1;
         if (__bt_cmp(t, key, &e) == 0) {

@@ -379,10 +379,8 @@ extern StaticSymbolData sym_atom_data;
 extern StaticSymbolData sym_deref_data;
 extern StaticSymbolData sym_reset_bang_data;
 extern StaticSymbolData sym_swap_bang_data;
-#ifndef ESP32_BUILD
 extern StaticSymbolData sym_slurp_data;
 extern StaticSymbolData sym_spit_data;
-#endif
 
 // Extended Symbol for Special Forms with embedded evaluation function
 typedef struct CljSpecialSymbol {

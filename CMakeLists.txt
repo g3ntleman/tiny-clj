@@ -190,6 +190,8 @@ list(APPEND SOURCES
     src/ast.c
     src/atom.c
     src/file_utils.c
+    src/source_resolver.c
+    src/embedded_sources.c
     src/debug.c
     src/seq.c
     src/error_messages.c
@@ -275,6 +277,8 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/to_string.c
     src/macro.c
     src/file_utils.c
+    src/source_resolver.c
+    src/embedded_sources.c
     src/fs_layer.c
 )
 # ESP32-only sources (must not be part of host targets)
@@ -322,6 +326,8 @@ target_link_libraries(tiny-clj-esp32-repl PRIVATE subjective-c)
 target_link_libraries(tiny-clj-esp32-repl PRIVATE tiny-db)
 target_include_directories(tiny-clj-esp32-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR}
+    ${CMAKE_SOURCE_DIR}/external/esp-idf/components/esp_driver_gpio/include
+    ${CMAKE_SOURCE_DIR}/external/esp-idf/components/esp_common/include
 )
 target_compile_definitions(tiny-clj-esp32-repl PRIVATE
     ESP32_BUILD
@@ -462,6 +468,7 @@ add_executable(unit-tests
     src/tests/test_recursive_resolution.c
     src/tests/test_repl.c
     src/tests/test_file_io.c
+    src/tests/test_embedded_sources.c
     src/tests/test_rrd_scripts.c
     src/tests/test_atom.c
     src/tests/test_atom_watch.c

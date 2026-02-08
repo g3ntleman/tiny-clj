@@ -17,6 +17,7 @@
 #include "symbol.h"         // For init_special_symbols()
 #include "builtins.h"       // For builtins_reset_cached_funcs()
 #include "eval_special_forms.h" // For eval_special_forms_reset_caches()
+#include "embedded_sources.h"
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
 #include "to_string.h"      // For to_string(), pr_str; strings.h for string_data
@@ -31,6 +32,7 @@ TinyClJRuntime g_runtime = {
     .resolve_cache_epoch = 0,
     .symbol_table = NULL,
     .meta_registry = NULL,
+    .embedded_source_map = NULL,
     .pool_stack = NULL,
     .builtins_registered = false,
     .task_queue = NULL,
@@ -138,6 +140,9 @@ void runtime_init(TinyClJRuntime *runtime) {
     // This must happen AFTER callbacks are set, because the symbol table is a HashMap that
     // depends on clj_hash()/clj_equal() for correct behavior.
     init_special_symbols();
+
+    // Initialize embedded source map once (read-only, retained for runtime lifetime).
+    embedded_source_map_init();
 }
 
 void runtime_reset(TinyClJRuntime *runtime) {
@@ -158,6 +163,7 @@ void runtime_reset(TinyClJRuntime *runtime) {
     runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
     ASSIGN(runtime->pool_stack, NULL);
     ASSIGN(runtime->meta_registry, NULL);
+    // embedded_source_map is read-only and kept across resets
     
     runtime->builtins_registered = false;
     runtime->timer_id_counter = 0;

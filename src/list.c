@@ -90,7 +90,7 @@ CljList* as_list_checked(ID obj) {
             type_name);
     printf("[STACKTRACE] as_list failed at %s:%d - obj=%p, type=%d (%s)\n", __FILE__, __LINE__, obj, ((CljObject*)obj)->type, type_name);
     // Print stacktrace
-    #ifdef __GNUC__
+    #if defined(__GNUC__) && !defined(ESP32_BUILD)
     void *array[10];
     size_t size = backtrace(array, 10);
     char **strings = backtrace_symbols(array, size);

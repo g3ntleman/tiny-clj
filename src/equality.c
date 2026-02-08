@@ -95,13 +95,14 @@ bool clj_equal_full(ID a, ID b) {
             CljString *str_a = (CljString*)a;
             CljString *str_b = (CljString*)b;
 
-            // Special case: empty string singleton comparison
-            if (str_a == string_empty_singleton && str_b == string_empty_singleton) {
-                return true;
-            }
+            uint16_t len_a = string_length((ID)str_a);
+            uint16_t len_b = string_length((ID)str_b);
+            if (len_a != len_b) return false;
 
-            // Compare string data directly
-            return strcmp(str_a->data, str_b->data) == 0;
+            const char *data_a = string_data((ID)str_a);
+            const char *data_b = string_data((ID)str_b);
+            if (len_a == 0) return true;
+            return memcmp(data_a, data_b, len_a) == 0;
         }
 
         case CLJ_VECTOR_PERSISTENT: {

@@ -17,7 +17,7 @@
 #include "value.h"  // Must be included before namespace.h (value.h includes symbol.h)
 #include "namespace.h"
 #include "map.h"  // For CljPersistentMap
-
+#include "strings.h"  // For CljString
 
 // === Legacy API (deprecated - use ID API) ===
 // Note: parse() can return both objects (CljObject*) and immediate values (CljValue)
@@ -68,6 +68,14 @@ CljValue parse_from_reader(Reader *reader, EvalState *st);
  * @return Parsed ID (can be CljObject* for objects or CljValue for immediates) or NULL on error
  */
 ID parse(const char *input, EvalState *st);
+
+/**
+ * @brief Parse Clojure expression from CljString input
+ * @param str CljString (normal or view)
+ * @param st Evaluation state
+ * @return Parsed ID (can be CljObject* for objects or CljValue for immediates) or NULL on error
+ */
+ID parse_from_string(CljString *str, EvalState *st);
 
 /**
  * @brief Resolve a namespace alias in the current namespace

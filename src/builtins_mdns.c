@@ -492,12 +492,12 @@ static MdnsCtx* require_mdns_ctx(ID arg, const char *fn_name) {
         return NULL;
     }
     CljByteArray *ba = as_byte_array(arg);
-    if (!ba || (ba->base.flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) == 0) {
+    if (!ba || (ba->base.flags & CLJ_FLAG_EXTERNAL_DATA) == 0) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "%s expects a native mdns handle (external byte-array)", fn_name); return NULL;
         return NULL;
     }
-    CljByteArrayExternal *ext = (CljByteArrayExternal*)ba;
+    CljByteArrayView *ext = (CljByteArrayView*)ba;
     MdnsCtx *ctx = (MdnsCtx*)ext->external_ctx;
     if (!ctx) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
@@ -760,4 +760,3 @@ ID native_tinyclj_net_mdns_close_bang(ID *args, unsigned int argc) {
     }
     return NULL;
 }
-

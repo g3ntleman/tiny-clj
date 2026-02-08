@@ -12,6 +12,9 @@
 #include "map.h"     // For map_get
 #include "parser.h"  // For eval_parsed
 #include "to_string.h" // For pr_str debug printing
+#include "strings.h" // For string_data
+#include "source_resolver.h" // For resolve_path_to_bytes
+#include "embedded_sources.h" // For embedded_source_map_init
 #include "types.h"  // For clj_type_name
 #include "memory_profiler.h"
 #include "mini_format.h"
@@ -200,9 +203,12 @@ static int g_form_count = 0;
 double g_canon_time_ms = 0;  // extern in parser.c
 #endif
 
-static bool eval_core_source(const char *src, const char *source_name, EvalState *st) {
+static bool eval_core_source(const char *src, size_t src_len, const char *source_name, EvalState *st) {
   if (!src || !st)
     return false;
+  if (src_len == 0) {
+    src_len = strlen(src);
+  }
   
   // CRITICAL: Save the original namespace object (not just the name)
   // This ensures we use the same namespace object that was cached
@@ -228,7 +234,7 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
   
   // Use Reader to parse multiple expressions
   Reader reader;
-  reader_init(&reader, src);
+  reader_init_with_length(&reader, src, src_len);
   const char *label = source_name;
   if (!label || !label[0]) {
     if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname) {
@@ -334,7 +340,7 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
 
           if (debug_form > 0 && (expr_count + 1) == debug_form) {
             CljString *s = pr_str((ID)form);
-            const char *printed = (s) ? s->data : "<unprintable>";
+            const char *printed = (s) ? string_data((ID)s) : "<unprintable>";
             fprintf(stderr, "[%s] DEBUG core form #%d: %s\n", label, expr_count + 1, printed);
             fflush(stderr);
           }
@@ -482,7 +488,25 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
 int load_clojure_core(EvalState *st) {
   if (!st) return 0;
   
-  if (!clojure_core_code) {
+  // Ensure embedded sources are available for core loading.
+  embedded_source_map_init();
+
+  ID bytes = resolve_path_to_bytes("/libs/clojure/core.clj");
+  CljString *source_str = NULL;
+  const char *source = NULL;
+  size_t source_len = 0;
+  if (bytes) {
+    source_str = string_view_from_byte_array(bytes);
+    if (!source_str) return 0;
+    source = string_data((ID)source_str);
+    source_len = (size_t)string_length((ID)source_str);
+  } else if (clojure_core_code) {
+    source = clojure_core_code;
+    source_len = strlen(clojure_core_code);
+  }
+
+  if (!source || source_len == 0) {
+    RELEASE(source_str);
     return 0;
   }
 
@@ -526,7 +550,8 @@ int load_clojure_core(EvalState *st) {
   // This ensures all def operations store in the correct namespace
   st->current_ns = clojure_core;
   
-  bool ok = eval_core_source(clojure_core_code, "clojure.core.clj", st);
+  bool ok = eval_core_source(source, source_len, "clojure.core.clj", st);
+  RELEASE(source_str);
 
   if (ok) {
     clojure_core->loaded = true;
@@ -642,7 +667,8 @@ int load_clojure_repl(EvalState *st) {
   st->current_ns = target_ns;
   
   // Evaluate source using same approach as eval_core_source
-  bool ok = eval_core_source(source, source_label, st);
+  size_t source_len = strlen(source);
+  bool ok = eval_core_source(source, source_len, source_label, st);
   
   // Restore original namespace
   if (orig_ns) {

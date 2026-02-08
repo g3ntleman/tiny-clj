@@ -561,6 +561,14 @@ static void release_object_deep(CljObject *v) {
 static void release_object_default(CljObject *v) {
     switch (v->type) {
         case CLJ_STRING:
+#ifndef ZOMBIE_ENABLED
+            if ((v->flags & CLJ_FLAG_EXTERNAL_DATA) != 0) {
+                CljByteArrayView *ext = (CljByteArrayView*)v;
+                if (ext->external_free_fn) ext->external_free_fn(ext->external_ctx);
+            }
+#else
+            (void)v;
+#endif
             break;
         // CLJ_SYMBOL: Release handler registered by tiny-clj via subjective_c_register_release_fn()
             
@@ -772,8 +780,8 @@ static void release_object_default(CljObject *v) {
 #ifndef ZOMBIE_ENABLED
             { CljByteArray *ba = as_byte_array(v);
               if (ba) {
-                  if ((ba->base.flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) != 0) {
-                      CljByteArrayExternal *ext = (CljByteArrayExternal*)ba;
+                  if ((ba->base.flags & CLJ_FLAG_EXTERNAL_DATA) != 0) {
+                      CljByteArrayView *ext = (CljByteArrayView*)ba;
                       if (ext->external_free_fn) ext->external_free_fn(ext->external_ctx);
                   } else if (ba->data) CLJ_FREE(ba->data);
               } }

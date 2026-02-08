@@ -30,6 +30,14 @@ static inline uint32_t fnv1a_continue(uint32_t h, const char *s) {
     return h;
 }
 
+static inline uint32_t fnv1a_bytes(const char *s, size_t len) {
+    uint32_t h = FNV1A_OFFSET;
+    for (size_t i = 0; i < len; i++) {
+        h = FNV_MIX(h, (uint8_t)s[i]);
+    }
+    return h;
+}
+
 static uint32_t hash_symbol(CljSymbol *sym) {
     if (!sym || !sym->cname) return 0;
     if (sym->ns_name && sym->ns_name->cname) {
@@ -85,10 +93,10 @@ static uint32_t hash_list(CljList *list) {
 }
 
 static uint32_t hash_string(CljString *str) {
-    uint16_t len = str->length;
-    if (len <= 16) return fnv1a(str->data);
+    uint16_t len = string_length((ID)str);
+    const char *d = string_data((ID)str);
+    if (len <= 16) return fnv1a_bytes(d, len);
     // O(1): length + first 8 + last 8 chars
-    const char *d = str->data;
     uint32_t h = FNV_MIX(FNV_MIX(FNV1A_OFFSET, len), len >> 8);
     for (int i = 0; i < 8; i++) h = FNV_MIX(h, (uint8_t)d[i]);
     for (int i = len - 8; i < len; i++) h = FNV_MIX(h, (uint8_t)d[i]);

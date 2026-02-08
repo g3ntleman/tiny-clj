@@ -28,8 +28,21 @@ typedef struct CljObject
     int16_t rc;
 } CljObject;
 
+// Forward declaration to avoid implicit declaration when headers include each other
+// through libc's <string.h>/<strings.h> on embedded toolchains.
+static inline void *assert_type(CljObject *obj, CljType expected_type);
+
 #include "common.h"
 #include <stdio.h>
+
+// Ensure CLJ_ASSERT exists even if a different common.h was pulled in
+// via the toolchain's <string.h>/<strings.h> include chain.
+#ifndef CLJ_ASSERT
+#define CLJ_ASSERT(expr) ((void)0)
+#endif
+#ifndef CLJ_DEBUG_ASSERT
+#define CLJ_DEBUG_ASSERT(expr) CLJ_ASSERT(expr)
+#endif
 
 // Optional: stack trace support (execinfo/backtrace) for debug diagnostics.
 // Not available on ESP-IDF/newlib, so keep it disabled for embedded builds.

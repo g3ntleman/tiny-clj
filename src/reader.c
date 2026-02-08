@@ -3,13 +3,17 @@
 #include <ctype.h>
 #include "utf8.h"
 
-void reader_init(Reader *reader, const char *src) {
+void reader_init_with_length(Reader *reader, const char *src, size_t length) {
     reader->src = src;
-    reader->length = src ? strlen(src) : 0;
+    reader->length = src ? length : 0;
     reader->index = 0;
     reader->line = 1;
     reader->column = 1;
     reader->source_name = NULL;
+}
+
+void reader_init(Reader *reader, const char *src) {
+    reader_init_with_length(reader, src, src ? strlen(src) : 0);
 }
 
 void reader_init_with_source(Reader *reader, const char *src, const char *source_name) {
@@ -230,4 +234,3 @@ bool reader_is_delimiter(const Reader *reader) {
 bool reader_is_symbol_char(const Reader *reader) {
     return reader_check_codepoint_property(reader, utf8_is_symbol_char);
 }
-

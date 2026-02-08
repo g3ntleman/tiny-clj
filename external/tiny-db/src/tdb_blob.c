@@ -18,7 +18,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef __DBINTERFACE_PRIVATE
 #define __DBINTERFACE_PRIVATE
+#endif
 #include "tdb_bsd_db.h"
 #include "tdb_bsd_btree.h"
 #include "tdb_bsd_mpool.h"

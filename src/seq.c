@@ -245,9 +245,9 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
             }
             
             // Access string data directly
-            iter->state.str.data = str->data;
+            iter->state.str.data = string_data((ID)str);
             iter->state.str.index = 0;
-            iter->state.str.length = str->length;
+            iter->state.str.length = string_length((ID)str);
             iter->seq_type = CLJ_STRING;
             return true;
         }

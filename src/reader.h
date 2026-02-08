@@ -28,6 +28,7 @@ typedef struct {
 #endif
 
 void reader_init(Reader *reader, const char *src);
+void reader_init_with_length(Reader *reader, const char *src, size_t length);
 void reader_init_with_source(Reader *reader, const char *src, const char *source_name);
 void reader_set_source_name(Reader *reader, const char *source_name);
 const char* reader_get_source_name(const Reader *reader);
@@ -70,4 +71,3 @@ static inline void reader_skip_all(Reader *reader) {
   reader_init(&(name), (cstr))
 
 #endif // TINY_CLJ_READER_H
-

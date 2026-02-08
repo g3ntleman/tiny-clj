@@ -86,15 +86,15 @@ CljByteArray* make_byte_array_view(uint8_t *bytes, int length) {
     }
 
     // Allocate as a CLJ_BYTE_ARRAY so the memory profiler / type tracking stays consistent.
-    // We intentionally avoid ALLOC(CljByteArrayExternal, ...) because TYPE_OF() is not defined for it.
-    CljByteArrayExternal *ext = (CljByteArrayExternal*)alloc(sizeof(CljByteArrayExternal), 1, CLJ_BYTE_ARRAY);
+    // We intentionally avoid ALLOC(CljByteArrayView, ...) because TYPE_OF() is not defined for it.
+    CljByteArrayView *ext = (CljByteArrayView*)alloc(sizeof(CljByteArrayView), 1, CLJ_BYTE_ARRAY);
     if (!ext) {
         throw_oom();
         return NULL;
     }
 
     ext->base_arr.base.type = CLJ_BYTE_ARRAY;
-    ext->base_arr.base.flags = CLJ_FLAG_BYTE_ARRAY_EXTERNAL;
+    ext->base_arr.base.flags = CLJ_FLAG_EXTERNAL_DATA;
     ext->base_arr.length = length;
     ext->base_arr.data = bytes;
     ext->external_ctx = NULL;
@@ -102,7 +102,7 @@ CljByteArray* make_byte_array_view(uint8_t *bytes, int length) {
     return (CljByteArray*)ext;
 }
 
-CljByteArray* make_byte_array_external(uint8_t *bytes, int length, void *external_ctx, CljByteArrayExternalFreeFn free_fn) {
+CljByteArray* make_byte_array_external(uint8_t *bytes, int length, void *external_ctx, CljByteArrayViewFreeFn free_fn) {
     CljByteArray *arr = make_byte_array_view(bytes, length);
     if (!arr) return NULL;
     if (length == 0) {
@@ -111,8 +111,8 @@ CljByteArray* make_byte_array_external(uint8_t *bytes, int length, void *externa
     }
 
     CLJ_ASSERT(((CljObject*)arr)->type == CLJ_BYTE_ARRAY);
-    CLJ_ASSERT((((CljObject*)arr)->flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) != 0);
-    CljByteArrayExternal *ext = (CljByteArrayExternal*)arr;
+    CLJ_ASSERT((((CljObject*)arr)->flags & CLJ_FLAG_EXTERNAL_DATA) != 0);
+    CljByteArrayView *ext = (CljByteArrayView*)arr;
     ext->external_ctx = external_ctx;
     ext->external_free_fn = free_fn;
     return arr;

@@ -348,13 +348,13 @@ int __bt_split_root(BTREE* t) {
  */
 int __bt_split(BTREE* t, PAGE* sp, const DBT* key, const DBT* data, int flags, size_t ilen,
                indx_t skip) {
-    BINTERNAL* bi;
-    BLEAF *bl, *tbl;
+    BINTERNAL* bi = NULL;
+    BLEAF *bl = NULL, *tbl = NULL;
     DBT a, b;
     EPGNO* parent;
     PAGE *h, *l, *r, *lchild, *rchild;
     indx_t nxtindex;
-    size_t n, nbytes, nksize;
+    size_t n, nbytes, nksize = 0;
     int parentsplit;
     char* dest;
 
@@ -828,12 +828,12 @@ static int bt_broot(BTREE* t, PAGE* h, PAGE* l, PAGE* r) {
  *	Pointer to page in which to insert.
  */
 static PAGE* bt_psplit(BTREE* t, PAGE* h, PAGE* l, PAGE* r, indx_t* pskip, size_t ilen) {
-    BINTERNAL* bi;
-    BLEAF* bl;
-    RLEAF* rl;
+    BINTERNAL* bi = NULL;
+    BLEAF* bl = NULL;
+    RLEAF* rl = NULL;
     EPGNO* c;
     PAGE* rval;
-    void* src;
+    void* src = NULL;
     indx_t full, half, nxt, off, skip, top, used;
     size_t nbytes;
     int bigkeycnt, isbigkey;

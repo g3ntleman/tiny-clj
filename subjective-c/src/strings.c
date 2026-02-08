@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include "object.h"
+#include "byte_array.h"
 #include "strings.h"
 #include "memory.h"
 #include "types.h"  // For SINGLETON_RC
@@ -87,12 +88,53 @@ CljString* make_string_buffer(size_t length) {
     return s;
 }
 
+static void string_view_release_byte_array(void *ctx) {
+    if (!ctx) return;
+    RELEASE((ID)ctx);
+}
+
+CljString* string_view_from_byte_array(ID ba) {
+    if (!ba || TAG(ba) != CLJ_BYTE_ARRAY) {
+        throw_exception(EXCEPTION_TYPE, "string_view_from_byte_array expects a byte-array",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    CljByteArray *arr = as_byte_array(ba);
+    if (!arr) return NULL;
+    if (arr->length == 0) {
+        return string_empty_singleton;
+    }
+    if (!arr->data) {
+        throw_exception(EXCEPTION_RUNTIME, "string_view_from_byte_array: NULL data",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    if (arr->length < 0 || arr->length > (int)UINT16_MAX) {
+        throw_exception(EXCEPTION_RUNTIME, "string_view_from_byte_array: length exceeds maximum (65,535)",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    CljByteArrayView *view = (CljByteArrayView*)alloc(sizeof(CljByteArrayView), 1, CLJ_STRING);
+    if (!view) {
+        throw_oom();
+        return NULL;
+    }
+    view->base_arr.base.type = CLJ_STRING;
+    view->base_arr.base.flags = CLJ_FLAG_EXTERNAL_DATA;
+    view->base_arr.length = arr->length;
+    view->base_arr.data = arr->data;
+    view->external_ctx = RETAIN(ba);
+    view->external_free_fn = string_view_release_byte_array;
+    return (CljString*)view;
+}
+
 // Helper: Calculate length of string with escaping
 // Exported for use in object.c (DRY principle)
 size_t escape_string_calc_length(CljString *s) {
-    size_t len = s->length;
+    size_t len = string_length((ID)s);
     size_t escaped_len = len;
-    const char *data = s->data;
+    const char *data = string_data((ID)s);
     for (size_t i = 0; i < len; i++) {
         if (data[i] == '"' || data[i] == '\\') {
             escaped_len++;  // Each needs a backslash
@@ -107,8 +149,8 @@ void escape_string_write(CljString *s, char *buffer, size_t *offset) {
     buffer[*offset] = '"';
     (*offset)++;
 
-    const char *data = s->data;
-    size_t len = s->length;
+    const char *data = string_data((ID)s);
+    size_t len = string_length((ID)s);
     for (size_t i = 0; i < len; i++) {
         if (data[i] == '"' || data[i] == '\\') {
             buffer[*offset] = '\\';
@@ -121,5 +163,3 @@ void escape_string_write(CljString *s, char *buffer, size_t *offset) {
     buffer[*offset] = '"';
     (*offset)++;
 }
-
-

@@ -491,10 +491,8 @@ DEFINE_EXTERN_SYMBOL(sym_atom_data, "atom");
 DEFINE_EXTERN_SYMBOL(sym_reset_bang_data, "reset!");
 DEFINE_EXTERN_SYMBOL(sym_swap_bang_data, "swap!");
 DEFINE_EXTERN_SYMBOL(sym_list_batch_data, "list-batch");
-#ifndef ESP32_BUILD
 DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
 DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
-#endif
 
 // Static symbol structs for keywords (compile-time initialization)
 DEFINE_STATIC_SYMBOL(sym_kw_line_data, ":line");

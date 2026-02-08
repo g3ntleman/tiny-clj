@@ -45,6 +45,8 @@ set(TINYCLJ_SRCS
   "../../../src/to_string.c"
   "../../../src/macro.c"
   "../../../src/file_utils.c"
+  "../../../src/source_resolver.c"
+  "../../../src/embedded_sources.c"
   "../../../src/fs_layer.c"
   "../../../src/gpio_esp32.c"
   "../../../src/line_editor.c"
@@ -62,6 +64,7 @@ idf_component_register(
     subjective-c
     tiny-db
     driver
+    esp_partition
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC
@@ -70,4 +73,3 @@ target_compile_definitions(${COMPONENT_LIB} PUBLIC
   MEMORY_PROFILING_ENABLED=0
   META_ENABLED=0
 )
-

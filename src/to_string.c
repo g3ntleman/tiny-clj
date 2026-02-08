@@ -190,7 +190,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             if (escape_strings) {
                 return escape_string_calc_length(s);
             }
-            return s->length;
+            return string_length((ID)s);
         }
 
         case CLJ_SYMBOL: {
@@ -498,8 +498,10 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             if (escape_strings) {
                 escape_string_write(s, buffer, offset);
             } else {
-                memcpy(buffer + *offset, s->data, s->length);
-                *offset += s->length;
+                const char *data = string_data((ID)s);
+                uint16_t len = string_length((ID)s);
+                memcpy(buffer + *offset, data, len);
+                *offset += len;
             }
             return;
         }
