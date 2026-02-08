@@ -374,8 +374,8 @@ void autorelease_pool_peak_reset(void);
 #endif
 
 #define ASSIGN(var, new_obj) do { \
-    ID _new_val = (new_obj); \
-    ID _old_val = (var); \
+    ID volatile _new_val = (new_obj); \
+    ID volatile _old_val = (var); \
     if (_new_val != _old_val) { \
         RETAIN(_new_val); \
         RELEASE(_old_val); \

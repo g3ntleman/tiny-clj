@@ -185,6 +185,7 @@ static tdb_status_t fs_kv_get_chunked_bytes(tdb_kv_t* db, const uint8_t* key, si
     return TDB_OK;
 }
 
+#if !defined(ESP_PLATFORM)
 typedef struct {
     uint8_t* buf;
     size_t len;
@@ -213,6 +214,7 @@ static tdb_status_t fs_ram_erase(void* ctx, uint32_t addr, size_t len) {
     memset(r->buf + addr, 0xFF, len);
     return TDB_OK;
 }
+#endif
 
 #if defined(ESP_PLATFORM)
 #define TINYCLJ_TINYDB_PARTITION_LABEL "tinydb"

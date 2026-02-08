@@ -13,9 +13,7 @@
 #include "map.h"
 
 // Namespace structure - subtype of CljObject
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wtypedef-redefinition"
-typedef struct CljNamespace {
+struct CljNamespace {
     CljObject base;           // type + rc (4 bytes) - must be first field
     bool loaded;              // true once namespace source has been loaded/evaluated
     CljSymbol *name;          // z.B. 'user', 'math'
@@ -23,8 +21,8 @@ typedef struct CljNamespace {
     CljPersistentMap *macro_mappings;   // Map: Symbol → CljFunction (Macro-Registry)
     CljPersistentMap *aliases;          // Map: Symbol → Symbol (Alias → full namespace name)
     const char *filename;     // optional: associated file
-} CljNamespace;
-#pragma GCC diagnostic pop
+};
+typedef struct CljNamespace CljNamespace;
 
 // EvalState structure including namespaces and exception handling
 typedef struct {
