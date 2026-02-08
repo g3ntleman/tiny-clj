@@ -18,6 +18,47 @@
 #include "mini_format.h"
 #include "tiny_clj.h"
 
+#if defined(ESP_PLATFORM)
+static void esp_put_line(const char *s) {
+    if (s) platform_put_string(NULL, s);
+    platform_put_string(NULL, "\n");
+}
+static void print_build_info_esp32(void) {
+    char buf[80];
+    esp_put_line("=== Build Information ===");
+#if defined(DEBUG) && DEBUG
+    esp_put_line("Build Type: Debug");
+#else
+    esp_put_line("Build Type: Release");
+#endif
+    (void)mini_snprintf(buf, sizeof(buf), "Build Date: %s %s", __DATE__, __TIME__);
+    esp_put_line(buf);
+    esp_put_line("Compiler: GCC (xtensa-esp-elf)");
+    esp_put_line("Features:");
+#if defined(DEBUG) && DEBUG
+    esp_put_line("  - Debug: Enabled");
+#else
+    esp_put_line("  - Debug: Disabled");
+#endif
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    esp_put_line("  - Memory Profiling: Enabled");
+#else
+    esp_put_line("  - Memory Profiling: Disabled");
+#endif
+#if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
+    esp_put_line("  - Zombie Mode: Enabled");
+#else
+    esp_put_line("  - Zombie Mode: Disabled");
+#endif
+#if defined(META_ENABLED) && META_ENABLED
+    esp_put_line("  - Meta: Enabled");
+#else
+    esp_put_line("  - Meta: Disabled");
+#endif
+    esp_put_line("=======================");
+}
+#endif
+
 // No public header exists for these yet (they are used by repl.c and tests too).
 extern void init_special_symbols(void);
 extern EvalState *get_global_eval_state(void);
@@ -84,27 +125,20 @@ void tinyclj_idf_start(void) {
 
 #if defined(ESP_PLATFORM)
     {
-        char buf[64];
+        char buf[80];
+        (void)mini_snprintf(buf, sizeof(buf), "tiny-clj %s REPL (platform = %s). Ctrl-D to exit.\n",
+                            TINY_CLJ_VERSION, platform_name());
+        platform_put_string(NULL, buf);
+        print_build_info_esp32();
         size_t ram_total = platform_ram_bytes_total();
         size_t free_bytes = platform_heap_bytes_free();
         unsigned ram_k = (ram_total == (size_t)-1) ? 0u : (unsigned)(ram_total / 1024);
-        (void)mini_snprintf(buf, sizeof(buf), "**** ESP 32 TINY-CLJ V%s ****\n", TINY_CLJ_VERSION);
-        size_t len = strlen(buf) - 1;
-        unsigned pad = (len < 40u) ? (40u - (unsigned)len) / 2u : 0u;
-        if (pad > 0) {
-            char pad_buf[20];
-            memset(pad_buf, ' ', pad);
-            pad_buf[pad] = '\0';
-            platform_put_string(NULL, pad_buf);
-        }
-        platform_put_string(NULL, buf);
         (void)mini_snprintf(buf, sizeof(buf), "%uK RAM SYSTEM  %zu CLOJURE BYTES FREE\n", ram_k, free_bytes);
         platform_put_string(NULL, buf);
     }
 #endif
 
-    // Print baseline stats early (this is what we use for RAM baseline checks).
-    eval_and_print("(do (require 'tinyclj.runtime) (tinyclj.runtime/stats))", st);
+    // NOTE: baseline stats disabled for now (heap corruption during early eval).
 
     LineEditor *ed = line_editor_new(platform_get_char, platform_put_char, platform_put_string, NULL);
     set_line_editor(ed);
@@ -134,4 +168,3 @@ void tinyclj_idf_start(void) {
         }
     }
 }
-
