@@ -1,0 +1,17 @@
+---
+description: Beim Debuggen zuerst Unit-Tests instrumentieren; Production-Code nur wenn nötig
+alwaysApply: true
+---
+
+# Debug-Instrumentierung: Tests zuerst
+
+**Regel:** Beim Debuggen mit Logging/Instrumentierung:
+
+1. **Bevorzugt:** Unit-Tests instrumentieren (z. B. in `src/tests/*.c`). So bleibt Production-Code unberührt und die Beobachtung läuft im Test-Kontext.
+2. **Production-Code** (z. B. `src/*.c` außer Tests) nur instrumentieren, **wenn unbedingt nötig** – z. B. wenn der Fehler nur außerhalb von Tests reproduzierbar ist oder die Test-Instrumentierung nicht ausreicht.
+
+Nach dem Debuggen Instrumentierung wieder entfernen; bei Tests ist der Aufräumaufwand meist geringer.
+
+**Werte in Tests prüfen:** Wenn Du Werte von Variablen wissen willst, gib sie **im Test** mit `printf` (bzw. `test_fprintf`/`fprintf(stderr, ...)`) aus. Ausgabe ansehen, debuggen, danach die Ausgabe wieder entfernen. Das ist ein einfaches Prinzip und in der Praxis nicht langsamer als der Debugger.
+
+**to_string für Debug-Ausgabe:** Alle CljObject-basierten Objekte können mit `to_string` ausgegeben werden. Das eignet sich gut zum Debuggen und Instrumentieren von Code (Tests und Production).
