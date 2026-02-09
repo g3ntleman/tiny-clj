@@ -235,12 +235,11 @@ TEST_SHARED(test_for_basic_list_comprehension) {
     ID result = eval_string(
         "(for [x [1 2 3]] (* x x))",
         g_test_eval_state);
-    // Accept both lazy sequences and lists; normalize to a seq iterator
-    ID seq = AUTORELEASE(make_seq(result));
-    TEST_ASSERT_NOT_NULL(seq);
+    ID it = AUTORELEASE(make_seq(result));
+    TEST_ASSERT_NOT_NULL(it);
     int expected[] = {1, 4, 9};
     int i = 0;
-    for (ID cur = seq; cur && !seq_empty(cur); cur = seq_next(cur), ++i) {
+    for (ID cur = it; cur && !seq_empty(cur); cur = seq_next(cur), ++i) {
         ID first = seq_first(cur);
         TEST_ASSERT_TRUE(is_fixnum(first));
         TEST_ASSERT_EQUAL_INT(expected[i], as_fixnum(first));

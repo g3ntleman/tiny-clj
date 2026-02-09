@@ -188,6 +188,13 @@ static void init_release_dispatch(void) {
 static void zombie_description(CljObject *v, char *buf, size_t size) {
     if (!buf || !size) return;
     buf[0] = '\0';
+    /* Do not call clj_to_string when rc<=0: the to_string path may RETAIN (or AUTORELEASE)
+     * objects. v and its children have rc=0; RETAIN on rc=0 throws ZombieAccessException,
+     * so we would trigger a second throw while building the error message. */
+    if (v->rc <= 0) {
+        (void)mini_snprintf(buf, size, "(zombie %p)", (void*)v);
+        return;
+    }
     CljString *s = clj_to_string((ID)v);
     if (!s) return;
     const char *d = clj_string_data(s);

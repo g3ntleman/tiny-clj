@@ -10,7 +10,7 @@ Bei **Crashes** (SIGABRT, SIGSEGV, Exit 134), **AutoreleasePoolError** („still
 **Double Releases debuggen (Kurz-Checkliste):**
 - Debug-Build mit ZOMBIE_ENABLED (Standard). Beim Treffen der Problemstelle (rc==0 oder rc<=pool_count) wird automatisch „retain/release history for %p“ nach stderr geschrieben (R=retain, L=release, A=autorelease, neueste zuerst).
 - Caller-Adressen in lldb auflösen: `image lookup -a <caller>`.
-- Optional: Objekt früh fangen (z. B. seq.c:553 make_seq), `p heap_seq` → Adresse, dann retain/release-Breakpoints nur für diese Adresse setzen (Skript `.lldb-debug-double-free-address`).
+- Optional: Objekt früh fangen (z. B. seq.c:553 seq), `p heap_seq` → Adresse, dann retain/release-Breakpoints nur für diese Adresse setzen (Skript `.lldb-debug-double-free-address`).
 
 1. **lldb gezielt vorschlagen und nutzen**
    - `./build/unit-tests` unter lldb starten oder mit `-test` einen einzelnen Test
@@ -18,13 +18,20 @@ Bei **Crashes** (SIGABRT, SIGSEGV, Exit 134), **AutoreleasePoolError** („still
    - Nach Backtrace (BT) die zweite AUTORELEASE-Quelle oder den Aufrufer im Drain identifizieren
 
 2. **Typische Fehlerquellen**
-   - **Doppeltes AUTORELEASE**: `native_seq`/`make_seq` bei schon CLJ_SEQ (ohne erneutes AUTORELEASE zurückgeben); `to_string`/`print_helper`/`print_result` wenn der String schon im Pool ist; `apply_metadata_to_object` / `vector_conj` + äußeres AUTORELEASE; in Tests: `AUTORELEASE(make_seq(result))` wenn `result` schon CLJ_SEQ → `(TAG(result)==CLJ_SEQ) ? result : AUTORELEASE(make_seq(result))`
+   - **Doppeltes AUTORELEASE**: `native_seq`/`make_seq`: bei CLJ_SEQ gibt make_seq RETAIN(seq) zurück, Caller muss release/autorelease; `to_string`/`print_helper`/`print_result` wenn der String schon im Pool ist; `apply_metadata_to_object` / `vector_conj` + äußeres AUTORELEASE.
    - **autorelease during drain**: `zombie_desc` oder andere Aufrufe von `clj_to_string`/`to_string`/`autorelease` im `release`-Pfad oder während `autorelease_pool_drain_to_depth`; `zombie_desc` bei `g_in_drain` überspringen
 
 3. **Double-Free: Objektadresse in retain/release beobachten**
-   - **Früh fangen (empfohlen):** Wenn Du erst bei release/skipping RELEASE stoppst, ist das Problem schon passiert. Besser: bei Erzeugung stoppen (z. B. `seq.c:553` make_seq oder `seq.c:589` seq_rest), `p heap_seq` bzw. `p rest_seq` → Adresse, dann in demselben Lauf Breakpoints in `retain`/`release` mit dieser Adresse setzen und weiterlaufen – so siehst Du jedes retain/release von Geburt an.
+   - **Früh fangen (empfohlen):** Wenn Du erst bei release/skipping RELEASE stoppst, ist das Problem schon passiert. Besser: bei Erzeugung stoppen (z. B. `seq.c:592` make_seq (heap_seq) oder `seq.c:628` seq_rest (rest_seq)), `p heap_seq` bzw. `p rest_seq` → Adresse, dann in demselben Lauf Breakpoints in `retain`/`release` mit dieser Adresse setzen und weiterlaufen – so siehst Du jedes retain/release von Geburt an.
    - Skript `.lldb-debug-double-free-address`: Strategie A (früh fangen) und B (Adresse ersetzen) beschrieben; Adressen sind pro Lauf anders (ASLR/Heap), daher Adresse im selben Lauf aus „p heap_seq“ holen.
    - **Rückwärts lesen:** Bei DEBUG+ZOMBIE_ENABLED zeichnet ein Ringpuffer in `memory.c` die letzten retain/release/autorelease auf; an der Problemstelle wird die Historie nach stderr gedruckt (neueste zuerst). Caller werden automatisch symbolisiert (backtrace_symbols) – lldb ist dafür nicht nötig. Nach Adresse filtern: `RCHIST_FILTER_ADDR=0x<addr>` (Adresse aus „obj=%p“ in der Ausgabe).
+
+**Retain-Count-History (RCHIST) – Kurzreferenz:**
+- **Ort:** `subjective-c/src/memory.c`, Ringpuffer mit 128 Einträgen; nur bei DEBUG+ZOMBIE_ENABLED.
+- **Einträge:** Pro RETAIN/RELEASE/AUTORELEASE wird gepusht: Objekt, Op (R/L/A), rc nach der Operation, Caller (`__builtin_return_address(0)`).
+- **Gedruckt** bei: release mit rc==0 (Double-Free), release mit rc<=pool_count, autorelease mit rc<=pool_count.
+- **Ausgabe:** Zeilen `  R rc=2  <symbol>` usw. – neueste zuerst lesen; R=retain, L=release, A=autorelease; rc = Referenzzähler nach dem Aufruf.
+- **Filter:** `RCHIST_FILTER_ADDR=0x<addr>` setzen, dann wird nur für dieses Objekt gedruckt (Adresse aus „obj=%p“ im Header).
 
 4. **Hilfreiche lldb-Skripte**
    - `.lldb-trace-astnode`, `.lldb-debug-closure` etc. für Breakpoints mit Bedingungen (z.B. `v->type == 14` für ASTNode, `autorelease_count(v) > 0`)

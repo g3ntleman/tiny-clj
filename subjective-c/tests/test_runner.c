@@ -42,15 +42,32 @@ static void print_summary_on_exit(void) {
         printf("═══════════════════════════════════════════════════════════════\n");
         printf("TEST SUMMARY (printed due to early termination)\n");
         printf("═══════════════════════════════════════════════════════════════\n");
+        if (Unity.TestFile || Unity.CurrentTestName) {
+            fprintf(stderr, "Interrupted while running: ");
+            if (Unity.TestFile) fprintf(stderr, "%s", Unity.TestFile);
+            if (Unity.CurrentTestLineNumber) fprintf(stderr, ":%u", (unsigned)Unity.CurrentTestLineNumber);
+            if (Unity.CurrentTestName) fprintf(stderr, " %s", Unity.CurrentTestName);
+            fprintf(stderr, "\n");
+        }
         fflush(stdout);
-        UNITY_END();
+        int failures = UNITY_END();
         fflush(stdout);
+        clock_t end_time = g_start_time > 0 ? clock() : 0;
+        double elapsed = g_start_time > 0 ? ((double)(end_time - g_start_time)) / CLOCKS_PER_SEC : 0.0;
         if (g_start_time > 0) {
-            clock_t end_time = clock();
-            double elapsed = ((double)(end_time - g_start_time)) / CLOCKS_PER_SEC;
             printf("\nTotal runtime: %.3fs\n", elapsed);
             fflush(stdout);
         }
+        /* Duplicate summary to stderr so it appears even when stdout is buffered (e.g. timeout/pipe) */
+        fprintf(stderr, "\n═══════════════════════════════════════════════════════════════\n");
+        fprintf(stderr, "TEST SUMMARY (printed due to early termination)\n");
+        fprintf(stderr, "═══════════════════════════════════════════════════════════════\n");
+        fprintf(stderr, "-----------------------\n");
+        fprintf(stderr, "%u Tests %u Failures %u Ignored \n",
+                (unsigned)Unity.NumberOfTests, (unsigned)Unity.TestFailures, (unsigned)Unity.TestIgnores);
+        fprintf(stderr, "%s\n", failures == 0 ? "OK" : "FAIL");
+        fprintf(stderr, "Total runtime: %.3fs\n", elapsed);
+        fflush(stderr);
         g_summary_printed = true;
     }
 }
@@ -60,16 +77,21 @@ static void signal_handler(int sig) {
         _exit(128 + sig);
     }
     g_in_signal_handler = 1;
-    // Print summary immediately
     print_summary_on_exit();
-    // Also print a backtrace for debugging.
+    /* SIGTERM/SIGUSR1 (e.g. timeout) = clean termination, no crash dump */
+    if (sig == SIGTERM || sig == SIGUSR1) {
+        fflush(stdout);
+        fflush(stderr);
+        _exit(128 + sig);
+    }
+    /* Real crash: print stack trace then re-raise */
     void *trace[64];
     int trace_count = backtrace(trace, (int)(sizeof(trace) / sizeof(trace[0])));
     fprintf(stderr, "\n[crash] signal=%d\n", sig);
+    fprintf(stderr, "Stack trace:\n");
     backtrace_symbols_fd(trace, trace_count, fileno(stderr));
     fflush(stdout);
     fflush(stderr);
-    // Reset to default handler and re-raise
     signal(sig, SIG_DFL);
     raise(sig);
 }
@@ -289,12 +311,14 @@ int main(int argc, char **argv) {
     // Initialize autorelease pool before running tests
     autorelease_pool_init();
     
-    // Register signal handlers to print summary on crash
+    // Register signal handlers so summary is printed on crash or external kill (e.g. timeout)
     signal(SIGSEGV, signal_handler);
     signal(SIGABRT, signal_handler);
 #ifdef SIGTRAP
     signal(SIGTRAP, signal_handler);
 #endif
+    signal(SIGUSR1, signal_handler);  // e.g. timeout or runner sends this
+    signal(SIGTERM, signal_handler);  // e.g. kill or timeout
     atexit(print_summary_on_exit);
     
 #if MEMORY_PROFILING_ENABLED
@@ -358,6 +382,8 @@ int main(int argc, char **argv) {
     extern void tiny_clj_test_cleanup(bool show_memory_summary);
     tiny_clj_test_cleanup(show_memory_summary);
 #endif
-    
-    return result;
+
+    /* Exit 0 = success, 1 = failure. Avoid returning failure count (can be > 127 and
+     * be mistaken for signal 128+ in shells). */
+    return result == 0 ? 0 : 1;
 }

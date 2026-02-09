@@ -499,9 +499,15 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 // CRITICAL: Ensure expanded form is a list-like type (CLJ_LIST)
                 // Macros can return PersistentList (CLJ_LIST) which needs to be canonicalized
                 unsigned char expanded_tag = TAG(expanded);
+                if (expanded_tag == CLJ_SEQ) {
+                    // Sequence is already in pool; wrapping in make_list would RETAIN it -> double-release on drain.
+                    if (list) RETAIN(list);
+                    ID result = canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
+                    if (list) RELEASE(list);
+                    return result;
+                }
                 if (!is_list_type(expanded_tag)) {
-                    // Expanded form is not a list - this shouldn't happen for threading macros
-                    // but handle it gracefully by wrapping in a list
+                    // Expanded form is not a list - wrap in a list for canonicalization
                     expanded = make_list(expanded, NULL);
                 }
                 
@@ -983,6 +989,8 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         for (int j = 0; j < cnt; j++) {
             ID k = pairs[j * 2];
             ID v = pairs[j * 2 + 1];
+            if (v && !IS_IMMEDIATE(v) && !is_singleton((CljObject*)v))
+                autorelease_pool_remove((CljObject*)v);
             ASSIGN(new_map, map_assoc(new_map, k, v));
         }
         move_meta(map, new_map);

@@ -18,7 +18,13 @@ ASSERTION FAILED at memory.c:424
 
 ---
 
-## 2) SIGSEGV in native_next (noch offen)
+## 2) SIGSEGV in native_next (Fix: seq_next_inplace)
+
+**Ursache:** In `seq_next_inplace` wurde bei erschöpfter Seq fälschlich `ASSIGN(seq_slot, NULL)` verwendet. `ASSIGN(var, new_obj)` setzt `var`, nicht `*var` – es wurde also die Slot-Adresse als Objekt released und `*seq_slot` nie auf NULL gesetzt → Use-after-free/SIGSEGV in `native_next` (z. B. beim Laden von clojure.core).
+
+**Fix (erledigt):** In `seq.c` Zeile ~687: `RELEASE(*seq_slot); *seq_slot = NULL;` statt `ASSIGN(seq_slot, NULL)`.
+
+**Seq-Tests:** Wenn die Seq von `eval_string` kommt (autoreleased), muss der Caller sie mit `RETAIN(it)` übernehmen, bevor er `seq_next_inplace(&it)` aufruft, da `seq_next_inplace` beim Erschöpfen `RELEASE(*seq_slot)` ausführt (MEMORY_POLICY: nur owned refs releasen).
 
 ## Letzter Lauf
 
@@ -65,6 +71,24 @@ lldb ./build/unit-tests
 (lldb) frame select 2
 (lldb) list
 ```
+
+---
+
+## 3) ZombieAccessException in test_sequences/rest_single_element (eingegrenzt)
+
+**Stack:** `retain` ← `eval_string` (+532) ← `test_rest_single_element_impl` ← `test_rest_single_element`
+
+**Fehler:** `RETAIN: rc must be > 0 (got rc=0). Object %p (type=List).` – In `eval_string` wird `RETAIN(result)` auf ein List-Objekt mit rc=0 aufgerufen.
+
+**Eingrenzung:**
+- Tritt nur auf, wenn die ganze Gruppe `test_sequences/*` läuft; Einzellauf `rest_single_element` ist stabil grün.
+- `(rest [1])` sollte `empty_list()` (Singleton, rc=SINGLETON_RC) zurückgeben; der Zombie hat rc=0, ist also **kein** Singleton.
+- Mögliche Ursache: Ein anderes List-Objekt (z. B. AST-Knoten oder struktureller Tail) wird irgendwo zu oft released und danach noch als Eval-Ergebnis zurückgegeben (Use-after-free, flaky je nach Allokator-Reihenfolge).
+- Defensiv: In `eval_string` vor `RETAIN(result)` prüfen – wenn Heap-Objekt, kein Singleton und `rc <= 0`, dann `result = NULL` setzen, damit kein RETAIN auf Zombie erfolgt (Test schlägt dann mit ASSERT_NOT_NULL statt Crash).
+
+**Status:** Defensiv-Check optional; Root-Cause (welcher Pfad liefert eine bereits freigegebene Liste?) noch offen.
+
+---
 
 Oder Adresse in Zeile umrechnen (Debug-Build, keine Stripping-Infos nötig):
 

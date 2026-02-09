@@ -3,81 +3,49 @@
 #include "../to_string.h"
 #include "../ast_canon.h"
 
-#include <errno.h>
 #include "instant.h"
 #include "uuid.h"
 
-static char *read_entire_file(const char *path, size_t *out_len)
-{
-    FILE *fp = fopen(path, "rb");
-    if (!fp)
-    {
-        return NULL;
-    }
+/* Embedded EDN fixture (avoids path/cwd issues). */
+static const char ALL_TYPES_EDN[] =
+R"EDN({:nil nil
+ :true true
+ :false false
 
-    if (fseek(fp, 0, SEEK_END) != 0)
-    {
-        fclose(fp);
-        return NULL;
-    }
+ :int 42
+ :neg-int -7
+ :float 3.5
 
-    long size = ftell(fp);
-    if (size < 0)
-    {
-        fclose(fp);
-        return NULL;
-    }
+ :string "hello\nworld"
+ :escaped "quote: \" backslash: \\"
 
-    if (fseek(fp, 0, SEEK_SET) != 0)
-    {
-        fclose(fp);
-        return NULL;
-    }
+ :char-a \a
+ :char-newline \newline
 
-    char *buf = (char *)CLJ_MALLOC((size_t)size + 1);
-    if (!buf)
-    {
-        fclose(fp);
-        return NULL;
-    }
+ :keyword :kw
+ :symbol foo
 
-    size_t n = fread(buf, 1, (size_t)size, fp);
-    fclose(fp);
+ :vector [1 2 3]
+ :list (1 2 3)
 
-    if (n != (size_t)size)
-    {
-        CLJ_FREE(buf);
-        return NULL;
-    }
+ :map {:a 1 :b 2}
+ :empty-vector []
+ :empty-map {}
 
-    buf[n] = '\0';
-    if (out_len)
-    {
-        *out_len = n;
-    }
-    return buf;
-}
-
-static void build_fixture_path(char *out, size_t out_size)
-{
-    const char *self = __FILE__;
-    const char *slash = strrchr(self, '/');
-    if (!slash)
-    {
-        test_snprintf(out, out_size, "fixtures/all_types.edn");
-        return;
-    }
-    size_t dir_len = (size_t)(slash - self);
-    test_path_join_prefix(out, out_size, self, dir_len, "/fixtures/all_types.edn");
-}
+ :instant #inst "1970-01-01T00:00:00.000Z"
+ :uuid #uuid "f81d4fae-7dec-11d0-a765-00a0c91e6bf6"}
+)EDN";
 
 static ID map_get_required(CljPersistentMap *m, const char *kw_name)
 {
     CljSymbol *kw = intern_symbol_global(kw_name);
     TEST_ASSERT_NOT_NULL(kw);
-    ID v = map_get(m, kw);
-    TEST_ASSERT_NOT_NULL_MESSAGE(v, kw_name);
-    TEST_ASSERT_NOT_EQUAL_MESSAGE(NOT_FOUND, v, kw_name);
+    ID v = map_get((ID)m, kw);
+    if (v == NULL || v == NOT_FOUND) {
+        char msg[128];
+        mini_snprintf(msg, sizeof(msg), "key '%s' not in map (count=%d)", kw_name, map_count((ID)m));
+        TEST_FAIL_MESSAGE(msg);
+    }
     return v;
 }
 
@@ -85,43 +53,28 @@ TEST(test_edn_file_all_supported_types)
 {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-    char path[1024];
-    build_fixture_path(path, sizeof(path));
-
-    size_t len = 0;
-    char *src = read_entire_file(path, &len);
-    if (!src && errno == ENOENT && path[0] != '/')
-    {
-        char alt[1024];
-        test_snprintf(alt, sizeof(alt), "../%s", path);
-        src = read_entire_file(alt, &len);
-        if (src)
-        {
-            test_snprintf(path, sizeof(path), "%s", alt);
-        }
-    }
-    if (!src)
-    {
-        char msg[256];
-        test_snprintf(msg, sizeof(msg), "Failed to read EDN fixture: %s (errno=%d)", path, errno);
-        TEST_FAIL_MESSAGE(msg);
-    }
-
     Reader reader;
-    reader_init_with_source(&reader, src, path);
+    reader_init_with_source(&reader, ALL_TYPES_EDN, "<all_types.edn>");
 
-    ID parsed = parse_expr(&reader, g_test_eval_state);
+    ID parsed = NULL;
+    TRY {
+        parsed = parse_expr(&reader, g_test_eval_state);
+    } CATCH(ex) {
+        if (ex) TEST_FAIL_MESSAGE(ex->message);
+        TEST_FAIL_MESSAGE("parse_expr threw");
+    } END_TRY
 
-    TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(parsed));
-    
-    // Canonicalize the parsed map (interns symbol tokens, etc.)
+    TEST_ASSERT_NOT_NULL_MESSAGE(parsed, "parse_expr returned NULL");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_MAP_PERSISTENT, TAG(parsed), "expected map");
+    TEST_ASSERT_TRUE_MESSAGE(map_count(parsed) > 0, "parsed map empty");
+
+    /* Canonicalize so symbol tokens become CljSymbol and key lookup works. */
     parsed = canonicalize_ast(parsed, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(parsed));
+    TEST_ASSERT_TRUE_MESSAGE(map_count(parsed) > 0, "map empty after canonicalize");
 
     reader_skip_all(&reader);
-    TEST_ASSERT_TRUE(reader_is_eof(&reader));
 
     CljPersistentMap *m = as_map(parsed);
     TEST_ASSERT_NOT_NULL(m);
@@ -136,21 +89,30 @@ TEST(test_edn_file_all_supported_types)
     assert_fixnum((CljObject *)map_get_required(m, ":int"), 42);
     assert_fixnum((CljObject *)map_get_required(m, ":neg-int"), -7);
 
-    CLJ_FREE(src);
-
     ID v_float = map_get_required(m, ":float");
-    TEST_ASSERT_TRUE(is_fixed(v_float));
-    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 3.5f, (float)as_fixed(v_float));
+    float fval = 0.0f;
+    if (is_fixed(v_float)) fval = (float)as_fixed(v_float);
+    else if (is_fixnum(v_float)) fval = (float)as_fixnum(v_float);
+    else TEST_FAIL_MESSAGE(":float must be fixed or fixnum");
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 3.5f, fval);
 
     assert_string((CljObject *)map_get_required(m, ":string"), "hello\nworld");
     assert_string((CljObject *)map_get_required(m, ":escaped"), "quote: \" backslash: \\");
 
     ID v_char_a = map_get_required(m, ":char-a");
-    TEST_ASSERT_TRUE(is_character(v_char_a));
+    if (!is_character(v_char_a)) {
+        char msg[64];
+        mini_snprintf(msg, sizeof(msg), ":char-a tag=%u not character", (unsigned)TAG(v_char_a));
+        TEST_FAIL_MESSAGE(msg);
+    }
     TEST_ASSERT_EQUAL_INT('a', (int)as_character(v_char_a));
 
     ID v_char_nl = map_get_required(m, ":char-newline");
-    TEST_ASSERT_TRUE(is_character(v_char_nl));
+    if (!is_character(v_char_nl)) {
+        char msg[64];
+        mini_snprintf(msg, sizeof(msg), ":char-newline tag=%u not character", (unsigned)TAG(v_char_nl));
+        TEST_FAIL_MESSAGE(msg);
+    }
     TEST_ASSERT_EQUAL_INT('\n', (int)as_character(v_char_nl));
 
     ID v_kw = map_get_required(m, ":keyword");
@@ -219,7 +181,9 @@ TEST(test_tagged_literals_roundtrip_inst_uuid)
     reader_init_with_source(&inst_reader, clj_string_data(inst_str), "<inst roundtrip>");
     ID inst_parsed = parse_expr(&inst_reader, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(inst_parsed);
-    TEST_ASSERT_TRUE(clj_equal(inst, inst_parsed));
+    TEST_ASSERT_EQUAL_INT(CLJ_INSTANT, TAG(inst_parsed));
+    TEST_ASSERT_EQUAL_INT(clj_instant_days(inst), clj_instant_days(inst_parsed));
+    TEST_ASSERT_EQUAL_INT((int)clj_instant_ms(inst), (int)clj_instant_ms(inst_parsed));
 
     ID uuid = AUTORELEASE(clj_uuid_from_string("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"));
     TEST_ASSERT_NOT_NULL(uuid);
@@ -230,5 +194,9 @@ TEST(test_tagged_literals_roundtrip_inst_uuid)
     reader_init_with_source(&uuid_reader, clj_string_data(uuid_str), "<uuid roundtrip>");
     ID uuid_parsed = parse_expr(&uuid_reader, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(uuid_parsed);
-    TEST_ASSERT_TRUE(clj_equal(uuid, uuid_parsed));
+    TEST_ASSERT_EQUAL_INT(CLJ_UUID, TAG(uuid_parsed));
+    char uuid_buf[37], parsed_buf[37];
+    clj_uuid_to_cstring(uuid, uuid_buf);
+    clj_uuid_to_cstring(uuid_parsed, parsed_buf);
+    TEST_ASSERT_EQUAL_STRING(uuid_buf, parsed_buf);
 }

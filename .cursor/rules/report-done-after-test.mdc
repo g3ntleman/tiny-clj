@@ -1,0 +1,14 @@
+---
+description: Erst "fertig" melden, wenn die Änderung getestet wurde
+alwaysApply: true
+---
+
+# Reporte erst fertig, wenn getestet
+
+**Regel:** Etwas als erledigt/fertig melden **erst**, nachdem die Änderung **getestet** wurde.
+
+- Implementierung oder Fix nicht als „fertig“ oder „erledigt“ bezeichnen, bevor ein relevanter Test (z. B. Unit-Test, manueller Lauf, Build) durchgeführt wurde.
+- Wenn Tests fehlschlagen oder der Lauf fehlschlägt: das nicht als Erfolg melden; stattdessen nachbessern oder klar sagen, dass noch offen ist.
+- Kurz angeben, **was** getestet wurde (z. B. „./build/unit-tests -test …“, „make“, konkreter Befehl), wenn du „fertig“ meldest.
+
+Damit bleibt die Aussage „fertig“ verlässlich und nicht nur behauptet.

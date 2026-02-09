@@ -10,8 +10,6 @@
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 
-extern const char *clojure_core_code;
-
 // Clojure Core Funktionen
 int load_clojure_core(EvalState *st);
 int load_clojure_repl(EvalState *st);

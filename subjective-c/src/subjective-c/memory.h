@@ -209,6 +209,12 @@ uint32_t autorelease_pool_mark(void);
  */
 uint32_t autorelease_pool_depth(void);
 
+/** @brief Remove one occurrence of obj from the pool (use when taking ownership).
+ * @param obj Object to remove
+ * @return true if removed, false if not in pool
+ */
+bool autorelease_pool_remove(CljObject *obj);
+
 /** @brief Drain autorelease pool to a previously marked depth
  * @param mark Depth marker from autorelease_pool_mark()
  */

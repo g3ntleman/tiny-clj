@@ -1019,6 +1019,9 @@ void init_special_symbols() {
     if (is_special_symbol(SYM_RECUR)) {
         ((CljSpecialSymbol*)SYM_RECUR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_recur;
     }
+    if (is_special_symbol(SYM_LOOP)) {
+        ((CljSpecialSymbol*)SYM_LOOP)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_loop;
+    }
     if (is_special_symbol(SYM_THROW)) {
         ((CljSpecialSymbol*)SYM_THROW)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_throw;
     }

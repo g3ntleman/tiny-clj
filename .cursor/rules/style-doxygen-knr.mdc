@@ -4,15 +4,15 @@
 
 1. **K&R-Braces:** Öffnende geschweifte Klammer steht bei Kontrollstrukturen auf derselben Zeile wie das Schlüsselwort (`if (...) {`, `} else {`, `while (...) {`). Bei Funktionen bleibt die Klammer wie im Projekt üblich (oft eigene Zeile).
 
-2. **Doxygen:** Jede Funktion ist mit einem Doxygen-Kommentar zu dokumentieren, **maximal drei Zeilen**:
+2. **Doxygen nur an Implementierungen:** Doxygen-Kommentare stehen **ausschließlich an der Implementierung** in den `.c`-Dateien, **nicht** in den Headern (`.h`). In `.h`-Dateien keine Funktionsdokumentation; Deklarationen bleiben ohne Doxygen. **Doxygen-Doku an den Implementierungen nicht vergessen:** Beim Anlegen oder Ändern von Funktionen den Doxygen-Kommentar an der Definition in `src/*.c` ergänzen bzw. anpassen. Kurz und prägnant:
    - Kurzbeschreibung (optional @brief oder erste Zeile)
    - @param pro Parameter (eine Zeile)
    - @return wenn relevant
 
-Beispiel:
+Beispiel (nur in der .c-Datei bei der Definition):
 ```c
 /** Returns a sequence over coll; nil if empty or not seqable. */
-static ID seq_for_coll(ID coll);
+static ID seq_for_coll(ID coll) { ... }
 ```
 
 oder
@@ -23,7 +23,7 @@ oder
  * @param st     Eval state
  * @return Parsed expression or NULL
  */
-ID parse_expr(Reader *reader, EvalState *st);
+ID parse_expr(Reader *reader, EvalState *st) { ... }
 ```
 
 Bei Änderungen oder neuen Funktionen im Production-Code diese Regel anwenden.

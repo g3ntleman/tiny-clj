@@ -5,8 +5,8 @@
 # Besser: bei Erzeugung stoppen, Adresse holen, dann retain/release für diese Adresse beobachten.
 #
 # 1) Breakpoint bei Erzeugung setzen (z.B. neues CLJ_SEQ in make_seq oder seq_rest):
-#    breakpoint set -f seq.c -l 553
-#    (seq.c:553 = return heap_seq in make_seq; seq.c:589 = return rest_seq in seq_rest)
+#    breakpoint set -f seq.c -l 590
+#    (seq.c:592 = return heap_seq in make_seq; seq.c:628 = return rest_seq in seq_rest)
 # 2) run --test <dein_test>
 # 3) Beim ersten Stopp: Adresse holen mit  p heap_seq  (bzw. p rest_seq bei 589)
 # 4) Retain/Release nur für diese Adresse beobachten (im selben Lauf):

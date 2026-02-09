@@ -1,0 +1,159 @@
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x142643570","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x1426436a0","collection":"0x142643570"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x142643570","rest":"0x142643550"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x1426336a0","type":99},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x1427043e0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x142704460","collection":"0x1427043e0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x1427043e0","rest":"0x1427043c0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x142704710","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x142704790","collection":"0x142704710"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x142704710","rest":"0x1427046f0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x144134ab0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x144134be0","collection":"0x144134ab0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x144134ab0","rest":"0x144134a90"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x144134e90","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x144134f10","collection":"0x144134e90"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x144134e90","rest":"0x144134e70"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x135008730","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x1350087b0","collection":"0x135008730"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x135008730","rest":"0x135008710"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x142663c60","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x142663d90","collection":"0x142663c60"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x142663c60","rest":"0x142663c40"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x142653d90","type":11},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x12be20160","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x12be20290","collection":"0x12be20160"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x12be20160","rest":"0x12be20140"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x12be10290","type":111},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x12be20540","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x12be205c0","collection":"0x12be20540"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x12be20540","rest":"0x12be20520"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x12be105c0","type":116},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x12d010870","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x12d2093f0","collection":"0x12d010870"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x12d010870","rest":"0x12d010850"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x12d01a0f0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x12d01a220","collection":"0x12d01a0f0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x12d01a0f0","rest":"0x12d01a0d0"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x12d00a220","type":116},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x12be27750","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x12be277d0","collection":"0x12be27750"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x12be27750","rest":"0x12be27730"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x12be177d0","type":116},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x12d01a4d0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x12d01a550","collection":"0x12d01a4d0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x12d01a4d0","rest":"0x12d01a4b0"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x12d00a550","type":115},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x12d0249e0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x12d024b10","collection":"0x12d0249e0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x12d0249e0","rest":"0x12d0249c0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x12d024dc0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x12d024e40","collection":"0x12d024dc0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x12d024dc0","rest":"0x12d024da0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x12d0250f0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x12d025170","collection":"0x12d0250f0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x12d0250f0","rest":"0x12d0250d0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x12d034ee0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x12d035010","collection":"0x12d034ee0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x12d034ee0","rest":"0x12d034ec0"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x12d025010","type":112},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x12d0352c0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x12d035340","collection":"0x12d0352c0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x12d0352c0","rest":"0x12d0352a0"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x12d025340","type":8},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14a643620","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14a643750","collection":"0x14a643620"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14a643620","rest":"0x14a643600"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x14a633750","type":116},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14a7043e0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14a704460","collection":"0x14a7043e0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14a7043e0","rest":"0x14a7043c0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14a704710","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14a704790","collection":"0x14a704710"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14a704710","rest":"0x14a7046f0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c409820","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c60d7c0","collection":"0x14c409820"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c409820","rest":"0x14c409800"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14a64a100","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14a64a180","collection":"0x14a64a100"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14a64a100","rest":"0x14a64a0e0"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x14a63a180","type":116},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c508c60","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c508ce0","collection":"0x14c508c60"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c508c60","rest":"0x14c508c40"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c01f150","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c01f1f0","collection":"0x14c01f150"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c01f150","rest":"0x14c01f130"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x14c00f1f0","type":19},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c01f540","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c01f5c0","collection":"0x14c01f540"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c01f540","rest":"0x14c01f520"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c01f870","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c01f8f0","collection":"0x14c01f870"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c01f870","rest":"0x14c01f850"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c1117f0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c111890","collection":"0x14c1117f0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c1117f0","rest":"0x14c1117d0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c111b40","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c111bc0","collection":"0x14c111b40"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c111b40","rest":"0x14c111b20"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c111e70","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c111ef0","collection":"0x14c111e70"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c111e70","rest":"0x14c111e50"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c119ed0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c119f70","collection":"0x14c119ed0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c119ed0","rest":"0x14c119eb0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14a7244c0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14a724540","collection":"0x14a7244c0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14a7244c0","rest":"0x14a7244a0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14a7247e0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14a724860","collection":"0x14a7247e0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14a7247e0","rest":"0x14a7247c0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c050ab0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c050b50","collection":"0x14c050ab0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c050ab0","rest":"0x14c050a90"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c050e00","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c050e80","collection":"0x14c050e00"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c050e00","rest":"0x14c050de0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c11f600","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c11f680","collection":"0x14c11f600"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c11f600","rest":"0x14c11f5e0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x14c626e50","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x14c626ef0","collection":"0x14c626e50"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest without RETAIN","data":{"current_list":"0x14c626e50","rest":"0x14c626e30"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x14c616ef0","type":11},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x13e0097e0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x13e009910","collection":"0x13e0097e0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest with RETAIN","data":{"current_list":"0x13e0097e0","rest":"0x13e0097c0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x13e009bc0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x13e009c40","collection":"0x13e009bc0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest with RETAIN","data":{"current_list":"0x13e009bc0","rest":"0x13e009ba0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x13e009ef0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x13e009f70","collection":"0x13e009ef0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest with RETAIN","data":{"current_list":"0x13e009ef0","rest":"0x13e009ed0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x13cf5ee80","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x13cf5efb0","collection":"0x13cf5ee80"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest with RETAIN","data":{"current_list":"0x13cf5ee80","rest":"0x13cf5ee60"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x13cf4efb0","type":80},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x13e005de0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x13e011940","collection":"0x13e005de0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest with RETAIN","data":{"current_list":"0x13e005de0","rest":"0x13e005dc0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x13e011bf0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x13e011c70","collection":"0x13e011bf0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest with RETAIN","data":{"current_list":"0x13e011bf0","rest":"0x13e011bd0"},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x13ce3c370","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x13ce3c4a0","collection":"0x13ce3c370"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest with RETAIN","data":{"current_list":"0x13ce3c370","rest":"0x13ce3c350"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x13ce2c4a0","type":208},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x13cf6bbd0","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x13cf6bc50","collection":"0x13cf6bbd0"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest with RETAIN","data":{"current_list":"0x13cf6bbd0","rest":"0x13cf6bbb0"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x13cf5bc50","type":102},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x13cf6bf00","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x13cf6bf80","collection":"0x13cf6bf00"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest with RETAIN","data":{"current_list":"0x13cf6bf00","rest":"0x13cf6bee0"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x13cf5bf80","type":144},"timestamp":0}
+{"hypothesisId":"H3","location":"builtins.c:native_next entry","message":"collection arg","data":{"collection":"0x13cf96880","type":11},"timestamp":0}
+{"hypothesisId":"H2","location":"builtins.c:native_next after make_seq","message":"it from make_seq","data":{"it":"0x13cf969b0","collection":"0x13cf96880"},"timestamp":0}
+{"hypothesisId":"H1","location":"seq.c:seq_next list","message":"returning rest with RETAIN","data":{"current_list":"0x13cf96880","rest":"0x13cf96860"},"timestamp":0}
+{"hypothesisId":"H4","location":"builtins.c:native_next return","message":"return value","data":{"returned":"0x13cf869b0","type":8},"timestamp":0}

@@ -589,6 +589,7 @@ CljSeqIterator* make_seq(ID obj) {
     heap_seq->base.type = CLJ_SEQ;
     heap_seq->base.rc = 1;
     heap_seq->iter = stack_iter;
+    RETAIN(obj);
     return heap_seq;
 }
 
@@ -596,8 +597,8 @@ void seq_release(ID seq_obj) {
     if (!seq_obj) return;
     CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return;
-    
-    // Stack iterator doesn't need cleanup
+    if (seq->iter.container)
+        RELEASE(seq->iter.container);
     CLJ_FREE(seq);
 }
 
@@ -620,32 +621,35 @@ ID seq_rest(ID seq_obj) {
     if (!rest_seq) return NULL;
     
     rest_seq->base.type = CLJ_SEQ;
-    
-    // Copy iterator state
-    rest_seq->iter = seq->iter;  // Struct copy
+    rest_seq->base.rc = 1;
+    rest_seq->iter = seq->iter;
     seq_iter_next(&rest_seq->iter);
-    
+    if (rest_seq->iter.container)
+        RETAIN(rest_seq->iter.container);
     return (CljObject*)rest_seq;
 }
 
+/**
+ * @brief Advance seq to next element; for CLJ_LIST returns the list rest directly.
+ * @param seq_obj Current seq (or list when over a list).
+ * @return Next seq/rest, or NULL if empty. Caller-owned when a new seq is
+ *         allocated; for list, the returned rest is part of the original list.
+ * @note If the caller will release the head (the original seq or its container),
+ *       they must RETAIN(seq_next(...)) before releasing. Using
+ *       AUTORELEASE(RETAIN(result)) would be safer but would poison COW optimizations.
+ */
 ID seq_next(ID seq_obj) {
     if (!seq_obj) return NULL;
-    
-    // CRITICAL: If the original sequence was a CLJ_LIST, return CLJ_LIST directly
-    // This matches the behavior of native_next in builtins.c
+    /* If the original sequence was a CLJ_LIST, return CLJ_LIST directly (native_next semantics). */
     CljSeqIterator *seq = as_seq(seq_obj);
     if (seq && seq->iter.seq_type == CLJ_LIST) {
-        // Original was a CLJ_LIST - return CLJ_LIST directly (not CLJ_SEQ)
         if (seq->iter.state.list.current) {
             CljList *current_list = as_list(seq->iter.state.list.current);
             if (current_list) {
                 CljObject *rest = LIST_REST(current_list);
-                // next returns nil if rest is empty, otherwise rest
-                // rest is part of the original list structure, which is already safe (caller has strong reference)
                 return rest;
             }
         }
-        // Empty list - return nil
         return NULL;
     }
 
@@ -672,13 +676,24 @@ ID seq_next(ID seq_obj) {
 void seq_next_inplace(ID *seq_slot) {
     if (!seq_slot || !*seq_slot) return;
     CljSeqIterator *seq = as_seq(*seq_slot);
-    if (!seq) return;
+    if (!seq) {
+        /* Not a heap seq (e.g. list passed as seq): advance via seq_next and update slot. */
+        ID next = seq_next(*seq_slot);
+        RETAIN(next);
+        RELEASE(*seq_slot);
+        *seq_slot = next;
+        return;
+    }
     if (seq->iter.seq_type == CLJ_LIST || seq->base.rc != 1) {
-        ASSIGN(seq_slot, seq_next(*seq_slot));
+        ID next = seq_next(*seq_slot);
+        RETAIN(next);
+        RELEASE(*seq_slot);
+        *seq_slot = next;
         return;
     }
     if (!seq_iter_next(&seq->iter)) {
-        ASSIGN(seq_slot, NULL);
+        RELEASE(*seq_slot);
+        *seq_slot = NULL;
         return;
     }
 }

@@ -1,4 +1,7 @@
 Read MEMORY_POLICY.md
+
+**RELEASE(NULL), RETAIN(NULL), AUTORELEASE(NULL) sind erlaubt** – die Macros behandeln NULL sicher; kein if (x) RELEASE(x) nötig, RELEASE(x) genügt.
+
 ---
 alwaysApply: true
 ---

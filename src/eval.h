@@ -76,7 +76,8 @@ void reset_eval_arg_depth(void);
 // - enabled = -1: reset to "read from env on next use"
 void eval_set_use_compiled_ast(int enabled);
 
-// Convenience functions for string evaluation
+// Convenience functions for string evaluation.
+// All return autoreleased refs (MEMORY_POLICY); callers must NOT RELEASE the result.
 /**
  * @brief Evaluate a parsed CljValue (handles immediate values and heap objects)
  * @param parsed The parsed CljValue (can be immediate or heap object)

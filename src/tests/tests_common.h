@@ -95,6 +95,9 @@ extern EvalState* g_test_eval_state;
 // Function to get global test EvalState (for backwards compatibility)
 extern EvalState* test_get_eval_state(void);
 
+/** Load clojure.core when the test group runs without core (call at start of tests that need +, rest, etc.). */
+extern void test_ensure_clojure_core(void);
+
 // Heap growth checks (used by test runner)
 void test_heap_growth_disable(void);
 void test_heap_growth_allow_all(void);

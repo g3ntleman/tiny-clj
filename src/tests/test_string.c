@@ -4,6 +4,7 @@
  * Tests for string manipulation functions from clojure.string namespace
  */
 
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 90000
 #include "tests_common.h"
 #include "namespace.h"
 #include "symbol.h"

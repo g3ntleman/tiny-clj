@@ -10,7 +10,7 @@
 # Nützlich:  p seq   bzw.  frame variable
 #            p seq->base.rc   (Referenzzähler)
 
-# Breakpoint 1: make_seq - wenn Input bereits CLJ_SEQ ist
+# Breakpoint 1: make_seq - wenn Input bereits CLJ_SEQ ist (dann RETAIN)
 breakpoint set -f seq.c -n make_seq -c 'obj && (unsigned char)((CljObject*)obj)->type == 18'
 
 # Breakpoint 2: autorelease() nur für CLJ_SEQ (18)

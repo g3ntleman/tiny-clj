@@ -10,6 +10,10 @@
 #include <string.h>
 #include <limits.h>
 
+static const char *clojure_core_code =
+#include "clojure.core.clj"
+    ;
+
 static const char *clojure_string_code =
 #include "clojure.string.clj"
     ;
