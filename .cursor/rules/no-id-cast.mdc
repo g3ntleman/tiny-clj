@@ -1,6 +1,6 @@
 # Kein Cast von oder nach ID
 
-**Regel:** Es darf **nie** von oder nach dem Typ `ID` gecastet werden.
+**Regel:** Es darf **nie** von oder nach dem Typ `ID` gecastet werden. Es sind **keine** Casts `(ID)` oder `(CljObject*)` nötig – Werte als `ID` übergeben und APIs/Macros nutzen, die `ID` akzeptieren.
 
 - Objekte als `ID` übergeben und verwenden; keine Casts wie `(ID)ptr` oder `(CljObject*)id`.
 - Macros (RETAIN, RELEASE, AUTORELEASE) und APIs, die `ID` erwarten, verwenden, sodass am Aufruf kein Cast nötig ist.

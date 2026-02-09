@@ -10,6 +10,15 @@
 #ifndef SUBJECTIVE_C_OBJECT_H
 #define SUBJECTIVE_C_OBJECT_H
 
+/**
+ * ID – opaque reference to any Clojure value (heap object or immediate).
+ * Typedef for void* so all object pointers and immediates can be passed uniformly.
+ *
+ * Rule: Do not cast to or from ID. Pass values as ID; use macros (RETAIN, RELEASE,
+ * AUTORELEASE) and APIs that accept ID so no cast is needed at the call site.
+ * If an API requires a concrete pointer type, change the API to take ID or use
+ * an accessor that accepts ID – do not cast.
+ */
 typedef void *ID;
 typedef ID CljValue;
 

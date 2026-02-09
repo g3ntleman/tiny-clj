@@ -1,3 +1,3 @@
 - Use English for all commit messages, code comments, function documentation, and technical documentation
 
-- Never write forwarding functions (they add call overhead for no benefit). Expose the _core implementation directly as the public function.- Values of type ID must never be cast. Pass them as ID; use macros (e.g. RELEASE, RETAIN) or APIs that accept ID so no cast is needed at the call site.
+- Never write forwarding functions (they add call overhead for no benefit). Expose the _core implementation directly as the public function.- Values of type ID must never be cast. No casts (ID) or (CljObject*) are needed: pass values as ID and use macros (e.g. RELEASE, RETAIN) or APIs that accept ID so no cast is needed at the call site.
