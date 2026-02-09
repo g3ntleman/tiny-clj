@@ -238,7 +238,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
                 i++;
             }
             if (v->type == CLJ_VECTOR_TRANSIENT) {
-                len += 11; // "<transient >"
+                len += 12; // "<transient " (11) + ">" (1)
             }
             return len;
         }
@@ -289,7 +289,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
                 first = false;
             }
             if (v->type == CLJ_MAP_TRANSIENT) {
-                len += 11; // "<transient >"
+                len += 12; // "<transient " (11) + ">" (1)
             }
             return len;
         }
