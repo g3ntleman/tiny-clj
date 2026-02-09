@@ -252,6 +252,10 @@ void tearDown(void) {
     }
     test_heap_growth_check();
     memory_profiler_check_leaks("Test Complete");
+    // Drain and free autorelease pool so it does not grow across tests (e.g. when
+    // tests throw and WITH_AUTORELEASE_POOL drain is skipped), avoiding Vector+3.5MB
+    // growth in integer_overflow_detection and similar.
+    autorelease_pool_free();
     fs_global_store_reset();
     runtime_reset(&g_runtime);
     // Reset symbol table between tests to avoid cross-test contamination.

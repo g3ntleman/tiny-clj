@@ -2,9 +2,10 @@
  * Arithmetic Tests using Unity Framework
  * 
  * Tests for arithmetic operations and integer overflow/underflow detection.
+ *
+ * Heap limit 200 after fixing pool accumulation (tearDown: autorelease_pool_free()).
  */
-
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 9000
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 200
 #include "tests_common.h"
 
 // ============================================================================
