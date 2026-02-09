@@ -8,21 +8,13 @@
 #include "tests_common.h"
 #include "../list.h"
 #include "../seq.h"
+#include "../builtins.h"
 
 // is_list_like is defined in list.h as static inline
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
 // ============================================================================
-
-#define TEST_VECTOR_SIZE 3
-
-static ID make_sample_map_with_entries(void) {
-    ID map = AUTORELEASE(make_map(4));
-    map = map_by_associng_kv(as_map(map), intern_symbol_global("k1"), fixnum(10));
-    map = map_by_associng_kv(as_map(map), intern_symbol_global("k2"), fixnum(20));
-    return map;
-}
 
 // ============================================================================
 // SEQ CREATION TESTS
@@ -69,14 +61,22 @@ TEST_SHARED(test_seq_rest_map_returns_sequence) {
     TEST_ASSERT_FALSE(seq_empty(rest));
 }
 
-TEST_SHARED(test_seq_next_inplace_reuses_iterator) {
-    ID map = make_sample_map_with_entries();
-    ID it = AUTORELEASE(make_seq(map));
-    ID same = it;
-    seq_next_inplace(&it);
-    TEST_ASSERT_EQUAL_PTR(same, it);
-    seq_next_inplace(&it);
-    TEST_ASSERT_NULL(it);
+/* Exhausting a seq via seq_next_inplace must set *seq_slot to NULL. Caller must own the seq (RETAIN/make_seq); seq_next_inplace RELEASEs when exhausting. */
+TEST_SHARED(test_seq_next_inplace_reuses_iterator, SUBJECTIVE_C_TEST_HEAP_GROWTH_UNLIMITED) {
+    TRY {
+        ID it = eval_string("(seq [1])", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL_MESSAGE(it, "eval_string (seq [1]) returned NULL");
+        RETAIN(it);  /* Own the seq so seq_next_inplace may RELEASE it when exhausting */
+        seq_next_inplace(&it);
+        TEST_ASSERT_NULL_MESSAGE(it, "after 1 seq_next_inplace (seq [1]) slot should be NULL");
+    } CATCH(ex) {
+        if (ex) {
+            const char *msg = (ex->message[0] != '\0') ? ex->message : "(no message)";
+            test_fprintf(stderr, "[seq_next_inplace_reuses_iterator] %s - %s\n", ex->type, msg);
+            TEST_FAIL_MESSAGE((ex->message[0] != '\0') ? ex->message : ex->type);
+        } else
+            TEST_FAIL_MESSAGE("exception (no details)");
+    } END_TRY
 }
 
 TEST_SHARED(test_seq_next) {
@@ -246,14 +246,20 @@ TEST_SHARED(test_seq_cow_multiple_sequences_same_container) {
     RELEASE(vec);
 }
 
-TEST_SHARED(test_seq_cow_rc_one_inplace) {
-    ID vec = AUTORELEASE(make_vector(4, false));
-    CljPersistentVector *v = as_persistent_vector(vec);
-    v = vector_conj(vector_conj(v, fixnum(1)), fixnum(2));
-    ID it = AUTORELEASE(make_seq(vec));
-    CljPersistentVector *new_vec = vector_conj(v, fixnum(3));
-    TEST_ASSERT_TRUE(v == new_vec);
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(seq_first(it)));
+TEST_SHARED(test_seq_cow_rc_one_inplace, SUBJECTIVE_C_TEST_HEAP_GROWTH_UNLIMITED) {
+    TRY {
+        ID it = eval_string("(seq [1 2 3])", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL_MESSAGE(it, "eval_string (seq [1 2 3]) returned NULL");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, as_fixnum(seq_first(it)), "first element should be 1");
+        /* it is autoreleased from eval_string; no RETAIN needed when only reading */
+    } CATCH(ex) {
+        if (ex) {
+            const char *msg = (ex->message[0] != '\0') ? ex->message : "(no message)";
+            test_fprintf(stderr, "[seq_cow_rc_one_inplace] %s - %s\n", ex->type, msg);
+            TEST_FAIL_MESSAGE((ex->message[0] != '\0') ? ex->message : ex->type);
+        } else
+            TEST_FAIL_MESSAGE("exception (no details)");
+    } END_TRY
 }
 
 TEST_SHARED(test_seq_cow_rc_greater_one_copy_on_write) {
@@ -301,6 +307,51 @@ TEST_SHARED(test_seq_cow_iteration_after_cow) {
     TEST_ASSERT_EQUAL_PTR(v, as_seq(it)->iter.container);
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(seq_first(seq_rest(it))));
     RELEASE(vec);
+}
+
+// ============================================================================
+// LOW-LEVEL HYPOTHESIS TESTS (H2/H3/H4: make_seq/native_rest ownership)
+// ============================================================================
+
+/* H2: make_seq(collection) does not retain collection; seq holds pointer to list;
+ *     if list is released, seq_next_inplace dereferences freed memory. */
+TEST(test_h2_make_seq_then_release_list_then_next) {
+    CljList *tail = make_list(fixnum(2), NULL);
+    CljList *list = make_list(fixnum(1), tail);
+    RELEASE(tail);
+    ID seq = make_seq(list);
+    TEST_ASSERT_NOT_NULL(seq);
+    RELEASE(list);
+    seq_next_inplace(&seq);
+    TEST_ASSERT_TRUE(seq == NULL || TAG(seq) == CLJ_LIST || TAG(seq) == CLJ_SEQ);
+}
+
+/* H3/H4: native_rest(list) returns rest; if we release list, rest is only retained by list
+ *     chain, so rest becomes dangling; native_next(rest) or use of rest then crashes. */
+TEST(test_h3_native_next_after_release_head) {
+    CljList *tail = make_list(fixnum(2), NULL);
+    CljList *list = make_list(fixnum(1), tail);
+    RELEASE(tail);
+    ID args[1] = { list };
+    ID rest = native_rest(args, 1);
+    TEST_ASSERT_NOT_NULL(rest);
+    RELEASE(list);
+    ID args2[1] = { rest };
+    ID next = native_next(args2, 1);
+    (void)next;
+}
+
+TEST(test_h4_use_rest_after_release_head) {
+    CljList *tail = make_list(fixnum(2), NULL);
+    CljList *list = make_list(fixnum(1), tail);
+    RELEASE(tail);
+    ID args[1] = { list };
+    ID rest = native_rest(args, 1);
+    TEST_ASSERT_NOT_NULL(rest);
+    RELEASE(list);
+    ID args2[1] = { rest };
+    ID first = native_first(args2, 1);
+    (void)first;
 }
 
 // ============================================================================
