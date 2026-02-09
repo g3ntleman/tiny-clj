@@ -18,7 +18,6 @@
 #include "namespace.h"
 #include "map.h"  // For CljPersistentMap
 
-
 // === Legacy API (deprecated - use ID API) ===
 // Note: parse() can return both objects (CljObject*) and immediate values (CljValue)
 // Use ID as the return type to handle both cases

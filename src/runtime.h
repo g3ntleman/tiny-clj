@@ -73,7 +73,7 @@ typedef struct TinyClJRuntime {
     CljPersistentMap *embedded_source_map;
 } TinyClJRuntime;
 
-// Statisch alloziertes globales Runtime-Struct
+/** Statically allocated global runtime struct. */
 extern TinyClJRuntime g_runtime;
 
 void runtime_init(TinyClJRuntime *runtime);

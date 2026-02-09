@@ -11,7 +11,6 @@
 #include "types.h"  // For SINGLETON_RC
 #include "exception.h"  // For throw_exception
 #include "common.h"  // For CLJ_ASSERT
-#include <stdint.h>
 
 // Empty string singleton with CljString layout
 static struct {

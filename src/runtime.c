@@ -58,7 +58,7 @@ static void zombie_log_fn(CljObject *v, bool is_double_free) {
 #endif
 
 void embedded_source_map_init(void) {
-    /* No embedded sources in this build; g_runtime.embedded_source_map remains NULL. */
+    /* No embedded sources in this build; embedded_source_map remains NULL. */
 }
 
 uint64_t runtime_next_resolve_epoch(void) {
