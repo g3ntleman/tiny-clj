@@ -21,6 +21,7 @@
 #include "namespace.h"
 #include "memory.h"
 #include "ast.h"
+#include "seq.h"
 #include "parser.h"  // For resolve_alias_in_namespace
 #include "meta.h"    // For meta_get and meta_set
 #include "symbol_token.h"
@@ -112,6 +113,60 @@ static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, boo
     }
     move_meta(rest_expr, node);
     return as_list(node);
+}
+
+// Materialize a sequence into a plain CLJ_LIST so macro expansion results can
+// pass through the normal canonicalization pipeline.
+static ID seq_to_plain_list(ID seq_obj) {
+    if (!seq_obj) return NULL;
+    if (is_list_type(TAG(seq_obj))) return seq_obj;
+
+    SeqIterator iter;
+    if (!seq_iter_init(&iter, seq_obj)) return NULL;
+    if (seq_iter_empty(&iter)) return (ID)empty_list();
+
+    CljPersistentVector *elems = make_vector(8, STRONG);
+    if (!elems) return NULL;
+    while (!seq_iter_empty(&iter)) {
+        ID elem = seq_iter_first(&iter);
+        vector_conj_inplace(&elems, elem);
+        seq_iter_next(&iter);
+    }
+
+    int count = vector_count(elems);
+    CljList *list = empty_list();
+    for (int i = count - 1; i >= 0; i--) {
+        ID elem = vector_nth(elems, i);
+        list = make_list(elem, list);
+    }
+    RELEASE(elems);
+    return (ID)list;
+}
+
+static bool seq_macro_fallback_assert_enabled(void) {
+#ifdef DEBUG
+    static int enabled = -1;
+    if (enabled == -1) {
+        const char *v = getenv("TINYCLJ_ASSERT_SEQ_FALLBACK");
+        enabled = (v && v[0] && strcmp(v, "0") != 0) ? 1 : 0;
+    }
+    return enabled == 1;
+#else
+    return false;
+#endif
+}
+
+static bool macro_expansion_seq_needs_fallback(ID expanded_first, bool in_quote, EvalState *st) {
+    if (in_quote) return true;
+    if (!expanded_first || IS_IMMEDIATE(expanded_first)) return true;
+    if (TAG(expanded_first) != CLJ_SYMBOL) return false;
+
+    CljSymbol *head_sym = as_symbol(expanded_first);
+    if (!head_sym) return true;
+    if (is_special_symbol(head_sym)) return true;
+    if (head_sym == SYM_LET || head_sym == SYM_LOOP || head_sym == SYM_FN) return true;
+    if (!is_native_symbol(head_sym) && lookup_macro_resolve(st, head_sym)) return true;
+    return false;
 }
 
 // ============================================================================
@@ -463,12 +518,13 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 // NOTE: Arguments are NOT fully canonicalized here - macros work with raw forms
                 // BUT: Symbol tokens must be converted to interned symbols for frame lookup
                 // The expanded form will be canonicalized recursively below
-                ID args[16];
-                int argc = 0;
-                LIST_FOR_EACH(LIST_REST(list), arg) {
-                    if (argc >= 16) break;
-                    // Keep macro args as raw forms (no canonicalization here).
-                    args[argc++] = arg;
+                CljList *rest = list_or_null(as_list(LIST_REST(list)));
+                int argc = rest ? list_count(rest) : 0;
+                ID args_stack[16];
+                ID *args = alloc_obj_array(argc, args_stack);
+                int i = 0;
+                LIST_FOR_EACH(rest, arg) {
+                    args[i++] = arg;
                 }
                 
                 // Call macro function to expand the form.
@@ -481,6 +537,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 }
                 
                 ID expanded = eval_function_call((CljObject*)macro, args, argc, NULL, st);
+                free_obj_array(args, args_stack);
                 if (st) {
                     st->current_ns = saved_ns;
                 }
@@ -500,11 +557,34 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 // Macros can return PersistentList (CLJ_LIST) which needs to be canonicalized
                 unsigned char expanded_tag = TAG(expanded);
                 if (expanded_tag == CLJ_SEQ) {
-                    // Sequence is already in pool; wrapping in make_list would RETAIN it -> double-release on drain.
-                    if (list) RETAIN(list);
-                    ID result = canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
-                    if (list) RELEASE(list);
-                    return result;
+                    SeqIterator seq_it;
+                    if (seq_iter_init(&seq_it, expanded) && !seq_iter_empty(&seq_it)) {
+                        ID expanded_first_raw = seq_iter_first(&seq_it);
+                        ID expanded_first = canonicalize_expr_with_scope(expanded_first_raw, st, in_quote, scope_stack);
+
+                        if (!macro_expansion_seq_needs_fallback(expanded_first, in_quote, st)) {
+                            CljPersistentVector *seq_args = make_vector(4, STRONG);
+                            seq_iter_next(&seq_it);
+                            while (!seq_iter_empty(&seq_it)) {
+                                ID arg_raw = seq_iter_first(&seq_it);
+                                ID arg = canonicalize_expr_with_scope(arg_raw, st, false, scope_stack);
+                                vector_conj_inplace(&seq_args, arg);
+                                seq_iter_next(&seq_it);
+                            }
+                            CljASTCall *seq_call = make_ast_call(expanded_first, seq_args);
+                            RELEASE(seq_args);
+                            move_meta(list, (ID)seq_call);
+                            return AUTORELEASE(seq_call);
+                        }
+                    }
+
+                    if (seq_macro_fallback_assert_enabled()) {
+                        CLJ_ASSERT(false && "macro-expansion CLJ_SEQ used canonicalizer fallback path");
+                    }
+                    ID expanded_list = seq_to_plain_list(expanded);
+                    if (!expanded_list) return NULL;
+                    expanded = expanded_list;
+                    expanded_tag = TAG(expanded);
                 }
                 if (!is_list_type(expanded_tag)) {
                     // Expanded form is not a list - wrap in a list for canonicalization

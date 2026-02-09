@@ -1,4 +1,4 @@
-# Plan: defn- (private functions) für tinyclj
+# Plan: defn- (private functions) für tiny-clj
 
 ## Ziel
 - defn- soll wie in Clojure private Funktionen deklarieren.
@@ -8,7 +8,7 @@
 
 ## Schritte
 1. Test für defn- anlegen: Funktion ist im Namespace, aber nicht von außen sichtbar.
-2. defn--Makro implementieren: Setzt ^:private und optional {:tinyclj/private true}.
+2. defn--Makro implementieren: Setzt ^:private und optional {:tiny-clj/private true}.
 3. Interpreter/Loader prüft im Debug-Build auf Privatheit und verhindert Zugriff von außen.
 4. Release-Build: Privatheit wird ignoriert.
 5. Tests für defn- mit und ohne Metadaten.

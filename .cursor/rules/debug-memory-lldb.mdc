@@ -24,12 +24,12 @@ Bei **Crashes** (SIGABRT, SIGSEGV, Exit 134), **AutoreleasePoolError** („still
 3. **Double-Free: Objektadresse in retain/release beobachten**
    - **Früh fangen (empfohlen):** Wenn Du erst bei release/skipping RELEASE stoppst, ist das Problem schon passiert. Besser: bei Erzeugung stoppen (z. B. `seq.c:592` make_seq (heap_seq) oder `seq.c:628` seq_rest (rest_seq)), `p heap_seq` bzw. `p rest_seq` → Adresse, dann in demselben Lauf Breakpoints in `retain`/`release` mit dieser Adresse setzen und weiterlaufen – so siehst Du jedes retain/release von Geburt an.
    - Skript `.lldb-debug-double-free-address`: Strategie A (früh fangen) und B (Adresse ersetzen) beschrieben; Adressen sind pro Lauf anders (ASLR/Heap), daher Adresse im selben Lauf aus „p heap_seq“ holen.
-   - **Rückwärts lesen:** Bei DEBUG+ZOMBIE_ENABLED zeichnet ein Ringpuffer in `memory.c` die letzten retain/release/autorelease auf; an der Problemstelle wird die Historie nach stderr gedruckt (neueste zuerst). Caller werden automatisch symbolisiert (backtrace_symbols) – lldb ist dafür nicht nötig. Nach Adresse filtern: `RCHIST_FILTER_ADDR=0x<addr>` (Adresse aus „obj=%p“ in der Ausgabe).
+   - **Rückwärts lesen:** Bei DEBUG zeichnet ein Ringpuffer in `memory.c` die letzten retain/release/autorelease auf (auch ohne ZOMBIE_ENABLED). An der Problemstelle wird die Historie bei Exception nach stderr gedruckt (neueste zuerst). Caller werden automatisch symbolisiert (backtrace_symbols) – lldb ist dafür nicht nötig. Nach Adresse filtern: `RCHIST_FILTER_ADDR=0x<addr>` (Adresse aus „obj=%p“ in der Ausgabe).
 
 **Retain-Count-History (RCHIST) – Kurzreferenz:**
-- **Ort:** `subjective-c/src/memory.c`, Ringpuffer mit 128 Einträgen; nur bei DEBUG+ZOMBIE_ENABLED.
-- **Einträge:** Pro RETAIN/RELEASE/AUTORELEASE wird gepusht: Objekt, Op (R/L/A), rc nach der Operation, Caller (`__builtin_return_address(0)`).
-- **Gedruckt** bei: release mit rc==0 (Double-Free), release mit rc<=pool_count, autorelease mit rc<=pool_count.
+- **Ort:** `subjective-c/src/memory.c`, Ringpuffer (RCHIST_SIZE Einträge; auf ESP32 kleiner), bei DEBUG (unabhängig von ZOMBIE_ENABLED), damit bei jeder Exception nutzbar.
+- **Einträge:** Pro RETAIN/RELEASE/AUTORELEASE wird gepusht: Objekt, Op (R/L/A), rc nach der Operation, Caller (`__builtin_return_address(1)`).
+- **Gedruckt** bei: retain mit rc<=0, release mit rc==0 (Double-Free), release mit rc<=pool_count, autorelease mit rc<=pool_count – also immer wenn eine entsprechende Exception geworfen wird.
 - **Ausgabe:** Zeilen `  R rc=2  <symbol>` usw. – neueste zuerst lesen; R=retain, L=release, A=autorelease; rc = Referenzzähler nach dem Aufruf.
 - **Filter:** `RCHIST_FILTER_ADDR=0x<addr>` setzen, dann wird nur für dieses Objekt gedruckt (Adresse aus „obj=%p“ im Header).
 

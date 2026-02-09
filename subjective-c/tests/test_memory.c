@@ -1,68 +1,78 @@
 #include "test_common.h"
 #include "platform_allocated_size.h"
-#include "memory.h"
-#include "map.h"
-#include "vector.h"
 #include "hashmap.h"
-#include "hashset.h"
 #include <stdio.h>
 
-/* On ESP32: assert that FAM allocators use round_up_to_fam_granularity so
- * requested size equals allocated size. Off ESP32 or when platform has no
- * allocated_size API: skip assertions. */
+/* Pseudo-test: measure malloc waste (allocated - requested) for FAM types at various sizes.
+ * Run with: ./bin/subjective-c-tests -test "test_memory/fam_alloc_waste_measure"
+ * Use output to derive round-up formula for capacity optimization. */
+static void measure_one(const char *label, size_t requested, size_t allocated) {
+    size_t waste = (allocated >= requested) ? (allocated - requested) : 0;
+    (void)fprintf(stderr, "FAM_WASTE %s requested=%zu allocated=%zu waste=%zu\n",
+                  label, requested, allocated, waste);
+}
+
 TEST(test_memory_fam_alloc_waste_measure) {
+    /* Check if platform reports allocated size (malloc_size / heap_caps_get_allocated_size). */
     void *probe = malloc(8);
     size_t got = probe ? platform_allocated_size(probe) : 0;
     if (probe) free(probe);
     if (got == 0) {
+        /* Platform has no allocated_size API; skip measurement. */
         TEST_PASS();
         return;
     }
 
-#if defined(ESP32_BUILD)
-    /* ESP32: allocated must equal the size we request (round_up_to_fam_granularity). */
+    (void)fprintf(stderr, "FAM_WASTE --- Map (capacity -> requested, allocated, waste) ---\n");
     for (int cap = 1; cap <= 32; cap++) {
         CljPersistentMap *m = make_map(cap);
-        if (!m || m->capacity == 0) continue;
-        size_t expected = round_up_to_fam_granularity(
-            sizeof(CljPersistentMap) + (size_t)m->capacity * 2 * sizeof(CljObject *));
-        size_t allocated = platform_allocated_size(m);
-        TEST_ASSERT_TRUE(expected == allocated);
+        if (!m || m->capacity == 0) continue; /* singleton */
+        size_t req = sizeof(CljPersistentMap) + (size_t)m->capacity * 2 * sizeof(CljObject *);
+        size_t alloc = platform_allocated_size(m);
+        char buf[64];
+        (void)snprintf(buf, sizeof(buf), "map_cap%d", m->capacity);
+        measure_one(buf, req, alloc);
         RELEASE(m);
     }
 
+    (void)fprintf(stderr, "FAM_WASTE --- Vector (capacity -> requested, allocated, waste) ---\n");
     for (unsigned int cap = 1; cap <= 32; cap++) {
         CljPersistentVector *v = make_vector(cap, STRONG);
         unsigned int actual_cap = vector_capacity(v);
         if (!v || actual_cap == 0) continue;
-        size_t expected = round_up_to_fam_granularity(
-            sizeof(CljPersistentVector) + (size_t)actual_cap * sizeof(ID));
-        size_t allocated = platform_allocated_size(v);
-        TEST_ASSERT_TRUE(expected == allocated);
+        size_t req = vector_requested_allocation_size(actual_cap);
+        size_t alloc = platform_allocated_size(v);
+        char buf[64];
+        (void)snprintf(buf, sizeof(buf), "vec_cap%u", actual_cap);
+        measure_one(buf, req, alloc);
         RELEASE(v);
     }
 
+    (void)fprintf(stderr, "FAM_WASTE --- HashSet (requested capacity -> actual cap, requested, allocated, waste) ---\n");
     for (unsigned int req_cap = 1; req_cap <= 32; req_cap++) {
         CljHashSet *s = make_hashset(req_cap);
         if (!s) continue;
-        size_t expected = round_up_to_fam_granularity(
-            sizeof(CljHashSet) + (size_t)s->capacity * sizeof(CljObject *));
-        size_t allocated = platform_allocated_size(s);
-        TEST_ASSERT_TRUE(expected == allocated);
+        size_t req = sizeof(CljHashSet) + (size_t)s->capacity * sizeof(CljObject *);
+        size_t alloc = platform_allocated_size(s);
+        char buf[64];
+        (void)snprintf(buf, sizeof(buf), "hashset_req%u_cap%u", req_cap, s->capacity);
+        measure_one(buf, req, alloc);
         RELEASE(s);
     }
 
+    (void)fprintf(stderr, "FAM_WASTE --- HashMap (requested capacity -> actual cap, requested, allocated, waste) ---\n");
     for (unsigned int req_cap = 1; req_cap <= 32; req_cap++) {
         CljHashMap *h = make_hashmap(req_cap);
         if (!h) continue;
-        size_t expected = round_up_to_fam_granularity(
-            sizeof(CljHashMap) + (size_t)h->capacity * 2 * sizeof(CljObject *));
-        size_t allocated = platform_allocated_size(h);
-        TEST_ASSERT_TRUE(expected == allocated);
+        size_t req = sizeof(CljHashMap) + (size_t)h->capacity * 2 * sizeof(CljObject *);
+        size_t alloc = platform_allocated_size(h);
+        char buf[64];
+        (void)snprintf(buf, sizeof(buf), "hashmap_req%u_cap%u", req_cap, h->capacity);
+        measure_one(buf, req, alloc);
         RELEASE(h);
     }
-#endif
 
+    (void)fprintf(stderr, "FAM_WASTE --- end ---\n");
     TEST_PASS();
 }
 

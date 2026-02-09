@@ -34,7 +34,7 @@ We advertise a `_matterc._udp` service (Matter commissionable discovery).
 Pick a port that isn't in use (example: `5540`). The instance name can be anything.
 
 ```bash
-dns-sd -R "tinyclj-mdns-test" _matterc._udp local 5540 D=3840 VP=123+456 CM=1
+dns-sd -R "tiny-clj-mdns-test" _matterc._udp local 5540 D=3840 VP=123+456 CM=1
 ```
 
 Notes:
@@ -90,13 +90,13 @@ Example shapes (values will differ):
 
 ```clojure
 {:type :instance-found
- :instance "tinyclj-mdns-test"
+ :instance "tiny-clj-mdns-test"
  :service "_matterc._udp.local"}
 ```
 
 ```clojure
 {:type :resolved
- :instance "tinyclj-mdns-test"
+ :instance "tiny-clj-mdns-test"
  :service "_matterc._udp.local"
  :host "my-mac.local"
  :port 5540

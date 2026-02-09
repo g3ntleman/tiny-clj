@@ -115,8 +115,7 @@ static void eval_finally_clause(ID finally_clause,
         while (node) {
             ID expr = LIST_FIRST(node);
             if (expr) {
-                ID r = eval_body(expr, env, st, ctx);
-                RELEASE(r);
+                (void)eval_body(expr, env, st, ctx);
             }
             node = list_rest_normalized(node);
         }
@@ -130,8 +129,7 @@ static void eval_finally_clause(ID finally_clause,
         for (unsigned int i = 0; i < count; i++) {
             ID expr = vector_nth(args, i);
             if (!expr) continue;
-            ID r = eval_body(expr, env, st, ctx);
-            RELEASE(r);
+            (void)eval_body(expr, env, st, ctx);
         }
     }
 }
@@ -230,11 +228,12 @@ ID eval_special_if(CljPersistentVector *args, CljPersistentMap *env, EvalState *
 
     ID cond_val = eval_arg_from_expr_with_context(cond_expr, env, st, ctx);
     bool truthy = clj_is_truthy(cond_val);
-    RELEASE(cond_val);
 
     ID branch = truthy ? then_expr : else_expr;
     if (!branch) return NULL;
-    return eval_body(branch, env, st, ctx);
+    // Bypass eval_body wrapper when ctx is set: saves ~304 bytes of stack per if-level
+    // (eval_body allocates its full frame even when it just forwards to eval_body_with_params)
+    return ctx ? eval_body_with_params(branch, ctx) : eval_body(branch, env, st, NULL);
 }
 
 ID eval_special_when(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
@@ -242,7 +241,6 @@ ID eval_special_when(CljPersistentVector *args, CljPersistentMap *env, EvalState
     ID cond_expr = (argc >= 1) ? args_nth(args, 0) : NULL;
     ID cond_val = eval_arg_from_expr_with_context(cond_expr, env, st, ctx);
     bool truthy = cond_val ? clj_is_truthy(cond_val) : false;
-    RELEASE(cond_val);
     if (!truthy) return NULL;
 
     ID result = NULL;
@@ -251,7 +249,9 @@ ID eval_special_when(CljPersistentVector *args, CljPersistentMap *env, EvalState
         bool has_next = (i + 1) < argc;
 
         if (body_expr) {
-            ASSIGN(result, eval_body(body_expr, env, st, ctx));
+            // Bypass eval_body wrapper when ctx is set: saves ~304 bytes of stack
+            ASSIGN(result, ctx ? eval_body_with_params(body_expr, ctx)
+                               : eval_body(body_expr, env, st, NULL));
             if (!result && has_next) return NULL;
         }
     }
@@ -271,11 +271,8 @@ ID eval_special_while(CljPersistentVector *args, CljPersistentMap *env, EvalStat
         WITH_AUTORELEASE_POOL({
             ID cond_val = eval_arg_from_expr_with_context(cond_expr, env, st, ctx);
             if (!cond_val || !clj_is_truthy(cond_val)) {
-                RELEASE(cond_val);
                 should_exit = true;
             } else {
-                RELEASE(cond_val);
-
                 ID result = NULL;
                 for (unsigned int i = 1; i < argc; i++) {
                     ID body_expr = args_nth(args, i);
@@ -289,7 +286,6 @@ ID eval_special_while(CljPersistentVector *args, CljPersistentMap *env, EvalStat
                         }
                     }
                 }
-                RELEASE(result);
             }
         });
 
@@ -564,7 +560,6 @@ ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState
         for (unsigned int i = 1; i < argc; i++) {
             ID body_expr = args_nth(args, i);
             if (!body_expr) continue;
-            RELEASE(result);
             if (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr)) {
                 result = body_expr;
                 RETAIN(result);

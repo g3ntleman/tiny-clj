@@ -29,7 +29,7 @@
   - Maximum pattern length: 256 characters
 
 ### Date/Time Library (Latest)
-- **tinyclj.datetime**: Neue Datum/Zeit-Konvertierungsbibliothek
+- **tiny-clj.datetime**: Neue Datum/Zeit-Konvertierungsbibliothek
   - `civil-from-days` / `days-from-civil` - Unix-Tage ↔ Datum (Jahr/Monat/Tag)
   - `time-from-millis` / `millis-from-time` - Millisekunden ↔ Zeit (Stunde/Minute/Sekunde)
   - `date-time` / `to-raw` - High-Level API für Timestamp-Konvertierung

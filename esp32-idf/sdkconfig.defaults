@@ -7,22 +7,27 @@ CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 CONFIG_COMPILER_OPTIMIZATION_LEVEL_RELEASE=y
 
 # Main task stack: default 3584 is too small for recursive parser when loading clojure_core.
-# 12KB was still too small for (require 'clojure.string): deep parse_list_rest recursion
-# overflowed into heap and caused LoadProhibited in tlsf_malloc (block ptr 0xff00).
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=20480
+# 20KB was still too small for (require 'tiny-clj.runtime): deep macro expansion recursion
+# (cond/some->/for macros) consumed ~19KB of stack, overflowing into heap.
+# 32KB gives enough headroom for complex macro expansions with the eval stack guard.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768
 
 # Use custom partition table with a reserved tiny-db partition.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
-# Core dumps: store in flash (persistent) for first deployments.
+# Core dumps: store in flash (persistent) for crash diagnostics.
+# IMPORTANT: Disabling coredump also disables CONFIG_FREERTOS_TASK_FUNCTION_WRAPPER
+# (Kconfig dependency), which causes a LoadProhibited crash in prvSelectHighestPriorityTaskSMP
+# during FreeRTOS scheduler startup. Keep coredump enabled.
+# CHECK_BOOT is disabled: an erased/corrupt coredump partition triggers
+# assert(pxQueue->uxItemSize == 0) in xQueueSemaphoreTake during boot.
 # Symbol names verified against: external/esp-idf/components/espcoredump/Kconfig
 CONFIG_ESP_COREDUMP_ENABLE=y
 CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
-# Prefer ELF for best debugging experience (bigger than BIN).
 CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
 CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
-CONFIG_ESP_COREDUMP_CHECK_BOOT=y
+# CONFIG_ESP_COREDUMP_CHECK_BOOT is not set
 
 # SPIFFS is unused in this project; leave it at IDF defaults.
 

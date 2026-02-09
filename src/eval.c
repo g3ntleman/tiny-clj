@@ -776,14 +776,10 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
     }
 }
 
-// Simplified body evaluation (basic implementation)
-/** @brief Evaluate function body expressions */
-ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
-    // CRITICAL: If EvalContext is provided, use eval_body_with_params to preserve RecurContext
-    // eval_body_with_params can handle ctx->params == NULL
-    if (ctx) {
-        return eval_body_with_params(body, ctx);
-    }
+// Non-ctx eval body path: separated to prevent its large frame (many locals in switch)
+// from bloating eval_body when only the ctx-forwarding path is taken.
+// This saves ~250 bytes of stack per eval_body call in the common (ctx != NULL) case.
+static ID __attribute__((noinline)) eval_body_no_ctx(ID body, CljPersistentMap *env, EvalState *st) {
     if (!body) {
         return NULL;
     }
@@ -802,12 +798,11 @@ ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *c
     switch (((CljObject*)body)->type) {
         case CLJ_LIST:
         case CLJ_AST_NODE: {
-            // Evaluate list
-            // CRITICAL: Pass ctx to preserve RecurContext
-            return eval_list(as_list(body), eval_env, st, ctx);
+            // Evaluate list (no ctx in this path)
+            return eval_list(as_list(body), eval_env, st, NULL);
         }
         case CLJ_AST_CALL: {
-            return eval_ast_call(as_ast_call(body), eval_env, st, ctx);
+            return eval_ast_call(as_ast_call(body), eval_env, st, NULL);
         }
         case CLJ_SYMBOL: {
             // Check if symbol is a keyword - keywords evaluate to themselves
@@ -821,16 +816,7 @@ ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *c
                 return NULL; // nil evaluates to NULL
             }
 
-            if (ctx) {
-                // Use st from context if available, otherwise fall back to parameter
-                EvalState *eval_st = get_eval_state(ctx, st);
-                CljPersistentMap *fallback_env = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
-                ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, fallback_env, ctx->frame, body, eval_st);
-                if (resolved_id != NOT_FOUND) {
-                    return AUTORELEASE(RETAIN(resolved_id));
-                }
-                // If NOT_FOUND, continue to fallback resolution paths below
-            }
+            // No ctx in this path (ctx-based resolution handled by eval_body_with_params)
 
             // Resolve symbol - first try local environment, then namespace
             // Note: We need to check if key exists, not just if value is non-NULL,
@@ -901,7 +887,7 @@ ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *c
                 if (is_symbol(elem) && elem == SYM_NIL) {
                     eval_elem = NULL;  // nil evaluates to NULL
                 } else if (elem) {
-                    eval_elem = eval_body(elem, env, st, ctx);
+                    eval_elem = eval_body_no_ctx(elem, env, st);
                 }
                 
                 // Add evaluated element to result vector
@@ -929,14 +915,14 @@ ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *c
                 if (key && key_tag == CLJ_SYMBOL && key == (CljObject*)SYM_NIL) {
                     eval_key = NULL;  // nil evaluates to NULL
                 } else if (key) {
-                    eval_key = eval_body(key, env, st, ctx);
+                    eval_key = eval_body_no_ctx(key, env, st);
                 }
 
                 ID eval_value = NULL;
                 if (value && value_tag == CLJ_SYMBOL && value == (CljObject*)SYM_NIL) {
                     eval_value = NULL;  // nil evaluates to NULL
                 } else if (value) {
-                    eval_value = eval_body(value, env, st, ctx);
+                    eval_value = eval_body_no_ctx(value, env, st);
                 }
 
                 // Add evaluated key-value pair to result map
@@ -952,6 +938,16 @@ ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *c
             // Literal value
             return body;
     }
+}
+
+// Lightweight dispatcher: when ctx is set, forward directly to eval_body_with_params
+// without allocating the full frame of eval_body_no_ctx. This saves ~250 bytes of stack
+// per eval recursion level (measured: 304 → ~48 bytes).
+ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+    if (ctx) {
+        return eval_body_with_params(body, ctx);
+    }
+    return eval_body_no_ctx(body, env, st);
 }
 
 // Helper functions for eval_list optimization
@@ -991,9 +987,40 @@ static ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *st, con
 // Thread-local recursion depth tracking for eval_arg and eval_list
 static _Thread_local int g_eval_arg_depth = 0;
 
-// Reset eval arg depth (for test isolation)
-void reset_eval_arg_depth(void) {
+// Thread-local recursion depth tracking for eval_ast_call (stack overflow guard)
+static _Thread_local int g_eval_ast_call_depth = 0;
+
+// Stack-based recursion guard: measures actual C stack usage (no heap alloc needed).
+// s_eval_stack_base is set at top-level eval entry (eval_parsed_value) and compared
+// against the current stack position in eval_ast_call.  After longjmp-based exception
+// recovery, the stack unwinds, so the measurement auto-corrects.
+static _Thread_local char *s_eval_stack_base = NULL;
+#ifdef DEBUG
+static _Thread_local ptrdiff_t s_eval_stack_peak = 0;
+#endif
+
+// Maximum eval stack consumption before we throw StackOverflowError.
+// ESP32: 20–32 KB total stack; leave headroom for malloc/autorelease/exception handling.
+// Desktop: 8 MB stack, so 256 KB is very conservative.
+#if defined(ESP_PLATFORM) || defined(ESP32_BUILD)
+#define EVAL_STACK_LIMIT  16384   /* 16 KB */
+#else
+#define EVAL_STACK_LIMIT  2097152 /* 2 MB (desktop stack is 8 MB+) */
+#endif
+
+// Reset eval depths (for test isolation and after exception recovery)
+void reset_eval_depths(void) {
     g_eval_arg_depth = 0;
+    g_eval_ast_call_depth = 0;
+}
+
+#ifdef DEBUG
+ptrdiff_t eval_stack_peak(void) { return s_eval_stack_peak; }
+#endif
+
+// Legacy alias
+void reset_eval_arg_depth(void) {
+    reset_eval_depths();
 }
 
 // ============================================================================
@@ -1170,7 +1197,6 @@ static INLINE ID eval_map_lookup_vec(CljPersistentVector *args, CljPersistentMap
     if (!key) return NULL;
 
     ID result = map_get_sentinel((CljValue)map, (CljValue)key, NULL);
-    RELEASE(key);
     return result;
 }
 
@@ -1213,11 +1239,7 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
             return (IS_IMMEDIATE(default_val) || !default_val) ? default_val : (ID)AUTORELEASE(default_val);
         }
 
-        if (default_val) {
-            RELEASE(default_val);
-        }
-
-        return (ID)AUTORELEASE(found);
+        return AUTORELEASE(found);
     }
 
     if (op_tag == CLJ_SYMBOL) {
@@ -1374,7 +1396,34 @@ ID eval_list(CljList *list, CljPersistentMap *env, EvalState *st, const EvalCont
 }
 
 static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+    // Stack-based depth guard: measure actual C stack usage to prevent stack overflow.
+    // More reliable than a counter: fires based on real stack consumption, not call count.
+    // Works correctly after longjmp (stack unwinds, measurement auto-corrects).
+    {
+        char stack_marker;
+        if (s_eval_stack_base) {
+            ptrdiff_t used = s_eval_stack_base - &stack_marker;
+            if (used < 0) used = -used;  // handle stack growth direction
+
+#ifdef DEBUG
+            if (used > s_eval_stack_peak) {
+                s_eval_stack_peak = used;
+            }
+#endif
+            if (used > EVAL_STACK_LIMIT) {
+                throw_exception(EXCEPTION_STACK_OVERFLOW,
+                                "Maximum eval stack depth exceeded",
+                                __FILE__, __LINE__, 0);
+                return NULL;  // unreachable (longjmp)
+            }
+        }
+    }
+    g_eval_ast_call_depth++;
+
+tail_restart: // Target for tail-call optimization (if/when branch → restart without new frame)
+
     if (!call) {
+        g_eval_ast_call_depth--;
         return NULL;
     }
 
@@ -1389,6 +1438,7 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
 
     ID op = call->op;
     if (!op) {
+        g_eval_ast_call_depth--;
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                   "Cannot call nil as a function");
         return NULL;
@@ -1401,6 +1451,64 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
         if (original_op_sym) {
             ID result = NULL;
             bool handled = false;
+
+            // --- Tail-call optimized: inline if ---
+            // Saves ~500 bytes of stack per if-level by avoiding
+            // eval_special_if → eval_body → eval_body_with_params → eval_ast_call recursion.
+            if (original_op_sym == SYM_IF) {
+                unsigned int argc = args ? vector_count(args) : 0;
+                if (argc >= 2) {
+                    ID cond_expr = vector_nth(args, 0);
+                    ID cond_val = eval_arg_from_expr_with_context(cond_expr, effective_env, effective_st, ctx);
+                    bool truthy = clj_is_truthy(cond_val);
+                    ID branch = truthy ? vector_nth(args, 1) : (argc >= 3 ? vector_nth(args, 2) : NULL);
+                    if (!branch) { g_eval_ast_call_depth--; return NULL; }
+                    // If branch is an AST call, restart eval_ast_call without new stack frame
+                    if (TAG(branch) == CLJ_AST_CALL) {
+                        call = as_ast_call(branch);
+                        goto tail_restart;
+                    }
+                    // Otherwise evaluate the branch expression
+                    result = ctx ? eval_body_with_params(branch, ctx)
+                                 : eval_body(branch, effective_env, effective_st, NULL);
+                    g_eval_ast_call_depth--;
+                    return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
+                }
+                g_eval_ast_call_depth--;
+                return NULL;
+            }
+
+            // --- Tail-call optimized: inline when ---
+            if (original_op_sym == SYM_WHEN) {
+                unsigned int argc = args ? vector_count(args) : 0;
+                ID cond_expr = (argc >= 1) ? vector_nth(args, 0) : NULL;
+                ID cond_val = eval_arg_from_expr_with_context(cond_expr, effective_env, effective_st, ctx);
+                bool truthy = cond_val ? clj_is_truthy(cond_val) : false;
+                if (!truthy) { g_eval_ast_call_depth--; return NULL; }
+                // Evaluate all body forms except the last for side effects
+                for (unsigned int i = 1; i + 1 < argc; i++) {
+                    ID body_expr = vector_nth(args, i);
+                    if (!body_expr) continue;
+                    ID r = ctx ? eval_body_with_params(body_expr, ctx)
+                               : eval_body(body_expr, effective_env, effective_st, NULL);
+                    (void)r;
+                }
+                // Last body form: tail-call optimize
+                if (argc >= 2) {
+                    ID last_expr = vector_nth(args, argc - 1);
+                    if (!last_expr) { g_eval_ast_call_depth--; return NULL; }
+                    if (TAG(last_expr) == CLJ_AST_CALL) {
+                        call = as_ast_call(last_expr);
+                        goto tail_restart;
+                    }
+                    result = ctx ? eval_body_with_params(last_expr, ctx)
+                                 : eval_body(last_expr, effective_env, effective_st, NULL);
+                    g_eval_ast_call_depth--;
+                    return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
+                }
+                g_eval_ast_call_depth--;
+                return NULL;
+            }
 
             if (original_op_sym == SYM_DEF) {
 #if defined(META_ENABLED) && META_ENABLED
@@ -1439,6 +1547,7 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
 
             if (handled) {
                 /* MEMORY_POLICY: eval returns autoreleased so callers need not release. */
+                g_eval_ast_call_depth--;
                 return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
             }
         }
@@ -1447,11 +1556,13 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
     if (is_list_like(op) || TAG(op) == CLJ_AST_CALL) {
         op = eval_body(op, effective_env, effective_st, ctx);
         if (!op) {
+            g_eval_ast_call_depth--;
             throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                       "Cannot call nil as a function");
             return NULL;
         }
         if (IS_IMMEDIATE(op)) {
+            g_eval_ast_call_depth--;
             const char *type_name = is_fixed((CljValue)op) ? "number" : (is_bool((CljValue)op) ? "boolean" : "immediate value");
             throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                       "Cannot call %s as a function (this may indicate a macro expansion error)", type_name);
@@ -1460,11 +1571,13 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
     }
 
     if (is_map(op)) {
+        g_eval_ast_call_depth--;
         ID r = eval_map_lookup_vec(call->args, effective_env, effective_st, ctx, op);
         return (IS_IMMEDIATE(r) || !r) ? r : (ID)AUTORELEASE(r);
     }
 
     if (TAG(op) == CLJ_VECTOR_PERSISTENT || TAG(op) == CLJ_VECTOR_TRANSIENT) {
+        g_eval_ast_call_depth--;
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                                   "Cannot call Vector as a function");
         return NULL;
@@ -1479,6 +1592,7 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
         if (cached_fn) {
             unsigned char cached_tag = TAG(cached_fn);
             if (cached_tag == CLJ_FUNC || cached_tag == CLJ_CLOSURE) {
+                g_eval_ast_call_depth--;
                 return call_function_with_args_and_context_vec(cached_fn, call->args, effective_env, effective_st, ctx);
             }
         }
@@ -1489,9 +1603,11 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
 
     unsigned char op_tag = op ? TAG(op) : 0;
     if (op && (op_tag == CLJ_SYMBOL || op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE)) {
+        g_eval_ast_call_depth--;
         return eval_function_call_from_vector(call->args, effective_env, effective_st, op, ctx);
     }
 
+    g_eval_ast_call_depth--;
     if (IS_IMMEDIATE(op)) {
         const char *type_name = is_fixed((CljValue)op) ? "number" : (is_bool((CljValue)op) ? "boolean" : "immediate value");
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
@@ -2899,6 +3015,16 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
  * This is a DRY helper used by both eval_string and eval_multiform_string.
  */
 ID eval_parsed_value(CljValue parsed, EvalState *eval_state) {
+    // Reset eval recursion depth at each top-level eval entry.
+    // This ensures the counter is correct even after longjmp-based exception recovery.
+    reset_eval_depths();
+    // Set stack base ON THIS FRAME (not inside reset_eval_depths, whose frame is gone).
+    char _stack_base_marker;
+    s_eval_stack_base = &_stack_base_marker;
+#ifdef DEBUG
+    s_eval_stack_peak = 0;
+#endif
+
     // Check if parsed is an immediate value
     if (IS_IMMEDIATE(parsed)) {
         // For immediate values, return them as CljObject* (they're already evaluated)

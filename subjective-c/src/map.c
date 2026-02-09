@@ -33,16 +33,10 @@ CljPersistentMap* make_map_impl(int capacity, ElementRetention retention) {
     return map_empty();
   }
 
+  // Allocate struct + data array in ONE malloc
   size_t struct_size = sizeof(CljPersistentMap);
-  size_t elem_size = 2 * sizeof(CljObject*);
-  size_t min_size = struct_size + (size_t)capacity * elem_size;
-#if defined(ESP32_BUILD)
-  size_t total_size = round_up_to_fam_granularity(min_size);
-  int cap_use = (int)((total_size - struct_size) / elem_size);
-#else
-  size_t total_size = min_size;
-  int cap_use = capacity;
-#endif
+  size_t data_size = (size_t)capacity * 2 * sizeof(CljObject*);
+  size_t total_size = struct_size + data_size;
 
   CljPersistentMap *map = (CljPersistentMap*)alloc(total_size, 1, CLJ_MAP_PERSISTENT);
   if (!map) {
@@ -52,10 +46,11 @@ CljPersistentMap* make_map_impl(int capacity, ElementRetention retention) {
   map->base.type = CLJ_MAP_PERSISTENT;
   map->base.flags = (retention == WEAK) ? CLJ_FLAG_WEAK_ELEMENTS : 0;
   map->count = 0;
-  map->capacity = cap_use;
+  map->capacity = capacity;
 
 #ifdef DEBUG
-  for (int i = 0; i < cap_use * 2; i++) {
+  // Initialize embedded array to NULL (debug-only)
+  for (int i = 0; i < capacity * 2; i++) {
     map->data[i] = NULL;
   }
 #endif

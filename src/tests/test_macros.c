@@ -59,6 +59,52 @@ TEST(test_macro_nested_expansion) {
     TEST_ASSERT_EQUAL_INT(7, as_fixnum((CljValue)result));  // 5 + 1 + 1 = 7
 }
 
+TEST(test_macro_expansion_seq_result_is_fully_canonicalized) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Macro returns a sequence (CLJ_SEQ) over a vector. This is valid Clojure:
+    // macro expansion may return seqs, not only concrete lists.
+    CljObject *def_result = eval_string(
+        "(defmacro mseq [x] (seq (vector '+ x 1)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(def_result);
+
+    CljObject *expanded = eval_string("(macroexpand '(mseq 41))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(expanded);
+    TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(expanded));
+
+    CljObject *result = eval_string("(mseq 41)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+
+    // Alternative macro style that guarantees a concrete list return.
+    def_result = eval_string(
+        "(defmacro mlist [x] (list '+ x 1))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(def_result);
+
+    expanded = eval_string("(macroexpand '(mlist 41))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(expanded);
+    TEST_ASSERT_TRUE(is_list_type(TAG(expanded)));
+    TEST_ASSERT_EQUAL_INT(3, list_count(as_list(expanded)));
+
+    result = eval_string("(mlist 41)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+
+    // Special-form expansion via seq still works (fallback path).
+    def_result = eval_string(
+        "(defmacro mseq-let [x] (seq (vector 'let (vector 'y x) (list '+ 'y 1))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(def_result);
+    result = eval_string("(mseq-let 41)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+}
+
 // ============================================================================
 // TEST: Variadic Functions (prerequisite for variadic macros)
 // ============================================================================

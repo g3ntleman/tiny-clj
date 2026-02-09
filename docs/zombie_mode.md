@@ -32,7 +32,7 @@ Bei ZOMBIE_ENABLED wird **kein** Speicher freigegeben (weder Zombie noch Kinder 
 2. **autorelease während Drain**  
    Wird im Drain-Pfad (z. B. indirekt in `release_object_deep` oder in Destruktoren) erneut `autorelease` aufgerufen, löst die Prüfung „autorelease during drain“ Assert/Abort aus.
 
-**Praktisch:** Damit beim Melden eines Zombie-Problems nicht sofort ein zweiter Fehler (RETAIN auf rc=0) ausgelöst wird, ruft `zombie_description` bei rc≤0 kein `clj_to_string(v)` mehr auf, sondern nur noch „(zombie %p)“. RCHIST und Backtrace reichen zur Fehlersuche.
+**Praktisch:** Damit beim Melden eines Zombie-Problems nicht sofort ein zweiter Fehler (RETAIN auf rc=0) ausgelöst wird, ruft `zombie_description` bei rc≤0 kein `clj_to_string(v)` mehr auf, sondern nur noch „(zombie %p)“. RCHIST und Backtrace reichen zur Fehlersuche. Die Retain-Count-History (RCHIST) wird bei **DEBUG** immer aufgezeichnet (auch ohne Zombie-Mode), sodass sie bei jeder Exception (z. B. Double-Free, rc<=0) genutzt werden kann. Auf ESP32 ist der Ringpuffer kleiner, um den Startup-Speicherbedarf gering zu halten.
 
 ## Praktische Tipps
 

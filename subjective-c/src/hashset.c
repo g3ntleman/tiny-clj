@@ -30,14 +30,10 @@ static unsigned int next_power_of_2(unsigned int n) {
 CljHashSet* make_hashset(unsigned int capacity) {
     unsigned int cap = next_power_of_2(capacity);
 
+    // Allocate struct + embedded data array in ONE malloc
     size_t struct_size = sizeof(CljHashSet);
     size_t data_size = (size_t)cap * sizeof(CljObject*);
-    size_t total_size =
-#if defined(ESP32_BUILD)
-        round_up_to_fam_granularity(struct_size + data_size);
-#else
-        struct_size + data_size;
-#endif
+    size_t total_size = struct_size + data_size;
 
     CljHashSet *set = (CljHashSet*)alloc(total_size, 1, CLJ_HASHSET);
     if (!set) {

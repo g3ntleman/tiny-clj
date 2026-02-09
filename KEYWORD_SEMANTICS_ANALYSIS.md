@@ -110,7 +110,7 @@ if (auto_qualify && slash_pos > 0) {
   
   if (st && st->current_ns && st->current_ns->aliases) {
     CljSymbol *alias_sym = intern_symbol_global(alias_str);
-    CljObject *resolved_ns = ns_get_alias(st->current_ns, (CljObject*)alias_sym);
+    CljObject *resolved_ns = ns_get_alias(st->current_ns, alias_sym);
     if (resolved_ns && TAG(resolved_ns) == CLJ_SYMBOL) {
       CljSymbol *ns_name_sym = as_symbol(resolved_ns);
       CljSymbol *kw = intern_symbol(ns_name_sym, keyword_name);

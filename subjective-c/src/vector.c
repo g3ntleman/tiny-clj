@@ -256,23 +256,15 @@ CljPersistentVector* make_vector(unsigned int capacity, ElementRetention retenti
     }
     g_make_vector_count++;
     CljType type = CLJ_VECTOR_PERSISTENT;
-    size_t struct_size = sizeof(CljPersistentVector);
-    size_t elem_size = sizeof(ID);
-    size_t min_size = struct_size + (size_t)capacity * elem_size;
-#if defined(ESP32_BUILD)
-    size_t total = round_up_to_fam_granularity(min_size);
-    unsigned int cap_use = (unsigned int)((total - struct_size) / elem_size);
-#else
-    size_t total = min_size;
-    unsigned int cap_use = capacity;
-#endif
+    size_t total = sizeof(CljPersistentVector) + (size_t)capacity * sizeof(ID);
     CljPersistentVector *vec = (CljPersistentVector*)alloc(total, 1, type);
     vec->base.type = type;
     vec->base.flags = weakElements ? CLJ_FLAG_WEAK_ELEMENTS : 0;
     vec->count = 0;
-    vec->capacity = (int)cap_use;
-    if (cap_use > 0) {
-        memset(vec->data, 0, (size_t)cap_use * sizeof(ID));
+    vec->capacity = (int)capacity;
+    // data[] is zeroed by alloc(...,1,...) ? alloc uses malloc, not calloc. So we must memset.
+    if (capacity > 0) {
+        memset(vec->data, 0, (size_t)capacity * sizeof(ID));
     }
     return vec;
 }

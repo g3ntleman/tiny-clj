@@ -24,7 +24,7 @@ todos:
     content: builtins_net.c Native Functions + Channel-Bridge + Tests
     status: pending
   - id: clj-net-api
-    content: libs/tinyclj/net.clj Clojure API Wrapper
+    content: libs/tiny-clj/net.clj Clojure API Wrapper
     status: pending
 ---
 
@@ -35,7 +35,7 @@ todos:
 ```mermaid
 flowchart TB
     subgraph clj [Clojure Layer]
-        NetAPI["tinyclj.net\n(net/udp-socket)\n(net/send!)\n(net/on-receive)"]
+        NetAPI["tiny-clj.net\n(net/udp-socket)\n(net/send!)\n(net/on-receive)"]
         Channel["core.async Channel\n(put! take! close!)"]
     end
     
@@ -139,7 +139,7 @@ Die Channel-API nutzt Callbacks (`put!`, `take!`, `close!`).
 ### Phase 3: Clojure Bindings
 
 7. `builtins_net.c`: Native Functions + Channel-Integration + Tests
-8. `libs/tinyclj/net.clj`: Clojure API Wrapper
+8. `libs/tiny-clj/net.clj`: Clojure API Wrapper
 
 ## Dateien
 
@@ -161,7 +161,7 @@ Die Channel-API nutzt Callbacks (`put!`, `take!`, `close!`).
 
 | `src/builtins_net.c` (neu) | ~300 Zeilen: Native Network Functions |
 
-| `libs/tinyclj/net.clj` (neu) | ~50 Zeilen: Clojure API |
+| `libs/tiny-clj/net.clj` (neu) | ~50 Zeilen: Clojure API |
 
 ## RAM-Bilanz (pro UDP-Paket)
 
