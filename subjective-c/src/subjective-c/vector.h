@@ -102,6 +102,9 @@ extern CljPersistentVector* vector_empty_singleton;
  * @return Singleton empty vector
  */
 CljPersistentVector* empty_vector(void);
+/** @brief Size that make_vector would request for a given capacity (for waste tests). */
+size_t vector_requested_allocation_size(unsigned int capacity);
+
 /** Create a vector with given capacity.
  * weak stores elements without retaining/releasing them
  * and sets CLJ_FLAG_WEAK_ELEMENTS on the vector object.

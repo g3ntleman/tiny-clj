@@ -54,6 +54,8 @@ void eval_set_use_compiled_ast(int enabled) {
     g_eval_use_compiled_ast = enabled ? 1 : 0;
 }
 
+static CljASTCall *list_to_ast_call(CljList *list);
+
 static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, CljSymbol *qualified) {
     if (!slot || !unqualified || !qualified) {
         return;
@@ -314,19 +316,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
         };
         // If an exception is thrown, longjmp will jump to the outer handler and this function
         // will never return, so the loop will not continue
-        ID new_result = NULL;
-        if (is_vector(func->body)) {
-            CljPersistentVector *body_vec = as_vector(func->body);
-            unsigned int count = body_vec ? vector_count(body_vec) : 0;
-            for (unsigned int i = 0; i < count; i++) {
-                ID expr = vector_nth(body_vec, i);
-                if (expr) {
-                    ASSIGN(new_result, eval_body_with_params(expr, &eval_ctx));
-                }
-            }
-        } else {
-            new_result = eval_body_with_params(func->body, &eval_ctx);
-        }
+        ID new_result = eval_body_with_params(func->body, &eval_ctx);
         // Check if recur was triggered in THIS function
         // With C stack, nested functions have their own stack frames, so recur_arg_count
         // only changes if recur was used in THIS function
@@ -952,9 +942,7 @@ ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *c
                 // Add evaluated key-value pair to result map
                 ASSIGN(result, map_assoc(result, eval_key, eval_value));
 
-                // Release evaluated key and value if they were retained
-                if (eval_key && eval_key != key) RELEASE(eval_key);
-                if (eval_value && eval_value != value) RELEASE(eval_value);
+                // eval_body returns autoreleased or borrowed values; do not RELEASE here.
             }
 
             return AUTORELEASE(result);
@@ -971,7 +959,7 @@ ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *c
 static CljASTCall *list_to_ast_call(CljList *list) {
     if (!list) return NULL;
     ID op = LIST_FIRST(list);
-    CljList *rest = list_rest_normalized(as_list(LIST_REST(list)));
+    CljList *rest = list_rest_normalized(list);
     CljPersistentVector *args = make_vector(0, STRONG);
     if (!args) return NULL;
     if (rest) {
@@ -1586,15 +1574,21 @@ ID eval_def(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
     // CRITICAL: Only for CLJ_CLOSURE (Clojure functions), not CLJ_FUNC (native functions)
     if (is_closure(value)) {
         CljFunction *func = as_function(value);
-        if (func && sym && sym->cname[0]) {
-            if (!func->name_sym) func->name_sym = sym;
-            
-            // Rewrite recursive calls to use qualified name (for TCO optimization)
-            // Only if namespace is available (avoids unnecessary work)
-            if (st->current_ns && st->current_ns->name) {
-                CljSymbol *qualified = intern_symbol(st->current_ns->name, sym->cname);
-                if (qualified && qualified != sym) {
-                    rewrite_recursive_calls_in_slot((ID*)&func->body, sym, qualified);
+        if (func) {
+            // Ensure closure carries its defining namespace for later resolution.
+            if (!func->ns && st && st->current_ns) {
+                func->ns = (CljNamespace*)RETAIN(st->current_ns);
+            }
+            if (sym && sym->cname[0]) {
+                if (!func->name_sym) func->name_sym = sym;
+
+                // Rewrite recursive calls to use qualified name (for TCO optimization)
+                // Only if namespace is available (avoids unnecessary work)
+                if (st->current_ns && st->current_ns->name) {
+                    CljSymbol *qualified = intern_symbol(st->current_ns->name, sym->cname);
+                    if (qualified && qualified != sym) {
+                        rewrite_recursive_calls_in_slot((ID*)&func->body, sym, qualified);
+                    }
                 }
             }
         }
@@ -1680,38 +1674,75 @@ ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
     // Avoid list_nth in a loop (linked lists would make this O(n^2)).
     for (unsigned int i = 1; i < argc; i++) {
         CljObject *clause = (CljObject*)vector_nth(args, i);
-        if (!clause || !is_list_type(TAG(clause))) continue;
+        if (!clause) continue;
 
-        CljList *clause_list = as_list(clause);
-        if (!clause_list) continue;
+        CljSymbol *clause_sym = NULL;
+        CljPersistentVector *specs_vec = NULL;
+        CljASTCall *call = NULL;
+        bool owns_call = false;
 
-        ID first = LIST_FIRST(clause_list);
-        if (!first || TAG(first) != CLJ_SYMBOL) continue;
+        CljType clause_tag = TAG(clause);
+        if (clause_tag == CLJ_AST_CALL) {
+            call = as_ast_call(clause);
+        } else if (is_list_type(clause_tag)) {
+            call = list_to_ast_call(as_list(clause));
+            owns_call = (call != NULL);
+        } else {
+            continue;
+        }
 
-        CljSymbol *clause_sym = as_symbol((CljObject*)first);
-        if (!clause_sym || !clause_sym->cname) continue;
+        if (!call || !call->op || TAG(call->op) != CLJ_SYMBOL) {
+            if (owns_call) {
+                RELEASE(call);
+            }
+            continue;
+        }
+
+        clause_sym = as_symbol(call->op);
+        specs_vec = call->args;
+
+        if (!clause_sym || !clause_sym->cname) {
+            if (owns_call) {
+                RELEASE(call);
+            }
+            continue;
+        }
 
         // Check if this is a :require clause
         if (clause_sym->cname[0] == ':' && strcmp(clause_sym->cname, ":require") == 0) {
             // Process require specs: (:require [ns :as alias] [ns2 :as alias2])
-            CljList *spec_node = list_or_null(as_list(LIST_REST(clause_list)));
-            for (CljList *s = spec_node; s; s = list_or_null(as_list(LIST_REST(s)))) {
-                CljObject *spec = LIST_FIRST(s);
-                if (!spec) continue;
-
-                // Process require spec using native_require
-                // This ensures consistent behavior whether namespace exists or not
-                // native_require will handle both loading and alias setting
+            if (specs_vec) {
+                unsigned int spec_count = vector_count(specs_vec);
+                for (unsigned int j = 0; j < spec_count; j++) {
+                    ID spec = vector_nth(specs_vec, j);
+                    if (!spec) continue;
 #ifndef ESP32_BUILD
-                // Set g_current_eval_state so native_require can use it
-                extern void builtin_set_eval_state(EvalState *st);
-                builtin_set_eval_state(st);
-                ID spec_id = spec;
-                ID args[1] = { spec_id };
-                (void)native_require(args, 1);
-                builtin_set_eval_state(NULL); // Clear after call
+                    extern void builtin_set_eval_state(EvalState *st);
+                    builtin_set_eval_state(st);
+                    ID spec_args[1] = { spec };
+                    (void)native_require(spec_args, 1);
+                    builtin_set_eval_state(NULL); // Clear after call
 #endif
+                }
+            } else {
+                CljList *spec_node = list_or_null(as_list(LIST_REST(as_list(clause))));
+                for (CljList *s = spec_node; s; s = list_or_null(as_list(LIST_REST(s)))) {
+                    CljObject *spec = LIST_FIRST(s);
+                    if (!spec) continue;
+#ifndef ESP32_BUILD
+                    extern void builtin_set_eval_state(EvalState *st);
+                    builtin_set_eval_state(st);
+                    ID spec_id = spec;
+                    ID spec_args[1] = { spec_id };
+                    (void)native_require(spec_args, 1);
+                    builtin_set_eval_state(NULL); // Clear after call
+#endif
+                }
             }
+        }
+
+        if (owns_call) {
+            RELEASE(call);
         }
     }
 
@@ -1919,26 +1950,6 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
         }
     }
 
-    if (body && body_is_multi) {
-        CljList *body_list = is_list_type(TAG(body)) ? as_list(body) : NULL;
-        CljList *forms_list = body_list ? list_rest_normalized(body_list) : NULL;
-        unsigned int count = 0;
-        for (CljList *node = forms_list; node; node = list_rest_normalized(node)) {
-            count++;
-        }
-        CljPersistentVector *forms = make_vector(count, STRONG);
-        for (CljList *node = forms_list; node; node = list_rest_normalized(node)) {
-            vector_conj_inplace(&forms, LIST_FIRST(node));
-        }
-        CljObject *old_body = (CljObject*)body;
-        body = AUTORELEASE(forms);
-
-        // Drop the list-based body now that it's stored in a vector.
-        if (old_body) {
-            RELEASE(old_body);
-        }
-        body_owned = false;
-    }
 
     // Capture env_stack from context if available (vector of maps).
     CljPersistentVector *fn_env_stack = NULL;

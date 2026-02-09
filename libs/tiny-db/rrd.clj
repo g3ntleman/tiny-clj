@@ -70,15 +70,40 @@
     nil
     (last values)))
 
+(defn kw-name
+  "Return keyword/symbol/string name, or nil."
+  [k]
+  (if (or (keyword? k) (symbol? k) (string? k))
+    (name k)
+    nil))
+
+(defn map-get-by-kw-name
+  "Map lookup by keyword name (supports :: keywords)."
+  [m k]
+  (let [v (get m k)]
+    (if (nil? v)
+      (let [kname (kw-name k)]
+        (if (nil? kname)
+          nil
+          (loop [ks (seq (keys m))]
+            (if (nil? ks)
+              nil
+              (let [kk (first ks)]
+                (if (= (kw-name kk) kname)
+                  (get m kk)
+                  (recur (next ks))))))))
+      v)))
+
 (defn get-cf
   "Resolve a consolidation function keyword to a function."
   [cf-key]
-  (case cf-key
-    :average cf-average
-    :min cf-min
-    :max cf-max
-    :last cf-last
-    (throw (Exception. (str "Unknown CF: " cf-key)))))
+  (let [cf (kw-name cf-key)]
+    (cond
+      (= cf "average") cf-average
+      (= cf "min") cf-min
+      (= cf "max") cf-max
+      (= cf "last") cf-last
+      :else (throw (str "Unknown CF: " cf-key)))))
 
 ;; Helper: map over two vectors by index (tiny-clj map supports only one collection).
 (defn map2
@@ -102,14 +127,14 @@
   - If :type is missing and :cf is :spline, treat it as :spline."
   [rra-def]
   (or (:type rra-def)
-      (if (= (:cf rra-def) :spline) :spline :classic)))
+      (if (= (kw-name (:cf rra-def)) "spline") :spline :classic)))
 
 (defn normalize-rra-def
   "Normalize an RRA definition so the core can dispatch consistently."
   [rra-def]
-  (let [t (rra-type rra-def)]
+  (let [t (tiny-db.rrd/rra-type rra-def)]
     (cond
-      (= t :classic)
+      (= (kw-name t) "classic")
       (-> rra-def
           (assoc :type :classic)
           (assoc :cdp-cf (or (:cdp-cf rra-def) (:cf rra-def))))
@@ -124,8 +149,8 @@
   [sym]
   (let [h (get-handler sym)]
     (when (nil? h)
-      (throw (Exception. (str "No RRA handler registered for: " sym
-                              " (did you require the handler namespace?)"))))
+      (throw (str "No RRA handler registered for: " sym
+                  " (did you require the handler namespace?)")))
     h))
 
 ;; =============================================================================
@@ -139,7 +164,7 @@
   Example: {:handler-types {:classic 'tiny-db.rrd-classic/handler
                             :spline 'tiny-db.rrd-spline/handler}}"
   [rras opts]
-  (let [types (set (map :type rras))
+  (let [types (reduce (fn [s rra] (conj s (:type rra))) #{} rras)
         custom (or (:handler-types opts) {})]
     ;; Ensure all types have a symbol
     (loop [ts (seq types)
@@ -147,10 +172,10 @@
       (if (nil? ts)
         m
         (let [t (first ts)
-              sym (get custom t)]
+              sym (map-get-by-kw-name custom t)]
           (when (nil? sym)
-            (throw (Exception. (str "No handler symbol for RRA type: " t
-                                    " - provide via :handler-types {" t " 'some.ns/handler}"))))
+            (throw (str "No handler symbol for RRA type: " t
+                        " - provide via :handler-types {" t " 'some.ns/handler}")))
           (recur (next ts) (assoc m t sym)))))))
 
 (defn resolve-handlers-from-types
@@ -170,9 +195,9 @@
   "Creates an initial RRA state using the handler for rra-def."
   [handlers rra-def]
   (let [t (:type rra-def)
-        h (get handlers t)]
+        h (map-get-by-kw-name handlers t)]
     (when (nil? h)
-      (throw (Exception. (str "No handler for RRA type: " t))))
+      (throw (str "No handler for RRA type: " t)))
     ((:init-state h) rra-def)))
 
 ;; Create initial state for an RRD.
@@ -196,25 +221,26 @@
     (create \"temp\" 60 [{:cf :average :steps 1 :rows 60}
                          {:type :spline :steps 1 :rows 100 :epsilon 0.1}]
             {:handler-types {:spline 'tiny-db.rrd-spline/handler}})"
-  ([name step rras]
-   (create name step rras {}))
-  ([name step rras opts]
-   (when (or (nil? name) (= "" name))
-     (throw (Exception. "RRD name must not be empty")))
-   (when (or (nil? step) (<= step 0))
-     (throw (Exception. "RRD step must be positive")))
-   (when (or (nil? rras) (empty? rras))
-     (throw (Exception. "RRD must have at least one RRA")))
-   (let [norm-rras (vec (map normalize-rra-def rras))
-         handler-types (resolve-handler-types norm-rras opts)
-         handlers (resolve-handlers-from-types handler-types)
-         rrd-def {:name name
-                  :step step
-                  :ds {:type :gauge :min nil :max nil}
-                  :rras norm-rras
-                  :handler-types handler-types
-                  :handlers handlers}]
-     (merge rrd-def (make-rrd-state rrd-def)))))
+  [name step rras & args]
+  (when (> (count args) 1)
+    (throw "create expects 3 or 4 arguments"))
+  (let [opts (if (empty? args) {} (first args))]
+    (when (or (nil? name) (= "" name))
+      (throw "RRD name must not be empty"))
+    (when (or (nil? step) (<= step 0))
+      (throw "RRD step must be positive"))
+    (when (or (nil? rras) (empty? rras))
+      (throw "RRD must have at least one RRA"))
+    (let [norm-rras (vec (map normalize-rra-def rras))
+          handler-types (resolve-handler-types norm-rras opts)
+          handlers (resolve-handlers-from-types handler-types)
+          rrd-def {:name name
+                   :step step
+                   :ds {:type :gauge :min nil :max nil}
+                   :rras norm-rras
+                   :handler-types handler-types
+                   :handlers handlers}]
+      (merge rrd-def (make-rrd-state rrd-def)))))
 
 ;; =============================================================================
 ;; PDP (Primary Data Point) Calculation
@@ -294,7 +320,7 @@
     (if (>= (:count cdp-prep) steps)
       ;; Time to consolidate
       (let [t (:type rra-def)
-            h (get handlers t)
+            h (map-get-by-kw-name handlers t)
             cdp-value (finalize-cdp cdp-prep cdp-cf)
             updated ((:on-cdp h) rra-state rra-def pdp-time cdp-value)]
         (assoc updated :cdp-prep {:value nil :count 0}))
@@ -358,13 +384,16 @@
   "Selects the best matching RRA index for cf-key over [start-time,end-time]."
   [rrd cf-key start-time end-time]
   (let [duration (- end-time start-time)
+        cf-key (kw-name cf-key)
         step (:step rrd)
         rras (:rras rrd)
         find-match (fn find-match [idx]
                      (if (>= idx (count rras))
                        0  ;; fallback to first
                        (let [rra (nth rras idx)]
-                         (let [rk (if (= (:type rra) :classic) (:cf rra) (:type rra))]
+                         (let [rk (if (= (kw-name (:type rra)) "classic")
+                                    (kw-name (:cf rra))
+                                    (kw-name (:type rra)))]
                            (if (and (= cf-key rk)
                                   (>= (rra-time-coverage rra step) duration))
                              idx
@@ -378,7 +407,7 @@
   (let [rra-def (nth (:rras rrd) rra-index)
         rra-state (nth (:rra-states rrd) rra-index)
         t (:type rra-def)
-        h (get (:handlers rrd) t)]
+        h (map-get-by-kw-name (:handlers rrd) t)]
     ((:fetch h) rrd rra-index rra-def rra-state)))
 
 ;; Fetch data from the RRD for a time range.
@@ -414,7 +443,7 @@
   (let [s (apply str (map char bytes))
         rrd (read-string s)]
     (when (not= (:magic rrd) rrd-magic)
-      (throw (Exception. "Invalid RRD magic")))
+      (throw "Invalid RRD magic"))
     (dissoc rrd :magic)))
 
 ;; Persist an RRD to storage.

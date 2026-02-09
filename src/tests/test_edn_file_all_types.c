@@ -68,8 +68,8 @@ TEST(test_edn_file_all_supported_types)
     TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_MAP_PERSISTENT, TAG(parsed), "expected map");
     TEST_ASSERT_TRUE_MESSAGE(map_count(parsed) > 0, "parsed map empty");
 
-    /* Canonicalize so symbol tokens become CljSymbol and key lookup works. */
-    parsed = canonicalize_ast(parsed, g_test_eval_state);
+    /* Canonicalize data so symbol tokens become CljSymbol without AST calls. */
+    parsed = canonicalize_ast_as_data(parsed, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(parsed));
     TEST_ASSERT_TRUE_MESSAGE(map_count(parsed) > 0, "map empty after canonicalize");

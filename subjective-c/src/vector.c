@@ -245,6 +245,10 @@ static CljPersistentVector* vector_remove_at_owned(CljPersistentVector* vec, uns
 
 static size_t g_make_vector_count = 0;
 
+size_t vector_requested_allocation_size(unsigned int capacity) {
+    return sizeof(CljPersistentVector) + (size_t)capacity * sizeof(ID);
+}
+
 CljPersistentVector* make_vector(unsigned int capacity, ElementRetention retention) {
     bool weakElements = (retention == WEAK);
     if (capacity == 0 && !weakElements) {
@@ -252,15 +256,23 @@ CljPersistentVector* make_vector(unsigned int capacity, ElementRetention retenti
     }
     g_make_vector_count++;
     CljType type = CLJ_VECTOR_PERSISTENT;
-    size_t total = sizeof(CljPersistentVector) + (size_t)capacity * sizeof(ID);
+    size_t struct_size = sizeof(CljPersistentVector);
+    size_t elem_size = sizeof(ID);
+    size_t min_size = struct_size + (size_t)capacity * elem_size;
+#if defined(ESP32_BUILD)
+    size_t total = round_up_to_fam_granularity(min_size);
+    unsigned int cap_use = (unsigned int)((total - struct_size) / elem_size);
+#else
+    size_t total = min_size;
+    unsigned int cap_use = capacity;
+#endif
     CljPersistentVector *vec = (CljPersistentVector*)alloc(total, 1, type);
     vec->base.type = type;
     vec->base.flags = weakElements ? CLJ_FLAG_WEAK_ELEMENTS : 0;
     vec->count = 0;
-    vec->capacity = (int)capacity;
-    // data[] is zeroed by alloc(...,1,...) ? alloc uses malloc, not calloc. So we must memset.
-    if (capacity > 0) {
-        memset(vec->data, 0, (size_t)capacity * sizeof(ID));
+    vec->capacity = (int)cap_use;
+    if (cap_use > 0) {
+        memset(vec->data, 0, (size_t)cap_use * sizeof(ID));
     }
     return vec;
 }
@@ -342,15 +354,11 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
 
         CLJ_ASSERT(index < (unsigned int)vec->capacity);
         if (index < vec->count && !is_weak) {
-            ID old = vec->data[index];
-            if (old) {
-                CljObject *o = (CljObject*)old;
-                if (!is_singleton(o) && o->rc > 0) {
-                    RELEASE(old);
-                }
-            }
+            // Use ASSIGN to avoid releasing when old == value.
+            ASSIGN(vec->data[index], value);
+        } else {
+            vec->data[index] = is_weak ? value : RETAIN(value);
         }
-        vec->data[index] = is_weak ? value : RETAIN(value);
         return vec;
     }
 
@@ -364,15 +372,11 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
     }
     CLJ_ASSERT(index < (unsigned int)new_vec->capacity);
     if (index < vec->count && !is_weak) {
-        ID old = new_vec->data[index];
-        if (old) {
-            CljObject *o = (CljObject*)old;
-            if (!is_singleton(o) && o->rc > 0) {
-                RELEASE(old);
-            }
-        }
+        // Use ASSIGN to avoid releasing when old == value.
+        ASSIGN(new_vec->data[index], value);
+    } else {
+        new_vec->data[index] = is_weak ? value : RETAIN(value);
     }
-    new_vec->data[index] = is_weak ? value : RETAIN(value);
     return new_vec;
 }
 

@@ -117,7 +117,7 @@ TEST(test_lowlevel_native_require_sets_alias_preloaded) {
     (void)result; // require returns nil
     
     // Verify: Alias should be set in current namespace
-    CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)str_alias);
+    CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, str_alias);
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name, "Alias 'str' should be set after native_require");
     
     if (ns_name && TAG(ns_name) == CLJ_SYMBOL) {
@@ -149,7 +149,7 @@ TEST(test_lowlevel_ns_set_alias_stores) {
     TEST_ASSERT_NOT_NULL_MESSAGE(test_ns->aliases, "aliases map should be created");
     
     // Verify: alias should be retrievable
-    CljObject *retrieved = ns_get_alias(test_ns, (CljObject *)alias_sym);
+    CljObject *retrieved = ns_get_alias(test_ns, alias_sym);
     TEST_ASSERT_NOT_NULL_MESSAGE(retrieved, "Alias should be retrievable after setting");
     
     if (retrieved && TAG(retrieved) == CLJ_SYMBOL) {
@@ -199,7 +199,7 @@ TEST(test_lowlevel_alias_sym_not_null_when_preloaded) {
     (void)result;
     
     // After native_require, alias should be set
-    CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)str_alias);
+    CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, str_alias);
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name, "Alias should be set after native_require with preloaded namespace");
 }
 
@@ -243,8 +243,8 @@ TEST(test_lowlevel_current_ns_correct_when_alias_set) {
         "current_ns should remain the same after native_require");
     
     // Verify: Alias should be in new namespace, not original
-    CljObject *ns_name_new = ns_get_alias(new_ns, (CljObject *)str_alias);
-    CljObject *ns_name_orig = ns_get_alias(original_ns, (CljObject *)str_alias);
+    CljObject *ns_name_new = ns_get_alias(new_ns, str_alias);
+    CljObject *ns_name_orig = ns_get_alias(original_ns, str_alias);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name_new, "Alias should be in new namespace");
     TEST_ASSERT_NULL_MESSAGE(ns_name_orig, "Alias should NOT be in original namespace");

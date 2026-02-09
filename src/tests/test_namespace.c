@@ -852,7 +852,7 @@ TEST(test_require_with_alias) {
     // Verify alias was stored in current namespace
     CljSymbol *ta_alias = intern_symbol_global("ta");
     TEST_ASSERT_NOT_NULL(ta_alias);
-    CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)ta_alias);
+    CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, ta_alias);
     TEST_ASSERT_NOT_NULL(ns_name);
     TEST_ASSERT_TRUE(TAG(ns_name) == CLJ_SYMBOL);
     CljSymbol *ns_sym = as_symbol(ns_name);
@@ -924,8 +924,8 @@ TEST(test_require_multiple_namespaces) {
     TEST_ASSERT_NOT_NULL(m1_alias);
     TEST_ASSERT_NOT_NULL(m2_alias);
 
-    CljObject *m1_ns = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)m1_alias);
-    CljObject *m2_ns = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)m2_alias);
+    CljObject *m1_ns = ns_get_alias(g_test_eval_state->current_ns, m1_alias);
+    CljObject *m2_ns = ns_get_alias(g_test_eval_state->current_ns, m2_alias);
     TEST_ASSERT_NOT_NULL(m1_ns);
     TEST_ASSERT_NOT_NULL(m2_ns);
     TEST_ASSERT_TRUE(TAG(m1_ns) == CLJ_SYMBOL);
@@ -947,7 +947,7 @@ TEST(test_require_alias_resolution) {
     // Verify alias was stored
     CljSymbol *tar_alias = intern_symbol_global("tar");
     TEST_ASSERT_NOT_NULL(tar_alias);
-    CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)tar_alias);
+    CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, tar_alias);
     TEST_ASSERT_NOT_NULL(ns_name);
 
     // Test namespace-qualified symbol resolution: tar/resvar

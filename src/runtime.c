@@ -22,7 +22,6 @@
 extern bool clj_equal_full(ID a, ID b);
 #include "to_string.h"      // For to_string(), pr_str; strings.h for string_data
 #include "callbacks.h"  // For clj_set_callbacks
-#include "embedded_sources.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -38,8 +37,7 @@ TinyClJRuntime g_runtime = {
     .builtins_registered = false,
     .task_queue = NULL,
     .timer_queue = NULL,
-    .timer_id_counter = 0,
-    .embedded_source_map = NULL
+    .timer_id_counter = 0
 };
 
 // Monotonic epoch for callsite + resolve cache invalidation.
@@ -58,10 +56,6 @@ static void zombie_log_fn(CljObject *v, bool is_double_free) {
     });
 }
 #endif
-
-void embedded_source_map_init(void) {
-    /* No embedded sources in this build; embedded_source_map remains NULL. */
-}
 
 uint64_t runtime_next_resolve_epoch(void) {
     uint64_t next = ++g_resolve_cache_epoch_counter;

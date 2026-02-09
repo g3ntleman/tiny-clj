@@ -1,3 +1,4 @@
+R"RRD_CLASSIC(
 (ns tiny-db.rrd-classic
   (:require [tiny-db.rrd :as rrd]))
 
@@ -41,3 +42,5 @@
 
 ;; Register handler at namespace load time.
 (rrd/register-handler! 'tiny-db.rrd-classic/handler handler)
+
+)RRD_CLASSIC"

@@ -30,20 +30,20 @@
 (defn buffer [n]
   (when (or (nil? n) (not (integer? n)) (< n 0))
     (illegal-arg! (str "buffer n must be integer >= 0, got " n)))
-  {:tinyclj.buffer/type :fixed
-   :tinyclj.buffer/n n})
+  {:tiny-clj.buffer/type :fixed
+   :tiny-clj.buffer/n n})
 
 (defn sliding-buffer [n]
   (when (or (nil? n) (not (integer? n)) (< n 0))
     (illegal-arg! (str "sliding-buffer n must be integer >= 0, got " n)))
-  {:tinyclj.buffer/type :sliding
-   :tinyclj.buffer/n n})
+  {:tiny-clj.buffer/type :sliding
+   :tiny-clj.buffer/n n})
 
 (defn dropping-buffer [n]
   (when (or (nil? n) (not (integer? n)) (< n 0))
     (illegal-arg! (str "dropping-buffer n must be integer >= 0, got " n)))
-  {:tinyclj.buffer/type :dropping
-   :tinyclj.buffer/n n})
+  {:tiny-clj.buffer/type :dropping
+   :tiny-clj.buffer/n n})
 
 ;; -----------------------------------------------------------------------------
 ;; Channels (subset step 1)
@@ -70,10 +70,10 @@
           nil)
         {:buf-type :fixed :cap buf-or-n})
       (if (and (map? buf-or-n)
-               (contains? buf-or-n :tinyclj.buffer/type)
-               (contains? buf-or-n :tinyclj.buffer/n))
-        (let [t (get buf-or-n :tinyclj.buffer/type)
-              n (get buf-or-n :tinyclj.buffer/n)]
+               (contains? buf-or-n :tiny-clj.buffer/type)
+               (contains? buf-or-n :tiny-clj.buffer/n))
+        (let [t (get buf-or-n :tiny-clj.buffer/type)
+              n (get buf-or-n :tiny-clj.buffer/n)]
           (do
             (if (or (nil? n) (not (integer? n)) (< n 0))
               (illegal-arg! (str "chan buffer n must be integer >= 0, got " n))

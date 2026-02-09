@@ -117,7 +117,7 @@
    (let [max-segments (or (:max-segments rra-def) (:rows rra-def))
          epsilon (or (:epsilon rra-def) 0.5)]
      (when (or (nil? max-segments) (<= max-segments 0))
-       (throw (Exception. "Spline RRA requires :max-segments (or :rows) > 0")))
+       (throw "Spline RRA requires :max-segments (or :rows) > 0"))
      {:cdp-prep {:value nil :count 0}
       :type :spline
       :epsilon epsilon
@@ -193,7 +193,6 @@
       :data data}))
  
 (def handler
-  "Spline RRA handler - register this via :handler-types {:spline 'tiny-db.rrd-spline/handler}"
   {:init-state (fn [rra-def]
                  (make-spline-rra-state rra-def))
    :on-cdp (fn [rra-state rra-def cdp-time cdp-value]

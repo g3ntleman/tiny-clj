@@ -3,7 +3,7 @@
 ;; Tests spline segment primitives and integration with RRD.
 
 (do
-  (load-file "libs/tiny_db/rrd.clj")
+  (load-file "libs/tiny-db/rrd.clj")
   (load-file "libs/tiny-db/rrd-spline.clj")
 
   (let [abs (fn [x] (if (< x 0) (- x) x))

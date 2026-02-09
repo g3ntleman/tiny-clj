@@ -444,9 +444,9 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         
         ID first = canonicalize_expr_with_scope(list->first, st, in_quote, scope_stack);
         
-        // Check if we're entering a quote expression
-        // Compare against SYM_QUOTE to detect (quote ...) forms
-        bool is_quote_form = (first == SYM_QUOTE);
+        // Check if we're entering a quote-like expression
+        // Treat (quote ...) and (quasiquote ...) as data contexts for canonicalization.
+        bool is_quote_form = (first == SYM_QUOTE || first == SYM_QUASIQUOTE);
         bool child_in_quote = in_quote || is_quote_form;
         
         // ========== MACRO EXPANSION (compile-time) ==========
@@ -1028,6 +1028,18 @@ ID canonicalize_ast(ID parsed_expr, EvalState *st) {
     // so evaluate directly without a nested pool.
     result = canonicalize_expr(parsed_expr, st, false);
     // Only autorelease when we created a new object (make_*).
+    if (result && !IS_IMMEDIATE(result) && result != parsed_expr) {
+        return AUTORELEASE(result);
+    }
+    return result;
+}
+
+ID canonicalize_ast_as_data(ID parsed_expr, EvalState *st) {
+    CLJ_ASSERT(st != NULL);
+    ID result = NULL;
+
+    // Treat lists as data (quoted) but still canonicalize symbol tokens.
+    result = canonicalize_expr(parsed_expr, st, true);
     if (result && !IS_IMMEDIATE(result) && result != parsed_expr) {
         return AUTORELEASE(result);
     }

@@ -963,19 +963,24 @@ CljSymbol* resolve_alias_in_namespace(EvalState *st, const char *alias_str) {
         return SYM_CLOJURE_CORE;
     }
     
-    if (!st || !st->current_ns) {
+    if (!st) {
         return NULL;
     }
-    
+
+    CljNamespace *ns = st->resolve_ns ? st->resolve_ns : st->current_ns;
+    if (!ns) {
+        return NULL;
+    }
+
     // Check if aliases map exists
-    if (!st->current_ns->aliases) {
+    if (!ns->aliases) {
         return NULL;
     }
     
     CljSymbol *alias_sym = intern_symbol_global(alias_str);
     if (!alias_sym) return NULL;
     
-    CljObject *resolved_ns_obj = ns_get_alias(st->current_ns, (CljObject*)alias_sym);
+    CljObject *resolved_ns_obj = ns_get_alias(ns, alias_sym);
     if (resolved_ns_obj && TAG(resolved_ns_obj) == CLJ_SYMBOL) {
         return as_symbol(resolved_ns_obj);
     }
@@ -1320,6 +1325,7 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
   char buf[PARSER_NUMBER_BUF];
   int pos = 0;
   bool has_digit_before_dot = false;
+  bool has_exp = false;
 
   if (reader_peek_char(reader) == '-')
     buf[pos++] = reader_next(reader);
@@ -1341,6 +1347,23 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
     while (isdigit((unsigned char)reader_peek_char(reader)) && pos < PARSER_NUMBER_BUF - 1)
       buf[pos++] = reader_next(reader);
   }
+
+  // Optional exponent part: e[+/-]digits
+  if ((reader_peek_char(reader) == 'e' || reader_peek_char(reader) == 'E') &&
+      pos < PARSER_NUMBER_BUF - 1) {
+    has_exp = true;
+    buf[pos++] = reader_next(reader);
+    if ((reader_peek_char(reader) == '+' || reader_peek_char(reader) == '-') &&
+        pos < PARSER_NUMBER_BUF - 1) {
+      buf[pos++] = reader_next(reader);
+    }
+    if (!isdigit((unsigned char)reader_peek_char(reader))) {
+      throw_parser_exception("Invalid exponent in number literal", reader);
+      return NULL;
+    }
+    while (isdigit((unsigned char)reader_peek_char(reader)) && pos < PARSER_NUMBER_BUF - 1)
+      buf[pos++] = reader_next(reader);
+  }
   buf[pos] = '\0';
 
   // Validate: decimal numbers must have at least one digit before the dot
@@ -1348,8 +1371,8 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
     throw_parser_exception("Unable to resolve symbol: .01 in this context", reader);
   }
 
-  if (strchr(buf, '.'))
-    return fixed((float)atof(buf));
+  if (strchr(buf, '.') || has_exp)
+    return fixed((float)strtod(buf, NULL));
   return fixnum(atoi(buf));
 }
 
@@ -1732,12 +1755,16 @@ static ID parse_meta_map(Reader *reader,
   }
   reader_skip_all(reader);
   if (reader_eof(reader) || reader_current(reader) != '^') {
+    // Ensure parser_in_meta is restored on early exit.
+    parser_in_meta = was_in_meta;
     return NULL;
   }
   reader_next(reader);  // Consume '^'
 
   reader_skip_all(reader);
   if (reader_eof(reader) || reader_current(reader) != '{') {
+    // Parse target object with metadata parsing disabled.
+    parser_in_meta = false;
     ID obj = parse_expr(reader, st);
     parser_in_meta = was_in_meta;
     return obj;
@@ -1745,9 +1772,10 @@ static ID parse_meta_map(Reader *reader,
   ID ignored_meta = parse_map(reader, st); // parse_map will skip allocations under parser_in_meta
   RELEASE(ignored_meta);
   reader_skip_all(reader);
-  // Reset parser_in_meta BEFORE parsing the target object
-  parser_in_meta = was_in_meta;
+  // Parse target object with metadata parsing disabled.
+  parser_in_meta = false;
   ID obj = parse_expr(reader, st);
+  parser_in_meta = was_in_meta;
   return obj;
 #else
   // When called from parse_expr, we need to consume '#' and '^'

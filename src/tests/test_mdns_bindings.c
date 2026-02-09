@@ -1,5 +1,5 @@
 /*
- * tinyclj.net.mdns native binding smoke tests
+ * tiny-clj.net.mdns native binding smoke tests
  */
 
 #include "tests_common.h"
@@ -13,7 +13,7 @@ TEST(test_mdns_bindings_native_functions_exist)
     (void)g_tests_common_anchor;
     // Assert that the :native stubs can resolve to a native function implementation
     // without depending on clojure.core helpers (like resolve) being loaded.
-    CljSymbol *ns = intern_symbol_global("tinyclj.net.mdns");
+    CljSymbol *ns = intern_symbol_global("tiny-clj.net.mdns");
     TEST_ASSERT_NOT_NULL(ns);
 
     CljSymbol *s_open = intern_symbol(ns, "open");

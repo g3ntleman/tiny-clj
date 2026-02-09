@@ -32,6 +32,7 @@
 #include "list.h"
 #include "function.h"
 #include "strings.h"
+#include "file_utils.h"
 #include "to_string.h"
 #include "event_loop.h"
 #include "reader.h"
@@ -39,7 +40,6 @@
 #include "ast.h"
 #include "ast_canon.h"
 #include "source_resolver.h"
-#include "embedded_sources.h"
 #include "meta.h"
 #include "eval.h"
 #include "platform.h"
@@ -4407,9 +4407,6 @@ ID native_slurp(ID *args, unsigned int argc)
     if (!validate_builtin_args(argc, 1, "slurp"))
         return NULL;
 
-    // Ensure embedded sources are available before resolving.
-    embedded_source_map_init();
-
     // Convert argument to CljString, then get C-string data
     CljString *filename_str_obj = to_string(args[0]);
     if (!filename_str_obj)
@@ -4422,16 +4419,16 @@ ID native_slurp(ID *args, unsigned int argc)
     const char *filename_str = string_data(filename_str_obj);
 
     ID bytes = resolve_path_to_bytes(filename_str);
-    if (!bytes)
-    {
-        throw_exception_formatted(EXCEPTION_FILE_NOT_FOUND, __FILE__, __LINE__, 0,
-                                  "Resource not found: %s", filename_str);
+    CljString *result = NULL;
+    if (bytes) {
+        result = string_view_from_byte_array(bytes);
+    } else {
+        // Fallback to host filesystem (non-embedded paths).
+        result = file_slurp(filename_str);
+    }
+    if (!result) {
         return NULL;
     }
-
-    CljString *result = string_view_from_byte_array(bytes);
-    if (!result)
-        return NULL;
     return AUTORELEASE(result);
 }
 
@@ -4455,23 +4452,26 @@ ID native_load_file(ID *args, unsigned int argc)
     }
     const char *filename = string_data(filename_str_obj);
 
-    // Resolve file content (KV + embedded)
+    // Resolve file content (KV + embedded) with filesystem fallback.
     ID bytes = resolve_path_to_bytes(filename);
-    if (!bytes)
-    {
-        throw_exception_formatted(EXCEPTION_FILE_NOT_FOUND, __FILE__, __LINE__, 0,
-                                  "Resource not found: %s", filename);
+    CljString *content = NULL;
+    if (bytes) {
+        content = string_view_from_byte_array(bytes);
+    } else {
+        content = file_slurp(filename);
+    }
+    if (!content) {
         return NULL;
     }
-    CljString *content = string_view_from_byte_array(bytes);
-    if (!content)
-        return NULL;
 
     // Get EvalState (use global state)
     EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
 
     // DRY: Use eval_source_in_current_state (same as require uses)
     bool ok = eval_source_in_current_state(content, filename, st);
+    if (ok && st && st->current_ns) {
+        st->current_ns->loaded = true;
+    }
     RELEASE(content);
 
     // load-file returns nil (like Clojure)
@@ -4701,12 +4701,15 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
     CljString *source_str = string_view_from_byte_array(bytes);
     if (!source_str) return false;
     CljNamespace *orig_ns = st->current_ns;
+    CljNamespace *orig_resolve_ns = st->resolve_ns;
     CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
     if (!target_ns) { RELEASE(source_str); return false; }
     st->current_ns = target_ns;
+    st->resolve_ns = target_ns;
     bool ok = eval_source_in_current_state(source_str, source_path, st);
     target_ns->loaded = true;
     st->current_ns = orig_ns;
+    st->resolve_ns = orig_resolve_ns;
     RELEASE(source_str);
     return ok;
 }
@@ -4754,7 +4757,6 @@ static bool process_require_spec(ID spec, EvalState *st)
             CljSymbol *ns_sym = as_symbol(ns_obj);
             if (!ns_sym || !ns_sym->cname)
             {
-                RELEASE(ns_obj);
                 return false;
             }
             ns_name = ns_sym->cname;
@@ -4764,7 +4766,6 @@ static bool process_require_spec(ID spec, EvalState *st)
             CljString *ns_str_obj = to_string(ns_obj);
             if (!ns_str_obj)
             {
-                RELEASE(ns_obj);
                 return false;
             }
             ns_name = string_data(ns_str_obj);
@@ -4785,7 +4786,6 @@ static bool process_require_spec(ID spec, EvalState *st)
                 CljSymbol *kw = as_symbol(elem);
                 if (!kw || !kw->cname)
                 {
-                    RELEASE(elem);
                     continue;
                 }
 
@@ -4799,7 +4799,6 @@ static bool process_require_spec(ID spec, EvalState *st)
                         // Don't release alias_sym - it's stored for later use
                         i++; // Skip next element
                     }
-                    RELEASE(elem);
                 }
                 else if (kw == SYM_KW_REFER)
                 {
@@ -4813,11 +4812,6 @@ static bool process_require_spec(ID spec, EvalState *st)
                             if (refer_sym && refer_sym->cname && strcmp(refer_sym->cname, ":all") == 0)
                             {
                                 refer_all = true;
-                                RELEASE(refer_arg);
-                            }
-                            else
-                            {
-                                RELEASE(refer_arg);
                             }
                         }
                         else if (refer_arg && TAG(refer_arg) == CLJ_VECTOR_PERSISTENT)
@@ -4825,22 +4819,9 @@ static bool process_require_spec(ID spec, EvalState *st)
                             refer_syms = refer_arg;
                             // Don't release refer_syms - it's stored for later use
                         }
-                        else
-                        {
-                            RELEASE(refer_arg);
-                        }
                         i++; // Skip next element
                     }
-                    RELEASE(elem);
                 }
-                else
-                {
-                    RELEASE(elem);
-                }
-            }
-            else
-            {
-                RELEASE(elem);
             }
         }
     }

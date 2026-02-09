@@ -15,6 +15,8 @@
  * @return Canonicalized expression with CljSymbol objects and ASTNodes
  */
 ID canonicalize_ast(ID parsed_expr, EvalState *st);
+// Canonicalize data forms without turning lists into AST calls (EDN/data use).
+ID canonicalize_ast_as_data(ID parsed_expr, EvalState *st);
 
 #endif // AST_CANON_H
 

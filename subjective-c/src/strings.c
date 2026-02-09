@@ -61,22 +61,32 @@ CljString* make_string(const char *str) {
     return make_string_impl(str);
 }
 
+static void string_view_release_ctx(void *ctx) {
+    if (!ctx) return;
+    RELEASE((ID)ctx);
+}
+
 CljString* string_view_from_byte_array(ID bytes) {
     if (!bytes || TAG(bytes) != CLJ_BYTE_ARRAY) return NULL;
     CljByteArray *ba = as_byte_array(bytes);
     int len = ba->length;
     if (len == 0) return string_empty_singleton;
     if (len < 0 || (unsigned)len > UINT16_MAX) return NULL;
-    CljString *s = (CljString*)alloc(sizeof(CljString) + (size_t)len + 1, 1, CLJ_STRING);
-    if (!s) {
+    if (!ba->data) return NULL;
+
+    // Allocate a string view backed by the byte array's data (zero-copy).
+    CljByteArrayView *view = (CljByteArrayView*)alloc(sizeof(CljByteArrayView), 1, CLJ_STRING);
+    if (!view) {
         throw_oom();
         return NULL;
     }
-    s->base.type = CLJ_STRING;
-    s->length = (uint16_t)len;
-    memcpy(s->data, ba->data, (size_t)len);
-    s->data[len] = '\0';
-    return s;
+    view->base_arr.base.type = CLJ_STRING;
+    view->base_arr.base.flags = CLJ_FLAG_EXTERNAL_DATA;
+    view->base_arr.length = len;
+    view->base_arr.data = ba->data;
+    view->external_ctx = (void*)RETAIN(bytes);
+    view->external_free_fn = string_view_release_ctx;
+    return (CljString*)view;
 }
 
 CljString* make_string_buffer(size_t length) {
@@ -105,47 +115,6 @@ CljString* make_string_buffer(size_t length) {
     memset(s->data, 0, length + 1);
 
     return s;
-}
-
-static void string_view_release_byte_array(void *ctx) {
-    if (!ctx) return;
-    RELEASE((ID)ctx);
-}
-
-CljString* string_view_from_byte_array(ID ba) {
-    if (!ba || TAG(ba) != CLJ_BYTE_ARRAY) {
-        throw_exception(EXCEPTION_TYPE, "string_view_from_byte_array expects a byte-array",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    CljByteArray *arr = as_byte_array(ba);
-    if (!arr) return NULL;
-    if (arr->length == 0) {
-        return string_empty_singleton;
-    }
-    if (!arr->data) {
-        throw_exception(EXCEPTION_RUNTIME, "string_view_from_byte_array: NULL data",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    if (arr->length < 0 || arr->length > (int)UINT16_MAX) {
-        throw_exception(EXCEPTION_RUNTIME, "string_view_from_byte_array: length exceeds maximum (65,535)",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    CljByteArrayView *view = (CljByteArrayView*)alloc(sizeof(CljByteArrayView), 1, CLJ_STRING);
-    if (!view) {
-        throw_oom();
-        return NULL;
-    }
-    view->base_arr.base.type = CLJ_STRING;
-    view->base_arr.base.flags = CLJ_FLAG_EXTERNAL_DATA;
-    view->base_arr.length = arr->length;
-    view->base_arr.data = arr->data;
-    view->external_ctx = RETAIN(ba);
-    view->external_free_fn = string_view_release_byte_array;
-    return (CljString*)view;
 }
 
 // Helper: Calculate length of string with escaping

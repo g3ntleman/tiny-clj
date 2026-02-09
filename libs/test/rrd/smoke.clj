@@ -3,7 +3,7 @@
 ;; Tests basic create/update/fetch cycle without persistence.
 
 (do
-  (load-file "libs/tiny_db/rrd.clj")
+  (load-file "libs/tiny-db/rrd.clj")
   (load-file "libs/tiny-db/rrd-classic.clj")
 
   (let [assert-eq (fn [expected actual msg]

@@ -339,7 +339,7 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     } CATCH(ex) {
         ok = false;
     } END_TRY
-    
+
     if (result_chan) {
         CljTransientMap *chan = result_chan;
         

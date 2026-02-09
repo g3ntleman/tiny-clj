@@ -57,10 +57,10 @@ static int inject_file_into_store(const char *logical_key, const char *path)
 static int load_rrd_libs(EvalState *st)
 {
     char path[512];
-    repo_path(path, sizeof(path), "libs/tiny_db/rrd.clj");
-    if (!inject_file_into_store("/libs/tiny_db/rrd.clj", path)) return 0;
+    repo_path(path, sizeof(path), "libs/tiny-db/rrd.clj");
+    if (!inject_file_into_store("/libs/tiny-db/rrd.clj", path)) return 0;
     TRY {
-        (void)eval_string("(load-file \"/libs/tiny_db/rrd.clj\")", st);
+        (void)eval_string("(load-file \"/libs/tiny-db/rrd.clj\")", st);
     } CATCH(ex) {
         if (ex) print_exception((CLJException *)ex);
         return 0;
@@ -101,14 +101,14 @@ static int load_rrd_spline(EvalState *st)
 TEST(test_rrd_inject_then_resolve)
 {
     char path[512];
-    repo_path(path, sizeof(path), "libs/tiny_db/rrd.clj");
+    repo_path(path, sizeof(path), "libs/tiny-db/rrd.clj");
     fs_global_store_reset();
-    int ok = inject_file_into_store("/libs/tiny_db/rrd.clj", path);
+    int ok = inject_file_into_store("/libs/tiny-db/rrd.clj", path);
     if (!ok) {
         TEST_IGNORE_MESSAGE("RRD rrd.clj file not found (run from project root or build/)");
         return;
     }
-    ID bytes = resolve_path_to_bytes("/libs/tiny_db/rrd.clj");
+    ID bytes = resolve_path_to_bytes("/libs/tiny-db/rrd.clj");
     TEST_ASSERT_NOT_NULL(bytes);
 }
 

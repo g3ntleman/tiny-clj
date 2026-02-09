@@ -179,11 +179,16 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
         // Empty sequence - don't set seq_type, leave it as 0
         return true;  // Empty sequence, but valid
     }
-    
+
+    // Immediates are not seqable.
+    if (IS_IMMEDIATE(obj)) {
+        return false;
+    }
+
     iter->container = obj;
-    CljObject *o = obj;
-    
-    switch (o->type) {
+    CljType type = TAG(obj);
+
+    switch (type) {
         case CLJ_LIST:
         case CLJ_AST_NODE: {
             CljList *list_data = as_list(obj);
@@ -775,13 +780,16 @@ int seq_count(ID obj) {
 
 bool is_seqable(ID obj) {
     if (!obj) return true; // nil is seqable
-    
-    switch (((CljObject*)obj)->type) {
+
+    if (IS_IMMEDIATE(obj)) return false;
+
+    switch (TAG(obj)) {
         case CLJ_LIST:
         case CLJ_AST_NODE:
         case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_MAP_PERSISTENT:
+        case CLJ_MAP_TRANSIENT:
         case CLJ_HASHSET:
         case CLJ_STRING:
         case CLJ_SEQ:  // Sequences are seqable

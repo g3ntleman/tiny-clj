@@ -90,7 +90,7 @@ TEST(test_symbol_table_namespace_aliases) {
     CljSymbol *str_alias = intern_symbol_global("str");
     TEST_ASSERT_NOT_NULL(str_alias);
     
-    CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)str_alias);
+    CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, str_alias);
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name, "Alias 'str' should be set in symbol table");
     
     if (TAG(ns_name) == CLJ_SYMBOL) {
