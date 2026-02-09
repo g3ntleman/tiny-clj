@@ -78,3 +78,4 @@ target_compile_definitions(${COMPONENT_LIB} PUBLIC
   MEMORY_PROFILING_ENABLED=0
   META_ENABLED=0
 )
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-clobbered)

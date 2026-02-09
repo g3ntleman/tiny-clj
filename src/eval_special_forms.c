@@ -12,8 +12,12 @@
 #include "function.h"
 #include "macro.h"
 #include "meta.h"
+#include "memory.h"
 #include "parser.h"
+#include "seq.h"
+#include "list.h"
 #include "ast.h"
+#include "ast_canon.h"
 #include "strings.h"
 #include "to_string.h"
 #include "debug.h"
@@ -40,19 +44,95 @@ static INLINE ID args_nth(CljPersistentVector *args, unsigned int idx) {
     return vector_nth(args, idx);
 }
 
-static void eval_finally_clause(CljList *finally_clause,
+// Ensure list-like forms are canonicalized into CLJ_AST_CALL on demand.
+static INLINE ID ensure_ast_call(ID form, EvalState *st) {
+    if (!form || IS_IMMEDIATE(form)) return form;
+    CljType tag = TAG(form);
+    if (tag == CLJ_AST_CALL) return form;
+    if (is_list_type(tag)) {
+        CLJ_ASSERT(st != NULL && "ensure_ast_call requires EvalState");
+#ifdef DEBUG
+        const char *ast_before = print_ast(form);
+        if (ast_before) {
+            DEBUG_PRINT("try: non-canonical clause before canonicalize: %s", ast_before);
+            CLJ_FREE((void*)ast_before);
+        } else {
+            DEBUG_PRINT("try: non-canonical clause before canonicalize: <null>");
+        }
+#endif
+        ID canon = canonicalize_ast(form, st);
+#ifdef DEBUG
+        if (canon && is_list_type(TAG(canon))) {
+            const char *ast_after = print_ast(canon);
+            if (ast_after) {
+                DEBUG_PRINT("try: clause still non-canonical after canonicalize: %s", ast_after);
+                CLJ_FREE((void*)ast_after);
+            } else {
+                DEBUG_PRINT("try: clause still non-canonical after canonicalize: <null>");
+            }
+        }
+#endif
+        return canon ? canon : form;
+    }
+    return form;
+}
+
+static ID seq_to_list_value(ID seq_obj) {
+    if (!seq_obj) return NULL;
+    if (is_list_type(TAG(seq_obj))) return RETAIN(seq_obj);
+    SeqIterator iter;
+    if (!seq_iter_init(&iter, seq_obj)) return NULL;
+    if (seq_iter_empty(&iter)) return (ID)empty_list();
+
+    CljPersistentVector *elems = make_vector(8, STRONG);
+    if (!elems) return NULL;
+
+    while (!seq_iter_empty(&iter)) {
+        ID elem = seq_iter_first(&iter);
+        vector_conj_inplace(&elems, elem);
+        seq_iter_next(&iter);
+    }
+
+    int count = vector_count(elems);
+    CljList *list = empty_list();
+    for (int i = count - 1; i >= 0; i--) {
+        ID elem = vector_nth(elems, i);
+        list = make_list(elem, list);
+    }
+    RELEASE(elems);
+    return (ID)list;
+}
+
+static void eval_finally_clause(ID finally_clause,
                                 CljPersistentMap *env,
                                 EvalState *st,
                                 const EvalContext *ctx) {
     if (!finally_clause) return;
-    CljList *node = list_rest_normalized(finally_clause);
-    while (node) {
-        ID expr = LIST_FIRST(node);
-        if (expr) {
+
+    CljType tag = TAG(finally_clause);
+    if (is_list_type(tag)) {
+        CljList *node = list_rest_normalized(as_list(finally_clause));
+        while (node) {
+            ID expr = LIST_FIRST(node);
+            if (expr) {
+                ID r = eval_body(expr, env, st, ctx);
+                RELEASE(r);
+            }
+            node = list_rest_normalized(node);
+        }
+        return;
+    }
+
+    if (tag == CLJ_AST_CALL) {
+        CljASTCall *call = as_ast_call(finally_clause);
+        CljPersistentVector *args = call ? call->args : NULL;
+        unsigned int count = args ? vector_count(args) : 0;
+        for (unsigned int i = 0; i < count; i++) {
+            ID expr = vector_nth(args, i);
+            if (!expr) continue;
             ID r = eval_body(expr, env, st, ctx);
             RELEASE(r);
         }
-        node = list_rest_normalized(node);
     }
 }
 
@@ -274,10 +354,12 @@ ID eval_special_quote(CljPersistentVector *args, CljPersistentMap *env, EvalStat
     if (!quoted_expr) return NULL;
     if (IS_IMMEDIATE(quoted_expr)) return quoted_expr;
     CljObject *obj = (CljObject*)quoted_expr;
-    // If already in pool (parsed AST), don't add another retain.
+#ifdef DEBUG
+    // Debug-only: If already in pool (parsed AST), don't add another retain.
     if (obj->flags & CLJ_FLAG_IN_AUTORELEASE) {
         return quoted_expr;
     }
+#endif
     // Otherwise retain to decouple from AST lifetime, then autorelease for caller ownership.
     return AUTORELEASE(RETAIN(quoted_expr));
 }
@@ -544,7 +626,7 @@ ID eval_special_dotimes(CljPersistentVector *args, CljPersistentMap *env, EvalSt
 ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     unsigned int argc = args_count(args);
     if (argc == 0) return NULL;
-    CljPersistentMap *volatile env_vol = env;
+    CljPersistentMap *env_vol = env;
     // Establish base env (match other wrappers: fall back to current namespace mappings).
     CljPersistentMap *base_env = eval_env_or_ns_mappings(env_vol, st);
 
@@ -552,9 +634,20 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
     int clause_index = -1;
     for (unsigned int i = 0; i < argc; i++) {
         ID elem = args_nth(args, i);
-        if (!elem || !is_list_type(TAG(elem))) continue;
-        CljList *clause = as_list(elem);
-        ID first = clause ? LIST_FIRST(clause) : NULL;
+        if (!elem) continue;
+        elem = ensure_ast_call(elem, st);
+        if (!elem || IS_IMMEDIATE(elem)) continue;
+        CljType tag = TAG(elem);
+        ID first = NULL;
+        if (is_list_type(tag)) {
+            CLJ_ASSERT(tag == CLJ_AST_CALL);
+            continue;
+        } else if (tag == CLJ_AST_CALL) {
+            CljASTCall *call = as_ast_call(elem);
+            first = call ? call->op : NULL;
+        } else {
+            continue;
+        }
         if (first == (ID)SYM_CATCH || first == (ID)SYM_FINALLY ||
             sym_name_eq(first, "catch") || sym_name_eq(first, "finally")) {
             clause_index = (int)i;
@@ -566,14 +659,25 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
     }
 
     // Find optional finally clause.
-    CljList *finally_clause = NULL;
+    ID finally_clause = NULL;
     for (unsigned int i = (unsigned int)clause_index; i < argc; i++) {
         ID elem = args_nth(args, i);
-        if (!elem || !is_list_type(TAG(elem))) continue;
-        CljList *clause = as_list(elem);
-        ID first = clause ? LIST_FIRST(clause) : NULL;
+        if (!elem) continue;
+        elem = ensure_ast_call(elem, st);
+        if (!elem || IS_IMMEDIATE(elem)) continue;
+        CljType tag = TAG(elem);
+        ID first = NULL;
+        if (is_list_type(tag)) {
+            CLJ_ASSERT(tag == CLJ_AST_CALL);
+            continue;
+        } else if (tag == CLJ_AST_CALL) {
+            CljASTCall *call = as_ast_call(elem);
+            first = call ? call->op : NULL;
+        } else {
+            continue;
+        }
         if (first == (ID)SYM_FINALLY || sym_name_eq(first, "finally")) {
-            finally_clause = clause;
+            finally_clause = elem;
             break;
         }
     }
@@ -596,45 +700,49 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
 
         for (unsigned int i = (unsigned int)clause_index; i < argc; i++) {
             ID elem = args_nth(args, i);
-            if (!elem || !is_list_type(TAG(elem))) continue;
+            if (!elem) continue;
+            elem = ensure_ast_call(elem, st);
+            if (!elem || IS_IMMEDIATE(elem)) continue;
 
-            CljList *clause = as_list(elem);
-            ID first = clause ? LIST_FIRST(clause) : NULL;
+            CljASTCall *clause_call = NULL;
+            ID first = NULL;
+            CljType elem_tag = TAG(elem);
+            if (is_list_type(elem_tag)) {
+                CLJ_ASSERT(elem_tag == CLJ_AST_CALL);
+                continue;
+            } else if (elem_tag == CLJ_AST_CALL) {
+                clause_call = as_ast_call(elem);
+                first = clause_call ? clause_call->op : NULL;
+            } else {
+                continue;
+            }
+
             if (first != (ID)SYM_CATCH && !sym_name_eq(first, "catch")) continue;
 
             // Supported catch clause shapes:
             // - (catch sym body...)
             // - (catch Type sym body...)
             ID binding_sym = NULL;
-            CljList *body_node = NULL;
-            CljList *cargs = list_rest_normalized(clause);
-            if (!cargs) continue;
+            CljPersistentVector *call_args = NULL;
+            unsigned int body_start = 0;
 
-            ID arg1 = LIST_FIRST(cargs);
-            CljList *after1 = list_rest_normalized(cargs);
-            if (after1) {
-                ID arg2 = LIST_FIRST(after1);
-                CljList *after2 = list_rest_normalized(after1);
-
-                // If there are >= 3 args after `catch`, treat as (catch Type sym body...).
-                // Otherwise treat as (catch sym body...).
-                if (after2) {
-                    if (is_symbol(arg2)) {
-                        binding_sym = arg2;
-                        body_node = after2;
-                    }
-                } else {
-                    if (is_symbol(arg1)) {
-                        binding_sym = arg1;
-                        body_node = after1;
-                    }
-                }
+            call_args = clause_call ? clause_call->args : NULL;
+            unsigned int ccount = call_args ? vector_count(call_args) : 0;
+            if (ccount >= 3) {
+                binding_sym = vector_nth(call_args, 1);
+                body_start = 2;
+            } else if (ccount >= 2) {
+                binding_sym = vector_nth(call_args, 0);
+                body_start = 1;
+            } else {
+                continue;
             }
 
             // Require at least one body form (even if it evaluates to nil).
-            if (!binding_sym || !body_node) {
+            if (!binding_sym || !is_symbol(binding_sym)) {
                 continue;
             }
+            if (!call_args) continue;
 
             CljPersistentMap *catch_env = NULL;
             if (is_map(base_env)) {
@@ -663,8 +771,9 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
                 catch_ctx = &catch_ctx_storage;
             }
 
-            for (CljList *b = body_node; b; b = list_rest_normalized(b)) {
-                ID body_expr = LIST_FIRST(b);
+            unsigned int body_count = vector_count(call_args);
+            for (unsigned int bi = body_start; bi < body_count; bi++) {
+                ID body_expr = vector_nth(call_args, bi);
                 if (!body_expr) continue;
                 ASSIGN(handler_result, eval_body(body_expr, catch_env, st, catch_ctx));
             }
@@ -704,7 +813,7 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
         throw_exception(EXCEPTION_RUNTIME, "binding requires an evaluation state with dynamic bindings", __FILE__, __LINE__, 0);
     }
 
-    CljPersistentMap *volatile env_vol = env;
+    CljPersistentMap *env_vol = env;
     // Base env for evaluating init forms and body (match other wrappers).
     CljPersistentMap *base_env = eval_env_or_ns_mappings(env_vol, st);
 
@@ -757,7 +866,7 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
             return NULL;
         }
 
-        ID volatile value = expr_id ? eval_body(expr_id, base_env, st, ctx) : NULL;
+        ID value = expr_id ? eval_body(expr_id, base_env, st, ctx) : NULL;
 
         // If binding *ns*, accept namespace object (preferred) or resolve symbol/string to namespace.
         if (sym == SYM_NS_STAR) {
@@ -921,17 +1030,27 @@ ID eval_special_quasiquote(CljPersistentVector *args, CljPersistentMap *env, Eva
     // Delegate to Clojure quasiquote-fn to get an expansion form.
     // Then evaluate that expansion in the *current* env/ctx so unquote and
     // unquote-splice can see lexical bindings (Clojure-compatible behavior).
-    // Finally, return (quote <value>) so callers doing (eval (quasiquote ...))
-    // still get the intended data structure.
     ID qq_args[] = { expr };
     ID expansion = eval_function_call((CljObject*)g_quasiquote_fn, qq_args, 1, NULL, st);
     if (!expansion) {
         return NULL;
     }
 
-    ID value = eval_body(expansion, env, st, ctx);
+    ID canonical = canonicalize_ast(expansion, st);
+    if (!canonical) {
+        return NULL;
+    }
+
+    ID value = eval_body(canonical, env, st, ctx);
     if (value == SYM_NIL) {
         value = NULL;
+    }
+
+    if (value && is_seq(value) && !is_list_type(TAG(value))) {
+        ID list_value = seq_to_list_value(value);
+        if (list_value) {
+            value = list_value;
+        }
     }
 
     CljList *quoted_arg = make_ast_list(value, NULL);

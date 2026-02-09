@@ -5,12 +5,11 @@
 #include "platform.h"
 
 #if defined(ESP_PLATFORM) && defined(__has_include)
-#if __has_include(<esp_system.h>) && __has_include(<esp_timer.h>) && __has_include(<esp_heap_caps.h>) && __has_include(<esp_chip_info.h>) && __has_include(<esp_spi_flash.h>) && __has_include(<esp_flash.h>) && __has_include(<driver/uart.h>) && __has_include(<freertos/FreeRTOS.h>) && __has_include(<freertos/task.h>)
+#if __has_include(<esp_system.h>) && __has_include(<esp_timer.h>) && __has_include(<esp_heap_caps.h>) && __has_include(<esp_chip_info.h>) && __has_include(<esp_flash.h>) && __has_include(<driver/uart.h>) && __has_include(<freertos/FreeRTOS.h>) && __has_include(<freertos/task.h>)
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <esp_heap_caps.h>
 #include <esp_chip_info.h>
-#include <esp_spi_flash.h>
 #include <esp_flash.h>
 #include <driver/uart.h>
 #include <freertos/FreeRTOS.h>
@@ -24,7 +23,6 @@
 #include <esp_timer.h>
 #include <esp_heap_caps.h>
 #include <esp_chip_info.h>
-#include <esp_spi_flash.h>
 #include <esp_flash.h>
 #include <driver/uart.h>
 #include <freertos/FreeRTOS.h>

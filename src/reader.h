@@ -49,8 +49,8 @@ bool reader_skip_ignorable(Reader *reader);
 bool reader_skip_all_including_newlines(Reader *reader);
 
 // UTF-8 codepoint functions
-uint32_t reader_peek_codepoint(const Reader *reader);
-uint32_t reader_next_codepoint(Reader *reader);
+int32_t reader_peek_codepoint(const Reader *reader);
+int32_t reader_next_codepoint(Reader *reader);
 bool reader_is_delimiter(const Reader *reader);
 bool reader_is_symbol_char(const Reader *reader);
 

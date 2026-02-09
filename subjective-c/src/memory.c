@@ -54,13 +54,21 @@ static THREAD_LOCAL uint32_t g_pool_peak_count = 0;
 #endif
 
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
-#define RCHIST_SIZE 128
+#define RCHIST_SIZE 1024
 typedef struct { CljObject *obj; char op; int rc_after; void *caller; } RcHistEntry;
 static THREAD_LOCAL RcHistEntry g_rchist[RCHIST_SIZE];
 static THREAD_LOCAL unsigned int g_rchist_head = 0;
 
 static void rchist_push(CljObject *v, char op, int rc_after) {
     /* Frame 0 = retain/release/autorelease, frame 1 = actual RELEASE/RETAIN/AUTORELEASE call site */
+#if defined(DEBUG)
+    const char *closure_only = getenv("RCHIST_CLOSURE_ONLY");
+    if (closure_only && closure_only[0] && strcmp(closure_only, "0") != 0) {
+        if (!v || v->type != CLJ_CLOSURE) {
+            return;
+        }
+    }
+#endif
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wframe-address"
@@ -246,6 +254,9 @@ void retain(CljObject *v) {
 #endif
 #ifdef DEBUG
     if (v->rc <= 0) {
+#if defined(ZOMBIE_ENABLED)
+        rchist_dump_for_object(v);
+#endif
         char message[512];
 #if defined(ZOMBIE_ENABLED)
         char z[384];
@@ -364,8 +375,8 @@ void release(CljObject *v) {
         MEMORY_PROFILER_TRACK_OBJECT_ZOMBIFY(v);  /* Realistic stats; no free – keep object as zombie */
 #else
         release_object_deep(v);
+        if (g_debug_output_active) LOGF(stdout, "🔍 release: Object %p will be freed\n", v);
         DEALLOC(v);
-        if (g_debug_output_active) LOGF(stdout, "🔍 release: Object %p freed\n", v);
 #endif
     }
 }

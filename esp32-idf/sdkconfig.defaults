@@ -24,12 +24,5 @@ CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
 CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
 CONFIG_ESP_COREDUMP_CHECK_BOOT=y
 
-# Disable SPIFFS (this project does not use it).
-# Even with EXCLUDE_COMPONENTS=spiffs, keeping configs off avoids accidental re-enabling.
-# CONFIG_SPIFFS_CACHE is not set
-# CONFIG_SPIFFS_PAGE_CHECK is not set
-# CONFIG_SPIFFS_USE_MAGIC is not set
-# CONFIG_SPIFFS_USE_MAGIC_LENGTH is not set
-# CONFIG_SPIFFS_USE_MTIME is not set
-CONFIG_SPIFFS_MAX_PARTITIONS=0
+# SPIFFS is unused in this project; leave it at IDF defaults.
 

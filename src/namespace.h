@@ -58,7 +58,7 @@ void ns_cleanup(void);
 int ns_reset_registry(void);  // Reset and reinitialize namespace registry
 
 // Namespace alias functions
-ID ns_get_alias(CljNamespace *ns, ID alias);
+ID ns_get_alias(CljNamespace *ns, CljSymbol *alias);
 void ns_set_alias(CljNamespace *ns, ID alias, ID ns_name);
 
 // EvalState functions
@@ -76,8 +76,6 @@ void evalstate_pop_dynamic_bindings_to(EvalState *st, unsigned int depth);
 // Exception handling
 void eval_error(const char *msg, EvalState *st);
 void parse_error(const char *msg, EvalState *st);
-CljObject* eval_try(CljObject *form, EvalState *st);
-CljObject* eval_catch(CljObject *form, EvalState *st);
 
 // List helpers moved to list.h
 

@@ -66,21 +66,23 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
         return NULL;
     }
 
+    ID fn_local = fn;
+
     // Resolve symbol to function if necessary (Clojure/JVM behavior)
     // ns_resolve automatically searches clojure.core, so we don't need to set current_ns
-    if (fn && TAG(fn) == CLJ_SYMBOL) {
+    if (fn_local && TAG(fn_local) == CLJ_SYMBOL) {
         // ns_resolve searches clojure.core even if current_ns is different
         // Pass NULL for st to use default namespace - ns_resolve will still search clojure.core
-        ID resolved = ns_resolve(NULL, as_symbol(fn));
+        ID resolved = ns_resolve(NULL, as_symbol(fn_local));
         if (resolved != NOT_FOUND) {
             // resolved is retained by the map, so we can use it directly
             // No need to RELEASE old fn (it's a parameter) or RETAIN resolved (already retained)
-            fn = resolved;
+            fn_local = resolved;
         }
     }
 
     // Validate that fn is a valid function (Clojure/JVM throws IllegalArgumentException/ClassCastException)
-    if (!fn || (TAG(fn) != CLJ_FUNC && TAG(fn) != CLJ_CLOSURE)) {
+    if (!fn_local || (TAG(fn_local) != CLJ_FUNC && TAG(fn_local) != CLJ_CLOSURE)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires a function",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -110,7 +112,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
 
     ID new_value = NULL;
     TRY {
-        new_value = eval_function_call(fn, fn_args, argc + 1, env, st);
+        new_value = eval_function_call((ID)fn_local, fn_args, argc + 1, env, st);
     } CATCH(ex) {
         // Cleanup on exception (RELEASE handles nil and immediates safely)
         for (unsigned int i = 0; i < argc + 1; i++) {

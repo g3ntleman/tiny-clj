@@ -249,9 +249,9 @@ static inline void exception_handler_free(ExceptionHandler *h) {
  *  @return NULL if arity not met (exception thrown), otherwise no return value
  */
 #define CHECK_ARITY_MIN(argc, min, func_name) \
-    _CHECK_ARITY_IMPL((argc) < (min), func_name, \
+    _CHECK_ARITY_IMPL(((int)(argc)) < ((int)(min)), func_name, \
                      "%s requires at least %u argument%s, got %u", \
-                     min, ((min) == 1 ? "" : "s"), argc)
+                     (unsigned)(min), ((min) == 1 ? "" : "s"), argc)
 
 /** @brief Check arity range and throw ArityException if out of range.
  *  @param argc Actual argument count
@@ -262,9 +262,9 @@ static inline void exception_handler_free(ExceptionHandler *h) {
  */
 #define CHECK_ARITY_RANGE(argc, min, max, func_name) \
     do { \
-        _CHECK_ARITY_IMPL((argc) < (min) || (argc) > (max), func_name, \
+        _CHECK_ARITY_IMPL(((int)(argc)) < ((int)(min)) || ((int)(argc)) > ((int)(max)), func_name, \
                          "%s requires %u-%u arguments, got %u", \
-                         min, max, argc); \
+                         (unsigned)(min), (unsigned)(max), argc); \
     } while(0)
 
 /**

@@ -21,7 +21,7 @@
 #ifndef DEBUG
 #define memory_profiler_track_raw_alloc(p, n, file, line) ((void)0)
 #define memory_profiler_track_raw_free(ptr, file, line) ((void)0)
-#define memory_profiler_track_raw_realloc(old_ptr, new_ptr, n, file, line) ((void)0)
+#define memory_profiler_track_raw_realloc(old_ptr_addr, new_ptr, n, file, line) ((void)0)
 #endif
 #endif
 
@@ -125,13 +125,14 @@ static inline void* clj_calloc_impl(size_t nmemb, size_t size, const char *file,
 
 static inline void* clj_realloc_impl(void *old_ptr, size_t n, const char *file, int line) {
     (void)file; (void)line;
+    uintptr_t old_ptr_addr = (uintptr_t)old_ptr;
     void *new_ptr = realloc(old_ptr, n);
     if (!new_ptr && n != 0) {
         throw_oom(); // never returns; old_ptr remains valid per realloc contract
     }
     // Only track if realloc succeeded or if n==0 (free semantics).
     if (new_ptr || n == 0) {
-        memory_profiler_track_raw_realloc(old_ptr, new_ptr, n, file, line);
+        memory_profiler_track_raw_realloc(old_ptr_addr, new_ptr, n, file, line);
     }
     return new_ptr;
 }
@@ -152,7 +153,7 @@ static inline void clj_free_impl(void *ptr, const char *file, int line) {
 // No-op macros for profiler tracking when profiling is disabled
 #define memory_profiler_track_raw_alloc(p, n, file, line) ((void)0)
 #define memory_profiler_track_raw_free(ptr, file, line) ((void)0)
-#define memory_profiler_track_raw_realloc(old_ptr, new_ptr, n, file, line) ((void)0)
+#define memory_profiler_track_raw_realloc(old_ptr_addr, new_ptr, n, file, line) ((void)0)
 
 #define CLJ_MALLOC(n) malloc((n))
 #define CLJ_CALLOC(nmemb, size) calloc((nmemb), (size))
@@ -380,8 +381,8 @@ void autorelease_pool_peak_reset(void);
 #endif
 
 #define ASSIGN(var, new_obj) do { \
-    ID volatile _new_val = (new_obj); \
-    ID volatile _old_val = (var); \
+    ID _new_val = (new_obj); \
+    ID _old_val = (var); \
     if (_new_val != _old_val) { \
         RETAIN(_new_val); \
         RELEASE(_old_val); \

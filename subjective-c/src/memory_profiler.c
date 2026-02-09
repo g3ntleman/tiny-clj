@@ -441,9 +441,10 @@ void memory_profiler_track_raw_free(void *ptr, const char *file, int line) {
     g_memory_stats.current_memory_usage = (g_memory_stats.current_memory_usage >= old) ? g_memory_stats.current_memory_usage - old : 0;
 }
 
-void memory_profiler_track_raw_realloc(void *old_ptr, void *new_ptr, size_t new_size, const char *file, int line) {
+void memory_profiler_track_raw_realloc(uintptr_t old_ptr_addr, void *new_ptr, size_t new_size, const char *file, int line) {
     (void)file;(void)line;
     if (!g_memory_profiling_enabled) return;
+    void *old_ptr = (void*)old_ptr_addr;
     g_memory_stats.raw_reallocations++;
     if (!old_ptr) { memory_profiler_track_raw_alloc(new_ptr, new_size, file, line); return; }
     if (new_size == 0) { memory_profiler_track_raw_free(old_ptr, file, line); return; }
@@ -670,9 +671,10 @@ void memory_profiler_track_raw_free(void *ptr, const char *file, int line) {
 #endif
 }
 
-void memory_profiler_track_raw_realloc(void *old_ptr, void *new_ptr, size_t new_size, const char *file, int line) {
+void memory_profiler_track_raw_realloc(uintptr_t old_ptr_addr, void *new_ptr, size_t new_size, const char *file, int line) {
     (void)file; (void)line;
 #ifdef DEBUG
+    void *old_ptr = (void*)old_ptr_addr;
     g_memory_stats.raw_reallocations++;
     if (!old_ptr) { memory_profiler_track_raw_alloc(new_ptr, new_size, file, line); return; }
     if (new_size == 0) { memory_profiler_track_raw_free(old_ptr, file, line); return; }
@@ -695,7 +697,7 @@ void memory_profiler_track_raw_realloc(void *old_ptr, void *new_ptr, size_t new_
     memory_profiler_track_raw_free(old_ptr, file, line);
     memory_profiler_track_raw_alloc(new_ptr, new_size, file, line);
 #else
-    (void)old_ptr; (void)new_ptr; (void)new_size;
+    (void)old_ptr_addr; (void)new_ptr; (void)new_size;
 #endif
 }
 void memory_profiler_track_retain(CljObject *o) { (void)o; }

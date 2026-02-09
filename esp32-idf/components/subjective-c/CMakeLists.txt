@@ -31,4 +31,5 @@ idf_component_register(
 target_compile_definitions(${COMPONENT_LIB} PUBLIC UNITY_USE_FLUSH_STDOUT)
 # tinyclj is built with DEBUG=1 and calls debug_trace_allocation from list.c/ast.c.
 target_compile_definitions(${COMPONENT_LIB} PUBLIC DEBUG=1)
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-clobbered)
 

@@ -14,7 +14,6 @@
 #include "to_string.h" // For pr_str debug printing
 #include "strings.h" // For string_data
 #include "source_resolver.h" // For resolve_path_to_bytes (load_clojure_repl, override fallback)
-#include "embedded_sources.h" // For embedded_source_map_init
 #include "builtins.h"        // For load_namespace_from_bytes
 #include "types.h"  // For clj_type_name
 #include "memory_profiler.h"
@@ -287,8 +286,8 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
         size_t parse_offset_before = reader_offset(&reader);
         TRY {
           form = value_by_parsing_expr(&reader, st);
-          if (form && !IS_IMMEDIATE(form)) {
-            RETAIN(form); // keep form alive across pool boundary
+          if (form && !IS_IMMEDIATE((CljValue)form)) {
+            RETAIN((CljValue)form); // keep form alive across pool boundary
           }
         } CATCH(ex) {
           // ParseError during parsing - log and continue to next expression
@@ -338,8 +337,8 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
             if (result) {
               success_count++;
             } else {
-              if (form && is_list_type(TAG(form))) {
-                CljList *list = as_list(form);
+              if (form && is_list_type(TAG((CljValue)form))) {
+                CljList *list = as_list((CljValue)form);
                 CljObject *first = LIST_FIRST(list);
                 if (first && TAG(first) == CLJ_SYMBOL) {
                   CljSymbol *first_sym = as_symbol(first);
@@ -350,8 +349,8 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
             }
           } CATCH(ex) {
             bool is_def_expr = false;
-            if (form && is_list_type(TAG(form))) {
-              CljList *list = as_list(form);
+            if (form && is_list_type(TAG((CljValue)form))) {
+              CljList *list = as_list((CljValue)form);
               CljObject *first = LIST_FIRST(list);
               if (first && TAG(first) == CLJ_SYMBOL) {
                 CljSymbol *first_sym = as_symbol(first);
@@ -388,8 +387,8 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
         });
       }
 
-      if (form && !IS_IMMEDIATE(form)) {
-        RELEASE(form);
+      if (form && !IS_IMMEDIATE((CljValue)form)) {
+        RELEASE((CljValue)form);
       }
     expr_count++;
 
@@ -448,7 +447,6 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
 
 int load_clojure_core(EvalState *st) {
   if (!st) return 0;
-  embedded_source_map_init();
   bool loaded = false;
   ID bytes = resolve_path_to_bytes("/libs/clojure/core.clj");
   if (bytes)
@@ -543,8 +541,9 @@ int load_clojure_repl(EvalState *st) {
     return 0;
   }
   
-  // Save original namespace
+  // Save original namespace state
   CljNamespace *orig_ns = st->current_ns;
+  CljNamespace *orig_resolve_ns = st->resolve_ns;
   
   // Ensure target namespace exists
   CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
@@ -556,15 +555,17 @@ int load_clojure_repl(EvalState *st) {
   
   // Temporarily switch to target namespace
   st->current_ns = target_ns;
+  st->resolve_ns = target_ns;
   
   // Evaluate source using same approach as eval_core_source
   size_t source_len = strlen(source);
   bool ok = eval_core_source(source, source_len, source_label, st);
   
-  // Restore original namespace
+  // Restore original namespace state
   if (orig_ns) {
     st->current_ns = orig_ns;
   }
+  st->resolve_ns = orig_resolve_ns;
   
   CLJ_FREE(source);
   CLJ_FREE(rel);

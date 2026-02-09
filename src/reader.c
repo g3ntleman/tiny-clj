@@ -84,7 +84,7 @@ int reader_column(const Reader *reader) {
 bool reader_skip_whitespace(Reader *reader) {
     bool skipped = false;
     while (!reader_eof(reader)) {
-        uint32_t cp = reader_peek_codepoint(reader);
+        int32_t cp = reader_peek_codepoint(reader);
         if (cp < 0) break;
         
         // Check if codepoint is whitespace
@@ -151,7 +151,7 @@ bool reader_skip_ignorable(Reader *reader) {
 bool reader_skip_whitespace_including_newlines(Reader *reader) {
     bool skipped = false;
     while (!reader_eof(reader)) {
-        uint32_t cp = reader_peek_codepoint(reader);
+        int32_t cp = reader_peek_codepoint(reader);
         if (cp < 0) break;
         
         // Check if codepoint is whitespace (including newlines)
@@ -200,14 +200,14 @@ static void update_position_tracking(Reader *reader, size_t bytes_consumed) {
 }
 
 // UTF-8 codepoint functions
-uint32_t reader_peek_codepoint(const Reader *reader) {
+int32_t reader_peek_codepoint(const Reader *reader) {
     if (reader_eof(reader)) return -1;
     int cp;
     const char *next = utf8codepoint(reader->src + reader->index, &cp);
     return next ? cp : -1;
 }
 
-uint32_t reader_next_codepoint(Reader *reader) {
+int32_t reader_next_codepoint(Reader *reader) {
     if (reader_eof(reader)) return -1;
     int cp;
     const char *next = utf8codepoint(reader->src + reader->index, &cp);
@@ -223,7 +223,7 @@ uint32_t reader_next_codepoint(Reader *reader) {
 
 // Generic function to check codepoint properties
 static bool reader_check_codepoint_property(const Reader *reader, bool (*check_func)(int)) {
-    uint32_t cp = reader_peek_codepoint(reader);
+    int32_t cp = reader_peek_codepoint(reader);
     return cp >= 0 && check_func(cp);
 }
 
