@@ -1960,42 +1960,41 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
     // If we are inside a function call with a CallFrame, eagerly capture parameters into a map.
     // This ensures closures can reference parameters after the call returns.
     // The captured param-map must be below any let frames so let-bindings still shadow params.
-    if (ctx && ctx->frame && ctx->frame->param_count > 0) {
-        // Capture the entire CallFrame chain (current + parents) so closures created inside
-        // nested lets can still see outer function parameters (and other frame-bound locals).
+    // Capture when any frame in the chain has params (closure inside a let must see outer defn params).
+    // Single loop: first phase walks chain (collect frames + total), second phase fills map (outer first).
+    if (ctx && ctx->frame) {
         CallFrame *frames[32];
-        int depth = 0;
+        int depth = 0, di = 0;
         unsigned int total = 0;
-        for (CallFrame *f = ctx->frame; f && depth < 32; f = f->parent) {
-            frames[depth++] = f;
-            if (f->param_count > 0) total += (unsigned int)f->param_count;
-        }
-
-        CljPersistentMap *param_map = make_map((int)total);
-        // Apply outer frames first, then inner frames so shadowing works.
-        for (int di = depth - 1; di >= 0; di--) {
-            CallFrame *f = frames[di];
-            for (int i = 0; i < f->param_count; i++) {
-                ID key = f->params[i];
-                ID val = frame_decode_value(f->values[i]);
-                map_assoc_inplace(&param_map, key, val);
+        CljPersistentMap *param_map = NULL;
+        CallFrame *f = ctx->frame;
+        for (;;) {
+            if (f && depth < 32) {
+                frames[depth++] = f;
+                if (f->param_count > 0) total += (unsigned int)f->param_count;
+                f = f->parent;
+            } else if (!param_map) {
+                if (total == 0) break;
+                param_map = make_map((int)total);
+                di = depth - 1;
+            } else if (di >= 0) {
+                CallFrame *fr = frames[di--];
+                for (int i = 0; i < fr->param_count; i++)
+                    map_assoc_inplace(&param_map, fr->params[i], frame_decode_value(fr->values[i]));
+            } else {
+                unsigned int base_cnt = vector_count(fn_env_stack);
+                CljPersistentVector *combined = NULL;
+                env_stack_push_inplace(&combined, param_map);
+                RELEASE(param_map);
+                for (unsigned int i = 0; i < base_cnt; i++)
+                    vector_conj_inplace(&combined, vector_nth(fn_env_stack, i));
+                if (fn_env_stack_owned)
+                    RELEASE(fn_env_stack);
+                fn_env_stack = combined;
+                fn_env_stack_owned = true;
+                break;
             }
         }
-
-        unsigned int base_cnt = vector_count(fn_env_stack);
-        CljPersistentVector *combined = NULL;
-        env_stack_push_inplace(&combined, param_map);
-        RELEASE(param_map);
-        for (unsigned int i = 0; i < base_cnt; i++) {
-            // env_stack contains maps
-            vector_conj_inplace(&combined, vector_nth(fn_env_stack, i));
-        }
-
-        if (fn_env_stack_owned) {
-            RELEASE(fn_env_stack);
-        }
-        fn_env_stack = combined;
-        fn_env_stack_owned = true;
     }
 
     // Create function object
@@ -2912,7 +2911,8 @@ ID eval_parsed_value(CljValue parsed, EvalState *eval_state) {
  * @brief Parse and evaluate a Clojure expression from a string (convenience)
  * @param expr_str The Clojure expression as a string
  * @param eval_state The evaluation state
- * @return The evaluated result (autoreleased) or NULL only if result is nil
+ * @return The evaluated result (autoreleased in caller's pool) or NULL only if result is nil.
+ *         Caller must not release; use result only while current autorelease pool is active.
  */
 ID eval_string(const char* expr_str, EvalState *eval_state) {
     CLJ_ASSERT(expr_str != NULL);
@@ -2922,23 +2922,12 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
     reader_init(&reader, expr_str);
     reader_set_source_name(&reader, "<string input>");
 
-    ID result = NULL;
-    bool parse_ok = true;
-    WITH_AUTORELEASE_POOL({
-        CljValue parsed = parse_from_reader(&reader, eval_state);
-        if (parsed == NULL) {
-            throw_exception(EXCEPTION_PARSE, "Failed to parse expression", __FILE__, __LINE__, 0);
-            parse_ok = false;
-        } else {
-            result = eval_parsed_value(parsed, eval_state);
-            RETAIN(result);
-        }
-    });
-    if (!parse_ok) {
+    CljValue parsed = parse_from_reader(&reader, eval_state);
+    if (parsed == NULL) {
+        throw_exception(EXCEPTION_PARSE, "Failed to parse expression", __FILE__, __LINE__, 0);
         return NULL;
     }
-    AUTORELEASE(result);
-    return result;
+    return eval_parsed_value(parsed, eval_state);
 }
 
 // ============================================================================
