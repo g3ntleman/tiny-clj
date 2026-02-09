@@ -4608,7 +4608,6 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     {
         if (!sym || TAG(sym) != CLJ_SYMBOL)
         {
-            RELEASE(sym);
             continue;
         }
 
