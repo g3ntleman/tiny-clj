@@ -16,6 +16,22 @@
 #include "strings.h"
 #include "value.h"
 
+static char *copy_string_cstr(CljString *str, const char *context) {
+    if (!str) return NULL;
+    size_t len = string_length((ID)str);
+    const char *data = string_data((ID)str);
+    char *buf = CLJ_MALLOC(len + 1);
+    if (!buf) {
+        throw_exception(EXCEPTION_RUNTIME, context, __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    if (len > 0) {
+        memcpy(buf, data, len);
+    }
+    buf[len] = '\0';
+    return buf;
+}
+
 // regex?: Returns true if x is a compiled regex pattern
 ID native_regex_p(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "regex?");
@@ -40,10 +56,12 @@ ID native_re_pattern(ID *args, unsigned int argc) {
     }
 
     CljString *pattern_str = as_clj_string(pattern_arg);
-    const char *pattern = clj_string_data(pattern_str);
+    char *pattern = copy_string_cstr(pattern_str, "re-pattern: failed to allocate pattern buffer");
+    if (!pattern) return NULL;
 
     char error[256];
     CljRegex *re = regex_compile(pattern, error, sizeof(error));
+    CLJ_FREE(pattern);
     if (!re) {
         throw_exception(EXCEPTION_RUNTIME, error, __FILE__, __LINE__, 0);
         return NULL;
@@ -75,12 +93,14 @@ ID native_re_find(ID *args, unsigned int argc) {
 
     CljRegex *re = (CljRegex *)re_arg;
     CljString *str = as_clj_string(str_arg);
-    const char *text = clj_string_data(str);
+    char *text = copy_string_cstr(str, "re-find: failed to allocate text buffer");
+    if (!text) return NULL;
 
     const char *match_start = NULL;
     const char *match_end = NULL;
 
     if (!regex_find(re, text, &match_start, &match_end)) {
+        CLJ_FREE(text);
         return NULL; // nil - no match
     }
 
@@ -88,6 +108,7 @@ ID native_re_find(ID *args, unsigned int argc) {
     CljString *result = make_string_buffer(match_len);
     memcpy(result->data, match_start, match_len);
     result->data[match_len] = '\0';
+    CLJ_FREE(text);
     return AUTORELEASE(result);
 }
 
@@ -114,12 +135,15 @@ ID native_re_matches(ID *args, unsigned int argc) {
 
     CljRegex *re = (CljRegex *)re_arg;
     CljString *str = as_clj_string(str_arg);
-    const char *text = clj_string_data(str);
+    char *text = copy_string_cstr(str, "re-matches: failed to allocate text buffer");
+    if (!text) return NULL;
 
     if (!regex_matches(re, text)) {
+        CLJ_FREE(text);
         return NULL; // nil - no match or partial match
     }
 
+    CLJ_FREE(text);
     // Return the matched string (entire string in this case)
     return str_arg;
 }
@@ -147,7 +171,8 @@ ID native_re_seq(ID *args, unsigned int argc) {
 
     CljRegex *re = (CljRegex *)re_arg;
     CljString *str = as_clj_string(str_arg);
-    const char *text = clj_string_data(str);
+    char *text = copy_string_cstr(str, "re-seq: failed to allocate text buffer");
+    if (!text) return NULL;
     const char *pos = text;
 
     // Build list of matches (in reverse, then reverse at end)
@@ -177,6 +202,7 @@ ID native_re_seq(ID *args, unsigned int argc) {
     }
 
     if (!result) {
+        CLJ_FREE(text);
         return NULL;
     }
 
@@ -189,6 +215,7 @@ ID native_re_seq(ID *args, unsigned int argc) {
     }
     // Release original list; reversed retains elements.
     RELEASE(result);
+    CLJ_FREE(text);
 
     return reversed ? AUTORELEASE(reversed) : NULL;
 }

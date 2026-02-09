@@ -1,0 +1,8 @@
+# make_* API-Invariante
+
+**Regel:** Alle `make_*`-Funktionen liefern einen gültigen Pointer oder werfen eine Exception – nie stilles NULL.
+
+- Nach einem `make_*`-Aufruf keinen NULL-Check einbauen, sofern die Funktion dieser Konvention folgt.
+- Siehe auch: docs/MEMORY_POLICY.md („Invariant: All make_* functions return a valid object or throw an exception (never a silent NULL)“).
+
+**Hinweis:** `make_seq` gibt NULL für nil/leer zurück (einzige Ausnahme von „kein stilles NULL“); jede **nicht-NULL**-Rückgabe ist caller-owned (neu mit rc=1 oder RETAIN bei Identity) und muss released/autoreleased werden.

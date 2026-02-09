@@ -33,6 +33,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 // Optional stack trace support (execinfo/backtrace), gated in object.h.
 // On ESP-IDF/newlib this is not available.
@@ -59,8 +60,16 @@ static THREAD_LOCAL RcHistEntry g_rchist[RCHIST_SIZE];
 static THREAD_LOCAL unsigned int g_rchist_head = 0;
 
 static void rchist_push(CljObject *v, char op, int rc_after) {
-    // capture caller of retain/release (best-effort) to aid debug
-    g_rchist[g_rchist_head] = (RcHistEntry){ v, op, rc_after, __builtin_return_address(0) };
+    /* Frame 0 = retain/release/autorelease, frame 1 = actual RELEASE/RETAIN/AUTORELEASE call site */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wframe-address"
+#endif
+    void *caller = __builtin_return_address(1);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+    g_rchist[g_rchist_head] = (RcHistEntry){ v, op, rc_after, caller };
     g_rchist_head = (g_rchist_head + 1) % RCHIST_SIZE;
 }
 
@@ -179,6 +188,13 @@ static void init_release_dispatch(void) {
 static void zombie_description(CljObject *v, char *buf, size_t size) {
     if (!buf || !size) return;
     buf[0] = '\0';
+    /* Do not call clj_to_string when rc<=0: the to_string path may RETAIN (or AUTORELEASE)
+     * objects. v and its children have rc=0; RETAIN on rc=0 throws ZombieAccessException,
+     * so we would trigger a second throw while building the error message. */
+    if (v->rc <= 0) {
+        (void)mini_snprintf(buf, size, "(zombie %p)", (void*)v);
+        return;
+    }
     CljString *s = clj_to_string((ID)v);
     if (!s) return;
     const char *d = clj_string_data(s);
@@ -365,6 +381,7 @@ uint32_t autorelease_pool_mark(void) {
 
 CljObject *autorelease(CljObject *v) {
     if (!v) return NULL;
+    if (v == (CljObject*)g_pool) return v; /* never add pool to itself (would double-release in remove/drain) */
     CLJ_ASSERT(g_pool && "autorelease_pool_init() not called");
     if (g_in_drain) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
@@ -391,7 +408,7 @@ CljObject *autorelease(CljObject *v) {
         if (dup_trace && dup_trace[0] && strcmp(dup_trace, "0") != 0) {
             uint32_t pool_count = autorelease_count(v);
             if (pool_count > 0) {
-                fprintf(stderr, "autorelease: Object %p (type=%s) already %u times in pool\n",
+                fprintf(stderr, "autorelease: Object %p (type=%s) already %" PRIu32 " times in pool\n",
                         (void*)v, clj_type_name(v->type), pool_count);
                 exception_print_native_backtrace();
                 fflush(stderr);
@@ -444,6 +461,22 @@ CljObject *autorelease(CljObject *v) {
     }
 #endif
     return v;
+}
+
+bool autorelease_pool_remove(CljObject *obj) {
+    if (!obj || IS_IMMEDIATE(obj) || is_singleton(obj) || !g_pool || g_in_drain) return false;
+    unsigned int c = vector_count(g_pool);
+    for (unsigned int i = c; i > 0; i--) {
+        unsigned int idx = i - 1;
+        if (vector_nth(g_pool, idx) == (ID)obj) {
+            CljPersistentVector *old = g_pool;
+            g_pool = vector_by_removing_at(g_pool, idx);
+            if (g_pool != old) RELEASE(old);
+            obj->flags &= (uint8_t)~CLJ_FLAG_IN_AUTORELEASE;
+            return true;
+        }
+    }
+    return false;
 }
 
 uint32_t autorelease_pool_peak_count(void) {
@@ -550,7 +583,7 @@ int retain_count(ID obj) {
 static void release_object_deep(CljObject *v) {
     if (!v || !TRACKS_RETAINS(v)) return;
     init_release_dispatch();
-    SubjectiveCReleaseFn fn = (v->type >= 0 && v->type < CLJ_TYPE_COUNT)
+    SubjectiveCReleaseFn fn = ((unsigned)v->type < CLJ_TYPE_COUNT)
         ? g_release_dispatch[v->type]
         : NULL;
     if (fn) {
@@ -561,6 +594,14 @@ static void release_object_deep(CljObject *v) {
 static void release_object_default(CljObject *v) {
     switch (v->type) {
         case CLJ_STRING:
+#ifndef ZOMBIE_ENABLED
+            if ((v->flags & CLJ_FLAG_EXTERNAL_DATA) != 0) {
+                CljByteArrayView *ext = (CljByteArrayView*)v;
+                if (ext->external_free_fn) ext->external_free_fn(ext->external_ctx);
+            }
+#else
+            (void)v;
+#endif
             break;
         // CLJ_SYMBOL: Release handler registered by tiny-clj via subjective_c_register_release_fn()
             
@@ -772,8 +813,8 @@ static void release_object_default(CljObject *v) {
 #ifndef ZOMBIE_ENABLED
             { CljByteArray *ba = as_byte_array(v);
               if (ba) {
-                  if ((ba->base.flags & CLJ_FLAG_BYTE_ARRAY_EXTERNAL) != 0) {
-                      CljByteArrayExternal *ext = (CljByteArrayExternal*)ba;
+                  if ((ba->base.flags & CLJ_FLAG_EXTERNAL_DATA) != 0) {
+                      CljByteArrayView *ext = (CljByteArrayView*)ba;
                       if (ext->external_free_fn) ext->external_free_fn(ext->external_ctx);
                   } else if (ba->data) CLJ_FREE(ba->data);
               } }

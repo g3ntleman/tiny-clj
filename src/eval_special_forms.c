@@ -544,9 +544,9 @@ ID eval_special_dotimes(CljPersistentVector *args, CljPersistentMap *env, EvalSt
 ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     unsigned int argc = args_count(args);
     if (argc == 0) return NULL;
-
+    CljPersistentMap *volatile env_vol = env;
     // Establish base env (match other wrappers: fall back to current namespace mappings).
-    CljPersistentMap *base_env = eval_env_or_ns_mappings(env, st);
+    CljPersistentMap *base_env = eval_env_or_ns_mappings(env_vol, st);
 
     // Split body expressions from catch/finally clauses.
     int clause_index = -1;
@@ -704,8 +704,9 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
         throw_exception(EXCEPTION_RUNTIME, "binding requires an evaluation state with dynamic bindings", __FILE__, __LINE__, 0);
     }
 
+    CljPersistentMap *volatile env_vol = env;
     // Base env for evaluating init forms and body (match other wrappers).
-    CljPersistentMap *base_env = eval_env_or_ns_mappings(env, st);
+    CljPersistentMap *base_env = eval_env_or_ns_mappings(env_vol, st);
 
     ID bindings_obj = args_nth(args, 0);
     if (!is_vector(bindings_obj)) {
@@ -756,7 +757,7 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
             return NULL;
         }
 
-        ID value = expr_id ? eval_body(expr_id, base_env, st, ctx) : NULL;
+        ID volatile value = expr_id ? eval_body(expr_id, base_env, st, ctx) : NULL;
 
         // If binding *ns*, accept namespace object (preferred) or resolve symbol/string to namespace.
         if (sym == SYM_NS_STAR) {

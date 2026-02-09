@@ -2,7 +2,7 @@
 ;;
 ;; Channel-first API implemented on top of native clojure.core/gpio-watch.
 
-(ns tinyclj.gpio)
+(ns tiny-clj.gpio)
 
 ^#^{:doc "Creates a core.async channel backed GPIO watcher.
 
@@ -19,7 +19,7 @@ Returns a map {:ch ch :watcher-id wid :close! (fn [])} where events are [pin val
     (require 'clojure.core.async)
     (let [argc (count args)]
       (if (< argc 1)
-        (throw "tinyclj.gpio/gpio-channel requires pin")
+        (throw "tiny-clj.gpio/gpio-channel requires pin")
         (let [pin (nth args 0)
               buf (if (>= argc 2) (nth args 1) (clojure.core.async/sliding-buffer 64))
               ch (clojure.core.async/chan buf)

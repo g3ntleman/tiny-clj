@@ -4,7 +4,7 @@
 
 (do
   (load-file "libs/tiny_db/rrd.clj")
-  (load-file "libs/tiny_db/rrd/spline.clj")
+  (load-file "libs/tiny-db/rrd-spline.clj")
 
   (let [abs (fn [x] (if (< x 0) (- x) x))
         assert-eq (fn [expected actual msg]
@@ -23,34 +23,34 @@
     ;; Test 1: Regression on perfect line
     (println "Spline test 1: regression on perfect line")
     ;; y = 2*x + 1
-    (let [s0 (tiny-db.rrd.spline/spline-segment-create 0 1)
-          s1 (tiny-db.rrd.spline/spline-segment-add s0 1 3)
-          s2 (tiny-db.rrd.spline/spline-segment-add s1 2 5)]
+    (let [s0 (tiny-db.rrd-spline/spline-segment-create 0 1)
+          s1 (tiny-db.rrd-spline/spline-segment-add s0 1 3)
+          s2 (tiny-db.rrd-spline/spline-segment-add s1 2 5)]
       (assert-close 2.0 (:m s2) 1.0e-9 "slope m")
       (assert-close 1.0 (:b s2) 1.0e-9 "intercept b")
-      (assert-close 7.0 (tiny-db.rrd.spline/spline-segment-predict s2 3) 1.0e-9 "predict at x=3")
-      (assert-close 0.0 (tiny-db.rrd.spline/spline-segment-error s2) 1.0e-9 "max error is zero"))
+      (assert-close 7.0 (tiny-db.rrd-spline/spline-segment-predict s2 3) 1.0e-9 "predict at x=3")
+      (assert-close 0.0 (tiny-db.rrd-spline/spline-segment-error s2) 1.0e-9 "max error is zero"))
     (println "  OK")
 
     ;; Test 2: Error-bounded split decision
     (println "Spline test 2: error-bounded split decision")
     (let [eps 0.01
-          s0 (tiny-db.rrd.spline/spline-segment-create 0 0)
-          s1 (tiny-db.rrd.spline/spline-segment-add s0 1 1)
-          s2 (tiny-db.rrd.spline/spline-segment-add s1 2 2)]
-      (assert-false (tiny-db.rrd.spline/spline-should-split? s2 3 3 eps) "no split for on-line point")
-      (assert-true (tiny-db.rrd.spline/spline-should-split? s2 3 10 eps) "split for outlier"))
+          s0 (tiny-db.rrd-spline/spline-segment-create 0 0)
+          s1 (tiny-db.rrd-spline/spline-segment-add s0 1 1)
+          s2 (tiny-db.rrd-spline/spline-segment-add s1 2 2)]
+      (assert-false (tiny-db.rrd-spline/spline-should-split? s2 3 3 eps) "no split for on-line point")
+      (assert-true (tiny-db.rrd-spline/spline-should-split? s2 3 10 eps) "split for outlier"))
     (println "  OK")
 
     ;; Test 3: Spline-RRA state management
     (println "Spline test 3: spline-rra state management")
     (let [rra-def {:type :spline :cf :spline :steps 1 :rows 10 :epsilon 0.01 :max-segments 4}
-          st0 (tiny-db.rrd.spline/make-spline-rra-state rra-def)
+          st0 (tiny-db.rrd-spline/make-spline-rra-state rra-def)
           ;; Add points on line y=x (no split), then outlier to force split.
-          st1 (tiny-db.rrd.spline/update-spline-rra st0 0 0)
-          st2 (tiny-db.rrd.spline/update-spline-rra st1 1 1)
-          st3 (tiny-db.rrd.spline/update-spline-rra st2 2 2)
-          st4 (tiny-db.rrd.spline/update-spline-rra st3 3 10)]
+          st1 (tiny-db.rrd-spline/update-spline-rra st0 0 0)
+          st2 (tiny-db.rrd-spline/update-spline-rra st1 1 1)
+          st3 (tiny-db.rrd-spline/update-spline-rra st2 2 2)
+          st4 (tiny-db.rrd-spline/update-spline-rra st3 3 10)]
       (assert-eq :spline (:type st0) "state has type")
       (assert-true (map? (:current-seg st4)) "current segment exists")
       ;; After split, we should have exactly one finalized segment stored.
@@ -61,14 +61,14 @@
     ;; Test 4: Fetch reconstructs samples within epsilon
     (println "Spline test 4: fetch reconstructs samples within epsilon")
     (let [rra-def {:type :spline :cf :spline :steps 1 :rows 6 :epsilon 1.0e-9 :max-segments 8}
-          st0 (tiny-db.rrd.spline/make-spline-rra-state rra-def)
+          st0 (tiny-db.rrd-spline/make-spline-rra-state rra-def)
           ;; y = 2*t + 1 for t=0..5
-          st (reduce (fn [s t] (tiny-db.rrd.spline/update-spline-rra s t (+ 1 (* 2 t)))) st0 (range 6))
+          st (reduce (fn [s t] (tiny-db.rrd-spline/update-spline-rra s t (+ 1 (* 2 t)))) st0 (range 6))
           rrd {:step 1
                :last-update 5
                :rras [rra-def]
                :rra-states [st]}
-          res (tiny-db.rrd.spline/fetch-spline-rra rrd rra-def st)]
+          res (tiny-db.rrd-spline/fetch-spline-rra rrd rra-def st)]
       (assert-eq 0 (:start res) "start time")
       (assert-eq 1 (:step res) "step")
       (assert-eq :spline (:cf res) "cf is spline")
@@ -82,12 +82,12 @@
 
     ;; Test 5: Integration via create/update-rrd/fetch with handler-types
     (println "Spline test 5: integration via create/update-rrd/fetch")
-    (load-file "libs/tiny_db/rrd/classic.clj")
+    (load-file "libs/tiny-db/rrd-classic.clj")
     (let [rrd0 (tiny-db.rrd/create "mix" 1
                  [{:cf :average :steps 1 :rows 6}
                   {:type :spline :steps 1 :rows 6 :epsilon 1.0e-6 :max-segments 8}]
-                 {:handler-types {:classic 'tiny-db.rrd.classic/handler
-                                  :spline 'tiny-db.rrd.spline/handler}})
+                 {:handler-types {:classic 'tiny-db.rrd-classic/handler
+                                  :spline 'tiny-db.rrd-spline/handler}})
           ;; Update 0..7, so PDPs for 0..6 are finalized.
           rrd1 (reduce (fn [r t] (tiny-db.rrd/update-rrd r t (+ 1 (* 2 t)))) rrd0 (range 8))
           avg (tiny-db.rrd/fetch rrd1 :average 0 999)

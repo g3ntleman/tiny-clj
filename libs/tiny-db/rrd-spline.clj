@@ -1,4 +1,4 @@
-(ns tiny-db.rrd.spline
+(ns tiny-db.rrd-spline
   (:require [tiny-db.rrd :as rrd]))
 
 ;; =============================================================================
@@ -193,7 +193,7 @@
       :data data}))
  
 (def handler
-  "Spline RRA handler - register this via :handler-types {:spline 'tiny-db.rrd.spline/handler}"
+  "Spline RRA handler - register this via :handler-types {:spline 'tiny-db.rrd-spline/handler}"
   {:init-state (fn [rra-def]
                  (make-spline-rra-state rra-def))
    :on-cdp (fn [rra-state rra-def cdp-time cdp-value]
@@ -209,5 +209,4 @@
             :has-current (not (nil? (:current-seg rra-state)))})})
 
 ;; Register handler at namespace load time.
-(rrd/register-handler! 'tiny-db.rrd.spline/handler handler)
- 
+(rrd/register-handler! 'tiny-db.rrd-spline/handler handler)

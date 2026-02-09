@@ -16,6 +16,7 @@
  *
  * This is intentionally small and deterministic. The backing store is a KV
  * database (tiny-db). For host unit tests we use a small RAM-backed blockdev.
+ * On ESP32, tiny-db is wired to a dedicated flash partition.
  */
 
 typedef struct FsKvStore FsKvStore;
@@ -25,6 +26,8 @@ void fs_kv_store_free(FsKvStore *st);
 
 /* Process-global store used by native bindings. */
 FsKvStore *fs_global_store(void);
+// Non-allocating accessor. Returns NULL if the global store has not been created yet.
+FsKvStore *fs_global_store_if_initialized(void);
 void fs_global_store_reset(void);
 
 /* Low-level KV ops (bytes) used by fs-layer tests. */
@@ -147,4 +150,3 @@ ID fs_list_dir_batch(FsKvStore *st,
 
 /* List direct children paths under a directory (batched). */
 #endif /* TINY_CLJ_FS_LAYER_H */
-

@@ -32,7 +32,7 @@
   "Register an RRA handler under a symbol name.
   
   Called by handler namespaces at load time, e.g.:
-    (rrd/register-handler! 'tiny-db.rrd.spline/handler spline-rra-handler)"
+    (rrd/register-handler! 'tiny-db.rrd-spline/handler spline-rra-handler)"
   [sym handler-map]
   (swap! handler-registry assoc sym handler-map))
 
@@ -136,8 +136,8 @@
   "Build handler-types map from RRA definitions and opts.
   
   All RRA types must be provided via :handler-types in opts.
-  Example: {:handler-types {:classic 'tiny-db.rrd.classic/handler
-                            :spline 'tiny-db.rrd.spline/handler}}"
+  Example: {:handler-types {:classic 'tiny-db.rrd-classic/handler
+                            :spline 'tiny-db.rrd-spline/handler}}"
   [rras opts]
   (let [types (set (map :type rras))
         custom (or (:handler-types opts) {})]
@@ -195,7 +195,7 @@
   Example:
     (create \"temp\" 60 [{:cf :average :steps 1 :rows 60}
                          {:type :spline :steps 1 :rows 100 :epsilon 0.1}]
-            {:handler-types {:spline 'tiny-db.rrd.spline/handler}})"
+            {:handler-types {:spline 'tiny-db.rrd-spline/handler}})"
   ([name step rras]
    (create name step rras {}))
   ([name step rras opts]

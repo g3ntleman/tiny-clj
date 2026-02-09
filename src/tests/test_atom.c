@@ -22,9 +22,6 @@
 #include "../list.h"
 #include "../builtins.h"
 
-// Forward declaration for clojure_core_code
-extern const char *clojure_core_code;
-
 // Get the global test evalState (with inc available)
 extern EvalState* test_get_eval_state(void);
 

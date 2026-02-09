@@ -175,7 +175,7 @@ CljSymbol *SYM_CLOJURE_REPL = NULL;
 CljSymbol *SYM_CLOJURE_LANG = NULL;
 CljSymbol *SYM_TINYCLJ = NULL;
 
-// tinyclj namespace function symbols
+// tiny-clj namespace function symbols
 CljSymbol *SYM_RETAIN_COUNT = NULL;
 CljSymbol *SYM_LIST_BATCH = NULL;
 
@@ -186,6 +186,7 @@ CljSymbol *SYM_NS_STAR = NULL;
 CljSymbol *SYM_CONCAT_X = NULL;
 CljSymbol *SYM_CONCAT_Y = NULL;
 CljSymbol *SYM_CONCAT_THUNK_FN = NULL;
+CljSymbol *SYM_THUNK_STATE = NULL;
 CljSymbol *SYM_MAP_FN = NULL;
 CljSymbol *SYM_MAP_SEQS = NULL;
 CljSymbol *SYM_MAP_THUNK_FN = NULL;
@@ -265,7 +266,7 @@ static struct {
     { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "clojure.repl" } },
     { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "clojure.core" } },
     { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "clojure.lang" } },
-    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "tinyclj" } },
+    { .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .unqualified = NULL, .cname = "tiny-clj" } },
 };
 
 #define NS_NAME_CLOJURE_STRING_IDX 0
@@ -395,6 +396,7 @@ DEFINE_STATIC_SYMBOL(sym_dotimes_data, "dotimes");
 DEFINE_STATIC_SYMBOL(sym_concat_x_key_data, "__concat_x__");
 DEFINE_STATIC_SYMBOL(sym_concat_y_key_data, "__concat_y__");
 DEFINE_STATIC_SYMBOL(sym_concat_thunk_fn_key_data, "__concat_thunk_fn__");
+DEFINE_STATIC_SYMBOL(sym_thunk_state_key_data, "__thunk_state__");
 DEFINE_STATIC_SYMBOL(sym_map_fn_key_data, "__map_fn__");
 DEFINE_STATIC_SYMBOL(sym_map_seqs_key_data, "__map_seqs__");
 DEFINE_STATIC_SYMBOL(sym_map_thunk_fn_key_data, "__map_thunk_fn__");
@@ -491,10 +493,8 @@ DEFINE_EXTERN_SYMBOL(sym_atom_data, "atom");
 DEFINE_EXTERN_SYMBOL(sym_reset_bang_data, "reset!");
 DEFINE_EXTERN_SYMBOL(sym_swap_bang_data, "swap!");
 DEFINE_EXTERN_SYMBOL(sym_list_batch_data, "list-batch");
-#ifndef ESP32_BUILD
 DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
 DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
-#endif
 
 // Static symbol structs for keywords (compile-time initialization)
 DEFINE_STATIC_SYMBOL(sym_kw_line_data, ":line");
@@ -802,12 +802,12 @@ void init_special_symbols() {
     INIT_SYMBOL_NS(SYM_SOURCE_NATIVE, sym_source_data, SYM_CLOJURE_REPL);
     // clojure.repl native function symbol for dir
     INIT_SYMBOL_NS(SYM_DIR_NATIVE, sym_dir_data, SYM_CLOJURE_REPL);
-    // tinyclj namespace name symbol is pre-allocated in g_namespace_name_symbols[] above.
+    // tiny-clj namespace name symbol is pre-allocated in g_namespace_name_symbols[] above.
     
-    // tinyclj native function symbol for retain-count
+    // tiny-clj native function symbol for retain-count
     INIT_SYMBOL_NS(SYM_RETAIN_COUNT, sym_retain_count_data, SYM_TINYCLJ);
     
-    // list-batch symbol (used in tinyclj.fs namespace)
+    // list-batch symbol (used in tiny-clj.fs namespace)
     INIT_SYMBOL(SYM_LIST_BATCH, sym_list_batch_data);
     
     // clojure.core sqrt native function symbol
@@ -850,6 +850,7 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_CONCAT_X, sym_concat_x_key_data);
     INIT_SYMBOL(SYM_CONCAT_Y, sym_concat_y_key_data);
     INIT_SYMBOL(SYM_CONCAT_THUNK_FN, sym_concat_thunk_fn_key_data);
+    INIT_SYMBOL(SYM_THUNK_STATE, sym_thunk_state_key_data);
     INIT_SYMBOL(SYM_MAP_FN, sym_map_fn_key_data);
     INIT_SYMBOL(SYM_MAP_SEQS, sym_map_seqs_key_data);
     INIT_SYMBOL(SYM_MAP_THUNK_FN, sym_map_thunk_fn_key_data);
@@ -1017,6 +1018,9 @@ void init_special_symbols() {
     }
     if (is_special_symbol(SYM_RECUR)) {
         ((CljSpecialSymbol*)SYM_RECUR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_recur;
+    }
+    if (is_special_symbol(SYM_LOOP)) {
+        ((CljSpecialSymbol*)SYM_LOOP)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_loop;
     }
     if (is_special_symbol(SYM_THROW)) {
         ((CljSpecialSymbol*)SYM_THROW)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_throw;

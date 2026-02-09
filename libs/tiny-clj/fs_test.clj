@@ -1,6 +1,6 @@
-(ns tinyclj.fs-test
+(ns tiny-clj.fs-test
   (:require [clojure.test :refer :all]
-            [tinyclj.fs :as fs]
+            [tiny-clj.fs :as fs]
             [tiny-db.kv :as kv]))
 
 (deftest meta-set-and-listing

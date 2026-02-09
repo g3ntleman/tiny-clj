@@ -68,7 +68,7 @@ for group in $TEST_GROUPS; do
     rm -f "$tmpfile"
     
     if [ "$status" -eq 124 ] || [ "$status" -eq 142 ]; then
-        echo "❌ GROUP $group HUNG (timeout after 5 seconds)"
+        echo "❌ GROUP $group HUNG (timeout after ${group_timeout}s)"
         echo "Running individual tests in this group..."
         
         # Get individual tests in this group

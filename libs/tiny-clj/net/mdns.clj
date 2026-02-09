@@ -1,10 +1,10 @@
-(ns tinyclj.net.mdns)
+(ns tiny-clj.net.mdns)
 
 ;; Native-backed mDNS/DNS-SD browsing + resolve API (Matter preparation).
 ;;
 ;; Notes:
 ;; - Browsing/resolve only (no advertise yet).
-;; - Callback style, consistent with tinyclj.net.
+;; - Callback style, consistent with tiny-clj.net.
 ;; - The implementation is intended to be lazy: no sockets/state until (open) is called.
 
 ^#^{:doc "Opens the platform mDNS transport and returns an opaque handle (native)."}

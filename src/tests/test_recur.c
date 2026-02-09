@@ -43,9 +43,7 @@ TEST(test_recur_deep_recursion) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result));
 
-    // Clean up
-    RELEASE(deep_def);
-
+    // eval_string returns autoreleased; no RELEASE
 }
 
 // Test arity error with recur
@@ -115,9 +113,7 @@ TEST(test_recur_countdown) {
     // :done is a keyword symbol, check it's truthy
     TEST_ASSERT_TRUE(clj_is_truthy(result));
 
-    // Clean up
-    RELEASE(countdown_def);
-
+    // eval_string returns autoreleased; no RELEASE
 }
 
 // Test sum with accumulator using recur
@@ -138,9 +134,7 @@ TEST(test_recur_sum) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     TEST_ASSERT_EQUAL_INT(15, as_fixnum((CljValue)result));
 
-    // Clean up
-    RELEASE(sum_def);
-
+    // eval_string returns autoreleased; no RELEASE
 }
 
 // Test tail position error with recur
@@ -231,7 +225,7 @@ TEST(test_if_function_call_works) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result));
 
-    RELEASE(fn_def);
+    // eval_string returns autoreleased; no RELEASE
 }
 
 // Isolated test: Check if if works in function without comparison
@@ -254,7 +248,7 @@ TEST(test_if_in_function_simple) {
     TEST_ASSERT_EQUAL_CHAR(':', sym2->cname[0]);
     TEST_ASSERT_EQUAL_STRING("no", sym2->cname + 1);
 
-    RELEASE(fn_def);
+    // eval_string returns autoreleased; no RELEASE
 }
 
 // Isolated test: Check if if works in function with comparison
@@ -269,7 +263,7 @@ TEST(test_if_in_function_with_comparison) {
     CljObject *result2 = eval_string("(test-if-comp 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
 
-    RELEASE(fn_def);
+    // eval_string returns autoreleased; no RELEASE
 }
 
 // Isolated test: Check if recur state affects if evaluation

@@ -1,5 +1,5 @@
 // Tests for history persistence (Vector<String>) via to-string/Parser
-// Consolidated filesystem tests (fs_layer, tinyclj bindings, streaming)
+// Consolidated filesystem tests (fs_layer, tiny-clj bindings, streaming)
 #include "tests_common.h"
 #include "../to_string.h"
 #include "vector.h"
@@ -1032,10 +1032,10 @@ TEST(test_fs_layer_rewrite_increments_version)
 }
 
 // ============================================================================
-// TINYCLJ FILESYSTEM AND KV BINDINGS TESTS (from test_tinyclj_bindings_fs_kv.c)
+// TINY-CLJ FILESYSTEM AND KV BINDINGS TESTS (from test_tiny_clj_bindings_fs_kv.c)
 // ============================================================================
 
-TEST(test_tinyclj_fs_and_kv_bindings_smoke)
+TEST(test_tiny_clj_fs_and_kv_bindings_smoke)
 {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -1043,19 +1043,19 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
     fs_global_store_reset();
 
     /* Load :native stubs */
-    eval_string("(require 'tinyclj.fs)", g_test_eval_state);
+    eval_string("(require 'tiny-clj.fs)", g_test_eval_state);
     eval_string("(require 'tiny-db.kv)", g_test_eval_state);
 
     /* write bytes (no explicit mkdir needed - directories are implicit) */
     CljObject *w = eval_string(
         "(let [a (byte-array 3)]"
         "  (aset a 0 1) (aset a 1 2) (aset a 2 3)"
-        "  (tinyclj.fs/spit-bytes \"/data/x.bin\" a))",
+        "  (tiny-clj.fs/spit-bytes \"/data/x.bin\" a))",
         g_test_eval_state);
     (void)w; /* returns nil */
 
     /* read bytes */
-    CljObject *rb = eval_string("(tinyclj.fs/slurp-bytes \"/data/x.bin\")", g_test_eval_state);
+    CljObject *rb = eval_string("(tiny-clj.fs/slurp-bytes \"/data/x.bin\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(rb);
     TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(rb));
     CljByteArray *ba = as_byte_array(rb);
@@ -1065,19 +1065,19 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
     TEST_ASSERT_EQUAL_UINT8(3, ba->data[2]);
 
     /* list (lazy): realize into a vector */
-    CljObject *lst = eval_string("(vec (tinyclj.fs/list \"/data/\"))", g_test_eval_state);
+    CljObject *lst = eval_string("(vec (tiny-clj.fs/list \"/data/\"))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(lst);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(lst));
     TEST_ASSERT_EQUAL_INT(1, vector_count(as_persistent_vector((ID)lst)));
 
-    /* list with >32 files (forces batching in tinyclj.fs/list) */
+    /* list with >32 files (forces batching in tiny-clj.fs/list) */
     eval_string(
         "(dotimes [i 50]"
         "  (let [a (byte-array 1)]"
         "    (aset a 0 (mod i 256))"
-        "    (tinyclj.fs/spit-bytes (str \"/many/file_\" i \".bin\") a)))",
+        "    (tiny-clj.fs/spit-bytes (str \"/many/file_\" i \".bin\") a)))",
         g_test_eval_state);
-    CljObject *many = eval_string("(vec (tinyclj.fs/list \"/many/\"))", g_test_eval_state);
+    CljObject *many = eval_string("(vec (tiny-clj.fs/list \"/many/\"))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(many);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(many));
     TEST_ASSERT_EQUAL_INT(50, vector_count(as_persistent_vector((ID)many)));
@@ -1097,7 +1097,7 @@ TEST(test_tinyclj_fs_and_kv_bindings_smoke)
     TEST_ASSERT_EQUAL_UINT8(8, kba->data[1]);
 }
 
-TEST(test_tinyclj_kv_supports_large_values)
+TEST(test_tiny_clj_kv_supports_large_values)
 {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     fs_global_store_reset();

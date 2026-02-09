@@ -20,7 +20,6 @@
 // TEST: Basic let binding
 // ============================================================================
 TEST(test_let_basic_binding) {
-    // Test: (let [x 10] x) should return 10
     const char *code = "(let [x 10] x)";
     CljValue result = eval_string(code, g_test_eval_state);
     
@@ -134,11 +133,7 @@ TEST(test_let_shadowing) {
 // TEST: Closure capture must be stable under shadowing
 // ============================================================================
 TEST(test_let_shadowing_closure_capture) {
-    // Test:
-    // (let [x 1]
-    //   (let [f (fn [] x)]
-    //     (let [x 2]
-    //       (f))))  => 1
+    // (let [x 1] (let [f (fn [] x)] (let [x 2] (f)))) => 1
     const char *code = "(let [x 1] (let [f (fn [] x)] (let [x 2] (f))))";
     CljValue result = eval_string(code, g_test_eval_state);
 
@@ -164,7 +159,6 @@ TEST(test_let_symbol_in_arithmetic) {
 // TEST: Let with function calls
 // ============================================================================
 TEST(test_let_with_function_calls) {
-    // Define a function first
     eval_string("(def square (fn [x] (* x x)))", g_test_eval_state);
     
     // Test: (let [x 5] (square x)) should return 25

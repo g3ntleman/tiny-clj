@@ -100,6 +100,8 @@ __attribute__((weak)) size_t tinyclj_esp32_ram_bytes_total(void) { return (size_
 __attribute__((weak)) size_t tinyclj_esp32_flash_bytes_free(void) { return (size_t)-1; }
 __attribute__((weak)) size_t tinyclj_esp32_flash_bytes_total(void) { return (size_t)-1; }
 
+__attribute__((weak)) void tinyclj_esp32_hardware_info(PlatformHardwareInfo *out) { (void)out; }
+
 /*
  * ESP-IDF example: see the comment block in src/platform_esp32_uart.c
  * (you can override the same four functions for embedded builds).
@@ -110,6 +112,15 @@ size_t platform_heap_bytes_total(void) { return tinyclj_esp32_heap_bytes_total()
 size_t platform_ram_bytes_total(void) { return tinyclj_esp32_ram_bytes_total(); }
 size_t platform_flash_bytes_free(void) { return tinyclj_esp32_flash_bytes_free(); }
 size_t platform_flash_bytes_total(void) { return tinyclj_esp32_flash_bytes_total(); }
+
+void platform_hardware_info(PlatformHardwareInfo *out) {
+    if (!out) return;
+    out->valid = false;
+    out->model[0] = '\0';
+    out->cores = 0;
+    out->revision = 0;
+    tinyclj_esp32_hardware_info(out);
+}
 
 #if defined(ESP32_BUILD) && TINYCLJ_HAVE_LWIP
 

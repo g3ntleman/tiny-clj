@@ -71,4 +71,3 @@ static inline void reader_skip_all(Reader *reader) {
   reader_init(&(name), (cstr))
 
 #endif // TINY_CLJ_READER_H
-

@@ -67,9 +67,11 @@ ID native_list(ID *args, unsigned int argc);
 ID native_count(ID *args, unsigned int argc);
 ID native_conj(ID *args, unsigned int argc);
 ID native_reverse(ID *args, unsigned int argc);
-#ifndef ESP32_BUILD
 ID native_require(ID *args, unsigned int argc);
-#endif
+/** Load a namespace by name using the same logic as (require 'ns-name). Returns true on success. */
+bool require_namespace_by_name(EvalState *st, const char *ns_name);
+/** Load namespace from already-resolved bytes (path used for source context). Shared by require and load_clojure_core. */
+bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, const char *source_path);
 
 // Comparison operators
 ID native_lt(ID *args, unsigned int argc);

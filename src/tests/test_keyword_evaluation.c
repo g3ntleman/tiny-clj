@@ -341,6 +341,34 @@ TEST(test_unqualified_keyword_still_works) {
     TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
 }
 
+// Test: :key vs ::key are different; map lookup distinguishes them
+TEST(test_colon_key_vs_double_colon_key_map_lookup) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    // In current ns (user): :year is unqualified, ::year is :user/year.
+    // They must not be equal and map get must use the same key as in the literal.
+    CljObject *neq = eval_string("(= :year ::year)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(neq);
+    TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(neq), ":year and ::year must not be equal in user ns");
+
+    // Map with unqualified :year: only :year finds it
+    CljObject *v1 = eval_string("(get {:year 2024} :year)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(v1);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)v1), "get with :year should return 2024");
+    TEST_ASSERT_EQUAL_INT(2024, AS_FIXNUM((CljValue)v1));
+
+    CljObject *v2 = eval_string("(get {:year 2024} ::year)", g_test_eval_state);
+    TEST_ASSERT_NULL_MESSAGE(v2, "get with ::year on {:year 2024} should be nil (different key)");
+
+    // Map with auto-qualified ::year: only ::year finds it
+    CljObject *v3 = eval_string("(get {::year 2024} ::year)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(v3);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)v3), "get with ::year should return 2024");
+    TEST_ASSERT_EQUAL_INT(2024, AS_FIXNUM((CljValue)v3));
+
+    CljObject *v4 = eval_string("(get {::year 2024} :year)", g_test_eval_state);
+    TEST_ASSERT_NULL_MESSAGE(v4, "get with :year on {::year 2024} should be nil (different key)");
+}
+
 // ============================================================================
 // TESTS: KEYWORDS AS FUNCTIONS (MAP LOOKUP + DEFAULT)
 // ============================================================================

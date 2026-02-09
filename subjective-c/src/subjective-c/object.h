@@ -28,8 +28,18 @@ typedef struct CljObject
     int16_t rc;
 } CljObject;
 
+// Forward declaration to avoid implicit declaration when headers include each other
+// through libc's <string.h>/<strings.h> on embedded toolchains.
+static inline void *assert_type(CljObject *obj, CljType expected_type);
+
 #include "common.h"
 #include <stdio.h>
+
+// Ensure CLJ_ASSERT exists even if a different common.h was pulled in
+// via the toolchain's <string.h>/<strings.h> include chain.
+#ifndef CLJ_ASSERT
+#define CLJ_ASSERT(expr) ((void)0)
+#endif
 
 // Optional: stack trace support (execinfo/backtrace) for debug diagnostics.
 // Not available on ESP-IDF/newlib, so keep it disabled for embedded builds.
@@ -213,6 +223,11 @@ static inline void *assert_type(CljObject *obj, CljType expected_type)
 #endif
         return NULL;
     }
+#elif defined(ESP32_BUILD) || defined(ESP_PLATFORM)
+    /* On ESP32, heap and stack share internal SRAM (0x3ffxxxxx). The fp+8MB heuristic
+     * would falsely flag valid heap pointers as stack and block loading (e.g. clojure.core).
+     * Skip the stack check here; invalid pointers may still be caught at free() by the
+     * allocator or by CONFIG_HEAP_POISONING. */
 #else
     void *current_fp = __builtin_frame_address(0);
     uintptr_t fp_val = (uintptr_t)current_fp;

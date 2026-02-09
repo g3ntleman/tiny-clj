@@ -1,0 +1,13 @@
+---
+description: Bei Heap-Limit-Anhebung TODO für Leak-Suche anlegen und alten Wert als Ziel merken
+alwaysApply: true
+---
+
+# Heap-Limit anheben: TODO + Zielwert
+
+**Regel:** Jedes Mal, wenn ein **Heap-Limit** (z. B. in Tests wie `TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT`, `heap_growth_limit_bytes`) **angehoben** wird:
+
+1. **TODO anlegen:** Ein TODO erstellen mit dem Inhalt „Neue Leaks finden und beheben, damit Heap-Limit wieder auf [alter Wert] gesenkt werden kann“ (oder vergleichbar).
+2. **Alten Wert als Ziel merken:** Den **vorherigen** Heap-Limit-Wert explizit notieren (z. B. in Kommentar im Test, in Reports, oder im TODO) als **Zielwert** für späteres Absenken nach Leak-Fix.
+
+Damit wird vermieden, dass Limit-Anhebungen dauerhaft bleiben; das Ziel ist, Leaks zu finden und das Limit wieder zu senken.

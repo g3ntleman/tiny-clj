@@ -209,6 +209,12 @@ uint32_t autorelease_pool_mark(void);
  */
 uint32_t autorelease_pool_depth(void);
 
+/** @brief Remove one occurrence of obj from the pool (use when taking ownership).
+ * @param obj Object to remove
+ * @return true if removed, false if not in pool
+ */
+bool autorelease_pool_remove(CljObject *obj);
+
 /** @brief Drain autorelease pool to a previously marked depth
  * @param mark Depth marker from autorelease_pool_mark()
  */
@@ -374,8 +380,8 @@ void autorelease_pool_peak_reset(void);
 #endif
 
 #define ASSIGN(var, new_obj) do { \
-    ID _new_val = (new_obj); \
-    ID _old_val = (var); \
+    ID volatile _new_val = (new_obj); \
+    ID volatile _old_val = (var); \
     if (_new_val != _old_val) { \
         RETAIN(_new_val); \
         RELEASE(_old_val); \

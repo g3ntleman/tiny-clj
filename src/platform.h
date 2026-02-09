@@ -57,6 +57,18 @@ size_t platform_flash_bytes_free(void);
 size_t platform_flash_bytes_total(void);
 
 // -----------------------------------------------------------------------------
+// Optional hardware info (e.g. ESP32 chip model, cores, revision). Filled only when available.
+// -----------------------------------------------------------------------------
+#define PLATFORM_HW_MODEL_MAX 24
+typedef struct {
+    char model[PLATFORM_HW_MODEL_MAX];
+    unsigned cores;
+    unsigned revision;
+    bool valid;
+} PlatformHardwareInfo;
+void platform_hardware_info(PlatformHardwareInfo *out);
+
+// -----------------------------------------------------------------------------
 // Networking (UDP/TCP) - event-driven, zero-copy friendly
 //
 // Design goals:

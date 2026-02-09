@@ -203,6 +203,10 @@ size_t platform_ram_bytes_total(void) { return (size_t)-1; }
 size_t platform_flash_bytes_free(void) { return (size_t)-1; }
 size_t platform_flash_bytes_total(void) { return (size_t)-1; }
 
+void platform_hardware_info(PlatformHardwareInfo *out) {
+    if (out) out->valid = false;
+}
+
 int platform_set_stdin_nonblocking(int enable) {
     // When stdin is integrated into CFRunLoop via CFFileDescriptor, the callback
     // drains stdin in a loop until it hits EAGAIN/EWOULDBLOCK. If stdin were put
@@ -473,7 +477,7 @@ static void udp_socket_cb(CFSocketRef s,
 
         const char *trace = getenv("TINYCLJ_MDNS_TRACE");
         if (trace && trace[0] != '\0' && trace[0] != '0') {
-            fprintf(stderr, "[tinyclj mdns] recv %zd bytes from %s:%u\n",
+            fprintf(stderr, "[tiny-clj mdns] recv %zd bytes from %s:%u\n",
                     n,
                     addr_buf[0] ? addr_buf : "?",
                     (unsigned)port);

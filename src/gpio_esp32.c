@@ -73,7 +73,7 @@ static inline void gpio_ensure_initialized(void) {
     KW_PIN = intern_symbol_global(":pin");
 
     // Create cached drain function object once.
-    SYM_GPIO_DRAIN = intern_symbol_global("tinyclj.gpio/drain-events");
+    SYM_GPIO_DRAIN = intern_symbol_global("tiny-clj.gpio/drain-events");
     g_gpio_drain_fn_obj = make_named_func(native_gpio_drain_events, SYM_GPIO_DRAIN);
 }
 
@@ -138,7 +138,7 @@ static void IRAM_ATTR gpio_isr_handler(void *arg) {
 /** Drain all queued GPIO events; invoke each callback with [pin value]; release callbacks. */
 static ID native_gpio_drain_events(ID *args, unsigned int argc) {
     (void)args;
-    CHECK_ARITY(argc, 0, "tinyclj.gpio/drain-events");
+    CHECK_ARITY(argc, 0, "tiny-clj.gpio/drain-events");
 
     // Drain all pending events.
     GpioEvent ev;

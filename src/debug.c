@@ -89,10 +89,12 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
 
         case CLJ_STRING: {
             CljString *str = as_clj_string(v);
-            if (str && str->length > 0) {
-                size_t len = str->length < 20 ? str->length : 20;
+            if (str && string_length((ID)str) > 0) {
+                size_t full_len = string_length((ID)str);
+                size_t len = full_len < 20 ? full_len : 20;
+                const char *data = string_data((ID)str);
                 *offset += mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "\"%.*s%s\"",
-                                   (int)len, str->data, str->length > 20 ? "..." : "");
+                                   (int)len, data, full_len > 20 ? "..." : "");
             } else {
                 *offset += mini_snprintf(buf + *offset, buf_size - (size_t)*offset, "\"\"");
             }

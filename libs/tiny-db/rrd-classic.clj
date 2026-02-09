@@ -1,11 +1,11 @@
-(ns tiny-db.rrd.classic
+(ns tiny-db.rrd-classic
   (:require [tiny-db.rrd :as rrd]))
 
 ;; Classic RRA handler for standard consolidation functions (average, min, max, last).
 ;; Stores CDPs in a ring buffer.
 
 (def handler
-  "Classic RRA handler - register via :handler-types {:classic 'tiny-db.rrd.classic/handler}"
+  "Classic RRA handler - register via :handler-types {:classic 'tiny-db.rrd-classic/handler}"
   {:init-state (fn [rra-def]
                  {:cdp-prep {:value nil :count 0}
                   :data (vec (repeat (:rows rra-def) nil))
@@ -41,4 +41,4 @@
             :filled (count (filter some? (:data rra-state)))})})
 
 ;; Register handler at namespace load time.
-(rrd/register-handler! 'tiny-db.rrd.classic/handler handler)
+(rrd/register-handler! 'tiny-db.rrd-classic/handler handler)

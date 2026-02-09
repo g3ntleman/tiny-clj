@@ -22,6 +22,15 @@ static uint32_t fnv1a(const char *s) {
     return h;
 }
 
+static uint32_t fnv1a_bytes(const uint8_t *data, size_t len) {
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < len; i++) {
+        h ^= data[i];
+        h *= 16777619u;
+    }
+    return h;
+}
+
 // Combine count and element hash for container types
 static inline uint32_t hash_container(uint32_t count, uint32_t elem_hash) {
     uint32_t h = 2166136261u;
@@ -47,8 +56,11 @@ uint32_t clj_hash_default(ID value) {
     CljType type = TAG(value);
     
     switch (type) {
-        case CLJ_STRING:
-            return fnv1a(((CljString*)value)->data);
+        case CLJ_STRING: {
+            const char *data = string_data(value);
+            uint16_t len = string_length(value);
+            return fnv1a_bytes((const uint8_t*)data, (size_t)len);
+        }
         
         case CLJ_VECTOR_PERSISTENT:
         case CLJ_VECTOR_TRANSIENT: {
@@ -161,10 +173,13 @@ bool clj_equal_default(ID a, ID b) {
     
     switch (tag) {
         case CLJ_STRING: {
-            CljString *str_a = (CljString*)a;
-            CljString *str_b = (CljString*)b;
-            if (str_a->length != str_b->length) return false;
-            return strcmp(str_a->data, str_b->data) == 0;
+            uint16_t len_a = string_length(a);
+            uint16_t len_b = string_length(b);
+            if (len_a != len_b) return false;
+            if (len_a == 0) return true;
+            const char *data_a = string_data(a);
+            const char *data_b = string_data(b);
+            return memcmp(data_a, data_b, len_a) == 0;
         }
         
         case CLJ_VECTOR_PERSISTENT:
@@ -283,8 +298,15 @@ CljString* clj_to_string_default(ID value) {
     
     CljType type = TAG(value);
     switch (type) {
-        case CLJ_STRING:
-            return make_string(((CljString*)value)->data);
+        case CLJ_STRING: {
+            uint16_t len = string_length(value);
+            const char *data = string_data(value);
+            CljString *s = make_string_buffer(len);
+            if (!s) return NULL;
+            memcpy(s->data, data, len);
+            s->data[len] = '\0';
+            return s;
+        }
         case CLJ_VECTOR_PERSISTENT:
             return make_string("[...]");
         case CLJ_MAP_PERSISTENT:

@@ -35,9 +35,23 @@ TEST(test_list_count) {
     RELEASE(list);
 }
 
+/* Clojure compatibility: () is the empty list; (= () (list)) => true; (seq ()) => nil. */
+TEST(test_empty_list_literal_clojure_compat) {
+    ID empty_lit = eval_string("(quote ())", g_test_eval_state);
+    ID empty_via_list = eval_string("(list)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(empty_lit);
+    TEST_ASSERT_NOT_NULL(empty_via_list);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(empty_lit));
+    TEST_ASSERT_TRUE(list_empty(as_list(empty_lit)));
+    TEST_ASSERT_EQUAL_PTR(empty_list(), as_list(empty_lit));
+    TEST_ASSERT_EQUAL_PTR(as_list(empty_lit), as_list(empty_via_list));
+    TEST_ASSERT_TRUE(clj_equal((CljValue)empty_lit, (CljValue)empty_via_list));
+    ID seq_result = eval_string("(seq ())", g_test_eval_state);
+    TEST_ASSERT_TRUE(seq_result == NULL || seq_empty(seq_result));
+}
+
 TEST(test_list_creation) {
     // High-level test using eval_string
-
 
     // Test empty list creation - (list) returns empty list in Clojure
     CljObject *list = eval_string("(list)", g_test_eval_state);
@@ -1052,10 +1066,11 @@ TEST(test_type_check_all_types) {
     TEST_ASSERT_EQUAL_INT(CLJ_FLOAT, TAG(fixed_val));
 
     // Test heap object types
-    // Note: parse("()") returns nil (Clojure behavior: () is nil)
+    // Clojure: () is the empty list (same as (list)), not nil
     ID empty_list_val = parse("()", g_test_eval_state);
-    TEST_ASSERT_NIL(empty_list_val);  // () is nil in Clojure
-    TEST_ASSERT_EQUAL_INT(CLJ_NIL, TAG(empty_list_val));
+    TEST_ASSERT_NOT_NULL(empty_list_val);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(empty_list_val));
+    TEST_ASSERT_TRUE(list_empty(as_list(empty_list_val)));
 
     ID vector_val = parse("[]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vector_val);

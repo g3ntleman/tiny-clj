@@ -80,6 +80,9 @@ RELEASE(list);
 - **`AUTORELEASE()`**: Tests, debugging, prototyping, non-performance-critical code
 - **`RELEASE()`**: Production, performance-critical code, real-time systems, objects not returned as values
 
+#### Eval path
+Evaluation (eval_let, eval_ast_call, eval_function_call_from_vector, etc.) **returns autoreleased references** for heap objects. Callers must **not** release these; the autorelease pool cleans them up. Immediates are returned as-is.
+
 ### 3. Object Lifecycle Rules
 
 **Objects that permanently store references to other objects must call `RETAIN()` on those objects and use `ASSIGN()` for updates:**
@@ -136,6 +139,8 @@ RELEASE(obj);   // Reference decrement
 - ✅ **Use `CREATE(obj)`** instead of `make_*()` functions
 - ✅ **Use `DEALLOC(obj)`** instead of `free(obj)`
 - ✅ **Use `ASSIGN(var, new_obj)`** instead of manual retain/release patterns
+
+**These macros are NULL-safe** (and safe for immediate values); no explicit checks are needed before calling them.
 
 This ensures consistent memory profiling and better tracking of all memory operations throughout the codebase.
 
@@ -222,7 +227,7 @@ ID safe_return(ID obj) {
 - **Object Creation** (`make_vector`, `make_list`, etc.): Return objects with `rc=1` - must be released or autoreleased
 - **Immediate Values** (`make_fixnum`, `make_char`, etc.): No memory management needed
 
-**Invariant:** All `make_*` functions return a valid object or throw an exception (never a silent NULL).
+**Invariant:** All `make_*` functions return a valid object or throw an exception (never a silent NULL). Exception: `make_seq(obj)` returns NULL for nil/empty (Clojure semantics); every **non-NULL** return is caller-owned (new with rc=1, or RETAIN when obj already CLJ_SEQ) and must be released or autoreleased.
 
 ```c
 // ✅ CORRECT: API functions return autoreleased objects

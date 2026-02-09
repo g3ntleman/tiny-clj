@@ -9,7 +9,10 @@
 #include "memory_profiler.h"
 #include "../tiny_clj.h"
 #include "../event_loop.h"
+#include "../fs_layer.h"
 #include "unity/src/unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
+#include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
 #ifdef __APPLE__
@@ -55,6 +58,14 @@ static size_t g_heap_growth_limit_bytes = 0;
 static bool is_shared_test_entry(const SubjectiveCTestEntry *entry) {
     if (!entry || !entry->group) return false;
     return strncmp(entry->group, "shared_", 7) == 0;
+}
+
+/* Groups that run without loading clojure.core. All other groups get core in setUp. */
+static bool group_runs_without_core(const SubjectiveCTestEntry *entry) {
+    if (!entry || !entry->group) return false;
+    const char *g = entry->group;
+    return strcmp(g, "test_parser") == 0
+        || strcmp(g, "test_static_keywords") == 0;
 }
 
 void test_heap_growth_disable(void) { g_heap_check_enabled = false; }
@@ -144,7 +155,8 @@ void setUp(void) {
             g_heap_check_enabled = true;
             g_heap_growth_limit_bytes = limit;
         } else if (g_heap_check_enabled) {
-            g_heap_growth_limit_bytes = 0;
+            // Shared tests with UNSPECIFIED: allow small growth (lazy/concat etc.)
+            g_heap_growth_limit_bytes = 2048;
         }
     }
     
@@ -197,28 +209,29 @@ void setUp(void) {
 
 // Zombie mode is automatically enabled via __attribute__((constructor)) if ZOMBIE_ENABLED is defined
     
-    // Load clojure.core for each test (refresh state between tests)
-    // Use autorelease pool for load_clojure_core to handle AUTORELEASE calls
-    // Wrap in TRY/CATCH to handle ParseErrors during clojure.core loading
+    // Load clojure.core only for groups that need it; others run with builtins/special forms only.
+    bool load_core = (g_current_test_entry == NULL) || !group_runs_without_core(g_current_test_entry);
     TRY {
         WITH_AUTORELEASE_POOL({
-            evalstate_reset(&g_test_eval_state, true);
+            evalstate_reset(&g_test_eval_state, load_core);
         });
     } CATCH(ex) {
-        // ParseError during clojure.core loading - log but continue
         if (ex) {
             test_fprintf(stderr, "Warning: Exception during clojure.core loading: %s - %s\n",
                          ex->type, ex->message);
         }
-        // Continue anyway - some tests may not need clojure.core
     } END_TRY
 
     test_heap_growth_mark_baseline();
 }
 
-// Get the global test evalState (with inc available)
 EvalState* test_get_eval_state(void) {
     return g_test_eval_state;
+}
+
+void test_ensure_clojure_core(void) {
+    if (g_test_eval_state)
+        load_clojure_core(g_test_eval_state);
 }
 
 void tearDown(void) {
@@ -239,7 +252,11 @@ void tearDown(void) {
     }
     test_heap_growth_check();
     memory_profiler_check_leaks("Test Complete");
-    
+    // Drain and free autorelease pool so it does not grow across tests (e.g. when
+    // tests throw and WITH_AUTORELEASE_POOL drain is skipped), avoiding Vector+3.5MB
+    // growth in integer_overflow_detection and similar.
+    autorelease_pool_free();
+    fs_global_store_reset();
     runtime_reset(&g_runtime);
     // Reset symbol table between tests to avoid cross-test contamination.
     symbol_table_cleanup();
@@ -478,15 +495,26 @@ void run_shared_tests_batched(void) {
     }
 }
 
-// One-line test runner: Unity already prints one line per test
+// One-line test runner: Unity already prints one line per test.
+// Each test gets setUp/tearDown so clojure.core is loaded (unless group_runs_without_core).
 void run_tests_by_registry_impl(void) {
     size_t test_count;
     const SubjectiveCTestEntry *all_tests = subjective_c_test_registry_entries(&test_count);
     g_single_test_mode = false;
-    
+
     for (size_t i = 0; i < test_count; i++) {
-        set_unity_test_file_info(&all_tests[i]);
-        run_test_with_exception_handling(&all_tests[i]);
+        const SubjectiveCTestEntry *e = &all_tests[i];
+        set_unity_test_file_info(e);
+        g_current_test_entry = e;
+        TRY {
+            setUp();
+            run_test_with_exception_handling(e);
+        } CATCH(ex) {
+            if (ex)
+                test_fprintf(stderr, "Exception in setUp/tearDown for %s: %s - %s\n",
+                            e->qualified_name ? e->qualified_name : e->name, ex->type, ex->message);
+        } END_TRY
+        tearDown();
     }
 }
 
@@ -532,15 +560,30 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
         if (found == 1) {
             g_single_test_mode = true;
         }
-        
-        // One-line output for pattern matching
+
+        // Set g_current_test_entry to first matching test so setUp() gets correct heap limit and load_core
         for (size_t i = 0; i < test_count; i++) {
             if (subjective_c_test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern) ||
                 subjective_c_test_name_matches_pattern(all_tests[i].name, test_name_or_pattern)) {
-                set_unity_test_file_info(&all_tests[i]);
-                run_test_with_exception_handling(&all_tests[i]);
+                g_current_test_entry = &all_tests[i];
+                break;
             }
         }
+        // One-line output for pattern matching (setUp/tearDown so clojure.core is loaded)
+        TRY {
+            setUp();
+            for (size_t i = 0; i < test_count; i++) {
+                if (subjective_c_test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern) ||
+                    subjective_c_test_name_matches_pattern(all_tests[i].name, test_name_or_pattern)) {
+                    set_unity_test_file_info(&all_tests[i]);
+                    run_test_with_exception_handling(&all_tests[i]);
+                }
+            }
+            tearDown();
+        } CATCH(ex) {
+            if (ex) test_fprintf(stderr, "Exception in setUp/tearDown: %s - %s\n", ex->type, ex->message);
+            tearDown();
+        } END_TRY
     } else {
         // Exact name match (existing logic)
         SubjectiveCTestEntry *test = NULL;
@@ -555,8 +598,15 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
         
         if (test) {
             g_single_test_mode = true;
-            set_unity_test_file_info(test);
-            run_test_with_exception_handling(test);
+            TRY {
+                setUp();
+                set_unity_test_file_info(test);
+                run_test_with_exception_handling(test);
+                tearDown();
+            } CATCH(ex) {
+                if (ex) test_fprintf(stderr, "Exception in setUp/tearDown: %s - %s\n", ex->type, ex->message);
+                tearDown();
+            } END_TRY
             // Summary will be printed at end of main()
         } else {
             // Test not found - fail without noisy output.

@@ -23,7 +23,6 @@ OLD_FUNCTIONS=(
     "map_get"
     "map_assoc"
     "make_string"
-    "make_seq"
     "seq_first"
     "seq_rest"
 )
@@ -92,10 +91,10 @@ echo -e "\n${YELLOW}3. Prüfe Test-Dateien auf Migration...${NC}"
 for test_file in "${TEST_FILES[@]}"; do
     if [ -f "$test_file" ]; then
         echo -n "  Prüfe $test_file... "
-        if grep -q "make_vector\|make_map\|make_string\|make_seq" "$test_file"; then
+        if grep -q "make_vector\|make_map\|make_string" "$test_file"; then
             echo -e "${RED}MUSS MIGRIERT WERDEN${NC}"
             echo "    Veraltete APIs gefunden:"
-            grep -E "make_vector|make_map|make_string|make_seq" "$test_file" | head -3 | sed 's/^/      /'
+            grep -E "make_vector|make_map|make_string" "$test_file" | head -3 | sed 's/^/      /'
         else
             echo -e "${GREEN}BEREITS MIGRIERT${NC}"
         fi

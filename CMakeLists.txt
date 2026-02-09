@@ -4,7 +4,7 @@ project(tiny-clj)
 # Feature flags (compile-time): all are positive *_ENABLED macros (0/1)
 option(META_ENABLED "Enable metadata support" OFF)
 option(MEMORY_PROFILING_ENABLED "Enable memory profiling hooks" ON)
-option(ZOMBIE_ENABLED "Enable zombie mode" OFF)
+option(ZOMBIE_ENABLED "Enable zombie mode (for memory-crash debugging)" ON)
 
 if(META_ENABLED)
     set(META_ENABLED_VALUE 1)
@@ -190,6 +190,8 @@ list(APPEND SOURCES
     src/ast.c
     src/atom.c
     src/file_utils.c
+    src/source_resolver.c
+    src/embedded_sources.c
     src/debug.c
     src/seq.c
     src/error_messages.c
@@ -276,6 +278,8 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/to_string.c
     src/macro.c
     src/file_utils.c
+    src/source_resolver.c
+    src/embedded_sources.c
     src/fs_layer.c
 )
 # ESP32-only sources (must not be part of host targets)
@@ -323,6 +327,8 @@ target_link_libraries(tiny-clj-esp32-repl PRIVATE subjective-c)
 target_link_libraries(tiny-clj-esp32-repl PRIVATE tiny-db)
 target_include_directories(tiny-clj-esp32-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR}
+    ${CMAKE_SOURCE_DIR}/external/esp-idf/components/esp_driver_gpio/include
+    ${CMAKE_SOURCE_DIR}/external/esp-idf/components/esp_common/include
 )
 target_compile_definitions(tiny-clj-esp32-repl PRIVATE
     ESP32_BUILD
@@ -463,7 +469,9 @@ add_executable(unit-tests
     src/tests/test_recursive_resolution.c
     src/tests/test_repl.c
     src/tests/test_file_io.c
+    src/tests/test_embedded_sources.c
     src/tests/test_rrd_scripts.c
+    src/tests/tests_resolver.c
     src/tests/test_atom.c
     src/tests/test_atom_watch.c
     src/tests/test_timer.c
@@ -548,13 +556,7 @@ target_compile_definitions(subjective-c PRIVATE
 # that are called via constructor attributes
 apply_common_settings(unit-tests)
 
-# Give profiling builds a distinct binary name to avoid overwriting the default
-# unit-tests executable (all executables share the same runtime output dir).
-if(MEMORY_PROFILING_ENABLED)
-    set_target_properties(unit-tests PROPERTIES OUTPUT_NAME "unit-tests-prof")
-else()
-    set_target_properties(unit-tests PROPERTIES OUTPUT_NAME "unit-tests")
-endif()
+set_target_properties(unit-tests PROPERTIES OUTPUT_NAME "unit-tests")
 
 # Use release-ish flags for faster runs unless caller overrides.
 target_compile_options(unit-tests PRIVATE

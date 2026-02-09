@@ -5,27 +5,32 @@
 #include "value.h"
 #include <stdint.h>
 
+#ifndef CLJ_BYTE_ARRAY_DEFINED
 typedef struct {
     CljObject base;
     int length;
     uint8_t *data;
 } CljByteArray;
+#define CLJ_BYTE_ARRAY_DEFINED 1
+#endif
 
-// Byte array flags (CljObject.flags) - only meaningful when type == CLJ_BYTE_ARRAY.
-// If set, the byte array's payload is externally owned and must NOT be freed via CLJ_FREE(ba->data).
-#define CLJ_FLAG_BYTE_ARRAY_EXTERNAL 0x10
+// External data flag (CljObject.flags). When set, payload is externally owned and must NOT
+// be freed via CLJ_FREE(...). Used by byte-array views and string views.
+#ifndef CLJ_FLAG_EXTERNAL_DATA
+#define CLJ_FLAG_EXTERNAL_DATA 0x10
+#endif
 
 // Optional external finalizer for externally owned payloads (e.g., lwIP pbuf).
 // Called when the byte array object is released (rc reaches 0).
-typedef void (*CljByteArrayExternalFreeFn)(void *ctx);
+typedef void (*CljByteArrayViewFreeFn)(void *ctx);
 
-// Extended byte array object used when CLJ_FLAG_BYTE_ARRAY_EXTERNAL is set.
+// Extended byte array object used when CLJ_FLAG_EXTERNAL_DATA is set.
 // The first member is CljByteArray so existing code can treat it as a normal byte array.
 typedef struct {
     CljByteArray base_arr;
     void *external_ctx;
-    CljByteArrayExternalFreeFn external_free_fn;
-} CljByteArrayExternal;
+    CljByteArrayViewFreeFn external_free_fn;
+} CljByteArrayView;
 
 static inline CljByteArray* as_byte_array(ID obj) {
     return (CljByteArray*)assert_type((CljObject*)obj, CLJ_BYTE_ARRAY);
@@ -58,7 +63,7 @@ CljByteArray* make_byte_array_view(uint8_t *bytes, int length);
  * @param free_fn Finalizer called on release (can be NULL)
  * @return Byte array view
  */
-CljByteArray* make_byte_array_external(uint8_t *bytes, int length, void *external_ctx, CljByteArrayExternalFreeFn free_fn);
+CljByteArray* make_byte_array_external(uint8_t *bytes, int length, void *external_ctx, CljByteArrayViewFreeFn free_fn);
 
 /** @brief Get byte at index
  * @param arr Byte array

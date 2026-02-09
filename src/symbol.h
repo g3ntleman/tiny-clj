@@ -206,6 +206,7 @@ extern CljSymbol *SYM_NS_STAR;
 extern CljSymbol *SYM_CONCAT_X;
 extern CljSymbol *SYM_CONCAT_Y;
 extern CljSymbol *SYM_CONCAT_THUNK_FN;
+extern CljSymbol *SYM_THUNK_STATE;
 extern CljSymbol *SYM_MAP_FN;
 extern CljSymbol *SYM_MAP_SEQS;
 extern CljSymbol *SYM_MAP_THUNK_FN;
@@ -216,7 +217,7 @@ extern CljSymbol *SYM_MAPCAT_THUNK_FN;
 extern CljSymbol *SYM_RANGE_CUR;
 extern CljSymbol *SYM_RANGE_INF_THUNK_FN;
 
-// tinyclj namespace function symbols
+// tiny-clj namespace function symbols
 extern CljSymbol *SYM_RETAIN_COUNT;
 extern CljSymbol *SYM_LIST_BATCH;
 
@@ -379,10 +380,8 @@ extern StaticSymbolData sym_atom_data;
 extern StaticSymbolData sym_deref_data;
 extern StaticSymbolData sym_reset_bang_data;
 extern StaticSymbolData sym_swap_bang_data;
-#ifndef ESP32_BUILD
 extern StaticSymbolData sym_slurp_data;
 extern StaticSymbolData sym_spit_data;
-#endif
 
 // Extended Symbol for Special Forms with embedded evaluation function
 typedef struct CljSpecialSymbol {

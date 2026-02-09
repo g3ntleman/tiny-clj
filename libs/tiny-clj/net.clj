@@ -1,4 +1,4 @@
-(ns tinyclj.net)
+(ns tiny-clj.net)
 
 ;; Native-backed networking API.
 ;;

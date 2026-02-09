@@ -1,5 +1,5 @@
-;; tinyclj.fs - Clojure-facing filesystem API
-(ns tinyclj.fs
+;; tiny-clj.fs - Clojure-facing filesystem API
+(ns tiny-clj.fs
   (:require [tiny-db.kv :as kv]))
 
 ;; Set user metadata for a path (merged into listing). Stored as EDN under <path>.meta.
@@ -8,7 +8,7 @@
 ^#^{:doc "Stores user metadata for a filesystem path.
 
 Writes the EDN-encoded metadata map to `<path>.meta` in the underlying KV store.
-The metadata is merged into `tinyclj.fs/list` results.
+The metadata is merged into `tiny-clj.fs/list` results.
 
 If the map includes `:size`, the file size is applied immediately via `set-size!`."}
 (defn meta-set! [path meta-map]

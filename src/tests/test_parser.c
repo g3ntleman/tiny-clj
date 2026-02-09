@@ -74,13 +74,12 @@ TEST(test_parse_collections) {
 TEST(test_parse_empty_list) {
     EvalState *eval_state = evalstate_new(false);
 
-    // Test: () is nil in Clojure (Clojure-compatible behavior)
+    // Clojure: () is the empty list (not nil); (list) is the same empty list
     CljObject *empty_list_result = parse("()", eval_state);
-    TEST_ASSERT_NIL(empty_list_result);  // () is nil (NULL)
-    // Note: TAG(NULL) is undefined, so we only check that result is NULL
-
-    // Test: (list) creates an empty list (different from ())
-    // This is tested separately in test_basics.c
+    TEST_ASSERT_NOT_NULL(empty_list_result);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(empty_list_result));
+    TEST_ASSERT_TRUE(list_empty(as_list(empty_list_result)));
+    TEST_ASSERT_EQUAL_PTR(empty_list(), as_list(empty_list_result));
 
     evalstate_free(eval_state);
 }

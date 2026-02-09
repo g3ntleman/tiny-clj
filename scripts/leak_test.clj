@@ -4,10 +4,10 @@
 ;; Run:  tiny-clj-repl -f scripts/leak_test.clj
 ;; Requires DEBUG and MEMORY_PROFILING_ENABLED for :memory-stats.
 
-(require 'tinyclj.runtime)
+(require 'tiny-clj.runtime)
 
 (defn ms [k]
-  (get (get (tinyclj.runtime/stats) :memory-stats) k))
+  (get (get (tiny-clj.runtime/stats) :memory-stats) k))
 
 (def b0 (ms :bytes-current))
 (println "bytes-current before (baseline):" (or b0 "n/a (profiling off?)"))
@@ -37,20 +37,20 @@
 (def b1 (ms :bytes-current))
 (println "bytes-current after 20 separate (reduce + (range 500)):" (or b1 "n/a"))
 
-;; 10 separate evals of (tinyclj.runtime/stats)
-(tinyclj.runtime/stats)
-(tinyclj.runtime/stats)
-(tinyclj.runtime/stats)
-(tinyclj.runtime/stats)
-(tinyclj.runtime/stats)
-(tinyclj.runtime/stats)
-(tinyclj.runtime/stats)
-(tinyclj.runtime/stats)
-(tinyclj.runtime/stats)
-(tinyclj.runtime/stats)
+;; 10 separate evals of (tiny-clj.runtime/stats)
+(tiny-clj.runtime/stats)
+(tiny-clj.runtime/stats)
+(tiny-clj.runtime/stats)
+(tiny-clj.runtime/stats)
+(tiny-clj.runtime/stats)
+(tiny-clj.runtime/stats)
+(tiny-clj.runtime/stats)
+(tiny-clj.runtime/stats)
+(tiny-clj.runtime/stats)
+(tiny-clj.runtime/stats)
 
 (def b2 (ms :bytes-current))
-(println "bytes-current after 10 separate (tinyclj.runtime/stats):" (or b2 "n/a"))
+(println "bytes-current after 10 separate (tiny-clj.runtime/stats):" (or b2 "n/a"))
 
 (if (and b0 b1 b2)
   (do

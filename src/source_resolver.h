@@ -6,4 +6,4 @@
 /** Resolve a path to byte array content (KV store or embedded map). Returns NULL if not found. */
 ID resolve_path_to_bytes(const char *path);
 
-#endif
+#endif // TINY_CLJ_SOURCE_RESOLVER_H

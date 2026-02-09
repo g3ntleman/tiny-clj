@@ -1,7 +1,10 @@
-;; tinyclj.runtime - Runtime debugging utilities
+
+
+R"TINY_CLJ_RUNTIME(
+;; tiny-clj.runtime - Runtime debugging utilities
 ;; Provides low-level debugging functions for inspecting internal structures
 
-(ns tinyclj.runtime)
+(ns tiny-clj.runtime)
 
 ;; stats - Return runtime stats map
 ^#^{:doc "Returns runtime stats as a map.
@@ -57,3 +60,5 @@ Missing values are omitted (the key will not be present)."}
 ;; Only available in DEBUG builds
 ^#^{:doc "Returns the AST (Abstract Syntax Tree) structure of an object as a string with internal type information. Only available in DEBUG builds. Usage: (ast-string obj)"}
 (def ast-string (fn ast-string [x] :native))
+
+)TINY_CLJ_RUNTIME"

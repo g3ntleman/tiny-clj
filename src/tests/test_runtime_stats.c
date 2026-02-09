@@ -1,4 +1,4 @@
-// Runtime stats tests: (tinyclj.runtime/stats)
+// Runtime stats tests: (tiny-clj.runtime/stats)
 
 #include "tests_common.h"
 #include "../event_loop.h"
@@ -42,8 +42,8 @@ static void print_memory_type_deltas(const MemoryStats *before,
 
 TEST(test_runtime_stats_basic_keys_present)
 {
-    // Ensure tinyclj.runtime is loaded so the :native stub is defined.
-    ID result = eval_string("(do (require 'tinyclj.runtime) (tinyclj.runtime/stats))", g_test_eval_state);
+    // Ensure tiny-clj.runtime is loaded so the :native stub is defined.
+    ID result = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_map(result));
 
@@ -62,7 +62,7 @@ TEST(test_runtime_stats_basic_keys_present)
 TEST(test_runtime_stats_build_time_before_now)
 {
     // Get build-time from stats
-    ID stats = eval_string("(do (require 'tinyclj.runtime) (tinyclj.runtime/stats))", g_test_eval_state);
+    ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(stats);
     TEST_ASSERT_TRUE(is_map(stats));
     
@@ -175,7 +175,7 @@ TEST(test_runtime_stats_bytes_peak_rounded_target_no_core)
         debug_precore_mem_step("after evalstate", &prev);
     }
 
-    ID stats = eval_string("(do (require 'tinyclj.runtime) (tinyclj.runtime/stats))", g_test_eval_state);
+    ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
     if (debug) {
         debug_precore_mem_step("after require+stats", &prev);
     }
@@ -203,7 +203,7 @@ TEST(test_runtime_stats_bytes_peak_rounded_target_no_core)
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_contains_memory_stats_map)
 {
-    ID stats = eval_string("(do (require 'tinyclj.runtime) (tinyclj.runtime/stats))", g_test_eval_state);
+    ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(stats);
     TEST_ASSERT_TRUE(is_map(stats));
 
@@ -241,8 +241,8 @@ TEST(test_runtime_stats_contains_memory_stats_map)
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_current_ram_under_200kb_after_core_load)
 {
-    // Ensure both clojure.core and tinyclj.runtime are loaded before measuring.
-    ID stats = eval_string("(do (require 'clojure.core) (require 'tinyclj.runtime) (tinyclj.runtime/stats))", g_test_eval_state);
+    // Ensure both clojure.core and tiny-clj.runtime are loaded before measuring.
+    ID stats = eval_string("(do (require 'clojure.core) (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(stats);
     TEST_ASSERT_TRUE(is_map(stats));
 

@@ -12,6 +12,10 @@
 #include "map.h"     // For map_get
 #include "parser.h"  // For eval_parsed
 #include "to_string.h" // For pr_str debug printing
+#include "strings.h" // For string_data
+#include "source_resolver.h" // For resolve_path_to_bytes (load_clojure_repl, override fallback)
+#include "embedded_sources.h" // For embedded_source_map_init
+#include "builtins.h"        // For load_namespace_from_bytes
 #include "types.h"  // For clj_type_name
 #include "memory_profiler.h"
 #include "mini_format.h"
@@ -154,11 +158,8 @@ extern CljSymbol *SYM_KW_SIZE;
 
 
 
-// Clojure core code for Tiny-Clj interpreter
-const char *clojure_core_code =
-#include "clojure.core.clj"
-
-    ;
+// Optional override for core source (tests/custom); default from embedded_sources.c via resolve_path_to_bytes.
+static const char *clojure_core_override = NULL;
 
 // Forward declaration for value_by_parsing_expr
 extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
@@ -200,35 +201,19 @@ static int g_form_count = 0;
 double g_canon_time_ms = 0;  // extern in parser.c
 #endif
 
-static bool eval_core_source(const char *src, const char *source_name, EvalState *st) {
+static bool eval_core_source(const char *src, size_t src_len, const char *source_name, EvalState *st) {
   if (!src || !st)
     return false;
-  
-  // CRITICAL: Save the original namespace object (not just the name)
-  // This ensures we use the same namespace object that was cached
-  (void)st;  // original_ns is saved but not used in this function
-  
-  // CRITICAL: Use the namespace from registry if it exists, otherwise use current_ns
-  // This ensures we use the same namespace object that register_builtins() may have created
-  // Note: For clojure.repl, we use st->current_ns which is already set to clojure.repl
-  CljNamespace *target_ns = NULL;
-  // Only use clojure.core from registry if current_ns is clojure.core
-  // Otherwise, use current_ns (which is already set correctly for clojure.repl)
-  if (st->current_ns && st->current_ns->name == SYM_CLOJURE_CORE) {
-    target_ns = ns_find_by_symbol(SYM_CLOJURE_CORE);
-    if (target_ns) {
-      st->current_ns = target_ns;
-    } else {
-      target_ns = st->current_ns;
-    }
-  } else {
-    // For other namespaces (like clojure.repl), use current_ns directly
-    target_ns = st->current_ns;
+  if (src_len == 0) {
+    src_len = strlen(src);
   }
   
+  // Caller has set st->current_ns to the target namespace; use it for all defs.
+  CljNamespace *target_ns = st->current_ns;
+
   // Use Reader to parse multiple expressions
   Reader reader;
-  reader_init(&reader, src);
+  reader_init_with_length(&reader, src, src_len);
   const char *label = source_name;
   if (!label || !label[0]) {
     if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname) {
@@ -334,7 +319,7 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
 
           if (debug_form > 0 && (expr_count + 1) == debug_form) {
             CljString *s = pr_str((ID)form);
-            const char *printed = (s) ? s->data : "<unprintable>";
+            const char *printed = (s) ? string_data((ID)s) : "<unprintable>";
             fprintf(stderr, "[%s] DEBUG core form #%d: %s\n", label, expr_count + 1, printed);
             fflush(stderr);
           }
@@ -433,13 +418,9 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     }
     }
   } CATCH(ex) {
-    // ParseError or other exception during clojure.core loading
-    // Log but don't fail - some expressions may have loaded successfully
-    if (ex) {
-      if (!g_core_quiet) {
-        fprintf(stderr, "Warning: Exception during clojure.core loading: %s - %s\n", 
-                ex->type, ex->message);
-      }
+    if (ex && !g_core_quiet) {
+      fprintf(stderr, "Warning: Exception during namespace loading [%s]: %s - %s\n",
+              label, ex->type, ex->message);
     }
     // Continue - return success if at least some expressions loaded
   } END_TRY
@@ -450,120 +431,55 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
   // target_ns is already registered in ns_registry, no cache needed
   
   if (!g_core_quiet) {
-    const char *ns_name = target_ns && target_ns->name && target_ns->name->cname 
-                          ? target_ns->name->cname 
-                          : "clojure.core";
     fprintf(stderr, "[%s] Evaluated %d form(s), %d succeeded.\n",
-            ns_name, expr_count, success_count);
+            label, expr_count, success_count);
   }
-  
 #ifdef PROFILE_STARTUP
   fprintf(stderr, "[PROFILE] Parse: %.2f ms, Canon: %.2f ms, Eval: %.2f ms, Forms: %d\n",
           g_parse_time_ms, g_canon_time_ms, g_eval_time_ms, g_form_count);
 #endif
-
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
   if (debug_mem_summary > 0) {
     core_mem_print_top_types("core load summary", 8);
   }
 #endif
-
-  // Ensure Math alias points to clojure.core so Math/sqrt style symbols resolve
-  if (target_ns && target_ns->name == SYM_CLOJURE_CORE) {
-    CljSymbol *math_alias = intern_symbol_global("Math");
-    if (math_alias && SYM_CLOJURE_CORE) {
-      ns_set_alias(target_ns, math_alias, SYM_CLOJURE_CORE);
-    }
-  }
-
   return success_count > 0;
 }
 
 int load_clojure_core(EvalState *st) {
   if (!st) return 0;
-  
-  if (!clojure_core_code) {
-    return 0;
-  }
-
-  // Preserve caller namespace; loading core should not permanently change it.
-  CljNamespace *original_ns = st->current_ns;
-
-  // CRITICAL: Ensure clojure.core namespace exists
-  // evalstate_set_ns will create the namespace if it doesn't exist
-  evalstate_set_ns(st, "clojure.core");
-  
-  // CRITICAL: Always use the namespace from registry for loading
-  // This ensures we load into the same namespace that will be used for lookups
-  CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
-  if (!clojure_core) {
-    // Namespace should have been created by evalstate_set_ns, but if not, fail
-    if (st->current_ns && st->current_ns->name == SYM_CLOJURE_CORE) {
-      clojure_core = st->current_ns;
-    } else {
-      return 0;
+  embedded_source_map_init();
+  bool loaded = false;
+  ID bytes = resolve_path_to_bytes("/libs/clojure/core.clj");
+  if (bytes)
+    loaded = load_namespace_from_bytes(st, "clojure.core", bytes, "/libs/clojure/core.clj");
+  if (!loaded && clojure_core_override) {
+    CljNamespace *orig_ns = st->current_ns;
+    evalstate_set_ns(st, "clojure.core");
+    CljNamespace *core = ns_find("clojure.core");
+    if (!core && st->current_ns->name && st->current_ns->name->cname
+        && strcmp(st->current_ns->name->cname, "clojure.core") == 0)
+      core = st->current_ns;
+    if (core) {
+      st->current_ns = core;
+      bool ok = eval_core_source(clojure_core_override, strlen(clojure_core_override), "clojure.core.clj", st);
+      if (ok) core->loaded = true;
+      if (orig_ns) st->current_ns = orig_ns;
+      if (ok) loaded = true;
     }
   }
-  
-  // IDEMPOTENCY: Check if clojure.core is already loaded
-  // If 'inc' is already in mappings, skip loading to avoid double-loading
-  if (clojure_core && clojure_core->mappings) {
-    CljSymbol *inc_sym = intern_symbol_global("inc");
-    if (inc_sym) {
-      CljObject *inc_value = (CljObject*)map_get_sentinel((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
-      if (inc_value && (TAG(inc_value) == CLJ_FUNC || TAG(inc_value) == CLJ_CLOSURE)) {
-        // clojure.core is already loaded - return success without reloading
-        clojure_core->loaded = true;
-        if (original_ns) {
-          st->current_ns = original_ns;
-        }
-        return 1;
-      }
-    }
-  }
-  
-  // CRITICAL: Ensure st->current_ns points to the namespace from registry
-  // This ensures all def operations store in the correct namespace
-  st->current_ns = clojure_core;
-  
-  bool ok = eval_core_source(clojure_core_code, "clojure.core.clj", st);
-
-  if (ok) {
-    clojure_core->loaded = true;
-  }
- 
-  // Create resolve cache after bootstrap to keep startup memory low.
+  if (!loaded) return 0;
+  CljNamespace *core = ns_find("clojure.core");
+  if (!core) return 0;
+  CljSymbol *math_alias = intern_symbol_global("Math");
+  if (math_alias && SYM_CLOJURE_CORE) ns_set_alias(core, math_alias, SYM_CLOJURE_CORE);
   runtime_ensure_resolve_cache(&g_runtime);
-  
-  // Restore original namespace after loading
-  if (original_ns) {
-    st->current_ns = original_ns;
-  }
-
-  (void)ok; // Result is checked below
-
-  // CRITICAL ASSERTION: Verify that 'inc' was loaded successfully
-  // This ensures that the loading process actually stored the function
-  // NOTE: Use namespace from registry directly, not st->current_ns,
-  // because st->current_ns may have been restored to original_ns after eval_core_source
-  // clojure_core is already defined above
-  if (clojure_core && clojure_core->mappings) {
-    CljSymbol *inc_sym = intern_symbol_global("inc");
-    if (inc_sym) {
-      CljObject *inc_value = (CljObject*)map_get_sentinel((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
-      if (!inc_value) {
-        return 0;
-      }
-      // Verify it's a function
-      if (!inc_value || (TAG(inc_value) != CLJ_FUNC && TAG(inc_value) != CLJ_CLOSURE)) {
-        return 0;
-      }
-    }
-  } else {
-    return 0;
-  }
-
-  return ok ? 1 : 0;
+  if (!core->mappings) return 0;
+  CljSymbol *inc_sym = intern_symbol_global("inc");
+  if (!inc_sym) return 0;
+  CljObject *inc_val = (CljObject *)map_get_sentinel((CljValue)core->mappings, (CljValue)inc_sym, NULL);
+  if (!inc_val || (TAG(inc_val) != CLJ_FUNC && TAG(inc_val) != CLJ_CLOSURE)) return 0;
+  return 1;
 }
 
 void clojure_core_set_quiet(bool quiet) {
@@ -572,7 +488,7 @@ void clojure_core_set_quiet(bool quiet) {
   // Called from REPL main() instead
 }
 
-void clojure_core_set_source(const char *src) { clojure_core_code = src; }
+void clojure_core_set_source(const char *src) { clojure_core_override = src; }
 
 // Load clojure.repl namespace from file
 int load_clojure_repl(EvalState *st) {
@@ -642,7 +558,8 @@ int load_clojure_repl(EvalState *st) {
   st->current_ns = target_ns;
   
   // Evaluate source using same approach as eval_core_source
-  bool ok = eval_core_source(source, source_label, st);
+  size_t source_len = strlen(source);
+  bool ok = eval_core_source(source, source_len, source_label, st);
   
   // Restore original namespace
   if (orig_ns) {

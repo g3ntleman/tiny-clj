@@ -95,6 +95,9 @@ extern EvalState* g_test_eval_state;
 // Function to get global test EvalState (for backwards compatibility)
 extern EvalState* test_get_eval_state(void);
 
+/** Load clojure.core when the test group runs without core (call at start of tests that need +, rest, etc.). */
+extern void test_ensure_clojure_core(void);
+
 // Heap growth checks (used by test runner)
 void test_heap_growth_disable(void);
 void test_heap_growth_allow_all(void);
@@ -226,6 +229,11 @@ static inline void assert_map(CljObject *obj) {
     TEST_ASSERT_NOT_NULL(obj);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(obj));
 }
+
+/** Register source at path so resolve_path_to_bytes (require/load-file) finds it. Uses KV store. */
+void register_resolver_source(const char *path, const char *source);
+/** Register all test.* namespace sources used by test_namespace.c (resolver instead of files). */
+void register_test_namespace_libs(void);
 
 static inline ID parse_canonicalized(const char *input, EvalState *st) {
     ID parsed = parse(input, st);

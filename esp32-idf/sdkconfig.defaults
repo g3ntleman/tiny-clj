@@ -1,3 +1,11 @@
+# Compiler: use Size optimization so DEBUG is not defined. With DEBUG, assert_type runs
+# the stack check; on ESP32 heap and stack share SRAM (0x3ffxxxxx) so that causes false
+# positives and can mask heap corruption. Release/Size build = no -DDEBUG = stable REPL.
+# CONFIG_COMPILER_OPTIMIZATION_DEBUG is not set
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+# CONFIG_COMPILER_OPTIMIZATION_LEVEL_DEBUG is not set
+CONFIG_COMPILER_OPTIMIZATION_LEVEL_RELEASE=y
+
 # Main task stack: default 3584 is too small for recursive parser when loading clojure_core.
 # 12KB was still too small for (require 'clojure.string): deep parse_list_rest recursion
 # overflowed into heap and caused LoadProhibited in tlsf_malloc (block ptr 0xff00).
