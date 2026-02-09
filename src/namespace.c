@@ -4,7 +4,6 @@
 #include "common.h"  // For CLJ_ASSERT
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
-#include "object.h"
 #include "map.h"
 #include "list.h"
 #include "exception.h"
@@ -13,7 +12,6 @@
 #include "memory.h"
 #include "parser.h"  // For eval_parsed
 #include "vector.h"
-#include "kv_macros.h"  // For KV_KEY, KV_VALUE
 
 // Helper context for namespace search in ns_resolve()
 struct ns_search_ctx {
@@ -27,6 +25,9 @@ struct ns_search_ctx {
 
 // Global context pointer for callback (thread-local would be better, but this works for single-threaded)
 static struct ns_search_ctx *g_ns_search_ctx = NULL;
+
+// Known approximate size of clojure.core mappings (defs/defns) to avoid resize during load
+#define CLOJURE_CORE_INITIAL_MAPPINGS_CAPACITY 256
 
 static bool namespace_is_clojure_core(const CljNamespace *ns) {
     if (!ns || !ns->name) {
@@ -190,11 +191,12 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
     }
 
     ns->name = name_symbol; // Use the interned symbol
-    ns->mappings = make_map(32); // Increased capacity for clojure.core
-
+    // clojure.core: pre-allocate known size to reduce fragmentation and startup cost
+    const int mappings_cap = (SYM_CLOJURE_CORE && name_symbol == SYM_CLOJURE_CORE)
+        ? CLOJURE_CORE_INITIAL_MAPPINGS_CAPACITY : 4;
+    ns->mappings = make_map(mappings_cap);
     ns->macro_mappings = NULL;  // Lazy initialization in register_macro
-
-    ns->aliases = make_map(16);
+    ns->aliases = make_map(4);
 
     ns->loaded = false;
 
@@ -890,11 +892,15 @@ void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
  * @param alias Alias symbol to look up
  * @return Namespace name symbol or NULL if not found
  */
-ID ns_get_alias(CljNamespace *ns, ID alias) {
+ID ns_get_alias(CljNamespace *ns, CljSymbol *alias) {
     if (!ns || !alias || !ns->aliases) return NULL;
+    if (!alias->cname) return NULL;
+
+    // Normalize alias to an unqualified symbol so lookups work regardless of ns qualification.
+    ID key = (ID)intern_symbol_global(alias->cname);
 
     // Look up alias in aliases map
-    ID ns_name = map_get_sentinel(ns->aliases, alias, NULL);
+    ID ns_name = map_get_sentinel(ns->aliases, key, NULL);
     return ns_name;
 }
 
@@ -906,12 +912,16 @@ ID ns_get_alias(CljNamespace *ns, ID alias) {
  */
 void ns_set_alias(CljNamespace *ns, ID alias, ID ns_name) {
     if (!ns || !alias || !ns_name) return;
+    CLJ_ASSERT(TAG(alias) == CLJ_SYMBOL);
+    CljSymbol *alias_sym = as_symbol(alias);
+    CLJ_ASSERT(alias_sym && alias_sym->cname);
 
     // Create or update aliases map
     if (!ns->aliases) {
         ns->aliases = make_map(16);
     }
 
-    // Store alias-namespace binding (overwrites existing)
-    map_assoc_inplace(&ns->aliases, alias, ns_name);
+    // Store alias-namespace binding (overwrites existing). Key = unqualified symbol for lookup.
+    ID key = (ID)intern_symbol_global(alias_sym->cname);
+    map_assoc_inplace(&ns->aliases, key, ns_name);
 }
