@@ -2664,6 +2664,10 @@ ID native_count(ID *args, unsigned int argc)
             CljList *list = as_list(coll);
             return (fixnum(list ? list_count(list) : 0));
         }
+        else if (tag == CLJ_HASHSET)
+        {
+            return fixnum((int)hashset_count((CljHashSet*)coll));
+        }
         else if (tag == CLJ_STRING)
         {
             CljString *str = (CljString *)coll;

@@ -3,8 +3,9 @@
  * 
  * Test-first implementation of missing clojure.core functions.
  * Tests are organized by phase according to the implementation plan.
+ * Heap limit 4096 for shared tests (mapcat, keep, lazy seqs allocate above 2048).
  */
-
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 4096
 #include "tests_common.h"
 
 // ============================================================================
