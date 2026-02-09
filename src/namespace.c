@@ -311,51 +311,19 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         return NOT_FOUND;
     }
 
-    // Unqualified symbol - check current namespace first (before cache)
-    // This ensures that redefined symbols in current namespace take precedence over cached values
-    // OPTIMIZATION: Fast path - try direct lookup with existing symbol pointer first
-    // ns_define() stores unqualified aliases for non-core namespaces, so this should work
-    // for most cases without needing to qualify+intern.
-    if (current_ns && current_ns->mappings) {
-        ID v = map_get(current_ns->mappings, sym);
-        if (v != NOT_FOUND) {
-            // Symbol found in current namespace - return it immediately
-            // No ambiguity check needed: current namespace always takes precedence
-            return v;
-        }
-    }
-
-    // CRITICAL: Namespace mappings now use fully qualified symbols as keys
-    // For unqualified symbols, we need to qualify them with the current namespace
-    // Use sentinel to distinguish "key not found" from "value is nil"
-    // In Clojure, nil is a valid value, so we need to distinguish between
-    // "symbol not found" (should search other namespaces) and "symbol found with nil value" (should return nil)
-    // Qualify symbol with current namespace for lookup
+    // Unqualified symbol - check current namespace first.
+    // Try qualified lookup first so def/ns_define (e.g. user/inc) shadow referred unqualified (e.g. inc from core).
     CljSymbol *qualified_sym = sym;
     if (current_ns && current_ns->name && current_ns->name->cname) {
         qualified_sym = intern_symbol(current_ns->name, sym->cname);
-        if (!qualified_sym) {
-            // Failed to qualify - fall through to search other namespaces
-            qualified_sym = sym;
-        }
+        if (!qualified_sym) qualified_sym = sym;
     }
-
-    // CRITICAL: For def, symbols are stored qualified (e.g., user/my-var)
-    // For :refer :all, symbols are also stored qualified (clojure.core is handled separately)
     if (current_ns && current_ns->mappings) {
         ID v = map_get(current_ns->mappings, qualified_sym);
-        if (v != NOT_FOUND) {
-            // Symbol found in current namespace - return it immediately
-            // No ambiguity check needed: current namespace always takes precedence
-            return v;
-        }
-        // Fallback: if qualified lookup failed, try unqualified (for private functions)
-        // This handles cases where the symbol pointer differs due to interning timing
+        if (v != NOT_FOUND) return v;
         if (qualified_sym != sym) {
             v = map_get(current_ns->mappings, sym);
-            if (v != NOT_FOUND) {
-                return v;
-            }
+            if (v != NOT_FOUND) return v;
         }
     }
 
@@ -663,11 +631,16 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
     CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
     if (user_ns && user_ns != clojure_core) {
         // Replace mappings with a fresh map for test isolation.
-        // make_map() returns an owned object (rc=1). ASSIGN() retains the new value,
-        // so we balance that retain to keep the adopted map at rc=1.
         CljPersistentMap *fresh = make_map(16);
         ASSIGN(user_ns->mappings, fresh);
         RELEASE(fresh);
+        // Refer clojure.core into user so (get ...) etc. resolve (Clojure default).
+        if (load_core && clojure_core && clojure_core->mappings) {
+            MAP_FOR_EACH(clojure_core->mappings, k, v) {
+                if (k && TAG(k) == CLJ_SYMBOL)
+                    map_assoc_inplace(&user_ns->mappings, k, v);
+            }
+        }
     }
 
     // Ensure current_ns is set to "user" (with clean mappings)

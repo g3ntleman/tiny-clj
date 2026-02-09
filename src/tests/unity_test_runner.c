@@ -9,6 +9,7 @@
 #include "memory_profiler.h"
 #include "../tiny_clj.h"
 #include "../event_loop.h"
+#include "../fs_layer.h"
 #include "unity/src/unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
 #include <stdlib.h>
 #include <string.h>
@@ -63,8 +64,7 @@ static bool is_shared_test_entry(const SubjectiveCTestEntry *entry) {
 static bool group_runs_without_core(const SubjectiveCTestEntry *entry) {
     if (!entry || !entry->group) return false;
     const char *g = entry->group;
-    return strcmp(g, "test_keyword_evaluation") == 0
-        || strcmp(g, "test_parser") == 0
+    return strcmp(g, "test_parser") == 0
         || strcmp(g, "test_static_keywords") == 0;
 }
 
@@ -252,7 +252,7 @@ void tearDown(void) {
     }
     test_heap_growth_check();
     memory_profiler_check_leaks("Test Complete");
-    
+    fs_global_store_reset();
     runtime_reset(&g_runtime);
     // Reset symbol table between tests to avoid cross-test contamination.
     symbol_table_cleanup();
@@ -556,7 +556,15 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
         if (found == 1) {
             g_single_test_mode = true;
         }
-        
+
+        // Set g_current_test_entry to first matching test so setUp() gets correct heap limit and load_core
+        for (size_t i = 0; i < test_count; i++) {
+            if (subjective_c_test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern) ||
+                subjective_c_test_name_matches_pattern(all_tests[i].name, test_name_or_pattern)) {
+                g_current_test_entry = &all_tests[i];
+                break;
+            }
+        }
         // One-line output for pattern matching (setUp/tearDown so clojure.core is loaded)
         TRY {
             setUp();

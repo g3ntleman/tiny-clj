@@ -41,10 +41,17 @@ TEST(test_embedded_sources_fallback)
     CljByteArray *ba = as_byte_array(bytes);
     TEST_ASSERT_TRUE(ba->length > 0);
 
-    const char *prefix = "(ns clojure.core";
-    size_t prefix_len = strlen(prefix);
-    TEST_ASSERT_TRUE(ba->length >= (int)prefix_len);
-    TEST_ASSERT_EQUAL_MEMORY(prefix, ba->data, prefix_len);
+    /* Embedded core is included as raw string; content starts after delimiter. */
+    const char *core_marker = "(ns clojure.core)";
+    size_t marker_len = strlen(core_marker);
+    TEST_ASSERT_TRUE(ba->length >= (int)marker_len);
+    const uint8_t *p = ba->data;
+    size_t rem = (size_t)ba->length;
+    while (rem >= marker_len && memcmp(p, core_marker, marker_len) != 0) {
+        p++;
+        rem--;
+    }
+    TEST_ASSERT_TRUE(rem >= marker_len);
 }
 
 TEST(test_embedded_sources_tiny_db_kv)
