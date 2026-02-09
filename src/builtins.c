@@ -822,9 +822,8 @@ ID native_next(ID *args, unsigned int argc) {
     if (!it) return NULL;
     seq_next_inplace(&it);  /* COW: in-place when possible, else replace slot */
     if (!it || TAG(it) == CLJ_NIL)
-        return NULL;  /* no more seq; do not return unowned nil/list so caller won't autorelease */
-    if (as_seq(it))
-        it = AUTORELEASE(it);
+        return NULL;  /* no more seq */
+    if (as_seq(it)) it = AUTORELEASE(it);
     return it;
 }
 
@@ -1079,7 +1078,9 @@ static void destructure_seq(CljPersistentVector **bvec_slot, ID bform, ID init) 
 
         if (elem == SYM_AMP) {
             vector_conj_inplace(&bvec, next);
-            vector_conj_inplace(&bvec, destructure_list3(sym_nthnext, gvec, fixnum(idx)));
+            ID f = destructure_list3(sym_nthnext, gvec, fixnum(idx));
+            vector_conj_inplace(&bvec, f);
+            RELEASE(f);
             skip = 1;
         } else if (elem == SYM_KW_AS) {
             vector_conj_inplace(&bvec, next);
@@ -1087,7 +1088,9 @@ static void destructure_seq(CljPersistentVector **bvec_slot, ID bform, ID init) 
             skip = 1;
         } else {
             vector_conj_inplace(&bvec, elem);
-            vector_conj_inplace(&bvec, destructure_list4(SYM_NTH, gvec, fixnum(idx), NULL));
+            ID f = destructure_list4(SYM_NTH, gvec, fixnum(idx), NULL);
+            vector_conj_inplace(&bvec, f);
+            RELEASE(f);
             idx++;
         }
     }
@@ -1142,9 +1145,9 @@ static void destructure_map(CljPersistentVector **bvec_slot, ID bform, ID init) 
         ID get_form = clj_is_truthy(default_val)
                           ? destructure_list4(sym_get, gmap, kw, default_val)
                           : destructure_list3(sym_get, gmap, kw);
-
         vector_conj_inplace(&bvec, sym);
         vector_conj_inplace(&bvec, get_form);
+        RELEASE(get_form);
     }
 
     *bvec_slot = bvec;
@@ -1738,13 +1741,14 @@ ID native_list(ID *args, unsigned int argc)
 
     if (argc == 0) return empty_list();
 
-    // Build list backwards. Each node must be autoreleased so the chain
-    // is properly balanced: make_list RETAINs rest, pool drain RELEASEs it.
-    CljList *result = NULL;
+    // Build list backwards; return owned (rc=1). Eval does single AUTORELEASE at call boundary.
+    CljList *head = NULL;
     for (int i = argc - 1; i >= 0; i--) {
-        result = AUTORELEASE(make_list(args[i], result));
+        CljList *node = make_list(args[i], head);
+        RELEASE(head);
+        head = node;
     }
-    return result;
+    return head;
 }
 
 ID native_reduce(ID *args, unsigned int argc)
@@ -4687,6 +4691,22 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
     }
 }
 
+bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, const char *source_path)
+{
+    if (!st || !ns_name || !source_path || !bytes || TAG(bytes) != CLJ_BYTE_ARRAY) return false;
+    CljString *source_str = string_view_from_byte_array(bytes);
+    if (!source_str) return false;
+    CljNamespace *orig_ns = st->current_ns;
+    CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
+    if (!target_ns) { RELEASE(source_str); return false; }
+    st->current_ns = target_ns;
+    bool ok = eval_source_in_current_state(source_str, source_path, st);
+    target_ns->loaded = true;
+    st->current_ns = orig_ns;
+    RELEASE(source_str);
+    return ok;
+}
+
 /**
  * @brief Process a single require spec (Symbol or Vector)
  * @param spec Require spec (Symbol or Vector [namespace :as alias] or [namespace :refer ...])
@@ -4926,46 +4946,7 @@ static bool process_require_spec(ID spec, EvalState *st)
                         __FILE__, __LINE__, 0);
         return false;
     }
-    CljString *source_str = string_view_from_byte_array(bytes);
-    if (!source_str)
-    {
-        CLJ_FREE(rel);
-        return false;
-    }
-
-    // Evaluate source in current state
-    // Save the original namespace pointer (not just the name) to restore it later
-    // This ensures aliases are set in the correct namespace
-    CljNamespace *orig_ns = NULL;
-    if (st && st->current_ns)
-    {
-        orig_ns = st->current_ns;
-    }
-
-    // CRITICAL: Ensure target namespace exists before loading
-    // This ensures that native functions registered before loading are in the correct namespace
-    CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
-    if (!target_ns)
-    {
-        CLJ_FREE(rel);
-        return false;
-    }
-
-    // Temporarily switch to target namespace
-    if (st)
-    {
-        st->current_ns = target_ns;
-    }
-    bool ok = eval_source_in_current_state(source_str, source_path, st);
-    // Mark as loaded even if partially successful (tiny-clj keeps partial-load tolerance).
-    target_ns->loaded = true;
-    // Restore original namespace
-    if (st && orig_ns)
-    {
-        st->current_ns = orig_ns;
-    }
-
-    RELEASE(source_str);
+    bool ok = load_namespace_from_bytes(st, ns_name, bytes, source_path);
     CLJ_FREE(rel);
 
     // CRITICAL: Don't fail completely if some expressions failed to load
@@ -5013,6 +4994,14 @@ static bool process_require_spec(ID spec, EvalState *st)
     // ns_name is from autoreleased CljString - no free needed
 
     return true;
+}
+
+bool require_namespace_by_name(EvalState *st, const char *ns_name)
+{
+    if (!st || !ns_name) return false;
+    CljSymbol *sym = intern_symbol_global(ns_name);
+    if (!sym) return false;
+    return process_require_spec((ID)sym, st);
 }
 
 static ID normalize_require_spec(ID spec, bool *needs_release)
@@ -7563,6 +7552,10 @@ void register_builtins()
     register_builtin("list", native_list);
     register_builtin("cons", native_cons);
     register_builtin("seq", native_seq);
+
+    // Used in clojure.core before their (def ...) is evaluated
+    register_builtin("not", native_not);
+    register_builtin("atom", native_atom);
 
     // NOTE: clojure.string functions are NOT registered here as builtins.
     // They are defined in libs/clojure/string.clj and loaded via require.
