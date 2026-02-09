@@ -70,6 +70,14 @@ CljValue parse_from_reader(Reader *reader, EvalState *st);
 ID parse(const char *input, EvalState *st);
 
 /**
+ * @brief Parse Clojure expression from a CljString (supports non-NUL-terminated content via length).
+ * @param str String to parse
+ * @param st Evaluation state
+ * @return Parsed ID or NULL on error
+ */
+ID parse_from_string(struct CljString *str, EvalState *st);
+
+/**
  * @brief Resolve a namespace alias in the current namespace
  * @param st Evaluation state (for current namespace context)
  * @param alias_str Alias string (without ':' prefix)

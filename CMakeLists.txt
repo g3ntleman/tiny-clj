@@ -205,7 +205,8 @@ list(APPEND SOURCES
     src/to_string.c
     src/macro.c
     src/fs_layer.c
-    
+    src/source_resolver.c
+
 )
 
 # Main executable (not built by default; use REPL)

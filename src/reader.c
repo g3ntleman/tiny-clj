@@ -12,6 +12,15 @@ void reader_init(Reader *reader, const char *src) {
     reader->source_name = NULL;
 }
 
+void reader_init_with_length(Reader *reader, const char *src, size_t length) {
+    reader->src = src;
+    reader->length = length;
+    reader->index = 0;
+    reader->line = 1;
+    reader->column = 1;
+    reader->source_name = NULL;
+}
+
 void reader_init_with_source(Reader *reader, const char *src, const char *source_name) {
     reader_init(reader, src);
     reader_set_source_name(reader, source_name);

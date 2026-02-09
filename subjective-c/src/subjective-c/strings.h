@@ -41,6 +41,12 @@ CljString* make_string(const char *str);
  */
 CljString* make_string_buffer(size_t length);
 
+/** @brief Create string from byte array (copies bytes; supports non-NUL-terminated data).
+ * @param bytes ID of a CLJ_BYTE_ARRAY
+ * @return New CljString or NULL if bytes is not a byte array or on error
+ */
+CljString* string_view_from_byte_array(ID bytes);
+
 static inline const char* clj_string_data(CljString *str) {
     return str ? str->data : "";
 }

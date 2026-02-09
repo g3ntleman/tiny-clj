@@ -6,10 +6,12 @@
 #include <stdint.h>
 #include "object.h"
 #include "strings.h"
+#include "byte_array.h"
 #include "memory.h"
 #include "types.h"  // For SINGLETON_RC
 #include "exception.h"  // For throw_exception
 #include "common.h"  // For CLJ_ASSERT
+#include <stdint.h>
 
 // Empty string singleton with CljString layout
 static struct {
@@ -57,6 +59,24 @@ CljString* make_clj_string(const char *str) {
  */
 CljString* make_string(const char *str) {
     return make_string_impl(str);
+}
+
+CljString* string_view_from_byte_array(ID bytes) {
+    if (!bytes || TAG(bytes) != CLJ_BYTE_ARRAY) return NULL;
+    CljByteArray *ba = as_byte_array(bytes);
+    int len = ba->length;
+    if (len == 0) return string_empty_singleton;
+    if (len < 0 || (unsigned)len > UINT16_MAX) return NULL;
+    CljString *s = (CljString*)alloc(sizeof(CljString) + (size_t)len + 1, 1, CLJ_STRING);
+    if (!s) {
+        throw_oom();
+        return NULL;
+    }
+    s->base.type = CLJ_STRING;
+    s->length = (uint16_t)len;
+    memcpy(s->data, ba->data, (size_t)len);
+    s->data[len] = '\0';
+    return s;
 }
 
 CljString* make_string_buffer(size_t length) {

@@ -68,6 +68,9 @@ typedef struct TinyClJRuntime {
     CljTransientVector *task_queue;    // transient vector for normal tasks
     CljTransientVector *timer_queue;  // transient vector for timer tasks
     int timer_id_counter;
+
+    // Embedded source map (path -> byte array) for slurp/load-file when no FS; NULL if none.
+    CljPersistentMap *embedded_source_map;
 } TinyClJRuntime;
 
 // Statisch alloziertes globales Runtime-Struct
