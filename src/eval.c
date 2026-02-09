@@ -208,15 +208,8 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
         builtin_set_eval_state(st);
         ID result = native_func->fn(args, argc);
         builtin_set_eval_state(NULL); // Clear after call
-        // Native functions do not retain args; caller must release. (eval_arg returns
-        // AUTORELEASE'd values; pool is weak/track-only, so we release here to avoid
-        // leaks for temporaries like (range 4000) in (reduce + (range 4000)).)
-        for (unsigned int i = 0; i < argc; i++) {
-            if (args[i] && !IS_IMMEDIATE(args[i]) && args[i] != result) {
-                RETAIN(args[i]);
-                RELEASE(args[i]);
-            }
-        }
+        /* Args are from eval (autoreleased); do not release them here or result may be
+         * a structural tail of an arg (e.g. rest(list)) and would be double-freed. */
         return result;
     }
 
@@ -1222,21 +1215,21 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
         }
 
         if (!target || !is_map(target)) {
-            return default_val;
+            return (IS_IMMEDIATE(default_val) || !default_val) ? default_val : (ID)AUTORELEASE(default_val);
         }
 
         ID found = map_get_sentinel((CljPersistentMap*)target, op, NOT_FOUND);
         if (found && found != NOT_FOUND) RETAIN(found);
 
         if (found == NOT_FOUND) {
-            return default_val;
+            return (IS_IMMEDIATE(default_val) || !default_val) ? default_val : (ID)AUTORELEASE(default_val);
         }
 
         if (default_val) {
             RELEASE(default_val);
         }
 
-        return found;
+        return (ID)AUTORELEASE(found);
     }
 
     if (op_tag == CLJ_SYMBOL) {
@@ -1257,7 +1250,8 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
 
         unsigned char fn_tag = TAG(fn);
         if (fn_tag == CLJ_MAP_PERSISTENT) {
-            return eval_map_lookup_vec(args, env, st, ctx, fn);
+            ID r = eval_map_lookup_vec(args, env, st, ctx, fn);
+            return (IS_IMMEDIATE(r) || !r) ? r : (ID)AUTORELEASE(r);
         }
 
         if (fn_tag == CLJ_FUNC || fn_tag == CLJ_CLOSURE) {
@@ -1305,6 +1299,7 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
                         argv[argc++] = eval_arg_from_expr_with_context(arg_expr, eval_env, st, ctx);
                     }
                     ID result = native_func(argv, argc);
+                    /* Builtins return pool-safe refs (already autoreleased); do not AUTORELEASE again. */
                     return result;
                 }
             }
@@ -1358,7 +1353,13 @@ static INLINE ID call_function_with_args_and_context_vec(ID fn, CljPersistentVec
     if (result == SYM_NIL) {
         return NULL;
     }
-    return AUTORELEASE(result);
+    /* HACK: Compensate for a retain-counting bug: exceptions can reach this path with rc=0
+     * (e.g. when returned from macro expansion / canonicalize eval). RETAIN once so
+     * caller does not release an already-dead object. TODO: Fix at source and remove. */
+    if (TAG(result) == CLJ_EXCEPTION && !IS_IMMEDIATE(result))
+        RETAIN(result);
+    /* Eval path returns autoreleased refs (MEMORY_POLICY). Do not AUTORELEASE again. */
+    return result;
 }
 
 // List evaluation: convert to call-site and dispatch.
@@ -1448,21 +1449,9 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
                 }
             }
 
-            if (!handled && original_op_sym->cname) {
-                if (strcmp(original_op_sym->cname, "try") == 0) {
-                    result = eval_special_try(args, effective_env, effective_st, ctx);
-                    handled = true;
-                } else if (strcmp(original_op_sym->cname, "loop") == 0) {
-                    result = eval_special_loop(args, effective_env, effective_st, ctx);
-                    handled = true;
-                } else if (strcmp(original_op_sym->cname, "recur") == 0) {
-                    result = eval_special_recur(args, effective_env, effective_st, ctx);
-                    handled = true;
-                }
-            }
-
             if (handled) {
-                return result;
+                /* MEMORY_POLICY: eval returns autoreleased so callers need not release. */
+                return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
             }
         }
     }
@@ -1483,7 +1472,8 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
     }
 
     if (is_map(op)) {
-        return eval_map_lookup_vec(call->args, effective_env, effective_st, ctx, op);
+        ID r = eval_map_lookup_vec(call->args, effective_env, effective_st, ctx, op);
+        return (IS_IMMEDIATE(r) || !r) ? r : (ID)AUTORELEASE(r);
     }
 
     if (TAG(op) == CLJ_VECTOR_PERSISTENT || TAG(op) == CLJ_VECTOR_TRANSIENT) {
@@ -2336,10 +2326,11 @@ ID eval_doseq(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, c
             });
 
             CljObject *next = (CljObject*)seq_next((CljObject*)cur);
+            if (next && !IS_IMMEDIATE(next)) RETAIN(next);
             if (TAG((ID)cur) == CLJ_SEQ) RELEASE(cur);
             cur = (CljSeqIterator*)next;
         }
-        if (cur && TAG((ID)cur) == CLJ_SEQ) RELEASE(cur);
+        if (cur && !IS_IMMEDIATE(cur)) RELEASE(cur);
     }
     RELEASE(coll_eval);
     return AUTORELEASE(NULL); // doseq always returns nil
@@ -2366,19 +2357,9 @@ ID eval_list_function(CljList *list, CljPersistentMap *env) {
     return args_list;
 }
 
-// ============================================================================
-// EVAL_LET - Let bindings implementation
-// NOTE: Destructuring is handled at AST canonicalization time (ast_canon.c)
-// using Clojure's (destructure ...) function. By the time we get here,
-// all bindings are simple symbol-value pairs.
-// ============================================================================
+// (let [bindings*] body*) — destructuring in ast_canon; here bindings are symbol init-expr pairs.
 ID eval_let(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
-    // (let [bindings*] body*)
-    // bindings* => binding-form init-expr
-
-    if (!args || !st) {
-        return NULL;
-    }
+    CLJ_ASSERT(args != NULL && st != NULL);
 
     CljPersistentMap *eval_env = eval_env_or_ns_mappings(env, st);
     if (!eval_env) {
@@ -2388,199 +2369,87 @@ ID eval_let(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, con
     }
 
     unsigned int argc = vector_count(args);
-
-    // Get bindings vector (first element): (let [x 10 y 20] ...)
-    CljObject *bindings_vec = (argc >= 1) ? (CljObject*)vector_nth(args, 0) : NULL;
-    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR_PERSISTENT) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                       "let requires a vector for bindings",
-                       NULL, 0, 0);
-        return NULL;
-    }
-
+    CLJ_ASSERT(argc >= 1 && "let: at least bindings vector required");
+    CljObject *bindings_vec = (CljObject*)vector_nth(args, 0);
+    CLJ_ASSERT(bindings_vec && TAG(bindings_vec) == CLJ_VECTOR_PERSISTENT && "let: bindings must be a vector");
     CljPersistentVector *bindings = as_vector((CljValue)bindings_vec);
-    if (!bindings) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                       "let bindings must be a valid vector",
-                       NULL, 0, 0);
-        return NULL;
-    }
+    CLJ_ASSERT(bindings != NULL);
     int binding_count = vector_count(bindings);
-
-    // Bindings must come in pairs (symbol value symbol value ...)
-    if (binding_count % 2 != 0) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                       "let requires an even number of forms in binding vector",
-                       NULL, 0, 0);
-        return NULL;
-    }
+    CLJ_ASSERT(binding_count % 2 == 0 && "let: even number of binding forms required");
 
     int pair_count = binding_count / 2;
-    bool has_frame = pair_count > 0;
 
-    // Start from captured env_stack (if any), but do NOT mutate it.
-    // We take an owned ref so later pushes can COW without touching the original.
     CljPersistentVector *let_stack = ctx ? (CljPersistentVector*)RETAIN(ctx->env_stack) : NULL;
-    // let_stack_owned previously tracked ownership; now unused with global pools.
 
-    // Frame for fast local lookups during initializer evaluation.
-    CallFrame *let_frame = NULL;
-    ID *binding_params = NULL;
-    ID *binding_values = NULL;
     CallFrame let_frame_storage;
     ID binding_slots[CALLFRAME_MAX_PARAMS * 2];
-    if (has_frame) {
-        CLJ_ASSERT(pair_count <= CALLFRAME_MAX_PARAMS && "Too many let bindings");
-        let_frame = &let_frame_storage;
-        frame_init(let_frame, ctx ? ctx->frame : NULL);
-        binding_params = binding_slots;
-        binding_values = binding_slots + pair_count;
-    }
+    CLJ_ASSERT(pair_count <= CALLFRAME_MAX_PARAMS && "let: too many bindings");
+    CallFrame *let_frame = &let_frame_storage;
+    ID *binding_params = binding_slots;
+    ID *binding_values = binding_slots + pair_count;
+    frame_init(let_frame, ctx ? ctx->frame : NULL);
 
-    // Let locals map (heap) stored as top frame in env_stack.
-    CljPersistentMap *let_env_map = NULL;
-    if (has_frame) {
-        let_env_map = make_map(pair_count);
-        env_stack_push_inplace(&let_stack, let_env_map);
-        // env_stack retains its elements; keep a borrowed pointer for updates.
-        RELEASE(let_env_map);
-    }
+    CljPersistentMap *let_env_map = make_map(pair_count);
+    env_stack_push_inplace(&let_stack, let_env_map);
+    RELEASE(let_env_map);
 
     EvalContext let_ctx = ctx ? *ctx : (EvalContext){0};
-    let_ctx.frame = ctx ? ctx->frame : NULL;
+    let_ctx.frame = let_frame;
     let_ctx.env_stack = let_stack;
-    if (!let_ctx.env) {
-        let_ctx.env = eval_env;
-    }
-    if (!let_ctx.st) {
-        let_ctx.st = st;
-    }
+    let_ctx.env = let_ctx.env ? let_ctx.env : eval_env;
+    let_ctx.st = let_ctx.st ? let_ctx.st : st;
 
     int binding_index = 0;
-
-
     for (int i = 0; i < binding_count; i += 2) {
         CljValue sym_val = (CljValue)vector_nth(bindings, i);
         CljValue init_val = (CljValue)vector_nth(bindings, i + 1);
+        CLJ_ASSERT(sym_val && TAG(sym_val) == CLJ_SYMBOL && "let: binding form must be a symbol");
 
-        unsigned char sym_tag = TAG(sym_val);
-        if (!sym_val || sym_tag != CLJ_SYMBOL) {
-            if (has_frame) frame_release(let_frame);
-            RELEASE(let_stack);
-            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                           "let binding must be a symbol",
-                           NULL, 0, 0);
-            return NULL;
+        ID value = (!init_val || is_fixnum(init_val) || is_special(init_val))
+            ? (ID)init_val : eval_body(init_val, eval_env, st, &let_ctx);
+
+        binding_params[binding_index] = sym_val;
+        binding_values[binding_index] = value;
+        if (value && !IS_IMMEDIATE(value)) RETAIN(value);
+        frame_set_bindings(let_frame, ctx ? ctx->frame : NULL,
+                           binding_params, binding_values, binding_index + 1);
+
+        CljPersistentMap *updated = map_assoc(let_env_map, sym_val, value);
+        if (updated && updated != let_env_map && let_ctx.env_stack) {
+            vector_assoc_inplace(&let_ctx.env_stack, vector_count(let_ctx.env_stack) - 1, (ID)updated);
+            let_env_map = updated;
         }
-
-        ID value = NULL;
-        if (!init_val) {
-            value = NULL;
-        } else if (is_fixnum(init_val) || is_special(init_val)) {
-            value = init_val;
-        } else {
-            value = eval_body(init_val, eval_env, st, &let_ctx);
-        }
-
-        if (has_frame) {
-            binding_params[binding_index] = sym_val;
-            binding_values[binding_index] = value;
-            if (value && !IS_IMMEDIATE(value)) {
-                RETAIN(value);
-            }
-            frame_set_bindings(let_frame, ctx ? ctx->frame : NULL,
-                               binding_params, binding_values, binding_index + 1);
-
-            // Make newly created bindings visible to subsequent initializers
-            let_ctx.frame = let_frame;
-            // Also expose bindings via the top env_stack map for closures and symbol resolution.
-            // Update the single let_env_map incrementally (avoid rebuilding env_stack).
-            if (let_env_map) {
-                // Use map_assoc (COW-aware) instead of map_put (deprecated, no growth/duplicate checks).
-                // This should remain in-place for rc=1 + sufficient capacity, but we still
-                // handle the "new pointer" case defensively to keep env_stack consistent.
-                CljPersistentMap *updated = map_assoc(let_env_map, sym_val, value);
-                if (updated && updated != let_env_map && let_ctx.env_stack) {
-                    unsigned int top_idx = vector_count(let_ctx.env_stack) - 1;
-                    vector_assoc_inplace(&let_ctx.env_stack, top_idx, (ID)updated);
-                    let_env_map = updated;
+        ID stored_value = binding_values[binding_index];
+        if (is_closure(stored_value)) {
+            CljFunction *f = as_function(stored_value);
+            if (f) {
+                bool already_bound = false;
+                ENV_STACK_FOR_EACH_REVERSE(f->env_stack, env_obj) {
+                    if (is_map(env_obj) && map_get((CljPersistentMap*)env_obj, sym_val) != NOT_FOUND) {
+                        already_bound = true;
+                        break;
+                    }
                 }
-            }
-
-            // Let recursion support:
-            // If the bound value is a closure, make the binding visible to the closure body
-            // by prepending a self-binding frame (only if it's not already present).
-            //
-            // This supports patterns like:
-            //   (let [step (fn [n] (if ... (step ...)))] (step 5))
-            //
-            // IMPORTANT: Never overwrite an existing captured env_stack (that breaks valid closures).
-            // We only *prepend* a binding frame.
-            ID stored_value = binding_values[binding_index];
-            if (is_closure(stored_value)) {
-                CljFunction *f = as_function(stored_value);
-                if (f) {
-                    bool already_bound = false;
-                    ENV_STACK_FOR_EACH_REVERSE(f->env_stack, env_obj) {
-                        if (is_map(env_obj)) {
-                            ID found = map_get((CljPersistentMap*)env_obj, sym_val);
-                            if (found != NOT_FOUND) {
-                                already_bound = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!already_bound) {
-                        CljPersistentMap *self_bind = map_assoc(map_empty(), sym_val, stored_value);
-                        env_stack_push_inplace(&f->env_stack, self_bind);
-                        RELEASE(self_bind);
-                    }
+                if (!already_bound) {
+                    CljPersistentMap *self_bind = map_assoc(map_empty(), sym_val, stored_value);
+                    env_stack_push_inplace(&f->env_stack, self_bind);
+                    RELEASE(self_bind);
                 }
             }
         }
-
-        if (value && !IS_IMMEDIATE(value)) {
-            RELEASE(value);
-        }
-
+        if (value && !IS_IMMEDIATE(value)) RELEASE(value);
         binding_index++;
     }
 
-    if (has_frame) {
-        // Keep frame for direct symbol resolution.
-        let_ctx.frame = let_frame;
-    }
-
     ID result = NULL;
-    CljPersistentMap *body_env = let_ctx.env ? let_ctx.env : env;
-    for (unsigned int i = 1; i < argc; i++) {
-        ID body_expr = vector_nth(args, i);
+    VECTOR_FOR_EACH(args, body_expr) {
+        if (_i == 0) continue;
         if (!body_expr) continue;
-
-        RELEASE(result);
-        if (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr)) {
-            result = body_expr;
-            RETAIN(result);
-        } else {
-            result = eval_body(body_expr, body_env, st, &let_ctx);
-        }
+        result = (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr))
+            ? body_expr : eval_body(body_expr, let_ctx.env, st, &let_ctx);
     }
 
-    if (has_frame) {
-        bool result_in_frame = false;
-        if (result && !IS_IMMEDIATE(result)) {
-            for (int i = 0; i < binding_index; i++) {
-                if (binding_values[i] == result) {
-                    result_in_frame = true;
-                    break;
-                }
-            }
-            if (result_in_frame)
-                RETAIN(result);
-        }
-        frame_release(let_frame);
-    }
+    frame_release_except(let_frame, result);
     RELEASE(let_stack);
     return result;
 }
@@ -2773,7 +2642,6 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
         if (count == 0) return expr;
         
         CljPersistentVector *result = make_vector(count, STRONG);
-        RETAIN(result);
         VECTOR_FOR_EACH(vec, elem) {
             ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, eval_env, eval_st, ctx) : NULL;
             ASSIGN(result, vector_conj(result, eval_elem));

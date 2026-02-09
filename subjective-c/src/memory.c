@@ -60,8 +60,16 @@ static THREAD_LOCAL RcHistEntry g_rchist[RCHIST_SIZE];
 static THREAD_LOCAL unsigned int g_rchist_head = 0;
 
 static void rchist_push(CljObject *v, char op, int rc_after) {
-    // capture caller of retain/release (best-effort) to aid debug
-    g_rchist[g_rchist_head] = (RcHistEntry){ v, op, rc_after, __builtin_return_address(0) };
+    /* Frame 0 = retain/release/autorelease, frame 1 = actual RELEASE/RETAIN/AUTORELEASE call site */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wframe-address"
+#endif
+    void *caller = __builtin_return_address(1);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+    g_rchist[g_rchist_head] = (RcHistEntry){ v, op, rc_after, caller };
     g_rchist_head = (g_rchist_head + 1) % RCHIST_SIZE;
 }
 
@@ -366,6 +374,7 @@ uint32_t autorelease_pool_mark(void) {
 
 CljObject *autorelease(CljObject *v) {
     if (!v) return NULL;
+    if (v == (CljObject*)g_pool) return v; /* never add pool to itself (would double-release in remove/drain) */
     CLJ_ASSERT(g_pool && "autorelease_pool_init() not called");
     if (g_in_drain) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
@@ -445,6 +454,22 @@ CljObject *autorelease(CljObject *v) {
     }
 #endif
     return v;
+}
+
+bool autorelease_pool_remove(CljObject *obj) {
+    if (!obj || IS_IMMEDIATE(obj) || is_singleton(obj) || !g_pool || g_in_drain) return false;
+    unsigned int c = vector_count(g_pool);
+    for (unsigned int i = c; i > 0; i--) {
+        unsigned int idx = i - 1;
+        if (vector_nth(g_pool, idx) == (ID)obj) {
+            CljPersistentVector *old = g_pool;
+            g_pool = vector_by_removing_at(g_pool, idx);
+            if (g_pool != old) RELEASE(old);
+            obj->flags &= (uint8_t)~CLJ_FLAG_IN_AUTORELEASE;
+            return true;
+        }
+    }
+    return false;
 }
 
 uint32_t autorelease_pool_peak_count(void) {
