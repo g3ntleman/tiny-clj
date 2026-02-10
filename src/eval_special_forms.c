@@ -349,13 +349,6 @@ ID eval_special_quote(CljPersistentVector *args, CljPersistentMap *env, EvalStat
     ID quoted_expr = args_nth(args, 0);
     if (!quoted_expr) return NULL;
     if (IS_IMMEDIATE(quoted_expr)) return quoted_expr;
-    CljObject *obj = (CljObject*)quoted_expr;
-#ifdef DEBUG
-    // Debug-only: If already in pool (parsed AST), don't add another retain.
-    if (obj->flags & CLJ_FLAG_IN_AUTORELEASE) {
-        return quoted_expr;
-    }
-#endif
     // Otherwise retain to decouple from AST lifetime, then autorelease for caller ownership.
     return AUTORELEASE(RETAIN(quoted_expr));
 }

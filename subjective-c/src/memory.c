@@ -113,6 +113,16 @@ static void rchist_dump_for_object(CljObject *v) {
 }
 #endif
 
+static inline bool autorelease_pool_contains(CljObject *obj) {
+    if (!obj || !g_pool) return false;
+    unsigned int c = vector_count(g_pool);
+    ID *arr = vector_as_array(g_pool);
+    for (unsigned int i = 0; i < c; i++) {
+        if ((CljObject*)arr[i] == obj) return true;
+    }
+    return false;
+}
+
 extern bool g_memory_verbose_mode;
 static bool g_debug_output_enabled = false;
 static bool g_debug_output_active = false;
@@ -399,7 +409,7 @@ CljObject *autorelease(CljObject *v) {
             "autorelease called during drain");
         return (CljObject*)NULL;
     }
-    if (v->flags & CLJ_FLAG_IN_AUTORELEASE) {
+    if (autorelease_pool_contains(v)) {
         return v;
     }
 #ifdef DEBUG
@@ -453,7 +463,6 @@ CljObject *autorelease(CljObject *v) {
     }
 #endif
     ASSIGN(g_pool, vector_conj_owned(g_pool, v));
-    v->flags |= CLJ_FLAG_IN_AUTORELEASE;
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
     rchist_push(v, 'A', v->rc);
 #endif
@@ -550,9 +559,6 @@ void autorelease_pool_drain_to_depth(uint32_t mark) {
                 }
             }
 #endif
-            if (!IS_IMMEDIATE(e)) {
-                ((CljObject*)e)->flags &= (uint8_t)~CLJ_FLAG_IN_AUTORELEASE;
-            }
             RELEASE(e);
         }
     }
