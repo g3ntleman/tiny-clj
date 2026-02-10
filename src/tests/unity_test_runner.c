@@ -228,6 +228,9 @@ void setUp(void) {
         strcmp(g_current_test_entry->group, "shared_test_string") == 0) {
         WITH_AUTORELEASE_POOL({
             (void)eval_string("(require 'clojure.string)", g_test_eval_state);
+            // Warm once to exclude one-time callsite/lazy costs from per-test heap checks.
+            (void)eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
+            (void)eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
         });
     }
 

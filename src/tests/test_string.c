@@ -4,7 +4,7 @@
  * Tests for string manipulation functions from clojure.string namespace
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 800
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 100
 #include "tests_common.h"
 #include "namespace.h"
 #include "symbol.h"
@@ -123,26 +123,21 @@ TEST_SHARED(test_string_escape) {
 // INCLUDES? TESTS
 // ============================================================================
 
-TEST_SHARED(test_string_includes_true) {
+TEST_SHARED(test_string_includes) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Load clojure.string namespace first
     load_clojure_string_namespace();
     
-    CljObject *result = eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
-}
-
-TEST_SHARED(test_string_includes_false) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Load clojure.string namespace first
-    load_clojure_string_namespace();
-
-    CljObject *result = eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+    // Test: (clojure.string/includes? "hello" "ell") => true
+    CljObject *result1 = eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(result1 == clj_true);
+    
+    // Test: (clojure.string/includes? "hello" "xyz") => false
+    CljObject *result2 = eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
 // ============================================================================
