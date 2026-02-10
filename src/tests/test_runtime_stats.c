@@ -430,11 +430,6 @@ TEST(test_runtime_stats_core_load_idempotent_memory)
     load_clojure_core(g_test_eval_state);
     MemoryStats second = memory_profiler_get_stats();
 
-    fprintf(stderr, "[core-idempotent] first bytes-current=%zu bytes-peak=%zu\n",
-            first.current_memory_usage, first.peak_memory_usage);
-    fprintf(stderr, "[core-idempotent] second bytes-current=%zu bytes-peak=%zu\n",
-            second.current_memory_usage, second.peak_memory_usage);
-
     // Allow small fluctuations from transient allocations, but no growth trend.
     size_t tolerance = 0;
     assert_memory_stats_not_increasing(&first, &second, tolerance,
@@ -475,13 +470,6 @@ TEST(test_runtime_stats_autorelease_loop_does_not_grow_heap)
     }
 
     MemoryStats after = memory_profiler_get_stats();
-
-    size_t delta = (after.current_memory_usage > before.current_memory_usage)
-                   ? (after.current_memory_usage - before.current_memory_usage)
-                   : 0;
-
-    fprintf(stderr, "[autorelease-loop] before=%zu after=%zu delta=%zu\n",
-            before.current_memory_usage, after.current_memory_usage, delta);
 
     // Expect zero growth after warm baseline.
     if (after.current_memory_usage > before.current_memory_usage) {
@@ -524,7 +512,7 @@ TEST(test_runtime_stats_memory_stats_stable_in_loop)
         if (now.current_memory_usage > baseline.current_memory_usage) {
             print_memory_type_deltas(&baseline, &now, "stable-loop");
         }
-        assert_memory_stats_not_increasing(&baseline, &now, 100,
+        assert_memory_stats_not_increasing(&baseline, &now, 0,
                                            "memory-stats should remain stable during loop");
     }
 }
