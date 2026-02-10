@@ -2634,8 +2634,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
         if (!ctx || !ctx->frame) return NULL;
         ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
         if (v == NOT_FOUND || !v) return NULL;
-        if (IS_IMMEDIATE(v)) return v;
-        return AUTORELEASE(RETAIN(v));
+        return v;
     }
 
     if (expr_tag == CLJ_SYMBOL) {
@@ -2652,8 +2651,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
                     return NULL;  // Parameter bound to nil
                 }
                 if (!frame_value) return NULL;
-                if (IS_IMMEDIATE(frame_value)) return frame_value;
-                return AUTORELEASE(RETAIN(frame_value));
+                return frame_value;
             }
         }
         
@@ -3080,16 +3078,28 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
     CLJ_ASSERT(expr_str != NULL);
     CLJ_ASSERT(eval_state != NULL);
 
-    Reader reader;
-    reader_init(&reader, expr_str);
-    reader_set_source_name(&reader, "<string input>");
+    // eval_string reparses on every call, so callsite cache entries on ephemeral
+    // AST nodes only add churn and can retain short-lived constants.
+    uint64_t saved_epoch = g_runtime.resolve_cache_epoch;
+    g_runtime.resolve_cache_epoch = 0;
 
-    CljValue parsed = parse_from_reader(&reader, eval_state);
-    if (parsed == NULL) {
-        throw_exception(EXCEPTION_PARSE, "Failed to parse expression", __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    return eval_parsed_value(parsed, eval_state);
+    ID result = NULL;
+    WITH_AUTORELEASE_POOL({
+        Reader reader;
+        reader_init(&reader, expr_str);
+        reader_set_source_name(&reader, "<string input>");
+
+        CljValue parsed = parse_from_reader(&reader, eval_state);
+        if (parsed == NULL) {
+            throw_exception(EXCEPTION_PARSE, "Failed to parse expression", __FILE__, __LINE__, 0);
+            result = NULL;
+        } else {
+            result = eval_parsed_value(parsed, eval_state);
+            RETAIN(result);
+        }
+    });
+    g_runtime.resolve_cache_epoch = saved_epoch;
+    return AUTORELEASE(result);
 }
 
 // ============================================================================

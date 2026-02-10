@@ -3,7 +3,7 @@
  * 
  * Extracted from builtins.c for better code organization.
  * Provides: str, subs, trim, upper-case, lower-case, pad-left,
- * last-index-of, reverse (string), format
+ * index-of, last-index-of, reverse (string), format
  */
 
 #include <stdlib.h>
@@ -384,6 +384,67 @@ ID native_pad_left(ID *args, unsigned int argc) {
     return AUTORELEASE(result);
 }
 
+// String index-of: (index-of s value) or (index-of s value from-index)
+ID native_index_of(ID *args, unsigned int argc) {
+    CHECK_ARITY_RANGE(argc, 2, 3, "index-of");
+
+    ID str_arg = args[0];
+    ID value_arg = args[1];
+    ID from_index_arg = argc == 3 ? args[2] : NULL;
+
+    if (!str_arg || TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "index-of requires a string as first argument");
+        return NULL;
+    }
+
+    if (!value_arg || TAG(value_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "index-of requires a string as second argument");
+        return NULL;
+    }
+
+    CljString *str = as_clj_string(str_arg);
+    CljString *value = as_clj_string(value_arg);
+    if (!str || !value) return NULL;
+
+    const char *str_data = string_data(str);
+    const char *value_data = clj_string_data(value);
+    int str_len = (int)string_length(str);
+    int value_len = (int)string_length(value);
+
+    int from_index = 0;
+    if (from_index_arg) {
+        if (TAG(from_index_arg) != CLJ_INT) {
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                      "index-of requires an integer as from-index");
+            return NULL;
+        }
+        from_index = as_fixnum(from_index_arg);
+    }
+
+    if (from_index < 0 || from_index > str_len) {
+        return NULL;
+    }
+
+    if (value_len == 0) {
+        return fixnum(from_index);
+    }
+
+    if (value_len > str_len || from_index >= str_len) {
+        return NULL;
+    }
+
+    int last_start = str_len - value_len;
+    for (int i = from_index; i <= last_start; i++) {
+        if (memcmp(str_data + i, value_data, (size_t)value_len) == 0) {
+            return fixnum(i);
+        }
+    }
+
+    return NULL;
+}
+
 // String last-index-of: (last-index-of s value) or (last-index-of s value from-index)
 ID native_last_index_of(ID *args, unsigned int argc) {
     CHECK_ARITY_RANGE(argc, 2, 3, "last-index-of");
@@ -698,6 +759,12 @@ BuiltinFn builtins_strings_native_function_lookup(CljSymbol *symbol) {
     char qualified_name[128];
     if (ns_name) {
         mini_snprintf(qualified_name, sizeof(qualified_name), "%s/%s", ns_name, cname);
+    }
+
+    if (cname && strcmp(cname, "index-of") == 0) {
+        if (!ns_name || strcmp(ns_name, "clojure.string") == 0) {
+            return native_index_of;
+        }
     }
 
     for (int i = 0; builtins_strings_native_function_table[i].clojure_symbol != NULL; i++) {

@@ -51,6 +51,16 @@ static THREAD_LOCAL bool g_in_drain = false;
 
 #ifdef DEBUG
 static THREAD_LOCAL uint32_t g_pool_peak_count = 0;
+
+static inline bool autorelease_pool_contains(CljObject *obj) {
+    if (!obj || !g_pool) return false;
+    unsigned int c = vector_count(g_pool);
+    ID *arr = vector_as_array(g_pool);
+    for (unsigned int i = 0; i < c; i++) {
+        if ((CljObject*)arr[i] == obj) return true;
+    }
+    return false;
+}
 #endif
 
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
@@ -110,18 +120,6 @@ static void rchist_dump_for_object(CljObject *v) {
 #endif
     }
     fflush(stderr);
-}
-#endif
-
-#ifdef DEBUG
-static inline bool autorelease_pool_contains(CljObject *obj) {
-    if (!obj || !g_pool) return false;
-    unsigned int c = vector_count(g_pool);
-    ID *arr = vector_as_array(g_pool);
-    for (unsigned int i = 0; i < c; i++) {
-        if ((CljObject*)arr[i] == obj) return true;
-    }
-    return false;
 }
 #endif
 
@@ -415,8 +413,7 @@ CljObject *autorelease(CljObject *v) {
     if (autorelease_pool_contains(v)) {
         return v;
     }
-#endif
-#ifdef DEBUG
+
     {
         const char *trace_list = getenv("TINYCLJ_TRACE_LIST_AUTORELEASE");
         const char *trace_ast = getenv("TINYCLJ_TRACE_AST_AUTORELEASE");

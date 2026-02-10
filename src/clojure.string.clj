@@ -62,20 +62,22 @@ R"CLOJURE_STRING(
 (defn escape [s cmap]
   (if (or (nil? s) (= (count s) 0))
     s
-    (let [s-len (count s)]
-      (loop [idx 0
-             out nil]
-        (if (>= idx s-len)
-          (if (nil? out) s out)
-          (let [c (subs s idx (+ idx 1))
-                replacement (get cmap c)]
-            (if (nil? replacement)
-              (if (nil? out)
-                (recur (+ idx 1) nil)
-                (recur (+ idx 1) (str out c)))
-              (if (nil? out)
-                (recur (+ idx 1) (str (subs s 0 idx) (str replacement)))
-                (recur (+ idx 1) (str out (str replacement)))))))))))
+    (if (empty? cmap)
+      s
+      (let [s-len (count s)]
+        (loop [idx 0
+               out nil]
+          (if (>= idx s-len)
+            (if (nil? out) s out)
+            (let [c (subs s idx (+ idx 1))
+                  replacement (get cmap c)]
+              (if (nil? replacement)
+                (if (nil? out)
+                  (recur (+ idx 1) nil)
+                  (recur (+ idx 1) (str out c)))
+                (if (nil? out)
+                  (recur (+ idx 1) (str (subs s 0 idx) (str replacement)))
+                  (recur (+ idx 1) (str out (str replacement))))))))))))
 
 ;; includes? - True if s includes substr
 ^#^{:doc "Returns true if s contains substr."}
@@ -84,21 +86,7 @@ R"CLOJURE_STRING(
 
 ;; index-of - Returns index of value in s, optionally searching from from-index
 ^#^{:doc "Returns the index of value in s, or nil if not found. If from-index is provided, starts searching from that index."}
-(defn index-of [s value from-index]
-  (if (or (nil? s) (nil? value))
-    nil
-    (let [s-len (count s)
-          value-len (count value)
-          start-idx (if (nil? from-index) 0 from-index)]
-      (if (or (< s-len value-len) (< start-idx 0) (>= start-idx s-len))
-        nil
-        (loop [idx start-idx]
-          (if (> (+ idx value-len) s-len)
-            nil
-            (let [substr (subs s idx (+ idx value-len))]
-              (if (= substr value)
-                idx
-                (recur (+ idx 1))))))))))
+(defn index-of [s value from-index] :native)
 
 ;; join - Joins collection with separator
 ^#^{:doc "Joins the strings in coll, inserting separator between elements. Treats nil separator as \"\"."}

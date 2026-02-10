@@ -4,7 +4,7 @@
  * Tests for string manipulation functions from clojure.string namespace
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 100
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 50
 #include "tests_common.h"
 #include "namespace.h"
 #include "symbol.h"
@@ -38,17 +38,17 @@ TEST_SHARED(test_string_blank) {
     CljObject *result1 = eval_string("(clojure.string/blank? nil)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(result1 == clj_true);
-    
+
     // Test: (clojure.string/blank? "") => true
     CljObject *result2 = eval_string("(clojure.string/blank? \"\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_TRUE(result2 == clj_true);
-    
+
     // Test: (clojure.string/blank? "   ") => true
     CljObject *result3 = eval_string("(clojure.string/blank? \"   \")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
     TEST_ASSERT_TRUE(result3 == clj_true);
-    
+
     // Test: (clojure.string/blank? "abc") => false
     CljObject *result4 = eval_string("(clojure.string/blank? \"abc\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
@@ -71,7 +71,7 @@ TEST_SHARED(test_string_capitalize) {
     TEST_ASSERT_TRUE(result1 && TAG(result1) == CLJ_STRING);
     CljString *str1 = as_clj_string(result1);
     TEST_ASSERT_EQUAL_STRING("Hello", clj_string_data(str1));
-    
+
     // Test: (clojure.string/capitalize "HELLO") => "Hello"
     CljObject *result2 = eval_string("(clojure.string/capitalize \"HELLO\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
@@ -94,7 +94,7 @@ TEST_SHARED(test_string_ends_with) {
     CljObject *result1 = eval_string("(clojure.string/ends-with? \"hello\" \"lo\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(result1 == clj_true);
-    
+
     // Test: (clojure.string/ends-with? "hello" "x") => false
     CljObject *result2 = eval_string("(clojure.string/ends-with? \"hello\" \"x\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
@@ -133,7 +133,7 @@ TEST_SHARED(test_string_includes) {
     CljObject *result1 = eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(result1 == clj_true);
-    
+
     // Test: (clojure.string/includes? "hello" "xyz") => false
     CljObject *result2 = eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);

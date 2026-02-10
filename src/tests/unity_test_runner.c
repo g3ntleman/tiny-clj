@@ -54,6 +54,7 @@ static bool g_memory_profiler_initialized = false;
 #endif
 static bool g_heap_check_enabled = false;
 static size_t g_heap_growth_limit_bytes = 0;
+static uint32_t g_heap_baseline_pool_depth = 0;
 
 static bool is_shared_test_entry(const SubjectiveCTestEntry *entry) {
     if (!entry || !entry->group) return false;
@@ -78,6 +79,7 @@ static void test_heap_growth_mark_baseline(void) {
 #if MEMORY_PROFILING_ENABLED
     if (g_heap_check_enabled && is_memory_profiling_enabled()) {
         g_heap_baseline = memory_profiler_get_stats();
+        g_heap_baseline_pool_depth = autorelease_pool_depth();
     }
 #endif
 }
@@ -162,6 +164,18 @@ void setUp(void) {
     
     // In batch mode, skip heavy initialization (clojure.core already loaded)
     if (g_batch_mode) {
+        // Keep batch-mode behavior consistent with full setUp for shared string tests:
+        // include clojure.string load and one-time callsite warmup in setup budget.
+        if (g_current_test_entry && g_current_test_entry->group &&
+            strcmp(g_current_test_entry->group, "shared_test_string") == 0) {
+            WITH_AUTORELEASE_POOL({
+                (void)eval_string("(require 'clojure.string)", g_test_eval_state);
+                (void)eval_string("(clojure.string/escape \"abc\" {})", g_test_eval_state);
+                (void)eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
+                (void)eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
+                (void)eval_string("(clojure.string/index-of \"hello\" \"l\" 0)", g_test_eval_state);
+            });
+        }
         test_heap_growth_mark_baseline();
         return;
     }
@@ -229,8 +243,10 @@ void setUp(void) {
         WITH_AUTORELEASE_POOL({
             (void)eval_string("(require 'clojure.string)", g_test_eval_state);
             // Warm once to exclude one-time callsite/lazy costs from per-test heap checks.
+            (void)eval_string("(clojure.string/escape \"abc\" {})", g_test_eval_state);
             (void)eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
             (void)eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
+            (void)eval_string("(clojure.string/index-of \"hello\" \"l\" 0)", g_test_eval_state);
         });
     }
 
@@ -249,6 +265,9 @@ void test_ensure_clojure_core(void) {
 void tearDown(void) {
     // In batch mode, skip heavy teardown
     if (g_batch_mode) {
+        // Same semantics as non-batch: exclude test-local autorelease residues
+        // from heap growth checks.
+        autorelease_pool_drain_to_depth(g_heap_baseline_pool_depth);
         test_heap_growth_check();
         return;
     }
@@ -262,6 +281,9 @@ void tearDown(void) {
     if (g_memory_verbose_mode) {
         memory_profiler_print_stats("Test Complete");
     }
+    // Exclude test-local autoreleased temporaries (including eval results) from
+    // heap growth checks by restoring pool depth to the setup baseline first.
+    autorelease_pool_drain_to_depth(g_heap_baseline_pool_depth);
     test_heap_growth_check();
     memory_profiler_check_leaks("Test Complete");
     // Drain and free autorelease pool so it does not grow across tests (e.g. when
