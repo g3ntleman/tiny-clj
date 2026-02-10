@@ -99,25 +99,41 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
         }
 
         if (seq_val) {
-            // Normalize through seq/first/rest to preserve existing semantics.
-            ID seq_args[1] = {seq_val};
-            ID seq_obj = native_seq(seq_args, 1);
-            if (seq_obj) {
-                ID one_arg[1] = {seq_obj};
-                first_val = native_first(one_arg, 1);
-                rest_val = native_rest(one_arg, 1);
-
-                // Empty sequence: first and rest both nil -> leave first_val/rest_val NULL.
-                // Sequence (nil . rest): first is nil but rest non-nil -> store SYM_NIL.
-                if (!first_val && rest_val) {
-                    first_val = SYM_NIL;
+            if (TAG(seq_val) == CLJ_SEQ) {
+                // Fast-path: already a seq wrapper; avoid make_seq(retain) churn.
+                CljSeqIterator *seq_view = as_seq(seq_val);
+                bool rest_borrowed = (seq_view && seq_view->iter.seq_type == CLJ_LIST);
+                first_val = seq_first(seq_val);
+                RETAIN(first_val);  // may reference seq container internals
+                rest_val = seq_next(seq_val);  // owned for non-list, borrowed for list
+                if (rest_borrowed) {
+                    RETAIN(rest_val);
                 }
+            } else {
+                // Normalize via owned seq iteration for non-seq inputs.
+                ID seq_obj = make_seq(seq_val);
+                if (seq_obj) {
+                    CljSeqIterator *seq_view = as_seq(seq_obj);
+                    bool rest_borrowed = (seq_view && seq_view->iter.seq_type == CLJ_LIST);
+                    first_val = seq_first(seq_obj);
+                    RETAIN(first_val);  // may reference seq container internals
+                    rest_val = seq_next(seq_obj);  // owned for non-list, borrowed for list
+                    if (rest_borrowed) {
+                        RETAIN(rest_val);
+                    }
+                    RELEASE(seq_obj);
+                }
+            }
+
+            // Empty sequence: first and rest both nil -> leave first_val/rest_val NULL.
+            // Sequence (nil . rest): first is nil but rest non-nil -> store SYM_NIL.
+            if (!first_val && rest_val) {
+                first_val = SYM_NIL;
             }
         }
 
         // Keep results alive after this inner pool drains.
-        RETAIN(first_val);
-        RETAIN(rest_val);
+        // first_val is retained above before advancing seq; rest_val is owned.
     });
     builtin_set_eval_state(NULL);
 
@@ -669,7 +685,8 @@ ID seq_next(ID seq_obj) {
     
     // Check if rest is empty - if so, return nil (Clojure-compatible)
     if (seq_empty(rest_seq)) {
-        seq_release(rest_seq);
+        // Release via RC path so profiler/type counters stay consistent.
+        RELEASE(rest_seq);
         return NULL;  // nil
     }
     

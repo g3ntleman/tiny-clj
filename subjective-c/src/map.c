@@ -137,6 +137,7 @@ static CljPersistentMap* map_assoc_core(CljPersistentMap* map, ID key, ID value)
   }
 
   new_map->base.type = CLJ_MAP_PERSISTENT;
+  new_map->base.flags = map->base.flags;
   new_map->count = 0;  // Start with 0, will be set correctly below
   new_map->capacity = new_capacity;
 
@@ -352,6 +353,7 @@ static CljPersistentMap* map_remove_core(CljPersistentMap *map, ID key) {
   }
 
   new_map->base.type = CLJ_MAP_PERSISTENT;
+  new_map->base.flags = map_data->base.flags;
   new_map->count = 0;
   new_map->capacity = map_data->capacity;
 
@@ -508,6 +510,7 @@ static CljPersistentMap* map_copy(CljPersistentMap *src) {
 
     // Initialize new map
   new_map->base.type = CLJ_MAP_PERSISTENT;
+  new_map->base.flags = src->base.flags;
   new_map->count = src->count;
   new_map->capacity = src->capacity;
 
