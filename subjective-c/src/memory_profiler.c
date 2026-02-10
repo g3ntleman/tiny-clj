@@ -325,9 +325,6 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
     uint8_t tt = obj->type;
     // Use stored size from hash table for consistency with creation
     (void)obj_blocks_untrack(obj, &obj_size, &tt);
-#ifdef DEBUG
-    memory_track_heap_simple(obj, obj_size, false);
-#endif
     memory_profiler_track_deallocation(obj_size);
     if (tt < CLJ_TYPE_COUNT) {
         if (g_memory_stats.bytes_current_by_type[tt] >= obj_size)
@@ -365,9 +362,6 @@ void memory_profiler_track_object_zombify(CljObject *obj) {
     uint8_t tt = obj->type;
     // Use stored size from hash table for consistency with creation
     (void)obj_blocks_untrack(obj, &obj_size, &tt);
-#ifdef DEBUG
-    memory_track_heap_simple(obj, obj_size, false);
-#endif
     memory_profiler_track_deallocation(obj_size);
     if (tt < CLJ_TYPE_COUNT) {
         if (g_memory_stats.bytes_current_by_type[tt] >= obj_size)

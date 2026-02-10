@@ -2935,8 +2935,7 @@ ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
 #ifdef DEBUG
 ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     // (heap expr) - Memory leak detector.
-    // Evaluates expr twice: first to warm up caches, second to measure.
-    // Returns a map of type -> bytes delta, or nil if all zero.
+    // Evaluates expr once and returns a map of per-type bytes deltas.
     if (!args || !st) return NULL;
 
     unsigned int argc = vector_count(args);
@@ -2948,9 +2947,6 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
     // Disable callsite cache during heap measurement to avoid cache churn artifacts
     uint64_t saved_epoch = g_runtime.resolve_cache_epoch;
     g_runtime.resolve_cache_epoch = 0;
-
-    // Warmup pass - prime caches and drain any accumulated autoreleases
-    WITH_AUTORELEASE_POOL({ (void)eval_body((ID)expr, eval_env, st, ctx); });
 
     // Capture stats before measurement
     MemoryStats stats_before = memory_profiler_get_stats();
