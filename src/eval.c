@@ -738,7 +738,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             
             // Create new vector with evaluated elements
             CljPersistentVector *result = make_vector(count, STRONG);
-            RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
@@ -748,8 +747,13 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                     eval_elem = eval_body_with_params(elem, ctx);
                 }
                 
-                // Add evaluated element to result vector
-                ASSIGN(result, vector_conj(result, eval_elem));
+                // vector_conj may return a new owned vector (or the same pointer in-place).
+                // Keep a single owned reference in `result` without extra RETAIN churn.
+                CljPersistentVector *old_result = result;
+                result = vector_conj_owned(result, eval_elem);
+                if (result != old_result) {
+                    RELEASE(old_result);
+                }
             }
             
             return AUTORELEASE(result);
@@ -758,13 +762,16 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         case CLJ_MAP_PERSISTENT: {
             CljPersistentMap *map = (CljPersistentMap*)body;
             CljPersistentMap *result = map_empty();
-            RETAIN(result);
             
             MAP_FOR_EACH(map, key, value) {
                 ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
                 ID eval_value = value ? eval_body_with_params(value, ctx) : NULL;
                 
-                ASSIGN(result, map_assoc(result, eval_key, eval_value));
+                CljPersistentMap *old_result = result;
+                result = map_assoc(result, eval_key, eval_value);
+                if (result != old_result) {
+                    RELEASE(old_result);
+                }
             }
             
             return AUTORELEASE(result);
@@ -878,7 +885,6 @@ static ID __attribute__((noinline)) eval_body_no_ctx(ID body, CljPersistentMap *
             
             // Create new vector with evaluated elements
             CljPersistentVector *result = make_vector(count, STRONG);
-            RETAIN(result);
             
             VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
@@ -890,8 +896,11 @@ static ID __attribute__((noinline)) eval_body_no_ctx(ID body, CljPersistentMap *
                     eval_elem = eval_body_no_ctx(elem, env, st);
                 }
                 
-                // Add evaluated element to result vector
-                ASSIGN(result, vector_conj(result, eval_elem));
+                CljPersistentVector *old_result = result;
+                result = vector_conj_owned(result, eval_elem);
+                if (result != old_result) {
+                    RELEASE(old_result);
+                }
             }
             
             return AUTORELEASE(result);
@@ -902,7 +911,6 @@ static ID __attribute__((noinline)) eval_body_no_ctx(ID body, CljPersistentMap *
             // This is necessary for cases like {nil "value"} where nil should be evaluated to NULL
             CljPersistentMap *map = (CljPersistentMap*)body;
             CljPersistentMap *result = map_empty();
-            RETAIN(result);
 
             MAP_FOR_EACH(map, key, value) {
                 // Cache tags for performance
@@ -925,8 +933,12 @@ static ID __attribute__((noinline)) eval_body_no_ctx(ID body, CljPersistentMap *
                     eval_value = eval_body_no_ctx(value, env, st);
                 }
 
-                // Add evaluated key-value pair to result map
-                ASSIGN(result, map_assoc(result, eval_key, eval_value));
+                // Add evaluated key-value pair to result map while preserving single ownership.
+                CljPersistentMap *old_result = result;
+                result = map_assoc(result, eval_key, eval_value);
+                if (result != old_result) {
+                    RELEASE(old_result);
+                }
 
                 // eval_body returns autoreleased or borrowed values; do not RELEASE here.
             }
@@ -1206,7 +1218,8 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
     unsigned char op_tag = TAG(op);
     if (op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE) {
         ID result = call_function_with_args_and_context_vec(op, args, env, st, ctx);
-        return (result == SYM_NIL) ? NULL : result;
+        if (result == SYM_NIL) return NULL;
+        return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
     }
 
     if (is_keyword(op)) {
@@ -1274,7 +1287,8 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
             g_eval_arg_depth++;
             ID result = call_function_with_args_and_context_vec(fn, args, env, st, ctx);
             g_eval_arg_depth--;
-            return (result == SYM_NIL) ? NULL : result;
+            if (result == SYM_NIL) return NULL;
+            return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
         }
 
         if (fn_tag == CLJ_LIST) {
@@ -1593,7 +1607,8 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
             unsigned char cached_tag = TAG(cached_fn);
             if (cached_tag == CLJ_FUNC || cached_tag == CLJ_CLOSURE) {
                 g_eval_ast_call_depth--;
-                return call_function_with_args_and_context_vec(cached_fn, call->args, effective_env, effective_st, ctx);
+                ID cached_result = call_function_with_args_and_context_vec(cached_fn, call->args, effective_env, effective_st, ctx);
+                return (IS_IMMEDIATE(cached_result) || !cached_result) ? cached_result : (ID)AUTORELEASE(cached_result);
             }
         }
     }
@@ -2753,7 +2768,11 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
             ID value_id = value;
             ID eval_key = (key_id == SYM_NIL) ? NULL : eval_body(key_id, eval_env, eval_st, NULL);
             ID eval_value = (value_id == SYM_NIL) ? NULL : eval_body(value_id, eval_env, eval_st, NULL);
-            ASSIGN(result, map_assoc(result, eval_key, eval_value));
+            CljPersistentMap *old_result = result;
+            result = map_assoc(result, eval_key, eval_value);
+            if (result != old_result) {
+                RELEASE(old_result);
+            }
         }
 
         return AUTORELEASE(result);
@@ -2770,7 +2789,11 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
         CljPersistentVector *result = make_vector(count, STRONG);
         VECTOR_FOR_EACH(vec, elem) {
             ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, eval_env, eval_st, ctx) : NULL;
-            ASSIGN(result, vector_conj(result, eval_elem));
+            CljPersistentVector *old_result = result;
+            result = vector_conj_owned(result, eval_elem);
+            if (result != old_result) {
+                RELEASE(old_result);
+            }
         }
         return AUTORELEASE(result);
     }
@@ -2951,8 +2974,14 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
     // Capture stats before measurement
     MemoryStats stats_before = memory_profiler_get_stats();
 
-    // Measurement pass
-    WITH_AUTORELEASE_POOL({ (void)eval_body((ID)expr, eval_env, st, ctx); });
+    // Measurement pass: ensure returned heap values are pool-bound even if a callee
+    // accidentally returns an owned reference.
+    WITH_AUTORELEASE_POOL({
+        ID measured = eval_body((ID)expr, eval_env, st, ctx);
+        if (measured && !IS_IMMEDIATE(measured)) {
+            AUTORELEASE(measured);
+        }
+    });
 
     // Capture stats after measurement
     MemoryStats stats_after = memory_profiler_get_stats();
@@ -3037,7 +3066,7 @@ ID eval_parsed_value(CljValue parsed, EvalState *eval_state) {
 
     // result can be NULL only if the evaluation result is nil
     // If eval_parsed fails, it should throw an exception, not return NULL
-    return result;
+    return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
 }
 
 /**

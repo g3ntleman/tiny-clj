@@ -374,15 +374,15 @@ target_include_directories(tiny-clj-repl PRIVATE
 # REPL Build
 # Debug in Debug mode, Release in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=0 MEMORY_PROFILING_ENABLED=0 LINE_EDITING_ENABLED=1)
+    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=0 MEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE} LINE_EDITING_ENABLED=1)
     set_target_properties(tiny-clj-repl PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )
     # Release: use CMAKE_C_FLAGS_RELEASE (set above with -O3 -DNDEBUG)
 else()
-    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=0 MEMORY_PROFILING_ENABLED=0 DEBUG LINE_EDITING_ENABLED=1)
+    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=0 MEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE} DEBUG LINE_EDITING_ENABLED=1)
     set_target_properties(tiny-clj-repl PROPERTIES
-        COMPILE_FLAGS "-g -O0 -DDEBUG -DMEMORY_PROFILING_ENABLED=0 -fno-omit-frame-pointer"
+        COMPILE_FLAGS "-g -O0 -DDEBUG -DMEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE} -fno-omit-frame-pointer"
         LINK_FLAGS ""
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )

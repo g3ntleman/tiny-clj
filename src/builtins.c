@@ -1770,14 +1770,14 @@ ID native_list(ID *args, unsigned int argc)
 
     if (argc == 0) return empty_list();
 
-    // Build list backwards; return owned (rc=1). Eval does single AUTORELEASE at call boundary.
+    // Build list backwards; return pool-safe like other builtins.
     CljList *head = NULL;
     for (int i = argc - 1; i >= 0; i--) {
         CljList *node = make_list(args[i], head);
         RELEASE(head);
         head = node;
     }
-    return head;
+    return AUTORELEASE(head);
 }
 
 ID native_reduce(ID *args, unsigned int argc)
@@ -2031,7 +2031,7 @@ ID native_assoc(ID *args, unsigned int argc)
             return NULL;
     }
 
-    return result;
+    return AUTORELEASE(result);
 }
 
 // dissoc: Remove keys from map (supports multiple keys like Clojure)

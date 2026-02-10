@@ -572,9 +572,7 @@ TEST(test_runtime_stats_reduce_range_loop_stable_after_warmup)
 
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 /*
- * Regression test for (assoc var key val): measures per-eval heap growth after warmup.
- * Currently ~80 bytes (Map) per eval are retained; tolerance is a guard so the test
- * passes and fails if the leak grows. Goal: fix the leak and set tolerance to 0.
+ * Regression test for (assoc var key val): after warmup, one eval must not grow heap.
  */
 TEST(test_runtime_stats_assoc_var_per_eval_growth_bounded)
 {
@@ -619,11 +617,10 @@ TEST(test_runtime_stats_assoc_var_per_eval_growth_bounded)
         print_memory_type_deltas(&baseline, &after, "assoc-var-per-eval");
     }
 
-    /* Regression guard: currently ~80 bytes per eval; fail if leak grows (e.g. > 128). */
-    const size_t tolerance = 128;
+    const size_t tolerance = 0;
     char msg[128];
     snprintf(msg, sizeof(msg),
-             "assoc var per-eval growth should be <= %zu bytes (got %zu); fix leak and lower tolerance to 0",
+             "assoc var per-eval growth should be <= %zu bytes (got %zu)",
              tolerance, delta);
     TEST_ASSERT_TRUE_MESSAGE(delta <= tolerance, msg);
 }
