@@ -791,16 +791,6 @@ ID native_next(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    // Fast path for list-like structures: avoid transient CLJ_SEQ wrappers.
-    // Return list tail directly (borrowed) to preserve COW-friendly rc behavior.
-    if (is_list_type(TAG(collection))) {
-        CljList *node = as_list(collection);
-        if (!node) return NULL;
-        ID rest = LIST_REST(node);
-        if (!rest) return NULL;
-        return rest;
-    }
-
     // Check if collection is an immediate value (fixnum, etc.) - not seqable
     if (IS_IMMEDIATE(collection))
     {
@@ -811,8 +801,9 @@ ID native_next(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    // EAT-YOUR-OWN-DOG-FOOD: Use seq_next for all seqable types
-    // For CLJ_LIST, seq_next returns CLJ_LIST directly; other types use seq_rest
+    // EAT-YOUR-OWN-DOG-FOOD: Use seq_next for all seqable types.
+    // TODO(memory/next): Reintroduce a list fast path later if needed, but keep
+    // return ownership identical for all input types per MEMORY_POLICY.
     if (!is_seqable(collection))
     {
         const char *type_name = clj_type_name(((CljObject *)collection)->type);
@@ -833,10 +824,10 @@ ID native_next(ID *args, unsigned int argc) {
     seq_next_inplace(&it);  /* COW: in-place when possible, else replace slot */
     if (!it || TAG(it) == CLJ_NIL)
         return NULL;  /* no more seq */
-    // Return values from builtins in caller-pool lifetime. For list tails this
-    // balances the RETAIN done in seq_next_inplace and avoids accumulating
-    // owned "rest" values in lazy pipelines.
-    if (it && !IS_IMMEDIATE(it)) it = AUTORELEASE(it);
+    // Unified ownership policy for next:
+    // - heap results are returned AUTORELEASEd (caller-pool lifetime),
+    // - immediates are returned as-is.
+    if (!IS_IMMEDIATE(it)) return AUTORELEASE(it);
     return it;
 }
 
@@ -1309,10 +1300,10 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
             }
             return NULL; // stop at shortest
         }
-        call_args[i] = native_first(&seq_obj, 1);
+        call_args[i] = seq_first(seq_obj);
         RETAIN(call_args[i]); // may reference seq container internals
-        next_colls[i] = native_rest(&seq_obj, 1);
-        RELEASE(seq_obj);
+        seq_next_inplace(&seq_obj);
+        next_colls[i] = seq_obj; // owned next seq/list (or NULL)
     }
 
     EvalState *st = builtin_get_eval_state();
@@ -1327,6 +1318,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     if (!next_seqs) return NULL;
     for (unsigned int i = 0; i < ncolls; i++) {
         vector_conj_inplace(&next_seqs, next_colls[i]);
+        RELEASE(next_colls[i]);
     }
 
     CljPersistentMap *rest_state = map_empty();
@@ -1349,7 +1341,7 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     RELEASE(rest_env_stack);
     CljList *result = make_list(mapped, (CljList*)rest_lazy);
     RELEASE(rest_lazy);
-    return result;
+    return AUTORELEASE(result);
 }
 
 // mapcat: lazy concat of (f x) over coll
@@ -1362,6 +1354,7 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
     ID fn = map_get_sentinel(state, SYM_MAPCAT_FN, NULL);
     ID coll = map_get_sentinel(state, SYM_MAPCAT_COLL, NULL);
     ID inner = map_get_sentinel(state, SYM_MAPCAT_INNER, NULL);
+    bool coll_owned = false;
     if (!fn || IS_IMMEDIATE(fn) || !(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE)) return NULL;
 
     EvalState *st = builtin_get_eval_state();
@@ -1372,15 +1365,16 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
         if (inner) {
             ID inner_seq = make_seq(inner); // owned temporary
             if (inner_seq) {
-                ID v = native_first(&inner_seq, 1);
+                ID v = seq_first(inner_seq);
                 RETAIN(v); // may reference seq container internals
-                ID inner_rest = native_rest(&inner_seq, 1);
-                RELEASE(inner_seq);
+                seq_next_inplace(&inner_seq);
+                ID inner_rest = inner_seq; // owned next seq/list (or NULL)
 
                 CljPersistentMap *rest_state = map_empty();
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_FN, fn);
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_COLL, coll);
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_INNER, inner_rest);
+                RELEASE(inner_rest);
                 CljPersistentVector *rest_env_stack = make_vector(1, STRONG);
                 if (!rest_env_stack) { RELEASE(v); RELEASE(rest_state); return NULL; }
                 vector_conj_inplace(&rest_env_stack, rest_state);
@@ -1398,7 +1392,11 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
                 CljList *result = make_list(v, (CljList*)rest_lazy);
                 RELEASE(v);
                 RELEASE(rest_lazy);
-                return result;
+                if (coll_owned) {
+                    RELEASE(coll);
+                    coll_owned = false;
+                }
+                return AUTORELEASE(result);
             }
             // inner exhausted -> fall through to advance outer
             inner = NULL;
@@ -1407,17 +1405,25 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
         // Fetch next outer element
         ID coll_seq = make_seq(coll); // owned temporary
         if (!coll_seq) {
+            if (coll_owned) {
+                RELEASE(coll);
+                coll_owned = false;
+            }
             return NULL;
         }
 
-        ID outer_first = native_first(&coll_seq, 1);
+        ID outer_first = seq_first(coll_seq);
         RETAIN(outer_first); // may reference seq container internals
-        ID outer_rest = native_rest(&coll_seq, 1);
-        RELEASE(coll_seq);
+        seq_next_inplace(&coll_seq);
+        ID outer_rest = coll_seq; // owned next seq/list (or NULL)
         ID call_args[1] = { outer_first };
         inner = eval_function_call(fn, call_args, 1, NULL, st);
         RELEASE(outer_first);
+        if (coll_owned) {
+            RELEASE(coll);
+        }
         coll = outer_rest;
+        coll_owned = (coll != NULL);
         // Loop again; either inner yields values, or we advance outer further.
     }
 }

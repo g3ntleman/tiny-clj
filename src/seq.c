@@ -695,15 +695,27 @@ void seq_next_inplace(ID *seq_slot) {
     }
     if (seq->iter.seq_type == CLJ_LIST || seq->base.rc != 1) {
         ID next = seq_next(*seq_slot);
-        RETAIN(next);
+        // Ownership differs by source:
+        // - list-backed seq_next returns borrowed tail -> retain before storing
+        // - non-list seq_next returns owned next seq    -> no extra retain
+        if (seq->iter.seq_type == CLJ_LIST) {
+            RETAIN(next);
+        }
         RELEASE(*seq_slot);
         *seq_slot = next;
         return;
     }
+    ID old_container = seq->iter.container;
     if (!seq_iter_next(&seq->iter)) {
         RELEASE(*seq_slot);
         *seq_slot = NULL;
         return;
+    }
+    // In-place mutation can switch iterator container (notably for LazySeq).
+    // Transfer wrapper ownership from old container to new container.
+    if (seq->iter.container != old_container) {
+        RETAIN(seq->iter.container);
+        RELEASE(old_container);
     }
 }
 
@@ -833,9 +845,16 @@ static void release_lazy_seq(CljObject *v) {
     }
 }
 
+/**
+ * @brief Release handler for heap sequence wrappers (CLJ_SEQ).
+ *
+ * Releases the iterator container retained by make_seq/seq_rest wrappers.
+ *
+ * @param v Sequence wrapper object.
+ */
 static void release_seq(CljObject *v) {
     CljSeqIterator *seq = (CljSeqIterator*)v;
-        RELEASE(seq->iter.container);
+    RELEASE(seq->iter.container);
 }
 
 /**
