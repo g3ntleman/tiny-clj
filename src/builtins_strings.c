@@ -58,12 +58,12 @@ static bool format_ensure_capacity(char **buffer, size_t *buf_size, char **out, 
 // String concatenation (variadic)
 ID native_str(ID *args, unsigned int argc) {
     if (argc == 0) {
-        return make_string("");
+        return string_empty_singleton;
     }
 
     // Optimization: If only one argument and it's already a string, return it directly
     if (argc == 1 && args[0] && TAG(args[0]) == CLJ_STRING) {
-        return args[0];
+        return AUTORELEASE(args[0]);
     }
 
     // Calculate total length
@@ -105,7 +105,7 @@ ID native_str(ID *args, unsigned int argc) {
     }
     buffer[offset] = '\0';
 
-    return (CljObject*)result;
+    return AUTORELEASE(result);
 }
 
 // String substring: (subs s start) or (subs s start end)
