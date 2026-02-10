@@ -222,6 +222,15 @@ void setUp(void) {
         }
     } END_TRY
 
+    // For string shared tests, include clojure.string load cost in setup baseline.
+    // This keeps per-test heap checks focused on the test expression itself.
+    if (g_current_test_entry && g_current_test_entry->group &&
+        strcmp(g_current_test_entry->group, "shared_test_string") == 0) {
+        WITH_AUTORELEASE_POOL({
+            (void)eval_string("(require 'clojure.string)", g_test_eval_state);
+        });
+    }
+
     test_heap_growth_mark_baseline();
 }
 

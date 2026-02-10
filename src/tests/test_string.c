@@ -4,7 +4,7 @@
  * Tests for string manipulation functions from clojure.string namespace
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 85000
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 800
 #include "tests_common.h"
 #include "namespace.h"
 #include "symbol.h"
@@ -20,13 +20,8 @@ int load_clojure_core(EvalState *st);
 // ============================================================================
 
 static void load_clojure_string_namespace(void) {
-    // Load clojure.string namespace using eval_string (required for test isolation)
-    // NOTE: native_require creates its own EvalState, which breaks test isolation.
-    // Using eval_string ensures the namespace is loaded in the correct EvalState context.
-    // CRITICAL: This must be called before any clojure.string function tests.
-    // NOTE: Each test runs in isolation, so we can't cache the namespace loading.
-    CljObject *req_result = eval_string("(require 'clojure.string)", g_test_eval_state);
-    (void)req_result; // require returns nil
+    // shared_test_string preloads clojure.string in setUp().
+    (void)0;
 }
 
 // ============================================================================
@@ -128,21 +123,26 @@ TEST_SHARED(test_string_escape) {
 // INCLUDES? TESTS
 // ============================================================================
 
-TEST_SHARED(test_string_includes) {
+TEST_SHARED(test_string_includes_true) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Load clojure.string namespace first
     load_clojure_string_namespace();
     
-    // Test: (clojure.string/includes? "hello" "ell") => true
-    CljObject *result1 = eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 == clj_true);
-    
-    // Test: (clojure.string/includes? "hello" "xyz") => false
-    CljObject *result2 = eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_false);
+    CljObject *result = eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST_SHARED(test_string_includes_false) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Load clojure.string namespace first
+    load_clojure_string_namespace();
+
+    CljObject *result = eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
