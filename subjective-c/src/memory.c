@@ -474,22 +474,6 @@ CljObject *autorelease(CljObject *v) {
     return v;
 }
 
-bool autorelease_pool_remove(CljObject *obj) {
-    if (!obj || IS_IMMEDIATE(obj) || is_singleton(obj) || !g_pool || g_in_drain) return false;
-    unsigned int c = vector_count(g_pool);
-    for (unsigned int i = c; i > 0; i--) {
-        unsigned int idx = i - 1;
-        if (vector_nth(g_pool, idx) == (ID)obj) {
-            CljPersistentVector *old = g_pool;
-            g_pool = vector_by_removing_at(g_pool, idx);
-            if (g_pool != old) RELEASE(old);
-            obj->flags &= (uint8_t)~CLJ_FLAG_IN_AUTORELEASE;
-            return true;
-        }
-    }
-    return false;
-}
-
 uint32_t autorelease_pool_peak_count(void) {
 #ifdef DEBUG
     return g_pool_peak_count;

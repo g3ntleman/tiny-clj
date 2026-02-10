@@ -1088,7 +1088,7 @@ R"CLOJURE(
       (let [sym (first clauses)
             expr (second clauses)
             more (nnext clauses)
-            base-coll (list 'seq expr)
+            base-coll expr
             parse-mods (fn parse-mods [coll cs lets]
                          (if (or (empty? cs) (not (keyword? (first cs))))
                            (list coll cs lets)

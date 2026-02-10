@@ -1077,8 +1077,6 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
         for (int j = 0; j < cnt; j++) {
             ID k = pairs[j * 2];
             ID v = pairs[j * 2 + 1];
-            if (v && !IS_IMMEDIATE(v) && !is_singleton((CljObject*)v))
-                autorelease_pool_remove((CljObject*)v);
             ASSIGN(new_map, map_assoc(new_map, k, v));
         }
         move_meta(map, new_map);

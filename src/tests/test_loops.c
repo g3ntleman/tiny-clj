@@ -4,7 +4,7 @@
  * Tests for for, doseq, dotimes, and while loop implementations.
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 600000000
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 500000000
 #include "tests_common.h"
 #include "vector.h"
 

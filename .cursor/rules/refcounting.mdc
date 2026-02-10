@@ -1,7 +1,17 @@
-Read MEMORY_POLICY.md
-
-**RELEASE(NULL), RETAIN(NULL), AUTORELEASE(NULL) sind erlaubt** – die Macros behandeln NULL sicher; kein if (x) RELEASE(x) nötig, RELEASE(x) genügt.
-
 ---
+description: Reference counting macro usage and null-safety
 alwaysApply: true
 ---
+
+# Refcounting Rules
+
+Read `docs/MEMORY_POLICY.md` before changing memory ownership logic.
+
+`RETAIN`, `RELEASE`, `AUTORELEASE`, and `ASSIGN` are null-safe macros.
+Do not add explicit null checks before these macros.
+
+Use:
+- `RELEASE(x)`
+
+Not:
+- `if (x) RELEASE(x)`

@@ -46,12 +46,8 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
         return;
     }
 
-    // No generator: treat as empty.
-    if (!lazy->thunk) {
-        lazy->first = NULL;
-        lazy->cached_rest = NULL;
-        return;
-    }
+    // Invariant: unresolved LazySeq must have a thunk.
+    CLJ_ASSERT(lazy->thunk && "LazySeq must have thunk before first realization");
 
     // Resolve EvalState.
     EvalState *st = builtin_get_eval_state();
@@ -63,6 +59,7 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
         }
     }
 
+    CLJ_ASSERT(st && "LazySeq realization requires an EvalState");
     if (!st) {
         // Cannot evaluate without state.
         lazy->first = NULL;
@@ -80,56 +77,63 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
     CljNamespace *saved_ns = st->current_ns;
     CLJ_ASSERT(lazy->thunk && !IS_IMMEDIATE(lazy->thunk) && 
                (TAG(lazy->thunk) == CLJ_CLOSURE || TAG(lazy->thunk) == CLJ_FUNC));
-    ID seq_val;
     ID first_val = NULL;
     ID rest_val = NULL;
-    if (lazy->thunk_state && is_persistent_map(lazy->thunk_state)) {
-        ID state = lazy->thunk_state;
-        if (TAG(lazy->thunk) == CLJ_CLOSURE) {
-            CljFunction *thunk_fn = (CljFunction*)lazy->thunk;
-            if (thunk_fn->ns) st->current_ns = thunk_fn->ns;
+    WITH_AUTORELEASE_POOL({
+        ID seq_val = NULL;
+        if (lazy->thunk_state && is_persistent_map(lazy->thunk_state)) {
+            ID state = lazy->thunk_state;
+            if (TAG(lazy->thunk) == CLJ_CLOSURE) {
+                CljFunction *thunk_fn = (CljFunction*)lazy->thunk;
+                if (thunk_fn->ns) st->current_ns = thunk_fn->ns;
+            }
+            seq_val = eval_function_call(lazy->thunk, &state, 1, NULL, st);
+            st->current_ns = saved_ns;
+        } else {
+            if (TAG(lazy->thunk) == CLJ_CLOSURE) {
+                CljFunction *thunk_fn = (CljFunction*)lazy->thunk;
+                if (thunk_fn->ns) st->current_ns = thunk_fn->ns;
+            }
+            seq_val = eval_function_call(lazy->thunk, NULL, 0, NULL, st);  // 0-arity (e.g. lazy-seq*)
+            st->current_ns = saved_ns;
         }
-        seq_val = eval_function_call(lazy->thunk, &state, 1, NULL, st);
-        st->current_ns = saved_ns;
-        goto realized;
-    }
-    if (TAG(lazy->thunk) == CLJ_CLOSURE) {
-        CljFunction *thunk_fn = (CljFunction*)lazy->thunk;
-        if (thunk_fn->ns) st->current_ns = thunk_fn->ns;
-    }
-    seq_val = eval_function_call(lazy->thunk, NULL, 0, NULL, st);  // 0-arity (e.g. lazy-seq*)
-    st->current_ns = saved_ns;
-realized:
-    ;
 
-    if (seq_val) {
-        // Normalize through seq/first/rest to preserve existing semantics
-        // (notably: nil elements vs empty sequences).
-        ID seq_args[1] = {seq_val};
-        ID seq_obj = native_seq(seq_args, 1);
-        if (seq_obj) {
-            ID one_arg[1] = {seq_obj};
-            first_val = native_first(one_arg, 1);
-            rest_val = native_rest(one_arg, 1);
+        if (seq_val) {
+            // Normalize through seq/first/rest to preserve existing semantics.
+            ID seq_args[1] = {seq_val};
+            ID seq_obj = native_seq(seq_args, 1);
+            if (seq_obj) {
+                ID one_arg[1] = {seq_obj};
+                first_val = native_first(one_arg, 1);
+                rest_val = native_rest(one_arg, 1);
 
-            // Empty sequence: first and rest both nil -> leave first_val/rest_val NULL.
-            // Sequence (nil . rest): first is nil but rest non-nil -> store SYM_NIL so we have one element.
-            if (!first_val && rest_val) {
-                first_val = SYM_NIL;
+                // Empty sequence: first and rest both nil -> leave first_val/rest_val NULL.
+                // Sequence (nil . rest): first is nil but rest non-nil -> store SYM_NIL.
+                if (!first_val && rest_val) {
+                    first_val = SYM_NIL;
+                }
             }
         }
-    }
+
+        // Keep results alive after this inner pool drains.
+        RETAIN(first_val);
+        RETAIN(rest_val);
+    });
     builtin_set_eval_state(NULL);
 
     // Cache results and release generator.
-    ASSIGN(lazy->first, first_val);
-    if (rest_val && !IS_IMMEDIATE(rest_val))
-        autorelease_pool_remove((CljObject*)rest_val);
-    if (lazy->cached_rest != NOT_FOUND)
-        RELEASE(lazy->cached_rest);
+    // Move ownership into lazy fields without ASSIGN to avoid extra RETAIN/RELEASE churn.
+    // RELEASE macros are nil/immediate-safe, so unconditional release is fine here.
+    RELEASE(lazy->first);
+    lazy->first = first_val;
+    RELEASE(lazy->cached_rest);
     lazy->cached_rest = rest_val;
     RELEASE(lazy->thunk);
     lazy->thunk = NULL;
+    // State is only needed during thunk evaluation. Drop it after realization
+    // so long lazy chains do not retain per-step map state.
+    RELEASE(lazy->thunk_state);
+    lazy->thunk_state = NULL;
 }
 
 static ID make_map_entry_vector(ID map_obj, int index) {
@@ -829,11 +833,17 @@ static void release_lazy_seq(CljObject *v) {
     }
 }
 
+static void release_seq(CljObject *v) {
+    CljSeqIterator *seq = (CljSeqIterator*)v;
+        RELEASE(seq->iter.container);
+}
+
 /**
  * @brief Register seq-related release handlers with subjective-c memory system.
  * 
  * Should be called during runtime initialization.
  */
 void seq_register_release_fn(void) {
+    subjective_c_register_release_fn(CLJ_SEQ, release_seq);
     subjective_c_register_release_fn(CLJ_LAZY_SEQ, release_lazy_seq);
 }

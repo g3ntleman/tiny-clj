@@ -791,6 +791,16 @@ ID native_next(ID *args, unsigned int argc) {
         return NULL;
     }
 
+    // Fast path for list-like structures: avoid transient CLJ_SEQ wrappers.
+    // Return list tail directly (borrowed) to preserve COW-friendly rc behavior.
+    if (is_list_type(TAG(collection))) {
+        CljList *node = as_list(collection);
+        if (!node) return NULL;
+        ID rest = LIST_REST(node);
+        if (!rest) return NULL;
+        return rest;
+    }
+
     // Check if collection is an immediate value (fixnum, etc.) - not seqable
     if (IS_IMMEDIATE(collection))
     {
@@ -823,7 +833,10 @@ ID native_next(ID *args, unsigned int argc) {
     seq_next_inplace(&it);  /* COW: in-place when possible, else replace slot */
     if (!it || TAG(it) == CLJ_NIL)
         return NULL;  /* no more seq */
-    if (as_seq(it)) it = AUTORELEASE(it);
+    // Return values from builtins in caller-pool lifetime. For list tails this
+    // balances the RETAIN done in seq_next_inplace and avoids accumulating
+    // owned "rest" values in lazy pipelines.
+    if (it && !IS_IMMEDIATE(it)) it = AUTORELEASE(it);
     return it;
 }
 
@@ -1285,22 +1298,29 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
     unsigned int ncolls = vector_count(seqs_vec);
     if (ncolls == 0 || ncolls > 8) return NULL;
 
-    ID call_args[8];
-    ID next_colls[8];
+    ID call_args[8] = {0};
+    ID next_colls[8] = {0};
     for (unsigned int i = 0; i < ncolls; i++) {
         ID coll = vector_nth(seqs_vec, i);
-        ID one_arg[1] = { coll };
-        ID seq_obj = native_seq(one_arg, 1);
+        ID seq_obj = make_seq(coll);  // owned temporary
         if (!seq_obj) {
+            for (unsigned int j = 0; j < i; j++) {
+                RELEASE(call_args[j]);
+            }
             return NULL; // stop at shortest
         }
         call_args[i] = native_first(&seq_obj, 1);
+        RETAIN(call_args[i]); // may reference seq container internals
         next_colls[i] = native_rest(&seq_obj, 1);
+        RELEASE(seq_obj);
     }
 
     EvalState *st = builtin_get_eval_state();
     if (!st) st = get_global_eval_state();
     ID mapped = eval_function_call(fn, call_args, ncolls, NULL, st);
+    for (unsigned int i = 0; i < ncolls; i++) {
+        RELEASE(call_args[i]);
+    }
 
     // Advance collections (store rest for each).
     CljPersistentVector *next_seqs = make_vector(ncolls, STRONG);
@@ -1350,23 +1370,24 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
     // Advance until we have a non-empty inner sequence (or outer exhausted).
     while (true) {
         if (inner) {
-            ID inner_arg[1] = { inner };
-            ID inner_seq = native_seq(inner_arg, 1);
+            ID inner_seq = make_seq(inner); // owned temporary
             if (inner_seq) {
                 ID v = native_first(&inner_seq, 1);
+                RETAIN(v); // may reference seq container internals
                 ID inner_rest = native_rest(&inner_seq, 1);
+                RELEASE(inner_seq);
 
                 CljPersistentMap *rest_state = map_empty();
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_FN, fn);
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_COLL, coll);
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_INNER, inner_rest);
                 CljPersistentVector *rest_env_stack = make_vector(1, STRONG);
-                if (!rest_env_stack) { RELEASE(rest_state); return NULL; }
+                if (!rest_env_stack) { RELEASE(v); RELEASE(rest_state); return NULL; }
                 vector_conj_inplace(&rest_env_stack, rest_state);
                 RELEASE(rest_state);
                 ID fn_obj = cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN, &g_mapcat_thunk_fn_obj);
                 ID thunk_body = make_thunk_body_ast_call(fn_obj);
-                if (!thunk_body) { RELEASE(rest_env_stack); return NULL; }
+                if (!thunk_body) { RELEASE(v); RELEASE(rest_env_stack); return NULL; }
                 ID rest_param = SYM_THUNK_STATE;
                 CljFunction *rest_thunk = make_function(&rest_param, 1, thunk_body, rest_env_stack, NULL, NULL);
                 RELEASE(thunk_body);
@@ -1375,25 +1396,27 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
                 RELEASE(rest_thunk);
                 RELEASE(rest_env_stack);
                 CljList *result = make_list(v, (CljList*)rest_lazy);
+                RELEASE(v);
                 RELEASE(rest_lazy);
-                return AUTORELEASE(result);
+                return result;
             }
             // inner exhausted -> fall through to advance outer
             inner = NULL;
         }
 
         // Fetch next outer element
-        ID coll_arg[1] = { coll };
-        ID coll_seq = native_seq(coll_arg, 1);
+        ID coll_seq = make_seq(coll); // owned temporary
         if (!coll_seq) {
             return NULL;
         }
 
         ID outer_first = native_first(&coll_seq, 1);
+        RETAIN(outer_first); // may reference seq container internals
         ID outer_rest = native_rest(&coll_seq, 1);
-
+        RELEASE(coll_seq);
         ID call_args[1] = { outer_first };
         inner = eval_function_call(fn, call_args, 1, NULL, st);
+        RELEASE(outer_first);
         coll = outer_rest;
         // Loop again; either inner yields values, or we advance outer further.
     }
@@ -2915,16 +2938,24 @@ ID native_vec(ID *args, unsigned int argc)
     }
 
     // Iterate through sequence and add elements using vector_conj (reuse existing logic)
-    // This avoids code duplication and reuses COW-based vector_conj
+    // This avoids code duplication and reuses COW-based vector_conj.
     // Note: nil (NULL) is a valid value in Clojure collections
     while (!seq_iter_empty(&iter))
     {
         ID elem_id = seq_iter_first(&iter);
-        // Use vector_conj to add element (handles growth automatically via COW)
-        // vector_conj may return a new vector if capacity was exceeded (COW)
+        // Use vector_conj_owned to keep ownership local in this loop.
+        // It may return a new vector when growth is needed (COW).
         // Note: vector_conj accepts NULL (nil) as valid element
-        // Use ASSIGN to safely update vec (handles retain/release automatically)
-        ASSIGN(vec, vector_conj(vec, elem_id));
+        // Keep ownership local and avoid extra retains that force rc>1 and COW churn.
+        CljPersistentVector *next_vec = vector_conj_owned(vec, elem_id);
+        if (!next_vec) {
+            RELEASE(vec);
+            return NULL;
+        }
+        if (next_vec != vec) {
+            RELEASE(vec);
+            vec = next_vec;
+        }
 
         // Move to next element (reuse existing seq_iter_next API)
         seq_iter_next(&iter);
