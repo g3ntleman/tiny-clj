@@ -6959,38 +6959,46 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 
     if (!m) return NULL;
 
+#define MAP_REASSIGN(var, expr) do { \
+    CljPersistentMap *_next_map = (expr); \
+    if (_next_map != (var)) { \
+        RELEASE(var); \
+        (var) = _next_map; \
+    } \
+} while (0)
+
 #if defined(DEBUG)
     // Debug diagnostics: symbols, namespaces, heap (always available)
-    ASSIGN(m, map_assoc(m, SYM_KW_SYMBOLS, fixnum((int32_t)hashset_count(g_runtime.symbol_table))));
-    ASSIGN(m, map_assoc(m, SYM_KW_NAMESPACES, fixnum((int32_t)map_count(g_runtime.ns_registry))));
+    MAP_REASSIGN(m, map_assoc(m, SYM_KW_SYMBOLS, fixnum((int32_t)hashset_count(g_runtime.symbol_table))));
+    MAP_REASSIGN(m, map_assoc(m, SYM_KW_NAMESPACES, fixnum((int32_t)map_count(g_runtime.ns_registry))));
     
     // Heap usage (always tracked in DEBUG, same keys as full profiling)
     size_t bytes_current = g_memory_stats.current_memory_usage;
     size_t bytes_peak = g_memory_stats.peak_memory_usage;
     int32_t fc = (bytes_current > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bytes_current;
     int32_t fp = (bytes_peak > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)bytes_peak;
-    ASSIGN(m, map_assoc(m, SYM_KW_BYTES_CURRENT, fixnum(fc)));
-    ASSIGN(m, map_assoc(m, SYM_KW_BYTES_PEAK, fixnum(fp)));
+    MAP_REASSIGN(m, map_assoc(m, SYM_KW_BYTES_CURRENT, fixnum(fc)));
+    MAP_REASSIGN(m, map_assoc(m, SYM_KW_BYTES_PEAK, fixnum(fp)));
 #endif
 
 #if defined(DEBUG)
     // Memory stats: always include a minimal map; extend when profiling is enabled.
     CljPersistentMap *ms = make_map(12);
     if (ms) {
-        ASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_CURRENT, fixnum(fc)));
-        ASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_PEAK, fixnum(fp)));
+        MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_CURRENT, fixnum(fc)));
+        MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_PEAK, fixnum(fp)));
 
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
         // Extended profiling stats (nested map with per-type breakdown)
         #define CLAMP_FIXNUM(val) ((val) > (size_t)FIXNUM_MAX ? (int32_t)FIXNUM_MAX : (int32_t)(val))
 
-        ASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BYTES_CURRENT, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_bytes_current))));
-        ASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BYTES_PEAK, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_bytes_peak))));
-        ASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BLOCKS_CURRENT, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_blocks_current))));
-        ASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BLOCKS_PEAK, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_blocks_peak))));
-        ASSIGN(ms, map_assoc(ms, SYM_KW_TOTAL_ALLOCATIONS, fixnum(CLAMP_FIXNUM(g_memory_stats.total_allocations))));
-        ASSIGN(ms, map_assoc(ms, SYM_KW_TOTAL_DEALLOCATIONS, fixnum(CLAMP_FIXNUM(g_memory_stats.total_deallocations))));
-        ASSIGN(ms, map_assoc(ms, SYM_KW_MEMORY_LEAKS, fixnum(CLAMP_FIXNUM(g_memory_stats.memory_leaks))));
+        MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BYTES_CURRENT, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_bytes_current))));
+        MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BYTES_PEAK, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_bytes_peak))));
+        MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BLOCKS_CURRENT, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_blocks_current))));
+        MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_RAW_BLOCKS_PEAK, fixnum(CLAMP_FIXNUM(g_memory_stats.raw_blocks_peak))));
+        MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_TOTAL_ALLOCATIONS, fixnum(CLAMP_FIXNUM(g_memory_stats.total_allocations))));
+        MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_TOTAL_DEALLOCATIONS, fixnum(CLAMP_FIXNUM(g_memory_stats.total_deallocations))));
+        MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_MEMORY_LEAKS, fixnum(CLAMP_FIXNUM(g_memory_stats.memory_leaks))));
 
         // Per-type breakdown
         CljPersistentMap *by_type = make_map(0);
@@ -7002,13 +7010,17 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 
                 CljPersistentMap *row = make_map(4);
                 if (!row) break;
-                ASSIGN(row, map_assoc(row, SYM_KW_BYTES_CURRENT, fixnum(CLAMP_FIXNUM(bc))));
-                ASSIGN(row, map_assoc(row, SYM_KW_BYTES_PEAK, fixnum(CLAMP_FIXNUM(bp))));
-                ASSIGN(row, map_assoc(row, SYM_KW_ALLOC_COUNT, fixnum(CLAMP_FIXNUM(g_memory_stats.allocations_by_type[ti]))));
-                ASSIGN(row, map_assoc(row, SYM_KW_DEALLOC_COUNT, fixnum(CLAMP_FIXNUM(g_memory_stats.deallocations_by_type[ti]))));
-                ASSIGN(by_type, map_assoc(by_type, make_string(clj_type_name((CljType)ti)), row));
+                MAP_REASSIGN(row, map_assoc(row, SYM_KW_BYTES_CURRENT, fixnum(CLAMP_FIXNUM(bc))));
+                MAP_REASSIGN(row, map_assoc(row, SYM_KW_BYTES_PEAK, fixnum(CLAMP_FIXNUM(bp))));
+                MAP_REASSIGN(row, map_assoc(row, SYM_KW_ALLOC_COUNT, fixnum(CLAMP_FIXNUM(g_memory_stats.allocations_by_type[ti]))));
+                MAP_REASSIGN(row, map_assoc(row, SYM_KW_DEALLOC_COUNT, fixnum(CLAMP_FIXNUM(g_memory_stats.deallocations_by_type[ti]))));
+                ID type_name = make_string(clj_type_name((CljType)ti));
+                MAP_REASSIGN(by_type, map_assoc(by_type, type_name, row));
+                RELEASE(type_name);
+                RELEASE(row);
             }
-            ASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_BY_TYPE, by_type));
+            MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_BYTES_BY_TYPE, by_type));
+            RELEASE(by_type);
         }
 
         #undef CLAMP_FIXNUM
@@ -7020,11 +7032,12 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
             if (heap_free != (size_t)-1) {
                 int32_t hf = (heap_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_free;
                 CljSymbol *kw = intern_symbol_global(":heap-bytes-free");
-                if (kw) ASSIGN(ms, map_assoc(ms, kw, fixnum(hf)));
+                if (kw) MAP_REASSIGN(ms, map_assoc(ms, kw, fixnum(hf)));
             }
         }
 
-        ASSIGN(m, map_assoc(m, SYM_KW_MEMORY_STATS, ms));
+        MAP_REASSIGN(m, map_assoc(m, SYM_KW_MEMORY_STATS, ms));
+        RELEASE(ms);
     }
 #endif
 
@@ -7037,15 +7050,16 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
             if (ms) {
                 int32_t hf = (heap_free > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_free;
                 CljSymbol *kw_free = intern_symbol_global(":heap-bytes-free");
-                if (kw_free) ASSIGN(ms, map_assoc(ms, kw_free, fixnum(hf)));
+                if (kw_free) MAP_REASSIGN(ms, map_assoc(ms, kw_free, fixnum(hf)));
                 size_t heap_total = platform_heap_bytes_total();
                 if (heap_total != (size_t)-1) {
                     int32_t ht = (heap_total > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_total;
                     CljSymbol *kw_total = intern_symbol_global(":heap-bytes-total");
-                    if (kw_total) ASSIGN(ms, map_assoc(ms, kw_total, fixnum(ht)));
+                    if (kw_total) MAP_REASSIGN(ms, map_assoc(ms, kw_total, fixnum(ht)));
                 }
                 CljSymbol *kw_ms = intern_symbol_global(":memory-stats");
-                if (kw_ms) ASSIGN(m, map_assoc(m, kw_ms, ms));
+                if (kw_ms) MAP_REASSIGN(m, map_assoc(m, kw_ms, ms));
+                RELEASE(ms);
             }
         }
     }
@@ -7062,13 +7076,20 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
                 CljSymbol *kw_cores = intern_symbol_global(":cores");
                 CljSymbol *kw_revision = intern_symbol_global(":revision");
                 CljSymbol *kw_hw = intern_symbol_global(":hardware");
-                if (kw_model) ASSIGN(hm, map_assoc(hm, kw_model, make_string(hw.model)));
-                if (kw_cores) ASSIGN(hm, map_assoc(hm, kw_cores, fixnum((int32_t)hw.cores)));
-                if (kw_revision) ASSIGN(hm, map_assoc(hm, kw_revision, fixnum((int32_t)hw.revision)));
-                if (kw_hw) ASSIGN(m, map_assoc(m, kw_hw, hm));
+                if (kw_model) {
+                    ID model = make_string(hw.model);
+                    MAP_REASSIGN(hm, map_assoc(hm, kw_model, model));
+                    RELEASE(model);
+                }
+                if (kw_cores) MAP_REASSIGN(hm, map_assoc(hm, kw_cores, fixnum((int32_t)hw.cores)));
+                if (kw_revision) MAP_REASSIGN(hm, map_assoc(hm, kw_revision, fixnum((int32_t)hw.revision)));
+                if (kw_hw) MAP_REASSIGN(m, map_assoc(m, kw_hw, hm));
+                RELEASE(hm);
             }
         }
     }
+
+#undef MAP_REASSIGN
 
     return AUTORELEASE(m);
 }

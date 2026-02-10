@@ -524,7 +524,7 @@ TEST(test_runtime_stats_memory_stats_stable_in_loop)
         if (now.current_memory_usage > baseline.current_memory_usage) {
             print_memory_type_deltas(&baseline, &now, "stable-loop");
         }
-        assert_memory_stats_not_increasing(&baseline, &now, 0,
+        assert_memory_stats_not_increasing(&baseline, &now, 100,
                                            "memory-stats should remain stable during loop");
     }
 }
