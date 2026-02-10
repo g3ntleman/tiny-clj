@@ -529,3 +529,103 @@ TEST(test_runtime_stats_memory_stats_stable_in_loop)
     }
 }
 #endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_reduce_range_loop_stable_after_warmup)
+{
+    const char *expr = "(reduce + (range 200))";
+
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    init_special_symbols();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, true);
+
+    // Warm up resolver/call paths before taking baseline.
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID warm = eval_string(expr, g_test_eval_state);
+            (void)warm;
+        });
+    }
+    MemoryStats baseline = memory_profiler_get_stats();
+
+    for (int i = 0; i < 40; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID r = eval_string(expr, g_test_eval_state);
+            (void)r;
+        });
+        MemoryStats now = memory_profiler_get_stats();
+        if (now.current_memory_usage > baseline.current_memory_usage) {
+            print_memory_type_deltas(&baseline, &now, "reduce-range-stable-loop");
+        }
+        assert_memory_stats_not_increasing(&baseline, &now, 0,
+                                           "reduce loop should not grow heap after warmup");
+    }
+}
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+/*
+ * Regression test for (assoc var key val): measures per-eval heap growth after warmup.
+ * Currently ~80 bytes (Map) per eval are retained; tolerance is a guard so the test
+ * passes and fails if the leak grows. Goal: fix the leak and set tolerance to 0.
+ */
+TEST(test_runtime_stats_assoc_var_per_eval_growth_bounded)
+{
+    const char *init_expr = "(def m {:a 1 :b 2})";
+    const char *expr = "(assoc m :c 3)";
+
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    init_special_symbols();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, true);
+
+    WITH_AUTORELEASE_POOL({
+        ID init = eval_string(init_expr, g_test_eval_state);
+        (void)init;
+    });
+
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID warm = eval_string(expr, g_test_eval_state);
+            (void)warm;
+        });
+    }
+    MemoryStats baseline = memory_profiler_get_stats();
+
+    WITH_AUTORELEASE_POOL({
+        ID r = eval_string(expr, g_test_eval_state);
+        (void)r;
+    });
+    MemoryStats after = memory_profiler_get_stats();
+
+    size_t delta = (after.current_memory_usage > baseline.current_memory_usage)
+        ? (after.current_memory_usage - baseline.current_memory_usage)
+        : 0;
+
+    if (delta > 0) {
+        print_memory_type_deltas(&baseline, &after, "assoc-var-per-eval");
+    }
+
+    /* Regression guard: currently ~80 bytes per eval; fail if leak grows (e.g. > 128). */
+    const size_t tolerance = 128;
+    char msg[128];
+    snprintf(msg, sizeof(msg),
+             "assoc var per-eval growth should be <= %zu bytes (got %zu); fix leak and lower tolerance to 0",
+             tolerance, delta);
+    TEST_ASSERT_TRUE_MESSAGE(delta <= tolerance, msg);
+}
+#endif
+
