@@ -113,6 +113,7 @@ static void rchist_dump_for_object(CljObject *v) {
 }
 #endif
 
+#ifdef DEBUG
 static inline bool autorelease_pool_contains(CljObject *obj) {
     if (!obj || !g_pool) return false;
     unsigned int c = vector_count(g_pool);
@@ -122,6 +123,7 @@ static inline bool autorelease_pool_contains(CljObject *obj) {
     }
     return false;
 }
+#endif
 
 extern bool g_memory_verbose_mode;
 static bool g_debug_output_enabled = false;
@@ -409,9 +411,11 @@ CljObject *autorelease(CljObject *v) {
             "autorelease called during drain");
         return (CljObject*)NULL;
     }
+#ifdef DEBUG
     if (autorelease_pool_contains(v)) {
         return v;
     }
+#endif
 #ifdef DEBUG
     {
         const char *trace_list = getenv("TINYCLJ_TRACE_LIST_AUTORELEASE");
