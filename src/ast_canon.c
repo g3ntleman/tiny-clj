@@ -137,7 +137,9 @@ static ID seq_to_plain_list(ID seq_obj) {
     CljList *list = empty_list();
     for (int i = count - 1; i >= 0; i--) {
         ID elem = vector_nth(elems, i);
-        list = make_list(elem, list);
+        CljList *next = make_list(elem, list);
+        RELEASE(list);
+        list = next;
     }
     RELEASE(elems);
     return (ID)list;
@@ -556,6 +558,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 // CRITICAL: Ensure expanded form is a list-like type (CLJ_LIST)
                 // Macros can return PersistentList (CLJ_LIST) which needs to be canonicalized
                 unsigned char expanded_tag = TAG(expanded);
+                bool expanded_owned_by_canonicalizer = false;
                 if (expanded_tag == CLJ_SEQ) {
                     SeqIterator seq_it;
                     if (seq_iter_init(&seq_it, expanded) && !seq_iter_empty(&seq_it)) {
@@ -585,10 +588,12 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     if (!expanded_list) return NULL;
                     expanded = expanded_list;
                     expanded_tag = TAG(expanded);
+                    expanded_owned_by_canonicalizer = true;
                 }
                 if (!is_list_type(expanded_tag)) {
                     // Expanded form is not a list - wrap in a list for canonicalization
                     expanded = make_list(expanded, NULL);
+                    expanded_owned_by_canonicalizer = true;
                 }
                 
                 // Recursively canonicalize the expanded form
@@ -599,8 +604,11 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     RETAIN(list);
                 }
                 ID result = canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
-                // Do not RELEASE(expanded): we did not RETAIN it; it came from eval_function_call
-                // and is managed by the caller's autorelease pool.
+                if (expanded_owned_by_canonicalizer) {
+                    // expanded was created in this frame (seq_to_plain_list/make_list wrapper)
+                    // and must be released here after recursive canonicalization.
+                    RELEASE(expanded);
+                }
                 if (list) {
                     RELEASE(list);
                 }
