@@ -1,8 +1,13 @@
 CompileFlags:
   Add:
-    - -Iexternal/unity/src
-    - -Iexternal
+    - -Iinclude
     - -Isrc
+    - -Iexternal
+    - -Iexternal/unity/src
+    - -Isubjective-c/src
+    - -Isubjective-c/src/subjective-c
+    - -Iexternal/tiny-db/inc
+    - -Iexternal/tiny-db/src
     - -DENABLE_MEMORY_PROFILING
     - -DDEBUG
     - -DENABLE_META

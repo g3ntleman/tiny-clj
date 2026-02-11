@@ -134,10 +134,6 @@ extern GlobalExceptionStack global_exception_stack;
 
 static inline ExceptionHandler* exception_handler_alloc_or_abort(void) {
     ExceptionHandler *h = (ExceptionHandler*)CLJ_MALLOC(sizeof(ExceptionHandler));
-    if (!h) {
-        fputs("FATAL: CLJ_MALLOC failed in TRY block\n", stderr);
-        abort();
-    }
     return h;
 }
 

@@ -143,11 +143,6 @@ static inline void clj_free_impl(void *ptr, const char *file, int line) {
     free(ptr);
 }
 
-#define CLJ_MALLOC(n) clj_malloc_impl((n), __FILE__, __LINE__)
-#define CLJ_CALLOC(nmemb, size) clj_calloc_impl((nmemb), (size), __FILE__, __LINE__)
-#define CLJ_REALLOC(ptr, n) clj_realloc_impl((ptr), (n), __FILE__, __LINE__)
-#define CLJ_FREE(ptr) clj_free_impl((ptr), __FILE__, __LINE__)
-
 #else
 
 // No-op macros for profiler tracking when profiling is disabled
@@ -155,12 +150,61 @@ static inline void clj_free_impl(void *ptr, const char *file, int line) {
 #define memory_profiler_track_raw_free(ptr, file, line) ((void)0)
 #define memory_profiler_track_raw_realloc(old_ptr_addr, new_ptr, n, file, line) ((void)0)
 
-#define CLJ_MALLOC(n) malloc((n))
-#define CLJ_CALLOC(nmemb, size) calloc((nmemb), (size))
-#define CLJ_REALLOC(ptr, n) realloc((ptr), (n))
-#define CLJ_FREE(ptr) free((ptr))
+static inline void* clj_malloc_impl(size_t n, const char *file, int line) {
+    (void)file; (void)line;
+    void *p = malloc(n);
+    if (!p && n != 0) {
+        throw_oom(); // never returns
+    }
+    return p;
+}
+
+static inline void* clj_calloc_impl(size_t nmemb, size_t size, const char *file, int line) {
+    (void)file; (void)line;
+    if (nmemb != 0 && size > ((size_t)-1) / nmemb) {
+        throw_oom(); // never returns
+    }
+    size_t n = nmemb * size;
+    void *p = calloc(nmemb, size);
+    if (!p && n != 0) {
+        throw_oom(); // never returns
+    }
+    return p;
+}
+
+static inline void* clj_realloc_impl(void *old_ptr, size_t n, const char *file, int line) {
+    (void)file; (void)line;
+    void *new_ptr = realloc(old_ptr, n);
+    if (!new_ptr && n != 0) {
+        throw_oom(); // never returns; old_ptr remains valid per realloc contract
+    }
+    return new_ptr;
+}
+
+static inline void clj_free_impl(void *ptr, const char *file, int line) {
+    (void)file; (void)line;
+    free(ptr);
+}
 
 #endif // MEMORY_PROFILING_ENABLED
+
+// -----------------------------------------------------------------------------
+// Canonical allocation macro API
+// -----------------------------------------------------------------------------
+//
+// Use CLJ_BUF_* for raw buffers and C arrays.
+// Use CLJ_OBJ_* for CljObject-based allocations (type/flags/rc initialization).
+//
+#define CLJ_BUF_MALLOC(n) clj_malloc_impl((n), __FILE__, __LINE__)
+#define CLJ_BUF_CALLOC(nmemb, size) clj_calloc_impl((nmemb), (size), __FILE__, __LINE__)
+#define CLJ_BUF_REALLOC(ptr, n) clj_realloc_impl((ptr), (n), __FILE__, __LINE__)
+#define CLJ_BUF_FREE(ptr) clj_free_impl((ptr), __FILE__, __LINE__)
+
+// Backward-compatible aliases. Prefer CLJ_BUF_* in new code.
+#define CLJ_MALLOC(n) CLJ_BUF_MALLOC(n)
+#define CLJ_CALLOC(nmemb, size) CLJ_BUF_CALLOC((nmemb), (size))
+#define CLJ_REALLOC(ptr, n) CLJ_BUF_REALLOC((ptr), (n))
+#define CLJ_FREE(ptr) CLJ_BUF_FREE(ptr)
 
 // -----------------------------------------------------------------------------
 // Trackable string allocation helpers
@@ -232,7 +276,14 @@ uint32_t autorelease_pool_peak_count(void);
 void autorelease_pool_peak_reset(void);
 #endif
 
-#define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
+// Object allocation helpers (CljObject-based)
+#define CLJ_OBJ_ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
+#define CLJ_OBJ_NEW(type) CLJ_OBJ_ALLOC(type, 1)
+// clj_type is a CljType enum value (e.g. CLJ_MAP_PERSISTENT).
+#define CLJ_OBJ_ALLOC_BYTES(clj_type, bytes) alloc((bytes), 1, (clj_type))
+
+// Backward-compatible aliases. Prefer CLJ_OBJ_* in new code.
+#define ALLOC(type, count) CLJ_OBJ_ALLOC(type, count)
 #define ALLOC_BYTES(obj_type, bytes) ((obj_type*) alloc((bytes), 1, (obj_type)))
 
 #ifdef DEBUG
@@ -384,13 +435,17 @@ void autorelease_pool_peak_reset(void);
     } \
 } while(0)
 
-/** @brief Allocate memory for object(s) with reference counting
+/** @brief Allocate memory for object(s) with reference counting.
  * @param type_size Size of each object
  * @param count Number of objects
  * @param obj_type Type tag for the object
- * @return Allocated memory or throws OOM exception
+ * @return Non-NULL allocated memory. On OOM, throws and never returns.
  */
-void* alloc(size_t type_size, size_t count, CljType obj_type);
+void* alloc(size_t type_size, size_t count, CljType obj_type)
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((returns_nonnull))
+#endif
+;
 
 #define WITH_AUTORELEASE_POOL(code) do { \
     uint32_t _restore = autorelease_pool_mark(); \

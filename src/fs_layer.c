@@ -339,10 +339,6 @@ void fs_global_store_reset(void)
 FsKvStore *fs_kv_store_new(void)
 {
     FsKvStore *st = (FsKvStore *)CLJ_MALLOC(sizeof(FsKvStore));
-    if (!st) {
-        throw_oom();
-        return NULL;
-    }
     memset(st, 0, sizeof(*st));
 
 #if defined(ESP_PLATFORM)
@@ -366,10 +362,6 @@ FsKvStore *fs_kv_store_new(void)
     // Host default: RAM-backed block device for tiny-db.
     const size_t ram_bytes = 128 * 1024;
     st->ram.buf = (uint8_t*)CLJ_MALLOC(ram_bytes);
-    if (!st->ram.buf) {
-        CLJ_FREE(st);
-        throw_oom();
-    }
     st->ram.len = ram_bytes;
     memset(st->ram.buf, 0xFF, ram_bytes);
 

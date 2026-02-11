@@ -1126,11 +1126,6 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     bool in_data_segment = is_pointer_in_data_segment(cname);
     size_t extra = in_data_segment ? 0 : (cname_len + 1);
     CljSymbol *sym = (CljSymbol*)alloc(sizeof(CljSymbol) + extra, 1, CLJ_SYMBOL);
-    if (!sym) {
-        throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
-                                  "Failed to allocate memory for symbol '%s'", cname);
-        return NULL;
-    }
 
     sym->base.type = CLJ_SYMBOL;
     sym->base.rc = SINGLETON_RC;  // Interned symbols are singletons - never freed

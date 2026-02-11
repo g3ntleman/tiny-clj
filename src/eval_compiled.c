@@ -74,10 +74,6 @@ ID eval_compiled_call(CljASTNode *node, CljPersistentMap *env, EvalState *st, co
         if (argc == 16) {
             // Grow to heap once if needed (rare).
             args = (ID*)CLJ_MALLOC(sizeof(ID) * 32);
-            if (!args) {
-                throw_oom();
-                return NULL;
-            }
             for (unsigned int i = 0; i < 16; i++) args[i] = stack_args[i];
         }
         ID v = eval_arg_from_expr_with_context(cur->first, env, st, ctx);

@@ -1,5 +1,5 @@
 // Vector-spezifische Tests
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 13000
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 800
 #include "tests_common.h"
 #include "vector.h"
 #include "types.h"

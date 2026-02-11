@@ -1,10 +1,9 @@
 {
-  // Use compile_commands.json for accurate IntelliSense and navigation
   "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
   "C_Cpp.default.cStandard": "c99",
-  // Enable Go to Definition with Cmd+Click
+  "C_Cpp.default.compilerPath": "/usr/bin/clang",
+  "C_Cpp.intelliSenseEngine": "default",
   "editor.gotoLocation.multipleDefinitions": "goto",
   "editor.gotoLocation.multipleReferences": "goto",
-  "editor.gotoLocation.multipleImplementations": "goto",
-  "C_Cpp.default.compilerPath": "/usr/bin/clang"
+  "editor.gotoLocation.multipleImplementations": "goto"
 }

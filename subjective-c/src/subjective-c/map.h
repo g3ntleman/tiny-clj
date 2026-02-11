@@ -92,7 +92,9 @@ static inline ID map_get(ID map, ID key) {
  * @param map Source map
  * @param key Key to associate
  * @param value Value to associate
- * @return New map with association (AUTORELEASE'd)
+ * @return Updated map.
+ *         - COW/new-instance path: AUTORELEASE'd map
+ *         - in-place path (rc==1): original map pointer
  */
 CljPersistentMap* map_assoc(CljPersistentMap* map, ID key, ID value);
 
@@ -145,7 +147,9 @@ int map_contains(ID map, ID key);
 /** @brief Remove key (persistent, returns new map)
  * @param map Source map
  * @param key Key to remove
- * @return New map without key (AUTORELEASE'd)
+ * @return Updated map.
+ *         - key removed via new-instance path: AUTORELEASE'd map
+ *         - key not found path: original map pointer
  */
 CljPersistentMap* map_remove(CljPersistentMap *map, ID key);
 

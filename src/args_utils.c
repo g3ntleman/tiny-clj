@@ -15,7 +15,6 @@ ID *allocate_args_array(int argc) {
     if (argc <= 0) return NULL;
     
     ID *args = (ID*)CLJ_MALLOC((size_t)argc * sizeof(*args));
-    if (!args) return NULL;
     
     // Initialize all pointers to NULL
     for (int i = 0; i < argc; i++) {

@@ -174,7 +174,6 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
 
     // Create a new namespace using ALLOC (initializes base.type and base.rc)
     CljNamespace *ns = ALLOC(CljNamespace, 1);
-    if (!ns) return NULL;
 
     // Ensure namespace starts as a valid retained object.
     // Zombie mode uses rc==0 to detect freed objects, so rc must not be 0 here.

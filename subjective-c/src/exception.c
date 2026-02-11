@@ -126,7 +126,6 @@ CLJException* make_exception(const char *type, const char *message, const char *
     }
 
     CLJException *exc = ALLOC(CLJException, 1);
-    if (!exc) return NULL;
 
     // Initialize base object
     exc->base.type = CLJ_EXCEPTION;
@@ -275,10 +274,6 @@ struct CljString* stacktrace(void) {
 
     // Allocate buffer for stacktrace string
     char *buffer = (char*)CLJ_MALLOC(total_len + 1);
-    if (!buffer) {
-        CLJ_FREE(symbols);
-        return NULL;
-    }
 
     // Build stacktrace string, skipping the last line (often contains loader frames).
     size_t pos = 0;

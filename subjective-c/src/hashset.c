@@ -36,9 +36,6 @@ CljHashSet* make_hashset(unsigned int capacity) {
     size_t total_size = struct_size + data_size;
 
     CljHashSet *set = (CljHashSet*)alloc(total_size, 1, CLJ_HASHSET);
-    if (!set) {
-        throw_oom();
-    }
 
     set->base.type = CLJ_HASHSET;
     set->count = 0;

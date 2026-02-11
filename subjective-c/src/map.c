@@ -39,9 +39,6 @@ CljPersistentMap* make_map_impl(int capacity, ElementRetention retention) {
   size_t total_size = struct_size + data_size;
 
   CljPersistentMap *map = (CljPersistentMap*)alloc(total_size, 1, CLJ_MAP_PERSISTENT);
-  if (!map) {
-    throw_oom();
-  }
 
   map->base.type = CLJ_MAP_PERSISTENT;
   map->base.flags = (retention == WEAK) ? CLJ_FLAG_WEAK_ELEMENTS : 0;
@@ -98,6 +95,22 @@ static inline int map_find_index_eq(CljPersistentMap *m, CljObject *target) {
   return found_idx;
 }
 
+/*
+ * INTERNAL OWNERSHIP NOTE
+ * -----------------------
+ * map_assoc_core intentionally violates the public MEMORY_POLICY return convention
+ * ("heap object results are returned AUTORELEASE'd").
+ *
+ * This core helper always returns an owned reference:
+ * - in-place path: returns the original map pointer
+ * - COW path: returns a newly allocated map with rc=1
+ *
+ * Reason: map_assoc_inplace/map_remove_inplace need an owned result to safely
+ * replace/release slot values without pool-coupling. The public wrapper map_assoc()
+ * restores API-level policy by applying AUTORELEASE only when a new instance is produced.
+ *
+ * Do not expose map_assoc_core outside this translation unit.
+ */
 static CljPersistentMap* map_assoc_core(CljPersistentMap* map, ID key, ID value) {
   CLJ_ASSERT(map && map->base.type == CLJ_MAP_PERSISTENT);
   CljObject *key_obj = (CljObject*)key;
@@ -132,9 +145,6 @@ static CljPersistentMap* map_assoc_core(CljPersistentMap* map, ID key, ID value)
   size_t struct_size = sizeof(CljPersistentMap);
   size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
   CljPersistentMap *new_map = (CljPersistentMap*)alloc(struct_size + data_size, 1, CLJ_MAP_PERSISTENT);
-  if (!new_map) {
-    throw_oom();
-  }
 
   new_map->base.type = CLJ_MAP_PERSISTENT;
   new_map->base.flags = map->base.flags;
@@ -183,17 +193,14 @@ static CljPersistentMap* map_assoc_core(CljPersistentMap* map, ID key, ID value)
   // ASSERT removed for performance - was verifying with map_get after every map_assoc
 
   return new_map;  // owned (rc=1)
-
-  // Error case: invalid map or wrong type
-  return map;  // Return original map on error
 }
 
 CljPersistentMap* map_assoc(CljPersistentMap* map, ID key, ID value) {
-  return map_assoc_core(map, key, value);
-}
-
-static CljPersistentMap* map_assoc_owned(CljPersistentMap* map, ID key, ID value) {
-  return map_assoc_core(map, key, value);
+  CljPersistentMap *updated = map_assoc_core(map, key, value);
+  // MEMORY_POLICY: only newly allocated results are autoreleased.
+  // In-place updates return the original map pointer and must not gain an extra pool release.
+  if (updated && updated != map) return (CljPersistentMap*)AUTORELEASE(updated);
+  return updated;
 }
 
 /** Merge two maps with optional overwrite. */
@@ -348,9 +355,6 @@ static CljPersistentMap* map_remove_core(CljPersistentMap *map, ID key) {
   size_t struct_size = sizeof(CljPersistentMap);
   size_t data_size = (size_t)map_data->capacity * 2 * sizeof(CljObject*);
   CljPersistentMap *new_map = (CljPersistentMap*)alloc(struct_size + data_size, 1, CLJ_MAP_PERSISTENT);
-  if (!new_map) {
-    throw_oom();
-  }
 
   new_map->base.type = CLJ_MAP_PERSISTENT;
   new_map->base.flags = map_data->base.flags;
@@ -378,17 +382,16 @@ static CljPersistentMap* map_remove_core(CljPersistentMap *map, ID key) {
 }
 
 CljPersistentMap* map_remove(CljPersistentMap *map, ID key) {
-  return map_remove_core(map, key);
-}
-
-static CljPersistentMap* map_remove_owned(CljPersistentMap *map, ID key) {
-  return map_remove_core(map, key);
+  CljPersistentMap *updated = map_remove_core(map, key);
+  // Same ownership rule as map_assoc: autorelease only for new instances.
+  if (updated && updated != map) return (CljPersistentMap*)AUTORELEASE(updated);
+  return updated;
 }
 
 void map_assoc_inplace(CljPersistentMap **map_slot, ID key, ID value) {
   if (!map_slot || !*map_slot) return;
   CljPersistentMap *current = *map_slot;
-  CljPersistentMap *updated = map_assoc_owned(current, key, value);
+  CljPersistentMap *updated = map_assoc_core(current, key, value);
   if (updated && updated != current) {
     RELEASE(current);
     *map_slot = updated;
@@ -398,7 +401,7 @@ void map_assoc_inplace(CljPersistentMap **map_slot, ID key, ID value) {
 void map_remove_inplace(CljPersistentMap **map_slot, ID key) {
   if (!map_slot || !*map_slot) return;
   CljPersistentMap *current = *map_slot;
-  CljPersistentMap *updated = map_remove_owned(current, key);
+  CljPersistentMap *updated = map_remove_core(current, key);
   if (updated && updated != current) {
     RELEASE(current);
     *map_slot = updated;
@@ -504,9 +507,6 @@ static CljPersistentMap* map_copy(CljPersistentMap *src) {
     size_t struct_size = sizeof(CljPersistentMap);
     size_t data_size = (size_t)src->capacity * 2 * sizeof(CljObject*);
     CljPersistentMap *new_map = (CljPersistentMap*)alloc(struct_size + data_size, 1, CLJ_MAP_PERSISTENT);
-    if (!new_map) {
-        throw_oom();
-    }
 
     // Initialize new map
   new_map->base.type = CLJ_MAP_PERSISTENT;
@@ -588,10 +588,6 @@ CljTransientMap* map_transient(CljPersistentMap *map) {
     }
 
     CljTransientMap *tmap = (CljTransientMap*)alloc(sizeof(CljTransientMap), 1, CLJ_MAP_TRANSIENT);
-    if (!tmap) {
-        throw_oom();
-        return NULL;
-    }
   tmap->base.type = CLJ_MAP_TRANSIENT;
   tmap->backing = (CljPersistentMap*)RETAIN(map);
   return tmap;

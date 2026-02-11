@@ -4,7 +4,7 @@
  * Consolidated tests for core Clojure functions from clojure.core namespace
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 1700
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 800
 #include "tests_common.h"
 #include "namespace.h"
 #include "symbol.h"

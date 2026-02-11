@@ -16,15 +16,11 @@
 #include "strings.h"
 #include "value.h"
 
-static char *copy_string_cstr(CljString *str, const char *context) {
+static char *copy_string_cstr(CljString *str) {
     if (!str) return NULL;
     size_t len = string_length((ID)str);
     const char *data = string_data((ID)str);
     char *buf = CLJ_MALLOC(len + 1);
-    if (!buf) {
-        throw_exception(EXCEPTION_RUNTIME, context, __FILE__, __LINE__, 0);
-        return NULL;
-    }
     if (len > 0) {
         memcpy(buf, data, len);
     }
@@ -56,7 +52,7 @@ ID native_re_pattern(ID *args, unsigned int argc) {
     }
 
     CljString *pattern_str = as_clj_string(pattern_arg);
-    char *pattern = copy_string_cstr(pattern_str, "re-pattern: failed to allocate pattern buffer");
+    char *pattern = copy_string_cstr(pattern_str);
     if (!pattern) return NULL;
 
     char error[256];
@@ -93,7 +89,7 @@ ID native_re_find(ID *args, unsigned int argc) {
 
     CljRegex *re = (CljRegex *)re_arg;
     CljString *str = as_clj_string(str_arg);
-    char *text = copy_string_cstr(str, "re-find: failed to allocate text buffer");
+    char *text = copy_string_cstr(str);
     if (!text) return NULL;
 
     const char *match_start = NULL;
@@ -135,7 +131,7 @@ ID native_re_matches(ID *args, unsigned int argc) {
 
     CljRegex *re = (CljRegex *)re_arg;
     CljString *str = as_clj_string(str_arg);
-    char *text = copy_string_cstr(str, "re-matches: failed to allocate text buffer");
+    char *text = copy_string_cstr(str);
     if (!text) return NULL;
 
     if (!regex_matches(re, text)) {
@@ -171,7 +167,7 @@ ID native_re_seq(ID *args, unsigned int argc) {
 
     CljRegex *re = (CljRegex *)re_arg;
     CljString *str = as_clj_string(str_arg);
-    char *text = copy_string_cstr(str, "re-seq: failed to allocate text buffer");
+    char *text = copy_string_cstr(str);
     if (!text) return NULL;
     const char *pos = text;
 

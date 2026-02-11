@@ -229,9 +229,6 @@ static char* unescape_eval_arg(const char *raw_code) {
     CLJ_ASSERT(raw_code != NULL);
     size_t len = strlen(raw_code);
     char *buffer = (char*)CLJ_MALLOC(len + 1);
-    if (!buffer) {
-        return NULL;
-    }
 
     size_t w = 0;
     bool changed = false;
@@ -686,7 +683,6 @@ int main(int argc, char **argv) {
     // Allocate array for eval arguments
     if (eval_count > 0) {
         eval_args = CLJ_MALLOC(sizeof(char*) * eval_count);
-        if (!eval_args) return 1;
     }
 
     // Second pass: collect all arguments
@@ -799,11 +795,6 @@ int main(int argc, char **argv) {
 
         // Allocate buffer (sz + 1 for null terminator)
         char *buffer = (char*)CLJ_MALLOC((size_t)sz + 1);
-        if (!buffer) {
-            fclose(fp);
-            printf("Error: Out of memory\n");
-            cleanup_and_exit(eval_args, 1);
-        }
 
         // Read entire file
         size_t n = fread(buffer, 1, (size_t)sz, fp);
@@ -844,21 +835,12 @@ int main(int argc, char **argv) {
         size_t capacity = 4096;
         size_t len = 0;
         char *buffer = (char*)CLJ_MALLOC(capacity);
-        if (!buffer) {
-            fprintf(stderr, "Error: Out of memory while reading stdin\n");
-            cleanup_and_exit(eval_args, 1);
-        }
 
         int ch;
         while ((ch = fgetc(stdin)) != EOF) {
             if (len + 1 >= capacity) {
                 size_t new_cap = capacity * 2;
                 char *tmp = (char*)CLJ_REALLOC(buffer, new_cap);
-                if (!tmp) {
-                    CLJ_FREE(buffer);
-                    fprintf(stderr, "Error: Out of memory while reading stdin\n");
-                    cleanup_and_exit(eval_args, 1);
-                }
                 buffer = tmp;
                 capacity = new_cap;
             }

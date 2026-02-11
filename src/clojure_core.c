@@ -182,10 +182,6 @@ static char* read_file_cstr_local(const char *path) {
     return NULL;
   }
   char *buffer = (char*)CLJ_MALLOC((size_t)sz + 1);
-  if (!buffer) {
-    fclose(fp);
-    return NULL;
-  }
   size_t read_sz = fread(buffer, 1, (size_t)sz, fp);
   buffer[read_sz] = '\0';
   fclose(fp);

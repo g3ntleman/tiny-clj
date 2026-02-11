@@ -298,7 +298,18 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
         // For functions without recur (like fib), this check is always false - zero overhead
         if (used_recur_slots > 0) {
         for (int i = 0; i < used_recur_slots; i++) {
-            RELEASE(recur_args[i]);
+            ID rv = recur_args[i];
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
+            if (rv && !IS_IMMEDIATE(rv)) {
+                int rc = retain_count(rv);
+                uint32_t pool_count = autorelease_count(rv);
+                if (rc > (int)pool_count) {
+                    RELEASE(rv);
+                }
+            }
+#else
+            RELEASE(rv);
+#endif
             recur_args[i] = NULL;
         }
         used_recur_slots = 0;
@@ -323,8 +334,8 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
         if (recur_arg_count >= 0) {
             // Tail call detected: recur was used in this function
             CLJ_ASSERT(recur_arg_count <= param_count);
-            // RELEASE handles NULL and immediates automatically
-            RELEASE(new_result);
+            // new_result may be borrowed/autoreleased (e.g. list literals).
+            // Do not release it here; recur ignores this value semantically.
 
             // Update argc and copy new arguments from recur_args
             CLJ_ASSERT(recur_arg_count >= 0 && recur_arg_count <= param_count);
@@ -357,7 +368,18 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
     // OPTIMIZATION: Only cleanup if recur args were actually set
     if (used_recur_slots > 0) {
     for (int i = 0; i < used_recur_slots; i++) {
-        RELEASE(recur_args[i]);
+        ID rv = recur_args[i];
+#if defined(DEBUG) && defined(ZOMBIE_ENABLED)
+        if (rv && !IS_IMMEDIATE(rv)) {
+            int rc = retain_count(rv);
+            uint32_t pool_count = autorelease_count(rv);
+            if (rc > (int)pool_count) {
+                RELEASE(rv);
+            }
+        }
+#else
+        RELEASE(rv);
+#endif
         }
     }
 
@@ -604,7 +626,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
         if (v == NOT_FOUND || !v) return NULL;
         if (IS_IMMEDIATE(v)) return v;
-        return AUTORELEASE(RETAIN(v));
+        // Frame owns this value for the current call-frame lifetime.
+        return v;
     }
 
     if (body_tag == CLJ_SYMBOL) {
@@ -632,7 +655,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                     // This is correct for macros where a symbol parameter can have a symbol value
                     if (!frame_value) return NULL;
                     if (IS_IMMEDIATE(frame_value)) return frame_value;
-                    return AUTORELEASE(RETAIN(frame_value));
+                    return frame_value;
                 }
             }
             
@@ -658,7 +681,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                         throw_unresolved_symbol_exception_symbol(body_sym);
                     }
                 }
-                return AUTORELEASE(RETAIN(resolved_id));
+                return resolved_id;
             }
         }
         // If still not found, try namespace lookup (for recursive function calls)
@@ -767,11 +790,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
                 ID eval_value = value ? eval_body_with_params(value, ctx) : NULL;
                 
-                CljPersistentMap *old_result = result;
-                result = map_assoc(result, eval_key, eval_value);
-                if (result != old_result) {
-                    RELEASE(old_result);
-                }
+                ASSIGN(result, map_assoc(result, eval_key, eval_value));
             }
             
             return AUTORELEASE(result);
@@ -933,12 +952,8 @@ static ID __attribute__((noinline)) eval_body_no_ctx(ID body, CljPersistentMap *
                     eval_value = eval_body_no_ctx(value, env, st);
                 }
 
-                // Add evaluated key-value pair to result map while preserving single ownership.
-                CljPersistentMap *old_result = result;
-                result = map_assoc(result, eval_key, eval_value);
-                if (result != old_result) {
-                    RELEASE(old_result);
-                }
+                // Keep result ownership stable across COW/new-instance and in-place paths.
+                ASSIGN(result, map_assoc(result, eval_key, eval_value));
 
                 // eval_body returns autoreleased or borrowed values; do not RELEASE here.
             }
@@ -1219,7 +1234,7 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
     if (op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE) {
         ID result = call_function_with_args_and_context_vec(op, args, env, st, ctx);
         if (result == SYM_NIL) return NULL;
-        return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
+        return result;
     }
 
     if (is_keyword(op)) {
@@ -1288,7 +1303,7 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
             ID result = call_function_with_args_and_context_vec(fn, args, env, st, ctx);
             g_eval_arg_depth--;
             if (result == SYM_NIL) return NULL;
-            return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
+            return result;
         }
 
         if (fn_tag == CLJ_LIST) {
@@ -2151,7 +2166,7 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
 
     // If this is a named function, bind it to its own name in closure for recursion
     if (fn_name) {
-        CljPersistentMap *self_binding = map_assoc(map_empty(), fn_name, fn);
+        CljPersistentMap *self_binding = RETAIN(map_assoc(map_empty(), fn_name, fn));
         RELEASE(fn);  // Balance map_assoc's RETAIN
         
         // Rewrite recursive calls: For def, use qualified name (TCO optimization)
@@ -2446,7 +2461,7 @@ ID eval_doseq(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, c
             WITH_AUTORELEASE_POOL({
                 if (ctx) {
                     CljPersistentVector *new_stack = (CljPersistentVector*)RETAIN(ctx->env_stack);
-                    CljPersistentMap *self_bind = map_assoc(map_empty(), var, element);
+                    CljPersistentMap *self_bind = RETAIN(map_assoc(map_empty(), var, element));
                     env_stack_push_inplace(&new_stack, self_bind);
                     RELEASE(self_bind);
 
@@ -2572,7 +2587,7 @@ ID eval_let(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, con
                     }
                 }
                 if (!already_bound) {
-                    CljPersistentMap *self_bind = map_assoc(map_empty(), sym_val, stored_value);
+                    CljPersistentMap *self_bind = RETAIN(map_assoc(map_empty(), sym_val, stored_value));
                     env_stack_push_inplace(&f->env_stack, self_bind);
                     RELEASE(self_bind);
                 }
@@ -2705,7 +2720,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
                     if (bound != NOT_FOUND) {
                         if (!bound) return NULL;
                         if (IS_IMMEDIATE(bound)) return bound;
-                        return AUTORELEASE(RETAIN(bound));
+                        return bound;
                     }
                 }
             }
@@ -2727,10 +2742,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
             if (IS_IMMEDIATE(resolved_value)) {
                 return resolved_value;
             }
-            // resolved_value can come from map_get (pointer) or ns_resolve (safe)
-            // map_get returns only pointer, ns_resolve returns safe value
-            // Since we can't distinguish, use RETAIN+AUTORELEASE for safety
-            return AUTORELEASE(RETAIN(resolved_value)); // question this!!
+            return resolved_value;
         }
 
         // Only call as_symbol when needed (error paths)
@@ -2766,11 +2778,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
             ID value_id = value;
             ID eval_key = (key_id == SYM_NIL) ? NULL : eval_body(key_id, eval_env, eval_st, NULL);
             ID eval_value = (value_id == SYM_NIL) ? NULL : eval_body(value_id, eval_env, eval_st, NULL);
-            CljPersistentMap *old_result = result;
-            result = map_assoc(result, eval_key, eval_value);
-            if (result != old_result) {
-                RELEASE(old_result);
-            }
+            ASSIGN(result, map_assoc(result, eval_key, eval_value));
         }
 
         return AUTORELEASE(result);
@@ -2993,7 +3001,7 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
     // Build result map with per-type diffs. Always return a map, even if all
     // deltas are zero (useful for consistent debugging output).
     CljPersistentMap *result = map_empty();
-    result = map_assoc(result, intern_symbol_global(":total"), fixnum((int)total_diff));
+    ASSIGN(result, map_assoc(result, intern_symbol_global(":total"), fixnum((int)total_diff)));
 
     // Add per-type diffs (bytes_current_by_type tracks actual bytes)
     for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
@@ -3007,7 +3015,7 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
             if (len >= sizeof(kw_buf) - 1) len = sizeof(kw_buf) - 2;
             memcpy(kw_buf + 1, type_name, len);
             kw_buf[len + 1] = '\0';
-            result = map_assoc(result, intern_symbol_global(kw_buf), fixnum((int)bytes_diff));
+            ASSIGN(result, map_assoc(result, intern_symbol_global(kw_buf), fixnum((int)bytes_diff)));
         }
     }
 

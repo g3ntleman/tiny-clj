@@ -29,7 +29,6 @@ CljLazySeq* make_lazy_seq(ID thunk) {
     if (!thunk) return NULL;
 
     CljLazySeq *lazy = ALLOC(CljLazySeq, 1);
-    if (!lazy) return NULL;
 
     lazy->base.type = CLJ_LAZY_SEQ;
     lazy->base.flags = 0;
@@ -610,7 +609,6 @@ CljSeqIterator* make_seq(ID obj) {
         return NULL;
 
     CljSeqIterator *heap_seq = ALLOC(CljSeqIterator, 1);
-    if (!heap_seq) throw_oom();
     heap_seq->base.type = CLJ_SEQ;
     heap_seq->base.rc = 1;
     heap_seq->iter = stack_iter;
@@ -643,7 +641,6 @@ ID seq_rest(ID seq_obj) {
     // Create new heap wrapper with advanced iterator
     // Use malloc instead of calloc - all fields are immediately initialized
     CljSeqIterator *rest_seq = ALLOC(CljSeqIterator, 1);
-    if (!rest_seq) return NULL;
     
     rest_seq->base.type = CLJ_SEQ;
     rest_seq->base.rc = 1;

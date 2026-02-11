@@ -20,8 +20,10 @@ int load_clojure_core(EvalState *st);
 // ============================================================================
 
 static void load_clojure_string_namespace(void) {
-    // shared_test_string preloads clojure.string in setUp().
-    (void)0;
+    // Some tests in this file are plain TEST(...) and do not run shared setup.
+    // Require explicitly so qualified calls are always available.
+    ID req_result = eval_string("(require 'clojure.string)", g_test_eval_state);
+    (void)req_result; // require returns nil
 }
 
 // ============================================================================

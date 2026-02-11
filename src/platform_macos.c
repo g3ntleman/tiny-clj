@@ -501,10 +501,6 @@ static void udp_socket_cb(CFSocketRef s,
 
 static PlatformUdpSocket* udp_wrap_native_fd(int fd, platform_udp_recv_cb cb, void *cb_ctx) {
     PlatformUdpSocket *u = (PlatformUdpSocket*)CLJ_CALLOC(1, sizeof(PlatformUdpSocket));
-    if (!u) {
-        close(fd);
-        return NULL;
-    }
     u->cb = cb;
     u->cb_ctx = cb_ctx;
 
@@ -625,7 +621,6 @@ PlatformMdns* platform_mdns_open(platform_udp_recv_cb cb, void *cb_ctx) {
     const uint16_t port = 5353;
 
     PlatformMdns *m = (PlatformMdns*)CLJ_CALLOC(1, sizeof(PlatformMdns));
-    if (!m) return NULL;
 
     // Enumerate interfaces so we can join IPv4/IPv6 mDNS multicast groups on all
     // multicast-capable interfaces. This matters on hosts with VPNs / multiple NICs.
@@ -962,7 +957,6 @@ PlatformTcpConn* platform_tcp_connect_async(const char *host, uint16_t port,
     if (!host || !cb) return NULL;
 
     PlatformTcpConn *c = (PlatformTcpConn*)CLJ_CALLOC(1, sizeof(PlatformTcpConn));
-    if (!c) return NULL;
     c->cb = cb;
     c->cb_ctx = cb_ctx;
     c->connected_emitted = false;

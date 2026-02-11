@@ -29,9 +29,6 @@ static const DebugTraceConfig ast_trace_cfg = {
  */
 CljASTNode* make_ast_node(ID first, ID rest) {
     CljASTNode *node = ALLOC(CljASTNode, 1);
-    if (!node) {
-        throw_oom();
-    }
 
     node->base.type = CLJ_AST_NODE;
     node->first = RETAIN(first);
@@ -54,9 +51,6 @@ CljASTNode* make_ast_node(ID first, ID rest) {
  */
 CljASTCall* make_ast_call(ID op, CljPersistentVector *args) {
     CljASTCall *call = ALLOC(CljASTCall, 1);
-    if (!call) {
-        throw_oom();
-    }
 
     call->base.type = CLJ_AST_CALL;
     call->op = RETAIN(op);
@@ -76,7 +70,6 @@ CljASTCall* make_ast_call(ID op, CljPersistentVector *args) {
 CljSlotRef* make_slot_ref(CljSymbol *symbol, uint8_t depth, uint8_t slot) {
     // Can't use ALLOC(CljSlotRef, ...) because TYPE_OF_CljSlotRef isn't defined in subjective-c.
     CljSlotRef *ref = (CljSlotRef*)alloc(sizeof(CljSlotRef), 1, CLJ_SLOT_REF);
-    if (!ref) throw_oom();
 
     // alloc() sets type, but keep this explicit for robustness.
     ref->base.type = CLJ_SLOT_REF;
@@ -191,9 +184,6 @@ ID ast_call_get_callsite_cache(const CljASTCall *call) {
  */
 CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint64_t epoch) {
     CljCallsiteCache *cache = ALLOC(CljCallsiteCache, 1);
-    if (!cache) {
-        throw_oom();
-    }
 
     cache->base.type = CLJ_CALLSITE_CACHE;
     cache->symbol = symbol;

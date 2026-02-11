@@ -732,20 +732,22 @@ ID native_first(ID *args, unsigned int argc)
         ID first = LIST_FIRST((CljList *)coll);
         // Arguments are evaluated, but list elements might still be SYM_NIL
         // Convert SYM_NIL to NULL (nil representation)
-        return (first == SYM_NIL) ? NULL : first;
+        if (first == SYM_NIL) return NULL;
+        return RETAIN(first);
     }
 
     case CLJ_SEQ:
     {
         // Already a sequence - just call seq_first (DRY)
-        return seq_first(coll);
+        ID first = seq_first(coll);
+        return RETAIN(first);
     }
 
     default:
     {
         CljSeqIterator *it = make_seq(coll);
         if (!it) return NULL;
-        ID result = seq_first(it);
+        ID result = RETAIN(seq_first(it));
         RELEASE(it);
         return result;
     }
@@ -898,6 +900,7 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
     RELEASE(rest_thunk);
     RELEASE(rest_env_stack);
     CljList *result = make_list(elem, (CljList*)rest_lazy);
+    RELEASE(elem);
     RELEASE(rest_lazy);
     return result;
 }
@@ -1084,7 +1087,6 @@ static void destructure_seq(CljPersistentVector **bvec_slot, ID bform, ID init) 
             vector_conj_inplace(&bvec, next);
             ID f = destructure_list3(sym_nthnext, gvec, fixnum(idx));
             vector_conj_inplace(&bvec, f);
-            RELEASE(f);
             skip = 1;
         } else if (elem == SYM_KW_AS) {
             vector_conj_inplace(&bvec, next);
@@ -1094,7 +1096,6 @@ static void destructure_seq(CljPersistentVector **bvec_slot, ID bform, ID init) 
             vector_conj_inplace(&bvec, elem);
             ID f = destructure_list4(SYM_NTH, gvec, fixnum(idx), NULL);
             vector_conj_inplace(&bvec, f);
-            RELEASE(f);
             idx++;
         }
     }
@@ -1151,7 +1152,6 @@ static void destructure_map(CljPersistentVector **bvec_slot, ID bform, ID init) 
                           : destructure_list3(sym_get, gmap, kw);
         vector_conj_inplace(&bvec, sym);
         vector_conj_inplace(&bvec, get_form);
-        RELEASE(get_form);
     }
 
     *bvec_slot = bvec;
@@ -1741,11 +1741,6 @@ ID native_cons(ID *args, unsigned int argc)
         }
 
         CljLazySeq *lazy = ALLOC(CljLazySeq, 1);
-        if (!lazy)
-        {
-            RELEASE(tail);
-            return NULL;
-        }
 
         lazy->base.type = CLJ_LAZY_SEQ;
         lazy->base.flags = 0;
@@ -1829,10 +1824,13 @@ ID native_reduce(ID *args, unsigned int argc)
         ID current = seq_iter_first(&iter);
         ID call_args[2] = {acc, current};
         ID new_acc = eval_function_call(fn, call_args, 2, NULL, st);
+        if (new_acc && !IS_IMMEDIATE(new_acc)) {
+            RETAIN(new_acc);
+        }
         if (acc_owned)
             RELEASE(acc);
         acc = new_acc;
-        acc_owned = true;
+        acc_owned = (new_acc && !IS_IMMEDIATE(new_acc));
         seq_iter_next(&iter);
     }
 
@@ -2068,26 +2066,33 @@ ID native_dissoc(ID *args, unsigned int argc)
 
     // Remove keys one by one (Clojure semantics: multiple keys supported)
     CljPersistentMap *result = map;
+    bool result_owned = false;
     for (unsigned int i = 1; i < argc; i++)
     {
         ID key = args[i];
         if (!key)
             continue; // Skip NULL keys
 
-        // map_remove returns a new map (or original if key not found)
         CljPersistentMap *new_result = map_remove(result, key);
         if (new_result != result)
         {
-            // New map was created - release old one if it was retained
-            if (i > 1 || result != map)
+            // map_remove returns pool-managed maps on replacement path;
+            // retain while we keep it across loop iterations.
+            RETAIN(new_result);
+            if (result_owned)
             {
                 RELEASE(result);
             }
             result = new_result;
+            result_owned = true;
         }
     }
 
-    // Return result (already safe - from map_remove or parameter)
+    // If we retained an intermediate/new map, return it pool-managed.
+    if (result_owned)
+    {
+        AUTORELEASE(result);
+    }
     return result;
 }
 
@@ -3701,10 +3706,6 @@ ID native_repl_dir(ID *args, unsigned int argc)
     }
 
     const char **names = (const char **)CLJ_MALLOC(sizeof(char *) * entry_count);
-    if (!names)
-    {
-        throw_oom();
-    }
 
     int idx_names = 0;
     MAP_FOR_EACH(target_ns->mappings, key, value)
@@ -4525,8 +4526,6 @@ static char *namespace_to_relpath(const char *ns_name)
     size_t len = strlen(ns_name);
     // Worst case: all chars + possible slashes + ".clj" + NUL
     char *buf = (char *)CLJ_MALLOC(len + 5);
-    if (!buf)
-        return NULL;
     for (size_t i = 0; i < len; i++)
     {
         char c = ns_name[i];
@@ -6905,10 +6904,6 @@ ID native_swap_bang(ID *args, unsigned int argc)
         fn_argc = argc - 2;
         // Use malloc instead of calloc - array is immediately filled
         fn_args = (ID *)CLJ_MALLOC(fn_argc * sizeof(ID));
-        if (!fn_args)
-        {
-            throw_oom();
-        }
 
         for (unsigned int i = 0; i < fn_argc; i++)
         {
@@ -6999,6 +6994,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
 #define MAP_REASSIGN(var, expr) do { \
     CljPersistentMap *_next_map = (expr); \
     if (_next_map != (var)) { \
+        RETAIN(_next_map); \
         RELEASE(var); \
         (var) = _next_map; \
     } \
@@ -7462,10 +7458,6 @@ static void register_builtin(const char *cname, BuiltinFn func)
         }
 
         char *ns_name = (char *)CLJ_MALLOC(ns_len + 1);
-        if (!ns_name)
-        {
-            return;
-        }
         strncpy(ns_name, cname, ns_len);
         ns_name[ns_len] = '\0';
 

@@ -436,8 +436,8 @@ TEST_SHARED(test_map_equal_after_add_and_remove) {
     CljString *temp_key = make_string("temp-key");
     CljString *temp_val = make_string("temp-val");
 
-    CljPersistentMap *with_temp = map_assoc(map, temp_key, temp_val);
-    CljPersistentMap *back_to_orig = map_remove(with_temp, temp_key);
+    CljPersistentMap *with_temp = RETAIN(map_assoc(map, temp_key, temp_val));
+    CljPersistentMap *back_to_orig = RETAIN(map_remove(with_temp, temp_key));
 
     // After add+remove, temp entry must be gone and original entries intact.
     TEST_ASSERT_EQUAL_INT(2, map_count(back_to_orig));

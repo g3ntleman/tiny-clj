@@ -605,7 +605,6 @@ TEST(test_parse_vector_strings_inner_pool) {
         TEST_ASSERT_TRUE(TAG(elem) == CLJ_STRING);
         ID expected_str = make_string(expected[i]);
         TEST_ASSERT_TRUE(clj_equal(elem, expected_str));
-        RELEASE(elem);
         RELEASE(expected_str);
     }
   });

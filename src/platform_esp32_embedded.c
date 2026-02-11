@@ -186,10 +186,6 @@ PlatformUdpSocket* platform_udp_bind(uint16_t port, platform_udp_recv_cb cb, voi
     }
 
     PlatformUdpSocket *sock = (PlatformUdpSocket*)CLJ_MALLOC(sizeof(PlatformUdpSocket));
-    if (!sock) {
-        udp_remove(pcb);
-        return NULL;
-    }
     sock->pcb = pcb;
     sock->cb = cb;
     sock->cb_ctx = cb_ctx;
@@ -306,10 +302,6 @@ PlatformTcpConn* platform_tcp_connect_async(const char *host, uint16_t port,
     if (!pcb) return NULL;
 
     PlatformTcpConn *c = (PlatformTcpConn*)CLJ_MALLOC(sizeof(PlatformTcpConn));
-    if (!c) {
-        tcp_abort(pcb);
-        return NULL;
-    }
     c->pcb = pcb;
     c->cb = cb;
     c->cb_ctx = cb_ctx;

@@ -349,8 +349,9 @@ ID eval_special_quote(CljPersistentVector *args, CljPersistentMap *env, EvalStat
     ID quoted_expr = args_nth(args, 0);
     if (!quoted_expr) return NULL;
     if (IS_IMMEDIATE(quoted_expr)) return quoted_expr;
-    // Otherwise retain to decouple from AST lifetime, then autorelease for caller ownership.
-    return AUTORELEASE(RETAIN(quoted_expr));
+    // Quote returns the literal object as-is.
+    // The literal is already owned by its AST/form container.
+    return quoted_expr;
 }
 
 ID eval_special_throw(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
@@ -507,9 +508,6 @@ ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState
 
         binding_params[binding_index] = sym;
         binding_values[binding_index] = value;
-        if (value && !IS_IMMEDIATE(value)) {
-            RETAIN(value);
-        }
 
         frame_set_bindings(loop_frame, ctx ? ctx->frame : NULL,
                            binding_params, binding_values, binding_index + 1);
@@ -525,9 +523,6 @@ ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState
             }
         }
 
-        if (value && !IS_IMMEDIATE(value)) {
-            RELEASE(value);
-        }
         binding_index++;
     }
 
@@ -582,12 +577,14 @@ ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState
         }
     }
 
-    // Cleanup
+    // Release frame-owned locals while preserving returned value ownership.
+    if (loop_frame) {
+        frame_release_except(loop_frame, result);
+    }
+
+    // Cleanup explicit recur-arg ownership.
     for (int i = 0; i < pair_count; i++) {
-        if (binding_values[i] && !IS_IMMEDIATE(binding_values[i])) {
-            RELEASE(binding_values[i]);
-        }
-        if (recur_args[i] && !IS_IMMEDIATE(recur_args[i])) {
+        if (recur_args[i] && recur_args[i] != result && !IS_IMMEDIATE(recur_args[i])) {
             RELEASE(recur_args[i]);
         }
     }

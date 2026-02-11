@@ -14,10 +14,6 @@
  */
 CljAtom* make_atom(ID value) {
     CljAtom *atom = ALLOC(CljAtom, 1);
-    if (!atom) {
-        throw_oom();
-        return NULL;
-    }
 
     atom->base.type = CLJ_ATOM;
     // RETAIN handles nil and immediates safely (ignores them)
@@ -94,11 +90,6 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     // Prepare function call arguments: [current_value, ...args]
     // Use malloc instead of calloc - array is immediately filled
     ID *fn_args = (ID*)CLJ_MALLOC((argc + 1) * sizeof(ID));
-    if (!fn_args) {
-        RELEASE(current_value);
-        throw_oom();
-        return NULL;
-    }
 
     fn_args[0] = current_value;  // First argument is current atom value
     for (unsigned int i = 0; i < argc; i++) {

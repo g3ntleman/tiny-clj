@@ -237,10 +237,6 @@ int main(int argc, char **argv) {
 
     if (argc > 1) {
         test_patterns = (const char**)CLJ_CALLOC((size_t)argc, sizeof(const char*));
-        if (!test_patterns) {
-            fprintf(stderr, "ERROR: out of memory\n");
-            return 1;
-        }
     }
 
     for (int i = 1; i < argc; i++) {

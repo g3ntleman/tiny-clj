@@ -557,7 +557,5 @@ TEST(test_stacktrace_stack_trace_returns_vector_of_strings) {
         TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_STRING, TAG(frame), "every stack-trace frame should be a string");
     }
 
-    if (trace_obj && !IS_IMMEDIATE(trace_obj)) RELEASE(trace_obj);
-    if (ex_obj && !IS_IMMEDIATE(ex_obj)) RELEASE(ex_obj);
 }
 

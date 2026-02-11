@@ -31,9 +31,6 @@ CljByteArray* make_byte_array(int length) {
     }
 
     CljByteArray *ba = ALLOC(CljByteArray, 1);
-    if (!ba) {
-        throw_oom();
-    }
 
     ba->base.type = CLJ_BYTE_ARRAY;
     ba->base.flags = 0;
@@ -88,10 +85,6 @@ CljByteArray* make_byte_array_view(uint8_t *bytes, int length) {
     // Allocate as a CLJ_BYTE_ARRAY so the memory profiler / type tracking stays consistent.
     // We intentionally avoid ALLOC(CljByteArrayView, ...) because TYPE_OF() is not defined for it.
     CljByteArrayView *ext = (CljByteArrayView*)alloc(sizeof(CljByteArrayView), 1, CLJ_BYTE_ARRAY);
-    if (!ext) {
-        throw_oom();
-        return NULL;
-    }
 
     ext->base_arr.base.type = CLJ_BYTE_ARRAY;
     ext->base_arr.base.flags = CLJ_FLAG_EXTERNAL_DATA;

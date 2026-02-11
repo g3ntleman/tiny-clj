@@ -39,11 +39,6 @@ static bool format_ensure_capacity(char **buffer, size_t *buf_size, char **out, 
     }
 
     char *new_buf = CLJ_REALLOC(*buffer, new_size);
-    if (!new_buf) {
-        throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
-                       __FILE__, __LINE__, 0);
-        return false;
-    }
 
     *buffer = new_buf;
     *buf_size = new_size;
@@ -571,11 +566,6 @@ ID native_format(ID *args, unsigned int argc) {
     // Allocate buffer for formatted string (start with reasonable size)
     size_t buf_size = 256;
     char *buffer = CLJ_MALLOC(buf_size);
-    if (!buffer) {
-        throw_exception(EXCEPTION_RUNTIME, "format: failed to allocate buffer",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
 
     // Format arguments based on format string
     if (argc == 1) {

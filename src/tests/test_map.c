@@ -657,7 +657,7 @@ TEST(test_map_assoc_nil_key) {
         // assoc nil key with value
         CljObject *value = AUTORELEASE(intern_symbol(NULL, "nil-value"));
         RETAIN(value);
-        map = map_assoc(map, NULL, value);
+        map = RETAIN(map_assoc(map, NULL, value));
         TEST_ASSERT_NOT_NULL(map);
         TEST_ASSERT_EQUAL_INT(1, map->count);
         
@@ -731,7 +731,7 @@ TEST(test_map_contains_nil_key) {
         CljPersistentMap *map = map_empty();
         CljObject *value = (CljObject*)intern_symbol(NULL, "nil-value");
         RETAIN(value);
-        map = map_assoc(map, NULL, value);
+        map = RETAIN(map_assoc(map, NULL, value));
         TEST_ASSERT_NOT_NULL(map);
         
         // map_contains should return true for nil key

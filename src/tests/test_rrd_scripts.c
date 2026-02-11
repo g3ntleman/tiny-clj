@@ -41,7 +41,6 @@ static int inject_file_into_store(const char *logical_key, const char *path)
     if (size < 0) { fclose(fp); return 0; }
     if (fseek(fp, 0, SEEK_SET) != 0) { fclose(fp); return 0; }
     char *buf = (char *)CLJ_MALLOC((size_t)size + 1);
-    if (!buf) { fclose(fp); return 0; }
     size_t n = fread(buf, 1, (size_t)size, fp);
     fclose(fp);
     if (n != (size_t)size) { CLJ_FREE(buf); return 0; }

@@ -80,11 +80,6 @@ CljString* file_slurp(const char *path) {
     // Read file content
     // Allocate buffer for file content + null terminator
     char *buffer = (char*)CLJ_MALLOC((size_t)file_size + 1);
-    if (!buffer) {
-        fclose(fp);
-        throw_oom();
-        return NULL;
-    }
     
     size_t bytes_read = fread(buffer, 1, (size_t)file_size, fp);
     buffer[bytes_read] = '\0';  // Null-terminate

@@ -156,7 +156,6 @@ static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int
 // Print AST structure for debugging
 const char* print_ast(ID v) {
     char *buf = ALLOC(char, 4096);
-    if (!buf) return clj_strdup("#<error: out of memory>");
 
     int offset = 0;
     print_ast_recursive(v, 0, buf, 4096, &offset);

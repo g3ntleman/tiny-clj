@@ -67,7 +67,6 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVe
     }
 
     CljFunction *func = (CljFunction*)alloc(sizeof(CljFunction), 1, CLJ_CLOSURE);
-    if (!func) throw_oom();
 
     func->base.type = CLJ_CLOSURE;  // Interpreted functions use CLJ_CLOSURE type
     func->body = RETAIN(body);
@@ -94,9 +93,6 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVe
 ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
 {
     CljCFunc *func = ALLOC(CljCFunc, 1);
-    if (!func) {
-        throw_oom();
-    }
 
     func->base.type = CLJ_FUNC;
     func->fn = fn;

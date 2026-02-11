@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(tiny-clj)
 
+# Generate compile_commands.json for IDE (Go to Definition, IntelliSense)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Feature flags (compile-time): all are positive *_ENABLED macros (0/1)
 option(META_ENABLED "Enable metadata support" OFF)
 option(MEMORY_PROFILING_ENABLED "Enable memory profiling hooks" ON)

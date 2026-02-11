@@ -143,6 +143,44 @@ static void test_heap_growth_check(void) {
 // GLOBAL SETUP/TEARDOWN
 // ============================================================================
 
+static void warm_shared_group_for_heap_baseline(void) {
+    if (!g_current_test_entry || !g_current_test_entry->group || !g_test_eval_state) {
+        return;
+    }
+
+    const char *group = g_current_test_entry->group;
+
+    // Keep per-test heap checks focused on the test expression, not one-time
+    // namespace/bootstrap/callsite costs that are identical across tests.
+    if (strcmp(group, "shared_test_string") == 0) {
+        WITH_AUTORELEASE_POOL({
+            (void)eval_string("(require 'clojure.string)", g_test_eval_state);
+            (void)eval_string("(clojure.string/escape \"abc\" {})", g_test_eval_state);
+            (void)eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
+            (void)eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
+            (void)eval_string("(clojure.string/index-of \"hello\" \"l\" 0)", g_test_eval_state);
+        });
+        return;
+    }
+
+    if (strcmp(group, "shared_test_loops") == 0) {
+        WITH_AUTORELEASE_POOL({
+            (void)eval_string("(for [x [1 2 3]] (* x x))", g_test_eval_state);
+            (void)eval_string("(vec (for [x [1 2] y [3 4]] [x y]))", g_test_eval_state);
+            (void)eval_string("(vec (for [x (range 6) :when (even? x)] x))", g_test_eval_state);
+            (void)eval_string("(let [s (for [x (range 5)] x)] (= (vec s) (vec s)))", g_test_eval_state);
+        });
+        return;
+    }
+
+    if (strcmp(group, "shared_test_core_functions") == 0) {
+        WITH_AUTORELEASE_POOL({
+            (void)eval_string("(first (keep (fn [x] (if (even? x) x nil)) '(1 2 3 4 5 6)))", g_test_eval_state);
+            (void)eval_string("(last (keep (fn [x] (if (even? x) x nil)) '(1 2 3 4 5 6)))", g_test_eval_state);
+        });
+    }
+}
+
 
 void setUp(void) {
     // Default: enforce heap growth checks for shared (read-only) tests only
@@ -164,18 +202,7 @@ void setUp(void) {
     
     // In batch mode, skip heavy initialization (clojure.core already loaded)
     if (g_batch_mode) {
-        // Keep batch-mode behavior consistent with full setUp for shared string tests:
-        // include clojure.string load and one-time callsite warmup in setup budget.
-        if (g_current_test_entry && g_current_test_entry->group &&
-            strcmp(g_current_test_entry->group, "shared_test_string") == 0) {
-            WITH_AUTORELEASE_POOL({
-                (void)eval_string("(require 'clojure.string)", g_test_eval_state);
-                (void)eval_string("(clojure.string/escape \"abc\" {})", g_test_eval_state);
-                (void)eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
-                (void)eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
-                (void)eval_string("(clojure.string/index-of \"hello\" \"l\" 0)", g_test_eval_state);
-            });
-        }
+        warm_shared_group_for_heap_baseline();
         test_heap_growth_mark_baseline();
         return;
     }
@@ -236,19 +263,7 @@ void setUp(void) {
         }
     } END_TRY
 
-    // For string shared tests, include clojure.string load cost in setup baseline.
-    // This keeps per-test heap checks focused on the test expression itself.
-    if (g_current_test_entry && g_current_test_entry->group &&
-        strcmp(g_current_test_entry->group, "shared_test_string") == 0) {
-        WITH_AUTORELEASE_POOL({
-            (void)eval_string("(require 'clojure.string)", g_test_eval_state);
-            // Warm once to exclude one-time callsite/lazy costs from per-test heap checks.
-            (void)eval_string("(clojure.string/escape \"abc\" {})", g_test_eval_state);
-            (void)eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
-            (void)eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
-            (void)eval_string("(clojure.string/index-of \"hello\" \"l\" 0)", g_test_eval_state);
-        });
-    }
+    warm_shared_group_for_heap_baseline();
 
     test_heap_growth_mark_baseline();
 }

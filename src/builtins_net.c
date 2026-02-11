@@ -122,10 +122,6 @@ static void net_udp_recv_bridge(void *ctx,
         return;
     }
     NetPacketCtx *pc = (NetPacketCtx*)CLJ_MALLOC(sizeof(NetPacketCtx));
-    if (!pc) {
-        platform_net_packet_release(packet_handle);
-        return;
-    }
     pc->packet_handle = packet_handle;
     CljByteArray *payload = make_byte_array_external((uint8_t*)data, (int)len, pc, net_packet_release_cb);
     if (!payload) {
@@ -180,10 +176,6 @@ ID native_tinyclj_net_udp_socket(ID *args, unsigned int argc) {
     }
 
     NetCtx *c = (NetCtx*)CLJ_MALLOC(sizeof(NetCtx));
-    if (!c) {
-        throw_oom();
-        return NULL;
-    }
     memset(c, 0, sizeof(*c));
     c->type = NET_TYPE_UDP;
 
@@ -197,12 +189,6 @@ ID native_tinyclj_net_udp_socket(ID *args, unsigned int argc) {
     c->on_receive_fn = NULL;
 
     c->handle_bytes = (uint8_t*)CLJ_MALLOC(sizeof(ID));
-    if (!c->handle_bytes) {
-        platform_udp_close(sock);
-        CLJ_FREE(c);
-        throw_oom();
-        return NULL;
-    }
     memcpy(c->handle_bytes, &c, sizeof(ID));
 
     CljByteArray *handle = make_byte_array_external(c->handle_bytes, (int)sizeof(ID), c, net_ctx_free);
@@ -326,10 +312,6 @@ static void net_tcp_event_bridge(void *ctx,
     }
 
     NetPacketCtx *pc = (NetPacketCtx*)CLJ_MALLOC(sizeof(NetPacketCtx));
-    if (!pc) {
-        platform_net_packet_release(packet_handle);
-        return;
-    }
     pc->packet_handle = packet_handle;
     CljByteArray *payload = make_byte_array_external((uint8_t*)data, (int)len, pc, net_packet_release_cb);
     if (!payload) {
@@ -385,10 +367,6 @@ ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc) {
     }
 
     NetCtx *c = (NetCtx*)CLJ_MALLOC(sizeof(NetCtx));
-    if (!c) {
-        throw_oom();
-        return NULL;
-    }
     memset(c, 0, sizeof(*c));
     c->type = NET_TYPE_TCP;
 
@@ -402,12 +380,6 @@ ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc) {
     c->on_receive_fn = NULL;
 
     c->handle_bytes = (uint8_t*)CLJ_MALLOC(sizeof(ID));
-    if (!c->handle_bytes) {
-        platform_tcp_close(conn);
-        CLJ_FREE(c);
-        throw_oom();
-        return NULL;
-    }
     memcpy(c->handle_bytes, &c, sizeof(ID));
 
     CljByteArray *handle = make_byte_array_external(c->handle_bytes, (int)sizeof(ID), c, net_ctx_free);

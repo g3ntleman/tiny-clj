@@ -76,10 +76,6 @@ CljString* string_view_from_byte_array(ID bytes) {
 
     // Allocate a string view backed by the byte array's data (zero-copy).
     CljByteArrayView *view = (CljByteArrayView*)alloc(sizeof(CljByteArrayView), 1, CLJ_STRING);
-    if (!view) {
-        throw_oom();
-        return NULL;
-    }
     view->base_arr.base.type = CLJ_STRING;
     view->base_arr.base.flags = CLJ_FLAG_EXTERNAL_DATA;
     view->base_arr.length = len;
@@ -104,10 +100,6 @@ CljString* make_string_buffer(size_t length) {
 
     // Allocate CljString + space for string data + null terminator
     CljString *s = (CljString*)alloc(sizeof(CljString) + length + 1, 1, CLJ_STRING);
-    if (!s) {
-        throw_oom();
-        return NULL;
-    }
 
     s->base.type = CLJ_STRING;
     s->length = (uint16_t)length;

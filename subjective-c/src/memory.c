@@ -154,7 +154,7 @@ bool memory_get_debug_output_enabled(void) {
  * @param type_size Size of object type
  * @param count Number of objects
  * @param obj_type Clojure type tag
- * @return Allocated object with rc=1, throws on OOM
+ * @return Non-NULL allocated object with rc=1. On OOM, throws and never returns.
  */
 void* alloc(size_t type_size, size_t count, CljType obj_type) {
     void *result = malloc(type_size * count);
@@ -346,7 +346,10 @@ void release(CljObject *v) {
                     (void*)v, clj_type_name(v->type), rc_before, pool_count,
                     rc_before == (int)pool_count ? "Missing RETAIN before RELEASE!" : "Will cause double-release!");
             fflush(stderr);
-            CLJ_ASSERT(rc_before > (int)pool_count && "rc must be > pool_count before RELEASE (missing RETAIN or double RELEASE)");
+            throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
+                "release: Object %p (type=%s) rc=%d <= pool_count=%u",
+                (void*)v, clj_type_name(v->type), rc_before, pool_count);
+            return;
         }
     }
 #endif
