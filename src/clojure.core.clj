@@ -942,14 +942,17 @@ R"CLOJURE(
 
 ^#^{:doc "Returns a lazy sequence of the elements of coll with duplicates removed."}
 (defn distinct [coll]
-  (let [step (fn step [seen coll]
-               (if (empty? coll)
-                 (list)
-                 (let [x (first coll)]
-                   (if (get seen x)
-                     (step seen (rest coll))
-                     (cons x (step (assoc seen x true) (rest coll)))))))]
-    (step {} coll)))
+  (loop [seen {}
+         xs coll
+         out []]
+    (if (empty? xs)
+      (seq out)
+      (let [x (first xs)]
+        (if (get seen x)
+          (recur seen (rest xs) out)
+          (recur (assoc seen x true)
+                 (rest xs)
+                 (conj out x)))))))
 
 ; ============================================================================
 ; Partitioning Functions (Phase 5) - partition is now defined earlier
@@ -975,12 +978,14 @@ R"CLOJURE(
 
 ^#^{:doc "Returns a map with the keys mapped to the corresponding vals."}
 (defn zipmap [ks vs]
-  (let [step (fn step [m ks vs]
-               (if (or (empty? ks) (empty? vs))
-                 m
-                 (step (assoc m (first ks) (first vs))
-                       (rest ks) (rest vs))))]
-    (step {} ks vs)))
+  (loop [m {}
+         ks ks
+         vs vs]
+    (if (or (empty? ks) (empty? vs))
+      m
+      (recur (assoc m (first ks) (first vs))
+             (rest ks)
+             (rest vs)))))
 
 ^#^{:doc "Returns the value in a nested associative structure."}
 (defn get-in [m ks]
