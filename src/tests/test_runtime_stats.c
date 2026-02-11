@@ -399,12 +399,30 @@ TEST(test_runtime_stats_core_load_under_100k)
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_core_load_peak_under_150k)
 {
+    // Fresh runtime state for a clean peak baseline.
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    init_special_symbols();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+
+    evalstate_reset(&g_test_eval_state, false);
+
+    MemoryStats before = memory_profiler_get_stats();
+    load_clojure_core(g_test_eval_state);
     MemoryStats after = memory_profiler_get_stats();
+    size_t peak_delta = (after.peak_memory_usage > before.peak_memory_usage)
+        ? (after.peak_memory_usage - before.peak_memory_usage)
+        : 0;
     size_t limit = 150 * 1024;
     char msg[128];
-    snprintf(msg, sizeof(msg), "core load peak must be <= %zu bytes (got %zu)",
-             limit, after.peak_memory_usage);
-    TEST_ASSERT_TRUE_MESSAGE(after.peak_memory_usage <= limit, msg);
+    snprintf(msg, sizeof(msg), "core load peak delta must be <= %zu bytes (got %zu)",
+             limit, peak_delta);
+    TEST_ASSERT_TRUE_MESSAGE(peak_delta <= limit, msg);
 }
 #endif
 
@@ -613,4 +631,5 @@ TEST(test_runtime_stats_assoc_var_per_eval_growth_bounded)
     TEST_ASSERT_TRUE_MESSAGE(delta <= tolerance, msg);
 }
 #endif
+
 

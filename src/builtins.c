@@ -1600,7 +1600,9 @@ ID native_filter(ID *args, unsigned int argc)
     for (int i = (int)n - 1; i >= 0; i--)
     {
         ID v = vector_nth(kept, (unsigned int)i);
-        out = make_list(v, out);
+        CljList *next_out = make_list(v, out);
+        RELEASE(out);
+        out = next_out;
     }
     RELEASE(kept);
     return out ? AUTORELEASE(out) : empty_list();
@@ -2906,12 +2908,11 @@ ID native_vec(ID *args, unsigned int argc)
         return empty_vector();
     }
 
-    // If already a vector, return same object (No-Op - Clojure behavior)
-    // Note: coll is already AUTORELEASEd by eval_arg, so we need to AUTORELEASE it again
-    // to ensure it's in the caller's pool
+    // If already a vector, return same object (No-Op - Clojure behavior).
+    // Eval path values are already pool-safe; do not AUTORELEASE again here.
     if (TAG(coll) == CLJ_VECTOR_PERSISTENT)
     {
-        return AUTORELEASE(coll);
+        return coll;
     }
 
     // Check if collection is seqable
@@ -5813,7 +5814,7 @@ static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {
     RELEASE(rest_env_stack);
     CljList *result = make_list(fixnum(cur), (CljList*)rest_lazy);
     RELEASE(rest_lazy);
-    return result;
+    return AUTORELEASE(result);
 }
 
 ID native_range(ID *args, unsigned int argc)

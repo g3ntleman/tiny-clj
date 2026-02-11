@@ -29,6 +29,14 @@ extern bool g_memory_verbose_mode;
 // Forward declaration for load_clojure_core
 int load_clojure_core(EvalState *st);
 
+extern const char *g_expr_for_basic_list_comprehension;
+extern const char *g_expr_for_multiple_bindings;
+extern const char *g_expr_for_when_modifier;
+extern const char *g_expr_for_let_modifier;
+extern const char *g_expr_for_while_modifier;
+extern const char *g_expr_for_lazy_infinite;
+extern const char *g_expr_for_multi_consumer_independence;
+
 // Static flags to ensure initialization happens only once
 static bool g_special_symbols_initialized = false;
 
@@ -165,13 +173,13 @@ static void warm_shared_group_for_heap_baseline(void) {
 
     if (strcmp(group, "shared_test_loops") == 0) {
         WITH_AUTORELEASE_POOL({
-            (void)eval_string("(for [x [1 2 3]] (* x x))", g_test_eval_state);
-            (void)eval_string("(vec (for [x [1 2] y [3 4]] [x y]))", g_test_eval_state);
-            (void)eval_string("(vec (for [x (range 6) :when (even? x)] x))", g_test_eval_state);
-            (void)eval_string("(vec (for [x [1 2 3] :let [y (* x 2)]] y))", g_test_eval_state);
-            (void)eval_string("(vec (for [x (range) :while (< x 3)] x))", g_test_eval_state);
-            (void)eval_string("(vec (take 3 (for [x (range)] x)))", g_test_eval_state);
-            (void)eval_string("(let [s (for [x (range 5)] x)] (= (vec s) (vec s)))", g_test_eval_state);
+            (void)eval_string(g_expr_for_basic_list_comprehension, g_test_eval_state);
+            (void)eval_string(g_expr_for_multiple_bindings, g_test_eval_state);
+            (void)eval_string(g_expr_for_when_modifier, g_test_eval_state);
+            (void)eval_string(g_expr_for_let_modifier, g_test_eval_state);
+            (void)eval_string(g_expr_for_while_modifier, g_test_eval_state);
+            (void)eval_string(g_expr_for_lazy_infinite, g_test_eval_state);
+            (void)eval_string(g_expr_for_multi_consumer_independence, g_test_eval_state);
         });
         return;
     }
@@ -559,14 +567,12 @@ void run_tests_by_registry_impl(void) {
         set_unity_test_file_info(e);
         g_current_test_entry = e;
         TRY {
-            setUp();
             run_test_with_exception_handling(e);
         } CATCH(ex) {
             if (ex)
                 test_fprintf(stderr, "Exception in setUp/tearDown for %s: %s - %s\n",
                             e->qualified_name ? e->qualified_name : e->name, ex->type, ex->message);
         } END_TRY
-        tearDown();
     }
 }
 
@@ -623,7 +629,6 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
         }
         // One-line output for pattern matching (setUp/tearDown so clojure.core is loaded)
         TRY {
-            setUp();
             for (size_t i = 0; i < test_count; i++) {
                 if (subjective_c_test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern) ||
                     subjective_c_test_name_matches_pattern(all_tests[i].name, test_name_or_pattern)) {
@@ -631,10 +636,8 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
                     run_test_with_exception_handling(&all_tests[i]);
                 }
             }
-            tearDown();
         } CATCH(ex) {
             if (ex) test_fprintf(stderr, "Exception in setUp/tearDown: %s - %s\n", ex->type, ex->message);
-            tearDown();
         } END_TRY
     } else {
         // Exact name match (existing logic)
@@ -651,13 +654,10 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
         if (test) {
             g_single_test_mode = true;
             TRY {
-                setUp();
                 set_unity_test_file_info(test);
                 run_test_with_exception_handling(test);
-                tearDown();
             } CATCH(ex) {
                 if (ex) test_fprintf(stderr, "Exception in setUp/tearDown: %s - %s\n", ex->type, ex->message);
-                tearDown();
             } END_TRY
             // Summary will be printed at end of main()
         } else {

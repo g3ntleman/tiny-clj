@@ -1501,7 +1501,7 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
                     result = ctx ? eval_body_with_params(branch, ctx)
                                  : eval_body(branch, effective_env, effective_st, NULL);
                     g_eval_ast_call_depth--;
-                    return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
+                    return result;
                 }
                 g_eval_ast_call_depth--;
                 return NULL;
@@ -1533,7 +1533,7 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
                     result = ctx ? eval_body_with_params(last_expr, ctx)
                                  : eval_body(last_expr, effective_env, effective_st, NULL);
                     g_eval_ast_call_depth--;
-                    return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
+                    return result;
                 }
                 g_eval_ast_call_depth--;
                 return NULL;
@@ -1577,7 +1577,7 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
             if (handled) {
                 /* MEMORY_POLICY: eval returns autoreleased so callers need not release. */
                 g_eval_ast_call_depth--;
-                return (IS_IMMEDIATE(result) || !result) ? result : (ID)AUTORELEASE(result);
+                return result;
             }
         }
     }

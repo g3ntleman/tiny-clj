@@ -1065,8 +1065,16 @@ R"CLOJURE(
                                        (nnext remaining))
         (= item :let)
         (let [let-bindings (second remaining)
-              flat-bindings (destructure let-bindings)]
-          (normalize-for-bindings-helper (conj result :let (vec flat-bindings))
+              simple-let? (loop [bs (seq let-bindings)]
+                            (if (empty? bs)
+                              true
+                              (if (symbol? (first bs))
+                                (recur (nnext bs))
+                                false)))
+              flat-bindings (if simple-let?
+                              let-bindings
+                              (vec (destructure let-bindings)))]
+          (normalize-for-bindings-helper (conj result :let flat-bindings)
                                          (nnext remaining)))
         :else
         (let [pattern item
@@ -1094,37 +1102,41 @@ R"CLOJURE(
             expr (second clauses)
             more (nnext clauses)
             base-coll expr
-            parse-mods (fn parse-mods [coll cs lets]
-                         (if (or (empty? cs) (not (keyword? (first cs))))
-                           (list coll cs lets)
-                           (let [kw (first cs)]
-                             (cond
-                               (= kw :when)
-                                 (parse-mods
-                                  (list 'filter
-                                         (list 'fn (vec [sym]) (second cs))
-                                         coll)
-                                   (nnext cs)
-                                   lets)
-                               (= kw :while)
-                                 (parse-mods
-                                  (list 'take-while
-                                         (list 'fn (vec [sym]) (second cs))
-                                         coll)
-                                   (nnext cs)
-                                   lets)
-                               (= kw :let)
-                                 (parse-mods coll (nnext cs) (conj lets (second cs)))
-                               :else
-                                 (throw (str "for: unknown binding modifier: " kw))))))]
-        (let [parsed (parse-mods base-coll more [])
-              coll2 (first parsed)
-              rest-clauses (second parsed)
-              lets (second (rest parsed))
+            parsed (loop [coll base-coll
+                          cs more
+                          lets []]
+                     (if (or (empty? cs) (not (keyword? (first cs))))
+                       (vector coll cs lets)
+                       (let [kw (first cs)]
+                         (cond
+                           (= kw :when)
+                             (recur
+                              (list 'filter
+                                     (list 'fn (vec [sym]) (second cs))
+                                     coll)
+                              (nnext cs)
+                              lets)
+                           (= kw :while)
+                             (recur
+                              (list 'take-while
+                                     (list 'fn (vec [sym]) (second cs))
+                                     coll)
+                              (nnext cs)
+                              lets)
+                           (= kw :let)
+                             (recur coll (nnext cs) (conj lets (second cs)))
+                           :else
+                             (throw (str "for: unknown binding modifier: " kw))))))]
+        (let [coll2 (nth parsed 0)
+              rest-clauses (nth parsed 1)
+              lets (nth parsed 2)
               inner (for-build rest-clauses body)
-              inner-with-lets (reduce (fn [acc b] (list 'let b acc))
-                                      inner
-                                      (reverse lets))]
+              inner-with-lets (loop [acc inner
+                                     i (dec (count lets))]
+                                (if (< i 0)
+                                  acc
+                                  (recur (list 'let (nth lets i) acc)
+                                         (dec i))))]
           (list 'mapcat
                 (list 'fn (vec [sym]) inner-with-lets)
                 coll2))))))
@@ -1153,10 +1165,11 @@ R"CLOJURE(
 ^#^{:doc "Repeatedly calls macroexpand-1 on form until it no longer represents a macro form."}
 (def macroexpand
   (fn [form]
-    (let [expanded (macroexpand-1 form)]
-      (if (identical? expanded form)
-        form
-        (macroexpand expanded)))))
+    (loop [current form]
+      (let [expanded (macroexpand-1 current)]
+        (if (identical? expanded current)
+          current
+          (recur expanded))))))
 
 ; ============================================================================
 ; Quasiquote Implementation (bootstrap-safe: uses only basic special forms)

@@ -52,6 +52,9 @@ static THREAD_LOCAL bool g_in_drain = false;
 #ifdef DEBUG
 static THREAD_LOCAL uint32_t g_pool_peak_count = 0;
 
+// DEBUG-only diagnostic helper.
+// Must never be used in production code and must not drive ownership semantics
+// or control flow decisions in retain/release/autorelease paths.
 static inline bool autorelease_pool_contains(CljObject *obj) {
     if (!obj || !g_pool) return false;
     unsigned int c = vector_count(g_pool);

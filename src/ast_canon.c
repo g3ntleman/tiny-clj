@@ -544,6 +544,10 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                     st->current_ns = saved_ns;
                 }
                 if (!expanded) return NULL;
+                ID macro_expanded = expanded;
+                if (macro_expanded && !IS_IMMEDIATE(macro_expanded)) {
+                    RETAIN(macro_expanded);
+                }
 
                 // Transfer metadata from original form to expanded form
                 move_meta(list, expanded);
@@ -552,7 +556,9 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 // Immediate values don't need wrapping and should be returned directly
                 if (IS_IMMEDIATE(expanded)) {
                     // Return immediate value directly (canonicalize_expr handles this)
-                    return canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
+                    ID ret = canonicalize_expr_with_scope(expanded, st, in_quote, scope_stack);
+                    RELEASE(macro_expanded);
+                    return ret;
                 }
                 
                 // CRITICAL: Ensure expanded form is a list-like type (CLJ_LIST)
@@ -577,6 +583,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                             CljASTCall *seq_call = make_ast_call(expanded_first, seq_args);
                             RELEASE(seq_args);
                             move_meta(list, (ID)seq_call);
+                            RELEASE(macro_expanded);
                             return AUTORELEASE(seq_call);
                         }
                     }
@@ -585,7 +592,10 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                         CLJ_ASSERT(false && "macro-expansion CLJ_SEQ used canonicalizer fallback path");
                     }
                     ID expanded_list = seq_to_plain_list(expanded);
-                    if (!expanded_list) return NULL;
+                    if (!expanded_list) {
+                        RELEASE(macro_expanded);
+                        return NULL;
+                    }
                     expanded = expanded_list;
                     expanded_tag = TAG(expanded);
                     expanded_owned_by_canonicalizer = true;
@@ -612,6 +622,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 if (list) {
                     RELEASE(list);
                 }
+                RELEASE(macro_expanded);
                 return result;
             }
         }
@@ -1104,30 +1115,13 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
  */
 ID canonicalize_ast(ID parsed_expr, EvalState *st) {
     CLJ_ASSERT(st != NULL);
-    ID result = NULL;
-    bool needs_escape = false;
-    int rc_after_retain = 0;
-    (void)needs_escape;
-    (void)rc_after_retain;
-
-    // Canonicalization allocates objects that should live in the caller's pool,
-    // so evaluate directly without a nested pool.
-    result = canonicalize_expr(parsed_expr, st, false);
-    // Only autorelease when we created a new object (make_*).
-    if (result && !IS_IMMEDIATE(result) && result != parsed_expr) {
-        return AUTORELEASE(result);
-    }
-    return result;
+    // Canonicalization helpers already return pool-safe values; do not
+    // autorelease again here (would cause duplicate pool entries).
+    return canonicalize_expr(parsed_expr, st, false);
 }
 
 ID canonicalize_ast_as_data(ID parsed_expr, EvalState *st) {
     CLJ_ASSERT(st != NULL);
-    ID result = NULL;
-
     // Treat lists as data (quoted) but still canonicalize symbol tokens.
-    result = canonicalize_expr(parsed_expr, st, true);
-    if (result && !IS_IMMEDIATE(result) && result != parsed_expr) {
-        return AUTORELEASE(result);
-    }
-    return result;
+    return canonicalize_expr(parsed_expr, st, true);
 }

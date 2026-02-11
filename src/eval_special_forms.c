@@ -417,7 +417,7 @@ ID eval_special_go(CljPersistentVector *args, CljPersistentMap *env, EvalState *
 
 // Wrapper functions for existing special form evaluators
 ID eval_special_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
-    return AUTORELEASE(eval_fn(args, eval_env_or_ns_mappings(env, st), st, ctx));
+    return eval_fn(args, eval_env_or_ns_mappings(env, st), st, ctx);
 }
 
 ID eval_special_let(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {

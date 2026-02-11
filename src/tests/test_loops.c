@@ -8,6 +8,14 @@
 #include "tests_common.h"
 #include "vector.h"
 
+const char *g_expr_for_basic_list_comprehension = "(for [x [1 2 3]] (* x x))";
+const char *g_expr_for_multiple_bindings = "(vec (for [x [1 2] y [3 4]] [x y]))";
+const char *g_expr_for_when_modifier = "(vec (for [x (range 6) :when (even? x)] x))";
+const char *g_expr_for_let_modifier = "(vec (for [x [1 2 3] :let [y (* x 2)]] y))";
+const char *g_expr_for_while_modifier = "(vec (for [x (range) :while (< x 3)] x))";
+const char *g_expr_for_lazy_infinite = "(vec (take 3 (for [x (range)] x)))";
+const char *g_expr_for_multi_consumer_independence = "(let [s (for [x (range 5)] x)] (= (vec s) (vec s)))";
+
 static CljPersistentVector *make_dotimes_args(ID binding_vec, ID body_expr) {
     CljPersistentVector *args = make_vector(2, STRONG);
     vector_conj_inplace(&args, binding_vec);
@@ -232,9 +240,7 @@ TEST_SHARED(test_doseq_with_vector_binding) {
 
 // Regression: for with vector binding (basic list comprehension)
 TEST_SHARED(test_for_basic_list_comprehension) {
-    ID result = eval_string(
-        "(for [x [1 2 3]] (* x x))",
-        g_test_eval_state);
+    ID result = eval_string(g_expr_for_basic_list_comprehension, g_test_eval_state);
     ID cur = make_seq(result);
     TEST_ASSERT_NOT_NULL(cur);
     int expected[] = {1, 4, 9};
@@ -257,9 +263,7 @@ TEST_SHARED(test_for_multiple_bindings) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // (for [x [1 2] y [3 4]] [x y]) => [[1 3] [1 4] [2 3] [2 4]]
-    ID result = eval_string(
-        "(vec (for [x [1 2] y [3 4]] [x y]))",
-        g_test_eval_state);
+    ID result = eval_string(g_expr_for_multiple_bindings, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
@@ -288,9 +292,7 @@ TEST_SHARED(test_for_when_modifier) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // (for [x (range 6) :when (even? x)] x) => [0 2 4]
-    ID result = eval_string(
-        "(vec (for [x (range 6) :when (even? x)] x))",
-        g_test_eval_state);
+    ID result = eval_string(g_expr_for_when_modifier, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
@@ -306,9 +308,7 @@ TEST_SHARED(test_for_let_modifier) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // (for [x [1 2 3] :let [y (* x 2)]] y) => [2 4 6]
-    ID result = eval_string(
-        "(vec (for [x [1 2 3] :let [y (* x 2)]] y))",
-        g_test_eval_state);
+    ID result = eval_string(g_expr_for_let_modifier, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
@@ -324,9 +324,7 @@ TEST_SHARED(test_for_while_modifier) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // (for [x (range) :while (< x 3)] x) => [0 1 2]
-    ID result = eval_string(
-        "(vec (for [x (range) :while (< x 3)] x))",
-        g_test_eval_state);
+    ID result = eval_string(g_expr_for_while_modifier, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
@@ -361,9 +359,7 @@ TEST_SHARED(test_for_lazy_infinite) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // (vec (take 3 (for [x (range)] x))) => [0 1 2]
-    ID result = eval_string(
-        "(vec (take 3 (for [x (range)] x)))",
-        g_test_eval_state);
+    ID result = eval_string(g_expr_for_lazy_infinite, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_vector(result));
     
@@ -379,9 +375,8 @@ TEST_SHARED(test_for_multi_consumer_independence) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // (let [s (for [x (range 5)] x)] (= (vec s) (vec s))) => true
-    ID result = eval_string(
-        "(let [s (for [x (range 5)] x)] (= (vec s) (vec s)))",
-        g_test_eval_state);
+    ID result = eval_string(g_expr_for_multi_consumer_independence, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(result == clj_true);
 }
+
