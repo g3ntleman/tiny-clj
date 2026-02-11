@@ -98,7 +98,7 @@ static void rchist_dump_for_object(CljObject *v) {
     const char *filter_env = getenv("RCHIST_FILTER_ADDR");
     if (filter_env && (uintptr_t)v != (uintptr_t)strtoull(filter_env, NULL, 0))
         return;
-    fprintf(stderr, "=== double-release debug: retain/release history for obj=%p (type=%s), newest first (read backwards) ===\n",
+    fprintf(stderr, "=== rc-history debug: retain/release/autorelease history for obj=%p (type=%s), newest first (read backwards) ===\n",
             (void*)v, clj_type_name(v->type));
     fprintf(stderr, "  R=retain L=release A=autorelease. Filter by address: RCHIST_FILTER_ADDR=0x%lx\n", (unsigned long)(uintptr_t)v);
     for (unsigned int i = 0; i < RCHIST_SIZE; i++) {

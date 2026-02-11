@@ -300,6 +300,18 @@ TEST(test_zombie_detection) {
     // Release once (rc = 0, object becomes zombie if zombie mode enabled)
     RELEASE(obj);
     
+    // Suppress rc-history stderr noise for this intentional negative test.
+    const char *saved_filter = getenv("RCHIST_FILTER_ADDR");
+    bool had_saved_filter = (saved_filter && saved_filter[0] != '\0');
+    char saved_filter_buf[128];
+    if (had_saved_filter) {
+        size_t n = strlen(saved_filter);
+        if (n >= sizeof(saved_filter_buf)) n = sizeof(saved_filter_buf) - 1;
+        memcpy(saved_filter_buf, saved_filter, n);
+        saved_filter_buf[n] = '\0';
+    }
+    setenv("RCHIST_FILTER_ADDR", "0x0", 1);
+
     // Try to retain again - should trigger ZombieAccessException
     TRY {
         RETAIN(obj);  // This should throw ZombieAccessException
@@ -320,6 +332,12 @@ TEST(test_zombie_detection) {
         // Verify stacktrace is present (DEBUG builds only)
         TEST_ASSERT_NOT_NULL(ex->stacktrace);
     } END_TRY
+
+    if (had_saved_filter) {
+        setenv("RCHIST_FILTER_ADDR", saved_filter_buf, 1);
+    } else {
+        unsetenv("RCHIST_FILTER_ADDR");
+    }
 }
 #else
 TEST(test_zombie_detection) {
