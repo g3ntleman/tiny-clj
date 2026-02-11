@@ -168,6 +168,9 @@ static void warm_shared_group_for_heap_baseline(void) {
             (void)eval_string("(for [x [1 2 3]] (* x x))", g_test_eval_state);
             (void)eval_string("(vec (for [x [1 2] y [3 4]] [x y]))", g_test_eval_state);
             (void)eval_string("(vec (for [x (range 6) :when (even? x)] x))", g_test_eval_state);
+            (void)eval_string("(vec (for [x [1 2 3] :let [y (* x 2)]] y))", g_test_eval_state);
+            (void)eval_string("(vec (for [x (range) :while (< x 3)] x))", g_test_eval_state);
+            (void)eval_string("(vec (take 3 (for [x (range)] x)))", g_test_eval_state);
             (void)eval_string("(let [s (for [x (range 5)] x)] (= (vec s) (vec s)))", g_test_eval_state);
         });
         return;

@@ -4739,6 +4739,10 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
     CljNamespace *orig_resolve_ns = st->resolve_ns;
     CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
     if (!target_ns) { RELEASE(source_str); return false; }
+    if (target_ns->loaded) {
+        RELEASE(source_str);
+        return true;
+    }
     st->current_ns = target_ns;
     st->resolve_ns = target_ns;
     bool ok = eval_source_in_current_state(source_str, source_path, st);

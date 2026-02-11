@@ -235,14 +235,15 @@ TEST_SHARED(test_for_basic_list_comprehension) {
     ID result = eval_string(
         "(for [x [1 2 3]] (* x x))",
         g_test_eval_state);
-    ID it = AUTORELEASE(make_seq(result));
-    TEST_ASSERT_NOT_NULL(it);
+    ID cur = make_seq(result);
+    TEST_ASSERT_NOT_NULL(cur);
     int expected[] = {1, 4, 9};
     int i = 0;
-    for (ID cur = it; cur && !seq_empty(cur); cur = seq_next(cur), ++i) {
+    for (; cur && !seq_empty(cur); ++i) {
         ID first = seq_first(cur);
         TEST_ASSERT_TRUE(is_fixnum(first));
         TEST_ASSERT_EQUAL_INT(expected[i], as_fixnum(first));
+        seq_next_inplace(&cur);
     }
     TEST_ASSERT_EQUAL_INT(3, i); // Should have 3 elements
 }
@@ -254,7 +255,7 @@ TEST_SHARED(test_for_basic_list_comprehension) {
 // Test: Multiple bindings (cartesian product)
 TEST_SHARED(test_for_multiple_bindings) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // (for [x [1 2] y [3 4]] [x y]) => [[1 3] [1 4] [2 3] [2 4]]
     ID result = eval_string(
         "(vec (for [x [1 2] y [3 4]] [x y]))",
