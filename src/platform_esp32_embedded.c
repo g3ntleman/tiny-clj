@@ -79,7 +79,7 @@ void platform_put_string(void *ctx, const char *s) {
 #endif
 
 const char *platform_name(void) {
-    return "esp32";
+    return "ESP32";
 }
 
 // No line editor functions needed for embedded execution
@@ -119,6 +119,7 @@ void platform_hardware_info(PlatformHardwareInfo *out) {
     out->model[0] = '\0';
     out->cores = 0;
     out->revision = 0;
+    out->gpio_pin_count = 0;
     tinyclj_esp32_hardware_info(out);
 }
 

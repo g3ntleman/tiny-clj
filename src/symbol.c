@@ -144,6 +144,11 @@ CljSymbol *SYM_KW_SECOND = NULL;
 // Runtime stats keywords (always available)
 CljSymbol *SYM_KW_OS = NULL;
 CljSymbol *SYM_KW_VERSION = NULL;
+CljSymbol *SYM_KW_HARDWARE = NULL;
+CljSymbol *SYM_KW_MODEL = NULL;
+CljSymbol *SYM_KW_CORES = NULL;
+CljSymbol *SYM_KW_REVISION = NULL;
+CljSymbol *SYM_KW_GPIO_PIN_COUNT = NULL;
 
 #ifdef DEBUG
 // Runtime stats keywords (DEBUG only)
@@ -541,6 +546,11 @@ DEFINE_STATIC_SYMBOL(sym_kw_second_data, ":second");
 // Runtime stats keywords (always available)
 DEFINE_STATIC_SYMBOL(sym_kw_os_data, ":os");
 DEFINE_STATIC_SYMBOL(sym_kw_version_data, ":version");
+DEFINE_STATIC_SYMBOL(sym_kw_hardware_data, ":hardware");
+DEFINE_STATIC_SYMBOL(sym_kw_model_data, ":model");
+DEFINE_STATIC_SYMBOL(sym_kw_cores_data, ":cores");
+DEFINE_STATIC_SYMBOL(sym_kw_revision_data, ":revision");
+DEFINE_STATIC_SYMBOL(sym_kw_gpio_pin_count_data, ":gpio-pin-count");
 
 #ifdef DEBUG
 // Runtime stats keywords (DEBUG only)
@@ -944,6 +954,11 @@ void init_special_symbols() {
     // Runtime stats keywords (always available)
     INIT_SYMBOL(SYM_KW_OS, sym_kw_os_data);
     INIT_SYMBOL(SYM_KW_VERSION, sym_kw_version_data);
+    INIT_SYMBOL(SYM_KW_HARDWARE, sym_kw_hardware_data);
+    INIT_SYMBOL(SYM_KW_MODEL, sym_kw_model_data);
+    INIT_SYMBOL(SYM_KW_CORES, sym_kw_cores_data);
+    INIT_SYMBOL(SYM_KW_REVISION, sym_kw_revision_data);
+    INIT_SYMBOL(SYM_KW_GPIO_PIN_COUNT, sym_kw_gpio_pin_count_data);
 
 #ifdef DEBUG
     // Runtime stats keywords (DEBUG only)

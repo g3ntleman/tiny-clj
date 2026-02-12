@@ -21,6 +21,12 @@ Optional keys (only present when the platform provides the value):
 - :flash-bytes-free (integer, bytes; Flash-Tree partition, app-usable)
 - :flash-bytes-total (integer, bytes; Flash-Tree partition total, app-usable)
 
+Optional nested keys under :hardware:
+- :model (string, e.g. \"ESP32\")
+- :cores (integer)
+- :revision (integer)
+- :gpio-pin-count (integer, total SoC GPIO pin count)
+
 Missing values are omitted (the key will not be present)."}
 (def stats (fn stats [] :native))
 

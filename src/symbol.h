@@ -170,6 +170,11 @@ extern CljSymbol *SYM_KW_SECOND;
 // Runtime stats keywords (always available)
 extern CljSymbol *SYM_KW_OS;
 extern CljSymbol *SYM_KW_VERSION;
+extern CljSymbol *SYM_KW_HARDWARE;
+extern CljSymbol *SYM_KW_MODEL;
+extern CljSymbol *SYM_KW_CORES;
+extern CljSymbol *SYM_KW_REVISION;
+extern CljSymbol *SYM_KW_GPIO_PIN_COUNT;
 
 #ifdef DEBUG
 // Runtime stats keywords (DEBUG only)

@@ -204,7 +204,13 @@ size_t platform_flash_bytes_free(void) { return (size_t)-1; }
 size_t platform_flash_bytes_total(void) { return (size_t)-1; }
 
 void platform_hardware_info(PlatformHardwareInfo *out) {
-    if (out) out->valid = false;
+    if (out) {
+        out->valid = false;
+        out->model[0] = '\0';
+        out->cores = 0;
+        out->revision = 0;
+        out->gpio_pin_count = 0;
+    }
 }
 
 int platform_set_stdin_nonblocking(int enable) {

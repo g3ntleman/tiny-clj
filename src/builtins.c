@@ -7108,20 +7108,19 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         PlatformHardwareInfo hw;
         platform_hardware_info(&hw);
         if (hw.valid) {
-            CljPersistentMap *hm = make_map(3);
+            CljPersistentMap *hm = make_map(4);
             if (hm) {
-                CljSymbol *kw_model = intern_symbol_global(":model");
-                CljSymbol *kw_cores = intern_symbol_global(":cores");
-                CljSymbol *kw_revision = intern_symbol_global(":revision");
-                CljSymbol *kw_hw = intern_symbol_global(":hardware");
-                if (kw_model) {
+                if (SYM_KW_MODEL) {
                     ID model = make_string(hw.model);
-                    MAP_REASSIGN(hm, map_assoc(hm, kw_model, model));
+                    MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_MODEL, model));
                     RELEASE(model);
                 }
-                if (kw_cores) MAP_REASSIGN(hm, map_assoc(hm, kw_cores, fixnum((int32_t)hw.cores)));
-                if (kw_revision) MAP_REASSIGN(hm, map_assoc(hm, kw_revision, fixnum((int32_t)hw.revision)));
-                if (kw_hw) MAP_REASSIGN(m, map_assoc(m, kw_hw, hm));
+                if (SYM_KW_CORES) MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_CORES, fixnum((int32_t)hw.cores)));
+                if (SYM_KW_REVISION) MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_REVISION, fixnum((int32_t)hw.revision)));
+                if (SYM_KW_GPIO_PIN_COUNT && hw.gpio_pin_count > 0) {
+                    MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_GPIO_PIN_COUNT, fixnum((int32_t)hw.gpio_pin_count)));
+                }
+                if (SYM_KW_HARDWARE) MAP_REASSIGN(m, map_assoc(m, SYM_KW_HARDWARE, hm));
                 RELEASE(hm);
             }
         }

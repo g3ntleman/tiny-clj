@@ -94,6 +94,27 @@ TEST(test_runtime_stats_build_time_before_now)
     }
 }
 
+TEST(test_runtime_stats_hardware_gpio_pin_count_when_hardware_present)
+{
+    ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(stats);
+    TEST_ASSERT_TRUE(is_map(stats));
+
+    ID k_hardware = (ID)intern_symbol_global(":hardware");
+    ID v_hardware = map_get_sentinel((CljPersistentMap *)stats, k_hardware, NOT_FOUND);
+    if (v_hardware == NOT_FOUND || !v_hardware) {
+        // Platform does not provide hardware info in this build.
+        TEST_PASS();
+    }
+
+    TEST_ASSERT_TRUE(is_map(v_hardware));
+    ID k_gpio_pin_count = (ID)intern_symbol_global(":gpio-pin-count");
+    ID v_gpio_pin_count = map_get_sentinel((CljPersistentMap *)v_hardware, k_gpio_pin_count, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_gpio_pin_count);
+    TEST_ASSERT_TRUE(is_fixnum(v_gpio_pin_count));
+    TEST_ASSERT_TRUE(as_fixnum(v_gpio_pin_count) > 0);
+}
+
 #if defined(DEBUG)
 static bool debug_precore_mem_enabled(void)
 {

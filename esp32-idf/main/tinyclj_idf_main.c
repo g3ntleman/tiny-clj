@@ -5,13 +5,14 @@
 #include "platform.h"
 
 #if defined(ESP_PLATFORM) && defined(__has_include)
-#if __has_include(<esp_system.h>) && __has_include(<esp_timer.h>) && __has_include(<esp_heap_caps.h>) && __has_include(<esp_chip_info.h>) && __has_include(<esp_flash.h>) && __has_include(<driver/uart.h>) && __has_include(<freertos/FreeRTOS.h>) && __has_include(<freertos/task.h>)
+#if __has_include(<esp_system.h>) && __has_include(<esp_timer.h>) && __has_include(<esp_heap_caps.h>) && __has_include(<esp_chip_info.h>) && __has_include(<esp_flash.h>) && __has_include(<driver/uart.h>) && __has_include(<freertos/FreeRTOS.h>) && __has_include(<freertos/task.h>) && __has_include(<soc/soc_caps.h>)
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <esp_heap_caps.h>
 #include <esp_chip_info.h>
 #include <esp_flash.h>
 #include <driver/uart.h>
+#include <soc/soc_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #define TINYCLJ_HAVE_ESP_IDF_HEADERS 1
@@ -25,6 +26,7 @@
 #include <esp_chip_info.h>
 #include <esp_flash.h>
 #include <driver/uart.h>
+#include <soc/soc_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #define TINYCLJ_HAVE_ESP_IDF_HEADERS 1
@@ -169,6 +171,7 @@ void tinyclj_esp32_hardware_info(PlatformHardwareInfo *out) {
     (void)snprintf(out->model, sizeof(out->model), "%s", esp_chip_model_str((int)info.model));
     out->cores = (unsigned)info.cores;
     out->revision = (unsigned)info.revision;
+    out->gpio_pin_count = (unsigned)SOC_GPIO_PIN_COUNT;
     out->valid = true;
 #else
     (void)out;

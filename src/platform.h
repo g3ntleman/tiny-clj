@@ -64,6 +64,7 @@ typedef struct {
     char model[PLATFORM_HW_MODEL_MAX];
     unsigned cores;
     unsigned revision;
+    unsigned gpio_pin_count;
     bool valid;
 } PlatformHardwareInfo;
 void platform_hardware_info(PlatformHardwareInfo *out);

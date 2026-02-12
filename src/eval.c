@@ -1021,7 +1021,7 @@ static _Thread_local int g_eval_ast_call_depth = 0;
 // s_eval_stack_base is set at top-level eval entry (eval_parsed_value) and compared
 // against the current stack position in eval_ast_call.  After longjmp-based exception
 // recovery, the stack unwinds, so the measurement auto-corrects.
-static _Thread_local char *s_eval_stack_base = NULL;
+static _Thread_local uintptr_t s_eval_stack_base = 0;
 #ifdef DEBUG
 static _Thread_local ptrdiff_t s_eval_stack_peak = 0;
 #endif
@@ -1430,8 +1430,11 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
     // Works correctly after longjmp (stack unwinds, measurement auto-corrects).
     {
         char stack_marker;
-        if (s_eval_stack_base) {
-            ptrdiff_t used = s_eval_stack_base - &stack_marker;
+        if (s_eval_stack_base != 0) {
+            uintptr_t cur = (uintptr_t)(void*)&stack_marker;
+            ptrdiff_t used = (ptrdiff_t)((cur >= s_eval_stack_base)
+                ? (cur - s_eval_stack_base)
+                : (s_eval_stack_base - cur));
             if (used < 0) used = -used;  // handle stack growth direction
 
 #ifdef DEBUG
@@ -3051,7 +3054,7 @@ ID eval_parsed_value(CljValue parsed, EvalState *eval_state) {
     reset_eval_depths();
     // Set stack base ON THIS FRAME (not inside reset_eval_depths, whose frame is gone).
     char _stack_base_marker;
-    s_eval_stack_base = &_stack_base_marker;
+    s_eval_stack_base = (uintptr_t)(void*)&_stack_base_marker;
 #ifdef DEBUG
     s_eval_stack_peak = 0;
 #endif
