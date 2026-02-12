@@ -7073,6 +7073,14 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
                 if (kw) MAP_REASSIGN(ms, map_assoc(ms, kw, fixnum(hf)));
             }
         }
+        // Optional external RAM total (e.g. PSRAM on ESP32)
+        {
+            size_t ext_ram = platform_external_ram_bytes_total();
+            if (ext_ram != (size_t)-1 && SYM_KW_EXTERNAL_RAM_TOTAL) {
+                int32_t er = (ext_ram > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)ext_ram;
+                MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_EXTERNAL_RAM_TOTAL, fixnum(er)));
+            }
+        }
 
         MAP_REASSIGN(m, map_assoc(m, SYM_KW_MEMORY_STATS, ms));
         RELEASE(ms);
@@ -7094,6 +7102,11 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
                     int32_t ht = (heap_total > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)heap_total;
                     CljSymbol *kw_total = intern_symbol_global(":heap-bytes-total");
                     if (kw_total) MAP_REASSIGN(ms, map_assoc(ms, kw_total, fixnum(ht)));
+                }
+                size_t ext_ram = platform_external_ram_bytes_total();
+                if (ext_ram != (size_t)-1 && SYM_KW_EXTERNAL_RAM_TOTAL) {
+                    int32_t er = (ext_ram > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)ext_ram;
+                    MAP_REASSIGN(ms, map_assoc(ms, SYM_KW_EXTERNAL_RAM_TOTAL, fixnum(er)));
                 }
                 CljSymbol *kw_ms = intern_symbol_global(":memory-stats");
                 if (kw_ms) MAP_REASSIGN(m, map_assoc(m, kw_ms, ms));

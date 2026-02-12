@@ -53,6 +53,8 @@ size_t platform_heap_bytes_free(void);
 size_t platform_heap_bytes_total(void);
 /** Total installed RAM (e.g. for "xxK RAM SYSTEM" display; C64-style). SIZE_MAX if unknown. */
 size_t platform_ram_bytes_total(void);
+/** Total external RAM (e.g. PSRAM/SPIRAM on ESP32). SIZE_MAX if unavailable or not present. */
+size_t platform_external_ram_bytes_total(void);
 size_t platform_flash_bytes_free(void);
 size_t platform_flash_bytes_total(void);
 

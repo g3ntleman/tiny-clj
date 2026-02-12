@@ -18,6 +18,7 @@ Keys (always present):
 Optional keys (only present when the platform provides the value):
 - :heap-bytes-free (integer, bytes)
 - :heap-bytes-total (integer, bytes)
+- :external-ram-total (integer, bytes; optional external RAM e.g. PSRAM total)
 - :flash-bytes-free (integer, bytes; Flash-Tree partition, app-usable)
 - :flash-bytes-total (integer, bytes; Flash-Tree partition total, app-usable)
 

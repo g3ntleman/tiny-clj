@@ -149,6 +149,7 @@ CljSymbol *SYM_KW_MODEL = NULL;
 CljSymbol *SYM_KW_CORES = NULL;
 CljSymbol *SYM_KW_REVISION = NULL;
 CljSymbol *SYM_KW_GPIO_PIN_COUNT = NULL;
+CljSymbol *SYM_KW_EXTERNAL_RAM_TOTAL = NULL;
 
 #ifdef DEBUG
 // Runtime stats keywords (DEBUG only)
@@ -551,6 +552,7 @@ DEFINE_STATIC_SYMBOL(sym_kw_model_data, ":model");
 DEFINE_STATIC_SYMBOL(sym_kw_cores_data, ":cores");
 DEFINE_STATIC_SYMBOL(sym_kw_revision_data, ":revision");
 DEFINE_STATIC_SYMBOL(sym_kw_gpio_pin_count_data, ":gpio-pin-count");
+DEFINE_STATIC_SYMBOL(sym_kw_external_ram_total_data, ":external-ram-total");
 
 #ifdef DEBUG
 // Runtime stats keywords (DEBUG only)
@@ -959,6 +961,7 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_CORES, sym_kw_cores_data);
     INIT_SYMBOL(SYM_KW_REVISION, sym_kw_revision_data);
     INIT_SYMBOL(SYM_KW_GPIO_PIN_COUNT, sym_kw_gpio_pin_count_data);
+    INIT_SYMBOL(SYM_KW_EXTERNAL_RAM_TOTAL, sym_kw_external_ram_total_data);
 
 #ifdef DEBUG
     // Runtime stats keywords (DEBUG only)

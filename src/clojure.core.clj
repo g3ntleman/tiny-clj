@@ -1053,42 +1053,37 @@ R"CLOJURE(
 ; ============================================================================
 ; TEST: helper as global function to see if it fixes the nesting problem
 (defn normalize-for-bindings-helper [result remaining]
-  (if (empty? remaining)
-    result
-    (let [item (first remaining)]
-      (cond
-        (= item :when)
-        (normalize-for-bindings-helper (conj result :when (second remaining))
-                                       (nnext remaining))
-        (= item :while)
-        (normalize-for-bindings-helper (conj result :while (second remaining))
-                                       (nnext remaining))
-        (= item :let)
-        (let [let-bindings (second remaining)
-              simple-let? (loop [bs (seq let-bindings)]
-                            (if (empty? bs)
-                              true
-                              (if (symbol? (first bs))
-                                (recur (nnext bs))
-                                false)))
-              flat-bindings (if simple-let?
-                              let-bindings
-                              (vec (destructure let-bindings)))]
-          (normalize-for-bindings-helper (conj result :let flat-bindings)
-                                         (nnext remaining)))
-        :else
-        (let [pattern item
-              expr (second remaining)]
-          (if (symbol? pattern)
-            ;; simple symbol - keep as-is
-            (normalize-for-bindings-helper (conj result pattern expr)
-                                           (nnext remaining))
-            ;; destructuring pattern - gensym + :let
-            (let [g (gensym "for__")
-                  destructured (destructure [pattern g])
-                  destructured-vec (vec destructured)]
-              (normalize-for-bindings-helper (conj (conj (conj (conj result g) expr) :let) destructured-vec)
-                                             (nnext remaining)))))))))
+  (loop [result result remaining remaining]
+    (if (empty? remaining)
+      result
+      (let [item (first remaining)]
+        (cond
+          (= item :when)
+          (recur (conj result :when (second remaining)) (nnext remaining))
+          (= item :while)
+          (recur (conj result :while (second remaining)) (nnext remaining))
+          (= item :let)
+          (let [let-bindings (second remaining)
+                simple-let? (loop [bs (seq let-bindings)]
+                              (if (empty? bs)
+                                true
+                                (if (symbol? (first bs))
+                                  (recur (nnext bs))
+                                  false)))
+                flat-bindings (if simple-let?
+                                let-bindings
+                                (vec (destructure let-bindings)))]
+            (recur (conj result :let flat-bindings) (nnext remaining)))
+          :else
+          (let [pattern item
+                expr (second remaining)]
+            (if (symbol? pattern)
+              (recur (conj result pattern expr) (nnext remaining))
+              (let [g (gensym "for__")
+                    destructured (destructure [pattern g])
+                    destructured-vec (vec destructured)]
+                (recur (conj (conj (conj (conj result g) expr) :let) destructured-vec)
+                       (nnext remaining))))))))))
 
 (defn normalize-for-bindings [bindings]
   (normalize-for-bindings-helper [] (seq bindings)))

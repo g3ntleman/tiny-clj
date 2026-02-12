@@ -1,4 +1,4 @@
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 100
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 50
 #include "tests_common.h"
 
 // Test hook controls implemented in test_yield_sleep_hooks.c

@@ -115,6 +115,28 @@ TEST(test_runtime_stats_hardware_gpio_pin_count_when_hardware_present)
     TEST_ASSERT_TRUE(as_fixnum(v_gpio_pin_count) > 0);
 }
 
+TEST(test_runtime_stats_external_ram_total_when_present)
+{
+    ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(stats);
+    TEST_ASSERT_TRUE(is_map(stats));
+
+    ID k_memory_stats = (ID)intern_symbol_global(":memory-stats");
+    ID v_memory_stats = map_get_sentinel((CljPersistentMap *)stats, k_memory_stats, NOT_FOUND);
+    if (v_memory_stats == NOT_FOUND || !v_memory_stats || !is_map(v_memory_stats)) {
+        TEST_PASS();
+    }
+
+    ID k_external_ram_total = (ID)intern_symbol_global(":external-ram-total");
+    ID v_external_ram_total = map_get_sentinel((CljPersistentMap *)v_memory_stats, k_external_ram_total, NOT_FOUND);
+    if (v_external_ram_total == NOT_FOUND) {
+        /* Platform does not report external RAM (e.g. host or ESP32 without PSRAM). */
+        TEST_PASS();
+    }
+    TEST_ASSERT_TRUE(is_fixnum(v_external_ram_total));
+    TEST_ASSERT_TRUE(as_fixnum(v_external_ram_total) >= 0);
+}
+
 #if defined(DEBUG)
 static bool debug_precore_mem_enabled(void)
 {

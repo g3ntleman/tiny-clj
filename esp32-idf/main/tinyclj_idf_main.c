@@ -63,6 +63,7 @@ uint32_t tinyclj_esp32_current_time_ms(void);
 size_t tinyclj_esp32_heap_bytes_free(void);
 size_t tinyclj_esp32_heap_bytes_total(void);
 size_t tinyclj_esp32_ram_bytes_total(void);
+size_t tinyclj_esp32_external_ram_bytes_total(void);
 size_t tinyclj_esp32_flash_bytes_free(void);
 size_t tinyclj_esp32_flash_bytes_total(void);
 void tinyclj_esp32_hardware_info(PlatformHardwareInfo *out);
@@ -124,6 +125,14 @@ size_t tinyclj_esp32_ram_bytes_total(void) {
     size_t total = (internal_kb > 0) ? (size_t)internal_kb * 1024u : heap_caps_get_total_size(MALLOC_CAP_8BIT);
     total += heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
     return total;
+#else
+    return (size_t)-1;
+#endif
+}
+
+size_t tinyclj_esp32_external_ram_bytes_total(void) {
+#if TINYCLJ_HAVE_ESP_IDF_HEADERS
+    return heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
 #else
     return (size_t)-1;
 #endif

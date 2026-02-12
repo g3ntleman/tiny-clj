@@ -175,6 +175,7 @@ extern CljSymbol *SYM_KW_MODEL;
 extern CljSymbol *SYM_KW_CORES;
 extern CljSymbol *SYM_KW_REVISION;
 extern CljSymbol *SYM_KW_GPIO_PIN_COUNT;
+extern CljSymbol *SYM_KW_EXTERNAL_RAM_TOTAL;
 
 #ifdef DEBUG
 // Runtime stats keywords (DEBUG only)
