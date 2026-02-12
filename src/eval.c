@@ -2976,9 +2976,11 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
     CljObject *expr = (CljObject*)vector_nth(args, 0);
     CljPersistentMap *eval_env = eval_env_or_ns_mappings(env, st);
 
-    // Disable callsite cache during heap measurement to avoid cache churn artifacts
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    // During memory profiling, disable callsite cache to avoid cache churn artifacts.
     uint64_t saved_epoch = g_runtime.resolve_cache_epoch;
     g_runtime.resolve_cache_epoch = 0;
+#endif
 
     // Capture stats before measurement
     MemoryStats stats_before = memory_profiler_get_stats();
@@ -2998,8 +3000,10 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
     // Calculate total diff
     long long total_diff = (long long)stats_after.current_memory_usage - (long long)stats_before.current_memory_usage;
 
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     // Restore callsite cache epoch
     g_runtime.resolve_cache_epoch = saved_epoch;
+#endif
 
     // Build result map with per-type diffs. Always return a map, even if all
     // deltas are zero (useful for consistent debugging output).
@@ -3089,10 +3093,11 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
     CLJ_ASSERT(expr_str != NULL);
     CLJ_ASSERT(eval_state != NULL);
 
-    // eval_string reparses on every call, so callsite cache entries on ephemeral
-    // AST nodes only add churn and can retain short-lived constants.
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    // While profiling, disable callsite cache for ephemeral ASTs to reduce noise.
     uint64_t saved_epoch = g_runtime.resolve_cache_epoch;
     g_runtime.resolve_cache_epoch = 0;
+#endif
 
     ID result = NULL;
     WITH_AUTORELEASE_POOL({
@@ -3109,7 +3114,9 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
             RETAIN(result);
         }
     });
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     g_runtime.resolve_cache_epoch = saved_epoch;
+#endif
     return AUTORELEASE(result);
 }
 

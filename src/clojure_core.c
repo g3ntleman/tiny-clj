@@ -163,31 +163,6 @@ static const char *clojure_core_override = NULL;
 // Forward declaration for value_by_parsing_expr
 extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
-// Helper: Read entire text file into memory (caller frees)
-static char* read_file_cstr_local(const char *path) {
-  if (!path) return NULL;
-  FILE *fp = fopen(path, "r");
-  if (!fp) return NULL;
-  if (fseek(fp, 0, SEEK_END) != 0) {
-    fclose(fp);
-    return NULL;
-  }
-  long sz = ftell(fp);
-  if (sz < 0) {
-    fclose(fp);
-    return NULL;
-  }
-  if (fseek(fp, 0, SEEK_SET) != 0) {
-    fclose(fp);
-    return NULL;
-  }
-  char *buffer = (char*)CLJ_MALLOC((size_t)sz + 1);
-  size_t read_sz = fread(buffer, 1, (size_t)sz, fp);
-  buffer[read_sz] = '\0';
-  fclose(fp);
-  return buffer;
-}
-
 #ifdef PROFILE_STARTUP
 #include <time.h>
 static double g_parse_time_ms = 0;
@@ -484,87 +459,8 @@ void clojure_core_set_quiet(bool quiet) {
 
 void clojure_core_set_source(const char *src) { clojure_core_override = src; }
 
-// Load clojure.repl namespace from file
+// Load clojure.repl namespace via unified require path/embedded resolution.
 int load_clojure_repl(EvalState *st) {
   if (!st) return 0;
-  
-  // Convert namespace to relative path (clojure.repl -> clojure/repl.clj)
-  const char *ns_name = "clojure.repl";
-  size_t len = strlen(ns_name);
-  char *rel = (char*)CLJ_MALLOC(len + 5); // +5 for ".clj" and potential slashes
-  if (!rel) return 0;
-  
-  // Replace dots with slashes
-  for (size_t i = 0; i < len; i++) {
-    rel[i] = (ns_name[i] == '.') ? '/' : ns_name[i];
-  }
-  rel[len] = '\0';
-  strcat(rel, ".clj");
-  
-  // Search order: libs/<rel>, <rel>, ../libs/<rel>, ../<rel>
-  char libs_path[512];
-  mini_snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
-  char parent_libs_path[512];
-  // Avoid -Werror=format-truncation: "../" + libs_path must fit.
-  // Keep this robust on toolchains that treat warnings as errors (ESP-IDF).
-  const size_t max_copy = sizeof(parent_libs_path) - 4; // "../" + '\0'
-  if (strlen(libs_path) > max_copy) {
-    CLJ_FREE(rel);
-    return 0;
-  }
-  mini_snprintf(parent_libs_path, sizeof(parent_libs_path), "../%.*s", (int)max_copy, libs_path);
-  char parent_rel_path[512];
-  mini_snprintf(parent_rel_path, sizeof(parent_rel_path), "../%s", rel);
-  const char *candidates[] = {
-    libs_path,
-    rel,
-    parent_libs_path,
-    parent_rel_path
-  };
-  
-  char *source = NULL;
-  const char *source_label = NULL;
-  for (size_t i = 0; i < sizeof(candidates)/sizeof(candidates[0]); i++) {
-    source = read_file_cstr_local(candidates[i]);
-    if (source) {
-      source_label = candidates[i];
-      break;
-    }
-  }
-  
-  if (!source) {
-    CLJ_FREE(rel);
-    return 0;
-  }
-  
-  // Save original namespace state
-  CljNamespace *orig_ns = st->current_ns;
-  CljNamespace *orig_resolve_ns = st->resolve_ns;
-  
-  // Ensure target namespace exists
-  CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
-  if (!target_ns) {
-    CLJ_FREE(source);
-    CLJ_FREE(rel);
-    return 0;
-  }
-  
-  // Temporarily switch to target namespace
-  st->current_ns = target_ns;
-  st->resolve_ns = target_ns;
-  
-  // Evaluate source using same approach as eval_core_source
-  size_t source_len = strlen(source);
-  bool ok = eval_core_source(source, source_len, source_label, st);
-  
-  // Restore original namespace state
-  if (orig_ns) {
-    st->current_ns = orig_ns;
-  }
-  st->resolve_ns = orig_resolve_ns;
-  
-  CLJ_FREE(source);
-  CLJ_FREE(rel);
-  
-  return ok ? 1 : 0;
+  return require_namespace_by_name(st, "clojure.repl") ? 1 : 0;
 }

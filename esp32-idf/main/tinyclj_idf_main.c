@@ -67,6 +67,7 @@ size_t tinyclj_esp32_external_ram_bytes_total(void);
 size_t tinyclj_esp32_flash_bytes_free(void);
 size_t tinyclj_esp32_flash_bytes_total(void);
 void tinyclj_esp32_hardware_info(PlatformHardwareInfo *out);
+const char *tinyclj_esp32_os_version(void);
 
 int tinyclj_esp32_uart_read_byte_nonblocking(void);
 void tinyclj_esp32_uart_write_bytes(const uint8_t *data, size_t n);
@@ -172,6 +173,14 @@ static const char *esp_chip_model_str(int model) {
 }
 #endif
 
+const char *tinyclj_esp32_os_version(void) {
+#if TINYCLJ_HAVE_ESP_IDF_HEADERS
+    return esp_get_idf_version();
+#else
+    return NULL;
+#endif
+}
+
 void tinyclj_esp32_hardware_info(PlatformHardwareInfo *out) {
 #if TINYCLJ_HAVE_ESP_IDF_HEADERS
     if (!out) return;
@@ -181,6 +190,7 @@ void tinyclj_esp32_hardware_info(PlatformHardwareInfo *out) {
     out->cores = (unsigned)info.cores;
     out->revision = (unsigned)info.revision;
     out->gpio_pin_count = (unsigned)SOC_GPIO_PIN_COUNT;
+    out->features = (uint32_t)info.features;
     out->valid = true;
 #else
     (void)out;

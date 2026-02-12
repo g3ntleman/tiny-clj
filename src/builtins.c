@@ -7005,6 +7005,15 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     } \
 } while (0)
 
+    {
+        const char *os_ver = platform_os_version();
+        if (os_ver && os_ver[0] != '\0' && SYM_KW_OS_VERSION) {
+            ID v_os_ver = make_string(os_ver);
+            MAP_REASSIGN(m, map_assoc(m, SYM_KW_OS_VERSION, v_os_ver));
+            RELEASE(v_os_ver);
+        }
+    }
+
 #if defined(DEBUG)
     // Debug diagnostics: symbols, namespaces, heap (always available)
     MAP_REASSIGN(m, map_assoc(m, SYM_KW_SYMBOLS, fixnum((int32_t)hashset_count(g_runtime.symbol_table))));
@@ -7116,12 +7125,12 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
     }
 #endif
 
-    // Optional :hardware map (e.g. ESP32 chip model, cores, revision)
+    // Optional :hardware map (flat: model, cores, revision, gpio-pin-count, psram-bytes, wifi, ble, bt, ...)
     {
         PlatformHardwareInfo hw;
         platform_hardware_info(&hw);
         if (hw.valid) {
-            CljPersistentMap *hm = make_map(4);
+            CljPersistentMap *hm = make_map(16);
             if (hm) {
                 if (SYM_KW_MODEL) {
                     ID model = make_string(hw.model);
@@ -7132,6 +7141,21 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
                 if (SYM_KW_REVISION) MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_REVISION, fixnum((int32_t)hw.revision)));
                 if (SYM_KW_GPIO_PIN_COUNT && hw.gpio_pin_count > 0) {
                     MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_GPIO_PIN_COUNT, fixnum((int32_t)hw.gpio_pin_count)));
+                }
+                {
+                    size_t psram = platform_external_ram_bytes_total();
+                    if (psram != (size_t)-1 && SYM_KW_PSRAM_BYTES) {
+                        int32_t pb = (psram > (size_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)psram;
+                        MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_PSRAM_BYTES, fixnum(pb)));
+                    }
+                }
+                if (hw.features != 0) {
+                    if (SYM_KW_WIFI) MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_WIFI, (hw.features & PLATFORM_HW_FEATURE_WIFI_BGN) ? clj_true : clj_false));
+                    if (SYM_KW_BLE) MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_BLE, (hw.features & PLATFORM_HW_FEATURE_BLE) ? clj_true : clj_false));
+                    if (SYM_KW_BT) MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_BT, (hw.features & PLATFORM_HW_FEATURE_BT) ? clj_true : clj_false));
+                    if (SYM_KW_EMB_FLASH) MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_EMB_FLASH, (hw.features & PLATFORM_HW_FEATURE_EMB_FLASH) ? clj_true : clj_false));
+                    if (SYM_KW_EMB_PSRAM) MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_EMB_PSRAM, (hw.features & PLATFORM_HW_FEATURE_EMB_PSRAM) ? clj_true : clj_false));
+                    if (SYM_KW_IEEE802154) MAP_REASSIGN(hm, map_assoc(hm, SYM_KW_IEEE802154, (hw.features & PLATFORM_HW_FEATURE_IEEE802154) ? clj_true : clj_false));
                 }
                 if (SYM_KW_HARDWARE) MAP_REASSIGN(m, map_assoc(m, SYM_KW_HARDWARE, hm));
                 RELEASE(hm);

@@ -10,6 +10,16 @@
  */
 
 #include "tests_common.h"
+#include <unistd.h>
+
+static void require_readable_script_or_ignore(const char *path) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(path, "path must not be NULL");
+    if (access(path, R_OK) != 0) {
+        char msg[256];
+        test_snprintf(msg, sizeof(msg), "Skipping: missing script file %s", path);
+        TEST_IGNORE_MESSAGE(msg);
+    }
+}
 
 static void assert_load_file_ok(const char *path) {
     TEST_ASSERT_NOT_NULL_MESSAGE(path, "path must not be NULL");
@@ -29,20 +39,24 @@ static void assert_load_file_ok(const char *path) {
 
 TEST(test_plan_trackA_core_async_smoke_script) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    require_readable_script_or_ignore("libs/test/core_async/smoke.clj");
     assert_load_file_ok("libs/test/core_async/smoke.clj");
 }
 
 TEST(test_plan_trackA_core_async_callbacks_script) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    require_readable_script_or_ignore("libs/test/core_async/callbacks.clj");
     assert_load_file_ok("libs/test/core_async/callbacks.clj");
 }
 
 TEST(test_plan_trackA_core_async_go_unsupported_script) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    require_readable_script_or_ignore("libs/test/core_async/go_unsupported.clj");
     assert_load_file_ok("libs/test/core_async/go_unsupported.clj");
 }
 
 TEST(test_plan_trackA_gpio_smoke_script) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    require_readable_script_or_ignore("libs/test/gpio/smoke.clj");
     assert_load_file_ok("libs/test/gpio/smoke.clj");
 }

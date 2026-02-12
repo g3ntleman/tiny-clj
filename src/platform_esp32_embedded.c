@@ -82,6 +82,12 @@ const char *platform_name(void) {
     return "ESP32";
 }
 
+__attribute__((weak)) const char *tinyclj_esp32_os_version(void) { return NULL; }
+
+const char *platform_os_version(void) {
+    return tinyclj_esp32_os_version();
+}
+
 // No line editor functions needed for embedded execution
 
 bool platform_try_get_cursor_position(uint16_t *row, uint16_t *col) {
@@ -122,6 +128,7 @@ void platform_hardware_info(PlatformHardwareInfo *out) {
     out->cores = 0;
     out->revision = 0;
     out->gpio_pin_count = 0;
+    out->features = 0;
     tinyclj_esp32_hardware_info(out);
 }
 

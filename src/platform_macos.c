@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <sys/socket.h>
+#include <sys/sysctl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <net/if.h>
@@ -194,6 +195,15 @@ const char *platform_name() {
     return "macOS";
 }
 
+const char *platform_os_version(void) {
+    static char buf[32];
+    size_t len = sizeof(buf);
+    if (sysctlbyname("kern.osproductversion", buf, &len, NULL, 0) == 0 && len > 0 && buf[0] != '\0') {
+        return buf;
+    }
+    return NULL;
+}
+
 // -----------------------------------------------------------------------------
 // Optional runtime stats (not available on host builds)
 // -----------------------------------------------------------------------------
@@ -211,6 +221,7 @@ void platform_hardware_info(PlatformHardwareInfo *out) {
         out->cores = 0;
         out->revision = 0;
         out->gpio_pin_count = 0;
+        out->features = 0;
     }
 }
 

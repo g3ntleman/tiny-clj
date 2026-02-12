@@ -183,6 +183,11 @@ static void repl_process_event_loop(EvalState *st) {
  */
 bool eval_multiform_string(const char *code, EvalState *st) {
     bool result = true; // Start optimistic
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    // While profiling, disable callsite cache for reparsed REPL inputs.
+    uint64_t saved_epoch = g_runtime.resolve_cache_epoch;
+    g_runtime.resolve_cache_epoch = 0;
+#endif
 
     Reader reader;
     reader_init(&reader, code);
@@ -222,6 +227,9 @@ bool eval_multiform_string(const char *code, EvalState *st) {
         if (should_break) { break; }
     }
 
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    g_runtime.resolve_cache_epoch = saved_epoch;
+#endif
     return result;
 }
 

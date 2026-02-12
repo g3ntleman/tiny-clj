@@ -10,6 +10,8 @@
 void platform_init(void);
 void platform_print(const char *message);
 const char *platform_name(void);
+/** OS/framework version string (e.g. macOS "14.2.1", ESP-IDF "v5.3.4"). NULL if unavailable. */
+const char *platform_os_version(void);
 
 // Sleep/delay helper used by clojure.core/sleep builtin.
 // Contract: best-effort blocking delay for at least ms milliseconds.
@@ -62,11 +64,19 @@ size_t platform_flash_bytes_total(void);
 // Optional hardware info (e.g. ESP32 chip model, cores, revision). Filled only when available.
 // -----------------------------------------------------------------------------
 #define PLATFORM_HW_MODEL_MAX 24
+/* Feature bits match ESP-IDF CHIP_FEATURE_* (esp_chip_info.h). 0 = unknown. */
+#define PLATFORM_HW_FEATURE_EMB_FLASH   (1u << 0)
+#define PLATFORM_HW_FEATURE_WIFI_BGN    (1u << 1)
+#define PLATFORM_HW_FEATURE_BLE         (1u << 4)
+#define PLATFORM_HW_FEATURE_BT          (1u << 5)
+#define PLATFORM_HW_FEATURE_IEEE802154  (1u << 6)
+#define PLATFORM_HW_FEATURE_EMB_PSRAM  (1u << 7)
 typedef struct {
     char model[PLATFORM_HW_MODEL_MAX];
     unsigned cores;
     unsigned revision;
     unsigned gpio_pin_count;
+    uint32_t features; /* PLATFORM_HW_FEATURE_* bits; 0 if unknown */
     bool valid;
 } PlatformHardwareInfo;
 void platform_hardware_info(PlatformHardwareInfo *out);

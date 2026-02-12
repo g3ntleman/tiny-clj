@@ -10,10 +10,12 @@ R"TINY_CLJ_RUNTIME(
 ^#^{:doc "Returns runtime stats as a map.
 
 Keys (always present):
-- :host-os (string)
-- :host-os-version (string)
-- :tiny-clj-version (string)
-- :build-time (#inst ...)
+- :os (string, e.g. \"darwin\", \"ESP/IDF\")
+- :version (string, tiny-clj version)
+- :build-time (#inst ...) when available
+
+Optional:
+- :os-version (string, e.g. macOS \"14.2.1\", ESP-IDF \"v5.3.4\")
 
 Optional keys (only present when the platform provides the value):
 - :heap-bytes-free (integer, bytes)
@@ -22,11 +24,13 @@ Optional keys (only present when the platform provides the value):
 - :flash-bytes-free (integer, bytes; Flash-Tree partition, app-usable)
 - :flash-bytes-total (integer, bytes; Flash-Tree partition total, app-usable)
 
-Optional nested keys under :hardware:
+Optional flat keys under :hardware (no nesting):
 - :model (string, e.g. \"ESP32\")
 - :cores (integer)
 - :revision (integer)
-- :gpio-pin-count (integer, total SoC GPIO pin count)
+- :gpio-pin-count (integer)
+- :psram-bytes (integer, total PSRAM when available)
+- :wifi, :ble, :bt, :emb-flash, :emb-psram, :ieee802154 (boolean true/false when SoC reports features)
 
 Missing values are omitted (the key will not be present)."}
 (def stats (fn stats [] :native))

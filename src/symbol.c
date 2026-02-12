@@ -143,6 +143,7 @@ CljSymbol *SYM_KW_SECOND = NULL;
 // Runtime stats keywords
 // Runtime stats keywords (always available)
 CljSymbol *SYM_KW_OS = NULL;
+CljSymbol *SYM_KW_OS_VERSION = NULL;
 CljSymbol *SYM_KW_VERSION = NULL;
 CljSymbol *SYM_KW_HARDWARE = NULL;
 CljSymbol *SYM_KW_MODEL = NULL;
@@ -150,6 +151,13 @@ CljSymbol *SYM_KW_CORES = NULL;
 CljSymbol *SYM_KW_REVISION = NULL;
 CljSymbol *SYM_KW_GPIO_PIN_COUNT = NULL;
 CljSymbol *SYM_KW_EXTERNAL_RAM_TOTAL = NULL;
+CljSymbol *SYM_KW_PSRAM_BYTES = NULL;
+CljSymbol *SYM_KW_WIFI = NULL;
+CljSymbol *SYM_KW_BLE = NULL;
+CljSymbol *SYM_KW_BT = NULL;
+CljSymbol *SYM_KW_EMB_FLASH = NULL;
+CljSymbol *SYM_KW_EMB_PSRAM = NULL;
+CljSymbol *SYM_KW_IEEE802154 = NULL;
 
 #ifdef DEBUG
 // Runtime stats keywords (DEBUG only)
@@ -546,6 +554,7 @@ DEFINE_STATIC_SYMBOL(sym_kw_second_data, ":second");
 // Runtime stats keywords
 // Runtime stats keywords (always available)
 DEFINE_STATIC_SYMBOL(sym_kw_os_data, ":os");
+DEFINE_STATIC_SYMBOL(sym_kw_os_version_data, ":os-version");
 DEFINE_STATIC_SYMBOL(sym_kw_version_data, ":version");
 DEFINE_STATIC_SYMBOL(sym_kw_hardware_data, ":hardware");
 DEFINE_STATIC_SYMBOL(sym_kw_model_data, ":model");
@@ -553,6 +562,13 @@ DEFINE_STATIC_SYMBOL(sym_kw_cores_data, ":cores");
 DEFINE_STATIC_SYMBOL(sym_kw_revision_data, ":revision");
 DEFINE_STATIC_SYMBOL(sym_kw_gpio_pin_count_data, ":gpio-pin-count");
 DEFINE_STATIC_SYMBOL(sym_kw_external_ram_total_data, ":external-ram-total");
+DEFINE_STATIC_SYMBOL(sym_kw_psram_bytes_data, ":psram-bytes");
+DEFINE_STATIC_SYMBOL(sym_kw_wifi_data, ":wifi");
+DEFINE_STATIC_SYMBOL(sym_kw_ble_data, ":ble");
+DEFINE_STATIC_SYMBOL(sym_kw_bt_data, ":bt");
+DEFINE_STATIC_SYMBOL(sym_kw_emb_flash_data, ":emb-flash");
+DEFINE_STATIC_SYMBOL(sym_kw_emb_psram_data, ":emb-psram");
+DEFINE_STATIC_SYMBOL(sym_kw_ieee802154_data, ":ieee802154");
 
 #ifdef DEBUG
 // Runtime stats keywords (DEBUG only)
@@ -955,6 +971,7 @@ void init_special_symbols() {
     // Runtime stats keywords
     // Runtime stats keywords (always available)
     INIT_SYMBOL(SYM_KW_OS, sym_kw_os_data);
+    INIT_SYMBOL(SYM_KW_OS_VERSION, sym_kw_os_version_data);
     INIT_SYMBOL(SYM_KW_VERSION, sym_kw_version_data);
     INIT_SYMBOL(SYM_KW_HARDWARE, sym_kw_hardware_data);
     INIT_SYMBOL(SYM_KW_MODEL, sym_kw_model_data);
@@ -962,6 +979,13 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_REVISION, sym_kw_revision_data);
     INIT_SYMBOL(SYM_KW_GPIO_PIN_COUNT, sym_kw_gpio_pin_count_data);
     INIT_SYMBOL(SYM_KW_EXTERNAL_RAM_TOTAL, sym_kw_external_ram_total_data);
+    INIT_SYMBOL(SYM_KW_PSRAM_BYTES, sym_kw_psram_bytes_data);
+    INIT_SYMBOL(SYM_KW_WIFI, sym_kw_wifi_data);
+    INIT_SYMBOL(SYM_KW_BLE, sym_kw_ble_data);
+    INIT_SYMBOL(SYM_KW_BT, sym_kw_bt_data);
+    INIT_SYMBOL(SYM_KW_EMB_FLASH, sym_kw_emb_flash_data);
+    INIT_SYMBOL(SYM_KW_EMB_PSRAM, sym_kw_emb_psram_data);
+    INIT_SYMBOL(SYM_KW_IEEE802154, sym_kw_ieee802154_data);
 
 #ifdef DEBUG
     // Runtime stats keywords (DEBUG only)

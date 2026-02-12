@@ -28,10 +28,8 @@ int load_clojure_repl(EvalState *st);
 // ============================================================================
 
 static void load_repl_namespace(void) {
-    // Load clojure.repl namespace
-    // Note: load_clojure_repl is called automatically in REPL, but for tests
-    // we need to call it explicitly
-    load_clojure_repl(g_test_eval_state);
+    // Use the public require path to mirror user/runtime behavior.
+    (void)eval_string("(require 'clojure.repl)", g_test_eval_state);
 }
 
 // ============================================================================

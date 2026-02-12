@@ -169,6 +169,7 @@ extern CljSymbol *SYM_KW_SECOND;
 // Runtime stats keyword symbols
 // Runtime stats keywords (always available)
 extern CljSymbol *SYM_KW_OS;
+extern CljSymbol *SYM_KW_OS_VERSION;
 extern CljSymbol *SYM_KW_VERSION;
 extern CljSymbol *SYM_KW_HARDWARE;
 extern CljSymbol *SYM_KW_MODEL;
@@ -176,6 +177,13 @@ extern CljSymbol *SYM_KW_CORES;
 extern CljSymbol *SYM_KW_REVISION;
 extern CljSymbol *SYM_KW_GPIO_PIN_COUNT;
 extern CljSymbol *SYM_KW_EXTERNAL_RAM_TOTAL;
+extern CljSymbol *SYM_KW_PSRAM_BYTES;
+extern CljSymbol *SYM_KW_WIFI;
+extern CljSymbol *SYM_KW_BLE;
+extern CljSymbol *SYM_KW_BT;
+extern CljSymbol *SYM_KW_EMB_FLASH;
+extern CljSymbol *SYM_KW_EMB_PSRAM;
+extern CljSymbol *SYM_KW_IEEE802154;
 
 #ifdef DEBUG
 // Runtime stats keywords (DEBUG only)

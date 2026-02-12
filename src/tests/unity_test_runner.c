@@ -186,8 +186,21 @@ static void warm_shared_group_for_heap_baseline(void) {
 
     if (strcmp(group, "shared_test_core_functions") == 0) {
         WITH_AUTORELEASE_POOL({
+            // Warm common lazy-seq/callsite shapes used across this group.
+            (void)eval_string("(= (concat '(1 2) '(3 4)) '(1 2 3 4))", g_test_eval_state);
+            (void)eval_string("(= (first (mapcat (fn [x] (list x (inc x))) '(1 3))) 1)", g_test_eval_state);
+            (void)eval_string("(= (get (group-by even? '(1 2 3 4 5 6)) true) [2 4 6])", g_test_eval_state);
             (void)eval_string("(first (keep (fn [x] (if (even? x) x nil)) '(1 2 3 4 5 6)))", g_test_eval_state);
             (void)eval_string("(last (keep (fn [x] (if (even? x) x nil)) '(1 2 3 4 5 6)))", g_test_eval_state);
+        });
+        return;
+    }
+
+    if (strcmp(group, "shared_test_predicates") == 0) {
+        WITH_AUTORELEASE_POOL({
+            // Warm set operation shapes used by conj/disj predicate tests.
+            (void)eval_string("(contains? (conj #{1} 2) 2)", g_test_eval_state);
+            (void)eval_string("(contains? (disj #{1 2} 2) 2)", g_test_eval_state);
         });
     }
 }
