@@ -98,13 +98,19 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
         }
 
         if (seq_val) {
-            if (TAG(seq_val) == CLJ_SEQ) {
-                // Fast-path: already a seq wrapper; avoid make_seq(retain) churn.
-                CljSeqIterator *seq_view = as_seq(seq_val);
-                bool rest_borrowed = (seq_view && seq_view->iter.seq_type == CLJ_LIST);
+            if (TAG(seq_val) == CLJ_SEQ || TAG(seq_val) == CLJ_LAZY_SEQ) {
+                // Fast-path: already a seq step carrier; avoid make_seq churn.
+                bool rest_borrowed = false;
+                if (TAG(seq_val) == CLJ_LAZY_SEQ) {
+                    // seq_next(lazy) returns borrowed cached_rest.
+                    rest_borrowed = true;
+                } else {
+                    CljSeqIterator *seq_view = as_seq(seq_val);
+                    rest_borrowed = (seq_view && seq_view->iter.seq_type == CLJ_LIST);
+                }
                 first_val = seq_first(seq_val);
                 RETAIN(first_val);  // may reference seq container internals
-                rest_val = seq_next(seq_val);  // owned for non-list, borrowed for list
+                rest_val = seq_next(seq_val);  // owned for non-list seq, borrowed for list/lazy
                 if (rest_borrowed) {
                     RETAIN(rest_val);
                 }
@@ -628,6 +634,14 @@ void seq_release(ID seq_obj) {
 
 ID seq_first(ID seq_obj) {
     if (!seq_obj) return NULL;
+    if (TAG(seq_obj) == CLJ_LAZY_SEQ) {
+        CljLazySeq *lazy = as_lazy_seq(seq_obj);
+        if (!lazy) return NULL;
+        lazy_seq_realize(lazy);
+        ID first = lazy->first;
+        if (first == NOT_FOUND) return NULL;
+        return (first == SYM_NIL) ? NULL : first;
+    }
     CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return NULL;
     
@@ -653,16 +667,23 @@ ID seq_rest(ID seq_obj) {
 }
 
 /**
- * @brief Advance seq to next element; for CLJ_LIST returns the list rest directly.
- * @param seq_obj Current seq (or list when over a list).
+ * @brief Advance seq to next element.
+ * @param seq_obj Current seq object.
  * @return Next seq/rest, or NULL if empty. Caller-owned when a new seq is
- *         allocated; for list, the returned rest is part of the original list.
+ *         allocated; for list-backed and lazy seq steps, the returned rest is borrowed.
  * @note If the caller will release the head (the original seq or its container),
  *       they must RETAIN(seq_next(...)) before releasing. Using
  *       AUTORELEASE(RETAIN(result)) would be safer but would poison COW optimizations.
  */
 ID seq_next(ID seq_obj) {
     if (!seq_obj) return NULL;
+    if (TAG(seq_obj) == CLJ_LAZY_SEQ) {
+        CljLazySeq *lazy = as_lazy_seq(seq_obj);
+        if (!lazy) return NULL;
+        lazy_seq_realize(lazy);
+        ID rest = lazy->cached_rest;
+        return (rest == NOT_FOUND) ? NULL : rest;
+    }
     /* If the original sequence was a CLJ_LIST, return CLJ_LIST directly (native_next semantics). */
     CljSeqIterator *seq = as_seq(seq_obj);
     if (seq && seq->iter.seq_type == CLJ_LIST) {
@@ -699,6 +720,26 @@ ID seq_next(ID seq_obj) {
  */
 void seq_next_inplace(ID *seq_slot) {
     if (!seq_slot || !*seq_slot) return;
+    if (TAG(*seq_slot) == CLJ_LAZY_SEQ) {
+        CljLazySeq *lazy = as_lazy_seq(*seq_slot);
+        if (!lazy) return;
+        lazy_seq_realize(lazy);
+        ID next = (lazy->cached_rest == NOT_FOUND) ? NULL : lazy->cached_rest;
+
+        if (lazy->base.rc == 1) {
+            // Exclusive owner: transfer cached_rest ownership out of current cell.
+            lazy->cached_rest = NULL;
+            RELEASE(*seq_slot);
+            *seq_slot = next;
+            return;
+        }
+
+        // Shared lazy cell: keep persistent semantics.
+        RETAIN(next);
+        RELEASE(*seq_slot);
+        *seq_slot = next;
+        return;
+    }
     CljSeqIterator *seq = as_seq(*seq_slot);
     if (!seq) {
         /* Not a heap seq (e.g. list passed as seq): advance via seq_next and update slot. */
@@ -854,9 +895,37 @@ static void release_lazy_seq(CljObject *v) {
     CljLazySeq *lazy_seq = (CljLazySeq*)v;
     if (lazy_seq) {
         RELEASE(lazy_seq->thunk);
+        lazy_seq->thunk = NULL;
         RELEASE(lazy_seq->thunk_state);
+        lazy_seq->thunk_state = NULL;
         RELEASE(lazy_seq->first);
-        RELEASE(lazy_seq->cached_rest);
+        lazy_seq->first = NULL;
+
+        // Release long LazySeq rest chains iteratively to avoid deep recursion.
+        ID rest = lazy_seq->cached_rest;
+        lazy_seq->cached_rest = NULL;
+        while (rest && !IS_IMMEDIATE(rest) && TAG(rest) == CLJ_LAZY_SEQ) {
+            CljObject *rest_obj = (CljObject*)rest;
+            if (rest_obj->rc != 1) {
+                break;
+            }
+
+            CljLazySeq *rest_lazy = (CljLazySeq*)rest;
+            ID next_rest = rest_lazy->cached_rest;
+
+            // Detach before RELEASE(rest) so nested destructor cannot recurse.
+            rest_lazy->cached_rest = NULL;
+            RELEASE(rest_lazy->thunk);
+            rest_lazy->thunk = NULL;
+            RELEASE(rest_lazy->thunk_state);
+            rest_lazy->thunk_state = NULL;
+            RELEASE(rest_lazy->first);
+            rest_lazy->first = NULL;
+            RELEASE(rest);
+
+            rest = next_rest;
+        }
+        RELEASE(rest);
     }
 }
 

@@ -871,6 +871,7 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
     ID y = map_get_sentinel(state, SYM_CONCAT_Y, NULL);
 
     ID elem = NULL;
+    bool elem_owned = false;
     ID next_x = empty_list();
     ID x_seq = NULL;
     if (x_seqable && is_list_type(TAG(x_seqable))) {
@@ -891,6 +892,7 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
         }
         elem = seq_first(x_seq);
         RETAIN(elem);  // may reference seq container internals
+        elem_owned = true;
         seq_next_inplace(&x_seq);
         if (x_seq) {
             next_x = x_seq;
@@ -902,23 +904,29 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
     map_assoc_inplace(&rest_state, SYM_CONCAT_X, next_x);
     RELEASE(x_seq);
     map_assoc_inplace(&rest_state, SYM_CONCAT_Y, y);
-    CljPersistentVector *rest_env_stack = make_vector(1, STRONG);
-    if (!rest_env_stack) { RELEASE(rest_state); return NULL; }
-    vector_conj_inplace(&rest_env_stack, rest_state);
-    RELEASE(rest_state);
     ID fn_obj = cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, &g_concat_thunk_fn_obj);
-    ID thunk_body = make_thunk_body_ast_call(fn_obj);
-    if (!thunk_body) { RELEASE(rest_env_stack); return NULL; }
-    ID rest_param = SYM_THUNK_STATE;
-    CljFunction *rest_thunk = make_function(&rest_param, 1, thunk_body, rest_env_stack, NULL, NULL);
-    RELEASE(thunk_body);
-    CljLazySeq *rest_lazy = make_lazy_seq(rest_thunk);
-    if (rest_lazy && vector_count(rest_env_stack) > 0) rest_lazy->thunk_state = RETAIN(vector_nth(rest_env_stack, 0));
-    RELEASE(rest_thunk);
-    RELEASE(rest_env_stack);
-    CljList *result = make_list(elem, (CljList*)rest_lazy);
-    RELEASE(elem);
-    RELEASE(rest_lazy);
+    CljLazySeq *rest_lazy = make_lazy_seq(fn_obj);
+    if (!rest_lazy) {
+        RELEASE(rest_state);
+        if (elem_owned) {
+            RELEASE(elem);
+        }
+        return NULL;
+    }
+    rest_lazy->thunk_state = rest_state;  // ownership transfer
+
+    // LazySeq itself is the cons-like step carrier: first + cached_rest.
+    CljLazySeq *result = ALLOC(CljLazySeq, 1);
+    result->base.type = CLJ_LAZY_SEQ;
+    result->base.flags = 0;
+    result->first = RETAIN(elem ? elem : SYM_NIL);
+    result->thunk = NULL;
+    result->cached_rest = rest_lazy;  // transfer ownership (rc=1 from make_lazy_seq)
+    result->thunk_state = NULL;
+
+    if (elem_owned) {
+        RELEASE(elem);
+    }
     return AUTORELEASE(result);
 }
 
@@ -937,21 +945,13 @@ ID native_concat(ID *args, unsigned int argc)
     map_assoc_inplace(&state, SYM_CONCAT_X, x);
     map_assoc_inplace(&state, SYM_CONCAT_Y, y);
 
-    CljPersistentVector *env_stack = make_vector(1, STRONG);
-    if (!env_stack) { RELEASE(state); return empty_list(); }
-    vector_conj_inplace(&env_stack, state);
-    RELEASE(state);
-
     ID fn_obj = cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, &g_concat_thunk_fn_obj);
-    ID thunk_body = make_thunk_body_ast_call(fn_obj);
-    if (!thunk_body) { RELEASE(env_stack); return empty_list(); }
-    ID thunk_param = SYM_THUNK_STATE;
-    CljFunction *thunk = make_function(&thunk_param, 1, thunk_body, env_stack, NULL, NULL);
-    RELEASE(thunk_body);
-    CljLazySeq *lazy = make_lazy_seq(thunk);
-    if (lazy && vector_count(env_stack) > 0) lazy->thunk_state = RETAIN(vector_nth(env_stack, 0));
-    RELEASE(thunk);
-    RELEASE(env_stack);
+    CljLazySeq *lazy = make_lazy_seq(fn_obj);
+    if (!lazy) {
+        RELEASE(state);
+        return empty_list();
+    }
+    lazy->thunk_state = state;  // ownership transfer
     return lazy ? AUTORELEASE(lazy) : empty_list();
 }
 
@@ -1392,20 +1392,10 @@ static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_COLL, coll);
                 map_assoc_inplace(&rest_state, SYM_MAPCAT_INNER, inner_rest);
                 RELEASE(inner_rest);
-                CljPersistentVector *rest_env_stack = make_vector(1, STRONG);
-                if (!rest_env_stack) { RELEASE(v); RELEASE(rest_state); return NULL; }
-                vector_conj_inplace(&rest_env_stack, rest_state);
-                RELEASE(rest_state);
                 ID fn_obj = cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN, &g_mapcat_thunk_fn_obj);
-                ID thunk_body = make_thunk_body_ast_call(fn_obj);
-                if (!thunk_body) { RELEASE(v); RELEASE(rest_env_stack); return NULL; }
-                ID rest_param = SYM_THUNK_STATE;
-                CljFunction *rest_thunk = make_function(&rest_param, 1, thunk_body, rest_env_stack, NULL, NULL);
-                RELEASE(thunk_body);
-                CljLazySeq *rest_lazy = make_lazy_seq(rest_thunk);
-                if (rest_lazy && vector_count(rest_env_stack) > 0) rest_lazy->thunk_state = RETAIN(vector_nth(rest_env_stack, 0));
-                RELEASE(rest_thunk);
-                RELEASE(rest_env_stack);
+                CljLazySeq *rest_lazy = make_lazy_seq(fn_obj);
+                if (!rest_lazy) { RELEASE(v); RELEASE(rest_state); return NULL; }
+                rest_lazy->thunk_state = rest_state; // ownership transfer
                 CljList *result = make_list(v, (CljList*)rest_lazy);
                 RELEASE(v);
                 RELEASE(rest_lazy);
@@ -1539,21 +1529,13 @@ ID native_mapcat(ID *args, unsigned int argc) {
     map_assoc_inplace(&state, SYM_MAPCAT_COLL, coll);
     map_assoc_inplace(&state, SYM_MAPCAT_INNER, NULL);
 
-    CljPersistentVector *env_stack = make_vector(1, STRONG);
-    if (!env_stack) { RELEASE(state); return empty_list(); }
-    vector_conj_inplace(&env_stack, state);
-    RELEASE(state);
-
     ID fn_obj = cached_named_func(native_mapcat_thunk_executor, SYM_MAPCAT_THUNK_FN, &g_mapcat_thunk_fn_obj);
-    ID thunk_body = make_thunk_body_ast_call(fn_obj);
-    if (!thunk_body) { RELEASE(env_stack); return empty_list(); }
-    ID thunk_param = SYM_THUNK_STATE;
-    CljFunction *thunk = make_function(&thunk_param, 1, thunk_body, env_stack, NULL, NULL);
-    RELEASE(thunk_body);
-    CljLazySeq *lazy = make_lazy_seq(thunk);
-    if (lazy && vector_count(env_stack) > 0) lazy->thunk_state = RETAIN(vector_nth(env_stack, 0));
-    RELEASE(thunk);
-    RELEASE(env_stack);
+    CljLazySeq *lazy = make_lazy_seq(fn_obj);
+    if (!lazy) {
+        RELEASE(state);
+        return empty_list();
+    }
+    lazy->thunk_state = state; // ownership transfer
     return lazy ? AUTORELEASE(lazy) : empty_list();
 }
 

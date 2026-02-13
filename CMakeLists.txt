@@ -6,7 +6,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Feature flags (compile-time): all are positive *_ENABLED macros (0/1)
 option(META_ENABLED "Enable metadata support" OFF)
-option(MEMORY_PROFILING_ENABLED "Enable memory profiling hooks" ON)
+option(MEMORY_PROFILING_ENABLED "Enable memory profiling hooks" OFF)
 option(ZOMBIE_ENABLED "Enable zombie mode (for memory-crash debugging)" ON)
 
 if(META_ENABLED)

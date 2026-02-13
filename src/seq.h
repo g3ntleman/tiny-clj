@@ -138,13 +138,15 @@ typedef struct {
 // ============================================================================
 
 /**
- * @brief Heap-allocated lazy sequence.
+ * @brief Heap-allocated lazy sequence representing one seq step itself.
  *
- * LazySeq realization model:
- * - Before realization: first == NOT_FOUND and thunk is a 0-arity thunk that
+ * LazySeq contract:
+ * - The object is its own seq node (cons-like):
+ *   - first: current element (SYM_NIL internally for nil element)
+ *   - cached_rest: next seq segment (can be another LazySeq, Seq, List, or nil)
+ * - Before realization: first == NOT_FOUND and thunk is a 0/1-arity thunk that
  *   produces a seqable value.
- * - After realization: first holds the first element (may be NULL for a nil
- *   element), cached_rest holds the rest sequence, and thunk is released.
+ * - After realization: first/cached_rest are populated and thunk is released.
  */
 typedef struct {
     CljObject base;     // Base object (CLJ_LAZY_SEQ type)

@@ -709,7 +709,29 @@ static void release_object_default(CljObject *v) {
             }
 #endif
             RELEASE(list->first);
-            RELEASE(list->rest);
+
+            // Release list tails iteratively to avoid deep recursive release chains
+            // for long persistent lists (e.g. large lazy-for materializations).
+            ID tail = list->rest;
+            list->rest = NULL;
+            while (tail && !IS_IMMEDIATE(tail) && TAG(tail) == CLJ_LIST) {
+                CljObject *tail_obj = (CljObject*)tail;
+                if (tail_obj->rc != 1) {
+                    break;
+                }
+
+                CljList *tail_list = (CljList*)tail;
+                ID next_tail = tail_list->rest;
+
+                // Detach before RELEASE(tail) so the nested destructor does not recurse.
+                tail_list->rest = NULL;
+                RELEASE(tail_list->first);
+                tail_list->first = NULL;
+                RELEASE(tail);
+
+                tail = next_tail;
+            }
+            RELEASE(tail);
             break;
         }
         case CLJ_AST_NODE: {

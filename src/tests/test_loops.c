@@ -331,6 +331,26 @@ TEST_SHARED(test_for_large_sequence) {
     TEST_ASSERT_EQUAL_INT(expected, as_fixnum(result));
 }
 
+// Regression: repeated large for/range realizations must remain stable.
+TEST_SHARED(test_for_large_sequence_repeated_realization) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    const char *expr = "(count (vec (for [x (range 2000)] x)))";
+    const int expected = 2000;
+#else
+    const char *expr = "(count (vec (for [x (range 10000)] x)))";
+    const int expected = 10000;
+#endif
+
+    for (int i = 0; i < 3; i++) {
+        ID result = eval_string(expr, g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(is_fixnum(result));
+        TEST_ASSERT_EQUAL_INT(expected, as_fixnum(result));
+    }
+}
+
 // Test: Lazy sequence (take from infinite)
 TEST_SHARED(test_for_lazy_infinite) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);

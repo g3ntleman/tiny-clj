@@ -1626,7 +1626,11 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
             if (cached_tag == CLJ_FUNC || cached_tag == CLJ_CLOSURE) {
                 g_eval_ast_call_depth--;
                 ID cached_result = call_function_with_args_and_context_vec(cached_fn, call->args, effective_env, effective_st, ctx);
-                return (IS_IMMEDIATE(cached_result) || !cached_result) ? cached_result : (ID)AUTORELEASE(cached_result);
+                // Keep ownership identical to the non-cached function-call path.
+                // call_function_with_args_and_context_vec already returns pool-safe
+                // refs for eval results, so adding AUTORELEASE here can double-enqueue
+                // objects (notably seq wrappers from native next/rest).
+                return cached_result;
             }
         }
     }
