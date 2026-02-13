@@ -4,7 +4,7 @@
  * Consolidated tests for core Clojure functions from clojure.core namespace
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 400
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 200
 #include "tests_common.h"
 #include "namespace.h"
 #include "symbol.h"
@@ -484,22 +484,12 @@ TEST_SHARED(test_core_map_predicate) {
 
 TEST_SHARED(test_core_get) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (get {:a 1} :a) => 1
-    CljObject *result1 = eval_string("(get {:a 1} :a)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result1));
-    
-    // Test: (get {:a 1} :b) => nil
-    CljObject *result2 = eval_string("(get {:a 1} :b)", g_test_eval_state);
-    TEST_ASSERT_NULL(result2);
-    
-    // Test: (get {:a 1} :b 99) => 99 (default value)
-    CljObject *result3 = eval_string("(get {:a 1} :b 99)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_TRUE(is_fixnum(result3));
-    TEST_ASSERT_EQUAL_INT(99, as_fixnum(result3));
+    CljObject *ok = NULL;
+    WITH_AUTORELEASE_POOL({
+        ok = eval_string("(let [m {:a 1}] (and (= 1 (get m :a)) (nil? (get m :b)) (= 99 (get m :b 99))))", g_test_eval_state);
+    });
+    TEST_ASSERT_NOT_NULL(ok);
+    TEST_ASSERT_TRUE(ok == clj_true);
 }
 
 TEST_SHARED(test_core_assoc) {
@@ -514,16 +504,12 @@ TEST_SHARED(test_core_assoc) {
 
 TEST_SHARED(test_core_dissoc) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (get (dissoc {:a 1 :b 2} :a) :a) => nil
-    CljObject *result1 = eval_string("(get (dissoc {:a 1 :b 2} :a) :a)", g_test_eval_state);
-    TEST_ASSERT_NULL(result1);
-    
-    // Test: (get (dissoc {:a 1 :b 2} :a) :b) => 2
-    CljObject *result2 = eval_string("(get (dissoc {:a 1 :b 2} :a) :b)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result2));
+    CljObject *ok = NULL;
+    WITH_AUTORELEASE_POOL({
+        ok = eval_string("(let [m (dissoc {:a 1 :b 2} :a)] (and (nil? (get m :a)) (= 2 (get m :b))))", g_test_eval_state);
+    });
+    TEST_ASSERT_NOT_NULL(ok);
+    TEST_ASSERT_TRUE(ok == clj_true);
 }
 
 TEST_SHARED(test_core_keys) {

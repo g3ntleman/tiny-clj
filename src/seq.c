@@ -129,6 +129,7 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
             if (!first_val && rest_val) {
                 first_val = SYM_NIL;
             }
+
         }
 
         // Keep results alive after this inner pool drains.

@@ -151,61 +151,6 @@ static void test_heap_growth_check(void) {
 // GLOBAL SETUP/TEARDOWN
 // ============================================================================
 
-static void warm_shared_group_for_heap_baseline(void) {
-    if (!g_current_test_entry || !g_current_test_entry->group || !g_test_eval_state) {
-        return;
-    }
-
-    const char *group = g_current_test_entry->group;
-
-    // Keep per-test heap checks focused on the test expression, not one-time
-    // namespace/bootstrap/callsite costs that are identical across tests.
-    if (strcmp(group, "shared_test_string") == 0) {
-        WITH_AUTORELEASE_POOL({
-            (void)eval_string("(require 'clojure.string)", g_test_eval_state);
-            (void)eval_string("(clojure.string/escape \"abc\" {})", g_test_eval_state);
-            (void)eval_string("(clojure.string/includes? \"hello\" \"ell\")", g_test_eval_state);
-            (void)eval_string("(clojure.string/includes? \"hello\" \"xyz\")", g_test_eval_state);
-            (void)eval_string("(clojure.string/index-of \"hello\" \"l\" 0)", g_test_eval_state);
-        });
-        return;
-    }
-
-    if (strcmp(group, "shared_test_loops") == 0) {
-        WITH_AUTORELEASE_POOL({
-            (void)eval_string(g_expr_for_basic_list_comprehension, g_test_eval_state);
-            (void)eval_string(g_expr_for_multiple_bindings, g_test_eval_state);
-            (void)eval_string(g_expr_for_when_modifier, g_test_eval_state);
-            (void)eval_string(g_expr_for_let_modifier, g_test_eval_state);
-            (void)eval_string(g_expr_for_while_modifier, g_test_eval_state);
-            (void)eval_string(g_expr_for_lazy_infinite, g_test_eval_state);
-            (void)eval_string(g_expr_for_multi_consumer_independence, g_test_eval_state);
-        });
-        return;
-    }
-
-    if (strcmp(group, "shared_test_core_functions") == 0) {
-        WITH_AUTORELEASE_POOL({
-            // Warm common lazy-seq/callsite shapes used across this group.
-            (void)eval_string("(= (concat '(1 2) '(3 4)) '(1 2 3 4))", g_test_eval_state);
-            (void)eval_string("(= (first (mapcat (fn [x] (list x (inc x))) '(1 3))) 1)", g_test_eval_state);
-            (void)eval_string("(= (get (group-by even? '(1 2 3 4 5 6)) true) [2 4 6])", g_test_eval_state);
-            (void)eval_string("(first (keep (fn [x] (if (even? x) x nil)) '(1 2 3 4 5 6)))", g_test_eval_state);
-            (void)eval_string("(last (keep (fn [x] (if (even? x) x nil)) '(1 2 3 4 5 6)))", g_test_eval_state);
-        });
-        return;
-    }
-
-    if (strcmp(group, "shared_test_predicates") == 0) {
-        WITH_AUTORELEASE_POOL({
-            // Warm set operation shapes used by conj/disj predicate tests.
-            (void)eval_string("(contains? (conj #{1} 2) 2)", g_test_eval_state);
-            (void)eval_string("(contains? (disj #{1 2} 2) 2)", g_test_eval_state);
-        });
-    }
-}
-
-
 void setUp(void) {
     // Default: enforce heap growth checks for shared (read-only) tests only
     g_heap_check_enabled = is_shared_test_entry(g_current_test_entry);
@@ -226,7 +171,6 @@ void setUp(void) {
     
     // In batch mode, skip heavy initialization (clojure.core already loaded)
     if (g_batch_mode) {
-        warm_shared_group_for_heap_baseline();
         test_heap_growth_mark_baseline();
         return;
     }
@@ -287,7 +231,12 @@ void setUp(void) {
         }
     } END_TRY
 
-    warm_shared_group_for_heap_baseline();
+    // Group fixture: shared clojure.string tests exercise string functions, not
+    // namespace bootstrap costs. Load namespace before heap baseline is captured.
+    if (g_current_test_entry && g_current_test_entry->group &&
+        strcmp(g_current_test_entry->group, "shared_test_string") == 0) {
+        (void)require_namespace_by_name(g_test_eval_state, "clojure.string");
+    }
 
     test_heap_growth_mark_baseline();
 }
@@ -539,8 +488,20 @@ void run_shared_tests_batched(void) {
     
     // Run each shared group as a batch
     for (size_t g = 0; g < group_count; g++) {
+        const SubjectiveCTestEntry *group_entry = NULL;
+        for (size_t i = 0; i < test_count; i++) {
+            if (strcmp(all_tests[i].group, shared_groups[g]) == 0) {
+                group_entry = &all_tests[i];
+                break;
+            }
+        }
+        if (!group_entry) {
+            continue;
+        }
+
         // One setUp for the batch
         g_batch_mode = false;
+        g_current_test_entry = group_entry;
         TRY {
             setUp();
             g_batch_mode = true;
@@ -565,6 +526,7 @@ void run_shared_tests_batched(void) {
             Unity.TestFailures++;
             g_batch_mode = false;
         } END_TRY
+        g_current_test_entry = NULL;
     }
 }
 
@@ -575,8 +537,16 @@ void run_tests_by_registry_impl(void) {
     const SubjectiveCTestEntry *all_tests = subjective_c_test_registry_entries(&test_count);
     g_single_test_mode = false;
 
+    // Shared tests are explicitly designed to run in batch mode with one heavy
+    // setup/teardown per group; this avoids counting fixture/bootstrap costs as
+    // per-test heap growth.
+    run_shared_tests_batched();
+
     for (size_t i = 0; i < test_count; i++) {
         const SubjectiveCTestEntry *e = &all_tests[i];
+        if (e->group && strncmp(e->group, "shared_", 7) == 0) {
+            continue;  // Already executed via run_shared_tests_batched().
+        }
         set_unity_test_file_info(e);
         g_current_test_entry = e;
         TRY {

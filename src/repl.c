@@ -469,22 +469,26 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         return false;
     }
     set_line_editor(editor);
+    // History is a strictly interactive REPL feature.
+    bool history_enabled = (isatty(STDIN_FILENO) != 0);
     // Load history from default file and populate editor history (with exception handling)
     CljObject *history_vec = NULL;
-    WITH_AUTORELEASE_POOL({
-        TRY {
-            CljObject *loaded = line_editor_history_load_default();
-            // Only use loaded history if it has content
-            if (loaded && TAG(loaded) == CLJ_VECTOR_PERSISTENT && vector_count((CljPersistentVector*)loaded) > 0) {
-                // loaded is already retained from history_load_from_file, transfer to outer pool
-                ASSIGN(history_vec, AUTORELEASE(loaded));
-            }
-        } CATCH(ex) {
-            // Exception beim History-Laden - starte mit leerer History
-            // Exception wird automatisch freigegeben durch CATCH-Macro
-            history_vec = NULL;
-        } END_TRY
-    });
+    if (history_enabled) {
+        WITH_AUTORELEASE_POOL({
+            TRY {
+                CljObject *loaded = line_editor_history_load_default();
+                // Only use loaded history if it has content
+                if (loaded && TAG(loaded) == CLJ_VECTOR_PERSISTENT && vector_count((CljPersistentVector*)loaded) > 0) {
+                    // loaded is already retained from history_load_from_file, transfer to outer pool
+                    ASSIGN(history_vec, AUTORELEASE(loaded));
+                }
+            } CATCH(ex) {
+                // Exception beim History-Laden - starte mit leerer History
+                // Exception wird automatisch freigegeben durch CATCH-Macro
+                history_vec = NULL;
+            } END_TRY
+        });
+    }
     // Verwende die geladene History
     // line_editor_set_history_from_vector ruft clj_conj auf, das AUTORELEASE verwendet
     if (history_vec && TAG(history_vec) == CLJ_VECTOR_PERSISTENT) {
@@ -576,7 +580,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             if (acc[0] != '\0') {
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
                 LineEditor *editor = get_line_editor();
-                if (editor) {
+                if (history_enabled && editor) {
                     line_editor_add_to_history(editor, acc);
                 }
 #endif
@@ -599,7 +603,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         if (acc[0] != '\0') {
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
             LineEditor *editor = get_line_editor();
-            if (editor) {
+            if (history_enabled && editor) {
                 line_editor_add_to_history(editor, acc);
                 // Save history after each expression (fsync removed to avoid blocking)
                 WITH_AUTORELEASE_POOL({
@@ -625,7 +629,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     WITH_AUTORELEASE_POOL({
         LineEditor *ed = get_line_editor();
-        if (ed) {
+        if (history_enabled && ed) {
             CljPersistentVector *vec = line_editor_get_history_vector(ed);
             if (vec) {
                 line_editor_history_save_default((CljObject*)vec);

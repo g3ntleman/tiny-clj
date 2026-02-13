@@ -545,9 +545,7 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 }
                 if (!expanded) return NULL;
                 ID macro_expanded = expanded;
-                if (macro_expanded && !IS_IMMEDIATE(macro_expanded)) {
-                    RETAIN(macro_expanded);
-                }
+                RETAIN(macro_expanded);
 
                 // Transfer metadata from original form to expanded form
                 move_meta(list, expanded);

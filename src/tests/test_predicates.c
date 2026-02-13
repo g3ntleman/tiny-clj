@@ -6,7 +6,7 @@
  * set?, coll?, seq?, seqable?, ifn?
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 300
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 150
 #include "tests_common.h"
 
 // ============================================================================
@@ -405,13 +405,12 @@ TEST_SHARED(test_contains_set_false) {
 }
 
 TEST_SHARED(test_conj_disj_set) {
-    CljObject *result1 = eval_string("(contains? (conj #{1} 2) 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 == clj_true);
-
-    CljObject *result2 = eval_string("(contains? (disj #{1 2} 2) 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_false);
+    CljObject *ok = NULL;
+    WITH_AUTORELEASE_POOL({
+        ok = eval_string("(let [a (conj (hash-set 1) 2) b (disj (hash-set 1 2) 2)] (and (contains? a 2) (not (contains? b 2))))", g_test_eval_state);
+    });
+    TEST_ASSERT_NOT_NULL(ok);
+    TEST_ASSERT_TRUE(ok == clj_true);
 }
 
 TEST_SHARED(test_hash_set_dedup_count) {

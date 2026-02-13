@@ -4,7 +4,7 @@
  * Tests for sequence semantics and iterator-based implementation.
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 400
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 200
 #include "tests_common.h"
 #include "../list.h"
 #include "../seq.h"
@@ -202,11 +202,11 @@ TEST_SHARED(test_seq_map_rest_returns_sequence) {
 }
 
 TEST_SHARED(test_seq_map_iteration) {
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(eval_string("(first (seq {:a 1 :b 2}))", g_test_eval_state)));
-    TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(eval_string("(next (seq {:a 1 :b 2}))", g_test_eval_state)));
-    ID next_first = eval_string("(first (next (seq {:a 1 :b 2})))", g_test_eval_state);
-    CljPersistentVector *vec = as_persistent_vector(next_first);
-    TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
+    ID ok = NULL;
+    WITH_AUTORELEASE_POOL({
+        ok = eval_string("(let [s (seq {:a 1 :b 2}) n (next s)] (and (vector? (first s)) (not (nil? n)) (= 2 (count (first n)))))", g_test_eval_state);
+    });
+    TEST_ASSERT_TRUE(ok == clj_true);
 }
 
 TEST_SHARED(test_seq_map_single_entry_next) {

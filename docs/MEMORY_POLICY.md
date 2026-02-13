@@ -378,3 +378,36 @@ ID parsed = parse_string(expr, eval_state);
 
 ASSIGN(obj, new_obj);  // ✅ SAFE: Handles retain/release automatically
 ```
+
+## Debugging Learnings (2026-02)
+
+These lessons came from multi-day leak and ownership debugging sessions and are now
+part of the policy mindset:
+
+1. **Fix ownership at the callsite first**
+   - Prefer local, policy-conformant ownership fixes in the caller path.
+   - Avoid semantic changes in deeper shared primitives just to silence leaks.
+
+2. **Do not add macro guards**
+   - `RETAIN`, `RELEASE`, and `AUTORELEASE` are null-safe and immediate-safe.
+   - Do not wrap them in `if (obj)` checks.
+
+3. **Use direct seq/list paths in hot internal loops**
+   - Avoid calling `native_*` builtins from builtin internals when direct
+     seq/list APIs express the same semantics.
+   - Builtin argument validation in hot internal paths adds noise and overhead.
+
+4. **Runner warmups are not leak fixes**
+   - Do not hide leak/heap behavior with expression warmups in the test runner.
+   - Use explicit fixtures where needed; keep heap checks honest.
+
+5. **Isolate with `(heap ...)` via `repl -e`**
+   - Reduce failing cases to small expressions and measure repeatedly.
+   - Use this to separate one-time bootstrap costs from true ownership leaks.
+
+6. **If limits must be raised temporarily, track rollback target**
+   - Every heap-limit increase must record:
+     - previous value (target),
+     - temporary new value,
+     - TODO for leak reduction.
+   - Keep these entries in `Reports/HEAP_LIMIT_TODOS.md`.
