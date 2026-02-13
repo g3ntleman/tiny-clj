@@ -442,7 +442,6 @@ int load_clojure_core(EvalState *st) {
   if (!core) return 0;
   CljSymbol *math_alias = intern_symbol_global("Math");
   if (math_alias && SYM_CLOJURE_CORE) ns_set_alias(core, math_alias, SYM_CLOJURE_CORE);
-  runtime_ensure_resolve_cache(&g_runtime);
   if (!core->mappings) return 0;
   CljSymbol *inc_sym = intern_symbol_global("inc");
   if (!inc_sym) return 0;

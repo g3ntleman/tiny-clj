@@ -28,7 +28,6 @@ extern bool clj_equal_full(ID a, ID b);
 // Statically allocated global runtime struct (all pointers initialized to NULL).
 TinyClJRuntime g_runtime = {
     .ns_registry = NULL,
-    .resolve_cache = NULL,
     .resolve_cache_epoch = 0,
     .symbol_table = NULL,
     .meta_registry = NULL,
@@ -40,7 +39,7 @@ TinyClJRuntime g_runtime = {
     .timer_id_counter = 0
 };
 
-// Monotonic epoch for callsite + resolve cache invalidation.
+// Monotonic epoch for callsite cache invalidation.
 // Must never be reset to avoid re-validating stale cached pointers across runtime_reset().
 static uint64_t g_resolve_cache_epoch_counter = 1;
 
@@ -66,11 +65,6 @@ uint64_t runtime_next_resolve_epoch(void) {
     return next;
 }
 
-void runtime_ensure_resolve_cache(TinyClJRuntime *runtime) {
-    // Resolve cache is disabled; stub retained for API compatibility.
-    (void)runtime;
-}
-
 void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime) return;
     
@@ -92,8 +86,7 @@ void runtime_init(TinyClJRuntime *runtime) {
         runtime->symbol_table = make_hashset(512);  // HashSet for O(1) symbol lookup
     }
     
-    // Disable resolve_cache; keep epoch non-zero for callsite caches.
-    ASSIGN(runtime->resolve_cache, NULL);
+    // Keep epoch non-zero for callsite caches.
     runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
     
     // Initialize event loop queues as transient vectors (only if not already set)
@@ -159,8 +152,7 @@ void runtime_reset(TinyClJRuntime *runtime) {
     
     ASSIGN(runtime->task_queue, NULL);
     ASSIGN(runtime->timer_queue, NULL);
-    ASSIGN(runtime->resolve_cache, NULL);
-    // Invalidate callsite caches; resolve cache remains disabled.
+    // Invalidate callsite caches.
     runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
     ASSIGN(runtime->pool_stack, NULL);
     ASSIGN(runtime->meta_registry, NULL);

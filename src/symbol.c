@@ -1119,6 +1119,10 @@ static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *cname) {
     return (result == NOT_FOUND) ? NULL : (CljSymbol*)result;
 }
 
+CljSymbol* symbol_table_lookup(CljSymbol *ns_name, const char *cname) {
+    return symbol_table_find(ns_name, cname);
+}
+
 // Add symbol to the table - O(1) HashSet insert
 void symbol_table_add(CljSymbol *symbol) {
     if (!symbol || !symbol->cname) return;

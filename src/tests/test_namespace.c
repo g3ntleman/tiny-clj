@@ -662,8 +662,8 @@ TEST(test_ns_resolve_symbol_cache) {
     RELEASE(resolved1);
 }
 
-// Resolve-cache is disabled; callsite caches handle hot paths.
-// This test verifies function calls still resolve correctly without resolve_cache.
+// Global resolve-cache no longer exists; callsite caches handle hot paths.
+// This test verifies function calls still resolve correctly with callsite caching.
 TEST(test_resolve_list_operator_uses_cache) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -673,12 +673,6 @@ TEST(test_resolve_list_operator_uses_cache) {
 
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
-
-    // Ensure resolve_cache remains disabled
-    if (g_runtime.resolve_cache) {
-        RELEASE(g_runtime.resolve_cache);
-        g_runtime.resolve_cache = NULL;
-    }
 
     // Test with a builtin function that should be in clojure.core
     // Use 'inc' which should be available
@@ -704,7 +698,17 @@ TEST(test_resolve_list_operator_uses_cache) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
     TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
 
-    TEST_ASSERT_NULL(g_runtime.resolve_cache);
+    // Cache must now contain resolved call target for this callsite+symbol.
+    ID cached_after_first = call
+        ? ast_call_get_cached_resolution(call, inc_sym, g_runtime.resolve_cache_epoch)
+        : ast_node_get_cached_resolution(call_node, inc_sym, g_runtime.resolve_cache_epoch);
+    TEST_ASSERT_NOT_NULL_MESSAGE(cached_after_first, "callsite cache should be populated after first evaluation");
+
+    // Second call reuses the same canonicalized AST node and should hit callsite cache.
+    CljObject *result2 = eval_body(parsed, g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
+    TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result2));
 
     // Cleanup: inc_sym is from intern (singleton). eval_body returns autoreleased; no RELEASE(result1).
     RELEASE(inc_sym);

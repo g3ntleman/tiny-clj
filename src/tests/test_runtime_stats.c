@@ -673,6 +673,28 @@ TEST(test_runtime_stats_assoc_var_per_eval_growth_bounded)
              tolerance, delta);
     TEST_ASSERT_TRUE_MESSAGE(delta <= tolerance, msg);
 }
+
+TEST(test_heap_plus_does_not_intern_user_plus_when_missing)
+{
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    init_special_symbols();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, false);
+
+    ID result = eval_string("(heap +)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_map(result));
+
+    ID k_symbol = (ID)intern_symbol_global(":Symbol");
+    ID v_symbol = map_get_sentinel((CljPersistentMap *)result, k_symbol, NOT_FOUND);
+    TEST_ASSERT_EQUAL(NOT_FOUND, v_symbol);
+}
 #endif
 
 

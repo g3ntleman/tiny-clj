@@ -314,10 +314,13 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
 
     // Unqualified symbol - check current namespace first.
     // Try qualified lookup first so def/ns_define (e.g. user/inc) shadow referred unqualified (e.g. inc from core).
+    // Important: do not intern here. Lookup-only avoids creating symbols like user/+ when they are not defined.
     CljSymbol *qualified_sym = sym;
     if (current_ns && current_ns->name && current_ns->name->cname) {
-        qualified_sym = intern_symbol(current_ns->name, sym->cname);
-        if (!qualified_sym) qualified_sym = sym;
+        CljSymbol *existing_qualified = symbol_table_lookup(current_ns->name, sym->cname);
+        if (existing_qualified) {
+            qualified_sym = existing_qualified;
+        }
     }
     if (current_ns && current_ns->mappings) {
         ID v = map_get(current_ns->mappings, qualified_sym);
@@ -679,16 +682,11 @@ void parse_error(const char *msg, EvalState *st) {
  * @param value Value to bind to symbol
  */
 /**
- * @brief Invalidate the resolve cache by setting it to NULL
- * This is more efficient than removing individual symbols via map_assoc.
- * The cache will be automatically rebuilt on the next ns_resolve() call.
+ * @brief Invalidate resolution callsite caches by bumping the global epoch.
  */
 void ns_invalidate_resolve_cache(void) {
     // Invalidate callsite caches by bumping the global epoch counter.
     g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch();
-
-    // Resolve cache disabled: ensure pointer remains NULL
-    ASSIGN(g_runtime.resolve_cache, NULL);
 }
 
 /**
