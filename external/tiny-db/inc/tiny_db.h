@@ -94,6 +94,7 @@ tdb_status_t tdb_kv_get_len(tdb_kv_t* kv, const void* key, size_t key_len, size_
 tdb_status_t tdb_kv_get_into(tdb_kv_t* kv, const void* key, size_t key_len, void* out, size_t out_len,
                            size_t* saved_len_out);
 tdb_status_t tdb_kv_del(tdb_kv_t* kv, const void* key, size_t key_len);
+tdb_status_t tdb_kv_sync(tdb_kv_t* kv);
 
 /*
  * Query the maximum allowed value length for a given key length.

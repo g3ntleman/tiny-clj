@@ -724,11 +724,11 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Runs the next task in the event loop queue, if any. Returns true if a task was run, false otherwise."}
 (defn run-next-task [] :native)
-^#^{:doc "Schedules a function f to be called after ms milliseconds. Returns a timer-id that can be used to cancel the timer."}
+^#^{:doc "Schedules work after ms milliseconds. Second arg can be a function f, or options map {:fn f :id k :period-ms p}. With :id, scheduling upserts by equal key. If :period-ms > 0, the timer is periodic."}
 (defn schedule [ms f] :native)
-^#^{:doc "Schedules a function f to be called periodically every ms milliseconds. Returns a timer-id that can be used to cancel the timer."}
-(defn schedule-periodic [ms f] :native)
-^#^{:doc "Cancels a timer identified by timer-id. Returns true if the timer was cancelled, false otherwise."}
+^#^{:doc "Schedules periodic work. Third arg can be function f or options map {:fn f :id k}. With :id, scheduling upserts by equal key."}
+(defn schedule-periodic [delay-ms period-ms f] :native)
+^#^{:doc "Cancels a timer by numeric timer-id or by named key. Returns true if cancelled, false otherwise."}
 (defn cancel-timer [timer-id] :native)
 
 ; ============================================================================

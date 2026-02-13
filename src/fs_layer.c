@@ -4,9 +4,12 @@ extern struct CljSymbol *SYM_KW_SIZE, *SYM_KW_CHUNKS, *SYM_KW_PATH, *SYM_KW_META
 #include "fs_layer.h"
 
 #include "byte_array.h"
+#include "event_loop.h"
+#include "function.h"
 #include "memory.h"
 #include "mini_format.h"
 #include "strings.h"
+#include "symbol.h"
 #include "vector.h"
 
 #include "tiny_db.h"
@@ -22,6 +25,8 @@ extern struct CljSymbol *SYM_KW_SIZE, *SYM_KW_CHUNKS, *SYM_KW_PATH, *SYM_KW_META
 // Internal storage chunk size. This is NOT an app-facing limit.
 // App-facing streaming APIs (future) must cap chunks to FS_APP_MAX_CHUNK_SIZE.
 #define FS_STORE_CHUNK_SIZE 4096u
+#define FS_KV_SYNC_DEBOUNCE_MS 1000
+#define FS_KV_SYNC_TIMER_KEY_NAME "fs.kv.sync"
 
 // Forward declarations for FS helpers.
 static bool fs_is_valid_path(const char *path);
@@ -307,9 +312,103 @@ struct FsKvStore {
     FsRamBdev ram;
 #endif
     FsStreamStats stats;
+    bool sync_dirty;
+    struct FsKvStore *sync_next;
 };
 
 static FsKvStore *g_fs_global_store = NULL;
+static FsKvStore *g_fs_sync_store_head = NULL;
+static ID g_fs_sync_timer_fn_obj = NULL;
+static ID g_fs_sync_timer_key = NULL;
+
+static ID fs_kv_sync_timer_callback(ID *args, unsigned int argc);
+
+static void fs_kv_sync_register_store(FsKvStore *st)
+{
+    if (!st) return;
+    st->sync_next = g_fs_sync_store_head;
+    g_fs_sync_store_head = st;
+}
+
+static void fs_kv_sync_unregister_store(FsKvStore *st)
+{
+    if (!st) return;
+    FsKvStore *prev = NULL;
+    FsKvStore *cur = g_fs_sync_store_head;
+    while (cur) {
+        if (cur == st) {
+            if (prev) prev->sync_next = cur->sync_next;
+            else g_fs_sync_store_head = cur->sync_next;
+            cur->sync_next = NULL;
+            cur->sync_dirty = false;
+            break;
+        }
+        prev = cur;
+        cur = cur->sync_next;
+    }
+    if (!g_fs_sync_store_head) {
+        if (g_fs_sync_timer_key) {
+            (void)timer_cancel_named(g_fs_sync_timer_key);
+        }
+    }
+}
+
+static void fs_kv_sync_ensure_timer_fn(void)
+{
+    if (g_fs_sync_timer_fn_obj) return;
+    CljSymbol *sym = intern_symbol_global("tiny-clj.fs/kv-sync-flush");
+    g_fs_sync_timer_fn_obj = make_named_func(fs_kv_sync_timer_callback, sym);
+}
+
+static void fs_kv_sync_schedule_debounced(void)
+{
+    fs_kv_sync_ensure_timer_fn();
+    if (!g_fs_sync_timer_fn_obj) return;
+    if (!g_fs_sync_timer_key) {
+        g_fs_sync_timer_key = intern_symbol_global(FS_KV_SYNC_TIMER_KEY_NAME);
+    }
+    (void)timer_upsert_named(g_fs_sync_timer_key,
+                             RETAIN(g_fs_sync_timer_fn_obj),
+                             FS_KV_SYNC_DEBOUNCE_MS,
+                             false,
+                             0);
+}
+
+static void fs_kv_sync_mark_dirty(FsKvStore *st)
+{
+    if (!st) return;
+    st->sync_dirty = true;
+    fs_kv_sync_schedule_debounced();
+}
+
+static ID fs_kv_sync_timer_callback(ID *args, unsigned int argc)
+{
+    (void)args;
+    if (argc != 0) return NULL;
+
+    bool retry_needed = false;
+    FsKvStore *cur = g_fs_sync_store_head;
+    while (cur) {
+        if (cur->sync_dirty && cur->db) {
+            tdb_status_t stc = tdb_kv_sync(cur->db);
+            if (stc == TDB_OK) cur->sync_dirty = false;
+            else retry_needed = true;
+        }
+        cur = cur->sync_next;
+    }
+
+    if (retry_needed && g_fs_sync_timer_fn_obj) {
+        if (!g_fs_sync_timer_key) {
+            g_fs_sync_timer_key = intern_symbol_global(FS_KV_SYNC_TIMER_KEY_NAME);
+        }
+        (void)timer_upsert_named(g_fs_sync_timer_key,
+                                 RETAIN(g_fs_sync_timer_fn_obj),
+                                 FS_KV_SYNC_DEBOUNCE_MS,
+                                 false,
+                                 0);
+    }
+    return NULL;
+}
 
 FsKvStore *fs_global_store(void)
 {
@@ -388,6 +487,7 @@ FsKvStore *fs_kv_store_new(void)
 #endif
         return NULL;
     }
+    fs_kv_sync_register_store(st);
     return st;
 }
 
@@ -887,6 +987,7 @@ tdb_status_t fs_file_stream_write(FsKvStore* st,
 void fs_kv_store_free(FsKvStore *st)
 {
     if (!st) return;
+    fs_kv_sync_unregister_store(st);
     if (st->db) {
         tdb_kv_close(st->db);
         st->db = NULL;
@@ -923,7 +1024,9 @@ tdb_status_t fs_kv_put_status(FsKvStore *st, const char *key, const uint8_t *dat
 {
     if (!st || !st->db || !key) return TDB_ERR_INVALID_ARG;
     if (len > (size_t)INT32_MAX) return TDB_ERR_INVALID_ARG;
-    return tdb_kv_put(st->db, key, strlen(key), data, len);
+    tdb_status_t stc = tdb_kv_put(st->db, key, strlen(key), data, len);
+    if (stc == TDB_OK) fs_kv_sync_mark_dirty(st);
+    return stc;
 }
 
 tdb_status_t fs_kv_get_status(FsKvStore *st, const char *key, uint8_t *out, size_t out_len, size_t *saved_len_out)
@@ -936,14 +1039,33 @@ tdb_status_t fs_kv_get_status(FsKvStore *st, const char *key, uint8_t *out, size
 tdb_status_t fs_kv_del_status(FsKvStore *st, const char *key)
 {
     if (!st || !st->db || !key) return TDB_ERR_INVALID_ARG;
-    return tdb_kv_del(st->db, key, strlen(key));
+    tdb_status_t stc = tdb_kv_del(st->db, key, strlen(key));
+    if (stc == TDB_OK) fs_kv_sync_mark_dirty(st);
+    return stc;
+}
+
+tdb_status_t fs_kv_max_val_len_status(FsKvStore *st, const char *key, size_t *out_max_val_len)
+{
+    if (out_max_val_len) *out_max_val_len = 0;
+    if (!st || !st->db || !key || !out_max_val_len) return TDB_ERR_INVALID_ARG;
+    return tdb_kv_max_val_len(st->db, strlen(key), out_max_val_len);
+}
+
+tdb_status_t fs_kv_sync_status(FsKvStore *st)
+{
+    if (!st || !st->db) return TDB_ERR_INVALID_ARG;
+    tdb_status_t stc = tdb_kv_sync(st->db);
+    if (stc == TDB_OK) st->sync_dirty = false;
+    return stc;
 }
 
 tdb_status_t fs_kv_put_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, const uint8_t *data, size_t len)
 {
     if (!st || !st->db || !key || key_len == 0) return TDB_ERR_INVALID_ARG;
     if (len > (size_t)INT32_MAX) return TDB_ERR_INVALID_ARG;
-    return fs_kv_put_chunked_bytes(st->db, key, key_len, data, len);
+    tdb_status_t stc = fs_kv_put_chunked_bytes(st->db, key, key_len, data, len);
+    if (stc == TDB_OK) fs_kv_sync_mark_dirty(st);
+    return stc;
 }
 
 tdb_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len, uint8_t *out, size_t out_len, size_t *saved_len_out)
@@ -967,7 +1089,9 @@ tdb_status_t fs_kv_get_key_bytes_status(FsKvStore *st, const uint8_t *key, size_
 tdb_status_t fs_kv_del_key_bytes_status(FsKvStore *st, const uint8_t *key, size_t key_len)
 {
     if (!st || !st->db || !key || key_len == 0) return TDB_ERR_INVALID_ARG;
-    return tdb_kv_del(st->db, key, key_len);
+    tdb_status_t stc = tdb_kv_del(st->db, key, key_len);
+    if (stc == TDB_OK) fs_kv_sync_mark_dirty(st);
+    return stc;
 }
 
 /* -------------------------------------------------------------------------- */

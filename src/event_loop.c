@@ -23,6 +23,14 @@ static CljSymbol *KW_PERIODIC;
 static CljSymbol *KW_PERIOD_MS;
 static CljSymbol *KW_TIMER_ID;
 
+typedef struct NamedTimerEntry {
+    ID key;
+    int timer_id;
+    struct NamedTimerEntry *next;
+} NamedTimerEntry;
+
+static NamedTimerEntry *g_named_timers = NULL;
+
 // Timer-Task Map index constants for direct O(1) access
 // CRITICAL: The order of these enum values MUST match exactly the order of keys
 // in task_timer_to_map() when calling make_map_from_kv().
@@ -130,6 +138,123 @@ static inline int task_get_timer_id(CljPersistentMap *task_map) {
 // Forward declarations
 static void timer_process(void);
 static void timer_insert_sorted_map(CljPersistentMap *task_map);
+static bool timer_named_remove_by_id(int timer_id);
+
+static bool timer_key_is_valid(ID key) {
+    return key != NULL;
+}
+
+static NamedTimerEntry *timer_named_find_by_key(ID key) {
+    if (!timer_key_is_valid(key)) return NULL;
+    NamedTimerEntry *cur = g_named_timers;
+    while (cur) {
+        if (clj_equal(cur->key, key)) return cur;
+        cur = cur->next;
+    }
+    return NULL;
+}
+
+static bool timer_named_set(ID key, int timer_id) {
+    if (!timer_key_is_valid(key) || timer_id <= 0) return false;
+    NamedTimerEntry *existing = timer_named_find_by_key(key);
+    if (existing) {
+        existing->timer_id = timer_id;
+        return true;
+    }
+    NamedTimerEntry *entry = CLJ_MALLOC(sizeof(NamedTimerEntry));
+    if (!entry) return false;
+    entry->key = RETAIN(key);
+    entry->timer_id = timer_id;
+    entry->next = g_named_timers;
+    g_named_timers = entry;
+    return true;
+}
+
+static bool timer_named_take_by_key(ID key, int *out_timer_id) {
+    if (out_timer_id) *out_timer_id = 0;
+    if (!timer_key_is_valid(key)) return false;
+    NamedTimerEntry *prev = NULL;
+    NamedTimerEntry *cur = g_named_timers;
+    while (cur) {
+        if (clj_equal(cur->key, key)) {
+            if (out_timer_id) *out_timer_id = cur->timer_id;
+            if (prev) prev->next = cur->next;
+            else g_named_timers = cur->next;
+            RELEASE(cur->key);
+            CLJ_FREE(cur);
+            return true;
+        }
+        prev = cur;
+        cur = cur->next;
+    }
+    return false;
+}
+
+static bool timer_named_remove_by_id(int timer_id) {
+    if (timer_id <= 0) return false;
+    NamedTimerEntry *prev = NULL;
+    NamedTimerEntry *cur = g_named_timers;
+    while (cur) {
+        if (cur->timer_id == timer_id) {
+            if (prev) prev->next = cur->next;
+            else g_named_timers = cur->next;
+            RELEASE(cur->key);
+            CLJ_FREE(cur);
+            return true;
+        }
+        prev = cur;
+        cur = cur->next;
+    }
+    return false;
+}
+
+static void timer_named_clear_all(void) {
+    NamedTimerEntry *cur = g_named_timers;
+    while (cur) {
+        NamedTimerEntry *next = cur->next;
+        RELEASE(cur->key);
+        CLJ_FREE(cur);
+        cur = next;
+    }
+    g_named_timers = NULL;
+}
+
+static bool timer_schedule_with_id(CljObject *fn_zero_arity,
+                                   int64_t delay_ms,
+                                   bool periodic,
+                                   int64_t period_ms,
+                                   int timer_id) {
+    if (!fn_zero_arity || timer_id <= 0) return false;
+    if (delay_ms < 0) return false;
+    if (periodic && period_ms <= 0) return false;
+
+    // If delay is 0 and not periodic, execute immediately.
+    if (delay_ms == 0 && !periodic) {
+        CljTransientMap *chan = make_result_channel();
+        event_loop_enqueue(RETAIN(fn_zero_arity), chan);
+        RELEASE(chan);
+        return true;
+    }
+
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int sec = (int)tv.tv_sec;
+    int msec = (int)(tv.tv_usec / 1000);
+
+    int64_t total_msec = (int64_t)msec + delay_ms;
+    int scheduled_sec = (int)(sec + total_msec / 1000);
+    int scheduled_msec = (int)(total_msec % 1000);
+
+    CljPersistentMap *task_map = task_timer_to_map(RETAIN(fn_zero_arity),
+                                                   scheduled_sec,
+                                                   scheduled_msec,
+                                                   periodic,
+                                                   (int)period_ms,
+                                                   timer_id);
+    if (!task_map) return false;
+    timer_insert_sorted_map(task_map);
+    return true;
+}
 
 // Helper function to ensure task queue is initialized
 static CljTransientVector* task_queue_get(void) {
@@ -204,11 +329,15 @@ void event_loop_clear(void) {
     // Safety: check if task_queue is valid before accessing it
     // runtime_reset() sets task_queue to NULL, but event_loop_clear() is called after
     // So we need to check if it's already NULL or invalid
-    if (!g_runtime.task_queue) return;
+    if (!g_runtime.task_queue) {
+        timer_named_clear_all();
+        return;
+    }
     
     // Safety: validate pointer before calling task_queue_get which calls TAG()
     if ((uintptr_t)g_runtime.task_queue < 0x1000) {
         g_runtime.task_queue = NULL; // Mark as invalid
+        timer_named_clear_all();
         return;
     }
     
@@ -225,11 +354,15 @@ void event_loop_clear(void) {
     // Safety: check timer_queue before accessing it
     // Note: runtime_reset() now calls event_loop_clear() before setting timer_queue to NULL
     // So we can safely access it here
-    if (!g_runtime.timer_queue) return; // Already cleared
+    if (!g_runtime.timer_queue) {
+        timer_named_clear_all();
+        return; // Already cleared
+    }
     
     // Safety: validate pointer before calling timer_queue_get which calls TAG()
     if ((uintptr_t)g_runtime.timer_queue < 0x1000) {
         g_runtime.timer_queue = NULL; // Mark as invalid
+        timer_named_clear_all();
         return;
     }
     
@@ -241,6 +374,7 @@ void event_loop_clear(void) {
         // Clear vector count - elements will be freed when vector is released
         vector_clear(timer_vec->backing);
     }
+    timer_named_clear_all();
 }
 
 void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channel) {
@@ -390,37 +524,50 @@ static void timer_insert_sorted_map(CljPersistentMap *task_map) {
 // Enqueue a timer task
 int timer_enqueue(CljObject *fn_zero_arity, int64_t delay_ms, bool periodic, int64_t period_ms) {
     if (!fn_zero_arity) return 0;
-    
-    // Generate unique timer ID
+
     int timer_id = ++g_runtime.timer_id_counter;
-    
-    // If delay is 0 and not periodic, execute immediately
-    if (delay_ms == 0 && !periodic) {
-        CljTransientMap *chan = make_result_channel();
-        event_loop_enqueue(RETAIN(fn_zero_arity), chan);
-        RELEASE(chan);
-        RELEASE(fn_zero_arity);
-        return timer_id;
+    bool ok = timer_schedule_with_id(fn_zero_arity, delay_ms, periodic, period_ms, timer_id);
+    RELEASE(fn_zero_arity);
+    return ok ? timer_id : 0;
+}
+
+int timer_upsert_named(ID key,
+                       CljObject *fn_zero_arity,
+                       int64_t delay_ms,
+                       bool periodic,
+                       int64_t period_ms) {
+    if (!timer_key_is_valid(key) || !fn_zero_arity) return 0;
+
+    NamedTimerEntry *existing = timer_named_find_by_key(key);
+    int timer_id = existing ? existing->timer_id : (++g_runtime.timer_id_counter);
+    if (existing) {
+        (void)timer_cancel(timer_id);
     }
-    
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    int sec = (int)tv.tv_sec;
-    int msec = (int)(tv.tv_usec / 1000);
-    
-    // Add delay_ms to current time
-    int64_t total_msec = (int64_t)msec + delay_ms;
-    int scheduled_sec = (int)(sec + total_msec / 1000);
-    int scheduled_msec = (int)(total_msec % 1000);
-    
-    CljPersistentMap *task_map = task_timer_to_map(RETAIN(fn_zero_arity), scheduled_sec, scheduled_msec, periodic, (int)period_ms, timer_id);
-    if (!task_map) {
-        RELEASE(fn_zero_arity);
+
+    bool ok = timer_schedule_with_id(fn_zero_arity, delay_ms, periodic, period_ms, timer_id);
+    RELEASE(fn_zero_arity);
+    if (!ok) {
+        (void)timer_named_take_by_key(key, NULL);
         return 0;
     }
-    
-    timer_insert_sorted_map(task_map);
+
+    if (delay_ms == 0 && !periodic) {
+        (void)timer_named_take_by_key(key, NULL);
+        return timer_id;
+    }
+
+    if (!timer_named_set(key, timer_id)) {
+        (void)timer_cancel(timer_id);
+        return 0;
+    }
+
     return timer_id;
+}
+
+bool timer_cancel_named(ID key) {
+    int timer_id = 0;
+    if (!timer_named_take_by_key(key, &timer_id)) return false;
+    return timer_cancel(timer_id);
 }
 
 // Process timer queue: move ready timers to normal queue
@@ -441,14 +588,15 @@ static void timer_process(void) {
         int scheduled_sec = task_get_scheduled_sec(task_map);
         int scheduled_msec = task_get_scheduled_msec(task_map);
         ID fn = task_get_fn(task_map);
+        int timer_id = task_get_timer_id(task_map);
         if (!fn) {
+            (void)timer_named_remove_by_id(timer_id);
             RELEASE(task_map);
             timer_queue_remove_at(timer_vec, 0);
             continue;
         }
         bool periodic = task_get_periodic(task_map);
         int period_ms = task_get_period_ms(task_map);
-        int timer_id = task_get_timer_id(task_map);
         
         bool timer_ready = (scheduled_sec < now_sec) || 
                           (scheduled_sec == now_sec && scheduled_msec <= now_msec);
@@ -458,6 +606,9 @@ static void timer_process(void) {
         }
         
         timer_queue_remove_at(timer_vec, 0);
+        if (!periodic) {
+            (void)timer_named_remove_by_id(timer_id);
+        }
         RETAIN(fn);  // Retain before releasing task_map
         RELEASE(task_map);
         
@@ -499,6 +650,7 @@ bool timer_cancel(int timer_id) {
         if (map_timer_id == timer_id) {
             // Found the timer - remove it (timer_queue_remove_at releases it automatically)
             timer_queue_remove_at(timer_vec, i);
+            (void)timer_named_remove_by_id(timer_id);
             return true;
         }
     }

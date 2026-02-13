@@ -4,6 +4,7 @@
 #include "../to_string.h"
 #include "vector.h"
 #include "../fs_layer.h"
+#include "../event_loop.h"
 #include "mini_format.h"
 #include <unistd.h>
 
@@ -738,6 +739,42 @@ TEST(test_fs_kv_store_roundtrip_bytes)
     n = fs_kv_get(st, "/k", out, sizeof(out), &saved_len);
     TEST_ASSERT_EQUAL_UINT32(0, (uint32_t)n);
     TEST_ASSERT_EQUAL_UINT32(0, (uint32_t)saved_len);
+
+    fs_kv_store_free(st);
+}
+
+TEST(test_fs_kv_put_schedules_named_sync_timer)
+{
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    const uint8_t in[] = {0xAA, 0xBB};
+    TEST_ASSERT_EQUAL_INT(TDB_OK, fs_kv_put_status(st, "/sync/key", in, sizeof(in)));
+
+    ID sync_key = intern_symbol_global("fs.kv.sync");
+    TEST_ASSERT_TRUE(timer_cancel_named(sync_key));
+    TEST_ASSERT_FALSE(timer_cancel_named(sync_key));
+
+    fs_kv_store_free(st);
+}
+
+TEST(test_fs_kv_debounce_restarts_named_sync_timer)
+{
+    FsKvStore *st = fs_kv_store_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    const uint8_t a[] = {0x01};
+    const uint8_t b[] = {0x02};
+    TEST_ASSERT_EQUAL_INT(TDB_OK, fs_kv_put_status(st, "/sync/a", a, sizeof(a)));
+    usleep(200000);
+    TEST_ASSERT_EQUAL_INT(TDB_OK, fs_kv_put_status(st, "/sync/b", b, sizeof(b)));
+
+    usleep(850000);
+    TEST_ASSERT_FALSE(event_loop_run_next(NULL, g_test_eval_state));
+
+    usleep(300000);
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+    TEST_ASSERT_FALSE(event_loop_run_next(NULL, g_test_eval_state));
 
     fs_kv_store_free(st);
 }

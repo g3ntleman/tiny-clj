@@ -2998,7 +2998,87 @@ ID native_run_next_task(ID *args, unsigned int argc)
     return ran ? clj_true : clj_false;
 }
 
-// Timer: schedule builtin - schedule a one-time timer
+static CljSymbol *g_timer_kw_id = NULL;
+static CljSymbol *g_timer_kw_period_ms = NULL;
+
+static inline CljSymbol *timer_kw_id(void)
+{
+    if (!g_timer_kw_id) g_timer_kw_id = intern_symbol_global(":id");
+    return g_timer_kw_id;
+}
+
+static inline CljSymbol *timer_kw_period_ms(void)
+{
+    if (!g_timer_kw_period_ms) g_timer_kw_period_ms = intern_symbol_global(":period-ms");
+    return g_timer_kw_period_ms;
+}
+
+static bool parse_timer_fn_or_opts(ID arg,
+                                   const char *fn_name,
+                                   ID *out_fn_obj,
+                                   ID *out_timer_key,
+                                   int *out_period_ms,
+                                   bool *out_period_from_opts)
+{
+    if (out_fn_obj) *out_fn_obj = NULL;
+    if (out_timer_key) *out_timer_key = NULL;
+    if (out_period_ms) *out_period_ms = 0;
+    if (out_period_from_opts) *out_period_from_opts = false;
+    if (!arg) return false;
+
+    unsigned char arg_tag = TAG(arg);
+    if (arg_tag == CLJ_FUNC || arg_tag == CLJ_CLOSURE)
+    {
+        if (out_fn_obj) *out_fn_obj = arg;
+        return true;
+    }
+
+    if (arg_tag != CLJ_MAP_PERSISTENT)
+    {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "%s expects a function or options map", fn_name);
+        return false;
+    }
+
+    CljPersistentMap *opts = (CljPersistentMap *)arg;
+    ID fn_obj = map_get_sentinel(opts, SYM_KW_FN, NOT_FOUND);
+    unsigned char fn_tag = fn_obj ? TAG(fn_obj) : 0;
+    if (fn_obj == NOT_FOUND || !fn_obj || (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE))
+    {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "%s options map requires :fn function", fn_name);
+        return false;
+    }
+
+    if (out_fn_obj) *out_fn_obj = fn_obj;
+
+    ID key_obj = map_get_sentinel(opts, timer_kw_id(), NOT_FOUND);
+    if (key_obj != NOT_FOUND && out_timer_key) *out_timer_key = key_obj;
+
+    ID period_obj = map_get_sentinel(opts, timer_kw_period_ms(), NOT_FOUND);
+    if (period_obj != NOT_FOUND)
+    {
+        if (!period_obj || TAG(period_obj) != CLJ_INT)
+        {
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                      "%s options map :period-ms must be an integer", fn_name);
+            return false;
+        }
+        int period_ms = as_fixnum(period_obj);
+        if (period_ms < 0)
+        {
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                      "%s options map :period-ms must be non-negative", fn_name);
+            return false;
+        }
+        if (out_period_ms) *out_period_ms = period_ms;
+        if (out_period_from_opts) *out_period_from_opts = true;
+    }
+
+    return true;
+}
+
+// Timer: schedule builtin - schedule timer (one-shot by default, periodic via opts :period-ms)
 ID native_schedule(ID *args, unsigned int argc)
 {
     if (!validate_builtin_args(argc, 2, "schedule"))
@@ -3023,44 +3103,30 @@ ID native_schedule(ID *args, unsigned int argc)
         return NULL;
     }
 
-    // Second argument: function to execute (must be a function)
-    ID fn_obj = args[1];
-    unsigned char fn_tag = fn_obj ? TAG(fn_obj) : 0;
-    if (!fn_obj || (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE))
-    {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "schedule requires a function as second argument",
-                        __FILE__, __LINE__, 0);
+    ID fn_obj = NULL;
+    ID timer_key = NULL;
+    int period_ms = 0;
+    bool period_from_opts = false;
+    if (!parse_timer_fn_or_opts(args[1], "schedule", &fn_obj, &timer_key, &period_ms, &period_from_opts))
         return NULL;
-    }
-
-    // Create zero-arity wrapper function: (fn [] (fn_obj))
-    // The function should be called with zero arguments
-    CljFunction *func = as_function(fn_obj);
-    if (!func)
-    {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "schedule requires a valid function",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    bool periodic = period_from_opts && period_ms > 0;
 
     // CRITICAL: Retain the function before passing to timer_enqueue
     // The function may be in an autorelease pool that will be popped when this function returns
     // timer_enqueue will retain it again, but we need to ensure it survives until then
     RETAIN(fn_obj);
 
-    // Enqueue timer task
-    timer_enqueue(fn_obj, (int64_t)delay_ms, false, 0);
-
-    // Release our reference - timer_enqueue has retained it
-    RELEASE(fn_obj);
+    if (timer_key) {
+        (void)timer_upsert_named(timer_key, fn_obj, (int64_t)delay_ms, periodic, (int64_t)period_ms);
+    } else {
+        (void)timer_enqueue(fn_obj, (int64_t)delay_ms, periodic, (int64_t)period_ms);
+    }
 
     // schedule returns nil (like go blocks)
     return NULL;
 }
 
-// Timer: schedule-periodic builtin - schedule a periodic timer
+// Timer: schedule-periodic builtin - schedule a periodic timer (or named periodic via opts)
 ID native_schedule_periodic(ID *args, unsigned int argc)
 {
     if (!validate_builtin_args(argc, 3, "schedule-periodic"))
@@ -3104,13 +3170,16 @@ ID native_schedule_periodic(ID *args, unsigned int argc)
         return NULL;
     }
 
-    // Third argument: function to execute (must be a function)
-    ID fn_obj = args[2];
-    unsigned char fn_tag = fn_obj ? TAG(fn_obj) : 0;
-    if (!fn_obj || (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE))
+    ID fn_obj = NULL;
+    ID timer_key = NULL;
+    int period_from_opts = 0;
+    bool has_period_from_opts = false;
+    if (!parse_timer_fn_or_opts(args[2], "schedule-periodic", &fn_obj, &timer_key, &period_from_opts, &has_period_from_opts))
+        return NULL;
+    if (has_period_from_opts && period_from_opts > 0 && period_from_opts != period_ms)
     {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "schedule-periodic requires a function as third argument",
+                        "schedule-periodic options :period-ms must match period argument",
                         __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -3120,43 +3189,41 @@ ID native_schedule_periodic(ID *args, unsigned int argc)
     // timer_enqueue will retain it again, but we need to ensure it survives until then
     RETAIN(fn_obj);
 
-    // Enqueue periodic timer task and get timer ID
-    int32_t timer_id = timer_enqueue(fn_obj, (int64_t)delay_ms, true, (int64_t)period_ms);
-
-    // Release our reference - timer_enqueue has retained it
-    RELEASE(fn_obj);
+    int32_t timer_id = 0;
+    if (timer_key) {
+        timer_id = timer_upsert_named(timer_key, fn_obj, (int64_t)delay_ms, true, (int64_t)period_ms);
+    } else {
+        timer_id = timer_enqueue(fn_obj, (int64_t)delay_ms, true, (int64_t)period_ms);
+    }
 
     // schedule-periodic returns timer ID as integer
     return timer_id > 0 ? fixnum(timer_id) : NULL;
 }
 
-// Timer: cancel-timer builtin - cancel a timer by ID
+// Timer: cancel-timer builtin - cancel by timer ID or by named key
 ID native_cancel_timer(ID *args, unsigned int argc)
 {
     if (!validate_builtin_args(argc, 1, "cancel-timer"))
         return NULL;
 
-    // First argument: timer ID (must be integer)
-    ID timer_id_obj = args[0];
-    if (!timer_id_obj || TAG(timer_id_obj) != CLJ_INT)
+    bool cancelled = false;
+    ID cancel_arg = args[0];
+    if (cancel_arg && TAG(cancel_arg) == CLJ_INT)
     {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "cancel-timer timer-id must be an integer",
-                        __FILE__, __LINE__, 0);
-        return NULL;
+        int timer_id = as_fixnum(cancel_arg);
+        if (timer_id <= 0)
+        {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                            "cancel-timer timer-id must be positive",
+                            __FILE__, __LINE__, 0);
+            return NULL;
+        }
+        cancelled = timer_cancel(timer_id);
     }
-
-    int timer_id = as_fixnum(timer_id_obj);
-    if (timer_id <= 0)
+    else
     {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "cancel-timer timer-id must be positive",
-                        __FILE__, __LINE__, 0);
-        return NULL;
+        cancelled = timer_cancel_named(cancel_arg);
     }
-
-    // Cancel the timer
-    bool cancelled = timer_cancel(timer_id);
 
     // Return true if cancelled, false if not found
     return cancelled ? clj_true : clj_false;

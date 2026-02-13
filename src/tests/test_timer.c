@@ -332,18 +332,66 @@ TEST(test_cancel_timer_returns_false_when_not_found) {
 // Test that cancel-timer validates argument
 TEST(test_cancel_timer_validates_argument) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test with non-integer argument
+
+    // Non-integer argument is treated as named timer key.
+    // Unknown key should not throw and should return false.
+    CljObject *cancel_result = NULL;
     TRY {
-        (void)eval_string("(cancel-timer \"123\")", g_test_eval_state);
+        cancel_result = eval_string("(cancel-timer \"123\")", g_test_eval_state);
     } CATCH(ex) {
-        // Should throw exception
-        TEST_PASS();
+        TEST_FAIL_MESSAGE("cancel-timer should not throw for named key");
         return;
     } END_TRY
-    
-    // Should have thrown exception
-    TEST_FAIL_MESSAGE("cancel-timer should throw exception for non-integer argument");
+    TEST_ASSERT_NOT_NULL(cancel_result);
+    TEST_ASSERT_TRUE(is_special((CljValue)cancel_result));
+    TEST_ASSERT_TRUE(as_special((CljValue)cancel_result) == SPECIAL_FALSE);
+}
+
+TEST(test_schedule_options_id_reuses_named_timer) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    TRY {
+        (void)eval_string("(schedule 50 {:fn (fn [] 1) :id \"debounce\"})", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("schedule with options map should not throw");
+        return;
+    } END_TRY
+
+    TRY {
+        (void)eval_string("(schedule 1 {:fn (fn [] 2) :id \"debounce\"})", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("second schedule upsert should not throw");
+        return;
+    } END_TRY
+
+    usleep(5000);
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+    TEST_ASSERT_FALSE(event_loop_run_next(NULL, g_test_eval_state));
+}
+
+TEST(test_cancel_timer_accepts_named_key) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    TRY {
+        (void)eval_string("(schedule 0 {:fn (fn [] 42) :id :periodic :period-ms 1})", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("schedule periodic via options should not throw");
+        return;
+    } END_TRY
+
+    CljObject *cancel_result = NULL;
+    TRY {
+        cancel_result = eval_string("(cancel-timer :periodic)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("cancel-timer by key should not throw");
+        return;
+    } END_TRY
+    TEST_ASSERT_NOT_NULL(cancel_result);
+    TEST_ASSERT_TRUE(is_special((CljValue)cancel_result));
+    TEST_ASSERT_TRUE(as_special((CljValue)cancel_result) == SPECIAL_TRUE);
+
+    usleep(5000);
+    TEST_ASSERT_FALSE(event_loop_run_next(NULL, g_test_eval_state));
 }
 
 // Test that timer_enqueue with delay 0 correctly enqueues task

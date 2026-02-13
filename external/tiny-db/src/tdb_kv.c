@@ -375,6 +375,13 @@ tdb_status_t tdb_kv_del(tdb_kv_t* kv, const void* key, size_t key_len) {
     return tdb_from_bt_status(rc);
 }
 
+tdb_status_t tdb_kv_sync(tdb_kv_t* kv) {
+    if (!kv || !kv->bdb)
+        return TDB_ERR_INVALID_ARG;
+    int rc = kv->bdb->sync(kv->bdb, 0);
+    return tdb_from_bt_status(rc);
+}
+
 tdb_status_t tdb_kv_max_val_len(const tdb_kv_t* kv, size_t key_len, size_t* out_max_val_len) {
     if (out_max_val_len)
         *out_max_val_len = 0;

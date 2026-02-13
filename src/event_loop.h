@@ -26,6 +26,10 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st);
 int timer_enqueue(CljObject *fn_zero_arity, int64_t delay_ms, bool periodic, int64_t period_ms);
 // Cancel a timer by ID. Returns true if timer was found and cancelled, false otherwise.
 bool timer_cancel(int timer_id);
+// Create or update a timer by stable key (compared via clj_equal). Returns timer ID or 0 on error.
+int timer_upsert_named(ID key, CljObject *fn_zero_arity, int64_t delay_ms, bool periodic, int64_t period_ms);
+// Cancel a timer by stable key (compared via clj_equal). Returns true if timer was found and cancelled, false otherwise.
+bool timer_cancel_named(ID key);
 
 #endif
 
