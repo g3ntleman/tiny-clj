@@ -5988,9 +5988,8 @@ ID native_repeat(ID *args, unsigned int argc)
 
     if (argc == 1)
     {
-        // (repeat x) - use large count instead of infinite sequence
-        // TODO: When lazy sequences are implemented, replace this with a proper lazy infinite sequence
-        // Use large but practical value (1 million should be enough for most use cases)
+        // (repeat x) - use large count as approximation of infinite sequence
+        // Large but practical value (1 million) for most use cases
         count = 1000000;
         value = args[0];
     }
