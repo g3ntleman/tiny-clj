@@ -92,6 +92,41 @@ TEST_SHARED(test_seq_rest_vs_next_difference) {
     TEST_ASSERT_NULL(eval_string("(next (seq [42]))", g_test_eval_state));
 }
 
+/* Regression guard for quote-data semantics: nil as data must survive seq traversal. */
+TEST_SHARED(test_seq_quote_list_preserves_nil_elements) {
+    ID ok = eval_string(
+        "(let [s (seq '(nil 1 nil))] "
+        "  (and (nil? (first s)) "
+        "       (= 1 (first (next s))) "
+        "       (nil? (first (next (next s)))) "
+        "       (nil? (next (next (next s))))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok == clj_true);
+}
+
+/* Regression guard: rest must not drop/shift when head is quoted nil data. */
+TEST_SHARED(test_seq_quote_rest_after_nil_head) {
+    ID ok = eval_string(
+        "(let [r (rest '(nil 1 2))] "
+        "  (and (= 1 (first r)) "
+        "       (= 2 (first (next r))) "
+        "       (nil? (next (next r)))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok == clj_true);
+}
+
+/* Regression guard on lazy path over quoted data carrying nil elements. */
+TEST_SHARED(test_seq_lazy_quote_map_identity_preserves_nil) {
+    ID ok = eval_string(
+        "(let [s (map identity '(nil 1 nil))] "
+        "  (and (nil? (first s)) "
+        "       (= 1 (first (next s))) "
+        "       (nil? (first (next (next s)))) "
+        "       (nil? (next (next (next s))))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok == clj_true);
+}
+
 // ============================================================================
 // SEQ EQUALITY TESTS
 // ============================================================================

@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <external/tiny_regex.h>
 
 static SubjectiveCTestEntry *g_entries = NULL;
 static size_t g_entry_count = 0;
@@ -287,28 +288,42 @@ char *subjective_c_test_extract_filename_from_path(const char *file_path) {
  * @return true if match, false otherwise
  */
 bool subjective_c_test_name_matches_pattern(const char *name, const char *pattern) {
-    const char *name_ptr = name;
-    const char *pattern_ptr = pattern;
-    
-    while (*name_ptr && *pattern_ptr) {
-        if (*pattern_ptr == '*') {
-            pattern_ptr++;
-            if (*pattern_ptr == '\0') {
-                return true;
-            }
-            while (*name_ptr && *name_ptr != *pattern_ptr) {
-                name_ptr++;
-            }
-            if (*name_ptr == '\0') {
-                return false;
-            }
-        } else if (*name_ptr == *pattern_ptr) {
-            name_ptr++;
-            pattern_ptr++;
-        } else {
-            return false;
+    if (!name || !pattern) return false;
+
+    size_t pattern_len = strlen(pattern);
+    /* Worst case: every input char needs escaping (+1), plus ^, $, and terminator. */
+    size_t max_regex_len = (pattern_len * 2) + 3;
+    char *regex_pattern = (char*)CLJ_MALLOC(max_regex_len);
+    if (!regex_pattern) return false;
+
+    size_t out = 0;
+    regex_pattern[out++] = '^';
+
+    for (size_t i = 0; i < pattern_len; i++) {
+        char c = pattern[i];
+        if (c == '*') {
+            regex_pattern[out++] = '.';
+            regex_pattern[out++] = '*';
+            continue;
         }
+
+        switch (c) {
+            case '.': case '^': case '$': case '+': case '?':
+            case '[': case ']': case '\\':
+                regex_pattern[out++] = '\\';
+                break;
+            default:
+                break;
+        }
+        regex_pattern[out++] = c;
     }
-    
-    return (*name_ptr == '\0' && *pattern_ptr == '\0');
+
+    regex_pattern[out++] = '$';
+    regex_pattern[out] = '\0';
+
+    int match_len = 0;
+    bool matched = (re_match(regex_pattern, name, &match_len) == 0);
+
+    CLJ_FREE(regex_pattern);
+    return matched;
 }
