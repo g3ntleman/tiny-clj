@@ -740,6 +740,14 @@ R"CLOJURE(
 (defn gpio-unwatch [watcher-id] :native)
 ^#^{:doc "macOS/test helper: simulate a GPIO event (pin, value). Returns nil."}
 (defn gpio-simulate! [pin value] :native)
+^#^{:doc "Writes a digital level to GPIO pin. level 0 = low, non-zero = high. Returns nil."}
+(defn gpio-write! [pin level] :native)
+^#^{:doc "Reads a digital GPIO pin level. Returns 0 (low) or 1 (high)."}
+(defn gpio-read [pin] :native)
+^#^{:doc "Configures PWM output on pin. (gpio-pwm! pin freq-hz duty), duty in 0..255. Returns nil."}
+(defn gpio-pwm! [pin freq-hz duty] :native)
+^#^{:doc "Stops PWM output on pin and drives it low. Returns nil."}
+(defn gpio-pwm-stop! [pin] :native)
 
 ; ============================================================================
 ; Atom Functions (Native)

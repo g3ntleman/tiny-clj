@@ -48,6 +48,9 @@
 #include "hashmap.h"
 #include "datetime_utc.h"
 #include "platform.h"
+#if defined(ESP32_BUILD)
+#include "gpio_esp32.h"
+#endif
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -135,6 +138,10 @@ ID native_ns_unload(ID *args, unsigned int argc);
 ID native_gpio_watch(ID *args, unsigned int argc);
 ID native_gpio_unwatch(ID *args, unsigned int argc);
 ID native_gpio_simulate(ID *args, unsigned int argc);
+ID native_gpio_write(ID *args, unsigned int argc);
+ID native_gpio_read(ID *args, unsigned int argc);
+ID native_gpio_pwm(ID *args, unsigned int argc);
+ID native_gpio_pwm_stop(ID *args, unsigned int argc);
 
 ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
@@ -4091,6 +4098,10 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_gpio_watch_data.sym, native_gpio_watch},
     {&sym_gpio_unwatch_data.sym, native_gpio_unwatch},
     {&sym_gpio_simulate_data.sym, native_gpio_simulate},
+    {&sym_gpio_write_data.sym, native_gpio_write},
+    {&sym_gpio_read_data.sym, native_gpio_read},
+    {&sym_gpio_pwm_data.sym, native_gpio_pwm},
+    {&sym_gpio_pwm_stop_data.sym, native_gpio_pwm_stop},
     {&sym_ns_unload_data.sym, native_ns_unload},
     {&sym_plus_data.sym, native_add_variadic},
     {&sym_minus_data.sym, native_sub_variadic},
@@ -7079,6 +7090,18 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         }
     }
 
+    {
+        CljSymbol *k_gpio_event_drops = intern_symbol_global(":gpio-event-drops");
+        int32_t drops = 0;
+#if defined(ESP32_BUILD)
+        uint32_t raw_drops = gpio_esp32_get_event_drop_count();
+        drops = (raw_drops > (uint32_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_drops;
+#endif
+        if (k_gpio_event_drops) {
+            MAP_REASSIGN(m, map_assoc(m, k_gpio_event_drops, fixnum(drops)));
+        }
+    }
+
 #if defined(DEBUG)
     // Debug diagnostics: symbols, namespaces, heap (always available)
     MAP_REASSIGN(m, map_assoc(m, SYM_KW_SYMBOLS, fixnum((int32_t)hashset_count(g_runtime.symbol_table))));
@@ -7638,33 +7661,6 @@ static void register_builtin(const char *cname, BuiltinFn func)
         // Failed to register builtin
     }
 }
-
-// GPIO functions for clojure.core
-//
-// - Host builds: keep lightweight stubs (used by macOS tests via gpio-simulate!)
-// - ESP32 builds: real implementations live in src/gpio_esp32.c
-#ifndef ESP32_BUILD
-ID native_gpio_watch(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 2, "gpio-watch");
-    (void)args;
-    return fixnum(1);
-}
-
-ID native_gpio_unwatch(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "gpio-unwatch");
-    (void)args;
-    return NULL;
-}
-
-ID native_gpio_simulate(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 2, "gpio-simulate!");
-    (void)args;
-    return NULL;
-}
-#endif
 
 void register_builtins()
 {

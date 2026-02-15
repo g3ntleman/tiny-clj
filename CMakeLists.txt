@@ -210,6 +210,8 @@ list(APPEND SOURCES
     src/to_string.c
     src/macro.c
     src/fs_layer.c
+    src/gpio_host.c
+    src/repl_history_backend.c
     src/source_resolver.c
 
 )
@@ -446,6 +448,9 @@ add_executable(unit-tests
     src/tests/test_do.c
     src/tests/test_defn.c
     src/tests/test_native_lookup.c
+    src/tests/test_gpio_write.c
+    src/tests/test_gpio_architecture_contract.c
+    src/tests/test_event_loop_latency.c
     src/tests/test_clojure_core_loading.c
     src/tests/test_memory_leak_fibonacci.c
     src/tests/test_datetime.c

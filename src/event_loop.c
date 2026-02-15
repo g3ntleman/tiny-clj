@@ -12,7 +12,11 @@
 #include "kv_macros.h"  // For KV_VALUE
 #include "to_string.h"  // For to_string
 #include <stdbool.h>
+#include <limits.h>
 #include <sys/time.h>
+#if defined(ESP32_BUILD)
+#include "gpio_esp32.h"
+#endif
 
 // Task Map keys (static keywords, similar to SYM_IF etc.)
 static CljSymbol *KW_FN;
@@ -74,8 +78,8 @@ static bool task_from_map(CljPersistentMap *task_map, CljObject **fn, CljTransie
     
     if (!fn_val) return false;
     
-    if (fn) *fn = (CljObject*)fn_val;
-    if (result_chan) *result_chan = result_chan_val ? (CljTransientMap*)result_chan_val : NULL;
+    if (fn) *fn = fn_val;
+    if (result_chan) *result_chan = result_chan_val ? result_chan_val : NULL;
     
     return true;
 }
@@ -102,7 +106,7 @@ static CljPersistentMap* task_timer_to_map(CljObject *fn, int scheduled_sec, int
 
 // Task Getter functions (static inline for performance)
 // Works for both normal tasks and timer tasks
-static inline ID task_get_fn(CljPersistentMap *task_map) {
+static inline CljObject *task_get_fn(CljPersistentMap *task_map) {
     return map_get_sentinel(task_map, KW_FN, NULL);
 }
 
@@ -394,6 +398,36 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
     RELEASE(task_map);
 }
 
+bool event_loop_has_pending_tasks(void) {
+    CljTransientVector *task_vec = task_queue_get();
+    if (!task_vec || !task_vec->backing) return false;
+    return vector_count(task_vec->backing) > 0;
+}
+
+int event_loop_time_until_next_timer_ms(void) {
+    CljTransientVector *timer_vec = timer_queue_get();
+    if (!timer_vec || !timer_vec->backing) return -1;
+    if (vector_count(timer_vec->backing) == 0) return -1;
+
+    CljPersistentMap *task_map = vector_nth(timer_vec->backing, 0);
+    if (!task_map) return -1;
+
+    // vector_nth returns a borrowed element; do not RELEASE it here.
+    int scheduled_sec = task_get_scheduled_sec(task_map);
+    int scheduled_msec = task_get_scheduled_msec(task_map);
+
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int now_sec = (int)tv.tv_sec;
+    int now_msec = (int)(tv.tv_usec / 1000);
+
+    int64_t delta_ms = ((int64_t)scheduled_sec - (int64_t)now_sec) * 1000ll
+                     + ((int64_t)scheduled_msec - (int64_t)now_msec);
+    if (delta_ms <= 0) return 0;
+    if (delta_ms > INT_MAX) return INT_MAX;
+    return (int)delta_ms;
+}
+
 
 /**
  * @brief Execute the next enqueued go-block task
@@ -409,6 +443,11 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
  */
 bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     (void)env;
+
+#if defined(ESP32_BUILD)
+    // Promote ISR-raised drain requests into regular event-loop tasks.
+    gpio_esp32_poll_drain();
+#endif
     
     timer_process();
     
@@ -421,16 +460,21 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     
     // Get first task (FIFO)
     if (vector_count(task_vec->backing) == 0) return false;
-    CljPersistentMap *task_map = (CljPersistentMap*)vector_nth(task_vec->backing, 0);
+    CljPersistentMap *task_map = vector_nth(task_vec->backing, 0);
     RETAIN(task_map);
     vector_remove_at(task_vec, 0);
     
-    CljObject *fn;
-    CljTransientMap *result_chan;
+    CljObject *fn = NULL;
+    CljTransientMap *result_chan = NULL;
     if (!task_from_map(task_map, &fn, &result_chan)) {
         RELEASE(task_map);
         return false;
     }
+
+    // Own both values before releasing task_map (which currently owns them).
+    // Without this, fn could be released with task_map and later used/freed again.
+    RETAIN(fn);
+    RETAIN(result_chan);
     
     // CRITICAL: Validate that fn is actually a function before calling eval_function_call
     // This prevents crashes when run-next-task is called recursively during go-block execution
@@ -460,8 +504,6 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
         return false;
     }
     
-    // Retain result_chan before releasing task_map, since it's part of the map
-    RETAIN(result_chan);
     RELEASE(task_map);
     
     CljObject *result = NULL;
@@ -507,15 +549,14 @@ static void timer_insert_sorted_map(CljPersistentMap *task_map) {
     int count = (int)vector_count(timer_vec->backing);
     int insert_pos = count;
     for (int i = 0; i < count; i++) {
-        CljPersistentMap *existing_map = (CljPersistentMap*)vector_nth(timer_vec->backing, (unsigned int)i);
+        // vector_nth returns borrowed map entries from timer_vec->backing.
+        CljPersistentMap *existing_map = vector_nth(timer_vec->backing, (unsigned int)i);
         int existing_sec = task_get_scheduled_sec(existing_map);
         int existing_msec = task_get_scheduled_msec(existing_map);
         if (scheduled_sec < existing_sec || (scheduled_sec == existing_sec && scheduled_msec < existing_msec)) {
             insert_pos = i;
-            RELEASE(existing_map);
             break;
         }
-        RELEASE(existing_map);
     }
     
     vector_insert_at(timer_vec, (unsigned int)insert_pos, task_map);
@@ -581,13 +622,13 @@ static void timer_process(void) {
         CljTransientVector *timer_vec = timer_queue_get();
         if (!timer_vec || vector_count(timer_vec->backing) == 0) break;
         
-        CljPersistentMap *task_map = (CljPersistentMap*)vector_nth(timer_vec->backing, 0);
+        CljPersistentMap *task_map = vector_nth(timer_vec->backing, 0);
         // Retain task_map because we'll release it later (it's removed from vector)
         RETAIN(task_map);
         
         int scheduled_sec = task_get_scheduled_sec(task_map);
         int scheduled_msec = task_get_scheduled_msec(task_map);
-        ID fn = task_get_fn(task_map);
+        CljObject *fn = task_get_fn(task_map);
         int timer_id = task_get_timer_id(task_map);
         if (!fn) {
             (void)timer_named_remove_by_id(timer_id);
@@ -618,7 +659,7 @@ static void timer_process(void) {
             RETAIN(fn);  // Extra retain for next period
         }
         
-        event_loop_enqueue((CljObject*)fn, chan);
+        event_loop_enqueue(fn, chan);
         RELEASE(chan);
         
         if (periodic) {
@@ -643,7 +684,7 @@ bool timer_cancel(int timer_id) {
     
     int count = (int)vector_count(timer_vec->backing);
     for (int i = 0; i < count; i++) {
-        CljPersistentMap *task_map = (CljPersistentMap*)vector_nth(timer_vec->backing, (unsigned int)i);
+        CljPersistentMap *task_map = vector_nth(timer_vec->backing, (unsigned int)i);
         if (!task_map) continue;
         
         int map_timer_id = task_get_timer_id(task_map);

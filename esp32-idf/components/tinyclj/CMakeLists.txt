@@ -50,6 +50,8 @@ set(TINYCLJ_SRCS
   "../../../src/fs_layer.c"
   "../../../src/gpio_esp32.c"
   "../../../src/line_editor.c"
+  "../../../src/repl.c"
+  "../../../src/repl_history_backend.c"
   "../../../src/mdns_codec.c"
   "../../../src/mdns_resolver.c"
 )
@@ -72,6 +74,7 @@ idf_component_register(
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC
   ESP32_BUILD=1
+  TINYCLJ_RAM_BACKEND_ENABLED=0
   LINE_EDITING_ENABLED=1
   DEBUG=1
   BUILD_EPOCH_SECONDS=${BUILD_EPOCH_SECONDS}

@@ -20,9 +20,11 @@
 #include "value.h"
 #include "event_loop.h"
 #include "file_utils.h"
+#include "fs_layer.h"
 #include "meta.h"
-#include "build_info.h"
 #include "mini_format.h"
+#include "repl_history_common.h"
+#include "repl_history_backend.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -33,6 +35,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <time.h>
 
 // Tracks whether stdout is currently at the start of a new line.
 // Best-effort: updated via platform_macos stdout observer hook (for most prints)
@@ -42,7 +45,7 @@ static bool g_repl_stdout_at_line_start = true;
 // Crash diagnostics for SIGTRAP during core load.
 extern volatile sig_atomic_t g_clojure_core_last_form;
 #ifndef UNITY_TESTS
-static void repl_sigtrap_handler(int signo) {
+static void __attribute__((unused)) repl_sigtrap_handler(int signo) {
     fprintf(stderr, "REPL SIGTRAP (signal %d) during core load; last form=%d\n",
             signo, (int)g_clojure_core_last_form);
     exception_print_native_backtrace();
@@ -61,6 +64,190 @@ void tinyclj_stdout_observe_bytes(const char *data, size_t n) {
 // This limits processing to prevent blocking while still processing pending tasks
 #define REPL_EVENT_LOOP_MAX_ITERATIONS 10
 
+#ifndef REPL_TRACE_ENABLED
+#define REPL_TRACE_ENABLED 0
+#endif
+
+#if REPL_TRACE_ENABLED
+#define REPL_TRACE(fmt, ...) printf("[REPL TRACE] " fmt "\n", ##__VA_ARGS__)
+#else
+#define REPL_TRACE(fmt, ...) do { (void)0; } while (0)
+#endif
+
+/**
+ * @brief Formats build timestamp text for REPL build information output.
+ *
+ * Prefers BUILD_EPOCH_SECONDS (UTC) when available and otherwise falls back to
+ * compiler-provided __DATE__/__TIME__.
+ *
+ * @param out Destination buffer.
+ * @param out_size Size of @p out in bytes.
+ */
+static void repl_format_build_date_line(char *out, size_t out_size)
+{
+    if (!out || out_size == 0) {
+        return;
+    }
+#if defined(BUILD_EPOCH_SECONDS)
+    time_t epoch = (time_t)BUILD_EPOCH_SECONDS;
+    struct tm tm_utc;
+    if (gmtime_r(&epoch, &tm_utc) != NULL) {
+        (void)mini_snprintf(out, out_size, "Build Date: %04d-%02d-%02d %02d:%02d:%02d UTC",
+                            tm_utc.tm_year + 1900, tm_utc.tm_mon + 1, tm_utc.tm_mday,
+                            tm_utc.tm_hour, tm_utc.tm_min, tm_utc.tm_sec);
+        return;
+    }
+#endif
+    (void)mini_snprintf(out, out_size, "Build Date: %s %s", __DATE__, __TIME__);
+}
+
+/**
+ * @brief Builds a compiler description string for build information output.
+ *
+ * @param out Destination buffer.
+ * @param out_size Size of @p out in bytes.
+ */
+static void repl_format_compiler_line(char *out, size_t out_size)
+{
+    if (!out || out_size == 0) {
+        return;
+    }
+#if defined(ESP_PLATFORM)
+    (void)mini_snprintf(out, out_size, "Compiler: GCC (xtensa-esp-elf)");
+#elif defined(__clang__)
+    (void)mini_snprintf(out, out_size, "Compiler: Clang %s", __clang_version__);
+#elif defined(__GNUC__)
+    (void)mini_snprintf(out, out_size, "Compiler: GCC %s", __VERSION__);
+#else
+    (void)mini_snprintf(out, out_size, "Compiler: Unknown");
+#endif
+}
+
+/**
+ * @brief Prints common build information using a line-emitter callback.
+ *
+ * @param emit_line Callback invoked once per output line.
+ */
+void repl_print_build_info_with_emitter(void (*emit_line)(const char *line))
+{
+    if (!emit_line) {
+        return;
+    }
+
+    char line[96];
+    emit_line("=== Build Information ===");
+#if defined(DEBUG) && DEBUG
+    emit_line("Build Type: Debug");
+#else
+    emit_line("Build Type: Release");
+#endif
+    repl_format_build_date_line(line, sizeof(line));
+    emit_line(line);
+    repl_format_compiler_line(line, sizeof(line));
+    emit_line(line);
+    emit_line("Features:");
+#if defined(DEBUG) && DEBUG
+    emit_line("  - Debug: Enabled");
+#else
+    emit_line("  - Debug: Disabled");
+#endif
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+    emit_line("  - Memory Profiling: Enabled");
+#else
+    emit_line("  - Memory Profiling: Disabled");
+#endif
+#if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
+    emit_line("  - Zombie Mode: Enabled");
+#else
+    emit_line("  - Zombie Mode: Disabled");
+#endif
+#if defined(META_ENABLED) && META_ENABLED
+    emit_line("  - Meta: Enabled");
+#else
+    emit_line("  - Meta: Disabled");
+#endif
+    emit_line("=========================");
+}
+
+/**
+ * @brief Prints centered title text with optional left padding.
+ *
+ * @param title Title string to print.
+ * @param center_width Target width used for centering.
+ * @param emit_line Callback that prints one line.
+ */
+static void repl_emit_centered_title(const char *title,
+                                     unsigned center_width,
+                                     void (*emit_line)(const char *line))
+{
+    if (!title || !emit_line) {
+        return;
+    }
+
+    char line[160];
+    size_t len = strlen(title);
+    unsigned pad = 0;
+    if (center_width > 0 && len < center_width) {
+        pad = (unsigned)((center_width - (unsigned)len) / 2u);
+    }
+    if (pad >= sizeof(line)) {
+        pad = (unsigned)(sizeof(line) - 1u);
+    }
+    memset(line, ' ', pad);
+    line[pad] = '\0';
+    (void)mini_snprintf(line + pad, sizeof(line) - pad, "%s", title);
+    emit_line(line);
+}
+
+/**
+ * @brief Print the startup banner using a caller-provided line emitter.
+ *
+ * @param config Banner rendering configuration.
+ * @param emit_line Callback that prints one line.
+ */
+void repl_print_startup_banner_with_emitter(const ReplStartupBannerConfig *config,
+                                            void (*emit_line)(const char *line))
+{
+    if (!emit_line) {
+        return;
+    }
+
+    ReplStartupBannerConfig defaults = {
+        .title_line = NULL,
+        .center_title = false,
+        .center_width = 0u,
+        .include_ram_line = false,
+        .include_exit_hint = true
+    };
+    const ReplStartupBannerConfig *cfg = config ? config : &defaults;
+
+    if (cfg->title_line && cfg->title_line[0] != '\0') {
+        if (cfg->center_title) {
+            repl_emit_centered_title(cfg->title_line, cfg->center_width, emit_line);
+        } else {
+            emit_line(cfg->title_line);
+        }
+    }
+
+    char line[160];
+    (void)mini_snprintf(line, sizeof(line), "tiny-clj %s REPL (platform = %s).",
+                        TINY_CLJ_VERSION, platform_name());
+    emit_line(line);
+    repl_print_build_info_with_emitter(emit_line);
+
+    if (cfg->include_ram_line) {
+        size_t ram_total = platform_ram_bytes_total();
+        size_t free_bytes = platform_heap_bytes_free();
+        unsigned ram_k = (ram_total == (size_t)-1) ? 0u : (unsigned)(ram_total / 1024u);
+        (void)mini_snprintf(line, sizeof(line), "%uK RAM SYSTEM  %zu CLOJURE BYTES FREE", ram_k, free_bytes);
+        emit_line(line);
+    }
+
+    if (cfg->include_exit_hint) {
+        emit_line("Ctrl-D to exit.");
+    }
+}
+
 // Forward decls for line editor history persistence helpers
 extern CljObject* line_editor_history_load_default(void);
 extern bool line_editor_history_save_default(CljObject *vec);
@@ -75,7 +262,7 @@ extern void line_editor_clear_history(LineEditor *editor);
  *  @param error_pos Output parameter for position of first error (can be NULL)
  *  @return > 0 if incomplete (need more closing), = 0 if balanced, < 0 if invalid (too many closing)
  */
-static int form_balance(const char *s, int *error_pos) {
+int repl_form_balance(const char *s, int *error_pos) {
     int p = 0, b = 0, c = 0; // () [] {}
     bool in_str = false; bool esc = false;
     int pos = 0;
@@ -108,19 +295,58 @@ static int form_balance(const char *s, int *error_pos) {
     return p + b + c + (in_str ? 1 : 0);
 }
 
-/** @brief Print REPL prompt with namespace and continuation indicator.
+ReplFormState repl_form_state(const char *source, int *error_pos) {
+    int balance = repl_form_balance(source, error_pos);
+    if (balance > 0) return REPL_FORM_INCOMPLETE;
+    if (balance < 0) return REPL_FORM_INVALID;
+    return REPL_FORM_BALANCED;
+}
+
+bool repl_acc_append_line(char *acc, size_t acc_cap, const char *line) {
+    if (!acc || !line || acc_cap == 0u) return false;
+
+    size_t acc_len = 0u;
+    while (acc_len < acc_cap && acc[acc_len] != '\0') acc_len++;
+    if (acc_len >= acc_cap) return false;
+
+    size_t line_len = strlen(line);
+    if (line_len == 0u) return true;
+
+    size_t extra = (acc_len > 0u) ? 1u : 0u; // newline separator between logical lines
+    if (acc_len + extra + line_len + 1u > acc_cap) return false;
+
+    if (extra) acc[acc_len++] = '\n';
+    memcpy(acc + acc_len, line, line_len);
+    acc[acc_len + line_len] = '\0';
+    return true;
+}
+
+/** @brief Format REPL prompt with namespace and continuation indicator.
  *  @param st Evaluation state containing current namespace
  *  @param balanced Whether the current input is balanced
+ *  @param out Destination buffer for prompt text
+ *  @param out_size Size of destination buffer in bytes
  */
-static void print_prompt(EvalState *st, bool balanced) {
-    const char *ns_name = "user";  // Default
+void repl_format_prompt(EvalState *st, bool balanced, char *out, size_t out_size) {
+    if (!out || out_size == 0) {
+        return;
+    }
+    const char *ns_name = "user";
     if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname) {
         if (st->current_ns->name->cname[0] != '\0') {
             ns_name = st->current_ns->name->cname;
         }
     }
+    (void)mini_snprintf(out, out_size, "%s%s ", ns_name, balanced ? "=>" : "...");
+}
+
+/** @brief Print REPL prompt with namespace and continuation indicator.
+ *  @param st Evaluation state containing current namespace
+ *  @param balanced Whether the current input is balanced
+ */
+static void __attribute__((unused)) print_prompt(EvalState *st, bool balanced) {
     char prompt[128];
-    (void)mini_snprintf(prompt, sizeof(prompt), "%s%s ", ns_name, balanced ? "=>" : "...");
+    repl_format_prompt(st, balanced, prompt, sizeof(prompt));
     // Ensure the prompt starts at column 1, even if previous output did not end with '\n'.
     // This is best-effort: we track stdout line-start via platform stdout hooks.
     bool at_line_start = g_repl_stdout_at_line_start;
@@ -170,7 +396,7 @@ static void print_result(CljObject *v) {
  *  This function processes up to REPL_EVENT_LOOP_MAX_ITERATIONS tasks from
  *  the event loop queue, stopping early if the queue becomes empty.
  */
-static void repl_process_event_loop(EvalState *st) {
+void repl_process_event_loop(EvalState *st) {
     for (int i = 0; i < REPL_EVENT_LOOP_MAX_ITERATIONS; i++) {
         if (!event_loop_run_next(NULL, st)) break;
     }
@@ -216,6 +442,12 @@ bool eval_multiform_string(const char *code, EvalState *st) {
         } CATCH(ex) {
             if (st && saved_ns) { st->current_ns = saved_ns; }
             print_exception((CLJException*)ex);
+            if (ex) {
+                REPL_TRACE("caught exception type=%s message=%s file=%s line=%d col=%d",
+                           ex->type, ex->message, ex->file, ex->line, ex->col);
+            } else {
+                REPL_TRACE("caught exception: <null>");
+            }
             result = false;
             while (!reader_is_eof(&reader) && reader_current(&reader) != '\n')
                 reader_next(&reader);
@@ -286,7 +518,234 @@ bool repl_eval_arg(const char *raw_code, EvalState *st) {
 }
 
 
-// History-Persistenz Funktionen (konsolidiert aus repl_history.c)
+// History persistence helpers shared across host and ESP32 builds.
+#define REPL_HISTORY_FILE_MAX_ENTRIES 50u
+#define REPL_HISTORY_FILE_MAX_READ_BYTES (256u * 1024u)
+#define REPL_HISTORY_KV_KEY "repl.history"
+#define REPL_HISTORY_KV_DEFAULT_BYTE_LIMIT 4080u
+#define REPL_HISTORY_KV_MAX_READ_BYTES (64u * 1024u)
+#define REPL_HISTORY_TRIM_NUM 8
+#define REPL_HISTORY_TRIM_DEN 10
+
+typedef struct {
+    const char *path;
+} ReplFileHistoryCtx;
+
+/**
+ * @brief Queries serialized history size from file backend.
+ *
+ * @param ctx File backend context.
+ * @param out_size Receives serialized payload size.
+ * @return true when history file exists and size is known.
+ */
+static bool __attribute__((unused)) repl_file_history_query_size(void *ctx, size_t *out_size)
+{
+    ReplFileHistoryCtx *file_ctx = (ReplFileHistoryCtx*)ctx;
+    if (!file_ctx || !file_ctx->path || !out_size) {
+        return false;
+    }
+
+    struct stat st;
+    if (stat(file_ctx->path, &st) != 0 || st.st_size <= 0) {
+        return false;
+    }
+    *out_size = (size_t)st.st_size;
+    return true;
+}
+
+/**
+ * @brief Reads serialized history bytes from file backend.
+ *
+ * @param ctx File backend context.
+ * @param buf Destination buffer.
+ * @param cap Buffer capacity in bytes.
+ * @param out_size Receives loaded byte count.
+ * @return true on successful read.
+ */
+static bool __attribute__((unused)) repl_file_history_read(void *ctx, uint8_t *buf, size_t cap, size_t *out_size)
+{
+    ReplFileHistoryCtx *file_ctx = (ReplFileHistoryCtx*)ctx;
+    if (!file_ctx || !file_ctx->path || !buf || cap == 0 || !out_size) {
+        return false;
+    }
+
+    FILE *fp = fopen(file_ctx->path, "rb");
+    if (!fp) {
+        return false;
+    }
+    size_t n = fread(buf, 1, cap, fp);
+    int close_rc = fclose(fp);
+    if (close_rc != 0 || n == 0) {
+        return false;
+    }
+    *out_size = n;
+    return true;
+}
+
+/**
+ * @brief Writes serialized history bytes to file backend.
+ *
+ * @param ctx File backend context.
+ * @param buf Payload to write.
+ * @param len Payload length in bytes.
+ * @return true when payload is fully written.
+ */
+static bool __attribute__((unused)) repl_file_history_write(void *ctx, const uint8_t *buf, size_t len)
+{
+    ReplFileHistoryCtx *file_ctx = (ReplFileHistoryCtx*)ctx;
+    if (!file_ctx || !file_ctx->path || !buf) {
+        return false;
+    }
+
+    FILE *fp = fopen(file_ctx->path, "w");
+    if (!fp) {
+        return false;
+    }
+
+    size_t n = fwrite(buf, 1, len, fp);
+    if (n > 0) {
+        fputc('\n', fp);
+    }
+    fflush(fp);
+    int close_rc = fclose(fp);
+    return (n == len && close_rc == 0);
+}
+
+/**
+ * @brief Sync hook for file backend (no-op, already flushed on close).
+ *
+ * @param ctx File backend context.
+ * @return Always true.
+ */
+static bool __attribute__((unused)) repl_file_history_sync(void *ctx)
+{
+    (void)ctx;
+    return true;
+}
+
+#if defined(ESP_PLATFORM)
+typedef struct {
+    FsKvStore *store;
+} ReplKvHistoryCtx;
+
+/**
+ * @brief Refreshes the KV store handle used by ESP32 history backend.
+ *
+ * @param ctx KV backend context.
+ * @return true when a valid store handle is available.
+ */
+static bool repl_kv_history_refresh_store(ReplKvHistoryCtx *ctx)
+{
+    if (!ctx) {
+        return false;
+    }
+    ctx->store = fs_global_store_if_initialized();
+    if (!ctx->store) {
+        ctx->store = fs_global_store();
+    }
+    return ctx->store != NULL;
+}
+
+/**
+ * @brief Queries serialized history size from KV backend.
+ *
+ * @param ctx KV backend context.
+ * @param out_size Receives stored payload size.
+ * @return true when key exists and size is known.
+ */
+static bool repl_kv_history_query_size(void *ctx, size_t *out_size)
+{
+    ReplKvHistoryCtx *kv = (ReplKvHistoryCtx*)ctx;
+    if (!repl_kv_history_refresh_store(kv) || !out_size) {
+        return false;
+    }
+    return fs_kv_get_status(kv->store, REPL_HISTORY_KV_KEY, NULL, 0, out_size) == TDB_OK;
+}
+
+/**
+ * @brief Reads serialized history bytes from KV backend.
+ *
+ * @param ctx KV backend context.
+ * @param buf Destination buffer.
+ * @param cap Buffer capacity in bytes.
+ * @param out_size Receives loaded byte count.
+ * @return true on successful read.
+ */
+static bool repl_kv_history_read(void *ctx, uint8_t *buf, size_t cap, size_t *out_size)
+{
+    ReplKvHistoryCtx *kv = (ReplKvHistoryCtx*)ctx;
+    if (!repl_kv_history_refresh_store(kv) || !buf || cap == 0 || !out_size) {
+        return false;
+    }
+    return fs_kv_get_status(kv->store, REPL_HISTORY_KV_KEY, buf, cap, out_size) == TDB_OK;
+}
+
+/**
+ * @brief Writes serialized history bytes to KV backend.
+ *
+ * @param ctx KV backend context.
+ * @param buf Payload to write.
+ * @param len Payload length in bytes.
+ * @return true on successful write.
+ */
+static bool repl_kv_history_write(void *ctx, const uint8_t *buf, size_t len)
+{
+    ReplKvHistoryCtx *kv = (ReplKvHistoryCtx*)ctx;
+    if (!repl_kv_history_refresh_store(kv) || !buf) {
+        return false;
+    }
+    return fs_kv_put_status(kv->store, REPL_HISTORY_KV_KEY, buf, len) == TDB_OK;
+}
+
+/**
+ * @brief Flushes pending KV history writes to persistent storage.
+ *
+ * @param ctx KV backend context.
+ * @return true on successful sync.
+ */
+static bool repl_kv_history_sync(void *ctx)
+{
+    ReplKvHistoryCtx *kv = (ReplKvHistoryCtx*)ctx;
+    if (!repl_kv_history_refresh_store(kv)) {
+        return false;
+    }
+    return fs_kv_sync_status(kv->store) == TDB_OK;
+}
+
+/**
+ * @brief Computes effective byte limit for KV payloads.
+ *
+ * @param ctx KV backend context.
+ * @param default_limit Configured default limit.
+ * @return Effective backend payload limit.
+ */
+static size_t repl_kv_history_effective_limit(void *ctx, size_t default_limit)
+{
+    ReplKvHistoryCtx *kv = (ReplKvHistoryCtx*)ctx;
+    if (!repl_kv_history_refresh_store(kv)) {
+        return default_limit;
+    }
+    size_t kv_max = 0;
+    if (fs_kv_max_val_len_status(kv->store, REPL_HISTORY_KV_KEY, &kv_max) == TDB_OK &&
+        kv_max > 0 && kv_max < default_limit) {
+        return kv_max;
+    }
+    return default_limit;
+}
+
+/**
+ * @brief Reopens KV backend store handle before verification.
+ *
+ * @param ctx KV backend context.
+ * @return true when reopened store is available.
+ */
+static bool repl_kv_history_reopen_for_verify(void *ctx)
+{
+    ReplKvHistoryCtx *kv = (ReplKvHistoryCtx*)ctx;
+    fs_global_store_reset();
+    return repl_kv_history_refresh_store(kv);
+}
+#endif
 
 /** @brief Trim vector to last N elements
  *  @param vec Vector to trim
@@ -294,102 +753,138 @@ bool repl_eval_arg(const char *raw_code, EvalState *st) {
  *  @return New vector with last N elements (or original if smaller)
  */
 CljObject* history_trim_last_n(CljPersistentVector *vec, int limit) {
-    if (!vec || limit <= 0) return (CljObject*)empty_vector();
-    CljPersistentVector *v = vec;
-    int count = vector_count(v);
-    if (count <= limit) return RETAIN(vec);
-    int start = count - limit;
-    CljPersistentVector* out = make_vector(limit, STRONG);
-    ID nth_args[2];
-    nth_args[0] = v;
-    for (int i = 0; i < limit; i++) {
-        nth_args[1] = fixnum(start + i);
-        ID elem = nth2(nth_args, 2);
-        if (elem) {
-            // nth2 returns element with lifetime tied to vector - no release needed
-            out = vector_conj(out, elem);
-        }
-    }
-    return (CljObject*)out;
+    return (CljObject*)repl_history_take_last(vec, limit);
 }
 
-/** @brief Save vector to file as EDN
+/** @brief Save vector to default history backend.
  *  @param vec Vector to save
- *  @param path File path
+ *  @param path File path (host) or ignored (ESP32 KV backend)
  *  @return true if successful
  */
 bool history_save_to_file(CljPersistentVector *vec, const char *path) {
-    if (!path || !vec) return false;
-
-    CljObject *trimmed = history_trim_last_n(vec, 50);
-    if (!trimmed) return false;
-
-    CljString *s = pr_str(trimmed);
-    RELEASE(trimmed);
-    if (!s) return false;
-
-    FILE *fp = fopen(path, "w");
-    if (!fp) {
+    if (!vec) {
         return false;
     }
 
-    size_t len = string_length(s);
-    size_t n = fwrite(string_data(s), 1, len, fp);
-    if (n > 0) fputc('\n', fp);
-    fflush(fp);
-    // Don't use fsync - it can block and cause REPL to hang
-    // fsync(fileno(fp));
-    int close_result = fclose(fp);
+#if defined(ESP_PLATFORM)
+    ReplKvHistoryCtx kv_ctx = {0};
+    ReplHistoryBackend backend = {
+        .ctx = &kv_ctx,
+        .source_name = "<esp32 repl history>",
+        .max_read_bytes = REPL_HISTORY_KV_MAX_READ_BYTES,
+        .default_byte_limit = REPL_HISTORY_KV_DEFAULT_BYTE_LIMIT,
+        .max_entries = 0,
+        .trim_num = REPL_HISTORY_TRIM_NUM,
+        .trim_den = REPL_HISTORY_TRIM_DEN,
+        .verify_after_save = true,
+        .verify_after_reopen = false,
+        .query_size = repl_kv_history_query_size,
+        .read = repl_kv_history_read,
+        .write = repl_kv_history_write,
+        .sync = repl_kv_history_sync,
+        .effective_limit = repl_kv_history_effective_limit,
+        .reopen_for_verify = repl_kv_history_reopen_for_verify
+    };
+#else
+    if (!path) {
+        return false;
+    }
+    ReplFileHistoryCtx file_ctx = {.path = path};
+    ReplHistoryBackend backend = {
+        .ctx = &file_ctx,
+        .source_name = path,
+        .max_read_bytes = REPL_HISTORY_FILE_MAX_READ_BYTES,
+        .default_byte_limit = (size_t)-1,
+        .max_entries = REPL_HISTORY_FILE_MAX_ENTRIES,
+        .trim_num = REPL_HISTORY_TRIM_NUM,
+        .trim_den = REPL_HISTORY_TRIM_DEN,
+        .verify_after_save = false,
+        .verify_after_reopen = false,
+        .query_size = repl_file_history_query_size,
+        .read = repl_file_history_read,
+        .write = repl_file_history_write,
+        .sync = repl_file_history_sync,
+        .effective_limit = NULL,
+        .reopen_for_verify = NULL
+    };
+#endif
 
-    return (n == len && close_result == 0);
+    return repl_history_backend_save(&backend, vec);
 }
 
-/** @brief Load vector from file (EDN format)
- *  @param path File path
- *  @return Vector loaded from file, or empty vector on error
+/** @brief Load vector from default history backend.
+ *  @param path File path (host) or ignored (ESP32 KV backend)
+ *  @return Vector loaded from backend, or empty vector on error
  */
 CljPersistentVector* history_load_from_file(const char *path) {
-    if (!path) return empty_vector();
-
     EvalState *st = get_global_eval_state();
-    if (!st) return empty_vector();
+    if (!st) {
+        return empty_vector();
+    }
 
-    CljPersistentVector *string_history = NULL;
+#if defined(ESP_PLATFORM)
+    ReplKvHistoryCtx kv_ctx = {0};
+    ReplHistoryBackend backend = {
+        .ctx = &kv_ctx,
+        .source_name = "<esp32 repl history>",
+        .max_read_bytes = REPL_HISTORY_KV_MAX_READ_BYTES,
+        .default_byte_limit = REPL_HISTORY_KV_DEFAULT_BYTE_LIMIT,
+        .max_entries = 0,
+        .trim_num = REPL_HISTORY_TRIM_NUM,
+        .trim_den = REPL_HISTORY_TRIM_DEN,
+        .verify_after_save = true,
+        .verify_after_reopen = false,
+        .query_size = repl_kv_history_query_size,
+        .read = repl_kv_history_read,
+        .write = repl_kv_history_write,
+        .sync = repl_kv_history_sync,
+        .effective_limit = repl_kv_history_effective_limit,
+        .reopen_for_verify = repl_kv_history_reopen_for_verify
+    };
+#else
+    if (!path) {
+        evalstate_free(st);
+        return empty_vector();
+    }
+    ReplFileHistoryCtx file_ctx = {.path = path};
+    ReplHistoryBackend backend = {
+        .ctx = &file_ctx,
+        .source_name = path,
+        .max_read_bytes = REPL_HISTORY_FILE_MAX_READ_BYTES,
+        .default_byte_limit = (size_t)-1,
+        .max_entries = REPL_HISTORY_FILE_MAX_ENTRIES,
+        .trim_num = REPL_HISTORY_TRIM_NUM,
+        .trim_den = REPL_HISTORY_TRIM_DEN,
+        .verify_after_save = false,
+        .verify_after_reopen = false,
+        .query_size = repl_file_history_query_size,
+        .read = repl_file_history_read,
+        .write = repl_file_history_write,
+        .sync = repl_file_history_sync,
+        .effective_limit = NULL,
+        .reopen_for_verify = NULL
+    };
+#endif
 
-    WITH_AUTORELEASE_POOL({
-        TRY {
-            // Use file_slurp utility function directly (no eval_string needed)
-            // file_slurp throws exceptions on errors
-            CljString *content = file_slurp(path);
-
-            if (content) {
-                // Read directly from the CljString buffer
-                // The Reader only reads from the buffer, it doesn't store the pointer
-                const char *buf = clj_string_data(content);
-                Reader rd; reader_init(&rd, buf);
-                reader_set_source_name(&rd, path);
-                ID parsed = value_by_parsing_expr(&rd, st);
-
-                // Validate it's a vector
-                if (parsed && TAG(parsed) == CLJ_VECTOR_PERSISTENT) {
-                    string_history = as_persistent_vector((CljObject*)parsed);
-
-                    // RETAIN before pool pop to keep it alive
-                    RETAIN(string_history);
-                }
-            }
-        } CATCH(ex) {
-            // Exception during file_slurp or parsing - return empty vector
-            string_history = NULL;
-        } END_TRY
-    }); // Pool popped, but string_history is retained (rc > 0), so it survives
-
+    CljPersistentVector *loaded = repl_history_backend_load(&backend, st);
     evalstate_free(st);
-
-    // Return retained object - caller must release or autorelease it
-    return string_history ? string_history : empty_vector();
+    return loaded ? loaded : empty_vector();
 }
 
+
+#if !defined(ESP_PLATFORM)
+/**
+ * @brief Writes one build-info line to stdout.
+ *
+ * @param line Null-terminated line to print.
+ */
+static void repl_stdout_put_line(const char *line)
+{
+    if (!line) {
+        return;
+    }
+    printf("%s\n", line);
+}
 
 /** @brief Print command-line usage information.
  *  @param prog Program name for usage display
@@ -447,8 +942,14 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     }
 #endif
 
-    printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.3", platform_name());
-    print_build_info();
+    ReplStartupBannerConfig banner_cfg = {
+        .title_line = NULL,
+        .center_title = false,
+        .center_width = 0u,
+        .include_ram_line = false,
+        .include_exit_hint = true
+    };
+    repl_print_startup_banner_with_emitter(&banner_cfg, repl_stdout_put_line);
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Line editor needs blocking input for proper character handling
     platform_set_stdin_nonblocking(0);
@@ -458,7 +959,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     platform_set_stdin_nonblocking(1);
 #endif
 
-    char acc[4096]; acc[0] = '\0';
+    char acc[REPL_ACC_CAP_DEFAULT]; acc[0] = '\0';
     bool prompt_shown = false;
 
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
@@ -469,8 +970,12 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         return false;
     }
     set_line_editor(editor);
-    // History is a strictly interactive REPL feature.
-    bool history_enabled = (isatty(STDIN_FILENO) != 0);
+    // Keep history always enabled for interactive REPL (including ESP32 UART, where isatty is false).
+    bool history_enabled = true;
+#if REPL_TRACE_ENABLED
+    bool stdin_is_tty = (isatty(STDIN_FILENO) != 0);
+    REPL_TRACE("history init: enabled=%d stdin_is_tty=%d", history_enabled ? 1 : 0, stdin_is_tty ? 1 : 0);
+#endif
     // Load history from default file and populate editor history (with exception handling)
     CljObject *history_vec = NULL;
     if (history_enabled) {
@@ -481,11 +986,15 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                 if (loaded && TAG(loaded) == CLJ_VECTOR_PERSISTENT && vector_count((CljPersistentVector*)loaded) > 0) {
                     // loaded is already retained from history_load_from_file, transfer to outer pool
                     ASSIGN(history_vec, AUTORELEASE(loaded));
+                    REPL_TRACE("history load: %d entries", vector_count((CljPersistentVector*)loaded));
                 }
             } CATCH(ex) {
                 // Exception beim History-Laden - starte mit leerer History
                 // Exception wird automatisch freigegeben durch CATCH-Macro
                 history_vec = NULL;
+                if (ex) {
+                    REPL_TRACE("history load failed: type=%s message=%s", ex->type, ex->message);
+                }
             } END_TRY
         });
     }
@@ -508,7 +1017,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     while (true) {
         // Print prompt only once per input cycle to avoid flooding
         if (!prompt_shown) {
-            print_prompt(st, form_balance(acc, NULL) == 0);
+            print_prompt(st, repl_form_state(acc, NULL) == REPL_FORM_BALANCED);
             prompt_shown = true;
         }
 
@@ -523,8 +1032,14 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                 size_t line_len = 0;
                 const char *line = line_editor_get_buffer_cstr(editor, &line_len);
                 if (line && line_len > 0) {
-                    if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
-                    strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
+                    if (!repl_acc_append_line(acc, sizeof(acc), line)) {
+                        platform_put_string(NULL, "Error: Input too long (resetting form)\n");
+                        acc[0] = '\0';
+                        line_editor_clear(editor);
+                        prompt_shown = false;
+                        continue;
+                    }
+                    REPL_TRACE("line ready: line_len=%zu acc_len=%zu", line_len, strlen(acc));
                     line_editor_clear(editor);
                     got_input = true;
                 } else {
@@ -553,9 +1068,16 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                 continue;
             }
             if (n > 0) {
-                if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
                 for (int i = 0; i < n; i++) if (buf[i] == '\r') buf[i] = '\n';
-                strncat(acc, buf, sizeof(acc) - strlen(acc) - 1);
+                if (n >= (int)sizeof(buf)) n = (int)sizeof(buf) - 1;
+                buf[n] = '\0';
+                if (!repl_acc_append_line(acc, sizeof(acc), buf)) {
+                    platform_put_string(NULL, "Error: Input too long (resetting form)\n");
+                    acc[0] = '\0';
+                    prompt_shown = false;
+                    got_input = false;
+                    break;
+                }
                 got_input = true; break;
             }
         }
@@ -568,12 +1090,13 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             break;
         }
 
-        int balance = form_balance(acc, NULL);
-        if (balance > 0) {
+        ReplFormState form_state = repl_form_state(acc, NULL);
+        REPL_TRACE("form state=%d acc_len=%zu", (int)form_state, strlen(acc));
+        if (form_state == REPL_FORM_INCOMPLETE) {
             // Incomplete - need more input
             prompt_shown = false; // show continuation prompt once
             continue;
-        } else if (balance < 0) {
+        } else if (form_state == REPL_FORM_INVALID) {
             // Too many closing parens - syntax error
             platform_put_string(NULL, "Error: Too many closing parentheses\n");
             // Add to history before clearing
@@ -581,7 +1104,14 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
                 LineEditor *editor = get_line_editor();
                 if (history_enabled && editor) {
+#if REPL_TRACE_ENABLED
+                    int before = line_editor_get_history_size(editor);
+#endif
                     line_editor_add_to_history(editor, acc);
+#if REPL_TRACE_ENABLED
+                    int after = line_editor_get_history_size(editor);
+                    REPL_TRACE("history add (invalid form): before=%d after=%d", before, after);
+#endif
                 }
 #endif
             }
@@ -595,7 +1125,9 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
         // (Entfernt) REPL interne History-Kommandos
 
+        REPL_TRACE("eval start: form_len=%zu", strlen(acc));
         bool success = eval_multiform_string(acc, st);
+        REPL_TRACE("eval done: success=%d", success ? 1 : 0);
 
         repl_process_event_loop(st);
 
@@ -604,12 +1136,24 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
             LineEditor *editor = get_line_editor();
             if (history_enabled && editor) {
+#if REPL_TRACE_ENABLED
+                int before = line_editor_get_history_size(editor);
+#endif
                 line_editor_add_to_history(editor, acc);
+#if REPL_TRACE_ENABLED
+                int after = line_editor_get_history_size(editor);
+                REPL_TRACE("history add: before=%d after=%d", before, after);
+#endif
                 // Save history after each expression (fsync removed to avoid blocking)
                 WITH_AUTORELEASE_POOL({
                     CljPersistentVector *vec = line_editor_get_history_vector(editor);
                     if (vec) {
-                        line_editor_history_save_default((CljObject*)vec);
+#if REPL_TRACE_ENABLED
+                        bool saved = line_editor_history_save_default((CljObject*)vec);
+                        REPL_TRACE("history save: entries=%d saved=%d", vector_count(vec), saved ? 1 : 0);
+#else
+                        (void)line_editor_history_save_default((CljObject*)vec);
+#endif
                         RELEASE(vec);
                     }
                 });
@@ -632,7 +1176,12 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         if (history_enabled && ed) {
             CljPersistentVector *vec = line_editor_get_history_vector(ed);
             if (vec) {
-                line_editor_history_save_default((CljObject*)vec);
+#if REPL_TRACE_ENABLED
+                bool saved = line_editor_history_save_default((CljObject*)vec);
+                REPL_TRACE("history save on exit: entries=%d saved=%d", vector_count(vec), saved ? 1 : 0);
+#else
+                (void)line_editor_history_save_default((CljObject*)vec);
+#endif
                 RELEASE(vec);
             }
         }
@@ -643,7 +1192,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     return true;
 }
 
-#ifndef UNITY_TESTS
+#if !defined(UNITY_TESTS)
 int main(int argc, char **argv) {
 #ifdef PROFILE_STARTUP
     #include <time.h>
@@ -884,3 +1433,4 @@ int main(int argc, char **argv) {
     return 0;
 }
 #endif // UNITY_TESTS
+#endif // !ESP_PLATFORM

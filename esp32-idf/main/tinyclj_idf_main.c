@@ -72,6 +72,7 @@ const char *tinyclj_esp32_os_version(void);
 int tinyclj_esp32_uart_read_byte_nonblocking(void);
 void tinyclj_esp32_uart_write_bytes(const uint8_t *data, size_t n);
 void tinyclj_esp32_uart_flush(void);
+void tinyclj_esp32_uart_debug_snapshot(size_t *bytes_read, size_t *bytes_written);
 
 // Entry point implemented in tinyclj_idf_run.c
 void tinyclj_idf_start(void);
@@ -216,11 +217,17 @@ void app_main(void) {
     tinyclj_idf_start();
 }
 
+static size_t g_uart_bytes_read = 0;
+static size_t g_uart_bytes_written = 0;
+
 int tinyclj_esp32_uart_read_byte_nonblocking(void) {
 #if defined(ESP_PLATFORM)
     uint8_t b = 0;
     int n = uart_read_bytes(UART_NUM_0, &b, 1, 0);
-    if (n == 1) return (int)b;
+    if (n == 1) {
+        g_uart_bytes_read += 1u;
+        return (int)b;
+    }
     return -2; // no input
 #else
     return -2;
@@ -230,6 +237,7 @@ int tinyclj_esp32_uart_read_byte_nonblocking(void) {
 void tinyclj_esp32_uart_write_bytes(const uint8_t *data, size_t n) {
 #if defined(ESP_PLATFORM)
     if (!data || n == 0) return;
+    g_uart_bytes_written += n;
     (void)uart_write_bytes(UART_NUM_0, (const char*)data, (int)n);
 #else
     (void)data; (void)n;
@@ -240,3 +248,7 @@ void tinyclj_esp32_uart_flush(void) {
     // No-op on ESP-IDF UART driver; writes are queued internally.
 }
 
+void tinyclj_esp32_uart_debug_snapshot(size_t *bytes_read, size_t *bytes_written) {
+    if (bytes_read) *bytes_read = g_uart_bytes_read;
+    if (bytes_written) *bytes_written = g_uart_bytes_written;
+}

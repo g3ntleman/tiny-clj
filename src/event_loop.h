@@ -18,6 +18,12 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
 // Run next enqueued task. Returns true if a task was executed, false if queue empty.
 bool event_loop_run_next(CljPersistentMap *env, EvalState *st);
 
+// Returns true when the normal task queue currently has pending entries.
+bool event_loop_has_pending_tasks(void);
+
+// Returns milliseconds until the next timer is due, 0 when overdue/ready, or -1 when no timers exist.
+int event_loop_time_until_next_timer_ms(void);
+
 // Timer API
 // Enqueue a timer task for execution after delay_ms milliseconds
 // If periodic is true, the task will be re-scheduled every period_ms milliseconds
@@ -32,7 +38,6 @@ int timer_upsert_named(ID key, CljObject *fn_zero_arity, int64_t delay_ms, bool 
 bool timer_cancel_named(ID key);
 
 #endif
-
 
 
 

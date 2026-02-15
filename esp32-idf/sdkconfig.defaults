@@ -12,7 +12,7 @@ CONFIG_COMPILER_OPTIMIZATION_LEVEL_RELEASE=y
 # 32KB gives enough headroom for complex macro expansions with the eval stack guard.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768
 
-# Use custom partition table with a reserved tiny-db partition.
+# Use custom partition table with reserved tiny-db and coredump partitions.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
@@ -30,4 +30,3 @@ CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
 # CONFIG_ESP_COREDUMP_CHECK_BOOT is not set
 
 # SPIFFS is unused in this project; leave it at IDF defaults.
-

@@ -16,6 +16,7 @@ Keys (always present):
 
 Optional:
 - :os-version (string, e.g. macOS \"14.2.1\", ESP-IDF \"v5.3.4\")
+- :gpio-event-drops (integer, count of dropped GPIO ISR events due to full ring buffer)
 
 Optional keys (only present when the platform provides the value):
 - :heap-bytes-free (integer, bytes)

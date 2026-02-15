@@ -104,6 +104,14 @@ source "${REPO_ROOT}/scripts/esp_env.sh"
 
 cd "${IDF_PROJECT_DIR}"
 
+# Repair stale/dangling symlinks from interrupted runs.
+if [ -L build ] && [ ! -e build ]; then
+  rm -f build
+fi
+if [ -L "${CENTRAL_BUILD_DIR}/build" ] && [ ! -e "${CENTRAL_BUILD_DIR}/build" ]; then
+  rm -f "${CENTRAL_BUILD_DIR}/build"
+fi
+
 if [ "${DO_CLEAN}" -eq 1 ]; then
   rm -rf build
   rm -rf "${CENTRAL_BUILD_DIR}/build"
@@ -120,8 +128,30 @@ fi
 if [ ! -d build ]; then
   idf.py set-target "${TARGET}"
 fi
-# Nounset-safe array expansion (EXTRA_IDF_ARGS may be unset/non-array in some shells).
-idf.py build ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"}
+
+run_idf_build_logged() {
+  local log_file="$1"
+  set +e
+  # Nounset-safe array expansion (EXTRA_IDF_ARGS may be unset/non-array in some shells).
+  idf.py build ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"} 2>&1 | tee "${log_file}"
+  local rc=${PIPESTATUS[0]}
+  set -e
+  return "${rc}"
+}
+
+BUILD_LOG="$(mktemp -t tinyclj-idf-build.XXXXXX.log)"
+if ! run_idf_build_logged "${BUILD_LOG}"; then
+  if grep -q "Cannot find component list file" "${BUILD_LOG}"; then
+    echo "Detected stale CMake component metadata. Reconfiguring from a clean build directory..."
+    rm -rf build
+    idf.py set-target "${TARGET}"
+    run_idf_build_logged "${BUILD_LOG}"
+  else
+    echo "Build failed. Log: ${BUILD_LOG}" >&2
+    exit 1
+  fi
+fi
+rm -f "${BUILD_LOG}"
 
 # If requested, run flash/monitor before moving the build dir.
 if [ "${DO_FLASH}" -eq 1 ]; then
@@ -133,11 +163,13 @@ if [ "${DO_MONITOR}" -eq 1 ]; then
 fi
 
 # Optionally move the produced build directory into the centralized builds area.
-if [ -d build ] && [ "${DO_MOVE}" -eq 1 ]; then
+if [ -d build ] && [ "${DO_MOVE}" -eq 1 ] && [ ! -L build ]; then
   mkdir -p "${CENTRAL_BUILD_DIR}"
   if [ -d "${CENTRAL_BUILD_DIR}/build" ]; then
     rm -rf "${CENTRAL_BUILD_DIR}/build"
   fi
   mv build "${CENTRAL_BUILD_DIR}/"
+  ln -s "${CENTRAL_BUILD_DIR}/build" build
   echo "Moved esp32-idf/build -> ${CENTRAL_BUILD_DIR}/build"
+  echo "Linked esp32-idf/build -> ${CENTRAL_BUILD_DIR}/build (for monitor/addr2line)."
 fi

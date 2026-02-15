@@ -403,6 +403,15 @@ static int tdb_mpool_scan_half(MPOOL* mp, uint32_t start, uint32_t end, uint32_t
     return 0;
 }
 
+/**
+ * @brief Rebuild mpool runtime state by scanning persisted log records.
+ *
+ * Reconstructs active half/write offset and page count. If no valid records
+ * are found, the data region is normalized to an erased state before first use.
+ *
+ * @param mp Memory pool context.
+ * @return 0 on success, -1 on failure.
+ */
 static int tdb_mpool_recover(MPOOL* mp) {
     if (!mp || !mp->bdev)
         return -1;
@@ -430,7 +439,32 @@ static int tdb_mpool_recover(MPOOL* mp) {
         mp->gc_active_half = 0;
         mp->write_off = end0;
     }
- 
+
+    /*
+     * Fresh/invalid medium: if no valid records were found in either half,
+     * proactively erase the full data region once.
+     *
+     * Why: append-only writes rely on erased (0xFF) flash. On boards where
+     * the tinydb partition contains non-erased garbage, the first writes can
+     * appear to succeed in-memory but become unrecoverable after reopen.
+     */
+    if (!any) {
+        const uint32_t eg = mp->bdev->geom.erase_granularity;
+        if (eg != 0u) {
+            const uint32_t start = mp->data_base;
+            const uint32_t total = mp->bdev->geom.total_size_bytes;
+            if (start < total) {
+                uint32_t len = total - start;
+                len = (len / eg) * eg;
+                if (len > 0u) {
+                    if (tdb_blockdev_erase(mp->bdev, start, len) != TDB_OK)
+                        return -1;
+                }
+            }
+        }
+        mp->gc_active_half = 0;
+        mp->write_off = half0;
+    }
 
     mp->npages = any ? (max_pgno + 1) : 0;
     return 0;
@@ -961,4 +995,3 @@ int mpool_free_pgno(MPOOL* mp, pgno_t pgno) {
     }
     return 0;
 }
-

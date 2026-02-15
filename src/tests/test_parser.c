@@ -10,6 +10,7 @@
 #include "../symbol.h"
 #include "../symbol_token.h"
 #include "../ast_canon.h"
+#include "../repl.h"
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -445,6 +446,19 @@ TEST(test_parse_multiple_expressions) {
     TEST_ASSERT_NOT_NULL(result4);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result4));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)result4));
+
+    evalstate_free(eval_state);
+}
+
+TEST(test_parse_unclosed_list_recovery_across_calls) {
+    EvalState *eval_state = evalstate_new(false);
+
+    // Regression: an unclosed list must not corrupt heap state for subsequent parses.
+    bool first_ok = eval_multiform_string("(defn blink [p]", eval_state);
+    TEST_ASSERT_FALSE(first_ok);
+
+    bool second_ok = eval_multiform_string("(+ 1 2)", eval_state);
+    TEST_ASSERT_TRUE(second_ok);
 
     evalstate_free(eval_state);
 }

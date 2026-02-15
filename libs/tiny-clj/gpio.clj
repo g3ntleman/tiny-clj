@@ -4,6 +4,16 @@
 
 (ns tiny-clj.gpio)
 
+(def ^:private core-async-loaded? (atom false))
+
+(defn- ensure-core-async! []
+  (if @core-async-loaded?
+    nil
+    (do
+      (require 'clojure.core.async)
+      (reset! core-async-loaded? true)
+      nil)))
+
 ^#^{:doc "Creates a core.async channel backed GPIO watcher.
 
 Args: (gpio-channel pin) or (gpio-channel pin buffer).
@@ -16,7 +26,7 @@ Returns a map {:ch ch :watcher-id wid :close! (fn [])} where events are [pin val
   ;;
   ;; Event format: [pin value]
   (do
-    (require 'clojure.core.async)
+    (ensure-core-async!)
     (let [argc (count args)]
       (if (< argc 1)
         (throw "tiny-clj.gpio/gpio-channel requires pin")
@@ -35,4 +45,3 @@ Returns a map {:ch ch :watcher-id wid :close! (fn [])} where events are [pin val
                        (clojure.core/gpio-unwatch wid)
                        (clojure.core.async/close! ch)
                        nil))})))))
-

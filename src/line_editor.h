@@ -73,6 +73,8 @@ int line_editor_get_history_size(const LineEditor *editor);
 CljPersistentVector* line_editor_get_history_vector(LineEditor *editor); // returns persistent vector (rc>=1)
 void line_editor_set_history_from_vector(LineEditor *editor, CljPersistentVector *vec);
 void line_editor_clear_history(LineEditor *editor);
+CljObject* line_editor_history_load_default(void);
+bool line_editor_history_save_default(CljObject *vec);
 
 // Global line editor management
 void set_line_editor(LineEditor *editor);

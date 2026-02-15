@@ -18,6 +18,7 @@
 #ifdef ESP32_BUILD
 
 #include "gpio_esp32.h"
+#include "gpio_common.h"
 
 #include "builtins.h"   // builtin_get_eval_state()
 #include "eval.h"       // eval_function_call
@@ -32,6 +33,7 @@
 #include "event_loop.h"
 
 #include <driver/gpio.h>
+#include <driver/ledc.h>
 #include <esp_err.h>
 #include <esp_attr.h>
 #include <stdatomic.h>
@@ -59,12 +61,37 @@ static GpioEvent g_gpio_events[GPIO_EVENT_RING_CAP];
 static _Atomic uint32_t g_gpio_event_w = 0;
 static _Atomic uint32_t g_gpio_event_r = 0;
 static _Atomic bool g_gpio_drain_scheduled = false;
+static _Atomic bool g_gpio_drain_requested = false;
+static _Atomic uint32_t g_gpio_event_drop_count = 0;
 
 // Cached drain function object (zero-arity task for event loop).
 static ID g_gpio_drain_fn_obj = NULL;
 static CljSymbol *SYM_GPIO_DRAIN = NULL;
 
 static ID native_gpio_drain_events(ID *args, unsigned int argc);
+
+// PWM bindings (LEDC): static table, no heap.
+typedef struct {
+    int32_t pin;
+    ledc_channel_t channel;
+    ledc_timer_t timer;
+    bool configured;
+} GpioPwmBinding;
+
+#if defined(LEDC_CHANNEL_MAX)
+enum { GPIO_PWM_BINDING_CAP = LEDC_CHANNEL_MAX };
+#else
+enum { GPIO_PWM_BINDING_CAP = 8 };
+#endif
+#if defined(LEDC_TIMER_MAX)
+enum { GPIO_PWM_TIMER_CAP = LEDC_TIMER_MAX };
+#else
+enum { GPIO_PWM_TIMER_CAP = 4 };
+#endif
+enum { GPIO_PWM_MAX_FREQ_HZ = 100000 };
+
+static GpioPwmBinding g_pwm_bindings[GPIO_PWM_BINDING_CAP];
+static bool g_pwm_bindings_initialized = false;
 
 /** Ensure watcher map and keywords are initialized (once). */
 static inline void gpio_ensure_initialized(void) {
@@ -75,6 +102,43 @@ static inline void gpio_ensure_initialized(void) {
     // Create cached drain function object once.
     SYM_GPIO_DRAIN = intern_symbol_global("tiny-clj.gpio/drain-events");
     g_gpio_drain_fn_obj = make_named_func(native_gpio_drain_events, SYM_GPIO_DRAIN);
+}
+
+static inline void gpio_pwm_bindings_init(void) {
+    if (g_pwm_bindings_initialized) return;
+    for (int i = 0; i < GPIO_PWM_BINDING_CAP; i++) {
+        g_pwm_bindings[i].pin = -1;
+        g_pwm_bindings[i].channel = (ledc_channel_t)i;
+        g_pwm_bindings[i].timer = (ledc_timer_t)(i % GPIO_PWM_TIMER_CAP);
+        g_pwm_bindings[i].configured = false;
+    }
+    g_pwm_bindings_initialized = true;
+}
+
+static inline GpioPwmBinding *gpio_pwm_binding_find_by_pin(int32_t pin) {
+    for (int i = 0; i < GPIO_PWM_BINDING_CAP; i++) {
+        if (g_pwm_bindings[i].pin == pin) return &g_pwm_bindings[i];
+    }
+    return NULL;
+}
+
+static inline GpioPwmBinding *gpio_pwm_binding_acquire(int32_t pin) {
+    GpioPwmBinding *existing = gpio_pwm_binding_find_by_pin(pin);
+    if (existing) return existing;
+    for (int i = 0; i < GPIO_PWM_BINDING_CAP; i++) {
+        if (g_pwm_bindings[i].pin < 0) {
+            g_pwm_bindings[i].pin = pin;
+            g_pwm_bindings[i].configured = false;
+            return &g_pwm_bindings[i];
+        }
+    }
+    return NULL;
+}
+
+static inline void gpio_pwm_binding_release(GpioPwmBinding *binding) {
+    if (!binding) return;
+    binding->pin = -1;
+    binding->configured = false;
 }
 
 /** Push one event from ISR into ring; callback_fn_retained is consumed. Returns false if ring full. */
@@ -102,14 +166,30 @@ static inline bool gpio_event_ring_pop(GpioEvent *out) {
     return true;
 }
 
-/** If not already scheduled, enqueue one drain task (called from ISR). */
-static inline void gpio_schedule_drain_from_isr(void) {
+/** ISR-side signal only: request one drain in thread context. */
+static inline void gpio_request_drain_from_isr(void) {
+    atomic_store_explicit(&g_gpio_drain_requested, true, memory_order_release);
+}
+
+/** Promote pending ISR drain requests into one event-loop task (thread context only). */
+void gpio_esp32_poll_drain(void) {
+    gpio_ensure_initialized();
+
+    bool requested = atomic_load_explicit(&g_gpio_drain_requested, memory_order_acquire);
+    if (!requested) return;
+
     bool expected = false;
-    if (atomic_compare_exchange_strong_explicit(&g_gpio_drain_scheduled, &expected, true, memory_order_acq_rel, memory_order_relaxed)) {
-        // Enqueue one drain task; it will drain everything currently queued.
-        // NOTE: event_loop_enqueue is not strictly ISR-safe; this follows the chosen plan.
-        event_loop_enqueue((CljObject*)g_gpio_drain_fn_obj, NULL);
+    if (!atomic_compare_exchange_strong_explicit(&g_gpio_drain_scheduled, &expected, true, memory_order_acq_rel, memory_order_relaxed)) {
+        return;
     }
+
+    // Consume the current request now that we're enqueuing one drain task.
+    atomic_store_explicit(&g_gpio_drain_requested, false, memory_order_release);
+    event_loop_enqueue((CljObject*)g_gpio_drain_fn_obj, NULL);
+}
+
+uint32_t gpio_esp32_get_event_drop_count(void) {
+    return atomic_load_explicit(&g_gpio_event_drop_count, memory_order_relaxed);
 }
 
 /** ISR: read pin level, retain callback, push event, schedule drain. */
@@ -129,10 +209,11 @@ static void IRAM_ATTR gpio_isr_handler(void *arg) {
     ID retained_cb = RETAIN(callback_fn);
     if (!gpio_event_ring_push_from_isr(pin, value, retained_cb)) {
         // Ring full: drop event, but balance RETAIN.
+        atomic_fetch_add_explicit(&g_gpio_event_drop_count, 1u, memory_order_relaxed);
         RELEASE(retained_cb);
         return;
     }
-    gpio_schedule_drain_from_isr();
+    gpio_request_drain_from_isr();
 }
 
 /** Drain all queued GPIO events; invoke each callback with [pin value]; release callbacks. */
@@ -144,8 +225,8 @@ static ID native_gpio_drain_events(ID *args, unsigned int argc) {
     GpioEvent ev;
     while (gpio_event_ring_pop(&ev)) {
         CljPersistentVector *event_vec = make_vector(2, STRONG);
-        ASSIGN(event_vec, vector_conj(event_vec, fixnum(ev.pin)));
-        ASSIGN(event_vec, vector_conj(event_vec, fixnum(ev.value)));
+        vector_conj_inplace(&event_vec, fixnum(ev.pin));
+        vector_conj_inplace(&event_vec, fixnum(ev.value));
 
         ID call_args[1] = { (ID)event_vec };
         (void)eval_function_call(ev.callback_fn, call_args, 1, NULL, builtin_get_eval_state());
@@ -157,9 +238,10 @@ static ID native_gpio_drain_events(ID *args, unsigned int argc) {
     // If queue is empty, allow future scheduling.
     atomic_store_explicit(&g_gpio_drain_scheduled, false, memory_order_release);
 
-    // Race: if ISR enqueued while we cleared scheduled, reschedule.
+    // Race: ISR may have written new events while we were draining.
     if (atomic_load_explicit(&g_gpio_event_r, memory_order_relaxed) != atomic_load_explicit(&g_gpio_event_w, memory_order_acquire)) {
-        gpio_schedule_drain_from_isr();
+        atomic_store_explicit(&g_gpio_drain_requested, true, memory_order_release);
+        gpio_esp32_poll_drain();
     }
 
     return NULL;
@@ -184,12 +266,9 @@ static inline void gpio_ensure_isr_service(void) {
 ID native_gpio_watch(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 2, "gpio-watch");
 
-    ID pin_val = args[0];
     ID callback = args[1];
-    if (!pin_val || !is_fixnum(pin_val)) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "gpio-watch: pin must be fixnum", __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    int32_t pin = 0;
+    GPIO_PARSE_PIN_FIXNUM_OR_RETURN_NULL("gpio-watch", args[0], &pin);
     if (!is_callable(callback)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "gpio-watch: callback must be callable", __FILE__, __LINE__, 0);
         return NULL;
@@ -197,7 +276,6 @@ ID native_gpio_watch(ID *args, unsigned int argc) {
 
     gpio_ensure_initialized();
 
-    int32_t pin = (int32_t)as_fixnum(pin_val);
     ID pin_key = fixnum(pin);
 
     if (map_get((ID)g_gpio_watchers, pin_key) != NOT_FOUND) {
@@ -212,7 +290,7 @@ ID native_gpio_watch(ID *args, unsigned int argc) {
         (ID)SYM_KW_WATCHER_ID, fixnum(watcher_id));
 
     // Store watcher_map in global index. Map retains value; we release local afterwards.
-    ASSIGN(g_gpio_watchers, map_assoc(g_gpio_watchers, pin_key, (ID)watcher_map));
+    map_assoc_inplace(&g_gpio_watchers, pin_key, watcher_map);
 
     gpio_config_t cfg = {
         .pin_bit_mask = (1ULL << (uint64_t)pin),
@@ -223,7 +301,7 @@ ID native_gpio_watch(ID *args, unsigned int argc) {
     };
     esp_err_t err = gpio_config(&cfg);
     if (err != ESP_OK) {
-        ASSIGN(g_gpio_watchers, map_remove(g_gpio_watchers, pin_key));
+        map_remove_inplace(&g_gpio_watchers, pin_key);
         RELEASE(watcher_map);
         throw_exception(EXCEPTION_RUNTIME, "gpio-watch: gpio_config failed", __FILE__, __LINE__, 0);
         return NULL;
@@ -232,7 +310,7 @@ ID native_gpio_watch(ID *args, unsigned int argc) {
     gpio_ensure_isr_service();
     err = gpio_isr_handler_add((gpio_num_t)pin, gpio_isr_handler, (void*)watcher_map);
     if (err != ESP_OK) {
-        ASSIGN(g_gpio_watchers, map_remove(g_gpio_watchers, pin_key));
+        map_remove_inplace(&g_gpio_watchers, pin_key);
         RELEASE(watcher_map);
         throw_exception(EXCEPTION_RUNTIME, "gpio-watch: gpio_isr_handler_add failed", __FILE__, __LINE__, 0);
         return NULL;
@@ -258,10 +336,10 @@ ID native_gpio_unwatch(ID *args, unsigned int argc) {
 
     ID found_pin_key = NULL;
     MAP_FOR_EACH(g_gpio_watchers, k, v) {
-        ID watcher_map = (ID)v;
+        ID watcher_map = v;
         ID stored_wid = map_get_sentinel(watcher_map, (ID)SYM_KW_WATCHER_ID, NOT_FOUND);
         if (stored_wid != NOT_FOUND && stored_wid && is_fixnum(stored_wid) && (int32_t)as_fixnum(stored_wid) == wid) {
-            found_pin_key = (ID)k;
+            found_pin_key = k;
             break;
         }
     }
@@ -269,7 +347,165 @@ ID native_gpio_unwatch(ID *args, unsigned int argc) {
 
     int32_t pin = (int32_t)as_fixnum(found_pin_key);
     (void)gpio_isr_handler_remove((gpio_num_t)pin);
-    ASSIGN(g_gpio_watchers, map_remove(g_gpio_watchers, found_pin_key));
+    map_remove_inplace(&g_gpio_watchers, found_pin_key);
+    return NULL;
+}
+
+/**
+ * @brief Set a GPIO pin output level (Clojure: gpio-write!).
+ * @param args [pin fixnum, level fixnum]
+ * @return nil
+ */
+ID native_gpio_write(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 2, "gpio-write!");
+
+    int32_t pin = 0;
+    int32_t level = 0;
+    GPIO_PARSE_PIN_FIXNUM_OR_RETURN_NULL("gpio-write!", args[0], &pin);
+    GPIO_PARSE_LEVEL_FIXNUM_OR_RETURN_NULL("gpio-write!", args[1], &level);
+    if (pin < 0 || pin >= GPIO_NUM_MAX || !GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)pin)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "gpio-write!: invalid output pin", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    // Force output mode before writing to survive mode drift across watchers/reconfigurations.
+    esp_err_t dir_err = gpio_set_direction((gpio_num_t)pin, GPIO_MODE_OUTPUT);
+    if (dir_err != ESP_OK) {
+        throw_exception(EXCEPTION_RUNTIME, "gpio-write!: gpio_set_direction failed", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    esp_err_t err = gpio_set_level((gpio_num_t)pin, (uint32_t)level);
+    if (err != ESP_OK) {
+        throw_exception(EXCEPTION_RUNTIME, "gpio-write!: gpio_set_level failed", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    return NULL;
+}
+
+/**
+ * @brief Read a GPIO pin level (Clojure: gpio-read).
+ * @param args [pin fixnum]
+ * @return fixnum 0|1
+ */
+ID native_gpio_read(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "gpio-read");
+
+    int32_t pin = 0;
+    GPIO_PARSE_PIN_FIXNUM_OR_RETURN_NULL("gpio-read", args[0], &pin);
+    if (pin < 0 || pin >= GPIO_NUM_MAX || !GPIO_IS_VALID_GPIO((gpio_num_t)pin)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "gpio-read: invalid pin", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    int level = gpio_get_level((gpio_num_t)pin);
+    return fixnum((level == 0) ? 0 : 1);
+}
+
+/**
+ * @brief Configure PWM output for pin (Clojure: gpio-pwm!).
+ * @param args [pin fixnum, freq-hz fixnum, duty fixnum 0..255]
+ * @return nil
+ */
+ID native_gpio_pwm(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 3, "gpio-pwm!");
+
+    int32_t pin = 0;
+    int32_t freq_hz = 0;
+    int32_t duty8 = 0;
+    GPIO_PARSE_PIN_FIXNUM_OR_RETURN_NULL("gpio-pwm!", args[0], &pin);
+    GPIO_PARSE_FIXNUM_RANGE_OR_RETURN_NULL("gpio-pwm!", "freq-hz", args[1], 1, GPIO_PWM_MAX_FREQ_HZ, &freq_hz);
+    GPIO_PARSE_FIXNUM_RANGE_OR_RETURN_NULL("gpio-pwm!", "duty", args[2], 0, 255, &duty8);
+
+    if (pin < 0 || pin >= GPIO_NUM_MAX || !GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)pin)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "gpio-pwm!: invalid output pin", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    gpio_pwm_bindings_init();
+    GpioPwmBinding *binding = gpio_pwm_binding_acquire(pin);
+    if (!binding) {
+        throw_exception(EXCEPTION_RUNTIME, "gpio-pwm!: no free PWM channel", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ledc_timer_config_t timer_cfg = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = LEDC_TIMER_10_BIT,
+        .timer_num = binding->timer,
+        .freq_hz = (uint32_t)freq_hz,
+        .clk_cfg = LEDC_AUTO_CLK
+    };
+    esp_err_t err = ledc_timer_config(&timer_cfg);
+    if (err != ESP_OK) {
+        throw_exception(EXCEPTION_RUNTIME, "gpio-pwm!: ledc_timer_config failed", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    if (!binding->configured) {
+        ledc_channel_config_t ch_cfg = {
+            .gpio_num = pin,
+            .speed_mode = LEDC_LOW_SPEED_MODE,
+            .channel = binding->channel,
+            .intr_type = LEDC_INTR_DISABLE,
+            .timer_sel = binding->timer,
+            .duty = 0,
+            .hpoint = 0
+        };
+        err = ledc_channel_config(&ch_cfg);
+        if (err != ESP_OK) {
+            throw_exception(EXCEPTION_RUNTIME, "gpio-pwm!: ledc_channel_config failed", __FILE__, __LINE__, 0);
+            return NULL;
+        }
+        binding->configured = true;
+    }
+
+    uint32_t duty10 = ((uint32_t)duty8 * 1023u + 127u) / 255u;
+    err = ledc_set_duty(LEDC_LOW_SPEED_MODE, binding->channel, duty10);
+    if (err != ESP_OK) {
+        throw_exception(EXCEPTION_RUNTIME, "gpio-pwm!: ledc_set_duty failed", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    err = ledc_update_duty(LEDC_LOW_SPEED_MODE, binding->channel);
+    if (err != ESP_OK) {
+        throw_exception(EXCEPTION_RUNTIME, "gpio-pwm!: ledc_update_duty failed", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    return NULL;
+}
+
+/**
+ * @brief Stop PWM output for pin (Clojure: gpio-pwm-stop!).
+ * @param args [pin fixnum]
+ * @return nil
+ */
+ID native_gpio_pwm_stop(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "gpio-pwm-stop!");
+
+    int32_t pin = 0;
+    GPIO_PARSE_PIN_FIXNUM_OR_RETURN_NULL("gpio-pwm-stop!", args[0], &pin);
+    if (pin < 0 || pin >= GPIO_NUM_MAX || !GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)pin)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "gpio-pwm-stop!: invalid output pin", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    gpio_pwm_bindings_init();
+    GpioPwmBinding *binding = gpio_pwm_binding_find_by_pin(pin);
+    if (!binding) return NULL;
+
+    esp_err_t err = ledc_stop(LEDC_LOW_SPEED_MODE, binding->channel, 0);
+    if (err != ESP_OK) {
+        throw_exception(EXCEPTION_RUNTIME, "gpio-pwm-stop!: ledc_stop failed", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    err = gpio_set_direction((gpio_num_t)pin, GPIO_MODE_OUTPUT);
+    if (err == ESP_OK) {
+        (void)gpio_set_level((gpio_num_t)pin, 0u);
+    }
+
+    gpio_pwm_binding_release(binding);
     return NULL;
 }
 
@@ -281,4 +517,3 @@ ID native_gpio_simulate(ID *args, unsigned int argc) {
 }
 
 #endif // ESP32_BUILD
-

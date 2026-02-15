@@ -493,6 +493,42 @@ TEST(test_repl_eval_arg_supports_escaped_newlines) {
     TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
 }
 
+TEST(test_repl_form_balance_detects_incomplete_multiline_form) {
+    int error_pos = -1;
+    int balance = repl_form_balance("(defn blink [p]\n  (dotimes [_ 3]\n    (inc p)", &error_pos);
+    TEST_ASSERT_TRUE(balance > 0);
+    TEST_ASSERT_EQUAL_INT(-1, error_pos);
+}
+
+TEST(test_repl_form_balance_detects_extra_closing_delimiter) {
+    int error_pos = -1;
+    int balance = repl_form_balance("(+ 1 2))", &error_pos);
+    TEST_ASSERT_TRUE(balance < 0);
+    TEST_ASSERT_TRUE(error_pos >= 0);
+}
+
+TEST(test_repl_form_state_classifies_all_cases) {
+    TEST_ASSERT_EQUAL_INT(REPL_FORM_BALANCED, (int)repl_form_state("(+ 1 2)", NULL));
+    TEST_ASSERT_EQUAL_INT(REPL_FORM_INCOMPLETE, (int)repl_form_state("(+ 1 2", NULL));
+    TEST_ASSERT_EQUAL_INT(REPL_FORM_INVALID, (int)repl_form_state("(+ 1 2))", NULL));
+}
+
+TEST(test_repl_acc_append_line_joins_lines_with_newline) {
+    char acc[32];
+    acc[0] = '\0';
+
+    TEST_ASSERT_TRUE(repl_acc_append_line(acc, sizeof(acc), "(defn blink [p]"));
+    TEST_ASSERT_TRUE(repl_acc_append_line(acc, sizeof(acc), "  (inc p))"));
+    TEST_ASSERT_EQUAL_STRING("(defn blink [p]\n  (inc p))", acc);
+}
+
+TEST(test_repl_acc_append_line_rejects_overflow_without_mutation) {
+    char acc[16];
+    (void)strcpy(acc, "123456789");
+    TEST_ASSERT_FALSE(repl_acc_append_line(acc, sizeof(acc), "abcdef"));
+    TEST_ASSERT_EQUAL_STRING("123456789", acc);
+}
+
 // ============================================================================
 // INTEGRATION TESTS
 // ============================================================================
@@ -556,4 +592,3 @@ TEST(test_stacktrace_stack_trace_returns_vector_of_strings) {
     }
 
 }
-

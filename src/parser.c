@@ -783,12 +783,12 @@ static ID parse_list(Reader *reader, EvalState *st) {
       }
 
       // Build binding vector for let: [binding test]
-      ID let_binding_vec = AUTORELEASE(binding_vec);
+      ID let_binding_vec = binding_vec;
 
       // Build (let [binding test] (if binding then else?))
-      ID expanded = AUTORELEASE(make_ast_list(SYM_LET,
-                                              AUTORELEASE(make_ast_list(let_binding_vec,
-                                                                        AUTORELEASE(make_ast_list(if_expr, NULL))))));
+      ID expanded = make_ast_list(SYM_LET,
+                                  AUTORELEASE(make_ast_list(let_binding_vec,
+                                                            AUTORELEASE(make_ast_list(if_expr, NULL)))));
 
       // Skip whitespace before checking for closing parenthesis
       reader_skip_all(reader);
@@ -806,7 +806,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
       }
 
       RELEASE(rest);
-      return expanded;  // No location meta - symbols have inline line/col
+      return AUTORELEASE(expanded);  // No location meta - symbols have inline line/col
     }
   }
 
@@ -815,7 +815,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
 
   // Build list from first and rest
   // Return autoreleased object - caller can use until pool is popped
-  ID result = AUTORELEASE(make_ast_list(first, (CljList*)rest));
+  ID result = make_ast_list(first, (CljList*)rest);
   RELEASE(rest);
 
   // Skip whitespace before checking for closing parenthesis
@@ -830,7 +830,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
     return NULL;
   }
 
-  return result;  // No location meta - symbols have inline line/col
+  return AUTORELEASE(result);  // No location meta - symbols have inline line/col
 }
 
 /**
@@ -1732,7 +1732,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   CljList *body_list = make_ast_list(body, NULL);
   RELEASE(body);
   return AUTORELEASE(make_ast_list(fn_sym,
-                                   AUTORELEASE(make_ast_list(AUTORELEASE(param_vec),
+                                   AUTORELEASE(make_ast_list(param_vec,
                                                              AUTORELEASE(body_list)))));
 }
 

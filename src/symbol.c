@@ -389,6 +389,10 @@ DEFINE_EXTERN_SYMBOL(sym_get_thread_bindings_data, "get-thread-bindings");
 DEFINE_EXTERN_SYMBOL(sym_gpio_watch_data, "gpio-watch");
 DEFINE_EXTERN_SYMBOL(sym_gpio_unwatch_data, "gpio-unwatch");
 DEFINE_EXTERN_SYMBOL(sym_gpio_simulate_data, "gpio-simulate!");
+DEFINE_EXTERN_SYMBOL(sym_gpio_write_data, "gpio-write!");
+DEFINE_EXTERN_SYMBOL(sym_gpio_read_data, "gpio-read");
+DEFINE_EXTERN_SYMBOL(sym_gpio_pwm_data, "gpio-pwm!");
+DEFINE_EXTERN_SYMBOL(sym_gpio_pwm_stop_data, "gpio-pwm-stop!");
 
 // Extern symbol structs for native functions (compile-time initialization, statically allocated)
 // These are extern so they can be used in builtins.c's native function table
@@ -867,6 +871,10 @@ void init_special_symbols() {
     symbol_table_add(&sym_gpio_watch_data.sym);
     symbol_table_add(&sym_gpio_unwatch_data.sym);
     symbol_table_add(&sym_gpio_simulate_data.sym);
+    symbol_table_add(&sym_gpio_write_data.sym);
+    symbol_table_add(&sym_gpio_read_data.sym);
+    symbol_table_add(&sym_gpio_pwm_data.sym);
+    symbol_table_add(&sym_gpio_pwm_stop_data.sym);
     symbol_table_add(&sym_hash_set_data.sym);
     symbol_table_add(&sym_disj_data.sym);
     symbol_table_add(&sym_set_p_data.sym);

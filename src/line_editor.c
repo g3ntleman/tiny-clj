@@ -370,7 +370,7 @@ static void history_ensure_temp(LineEditor *editor) {
     // Append current buffer as a temporary entry (editable during history navigation).
     CljString *tmp = make_string((editor->buffer.str) ? editor->buffer.str->data : "");
     if (tmp) {
-        vector_push(editor->history, (ID)tmp);
+        vector_push(editor->history, tmp);
         RELEASE(tmp);
         editor->history_has_temp = true;
         editor->history_index = 0;
@@ -397,7 +397,7 @@ static void history_save_current_entry(LineEditor *editor) {
     if (idx < 0) return;
     CljString *s = make_string((editor->buffer.str) ? editor->buffer.str->data : "");
     if (!s) return;
-    vector_set_nth_transient(editor->history, (unsigned int)idx, (ID)s);
+    vector_set_nth_transient(editor->history, (unsigned int)idx, s);
     RELEASE(s);
 }
 
@@ -926,7 +926,7 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
     
     // Create string object and add to history vector using transient conj
     // Use vector_conj_inplace to avoid AUTORELEASE (editor->history is a transient vector)
-    CljObject *line_obj = (CljObject*)make_string(line);
+    CljString *line_obj = make_string(line);
     if (line_obj) {
         vector_push(editor->history, line_obj);
         // line_obj is now retained by the vector, we can release our reference
@@ -940,7 +940,7 @@ CljString* line_editor_get_history_line(LineEditor *editor, int index) {
     CljPersistentVector *history_vec = editor->history ? editor->history->backing : NULL;
     ID elem = history_vec ? vector_nth(history_vec, index) : NULL;
     // Retain element for return value (caller will release it)
-    return elem ? (CljString*)RETAIN(elem) : NULL;
+    return elem ? RETAIN(elem) : NULL;
 }
 
 int line_editor_get_history_size(const LineEditor *editor) {
@@ -1015,7 +1015,13 @@ void line_editor_reset_history_index(LineEditor *editor) {
     }
 }
 
-// Optional: Default persistence path (~/.tiny-clj/history.edn)
+/**
+ * @brief Builds the default host history path (~/.tiny-clj/history.edn).
+ *
+ * @param out Destination buffer.
+ * @param out_sz Buffer size in bytes.
+ */
+#if !defined(ESP_PLATFORM)
 static void build_default_history_path(char *out, size_t out_sz) {
     const char *home = getenv("HOME") ? getenv("HOME") : ".";
     mini_snprintf(out, out_sz, "%s/.tiny-clj", home);
@@ -1023,25 +1029,43 @@ static void build_default_history_path(char *out, size_t out_sz) {
     mkdir(out, 0700);
     mini_snprintf(out, out_sz, "%s/.tiny-clj/history.edn", home);
 }
+#endif
 
 // External persistence functions (defined in repl.c)
 extern CljObject* history_trim_last_n(CljPersistentVector *vec, int limit);
 extern bool history_save_to_file(CljPersistentVector *vec, const char *path);
 extern CljPersistentVector* history_load_from_file(const char *path);
 
-// Load history from default path; returns persistent Vector<String>
+/**
+ * @brief Loads persisted line editor history from the default backend.
+ *
+ * @return Retained persistent vector containing history entries.
+ */
 CljObject* line_editor_history_load_default(void) {
+#if defined(ESP_PLATFORM)
+    return (CljObject*)history_load_from_file(NULL);
+#else
     char path[512];
     build_default_history_path(path, sizeof(path));
     return (CljObject*)history_load_from_file(path);
+#endif
 }
 
-// Save history to default path; accepts Vector<String> (persistent/transient ok)
+/**
+ * @brief Saves line editor history to the default backend.
+ *
+ * @param vec Persistent history vector.
+ * @return true on successful persistence.
+ */
 bool line_editor_history_save_default(CljObject *vec) {
+    if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT) return false;
+#if defined(ESP_PLATFORM)
+    return history_save_to_file(as_persistent_vector(vec), NULL);
+#else
     char path[512];
     build_default_history_path(path, sizeof(path));
-    if (!vec || TAG(vec) != CLJ_VECTOR_PERSISTENT) return false;
     return history_save_to_file(as_persistent_vector(vec), path);
+#endif
 }
 
 #else

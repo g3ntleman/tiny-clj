@@ -21,6 +21,18 @@ extern struct CljSymbol *SYM_KW_SIZE, *SYM_KW_CHUNKS, *SYM_KW_PATH, *SYM_KW_META
 #include <esp_err.h>
 #endif
 
+#if !defined(TINYCLJ_RAM_BACKEND_ENABLED)
+#if defined(ESP_PLATFORM)
+#define TINYCLJ_RAM_BACKEND_ENABLED 0
+#else
+#define TINYCLJ_RAM_BACKEND_ENABLED 1
+#endif
+#endif
+
+#if defined(ESP_PLATFORM) && (TINYCLJ_RAM_BACKEND_ENABLED != 0)
+#error "RAM backend must be disabled on ESP32 builds"
+#endif
+
 #define FS_APP_MAX_CHUNK_SIZE 4096u
 // Internal storage chunk size. This is NOT an app-facing limit.
 // App-facing streaming APIs (future) must cap chunks to FS_APP_MAX_CHUNK_SIZE.
@@ -190,7 +202,7 @@ static tdb_status_t fs_kv_get_chunked_bytes(tdb_kv_t* db, const uint8_t* key, si
     return TDB_OK;
 }
 
-#if !defined(ESP_PLATFORM)
+#if TINYCLJ_RAM_BACKEND_ENABLED
 typedef struct {
     uint8_t* buf;
     size_t len;
@@ -222,7 +234,7 @@ static tdb_status_t fs_ram_erase(void* ctx, uint32_t addr, size_t len) {
 #endif
 
 #if defined(ESP_PLATFORM)
-#define TINYCLJ_TINYDB_PARTITION_LABEL "tinydb"
+#define TINYCLJ_TINYDB_PARTITION_LABEL "tiny-db"
 #define TINYCLJ_FLASH_PROG_GRANULARITY 4u
 #define TINYCLJ_FLASH_ERASE_GRANULARITY 4096u
 
@@ -308,7 +320,7 @@ struct FsKvStore {
     tdb_blockdev_t bdev;
 #if defined(ESP_PLATFORM)
     FsFlashBdev flash;
-#else
+#elif TINYCLJ_RAM_BACKEND_ENABLED
     FsRamBdev ram;
 #endif
     FsStreamStats stats;
@@ -435,6 +447,14 @@ void fs_global_store_reset(void)
 /* KV store helpers                                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * @brief Create and initialize the global KV store backend.
+ *
+ * On ESP32 this binds tiny-db to the dedicated flash partition.
+ * On non-ESP builds this can use the RAM backend when enabled.
+ *
+ * @return Pointer to initialized store on success, otherwise NULL.
+ */
 FsKvStore *fs_kv_store_new(void)
 {
     FsKvStore *st = (FsKvStore *)CLJ_MALLOC(sizeof(FsKvStore));
@@ -457,7 +477,7 @@ FsKvStore *fs_kv_store_new(void)
     st->bdev.geom.read_granularity = 1;
     st->bdev.geom.prog_granularity = 1;
     st->bdev.geom.erase_granularity = TINYCLJ_FLASH_ERASE_GRANULARITY;
-#else
+#elif TINYCLJ_RAM_BACKEND_ENABLED
     // Host default: RAM-backed block device for tiny-db.
     const size_t ram_bytes = 128 * 1024;
     st->ram.buf = (uint8_t*)CLJ_MALLOC(ram_bytes);
@@ -475,16 +495,18 @@ FsKvStore *fs_kv_store_new(void)
     // To reliably fit 4KB chunk values inline (no overflow pages), use a larger logical erase
     // granularity than the chunk size.
     st->bdev.geom.erase_granularity = 16384;
+#else
+    CLJ_FREE(st);
+    return NULL;
 #endif
 
     tdb_status_t fst = tdb_kv_open(&st->db, &st->bdev, NULL);
     if (fst != TDB_OK) {
 #if defined(ESP_PLATFORM)
-    CLJ_FREE(st);
-#else
+#elif TINYCLJ_RAM_BACKEND_ENABLED
     CLJ_FREE(st->ram.buf);
-    CLJ_FREE(st);
 #endif
+        CLJ_FREE(st);
         return NULL;
     }
     fs_kv_sync_register_store(st);
@@ -984,6 +1006,11 @@ tdb_status_t fs_file_stream_write(FsKvStore* st,
 }
 
 
+/**
+ * @brief Release a KV store and all backend resources.
+ *
+ * @param st Store instance to free. NULL is allowed.
+ */
 void fs_kv_store_free(FsKvStore *st)
 {
     if (!st) return;
@@ -992,7 +1019,7 @@ void fs_kv_store_free(FsKvStore *st)
         tdb_kv_close(st->db);
         st->db = NULL;
     }
-#if !defined(ESP_PLATFORM)
+#if TINYCLJ_RAM_BACKEND_ENABLED
     CLJ_FREE(st->ram.buf);
     st->ram.buf = NULL;
     st->ram.len = 0;
@@ -1196,7 +1223,7 @@ ID fs_read_bytes(FsKvStore *st, const char *path)
     FsFileMeta meta;
     if (!fs_meta_get(st, path, &meta)) return NULL;
 
-    ID arr = (ID)make_byte_array((int)meta.size);
+    ID arr = make_byte_array((int)meta.size);
     if (!arr) return NULL;
 
     CljByteArray *ba = as_byte_array(arr);
@@ -1311,21 +1338,21 @@ ID fs_list_dir_batch(FsKvStore *st,
             CljPersistentMap *meta_map = make_map(4);
             if (!meta_map) { tdb_kv_cursor_close(cur); return NULL; }
             if (has_formal) {
-                map_assoc_inplace(&meta_map, (ID)SYM_KW_SIZE, fixnum((int32_t)meta.size));
-                map_assoc_inplace(&meta_map, (ID)SYM_KW_CHUNKS, fixnum((int32_t)meta.chunks));
+                map_assoc_inplace(&meta_map, SYM_KW_SIZE, fixnum((int32_t)meta.size));
+                map_assoc_inplace(&meta_map, SYM_KW_CHUNKS, fixnum((int32_t)meta.chunks));
             }
 
             CljPersistentMap *entry_map = make_map(2);
             if (!entry_map) { RELEASE(meta_map); tdb_kv_cursor_close(cur); return NULL; }
 
-            ID path_str = (ID)make_string(kstr);
-            map_assoc_inplace(&entry_map, (ID)SYM_KW_PATH, path_str);
+            ID path_str = make_string(kstr);
+            map_assoc_inplace(&entry_map, SYM_KW_PATH, path_str);
             RELEASE(path_str);
 
-            map_assoc_inplace(&entry_map, (ID)SYM_KW_META, (ID)meta_map);
+            map_assoc_inplace(&entry_map, SYM_KW_META, meta_map);
             RELEASE(meta_map);
 
-            vector_conj_inplace(&vec, (ID)entry_map);
+            vector_conj_inplace(&vec, entry_map);
             RELEASE(entry_map);
             returned++;
             if (batch_size && returned >= batch_size) {
@@ -1335,5 +1362,5 @@ ID fs_list_dir_batch(FsKvStore *st,
     }
 
     tdb_kv_cursor_close(cur);
-    return AUTORELEASE((ID)vec);
+    return AUTORELEASE(vec);
 }

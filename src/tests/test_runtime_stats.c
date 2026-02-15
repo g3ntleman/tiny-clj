@@ -137,6 +137,19 @@ TEST(test_runtime_stats_external_ram_total_when_present)
     TEST_ASSERT_TRUE(as_fixnum(v_external_ram_total) >= 0);
 }
 
+TEST(test_runtime_stats_gpio_event_drops_present)
+{
+    ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(stats);
+    TEST_ASSERT_TRUE(is_map(stats));
+
+    ID k_gpio_event_drops = (ID)intern_symbol_global(":gpio-event-drops");
+    ID v_gpio_event_drops = map_get_sentinel((CljPersistentMap *)stats, k_gpio_event_drops, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_gpio_event_drops);
+    TEST_ASSERT_TRUE(is_fixnum(v_gpio_event_drops));
+    TEST_ASSERT_TRUE(as_fixnum(v_gpio_event_drops) >= 0);
+}
+
 #if defined(DEBUG)
 static bool debug_precore_mem_enabled(void)
 {
@@ -696,5 +709,4 @@ TEST(test_heap_plus_does_not_intern_user_plus_when_missing)
     TEST_ASSERT_EQUAL(NOT_FOUND, v_symbol);
 }
 #endif
-
 
