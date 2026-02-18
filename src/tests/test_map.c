@@ -1103,6 +1103,18 @@ TEST(test_merge_multiple_maps) {
     ASSERT_TRUE_RESULT("(= (count (merge {:a 1} {:b 2} {:c 3})) 3)");
 }
 
+TEST(test_hash_map_basic_binding) {
+    ASSERT_TRUE_RESULT("(= (hash-map :a 1 :b 2) {:a 1 :b 2})");
+}
+
+TEST(test_hash_map_empty_binding) {
+    ASSERT_TRUE_RESULT("(= (hash-map) {})");
+}
+
+TEST(test_hash_map_overwrite_last_wins) {
+    ASSERT_TRUE_RESULT("(= (hash-map :a 1 :a 2) {:a 2})");
+}
+
 // ============================================================================
 // contains? tests
 // ============================================================================

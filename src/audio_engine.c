@@ -8,10 +8,27 @@
 #include "byte_array.h"
 #include "memory.h"
 #include "event_loop.h"
+#include "channel.h"
+#include "function.h"
+#include "eval.h"
+#include "builtins.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Global engine instance */
 AudioEngine g_audio_engine;
+
+static bool audio_interp_debug_enabled(void) {
+    static int init = 0;
+    static bool enabled = false;
+    if (!init) {
+        const char *env = getenv("TINYCLJ_AUDIO_INTERP_DEBUG");
+        enabled = (env && env[0] != '0');
+        init = 1;
+    }
+    return enabled;
+}
 
 /* ========================================================================= */
 /* MIDI note -> frequency table (A4 = 440 Hz, equal temperament)             */
@@ -154,6 +171,46 @@ static AudioTrackEntry *find_track(ID track_id) {
     return NULL;
 }
 
+static bool finished_queue_push(ID track_id) {
+    uint32_t w = atomic_load_explicit(&g_audio_engine.finished_write, memory_order_relaxed);
+    uint32_t r = atomic_load_explicit(&g_audio_engine.finished_read, memory_order_acquire);
+    if ((w - r) >= AUDIO_FINISHED_QUEUE_CAP) {
+        g_audio_engine.telemetry.finished_drop_count++;
+        return false;
+    }
+    g_audio_engine.finished_queue[w % AUDIO_FINISHED_QUEUE_CAP] = track_id;
+    atomic_store_explicit(&g_audio_engine.finished_write, w + 1, memory_order_release);
+    return true;
+}
+
+bool audio_engine_pop_finished_track(ID *out_track_id) {
+    if (!out_track_id) return false;
+    uint32_t r = atomic_load_explicit(&g_audio_engine.finished_read, memory_order_relaxed);
+    uint32_t w = atomic_load_explicit(&g_audio_engine.finished_write, memory_order_acquire);
+    if (r == w) return false;
+    *out_track_id = g_audio_engine.finished_queue[r % AUDIO_FINISHED_QUEUE_CAP];
+    atomic_store_explicit(&g_audio_engine.finished_read, r + 1, memory_order_release);
+    return true;
+}
+
+static ID audio_dispatch_finished_native(ID *args, unsigned int argc) {
+    (void)args;
+    if (argc != 0) return NULL;
+
+    ID finished_track = NULL;
+    if (!audio_engine_pop_finished_track(&finished_track)) return NULL;
+
+    ID fn = g_audio_engine.on_finished_fn;
+    if (!fn || !finished_track) return NULL;
+
+    ID call_args[1] = { finished_track };
+    EvalState *st = builtin_get_eval_state();
+    if (!st) return NULL;
+
+    (void)eval_function_call(fn, call_args, 1, NULL, st);
+    return NULL;
+}
+
 /* ========================================================================= */
 /* Stream helpers                                                            */
 /* ========================================================================= */
@@ -195,6 +252,17 @@ static bool stream_parse_event(AudioStream *s, AudioVoice *voices, int voice_cou
             voices[vi].gate_remaining_ticks = gate_ticks;
             voices[vi].volume = s->track_volume;
             voices[vi].active = true;
+            if (audio_interp_debug_enabled()) {
+                fprintf(stderr,
+                        "[audio-interp] NOTE tick=%u ch=%u->v=%d note=%u freq=%u gate=%u vol=%u\n",
+                        s->current_tick,
+                        channel,
+                        vi,
+                        note,
+                        (unsigned int)voices[vi].freq_hz,
+                        (unsigned int)gate_ticks,
+                        (unsigned int)voices[vi].volume);
+            }
         }
         break;
     }
@@ -208,6 +276,12 @@ static bool stream_parse_event(AudioStream *s, AudioVoice *voices, int voice_cou
         break;
     }
     case TRK1_EVT_END: {
+        if (audio_interp_debug_enabled()) {
+            fprintf(stderr,
+                    "[audio-interp] END tick=%u repeat_remaining=%d\n",
+                    s->current_tick,
+                    (int)s->repeat_remaining);
+        }
         /* Handle repeat */
         if (s->repeat_remaining == 0) {
             /* Infinite loop: rewind */
@@ -252,15 +326,16 @@ static bool stream_parse_event(AudioStream *s, AudioVoice *voices, int voice_cou
 static void notify_finished(ID track_id) {
     ID fn = g_audio_engine.on_finished_fn;
     if (!fn) return;
-
-    /* In a real ESP32 build, this would use a mutex-protected
-     * event_loop_enqueue_from_tick(). On host, we can call directly
-     * since tests are single-threaded. */
-    (void)track_id;
-    /* The actual callback invocation happens in the Clojure thread
-     * when the event loop processes the task. For the MVP host
-     * implementation, we store the finished track_id for polling
-     * in tests. Full event_loop integration is done in step 4. */
+    if (!finished_queue_push(track_id)) return;
+#ifndef ESP32_BUILD
+    if (g_audio_engine.finished_dispatch_fn) {
+        CljTransientMap *result_channel = make_result_channel();
+        if (result_channel) {
+            event_loop_enqueue(g_audio_engine.finished_dispatch_fn, result_channel);
+            RELEASE(result_channel);
+        }
+    }
+#endif
 }
 
 /* ========================================================================= */
@@ -275,6 +350,9 @@ void audio_engine_init(int voice_count) {
     g_audio_engine.music_volume = 255;
     g_audio_engine.us_per_tick = 1000; /* 1ms default */
     audio_cmd_queue_init(&g_audio_engine.cmd_queue);
+    atomic_store_explicit(&g_audio_engine.finished_write, 0, memory_order_relaxed);
+    atomic_store_explicit(&g_audio_engine.finished_read, 0, memory_order_relaxed);
+    g_audio_engine.finished_dispatch_fn = make_named_func(audio_dispatch_finished_native, NULL);
     audio_backend_init(voice_count);
 }
 
@@ -291,6 +369,7 @@ void audio_engine_shutdown(void) {
 
     /* Release on-finished callback */
     RELEASE(g_audio_engine.on_finished_fn);
+    RELEASE(g_audio_engine.finished_dispatch_fn);
 
     audio_backend_shutdown();
     memset(&g_audio_engine, 0, sizeof(g_audio_engine));
@@ -374,6 +453,21 @@ void audio_engine_stop_music(void) {
 }
 
 bool audio_engine_play_sfx(ID sfx_id) {
+    if (!sfx_id) return false;
+    if (!find_track(sfx_id)) return false;
+
+    bool has_free_slot = false;
+    for (int i = 0; i < AUDIO_MAX_SFX; i++) {
+        if (!g_audio_engine.sfx[i].stream.active) {
+            has_free_slot = true;
+            break;
+        }
+    }
+    if (!has_free_slot) {
+        g_audio_engine.telemetry.sfx_drop_count++;
+        return false;
+    }
+
     AudioCmd cmd = { .type = AUDIO_CMD_PLAY_SFX, .track_id = sfx_id };
     bool ok = audio_cmd_push(&g_audio_engine.cmd_queue, cmd);
     if (ok && !g_audio_engine.tick_running) {
@@ -461,7 +555,10 @@ static void tick_drain_commands(void) {
                     break;
                 }
             }
-            if (slot < 0) break; /* Drop: all SFX slots busy */
+            if (slot < 0) {
+                g_audio_engine.telemetry.sfx_drop_count++;
+                break;
+            }
             /* Find free voice */
             int vi = -1;
             for (int i = 0; i < g_audio_engine.voice_count; i++) {
@@ -511,6 +608,10 @@ static void tick_drain_commands(void) {
         }
     }
 
+    if (!audio_cmd_queue_empty(&g_audio_engine.cmd_queue)) {
+        g_audio_engine.telemetry.tick_overrun_count++;
+    }
+
     /* Update watermark */
     uint32_t w = atomic_load_explicit(&g_audio_engine.cmd_queue.write, memory_order_relaxed);
     uint32_t r = atomic_load_explicit(&g_audio_engine.cmd_queue.read, memory_order_relaxed);
@@ -536,6 +637,9 @@ static void tick_advance_stream(AudioStream *s) {
             break;
         }
     }
+    if (s->active && s->current_tick >= s->next_event_tick && events_this_tick >= MAX_EVENTS_PER_TICK) {
+        g_audio_engine.telemetry.tick_overrun_count++;
+    }
     s->current_tick++;
 }
 
@@ -558,6 +662,10 @@ static void tick_advance_sfx(void) {
                 break;
             }
         }
+        if (sfx->stream.active && sfx->stream.current_tick >= sfx->stream.next_event_tick
+            && events_this_tick >= MAX_EVENTS_PER_TICK) {
+            g_audio_engine.telemetry.tick_overrun_count++;
+        }
         sfx->stream.current_tick++;
 
         if (!sfx->stream.active) {
@@ -578,6 +686,11 @@ static void tick_update_voices(void) {
                 /* Note off */
                 audio_backend_set_voice(i, 0, 0);
                 v->freq_hz = 0;
+                if (audio_interp_debug_enabled()) {
+                    fprintf(stderr,
+                            "[audio-interp] NOTE_OFF voice=%d tick_done gate=0\n",
+                            i);
+                }
             } else {
                 /* Apply global music volume scaling */
                 uint8_t effective_vol = (uint8_t)(((uint16_t)v->volume * g_audio_engine.music_volume) >> 8);
@@ -593,6 +706,13 @@ static bool tick_has_active_audio(void) {
     if (g_audio_engine.music_stream.active) return true;
     for (int i = 0; i < AUDIO_MAX_SFX; i++) {
         if (g_audio_engine.sfx[i].stream.active) return true;
+    }
+    for (int i = 0; i < g_audio_engine.voice_count; i++) {
+        if (g_audio_engine.voices[i].active &&
+            g_audio_engine.voices[i].gate_remaining_ticks > 0 &&
+            g_audio_engine.voices[i].freq_hz > 0) {
+            return true;
+        }
     }
     return false;
 }

@@ -211,6 +211,9 @@ list(APPEND SOURCES
     src/macro.c
     src/fs_layer.c
     src/gpio_host.c
+    src/audio_engine.c
+    src/builtins_audio.c
+    src/audio_backend_host.c
     src/repl_history_backend.c
     src/source_resolver.c
 
@@ -226,6 +229,7 @@ target_link_libraries(tiny-clj PRIVATE subjective-c)
 target_link_libraries(tiny-clj PRIVATE tiny-db)
 if(APPLE)
     target_link_libraries(tiny-clj PRIVATE "-framework CoreFoundation")
+    target_link_libraries(tiny-clj PRIVATE "-framework CoreAudio" "-framework AudioUnit")
     # DNS-SD (Bonjour) symbols are provided by libsystem_dnssd on modern macOS toolchains.
     # ld does not always search ${SDK}/usr/lib/system by default, so add it explicitly.
     target_link_directories(tiny-clj PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
@@ -290,6 +294,7 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
 # ESP32-only sources (must not be part of host targets)
 target_sources(tiny-clj-esp32 PRIVATE
     src/gpio_esp32.c
+    src/audio_backend_esp32.c
 )
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
 target_link_libraries(tiny-clj-esp32 PRIVATE tiny-db)
@@ -327,6 +332,7 @@ add_executable(tiny-clj-esp32-repl EXCLUDE_FROM_ALL
 # ESP32-only sources (must not be part of host targets)
 target_sources(tiny-clj-esp32-repl PRIVATE
     src/gpio_esp32.c
+    src/audio_backend_esp32.c
 )
 target_link_libraries(tiny-clj-esp32-repl PRIVATE subjective-c)
 target_link_libraries(tiny-clj-esp32-repl PRIVATE tiny-db)
@@ -369,6 +375,7 @@ target_link_libraries(tiny-clj-repl PRIVATE subjective-c)
 target_link_libraries(tiny-clj-repl PRIVATE tiny-db)
 if(APPLE)
     target_link_libraries(tiny-clj-repl PRIVATE "-framework CoreFoundation")
+    target_link_libraries(tiny-clj-repl PRIVATE "-framework CoreAudio" "-framework AudioUnit")
     target_link_directories(tiny-clj-repl PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
     target_link_libraries(tiny-clj-repl PRIVATE system_dnssd)
 endif()
@@ -404,6 +411,7 @@ target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
 target_link_libraries(tiny-clj-profile PRIVATE tiny-db)
 if(APPLE)
     target_link_libraries(tiny-clj-profile PRIVATE "-framework CoreFoundation")
+    target_link_libraries(tiny-clj-profile PRIVATE "-framework CoreAudio" "-framework AudioUnit")
 endif()
 target_include_directories(tiny-clj-profile PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
@@ -503,6 +511,7 @@ add_executable(unit-tests
     src/tests/test_pprint.c
     src/tests/test_print.c
     src/tests/test_static_keywords.c
+    src/tests/test_audio_engine.c
     src/tests/test_byte_array.c
     src/tests/test_byte_array_view.c
     src/tests/test_platform_net.c
@@ -531,6 +540,7 @@ target_link_libraries(unit-tests PRIVATE subjective-c)
 target_link_libraries(unit-tests PRIVATE tiny-db)
 if(APPLE)
     target_link_libraries(unit-tests PRIVATE "-framework CoreFoundation")
+    target_link_libraries(unit-tests PRIVATE "-framework CoreAudio" "-framework AudioUnit")
     target_link_directories(unit-tests PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
     target_link_libraries(unit-tests PRIVATE system_dnssd)
 endif()

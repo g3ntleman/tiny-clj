@@ -35,6 +35,7 @@
 #include "file_utils.h"
 #include "to_string.h"
 #include "event_loop.h"
+#include "audio_engine.h"
 #include "reader.h"
 #include "parser.h"
 #include "ast.h"
@@ -51,6 +52,20 @@
 #if defined(ESP32_BUILD)
 #include "gpio_esp32.h"
 #endif
+
+/* Audio builtins (defined in builtins_audio.c) */
+ID native_audio_load_track(ID *args, unsigned int argc);
+ID native_audio_unload_track(ID *args, unsigned int argc);
+ID native_audio_play_music(ID *args, unsigned int argc);
+ID native_audio_stop_track(ID *args, unsigned int argc);
+ID native_audio_stop_music(ID *args, unsigned int argc);
+ID native_audio_play_sfx(ID *args, unsigned int argc);
+ID native_audio_stop_all(ID *args, unsigned int argc);
+ID native_audio_set_track_volume(ID *args, unsigned int argc);
+ID native_audio_set_music_volume(ID *args, unsigned int argc);
+ID native_audio_on_finished(ID *args, unsigned int argc);
+ID native_audio_play_test_tone(ID *args, unsigned int argc);
+ID native_audio_host_status(ID *args, unsigned int argc);
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -4121,6 +4136,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_symbol_data.sym, native_symbol},
     {&sym_type_data.sym, native_type},
     {&sym_array_map_data.sym, native_array_map},
+    {&sym_hash_map_data.sym, native_array_map},
     {&sym_vector_data.sym, native_vector},
     {&sym_vec_data.sym, native_vec},
     {&sym_hash_set_data.sym, native_hash_set},
@@ -4208,6 +4224,17 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_swap_bang_data.sym, native_swap_bang},
     {&sym_slurp_data.sym, native_slurp},
     {&sym_spit_data.sym, native_spit},
+    // Audio builtins
+    {&sym_audio_load_track_data.sym, native_audio_load_track},
+    {&sym_audio_unload_track_data.sym, native_audio_unload_track},
+    {&sym_audio_play_music_data.sym, native_audio_play_music},
+    {&sym_audio_stop_track_data.sym, native_audio_stop_track},
+    {&sym_audio_stop_music_data.sym, native_audio_stop_music},
+    {&sym_audio_play_sfx_data.sym, native_audio_play_sfx},
+    {&sym_audio_stop_all_data.sym, native_audio_stop_all},
+    {&sym_audio_set_track_volume_data.sym, native_audio_set_track_volume},
+    {&sym_audio_set_music_volume_data.sym, native_audio_set_music_volume},
+    {&sym_audio_on_finished_data.sym, native_audio_on_finished},
 #ifdef DEBUG
     {&sym_ast_string_data.sym, native_ast_string},
 #endif
@@ -7102,6 +7129,41 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc)
         }
     }
 
+    {
+        CljSymbol *k_audio_cmd_drop_count = intern_symbol_global(":audio-cmd-drop-count");
+        CljSymbol *k_audio_tick_overrun_count = intern_symbol_global(":audio-tick-overrun-count");
+        CljSymbol *k_audio_queue_high_watermark = intern_symbol_global(":audio-queue-high-watermark");
+        CljSymbol *k_audio_sfx_drop_count = intern_symbol_global(":audio-sfx-drop-count");
+        CljSymbol *k_audio_finished_drop_count = intern_symbol_global(":audio-finished-drop-count");
+
+        int32_t cmd_drops = (g_audio_engine.telemetry.cmd_drop_count > (uint32_t)FIXNUM_MAX)
+            ? (int32_t)FIXNUM_MAX : (int32_t)g_audio_engine.telemetry.cmd_drop_count;
+        int32_t overruns = (g_audio_engine.telemetry.tick_overrun_count > (uint32_t)FIXNUM_MAX)
+            ? (int32_t)FIXNUM_MAX : (int32_t)g_audio_engine.telemetry.tick_overrun_count;
+        int32_t queue_high_watermark = (g_audio_engine.telemetry.queue_high_watermark > (uint32_t)FIXNUM_MAX)
+            ? (int32_t)FIXNUM_MAX : (int32_t)g_audio_engine.telemetry.queue_high_watermark;
+        int32_t sfx_drops = (g_audio_engine.telemetry.sfx_drop_count > (uint32_t)FIXNUM_MAX)
+            ? (int32_t)FIXNUM_MAX : (int32_t)g_audio_engine.telemetry.sfx_drop_count;
+        int32_t finished_drops = (g_audio_engine.telemetry.finished_drop_count > (uint32_t)FIXNUM_MAX)
+            ? (int32_t)FIXNUM_MAX : (int32_t)g_audio_engine.telemetry.finished_drop_count;
+
+        if (k_audio_cmd_drop_count) {
+            MAP_REASSIGN(m, map_assoc(m, k_audio_cmd_drop_count, fixnum(cmd_drops)));
+        }
+        if (k_audio_tick_overrun_count) {
+            MAP_REASSIGN(m, map_assoc(m, k_audio_tick_overrun_count, fixnum(overruns)));
+        }
+        if (k_audio_queue_high_watermark) {
+            MAP_REASSIGN(m, map_assoc(m, k_audio_queue_high_watermark, fixnum(queue_high_watermark)));
+        }
+        if (k_audio_sfx_drop_count) {
+            MAP_REASSIGN(m, map_assoc(m, k_audio_sfx_drop_count, fixnum(sfx_drops)));
+        }
+        if (k_audio_finished_drop_count) {
+            MAP_REASSIGN(m, map_assoc(m, k_audio_finished_drop_count, fixnum(finished_drops)));
+        }
+    }
+
 #if defined(DEBUG)
     // Debug diagnostics: symbols, namespaces, heap (always available)
     MAP_REASSIGN(m, map_assoc(m, SYM_KW_SYMBOLS, fixnum((int32_t)hashset_count(g_runtime.symbol_table))));
@@ -7734,6 +7796,20 @@ void register_builtins()
 
     // Apply function
     register_builtin("apply", native_apply);
+
+    // Audio builtins
+    register_builtin("audio-load-track!", native_audio_load_track);
+    register_builtin("audio-unload-track!", native_audio_unload_track);
+    register_builtin("audio-play-music!", native_audio_play_music);
+    register_builtin("audio-stop-track!", native_audio_stop_track);
+    register_builtin("audio-stop-music!", native_audio_stop_music);
+    register_builtin("audio-play-sfx!", native_audio_play_sfx);
+    register_builtin("audio-stop-all!", native_audio_stop_all);
+    register_builtin("audio-set-track-volume!", native_audio_set_track_volume);
+    register_builtin("audio-set-music-volume!", native_audio_set_music_volume);
+    register_builtin("audio-on-finished!", native_audio_on_finished);
+    register_builtin("audio-play-test-tone!", native_audio_play_test_tone);
+    register_builtin("audio-host-status!", native_audio_host_status);
 
     // Prime concat thunk function object during setup so tests do not pay
     // one-time cached_named_func allocation in per-test heap assertions.

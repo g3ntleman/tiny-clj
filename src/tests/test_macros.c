@@ -136,6 +136,32 @@ TEST(test_variadic_fn_many_args) {
     TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)result));
 }
 
+TEST(test_multi_arity_fn_throws_not_implemented) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    TRY {
+        (void)eval_string("((fn ([x] x) ([x y] (+ x y))) 1)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_PASS();
+        return;
+    } END_TRY
+
+    TEST_FAIL_MESSAGE("multi-arity fn should throw not implemented");
+}
+
+TEST(test_multi_arity_defn_throws_not_implemented) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    TRY {
+        (void)eval_string("(do (defn g ([] 0) ([x] x) ([x y] (+ x y))) (g 1))", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_PASS();
+        return;
+    } END_TRY
+
+    TEST_FAIL_MESSAGE("multi-arity defn should throw not implemented");
+}
+
 // ============================================================================
 // TEST: Variadic Macros
 // ============================================================================

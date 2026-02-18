@@ -7,6 +7,7 @@
 
 #include "tests_common.h"
 #include "../audio_engine.h"
+#include "../event_loop.h"
 #include "byte_array.h"
 
 /* ========================================================================= */
@@ -511,6 +512,60 @@ TEST(test_audio_sfx_oneshot) {
     audio_engine_shutdown();
 }
 
+TEST(test_audio_sfx_drop_when_all_slots_busy) {
+    audio_engine_init(2);
+
+    ID sfx_sym = (ID)intern_symbol_global(":sfx-drop");
+    ID ba = make_test_trk1_with_delay(80, 100, 30, 1);
+
+    TEST_ASSERT_TRUE(audio_engine_load_track(sfx_sym, ba));
+    g_audio_engine.telemetry.sfx_drop_count = 0;
+
+    TEST_ASSERT_TRUE(audio_engine_play_sfx(sfx_sym));
+    audio_engine_tick();
+    TEST_ASSERT_TRUE(audio_engine_play_sfx(sfx_sym));
+    audio_engine_tick();
+
+    TEST_ASSERT_FALSE(audio_engine_play_sfx(sfx_sym));
+    TEST_ASSERT_EQUAL_UINT32(1, g_audio_engine.telemetry.sfx_drop_count);
+
+    RELEASE(ba);
+    audio_engine_shutdown();
+}
+
+TEST(test_audio_finished_callback_runs_via_event_loop) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    audio_engine_init(1);
+    event_loop_clear();
+
+    ID track_sym = (ID)intern_symbol_global(":finish-test");
+    ID ba = make_test_trk1(69, 2, 1, 0);
+    TEST_ASSERT_TRUE(audio_engine_load_track(track_sym, ba));
+
+    ID atom_def = eval_string("(def audio-finished-track (atom nil))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(atom_def);
+    ID cb_def = eval_string(
+        "(def audio-finished-cb (fn [track-id] (reset! audio-finished-track track-id)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(cb_def);
+    ID cb_fn = eval_string("audio-finished-cb", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(cb_fn);
+
+    audio_engine_on_finished(cb_fn);
+    TEST_ASSERT_TRUE(audio_engine_play_music(track_sym, 1));
+
+    audio_engine_tick();
+    TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+
+    ID done = eval_string("(= @audio-finished-track :finish-test)", g_test_eval_state);
+    TEST_ASSERT_EQUAL(clj_true, done);
+
+    RELEASE(ba);
+    audio_engine_shutdown();
+}
+
 /* ========================================================================= */
 /* Native API wiring tests (via eval_string)                                 */
 /* ========================================================================= */
@@ -525,9 +580,10 @@ TEST(test_audio_native_lookup) {
         "audio-stop-music!", "audio-play-sfx!",
         "audio-stop-all!", "audio-set-track-volume!",
         "audio-set-music-volume!", "audio-on-finished!",
+        "audio-play-test-tone!", "audio-host-status!",
     };
 
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 12; i++) {
         char buf[128];
         test_snprintf(buf, sizeof(buf), "(fn? %s)", names[i]);
         ID result = NULL;
@@ -540,6 +596,319 @@ TEST(test_audio_native_lookup) {
         } END_TRY
         TEST_ASSERT_NOT_NULL_MESSAGE(result, names[i]);
     }
+}
+
+TEST(test_audio_native_play_music_initializes_engine_if_needed) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    audio_engine_shutdown();
+    TEST_ASSERT_EQUAL_INT(0, g_audio_engine.voice_count);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do "
+            "  (require 'tiny-snd.composer) "
+            "  (= :playing "
+            "     (tiny-snd.composer/play-steps! :lazy-init "
+            "       [{:notes [:G5 :D5] :dur :s}] "
+            "       {:channel-count 2 :volumes [220 180]})))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("audio native play path should initialize engine lazily");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true);
+    TEST_ASSERT_TRUE(g_audio_engine.voice_count > 0);
+
+    audio_engine_shutdown();
+}
+
+TEST(test_audio_native_play_test_tone_returns_bool) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string("(audio-play-test-tone! 440 100)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("audio-play-test-tone! should not throw");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true || result == clj_false);
+}
+
+TEST(test_audio_native_play_test_tone_with_volume_returns_bool) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string("(audio-play-test-tone! 523 120 64)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("audio-play-test-tone! with volume should not throw");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true || result == clj_false);
+}
+
+TEST(test_audio_native_host_status_returns_map) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string("(audio-host-status!)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("audio-host-status! should not throw");
+    } END_TRY
+
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_map(result));
+}
+
+TEST(test_audio_tiny_snd_composer_namespace_compile_and_play) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    audio_engine_shutdown();
+    audio_engine_init(4);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do "
+            "  (require 'tiny-snd.composer) "
+            "  (= :playing "
+            "     (tiny-snd.composer/play-steps! :dsl-test "
+            "       [{:notes [:G5 :D5] :dur :s} {:notes [:Bb5 :F5] :dur :e}] "
+            "       {:channel-count 2 :volumes [200 120]})))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("tiny-snd.composer namespace should compile and play steps");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST(test_audio_tiny_snd_composer_play_starwars_title_returns_bool) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    audio_engine_shutdown();
+    audio_engine_init(4);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do (require 'tiny-snd.composer) (= :playing (tiny-snd.composer/play-starwars-title!)))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("tiny-snd.composer/play-starwars-title! should not throw");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST(test_audio_tiny_snd_composer_play_steps_one_voice_returns_bool) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    audio_engine_shutdown();
+    audio_engine_init(4);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do (require 'tiny-snd.composer) "
+            "    (= :playing "
+            "       (tiny-snd.composer/play-steps! :one-voice "
+            "         [{:notes [:G5] :dur :s} {:notes [:D5] :dur :s}] "
+            "         {:channel-count 1 :volumes [210]})))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! one-voice should not throw");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST(test_audio_tiny_snd_composer_play_steps_musical_durations_returns_bool) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    audio_engine_shutdown();
+    audio_engine_init(4);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do (require 'tiny-snd.composer) "
+            "    (= :playing "
+            "       (tiny-snd.composer/play-steps! :musical-dur "
+            "         [{:notes [:G5 :D5] :dur :q} "
+            "          {:notes [:Bb5 :F5] :dur :dq} "
+            "          {:notes [:A5 :E5] :dur :et}] "
+            "         {:channel-count 2 :volumes [220 170] :tempo-bpm 104})))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! with musical durations should not throw");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST(test_audio_tiny_snd_composer_play_steps_rest_shorthand_returns_bool) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    audio_engine_shutdown();
+    audio_engine_init(4);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do (require 'tiny-snd.composer) "
+            "    (= :playing "
+            "       (tiny-snd.composer/play-steps! :rest-shorthand "
+            "         [{:notes [:G5 :D5] :dur :q} "
+            "          {:rest :e} "
+            "          {:notes [:Bb5 :F5] :dur :q}] "
+            "         {:channel-count 2 :volumes [220 170] :tempo-bpm 104})))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! with rest shorthand should not throw");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST(test_audio_tiny_snd_composer_numeric_duration_throws) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    audio_engine_shutdown();
+    audio_engine_init(4);
+
+    bool threw = false;
+    TRY {
+        (void)eval_string(
+            "(do (require 'tiny-snd.composer) "
+            "    (tiny-snd.composer/play-steps! :numeric-dur "
+            "      [{:notes [:G5 :D5] :dur 120}] "
+            "      {:channel-count 2 :volumes [220 170]}))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        threw = true;
+    } END_TRY
+
+    TEST_ASSERT_TRUE(threw);
+}
+
+TEST(test_audio_tiny_snd_composer_rest_with_dur_throws) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    audio_engine_shutdown();
+    audio_engine_init(4);
+
+    bool threw = false;
+    TRY {
+        (void)eval_string(
+            "(do (require 'tiny-snd.composer) "
+            "    (tiny-snd.composer/play-steps! :bad-rest "
+            "      [{:notes [:G5 :D5] :dur :q} "
+            "       {:rest :e :dur :e}] "
+            "      {:channel-count 2 :volumes [220 170]}))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        threw = true;
+    } END_TRY
+
+    TEST_ASSERT_TRUE(threw);
+}
+
+TEST(test_audio_tiny_snd_composer_play_steps_four_voices_returns_bool) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    audio_engine_shutdown();
+    audio_engine_init(4);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do (require 'tiny-snd.composer) "
+            "    (= :playing "
+            "       (tiny-snd.composer/play-steps! :four-voice "
+            "         [{:notes [:G5 :D5 :Bb4 :F4] :dur :e} {:notes [:A5 :E5 :C5 :G4] :dur :q}] "
+            "         {:channel-count 4 :volumes [220 170 130 100]})))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! four-voice should not throw");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST(test_audio_tiny_snd_composer_play_steps_two_voices_activate_two_voices) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    audio_engine_shutdown();
+    audio_engine_init(4);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do (require 'tiny-snd.composer) "
+            "    (= :playing "
+            "       (tiny-snd.composer/play-steps! :two-voice-activation "
+            "         [{:notes [:G5 :D5] :dur :q}] "
+            "         {:channel-count 2 :volumes [220 170]})))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! two-voice should not throw");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true);
+    audio_engine_tick(); /* Drain command queue and parse first step */
+    TEST_ASSERT_TRUE(g_audio_engine.voices[0].active);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[1].active);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[0].freq_hz > 0);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[1].freq_hz > 0);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[0].freq_hz != g_audio_engine.voices[1].freq_hz);
+}
+
+TEST(test_audio_tiny_snd_composer_play_melody_backing_returns_bool) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    audio_engine_shutdown();
+    audio_engine_init(4);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do (require 'tiny-snd.composer) "
+            "    (= :playing "
+            "       (tiny-snd.composer/play-steps! :mel-backing "
+            "         [{:melody :G5 :backing [:D5 :Bb4] :dur :e} "
+            "          {:melody :A5 :backing [:E5 :C5] :dur :e}] "
+            "         {:channel-count 3 :melody-vol 220 :backing-volumes [160 130]})))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! with melody/backing should not throw");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST(test_audio_tiny_snd_composer_play_melody_backing_auto_uses_available_channels) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    audio_engine_shutdown();
+    audio_engine_init(4);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do (require 'tiny-snd.composer) "
+            "    (= :playing "
+            "       (tiny-snd.composer/play-steps! :mel-backing-auto "
+            "         [{:melody :G5 :backing [:D5 :Bb4] :dur :q}] "
+            "         {:channel-count 4 :melody-vol 220 :backing-volumes [170 150 130]})))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! melody/backing should auto-fill available channels");
+    } END_TRY
+
+    TEST_ASSERT_TRUE(result == clj_true);
+    audio_engine_tick(); /* Drain command queue and parse first step */
+    TEST_ASSERT_TRUE(g_audio_engine.voices[0].active);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[1].active);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[2].active);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[3].active);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[0].freq_hz > 0);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[1].freq_hz > 0);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[2].freq_hz > 0);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[3].freq_hz > 0);
 }
 
 TEST(test_audio_native_load_unload_via_eval) {
@@ -593,6 +962,30 @@ TEST(test_audio_tick_starts_on_play) {
         audio_engine_tick();
     }
     /* After stream ends: tick should self-stop */
+    TEST_ASSERT_FALSE(g_audio_engine.tick_running);
+
+    RELEASE(ba);
+    audio_engine_shutdown();
+}
+
+TEST(test_audio_tick_stays_running_while_voice_gate_active) {
+    audio_engine_init(1);
+    TEST_ASSERT_FALSE(g_audio_engine.tick_running);
+
+    ID track_sym = (ID)intern_symbol_global(":gate-lifecycle-test");
+    ID ba = make_test_trk1(60, 30, 1, 0); /* NOTE + END same tick, gate remains */
+    TEST_ASSERT_TRUE(audio_engine_load_track(track_sym, ba));
+    TEST_ASSERT_TRUE(audio_engine_play_music(track_sym, 1));
+
+    audio_engine_tick(); /* parses NOTE + END; stream ends, voice gate still active */
+    TEST_ASSERT_FALSE(g_audio_engine.music_stream.active);
+    TEST_ASSERT_TRUE(g_audio_engine.voices[0].gate_remaining_ticks > 0);
+    TEST_ASSERT_TRUE(g_audio_engine.tick_running);
+
+    /* After gate fully decays, tick should auto-stop */
+    for (int i = 0; i < 40; i++) {
+        audio_engine_tick();
+    }
     TEST_ASSERT_FALSE(g_audio_engine.tick_running);
 
     RELEASE(ba);

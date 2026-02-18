@@ -68,6 +68,7 @@ bool trk1_decode_varuint(const uint8_t **cursor, const uint8_t *end, uint32_t *o
 /* ========================================================================= */
 
 #define AUDIO_CMD_QUEUE_CAP 8
+#define AUDIO_FINISHED_QUEUE_CAP 8
 
 typedef enum {
     AUDIO_CMD_PLAY_TRACK,
@@ -160,6 +161,8 @@ typedef struct {
     uint32_t cmd_drop_count;
     uint32_t tick_overrun_count;
     uint32_t queue_high_watermark;
+    uint32_t sfx_drop_count;
+    uint32_t finished_drop_count;
 } AudioTelemetry;
 
 /* ========================================================================= */
@@ -189,6 +192,10 @@ typedef struct {
 
     /* Finished callback (Clojure function, retained) */
     ID              on_finished_fn;
+    ID              finished_dispatch_fn;
+    ID              finished_queue[AUDIO_FINISHED_QUEUE_CAP];
+    _Atomic uint32_t finished_write;
+    _Atomic uint32_t finished_read;
 
     /* Tick lifecycle */
     bool            tick_running;
@@ -199,6 +206,14 @@ typedef struct {
     /* Microseconds per tick (derived from BPM/TPQ or default 1000 = 1ms) */
     uint32_t        us_per_tick;
 } AudioEngine;
+
+typedef struct {
+    bool backend_available;
+    bool audio_running;
+    bool tick_enabled;
+    bool tick_thread_running;
+    int voice_count;
+} AudioHostStatus;
 
 /* Global engine instance */
 extern AudioEngine g_audio_engine;
@@ -254,6 +269,10 @@ void audio_engine_on_finished(ID callback_fn);
  * voice_output is filled with freq_hz values for each voice (0 = silent). */
 void audio_engine_tick(void);
 
+/* Pop one finished track id for control-thread dispatch.
+ * Returns true when a finished id was available. */
+bool audio_engine_pop_finished_track(ID *out_track_id);
+
 /* ========================================================================= */
 /* Voice backend (platform-specific)                                         */
 /* ========================================================================= */
@@ -273,6 +292,10 @@ void audio_backend_shutdown(void);
 
 void audio_tick_start(void);
 void audio_tick_stop(void);
+
+/* Host backend status helper (debug).
+ * On unsupported platforms returns false. */
+bool audio_backend_host_get_status(AudioHostStatus *out);
 
 /* ========================================================================= */
 /* MIDI note to frequency conversion                                         */

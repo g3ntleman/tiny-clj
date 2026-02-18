@@ -12,6 +12,7 @@
 
 #include "driver/ledc.h"
 #include "esp_timer.h"
+#include <stdatomic.h>
 #include <string.h>
 
 /* ========================================================================= */
@@ -41,10 +42,47 @@ static LedcVoice g_ledc_voices[] = {
 /* ========================================================================= */
 
 static esp_timer_handle_t g_audio_timer = NULL;
+static _Atomic bool g_audio_tick_in_callback = false;
+
+/* Keep callback work within one tick budget. */
+#define AUDIO_TICK_BUDGET_US (VG_AUDIO_TICK_MS * 1000)
+
+static bool ledc_mapping_valid(int voice_count) {
+    for (int i = 0; i < voice_count; i++) {
+        for (int j = i + 1; j < voice_count; j++) {
+            if (g_ledc_voices[i].channel == g_ledc_voices[j].channel) {
+                return false;
+            }
+            if (g_ledc_voices[i].timer == g_ledc_voices[j].timer) {
+                /* Same timer would couple frequencies across voices. */
+                return false;
+            }
+        }
+    }
+    return true;
+}
 
 static void audio_timer_callback(void *arg) {
     (void)arg;
+
+    /* Real-time callback rules:
+     * - no allocation
+     * - no locks
+     * - no I/O/logging
+     * - no VM/eval calls
+     */
+    if (atomic_exchange_explicit(&g_audio_tick_in_callback, true, memory_order_acq_rel)) {
+        g_audio_engine.telemetry.tick_overrun_count++;
+        return;
+    }
+
+    int64_t start_us = esp_timer_get_time();
     audio_engine_tick();
+    int64_t elapsed_us = esp_timer_get_time() - start_us;
+    if (elapsed_us > AUDIO_TICK_BUDGET_US) {
+        g_audio_engine.telemetry.tick_overrun_count++;
+    }
+    atomic_store_explicit(&g_audio_tick_in_callback, false, memory_order_release);
 }
 
 /* ========================================================================= */
@@ -53,6 +91,11 @@ static void audio_timer_callback(void *arg) {
 
 void audio_backend_init(int voice_count) {
     if (voice_count > LEDC_VOICE_CAP) voice_count = LEDC_VOICE_CAP;
+    if (voice_count < 0) voice_count = 0;
+
+    if (!ledc_mapping_valid(voice_count)) {
+        return;
+    }
 
     for (int i = 0; i < voice_count; i++) {
         LedcVoice *v = &g_ledc_voices[i];
@@ -131,10 +174,14 @@ void audio_tick_start(void) {
             .dispatch_method = ESP_TIMER_TASK,
             .name = "audio_tick",
         };
-        esp_timer_create(&args, &g_audio_timer);
+        if (esp_timer_create(&args, &g_audio_timer) != ESP_OK) {
+            return;
+        }
     }
 
-    esp_timer_start_periodic(g_audio_timer, VG_AUDIO_TICK_MS * 1000); /* us */
+    if (esp_timer_start_periodic(g_audio_timer, VG_AUDIO_TICK_MS * 1000) != ESP_OK) { /* us */
+        return;
+    }
     g_audio_engine.tick_running = true;
 }
 

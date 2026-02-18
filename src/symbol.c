@@ -452,6 +452,7 @@ DEFINE_EXTERN_SYMBOL(sym_subs_data, "subs");
 DEFINE_EXTERN_SYMBOL(sym_symbol_data, "symbol");
 DEFINE_EXTERN_SYMBOL(sym_type_data, "type");
 DEFINE_EXTERN_SYMBOL(sym_array_map_data, "array-map");
+DEFINE_EXTERN_SYMBOL(sym_hash_map_data, "hash-map");
 DEFINE_EXTERN_SYMBOL(sym_vector_data, "vector");
 DEFINE_EXTERN_SYMBOL(sym_vec_data, "vec");
 DEFINE_EXTERN_SYMBOL(sym_peek_data, "peek");
@@ -513,6 +514,18 @@ DEFINE_EXTERN_SYMBOL(sym_swap_bang_data, "swap!");
 DEFINE_EXTERN_SYMBOL(sym_list_batch_data, "list-batch");
 DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
 DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
+
+// Audio symbols
+DEFINE_EXTERN_SYMBOL(sym_audio_load_track_data, "audio-load-track!");
+DEFINE_EXTERN_SYMBOL(sym_audio_unload_track_data, "audio-unload-track!");
+DEFINE_EXTERN_SYMBOL(sym_audio_play_music_data, "audio-play-music!");
+DEFINE_EXTERN_SYMBOL(sym_audio_stop_track_data, "audio-stop-track!");
+DEFINE_EXTERN_SYMBOL(sym_audio_stop_music_data, "audio-stop-music!");
+DEFINE_EXTERN_SYMBOL(sym_audio_play_sfx_data, "audio-play-sfx!");
+DEFINE_EXTERN_SYMBOL(sym_audio_stop_all_data, "audio-stop-all!");
+DEFINE_EXTERN_SYMBOL(sym_audio_set_track_volume_data, "audio-set-track-volume!");
+DEFINE_EXTERN_SYMBOL(sym_audio_set_music_volume_data, "audio-set-music-volume!");
+DEFINE_EXTERN_SYMBOL(sym_audio_on_finished_data, "audio-on-finished!");
 
 // Static symbol structs for keywords (compile-time initialization)
 DEFINE_STATIC_SYMBOL(sym_kw_line_data, ":line");
@@ -876,6 +889,7 @@ void init_special_symbols() {
     symbol_table_add(&sym_gpio_pwm_data.sym);
     symbol_table_add(&sym_gpio_pwm_stop_data.sym);
     symbol_table_add(&sym_hash_set_data.sym);
+    symbol_table_add(&sym_hash_map_data.sym);
     symbol_table_add(&sym_disj_data.sym);
     symbol_table_add(&sym_set_p_data.sym);
 

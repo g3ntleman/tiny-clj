@@ -2000,6 +2000,32 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
         body = (CljObject*)make_list(SYM_DO, body_list);
     }
 
+    // Multi-arity fn/defn syntax is not supported yet:
+    //   (fn ([x] ...) ([x y] ...))
+    //   (defn f ([] ...) ([x] ...))
+    // In those forms, params_list is itself an arity clause; its first element
+    // is another parameter declaration (vector/list/seq).
+    ID first_param = NULL;
+    if (params_list && is_list_type(TAG(params_list))) {
+        CljList *param_clause = as_list(params_list);
+        first_param = (param_clause != NULL) ? LIST_FIRST(param_clause) : NULL;
+    } else if (params_list && is_seq(params_list)) {
+        first_param = seq_first(params_list);
+    } else if (params_list && TAG(params_list) == CLJ_AST_CALL) {
+        // Canonicalized multi-arity clause like ([] 0) arrives as AST call with
+        // vector/list op. Handle this explicitly so defn/fn throws instead of
+        // silently evaluating to nil.
+        CljASTCall *clause = as_ast_call(params_list);
+        first_param = clause ? clause->op : NULL;
+    }
+    if (first_param &&
+        (is_vector(first_param) || is_list_type(TAG(first_param)) || is_seq(first_param))) {
+        throw_exception(EXCEPTION_RUNTIME,
+                        "Multi-arity fn/defn is not implemented yet",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
     // Parameters can be a vector [a b] or a list (a b)
     bool is_vector_params = is_vector(params_list);
     if (!params_list || (!is_list_type(TAG(params_list)) && !is_vector_params)) {

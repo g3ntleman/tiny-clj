@@ -563,6 +563,8 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns a new array map with supplied mappings."}
 (defn array-map [& keyvals] :native)
+^#^{:doc "Returns a new hash map with supplied mappings."}
+(defn hash-map [& keyvals] :native)
 ^#^{:doc "Associates key with val in map. When key is a keyword, returns a new map with the key/value added. When key is not a keyword, returns a new map with the key/value added. If a key already exists, its value is replaced."}
 (defn assoc [map key val & kvs] :native)
 ^#^{:doc "Dissociates. Returns a new map of the same (hashed/sorted) type, that does not contain a mapping for key(s)."}
