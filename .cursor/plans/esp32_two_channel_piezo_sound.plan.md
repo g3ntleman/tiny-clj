@@ -1,6 +1,6 @@
 ---
 name: ESP32 Mehrkanal-Piezo-Sound (trk1 / MUS-lite)
-overview: Songs bleiben in Clojure (DSL/Maps), werden in kompaktes trk1-ByteArray kompiliert und als Datei in der FS-Emulation gespeichert. C streamt trk1 direkt (MUS-lite), Kanalanzahl ist konfigurierbar.
+overview: Songs bleiben in Clojure (DSL/Maps), werden per explizitem Composer-Schritt in kompaktes trk1 kompiliert und als Datei in der FS-Emulation gecached. Startup laedt nur vorhandene Cache-Dateien; C streamt trk1 direkt (MUS-lite), Kanalanzahl ist konfigurierbar.
 todos:
   - id: architecture-lock
     content: "Architektur fixieren: Clojure authoring + compile-to-trk1, C Audio-Core streamt direkt ohne Full-Decode."
@@ -9,10 +9,10 @@ todos:
     content: trk1 bytegenau finalisieren (Header, Event-Bitfelder, Varint-Delay, Validierungsregeln).
     status: pending
   - id: ownership-contract
-    content: "Ownership-Vertrag umsetzen: audio-load-track! macht RETAIN, unload/shutdown macht RELEASE, kein RC im Tick."
+    content: "Ownership-Vertrag umsetzen: tiny-snd.runtime/audio-load-track! macht RETAIN, unload/shutdown macht RELEASE, kein RC im Tick."
     status: pending
   - id: native-api-wiring
-    content: "Native API verdrahten: audio-load-track!, audio-unload-track!, audio-play-music!, audio-stop-track!, audio-stop-music!, audio-play-sfx!, audio-stop-all!, audio-set-track-volume!, audio-set-music-volume!, audio-take-finished!."
+    content: "Native API verdrahten: tiny-snd.runtime/audio-load-track!, tiny-snd.runtime/audio-unload-track!, tiny-snd.runtime/audio-play-music!, tiny-snd.runtime/audio-stop-track!, tiny-snd.runtime/audio-stop-music!, tiny-snd.runtime/audio-play-sfx!, tiny-snd.runtime/audio-stop-all!, tiny-snd.runtime/audio-set-track-volume!, tiny-snd.runtime/audio-set-music-volume!, tiny-snd.runtime/audio-take-finished!."
     status: pending
   - id: ledc-multichannel
     content: LEDC fuer N Kanaele konfigurieren (Timer/Channel Mapping validieren, Board-Default 2 Outputs).
@@ -21,7 +21,7 @@ todos:
     content: 1ms Tick + direkter trk1 Stream-Parser + bounded command/finished queues implementieren.
     status: pending
   - id: storage-fs-emulation
-    content: "Persistenz ueber FS-Emulation: Composer schreibt .trk1-Dateien; Runtime-ID ist Symbol/Keyword, gemappt auf Dateiname."
+    content: "Persistenz ueber FS-Emulation: Cache wird explizit via Composer erzeugt; Startup laedt nur .trk1-Dateien. Runtime-ID ist Symbol/Keyword, gemappt auf Dateiname."
     status: pending
   - id: sfx-oneshot-policy
     content: "SFX-Policy definieren: kein separates SFX-Format; SFX nutzen ebenfalls trk1 + One-Shot-Semantik mit Prioritaet/Voice-Steal/Drop-Regeln."
@@ -44,6 +44,7 @@ isProject: false
 - Timing bleibt deterministisch im C-Core (1ms Tick, kein Audio-Timing im Interpreter).
 - **SFX** werden als **One-Shot** einmalig abgespielt, auch waehrend Musik laeuft.
 - Im MVP ist die Runtime-Identitaet ein **Symbol/Keyword** (Pointervergleich in C); Dateiname bleibt Persistenz-Key.
+- Caching ist **explizit**: Startup kompiliert nie Songs; fehlende `.trk1` sind ein klarer Fehler.
 
 ## 2) Kernentscheidungen
 
@@ -52,9 +53,11 @@ isProject: false
 3. **Ownership:** `RETAIN + owned by audio` (keine Kopie im MVP).
 4. **API-Schnitt:** Clojure lädt/steuert Tracks über Native Calls, C verwaltet Playback.
 5. **Threading:** keine VM-/RC-Aufrufe im Tick-Kontext.
-6. **SFX-Modell:** `audio-play-sfx!` startet einen einmaligen Effekt (kein Loop), der Musik ueberlagern darf.
+6. **SFX-Modell:** `tiny-snd.runtime/audio-play-sfx!` startet einen einmaligen Effekt (kein Loop), der Musik ueberlagern darf.
 7. **Format-Policy:** **kein separates SFX-Format**; Musik und SFX verwenden beide `trk1`.
 8. **Storage:** FS-Emulation als Persistenz; Composer mappt `track-sym <-> filename`.
+9. **Namespaces:** Runtime-API in `tiny-snd.runtime`, Compiler/Authoring in `tiny-snd.composer`.
+10. **Boot-Strategie:** kein Auto-Compile im Startup; nur `slurp-bytes` + `tiny-snd.runtime/audio-load-track!`, Cache-Erzeugung explizit.
 
 ## 3) Architektur
 
@@ -64,6 +67,7 @@ isProject: false
   - Authoring: Song als DSL/Map.
   - Compile: DSL/Map -> `trk1` ByteArray.
   - Persist: `trk1` per FS-Emulation als Datei speichern/laden.
+  - Expliziter Cache-Schritt (manuell/build-task), getrennt vom Startup.
   - Control: load/play/stop/unload, finished-Events pollen.
 - **C-Seite**
   - Track-Registry (`track_id` -> retained byte-array view).
@@ -74,15 +78,14 @@ isProject: false
 
 ### Datenfluss
 
-1. `compile-track` in Clojure erzeugt `trk1` ByteArray.
-2. Composer speichert Datei, z.B. `audio/menu-theme.trk1`.
-3. Beim Laden: `slurp-bytes` liest Datei.
-4. `audio-load-track!` validiert + `RETAIN` (track-id = interniertes Symbol/Keyword).
-5. `audio-play-music!` startet Stream-Cursor auf Track.
-6. Tick parst faellige Events und aktualisiert Voices/LEDC.
-7. Bei `END` (+ Repeat verbraucht) -> `track_id` in finished queue.
-8. `audio-play-sfx!` startet One-Shot-SFX parallel zur Musik.
-9. Game-Loop holt via `audio-take-finished!` und startet Folge-Part.
+1. Composer erzeugt Cache explizit (z.B. per Task): DSL -> `tiny-snd.composer/compile-track` -> `tiny-snd.composer/save-track!`.
+2. Startup liest `audio/<name>.trk1` via `tiny-clj.fs/slurp-bytes`.
+3. `tiny-snd.runtime/audio-load-track!` validiert + `RETAIN` (track-id = interniertes Symbol/Keyword).
+4. `tiny-snd.runtime/audio-play-music!` startet Stream-Cursor auf Track.
+5. Tick parst faellige Events und aktualisiert Voices/LEDC.
+6. Bei `END` (+ Repeat verbraucht) -> `track_id` in finished queue.
+7. `tiny-snd.runtime/audio-play-sfx!` startet One-Shot-SFX parallel zur Musik.
+8. Game-Loop holt via `tiny-snd.runtime/audio-take-finished!` und startet Folge-Part.
 
 ## 4) `trk1` Spezifikation (bytegenau)
 
@@ -133,19 +136,30 @@ bit3..0  channel (0..15)
 
 ## 5) API-Vertrag
 
-### Composer-Workflow (Clojure, explizit)
+### Composer-Workflow (`tiny-snd.composer`, explizit)
 
 Im MVP wird die Persistenz ueber FS-Emulation abgewickelt; Runtime-ID und Dateiname sind getrennt.
 Es gibt **kein separates SFX-Format**: SFX-Dateien sind ebenfalls `trk1`.
+Der Composer wird **explizit** aufgerufen (manuell/build-task), nicht automatisch im Startup.
 
-- `composer/compile-track [song]` -> `trk1-byte-array`
-- `composer/save-track! [filename song]`:
+- `tiny-snd.composer/compile-track [song]` -> `trk1-byte-array`
+- `tiny-snd.composer/save-track! [filename song]`:
   - kompiliert Song und speichert per `tiny-clj.fs/spit-bytes`
-- `composer/load-track! [track-sym filename]`:
+- `tiny-snd.composer/load-track! [track-sym filename]`:
   - liest via `tiny-clj.fs/slurp-bytes`
-  - ruft `audio-load-track!` mit `track-id = track-sym` auf
-- `composer/register-track! [track-sym filename]` (optional Helper):
+  - ruft `tiny-snd.runtime/audio-load-track!` mit `track-id = track-sym` auf
+- `tiny-snd.composer/cache-track! [track-sym filename song]`:
+  - kompiliert immer explizit und ueberschreibt die `.trk1` Datei
+- `tiny-snd.composer/register-track! [track-sym filename]` (optional Helper):
   - kapselt das Mapping in einer Clojure-Registry
+- Nach dem Laden kann der Compiler-Namespace entladen werden:
+  - `(ns-unload 'tiny-snd.composer)`
+
+Cache-Policy (MVP):
+
+- Startup kompiliert nie Songs.
+- Fehlende `.trk1` beim Laden ist ein Fehler (fail fast mit klarer Meldung).
+- Rebuild/Refresh passiert explizit ueber `tiny-snd.composer/cache-track!`.
 
 Namenskonvention (MVP):
 
@@ -153,24 +167,24 @@ Namenskonvention (MVP):
 - `track-sym` als Runtime-ID, z.B. `:menu-theme`
 - Dateiname als Persistenz-Ort, z.B. `\"audio/menu-theme.trk1\"`
 
-### Clojure Native API
+### Runtime API (`tiny-snd.runtime`)
 
-- `audio-load-track! [track-id trk1-bytes]` -> `true|false`
-- `audio-unload-track! [track-id]` -> `true|false`
-- `audio-play-music! [track-id repeat]` -> `true|false`
+- `tiny-snd.runtime/audio-load-track! [track-id trk1-bytes]` -> `true|false`
+- `tiny-snd.runtime/audio-unload-track! [track-id]` -> `true|false`
+- `tiny-snd.runtime/audio-play-music! [track-id repeat]` -> `true|false`
   - `repeat`: `1|:1x`, `2|:2x`, `0|:infinite|:unendlich`
-- `audio-stop-track! [track-id]` -> `true|false` (stoppt den aktiven Stream dieses Tracks sofort, Track bleibt geladen)
-  - Semantik: erzeugt **kein** `audio-take-finished!` Event fuer diesen Abbruch.
-- `audio-stop-music! []` -> `nil`
-- `audio-play-sfx! [sfx-id]` -> `true|false`
+- `tiny-snd.runtime/audio-stop-track! [track-id]` -> `true|false` (stoppt den aktiven Stream dieses Tracks sofort, Track bleibt geladen)
+  - Semantik: erzeugt **kein** `tiny-snd.runtime/audio-take-finished!` Event fuer diesen Abbruch.
+- `tiny-snd.runtime/audio-stop-music! []` -> `nil`
+- `tiny-snd.runtime/audio-play-sfx! [sfx-id]` -> `true|false`
   - Semantik: startet einen **einmaligen** SFX-Run (One-Shot), auch wenn Musik laeuft.
   - Rueckgabe `false`, wenn SFX wegen voller Voice-Kapazitaet/Policy gedroppt wurde.
-- `audio-stop-all! []` -> `nil`
-- `audio-set-track-volume! [track-id vol-0-255]` -> `true|false`
+- `tiny-snd.runtime/audio-stop-all! []` -> `nil`
+- `tiny-snd.runtime/audio-set-track-volume! [track-id vol-0-255]` -> `true|false`
   - Semantik: wenn Track aktiv laeuft, wirkt die Lautstaerke **sofort** (ohne Stop/Restart).
-  - Wenn Track geladen aber inaktiv: Volume als Startwert fuer naechstes `audio-play-music!`.
-- `audio-set-music-volume! [0-255]` -> `nil`
-- `audio-take-finished! []` -> `track-id|nil`
+  - Wenn Track geladen aber inaktiv: Volume als Startwert fuer naechstes `tiny-snd.runtime/audio-play-music!`.
+- `tiny-snd.runtime/audio-set-music-volume! [0-255]` -> `nil`
+- `tiny-snd.runtime/audio-take-finished! []` -> `track-id|nil`
 
 Hinweis: `track-id` ist als **interniertes Symbol/Keyword** gedacht (Pointervergleich im C-Core).
 
@@ -196,8 +210,8 @@ Hinweis: `track-id` ist als **interniertes Symbol/Keyword** gedacht (Pointerverg
 
 ### Ownership (`RETAIN + owned by audio`)
 
-1. `audio-load-track!` validiert Header/Bounds und macht **genau ein** `RETAIN`.
-2. `audio-unload-track!`/Shutdown macht **genau ein** `RELEASE`.
+1. `tiny-snd.runtime/audio-load-track!` validiert Header/Bounds und macht **genau ein** `RETAIN`.
+2. `tiny-snd.runtime/audio-unload-track!`/Shutdown macht **genau ein** `RELEASE`.
 3. Tick greift nur read-only auf `data_ptr/len` zu.
 4. Geladene Tracks gelten als **frozen** (kein `aset` auf Inhalt).
 
@@ -246,6 +260,7 @@ DoD:
 - Symbol-/Lookup-/Arity-Tests:
   - `test_audio_native_lookup_*`
   - `test_audio_native_arity_*`
+  - `test_audio_native_namespace_tiny_snd_runtime_*`
   - `test_audio_load_unload_contract_*`
   - `test_audio_stop_track_contract_*`
   - `test_audio_set_track_volume_contract_*`
@@ -263,13 +278,16 @@ DoD:
   - Varint-Decoder inkl. Overflow-Schutz
   - Direkt-Streaming (kein Full-Decode)
   - Repeat-Verhalten (1x/2x/infinite)
-  - Track-Stop-Verhalten (`audio-stop-track!` stoppt sofort, ohne unload)
-  - Track-Volume-Verhalten (`audio-set-track-volume!` wirkt waehrend Playback ohne Neustart)
+  - Track-Stop-Verhalten (`tiny-snd.runtime/audio-stop-track!` stoppt sofort, ohne unload)
+  - Track-Volume-Verhalten (`tiny-snd.runtime/audio-set-track-volume!` wirkt waehrend Playback ohne Neustart)
   - SFX-One-Shot-Verhalten (einmalig, kein Loop, parallel zu Musik)
   - Voice-Policy bei Engpass (free->steal->drop gemaess Konfiguration)
-  - Finished-Meldung (`audio-take-finished!`)
+  - Finished-Meldung (`tiny-snd.runtime/audio-take-finished!`)
   - RETAIN-Vertrag (`load->retain`, `unload->release`)
   - Composer-FS-Workflow (`compile -> spit-bytes -> slurp-bytes -> load`)
+  - Expliziter Cache-Workflow (`cache-track!` erzeugt/aktualisiert Datei deterministisch)
+  - Startup ohne Composer (nur `slurp-bytes` + `tiny-snd.runtime/audio-load-track!`)
+  - Fehlende Cache-Datei fuehrt zu klarem Ladefehler (kein stilles Auto-Compile)
   - Symbol-ID + Mapping (`track_id = symbol`, `symbol -> filename`)
 
 DoD:
@@ -304,7 +322,7 @@ DoD:
 
 - SFX-Programme (Laser/Explosion/Hit/Menu/R2D2).
 - Game-Loop nutzt finished-Events fuer Folge-Parts.
-- SFX werden waehrend laufender Musik als One-Shots getriggert (`audio-play-sfx!`).
+- SFX werden waehrend laufender Musik als One-Shots getriggert (`tiny-snd.runtime/audio-play-sfx!`).
 
 DoD:
 
@@ -321,18 +339,20 @@ DoD:
 
 ## 10) Risiken und Gegenmassnahmen
 
-- **Mutable Trackdaten (`aset`) nach `load**`
+- **Mutable Trackdaten (`aset`) nach `load`**
   - Mitigation: frozen contract + optionale Debug-Fingerprint-Pruefung.
-- `**unload` waehrend Track noch aktiv**
+- **`unload` waehrend Track noch aktiv**
   - Mitigation: mark-for-unload oder `stop` vor `release`.
 - **Harte Lautstaerke-Spruenge waehrend Playback**
   - Mitigation: optional kleine Volume-Rampe (z.B. 2-8 Ticks) statt sofortigem Sprung.
 - **SFX-Sturm bei engem Voice-Budget**
   - Mitigation: klare One-Shot-Policy (Prioritaet/Steal/Drop) + Drop-Counter.
 - **Defekte/inkompatible `.trk1`-Datei in FS-Emulation**
-  - Mitigation: strikte Header/Bounds-Validierung bei `audio-load-track!`, bei Fehler sauber ablehnen.
+  - Mitigation: strikte Header/Bounds-Validierung bei `tiny-snd.runtime/audio-load-track!`, bei Fehler sauber ablehnen.
 - **Track-Symbol zeigt auf falschen Dateinamen (Mapping-Fehler)**
   - Mitigation: zentrale Composer-Registry + Validierungscheck beim Laden.
+- **Veralteter Cache nach Song-Aenderung**
+  - Mitigation: explizite Cache-Version/Manifest-Hash pruefen; bei Mismatch neu kompilieren.
 - **Pointer-ID nach Runtime-Reset nicht stabil**
   - Mitigation: IDs nicht als Pointer persistieren; nach Boot/Reset ueber Symbolname neu registrieren.
 - **Flash-Verschleiss durch haeufiges Re-Speichern**
@@ -351,4 +371,3 @@ Diese Datei konkretisiert Milestone 3/4 aus:
 
 - Milestone 3 (Audio Core): Schritte 1 bis 4.
 - Milestone 4 (Host Contract): Schritte 1, 5.
-
