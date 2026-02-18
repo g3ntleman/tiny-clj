@@ -186,6 +186,8 @@ ID native_audio_host_status(ID *args, unsigned int argc) {
     if (!validate_arity(argc, 0, "audio-host-status!")) return NULL;
     (void)args;
 
+    ensure_audio_engine_initialized();
+
     AudioHostStatus st = {0};
     bool ok = audio_backend_host_get_status(&st);
     ID k_backend_available = intern_symbol_global(":backend-available");

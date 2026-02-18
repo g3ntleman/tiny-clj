@@ -5,16 +5,17 @@ R"TINY_SND_CMP(
 ;; Note helpers
 ;; -----------------------------------------------------------------------------
 
+(def ^:private semitone-base-map
+  {\C 0
+   \D 2
+   \E 4
+   \F 5
+   \G 7
+   \A 9
+   \B 11})
+
 (defn- semitone-base [letter]
-  (cond
-    (= letter "C") 0
-    (= letter "D") 2
-    (= letter "E") 4
-    (= letter "F") 5
-    (= letter "G") 7
-    (= letter "A") 9
-    (= letter "B") 11
-    :else nil))
+  (get semitone-base-map letter))
 
 (defn note->midi [note-kw]
   (cond
@@ -25,7 +26,7 @@ R"TINY_SND_CMP(
     :else
     (let [s (name note-kw)
           n (count s)
-          letter (subs s 0 1)
+          letter (read-string (str "\\" (subs s 0 1)))
           accidental (if (= n 3) (subs s 1 2) "")
           octave-str (if (= n 3) (subs s 2 3) (subs s 1 2))
           octave (read-string octave-str)
@@ -123,26 +124,24 @@ R"TINY_SND_CMP(
         (recur (+ ch 1) ev2))
       ev)))
 
-(defn- duration-fraction [dur-kw]
-  (cond
-    (= dur-kw :w)  [4 1]
-    (= dur-kw :h)  [2 1]
-    (= dur-kw :q)  [1 1]
-    (= dur-kw :e)  [1 2]
-    (= dur-kw :s)  [1 4]
-    (= dur-kw :t)  [1 8]
-    (= dur-kw :dh) [3 1]
-    (= dur-kw :dq) [3 2]
-    (= dur-kw :de) [3 4]
-    (= dur-kw :ds) [3 8]
-    (= dur-kw :qt) [2 3]
-    (= dur-kw :et) [1 3]
-    (= dur-kw :st) [1 6]
-    :else nil))
+(def ^:private duration-fraction-map
+  {:w  [4 1]
+   :h  [2 1]
+   :q  [1 1]
+   :e  [1 2]
+   :s  [1 4]
+   :t  [1 8]
+   :dh [3 1]
+   :dq [3 2]
+   :de [3 4]
+   :ds [3 8]
+   :qt [2 3]
+   :et [1 3]
+   :st [1 6]})
 
 (defn- duration->ms [dur tempo-bpm]
   (if (keyword? dur)
-    (let [frac (duration-fraction dur)]
+    (let [frac (get duration-fraction-map dur)]
       (if (nil? frac)
         (throw (ex-info "Unknown musical duration keyword"
                         {:dur dur
@@ -178,10 +177,10 @@ R"TINY_SND_CMP(
                                    true
                                    (recur (rest s))))))
         opts* (if has-melody-backing
-                (tiny-snd.composer/compile-opts-melody-backing steps opts)
+                (compile-opts-melody-backing steps opts)
                 opts)
         steps* (if has-melody-backing
-                 (tiny-snd.composer/melody-backing->steps steps opts*)
+                 (melody-backing->steps steps opts*)
                  steps)
         inferred (infer-channel-count steps*)
         channel-count (or (get opts* :channel-count) inferred)
@@ -223,9 +222,6 @@ R"TINY_SND_CMP(
         all (reduce conj (trk1-header stream-len channel-count) eventsN)]
     (->byte-array all)))
 
-(defn compile-track-default [steps]
-  (tiny-snd.composer/compile-track steps {}))
-
 (defn- play-result->status [ok]
   (if ok :playing :stopped))
 
@@ -233,40 +229,8 @@ R"TINY_SND_CMP(
   "Compiles, loads and plays steps once.
    Options map is passed to compile-track."
   [track-id steps opts]
-  (audio-load-track! track-id (tiny-snd.composer/compile-track steps opts))
+  (audio-load-track! track-id (compile-track steps opts))
   (play-result->status (audio-play-music! track-id 1)))
-
-(defn play-steps-default! [track-id steps]
-  (tiny-snd.composer/play-steps! track-id steps {}))
-
-;; Backward-compatible 2-voice wrappers
-(defn- compile-opts-2v [opts]
-  (let [base (or opts {})
-        lead-vol (or (get base :lead-vol) 220)
-        harm-vol (or (get base :harm-vol) 160)
-        gate-percent (or (get base :gate-percent) 82)
-        opts1 (dissoc base :lead-vol :harm-vol)
-        opts2 (assoc opts1 :channel-count 2)
-        opts3 (assoc opts2 :volumes [lead-vol harm-vol])]
-    (assoc opts3 :gate-percent gate-percent)))
-
-(defn compile-track-2v [steps opts]
-  (let [steps2 (loop [s steps out []]
-                 (if (empty? s)
-                   out
-                   (let [step (first s)
-                         lead (get step :lead)
-                         harm (get step :harm)
-                         dur  (get step :dur)]
-                     (recur (rest s) (conj out {:notes [lead harm] :dur dur})))))]
-    (tiny-snd.composer/compile-track steps2 (compile-opts-2v opts))))
-
-(defn play-steps-2v! [track-id steps opts]
-  (audio-load-track! track-id (tiny-snd.composer/compile-track-2v steps opts))
-  (play-result->status (audio-play-music! track-id 1)))
-
-(defn play-steps-2v-default! [track-id steps]
-  (tiny-snd.composer/play-steps-2v! track-id steps {}))
 
 ;; Melody + backing transformation helper.
 ;; Input step format:
@@ -326,7 +290,7 @@ R"TINY_SND_CMP(
    If :channel-count is N, melody uses 1 channel and backing is expanded to N-1 notes.
    Supports pause shorthand per step: {:rest :e}."
   [steps opts]
-  (let [opts2 (tiny-snd.composer/compile-opts-melody-backing steps opts)
+  (let [opts2 (compile-opts-melody-backing steps opts)
         channel-count (or (get opts2 :channel-count) 1)
         backing-count (max 0 (- channel-count 1))
         steps2 (loop [s steps out []]
@@ -345,13 +309,6 @@ R"TINY_SND_CMP(
                          notes (into [melody] backing)]
                      (recur (rest s) (conj out {:notes notes :dur dur})))))]
     steps2))
-
-(defn compile-track-melody-backing
-  "Compiles melody+backing steps via generic compile-track."
-  [steps opts]
-  (let [opts2 (compile-opts-melody-backing steps opts)
-        steps2 (tiny-snd.composer/melody-backing->steps steps opts)]
-    (tiny-snd.composer/compile-track steps2 opts2)))
 
 ;; -----------------------------------------------------------------------------
 ;; Demo: piezo-friendly Star Wars title phrase
@@ -375,12 +332,12 @@ R"TINY_SND_CMP(
 (defn play-starwars-title!
   "Convenience demo for host/ESP playback."
   []
-  (tiny-snd.composer/play-steps! :starwars-title-2v tiny-snd.composer/starwars-title-steps
-                              {:channel-count 2
-                               :melody-vol 220
-                               :backing-volumes [195]
-                                :tempo-bpm 104
-                                :gate-percent 78}))
+  (play-steps! :starwars-title-2v starwars-title-steps
+               {:channel-count 2
+                :melody-vol 220
+                :backing-volumes [195]
+                :tempo-bpm 104
+                :gate-percent 78}))
 
 (defn wait-until-audio-stopped!
   "Blocks cooperatively until audio playback stops or timeout elapses.
@@ -407,10 +364,11 @@ R"TINY_SND_CMP(
 (defn play-starwars-title-blocking!
   "Starts the Star Wars demo and waits until playback ends (or timeout).
    Returns a map:
-   {:start :playing|:stopped, :wait :stopped|:timeout|:unknown}"
+   {:start :playing|:stopped
+    :wait :stopped|:timeout|:unknown}"
   []
-  (let [start (tiny-snd.composer/play-starwars-title!)
-        wait (tiny-snd.composer/wait-until-audio-stopped! 6000)]
+  (let [start (play-starwars-title!)
+        wait (wait-until-audio-stopped! 6000)]
     {:start start :wait wait}))
 
 )TINY_SND_CMP"
