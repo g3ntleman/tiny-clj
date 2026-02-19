@@ -5145,6 +5145,56 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
  * @param target_ns Target namespace
  * @param symbols Vector of symbols to copy
  */
+static inline CljSymbol *refer_mapping_key_for_target_ns(CljNamespace *target_ns, CljSymbol *symbol)
+{
+    if (!target_ns || !symbol || !symbol->cname) {
+        return NULL;
+    }
+
+    // clojure.core stores symbols unqualified to match JVM behavior.
+    if (target_ns->name == SYM_CLOJURE_CORE) {
+        return intern_symbol_global(symbol->cname);
+    }
+
+    // Already qualified to this namespace.
+    if (symbol->ns_name && target_ns->name && symbol->ns_name == target_ns->name) {
+        return symbol;
+    }
+
+    // Keep explicitly qualified symbol as-is.
+    if (symbol->ns_name && symbol->ns_name->cname) {
+        return symbol;
+    }
+
+    // Qualify unqualified symbol for target namespace.
+    if (target_ns->name && target_ns->name->cname) {
+        return intern_symbol(target_ns->name, symbol->cname);
+    }
+
+    return symbol;
+}
+
+static inline bool refer_assoc_into_namespace(CljNamespace *target_ns, CljSymbol *symbol, ID value)
+{
+    if (!target_ns || !symbol) {
+        return false;
+    }
+    if (!target_ns->mappings) {
+        target_ns->mappings = make_map(16);
+        if (!target_ns->mappings) {
+            return false;
+        }
+    }
+
+    CljSymbol *target_key = refer_mapping_key_for_target_ns(target_ns, symbol);
+    if (!target_key) {
+        return false;
+    }
+
+    map_assoc_inplace(&target_ns->mappings, target_key, value);
+    return true;
+}
+
 static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *target_ns, CljObject *symbols)
 {
     if (!source_ns || !target_ns || !symbols)
@@ -5154,6 +5204,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
         return;
 
     CljPersistentVector *vec = as_vector(symbols);
+    bool changed = false;
     VECTOR_FOR_EACH(vec, sym)
     {
         if (!sym || TAG(sym) != CLJ_SYMBOL)
@@ -5184,10 +5235,16 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
         CljObject *val = map_get(source_ns->mappings, lookup_sym);
         if (val != NOT_FOUND)
         {
-            // Copy to target namespace using ns_define_refer for :refer (stores unqualified symbol)
-            ns_define_refer(target_ns, sym, val);
+            // Batch refer updates into target mappings and invalidate resolve cache once.
+            if (refer_assoc_into_namespace(target_ns, sym_obj, val)) {
+                changed = true;
+            }
         }
         // sym lifetime is tied to vector - no release needed
+    }
+
+    if (changed) {
+        ns_invalidate_resolve_cache();
     }
 }
 
@@ -5204,6 +5261,8 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
     CljPersistentMap *map = source_ns->mappings;
     if (!map)
         return;
+
+    bool changed = false;
 
     // Iterate through all mappings in source namespace
     // Keys are qualified symbols (e.g., test.referall/var1 or clojure.repl/doc)
@@ -5232,15 +5291,20 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
                     unqualified_name = slash ? slash + 1 : cname;
                 }
 
-                // Create unqualified symbol for target namespace
-                // Use ns_define_refer to store unqualified symbol (like Clojure/JVM)
+                // Create unqualified symbol and batch-merge into target namespace mappings.
                 CljSymbol *unqualified_sym = intern_symbol_global(unqualified_name);
                 if (unqualified_sym)
                 {
-                    ns_define_refer(target_ns, unqualified_sym, val);
+                    if (refer_assoc_into_namespace(target_ns, unqualified_sym, val)) {
+                        changed = true;
+                    }
                 }
             }
         }
+    }
+
+    if (changed) {
+        ns_invalidate_resolve_cache();
     }
 }
 

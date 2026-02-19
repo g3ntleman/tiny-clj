@@ -299,11 +299,24 @@ CljPersistentRecord *record_create_from_map(ID type_symbol, ID source_map) {
 
     CljType source_tag = TAG(source_map);
     if (source_tag == CLJ_MAP_PERSISTENT || source_tag == CLJ_MAP_TRANSIENT) {
-        for (unsigned int i = 0; i < record->field_count; i++) {
-            ID key = vector_nth(desc->field_keys, i);
-            ID value = map_get_sentinel(source_map, key, NULL);
-            if (value) {
-                record->values[i] = RETAIN(value);
+        int source_count = map_count(source_map);
+        if (source_count > 0 && (unsigned int)source_count < record->field_count) {
+            CljPersistentMap *source = map_backing(source_map);
+            if (source) {
+                MAP_FOR_EACH(source, key, value) {
+                    int index = descriptor_field_index(desc, key);
+                    if (index >= 0 && value) {
+                        record->values[(unsigned int)index] = RETAIN(value);
+                    }
+                }
+            }
+        } else {
+            for (unsigned int i = 0; i < record->field_count; i++) {
+                ID key = vector_nth(desc->field_keys, i);
+                ID value = map_get_sentinel(source_map, key, NULL);
+                if (value) {
+                    record->values[i] = RETAIN(value);
+                }
             }
         }
         return record;
@@ -323,11 +336,24 @@ CljPersistentRecord *record_create_from_map(ID type_symbol, ID source_map) {
             return record;
         }
 
-        for (unsigned int i = 0; i < record->field_count; i++) {
-            ID key = vector_nth(desc->field_keys, i);
-            ID value = record_get_sentinel(source_map, key, NULL);
-            if (value) {
-                record->values[i] = RETAIN(value);
+        if (source_rec && source_rec->field_count < record->field_count) {
+            for (unsigned int i = 0; i < source_rec->field_count; i++) {
+                ID key = vector_nth(source_rec->descriptor->field_keys, i);
+                int index = descriptor_field_index(desc, key);
+                if (index >= 0) {
+                    ID value = source_rec->values[i];
+                    if (value) {
+                        record->values[(unsigned int)index] = RETAIN(value);
+                    }
+                }
+            }
+        } else {
+            for (unsigned int i = 0; i < record->field_count; i++) {
+                ID key = vector_nth(desc->field_keys, i);
+                ID value = record_get_sentinel(source_map, key, NULL);
+                if (value) {
+                    record->values[i] = RETAIN(value);
+                }
             }
         }
         return record;
@@ -380,24 +406,11 @@ bool record_contains(ID record_obj, ID key) {
 }
 
 // Return a vector of record keys in descriptor order.
-// Returns owned vector (rc=1).
+// Returns retained descriptor key vector (no per-call allocation).
 ID record_keys(ID record_obj) {
     if (!is_record(record_obj)) return NULL;
     CljPersistentRecord *record = as_record(record_obj);
-
-    CljPersistentVector *keys_vec = make_vector(record->field_count, STRONG);
-    if (!keys_vec) return NULL;
-
-    for (unsigned int i = 0; i < record->field_count; i++) {
-        ID key = vector_nth(record->descriptor->field_keys, i);
-        CljPersistentVector *next = vector_conj_owned(keys_vec, RETAIN(key));
-        if (next != keys_vec) {
-            RELEASE(keys_vec);
-            keys_vec = next;
-        }
-    }
-
-    return keys_vec;
+    return RETAIN(record->descriptor->field_keys);
 }
 
 // Return a vector of non-nil record values in descriptor order.
@@ -477,7 +490,7 @@ ID record_assoc(ID record_obj, ID key, ID value) {
     return NULL;
 }
 
-// Remove a known field by converting to map then removing the key.
+// Remove a known field by materializing a map without that field.
 // Unknown keys throw NotImplementedException.
 ID record_dissoc(ID record_obj, ID key) {
     if (!is_record(record_obj)) return NULL;
@@ -488,12 +501,17 @@ ID record_dissoc(ID record_obj, ID key) {
         return NULL;
     }
 
-    CljPersistentMap *as_map_obj = record_to_map(record_obj);
-    if (!as_map_obj) return NULL;
+    CljPersistentRecord *record = as_record(record_obj);
+    int out_capacity = (record->field_count > 0) ? ((int)record->field_count - 1) : 0;
+    CljPersistentMap *result = make_map(out_capacity);
+    if (!result) return NULL;
 
-    CljPersistentMap *updated_map = map_remove(as_map_obj, key);
-    if (updated_map != as_map_obj) {
-        RELEASE(as_map_obj);
+    for (unsigned int i = 0; i < record->field_count; i++) {
+        if ((int)i == index) continue;
+        ID field_key = vector_nth(record->descriptor->field_keys, i);
+        ID field_value = record->values[i];
+        map_assoc_inplace(&result, field_key, field_value);
     }
-    return updated_map;
+
+    return result;
 }
