@@ -26,10 +26,9 @@
 
 static INLINE bool sym_name_eq(ID obj, const char *name) {
     CLJ_ASSERT(name != NULL && "sym_name_eq: name must not be NULL");
-    if (!name) return false;
     if (!obj || TAG(obj) != CLJ_SYMBOL) return false;
     CljSymbol *sym = as_symbol(obj);
-    if (!sym || !sym->cname) return false;
+    CLJ_ASSERT(sym && sym->cname && "CLJ_SYMBOL must cast to symbol with cname");
     return strcmp(sym->cname, name) == 0;
 }
 
@@ -430,8 +429,7 @@ ID eval_special_recur(CljPersistentVector *args, CljPersistentMap *env, EvalStat
 }
 
 ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
-    CLJ_ASSERT(st != NULL && "eval_special_loop: st must not be NULL");
-    if (!args || !st) return NULL;
+    CLJ_ASSERT(args != NULL && st != NULL && "eval_special_loop requires args and EvalState");
 
     // Shape: (loop [sym1 init1 sym2 init2 ...] body...)
     ID bindings_vec = args_nth(args, 0);
@@ -441,8 +439,9 @@ ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState
     }
 
     CljPersistentVector *bindings = as_vector(bindings_vec);
-    int binding_count = bindings ? (int)vector_count(bindings) : 0;
-    if (!bindings || (binding_count % 2) != 0) {
+    CLJ_ASSERT(bindings != NULL && "loop bindings vector must cast successfully");
+    int binding_count = (int)vector_count(bindings);
+    if ((binding_count % 2) != 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop requires an even number of forms in binding vector",
                         __FILE__, __LINE__, 0);
         return NULL;
@@ -624,7 +623,8 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
             continue;
         } else if (tag == CLJ_AST_CALL) {
             CljASTCall *call = as_ast_call(elem);
-            first = call ? call->op : NULL;
+            CLJ_ASSERT(call != NULL && "CLJ_AST_CALL tag must cast to AST call");
+            first = call->op;
         } else {
             continue;
         }
@@ -652,7 +652,8 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
             continue;
         } else if (tag == CLJ_AST_CALL) {
             CljASTCall *call = as_ast_call(elem);
-            first = call ? call->op : NULL;
+            CLJ_ASSERT(call != NULL && "CLJ_AST_CALL tag must cast to AST call");
+            first = call->op;
         } else {
             continue;
         }
@@ -692,7 +693,8 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
                 continue;
             } else if (elem_tag == CLJ_AST_CALL) {
                 clause_call = as_ast_call(elem);
-                first = clause_call ? clause_call->op : NULL;
+                CLJ_ASSERT(clause_call != NULL && "CLJ_AST_CALL tag must cast to AST call");
+                first = clause_call->op;
             } else {
                 continue;
             }
@@ -985,7 +987,6 @@ void eval_special_forms_reset_caches(void) {
 
 ID eval_special_quasiquote(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(st != NULL && "eval_special_quasiquote: st must not be NULL");
-    if (!st) return NULL;
     // Get the expression to quasiquote: (quasiquote expr)
     ID expr = args_nth(args, 0);
     if (!expr) return NULL;
@@ -1045,7 +1046,6 @@ ID eval_special_quasiquote(CljPersistentVector *args, CljPersistentMap *env, Eva
 
 ID eval_special_defmacro(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(st != NULL && "eval_special_defmacro: st must not be NULL");
-    if (!st) return NULL;
     (void)ctx;
 
     // Parse: (defmacro name [params] body) or (defmacro name docstring [params] body)

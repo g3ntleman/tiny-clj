@@ -611,17 +611,15 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
     if (IS_IMMEDIATE(body)) {
         return body;
     }
-    // Defensive: avoid dereferencing obviously invalid pointers.
-    if ((uintptr_t)body < 0x1000) {
-        return NULL;
-    }
+    // Heap object invariant: non-immediate IDs must be valid object pointers.
+    CLJ_ASSERT((uintptr_t)body >= 0x1000 && "eval_body_with_params: invalid non-immediate pointer");
 
     unsigned char body_tag = TAG(body);
 
     // Lexical addressing fast-path: (depth, slot) reference into CallFrame chain.
     if (body_tag == CLJ_SLOT_REF) {
         const CljSlotRef *ref = (const CljSlotRef*)body;
-        if (!ctx || !ctx->frame) return NULL;
+        CLJ_ASSERT(ctx && ctx->frame && "CLJ_SLOT_REF requires frame context");
         ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
         if (v == NOT_FOUND || !v) return NULL;
         if (IS_IMMEDIATE(v)) return v;
@@ -652,7 +650,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                     }
                     // Frame lookups return the bound value directly - no self-resolution check
                     // This is correct for macros where a symbol parameter can have a symbol value
-                    if (!frame_value) return NULL;
+                    CLJ_ASSERT(frame_value && "frame lookup must return value or NOT_FOUND");
                     if (IS_IMMEDIATE(frame_value)) return frame_value;
                     return frame_value;
                 }
@@ -2433,12 +2431,14 @@ ID eval_doseq(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, c
 
     if (is_vector(binding_list)) {
         CljPersistentVector *vec = as_vector(binding_list);
-        if (!vec || vector_count(vec) < 2) return NULL;
+        CLJ_ASSERT(vec != NULL && "vector binding must cast to non-null vector");
+        if (vector_count(vec) < 2) return NULL;
         var = vector_nth(vec, 0);
         coll_expr = vector_nth(vec, 1);
     } else if (is_list_type(TAG(binding_list))) {
         CljList *binding_data = as_list(binding_list);
-        if (!binding_data || !binding_data->first) return NULL;
+        CLJ_ASSERT(binding_data != NULL && "list binding must cast to non-null list");
+        if (!binding_data->first) return NULL;
         var = binding_data->first;
         CljList *rest_list = as_list(binding_data->rest);
         if (!rest_list) return NULL;
@@ -2496,8 +2496,7 @@ ID eval_list_function(CljList *list, CljPersistentMap *env) {
     CLJ_ASSERT(env != NULL);
     (void)env; // Suppress unused parameter warning
     // (list arg1 arg2 ...)
-    CLJ_ASSERT(list != NULL);
-    if (!list || !is_list_type(TAG(list))) return NULL;
+    CLJ_ASSERT(list != NULL && is_list_type(TAG(list)));
 
     CljList *list_data = as_list(list);
 
@@ -2616,8 +2615,7 @@ ID eval_arg(CljList *list, int index, CljPersistentMap *env, EvalState *st) {
 }
 
 ID eval_arg_with_context(CljList *list, int index, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
-    CLJ_ASSERT(list != NULL);
-    if (!list || !is_list_type(TAG(list))) return NULL;
+    CLJ_ASSERT(list != NULL && is_list_type(TAG(list)));
 
     // Get element from list
     ID element = list_nth(as_list(list), index);
@@ -2646,7 +2644,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
 
     if (expr_tag == CLJ_SLOT_REF) {
         const CljSlotRef *ref = (const CljSlotRef*)expr;
-        if (!ctx || !ctx->frame) return NULL;
+        CLJ_ASSERT(ctx && ctx->frame && "CLJ_SLOT_REF requires frame context");
         ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
         if (v == NOT_FOUND || !v) return NULL;
         return v;
@@ -2665,7 +2663,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
                 if (frame_value == NOT_FOUND) {
                     return NULL;  // Parameter bound to nil
                 }
-                if (!frame_value) return NULL;
+                CLJ_ASSERT(frame_value && "frame lookup must return value or NOT_FOUND");
                 return frame_value;
             }
         }
@@ -2825,12 +2823,14 @@ ID eval_dotimes(CljPersistentVector *args, CljPersistentMap *env, EvalState *st,
 
     if (is_vector(binding_list)) {
         CljPersistentVector *vec = as_vector(binding_list);
-        if (!vec || vector_count(vec) < 2) return NULL;
+        CLJ_ASSERT(vec != NULL && "vector binding must cast to non-null vector");
+        if (vector_count(vec) < 2) return NULL;
         var = vector_nth(vec, 0);
         n_obj = vector_nth(vec, 1);
     } else if (is_list_type(TAG(binding_list))) {
         CljList *binding_data = as_list(binding_list);
-        if (!binding_data || !binding_data->first) return NULL;
+        CLJ_ASSERT(binding_data != NULL && "list binding must cast to non-null list");
+        if (!binding_data->first) return NULL;
         var = binding_data->first;
         CljList *rest_list = as_list(binding_data->rest);
         if (!rest_list || !rest_list->first) return NULL;

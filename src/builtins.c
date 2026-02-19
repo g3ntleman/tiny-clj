@@ -996,9 +996,9 @@ static ID unwrap_thunk_state(ID state_id) {
 }
 
 static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
-    if (argc != 1) return NULL;
+    CLJ_ASSERT(args != NULL && argc == 1 && "concat thunk executor expects exactly one state arg");
     ID state_id = unwrap_thunk_state(args[0]);
-    if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
+    CLJ_ASSERT(state_id && TAG(state_id) == CLJ_MAP_PERSISTENT && "concat thunk state must be persistent map");
 
     CljPersistentMap *state = as_map(state_id);
     ID x_seqable = map_get_sentinel(state, SYM_CONCAT_X, NULL);
@@ -1010,7 +1010,8 @@ static ID native_concat_thunk_executor(ID *args, unsigned int argc) {
     ID x_seq = NULL;
     if (x_seqable && is_list_type(TAG(x_seqable))) {
         CljList *list = as_list(x_seqable);
-        if (!list || list_empty(list)) {
+        CLJ_ASSERT(list && "list-tagged seqable must cast to list");
+        if (list_empty(list)) {
             return y;
         }
         elem = LIST_FIRST(list);
@@ -1527,14 +1528,15 @@ ID native_partition(ID *args, unsigned int argc)
 // map: apply f across 1+ colls (zips to shortest)
 // Usage: (map f coll) (map f coll1 coll2 ...)
 static ID native_map_thunk_executor(ID *args, unsigned int argc) {
-    if (argc != 1) return NULL;
+    CLJ_ASSERT(args != NULL && argc == 1 && "map thunk executor expects exactly one state arg");
     ID state_id = unwrap_thunk_state(args[0]);
-    if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
+    CLJ_ASSERT(state_id && TAG(state_id) == CLJ_MAP_PERSISTENT && "map thunk state must be persistent map");
 
     CljPersistentMap *state = as_map(state_id);
     ID fn = map_get_sentinel(state, SYM_MAP_FN, NULL);
     ID seqs_vec_id = map_get_sentinel(state, SYM_MAP_SEQS, NULL);
-    if (!fn || !seqs_vec_id || TAG(seqs_vec_id) != CLJ_VECTOR_PERSISTENT) return NULL;
+    CLJ_ASSERT(fn && seqs_vec_id && TAG(seqs_vec_id) == CLJ_VECTOR_PERSISTENT &&
+               "map thunk state must contain fn and seq vector");
 
     CljPersistentVector *seqs_vec = as_vector(seqs_vec_id);
     unsigned int ncolls = vector_count(seqs_vec);
@@ -1597,16 +1599,17 @@ static ID native_map_thunk_executor(ID *args, unsigned int argc) {
 
 // mapcat: lazy concat of (f x) over coll
 static ID native_mapcat_thunk_executor(ID *args, unsigned int argc) {
-    if (argc != 1) return NULL;
+    CLJ_ASSERT(args != NULL && argc == 1 && "mapcat thunk executor expects exactly one state arg");
     ID state_id = unwrap_thunk_state(args[0]);
-    if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
+    CLJ_ASSERT(state_id && TAG(state_id) == CLJ_MAP_PERSISTENT && "mapcat thunk state must be persistent map");
 
     CljPersistentMap *state = as_map(state_id);
     ID fn = map_get_sentinel(state, SYM_MAPCAT_FN, NULL);
     ID coll = map_get_sentinel(state, SYM_MAPCAT_COLL, NULL);
     ID inner = map_get_sentinel(state, SYM_MAPCAT_INNER, NULL);
     bool coll_owned = false;
-    if (!fn || IS_IMMEDIATE(fn) || !(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE)) return NULL;
+    CLJ_ASSERT(fn && !IS_IMMEDIATE(fn) && (TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE) &&
+               "mapcat thunk state must contain callable fn");
 
     EvalState *st = builtin_get_eval_state();
     if (!st) st = get_global_eval_state();
@@ -6391,13 +6394,13 @@ ID native_bit_shift_left(ID *args, unsigned int argc)
 }
 
 static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {
-    if (targc != 1) return NULL;
+    CLJ_ASSERT(targs != NULL && targc == 1 && "range infinite thunk expects exactly one state arg");
     ID state_id = unwrap_thunk_state(targs[0]);
-    if (!state_id || TAG(state_id) != CLJ_MAP_PERSISTENT) return NULL;
+    CLJ_ASSERT(state_id && TAG(state_id) == CLJ_MAP_PERSISTENT && "range infinite thunk state must be persistent map");
 
     CljPersistentMap *state = as_map(state_id);
     ID cur_id = map_get_sentinel(state, SYM_RANGE_CUR, NULL);
-    if (!is_fixnum(cur_id)) return NULL;
+    CLJ_ASSERT(is_fixnum(cur_id) && "range infinite thunk state :cur must be fixnum");
     int cur = AS_FIXNUM(cur_id);
 
     CljPersistentMap *rest_state = map_empty();

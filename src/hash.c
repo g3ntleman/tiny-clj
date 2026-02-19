@@ -40,7 +40,7 @@ static inline uint32_t fnv1a_bytes(const char *s, size_t len) {
 }
 
 static uint32_t hash_symbol(CljSymbol *sym) {
-    if (!sym || !sym->cname) return 0;
+    CLJ_ASSERT(sym && sym->cname && "hash_symbol expects a valid symbol with cname");
     if (sym->ns_name && sym->ns_name->cname) {
         uint32_t h = fnv1a(sym->ns_name->cname);
         return fnv1a_continue(FNV_MIX(h, '/'), sym->cname);
@@ -49,7 +49,7 @@ static uint32_t hash_symbol(CljSymbol *sym) {
 }
 
 static uint32_t hash_vector(CljPersistentVector *vec) {
-    if (!vec) return 0;
+    CLJ_ASSERT(vec && "hash_vector expects non-null vector");
     uint32_t h = 0;
     int n = vector_count(vec);
     for (int i = 0; i < n; i++)
@@ -59,7 +59,7 @@ static uint32_t hash_vector(CljPersistentVector *vec) {
 
 static uint32_t hash_map(ID map_obj) {
     CljPersistentMap *map = map_backing(map_obj);
-    if (!map) return 0;
+    CLJ_ASSERT(map && "hash_map expects non-null map backing");
     int cnt = map_count(map);
     if (cnt <= 0) return 0;
 
@@ -95,7 +95,7 @@ static uint32_t hash_list(CljList *list) {
 
 static uint32_t hash_record(ID record_obj) {
     CljPersistentRecord *record = as_record(record_obj);
-    if (!record || !record->descriptor) return 0;
+    CLJ_ASSERT(record && record->descriptor && "hash_record expects valid record descriptor");
 
     uint32_t h = FNV1A_OFFSET;
     h = FNV_MIX(h, clj_hash_full(record->descriptor->type_symbol));
