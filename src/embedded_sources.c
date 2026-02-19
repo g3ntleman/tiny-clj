@@ -46,6 +46,10 @@ static const char *tiny_clj_fs_code =
 #include "tiny-clj.fs.clj"
     ;
 
+static const char *tiny_snd_composer_code =
+#include "tiny-clj.audio.clj"
+    ;
+
 static const char *tiny_clj_net_code =
 #include "tiny-clj.net.clj"
     ;
@@ -93,6 +97,7 @@ void embedded_source_map_init(void) {
     embedded_source_map_add(&m, "/libs/clojure/stacktrace.clj", clojure_stacktrace_code);
     embedded_source_map_add(&m, "/libs/tiny-clj/runtime.clj", tiny_clj_runtime_code);
     embedded_source_map_add(&m, "/libs/tiny-clj/fs.clj", tiny_clj_fs_code);
+    embedded_source_map_add(&m, "/libs/tiny-snd/composer.clj", tiny_snd_composer_code);
     embedded_source_map_add(&m, "/libs/tiny-clj/net.clj", tiny_clj_net_code);
     embedded_source_map_add(&m, "/libs/tiny-clj/net/mdns.clj", tiny_clj_net_mdns_code);
     embedded_source_map_add(&m, "/libs/tiny-db/kv.clj", tiny_db_kv_code);

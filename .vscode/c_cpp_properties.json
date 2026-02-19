@@ -1,0 +1,78 @@
+{
+  "configurations": [
+    {
+      "name": "Mac",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/include",
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/external",
+        "${workspaceFolder}/external/unity/src",
+        "${workspaceFolder}/subjective-c/src",
+        "${workspaceFolder}/subjective-c/src/subjective-c",
+        "${workspaceFolder}/external/tiny-db/inc",
+        "${workspaceFolder}/external/tiny-db/src",
+        "/usr/include",
+        "/usr/local/include"
+      ],
+      "defines": [
+        "DEBUG",
+        "ENABLE_MEMORY_PROFILING",
+        "META_ENABLED=1"
+      ],
+      "macFrameworkPath": ["/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"],
+      "cStandard": "c99",
+      "cppStandard": "c17",
+      "intelliSenseMode": "macos-clang-arm64",
+      "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+    },
+    {
+      "name": "Linux",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/include",
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/external",
+        "${workspaceFolder}/external/unity/src",
+        "${workspaceFolder}/subjective-c/src",
+        "${workspaceFolder}/subjective-c/src/subjective-c",
+        "${workspaceFolder}/external/tiny-db/inc",
+        "${workspaceFolder}/external/tiny-db/src",
+        "/usr/include"
+      ],
+      "defines": [
+        "DEBUG",
+        "ENABLE_MEMORY_PROFILING",
+        "META_ENABLED=1"
+      ],
+      "cStandard": "c99",
+      "cppStandard": "c17",
+      "intelliSenseMode": "linux-gcc-x64",
+      "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+    },
+    {
+      "name": "Win32",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/include",
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/external",
+        "${workspaceFolder}/external/unity/src",
+        "${workspaceFolder}/subjective-c/src",
+        "${workspaceFolder}/subjective-c/src/subjective-c",
+        "${workspaceFolder}/external/tiny-db/inc",
+        "${workspaceFolder}/external/tiny-db/src"
+      ],
+      "defines": [
+        "DEBUG",
+        "ENABLE_MEMORY_PROFILING",
+        "META_ENABLED=1"
+      ],
+      "cStandard": "c99",
+      "cppStandard": "c17",
+      "intelliSenseMode": "windows-msvc-x64",
+      "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+    }
+  ],
+  "version": 4
+}
