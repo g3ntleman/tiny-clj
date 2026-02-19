@@ -386,32 +386,27 @@ ID eval_special_throw(CljPersistentVector *args, CljPersistentMap *env, EvalStat
 
 ID eval_special_go(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
     (void)ctx;  // Unused
-    CljList *do_list = NULL;
     unsigned int argc = args_count(args);
+    CljASTCall *do_call = NULL;
     if (argc > 0) {
-        CljList *body_list = NULL;
-        for (int i = (int)argc - 1; i >= 0; i--) {
-            ID expr_i = args_nth(args, (unsigned int)i);
-            body_list = make_list(expr_i, body_list);
-        }
-        do_list = make_list((CljObject*)SYM_DO, body_list);
+        // Build canonical body directly as (do ...) AST call to avoid legacy list fallback.
+        do_call = make_ast_call((ID)SYM_DO, args);
     }
 
     CljPersistentVector* empty_params_vec = make_vector(0, STRONG);
     CljPersistentVector *fn_args = make_vector(2, STRONG);
     vector_conj_inplace(&fn_args, (ID)empty_params_vec);
     RELEASE(empty_params_vec);
-    vector_conj_inplace(&fn_args, (ID)do_list);
+    vector_conj_inplace(&fn_args, (ID)do_call);
 
     ID fn_obj = eval_fn(fn_args, env, st, NULL);
     RELEASE(fn_args);
+    RELEASE(do_call);
     if (!fn_obj) {
-        RELEASE(do_list);
         return NULL;
     }
     CljTransientMap *chan = make_result_channel();
     event_loop_enqueue(fn_obj, chan);
-    RELEASE(do_list);
     return (CljObject*)chan;
 }
 

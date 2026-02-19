@@ -14,6 +14,7 @@
 
 struct CljPersistentMap;  // Forward declaration to avoid including map.h here
 struct CljHashSet;        // Forward declaration to avoid including hashset.h here
+struct CljPersistentRecord;         // Forward declaration to avoid including record.h here
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,6 +57,11 @@ typedef struct {
             int index;           // Current slot index
             int capacity;        // Total slots
         } hset;
+        struct {
+            struct CljPersistentRecord *record; // Record being iterated
+            int index;           // Current entry index
+            int count;           // Total entries
+        } record;
     } state;
     CljType seq_type;        // Type of sequence (for dispatch)
 } SeqIterator;

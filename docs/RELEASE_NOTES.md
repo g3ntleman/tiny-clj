@@ -2,6 +2,12 @@
 
 ## Latest Updates (Recent Commits)
 
+### Record Support (Latest)
+- **Records (`defrecord`)**: Basis-Funktionalität ist implementiert (Descriptor, Konstruktoren `->Type`/`map->Type`, Feldzugriff).
+- **Implementation Restriction**: Extension-Map (`extmap`) ist aktuell **nicht** implementiert.
+  - Zusätzliche Keys, die nicht in `defrecord` deklariert sind, werden nicht unterstützt.
+  - Entsprechende Operationen enden mit `NotImplementedException`.
+
 ### Version 0.3: tiny-db flash database layer (sorted key-value store)
 - **tiny-db storage layer**: Database layer for flash-like block devices using a sorted key-value store (B-tree)
   - Copy-on-write / append-only write path to tolerate resets and power-loss scenarios

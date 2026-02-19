@@ -53,6 +53,9 @@ typedef struct TinyClJRuntime {
     // Meta Registry (HashMap for O(1) lookup)
     CljHashMap *meta_registry;
 
+    // Record descriptors (type symbol -> descriptor object)
+    CljHashMap *record_registry;
+
     // Embedded source map (path -> byte-array view)
     CljPersistentMap *embedded_source_map;
     

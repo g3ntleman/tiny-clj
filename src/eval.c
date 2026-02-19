@@ -28,6 +28,7 @@
 #include "value.h"
 #include "environment.h"
 #include "ast.h"
+#include "ast_canon.h"
 #include "vector.h"
 #include "env_stack.h"
 #include "strings.h"  // For pr_str
@@ -54,7 +55,7 @@ void eval_set_use_compiled_ast(int enabled) {
     g_eval_use_compiled_ast = enabled ? 1 : 0;
 }
 
-static CljASTCall *list_to_ast_call(CljList *list);
+static ID eval_noncanonical_list_form(ID list_form);
 
 static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, CljSymbol *qualified) {
     if (!slot || !unqualified || !qualified) {
@@ -124,6 +125,7 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
 // Evaluation context structures are defined in function_call.h
 
 #include "map.h"
+#include "record.h"
 #include "runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -222,7 +224,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
     }
 
     // Arity check - variadic functions accept >= required params
-    int param_count = func->params ? (int)vector_count(func->params) : 0;
+    int param_count = (int)func->param_count;
     int8_t vi = func->variadic_index;
     unsigned int required = (param_count > 0) ? (unsigned int)param_count : 0;
     if (vi < 0) {
@@ -240,7 +242,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
     ID current_args[16];
     ID recur_args[16];
     int used_recur_slots = 0;
-    ID *params_array = func->params ? vector_as_array(func->params) : NULL;
+    ID *params_array = (param_count > 0) ? func->params : NULL;
     
     // Variadic handling: build effective params/values only when needed
     ID variadic_params[16];
@@ -586,10 +588,7 @@ ID eval_body_with_env(ID body, CljPersistentMap *env, EvalState *st) {
 
         case CLJ_LIST:
         case CLJ_AST_NODE: {
-            // Type check before calling
-            if (!body_obj || !is_list_type(TAG(body_obj))) return NULL;
-            CljList *list_data = as_list(body);
-            return eval_list(list_data, env, st, NULL);
+            return eval_noncanonical_list_form(body);
         }
         case CLJ_AST_CALL: {
             return eval_ast_call(as_ast_call(body), env, st, NULL);
@@ -725,12 +724,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 // AST-Node wrapping a vector - evaluate the vector
                 return eval_body_with_params(node->first, ctx);
             }
-            // Otherwise treat as list
-            CljPersistentMap *env_map = get_closure_env(ctx);
-            EvalState *ctx_state = get_eval_state(ctx, NULL);
-            // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
-            if (!ctx_state) ctx_state = builtin_get_eval_state();
-            return eval_list(as_list(body), env_map, ctx_state, ctx);
+            // Otherwise treat as legacy list-like form.
+            return eval_noncanonical_list_form(body);
         }
         case CLJ_AST_CALL: {
             CljPersistentMap *env_map = get_closure_env(ctx);
@@ -740,12 +735,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         }
 
         case CLJ_LIST: {
-            // Evaluate list with context (ctx preserves recur)
-            CljPersistentMap *env_map = get_closure_env(ctx);
-            EvalState *ctx_state = get_eval_state(ctx, NULL);
-            // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
-            if (!ctx_state) ctx_state = builtin_get_eval_state();
-            return eval_list(as_list(body), env_map, ctx_state, ctx);
+            // Legacy non-canonical list forms are rejected.
+            return eval_noncanonical_list_form(body);
         }
 
         case CLJ_VECTOR_PERSISTENT:
@@ -824,8 +815,7 @@ static ID __attribute__((noinline)) eval_body_no_ctx(ID body, CljPersistentMap *
     switch (((CljObject*)body)->type) {
         case CLJ_LIST:
         case CLJ_AST_NODE: {
-            // Evaluate list (no ctx in this path)
-            return eval_list(as_list(body), eval_env, st, NULL);
+            return eval_noncanonical_list_form(body);
         }
         case CLJ_AST_CALL: {
             return eval_ast_call(as_ast_call(body), eval_env, st, NULL);
@@ -977,41 +967,20 @@ ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *c
     return eval_body_no_ctx(body, env, st);
 }
 
-// Helper functions for eval_list optimization
-/** Convert (op arg1 ...) list to CljASTCall. Caller must RELEASE. Used only at eval_list entry. */
-static CljASTCall *list_to_ast_call(CljList *list) {
-    if (!list) return NULL;
-    ID op = LIST_FIRST(list);
-    CljList *rest = list_rest_normalized(list);
-    CljPersistentVector *args = make_vector(0, STRONG);
-    if (!args) return NULL;
-    if (rest) {
-        unsigned int n = 0;
-        for (CljList *node = rest; node && n < 32; ) {
-            n++;
-            ID r = LIST_REST(node);
-            if (!r) break;
-            if (!is_list_type(TAG((CljObject*)r))) { n++; break; }
-            node = as_list(r);
-        }
-        for (CljList *node = rest; node && vector_count(args) < n; ) {
-            vector_conj_inplace(&args, LIST_FIRST(node));
-            ID r = LIST_REST(node);
-            if (!r) break;
-            if (!is_list_type(TAG((CljObject*)r))) {
-                vector_conj_inplace(&args, r);
-                break;
-            }
-            node = as_list(r);
-        }
-    }
-    CljASTCall *call = make_ast_call(op, args);
-    RELEASE(args);
-    return call;
+// Non-canonical list forms are no longer evaluated via runtime list->AST bridges.
+// Keep empty-list compatibility (`()` currently evaluates to nil in this runtime),
+// and fail fast on any non-empty list to catch upstream canonicalization regressions.
+static ID eval_noncanonical_list_form(ID list_form) {
+    if (!list_form || !is_list_type(TAG(list_form))) return NULL;
+    CljList *list = as_list(list_form);
+    if (!list || list_empty(list)) return NULL;
+    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                              "Cannot evaluate non-canonical list form");
+    return NULL;
 }
 static ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *st, const EvalContext *ctx, CljObject *call_form);
 
-// Thread-local recursion depth tracking for eval_arg and eval_list
+// Thread-local recursion depth tracking for nested eval_arg/call dispatch
 static _Thread_local int g_eval_arg_depth = 0;
 
 // Thread-local recursion depth tracking for eval_ast_call (stack overflow guard)
@@ -1051,7 +1020,7 @@ void reset_eval_arg_depth(void) {
 }
 
 // ============================================================================
-// Helper functions for eval_list refactoring
+// Helper functions for call dispatch and environment lookup
 // ============================================================================
 
 static INLINE bool is_dynamic_var_symbol(const CljSymbol *symbol) {
@@ -1211,6 +1180,24 @@ static INLINE ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *
     return resolved ? resolved : op;
 }
 
+static inline bool is_map_like_eval(ID obj) {
+    if (!obj) return false;
+    unsigned char tag = TAG(obj);
+    return tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT || tag == CLJ_RECORD;
+}
+
+static inline ID map_like_get_sentinel_eval(ID map_like, ID key, ID not_found) {
+    if (!map_like) return not_found;
+    unsigned char tag = TAG(map_like);
+    if (tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT) {
+        return map_get_sentinel((CljValue)map_like, (CljValue)key, (CljValue)not_found);
+    }
+    if (tag == CLJ_RECORD) {
+        return record_get_sentinel(map_like, key, not_found);
+    }
+    return not_found;
+}
+
 static INLINE ID eval_map_lookup_vec(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx, ID map) {
     unsigned int argc = args ? vector_count(args) : 0;
     if (argc != 1) {
@@ -1223,7 +1210,7 @@ static INLINE ID eval_map_lookup_vec(CljPersistentVector *args, CljPersistentMap
     ID key = eval_arg_from_expr_with_context(key_expr, env, st, ctx);
     if (!key) return NULL;
 
-    ID result = map_get_sentinel((CljValue)map, (CljValue)key, NULL);
+    ID result = map_like_get_sentinel_eval(map, key, NULL);
     return result;
 }
 
@@ -1256,11 +1243,11 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
             default_val = eval_arg_from_expr_with_context(vector_nth(args, 1), env, st, ctx);
         }
 
-        if (!target || !is_map(target)) {
+        if (!target || !is_map_like_eval(target)) {
             return (IS_IMMEDIATE(default_val) || !default_val) ? default_val : (ID)AUTORELEASE(default_val);
         }
 
-        ID found = map_get_sentinel((CljPersistentMap*)target, op, NOT_FOUND);
+        ID found = map_like_get_sentinel_eval(target, op, NOT_FOUND);
         if (found && found != NOT_FOUND) RETAIN(found);
 
         if (found == NOT_FOUND) {
@@ -1287,7 +1274,7 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
         }
 
         unsigned char fn_tag = TAG(fn);
-        if (fn_tag == CLJ_MAP_PERSISTENT) {
+        if (fn_tag == CLJ_MAP_PERSISTENT || fn_tag == CLJ_MAP_TRANSIENT || fn_tag == CLJ_RECORD) {
             ID r = eval_map_lookup_vec(args, env, st, ctx, fn);
             return (IS_IMMEDIATE(r) || !r) ? r : (ID)AUTORELEASE(r);
         }
@@ -1398,29 +1385,6 @@ static INLINE ID call_function_with_args_and_context_vec(ID fn, CljPersistentVec
     if (TAG(result) == CLJ_EXCEPTION && !IS_IMMEDIATE(result))
         RETAIN(result);
     /* Eval path returns autoreleased refs (MEMORY_POLICY). Do not AUTORELEASE again. */
-    return result;
-}
-
-// List evaluation: convert to call-site and dispatch.
-//
-// INEFFICIENT: This path allocates a fresh CljASTCall (and args vector) via list_to_ast_call
-// on every call. Prefer call-sites (CljASTCall) so callers use eval_ast_call directly and
-// avoid this conversion. We still need eval_list for self-modifying or runtime-constructed
-// code where the form is a list (e.g. (eval (read-string "...")) or macros that build forms).
-ID eval_list(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
-    if (!list || list_empty(list)) return NULL;
-
-    EvalState *effective_st = ctx ? get_eval_state(ctx, st) : st;
-    if (!effective_st) effective_st = builtin_get_eval_state();
-
-    CljPersistentMap *effective_env = ctx ? get_closure_env(ctx) : NULL;
-    if (!effective_env) effective_env = env;
-    effective_env = eval_env_or_ns_mappings(effective_env, effective_st);
-
-    CljASTCall *call = list_to_ast_call(list);
-    if (!call) return NULL;
-    ID result = eval_ast_call(call, effective_env, effective_st, ctx);
-    RELEASE(call);
     return result;
 }
 
@@ -1602,7 +1566,7 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
         }
     }
 
-    if (is_map(op)) {
+    if (is_map_like_eval(op)) {
         g_eval_ast_call_depth--;
         ID r = eval_map_lookup_vec(call->args, effective_env, effective_st, ctx, op);
         return (IS_IMMEDIATE(r) || !r) ? r : (ID)AUTORELEASE(r);
@@ -1639,6 +1603,12 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
     op = resolved_op;
 
     unsigned char op_tag = op ? TAG(op) : 0;
+    if (op && is_map_like_eval(op)) {
+        g_eval_ast_call_depth--;
+        ID r = eval_map_lookup_vec(call->args, effective_env, effective_st, ctx, op);
+        return (IS_IMMEDIATE(r) || !r) ? r : (ID)AUTORELEASE(r);
+    }
+
     if (op && (op_tag == CLJ_SYMBOL || op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE)) {
         g_eval_ast_call_depth--;
         return eval_function_call_from_vector(call->args, effective_env, effective_st, op, ctx);
@@ -1704,7 +1674,7 @@ ID eval_def(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
     }
     // If value_expr is NULL, value remains NULL (nil case)
     // value can be NULL if nil was evaluated (legitimate case)
-    // If evaluation failed, eval_list/eval_parsed should have thrown an exception
+    // If evaluation failed, eval/eval_parsed should have thrown an exception
 
     // Store the symbol-value binding in the environment
     if (!st) {
@@ -1832,22 +1802,20 @@ ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
         CljSymbol *clause_sym = NULL;
         CljPersistentVector *specs_vec = NULL;
         CljASTCall *call = NULL;
-        bool owns_call = false;
 
         CljType clause_tag = TAG(clause);
         if (clause_tag == CLJ_AST_CALL) {
             call = as_ast_call(clause);
         } else if (is_list_type(clause_tag)) {
-            call = list_to_ast_call(as_list(clause));
-            owns_call = (call != NULL);
+            ID canonical_clause = canonicalize_ast(clause, st);
+            if (canonical_clause && TAG(canonical_clause) == CLJ_AST_CALL) {
+                call = as_ast_call(canonical_clause);
+            }
         } else {
             continue;
         }
 
         if (!call || !call->op || TAG(call->op) != CLJ_SYMBOL) {
-            if (owns_call) {
-                RELEASE(call);
-            }
             continue;
         }
 
@@ -1855,9 +1823,6 @@ ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
         specs_vec = call->args;
 
         if (!clause_sym || !clause_sym->cname) {
-            if (owns_call) {
-                RELEASE(call);
-            }
             continue;
         }
 
@@ -1894,9 +1859,6 @@ ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
             }
         }
 
-        if (owns_call) {
-            RELEASE(call);
-        }
     }
 
     return NULL;
@@ -1988,16 +1950,19 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
 
     body = vector_nth(args, body_start);
     
-    // Handle multiple body expressions: use a temporary (do ...) for TCO analysis.
-    // We'll later store the body as a vector to drop the list nodes.
+    // Handle multiple body expressions by creating canonical (do ...) AST call.
     bool body_is_multi = ((argc - body_start) > 1);
+    bool body_owned = false;
     if (body_is_multi) {
-        CljList *body_list = NULL;
-        for (int i = (int)argc - 1; i >= (int)body_start; i--) {
-            ID expr = vector_nth(args, (unsigned int)i);
-            body_list = make_list(expr, body_list);
+        unsigned int body_count = argc - body_start;
+        CljPersistentVector *do_args = make_vector((int)body_count, STRONG);
+        for (unsigned int i = body_start; i < argc; i++) {
+            vector_conj_inplace(&do_args, vector_nth(args, i));
         }
-        body = (CljObject*)make_list(SYM_DO, body_list);
+        CljASTCall *do_call = make_ast_call((ID)SYM_DO, do_args);
+        RELEASE(do_args);
+        body = (ID)do_call;
+        body_owned = true;
     }
 
     // Parameters can be a vector [a b] or a list (a b)
@@ -2086,17 +2051,19 @@ ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, cons
         }
     }
 
-    // TCO: Transform recursive tail calls to recur for named functions
-    bool body_owned = false;
+    // Optimize named function bodies via one optimizer walk.
     if (fn_name && body) {
-        CljObject *orig_body = body;
-        CljObject *transformed = transform_recursive_tail_calls(body, (CljObject*)fn_name,
+        ID orig_body = body;
+        ID transformed = optimize_function_body_walk(body, (ID)fn_name,
                                                                  (CljObject**)params, param_count, body);
         if (transformed) {
             if (transformed == orig_body) {
-                // transform_recursive_tail_calls retains; drop the extra retain.
+                // optimize_function_body_walk retains; drop the extra retain.
                 RELEASE(transformed);
             } else {
+                if (body_owned) {
+                    RELEASE(orig_body);
+                }
                 body = transformed;
                 body_owned = true;
             }
@@ -2338,7 +2305,7 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     }
 
     // If not found in namespace but is a builtin, return symbol as fallback
-    // (will be handled by eval_list)
+    // (handled by the function-call dispatch path).
     if (is_builtin_function(symbol)) {
         return symbol;
     }
@@ -2515,7 +2482,7 @@ ID eval_list_function(CljList *list, CljPersistentMap *env) {
         return empty_list();
     }
 
-    // Simply return the arguments as a list (they're already evaluated by eval_list)
+    // Simply return the arguments as a list (they're already evaluated by call dispatch)
     // args_list is part of the list_data structure, which is already safe (caller has strong reference)
     return args_list;
 }
@@ -2770,10 +2737,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
     }
 
     if (is_list_type(expr_tag)) {
-        // Fast-path: use caller's EvalState (99% of cases)
-        // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
-        EvalState *list_st = eval_st ? eval_st : builtin_get_eval_state();
-        return eval_list(as_list(expr), eval_env, list_st, ctx);
+        return eval_noncanonical_list_form(expr);
     }
 
     if (expr_tag == CLJ_MAP_PERSISTENT) {
@@ -2949,8 +2913,7 @@ ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
     if (IS_IMMEDIATE(result)) {
         return result;
     }
-    // For heap objects from map_get/ns_resolve, use AUTORELEASE
-    // eval_list already returns AUTORELEASE, so we just return it
+    // For heap objects from map_get/ns_resolve, return pool-safe refs as-is.
     return result;
 }
 

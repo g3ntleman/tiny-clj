@@ -184,6 +184,7 @@ list(APPEND SOURCES
     src/eval.c
     src/function.c
     src/optimize.c
+    src/record.c
     src/environment.c
     src/equality.c
     src/hash.c
@@ -264,6 +265,7 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/eval.c
     src/function.c
     src/optimize.c
+    src/record.c
     src/environment.c
     src/equality.c
     src/list.c
@@ -476,6 +478,7 @@ add_executable(unit-tests
     src/tests/test_qualified_symbol_resolution.c
     src/tests/test_recursive_resolution.c
     src/tests/test_repl.c
+    src/tests/test_runner_patterns.c
     src/tests/test_file_io.c
     src/tests/test_embedded_sources.c
     src/tests/test_rrd_scripts.c
@@ -486,6 +489,7 @@ add_executable(unit-tests
     src/tests/test_meta.c
     src/tests/test_hashmap_highlevel.c
     src/tests/test_map.c
+    src/tests/test_records.c
     src/tests/test_cow.c
     src/tests/test_special_forms.c
     src/tests/test_dynamic_binding.c

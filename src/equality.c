@@ -17,6 +17,7 @@
 #include "list.h"
 #include "seq.h"
 #include "hashset.h"
+#include "record.h"
 
 #include "instant.h"
 #include "uuid.h"
@@ -150,6 +151,18 @@ bool clj_equal_full(ID a, ID b) {
                 ID val_b = map_get(map_b, key_a);
                 if (val_b == NOT_FOUND) return false;
                 if (!clj_equal(val_a, val_b)) return false;
+            }
+            return true;
+        }
+
+        case CLJ_RECORD: {
+            CljPersistentRecord *ra = as_record(a);
+            CljPersistentRecord *rb = as_record(b);
+            if (!ra || !rb || !ra->descriptor || !rb->descriptor) return false;
+            if (!clj_equal(ra->descriptor->type_symbol, rb->descriptor->type_symbol)) return false;
+            if (ra->field_count != rb->field_count) return false;
+            for (unsigned int i = 0; i < ra->field_count; i++) {
+                if (!clj_equal(ra->values[i], rb->values[i])) return false;
             }
             return true;
         }

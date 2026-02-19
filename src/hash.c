@@ -11,6 +11,7 @@
 #include "kv_macros.h"
 #include "callbacks.h"
 #include "hashset.h"
+#include "record.h"
 
 #include "instant.h"
 #include "uuid.h"
@@ -92,6 +93,24 @@ static uint32_t hash_list(CljList *list) {
     return h;
 }
 
+static uint32_t hash_record(ID record_obj) {
+    CljPersistentRecord *record = as_record(record_obj);
+    if (!record || !record->descriptor) return 0;
+
+    uint32_t h = FNV1A_OFFSET;
+    h = FNV_MIX(h, clj_hash_full(record->descriptor->type_symbol));
+    h = FNV_MIX(h, (uint32_t)record->field_count);
+
+    if (record->field_count > 0) {
+        h = FNV_MIX(h, clj_hash_full(record->values[0]));
+    }
+    if (record->field_count > 1) {
+        h = FNV_MIX(h, clj_hash_full(record->values[record->field_count - 1]));
+    }
+
+    return h;
+}
+
 static uint32_t hash_string(CljString *str) {
     uint16_t len = string_length((ID)str);
     const char *d = string_data((ID)str);
@@ -140,6 +159,8 @@ uint32_t clj_hash_full(ID value) {
         case CLJ_MAP_TRANSIENT:
             // Transients do not have value semantics; hash by identity.
             return (uint32_t)(uintptr_t)value;
+        case CLJ_RECORD:
+            return hash_record(value);
         case CLJ_LIST: return hash_list((CljList*)value);
         case CLJ_INSTANT: {
             CljInstant *inst = (CljInstant*)value;

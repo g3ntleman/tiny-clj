@@ -19,12 +19,13 @@ typedef struct {
 
 typedef struct {
     CljObject base;
+    uint8_t param_count;      // Number of entries in params[] (includes '&' marker for variadics)
     int8_t variadic_index;    // -1 = not variadic, >= 0 = index of & in params
-    CljPersistentVector *params;  // Parameter vector (can be NULL if no parameters)
     ID body;                  // Function body (AST to evaluate)
     CljPersistentVector *env_stack;  // Environment stack (vector of maps), COW-optimized
     struct CljSymbol *name_sym;
     struct CljNamespace *ns;
+    ID params[];              // Inline parameter array (flexible array member)
 } CljFunction;
 
 CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVector *env_stack, struct CljSymbol *name_sym, struct CljNamespace *ns);

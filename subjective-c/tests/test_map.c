@@ -231,19 +231,44 @@ TEST(test_map_remove_behavior) {
 
     CljPersistentMap *removed_map = map_remove(map, kw1);
     TEST_ASSERT_NOT_NULL(removed_map);
-    TEST_ASSERT_TRUE(removed_map != map);
+    TEST_ASSERT_EQUAL_PTR(map, removed_map);
     TEST_ASSERT_EQUAL_INT(1, removed_map->count);
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, map_get(removed_map, kw1));
     CljValue val_kw2 = map_get_sentinel(removed_map, kw2, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val_kw2));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(val_kw2));
-    RELEASE(removed_map);
 
     CljPersistentMap *unchanged_map = map_remove(map, kw3);
     TEST_ASSERT_EQUAL_PTR(map, unchanged_map);
-    TEST_ASSERT_EQUAL_INT(2, map->count);
+    TEST_ASSERT_EQUAL_INT(1, map->count);
 
     RELEASE(map);
+}
+
+TEST(test_map_remove_cow_when_shared) {
+    CljPersistentMap *map = make_map_or_fail(4);
+    ID kw1 = AUTORELEASE(make_string(":key1"));
+    ID kw2 = AUTORELEASE(make_string(":key2"));
+
+    map = adopt_map(map, map_assoc(map, kw1, fixnum(1)));
+    map = adopt_map(map, map_assoc(map, kw2, fixnum(2)));
+    TEST_ASSERT_EQUAL_INT(2, map->count);
+
+    RETAIN(map); // shared ownership => rc>1, remove must take COW path
+    CljPersistentMap *removed_map = RETAIN(map_remove(map, kw1));
+    TEST_ASSERT_NOT_NULL(removed_map);
+    TEST_ASSERT_TRUE(removed_map != map);
+
+    TEST_ASSERT_EQUAL_INT(2, map->count);
+    TEST_ASSERT_TRUE(map_get(map, kw1) != NOT_FOUND);
+
+    TEST_ASSERT_EQUAL_INT(1, removed_map->count);
+    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, map_get(removed_map, kw1));
+    TEST_ASSERT_TRUE(map_get(removed_map, kw2) != NOT_FOUND);
+
+    RELEASE(removed_map);
+    RELEASE(map); // release retained share
+    RELEASE(map); // release original
 }
 
 TEST(test_map_merge_overwrite_flag) {
@@ -705,7 +730,7 @@ TEST(test_map_nil_as_key_remove) {
     CljValue result = map_get(removed_map, NULL);
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, result);
     
-    RELEASE(removed_map);
+    if (removed_map != map) RELEASE(removed_map);
     RELEASE(map);
 }
 
@@ -755,7 +780,7 @@ TEST(test_map_nil_as_value_remove) {
     CljValue result = map_get(removed_map, key);
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, result);
     
-    RELEASE(removed_map);
+    if (removed_map != map) RELEASE(removed_map);
     RELEASE(map);
 }
 
@@ -795,6 +820,6 @@ TEST(test_map_nil_key_and_value_together) {
     TEST_ASSERT_TRUE(is_fixnum(other_after_remove));
     TEST_ASSERT_EQUAL_INT(99, as_fixnum(other_after_remove));
     
-    RELEASE(removed_map);
+    if (removed_map != map) RELEASE(removed_map);
     RELEASE(map);
 }

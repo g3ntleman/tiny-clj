@@ -1,8 +1,8 @@
 /*
- * Tail Call Optimization (TCO) for Tiny-CLJ
+ * Function-body optimization walk for Tiny-CLJ.
  *
- * Compact, DRY implementation for detecting and transforming recursive tail calls
- * into explicit `recur` calls, following the Clojure approach.
+ * This file implements a single recursive AST walk that applies multiple
+ * optimizations in one traversal.
  */
 
 #include "optimize.h"
@@ -13,6 +13,8 @@
 #include "memory.h"
 #include "ast.h"
 #include "vector.h"
+#include "record.h"
+#include "value.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -21,6 +23,107 @@ static bool is_last_in_list(CljObject *expr, CljList *list) {
     if (!list) return false;
     while (list->rest) list = as_list(list->rest);
     return list->first == expr;
+}
+
+static bool symbol_cname_equals(CljSymbol *sym, const char *name) {
+    if (!sym || !name || !sym->cname) return false;
+    return strcmp(sym->cname, name) == 0;
+}
+
+// Resolve a descriptor from constructor symbols like ->Type or map->Type.
+static CljRecordDescriptor *record_descriptor_from_ctor_symbol(CljSymbol *ctor_sym) {
+    if (!ctor_sym || !ctor_sym->cname) return NULL;
+
+    const char *cname = ctor_sym->cname;
+    const char *type_name = NULL;
+    if (strncmp(cname, "map->", 5) == 0 && cname[5] != '\0') {
+        type_name = cname + 5;
+    } else if (strncmp(cname, "->", 2) == 0 && cname[2] != '\0') {
+        type_name = cname + 2;
+    } else {
+        return NULL;
+    }
+
+    CljSymbol *type_sym = ctor_sym->ns_name
+        ? intern_symbol(ctor_sym->ns_name, type_name)
+        : intern_symbol_global(type_name);
+    if (!type_sym) return NULL;
+
+    return record_descriptor_lookup((ID)type_sym);
+}
+
+// Infer record field index for constant keyword lookups on constructor targets.
+static int infer_record_field_index_from_target(ID target_expr, ID key) {
+    if (!target_expr || !key || TAG(target_expr) != CLJ_AST_CALL || !IS_KEYWORD(key)) {
+        return -1;
+    }
+
+    CljASTCall *target_call = as_ast_call(target_expr);
+    if (!target_call || !target_call->op || TAG(target_call->op) != CLJ_SYMBOL) {
+        return -1;
+    }
+
+    CljRecordDescriptor *desc = record_descriptor_from_ctor_symbol(as_symbol(target_call->op));
+    if (!desc || !desc->key_to_index) {
+        return -1;
+    }
+
+    ID idx_obj = hashmap_get_sentinel(desc->key_to_index, key, NOT_FOUND);
+    if (!idx_obj || idx_obj == NOT_FOUND || !is_fixnum(idx_obj)) {
+        return -1;
+    }
+
+    return as_fixnum(idx_obj);
+}
+
+// Rewrite (:k (->Type ...)) and (get (->Type ...) :k) into record-get-index.
+// Returns true when rewrite was applied.
+static bool rewrite_record_lookup_call(CljASTCall *call) {
+    if (!call || !call->op || !call->args) return false;
+
+    unsigned int argc = vector_count(call->args);
+    if (argc == 0) return false;
+
+    ID target_expr = NULL;
+    ID key = NULL;
+    ID default_expr = NULL;
+
+    if (IS_KEYWORD(call->op)) {
+        if (argc != 1 && argc != 2) return false;
+        key = call->op;
+        target_expr = vector_nth(call->args, 0);
+        default_expr = (argc == 2) ? vector_nth(call->args, 1) : NULL;
+    } else if (TAG(call->op) == CLJ_SYMBOL) {
+        CljSymbol *op_sym = as_symbol(call->op);
+        if (!symbol_cname_equals(op_sym, "get")) return false;
+        if (argc != 2 && argc != 3) return false;
+        target_expr = vector_nth(call->args, 0);
+        key = vector_nth(call->args, 1);
+        default_expr = (argc == 3) ? vector_nth(call->args, 2) : NULL;
+        if (!IS_KEYWORD(key)) return false;
+    } else {
+        return false;
+    }
+
+    int index = infer_record_field_index_from_target(target_expr, key);
+    if (index < 0) return false;
+
+    CljPersistentVector *new_args = make_vector(3, STRONG);
+    if (!new_args) return false;
+    vector_conj_inplace(&new_args, target_expr);
+    vector_conj_inplace(&new_args, fixnum(index));
+    vector_conj_inplace(&new_args, default_expr);
+
+    CljSymbol *fast_op = intern_symbol_global("record-get-index");
+    if (!fast_op) {
+        RELEASE(new_args);
+        return false;
+    }
+
+    ASSIGN(call->op, (ID)fast_op);
+    ASSIGN(call->args, new_args);
+    RELEASE(new_args);
+    return true;
 }
 
 // Get last element and check tail position (for AST_CALL bodies)
@@ -187,14 +290,15 @@ static CljObject* transform_to_recur(CljList *call_list, CljSymbol *func_sym) {
 }
 
 // Forward declaration
-CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
+CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
                                          CljObject **params, int param_count,
                                          CljObject *parent_body);
 
-static bool transform_ast_call_arg(CljASTCall *call, unsigned int index,
-                                   CljObject *func_name,
-                                   CljObject **params, int param_count,
-                                   CljObject *parent_body) {
+// Optimize one AST_CALL argument in-place via the same optimizer walk.
+static bool optimize_ast_call_arg_inplace(CljASTCall *call, unsigned int index,
+                                          CljObject *func_name,
+                                          CljObject **params, int param_count,
+                                          CljObject *parent_body) {
     if (!call || !call->args) return true;
     unsigned int argc = vector_count(call->args);
     if (index >= argc) return true;
@@ -202,7 +306,7 @@ static bool transform_ast_call_arg(CljASTCall *call, unsigned int index,
     ID arg = vector_nth(call->args, index);
     if (!arg) return true;
 
-    CljObject *transformed = transform_recursive_tail_calls(arg, func_name, params, param_count, parent_body);
+    CljObject *transformed = optimize_function_body_walk(arg, func_name, params, param_count, parent_body);
     if (!transformed) return false;
     if (transformed != arg) {
         vector_assoc_inplace(&call->args, index, transformed);
@@ -213,16 +317,16 @@ static bool transform_ast_call_arg(CljASTCall *call, unsigned int index,
 // Helper: Transform list of expressions
 // Mutates the list in-place
 // Returns the original list (now mutated) if transformations occurred
-static CljList* transform_list(CljList *list, CljObject *func_name,
-                                CljObject **params, int param_count,
-                                CljObject *parent_body) {
+static CljList* optimize_list_walk_inplace(CljList *list, CljObject *func_name,
+                                           CljObject **params, int param_count,
+                                           CljObject *parent_body) {
     if (!list) return NULL;
 
     for (CljList *current = list; current; current = as_list(current->rest)) {
         CljObject *expr = current->first;
         if (!expr) continue;
 
-        CljObject *transformed = transform_recursive_tail_calls(expr, func_name, params, param_count, parent_body);
+        CljObject *transformed = optimize_function_body_walk(expr, func_name, params, param_count, parent_body);
         if (!transformed) return NULL;
 
         if (transformed != expr) {
@@ -262,6 +366,7 @@ static CljList* build_list(CljObject *first, CljObject *second, CljObject *third
     return list;
 }
 
+// Build an AST_CALL recur node while preserving existing call arguments.
 static CljObject* transform_ast_call_to_recur(CljASTCall *call) {
     if (!call) return NULL;
     // Preserve AST_CALL representation so recur is evaluated as a special form.
@@ -270,8 +375,8 @@ static CljObject* transform_ast_call_to_recur(CljASTCall *call) {
     return (CljObject*)recur_call;
 }
 
-// Transform recursive tail calls to recur
-CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
+// Optimize function body via one recursive walk with multiple optimizations.
+CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
                                          CljObject **params, int param_count,
                                          CljObject *parent_body) {
     if (!body) return NULL;
@@ -292,10 +397,12 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
             return body;
         }
 
+        (void)rewrite_record_lookup_call(call);
+
         unsigned int argc = vector_count(call->args);
         if (head == SYM_IF) {
             for (unsigned int i = 0; i < argc && i < 3; i++) {
-                if (!transform_ast_call_arg(call, i, func_name, params, param_count, body)) {
+                if (!optimize_ast_call_arg_inplace(call, i, func_name, params, param_count, body)) {
                     return NULL;
                 }
             }
@@ -305,7 +412,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
 
         if (head == SYM_WHEN || head == SYM_DO || head == SYM_LET || head == SYM_COND) {
             for (unsigned int i = 0; i < argc; i++) {
-                if (!transform_ast_call_arg(call, i, func_name, params, param_count, body)) {
+                if (!optimize_ast_call_arg_inplace(call, i, func_name, params, param_count, body)) {
                     return NULL;
                 }
             }
@@ -324,7 +431,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
     CljSymbol *head = (CljSymbol*)head_obj;
     CljObject *context = parent_body ? parent_body : body;
 
-    // Transform recursive tail call
+    // Tail-call optimization: rewrite direct self-tail calls to `recur`.
     bool is_recursive = is_recursive_call(body, func_name);
     bool is_tail = is_tail_position(body, context);
     if (is_recursive && is_tail) {
@@ -332,21 +439,21 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
         return transform_to_recur(body_list, func_sym);
     }
 
-    // Transform special forms
+    // Recurse through special forms (same optimization walk).
     CljList *rest = as_list(body_list->rest);
     if (!rest) return RETAIN(body), body;
 
     if (head == SYM_IF) {
         // Transform (if cond then else)
         CljObject *cond = rest->first;
-        CljObject *t_cond = cond ? transform_recursive_tail_calls(cond, func_name, params, param_count, body) : NULL;
+        CljObject *t_cond = cond ? optimize_function_body_walk(cond, func_name, params, param_count, body) : NULL;
         if (cond && !t_cond) return NULL;
 
         CljList *then_list = as_list(rest->rest);
         CljObject *t_then = NULL, *t_else = NULL;
 
         if (then_list && then_list->first) {
-            t_then = transform_recursive_tail_calls(then_list->first, func_name, params, param_count, body);
+            t_then = optimize_function_body_walk(then_list->first, func_name, params, param_count, body);
             if (!t_then) {
                 if (t_cond && t_cond != cond) RELEASE(t_cond);
                 return NULL;
@@ -354,7 +461,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
 
             CljList *else_list = as_list(then_list->rest);
             if (else_list && else_list->first) {
-                t_else = transform_recursive_tail_calls(else_list->first, func_name, params, param_count, body);
+                t_else = optimize_function_body_walk(else_list->first, func_name, params, param_count, body);
                 if (!t_else) {
                     if (t_cond && t_cond != cond) RELEASE(t_cond);
                     RELEASE(t_then);
@@ -401,7 +508,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
     if (head == SYM_LET) {
         // Transform (let [bindings] body...)
         CljObject *bindings = rest->first;
-        CljObject *t_bindings = bindings ? transform_recursive_tail_calls(bindings, func_name, params, param_count, body) : NULL;
+        CljObject *t_bindings = bindings ? optimize_function_body_walk(bindings, func_name, params, param_count, body) : NULL;
         if (bindings && !t_bindings) return NULL;
 
         CljList *body_exprs = as_list(rest->rest);
@@ -413,14 +520,14 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
         CljObject *t_body_obj = NULL;
         if (body_exprs->first && !body_exprs->rest) {
             // Single expression - transform directly
-            t_body_obj = transform_recursive_tail_calls(body_exprs->first, func_name, params, param_count, body);
+            t_body_obj = optimize_function_body_walk(body_exprs->first, func_name, params, param_count, body);
             if (!t_body_obj) {
                 if (t_bindings && t_bindings != bindings) RELEASE(t_bindings);
                 return NULL;
             }
         } else {
             // Multiple expressions - transform list
-            CljList *t_body = transform_list(body_exprs, func_name, params, param_count, body);
+            CljList *t_body = optimize_list_walk_inplace(body_exprs, func_name, params, param_count, body);
             if (!t_body) {
                 if (t_bindings && t_bindings != bindings) RELEASE(t_bindings);
                 return NULL;
@@ -441,7 +548,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
 
     if (head == SYM_COND) {
         // Transform (cond test expr ...)
-        CljList *t_rest = transform_list(rest, func_name, params, param_count, body);
+        CljList *t_rest = optimize_list_walk_inplace(rest, func_name, params, param_count, body);
         if (!t_rest) return NULL;
 
         // If nothing changed, return the original cond form

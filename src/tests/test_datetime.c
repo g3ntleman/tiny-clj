@@ -280,6 +280,37 @@ TEST(test_datetime_date_time_api) {
     TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result));
 }
 
+TEST(test_datetime_to_raw_returns_map_like_record) {
+    ID result = eval_string(
+        "(do (require 'tiny-clj.datetime)"
+        "    (let [kw-days (clojure.core/keyword \"tiny-clj.datetime\" \"days\")"
+        "          kw-ms   (clojure.core/keyword \"tiny-clj.datetime\" \"ms\")"
+        "          raw     (tiny-clj.datetime/to-raw #inst \"1970-01-01T00:00:00.000Z\")]"
+        "      (and (map? raw)"
+        "           (= 2 (count raw))"
+        "           (= 0 (get raw kw-days))"
+        "           (= 0 (get raw kw-ms)))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result));
+}
+
+TEST(test_datetime_to_raw_core_ops_assoc_dissoc) {
+    ID result = eval_string(
+        "(do (require 'tiny-clj.datetime)"
+        "    (let [kw-days (clojure.core/keyword \"tiny-clj.datetime\" \"days\")"
+        "          kw-ms   (clojure.core/keyword \"tiny-clj.datetime\" \"ms\")"
+        "          raw     (tiny-clj.datetime/to-raw #inst \"1970-01-01T00:00:00.000Z\")"
+        "          raw2    (assoc raw kw-ms 1234)"
+        "          raw3    (dissoc raw2 kw-ms)]"
+        "      (and (= 1234 (get raw2 kw-ms))"
+        "           (= 1 (count raw3))"
+        "           (= 0 (get raw3 kw-days)))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result));
+}
+
 // --- format-iso tests ---
 
 TEST(test_datetime_format_iso) {

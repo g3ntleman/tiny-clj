@@ -14,6 +14,7 @@
 #include "vector.h"
 #include "strings.h"
 #include "map.h"
+#include "record.h"
 #include "hashset.h"
 #include "symbol.h"
 #include "memory.h"    // For subjective_c_register_release_fn
@@ -178,6 +179,30 @@ static ID make_map_entry_vector(ID map_obj, int index) {
     return AUTORELEASE(entry);
 }
 
+static ID make_record_entry_vector(ID record_obj, int index) {
+    if (!record_obj || TAG(record_obj) != CLJ_RECORD || index < 0) {
+        return NULL;
+    }
+
+    CljPersistentRecord *record = as_record(record_obj);
+    if (!record || index >= (int)record->field_count) {
+        return NULL;
+    }
+
+    ID key = record_key_at_index(record_obj, (unsigned int)index);
+    ID value = record_get_by_index(record_obj, (unsigned int)index);
+
+    CljPersistentVector *entry = make_vector(2, STRONG);
+    if (!entry) {
+        return NULL;
+    }
+
+    entry = vector_conj(entry, key);
+    entry = vector_conj(entry, value);
+
+    return AUTORELEASE(entry);
+}
+
 // ============================================================================
 // FAST SEQ IMPLEMENTATION
 // ============================================================================
@@ -322,6 +347,18 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
             iter->container = (CljObject*)set;
             return true;
         }
+        case CLJ_RECORD: {
+            CljPersistentRecord *record = as_record(obj);
+            if (!record || record->field_count == 0) {
+                return true;  // Empty record
+            }
+            iter->state.record.record = record;
+            iter->state.record.index = 0;
+            iter->state.record.count = (int)record->field_count;
+            iter->seq_type = CLJ_RECORD;
+            iter->container = (CljObject*)record;
+            return true;
+        }
 
         // Note: nil is now represented as NULL, handled above
         return true;
@@ -391,6 +428,13 @@ ID seq_iter_first(const SeqIterator *iter) {
             if (idx >= 0 && idx < iter->state.hset.capacity) {
                 ID elem = iter->state.hset.set->data[idx];
                 return (elem == SYM_NIL) ? NULL : elem;
+            }
+            return NULL;
+        }
+
+        case CLJ_RECORD: {
+            if (iter->state.record.index < iter->state.record.count) {
+                return make_record_entry_vector((ID)iter->state.record.record, iter->state.record.index);
             }
             return NULL;
         }
@@ -488,6 +532,15 @@ bool seq_iter_next(SeqIterator *iter) {
             iter->state.hset.index = iter->state.hset.capacity;
             return false;
         }
+
+        case CLJ_RECORD: {
+            if (iter->state.record.index < iter->state.record.count - 1) {
+                iter->state.record.index++;
+                return true;
+            }
+            iter->state.record.index = iter->state.record.count;
+            return false;
+        }
         
         default:
             return false;
@@ -547,6 +600,9 @@ bool seq_iter_empty(const SeqIterator *iter) {
         
         case CLJ_HASHSET:
             return iter->state.hset.index < 0 || iter->state.hset.index >= iter->state.hset.capacity;
+
+        case CLJ_RECORD:
+            return iter->state.record.index >= iter->state.record.count;
         
         default:
             // If seq_type is 0 (not set), it's an empty sequence
@@ -569,6 +625,8 @@ int seq_iter_position(const SeqIterator *iter) {
             return iter->state.map.index;
         case CLJ_HASHSET:
             return iter->state.hset.index;
+        case CLJ_RECORD:
+            return iter->state.record.index;
         default:
             return 0;
     }
@@ -589,6 +647,9 @@ bool collection_empty(ID obj) {
     if (t == CLJ_MAP_PERSISTENT || t == CLJ_MAP_TRANSIENT) {
         CljPersistentMap *m = as_map(obj);
         return !m || m->count == 0;
+    }
+    if (t == CLJ_RECORD) {
+        return record_count(obj) == 0;
     }
     if (t == CLJ_HASHSET) {
         CljHashSet *s = (CljHashSet*)obj;
@@ -819,6 +880,8 @@ int seq_count(ID obj) {
                 }
                 return remaining;
             }
+            case CLJ_RECORD:
+                return seq->iter.state.record.count - seq->iter.state.record.index;
             default:
                 return 0;
         }
@@ -862,6 +925,7 @@ bool is_seqable(ID obj) {
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_MAP_PERSISTENT:
         case CLJ_MAP_TRANSIENT:
+        case CLJ_RECORD:
         case CLJ_HASHSET:
         case CLJ_STRING:
         case CLJ_SEQ:  // Sequences are seqable

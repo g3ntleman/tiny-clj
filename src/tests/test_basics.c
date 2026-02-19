@@ -1117,6 +1117,13 @@ TEST(test_type_check_all_types) {
 // ============================================================================
 
 TEST(test_eval) {
+    // Clojure-compatible: eval does not read strings as code.
+    // (eval "(+ 1 2)") => "(+ 1 2)"
+    CljObject *from_string = eval_string("(eval \"(+ 1 2)\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(from_string, "(eval \"(+ 1 2)\") should return the string itself");
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(from_string));
+    TEST_ASSERT_EQUAL_STRING("(+ 1 2)", string_data(from_string));
+
     // (eval) uses same canonicalization as require/load; quoted form is evaluated after canonicalize.
     // (eval '(inc 1)) => 2
     CljObject *inc_result = eval_string("(eval '(inc 1))", g_test_eval_state);

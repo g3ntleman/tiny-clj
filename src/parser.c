@@ -503,7 +503,7 @@ ID eval_canonical_form(ID expr, EvalState *eval_state, CljPersistentMap *env) {
     if (expr_tag == CLJ_AST_CALL)
         return eval_body(expr, eval_env, eval_state, NULL);
     if (is_list_type(expr_tag))
-        return eval_list(as_list(expr), eval_env, eval_state, NULL);
+        return eval_body(expr, eval_env, eval_state, NULL);
     if (expr_tag == CLJ_SYMBOL)
         return eval_symbol(as_symbol(expr), eval_state);
     if (TAG(expr) == CLJ_MAP_PERSISTENT || TAG(expr) == CLJ_VECTOR_PERSISTENT)

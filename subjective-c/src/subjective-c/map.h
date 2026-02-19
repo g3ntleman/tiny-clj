@@ -148,7 +148,8 @@ int map_contains(ID map, ID key);
  * @param map Source map
  * @param key Key to remove
  * @return Updated map.
- *         - key removed via new-instance path: AUTORELEASE'd map
+ *         - key removed via in-place path (rc==1): original map pointer
+ *         - key removed via new-instance path (rc>1): AUTORELEASE'd map
  *         - key not found path: original map pointer
  */
 CljPersistentMap* map_remove(CljPersistentMap *map, ID key);

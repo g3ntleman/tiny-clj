@@ -28,6 +28,7 @@
 #include "hashmap.h"  // For CljHashMap
 #include "hashset.h"  // For CljHashSet
 #include "byte_array.h"  // For CljByteArray and external buffer flags
+#include "record.h"  // For CljPersistentRecord/CljRecordDescriptor
 #include "thread_local.h"
 #include "mini_format.h"
 #include <string.h>
@@ -290,6 +291,7 @@ void retain(CljObject *v) {
     }
 #endif
     MEMORY_PROFILER_TRACK_RETAIN(v);
+    CLJ_ASSERT(v->rc < INT16_MAX);
     v->rc++;
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
     rchist_push(v, 'R', v->rc);
@@ -674,6 +676,25 @@ static void release_object_default(CljObject *v) {
                 }
             }
             break;
+
+        case CLJ_RECORD_DESCRIPTOR: {
+            CljRecordDescriptor *desc = (CljRecordDescriptor*)v;
+            if (!desc) break;
+            RELEASE(desc->type_symbol);
+            RELEASE(desc->field_keys);
+            RELEASE(desc->key_to_index);
+            break;
+        }
+
+        case CLJ_RECORD: {
+            CljPersistentRecord *record = (CljPersistentRecord*)v;
+            if (!record) break;
+            RELEASE(record->descriptor);
+            for (unsigned int i = 0; i < record->field_count; i++) {
+                RELEASE(record->values[i]);
+            }
+            break;
+        }
             
         case CLJ_LIST: {
             CljList *list = (CljList*)v;
@@ -829,7 +850,9 @@ static void release_object_default(CljObject *v) {
             break;
         case CLJ_CLOSURE: {
             CljFunction *func = (CljFunction*)v;
-            RELEASE(func->params);
+            for (uint8_t i = 0; i < func->param_count; i++) {
+                RELEASE(func->params[i]);
+            }
             RELEASE(func->body);
             // Named fn: env_stack holds (name_sym -> self). RELEASE(env_stack) would double-free.
             // Skip and accept the retain-cycle leak.

@@ -31,6 +31,7 @@ TinyClJRuntime g_runtime = {
     .resolve_cache_epoch = 0,
     .symbol_table = NULL,
     .meta_registry = NULL,
+    .record_registry = NULL,
     .embedded_source_map = NULL,
     .pool_stack = NULL,
     .builtins_registered = false,
@@ -156,6 +157,7 @@ void runtime_reset(TinyClJRuntime *runtime) {
     runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
     ASSIGN(runtime->pool_stack, NULL);
     ASSIGN(runtime->meta_registry, NULL);
+    ASSIGN(runtime->record_registry, NULL);
     // embedded_source_map is read-only and kept across resets
     
     runtime->builtins_registered = false;

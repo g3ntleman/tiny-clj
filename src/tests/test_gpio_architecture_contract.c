@@ -27,9 +27,25 @@ static char *read_text_file(const char *path, size_t *out_len) {
     return buf;
 }
 
+static char *read_gpio_esp32_source(size_t *out_len) {
+    const char *candidates[] = {
+        "src/gpio_esp32.c",
+        "../src/gpio_esp32.c",
+        "../../src/gpio_esp32.c"
+    };
+    for (unsigned int i = 0; i < (unsigned int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        FILE *probe = fopen(candidates[i], "rb");
+        if (!probe) continue;
+        fclose(probe);
+        return read_text_file(candidates[i], out_len);
+    }
+    TEST_FAIL_MESSAGE("failed to locate src/gpio_esp32.c (tried cwd-relative candidates)");
+    return NULL;
+}
+
 TEST(test_gpio_architecture_uses_request_flag_polling) {
     size_t len = 0;
-    char *src = read_text_file("src/gpio_esp32.c", &len);
+    char *src = read_gpio_esp32_source(&len);
     TEST_ASSERT_TRUE(len > 0);
 
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "g_gpio_drain_requested"),
@@ -44,7 +60,7 @@ TEST(test_gpio_architecture_uses_request_flag_polling) {
 
 TEST(test_gpio_architecture_isr_section_has_no_direct_enqueue) {
     size_t len = 0;
-    char *src = read_text_file("src/gpio_esp32.c", &len);
+    char *src = read_gpio_esp32_source(&len);
     TEST_ASSERT_TRUE(len > 0);
 
     const char *isr_start = strstr(src, "static void IRAM_ATTR gpio_isr_handler");

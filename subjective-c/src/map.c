@@ -332,9 +332,11 @@ int map_contains(ID map, ID key) {
   return 0;
 }
 
-/** Remove key if present - always returns a new map (COW disabled).
+/** Remove key with COW:
+ * - rc==1: mutate in-place (shift-delete)
+ * - rc>1: return a new map
  * Returns the original map if key is not found.
- * Returns owned object (rc=1, no AUTORELEASE).
+ * Returns owned object (rc=1) for newly allocated results.
  */
 static CljPersistentMap* map_remove_core(CljPersistentMap *map, ID key) {
   CLJ_ASSERT(map);
@@ -345,13 +347,30 @@ static CljPersistentMap* map_remove_core(CljPersistentMap *map, ID key) {
     return map;  // Return original map on error
 
   CljObject *key_obj = (CljObject*)key;
-  int index = KV_FIND_INDEX(map_data->data, map_data->count, key_obj);
+  int index = map_find_index_eq(map_data, key_obj);
   if (index == INDEX_NOT_FOUND) {
     return map;  // Key not found - return original map
   }
 
-  // Key found - create new map without this key
-  // Allocate new map with same capacity
+  // Fast path: in-place removal when uniquely owned.
+  if (map_data->base.rc == 1) {
+    RELEASE(KV_KEY(map_data->data, index));
+    RELEASE(KV_VALUE(map_data->data, index));
+
+    for (int i = index; i < map_data->count - 1; i++) {
+      KV_KEY(map_data->data, i) = KV_KEY(map_data->data, i + 1);
+      KV_VALUE(map_data->data, i) = KV_VALUE(map_data->data, i + 1);
+    }
+
+    int last = map_data->count - 1;
+    KV_KEY(map_data->data, last) = NULL;
+    KV_VALUE(map_data->data, last) = NULL;
+    map_data->count--;
+    return map_data;
+  }
+
+  // COW path: create new map without this key
+  // Allocate new map with same capacity.
   size_t struct_size = sizeof(CljPersistentMap);
   size_t data_size = (size_t)map_data->capacity * 2 * sizeof(CljObject*);
   CljPersistentMap *new_map = (CljPersistentMap*)alloc(struct_size + data_size, 1, CLJ_MAP_PERSISTENT);

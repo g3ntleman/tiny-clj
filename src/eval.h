@@ -35,8 +35,6 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
 ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 // Internal function - uses EvalContext for parameter substitution
 ID eval_body_with_params(ID body, const EvalContext *ctx);
-// List evaluation (optionally accepts EvalContext for recur support)
-ID eval_list(CljList *list, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 // Special form evaluators
 ID eval_def(CljPersistentVector *args, CljPersistentMap *env, EvalState *st);
