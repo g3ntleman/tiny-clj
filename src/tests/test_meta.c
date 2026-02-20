@@ -385,11 +385,13 @@ TEST(test_meta_qualified_symbol) {
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_value, 
                                  "metadata should contain :ns key");
     
-    // :name should be "trim" (string)
-    if (TAG(name_value) == CLJ_STRING) {
-        CljString *name_str = as_clj_string(name_value);
-        TEST_ASSERT_EQUAL_STRING_MESSAGE("trim", clj_string_data(name_str), 
-                                        ":name should be \"trim\"");
+    // :name should be the symbol trim
+    TEST_ASSERT_TRUE_MESSAGE(TAG(name_value) == CLJ_SYMBOL,
+                             ":name should be a symbol");
+    if (TAG(name_value) == CLJ_SYMBOL) {
+        CljSymbol *name_sym = (CljSymbol *)name_value;
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("trim", clj_symbol_name(name_sym),
+                                         ":name should be symbol trim");
     }
 }
 

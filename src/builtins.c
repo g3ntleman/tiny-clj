@@ -8142,17 +8142,16 @@ static void register_builtin(const char *cname, BuiltinFn func)
         init_special_symbols();
 
         // Create metadata map with :name and :ns
-        CljPersistentMap *meta_map = make_map(4);
+        CljPersistentMap *meta_map = make_map(2);
         if (meta_map)
         {
-            // Add :name (function name as string)
+            // Add :name (function name as symbol for Clojure compatibility)
             if (SYM_KW_NAME && symbol_name && symbol_name[0] != '\0')
             {
-                CljString *name_str = make_string(symbol_name);
-                if (name_str)
+                CljSymbol *name_sym = intern_symbol_global(symbol_name);
+                if (name_sym)
                 {
-                    ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NAME, name_str));
-                    RELEASE(name_str);
+                    ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NAME, name_sym));
                 }
             }
 

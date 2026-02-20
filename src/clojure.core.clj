@@ -87,20 +87,7 @@ R"CLOJURE(
 ; ============================================================================
 ; Arithmetic Functions (Native) - defined early for use in numeric predicates
 ; ============================================================================
-^#^{:doc "Returns the sum of numbers. (+) returns 0."}
-(defn + [& args] :native)
-^#^{:doc "Returns the difference of numbers. (- x) returns negation of x. (- x y) returns x minus y."}
-(defn - [& args] :native)
-^#^{:doc "Returns the product of numbers. (*) returns 1."}
-(defn * [& args] :native)
-^#^{:doc "Returns the quotient of dividing numerator by denominator(s)."}
-(defn / [& args] :native)
-^#^{:doc "Modulus of num and div. Truncates toward negative infinity."}
-(defn mod [num div] :native)
-^#^{:doc "quot[ient] of dividing numerator by denominator."}
-(defn quot [num div] :native)
-^#^{:doc "Bitwise left shift. Shifts x left by n bits."}
-(defn bit-shift-left [x n] :native)
+; + - * / mod quot bit-shift-left are already defined earlier.
 
 ^#^{:doc "Increments a number by 1. Returns the number plus one."}
 (def inc (fn [x] (+ x 1)))
@@ -465,16 +452,7 @@ R"CLOJURE(
 (defn peek [coll] :native)
 ^#^{:doc "For a list or queue, returns a new list/queue without the first item, for a vector, returns a new vector without the last item. If the collection is empty, returns nil."}
 (defn pop [coll] :native)
-^#^{:doc "Returns the first item in the collection. Calls seq on its argument. If coll is nil, returns nil."}
-(defn first [coll] :native)
-^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil."}
-(defn rest [coll] :native)
-^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil (not a sequence)."}
-(defn next [coll] :native)
-^#^{:doc "Same as (next (next x))."}
-(defn nnext [x] :native)
-^#^{:doc "Returns the number of items in the collection. (count nil) returns 0. Also works on strings, arrays, and Java Collections."}
-(defn count [coll] :native)
+; first/rest/next/nnext/count are already defined earlier.
 ^#^{:doc "Returns a persistent vector of the items in vector from start (inclusive) to end (exclusive). If end is not supplied, defaults to (count vector)."}
 (defn subvec [v start & end] :native)
 ^#^{:doc "Returns a new collection consisting of coll with the xs 'added'. (conj coll item) adds item at an appropriate 'place' in the collection. For lists, conj prepends. For vectors, conj appends."}
@@ -489,14 +467,9 @@ R"CLOJURE(
 ; ============================================================================
 ; Predicate Functions (Native)
 ; ============================================================================
-^#^{:doc "Returns true if x is a vector, false otherwise."}
-(defn vector? [x] :native)
 ; nil? is now defined earlier (before Threading Macros)
 ; vector? and map? are now defined earlier (before Threading Macros)
-^#^{:doc "Returns true if x is a map, false otherwise."}
-(defn map? [x] :native)
-^#^{:doc "Returns true if x is a kind of persistent list."}
-(defn list? [x] :native)
+; vector?/map?/list? are already defined earlier.
 
 ; ============================================================================
 ; Type Predicates (Native)
@@ -508,8 +481,7 @@ R"CLOJURE(
 ^#^{:doc "Returns true if n is a floating point number."}
 (defn float? [x] :native)
 ; string?, keyword?, and fn? are now defined earlier (before Threading Macros)
-^#^{:doc "Returns true if x is a Symbol."}
-(defn symbol? [x] :native)
+; symbol? is already defined earlier.
 ^#^{:doc "Returns true if x is a Character."}
 (defn char? [x] :native)
 
@@ -524,8 +496,7 @@ R"CLOJURE(
 (defn false? [x] (identical? x false))
 ^#^{:doc "Returns true if x is a Boolean."}
 (defn boolean? [x] (or (true? x) (false? x)))
-^#^{:doc "Returns true if x is a kind of persistent set."}
-(defn set? [x] :native)
+; set? is already defined earlier; avoid duplicate redefinition.
 ; coll?, seq?, seqable?, and ifn? are now defined earlier (before Threading Macros)
 
 ; ============================================================================
@@ -740,97 +711,44 @@ R"CLOJURE(
 ; ============================================================================
 ; Arithmetic Functions (Derived)
 ; ============================================================================
-^#^{:doc "Increments a number by 1. Returns the number plus one."}
-(def inc (fn [x] (+ x 1)))
-^#^{:doc "Decrements a number by 1. Returns the number minus one."}
-(def dec (fn [x] (- x 1)))
+; inc/dec are already defined earlier; avoid duplicate redefinition.
 
 ; ============================================================================
 ; Numeric Predicates (Derived)
 ; ============================================================================
-^#^{:doc "Returns true if x is zero, false otherwise."}
-(def zero? (fn [x] (= x 0)))
-^#^{:doc "Returns true if x is positive, false otherwise."}
-(def pos? (fn [x] (> x 0)))
-^#^{:doc "Returns true if x is negative, false otherwise."}
-(def neg? (fn [x] (< x 0)))
-^#^{:doc "Returns true if x is even, false otherwise."}
-(def even? (fn [x] (= (mod x 2) 0)))
-^#^{:doc "Returns true if x is odd, false otherwise."}
-(def odd? (fn [x] (= (mod x 2) 1)))
+; zero?/pos?/neg?/even?/odd? are already defined earlier.
 
 ; ============================================================================
 ; Comparison & Logic (Derived)
 ; ============================================================================
-^#^{:doc "Returns true if x is logical false, false otherwise."}
-(def not (fn [x] (if x false true)))
-^#^{:doc "Returns the maximum of a and b."}
-(def max (fn [a b] (if (> a b) a b)))
-^#^{:doc "Returns the minimum of a and b."}
-(def min (fn [a b] (if (< a b) a b)))
+; max/min are already defined earlier; avoid duplicate redefinition.
 
 ; ============================================================================
 ; Collection Functions (Derived)
 ; ============================================================================
-^#^{:doc "Returns the second item in coll. Returns nil if coll contains less than 2 items."}
-(def second (fn [coll] (first (rest coll))))
-^#^{:doc "Returns true if coll has no items - same as (not (seq coll)). Please use the idiom (seq coll) when testing whether a collection is non-empty."}
-(def empty? (fn [coll] 
-  (not (seq coll))))
+; second/empty? are already defined earlier; avoid duplicate redefinition.
 
 ; ============================================================================
 ; Utility Functions
 ; ============================================================================
-^#^{:doc "Returns its argument."}
-(def identity (fn [x] x))
-^#^{:doc "Returns a function that takes one argument and returns x. Note: Variadic functions (& args) are not yet supported, so the returned function accepts only one argument instead of any number of arguments."}
-(def constantly (fn [x] (fn [arg] x)))
+; identity/constantly are already defined earlier; avoid duplicate redefinition.
 
 ; ============================================================================
 ; Higher-Order Functions (using now-defined list, cons, first, rest, empty?)
 ; ============================================================================
-^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Requires at least f and one coll (transducers not supported)."}
-(defn map [f & colls] :native)
-
-^#^{:doc "Returns a sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects."}
-(defn filter [pred coll] :native)
+; map/filter are already defined earlier; avoid duplicate redefinition.
 
 ; ============================================================================
 ; Type Predicates (Clojure-based)
 ; ============================================================================
-^#^{:doc "Returns true if x is not nil, false otherwise."}
-(defn some? [x] (not (nil? x)))
-^#^{:doc "Returns true if x is the value true, false otherwise."}
-(defn true? [x] (identical? x true))
-^#^{:doc "Returns true if x is the value false, false otherwise."}
-(defn false? [x] (identical? x false))
-^#^{:doc "Returns true if x is a Boolean."}
-(defn boolean? [x] (or (true? x) (false? x)))
-^#^{:doc "Returns true if x is a kind of persistent set."}
-(defn set? [x] :native)
-^#^{:doc "Returns true if x is a persistent collection."}
-(defn coll? [x] (or (list? x) (vector? x) (map? x) (set? x)))
-^#^{:doc "Returns true if x implements ISeq."}
-(defn seq? [x] (list? x))
-^#^{:doc "Returns true if (seq x) will succeed, false otherwise."}
-(defn seqable? [x] (or (nil? x) (coll? x) (string? x)))
-^#^{:doc "Returns true if x implements IFn. Note that many data structures implement IFn."}
-(defn ifn? [x] (or (fn? x) (keyword? x) (map? x) (vector? x)))
+; Type-predicate helpers are already defined earlier; avoid duplicate redefinition.
 
 ; ============================================================================
 ; Sequence Functions (Phase 1)
 ; ============================================================================
 
-
-^#^{:doc "Returns the nth next of coll, (seq coll) when n is 0."}
-(defn nthnext [coll n] :native)
-^#^{:doc "Returns the last item in coll, in linear time."}
-(defn last [coll]
-  (if (empty? coll)
-    nil
-    (if (empty? (rest coll))
-      (first coll)
-      (last (rest coll)))))
+; nthnext is already defined earlier; avoid duplicate redefinition.
+; last is already defined earlier; avoid duplicate redefinition.
 
 ; ============================================================================
 ; Predicate Functions (Phase 2)
