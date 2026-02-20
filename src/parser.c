@@ -94,10 +94,7 @@ static void throw_parser_exceptionf(Reader *reader, const char *format, ...) {
 #endif
 }
 
-// Stack-based parser constants (minimize per-frame stack for deep recursion on ESP32)
-#define MAX_STACK_VECTOR_SIZE 64
-#define MAX_STACK_MAP_PAIRS 32
-#define MAX_STACK_LIST_SIZE 64
+// Parser buffer constants (keep stack use bounded on embedded targets).
 #define PARSER_SYMBOL_BUF 128   /* symbols limited by SYMBOL_NAME_MAX_LEN (64) */
 #define PARSER_NUMBER_BUF 128   /* number literals are short */
 #define MAX_STACK_STRING_SIZE 2048
@@ -169,6 +166,7 @@ static ID parse_list(Reader *reader, EvalState *st);
 static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open_column);
 static ID parse_string_internal(Reader *reader, EvalState *st);
 static ID parse_symbol(Reader *reader, EvalState *st);
+static bool skip_form_no_alloc(Reader *reader);
 
 static ID parse_tagged_literal(Reader *reader, EvalState *st) {
   // Parse: #<tag> <value>
@@ -222,20 +220,6 @@ static ID parse_tagged_literal(Reader *reader, EvalState *st) {
 static ID parse_character(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
 
-// Parser is single-threaded. Track when we're consuming metadata so we can
-// avoid allocations in META-disabled builds.
-#if !(defined(META_ENABLED) && META_ENABLED)
-static bool parser_in_meta = false;
-#endif
-
-// Optional: disable metadata parsing (used during core load diagnostics).
-static bool g_parser_disable_meta = false;
-
-void parser_set_disable_meta(bool disable) {
-  g_parser_disable_meta = disable;
-}
-
-
 // Ensure that every parse step advances the reader or hits EOF, otherwise throw
 static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
   size_t before = reader_offset(reader);
@@ -245,6 +229,138 @@ static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
     throw_parser_exception("Parser made no progress while reading expression", reader);
   }
   return val;
+}
+
+// Skip one form without constructing runtime objects (used when metadata is disabled).
+static bool skip_string_no_alloc(Reader *reader) {
+  if (!reader || reader_current(reader) != '"') return false;
+  reader_next(reader); // opening quote
+  while (!reader_eof(reader)) {
+    char c = reader_next(reader);
+    if (c == '\\' && !reader_eof(reader)) {
+      reader_next(reader); // escaped byte
+      continue;
+    }
+    if (c == '"') return true;
+  }
+  return false;
+}
+
+static bool skip_token_no_alloc(Reader *reader) {
+  if (!reader) return false;
+  while (!reader_eof(reader)) {
+    char c = reader_current(reader);
+    if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ',' ||
+        c == ';' || c == '(' || c == ')' || c == '[' || c == ']' ||
+        c == '{' || c == '}' || c == '"') {
+      break;
+    }
+    int32_t cp = reader_next_codepoint(reader);
+    if (cp < 0) {
+      reader_next(reader); // forward progress fallback for invalid UTF-8
+    }
+  }
+  return true;
+}
+
+static bool skip_delimited_form_no_alloc(Reader *reader, char open, char close) {
+  if (!reader || reader_current(reader) != open) return false;
+  reader_next(reader); // consume opener
+  for (;;) {
+    reader_skip_all(reader);
+    if (reader_eof(reader)) return false;
+    if (reader_current(reader) == close) {
+      reader_next(reader);
+      return true;
+    }
+    if (!skip_form_no_alloc(reader)) return false;
+  }
+}
+
+static bool skip_dispatch_form_no_alloc(Reader *reader) {
+  if (!reader || reader_current(reader) != '#') return false;
+  reader_next(reader); // consume '#'
+  if (reader_eof(reader)) return false;
+
+  char c = reader_current(reader);
+  switch (c) {
+    case '|':
+      // Block comment reader macro (#| ... |#): consume comment, then skip next real form.
+      if (!reader_skip_block_comment(reader)) return false;
+      return skip_form_no_alloc(reader);
+    case '{':
+      return skip_delimited_form_no_alloc(reader, '{', '}');
+    case '(':
+      return skip_delimited_form_no_alloc(reader, '(', ')');
+    case '"':
+      return skip_string_no_alloc(reader); // regex literal #"..."
+    case '^':
+      // Metadata reader macro #^meta obj: skip meta and target.
+      reader_next(reader); // consume '^'
+      if (!skip_form_no_alloc(reader)) return false;
+      return skip_form_no_alloc(reader);
+    case '_':
+      // Discard next form.
+      reader_next(reader); // consume '_'
+      return skip_form_no_alloc(reader);
+    case ':':
+      // Namespaced map literal #:ns {...} / #::{...}
+      reader_next(reader); // first ':'
+      if (!reader_eof(reader) && reader_current(reader) == ':') {
+        reader_next(reader); // optional second ':'
+      }
+      (void)skip_token_no_alloc(reader); // optional namespace token
+      return skip_form_no_alloc(reader); // usually a map form
+    default:
+      // Tagged literal: #inst "...", #uuid "...", #foo/bar value
+      (void)skip_token_no_alloc(reader);
+      return skip_form_no_alloc(reader);
+  }
+}
+
+static bool skip_form_no_alloc(Reader *reader) {
+  if (!reader) return false;
+  reader_skip_all(reader);
+  if (reader_eof(reader)) return false;
+
+  char c = reader_current(reader);
+  switch (c) {
+    case '"':
+      return skip_string_no_alloc(reader);
+    case '(':
+      return skip_delimited_form_no_alloc(reader, '(', ')');
+    case '[':
+      return skip_delimited_form_no_alloc(reader, '[', ']');
+    case '{':
+      return skip_delimited_form_no_alloc(reader, '{', '}');
+    case '\'':
+    case '`':
+    case '@':
+      reader_next(reader); // quote/syntax-quote/deref prefix
+      return skip_form_no_alloc(reader);
+    case '~':
+      reader_next(reader); // unquote prefix
+      if (!reader_eof(reader) && reader_current(reader) == '@') {
+        reader_next(reader); // unquote-splicing
+      }
+      return skip_form_no_alloc(reader);
+    case '^':
+      reader_next(reader); // metadata prefix
+      if (!skip_form_no_alloc(reader)) return false; // metadata payload
+      return skip_form_no_alloc(reader);             // target object
+    case '#':
+      return skip_dispatch_form_no_alloc(reader);
+    default:
+      return skip_token_no_alloc(reader);
+  }
+}
+
+static ID parse_after_skipping_meta_payload(Reader *reader, EvalState *st) {
+  if (!skip_form_no_alloc(reader)) {
+    return NULL;
+  }
+  reader_skip_all(reader);
+  return parse_expr(reader, st);
 }
 
 /**
@@ -598,32 +714,6 @@ static ID parse_map(Reader *reader, EvalState *st) {
   if (!reader_match(reader, '{'))
     return NULL;
   reader_skip_all(reader);
-#if !(defined(META_ENABLED) && META_ENABLED)
-  if (parser_in_meta) {
-    // Fast path: consume balanced map contents without allocating.
-    int depth = 1;
-    while (!reader_eof(reader) && depth > 0) {
-      char c = reader_current(reader);
-      reader_next(reader);
-      if (c == '{') depth++;
-      else if (c == '}') depth--;
-      else if (c == '"') {
-        // Skip string literal to ignore braces inside strings
-        while (!reader_eof(reader)) {
-          char s = reader_current(reader);
-          reader_next(reader);
-          if (s == '\\' && !reader_eof(reader)) {
-            reader_next(reader); // skip escaped char
-            continue;
-          }
-          if (s == '"') break;
-        }
-      }
-    }
-    reader_skip_all(reader);
-    return NULL; // No map object produced when metadata is disabled
-  }
-#endif
   // Build the map incrementally to avoid relying on a fixed-size stack buffer.
   // This also matches Clojure semantics for duplicate keys (later entries win).
   CljPersistentMap *map = make_map(8, STRONG);
@@ -1546,46 +1636,17 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   // Consume the '^' character (we know it's '^' because parse_expr checked it)
   reader_next(reader);
 
-  if (g_parser_disable_meta) {
-    // Parse and discard the metadata expression, then return the target object.
-    reader_skip_all(reader);
-    if (!reader_eof(reader) && reader_current(reader) == '#') {
-      char next = reader_peek_ahead(reader, 1);
-      if (next == '^') {
-        reader_next(reader);  // consume '#'
-      }
-    }
-    ID ignored_meta = parse_expr(reader, st);
-    RELEASE(ignored_meta);
-    reader_skip_all(reader);
-    return parse_expr(reader, st);
-  }
-
 #if !(defined(META_ENABLED) && META_ENABLED)
-  bool was_in_meta = parser_in_meta;
-  parser_in_meta = true;
-
-  // Metadata is compiled out: parse the metadata form (without allocating) and ignore it,
-  // then parse the target object.
+  // Metadata is compiled out: skip metadata form without allocations/interning.
   reader_skip_all(reader);
   if (!reader_eof(reader) && reader_current(reader) == '#') {
     char next = reader_peek_ahead(reader, 1);
     if (next == '^') {
       reader_next(reader);  // consume '#'
-      ID result = parse_meta_map(reader, st);
-      parser_in_meta = was_in_meta;
-      return result;
+      return parse_meta_map(reader, st);
     }
   }
-  // Parse and discard the metadata expression (parse_map will skip allocs when parser_in_meta)
-  ID ignored_meta = parse_expr(reader, st);
-  RELEASE(ignored_meta);
-  reader_skip_all(reader);
-  // Reset parser_in_meta BEFORE parsing the target object,
-  // otherwise maps in the object body would be skipped too!
-  parser_in_meta = was_in_meta;
-  ID obj = parse_expr(reader, st);
-  return obj;
+  return parse_after_skipping_meta_payload(reader, st);
 #else
   // Check if this is ^#^{...} syntax (metadata map)
   reader_skip_all(reader);
@@ -1745,9 +1806,6 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
 static ID parse_meta_map(Reader *reader,
                                         EvalState *st) {
 #if !(defined(META_ENABLED) && META_ENABLED)
-  bool was_in_meta = parser_in_meta;
-  parser_in_meta = true;
-
   reader_skip_all(reader);
   if (!reader_eof(reader) && reader_current(reader) == '#') {
     // Called from parse_expr - consume '#'
@@ -1755,28 +1813,12 @@ static ID parse_meta_map(Reader *reader,
   }
   reader_skip_all(reader);
   if (reader_eof(reader) || reader_current(reader) != '^') {
-    // Ensure parser_in_meta is restored on early exit.
-    parser_in_meta = was_in_meta;
     return NULL;
   }
   reader_next(reader);  // Consume '^'
 
-  reader_skip_all(reader);
-  if (reader_eof(reader) || reader_current(reader) != '{') {
-    // Parse target object with metadata parsing disabled.
-    parser_in_meta = false;
-    ID obj = parse_expr(reader, st);
-    parser_in_meta = was_in_meta;
-    return obj;
-  }
-  ID ignored_meta = parse_map(reader, st); // parse_map will skip allocations under parser_in_meta
-  RELEASE(ignored_meta);
-  reader_skip_all(reader);
-  // Parse target object with metadata parsing disabled.
-  parser_in_meta = false;
-  ID obj = parse_expr(reader, st);
-  parser_in_meta = was_in_meta;
-  return obj;
+  // Skip metadata payload without constructing objects.
+  return parse_after_skipping_meta_payload(reader, st);
 #else
   // When called from parse_expr, we need to consume '#' and '^'
   // When called from parse_meta, we're already past '#' and at '^'
