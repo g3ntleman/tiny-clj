@@ -8,7 +8,7 @@
 #ifdef ESP32_BUILD
 
 #include "audio_engine.h"
-#include "vector_handheld_config.h"
+#include "esp32-idf/main/vector_handheld_config.h"
 
 #include "driver/ledc.h"
 #include "esp_timer.h"
@@ -200,6 +200,17 @@ void audio_tick_stop(void) {
             g_ledc_voices[i].last_duty = 0;
         }
     }
+}
+
+bool audio_backend_host_get_status(AudioHostStatus *out) {
+    if (!out) return false;
+
+    out->backend_available = true;
+    out->audio_running = g_audio_engine.tick_running;
+    out->tick_enabled = g_audio_engine.tick_running;
+    out->tick_thread_running = false;
+    out->voice_count = g_audio_engine.voice_count;
+    return true;
 }
 
 #endif /* ESP32_BUILD */

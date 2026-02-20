@@ -26,6 +26,7 @@ set(TINYCLJ_SRCS
   "../../../src/eval.c"
   "../../../src/function.c"
   "../../../src/optimize.c"
+  "../../../src/record.c"
   "../../../src/environment.c"
   "../../../src/equality.c"
   "../../../src/list.c"
@@ -72,6 +73,7 @@ idf_component_register(
     subjective-c
     tiny-db
     driver
+    esp_timer
     esp_partition
 )
 

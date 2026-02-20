@@ -12,6 +12,7 @@
 #include "function.h"
 #include "eval.h"
 #include "builtins.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -254,7 +255,7 @@ static bool stream_parse_event(AudioStream *s, AudioVoice *voices, int voice_cou
             voices[vi].active = true;
             if (audio_interp_debug_enabled()) {
                 fprintf(stderr,
-                        "[audio-interp] NOTE tick=%u ch=%u->v=%d note=%u freq=%u gate=%u vol=%u\n",
+                        "[audio-interp] NOTE tick=%" PRIu32 " ch=%u->v=%d note=%u freq=%u gate=%u vol=%u\n",
                         s->current_tick,
                         channel,
                         vi,
@@ -278,7 +279,7 @@ static bool stream_parse_event(AudioStream *s, AudioVoice *voices, int voice_cou
     case TRK1_EVT_END: {
         if (audio_interp_debug_enabled()) {
             fprintf(stderr,
-                    "[audio-interp] END tick=%u repeat_remaining=%d\n",
+                    "[audio-interp] END tick=%" PRIu32 " repeat_remaining=%d\n",
                     s->current_tick,
                     (int)s->repeat_remaining);
         }
