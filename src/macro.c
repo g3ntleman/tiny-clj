@@ -30,7 +30,6 @@ void register_macro(CljNamespace *ns, CljSymbol *name, CljFunction *macro_fn) {
     // Initialize macro_mappings if NULL
     if (!ns->macro_mappings) {
         ns->macro_mappings = make_map(16);
-        RETAIN(ns->macro_mappings);
     }
 
     // Store macro in namespace's macro registry.
@@ -39,11 +38,11 @@ void register_macro(CljNamespace *ns, CljSymbol *name, CljFunction *macro_fn) {
     // - For clojure.core, unqualified symbols are used as keys (Clojure-like).
     // - For other namespaces, additionally store the qualified symbol key, because
     //   macro call sites are typically namespace-qualified (e.g. clojure.core.async/go).
-    ASSIGN(ns->macro_mappings, map_assoc(ns->macro_mappings, (CljObject*)name, (CljObject*)macro_fn));
+    map_assoc_inplace(&ns->macro_mappings, (CljObject*)name, (CljObject*)macro_fn);
     if (ns->name && ns->name != SYM_CLOJURE_CORE && name->cname) {
         CljSymbol *qualified = intern_symbol(ns->name, name->cname);
         if (qualified) {
-            ASSIGN(ns->macro_mappings, map_assoc(ns->macro_mappings, (CljObject*)qualified, (CljObject*)macro_fn));
+            map_assoc_inplace(&ns->macro_mappings, (CljObject*)qualified, (CljObject*)macro_fn);
         }
     }
 }

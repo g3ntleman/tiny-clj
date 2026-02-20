@@ -22,6 +22,9 @@ struct CljSymbol *SYM_KW_META = NULL;
 
 // Note: Symbols have SINGLETON_RC and are never released
 
+#define SYMBOL_TABLE_LOAD_STARTUP 90u
+#define SYMBOL_TABLE_LOAD_POST_STARTUP 90u
+
 bool is_earmuffed_dynamic_symbol(const CljSymbol *sym) {
     return sym && ((sym->base.flags & CLJ_FLAG_DYNAMIC) != 0);
 }
@@ -1151,6 +1154,7 @@ void symbol_table_add(CljSymbol *symbol) {
 
     if (!g_runtime.symbol_table) {
         g_runtime.symbol_table = make_hashset(512);  // 512 = good initial capacity for Linear Probing
+        hashset_set_max_load_percent(g_runtime.symbol_table, SYMBOL_TABLE_LOAD_STARTUP);
     }
 
     if (hashset_contains(g_runtime.symbol_table, symbol)) {
@@ -1310,6 +1314,19 @@ const char* symbol_get_namespace_name(CljSymbol *sym) {
 void symbol_table_cleanup() {
     RELEASE(g_runtime.symbol_table);
     g_runtime.symbol_table = NULL;
+}
+
+void symbol_table_fit_startup_reserve(unsigned int reserve_percent) {
+    if (!g_runtime.symbol_table) return;
+
+    CljHashSet *current = g_runtime.symbol_table;
+    // After startup, table growth is typically low. Favor compact footprint.
+    hashset_set_max_load_percent(current, SYMBOL_TABLE_LOAD_POST_STARTUP);
+    CljHashSet *fitted = hashset_fit_count_with_reserve(current, reserve_percent);
+    if (fitted && fitted != current) {
+        RELEASE(current);
+        g_runtime.symbol_table = fitted;
+    }
 }
 
 // Special Form Management moved to to_string.c

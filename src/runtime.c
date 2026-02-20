@@ -25,6 +25,8 @@ extern bool clj_equal_full(ID a, ID b);
 #include <stdint.h>
 #include <stdbool.h>
 
+#define SYMBOL_TABLE_MAX_LOAD_PERCENT 90u
+
 // Statically allocated global runtime struct (all pointers initialized to NULL).
 TinyClJRuntime g_runtime = {
     .ns_registry = NULL,
@@ -32,7 +34,6 @@ TinyClJRuntime g_runtime = {
     .symbol_table = NULL,
     .meta_registry = NULL,
     .record_registry = NULL,
-    .embedded_source_map = NULL,
     .pool_stack = NULL,
     .builtins_registered = false,
     .task_queue = NULL,
@@ -85,6 +86,7 @@ void runtime_init(TinyClJRuntime *runtime) {
     // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
     if (!runtime->symbol_table) {
         runtime->symbol_table = make_hashset(512);  // HashSet for O(1) symbol lookup
+        hashset_set_max_load_percent(runtime->symbol_table, SYMBOL_TABLE_MAX_LOAD_PERCENT);
     }
     
     // Keep epoch non-zero for callsite caches.
@@ -111,7 +113,6 @@ void runtime_init(TinyClJRuntime *runtime) {
     // Reset primitive fields
     runtime->builtins_registered = false;
     runtime->timer_id_counter = 0;
-    runtime->embedded_source_map = NULL;
     
     // Register hashmap release function with memory system
     hashmap_register_release_fn();
@@ -136,7 +137,7 @@ void runtime_init(TinyClJRuntime *runtime) {
     // depends on clj_hash()/clj_equal() for correct behavior.
     init_special_symbols();
 
-    // Initialize embedded source map once (read-only, retained for runtime lifetime).
+    // Initialize embedded source registry (static table + on-demand byte-array views).
     embedded_source_map_init();
 }
 
@@ -158,10 +159,8 @@ void runtime_reset(TinyClJRuntime *runtime) {
     ASSIGN(runtime->pool_stack, NULL);
     ASSIGN(runtime->meta_registry, NULL);
     ASSIGN(runtime->record_registry, NULL);
-    // embedded_source_map is read-only and kept across resets
     
     runtime->builtins_registered = false;
     runtime->timer_id_counter = 0;
-    ASSIGN(runtime->embedded_source_map, NULL);
     event_loop_clear();
 }

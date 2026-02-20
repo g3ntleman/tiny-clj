@@ -55,9 +55,6 @@ typedef struct TinyClJRuntime {
 
     // Record descriptors (type symbol -> descriptor object)
     CljHashMap *record_registry;
-
-    // Embedded source map (path -> byte-array view)
-    CljPersistentMap *embedded_source_map;
     
     // Autorelease Pool Stack
     CljTransientVector *pool_stack;  // transient vector for autorelease pools

@@ -255,6 +255,7 @@ extern CljSymbol *SYM_LIST_BATCH;
 void symbol_table_add(CljSymbol *symbol);
 CljSymbol* symbol_table_lookup(CljSymbol *ns_name, const char *cname);
 void symbol_table_cleanup(void);
+void symbol_table_fit_startup_reserve(unsigned int reserve_percent);
 
 struct CljNamespace;
 struct CljNamespace* symbol_get_namespace(CljSymbol *sym);

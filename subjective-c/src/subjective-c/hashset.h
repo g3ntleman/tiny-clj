@@ -3,6 +3,7 @@
 
 #include "object.h"
 #include <stdbool.h>
+#include <stdint.h>
 
 // Sentinel singletons (SINGLETON_RC makes RETAIN/RELEASE safe no-ops)
 extern CljObject g_hashset_empty_sentinel;
@@ -15,6 +16,7 @@ typedef struct CljHashSet {
     unsigned int count;     // Active entries (never negative)
     unsigned int capacity;  // Array size (must be 2^n for mask, never negative)
     size_t tombstones;      // Deleted slots (for Linear Probing)
+    uint8_t max_load_percent; // Rehash threshold in percent (default 75)
     CljObject *data[];      // Embedded array: [key0, key1, ...]
                             // Size: capacity * sizeof(CljObject*)
 } CljHashSet;
@@ -24,6 +26,26 @@ typedef struct CljHashSet {
  * @return New hashset
  */
 CljHashSet* make_hashset(unsigned int capacity);
+
+/** @brief Create hashset with custom rehash threshold.
+ * @param capacity Initial capacity
+ * @param max_load_percent Rehash threshold in percent (clamped to [50..95])
+ * @return New hashset
+ */
+CljHashSet* make_hashset_with_max_load(unsigned int capacity, unsigned int max_load_percent);
+
+/** @brief Update rehash threshold for an existing set.
+ * @param set Hashset instance
+ * @param max_load_percent Rehash threshold in percent (clamped to [50..95])
+ */
+void hashset_set_max_load_percent(CljHashSet *set, unsigned int max_load_percent);
+
+/** @brief Rebuild hashset to fit current count plus reserve.
+ * @param set Source hashset
+ * @param reserve_percent Additional reserve over current count (e.g. 10 = +10%)
+ * @return New or same hashset (AUTORELEASE'd)
+ */
+CljHashSet* hashset_fit_count_with_reserve(CljHashSet *set, unsigned int reserve_percent);
 
 /** @brief Get key with custom not-found sentinel
  * @param set Hashset to query

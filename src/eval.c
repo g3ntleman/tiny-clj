@@ -122,6 +122,35 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
     }
 }
 
+static inline bool symbol_name_matches(CljSymbol *a, CljSymbol *b) {
+    if (!a || !b) return false;
+    if (a == b) return true;
+    if (!a->cname || !b->cname) return false;
+    return strcmp(a->cname, b->cname) == 0;
+}
+
+// Named fn literals used via (def name (fn name ...)) don't need an extra
+// self-binding frame: recursion can resolve through the namespace mapping.
+static void drop_def_self_binding_frame(CljFunction *func, CljSymbol *def_sym, ID fn_value) {
+    if (!func || !func->env_stack || !def_sym || !func->name_sym) return;
+    if (!symbol_name_matches(func->name_sym, def_sym)) return;
+
+    unsigned int frame_count = vector_count(func->env_stack);
+    if (frame_count == 0) return;
+
+    ID frame_obj = vector_nth(func->env_stack, frame_count - 1);
+    CljPersistentMap *frame_map = as_map(frame_obj);
+    if (!frame_map || map_count((ID)frame_map) != 1) return;
+
+    ID bound = map_get_sentinel((ID)frame_map, (ID)def_sym, NOT_FOUND);
+    if (bound != fn_value) return;
+
+    // Transfer the ownership previously held by the self-binding map
+    // so eval_fn's AUTORELEASE release remains balanced.
+    RETAIN(fn_value);
+    vector_pop_inplace(&func->env_stack);
+}
+
 // Evaluation context structures are defined in function_call.h
 
 #include "map.h"
@@ -1691,11 +1720,13 @@ ID eval_def(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
 
     // Resolve symbol once for reuse
     CljSymbol *sym = as_symbol(symbol);
+    CljFunction *closure_func = NULL;
     // If the value is a function, set its name and rewrite recursive calls
     // CRITICAL: Only for CLJ_CLOSURE (Clojure functions), not CLJ_FUNC (native functions)
     if (is_closure(value)) {
         CljFunction *func = as_function(value);
         if (func) {
+            closure_func = func;
             // Ensure closure carries its defining namespace for later resolution.
             if (!func->ns && st && st->current_ns) {
                 func->ns = (CljNamespace*)RETAIN(st->current_ns);
@@ -1717,6 +1748,12 @@ ID eval_def(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
 
     // Store in namespace (value can be NULL/nil - legitimate case)
     ns_define(st->current_ns, symbol, value);
+
+    // For (def f (fn f ...)) / defn-style definitions, drop the extra closure
+    // self-binding frame after namespace binding is established.
+    if (closure_func) {
+        drop_def_self_binding_frame(closure_func, sym, value);
+    }
 
     // Apply metadata to value
     // In Clojure, metadata from ^#^{...} (def ...) is applied to the value

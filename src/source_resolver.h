@@ -3,7 +3,7 @@
 
 #include "object.h"
 
-/** Resolve a path to byte array content (KV store or embedded map). Returns NULL if not found. */
+/** Resolve a path to byte array content (KV store or embedded source table). Returns NULL if not found. */
 ID resolve_path_to_bytes(const char *path);
 
 #endif // TINY_CLJ_SOURCE_RESOLVER_H

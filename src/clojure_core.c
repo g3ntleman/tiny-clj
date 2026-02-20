@@ -447,6 +447,7 @@ int load_clojure_core(EvalState *st) {
   if (!inc_sym) return 0;
   CljObject *inc_val = (CljObject *)map_get_sentinel((CljValue)core->mappings, (CljValue)inc_sym, NULL);
   if (!inc_val || (TAG(inc_val) != CLJ_FUNC && TAG(inc_val) != CLJ_CLOSURE)) return 0;
+  symbol_table_fit_startup_reserve(0u);
   return 1;
 }
 
