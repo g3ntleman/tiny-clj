@@ -76,6 +76,14 @@ static int bt_seqset __P((BTREE*, EPG*, DBT*, int));
  * Returns:
  *	RET_ERROR, RET_SUCCESS or RET_SPECIAL if there's no next key.
  */
+/**
+ * @brief __bt_seq.
+ * @param dbp B-Tree database handle.
+ * @param key Key bytes.
+ * @param data Value bytes.
+ * @param flags Option flags controlling operation behavior.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int __bt_seq(const DB* dbp, DBT* key, DBT* data, u_int flags) {
     BTREE* t;
     EPG e;
@@ -146,6 +154,14 @@ int __bt_seq(const DB* dbp, DBT* key, DBT* data, u_int flags) {
  *
  * Returns:
  *	RET_ERROR, RET_SUCCESS or RET_SPECIAL if there's no next key.
+ */
+/**
+ * @brief bt_seqset.
+ * @param t B-Tree context.
+ * @param ep Page/index search state.
+ * @param key Key bytes.
+ * @param flags Option flags controlling operation behavior.
+ * @return Return code (RET_SUCCESS on success).
  */
 static int bt_seqset(BTREE* t, EPG* ep, DBT* key, int flags) {
     EPG* e;
@@ -271,6 +287,13 @@ static int bt_seqset(BTREE* t, EPG* ep, DBT* key, int flags) {
  * Returns:
  *	RET_ERROR, RET_SUCCESS or RET_SPECIAL if there's no next key.
  */
+/**
+ * @brief bt_seqadv.
+ * @param t B-Tree context.
+ * @param e Page/index search state.
+ * @param flags Option flags controlling operation behavior.
+ * @return Return code (RET_SUCCESS on success).
+ */
 static int bt_seqadv(BTREE* t, EPG* e, int flags) {
     EPGNO *c, delc;
     PAGE* h;
@@ -346,6 +369,12 @@ static int bt_seqadv(BTREE* t, EPG* e, int flags) {
  *
  * Returns:
  *	RET_ERROR, RET_SUCCESS
+ */
+/**
+ * @brief __bt_crsrdel.
+ * @param t B-Tree context.
+ * @param c Page/index search state.
+ * @return Return code (RET_SUCCESS on success).
  */
 int __bt_crsrdel(BTREE* t, EPGNO* c) {
     PAGE* h;

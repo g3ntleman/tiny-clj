@@ -149,7 +149,7 @@ int tdb_kv_gc_step_more(tdb_kv_t* kv, size_t budget_bytes);
 /*
  * Encoding:
  * - Meta key:  <user_key> | 0x00 | 'M'
- * - Index key: <user_key> | 0x00 | 'C' | gen_be(u32) | block_i_be(u32)
+ * - Index key: <user_key> | 0x00 | 'C' | gen_wire(u32) | block_i_wire(u32)
  *
  * Meta value contains blob descriptor + an inline list of data page numbers (pgno).
  * Index values contain additional pgno arrays when the inline list is insufficient.

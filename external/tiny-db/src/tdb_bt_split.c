@@ -62,12 +62,25 @@ static PAGE* bt_page_noinsert __P((BTREE*, PAGE*, PAGE**, PAGE**));
 u_long bt_rootsplit, bt_split, bt_sortsplit, bt_pfxsaved;
 #endif
 
+/**
+ * @brief __bt_would_split.
+ * @param h Page pointer.
+ * @param nbytes Length in bytes.
+ * @return Boolean-like result (0 or non-zero).
+ */
 int __bt_would_split(PAGE* h, size_t nbytes) {
     if (!h)
         return 1;
     return h->upper - h->lower < nbytes + sizeof(indx_t);
 }
 
+/**
+ * @brief bt_psplit_noinsert.
+ * @param t B-Tree context.
+ * @param h Page pointer.
+ * @param l Page pointer.
+ * @param r Page pointer.
+ */
 static void bt_psplit_noinsert(BTREE* t, PAGE* h, PAGE* l, PAGE* r) {
     BINTERNAL* bi;
     BLEAF* bl;
@@ -154,6 +167,14 @@ static void bt_psplit_noinsert(BTREE* t, PAGE* h, PAGE* l, PAGE* r) {
     r->lower = (indx_t)(BTDATAOFF + off * sizeof(indx_t));
 }
 
+/**
+ * @brief bt_page_noinsert.
+ * @param t B-Tree context.
+ * @param h Page pointer.
+ * @param lp Page pointer.
+ * @param rp Page pointer.
+ * @return Page pointer, or NULL on failure.
+ */
 static PAGE* bt_page_noinsert(BTREE* t, PAGE* h, PAGE** lp, PAGE** rp) {
     PAGE *l, *r;
     pgno_t npg;
@@ -198,6 +219,15 @@ static PAGE* bt_page_noinsert(BTREE* t, PAGE* h, PAGE** lp, PAGE** rp) {
     return h;
 }
 
+/**
+ * @brief __bt_split_child.
+ * @param t B-Tree context.
+ * @param parent Page pointer.
+ * @param parent_index Index value.
+ * @param child Page pointer.
+ * @param out_right_pgno Output pointer receiving right pgno.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int __bt_split_child(BTREE* t, PAGE* parent, indx_t parent_index, PAGE* child, pgno_t* out_right_pgno) {
     if (out_right_pgno)
         *out_right_pgno = PGNO_INVALID;
@@ -292,6 +322,11 @@ int __bt_split_child(BTREE* t, PAGE* parent, indx_t parent_index, PAGE* child, p
     return RET_SUCCESS;
 }
 
+/**
+ * @brief __bt_split_root.
+ * @param t B-Tree context.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int __bt_split_root(BTREE* t) {
     if (!t || !t->bt_mp) {
         errno = EINVAL;
@@ -345,6 +380,17 @@ int __bt_split_root(BTREE* t) {
  *
  * Returns:
  *	RET_ERROR, RET_SUCCESS
+ */
+/**
+ * @brief __bt_split.
+ * @param t B-Tree context.
+ * @param sp Page pointer.
+ * @param key Key bytes.
+ * @param data Value bytes.
+ * @param flags Option flags controlling operation behavior.
+ * @param ilen Length in bytes.
+ * @param skip Index value.
+ * @return Return code (RET_SUCCESS on success).
  */
 int __bt_split(BTREE* t, PAGE* sp, const DBT* key, const DBT* data, int flags, size_t ilen,
                indx_t skip) {
@@ -591,6 +637,16 @@ err2:
  * Returns:
  *	Pointer to page in which to insert or NULL on error.
  */
+/**
+ * @brief bt_page.
+ * @param t B-Tree context.
+ * @param h Page pointer.
+ * @param lp Page pointer.
+ * @param rp Page pointer.
+ * @param skip Index value.
+ * @param ilen Length in bytes.
+ * @return Page pointer, or NULL on failure.
+ */
 static PAGE* bt_page(BTREE* t, PAGE* h, PAGE** lp, PAGE** rp, indx_t* skip, size_t ilen) {
     PAGE *l, *r, *tp;
     pgno_t npg;
@@ -687,6 +743,16 @@ static PAGE* bt_page(BTREE* t, PAGE* h, PAGE** lp, PAGE** rp, indx_t* skip, size
  * Returns:
  *	Pointer to page in which to insert or NULL on error.
  */
+/**
+ * @brief bt_root.
+ * @param t B-Tree context.
+ * @param h Page pointer.
+ * @param lp Page pointer.
+ * @param rp Page pointer.
+ * @param skip Index value.
+ * @param ilen Length in bytes.
+ * @return Page pointer, or NULL on failure.
+ */
 static PAGE* bt_root(BTREE* t, PAGE* h, PAGE** lp, PAGE** rp, indx_t* skip, size_t ilen) {
     PAGE *l, *r, *tp;
     pgno_t lnpg, rnpg;
@@ -727,6 +793,14 @@ static PAGE* bt_root(BTREE* t, PAGE* h, PAGE** lp, PAGE** rp, indx_t* skip, size
  * Returns:
  *	RET_ERROR, RET_SUCCESS
  */
+/**
+ * @brief bt_rroot.
+ * @param t B-Tree context.
+ * @param h Page pointer.
+ * @param l Page pointer.
+ * @param r Page pointer.
+ * @return Return code (RET_SUCCESS on success).
+ */
 static int bt_rroot(BTREE* t, PAGE* h, PAGE* l, PAGE* r) {
     char* dest;
 
@@ -760,6 +834,14 @@ static int bt_rroot(BTREE* t, PAGE* h, PAGE* l, PAGE* r) {
  *
  * Returns:
  *	RET_ERROR, RET_SUCCESS
+ */
+/**
+ * @brief bt_broot.
+ * @param t B-Tree context.
+ * @param h Page pointer.
+ * @param l Page pointer.
+ * @param r Page pointer.
+ * @return Return code (RET_SUCCESS on success).
  */
 static int bt_broot(BTREE* t, PAGE* h, PAGE* l, PAGE* r) {
     BINTERNAL* bi;
@@ -826,6 +908,16 @@ static int bt_broot(BTREE* t, PAGE* h, PAGE* l, PAGE* r) {
  *
  * Returns:
  *	Pointer to page in which to insert.
+ */
+/**
+ * @brief bt_psplit.
+ * @param t B-Tree context.
+ * @param h Page pointer.
+ * @param l Page pointer.
+ * @param r Page pointer.
+ * @param pskip Output split index.
+ * @param ilen Length in bytes.
+ * @return Page pointer, or NULL on failure.
  */
 static PAGE* bt_psplit(BTREE* t, PAGE* h, PAGE* l, PAGE* r, indx_t* pskip, size_t ilen) {
     BINTERNAL* bi = NULL;
@@ -1014,6 +1106,11 @@ static PAGE* bt_psplit(BTREE* t, PAGE* h, PAGE* l, PAGE* r, indx_t* pskip, size_
  * These values could be set by the bt_psplit routine.  The problem is that the
  * entry has to be popped off of the stack etc. or the values have to be passed
  * all the way back to bt_split/bt_rroot and it's not very clean.
+ */
+/**
+ * @brief rec_total.
+ * @param h Page pointer.
+ * @return Number of record-number entries under this page.
  */
 static recno_t rec_total(PAGE* h) {
     recno_t recs;

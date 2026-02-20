@@ -56,6 +56,9 @@ static void make_bdev(tdb_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size
     bdev->geom.erase_granularity = 4096;
 }
 
+/**
+ * @brief test_invalid_args_are_rejected.
+ */
 static void test_invalid_args_are_rejected(void) {
     uint8_t storage[8192];
     ramdev_t rd = {0};
@@ -82,6 +85,9 @@ static void test_invalid_args_are_rejected(void) {
     tdb_kv_close(db);
 }
 
+/**
+ * @brief test_delete_missing_key_returns_not_found.
+ */
 static void test_delete_missing_key_returns_not_found(void) {
     uint8_t storage[8192];
     ramdev_t rd = {0};
@@ -94,6 +100,9 @@ static void test_delete_missing_key_returns_not_found(void) {
     tdb_kv_close(db);
 }
 
+/**
+ * @brief test_empty_db_and_empty_prefix_cursor.
+ */
 static void test_empty_db_and_empty_prefix_cursor(void) {
     uint8_t storage[8192];
     ramdev_t rd = {0};
@@ -143,6 +152,9 @@ static void test_empty_db_and_empty_prefix_cursor(void) {
     tdb_kv_close(db);
 }
 
+/**
+ * @brief test_binary_keys_with_nul_bytes_roundtrip_and_prefix.
+ */
 static void test_binary_keys_with_nul_bytes_roundtrip_and_prefix(void) {
     uint8_t storage[16384];
     ramdev_t rd = {0};
@@ -191,6 +203,9 @@ static void test_binary_keys_with_nul_bytes_roundtrip_and_prefix(void) {
     tdb_kv_close(db);
 }
 
+/**
+ * @brief test_get_len_and_get_into_truncation.
+ */
 static void test_get_len_and_get_into_truncation(void) {
     uint8_t storage[16384];
     ramdev_t rd = {0};
@@ -222,6 +237,9 @@ static void test_get_len_and_get_into_truncation(void) {
     tdb_kv_close(db);
 }
 
+/**
+ * @brief test_large_value_is_rejected_without_overflow_pages.
+ */
 static void test_large_value_is_rejected_without_overflow_pages(void) {
     static uint8_t storage[262144];
     ramdev_t rd = {0};
@@ -244,6 +262,9 @@ static void test_large_value_is_rejected_without_overflow_pages(void) {
     free(val);
 }
 
+/**
+ * @brief test_kv_max_val_len_matches_runtime_rejection.
+ */
 static void test_kv_max_val_len_matches_runtime_rejection(void) {
     uint8_t storage[262144];
     ramdev_t rd = {0};
@@ -278,6 +299,9 @@ static void test_kv_max_val_len_matches_runtime_rejection(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_kv_gc_step_more_reports_no_work_on_fresh_db.
+ */
 static void test_kv_gc_step_more_reports_no_work_on_fresh_db(void) {
     uint8_t storage[262144];
     ramdev_t rd = {0};
@@ -293,6 +317,9 @@ static void test_kv_gc_step_more_reports_no_work_on_fresh_db(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief tdb_register_tests_kv_edge_cases.
+ */
 void tdb_register_tests_kv_edge_cases(void) {
     RUN_TEST(test_invalid_args_are_rejected);
     RUN_TEST(test_delete_missing_key_returns_not_found);

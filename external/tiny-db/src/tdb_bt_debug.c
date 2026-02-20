@@ -56,6 +56,10 @@ static char sccsid[] = "@(#)bt_debug.c	8.2 (Berkeley) 2/21/94";
  * Parameters:
  *	dbp:	pointer to the DB
  */
+/**
+ * @brief __bt_dump.
+ * @param dbp B-Tree database handle.
+ */
 void __bt_dump(DB* dbp)
 {
     BTREE* t;
@@ -99,6 +103,10 @@ void __bt_dump(DB* dbp)
  * Parameters:
  *	h:	pointer to the PAGE
  */
+/**
+ * @brief __bt_dmpage.
+ * @param h Page pointer.
+ */
 void __bt_dmpage(PAGE* h)
 {
     BTMETA* m;
@@ -131,6 +139,11 @@ void __bt_dmpage(PAGE* h)
  * Parameters:
  *	n:	page number to dump.
  */
+/**
+ * @brief __bt_dnpage.
+ * @param dbp B-Tree database handle.
+ * @param pgno Page number.
+ */
 void __bt_dnpage(DB* dbp, pgno_t pgno)
 {
     BTREE* t;
@@ -148,6 +161,10 @@ void __bt_dnpage(DB* dbp, pgno_t pgno)
  *
  * Parameters:
  *	h:	pointer to the PAGE
+ */
+/**
+ * @brief __bt_dpage.
+ * @param h Page pointer.
  */
 void __bt_dpage(PAGE* h)
 {
@@ -229,6 +246,10 @@ void __bt_dpage(PAGE* h)
  *
  * Parameters:
  *	dbp:	pointer to the DB
+ */
+/**
+ * @brief __bt_stat.
+ * @param dbp B-Tree database handle.
  */
 void __bt_stat(DB* dbp)
 {

@@ -55,6 +55,9 @@ static void make_bdev(tdb_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size
     bdev->geom.erase_granularity = 4096;
 }
 
+/**
+ * @brief test_o1ram_scan_miss_roundtrip_two_pages.
+ */
 static void test_o1ram_scan_miss_roundtrip_two_pages(void) {
     static uint8_t storage[131072];
     ramdev_t rd = {0};
@@ -103,6 +106,9 @@ static void test_o1ram_scan_miss_roundtrip_two_pages(void) {
     tdb_kv_unbind();
 }
 
+/**
+ * @brief test_o1ram_tombstone_makes_pgno_unreadable_after_reopen.
+ */
 static void test_o1ram_tombstone_makes_pgno_unreadable_after_reopen(void) {
     static uint8_t storage[131072];
     ramdev_t rd = {0};
@@ -133,6 +139,9 @@ static void test_o1ram_tombstone_makes_pgno_unreadable_after_reopen(void) {
     tdb_kv_unbind();
 }
 
+/**
+ * @brief test_o1ram_recovery_stops_at_torn_last_record.
+ */
 static void test_o1ram_recovery_stops_at_torn_last_record(void) {
     static uint8_t storage[131072];
     ramdev_t rd = {0};
@@ -173,11 +182,17 @@ static void test_o1ram_recovery_stops_at_torn_last_record(void) {
     tdb_kv_unbind();
 }
 
+/**
+ * @brief test_o1ram_is_enabled_for_dogfood_build.
+ */
 static void test_o1ram_is_enabled_for_dogfood_build(void) {
     /* This test just ensures the file is compiled+run in the dogfood build. */
     TEST_ASSERT_TRUE(TDB_MPOOL_O1_RAM == 1);
 }
 
+/**
+ * @brief tdb_register_tests_mpool_o1ram.
+ */
 void tdb_register_tests_mpool_o1ram(void) {
     RUN_TEST(test_o1ram_is_enabled_for_dogfood_build);
 #if TDB_MPOOL_O1_RAM

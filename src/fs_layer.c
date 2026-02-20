@@ -14,6 +14,7 @@ extern struct CljSymbol *SYM_KW_SIZE, *SYM_KW_CHUNKS, *SYM_KW_PATH, *SYM_KW_META
 
 #include "tiny_db.h"
 #include "tdb_blockdev.h"
+#include "tdb_utils.h"
 
 #include <string.h>
 #if defined(ESP_PLATFORM)
@@ -67,14 +68,6 @@ static bool fs_meta_put(FsKvStore *st, const char *path, const FsFileMeta *meta)
 #define FS_KV_KEY_MAX 1024u
 #define FS_KV_CHUNK_TAG 0x01u
 
-static void fs_write_be32(uint8_t out[4], uint32_t v)
-{
-    out[0] = (uint8_t)((v >> 24) & 0xFFu);
-    out[1] = (uint8_t)((v >> 16) & 0xFFu);
-    out[2] = (uint8_t)((v >> 8) & 0xFFu);
-    out[3] = (uint8_t)(v & 0xFFu);
-}
-
 typedef struct __attribute__((packed)) FsKvMeta {
     uint32_t magic;
     uint32_t version;
@@ -90,16 +83,16 @@ static tdb_status_t fs_kv_make_chunk_key_bytes(const uint8_t* key, size_t key_le
     if (!key || key_len == 0 || !out || !out_len) return TDB_ERR_INVALID_ARG;
     if (key_len > FS_KV_KEY_MAX) return TDB_ERR_INVALID_ARG;
 
-    // Chunk key: K || tag(1B) || ver_be32 || idx_be32
+    // Chunk key: K || tag(1B) || ver_wire32 || idx_wire32
     const size_t need = key_len + 1 + 4 + 4;
     if (need > out_cap) return TDB_ERR_INVALID_ARG;
     size_t pos = 0;
     memcpy(out + pos, key, key_len);
     pos += key_len;
     out[pos++] = (uint8_t)FS_KV_CHUNK_TAG;
-    fs_write_be32(out + pos, version);
+    tdb_u32_wire_write(out + pos, version);
     pos += 4;
-    fs_write_be32(out + pos, chunk_idx);
+    tdb_u32_wire_write(out + pos, chunk_idx);
     pos += 4;
     *out_len = pos;
     return TDB_OK;
@@ -577,48 +570,28 @@ tdb_status_t fs_kv_stream_read_key_bytes(FsKvStore* st,
     if (stc != TDB_OK) return stc;
 
     if (has_meta) {
-        // Chunked value: enumerate chunk keys by prefix cursor (Option 3).
-        // Prefix: K || tag || ver_be32
-        uint8_t prefix[FS_KV_KEY_MAX + 1 + 4];
-        if (key_len + 1 + 4 > sizeof(prefix)) return TDB_ERR_INVALID_ARG;
-        size_t pfx_len = 0;
-        memcpy(prefix, key, key_len);
-        pfx_len += key_len;
-        prefix[pfx_len++] = (uint8_t)FS_KV_CHUNK_TAG;
-        fs_write_be32(prefix + pfx_len, meta.version);
-        pfx_len += 4;
-
-        tdb_kv_cursor_t* cur = NULL;
-        stc = tdb_kv_cursor_open_prefix(st->db, prefix, pfx_len, &cur);
-        if (stc != TDB_OK) return stc;
-
+        /* Chunked value: read chunks by explicit index key to avoid any cursor sort dependence. */
         size_t remaining_total = (size_t)meta.total_len;
-        uint32_t seen_chunks = 0;
-        while (seen_chunks < meta.chunks) {
-            int has = 0;
-            stc = tdb_kv_cursor_next(cur, &has);
-            if (stc != TDB_OK) { tdb_kv_cursor_close(cur); return stc; }
-            if (!has) break;
+        uint8_t ckey[FS_KV_KEY_MAX + FS_KV_CHUNK_KEY_SUFFIX_MAX];
+        size_t ckey_len = 0;
+        uint8_t buf[FS_STORE_CHUNK_SIZE];
 
-            tdb_blob_t v = {0};
-            stc = tdb_kv_cursor_val(cur, &v);
-            if (stc != TDB_OK) { tdb_kv_cursor_close(cur); return stc; }
+        for (uint32_t i = 0; i < meta.chunks && remaining_total > 0; i++) {
+            stc = fs_kv_make_chunk_key_bytes(key, key_len, meta.version, i, ckey, sizeof(ckey), &ckey_len);
+            if (stc != TDB_OK) return stc;
 
-            if (v.len > (size_t)FS_STORE_CHUNK_SIZE) { tdb_kv_cursor_close(cur); return TDB_ERR_CORRUPT; }
-            if (v.len > remaining_total) { tdb_kv_cursor_close(cur); return TDB_ERR_CORRUPT; }
+            size_t saved = 0;
+            stc = tdb_kv_get_into(st->db, ckey, ckey_len, buf, sizeof(buf), &saved);
+            if (stc != TDB_OK) return stc;
+            if (saved == 0) return TDB_ERR_CORRUPT;
+            if (saved > (size_t)FS_STORE_CHUNK_SIZE) return TDB_ERR_CORRUPT;
+            if (saved > remaining_total) return TDB_ERR_CORRUPT;
 
             st->stats.blocks_read++;
-            if (v.len) {
-                stc = fs_emit_sliced((const uint8_t*)v.data, v.len, chunk_cap, cb, arg);
-                if (stc != TDB_OK) { tdb_kv_cursor_close(cur); return stc; }
-            }
-            remaining_total -= v.len;
-            seen_chunks++;
-            if (remaining_total == 0) break;
+            stc = fs_emit_sliced(buf, saved, chunk_cap, cb, arg);
+            if (stc != TDB_OK) return stc;
+            remaining_total -= saved;
         }
-
-        tdb_kv_cursor_close(cur);
-        if (seen_chunks != meta.chunks) return TDB_ERR_CORRUPT;
         if (remaining_total != 0) return TDB_ERR_CORRUPT;
         return TDB_OK;
     }

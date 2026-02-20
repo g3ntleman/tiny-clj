@@ -53,6 +53,9 @@ static void make_bdev(tdb_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size
     bdev->geom.erase_granularity = 4096;
 }
 
+/**
+ * @brief test_syskey_roundtrip.
+ */
 static void test_syskey_roundtrip(void) {
     uint8_t storage[16384];
     ramdev_t rd = {0};
@@ -74,6 +77,9 @@ static void test_syskey_roundtrip(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_syskeys_sort_before_user_keys.
+ */
 static void test_syskeys_sort_before_user_keys(void) {
     uint8_t storage[16384];
     ramdev_t rd = {0};
@@ -103,6 +109,9 @@ static void test_syskeys_sort_before_user_keys(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_syskey_prefix_iteration_only_returns_syskeys.
+ */
 static void test_syskey_prefix_iteration_only_returns_syskeys(void) {
     uint8_t storage[16384];
     ramdev_t rd = {0};
@@ -143,6 +152,9 @@ static void test_syskey_prefix_iteration_only_returns_syskeys(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief tdb_register_tests_gc_syskeys.
+ */
 void tdb_register_tests_gc_syskeys(void) {
     RUN_TEST(test_syskey_roundtrip);
     RUN_TEST(test_syskeys_sort_before_user_keys);

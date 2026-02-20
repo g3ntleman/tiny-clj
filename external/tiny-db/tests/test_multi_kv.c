@@ -38,6 +38,9 @@ static tdb_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
     return TDB_OK;
 }
 
+/**
+ * @brief test_two_kv_dbs_on_different_pages_are_independent.
+ */
 static void test_two_kv_dbs_on_different_pages_are_independent(void) {
     static uint8_t storage[256 * 1024];
     memset(storage, 0xFF, sizeof(storage));
@@ -89,6 +92,9 @@ static void test_two_kv_dbs_on_different_pages_are_independent(void) {
     tdb_kv_close(kv1);
 }
 
+/**
+ * @brief tdb_register_tests_multi_kv.
+ */
 void tdb_register_tests_multi_kv(void) {
     RUN_TEST(test_two_kv_dbs_on_different_pages_are_independent);
 }

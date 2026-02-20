@@ -11,6 +11,15 @@ typedef struct {
     size_t n;
 } seen_keys_t;
 
+/**
+ * @brief collect_keys_cb.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param val Value bytes.
+ * @param val_len Value length in bytes.
+ * @param arg Callback/user context.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t collect_keys_cb(const void* key, size_t key_len, const void* val, size_t val_len,
                                    void* arg) {
     (void)val;
@@ -24,6 +33,9 @@ static tdb_status_t collect_keys_cb(const void* key, size_t key_len, const void*
     return TDB_OK;
 }
 
+/**
+ * @brief test_lower_bound_basic.
+ */
 static void test_lower_bound_basic(void) {
     // Already sorted lex-bytes.
     const char* k0 = "a";
@@ -44,6 +56,9 @@ static void test_lower_bound_basic(void) {
     TEST_ASSERT_EQUAL_UINT32(4, (uint32_t)tdb_lower_bound_kv(e, 4, "c", 1));
 }
 
+/**
+ * @brief test_iter_prefix_order.
+ */
 static void test_iter_prefix_order(void) {
     const char* k0 = "ab";
     const char* k1 = "a";
@@ -75,6 +90,9 @@ static void test_iter_prefix_order(void) {
     TEST_ASSERT_EQUAL_STRING("aba", s2.keys[1]);
 }
 
+/**
+ * @brief tdb_register_tests_btree_prefix.
+ */
 void tdb_register_tests_btree_prefix(void) {
     RUN_TEST(test_lower_bound_basic);
     RUN_TEST(test_iter_prefix_order);

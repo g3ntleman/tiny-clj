@@ -59,6 +59,13 @@ static void make_bdev(tdb_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size
     bdev->geom.erase_granularity = 4096;
 }
 
+/**
+ * @brief topdown_put.
+ * @param db B-Tree database handle.
+ * @param key Key bytes.
+ * @param data Value bytes.
+ * @return RET_SUCCESS on success, RET_ERROR on failure.
+ */
 static int topdown_put(DB* db, DBT* key, DBT* data) {
     BTREE* t = (BTREE*)db->internal;
     const size_t nbytes = NBLEAFDBT(key->size, data->size);
@@ -96,6 +103,9 @@ static int topdown_put(DB* db, DBT* key, DBT* data) {
     return RET_SUCCESS;
 }
 
+/**
+ * @brief test_topdown_peak_pinned_is_3.
+ */
 static void test_topdown_peak_pinned_is_3(void) {
     static uint8_t storage[16 * 1024 * 1024];
     ramdev_t rd = {0};
@@ -142,7 +152,9 @@ static void test_topdown_peak_pinned_is_3(void) {
     tdb_kv_unbind();
 }
 
+/**
+ * @brief tdb_register_tests_btree_topdown_insert.
+ */
 void tdb_register_tests_btree_topdown_insert(void) {
     RUN_TEST(test_topdown_peak_pinned_is_3);
 }
-

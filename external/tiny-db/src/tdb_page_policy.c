@@ -4,6 +4,13 @@
 
 #include "tdb_utils.h"
 
+/**
+ * @brief tdb_page_policy_compute_variant_b.
+ * @param geom Block-device geometry descriptor.
+ * @param header_size Length in bytes.
+ * @param out Page-policy configuration.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_page_policy_compute_variant_b(const tdb_blockdev_geom_t* geom, size_t header_size,
                                              tdb_page_policy_t* out) {
     if (!geom || !out)

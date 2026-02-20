@@ -70,6 +70,13 @@ static char sccsid[] = "@(#)bt_stack.c	8.3 (Berkeley) 2/21/94";
  * Returns:
  * 	RET_ERROR, RET_SUCCESS
  */
+/**
+ * @brief __bt_push.
+ * @param t B-Tree context.
+ * @param pgno Page number.
+ * @param index Index value.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int __bt_push(BTREE* t, pgno_t pgno, int index) {
     if (t->bt_sp == t->bt_maxstack) {
         t->bt_maxstack += 50;

@@ -38,6 +38,10 @@ static tdb_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
     return TDB_OK;
 }
 
+/**
+ * @brief make_kv.
+ * @return Pointer result, or NULL on failure.
+ */
 static tdb_kv_t* make_kv(void) {
     static uint8_t storage[8192];
     static ramdev_t rd;
@@ -62,6 +66,9 @@ static tdb_kv_t* make_kv(void) {
     return kv;
 }
 
+/**
+ * @brief test_put_get_overwrite_del.
+ */
 static void test_put_get_overwrite_del(void) {
     tdb_kv_t* kv = make_kv();
 
@@ -85,6 +92,9 @@ static void test_put_get_overwrite_del(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_cursor_snapshot_is_stable.
+ */
 static void test_cursor_snapshot_is_stable(void) {
     TEST_IGNORE_MESSAGE("MVCC not supported - no snapshot isolation");
     tdb_kv_t* kv = make_kv();
@@ -131,6 +141,9 @@ static void test_cursor_snapshot_is_stable(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_two_cursors_are_independent_snapshots.
+ */
 static void test_two_cursors_are_independent_snapshots(void) {
     TEST_IGNORE_MESSAGE("MVCC not supported - no snapshot isolation");
     tdb_kv_t* kv = make_kv();
@@ -200,6 +213,9 @@ static void test_two_cursors_are_independent_snapshots(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief tdb_register_tests_btree_rw.
+ */
 void tdb_register_tests_btree_rw(void) {
     RUN_TEST(test_put_get_overwrite_del);
     RUN_TEST(test_cursor_snapshot_is_stable);

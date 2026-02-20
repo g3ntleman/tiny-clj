@@ -59,6 +59,10 @@ static void make_bdev(tdb_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size
     bdev->geom.erase_granularity = 4096;
 }
 
+/**
+ * @brief run_put_get_stress.
+ * @param cache_pagecount Element count.
+ */
 static void run_put_get_stress(uint32_t cache_pagecount) {
     const uint32_t old = tdb_mpool_get_cache_pagecount();
     TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_mpool_enable_psram_autosize(0));
@@ -109,14 +113,23 @@ static void run_put_get_stress(uint32_t cache_pagecount) {
     TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_mpool_enable_psram_autosize(1));
 }
 
+/**
+ * @brief test_cache_pagecount_3_stress.
+ */
 static void test_cache_pagecount_3_stress(void) {
     run_put_get_stress(3);
 }
 
+/**
+ * @brief test_cache_pagecount_16_stress.
+ */
 static void test_cache_pagecount_16_stress(void) {
     run_put_get_stress(16);
 }
 
+/**
+ * @brief tdb_register_tests_mpool_cache_stress.
+ */
 void tdb_register_tests_mpool_cache_stress(void) {
     RUN_TEST(test_cache_pagecount_3_stress);
     RUN_TEST(test_cache_pagecount_16_stress);

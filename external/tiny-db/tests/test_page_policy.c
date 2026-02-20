@@ -4,6 +4,9 @@
 
 #include "tdb_page_policy.h"
 
+/**
+ * @brief test_variant_b_4k_erase_16b_header.
+ */
 static void test_variant_b_4k_erase_16b_header(void) {
     tdb_blockdev_geom_t geom = {
         .total_size_bytes = 1u << 20,
@@ -19,6 +22,9 @@ static void test_variant_b_4k_erase_16b_header(void) {
     TEST_ASSERT_EQUAL_UINT32(4080, pol.page_size);
 }
 
+/**
+ * @brief test_variant_b_rejects_header_ge_erase.
+ */
 static void test_variant_b_rejects_header_ge_erase(void) {
     tdb_blockdev_geom_t geom = {
         .total_size_bytes = 1u << 20,
@@ -32,6 +38,9 @@ static void test_variant_b_rejects_header_ge_erase(void) {
     TEST_ASSERT_EQUAL_INT(TDB_ERR_INVALID_ARG, tdb_page_policy_compute_variant_b(&geom, 5000, &pol));
 }
 
+/**
+ * @brief test_variant_b_rejects_unaligned_header_or_payload.
+ */
 static void test_variant_b_rejects_unaligned_header_or_payload(void) {
     tdb_blockdev_geom_t geom = {
         .total_size_bytes = 1u << 20,
@@ -50,6 +59,9 @@ static void test_variant_b_rejects_unaligned_header_or_payload(void) {
     TEST_ASSERT_EQUAL_UINT32(4084, pol.page_size);
 }
 
+/**
+ * @brief tdb_register_tests_page_policy.
+ */
 void tdb_register_tests_page_policy(void) {
     RUN_TEST(test_variant_b_4k_erase_16b_header);
     RUN_TEST(test_variant_b_rejects_header_ge_erase);

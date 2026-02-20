@@ -7,6 +7,9 @@
 
 #include <string.h>
 
+/**
+ * @brief test_bt_would_split_empty_page.
+ */
 static void test_bt_would_split_empty_page(void) {
     uint8_t buf[512];
     memset(buf, 0, sizeof(buf));
@@ -16,6 +19,9 @@ static void test_bt_would_split_empty_page(void) {
     TEST_ASSERT_EQUAL_INT(0, __bt_would_split(h, 16));
 }
 
+/**
+ * @brief test_bt_would_split_almost_full.
+ */
 static void test_bt_would_split_almost_full(void) {
     uint8_t buf[512];
     memset(buf, 0, sizeof(buf));
@@ -27,6 +33,9 @@ static void test_bt_would_split_almost_full(void) {
     TEST_ASSERT_EQUAL_INT(0, __bt_would_split(h, nbytes));
 }
 
+/**
+ * @brief test_bt_would_split_overflow.
+ */
 static void test_bt_would_split_overflow(void) {
     uint8_t buf[512];
     memset(buf, 0, sizeof(buf));
@@ -38,6 +47,9 @@ static void test_bt_would_split_overflow(void) {
     TEST_ASSERT_EQUAL_INT(1, __bt_would_split(h, nbytes));
 }
 
+/**
+ * @brief tdb_register_tests_btree_split_helpers.
+ */
 void tdb_register_tests_btree_split_helpers(void) {
     RUN_TEST(test_bt_would_split_empty_page);
     RUN_TEST(test_bt_would_split_almost_full);

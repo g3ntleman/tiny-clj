@@ -60,6 +60,13 @@ static int bt_bdelete __P((BTREE*, const DBT*));
  * Returns:
  *	RET_ERROR, RET_SUCCESS and RET_SPECIAL if the key not found.
  */
+/**
+ * @brief __bt_delete.
+ * @param dbp B-Tree database handle.
+ * @param key Key bytes.
+ * @param flags Option flags controlling operation behavior.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int __bt_delete(const DB* dbp, const DBT* key, u_int flags) {
     BTREE* t;
     int status;
@@ -111,6 +118,12 @@ int __bt_delete(const DB* dbp, const DBT* key, u_int flags) {
  *
  * Returns:
  *	RET_ERROR, RET_SUCCESS and RET_SPECIAL if the key not found.
+ */
+/**
+ * @brief bt_bdelete.
+ * @param t B-Tree context.
+ * @param key Key bytes.
+ * @return Return code (RET_SUCCESS on success).
  */
 static int bt_bdelete(BTREE* t, const DBT* key) {
     EPG *e, save;
@@ -267,6 +280,13 @@ done2:
  *
  * Returns:
  *	RET_SUCCESS, RET_ERROR.
+ */
+/**
+ * @brief __bt_dleaf.
+ * @param t B-Tree context.
+ * @param h Page pointer.
+ * @param index Index value.
+ * @return Return code (RET_SUCCESS on success).
  */
 int __bt_dleaf(BTREE* t, PAGE* h, indx_t index) {
     register BLEAF* bl;

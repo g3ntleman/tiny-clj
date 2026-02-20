@@ -58,6 +58,11 @@ static void make_bdev(tdb_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size
     bdev->geom.erase_granularity = 4096;
 }
 
+/**
+ * @brief tree_height.
+ * @param t B-Tree context.
+ * @return Current tree height, or -1 on read failure.
+ */
 static int tree_height(BTREE* t) {
     int h = 0;
     pgno_t pg = P_ROOT;
@@ -75,6 +80,12 @@ static int tree_height(BTREE* t) {
     }
 }
 
+/**
+ * @brief fill_until_height.
+ * @param db B-Tree database handle.
+ * @param t B-Tree context.
+ * @param want_height Target tree height.
+ */
 static void fill_until_height(DB* db, BTREE* t, int want_height) {
     uint32_t x = 0xC0FFEEu;
     uint8_t kbuf[32];
@@ -96,6 +107,15 @@ static void fill_until_height(DB* db, BTREE* t, int want_height) {
     TEST_FAIL_MESSAGE("failed to reach requested tree height");
 }
 
+/**
+ * @brief try_find_split_pair.
+ * @param t B-Tree context.
+ * @param want_leaf_child Expected leaf-child flag.
+ * @param out_parent Page pointer.
+ * @param out_parent_index Output pointer receiving parent index.
+ * @param out_child Page pointer.
+ * @return 1 if a suitable split pair is found, 0 otherwise.
+ */
 static int try_find_split_pair(BTREE* t, int want_leaf_child, PAGE** out_parent, indx_t* out_parent_index,
                                PAGE** out_child) {
     if (out_parent)
@@ -161,6 +181,9 @@ static int try_find_split_pair(BTREE* t, int want_leaf_child, PAGE** out_parent,
     return 0;
 }
 
+/**
+ * @brief test_bt_split_child_leaf.
+ */
 static void test_bt_split_child_leaf(void) {
     static uint8_t storage[16 * 1024 * 1024];
     ramdev_t rd = {0};
@@ -222,6 +245,9 @@ static void test_bt_split_child_leaf(void) {
     tdb_kv_unbind();
 }
 
+/**
+ * @brief test_bt_split_child_internal.
+ */
 static void test_bt_split_child_internal(void) {
     static uint8_t storage[16 * 1024 * 1024];
     ramdev_t rd = {0};
@@ -282,8 +308,10 @@ static void test_bt_split_child_internal(void) {
     tdb_kv_unbind();
 }
 
+/**
+ * @brief tdb_register_tests_btree_split_child.
+ */
 void tdb_register_tests_btree_split_child(void) {
     RUN_TEST(test_bt_split_child_leaf);
     RUN_TEST(test_bt_split_child_internal);
 }
-

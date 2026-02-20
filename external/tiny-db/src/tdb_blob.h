@@ -2,7 +2,7 @@
 //
 // This implements large values without BSD btree overflow pages by storing:
 // - Meta-Key: <user_key> | 0x00 | 'M'  -> BlobDesc + inline pgno[]
-// - Index-Key: <user_key> | 0x00 | 'C' | gen_be(u32) | block_i_be(u32) -> IndexBlock(pgno[])
+// - Index-Key: <user_key> | 0x00 | 'C' | gen_wire(u32) | block_i_wire(u32) -> IndexBlock(pgno[])
 //
 // Data pages are stored as mpool pages (pgno) and referenced by pgno arrays.
 //
@@ -25,19 +25,19 @@ extern "C" {
 typedef struct tdb_blob_desc {
     uint8_t version;            /* must be TDB_BLOB_DESC_VERSION */
     uint8_t reserved;           /* must be 0 */
-    uint16_t chunk_size;        /* bytes per data page payload (big-endian on wire) */
-    uint32_t logical_size;      /* total blob size (big-endian on wire) */
-    uint32_t generation;        /* current generation (big-endian on wire) */
-    uint16_t index_block_count; /* number of index keys (big-endian on wire) */
-    uint16_t inline_pgno_count; /* number of inline pgno entries (big-endian on wire) */
+    uint16_t chunk_size;        /* bytes per data page payload (wire-endian) */
+    uint32_t logical_size;      /* total blob size (wire-endian) */
+    uint32_t generation;        /* current generation (wire-endian) */
+    uint16_t index_block_count; /* number of index keys (wire-endian) */
+    uint16_t inline_pgno_count; /* number of inline pgno entries (wire-endian) */
 } tdb_blob_desc_t;
 
 /* Fixed header size (without inline pgno array). */
 #define TDB_BLOB_DESC_HDR_SIZE 16u
 
 typedef struct tdb_index_block {
-    uint16_t count; /* number of pgno entries (big-endian on wire) */
-    /* followed by count * u32 pgno entries (big-endian on wire) */
+    uint16_t count; /* number of pgno entries (wire-endian) */
+    /* followed by count * u32 pgno entries (wire-endian) */
 } tdb_index_block_t;
 
 #define TDB_INDEX_BLOCK_HDR_SIZE 2u
@@ -65,8 +65,9 @@ tdb_status_t tdb_index_block_decode(const uint8_t* buf, size_t len, uint32_t* ou
  * On-wire format reference
  * =========================
  *
- * All integers are encoded big-endian (network byte order). The structs above
- * are *not* written to flash directly; only the encoded byte sequences are.
+ * All integers are encoded in the configured tiny-db wire byte order
+ * (see tdb_utils.h: TDB_WIRE_ENDIAN). The structs above are *not* written
+ * to flash directly; only the encoded byte sequences are.
  *
  * Key encoding (byte strings):
  *
@@ -74,7 +75,7 @@ tdb_status_t tdb_index_block_decode(const uint8_t* buf, size_t len, uint32_t* ou
  *     <user_key> | 0x00 | 'M'
  *
  *   Index key:
- *     <user_key> | 0x00 | 'C' | gen_be(u32) | block_i_be(u32)
+ *     <user_key> | 0x00 | 'C' | gen_wire(u32) | block_i_wire(u32)
  *
  * Value formats:
  *

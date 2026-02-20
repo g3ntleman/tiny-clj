@@ -57,6 +57,12 @@ static void mswap __P((PAGE*));
  *	pg:	page number
  *	h:	page to convert
  */
+/**
+ * @brief __bt_pgin.
+ * @param t B-Tree context.
+ * @param pg Page number.
+ * @param pp Page buffer to byte-swap in place.
+ */
 void __bt_pgin(void* t, pgno_t pg, void* pp) {
     PAGE* h;
     indx_t i, top;
@@ -120,6 +126,12 @@ void __bt_pgin(void* t, pgno_t pg, void* pp) {
         }
 }
 
+/**
+ * @brief __bt_pgout.
+ * @param t B-Tree context.
+ * @param pg Page number.
+ * @param pp Page buffer to byte-swap in place.
+ */
 void __bt_pgout(void* t, pgno_t pg, void* pp) {
     PAGE* h;
     indx_t i, top;
@@ -188,6 +200,10 @@ void __bt_pgout(void* t, pgno_t pg, void* pp) {
  *
  * Parameters:
  *	p:	page to convert
+ */
+/**
+ * @brief mswap.
+ * @param pg Page pointer.
  */
 static void mswap(PAGE* pg) {
     char* p;

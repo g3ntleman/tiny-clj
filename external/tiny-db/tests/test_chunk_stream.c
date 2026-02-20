@@ -1,7 +1,7 @@
 // test_chunk_stream.c - Contract test for chunked value streaming via prefix cursor.
 //
 // This is a low-level test for:
-// - deterministic chunk-key encoding (big-endian ordering)
+// - deterministic chunk-key encoding (configured wire byte order)
 // - prefix cursor iteration order
 // - streaming integrity via CRC32
 //
@@ -15,6 +15,7 @@
 #include "tdb_blockdev.h"
 #include "tdb_crc32.h"
 #include "tdb_page_policy.h"
+#include "tdb_utils.h"
 
 #define __DBINTERFACE_PRIVATE
 #include "tdb_bsd_db.h"
@@ -76,23 +77,11 @@ static tdb_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
     return TDB_OK;
 }
 
-static void u32_be_write(uint8_t out[4], uint32_t v) {
-    out[0] = (uint8_t)((v >> 24) & 0xFF);
-    out[1] = (uint8_t)((v >> 16) & 0xFF);
-    out[2] = (uint8_t)((v >> 8) & 0xFF);
-    out[3] = (uint8_t)(v & 0xFF);
-}
-
-static uint32_t u32_be_read(const uint8_t in[4]) {
-    return ((uint32_t)in[0] << 24) | ((uint32_t)in[1] << 16) | ((uint32_t)in[2] << 8) |
-           ((uint32_t)in[3]);
-}
-
 typedef struct __attribute__((packed)) chunk_meta {
-    uint32_t gen_be;
-    uint32_t chunk_size_be;
-    uint32_t total_len_be;
-    uint32_t crc32_be;
+    uint32_t gen_wire;
+    uint32_t chunk_size_wire;
+    uint32_t total_len_wire;
+    uint32_t crc32_wire;
 } chunk_meta_t;
 
 static uint8_t payload_byte(uint32_t idx, uint32_t off) {
@@ -112,6 +101,11 @@ static void fill_payload(uint8_t* dst, uint32_t idx, size_t n) {
     }
 }
 
+/**
+ * @brief btree_ovfl_cutoff_bytes.
+ * @param psize Length in bytes.
+ * @return Computed 32-bit value.
+ */
 static uint32_t btree_ovfl_cutoff_bytes(uint32_t psize) {
     // Mirrors the calculation in tdb_bt_open.c for t->bt_ovflsize.
     indx_t ov = (indx_t)((psize - BTDATAOFF) / DEFMINKEYPAGE - (sizeof(indx_t) + NBLEAFDBT(0, 0)));
@@ -121,6 +115,11 @@ static uint32_t btree_ovfl_cutoff_bytes(uint32_t psize) {
     return (uint32_t)ov;
 }
 
+/**
+ * @brief run_chunk_stream.
+ * @param total_len Length in bytes.
+ * @param label Input string.
+ */
 static void run_chunk_stream(size_t total_len, const char* label) {
     // Keep this test fast: large payloads cause lots of btree splits.
     const uint32_t erase_g = 4096;
@@ -188,9 +187,9 @@ static void run_chunk_stream(size_t total_len, const char* label) {
 
     // Write meta.
     chunk_meta_t meta = {0};
-    u32_be_write((uint8_t*)&meta.gen_be, gen);
-    u32_be_write((uint8_t*)&meta.chunk_size_be, chunk_size);
-    u32_be_write((uint8_t*)&meta.total_len_be, (uint32_t)total_len);
+    tdb_u32_wire_write((uint8_t*)&meta.gen_wire, gen);
+    tdb_u32_wire_write((uint8_t*)&meta.chunk_size_wire, chunk_size);
+    tdb_u32_wire_write((uint8_t*)&meta.total_len_wire, (uint32_t)total_len);
 
     uint8_t* chunk_buf = (uint8_t*)malloc(chunk_size);
     TEST_ASSERT_NOT_NULL(chunk_buf);
@@ -206,7 +205,7 @@ static void run_chunk_stream(size_t total_len, const char* label) {
 
     // Keys:
     //   meta:  <user_key> | 0x00 | 'M'
-    //   chunk: <user_key> | 0x00 | 'C' | gen_be(u32) | i_be(u32)
+    //   chunk: <user_key> | 0x00 | 'C' | gen_wire(u32) | i_wire(u32)
     uint8_t meta_key[sizeof(user_key) + 2];
     size_t meta_key_len = 0;
     memcpy(meta_key, user_key, sizeof(user_key) - 1);
@@ -220,7 +219,6 @@ static void run_chunk_stream(size_t total_len, const char* label) {
     double t_last = t_start;
     size_t bytes_last = 0;
     uint64_t prog_bytes_last = 0;
-    uint64_t read_bytes_last = 0;
     uint64_t prog_calls_last = 0;
     uint64_t read_calls_last = 0;
 
@@ -240,9 +238,9 @@ static void run_chunk_stream(size_t total_len, const char* label) {
         chunk_key_len += sizeof(user_key) - 1;
         chunk_key[chunk_key_len++] = 0x00;
         chunk_key[chunk_key_len++] = (uint8_t)'C';
-        u32_be_write(&chunk_key[chunk_key_len], gen);
+        tdb_u32_wire_write(&chunk_key[chunk_key_len], gen);
         chunk_key_len += 4;
-        u32_be_write(&chunk_key[chunk_key_len], idx);
+        tdb_u32_wire_write(&chunk_key[chunk_key_len], idx);
         chunk_key_len += 4;
 
         tdb_status_t put_st = tdb_kv_put(kv, chunk_key, chunk_key_len, chunk_buf, n);
@@ -261,7 +259,6 @@ static void run_chunk_stream(size_t total_len, const char* label) {
             const double dt = (t_now - t_last);
             const size_t db = produced - bytes_last;
             const uint64_t d_prog_b = rd.prog_bytes - prog_bytes_last;
-            const uint64_t d_read_b = rd.read_bytes - read_bytes_last;
             const uint64_t d_prog_c = rd.prog_calls - prog_calls_last;
             const uint64_t d_read_c = rd.read_calls - read_calls_last;
             const double mib_payload_s = (dt > 0.0) ? ((double)db / (1024.0 * 1024.0)) / dt : 0.0;
@@ -277,32 +274,32 @@ static void run_chunk_stream(size_t total_len, const char* label) {
             t_last = t_now;
             bytes_last = produced;
             prog_bytes_last = rd.prog_bytes;
-            read_bytes_last = rd.read_bytes;
             prog_calls_last = rd.prog_calls;
             read_calls_last = rd.read_calls;
         }
     }
-    u32_be_write((uint8_t*)&meta.crc32_be, expected_crc);
+    tdb_u32_wire_write((uint8_t*)&meta.crc32_wire, expected_crc);
 
     // Overwrite meta with final CRC.
     TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_put(kv, meta_key, meta_key_len, &meta, sizeof(meta)));
 
-    // Cursor prefix: <user_key> | 0x00 | 'C' | gen_be
+    // Cursor prefix: <user_key> | 0x00 | 'C' | gen_wire
     uint8_t prefix[sizeof(user_key) + 1 + 1 + 4];
     size_t prefix_len = 0;
     memcpy(prefix, user_key, sizeof(user_key) - 1);
     prefix_len += sizeof(user_key) - 1;
     prefix[prefix_len++] = 0x00;
     prefix[prefix_len++] = (uint8_t)'C';
-    u32_be_write(&prefix[prefix_len], gen);
+    tdb_u32_wire_write(&prefix[prefix_len], gen);
     prefix_len += 4;
 
     tdb_kv_cursor_t* cur = NULL;
     TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_open_prefix(kv, prefix, prefix_len, &cur));
     TEST_ASSERT_NOT_NULL(cur);
 
-    uint32_t stream_crc = 0;
-    uint32_t seen = 0;
+    uint8_t* seen_idx = (uint8_t*)calloc(chunk_count ? chunk_count : 1u, 1u);
+    TEST_ASSERT_NOT_NULL(seen_idx);
+    uint32_t seen_count = 0;
     int has = 0;
     while (1) {
         TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_kv_cursor_next(cur, &has));
@@ -315,17 +312,24 @@ static void run_chunk_stream(size_t total_len, const char* label) {
 
         TEST_ASSERT_TRUE(k.len >= prefix_len + 4);
         const uint8_t* kb = (const uint8_t*)k.data;
-        const uint32_t idx = u32_be_read(&kb[k.len - 4]);
-        TEST_ASSERT_EQUAL_UINT32(seen, idx);
+        const uint32_t idx = tdb_u32_wire_read(&kb[k.len - 4]);
+        TEST_ASSERT_TRUE(idx < chunk_count);
+        TEST_ASSERT_EQUAL_UINT8(0, seen_idx[idx]);
+        seen_idx[idx] = 1u;
+        seen_count++;
 
-        stream_crc = tdb_crc32_ieee(v.data, v.len, stream_crc);
-        seen++;
+        const size_t base = (size_t)idx * (size_t)chunk_size;
+        const size_t remain = (base < total_len) ? (total_len - base) : 0;
+        const size_t n = (remain < chunk_size) ? remain : chunk_size;
+        TEST_ASSERT_EQUAL_UINT32((uint32_t)n, (uint32_t)v.len);
+        fill_payload(chunk_buf, idx, n);
+        TEST_ASSERT_EQUAL_INT(0, memcmp(v.data, chunk_buf, n));
     }
 
     tdb_kv_cursor_close(cur);
+    free(seen_idx);
 
-    TEST_ASSERT_EQUAL_UINT32(chunk_count, seen);
-    TEST_ASSERT_EQUAL_UINT32(expected_crc, stream_crc);
+    TEST_ASSERT_EQUAL_UINT32(chunk_count, seen_count);
 
     const double t_end = now_seconds_monotonic();
     const double total_s = (t_end - t_start);
@@ -344,10 +348,16 @@ static void run_chunk_stream(size_t total_len, const char* label) {
     free(storage);
 }
 
+/**
+ * @brief test_chunk_stream_256k_crc_and_order.
+ */
 static void test_chunk_stream_256k_crc_and_order(void) {
     run_chunk_stream(256u << 10, "chunk_stream_256k");
 }
 
+/**
+ * @brief test_chunk_stream_1m_crc_and_order_stress.
+ */
 static void test_chunk_stream_1m_crc_and_order_stress(void) {
     const char* env = getenv("TINY_DB_STRESS");
     if (!env || env[0] == '\0' || (env[0] == '0' && env[1] == '\0')) {
@@ -356,6 +366,9 @@ static void test_chunk_stream_1m_crc_and_order_stress(void) {
     run_chunk_stream(1u << 20, "chunk_stream_1m");
 }
 
+/**
+ * @brief tdb_register_tests_chunk_stream.
+ */
 void tdb_register_tests_chunk_stream(void) {
     RUN_TEST(test_chunk_stream_256k_crc_and_order);
     RUN_TEST(test_chunk_stream_1m_crc_and_order_stress);

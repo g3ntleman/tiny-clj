@@ -30,6 +30,14 @@ typedef struct {
     uint64_t erase_bytes;
 } ramdev_t;
 
+/**
+ * @brief ram_read.
+ * @param ctx User callback context.
+ * @param addr Flash address offset in bytes.
+ * @param out Output buffer pointer.
+ * @param len Length in bytes.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t ram_read(void* ctx, uint32_t addr, void* out, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
     if ((size_t)addr + len > r->len)
@@ -40,6 +48,14 @@ static tdb_status_t ram_read(void* ctx, uint32_t addr, void* out, size_t len) {
     return TDB_OK;
 }
 
+/**
+ * @brief ram_prog.
+ * @param ctx User callback context.
+ * @param addr Flash address offset in bytes.
+ * @param data Value bytes.
+ * @param len Length in bytes.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t ram_prog(void* ctx, uint32_t addr, const void* data, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
     if ((size_t)addr + len > r->len)
@@ -53,6 +69,13 @@ static tdb_status_t ram_prog(void* ctx, uint32_t addr, const void* data, size_t 
     return TDB_OK;
 }
 
+/**
+ * @brief ram_erase.
+ * @param ctx User callback context.
+ * @param addr Flash address offset in bytes.
+ * @param len Length in bytes.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
     ramdev_t* r = (ramdev_t*)ctx;
     if ((size_t)addr + len > r->len)
@@ -63,6 +86,16 @@ static tdb_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
     return TDB_OK;
 }
 
+/**
+ * @brief make_ram_bdev.
+ * @param ctx User callback context.
+ * @param storage Backing storage buffer.
+ * @param storage_len Length in bytes.
+ * @param read_g Read granularity in bytes.
+ * @param prog_g Program granularity in bytes.
+ * @param erase_g Erase granularity in bytes.
+ * @return Initialized block-device descriptor.
+ */
 static tdb_blockdev_t make_ram_bdev(ramdev_t* ctx, uint8_t* storage, size_t storage_len,
                                    uint32_t read_g, uint32_t prog_g, uint32_t erase_g) {
     memset(ctx, 0, sizeof(*ctx));
@@ -79,6 +112,9 @@ static tdb_blockdev_t make_ram_bdev(ramdev_t* ctx, uint8_t* storage, size_t stor
     return bdev;
 }
 
+/**
+ * @brief test_blobdesc_roundtrip.
+ */
 static void test_blobdesc_roundtrip(void) {
     uint8_t buf[128] = {0};
     uint32_t inline_pgnos[2] = {123u, 456u};
@@ -113,6 +149,9 @@ static void test_blobdesc_roundtrip(void) {
     TEST_ASSERT_EQUAL_UINT32(456u, out_pgnos[1]);
 }
 
+/**
+ * @brief test_blobdesc_decode_bounds_reports_needed.
+ */
 static void test_blobdesc_decode_bounds_reports_needed(void) {
     uint8_t buf[128] = {0};
     uint32_t inline_pgnos[3] = {1u, 2u, 3u};
@@ -138,6 +177,9 @@ static void test_blobdesc_decode_bounds_reports_needed(void) {
     TEST_ASSERT_EQUAL_UINT16(3u, cap); /* required */
 }
 
+/**
+ * @brief test_indexblock_roundtrip.
+ */
 static void test_indexblock_roundtrip(void) {
     uint8_t buf[128] = {0};
     uint32_t pgnos[3] = {11u, 22u, 33u};
@@ -154,6 +196,12 @@ static void test_indexblock_roundtrip(void) {
     TEST_ASSERT_EQUAL_UINT32(33u, out_pgnos[2]);
 }
 
+/**
+ * @brief payload_byte.
+ * @param idx Index value.
+ * @param off Offset value.
+ * @return Computed byte value.
+ */
 static uint8_t payload_byte(uint32_t idx, uint32_t off) {
     uint32_t x = idx * 0x9E3779B1u ^ off * 0x85EBCA6Bu ^ 0xC001D00Du;
     x ^= x >> 16;
@@ -164,17 +212,30 @@ static uint8_t payload_byte(uint32_t idx, uint32_t off) {
     return (uint8_t)(x >> 24);
 }
 
+/**
+ * @brief fill_payload.
+ * @param dst Output buffer for generated payload bytes.
+ * @param idx Index value.
+ * @param n Element count.
+ */
 static void fill_payload(uint8_t* dst, uint32_t idx, size_t n) {
     for (size_t k = 0; k < n; k++)
         dst[k] = payload_byte(idx, (uint32_t)k);
 }
 
+/**
+ * @brief now_seconds_monotonic.
+ * @return Monotonic time in seconds.
+ */
 static double now_seconds_monotonic(void) {
     struct timespec ts;
     (void)clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
 }
 
+/**
+ * @brief test_blob_put_and_readback_64k.
+ */
 static void test_blob_put_and_readback_64k(void) {
     static uint8_t storage[4096 * 256];
     memset(storage, 0xFF, sizeof(storage));
@@ -211,6 +272,9 @@ static void test_blob_put_and_readback_64k(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_blob_truncate_smaller.
+ */
 static void test_blob_truncate_smaller(void) {
     static uint8_t storage[4096 * 256];
     memset(storage, 0xFF, sizeof(storage));
@@ -248,6 +312,9 @@ static void test_blob_truncate_smaller(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_blob_range_write.
+ */
 static void test_blob_range_write(void) {
     static uint8_t storage[4096 * 256];
     memset(storage, 0xFF, sizeof(storage));
@@ -291,6 +358,9 @@ static void test_blob_range_write(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_blob_writer_multi_step_and_abort.
+ */
 static void test_blob_writer_multi_step_and_abort(void) {
     static uint8_t storage[4096 * 256];
     memset(storage, 0xFF, sizeof(storage));
@@ -343,6 +413,9 @@ static void test_blob_writer_multi_step_and_abort(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_blob_gc_and_recovery_after_updates.
+ */
 static void test_blob_gc_and_recovery_after_updates(void) {
     static uint8_t storage[4096 * 1024]; /* 4 MiB */
     memset(storage, 0xFF, sizeof(storage));
@@ -401,6 +474,9 @@ static void test_blob_gc_and_recovery_after_updates(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_blob_stream_1mib_gated.
+ */
 static void test_blob_stream_1mib_gated(void) {
     const char* stress = getenv("TINY_DB_STRESS");
     if (!stress || stress[0] == '\0') {
@@ -458,6 +534,13 @@ typedef struct {
     size_t bytes;
 } stream_copy_ctx_t;
 
+/**
+ * @brief stream_copy_cb.
+ * @param data Value bytes.
+ * @param len Length in bytes.
+ * @param arg Callback/user context.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t stream_copy_cb(const void* data, size_t len, void* arg) {
     stream_copy_ctx_t* c = (stream_copy_ctx_t*)arg;
     if (!c || !c->w)
@@ -475,6 +558,13 @@ typedef struct {
     size_t bytes;
 } stream_crc_ctx_t;
 
+/**
+ * @brief stream_crc_cb.
+ * @param data Value bytes.
+ * @param len Length in bytes.
+ * @param arg Callback/user context.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t stream_crc_cb(const void* data, size_t len, void* arg) {
     stream_crc_ctx_t* c = (stream_crc_ctx_t*)arg;
     if (!c)
@@ -484,6 +574,9 @@ static tdb_status_t stream_crc_cb(const void* data, size_t len, void* arg) {
     return TDB_OK;
 }
 
+/**
+ * @brief test_blob_stream_copy_1mib.
+ */
 static void test_blob_stream_copy_1mib(void) {
     const size_t total = 1024u * 1024u;
     const uint32_t erase_g = 4096;
@@ -563,6 +656,9 @@ static void test_blob_stream_copy_1mib(void) {
     free(storage);
 }
 
+/**
+ * @brief tdb_register_tests_blob.
+ */
 void tdb_register_tests_blob(void) {
     RUN_TEST(test_blobdesc_roundtrip);
     RUN_TEST(test_blobdesc_decode_bounds_reports_needed);

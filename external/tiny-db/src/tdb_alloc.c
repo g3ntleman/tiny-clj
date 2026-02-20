@@ -23,6 +23,12 @@
 #define TDB_HAVE_ESP_IDF 0
 #endif
 
+/**
+ * @brief tdb_alloc.
+ * @param n Element count.
+ * @param kind Allocation kind identifier.
+ * @return Pointer result, or NULL on failure.
+ */
 void* tdb_alloc(size_t n, tdb_alloc_kind_t kind) {
     (void)kind;
     if (n == 0)
@@ -44,7 +50,10 @@ void* tdb_alloc(size_t n, tdb_alloc_kind_t kind) {
 #endif
 }
 
+/**
+ * @brief tdb_free.
+ * @param p Pointer previously returned by tdb_alloc.
+ */
 void tdb_free(void* p) {
     free(p);
 }
-

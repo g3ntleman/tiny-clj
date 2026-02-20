@@ -59,6 +59,14 @@ static char sccsid[] = "@(#)bt_get.c	8.2 (Berkeley) 9/7/93";
  * Returns:
  *	RET_ERROR, RET_SUCCESS and RET_SPECIAL if the key not found.
  */
+/**
+ * @brief __bt_get.
+ * @param dbp B-Tree database handle.
+ * @param key Key bytes.
+ * @param data Value bytes.
+ * @param flags Option flags controlling operation behavior.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int __bt_get(const DB* dbp, const DBT* key, DBT* data, u_int flags) {
     BTREE* t;
     EPG* e;
@@ -122,6 +130,13 @@ int __bt_get(const DB* dbp, const DBT* key, DBT* data, u_int flags) {
  *
  * Returns:
  *	The first entry in the tree greater than or equal to key.
+ */
+/**
+ * @brief __bt_first.
+ * @param t B-Tree context.
+ * @param key Key bytes.
+ * @param exactp Output flag set on exact match.
+ * @return Page/index reference, or NULL if not found.
  */
 EPG* __bt_first(BTREE* t, const DBT* key, int* exactp) {
     register PAGE* h;

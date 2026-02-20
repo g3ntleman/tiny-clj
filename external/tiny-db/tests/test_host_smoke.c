@@ -40,6 +40,9 @@ static tdb_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
     return TDB_OK;
 }
 
+/**
+ * @brief test_db_init_deinit_smoke.
+ */
 static void test_db_init_deinit_smoke(void) {
     static uint8_t storage[16384];          /* Larger for GC ping-pong */
     memset(storage, 0xFF, sizeof(storage)); /* Fresh flash starts erased */
@@ -61,6 +64,9 @@ static void test_db_init_deinit_smoke(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief tdb_register_tests_host_smoke.
+ */
 void tdb_register_tests_host_smoke(void) {
     RUN_TEST(test_db_init_deinit_smoke);
 }

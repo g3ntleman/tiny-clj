@@ -4,6 +4,9 @@
 
 #include "tiny_db.h"
 
+/**
+ * @brief test_cache_api_set_get.
+ */
 static void test_cache_api_set_get(void) {
     const uint32_t old = tdb_mpool_get_cache_pagecount();
 
@@ -18,11 +21,17 @@ static void test_cache_api_set_get(void) {
     TEST_ASSERT_EQUAL_UINT32(old, tdb_mpool_get_cache_pagecount());
 }
 
+/**
+ * @brief test_psram_autosize_toggle_is_callable.
+ */
 static void test_psram_autosize_toggle_is_callable(void) {
     TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_mpool_enable_psram_autosize(0));
     TEST_ASSERT_EQUAL_INT(TDB_OK, tdb_mpool_enable_psram_autosize(1));
 }
 
+/**
+ * @brief tdb_register_tests_mpool_cache_cfg.
+ */
 void tdb_register_tests_mpool_cache_cfg(void) {
     RUN_TEST(test_cache_api_set_get);
     RUN_TEST(test_psram_autosize_toggle_is_callable);

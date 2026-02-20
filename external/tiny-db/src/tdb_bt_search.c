@@ -62,6 +62,13 @@ static int bt_sprev __P((BTREE*, PAGE*, const DBT*, int*));
  *	of the key, if it were inserted into the tree, is entered into
  *	the bt_cur field of the tree.  A pointer to the field is returned.
  */
+/**
+ * @brief __bt_search.
+ * @param t B-Tree context.
+ * @param key Key bytes.
+ * @param exactp Output flag set on exact match.
+ * @return Page/index reference, or NULL if not found.
+ */
 EPG* __bt_search(BTREE* t, const DBT* key, int* exactp) {
     PAGE* h;
     indx_t base, index, lim;
@@ -132,6 +139,14 @@ EPG* __bt_search(BTREE* t, const DBT* key, int* exactp) {
  *
  * Note: This path does not build/consume the bt_stack. It only keeps one
  * parent and one child pinned (plus the newly allocated right page during a split).
+ */
+/**
+ * @brief __bt_search_insert.
+ * @param t B-Tree context.
+ * @param key Key bytes.
+ * @param insert_nbytes Length in bytes.
+ * @param exactp Output flag set on exact match.
+ * @return Page/index reference, or NULL if not found.
  */
 EPG* __bt_search_insert(BTREE* t, const DBT* key, size_t insert_nbytes, int* exactp) {
     if (!t || !key || !exactp) {
@@ -254,6 +269,14 @@ EPG* __bt_search_insert(BTREE* t, const DBT* key, size_t insert_nbytes, int* exa
  * Returns:
  *	If an exact match found.
  */
+/**
+ * @brief bt_snext.
+ * @param t B-Tree context.
+ * @param h Page pointer.
+ * @param key Key bytes.
+ * @param exactp Output flag set on exact match.
+ * @return Return code (RET_SUCCESS on success).
+ */
 static int bt_snext(BTREE* t, PAGE* h, const DBT* key, int* exactp) {
     EPG e;
     PAGE* tp = NULL;
@@ -298,6 +321,14 @@ static int bt_snext(BTREE* t, PAGE* h, const DBT* key, int* exactp) {
  *
  * Returns:
  *	If an exact match found.
+ */
+/**
+ * @brief bt_sprev.
+ * @param t B-Tree context.
+ * @param h Page pointer.
+ * @param key Key bytes.
+ * @param exactp Output flag set on exact match.
+ * @return Return code (RET_SUCCESS on success).
  */
 static int bt_sprev(BTREE* t, PAGE* h, const DBT* key, int* exactp) {
     EPG e;
