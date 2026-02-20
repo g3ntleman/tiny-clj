@@ -1,8 +1,8 @@
-# Tiny-CLJ Release Notes (2026-02-19)
+# Tiny-CLJ Release Notes (2026-02-20)
 
-## Latest Updates (Recent Commits)
+## Version 0.4 (Current)
 
-### Record Support (Latest)
+### Record Support
 - **Records (`defrecord`)**: Basis-Funktionalität ist implementiert (Descriptor, Konstruktoren `->Type`/`map->Type`, Feldzugriff).
 - **Runtime Integration**: Record-Equality berücksichtigt den konkreten Descriptor (Type-Identity) und vergleicht Felder Clojure-kompatibel.
 - **Performance Focus**: Hot-Path-Invarianten in der Record-Laufzeit sind auf `CLJ_ASSERT` ausgerichtet, um Release-Build-Overhead zu minimieren.
@@ -10,7 +10,7 @@
   - Zusätzliche Keys, die nicht in `defrecord` deklariert sind, werden nicht unterstützt.
   - Entsprechende Operationen enden mit `NotImplementedException`.
 
-### Piezo Sound Engine & macOS Simulation (Latest)
+### Piezo Sound Engine & macOS Simulation
 - **Piezo Audio Engine**: Sound-Engine für Piezo-Buzzer ist implementiert (Noten-/Frequenzsteuerung, Timing-Sequenzen, Embedded-fokussierter Runtime-Pfad).
 - **Desktop Validation**: macOS-Simulationspfad für die Audio-Engine ist verfügbar, um Verhalten ohne ESP-Hardware reproduzierbar zu testen.
 - **Parity Goal**: Gemeinsames API-Verhalten zwischen Embedded-Backend und macOS-Simulation für schnellere Iteration und Regression-Tests.
