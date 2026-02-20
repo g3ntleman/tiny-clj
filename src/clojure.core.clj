@@ -56,14 +56,6 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns a sequence of the collection. Returns nil if coll is empty or nil."}
 (defn seq [coll] :native)
-^#^{:doc "Returns the first item in the collection. Calls seq on its argument. If coll is nil, returns nil."}
-(defn first [coll] :native)
-^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil."}
-(defn rest [coll] :native)
-^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil (not a sequence)."}
-(defn next [coll] :native)
-^#^{:doc "Returns the number of items in the collection. (count nil) returns 0. Also works on strings, arrays, and Java Collections."}
-(defn count [coll] :native)
 
 ^#^{:doc "Returns the logical complement of x. Returns true if x is false or nil, false otherwise."}
 (defn not [x] :native)
@@ -87,8 +79,6 @@ R"CLOJURE(
 ; ============================================================================
 ; Arithmetic Functions (Native) - defined early for use in numeric predicates
 ; ============================================================================
-; + - * / mod quot bit-shift-left are already defined earlier.
-
 ^#^{:doc "Increments a number by 1. Returns the number plus one."}
 (def inc (fn [x] (+ x 1)))
 ^#^{:doc "Decrements a number by 1. Returns the number minus one."}
@@ -115,8 +105,6 @@ R"CLOJURE(
 ; ============================================================================
 ; Collection Functions
 ; ============================================================================
-^#^{:doc "Returns the second item in coll. Returns nil if coll contains less than 2 items."}
-(def second (fn [coll] (first (rest coll))))
 ^#^{:doc "Returns true if coll has no items - same as (not (seq coll)). Please use the idiom (seq coll) when testing whether a collection is non-empty."}
 (def empty? (fn [coll] 
   (not (seq coll))))
@@ -146,10 +134,6 @@ R"CLOJURE(
 ; ============================================================================
 ; Type Predicates (needed by Threading Macros)
 ; ============================================================================
-^#^{:doc "Returns true if x is a kind of persistent list."}
-(defn list? [x] :native)
-^#^{:doc "Returns true if x is a vector, false otherwise."}
-(defn vector? [x] :native)
 ^#^{:doc "Returns true if x is a map, false otherwise."}
 (defn map? [x] :native)
 ^#^{:doc "Returns true if x implements IFn."}
@@ -222,15 +206,6 @@ R"CLOJURE(
                         (cons x (build (dec n)))))]
           (vec (build n))))
       (throw "repeat requires 1 or 2 arguments"))))
-
-^#^{:doc "Returns a lazy sequence of lists of n items each."}
-(defn partition [n coll]
-  (if (empty? coll)
-    (list)
-    (let [p (take n coll)]
-      (if (< (count (vector p)) n)
-        (list)
-        (cons (vector p) (partition n (drop n coll)))))))
 
 ^#^{:doc "Generate unique symbol names."}
 (defn gensym [& prefix] :native)
@@ -452,7 +427,6 @@ R"CLOJURE(
 (defn peek [coll] :native)
 ^#^{:doc "For a list or queue, returns a new list/queue without the first item, for a vector, returns a new vector without the last item. If the collection is empty, returns nil."}
 (defn pop [coll] :native)
-; first/rest/next/nnext/count are already defined earlier.
 ^#^{:doc "Returns a persistent vector of the items in vector from start (inclusive) to end (exclusive). If end is not supplied, defaults to (count vector)."}
 (defn subvec [v start & end] :native)
 ^#^{:doc "Returns a new collection consisting of coll with the xs 'added'. (conj coll item) adds item at an appropriate 'place' in the collection. For lists, conj prepends. For vectors, conj appends."}
@@ -467,10 +441,6 @@ R"CLOJURE(
 ; ============================================================================
 ; Predicate Functions (Native)
 ; ============================================================================
-; nil? is now defined earlier (before Threading Macros)
-; vector? and map? are now defined earlier (before Threading Macros)
-; vector?/map?/list? are already defined earlier.
-
 ; ============================================================================
 ; Type Predicates (Native)
 ; ============================================================================
@@ -480,8 +450,6 @@ R"CLOJURE(
 (defn integer? [x] :native)
 ^#^{:doc "Returns true if n is a floating point number."}
 (defn float? [x] :native)
-; string?, keyword?, and fn? are now defined earlier (before Threading Macros)
-; symbol? is already defined earlier.
 ^#^{:doc "Returns true if x is a Character."}
 (defn char? [x] :native)
 
@@ -496,8 +464,6 @@ R"CLOJURE(
 (defn false? [x] (identical? x false))
 ^#^{:doc "Returns true if x is a Boolean."}
 (defn boolean? [x] (or (true? x) (false? x)))
-; set? is already defined earlier; avoid duplicate redefinition.
-; coll?, seq?, seqable?, and ifn? are now defined earlier (before Threading Macros)
 
 ; ============================================================================
 ; Map Functions (Native)
@@ -591,7 +557,6 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns a lazy seq of numbers from start (inclusive) to end (exclusive), by step, where start defaults to 0, step to 1, and end to infinity."}
 (defn range [& args] :native)
-; repeat is defined earlier (lazy, variadic)
 ^#^{:doc "Returns the nth next of coll, (seq coll) when n is 0."}
 (defn nthnext [coll n] :native)
 ^#^{:doc "Returns the first logical true value of (pred x) for any x in coll, else nil. Native implementation."}
@@ -709,48 +674,6 @@ R"CLOJURE(
 ; ============================================================================
 
 ; ============================================================================
-; Arithmetic Functions (Derived)
-; ============================================================================
-; inc/dec are already defined earlier; avoid duplicate redefinition.
-
-; ============================================================================
-; Numeric Predicates (Derived)
-; ============================================================================
-; zero?/pos?/neg?/even?/odd? are already defined earlier.
-
-; ============================================================================
-; Comparison & Logic (Derived)
-; ============================================================================
-; max/min are already defined earlier; avoid duplicate redefinition.
-
-; ============================================================================
-; Collection Functions (Derived)
-; ============================================================================
-; second/empty? are already defined earlier; avoid duplicate redefinition.
-
-; ============================================================================
-; Utility Functions
-; ============================================================================
-; identity/constantly are already defined earlier; avoid duplicate redefinition.
-
-; ============================================================================
-; Higher-Order Functions (using now-defined list, cons, first, rest, empty?)
-; ============================================================================
-; map/filter are already defined earlier; avoid duplicate redefinition.
-
-; ============================================================================
-; Type Predicates (Clojure-based)
-; ============================================================================
-; Type-predicate helpers are already defined earlier; avoid duplicate redefinition.
-
-; ============================================================================
-; Sequence Functions (Phase 1)
-; ============================================================================
-
-; nthnext is already defined earlier; avoid duplicate redefinition.
-; last is already defined earlier; avoid duplicate redefinition.
-
-; ============================================================================
 ; Predicate Functions (Phase 2)
 ; ============================================================================
 
@@ -840,7 +763,7 @@ R"CLOJURE(
                  (conj out x)))))))
 
 ; ============================================================================
-; Partitioning Functions (Phase 5) - partition is now defined earlier
+; Partitioning Functions (Phase 5)
 ; ============================================================================
 
 ^#^{:doc "Returns a lazy sequence of lists like partition, but may include partitions with fewer than n items at the end."}
