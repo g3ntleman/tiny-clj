@@ -24,6 +24,23 @@ Build a compact ESP32 handheld game ("Geometri Dash" style) with:
 - Stable frame pacing preferred over max visual complexity
 - tiny-clj should not do per-pixel work
 
+## Upstream Dependency: Vector Scene Graph Engine
+
+Primary dependency plan:
+
+- `/Users/theisen/Projects/tiny-clj/.cursor/plans/esp32_vector_scene_graph_engine.plan.md`
+
+Integration rule:
+
+- This Geometri Dash plan consumes the scene-graph renderer contract and patch path from the dependency plan, instead of defining a separate render primitive stack.
+
+Hard gates:
+
+- Gate A (before gameplay rendering integration):
+  - Scene-graph plan M0..M5 must pass (record schema, macOS simulator PoC, transforms, primitives, thick lines, id-based patches).
+- Gate B (before full on-device gameplay rendering):
+  - Scene-graph plan M7 must pass (ESP32 SPI backend integration on shared render core).
+
 ## Definition Of Done (project-level)
 
 1. Device boots directly into game loop.
@@ -31,6 +48,7 @@ Build a compact ESP32 handheld game ("Geometri Dash" style) with:
 3. Stable 60 FPS target, fallback 30 FPS if board/load requires.
 4. Continuous music (default 2 voices, skalierbar auf N Kanaele) + concurrent SFX without audible glitches.
 5. Clean reset/restart cycle after collision without memory growth.
+6. Gameplay render path uses the shared scene-graph engine contract (no parallel custom renderer).
 
 ## Milestone 0: Hardware Lock-In
 
@@ -52,23 +70,20 @@ Done when:
 
 - Pin map compiles and device boots reliably across power cycles.
 
-## Milestone 1: Display Bring-Up (C)
+## Milestone 1: Display Bring-Up (C, panel smoke only)
 
 Status: TODO
 
 Tasks:
 
 - Add ST7789 init + orientation + RGB565 clear.
-- Implement primitives:
-  - clear(color)
-  - hline/vline
-  - rect fill
-- Measure full-frame redraw time at target SPI clock.
-- Add optional dirty-rect mode switch.
+- Validate backlight control and viewport orientation.
+- Measure baseline panel write throughput at target SPI clock.
+- Keep this milestone intentionally minimal; scene primitives and vector rendering are delivered via the upstream scene-graph plan.
 
 Done when:
 
-- A fixed test scene renders at target FPS with no tearing artifacts.
+- Panel bring-up is stable across reboots and can clear/fill test colors reliably.
 
 ## Milestone 2: Input Layer (C)
 
@@ -134,24 +149,22 @@ Status: TODO
 
 Tasks:
 
-- Define strict frame contract:
+- Define strict frame contract (gameplay side):
   - Input map in
   - New state out
-  - Render command vector out
+  - Scene patch vector out (id-based updates, aligned with scene-graph plan M5)
   - Audio event vector out
 - Add low-allocation native bridge helpers.
-- Keep command vocabulary small:
-  - :clear
-  - :line
-  - :rect
+- Keep render payload aligned with upstream scene schema and canonicalization path.
+- Keep audio command vocabulary small:
   - :tone / :sfx
 - Add guardrails:
-  - max render commands per frame
+  - max scene patches per frame
   - max audio events per frame
 
 Done when:
 
-- tiny-clj update function can drive one frame end-to-end from C host.
+- tiny-clj update function can drive one frame end-to-end using scene patches + audio events.
 
 ## Milestone 5: Core Gameplay (tiny-clj)
 
@@ -227,19 +240,23 @@ Done when:
 ## Recommended Implementation Order (first 2 weeks)
 
 1. M0 hardware lock-in
-2. M1 display bring-up
+2. M1 display bring-up (panel smoke only)
 3. M2 input layer
 4. M3 audio core skeleton
-5. M4 tiny-clj host contract stub
-6. M5 minimal playable loop
+5. Dependency Gate A: complete scene-graph plan M0..M5 on macOS simulator
+6. M4 tiny-clj host contract (scene patches + audio events)
+7. Dependency Gate B: complete scene-graph plan M7 on ESP32
+8. M5 minimal playable loop on device
 
 ## Risk Register
 
 - Risk: SPI redraw too slow at full-screen every frame.
-  - Mitigation: dirty-rect mode + command capping.
+  - Mitigation: use upstream scene-graph clipping/patch path; avoid full-frame redraw requirement.
 - Risk: Audio jitter from timer contention.
   - Mitigation: very small ISR work, queue events, keep synthesis simple.
 - Risk: tiny-clj allocation spikes.
   - Mitigation: flat state model, bounded vectors, reuse patterns.
 - Risk: Boot pin conflicts from chosen GPIOs.
   - Mitigation: lock final pin map before PCB/perfboard wiring freeze.
+- Risk: Host simulator and ESP32 render behavior diverge.
+  - Mitigation: treat scene-graph conformance gates (A/B) as release blockers for gameplay integration.
