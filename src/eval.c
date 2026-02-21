@@ -807,8 +807,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             MAP_FOR_EACH(map, key, value) {
                 ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
                 ID eval_value = value ? eval_body_with_params(value, ctx) : NULL;
-                
-                ASSIGN(result, map_assoc(result, eval_key, eval_value));
+
+                map_assoc_inplace(&result, eval_key, eval_value);
             }
             
             return AUTORELEASE(result);
@@ -969,8 +969,7 @@ static ID __attribute__((noinline)) eval_body_no_ctx(ID body, CljPersistentMap *
                     eval_value = eval_body_no_ctx(value, env, st);
                 }
 
-                // Keep result ownership stable across COW/new-instance and in-place paths.
-                ASSIGN(result, map_assoc(result, eval_key, eval_value));
+                map_assoc_inplace(&result, eval_key, eval_value);
 
                 // eval_body returns autoreleased or borrowed values; do not RELEASE here.
             }
@@ -2810,7 +2809,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
             ID value_id = value;
             ID eval_key = (key_id == SYM_NIL) ? NULL : eval_body(key_id, eval_env, eval_st, NULL);
             ID eval_value = (value_id == SYM_NIL) ? NULL : eval_body(value_id, eval_env, eval_st, NULL);
-            ASSIGN(result, map_assoc(result, eval_key, eval_value));
+            map_assoc_inplace(&result, eval_key, eval_value);
         }
 
         return AUTORELEASE(result);

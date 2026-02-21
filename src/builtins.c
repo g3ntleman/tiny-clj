@@ -47,6 +47,7 @@
 #include "platform.h"
 #include "macro.h"
 #include "instant.h"
+#include "build_info.h"
 #include "hashmap.h"
 #include "datetime_utc.h"
 #include "platform.h"
@@ -7382,7 +7383,7 @@ ID native_atom(ID *args, unsigned int argc)
     ID value = args[0]; // Can be NULL (nil) or immediate
     CljAtom *atom = make_atom(value);
 
-    return atom;
+    return AUTORELEASE(atom);
 }
 
 // Native deref implementation
@@ -7402,7 +7403,7 @@ ID native_deref(ID *args, unsigned int argc)
     CljAtom *atom = as_atom(obj);
     ID value = atom_deref(atom);
 
-    return value; // Can be NULL (nil) or immediate
+    return AUTORELEASE(value); // Can be NULL (nil) or immediate
 }
 
 // Native reset! implementation
@@ -7424,7 +7425,7 @@ ID native_reset_bang(ID *args, unsigned int argc)
 
     ID result = atom_reset(atom, new_value);
 
-    return result; // Returns new value (can be NULL/nil or immediate)
+    return AUTORELEASE(result); // Returns new value (can be NULL/nil or immediate)
 }
 
 // Native swap! implementation
@@ -7478,7 +7479,7 @@ ID native_swap_bang(ID *args, unsigned int argc)
         CLJ_FREE(fn_args);
     }
 
-    return result; // Returns new value (can be NULL/nil or immediate)
+    return AUTORELEASE(result); // Returns new value (can be NULL/nil or immediate)
 }
 
 // Note: def and ns are special forms (not builtins) because they require non-evaluated arguments.

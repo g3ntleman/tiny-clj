@@ -249,8 +249,8 @@ ID eval_special_when(CljPersistentVector *args, CljPersistentMap *env, EvalState
 
         if (body_expr) {
             // Bypass eval_body wrapper when ctx is set: saves ~304 bytes of stack
-            ASSIGN(result, ctx ? eval_body_with_params(body_expr, ctx)
-                               : eval_body(body_expr, env, st, NULL));
+            result = ctx ? eval_body_with_params(body_expr, ctx)
+                         : eval_body(body_expr, env, st, NULL);
             if (!result && has_next) return NULL;
         }
     }
@@ -278,7 +278,7 @@ ID eval_special_while(CljPersistentVector *args, CljPersistentMap *env, EvalStat
                     bool has_next = (i + 1) < argc;
 
                     if (body_expr) {
-                        ASSIGN(result, eval_body(body_expr, env, st, ctx));
+                        result = eval_body(body_expr, env, st, ctx);
                         if (!result && has_next) {
                             should_error = true;
                             break;
@@ -303,7 +303,7 @@ ID eval_special_do(CljPersistentVector *args, CljPersistentMap *env, EvalState *
     for (unsigned int i = 0; i < argc; i++) {
         ID expr = args_nth(args, i);
         if (expr) {
-            ASSIGN(result, eval_body(expr, env, st, ctx));
+            result = eval_body(expr, env, st, ctx);
         }
     }
     return result;
@@ -668,7 +668,7 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
         for (unsigned int i = 0; i < (unsigned int)clause_index; i++) {
             ID expr = args_nth(args, i);
             if (!expr) continue;
-            ASSIGN(result, eval_body(expr, base_env, st, ctx));
+            result = eval_body(expr, base_env, st, ctx);
         }
         eval_finally_clause(finally_clause, base_env, st, ctx);
         return result;
@@ -757,7 +757,7 @@ ID eval_special_try(CljPersistentVector *args, CljPersistentMap *env, EvalState 
             for (unsigned int bi = body_start; bi < body_count; bi++) {
                 ID body_expr = vector_nth(call_args, bi);
                 if (!body_expr) continue;
-                ASSIGN(handler_result, eval_body(body_expr, catch_env, st, catch_ctx));
+                handler_result = eval_body(body_expr, catch_env, st, catch_ctx);
             }
 
             RELEASE(catch_stack);
@@ -895,10 +895,10 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
         for (unsigned int i = 1; i < argc; i++) {
             ID expr = args_nth(args, i);
             if (!expr) {
-                ASSIGN(result, NULL);
+                result = NULL;
                 continue;
             }
-            ASSIGN(result, eval_body(expr, base_env, st, ctx));
+            result = eval_body(expr, base_env, st, ctx);
         }
         evalstate_pop_dynamic_bindings_to(st, base_depth);
         st->current_ns = saved_ns;
