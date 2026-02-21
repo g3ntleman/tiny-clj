@@ -25,6 +25,7 @@
 #include "mini_format.h"
 #include "repl_history_common.h"
 #include "repl_history_backend.h"
+#include "build_info.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -41,6 +42,10 @@
 // Best-effort: updated via platform_macos stdout observer hook (for most prints)
 // and by REPL's own printing.
 static bool g_repl_stdout_at_line_start = true;
+// Monotonic write generation for output emitted via platform_put_* paths.
+// Used by the interactive REPL loop to detect "out-of-band" output that happened
+// after the prompt was shown and trigger a prompt refresh.
+static volatile uint32_t g_repl_stdout_generation = 0;
 
 // Crash diagnostics for SIGTRAP during core load.
 extern volatile sig_atomic_t g_clojure_core_last_form;
@@ -58,6 +63,7 @@ void tinyclj_stdout_observe_bytes(const char *data, size_t n) {
     // Update based on the last byte written.
     char last = data[n - 1];
     g_repl_stdout_at_line_start = (last == '\n' || last == '\r');
+    g_repl_stdout_generation++;
 }
 
 // Maximum number of event loop iterations per REPL cycle
@@ -92,13 +98,13 @@ static void repl_format_build_date_line(char *out, size_t out_size)
     time_t epoch = (time_t)BUILD_EPOCH_SECONDS;
     struct tm tm_utc;
     if (gmtime_r(&epoch, &tm_utc) != NULL) {
-        (void)mini_snprintf(out, out_size, "Build Date: %04d-%02d-%02d %02d:%02d:%02d UTC",
+        (void)mini_snprintf(out, out_size, "%04d-%02d-%02d %02d:%02d:%02d UTC",
                             tm_utc.tm_year + 1900, tm_utc.tm_mon + 1, tm_utc.tm_mday,
                             tm_utc.tm_hour, tm_utc.tm_min, tm_utc.tm_sec);
         return;
     }
 #endif
-    (void)mini_snprintf(out, out_size, "Build Date: %s %s", __DATE__, __TIME__);
+    (void)mini_snprintf(out, out_size, "%s %s", __DATE__, __TIME__);
 }
 
 /**
@@ -113,13 +119,13 @@ static void repl_format_compiler_line(char *out, size_t out_size)
         return;
     }
 #if defined(ESP_PLATFORM)
-    (void)mini_snprintf(out, out_size, "Compiler: GCC (xtensa-esp-elf)");
+    (void)mini_snprintf(out, out_size, "GCC (xtensa-esp-elf)");
 #elif defined(__clang__)
-    (void)mini_snprintf(out, out_size, "Compiler: Clang %s", __clang_version__);
+    (void)mini_snprintf(out, out_size, "Clang %s", __clang_version__);
 #elif defined(__GNUC__)
-    (void)mini_snprintf(out, out_size, "Compiler: GCC %s", __VERSION__);
+    (void)mini_snprintf(out, out_size, "GCC %s", __VERSION__);
 #else
-    (void)mini_snprintf(out, out_size, "Compiler: Unknown");
+    (void)mini_snprintf(out, out_size, "Unknown");
 #endif
 }
 
@@ -134,38 +140,36 @@ void repl_print_build_info_with_emitter(void (*emit_line)(const char *line))
         return;
     }
 
-    char line[96];
+    char line[160];
+    char value[96];
     emit_line("=== Build Information ===");
-#if defined(DEBUG) && DEBUG
-    emit_line("Build Type: Debug");
-#else
-    emit_line("Build Type: Release");
-#endif
-    repl_format_build_date_line(line, sizeof(line));
+    repl_format_compiler_line(value, sizeof(value));
+    (void)mini_snprintf(line, sizeof(line), "  Compiler          : %s", value);
     emit_line(line);
-    repl_format_compiler_line(line, sizeof(line));
-    emit_line(line);
-    emit_line("Features:");
+    emit_line("  Features          :");
 #if defined(DEBUG) && DEBUG
-    emit_line("  - Debug: Enabled");
+    emit_line("    Debug Enabled");
 #else
-    emit_line("  - Debug: Disabled");
+    emit_line("    Debug Disabled");
 #endif
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
-    emit_line("  - Memory Profiling: Enabled");
+    emit_line("    Memory Profiling Enabled");
 #else
-    emit_line("  - Memory Profiling: Disabled");
+    emit_line("    Memory Profiling Disabled");
 #endif
 #if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
-    emit_line("  - Zombie Mode: Enabled");
+    emit_line("    Zombie Mode Enabled");
 #else
-    emit_line("  - Zombie Mode: Disabled");
+    emit_line("    Zombie Mode Disabled");
 #endif
 #if defined(META_ENABLED) && META_ENABLED
-    emit_line("  - Meta: Enabled");
+    emit_line("    Meta Enabled");
 #else
-    emit_line("  - Meta: Disabled");
+    emit_line("    Meta Disabled");
 #endif
+    repl_format_build_date_line(value, sizeof(value));
+    (void)mini_snprintf(line, sizeof(line), "  Build Date        : %s", value);
+    emit_line(line);
     emit_line("=========================");
 }
 
@@ -961,6 +965,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
     char acc[REPL_ACC_CAP_DEFAULT]; acc[0] = '\0';
     bool prompt_shown = false;
+    uint32_t seen_stdout_generation = g_repl_stdout_generation;
 
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Initialize line editor
@@ -1013,12 +1018,14 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     // Print initial prompt after line editor init so the editor can track it for redraws.
     print_prompt(st, true);
     prompt_shown = true;
+    seen_stdout_generation = g_repl_stdout_generation;
 
     while (true) {
         // Print prompt only once per input cycle to avoid flooding
         if (!prompt_shown) {
             print_prompt(st, repl_form_state(acc, NULL) == REPL_FORM_BALANCED);
             prompt_shown = true;
+            seen_stdout_generation = g_repl_stdout_generation;
         }
 
         // Unified input processing
@@ -1028,6 +1035,15 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         if (editor) {
             int result = line_editor_process_input(editor);
             if (result == LINE_EDITOR_EOF) break;
+            if (result == LINE_EDITOR_INTERRUPT) {
+                // Ctrl-C: discard current multi-line form and show fresh prompt.
+                acc[0] = '\0';
+                line_editor_clear(editor);
+                print_prompt(st, true);
+                prompt_shown = true;
+                seen_stdout_generation = g_repl_stdout_generation;
+                continue;
+            }
             if (result == LINE_EDITOR_LINE_READY) {
                 size_t line_len = 0;
                 const char *line = line_editor_get_buffer_cstr(editor, &line_len);
@@ -1043,6 +1059,16 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                     line_editor_clear(editor);
                     got_input = true;
                 } else {
+                    // Recovery path for terminals/monitors that don't deliver Ctrl-C
+                    // to the target: pressing Enter on an incomplete form discards it.
+                    ReplFormState pending_state = repl_form_state(acc, NULL);
+                    if (pending_state == REPL_FORM_INCOMPLETE && acc[0] != '\0') {
+                        acc[0] = '\0';
+                        line_editor_clear(editor);
+                        print_prompt(st, true);
+                        prompt_shown = true;
+                        continue;
+                    }
                     line_editor_clear(editor);
                     prompt_shown = false;
                 }
@@ -1052,6 +1078,21 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                 // macOS stdin is delivered via CFRunLoop callbacks (platform_macos.c).
                 // Use the platform runloop as our idle wait to avoid busy-polling.
                 platform_runloop_run_once(1);
+                // If something printed after prompt display (e.g. println/event-loop output),
+                // force a prompt refresh on next iteration when the input buffer is empty.
+                if (prompt_shown) {
+                    uint32_t current_gen = g_repl_stdout_generation;
+                    if (current_gen != seen_stdout_generation) {
+                        size_t pending_len = 0;
+                        (void)line_editor_get_buffer_cstr(editor, &pending_len);
+                        if (pending_len == 0) {
+                            prompt_shown = false;
+                        }
+                        seen_stdout_generation = current_gen;
+                    }
+                } else {
+                    seen_stdout_generation = g_repl_stdout_generation;
+                }
                 continue;
             }
         }
@@ -1071,6 +1112,24 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                 for (int i = 0; i < n; i++) if (buf[i] == '\r') buf[i] = '\n';
                 if (n >= (int)sizeof(buf)) n = (int)sizeof(buf) - 1;
                 buf[n] = '\0';
+
+                // Recovery path for non-line-editor terminals/monitors:
+                // if current form is incomplete and user submits an empty line,
+                // discard the pending form and return to a fresh prompt.
+                bool only_newline = true;
+                for (int i = 0; i < n; i++) {
+                    if (buf[i] != '\n') {
+                        only_newline = false;
+                        break;
+                    }
+                }
+                if (only_newline && acc[0] != '\0' && repl_form_state(acc, NULL) == REPL_FORM_INCOMPLETE) {
+                    acc[0] = '\0';
+                    prompt_shown = false;
+                    got_input = false;
+                    break;
+                }
+
                 if (!repl_acc_append_line(acc, sizeof(acc), buf)) {
                     platform_put_string(NULL, "Error: Input too long (resetting form)\n");
                     acc[0] = '\0';
@@ -1212,8 +1271,9 @@ int main(int argc, char **argv) {
     signal(SIGTRAP, repl_sigtrap_handler);
     platform_init();
     runtime_init(&g_runtime);
-    meta_registry_init();  // Initialize metadata registry
-    init_special_symbols();  // Initialize special symbols like SYM_DEF
+    meta_registry_init();
+    init_special_symbols();
+    event_loop_init();
 #ifdef PROFILE_STARTUP
     clock_t t1 = clock();
     fprintf(stderr, "[PROFILE] init: %.2f ms\n", (double)(t1 - t0) * 1000.0 / CLOCKS_PER_SEC);
