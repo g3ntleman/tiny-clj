@@ -415,7 +415,7 @@ bool eval_multiform_string(const char *code, EvalState *st) {
     bool result = true; // Start optimistic
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     // While profiling, disable callsite cache for reparsed REPL inputs.
-    uint64_t saved_epoch = g_runtime.resolve_cache_epoch;
+    uint16_t saved_epoch = g_runtime.resolve_cache_epoch;
     g_runtime.resolve_cache_epoch = 0;
 #endif
 

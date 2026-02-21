@@ -308,7 +308,8 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             }
 
             size_t len = 1 + type_len + 2; // "#Type{}"
-            for (unsigned int i = 0; i < record->field_count; i++) {
+            unsigned int field_count = record_declared_field_count(record);
+            for (unsigned int i = 0; i < field_count; i++) {
                 if (i > 0) len += 2; // ", "
                 ID key = record_key_at_index((ID)record, i);
                 ID val = record_get_by_index((ID)record, i);
@@ -705,7 +706,8 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             }
 
             append_char(buffer, offset, '{');
-            for (unsigned int i = 0; i < record->field_count; i++) {
+            unsigned int field_count = record_declared_field_count(record);
+            for (unsigned int i = 0; i < field_count; i++) {
                 if (i > 0) {
                     append_cstr(buffer, offset, ", ");
                 }

@@ -12,13 +12,6 @@
 // Persistent vectors (TAG: CLJ_VECTOR_PERSISTENT)
 // ---------------------------------------------------------------------------
 
-struct CljPersistentVector {
-    CljObject base;
-    unsigned int count;
-    int capacity;
-    ID data[];  // flexible array (capacity entries)
-};
-
 // Empty-vector singleton: CLJ_VECTOR_PERSISTENT with rc=SINGLETON_RC, statically initialized.
 // Note: Flexible array member cannot be initialized, so we use a struct with no data array.
 static struct {
@@ -37,11 +30,6 @@ CljPersistentVector* vector_empty_singleton = (CljPersistentVector*)&clj_empty_v
 /** Return empty vector singleton (rc=SINGLETON_RC, do not retain/release). */
 CljPersistentVector* empty_vector(void) {
     return clj_empty_vector_singleton;
-}
-
-/** Get vector count. Returns 0 if vec is NULL. */
-unsigned int vector_count(CljPersistentVector *vec) {
-    return vec ? vec->count : 0;
 }
 
 /** Get vector capacity. Returns 0 if vec is NULL. */

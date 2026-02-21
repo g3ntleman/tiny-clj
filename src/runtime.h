@@ -45,7 +45,8 @@ typedef ID (*BuiltinFn)(ID *args, unsigned int argc);
 typedef struct TinyClJRuntime {
     // Namespaces
     CljTransientMap *ns_registry;             // transient Map: Symbol → CljNamespace*
-    uint64_t resolve_cache_epoch;             // Epoch for call-site cache invalidation (0 = disabled)
+    uint16_t resolve_cache_epoch;             // Epoch for call-site cache invalidation (0 = disabled)
+    uint8_t resolve_cache_generation;         // Wrap-generation for 16-bit resolve_cache_epoch
     
     // Symbol Table (HashSet for O(1) lookup)
     CljHashSet *symbol_table;       // HashSet: CljSymbol (interning table)
@@ -73,7 +74,7 @@ extern TinyClJRuntime g_runtime;
 
 void runtime_init(TinyClJRuntime *runtime);
 void runtime_reset(TinyClJRuntime *runtime);
-uint64_t runtime_next_resolve_epoch(void);
+uint16_t runtime_next_resolve_epoch(uint8_t *out_generation);
 
 // Legacy builtin functions removed - all builtins now use namespace registration
 

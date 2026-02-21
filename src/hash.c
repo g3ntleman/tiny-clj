@@ -96,16 +96,17 @@ static uint32_t hash_list(CljList *list) {
 static uint32_t hash_record(ID record_obj) {
     CljPersistentRecord *record = as_record(record_obj);
     CLJ_ASSERT(record && record->descriptor && "hash_record expects valid record descriptor");
+    unsigned int field_count = record_declared_field_count(record);
 
     uint32_t h = FNV1A_OFFSET;
     h = FNV_MIX(h, clj_hash_full(record->descriptor->type_symbol));
-    h = FNV_MIX(h, (uint32_t)record->field_count);
+    h = FNV_MIX(h, (uint32_t)field_count);
 
-    if (record->field_count > 0) {
+    if (field_count > 0) {
         h = FNV_MIX(h, clj_hash_full(record->values[0]));
     }
-    if (record->field_count > 1) {
-        h = FNV_MIX(h, clj_hash_full(record->values[record->field_count - 1]));
+    if (field_count > 1) {
+        h = FNV_MIX(h, clj_hash_full(record->values[field_count - 1]));
     }
 
     return h;

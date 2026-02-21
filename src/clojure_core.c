@@ -431,7 +431,9 @@ int load_clojure_core(EvalState *st) {
       core = st->current_ns;
     if (core) {
       st->current_ns = core;
+      ns_begin_resolve_cache_batch();
       bool ok = eval_core_source(clojure_core_override, strlen(clojure_core_override), "clojure.core.clj", st);
+      ns_end_resolve_cache_batch();
       if (ok) core->loaded = true;
       if (orig_ns) st->current_ns = orig_ns;
       if (ok) loaded = true;

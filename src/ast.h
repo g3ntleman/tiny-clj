@@ -55,17 +55,19 @@ typedef struct CljCallsiteCache {
     CljObject base;       // object header
     CljSymbol *symbol;    // symbol this cache is for
     ID resolved;          // cached resolution (fn, macro, etc.)
-    uint64_t epoch;       // validity epoch (env/namespace version)
+    uint16_t epoch;       // validity epoch (env/namespace version)
+    uint8_t epoch_generation; // wrap-generation for 16-bit epoch matching
+    uint8_t lookup_hint_index; // map/record keyword lookup hint (UINT8_MAX = no hint)
 } CljCallsiteCache;
 
-CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint64_t epoch);
+CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint16_t epoch);
 CljCallsiteCache* as_callsite_cache(ID obj);
-bool callsite_cache_is_valid(const CljCallsiteCache *cache, CljSymbol *symbol, uint64_t epoch);
-ID ast_node_get_cached_resolution(const CljASTNode *node, CljSymbol *symbol, uint64_t epoch);
-void ast_node_update_callsite_cache(CljASTNode *node, CljSymbol *symbol, ID resolved, uint64_t epoch);
+bool callsite_cache_is_valid(const CljCallsiteCache *cache, CljSymbol *symbol, uint16_t epoch);
+ID ast_node_get_cached_resolution(const CljASTNode *node, CljSymbol *symbol, uint16_t epoch);
+void ast_node_update_callsite_cache(CljASTNode *node, CljSymbol *symbol, ID resolved, uint16_t epoch);
 void ast_node_clear_callsite_cache(CljASTNode *node);
-ID ast_call_get_cached_resolution(const CljASTCall *call, CljSymbol *symbol, uint64_t epoch);
-void ast_call_update_callsite_cache(CljASTCall *call, CljSymbol *symbol, ID resolved, uint64_t epoch);
+ID ast_call_get_cached_resolution(const CljASTCall *call, CljSymbol *symbol, uint16_t epoch);
+void ast_call_update_callsite_cache(CljASTCall *call, CljSymbol *symbol, ID resolved, uint16_t epoch);
 void ast_call_clear_callsite_cache(CljASTCall *call);
 
 #endif

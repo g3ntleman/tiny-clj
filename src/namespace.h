@@ -54,6 +54,8 @@ CljNamespace* ns_find_for_object(CljObject *obj);  // Find namespace containing 
 void ns_define(CljNamespace *ns, ID symbol, ID value);
 void ns_define_refer(CljNamespace *ns, ID symbol, ID value);  // For :refer - stores unqualified symbol
 void ns_invalidate_resolve_cache(void);  // Invalidate resolve cache (sets to NULL)
+void ns_begin_resolve_cache_batch(void); // Coalesce repeated invalidations into one epoch bump
+void ns_end_resolve_cache_batch(void);
 void ns_cleanup(void);
 int ns_reset_registry(void);  // Reset and reinitialize namespace registry
 

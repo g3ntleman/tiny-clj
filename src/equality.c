@@ -165,8 +165,10 @@ bool clj_equal_full(ID a, ID b) {
             // Record type identity is descriptor identity; same type symbol alone is not sufficient
             // across unload/reload scenarios with potentially different field layouts.
             if (ra->descriptor != rb->descriptor) return false;
-            if (ra->field_count != rb->field_count) return false;
-            for (unsigned int i = 0; i < ra->field_count; i++) {
+            unsigned int count_a = record_declared_field_count(ra);
+            unsigned int count_b = record_declared_field_count(rb);
+            if (count_a != count_b) return false;
+            for (unsigned int i = 0; i < count_a; i++) {
                 if (!clj_equal(ra->values[i], rb->values[i])) return false;
             }
             return true;

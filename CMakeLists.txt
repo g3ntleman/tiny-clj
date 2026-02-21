@@ -158,8 +158,9 @@ configure_file(
     @ONLY
 )
 
-# Make build_info.h available to all targets
-include_directories(${CMAKE_BINARY_DIR})
+# Make generated headers (notably build_info.h) win over source-root headers.
+# This prevents stale checked-in headers from shadowing configure_file outputs.
+include_directories(BEFORE ${CMAKE_BINARY_DIR})
 
 # Source files (without main.c - main is target-specific)
 list(APPEND SOURCES

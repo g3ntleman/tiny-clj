@@ -173,7 +173,8 @@ ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
 ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 static ID call_function_with_args_and_context_vec(ID fn, CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
-static ID eval_function_call_from_vector(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, ID op, const EvalContext *ctx);
+static ID eval_function_call_from_vector(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, ID op,
+                                         ID call_form, const EvalContext *ctx);
 // is_special_symbol is now in symbol.c
 static INLINE bool is_builtin_function(CljSymbol *symbol);
 
@@ -1079,7 +1080,7 @@ static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
 // Handle recur special form
 // Resolve operator symbol from environment or namespace
 // DRY: Uses central resolve_symbol_in_env function
-static INLINE ID callsite_get_cached_resolution(ID call_form, CljSymbol *symbol, uint64_t epoch) {
+static INLINE ID callsite_get_cached_resolution(ID call_form, CljSymbol *symbol, uint16_t epoch) {
     if (!call_form || !symbol) return NULL;
     CljType tag = TAG(call_form);
     if (tag == CLJ_AST_NODE) {
@@ -1091,7 +1092,7 @@ static INLINE ID callsite_get_cached_resolution(ID call_form, CljSymbol *symbol,
     return NULL;
 }
 
-static INLINE void callsite_update_cache(ID call_form, CljSymbol *symbol, ID resolved, uint64_t epoch) {
+static INLINE void callsite_update_cache(ID call_form, CljSymbol *symbol, ID resolved, uint16_t epoch) {
     if (!call_form || !symbol || !resolved) return;
     CljType tag = TAG(call_form);
     if (tag == CLJ_AST_NODE) {
@@ -1212,6 +1213,10 @@ static inline bool is_map_like_eval(ID obj) {
     return tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT || tag == CLJ_RECORD;
 }
 
+static inline ID keyword_lookup_default_result(ID default_val) {
+    return (IS_IMMEDIATE(default_val) || !default_val) ? default_val : (ID)AUTORELEASE(default_val);
+}
+
 static inline ID map_like_get_sentinel_eval(ID map_like, ID key, ID not_found) {
     if (!map_like) return not_found;
     unsigned char tag = TAG(map_like);
@@ -1222,6 +1227,112 @@ static inline ID map_like_get_sentinel_eval(ID map_like, ID key, ID not_found) {
         return record_get_sentinel(map_like, key, not_found);
     }
     return not_found;
+}
+
+static INLINE ID callsite_get_cache_obj(ID call_form) {
+    if (!call_form) return NULL;
+    CljType tag = TAG(call_form);
+    if (tag == CLJ_AST_NODE) {
+        return ast_node_get_callsite_cache((const CljASTNode *)call_form);
+    }
+    if (tag == CLJ_AST_CALL) {
+        return ast_call_get_callsite_cache((const CljASTCall *)call_form);
+    }
+    return NULL;
+}
+
+static INLINE void callsite_set_cache_obj(ID call_form, ID cache_obj) {
+    if (!call_form) return;
+    CljType tag = TAG(call_form);
+    if (tag == CLJ_AST_NODE) {
+        ast_node_set_callsite_cache((CljASTNode *)call_form, cache_obj);
+        return;
+    }
+    if (tag == CLJ_AST_CALL) {
+        ast_call_set_callsite_cache((CljASTCall *)call_form, cache_obj);
+        return;
+    }
+}
+
+static INLINE CljCallsiteCache *callsite_cache_for_keyword_lookup(ID call_form, CljSymbol *keyword_sym) {
+    if (!call_form || !keyword_sym) return NULL;
+
+    CljCallsiteCache *cache = as_callsite_cache(callsite_get_cache_obj(call_form));
+    if (!cache) {
+        ID created = AUTORELEASE(make_callsite_cache(keyword_sym, (ID)keyword_sym, g_runtime.resolve_cache_epoch));
+        callsite_set_cache_obj(call_form, created);
+        cache = as_callsite_cache(callsite_get_cache_obj(call_form));
+        if (!cache) return NULL;
+    }
+
+    if (cache->symbol != keyword_sym ||
+        cache->epoch != g_runtime.resolve_cache_epoch ||
+        cache->epoch_generation != g_runtime.resolve_cache_generation) {
+        cache->symbol = keyword_sym;
+        cache->epoch = g_runtime.resolve_cache_epoch;
+        cache->epoch_generation = g_runtime.resolve_cache_generation;
+        ASSIGN(cache->resolved, (ID)keyword_sym);
+        cache->lookup_hint_index = UINT8_MAX;
+    }
+
+    return cache;
+}
+
+static INLINE void callsite_cache_store_lookup_hint(CljCallsiteCache *cache, int index) {
+    if (!cache) return;
+    if (index >= 0 && index < (int)UINT8_MAX) {
+        cache->lookup_hint_index = (uint8_t)index;
+    } else {
+        cache->lookup_hint_index = UINT8_MAX;
+    }
+}
+
+static INLINE ID map_get_with_lookup_hint(ID map_obj, ID key, uint8_t hint_index, int *out_index) {
+    if (out_index) *out_index = -1;
+    CljPersistentMap *map_data = map_backing(map_obj);
+    if (!map_data || map_data->count <= 0) return NOT_FOUND;
+
+    unsigned int count = (unsigned int)map_data->count;
+    if (hint_index != UINT8_MAX && (unsigned int)hint_index < count) {
+        ID hinted_key = (ID)map_data->data[2 * hint_index];
+        if (hinted_key == key || (hinted_key && key && clj_equal(hinted_key, key))) {
+            if (out_index) *out_index = (int)hint_index;
+            return (ID)map_data->data[2 * hint_index + 1];
+        }
+    }
+
+    for (unsigned int i = 0; i < count; i++) {
+        ID stored_key = (ID)map_data->data[2 * i];
+        if (stored_key == key || (stored_key && key && clj_equal(stored_key, key))) {
+            if (out_index) *out_index = (int)i;
+            return (ID)map_data->data[2 * i + 1];
+        }
+    }
+
+    return NOT_FOUND;
+}
+
+static INLINE ID record_get_with_lookup_hint(ID record_obj, ID key, uint8_t hint_index, int *out_index) {
+    if (out_index) *out_index = -1;
+    CljPersistentRecord *record = as_record(record_obj);
+    if (!record) return NOT_FOUND;
+
+    unsigned int field_count = record_declared_field_count(record);
+    if (hint_index != UINT8_MAX && (unsigned int)hint_index < field_count) {
+        ID hinted_key = record_key_at_index(record_obj, hint_index);
+        if (hinted_key == key || (hinted_key && key && clj_equal(hinted_key, key))) {
+            if (out_index) *out_index = (int)hint_index;
+            return record_get_by_index(record_obj, hint_index);
+        }
+    }
+
+    int index = record_field_index(record_obj, key);
+    if (index >= 0) {
+        if (out_index) *out_index = index;
+        return record_get_by_index(record_obj, (unsigned int)index);
+    }
+
+    return NOT_FOUND;
 }
 
 static INLINE ID eval_map_lookup_vec(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx, ID map) {
@@ -1240,7 +1351,8 @@ static INLINE ID eval_map_lookup_vec(CljPersistentVector *args, CljPersistentMap
     return result;
 }
 
-static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, ID op, const EvalContext *ctx) {
+static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, ID op,
+                                                ID call_form, const EvalContext *ctx) {
     if (!op) return NULL;
 
     unsigned char op_tag = TAG(op);
@@ -1263,21 +1375,45 @@ static INLINE ID eval_function_call_from_vector(CljPersistentVector *args, CljPe
             return NULL;
         }
 
-        ID target = eval_arg_from_expr_with_context(vector_nth(args, 0), env, st, ctx);
+        ID target_expr = vector_nth(args, 0);
+        ID target = NULL;
+        if (target_expr && !IS_IMMEDIATE(target_expr) && TAG(target_expr) == CLJ_SLOT_REF && ctx && ctx->frame) {
+            const CljSlotRef *target_ref = (const CljSlotRef *)target_expr;
+            ID slot_value = frame_get_slot(ctx->frame, target_ref->depth, target_ref->slot);
+            if (slot_value != NOT_FOUND) {
+                target = slot_value;
+            }
+        } else {
+            target = eval_arg_from_expr_with_context(target_expr, env, st, ctx);
+        }
         ID default_val = NULL;
         if (argc == 2) {
             default_val = eval_arg_from_expr_with_context(vector_nth(args, 1), env, st, ctx);
         }
 
         if (!target || !is_map_like_eval(target)) {
-            return (IS_IMMEDIATE(default_val) || !default_val) ? default_val : (ID)AUTORELEASE(default_val);
+            return keyword_lookup_default_result(default_val);
         }
 
-        ID found = map_like_get_sentinel_eval(target, op, NOT_FOUND);
+        ID found = NOT_FOUND;
+        CljCallsiteCache *lookup_cache = callsite_cache_for_keyword_lookup(call_form, as_symbol(op));
+        uint8_t hint_index = lookup_cache ? lookup_cache->lookup_hint_index : UINT8_MAX;
+        int resolved_index = -1;
+
+        unsigned char target_tag = TAG(target);
+        if (target_tag == CLJ_RECORD) {
+            found = record_get_with_lookup_hint(target, op, hint_index, &resolved_index);
+        } else if (target_tag == CLJ_MAP_PERSISTENT || target_tag == CLJ_MAP_TRANSIENT) {
+            found = map_get_with_lookup_hint(target, op, hint_index, &resolved_index);
+        } else {
+            found = map_like_get_sentinel_eval(target, op, NOT_FOUND);
+        }
+
+        callsite_cache_store_lookup_hint(lookup_cache, resolved_index);
         if (found && found != NOT_FOUND) RETAIN(found);
 
         if (found == NOT_FOUND) {
-            return (IS_IMMEDIATE(default_val) || !default_val) ? default_val : (ID)AUTORELEASE(default_val);
+            return keyword_lookup_default_result(default_val);
         }
 
         return AUTORELEASE(found);
@@ -1637,7 +1773,7 @@ tail_restart: // Target for tail-call optimization (if/when branch → restart w
 
     if (op && (op_tag == CLJ_SYMBOL || op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE)) {
         g_eval_ast_call_depth--;
-        return eval_function_call_from_vector(call->args, effective_env, effective_st, op, ctx);
+        return eval_function_call_from_vector(call->args, effective_env, effective_st, op, (ID)call, ctx);
     }
 
     g_eval_ast_call_depth--;
@@ -3007,7 +3143,7 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
 
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     // During memory profiling, disable callsite cache to avoid cache churn artifacts.
-    uint64_t saved_epoch = g_runtime.resolve_cache_epoch;
+    uint16_t saved_epoch = g_runtime.resolve_cache_epoch;
     g_runtime.resolve_cache_epoch = 0;
 #endif
 
@@ -3124,7 +3260,7 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
 
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     // While profiling, disable callsite cache for ephemeral ASTs to reduce noise.
-    uint64_t saved_epoch = g_runtime.resolve_cache_epoch;
+    uint16_t saved_epoch = g_runtime.resolve_cache_epoch;
     g_runtime.resolve_cache_epoch = 0;
 #endif
 

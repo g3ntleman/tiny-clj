@@ -6,19 +6,16 @@
 #include "symbol.h"
 #include "vector.h"
 #include "map.h"
-#include "hashmap.h"
 
 typedef struct CljRecordDescriptor {
     CljObject base;                 // type == CLJ_RECORD_DESCRIPTOR
     CljSymbol *type_symbol;         // e.g. Point
     CljPersistentVector *field_keys;  // vector of keyword symbols
-    CljHashMap *key_to_index;       // keyword -> fixnum(index)
 } CljRecordDescriptor;
 
 typedef struct CljPersistentRecord {
     CljObject base;                 // type == CLJ_RECORD
     CljRecordDescriptor *descriptor;
-    uint16_t field_count;
     ID values[];                    // compact, fixed order defined by descriptor
 } CljPersistentRecord;
 
@@ -38,6 +35,13 @@ static inline CljRecordDescriptor *as_record_descriptor(ID obj) {
     CLJ_ASSERT(!obj || TAG(obj) == CLJ_RECORD_DESCRIPTOR);
 #endif
     return (CljRecordDescriptor *)obj;
+}
+
+static inline unsigned int record_declared_field_count(const CljPersistentRecord *record) {
+    CLJ_ASSERT(record != NULL && "record_declared_field_count expects non-null record");
+    CLJ_ASSERT(record->descriptor != NULL && "record_declared_field_count expects record descriptor");
+    CLJ_ASSERT(record->descriptor->field_keys != NULL && "record_declared_field_count expects descriptor field_keys");
+    return vector_count(record->descriptor->field_keys);
 }
 
 CljRecordDescriptor *record_descriptor_lookup(ID type_symbol);

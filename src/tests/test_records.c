@@ -2,7 +2,7 @@
 #include "../ast.h"
 #include "../function.h"
 #include "../record.h"
-#include "hashmap.h"
+#include <string.h>
 
 static void assert_vector_fixnum(ID vec_id, unsigned int index, int expected) {
     TEST_ASSERT_NOT_NULL(vec_id);
@@ -14,6 +14,49 @@ static void assert_vector_fixnum(ID vec_id, unsigned int index, int expected) {
     ID val = vector_nth(vec, index);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(expected, as_fixnum(val));
+}
+
+static bool ast_contains_symbol_call(ID expr, const char *symbol_name) {
+    if (!expr || !symbol_name) return false;
+
+    if (TAG(expr) == CLJ_AST_CALL) {
+        CljASTCall *call = as_ast_call(expr);
+        if (!call) return false;
+
+        if (call->op && TAG(call->op) == CLJ_SYMBOL) {
+            CljSymbol *op = as_symbol(call->op);
+            if (op && op->cname && strcmp(op->cname, symbol_name) == 0) {
+                return true;
+            }
+        }
+
+        if (call->args) {
+            unsigned int argc = vector_count(call->args);
+            for (unsigned int i = 0; i < argc; i++) {
+                if (ast_contains_symbol_call(vector_nth(call->args, i), symbol_name)) return true;
+            }
+        }
+        return false;
+    }
+
+    if (TAG(expr) == CLJ_VECTOR_PERSISTENT || TAG(expr) == CLJ_VECTOR_TRANSIENT) {
+        CljPersistentVector *vec = as_vector(expr);
+        if (!vec) return false;
+        unsigned int count = vector_count(vec);
+        for (unsigned int i = 0; i < count; i++) {
+            if (ast_contains_symbol_call(vector_nth(vec, i), symbol_name)) return true;
+        }
+        return false;
+    }
+
+    if (!is_list_type(TAG(expr))) return false;
+    CljList *list = as_list(expr);
+    while (list) {
+        if (ast_contains_symbol_call(list->first, symbol_name)) return true;
+        if (!list->rest || !is_list_type(TAG(list->rest))) break;
+        list = as_list(list->rest);
+    }
+    return false;
 }
 
 TEST(test_record_high_level_lookup_paths) {
@@ -139,7 +182,7 @@ TEST(test_record_map_constructor_extra_key_throws_not_implemented) {
     TEST_ASSERT_TRUE(exception_caught);
 }
 
-TEST(test_record_descriptor_keeps_key_to_index_once_per_type) {
+TEST(test_record_descriptor_keeps_field_order_once_per_type) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID type_symbol = intern_symbol_global("DescriptorCheck");
@@ -153,14 +196,10 @@ TEST(test_record_descriptor_keeps_key_to_index_once_per_type) {
 
     CljRecordDescriptor *desc = record_register_descriptor(type_symbol, fields);
     TEST_ASSERT_NOT_NULL(desc);
-    TEST_ASSERT_NOT_NULL(desc->key_to_index);
-
-    ID idx_a = hashmap_get_sentinel(desc->key_to_index, kw_a, NOT_FOUND);
-    ID idx_b = hashmap_get_sentinel(desc->key_to_index, kw_b, NOT_FOUND);
-    TEST_ASSERT_TRUE(is_fixnum(idx_a));
-    TEST_ASSERT_TRUE(is_fixnum(idx_b));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(idx_a));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(idx_b));
+    TEST_ASSERT_NOT_NULL(desc->field_keys);
+    TEST_ASSERT_EQUAL_UINT(2, vector_count(desc->field_keys));
+    TEST_ASSERT_EQUAL_PTR(kw_a, vector_nth(desc->field_keys, 0));
+    TEST_ASSERT_EQUAL_PTR(kw_b, vector_nth(desc->field_keys, 1));
 
     CljPersistentVector *vals1 = AUTORELEASE(make_vector(2, STRONG));
     CljPersistentVector *vals2 = AUTORELEASE(make_vector(2, STRONG));
@@ -224,6 +263,133 @@ TEST(test_record_optimizer_rewrites_constant_key_lookup_to_index_lookup) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
+}
+
+TEST(test_record_optimizer_rewrites_let_bound_lookup_to_index_lookup) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID fn_obj = eval_string(
+        "(do "
+        "  (defrecord FastLetR [x y]) "
+        "  (fn fast-let-r [] "
+        "    (let [r (->FastLetR 3 4) "
+        "          alias r] "
+        "      (:x alias))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn_obj);
+    TEST_ASSERT_TRUE(TAG(fn_obj) == CLJ_CLOSURE);
+
+    CljFunction *fn = as_function(fn_obj);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_NOT_NULL(fn->body);
+    TEST_ASSERT_TRUE(ast_contains_symbol_call(fn->body, "record-get-index"));
+
+    ID result = eval_string(
+        "(do "
+        "  (defrecord FastLetRRun [x y]) "
+        "  ((fn [] (let [r (->FastLetRRun 3 4) alias r] (:x alias)))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
+}
+
+TEST(test_record_optimizer_rewrites_loop_binding_without_recur) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID fn_obj = eval_string(
+        "(do "
+        "  (defrecord FastLoopNoRecur [x y]) "
+        "  (fn fast-loop-no-recur [] "
+        "    (loop [r (->FastLoopNoRecur 5 6)] "
+        "      (:x r))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn_obj);
+    TEST_ASSERT_TRUE(TAG(fn_obj) == CLJ_CLOSURE);
+
+    CljFunction *fn = as_function(fn_obj);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_NOT_NULL(fn->body);
+    TEST_ASSERT_TRUE(ast_contains_symbol_call(fn->body, "record-get-index"));
+
+    ID result = eval_string(
+        "(do "
+        "  (defrecord FastLoopNoRecurRun [x y]) "
+        "  ((fn [] (loop [r (->FastLoopNoRecurRun 5 6)] (:x r)))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(result));
+}
+
+TEST(test_record_optimizer_does_not_rewrite_loop_binding_with_recur) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID fn_obj = eval_string(
+        "(do "
+        "  (defrecord FastLoopRecur [x y]) "
+        "  (fn fast-loop-recur [] "
+        "    (loop [r (->FastLoopRecur 1 2) done false] "
+        "      (if done "
+        "        (:x r) "
+        "        (recur {:x 9 :y 8} true)))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn_obj);
+    TEST_ASSERT_TRUE(TAG(fn_obj) == CLJ_CLOSURE);
+
+    CljFunction *fn = as_function(fn_obj);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_NOT_NULL(fn->body);
+    TEST_ASSERT_FALSE(ast_contains_symbol_call(fn->body, "record-get-index"));
+
+    ID result = eval_string(
+        "(do "
+        "  (defrecord FastLoopRecurRun [x y]) "
+        "  ((fn [] "
+        "      (loop [r (->FastLoopRecurRun 1 2) done false] "
+        "        (if done "
+        "          (:x r) "
+        "          (recur {:x 9 :y 8} true))))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(9, as_fixnum(result));
+}
+
+TEST(test_record_slotref_runtime_hint_revalidates_on_shape_change) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID fn_obj = eval_string(
+        "(do "
+        "  (defrecord HintA [x y]) "
+        "  (defrecord HintB [y x]) "
+        "  (fn hint-shape-change [] "
+        "    (loop [r (->HintA 1 2) done false] "
+        "      (if done "
+        "        (:x r) "
+        "        (recur (->HintB 7 8) true)))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn_obj);
+    TEST_ASSERT_TRUE(TAG(fn_obj) == CLJ_CLOSURE);
+
+    CljFunction *fn = as_function(fn_obj);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_NOT_NULL(fn->body);
+    TEST_ASSERT_FALSE(ast_contains_symbol_call(fn->body, "record-get-index"));
+
+    ID result = eval_string(
+        "(do "
+        "  (defrecord HintARun [x y]) "
+        "  (defrecord HintBRun [y x]) "
+        "  ((fn [] "
+        "      (loop [r (->HintARun 1 2) done false] "
+        "        (if done "
+        "          (:x r) "
+        "          (recur (->HintBRun 7 8) true))))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(8, as_fixnum(result));
 }
 
 TEST(test_record_assoc_cow_rc_one_updates_in_place) {

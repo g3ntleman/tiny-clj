@@ -878,8 +878,9 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
             value = (ID)bound_ns;
         }
 
+        // eval_body/ns_find results are pool-/container-managed values; binding frame
+        // takes its own retain via map_assoc_inplace, so no explicit RELEASE here.
         map_assoc_inplace(&frame, sym_id, value);
-        RELEASE(value);
     }
 
     // Push the new frame and run body; unwind stack even if an exception escapes.

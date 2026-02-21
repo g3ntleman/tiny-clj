@@ -682,7 +682,6 @@ static void release_object_default(CljObject *v) {
             if (!desc) break;
             RELEASE(desc->type_symbol);
             RELEASE(desc->field_keys);
-            RELEASE(desc->key_to_index);
             break;
         }
 
@@ -690,7 +689,8 @@ static void release_object_default(CljObject *v) {
             CljPersistentRecord *record = (CljPersistentRecord*)v;
             if (!record) break;
             RELEASE(record->descriptor);
-            for (unsigned int i = 0; i < record->field_count; i++) {
+            unsigned int field_count = record_declared_field_count(record);
+            for (unsigned int i = 0; i < field_count; i++) {
                 RELEASE(record->values[i]);
             }
             break;

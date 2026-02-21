@@ -204,7 +204,7 @@ TEST(test_atom_builtin_creates_atom) {
     ID result = native_atom(args, 1);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_ATOM);
-    RELEASE(result);
+    // native_* return values are pool-managed in eval paths; do not RELEASE here.
 }
 
 TEST(test_atom_builtin_deref) {
@@ -382,4 +382,3 @@ TEST(test_atom_real_world_usage) {
     RELEASE(counter);
     // Don't free st - it's the global test evalState
 }
-

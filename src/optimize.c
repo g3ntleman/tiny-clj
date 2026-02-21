@@ -18,6 +18,18 @@
 #include <string.h>
 #include <stdio.h>
 
+typedef struct RecordBinding {
+    const struct RecordBinding *parent;
+    CljSymbol *symbol;
+    ID target_expr;  // AST constructor call that yields a known record shape, or NULL to shadow.
+} RecordBinding;
+
+typedef struct RecordSlotFrame {
+    const struct RecordSlotFrame *parent;
+    const ID *slot_targets;  // per-slot constructor target (AST_CALL) or NULL
+    unsigned int slot_count;
+} RecordSlotFrame;
+
 // Check if expr is the last element in list (single traversal)
 static bool is_last_in_list(CljObject *expr, CljList *list) {
     if (!list) return false;
@@ -52,33 +64,110 @@ static CljRecordDescriptor *record_descriptor_from_ctor_symbol(CljSymbol *ctor_s
     return record_descriptor_lookup((ID)type_sym);
 }
 
-// Infer record field index for constant keyword lookups on constructor targets.
-static int infer_record_field_index_from_target(ID target_expr, ID key) {
-    if (!target_expr || !key || TAG(target_expr) != CLJ_AST_CALL || !IS_KEYWORD(key)) {
-        return -1;
+static bool record_binding_lookup(const RecordBinding *env, CljSymbol *symbol, ID *out_target_expr) {
+    if (!out_target_expr) return false;
+    for (const RecordBinding *entry = env; entry; entry = entry->parent) {
+        if (entry->symbol == symbol) {
+            *out_target_expr = entry->target_expr;
+            return true;
+        }
     }
+    return false;
+}
 
+static CljRecordDescriptor *record_descriptor_from_ctor_call(ID target_expr) {
+    if (!target_expr || TAG(target_expr) != CLJ_AST_CALL) return NULL;
     CljASTCall *target_call = as_ast_call(target_expr);
     if (!target_call || !target_call->op || TAG(target_call->op) != CLJ_SYMBOL) {
+        return NULL;
+    }
+    return record_descriptor_from_ctor_symbol(as_symbol(target_call->op));
+}
+
+static bool slot_frame_resolve_target(const RecordSlotFrame *slot_env, CljSlotRef *slot_ref, ID *out_target) {
+    if (!slot_ref || !out_target) return false;
+
+    const RecordSlotFrame *frame = slot_env;
+    uint8_t depth = slot_ref->depth;
+    while (frame && depth > 0) {
+        frame = frame->parent;
+        depth--;
+    }
+    if (!frame) return false;
+    if ((unsigned int)slot_ref->slot >= frame->slot_count) return false;
+
+    *out_target = frame->slot_targets ? frame->slot_targets[(unsigned int)slot_ref->slot] : NULL;
+    return true;
+}
+
+// Resolve target expression to a constructor call through local bindings.
+static ID resolve_record_target_expr(ID target_expr,
+                                     const RecordBinding *binding_env,
+                                     const RecordSlotFrame *slot_env) {
+    ID current = target_expr;
+    for (int depth = 0; depth < 32; depth++) {
+        if (!current) return NULL;
+        if (TAG(current) == CLJ_AST_CALL) {
+            return record_descriptor_from_ctor_call(current) ? current : NULL;
+        }
+        if (TAG(current) == CLJ_SLOT_REF) {
+            ID slot_target = NULL;
+            if (!slot_frame_resolve_target(slot_env, (CljSlotRef *)current, &slot_target)) {
+                return NULL;
+            }
+            if (!slot_target) return NULL;
+            current = slot_target;
+            continue;
+        }
+        if (TAG(current) != CLJ_SYMBOL) {
+            return NULL;
+        }
+
+        ID bound_target = NULL;
+        if (!record_binding_lookup(binding_env, as_symbol(current), &bound_target)) {
+            return NULL;
+        }
+        if (!bound_target) {
+            return NULL;
+        }
+        current = bound_target;
+    }
+    return NULL;
+}
+
+// Infer record field index for constant keyword lookups on constructor targets.
+static int infer_record_field_index_from_target(ID target_expr, ID key,
+                                                const RecordBinding *binding_env,
+                                                const RecordSlotFrame *slot_env) {
+    if (!target_expr || !key || !IS_KEYWORD(key)) {
         return -1;
     }
 
-    CljRecordDescriptor *desc = record_descriptor_from_ctor_symbol(as_symbol(target_call->op));
-    if (!desc || !desc->key_to_index) {
+    ID resolved_target = resolve_record_target_expr(target_expr, binding_env, slot_env);
+    if (!resolved_target) {
         return -1;
     }
 
-    ID idx_obj = hashmap_get_sentinel(desc->key_to_index, key, NOT_FOUND);
-    if (!idx_obj || idx_obj == NOT_FOUND || !is_fixnum(idx_obj)) {
+    CljRecordDescriptor *desc = record_descriptor_from_ctor_call(resolved_target);
+    if (!desc || !desc->field_keys) {
         return -1;
     }
 
-    return as_fixnum(idx_obj);
+    unsigned int field_count = vector_count(desc->field_keys);
+    for (unsigned int i = 0; i < field_count; i++) {
+        ID candidate = vector_nth(desc->field_keys, i);
+        if (candidate == key || clj_equal(candidate, key)) {
+            return (int)i;
+        }
+    }
+    return -1;
 }
 
 // Rewrite (:k (->Type ...)) and (get (->Type ...) :k) into record-get-index.
 // Returns true when rewrite was applied.
-static bool rewrite_record_lookup_call(CljASTCall *call) {
+static bool rewrite_record_lookup_call(CljASTCall *call,
+                                       const RecordBinding *binding_env,
+                                       const RecordSlotFrame *slot_env) {
     if (!call || !call->op || !call->args) return false;
 
     unsigned int argc = vector_count(call->args);
@@ -105,7 +194,7 @@ static bool rewrite_record_lookup_call(CljASTCall *call) {
         return false;
     }
 
-    int index = infer_record_field_index_from_target(target_expr, key);
+    int index = infer_record_field_index_from_target(target_expr, key, binding_env, slot_env);
     if (index < 0) return false;
 
     CljPersistentVector *new_args = make_vector(3, STRONG);
@@ -290,15 +379,19 @@ static CljObject* transform_to_recur(CljList *call_list, CljSymbol *func_sym) {
 }
 
 // Forward declaration
-CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
-                                         CljObject **params, int param_count,
-                                         CljObject *parent_body);
+static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, CljObject *func_name,
+                                                            CljObject **params, int param_count,
+                                                            CljObject *parent_body,
+                                                            const RecordBinding *binding_env,
+                                                            const RecordSlotFrame *slot_env);
 
 // Optimize one AST_CALL argument in-place via the same optimizer walk.
 static bool optimize_ast_call_arg_inplace(CljASTCall *call, unsigned int index,
                                           CljObject *func_name,
                                           CljObject **params, int param_count,
-                                          CljObject *parent_body) {
+                                          CljObject *parent_body,
+                                          const RecordBinding *binding_env,
+                                          const RecordSlotFrame *slot_env) {
     if (!call || !call->args) return true;
     unsigned int argc = vector_count(call->args);
     if (index >= argc) return true;
@@ -306,7 +399,8 @@ static bool optimize_ast_call_arg_inplace(CljASTCall *call, unsigned int index,
     ID arg = vector_nth(call->args, index);
     if (!arg) return true;
 
-    CljObject *transformed = optimize_function_body_walk(arg, func_name, params, param_count, parent_body);
+    CljObject *transformed = optimize_function_body_walk_with_bindings(arg, func_name, params, param_count,
+                                                                       parent_body, binding_env, slot_env);
     if (!transformed) return false;
     if (transformed != arg) {
         vector_assoc_inplace(&call->args, index, transformed);
@@ -319,14 +413,17 @@ static bool optimize_ast_call_arg_inplace(CljASTCall *call, unsigned int index,
 // Returns the original list (now mutated) if transformations occurred
 static CljList* optimize_list_walk_inplace(CljList *list, CljObject *func_name,
                                            CljObject **params, int param_count,
-                                           CljObject *parent_body) {
+                                           CljObject *parent_body,
+                                           const RecordBinding *binding_env,
+                                           const RecordSlotFrame *slot_env) {
     if (!list) return NULL;
 
     for (CljList *current = list; current; current = as_list(current->rest)) {
         CljObject *expr = current->first;
         if (!expr) continue;
 
-        CljObject *transformed = optimize_function_body_walk(expr, func_name, params, param_count, parent_body);
+        CljObject *transformed = optimize_function_body_walk_with_bindings(expr, func_name, params, param_count,
+                                                                           parent_body, binding_env, slot_env);
         if (!transformed) return NULL;
 
         if (transformed != expr) {
@@ -336,6 +433,43 @@ static CljList* optimize_list_walk_inplace(CljList *list, CljObject *func_name,
     }
 
     return list;
+}
+
+static bool expr_contains_recur(ID expr) {
+    if (!expr) return false;
+
+    if (TAG(expr) == CLJ_AST_CALL) {
+        CljASTCall *call = as_ast_call(expr);
+        if (!call) return false;
+        if (call->op == (ID)SYM_RECUR) return true;
+        if (expr_contains_recur(call->op)) return true;
+        if (call->args) {
+            unsigned int argc = vector_count(call->args);
+            for (unsigned int i = 0; i < argc; i++) {
+                if (expr_contains_recur(vector_nth(call->args, i))) return true;
+            }
+        }
+        return false;
+    }
+
+    if (TAG(expr) == CLJ_VECTOR_PERSISTENT || TAG(expr) == CLJ_VECTOR_TRANSIENT) {
+        CljPersistentVector *vec = as_vector(expr);
+        if (!vec) return false;
+        unsigned int count = vector_count(vec);
+        for (unsigned int i = 0; i < count; i++) {
+            if (expr_contains_recur(vector_nth(vec, i))) return true;
+        }
+        return false;
+    }
+
+    if (!is_list_type(TAG(expr))) return false;
+    CljList *list = as_list(expr);
+    while (list) {
+        if (expr_contains_recur(list->first)) return true;
+        if (!list->rest || !is_list_type(TAG(list->rest))) break;
+        list = as_list(list->rest);
+    }
+    return false;
 }
 
 // Helper: Build list with 1-3 elements
@@ -375,10 +509,117 @@ static CljObject* transform_ast_call_to_recur(CljASTCall *call) {
     return (CljObject*)recur_call;
 }
 
+// Optimize let-/loop-/binding-style forms with a bindings vector as first argument.
+static bool optimize_binding_form_ast_call(CljASTCall *call,
+                                           CljObject *func_name,
+                                           CljObject **params, int param_count,
+                                           CljObject *parent_body,
+                                           const RecordBinding *binding_env,
+                                           const RecordSlotFrame *slot_env,
+                                           bool propagate_to_body) {
+    if (!call || !call->args) return true;
+    unsigned int argc = vector_count(call->args);
+    if (argc == 0) return true;
+
+    ID bindings_obj = vector_nth(call->args, 0);
+    if (!bindings_obj ||
+        (TAG(bindings_obj) != CLJ_VECTOR_PERSISTENT && TAG(bindings_obj) != CLJ_VECTOR_TRANSIENT)) {
+        // Fallback for unexpected shapes: optimize all args with current environment.
+        for (unsigned int i = 0; i < argc; i++) {
+            if (!optimize_ast_call_arg_inplace(call, i, func_name, params, param_count, parent_body,
+                                               binding_env, slot_env)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    CljPersistentVector *bindings = as_vector(bindings_obj);
+    unsigned int binding_count = bindings ? vector_count(bindings) : 0;
+    unsigned int pair_count = binding_count / 2;
+
+    RecordBinding *entries = NULL;
+    ID *slot_targets = NULL;
+    unsigned int entries_used = 0;
+    if (pair_count > 0) {
+        entries = (RecordBinding *)CLJ_MALLOC(sizeof(RecordBinding) * pair_count);
+        slot_targets = (ID *)CLJ_MALLOC(sizeof(ID) * pair_count);
+        if (!entries || !slot_targets) {
+            CLJ_FREE(entries);
+            CLJ_FREE(slot_targets);
+            return false;
+        }
+        for (unsigned int i = 0; i < pair_count; i++) {
+            slot_targets[i] = NULL;
+        }
+    }
+
+    const RecordBinding *current_env = binding_env;
+    for (unsigned int i = 0; i + 1 < binding_count; i += 2) {
+        unsigned int slot_index = i / 2;
+        ID init_expr = vector_nth(bindings, i + 1);
+        CljObject *transformed = init_expr
+            ? optimize_function_body_walk_with_bindings(init_expr, func_name, params, param_count,
+                                                        parent_body, current_env, slot_env)
+            : NULL;
+        if (init_expr && !transformed) {
+            CLJ_FREE(entries);
+            CLJ_FREE(slot_targets);
+            return false;
+        }
+        if (init_expr && transformed != init_expr) {
+            vector_assoc_inplace(&bindings, i + 1, transformed);
+        }
+
+        ID sym_id = vector_nth(bindings, i);
+        ID init_after_opt = vector_nth(bindings, i + 1);
+        ID resolved_target = resolve_record_target_expr(init_after_opt, current_env, slot_env);
+        if (slot_targets && slot_index < pair_count) {
+            slot_targets[slot_index] = resolved_target;
+        }
+
+        if (!sym_id || TAG(sym_id) != CLJ_SYMBOL || entries_used >= pair_count) {
+            continue;
+        }
+
+        entries[entries_used].parent = current_env;
+        entries[entries_used].symbol = as_symbol(sym_id);
+        entries[entries_used].target_expr = resolved_target;
+        current_env = &entries[entries_used];
+        entries_used++;
+    }
+
+    if ((ID)bindings != bindings_obj) {
+        vector_assoc_inplace(&call->args, 0, (ID)bindings);
+    }
+
+    const RecordBinding *body_env = propagate_to_body ? current_env : binding_env;
+    RecordSlotFrame body_frame = {
+        .parent = slot_env,
+        .slot_targets = slot_targets,
+        .slot_count = pair_count
+    };
+    const RecordSlotFrame *body_slot_env = propagate_to_body ? &body_frame : slot_env;
+    for (unsigned int i = 1; i < argc; i++) {
+        if (!optimize_ast_call_arg_inplace(call, i, func_name, params, param_count, parent_body,
+                                           body_env, body_slot_env)) {
+            CLJ_FREE(entries);
+            CLJ_FREE(slot_targets);
+            return false;
+        }
+    }
+
+    CLJ_FREE(entries);
+    CLJ_FREE(slot_targets);
+    return true;
+}
+
 // Optimize function body via one recursive walk with multiple optimizations.
-CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
-                                         CljObject **params, int param_count,
-                                         CljObject *parent_body) {
+static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, CljObject *func_name,
+                                                            CljObject **params, int param_count,
+                                                            CljObject *parent_body,
+                                                            const RecordBinding *binding_env,
+                                                            const RecordSlotFrame *slot_env) {
     if (!body) return NULL;
     if (TAG(body) == CLJ_AST_CALL) {
         CljASTCall *call = (CljASTCall*)body;
@@ -397,12 +638,33 @@ CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
             return body;
         }
 
-        (void)rewrite_record_lookup_call(call);
+        (void)rewrite_record_lookup_call(call, binding_env, slot_env);
 
         unsigned int argc = vector_count(call->args);
+        if (head == SYM_LET || head == SYM_BINDING || head == SYM_LOOP) {
+            // `loop` bindings can be reassigned by recur. Only propagate bindings into the
+            // body when no recur is present (safe let-like subset).
+            bool propagate_to_body = true;
+            if (head == SYM_LOOP) {
+                for (unsigned int i = 1; i < argc; i++) {
+                    if (expr_contains_recur(vector_nth(call->args, i))) {
+                        propagate_to_body = false;
+                        break;
+                    }
+                }
+            }
+            if (!optimize_binding_form_ast_call(call, func_name, params, param_count, body,
+                                                binding_env, slot_env, propagate_to_body)) {
+                return NULL;
+            }
+            RETAIN(body);
+            return body;
+        }
+
         if (head == SYM_IF) {
             for (unsigned int i = 0; i < argc && i < 3; i++) {
-                if (!optimize_ast_call_arg_inplace(call, i, func_name, params, param_count, body)) {
+                if (!optimize_ast_call_arg_inplace(call, i, func_name, params, param_count,
+                                                   body, binding_env, slot_env)) {
                     return NULL;
                 }
             }
@@ -410,9 +672,10 @@ CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
             return body;
         }
 
-        if (head == SYM_WHEN || head == SYM_DO || head == SYM_LET || head == SYM_COND) {
+        if (head == SYM_WHEN || head == SYM_DO || head == SYM_COND) {
             for (unsigned int i = 0; i < argc; i++) {
-                if (!optimize_ast_call_arg_inplace(call, i, func_name, params, param_count, body)) {
+                if (!optimize_ast_call_arg_inplace(call, i, func_name, params, param_count,
+                                                   body, binding_env, slot_env)) {
                     return NULL;
                 }
             }
@@ -446,14 +709,17 @@ CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
     if (head == SYM_IF) {
         // Transform (if cond then else)
         CljObject *cond = rest->first;
-        CljObject *t_cond = cond ? optimize_function_body_walk(cond, func_name, params, param_count, body) : NULL;
+        CljObject *t_cond = cond ? optimize_function_body_walk_with_bindings(cond, func_name, params, param_count,
+                                                                              body, binding_env, slot_env)
+                                 : NULL;
         if (cond && !t_cond) return NULL;
 
         CljList *then_list = as_list(rest->rest);
         CljObject *t_then = NULL, *t_else = NULL;
 
         if (then_list && then_list->first) {
-            t_then = optimize_function_body_walk(then_list->first, func_name, params, param_count, body);
+            t_then = optimize_function_body_walk_with_bindings(then_list->first, func_name, params, param_count,
+                                                               body, binding_env, slot_env);
             if (!t_then) {
                 if (t_cond && t_cond != cond) RELEASE(t_cond);
                 return NULL;
@@ -461,7 +727,8 @@ CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
 
             CljList *else_list = as_list(then_list->rest);
             if (else_list && else_list->first) {
-                t_else = optimize_function_body_walk(else_list->first, func_name, params, param_count, body);
+                t_else = optimize_function_body_walk_with_bindings(else_list->first, func_name, params, param_count,
+                                                                   body, binding_env, slot_env);
                 if (!t_else) {
                     if (t_cond && t_cond != cond) RELEASE(t_cond);
                     RELEASE(t_then);
@@ -508,7 +775,10 @@ CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
     if (head == SYM_LET) {
         // Transform (let [bindings] body...)
         CljObject *bindings = rest->first;
-        CljObject *t_bindings = bindings ? optimize_function_body_walk(bindings, func_name, params, param_count, body) : NULL;
+        CljObject *t_bindings = bindings
+            ? optimize_function_body_walk_with_bindings(bindings, func_name, params, param_count,
+                                                        body, binding_env, slot_env)
+            : NULL;
         if (bindings && !t_bindings) return NULL;
 
         CljList *body_exprs = as_list(rest->rest);
@@ -520,14 +790,16 @@ CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
         CljObject *t_body_obj = NULL;
         if (body_exprs->first && !body_exprs->rest) {
             // Single expression - transform directly
-            t_body_obj = optimize_function_body_walk(body_exprs->first, func_name, params, param_count, body);
+            t_body_obj = optimize_function_body_walk_with_bindings(body_exprs->first, func_name, params, param_count,
+                                                                   body, binding_env, slot_env);
             if (!t_body_obj) {
                 if (t_bindings && t_bindings != bindings) RELEASE(t_bindings);
                 return NULL;
             }
         } else {
             // Multiple expressions - transform list
-            CljList *t_body = optimize_list_walk_inplace(body_exprs, func_name, params, param_count, body);
+            CljList *t_body = optimize_list_walk_inplace(body_exprs, func_name, params, param_count,
+                                                         body, binding_env, slot_env);
             if (!t_body) {
                 if (t_bindings && t_bindings != bindings) RELEASE(t_bindings);
                 return NULL;
@@ -548,7 +820,8 @@ CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
 
     if (head == SYM_COND) {
         // Transform (cond test expr ...)
-        CljList *t_rest = optimize_list_walk_inplace(rest, func_name, params, param_count, body);
+        CljList *t_rest = optimize_list_walk_inplace(rest, func_name, params, param_count,
+                                                     body, binding_env, slot_env);
         if (!t_rest) return NULL;
 
         // If nothing changed, return the original cond form
@@ -587,4 +860,11 @@ CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
         // because they are not in tail position
         return RETAIN(body), body;
     }
+}
+
+CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
+                                       CljObject **params, int param_count,
+                                       CljObject *parent_body) {
+    return optimize_function_body_walk_with_bindings(body, func_name, params, param_count,
+                                                     parent_body, NULL, NULL);
 }

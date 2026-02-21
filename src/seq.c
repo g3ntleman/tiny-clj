@@ -183,7 +183,8 @@ static ID make_record_entry_vector(ID record_obj, int index) {
     CLJ_ASSERT(index >= 0 && "make_record_entry_vector index must be non-negative");
 
     CljPersistentRecord *record = as_record(record_obj);
-    CLJ_ASSERT(record && index < (int)record->field_count && "make_record_entry_vector index out of bounds");
+    unsigned int field_count = record_declared_field_count(record);
+    CLJ_ASSERT(record && index < (int)field_count && "make_record_entry_vector index out of bounds");
 
     ID key = record_key_at_index(record_obj, (unsigned int)index);
     ID value = record_get_by_index(record_obj, (unsigned int)index);
@@ -347,12 +348,13 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
         case CLJ_RECORD: {
             CljPersistentRecord *record = as_record(obj);
             CLJ_ASSERT(record && "CLJ_RECORD tag implies non-null record");
-            if (record->field_count == 0) {
+            unsigned int field_count = record_declared_field_count(record);
+            if (field_count == 0) {
                 return true;  // Empty record
             }
             iter->state.record.record = record;
             iter->state.record.index = 0;
-            iter->state.record.count = (int)record->field_count;
+            iter->state.record.count = (int)field_count;
             iter->seq_type = CLJ_RECORD;
             iter->container = (CljObject*)record;
             return true;

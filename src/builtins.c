@@ -3094,7 +3094,7 @@ ID native_record_get_index(ID *args, unsigned int argc)
     }
 
     CljPersistentRecord *record = as_record(target);
-    if (!record || (unsigned int)index >= record->field_count)
+    if (!record || (unsigned int)index >= record_declared_field_count(record))
     {
         return default_val;
     }
@@ -5222,6 +5222,16 @@ static inline bool refer_assoc_into_namespace(CljNamespace *target_ns, CljSymbol
         return false;
     }
 
+    ID prev = map_get_sentinel(target_ns->mappings, target_key, NOT_FOUND);
+    if (prev == NOT_FOUND) {
+        map_assoc_inplace(&target_ns->mappings, target_key, value);
+        // First definition does not invalidate resolve caches.
+        return false;
+    }
+    if (prev == value) {
+        return false;
+    }
+
     map_assoc_inplace(&target_ns->mappings, target_key, value);
     return true;
 }
@@ -5354,7 +5364,11 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
     }
     st->current_ns = target_ns;
     st->resolve_ns = target_ns;
+    // Namespace source loading performs many def/defn operations; coalesce invalidate
+    // calls into one epoch bump at the end of the load.
+    ns_begin_resolve_cache_batch();
     bool ok = eval_source_in_current_state(source_str, source_path, st);
+    ns_end_resolve_cache_batch();
     target_ns->loaded = true;
     st->current_ns = orig_ns;
     st->resolve_ns = orig_resolve_ns;
@@ -8179,6 +8193,8 @@ static void register_builtin(const char *cname, BuiltinFn func)
 void register_builtins()
 {
     WITH_AUTORELEASE_POOL({
+    // Builtin registration touches many namespace mappings; one invalidation is enough.
+    ns_begin_resolve_cache_batch();
     // Single source of truth: bootstrap registrations are flagged in native_function_table.
     for (int i = 0; native_function_table[i].native_func != NULL; i++) {
         const NativeFunctionEntry *entry = &native_function_table[i];
@@ -8209,5 +8225,6 @@ void register_builtins()
     // one-time cached_named_func allocation in per-test heap assertions.
     (void)cached_named_func(native_concat_thunk_executor, SYM_CONCAT_THUNK_FN, &g_concat_thunk_fn_obj);
 
+    ns_end_resolve_cache_batch();
     });
 }

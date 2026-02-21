@@ -5,6 +5,7 @@
 
 #include "ast.h"
 #include "memory.h"
+#include "runtime.h"
 #include "list.h"
 #include "subjective-c/debug_trace.h"
 #include <stdlib.h>
@@ -182,13 +183,15 @@ ID ast_call_get_callsite_cache(const CljASTCall *call) {
  * @param epoch Namespace epoch for invalidation
  * @return Cache entry with rc=1, caller must release
  */
-CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint64_t epoch) {
+CljCallsiteCache* make_callsite_cache(CljSymbol *symbol, ID resolved, uint16_t epoch) {
     CljCallsiteCache *cache = ALLOC(CljCallsiteCache, 1);
 
     cache->base.type = CLJ_CALLSITE_CACHE;
     cache->symbol = symbol;
     cache->resolved = NULL;
     cache->epoch = epoch;
+    cache->epoch_generation = g_runtime.resolve_cache_generation;
+    cache->lookup_hint_index = UINT8_MAX;
     ASSIGN(cache->resolved, resolved);
     return cache;
 }
@@ -213,8 +216,12 @@ CljCallsiteCache* as_callsite_cache(ID obj) {
  * @param epoch Expected epoch
  * @return true if cache matches and has resolved value
  */
-bool callsite_cache_is_valid(const CljCallsiteCache *cache, CljSymbol *symbol, uint64_t epoch) {
-    return cache && cache->symbol == symbol && cache->epoch == epoch && cache->resolved != NULL;
+bool callsite_cache_is_valid(const CljCallsiteCache *cache, CljSymbol *symbol, uint16_t epoch) {
+    return cache &&
+           cache->symbol == symbol &&
+           cache->epoch == epoch &&
+           cache->epoch_generation == g_runtime.resolve_cache_generation &&
+           cache->resolved != NULL;
 }
 
 /**
@@ -224,7 +231,7 @@ bool callsite_cache_is_valid(const CljCallsiteCache *cache, CljSymbol *symbol, u
  * @param epoch Current namespace epoch
  * @return Cached resolved value or NULL if not cached/invalid
  */
-ID ast_node_get_cached_resolution(const CljASTNode *node, CljSymbol *symbol, uint64_t epoch) {
+ID ast_node_get_cached_resolution(const CljASTNode *node, CljSymbol *symbol, uint16_t epoch) {
     if (!node || !symbol) return NULL;
     CljCallsiteCache *cache = as_callsite_cache(node->callsite_cache);
     if (!cache) return NULL;
@@ -241,7 +248,7 @@ ID ast_node_get_cached_resolution(const CljASTNode *node, CljSymbol *symbol, uin
  * @param resolved Resolved value (retained)
  * @param epoch Current namespace epoch
  */
-void ast_node_update_callsite_cache(CljASTNode *node, CljSymbol *symbol, ID resolved, uint64_t epoch) {
+void ast_node_update_callsite_cache(CljASTNode *node, CljSymbol *symbol, ID resolved, uint16_t epoch) {
     if (!node || !symbol || !resolved) return;
     CljCallsiteCache *cache = as_callsite_cache(node->callsite_cache);
     if (!cache) {
@@ -251,6 +258,8 @@ void ast_node_update_callsite_cache(CljASTNode *node, CljSymbol *symbol, ID reso
     }
     cache->symbol = symbol;
     cache->epoch = epoch;
+    cache->epoch_generation = g_runtime.resolve_cache_generation;
+    cache->lookup_hint_index = UINT8_MAX;
     ASSIGN(cache->resolved, resolved);
 }
 
@@ -261,7 +270,7 @@ void ast_node_update_callsite_cache(CljASTNode *node, CljSymbol *symbol, ID reso
  * @param epoch Current namespace epoch
  * @return Cached resolved value or NULL if not cached/invalid
  */
-ID ast_call_get_cached_resolution(const CljASTCall *call, CljSymbol *symbol, uint64_t epoch) {
+ID ast_call_get_cached_resolution(const CljASTCall *call, CljSymbol *symbol, uint16_t epoch) {
     if (!call || !symbol) return NULL;
     CljCallsiteCache *cache = as_callsite_cache(call->callsite_cache);
     if (!cache) return NULL;
@@ -278,7 +287,7 @@ ID ast_call_get_cached_resolution(const CljASTCall *call, CljSymbol *symbol, uin
  * @param resolved Resolved value (retained)
  * @param epoch Current namespace epoch
  */
-void ast_call_update_callsite_cache(CljASTCall *call, CljSymbol *symbol, ID resolved, uint64_t epoch) {
+void ast_call_update_callsite_cache(CljASTCall *call, CljSymbol *symbol, ID resolved, uint16_t epoch) {
     if (!call || !symbol || !resolved) return;
     CljCallsiteCache *cache = as_callsite_cache(call->callsite_cache);
     if (!cache) {
@@ -287,6 +296,8 @@ void ast_call_update_callsite_cache(CljASTCall *call, CljSymbol *symbol, ID reso
     }
     cache->symbol = symbol;
     cache->epoch = epoch;
+    cache->epoch_generation = g_runtime.resolve_cache_generation;
+    cache->lookup_hint_index = UINT8_MAX;
     ASSIGN(cache->resolved, resolved);
 }
 
