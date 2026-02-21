@@ -65,7 +65,6 @@ typedef struct TinyClJRuntime {
     
     // Event Loop
     CljTransientVector *task_queue;    // transient vector for normal tasks
-    CljTransientVector *timer_queue;  // transient vector for timer tasks
     int timer_id_counter;
 } TinyClJRuntime;
 

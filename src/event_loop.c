@@ -4,28 +4,22 @@
 #include "memory.h"
 #include "exception.h"
 #include "channel.h"
-#include "types.h"  // For ZOMBIE_RC, clj_type_name
+#include "types.h"
 #include "runtime.h"
 #include "vector.h"
 #include "map.h"
-#include "value.h"  // For as_fixnum, clj_true
-#include "kv_macros.h"  // For KV_VALUE
-#include "to_string.h"  // For to_string
+#include "value.h"
 #include <stdbool.h>
+#include <string.h>
 #include <limits.h>
 #include <sys/time.h>
 #if defined(ESP32_BUILD)
 #include "gpio_esp32.h"
 #endif
 
-// Task Map keys (static keywords, similar to SYM_IF etc.)
+// Task Map keys (go-block tasks only)
 static CljSymbol *KW_FN;
 static CljSymbol *KW_RESULT_CHAN;
-static CljSymbol *KW_SCHEDULED_SEC;
-static CljSymbol *KW_SCHEDULED_MSEC;
-static CljSymbol *KW_PERIODIC;
-static CljSymbol *KW_PERIOD_MS;
-static CljSymbol *KW_TIMER_ID;
 
 typedef struct NamedTimerEntry {
     ID key;
@@ -35,22 +29,23 @@ typedef struct NamedTimerEntry {
 
 static NamedTimerEntry *g_named_timers = NULL;
 
-// Timer-Task Map index constants for direct O(1) access
-// CRITICAL: The order of these enum values MUST match exactly the order of keys
-// in task_timer_to_map() when calling make_map_from_kv().
-// This pattern (enum for indices, guaranteed key order, direct index access)
-// can be reused for future defrecord implementations.
-enum {
-    TIMER_TASK_IDX_FN = 0,
-    TIMER_TASK_IDX_SCHEDULED_SEC,
-    TIMER_TASK_IDX_SCHEDULED_MSEC,
-    TIMER_TASK_IDX_PERIODIC,
-    TIMER_TASK_IDX_PERIOD_MS,
-    TIMER_TASK_IDX_TIMER_ID
-};
+// --- Timer Queue: plain C struct array (zero heap allocs per tick) ---
 
-// Helper functions for normal Tasks as Maps
-// Task Map keys: :fn, :result-chan
+typedef struct {
+    ID   fn;
+    int  scheduled_sec;
+    int  scheduled_msec;
+    int  period_ms;
+    int  timer_id;
+    bool periodic;
+} TimerEntry;
+
+#define TIMER_QUEUE_CAP 32
+
+static TimerEntry g_timer_queue[TIMER_QUEUE_CAP];
+static int        g_timer_count = 0;
+
+// Go-block task map helpers (tasks WITH result channel)
 static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan) {
     CljPersistentMap *task_map = make_map(2, STRONG);
     if (!task_map) return NULL;
@@ -84,64 +79,40 @@ static bool task_from_map(CljPersistentMap *task_map, CljObject **fn, CljTransie
     return true;
 }
 
-// Helper functions for Timer-Tasks as Maps
-// Timer-Task Map keys: :fn, :scheduled-sec, :scheduled-msec, :periodic, :period-ms, :timer-id
-//
-// CRITICAL: The order of keys in make_map_from_kv() MUST match exactly
-// the order of the TIMER_TASK_IDX_* enum values defined above.
-// The optimized Getter functions (task_get_scheduled_sec(), etc.) rely on this
-// guaranteed key order for direct O(1) index access instead of O(n) keyword search.
-// If you change the key order here, you MUST also update the enum values accordingly.
-static CljPersistentMap* task_timer_to_map(CljObject *fn, int scheduled_sec, int scheduled_msec, bool periodic, int period_ms, int timer_id) {
-    // make_map_from_kv returns PersistentMap with rc=1 (or singleton if empty)
-    CljPersistentMap *pmap = make_map_from_kv(6,
-        KW_FN, fn,
-        KW_SCHEDULED_SEC, fixnum((int32_t)scheduled_sec),
-        KW_SCHEDULED_MSEC, fixnum((int32_t)scheduled_msec),
-        KW_PERIODIC, periodic ? clj_true : clj_false,
-        KW_PERIOD_MS, fixnum((int32_t)period_ms),
-        KW_TIMER_ID, fixnum((int32_t)timer_id));
-    return pmap;  // rc=1, caller takes ownership
+// --- Timer queue array operations ---
+
+static void timer_remove_at(int index) {
+    if (index < 0 || index >= g_timer_count) return;
+    RELEASE(g_timer_queue[index].fn);
+    g_timer_count--;
+    if (index < g_timer_count) {
+        memmove(&g_timer_queue[index], &g_timer_queue[index + 1],
+                (size_t)(g_timer_count - index) * sizeof(TimerEntry));
+    }
 }
 
-// Task Getter functions (static inline for performance)
-// Works for both normal tasks and timer tasks
-static inline CljObject *task_get_fn(CljPersistentMap *task_map) {
-    return map_get_sentinel(task_map, KW_FN, NULL);
-}
-
-// Timer-Task Getter functions (optimized with direct index access O(1))
-// These use direct index access instead of map_get() for better performance.
-// CRITICAL: These only work correctly for Timer-Task maps created by task_timer_to_map(),
-// which guarantees the key order matches the TIMER_TASK_IDX_* enum values.
-static inline int task_get_scheduled_sec(CljPersistentMap *task_map) {
-    ID val = KV_VALUE(task_map->data, TIMER_TASK_IDX_SCHEDULED_SEC);
-    return val ? (int)as_fixnum(val) : 0;
-}
-
-static inline int task_get_scheduled_msec(CljPersistentMap *task_map) {
-    ID val = KV_VALUE(task_map->data, TIMER_TASK_IDX_SCHEDULED_MSEC);
-    return val ? (int)as_fixnum(val) : 0;
-}
-
-static inline bool task_get_periodic(CljPersistentMap *task_map) {
-    ID val = KV_VALUE(task_map->data, TIMER_TASK_IDX_PERIODIC);
-    return val == clj_true;
-}
-
-static inline int task_get_period_ms(CljPersistentMap *task_map) {
-    ID val = KV_VALUE(task_map->data, TIMER_TASK_IDX_PERIOD_MS);
-    return val ? (int)as_fixnum(val) : 0;
-}
-
-static inline int task_get_timer_id(CljPersistentMap *task_map) {
-    ID val = KV_VALUE(task_map->data, TIMER_TASK_IDX_TIMER_ID);
-    return val ? (int)as_fixnum(val) : 0;
+static bool timer_insert_sorted(TimerEntry entry) {
+    if (g_timer_count >= TIMER_QUEUE_CAP) return false;
+    int pos = g_timer_count;
+    for (int i = 0; i < g_timer_count; i++) {
+        if (entry.scheduled_sec < g_timer_queue[i].scheduled_sec ||
+            (entry.scheduled_sec == g_timer_queue[i].scheduled_sec &&
+             entry.scheduled_msec < g_timer_queue[i].scheduled_msec)) {
+            pos = i;
+            break;
+        }
+    }
+    if (pos < g_timer_count) {
+        memmove(&g_timer_queue[pos + 1], &g_timer_queue[pos],
+                (size_t)(g_timer_count - pos) * sizeof(TimerEntry));
+    }
+    g_timer_queue[pos] = entry;
+    g_timer_count++;
+    return true;
 }
 
 // Forward declarations
 static void timer_process(void);
-static void timer_insert_sorted_map(CljPersistentMap *task_map);
 static bool timer_named_remove_by_id(int timer_id);
 
 static bool timer_key_is_valid(ID key) {
@@ -232,32 +203,24 @@ static bool timer_schedule_with_id(CljObject *fn_zero_arity,
     if (delay_ms < 0) return false;
     if (periodic && period_ms <= 0) return false;
 
-    // If delay is 0 and not periodic, execute immediately.
     if (delay_ms == 0 && !periodic) {
-        CljTransientMap *chan = make_result_channel();
-        event_loop_enqueue(RETAIN(fn_zero_arity), chan);
-        RELEASE(chan);
+        event_loop_enqueue(RETAIN(fn_zero_arity), NULL);
         return true;
     }
 
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    int sec = (int)tv.tv_sec;
-    int msec = (int)(tv.tv_usec / 1000);
+    int64_t total_msec = (int64_t)(tv.tv_usec / 1000) + delay_ms;
 
-    int64_t total_msec = (int64_t)msec + delay_ms;
-    int scheduled_sec = (int)(sec + total_msec / 1000);
-    int scheduled_msec = (int)(total_msec % 1000);
-
-    CljPersistentMap *task_map = task_timer_to_map(RETAIN(fn_zero_arity),
-                                                   scheduled_sec,
-                                                   scheduled_msec,
-                                                   periodic,
-                                                   (int)period_ms,
-                                                   timer_id);
-    if (!task_map) return false;
-    timer_insert_sorted_map(task_map);
-    return true;
+    TimerEntry entry = {
+        .fn            = RETAIN(fn_zero_arity),
+        .scheduled_sec = (int)(tv.tv_sec + total_msec / 1000),
+        .scheduled_msec= (int)(total_msec % 1000),
+        .periodic      = periodic,
+        .period_ms     = (int)period_ms,
+        .timer_id      = timer_id
+    };
+    return timer_insert_sorted(entry);
 }
 
 // Helper function to ensure task queue is initialized
@@ -287,97 +250,26 @@ static CljTransientVector* task_queue_get(void) {
     return task_vec;
 }
 
-// Helper function to ensure timer queue is initialized
-static CljTransientVector* timer_queue_get(void) {
-    if (!g_runtime.timer_queue) {
-        CljPersistentVector* timer_vec = make_vector(8, STRONG);
-        ASSIGN(g_runtime.timer_queue, vector_transient(timer_vec));
-        RELEASE(timer_vec);
-    }
-    if (!g_runtime.timer_queue) return NULL;
-    CljTransientVector *timer_vec = g_runtime.timer_queue;
-    
-    // Safety check: validate pointer before calling TAG
-    if ((uintptr_t)timer_vec < 0x1000) {
-        return NULL; // Invalid pointer
-    }
-    
-    // Safety: validate pointer before calling TAG
-    if (timer_vec && (uintptr_t)timer_vec >= 0x1000) {
-        CLJ_ASSERT(TAG(timer_vec) == CLJ_VECTOR_TRANSIENT);
-    }
-    return timer_vec;
-}
-
-// Helper function to remove element from timer queue at index
-static void timer_queue_remove_at(CljTransientVector *timer_vec, int index) {
-    if (!timer_vec) return;
-    vector_remove_at(timer_vec, (unsigned int)index);
-}
-
 void event_loop_init(void) {
-    // Initialize keywords
     KW_FN = intern_symbol_global(":fn");
     KW_RESULT_CHAN = intern_symbol_global(":result-chan");
-    KW_SCHEDULED_SEC = intern_symbol_global(":scheduled-sec");
-    KW_SCHEDULED_MSEC = intern_symbol_global(":scheduled-msec");
-    KW_PERIODIC = intern_symbol_global(":periodic");
-    KW_PERIOD_MS = intern_symbol_global(":period-ms");
-    KW_TIMER_ID = intern_symbol_global(":timer-id");
-    
-    // Ensure task queue is initialized (idempotent)
     task_queue_get();
 }
 
 void event_loop_clear(void) {
-    // Safety: check if task_queue is valid before accessing it
-    // runtime_reset() sets task_queue to NULL, but event_loop_clear() is called after
-    // So we need to check if it's already NULL or invalid
-    if (!g_runtime.task_queue) {
-        timer_named_clear_all();
-        return;
-    }
-    
-    // Safety: validate pointer before calling task_queue_get which calls TAG()
-    if ((uintptr_t)g_runtime.task_queue < 0x1000) {
-        g_runtime.task_queue = NULL; // Mark as invalid
-        timer_named_clear_all();
-        return;
-    }
-    
-    // task_queue_get() calls TAG() which might crash if task_queue is invalid
-    // So we validate the pointer first
-    CljTransientVector *task_vec = NULL;
     if (g_runtime.task_queue && (uintptr_t)g_runtime.task_queue >= 0x1000) {
-        task_vec = task_queue_get();
+        CljTransientVector *task_vec = task_queue_get();
+        if (task_vec && task_vec->backing) {
+            vector_clear(task_vec->backing);
+        }
+    } else {
+        g_runtime.task_queue = NULL;
     }
-    if (task_vec && task_vec->backing) {
-        vector_clear(task_vec->backing);
+
+    for (int i = 0; i < g_timer_count; i++) {
+        RELEASE(g_timer_queue[i].fn);
     }
-    
-    // Safety: check timer_queue before accessing it
-    // Note: runtime_reset() now calls event_loop_clear() before setting timer_queue to NULL
-    // So we can safely access it here
-    if (!g_runtime.timer_queue) {
-        timer_named_clear_all();
-        return; // Already cleared
-    }
-    
-    // Safety: validate pointer before calling timer_queue_get which calls TAG()
-    if ((uintptr_t)g_runtime.timer_queue < 0x1000) {
-        g_runtime.timer_queue = NULL; // Mark as invalid
-        timer_named_clear_all();
-        return;
-    }
-    
-    CljTransientVector *timer_vec = NULL;
-    if (g_runtime.timer_queue && (uintptr_t)g_runtime.timer_queue >= 0x1000) {
-        timer_vec = timer_queue_get();
-    }
-    if (timer_vec && timer_vec->backing) {
-        // Clear vector count - elements will be freed when vector is released
-        vector_clear(timer_vec->backing);
-    }
+    g_timer_count = 0;
     timer_named_clear_all();
 }
 
@@ -386,6 +278,11 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
     
     CljTransientVector *task_vec = task_queue_get();
     if (!task_vec) return;
+    
+    if (!result_channel) {
+        vector_push(task_vec, fn_zero_arity);
+        return;
+    }
     
     CljPersistentMap *task_map = task_to_map(RETAIN(fn_zero_arity), RETAIN(result_channel));
     if (!task_map) {
@@ -405,24 +302,12 @@ bool event_loop_has_pending_tasks(void) {
 }
 
 int event_loop_time_until_next_timer_ms(void) {
-    CljTransientVector *timer_vec = timer_queue_get();
-    if (!timer_vec || !timer_vec->backing) return -1;
-    if (vector_count(timer_vec->backing) == 0) return -1;
-
-    CljPersistentMap *task_map = vector_nth(timer_vec->backing, 0);
-    if (!task_map) return -1;
-
-    // vector_nth returns a borrowed element; do not RELEASE it here.
-    int scheduled_sec = task_get_scheduled_sec(task_map);
-    int scheduled_msec = task_get_scheduled_msec(task_map);
+    if (g_timer_count == 0) return -1;
 
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    int now_sec = (int)tv.tv_sec;
-    int now_msec = (int)(tv.tv_usec / 1000);
-
-    int64_t delta_ms = ((int64_t)scheduled_sec - (int64_t)now_sec) * 1000ll
-                     + ((int64_t)scheduled_msec - (int64_t)now_msec);
+    int64_t delta_ms = ((int64_t)g_timer_queue[0].scheduled_sec - (int64_t)tv.tv_sec) * 1000ll
+                     + ((int64_t)g_timer_queue[0].scheduled_msec - (int64_t)(tv.tv_usec / 1000));
     if (delta_ms <= 0) return 0;
     if (delta_ms > INT_MAX) return INT_MAX;
     return (int)delta_ms;
@@ -460,51 +345,38 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     
     // Get first task (FIFO)
     if (vector_count(task_vec->backing) == 0) return false;
-    CljPersistentMap *task_map = vector_nth(task_vec->backing, 0);
-    RETAIN(task_map);
+    ID entry = vector_nth(task_vec->backing, 0);
+    RETAIN(entry);
     vector_remove_at(task_vec, 0);
-    
+
     CljObject *fn = NULL;
     CljTransientMap *result_chan = NULL;
-    if (!task_from_map(task_map, &fn, &result_chan)) {
+
+    if (TAG(entry) == CLJ_MAP_PERSISTENT) {
+        CljPersistentMap *task_map = entry;
+        if (!task_from_map(task_map, &fn, &result_chan)) {
+            RELEASE(task_map);
+            return false;
+        }
+        RETAIN(fn);
+        RETAIN(result_chan);
         RELEASE(task_map);
-        return false;
+    } else {
+        fn = entry;
     }
 
-    // Own both values before releasing task_map (which currently owns them).
-    // Without this, fn could be released with task_map and later used/freed again.
-    RETAIN(fn);
-    RETAIN(result_chan);
-    
-    // CRITICAL: Validate that fn is actually a function before calling eval_function_call
-    // This prevents crashes when run-next-task is called recursively during go-block execution
-    // The fn must be CLJ_FUNC (native function) or CLJ_CLOSURE (Clojure function)
-    // 
-    // NOTE: If fn is not a function, this indicates a serious bug in task creation/storage.
-    // We should throw an exception rather than silently skipping, to help debug the issue.
     if (!fn || (TAG(fn) != CLJ_FUNC && TAG(fn) != CLJ_CLOSURE)) {
-        // Invalid function object - this should never happen if tasks are created correctly
-        // This could happen if:
-        // 1. The task map is corrupted
-        // 2. The function object was incorrectly stored in the task map
-        // 3. Memory corruption
-        // 
-        // Throw exception to help debug, but also handle gracefully to prevent crash
         const char *fn_type = fn ? clj_type_name(TAG(fn)) : "NULL";
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
             "Invalid function object in task queue: expected CLJ_FUNC or CLJ_CLOSURE, got %s",
             fn_type);
-        RELEASE(task_map);
         if (result_chan) {
-            // Close channel without value (error case)
             result_channel_close(result_chan);
             RELEASE(result_chan);
         }
         RELEASE(fn);
         return false;
     }
-    
-    RELEASE(task_map);
     
     CljObject *result = NULL;
     bool ok = true;
@@ -517,49 +389,16 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     } END_TRY
 
     if (result_chan) {
-        CljTransientMap *chan = result_chan;
-        
-        // Clojure-compatibility: nil is a valid value that can be sent through channels
-        // result_channel_put can handle NULL/nil values, so we write the result even if it's nil
         if (ok) {
-            result_channel_put(chan, result);
+            result_channel_put(result_chan, result);
         }
-        
-        result_channel_close(chan);
-    } else {
-        CLJ_ASSERT(0 && "event_loop_run_next: task.result_chan is NULL");
+        result_channel_close(result_chan);
+        RELEASE(result_chan);
     }
 
     if (!IS_IMMEDIATE(result)) RELEASE(result);
     RELEASE(fn);
-    RELEASE(result_chan);
     return true;
-}
-
-// Helper function to insert timer task map in sorted order (by scheduled time)
-static void timer_insert_sorted_map(CljPersistentMap *task_map) {
-    if (!task_map) return;
-    
-    int scheduled_sec = task_get_scheduled_sec(task_map);
-    int scheduled_msec = task_get_scheduled_msec(task_map);
-    
-    CljTransientVector *timer_vec = timer_queue_get();
-    if (!timer_vec) return;
-    
-    int count = (int)vector_count(timer_vec->backing);
-    int insert_pos = count;
-    for (int i = 0; i < count; i++) {
-        // vector_nth returns borrowed map entries from timer_vec->backing.
-        CljPersistentMap *existing_map = vector_nth(timer_vec->backing, (unsigned int)i);
-        int existing_sec = task_get_scheduled_sec(existing_map);
-        int existing_msec = task_get_scheduled_msec(existing_map);
-        if (scheduled_sec < existing_sec || (scheduled_sec == existing_sec && scheduled_msec < existing_msec)) {
-            insert_pos = i;
-            break;
-        }
-    }
-    
-    vector_insert_at(timer_vec, (unsigned int)insert_pos, task_map);
 }
 
 // Enqueue a timer task
@@ -611,90 +450,59 @@ bool timer_cancel_named(ID key) {
     return timer_cancel(timer_id);
 }
 
-// Process timer queue: move ready timers to normal queue
 static void timer_process(void) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     int now_sec = (int)tv.tv_sec;
     int now_msec = (int)(tv.tv_usec / 1000);
-    
-    while (true) {
-        CljTransientVector *timer_vec = timer_queue_get();
-        if (!timer_vec || vector_count(timer_vec->backing) == 0) break;
-        
-        CljPersistentMap *task_map = vector_nth(timer_vec->backing, 0);
-        // Retain task_map because we'll release it later (it's removed from vector)
-        RETAIN(task_map);
-        
-        int scheduled_sec = task_get_scheduled_sec(task_map);
-        int scheduled_msec = task_get_scheduled_msec(task_map);
-        CljObject *fn = task_get_fn(task_map);
-        int timer_id = task_get_timer_id(task_map);
-        if (!fn) {
-            (void)timer_named_remove_by_id(timer_id);
-            RELEASE(task_map);
-            timer_queue_remove_at(timer_vec, 0);
-            continue;
-        }
-        bool periodic = task_get_periodic(task_map);
-        int period_ms = task_get_period_ms(task_map);
-        
-        bool timer_ready = (scheduled_sec < now_sec) || 
-                          (scheduled_sec == now_sec && scheduled_msec <= now_msec);
-        if (!timer_ready) {
-            RELEASE(task_map);
-            break;  // Timers are sorted, so rest are also not ready
-        }
-        
-        timer_queue_remove_at(timer_vec, 0);
+
+    while (g_timer_count > 0) {
+        TimerEntry *t = &g_timer_queue[0];
+        if (t->scheduled_sec > now_sec ||
+            (t->scheduled_sec == now_sec && t->scheduled_msec > now_msec))
+            break;
+
+        ID fn        = t->fn;
+        bool periodic = t->periodic;
+        int period_ms = t->period_ms;
+        int timer_id  = t->timer_id;
+
+        RETAIN(fn);
+
+        // Drop timer-queue ownership for the head entry while keeping our
+        // local retained reference alive.
+        timer_remove_at(0);
+
         if (!periodic) {
             (void)timer_named_remove_by_id(timer_id);
         }
-        RETAIN(fn);  // Retain before releasing task_map
-        RELEASE(task_map);
-        
-        CljTransientMap *chan = make_result_channel();
-        
-        if (periodic) {
-            RETAIN(fn);  // Extra retain for next period
-        }
-        
-        event_loop_enqueue(fn, chan);
-        RELEASE(chan);
-        
+
+        event_loop_enqueue(fn, NULL);
+
         if (periodic) {
             int64_t total_msec = (int64_t)now_msec + period_ms;
-            int next_sec = now_sec + (int)(total_msec / 1000);
-            int next_msec = (int)(total_msec % 1000);
-            CljPersistentMap *next_task_map = task_timer_to_map(fn, next_sec, next_msec, true, period_ms, timer_id);
-            if (next_task_map) {
-                timer_insert_sorted_map(next_task_map);
-            }
-            RELEASE(fn);  // Release extra retain (task_timer_to_map and event_loop_enqueue retained it)
+            TimerEntry next = {
+                .fn             = RETAIN(fn),
+                .scheduled_sec  = now_sec + (int)(total_msec / 1000),
+                .scheduled_msec = (int)(total_msec % 1000),
+                .periodic       = true,
+                .period_ms      = period_ms,
+                .timer_id       = timer_id
+            };
+            timer_insert_sorted(next);
         }
+        RELEASE(fn);
     }
 }
 
-// Cancel a timer by ID
 bool timer_cancel(int timer_id) {
     if (timer_id <= 0) return false;
-    
-    CljTransientVector *timer_vec = timer_queue_get();
-    if (!timer_vec) return false;
-    
-    int count = (int)vector_count(timer_vec->backing);
-    for (int i = 0; i < count; i++) {
-        CljPersistentMap *task_map = vector_nth(timer_vec->backing, (unsigned int)i);
-        if (!task_map) continue;
-        
-        int map_timer_id = task_get_timer_id(task_map);
-        if (map_timer_id == timer_id) {
-            // Found the timer - remove it (timer_queue_remove_at releases it automatically)
-            timer_queue_remove_at(timer_vec, i);
+    for (int i = 0; i < g_timer_count; i++) {
+        if (g_timer_queue[i].timer_id == timer_id) {
+            timer_remove_at(i);
             (void)timer_named_remove_by_id(timer_id);
             return true;
         }
     }
-    
-    return false;  // Timer not found
+    return false;
 }

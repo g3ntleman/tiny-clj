@@ -37,7 +37,6 @@ TinyClJRuntime g_runtime = {
     .pool_stack = NULL,
     .builtins_registered = false,
     .task_queue = NULL,
-    .timer_queue = NULL,
     .timer_id_counter = 0
 };
 
@@ -101,14 +100,7 @@ void runtime_init(TinyClJRuntime *runtime) {
             ASSIGN(runtime->task_queue, transient_task);
         }
     }
-    if (!runtime->timer_queue) {
-        CljPersistentVector* timer_vec = make_vector(8, false);
-        if (timer_vec) {
-            CljTransientVector* transient_timer = vector_transient(timer_vec);
-            RELEASE(timer_vec); // vector_transient() retains the result
-            ASSIGN(runtime->timer_queue, transient_timer);
-        }
-    }
+    // Timer queue is a static C array in event_loop.c – no heap init needed.
     
     // Reset primitive fields
     runtime->builtins_registered = false;
@@ -153,7 +145,6 @@ void runtime_reset(TinyClJRuntime *runtime) {
     reset_eval_arg_depth();
     
     ASSIGN(runtime->task_queue, NULL);
-    ASSIGN(runtime->timer_queue, NULL);
     // Invalidate callsite caches.
     runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
     ASSIGN(runtime->pool_stack, NULL);

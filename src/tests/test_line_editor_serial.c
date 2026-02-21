@@ -370,6 +370,36 @@ TEST(test_line_editor_serial_ctrl_d_exits) {
     line_editor_free(ed);
 }
 
+TEST(test_line_editor_serial_ctrl_c_interrupt_clears_current_line) {
+    const unsigned char input[] = { 'a', 'b', 0x03, 'c', 'd', '\r' };
+    FakeStream s = { .in = input, .in_len = (int)sizeof(input), .in_pos = 0, .out_len = 0 };
+
+    LineEditor *ed = line_editor_new(fake_get_char, fake_put_char, fake_put_string, &s);
+    TEST_ASSERT_NOT_NULL(ed);
+
+    int r = line_editor_process_input(ed); // a
+    TEST_ASSERT_EQUAL_INT(LINE_EDITOR_SUCCESS, r);
+    r = line_editor_process_input(ed); // b
+    TEST_ASSERT_EQUAL_INT(LINE_EDITOR_SUCCESS, r);
+    r = line_editor_process_input(ed); // Ctrl-C
+    TEST_ASSERT_EQUAL_INT(LINE_EDITOR_INTERRUPT, r);
+
+    size_t len = 0;
+    const char *buf = line_editor_get_buffer_cstr(ed, &len);
+    TEST_ASSERT_NOT_NULL(buf);
+    TEST_ASSERT_EQUAL_UINT(0u, (unsigned int)len);
+    TEST_ASSERT_EQUAL_STRING("", buf);
+
+    TEST_ASSERT_TRUE(run_editor_until_ready(ed, 64));
+
+    LineEditorState st;
+    TEST_ASSERT_EQUAL_INT(0, line_editor_get_state(ed, &st));
+    TEST_ASSERT_TRUE(st.line_ready);
+    TEST_ASSERT_EQUAL_STRING("cd", st.buffer);
+
+    line_editor_free(ed);
+}
+
 TEST(test_line_editor_serial_submit_moves_to_end_of_multiline) {
     // Submit from middle of multiline should move cursor to end before newline.
     const unsigned char input[] = {

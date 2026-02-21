@@ -157,6 +157,10 @@ void tinyclj_idf_start(void) {
             if (r == LINE_EDITOR_LINE_READY) {
                 break;
             }
+            if (r == LINE_EDITOR_INTERRUPT) {
+                acc[0] = '\0';
+                break;
+            }
             if (r == LINE_EDITOR_EOF) {
                 (void)esp_repl_history_save(ed);  // best-effort
                 return;
@@ -170,6 +174,9 @@ void tinyclj_idf_start(void) {
         int st_rc = line_editor_get_state(ed, &s);
         if (st_rc == 0) {
             if (s.length == 0) {
+                if (acc[0] != '\0' && repl_form_state(acc, NULL) == REPL_FORM_INCOMPLETE) {
+                    acc[0] = '\0';
+                }
                 continue;
             }
 

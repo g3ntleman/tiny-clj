@@ -146,10 +146,10 @@ if(NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY OR CMAKE_RUNTIME_OUTPUT_DIRECTORY 
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
 endif()
 
-# Build time as Unix epoch seconds (UTC) for reproducible #inst in runtime stats
-# NOTE: This is evaluated at configure-time.
+# Build time as Unix epoch seconds (UTC) for reproducible #inst in runtime stats.
+# IMPORTANT: Only set on targets that actually use it (repl.c, builtins.c) to
+# avoid full rebuilds on every configure (the value changes each second).
 string(TIMESTAMP BUILD_EPOCH_SECONDS "%s" UTC)
-add_compile_definitions(BUILD_EPOCH_SECONDS=${BUILD_EPOCH_SECONDS})
 
 # Generate build_info.h from template
 configure_file(
