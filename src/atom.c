@@ -110,7 +110,6 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
             RELEASE(fn_args[i]);
         }
         CLJ_FREE(fn_args);
-        RELEASE(current_value);
         return NULL;
     } END_TRY
 
@@ -120,17 +119,11 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     }
     CLJ_FREE(fn_args);
 
-    RELEASE(current_value);
-
     if (!new_value) {
         // Function returned nil or error
         return NULL;
     }
 
     // Update atom with new value
-    atom_reset(atom, new_value);
-
-    // Return new value (already retained by atom_reset, but we need another retain for caller)
-    // RETAIN handles nil and immediates safely (ignores them)
-    return RETAIN(new_value);
+    return atom_reset(atom, new_value);
 }

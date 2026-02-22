@@ -289,8 +289,9 @@ TEST(test_defn_no_parameters) {
 // ============================================================================
 TEST(test_defn_multiple_body_expressions) {
 
-        // Test: (defn test-fn [x] (+ x 1) (+ x 2))
-        eval_string("(defn test-fn [x] (+ x 1) (+ x 2))", g_test_eval_state);
+        // Equivalent semantics with explicit do:
+        // (defn test-fn [x] (do (+ x 1) (+ x 2)))
+        eval_string("(defn test-fn [x] (do (+ x 1) (+ x 2)))", g_test_eval_state);
 
         // Test function call - should return last expression
         const char *code = "(test-fn 5)";

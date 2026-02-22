@@ -26,25 +26,6 @@
 #include "tdb_bsd_mpool.h"
 #include "tdb_kv_internal.h"
 
-/* ============== Endian helpers ============== */
-
-static inline void tdb_u16_be_write(uint8_t* p, uint16_t v) {
-    p[0] = (uint8_t)((v >> 8) & 0xFFu);
-    p[1] = (uint8_t)(v & 0xFFu);
-}
-static inline uint16_t tdb_u16_be_read(const uint8_t* p) {
-    return (uint16_t)(((uint16_t)p[0] << 8) | (uint16_t)p[1]);
-}
-static inline void tdb_u32_be_write(uint8_t* p, uint32_t v) {
-    p[0] = (uint8_t)((v >> 24) & 0xFFu);
-    p[1] = (uint8_t)((v >> 16) & 0xFFu);
-    p[2] = (uint8_t)((v >> 8) & 0xFFu);
-    p[3] = (uint8_t)(v & 0xFFu);
-}
-static inline uint32_t tdb_u32_be_read(const uint8_t* p) {
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
-
 /* ============== Small scratch buffers (avoid heap for small keys) ============== */
 
 typedef struct tdb_tmp_buf {
@@ -53,6 +34,12 @@ typedef struct tdb_tmp_buf {
     uint8_t stack[64];
 } tdb_tmp_buf_t;
 
+/**
+ * @brief tdb_tmp_buf_alloc.
+ * @param b Temporary buffer state.
+ * @param n Element count.
+ * @return Status code (TDB_OK on success).
+ */
 static inline tdb_status_t tdb_tmp_buf_alloc(tdb_tmp_buf_t* b, size_t n) {
     if (!b)
         return TDB_ERR_INVALID_ARG;
@@ -70,6 +57,10 @@ static inline tdb_status_t tdb_tmp_buf_alloc(tdb_tmp_buf_t* b, size_t n) {
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_tmp_buf_free.
+ * @param b Temporary buffer state.
+ */
 static inline void tdb_tmp_buf_free(tdb_tmp_buf_t* b) {
     if (!b)
         return;
@@ -87,6 +78,13 @@ typedef struct tdb_blob_copy_ctx {
     size_t written;
 } tdb_blob_copy_ctx_t;
 
+/**
+ * @brief tdb_blob_copy_cb.
+ * @param data Value bytes.
+ * @param len Length in bytes.
+ * @param arg Callback/user context.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_copy_cb(const void* data, size_t len, void* arg) {
     tdb_blob_copy_ctx_t* c = (tdb_blob_copy_ctx_t*)arg;
     if (!c)
@@ -102,6 +100,13 @@ static tdb_status_t tdb_blob_copy_cb(const void* data, size_t len, void* arg) {
 
 /* ============== Key helpers ============== */
 
+/**
+ * @brief tdb_blob_build_meta_key.
+ * @param user_key Key bytes.
+ * @param user_key_len Key length in bytes.
+ * @param out Output buffer pointer.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_build_meta_key(const void* user_key, size_t user_key_len,
                                           tdb_tmp_buf_t* out) {
     if (!out)
@@ -119,6 +124,15 @@ static tdb_status_t tdb_blob_build_meta_key(const void* user_key, size_t user_ke
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_build_index_key.
+ * @param user_key Key bytes.
+ * @param user_key_len Key length in bytes.
+ * @param generation Blob generation number.
+ * @param block_i Index block number.
+ * @param out Output buffer pointer.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_build_index_key(const void* user_key, size_t user_key_len,
                                            uint32_t generation, uint32_t block_i,
                                            tdb_tmp_buf_t* out) {
@@ -134,13 +148,23 @@ static tdb_status_t tdb_blob_build_index_key(const void* user_key, size_t user_k
         memcpy(out->p, user_key, user_key_len);
     out->p[user_key_len + 0] = 0x00;
     out->p[user_key_len + 1] = (uint8_t)'C';
-    tdb_u32_be_write(&out->p[user_key_len + 2], generation);
-    tdb_u32_be_write(&out->p[user_key_len + 6], block_i);
+    tdb_u32_wire_write(&out->p[user_key_len + 2], generation);
+    tdb_u32_wire_write(&out->p[user_key_len + 6], block_i);
     return TDB_OK;
 }
 
 /* ============== Format helpers (public for tests via src/tdb_blob.h) ============== */
 
+/**
+ * @brief tdb_blob_desc_encode.
+ * @param out Output buffer pointer.
+ * @param out_cap Output pointer receiving cap.
+ * @param desc Input pointer.
+ * @param inline_pgnos Input pointer.
+ * @param inline_pgno_count Element count.
+ * @param out_len Output pointer receiving len.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_desc_encode(uint8_t* out, size_t out_cap, const tdb_blob_desc_t* desc,
                                 const uint32_t* inline_pgnos, uint16_t inline_pgno_count,
                                 size_t* out_len) {
@@ -162,19 +186,28 @@ tdb_status_t tdb_blob_desc_encode(uint8_t* out, size_t out_cap, const tdb_blob_d
 
     out[0] = desc->version;
     out[1] = desc->reserved;
-    tdb_u16_be_write(&out[2], desc->chunk_size);
-    tdb_u32_be_write(&out[4], desc->logical_size);
-    tdb_u32_be_write(&out[8], desc->generation);
-    tdb_u16_be_write(&out[12], desc->index_block_count);
-    tdb_u16_be_write(&out[14], inline_pgno_count);
+    tdb_u16_wire_write(&out[2], desc->chunk_size);
+    tdb_u32_wire_write(&out[4], desc->logical_size);
+    tdb_u32_wire_write(&out[8], desc->generation);
+    tdb_u16_wire_write(&out[12], desc->index_block_count);
+    tdb_u16_wire_write(&out[14], inline_pgno_count);
     for (uint16_t i = 0; i < inline_pgno_count; i++) {
-        tdb_u32_be_write(&out[16u + (size_t)i * 4u], inline_pgnos[i]);
+        tdb_u32_wire_write(&out[16u + (size_t)i * 4u], inline_pgnos[i]);
     }
 
     *out_len = need;
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_desc_decode.
+ * @param buf Input pointer.
+ * @param len Length in bytes.
+ * @param out_desc Output pointer receiving desc.
+ * @param out_inline_pgnos Output pointer receiving inline pgnos.
+ * @param inout_inline_pgno_count Element count.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_desc_decode(const uint8_t* buf, size_t len, tdb_blob_desc_t* out_desc,
                                 uint32_t* out_inline_pgnos, uint16_t* inout_inline_pgno_count) {
     if (out_desc)
@@ -191,11 +224,11 @@ tdb_status_t tdb_blob_desc_decode(const uint8_t* buf, size_t len, tdb_blob_desc_
     if (reserved != 0)
         return TDB_ERR_CORRUPT;
 
-    const uint16_t chunk_size = tdb_u16_be_read(&buf[2]);
-    const uint32_t logical_size = tdb_u32_be_read(&buf[4]);
-    const uint32_t generation = tdb_u32_be_read(&buf[8]);
-    const uint16_t index_block_count = tdb_u16_be_read(&buf[12]);
-    const uint16_t inline_count = tdb_u16_be_read(&buf[14]);
+    const uint16_t chunk_size = tdb_u16_wire_read(&buf[2]);
+    const uint32_t logical_size = tdb_u32_wire_read(&buf[4]);
+    const uint32_t generation = tdb_u32_wire_read(&buf[8]);
+    const uint16_t index_block_count = tdb_u16_wire_read(&buf[12]);
+    const uint16_t inline_count = tdb_u16_wire_read(&buf[14]);
 
     const size_t need = (size_t)TDB_BLOB_DESC_HDR_SIZE + (size_t)inline_count * 4u;
     if (need != len && need > len)
@@ -219,12 +252,21 @@ tdb_status_t tdb_blob_desc_decode(const uint8_t* buf, size_t len, tdb_blob_desc_
     if (inline_count && !out_inline_pgnos)
         return TDB_ERR_INVALID_ARG;
     for (uint16_t i = 0; i < inline_count; i++) {
-        out_inline_pgnos[i] = tdb_u32_be_read(&buf[16u + (size_t)i * 4u]);
+        out_inline_pgnos[i] = tdb_u32_wire_read(&buf[16u + (size_t)i * 4u]);
     }
     *inout_inline_pgno_count = inline_count;
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_index_block_encode.
+ * @param out Output buffer pointer.
+ * @param out_cap Output pointer receiving cap.
+ * @param pgnos Input pointer.
+ * @param count Element count.
+ * @param out_len Output pointer receiving len.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_index_block_encode(uint8_t* out, size_t out_cap, const uint32_t* pgnos,
                                   uint16_t count, size_t* out_len) {
     if (out_len)
@@ -234,21 +276,29 @@ tdb_status_t tdb_index_block_encode(uint8_t* out, size_t out_cap, const uint32_t
     const size_t need = (size_t)TDB_INDEX_BLOCK_HDR_SIZE + (size_t)count * 4u;
     if (need > out_cap)
         return TDB_ERR_INVALID_ARG;
-    tdb_u16_be_write(&out[0], count);
+    tdb_u16_wire_write(&out[0], count);
     for (uint16_t i = 0; i < count; i++) {
-        tdb_u32_be_write(&out[2u + (size_t)i * 4u], pgnos[i]);
+        tdb_u32_wire_write(&out[2u + (size_t)i * 4u], pgnos[i]);
     }
     *out_len = need;
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_index_block_decode.
+ * @param buf Input pointer.
+ * @param len Length in bytes.
+ * @param out_pgnos Output pointer receiving pgnos.
+ * @param inout_count Element count.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_index_block_decode(const uint8_t* buf, size_t len, uint32_t* out_pgnos,
                                   uint16_t* inout_count) {
     if (!buf || !inout_count)
         return TDB_ERR_INVALID_ARG;
     if (len < TDB_INDEX_BLOCK_HDR_SIZE)
         return TDB_ERR_CORRUPT;
-    const uint16_t count = tdb_u16_be_read(&buf[0]);
+    const uint16_t count = tdb_u16_wire_read(&buf[0]);
     const size_t need = (size_t)TDB_INDEX_BLOCK_HDR_SIZE + (size_t)count * 4u;
     if (need != len && need > len)
         return TDB_ERR_CORRUPT;
@@ -262,7 +312,7 @@ tdb_status_t tdb_index_block_decode(const uint8_t* buf, size_t len, uint32_t* ou
     if (count && !out_pgnos)
         return TDB_ERR_INVALID_ARG;
     for (uint16_t i = 0; i < count; i++) {
-        out_pgnos[i] = tdb_u32_be_read(&buf[2u + (size_t)i * 4u]);
+        out_pgnos[i] = tdb_u32_wire_read(&buf[2u + (size_t)i * 4u]);
     }
     *inout_count = count;
     return TDB_OK;
@@ -270,6 +320,14 @@ tdb_status_t tdb_index_block_decode(const uint8_t* buf, size_t len, uint32_t* ou
 
 /* ============== Fast header peeks (avoid double decode + malloc churn) ============== */
 
+/**
+ * @brief tdb_blob_desc_peek.
+ * @param buf Input pointer.
+ * @param len Length in bytes.
+ * @param out_desc Output pointer receiving desc.
+ * @param out_inline_count Output pointer receiving inline.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_desc_peek(const uint8_t* buf, size_t len, tdb_blob_desc_t* out_desc,
                                      uint16_t* out_inline_count) {
     if (out_desc)
@@ -285,22 +343,29 @@ static tdb_status_t tdb_blob_desc_peek(const uint8_t* buf, size_t len, tdb_blob_
     if (buf[1] != 0)
         return TDB_ERR_CORRUPT;
 
-    const uint16_t inline_count = tdb_u16_be_read(&buf[14]);
+    const uint16_t inline_count = tdb_u16_wire_read(&buf[14]);
     const size_t need = (size_t)TDB_BLOB_DESC_HDR_SIZE + (size_t)inline_count * 4u;
     if (need != len)
         return TDB_ERR_CORRUPT;
 
     out_desc->version = buf[0];
     out_desc->reserved = 0;
-    out_desc->chunk_size = tdb_u16_be_read(&buf[2]);
-    out_desc->logical_size = tdb_u32_be_read(&buf[4]);
-    out_desc->generation = tdb_u32_be_read(&buf[8]);
-    out_desc->index_block_count = tdb_u16_be_read(&buf[12]);
+    out_desc->chunk_size = tdb_u16_wire_read(&buf[2]);
+    out_desc->logical_size = tdb_u32_wire_read(&buf[4]);
+    out_desc->generation = tdb_u32_wire_read(&buf[8]);
+    out_desc->index_block_count = tdb_u16_wire_read(&buf[12]);
     out_desc->inline_pgno_count = inline_count;
     *out_inline_count = inline_count;
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_index_block_peek_count.
+ * @param buf Input pointer.
+ * @param len Length in bytes.
+ * @param out_count Output pointer receiving count.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_index_block_peek_count(const uint8_t* buf, size_t len, uint16_t* out_count) {
     if (out_count)
         *out_count = 0;
@@ -308,7 +373,7 @@ static tdb_status_t tdb_index_block_peek_count(const uint8_t* buf, size_t len, u
         return TDB_ERR_INVALID_ARG;
     if (len < TDB_INDEX_BLOCK_HDR_SIZE)
         return TDB_ERR_CORRUPT;
-    const uint16_t count = tdb_u16_be_read(&buf[0]);
+    const uint16_t count = tdb_u16_wire_read(&buf[0]);
     const size_t need = (size_t)TDB_INDEX_BLOCK_HDR_SIZE + (size_t)count * 4u;
     if (need != len)
         return TDB_ERR_CORRUPT;
@@ -347,6 +412,11 @@ struct tdb_blob_writer {
     size_t cur_fill;
 };
 
+/**
+ * @brief tdb_blob_next_generation.
+ * @param old_gen Generation to remove.
+ * @return Computed 32-bit value.
+ */
 static uint32_t tdb_blob_next_generation(uint32_t old_gen) {
     uint32_t g = old_gen + 1u;
     if (g == 0u)
@@ -354,6 +424,14 @@ static uint32_t tdb_blob_next_generation(uint32_t old_gen) {
     return g;
 }
 
+/**
+ * @brief tdb_blob_read_meta_header.
+ * @param kv KV database handle.
+ * @param user_key Key bytes.
+ * @param user_key_len Key length in bytes.
+ * @param out_desc Output pointer receiving desc.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_read_meta_header(tdb_kv_t* kv, const void* user_key, size_t user_key_len,
                                             tdb_blob_desc_t* out_desc) {
     if (out_desc)
@@ -376,6 +454,16 @@ static tdb_status_t tdb_blob_read_meta_header(tdb_kv_t* kv, const void* user_key
     return tdb_blob_desc_peek((const uint8_t*)v.data, v.len, out_desc, &inline_count);
 }
 
+/**
+ * @brief tdb_blob_read_meta_full.
+ * @param kv KV database handle.
+ * @param user_key Key bytes.
+ * @param user_key_len Key length in bytes.
+ * @param out_desc Output pointer receiving desc.
+ * @param out_inline_pgnos Output pointer receiving inline pgnos.
+ * @param out_inline_count Output pointer receiving inline.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_read_meta_full(tdb_kv_t* kv, const void* user_key, size_t user_key_len,
                                           tdb_blob_desc_t* out_desc, uint32_t** out_inline_pgnos,
                                           uint16_t* out_inline_count) {
@@ -423,6 +511,17 @@ static tdb_status_t tdb_blob_read_meta_full(tdb_kv_t* kv, const void* user_key, 
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_write_index_block.
+ * @param kv KV database handle.
+ * @param user_key Key bytes.
+ * @param user_key_len Key length in bytes.
+ * @param generation Blob generation number.
+ * @param block_i Index block number.
+ * @param pgnos Input pointer.
+ * @param count Element count.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_write_index_block(tdb_kv_t* kv, const void* user_key, size_t user_key_len,
                                              uint32_t generation, uint32_t block_i,
                                              const uint32_t* pgnos, uint16_t count) {
@@ -467,6 +566,15 @@ static tdb_status_t tdb_blob_write_index_block(tdb_kv_t* kv, const void* user_ke
     return st;
 }
 
+/**
+ * @brief tdb_blob_delete_generation.
+ * @param kv KV database handle.
+ * @param user_key Key bytes.
+ * @param user_key_len Key length in bytes.
+ * @param generation Blob generation number.
+ * @param index_block_count Element count.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_delete_generation(tdb_kv_t* kv, const void* user_key, size_t user_key_len,
                                              uint32_t generation, uint16_t index_block_count) {
     if (!kv || (!user_key && user_key_len != 0))
@@ -483,6 +591,18 @@ static tdb_status_t tdb_blob_delete_generation(tdb_kv_t* kv, const void* user_ke
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_collect_all_pgnos.
+ * @param kv KV database handle.
+ * @param user_key Key bytes.
+ * @param user_key_len Key length in bytes.
+ * @param desc Input pointer.
+ * @param inline_pgnos Input pointer.
+ * @param inline_count Element count.
+ * @param out_all Output pointer receiving all.
+ * @param out_count Output pointer receiving count.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_collect_all_pgnos(tdb_kv_t* kv, const void* user_key, size_t user_key_len,
                                              const tdb_blob_desc_t* desc,
                                              const uint32_t* inline_pgnos, uint16_t inline_count,
@@ -584,6 +704,12 @@ static tdb_status_t tdb_blob_collect_all_pgnos(tdb_kv_t* kv, const void* user_ke
 
 /* ============== Public API ============== */
 
+/**
+ * @brief tdb_blob_chunk_size.
+ * @param kv KV database handle.
+ * @param out_chunk_size Output pointer receiving chunk.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_chunk_size(tdb_kv_t* kv, size_t* out_chunk_size) {
     if (out_chunk_size)
         *out_chunk_size = 0;
@@ -596,6 +722,14 @@ tdb_status_t tdb_blob_chunk_size(tdb_kv_t* kv, size_t* out_chunk_size) {
     return (*out_chunk_size > 0) ? TDB_OK : TDB_ERR_IO;
 }
 
+/**
+ * @brief tdb_blob_writer_init.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param out_writer Output pointer receiving writer.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_writer_init(tdb_kv_t* kv, const void* key, size_t key_len,
                                 tdb_blob_writer_t** out_writer) {
     if (!out_writer)
@@ -703,6 +837,12 @@ tdb_status_t tdb_blob_writer_init(tdb_kv_t* kv, const void* key, size_t key_len,
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_writer_record_pgno.
+ * @param w Blob writer state.
+ * @param pgno Page number.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_writer_record_pgno(tdb_blob_writer_t* w, pgno_t pgno) {
     if (!w)
         return TDB_ERR_INVALID_ARG;
@@ -726,6 +866,11 @@ static tdb_status_t tdb_blob_writer_record_pgno(tdb_blob_writer_t* w, pgno_t pgn
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_writer_flush_current_page.
+ * @param w Blob writer state.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_writer_flush_current_page(tdb_blob_writer_t* w) {
     if (!w)
         return TDB_ERR_INVALID_ARG;
@@ -745,6 +890,11 @@ static tdb_status_t tdb_blob_writer_flush_current_page(tdb_blob_writer_t* w) {
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_writer_ensure_page.
+ * @param w Blob writer state.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_blob_writer_ensure_page(tdb_blob_writer_t* w) {
     if (!w)
         return TDB_ERR_INVALID_ARG;
@@ -776,6 +926,13 @@ static tdb_status_t tdb_blob_writer_ensure_page(tdb_blob_writer_t* w) {
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_write.
+ * @param w Blob writer state.
+ * @param data Value bytes.
+ * @param len Length in bytes.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_write(tdb_blob_writer_t* w, const void* data, size_t len) {
     if (!w || (!data && len != 0))
         return TDB_ERR_INVALID_ARG;
@@ -801,6 +958,10 @@ tdb_status_t tdb_blob_write(tdb_blob_writer_t* w, const void* data, size_t len) 
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_writer_free.
+ * @param w Blob writer state.
+ */
 static void tdb_blob_writer_free(tdb_blob_writer_t* w) {
     if (!w)
         return;
@@ -810,12 +971,21 @@ static void tdb_blob_writer_free(tdb_blob_writer_t* w) {
     free(w);
 }
 
+/**
+ * @brief tdb_blob_abort.
+ * @param w Blob writer state.
+ */
 void tdb_blob_abort(tdb_blob_writer_t* w) {
     /* No commit: data pages are unreferenced (may be reclaimed by block-level GC if implemented).
      */
     tdb_blob_writer_free(w);
 }
 
+/**
+ * @brief tdb_blob_finish.
+ * @param w Blob writer state.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_finish(tdb_blob_writer_t* w) {
     if (!w)
         return TDB_ERR_INVALID_ARG;
@@ -938,6 +1108,15 @@ tdb_status_t tdb_blob_finish(tdb_blob_writer_t* w) {
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_put.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param data Value bytes.
+ * @param len Length in bytes.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_put(tdb_kv_t* kv, const void* key, size_t key_len, const void* data,
                         size_t len) {
     tdb_blob_writer_t* w = NULL;
@@ -952,6 +1131,14 @@ tdb_status_t tdb_blob_put(tdb_kv_t* kv, const void* key, size_t key_len, const v
     return tdb_blob_finish(w);
 }
 
+/**
+ * @brief tdb_blob_get_len.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param out_len Output pointer receiving len.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_get_len(tdb_kv_t* kv, const void* key, size_t key_len, size_t* out_len) {
     if (out_len)
         *out_len = 0;
@@ -965,6 +1152,15 @@ tdb_status_t tdb_blob_get_len(tdb_kv_t* kv, const void* key, size_t key_len, siz
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_stream.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param cb Callback function.
+ * @param arg Callback/user context.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_stream(tdb_kv_t* kv, const void* key, size_t key_len, tdb_blob_stream_cb cb,
                            void* arg) {
     if (!kv || (!key && key_len != 0) || !cb)
@@ -1059,6 +1255,16 @@ tdb_status_t tdb_blob_stream(tdb_kv_t* kv, const void* key, size_t key_len, tdb_
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_get_into.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param out Output buffer pointer.
+ * @param out_len Output pointer receiving len.
+ * @param saved_len_out Output pointer receiving previous length.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_get_into(tdb_kv_t* kv, const void* key, size_t key_len, void* out,
                              size_t out_len, size_t* saved_len_out) {
     if (saved_len_out)
@@ -1079,6 +1285,14 @@ tdb_status_t tdb_blob_get_into(tdb_kv_t* kv, const void* key, size_t key_len, vo
     return tdb_blob_stream(kv, key, key_len, tdb_blob_copy_cb, &c);
 }
 
+/**
+ * @brief tdb_blob_truncate.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param new_size Length in bytes.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_truncate(tdb_kv_t* kv, const void* key, size_t key_len, size_t new_size) {
     if (!kv || (!key && key_len != 0))
         return TDB_ERR_INVALID_ARG;
@@ -1228,6 +1442,16 @@ tdb_status_t tdb_blob_truncate(tdb_kv_t* kv, const void* key, size_t key_len, si
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_blob_write_range.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param offset Offset value.
+ * @param data Value bytes.
+ * @param len Length in bytes.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_blob_write_range(tdb_kv_t* kv, const void* key, size_t key_len, size_t offset,
                                 const void* data, size_t len) {
     if (!kv || (!key && key_len != 0) || (!data && len != 0))

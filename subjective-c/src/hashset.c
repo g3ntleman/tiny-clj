@@ -14,6 +14,29 @@
 CljObject g_hashset_empty_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
 CljObject g_hashset_tombstone_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
 
+#define HASHSET_DEFAULT_MAX_LOAD_PERCENT 75u
+#define HASHSET_MIN_MAX_LOAD_PERCENT 50u
+#define HASHSET_MAX_MAX_LOAD_PERCENT 95u
+
+static unsigned int next_power_of_2(unsigned int n);
+static void hashset_put_direct(CljHashSet *set, ID key);
+
+static unsigned int clamp_max_load_percent(unsigned int percent) {
+    if (percent < HASHSET_MIN_MAX_LOAD_PERCENT) return HASHSET_MIN_MAX_LOAD_PERCENT;
+    if (percent > HASHSET_MAX_MAX_LOAD_PERCENT) return HASHSET_MAX_MAX_LOAD_PERCENT;
+    return percent;
+}
+
+static unsigned int compute_capacity_for_entries(unsigned int required_entries, unsigned int max_load_percent) {
+    unsigned int load = clamp_max_load_percent(max_load_percent);
+    // ceil(required_entries * 100 / load)
+    uint64_t scaled = (uint64_t)required_entries * 100u + (uint64_t)load - 1u;
+    uint64_t min_capacity = scaled / (uint64_t)load;
+    if (min_capacity < 8u) min_capacity = 8u;
+    if (min_capacity > UINT_MAX) min_capacity = UINT_MAX;
+    return next_power_of_2((unsigned int)min_capacity);
+}
+
 // Next power of 2 (for mask: capacity - 1)
 static unsigned int next_power_of_2(unsigned int n) {
     if (n < 8) return 8;
@@ -28,6 +51,10 @@ static unsigned int next_power_of_2(unsigned int n) {
 
 /** Create hash set with capacity rounded up to next power of two. */
 CljHashSet* make_hashset(unsigned int capacity) {
+    return make_hashset_with_max_load(capacity, HASHSET_DEFAULT_MAX_LOAD_PERCENT);
+}
+
+CljHashSet* make_hashset_with_max_load(unsigned int capacity, unsigned int max_load_percent) {
     unsigned int cap = next_power_of_2(capacity);
 
     // Allocate struct + embedded data array in ONE malloc
@@ -41,6 +68,7 @@ CljHashSet* make_hashset(unsigned int capacity) {
     set->count = 0;
     set->capacity = cap;
     set->tombstones = 0;
+    set->max_load_percent = (uint8_t)clamp_max_load_percent(max_load_percent);
 
     // Initialize embedded array to HASHSET_EMPTY (NULL is a valid key: nil)
     for (unsigned int i = 0; i < cap; i++) {
@@ -48,6 +76,33 @@ CljHashSet* make_hashset(unsigned int capacity) {
     }
 
     return set;
+}
+
+void hashset_set_max_load_percent(CljHashSet *set, unsigned int max_load_percent) {
+    if (!set) return;
+    set->max_load_percent = (uint8_t)clamp_max_load_percent(max_load_percent);
+}
+
+CljHashSet* hashset_fit_count_with_reserve(CljHashSet *set, unsigned int reserve_percent) {
+    if (!set) return NULL;
+
+    uint64_t reserve = (uint64_t)set->count * (uint64_t)reserve_percent;
+    uint64_t reserve_slots = (reserve + 99u) / 100u;  // ceil(count * reserve/100)
+    uint64_t required_entries64 = (uint64_t)set->count + reserve_slots;
+    if (required_entries64 > UINT_MAX) required_entries64 = UINT_MAX;
+    unsigned int required_entries = (unsigned int)required_entries64;
+
+    unsigned int load = set->max_load_percent ? set->max_load_percent : HASHSET_DEFAULT_MAX_LOAD_PERCENT;
+    unsigned int target_capacity = compute_capacity_for_entries(required_entries, load);
+    bool need_rebuild = (target_capacity != set->capacity) || (set->tombstones > 0);
+    if (!need_rebuild) return set;
+
+    CljHashSet *fitted = make_hashset_with_max_load(target_capacity, load);
+    ID key;
+    HASHSET_FOR_EACH(set, key) {
+        hashset_put_direct(fitted, key);
+    }
+    return fitted;
 }
 
 // Linear Probing: Find slot (for contains/add/remove)
@@ -115,7 +170,7 @@ static void hashset_put_direct(CljHashSet *set, ID key) {
 
 // Rehashing: Copy all entries into a new set with larger capacity
 static CljHashSet* hashset_rehash(CljHashSet *set, unsigned int new_capacity) {
-    CljHashSet *new_set = make_hashset(new_capacity);
+    CljHashSet *new_set = make_hashset_with_max_load(new_capacity, set->max_load_percent);
 
     ID key;
     HASHSET_FOR_EACH(set, key) {
@@ -129,12 +184,13 @@ static CljHashSet* hashset_rehash(CljHashSet *set, unsigned int new_capacity) {
 static bool needs_rehash(CljHashSet *set) {
     if (!set) return false;
     size_t total_used = (size_t)set->count + set->tombstones;
-    return total_used * 4 > (size_t)set->capacity * 3;
+    size_t threshold = (size_t)(set->max_load_percent ? set->max_load_percent : HASHSET_DEFAULT_MAX_LOAD_PERCENT);
+    return total_used * 100 > (size_t)set->capacity * threshold;
 }
 
 // Copy hashset (clean copy without tombstones)
 static CljHashSet* hashset_copy(CljHashSet *set) {
-    CljHashSet *copy = make_hashset(set->count);
+    CljHashSet *copy = make_hashset_with_max_load(set->count, set->max_load_percent);
     copy->count = 0;
     copy->tombstones = 0;
 

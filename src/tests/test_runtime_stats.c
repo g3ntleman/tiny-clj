@@ -150,6 +150,43 @@ TEST(test_runtime_stats_gpio_event_drops_present)
     TEST_ASSERT_TRUE(as_fixnum(v_gpio_event_drops) >= 0);
 }
 
+TEST(test_runtime_stats_audio_counters_present)
+{
+    ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(stats);
+    TEST_ASSERT_TRUE(is_map(stats));
+
+    ID k_audio_cmd_drop_count = (ID)intern_symbol_global(":audio-cmd-drop-count");
+    ID k_audio_tick_overrun_count = (ID)intern_symbol_global(":audio-tick-overrun-count");
+    ID k_audio_queue_high_watermark = (ID)intern_symbol_global(":audio-queue-high-watermark");
+    ID k_audio_sfx_drop_count = (ID)intern_symbol_global(":audio-sfx-drop-count");
+    ID k_audio_finished_drop_count = (ID)intern_symbol_global(":audio-finished-drop-count");
+
+    ID v_audio_cmd_drop_count = map_get_sentinel((CljPersistentMap *)stats, k_audio_cmd_drop_count, NOT_FOUND);
+    ID v_audio_tick_overrun_count = map_get_sentinel((CljPersistentMap *)stats, k_audio_tick_overrun_count, NOT_FOUND);
+    ID v_audio_queue_high_watermark = map_get_sentinel((CljPersistentMap *)stats, k_audio_queue_high_watermark, NOT_FOUND);
+    ID v_audio_sfx_drop_count = map_get_sentinel((CljPersistentMap *)stats, k_audio_sfx_drop_count, NOT_FOUND);
+    ID v_audio_finished_drop_count = map_get_sentinel((CljPersistentMap *)stats, k_audio_finished_drop_count, NOT_FOUND);
+
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_audio_cmd_drop_count);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_audio_tick_overrun_count);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_audio_queue_high_watermark);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_audio_sfx_drop_count);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_audio_finished_drop_count);
+
+    TEST_ASSERT_TRUE(is_fixnum(v_audio_cmd_drop_count));
+    TEST_ASSERT_TRUE(is_fixnum(v_audio_tick_overrun_count));
+    TEST_ASSERT_TRUE(is_fixnum(v_audio_queue_high_watermark));
+    TEST_ASSERT_TRUE(is_fixnum(v_audio_sfx_drop_count));
+    TEST_ASSERT_TRUE(is_fixnum(v_audio_finished_drop_count));
+
+    TEST_ASSERT_TRUE(as_fixnum(v_audio_cmd_drop_count) >= 0);
+    TEST_ASSERT_TRUE(as_fixnum(v_audio_tick_overrun_count) >= 0);
+    TEST_ASSERT_TRUE(as_fixnum(v_audio_queue_high_watermark) >= 0);
+    TEST_ASSERT_TRUE(as_fixnum(v_audio_sfx_drop_count) >= 0);
+    TEST_ASSERT_TRUE(as_fixnum(v_audio_finished_drop_count) >= 0);
+}
+
 #if defined(DEBUG)
 static bool debug_precore_mem_enabled(void)
 {

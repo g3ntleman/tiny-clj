@@ -60,6 +60,11 @@ static int bt_meta __P((BTREE*));
  * Returns:
  *	RET_ERROR, RET_SUCCESS
  */
+/**
+ * @brief __bt_close.
+ * @param dbp B-Tree database handle.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int __bt_close(DB* dbp) {
     BTREE* t;
     int fd;
@@ -108,6 +113,12 @@ int __bt_close(DB* dbp) {
  *
  * Returns:
  *	RET_SUCCESS, RET_ERROR.
+ */
+/**
+ * @brief __bt_sync.
+ * @param dbp B-Tree database handle.
+ * @param flags Option flags controlling operation behavior.
+ * @return Return code (RET_SUCCESS on success).
  */
 int __bt_sync(const DB* dbp, u_int flags) {
     BTREE* t;
@@ -188,6 +199,11 @@ int __bt_sync(const DB* dbp, u_int flags) {
  *
  * Returns:
  *	RET_ERROR, RET_SUCCESS
+ */
+/**
+ * @brief bt_meta.
+ * @param t B-Tree context.
+ * @return Return code (RET_SUCCESS on success).
  */
 static int bt_meta(BTREE* t) {
     BTMETA m;

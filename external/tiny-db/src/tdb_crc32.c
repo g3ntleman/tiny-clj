@@ -47,6 +47,13 @@ static const uint32_t tdb_crc32_table[256] = {
     0xCDD70693u, 0x54DE5729u, 0x23D967BFu, 0xB3667A2Eu, 0xC4614AB8u, 0x5D681B02u, 0x2A6F2B94u,
     0xB40BBE37u, 0xC30C8EA1u, 0x5A05DF1Bu, 0x2D02EF8Du};
 
+/**
+ * @brief tdb_crc32_ieee.
+ * @param data Value bytes.
+ * @param len Length in bytes.
+ * @param seed Initial CRC seed.
+ * @return Computed 32-bit value.
+ */
 uint32_t tdb_crc32_ieee(const void* data, size_t len, uint32_t seed) {
     const uint8_t* p = (const uint8_t*)data;
     uint32_t crc = ~seed;

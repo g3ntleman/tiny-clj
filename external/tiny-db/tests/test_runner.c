@@ -2,7 +2,13 @@
 
 #include "unity.h"
 
+/**
+ * @brief setUp.
+ */
 void setUp(void) {}
+/**
+ * @brief tearDown.
+ */
 void tearDown(void) {}
 
 // Forward declarations for each test file's register function.
@@ -25,6 +31,10 @@ void tdb_register_tests_btree_topdown_insert(void);
 void tdb_register_tests_mpool_cache_cfg(void);
 void tdb_register_tests_mpool_cache_stress(void);
 
+/**
+ * @brief main.
+ * @return Unity framework exit code.
+ */
 int main(void) {
     UNITY_BEGIN();
 

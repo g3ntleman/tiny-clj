@@ -36,6 +36,11 @@
 static uint32_t g_cache_pagecount = TDB_MPOOL_CACHE_PAGES_DEFAULT;
 static int g_psram_autosize = 1;
 
+/**
+ * @brief tdb_mpool_set_cache_pagecount.
+ * @param count Element count.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_mpool_set_cache_pagecount(uint32_t count) {
     if (count < 3u || count > (uint32_t)TDB_MPOOL_CACHE_PAGES_MAX)
         return TDB_ERR_INVALID_ARG;
@@ -43,15 +48,28 @@ tdb_status_t tdb_mpool_set_cache_pagecount(uint32_t count) {
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_mpool_get_cache_pagecount.
+ * @return Computed 32-bit value.
+ */
 uint32_t tdb_mpool_get_cache_pagecount(void) {
     return g_cache_pagecount;
 }
 
+/**
+ * @brief tdb_mpool_enable_psram_autosize.
+ * @param enable Enable flag (0 disables, non-zero enables).
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_mpool_enable_psram_autosize(int enable) {
     g_psram_autosize = enable ? 1 : 0;
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_mpool_have_psram.
+ * @return Boolean-like result (0 or non-zero).
+ */
 static int tdb_mpool_have_psram(void) {
 #if TDB_MPOOL_HAVE_ESP_IDF
     return heap_caps_get_total_size(MALLOC_CAP_SPIRAM) > 0;
@@ -60,48 +78,87 @@ static int tdb_mpool_have_psram(void) {
 #endif
 }
 
-/* ============== On-wire header encoding (ESP32 byte order = little-endian) ============== */
+/* ============== On-wire header encoding (configured wire order; default little-endian) ============== */
 
 /*
  * The mpool log header is written in a fixed byte order to allow moving storage
  * media (e.g. SD cards) between different CPU architectures.
  *
- * On-wire byte order: little-endian (ESP32).
+ * On-wire byte order: configured via TDB_WIRE_ENDIAN (default: little-endian).
  *
  * Layout (16 bytes):
- *   0  magic  u32 LE
- *   4  pgno   u32 LE
- *   8  crc32  u32 LE  (CRC over header bytes with this field set to 0, + page bytes)
- *   12 flags  u32 LE
+ *   0  magic  u32 wire
+ *   4  pgno   u32 wire
+ *   8  crc32  u32 wire  (CRC over header bytes with this field set to 0, + page bytes)
+ *   12 flags  u32 wire
+ */
+/**
+ * @brief tdb_page_hdr_encode.
+ * @param out Output buffer pointer.
+ * @param magic Header magic value.
+ * @param pgno Page number.
+ * @param crc32 CRC32 checksum value.
+ * @param flags Option flags controlling operation behavior.
  */
 static inline void tdb_page_hdr_encode(uint8_t out[sizeof(tdb_page_hdr_t)], uint32_t magic,
                                       uint32_t pgno, uint32_t crc32, uint32_t flags) {
-    tdb_u32_le_write(&out[0], magic);
-    tdb_u32_le_write(&out[4], pgno);
-    tdb_u32_le_write(&out[8], crc32);
-    tdb_u32_le_write(&out[12], flags);
+    tdb_u32_wire_write(&out[0], magic);
+    tdb_u32_wire_write(&out[4], pgno);
+    tdb_u32_wire_write(&out[8], crc32);
+    tdb_u32_wire_write(&out[12], flags);
 }
 
+/**
+ * @brief tdb_page_hdr_zero_crc.
+ * @param io Input/output buffer pointer.
+ */
 static inline void tdb_page_hdr_zero_crc(uint8_t io[sizeof(tdb_page_hdr_t)]) {
-    tdb_u32_le_write(&io[8], 0u);
+    tdb_u32_wire_write(&io[8], 0u);
 }
 
+/**
+ * @brief tdb_page_hdr_get_magic.
+ * @param in Input buffer pointer.
+ * @return Computed 32-bit value.
+ */
 static inline uint32_t tdb_page_hdr_get_magic(const uint8_t in[sizeof(tdb_page_hdr_t)]) {
-    return tdb_u32_le_read(&in[0]);
+    return tdb_u32_wire_read(&in[0]);
 }
 
+/**
+ * @brief tdb_page_hdr_get_pgno.
+ * @param in Input buffer pointer.
+ * @return Computed 32-bit value.
+ */
 static inline uint32_t tdb_page_hdr_get_pgno(const uint8_t in[sizeof(tdb_page_hdr_t)]) {
-    return tdb_u32_le_read(&in[4]);
+    return tdb_u32_wire_read(&in[4]);
 }
 
+/**
+ * @brief tdb_page_hdr_get_crc.
+ * @param in Input buffer pointer.
+ * @return Computed 32-bit value.
+ */
 static inline uint32_t tdb_page_hdr_get_crc(const uint8_t in[sizeof(tdb_page_hdr_t)]) {
-    return tdb_u32_le_read(&in[8]);
+    return tdb_u32_wire_read(&in[8]);
 }
 
+/**
+ * @brief tdb_page_hdr_get_flags.
+ * @param in Input buffer pointer.
+ * @return Computed 32-bit value.
+ */
 static inline uint32_t tdb_page_hdr_get_flags(const uint8_t in[sizeof(tdb_page_hdr_t)]) {
-    return tdb_u32_le_read(&in[12]);
+    return tdb_u32_wire_read(&in[12]);
 }
 
+/**
+ * @brief tdb_page_hdr_crc_calc.
+ * @param hdr_bytes Length in bytes.
+ * @param page_bytes Length in bytes.
+ * @param page_len Length in bytes.
+ * @return Computed 32-bit value.
+ */
 static inline uint32_t tdb_page_hdr_crc_calc(const uint8_t hdr_bytes[sizeof(tdb_page_hdr_t)],
                                             const uint8_t* page_bytes, size_t page_len) {
     uint8_t tmp[sizeof(tdb_page_hdr_t)];
@@ -115,6 +172,14 @@ static inline uint32_t tdb_page_hdr_crc_calc(const uint8_t hdr_bytes[sizeof(tdb_
 /*
  * Compute CRC for a record stored on flash without allocating a full (header+payload) buffer.
  * Reads payload in small chunks and feeds it into the CRC incrementally.
+ */
+/**
+ * @brief tdb_page_hdr_crc_calc_from_flash.
+ * @param mp Memory-pool context.
+ * @param rec_off Offset value.
+ * @param hdr_bytes Length in bytes.
+ * @param out_crc Output pointer receiving crc.
+ * @return Status code (TDB_OK on success).
  */
 static tdb_status_t tdb_page_hdr_crc_calc_from_flash(MPOOL* mp, uint32_t rec_off,
                                                    const uint8_t hdr_bytes[sizeof(tdb_page_hdr_t)],
@@ -149,8 +214,15 @@ static tdb_status_t tdb_page_hdr_crc_calc_from_flash(MPOOL* mp, uint32_t rec_off
 /*
  * Compute CRC for a tombstone payload without allocating a full pagesize buffer.
  * Tombstone payload layout:
- * - first 4 bytes: next_free (u32 LE)
+ * - first 4 bytes: next_free (u32 wire)
  * - remaining bytes: left as erased (0xFF)
+ */
+/**
+ * @brief tdb_page_hdr_crc_calc_tombstone_erased_tail.
+ * @param hdr_bytes Length in bytes.
+ * @param next_free_le Encoded little-endian free-list pointer.
+ * @param page_len Length in bytes.
+ * @return Computed 32-bit value.
  */
 static uint32_t tdb_page_hdr_crc_calc_tombstone_erased_tail(
     const uint8_t hdr_bytes[sizeof(tdb_page_hdr_t)], const uint8_t next_free_le[4], size_t page_len) {
@@ -172,6 +244,11 @@ static uint32_t tdb_page_hdr_crc_calc_tombstone_erased_tail(
     return crc;
 }
 
+/**
+ * @brief tdb_rec_size.
+ * @param mp Memory-pool context.
+ * @return Computed 32-bit value.
+ */
 static inline uint32_t tdb_rec_size(const MPOOL* mp) {
     return (uint32_t)(sizeof(tdb_page_hdr_t) + mp->pagesize);
 }
@@ -194,6 +271,10 @@ static uint32_t gc_half_start(MPOOL* mp, int half);
 
 #define TDB_OFF_INVALID 0xFFFFFFFFu
 
+/**
+ * @brief tdb_pg_cache_init.
+ * @param mp Memory-pool context.
+ */
 static void tdb_pg_cache_init(MPOOL* mp) {
     if (!mp)
         return;
@@ -204,6 +285,13 @@ static void tdb_pg_cache_init(MPOOL* mp) {
     mp->pg_cache_rr = 0;
 }
 
+/**
+ * @brief tdb_pg_cache_lookup.
+ * @param mp Memory-pool context.
+ * @param pgno Page number.
+ * @param out_off Output pointer receiving off.
+ * @return 1 if the page is cached, 0 otherwise.
+ */
 static int tdb_pg_cache_lookup(MPOOL* mp, pgno_t pgno, uint32_t* out_off) {
     if (out_off)
         *out_off = TDB_OFF_INVALID;
@@ -218,6 +306,12 @@ static int tdb_pg_cache_lookup(MPOOL* mp, pgno_t pgno, uint32_t* out_off) {
     return 0;
 }
 
+/**
+ * @brief tdb_pg_cache_insert.
+ * @param mp Memory-pool context.
+ * @param pgno Page number.
+ * @param off Offset value.
+ */
 static void tdb_pg_cache_insert(MPOOL* mp, pgno_t pgno, uint32_t off) {
     if (!mp || pgno == PGNO_INVALID)
         return;
@@ -239,6 +333,11 @@ static void tdb_pg_cache_insert(MPOOL* mp, pgno_t pgno, uint32_t off) {
 
 /* ============== Cache Operations ============== */
 
+/**
+ * @brief tdb_pin_slot.
+ * @param mp Memory-pool context.
+ * @param slot Cache-slot descriptor.
+ */
 static inline void tdb_pin_slot(MPOOL* mp, tdb_cache_slot_t* slot) {
     if (!mp || !slot)
         return;
@@ -250,6 +349,11 @@ static inline void tdb_pin_slot(MPOOL* mp, tdb_cache_slot_t* slot) {
     }
 }
 
+/**
+ * @brief tdb_unpin_slot.
+ * @param mp Memory-pool context.
+ * @param slot Cache-slot descriptor.
+ */
 static inline void tdb_unpin_slot(MPOOL* mp, tdb_cache_slot_t* slot) {
     if (!mp || !slot)
         return;
@@ -316,7 +420,7 @@ static int tdb_cache_flush_slot(MPOOL* mp, tdb_cache_slot_t* slot) {
 
     tdb_page_hdr_encode(hdrb, TDB_PAGE_MAGIC, slot->pgno, 0u, 0u);
     uint32_t crc = tdb_page_hdr_crc_calc(hdrb, (const uint8_t*)slot->data, mp->pagesize);
-    tdb_u32_le_write(&hdrb[8], crc);
+    tdb_u32_wire_write(&hdrb[8], crc);
 
     /* Check space */
     if ((uint64_t)mp->write_off + total > mp->bdev->geom.total_size_bytes) {
@@ -472,6 +576,14 @@ static int tdb_mpool_recover(MPOOL* mp) {
 
 /* ============== Public API ============== */
 
+/**
+ * @brief mpool_open.
+ * @param key Key bytes.
+ * @param fd File descriptor.
+ * @param pagesize Length in bytes.
+ * @param maxcache Page number.
+ * @return Memory-pool handle, or NULL on failure.
+ */
 MPOOL* mpool_open(void* key, int fd, pgno_t pagesize, pgno_t maxcache) {
     (void)key;
     (void)fd;
@@ -546,6 +658,13 @@ MPOOL* mpool_open(void* key, int fd, pgno_t pagesize, pgno_t maxcache) {
     return mp;
 }
 
+/**
+ * @brief mpool_filter.
+ * @param mp Memory-pool context.
+ * @param pgin Page number.
+ * @param pgout Page number.
+ * @param pgcookie Opaque page cookie.
+ */
 void mpool_filter(MPOOL* mp, void (*pgin)(void*, pgno_t, void*),
                   void (*pgout)(void*, pgno_t, void*), void* pgcookie) {
     if (!mp)
@@ -555,6 +674,12 @@ void mpool_filter(MPOOL* mp, void (*pgin)(void*, pgno_t, void*),
     mp->pgcookie = pgcookie;
 }
 
+/**
+ * @brief mpool_new.
+ * @param mp Memory-pool context.
+ * @param pgnoaddr Page number.
+ * @return Pointer result, or NULL on failure.
+ */
 void* mpool_new(MPOOL* mp, pgno_t* pgnoaddr) {
     if (!mp || !pgnoaddr)
         return NULL;
@@ -600,6 +725,15 @@ void* mpool_new(MPOOL* mp, pgno_t* pgnoaddr) {
     return slot->data;
 }
 
+/**
+ * @brief tdb_scan_back_in_range.
+ * @param mp Memory-pool context.
+ * @param start_off_exclusive Offset value.
+ * @param stop_off_inclusive Offset value.
+ * @param want_pgno Page number.
+ * @param out_is_tombstone Output pointer receiving is tombstone.
+ * @return Computed 32-bit value.
+ */
 static uint32_t tdb_scan_back_in_range(MPOOL* mp, uint32_t start_off_exclusive, uint32_t stop_off_inclusive,
                                       pgno_t want_pgno, int* out_is_tombstone) {
     if (out_is_tombstone)
@@ -646,6 +780,13 @@ static uint32_t tdb_scan_back_in_range(MPOOL* mp, uint32_t start_off_exclusive, 
     return TDB_OFF_INVALID;
 }
 
+/**
+ * @brief tdb_scan_back_find_offset.
+ * @param mp Memory-pool context.
+ * @param want_pgno Page number.
+ * @param out_is_tombstone Output pointer receiving is tombstone.
+ * @return Computed 32-bit value.
+ */
 static uint32_t tdb_scan_back_find_offset(MPOOL* mp, pgno_t want_pgno, int* out_is_tombstone) {
     if (out_is_tombstone)
         *out_is_tombstone = 0;
@@ -665,6 +806,13 @@ static uint32_t tdb_scan_back_find_offset(MPOOL* mp, pgno_t want_pgno, int* out_
     return tdb_scan_back_in_range(mp, other_end, other_start, want_pgno, out_is_tombstone);
 }
 
+/**
+ * @brief mpool_get.
+ * @param mp Memory-pool context.
+ * @param pgno Page number.
+ * @param flags Option flags controlling operation behavior.
+ * @return Pointer result, or NULL on failure.
+ */
 void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags) {
     (void)flags;
     if (!mp)
@@ -750,6 +898,13 @@ void* mpool_get(MPOOL* mp, pgno_t pgno, unsigned int flags) {
     return slot->data;
 }
 
+/**
+ * @brief mpool_put.
+ * @param mp Memory-pool context.
+ * @param page Page buffer pointer.
+ * @param flags Option flags controlling operation behavior.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int mpool_put(MPOOL* mp, void* page, unsigned int flags) {
     if (!mp || !page)
         return -1;
@@ -772,6 +927,11 @@ int mpool_put(MPOOL* mp, void* page, unsigned int flags) {
     return -1; /* Page not found in cache */
 }
 
+/**
+ * @brief mpool_sync.
+ * @param mp Memory-pool context.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int mpool_sync(MPOOL* mp) {
     if (!mp)
         return -1;
@@ -788,6 +948,11 @@ int mpool_sync(MPOOL* mp) {
     return 0;
 }
 
+/**
+ * @brief mpool_close.
+ * @param mp Memory-pool context.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int mpool_close(MPOOL* mp) {
     if (!mp)
         return -1;
@@ -800,6 +965,11 @@ int mpool_close(MPOOL* mp) {
     return 0;
 }
 
+/**
+ * @brief mpool_peak_pinned.
+ * @param mp Memory-pool context.
+ * @return Computed 32-bit value.
+ */
 uint32_t mpool_peak_pinned(const MPOOL* mp) {
     return mp ? mp->pin_peak : 0;
 }
@@ -809,12 +979,23 @@ uint32_t mpool_peak_pinned(const MPOOL* mp) {
 /*
  * Get the start offset for a given half (0 or 1).
  */
+/**
+ * @brief gc_half_start.
+ * @param mp Memory-pool context.
+ * @param half GC half selector.
+ * @return Computed 32-bit value.
+ */
 static uint32_t gc_half_start(MPOOL* mp, int half) {
     return mp->data_base + (half * mp->gc_half_size);
 }
 
 /*
  * Check if GC is needed (active half is more than 75% full).
+ */
+/**
+ * @brief gc_needed.
+ * @param mp Memory-pool context.
+ * @return Boolean-like result (0 or non-zero).
  */
 static int gc_needed(MPOOL* mp) {
     uint32_t half_start = gc_half_start(mp, mp->gc_active_half);
@@ -823,10 +1004,23 @@ static int gc_needed(MPOOL* mp) {
 }
 
 /* ============== Garbage Collection (O(1)-RAM) ============== */
+/**
+ * @brief gc_half_end.
+ * @param mp Memory-pool context.
+ * @param half GC half selector.
+ * @return Computed 32-bit value.
+ */
 static uint32_t gc_half_end(MPOOL* mp, int half) {
     return gc_half_start(mp, half) + mp->gc_half_size;
 }
 
+/**
+ * @brief gc_copy_page_o1ram.
+ * @param mp Memory-pool context.
+ * @param old_half GC half selector.
+ * @param pgno Page number.
+ * @return 0 on success/skip, -1 on I/O or integrity failure.
+ */
 static int gc_copy_page_o1ram(MPOOL* mp, int old_half, pgno_t pgno) {
     const uint32_t total = tdb_rec_size(mp);
     const uint32_t new_start = gc_half_start(mp, mp->gc_active_half);
@@ -894,6 +1088,12 @@ static int gc_copy_page_o1ram(MPOOL* mp, int old_half, pgno_t pgno) {
     return 0;
 }
 
+/**
+ * @brief mpool_gc_step.
+ * @param mp Memory-pool context.
+ * @param budget_bytes Length in bytes.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int mpool_gc_step(MPOOL* mp, size_t budget_bytes) {
     if (!mp)
         return -1;
@@ -954,6 +1154,12 @@ int mpool_gc_step(MPOOL* mp, size_t budget_bytes) {
     return 0;
 }
 
+/**
+ * @brief mpool_free_pgno.
+ * @param mp Memory-pool context.
+ * @param pgno Page number.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int mpool_free_pgno(MPOOL* mp, pgno_t pgno) {
     if (!mp || pgno == PGNO_INVALID)
         return -1;
@@ -972,9 +1178,9 @@ int mpool_free_pgno(MPOOL* mp, pgno_t pgno) {
     tdb_page_hdr_encode(hdrb, TDB_PAGE_MAGIC, pgno, 0u, TDB_PAGE_FLAG_TOMBSTONE);
 
     uint8_t nextb[4];
-    tdb_u32_le_write(nextb, (uint32_t)PGNO_INVALID);
+    tdb_u32_wire_write(nextb, (uint32_t)PGNO_INVALID);
     const uint32_t crc = tdb_page_hdr_crc_calc_tombstone_erased_tail(hdrb, nextb, mp->pagesize);
-    tdb_u32_le_write(&hdrb[8], crc);
+    tdb_u32_wire_write(&hdrb[8], crc);
     if ((uint64_t)mp->write_off + (uint64_t)total > mp->bdev->geom.total_size_bytes)
         return -1;
 

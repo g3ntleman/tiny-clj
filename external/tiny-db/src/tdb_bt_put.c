@@ -63,6 +63,14 @@ static EPG* bt_fast __P((BTREE*, const DBT*, const DBT*, int*));
  *	RET_ERROR, RET_SUCCESS and RET_SPECIAL if the key is already in the
  *	tree and R_NOOVERWRITE specified.
  */
+/**
+ * @brief __bt_put.
+ * @param dbp B-Tree database handle.
+ * @param key Key bytes.
+ * @param data Value bytes.
+ * @param flags Option flags controlling operation behavior.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int __bt_put(const DB* dbp, DBT* key, const DBT* data, u_int flags) {
     BTREE* t;
     DBT tkey, tdata;
@@ -238,6 +246,14 @@ u_long bt_cache_hit, bt_cache_miss;
  *
  * Returns:
  * 	EPG for new record or NULL if not found.
+ */
+/**
+ * @brief bt_fast.
+ * @param t B-Tree context.
+ * @param key Key bytes.
+ * @param data Value bytes.
+ * @param exactp Output flag set on exact match.
+ * @return Page/index reference, or NULL if not found.
  */
 static EPG* bt_fast(BTREE* t, const DBT* key, const DBT* data, int* exactp) {
     PAGE* h;

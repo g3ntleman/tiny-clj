@@ -59,6 +59,11 @@ struct tdb_kv_cursor {
 
 /* ============== Status Conversion ============== */
 
+/**
+ * @brief tdb_from_bt_status.
+ * @param rc Backend return code.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_from_bt_status(int rc) {
     if (rc == RET_SUCCESS)
         return TDB_OK;
@@ -82,6 +87,14 @@ static const uint8_t TDB_SYSKEY_GC_CURSOR[] = {0x00, 'g', 'c', '_', 'c', 'u', 'r
 static const uint8_t TDB_SYSKEY_FREE_HEAD[] = {0x00, 'f', 'r', 'e', 'e', '_', 'h', 'e', 'a', 'd'};
 static const uint8_t TDB_SYSKEY_ALLOC_NEXT[] = {0x00, 'a', 'l', 'l', 'o', 'c', '_', 'n', 'e', 'x', 't'};
 
+/**
+ * @brief tdb_kv_sys_get_u32.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param out Output buffer pointer.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_kv_sys_get_u32(tdb_kv_t* kv, const uint8_t* key, size_t key_len,
                                      uint32_t* out) {
     if (out)
@@ -96,22 +109,35 @@ static tdb_status_t tdb_kv_sys_get_u32(tdb_kv_t* kv, const uint8_t* key, size_t 
         return tdb_from_bt_status(rc);
     if (d.size != 4)
         return TDB_ERR_CORRUPT;
-    *out = tdb_u32_le_read((const uint8_t*)d.data);
+    *out = tdb_u32_wire_read((const uint8_t*)d.data);
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_kv_sys_put_u32.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param v 32-bit value to persist.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_kv_sys_put_u32(tdb_kv_t* kv, const uint8_t* key, size_t key_len,
                                      uint32_t v) {
     if (!kv || !kv->bdb || !key || key_len == 0)
         return TDB_ERR_INVALID_ARG;
     uint8_t tmp[4];
-    tdb_u32_le_write(tmp, v);
+    tdb_u32_wire_write(tmp, v);
     DBT k = {.data = (void*)key, .size = key_len};
     DBT d = {.data = (void*)tmp, .size = sizeof(tmp)};
     int rc = kv->bdb->put(kv->bdb, &k, &d, 0);
     return tdb_from_bt_status(rc);
 }
 
+/**
+ * @brief tdb_kv_load_gc_state.
+ * @param kv KV database handle.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_kv_load_gc_state(tdb_kv_t* kv) {
     if (!kv || !kv->bdb)
         return TDB_ERR_INVALID_ARG;
@@ -148,6 +174,11 @@ static tdb_status_t tdb_kv_load_gc_state(tdb_kv_t* kv) {
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_kv_persist_gc_state.
+ * @param kv KV database handle.
+ * @return Status code (TDB_OK on success).
+ */
 static tdb_status_t tdb_kv_persist_gc_state(tdb_kv_t* kv) {
     if (!kv || !kv->bdb)
         return TDB_ERR_INVALID_ARG;
@@ -185,6 +216,11 @@ static tdb_status_t tdb_kv_persist_gc_state(tdb_kv_t* kv) {
 
 /* ============== Public API ============== */
 
+/**
+ * @brief tdb_kv_get_mpool.
+ * @param kv KV database handle.
+ * @return Memory-pool handle, or NULL on failure.
+ */
 MPOOL* tdb_kv_get_mpool(tdb_kv_t* kv) {
     if (!kv || !kv->bdb)
         return NULL;
@@ -194,6 +230,13 @@ MPOOL* tdb_kv_get_mpool(tdb_kv_t* kv) {
     return t->bt_mp;
 }
 
+/**
+ * @brief tdb_kv_open.
+ * @param out_kv KV database handle.
+ * @param bdev Block-device descriptor.
+ * @param cfg Input pointer.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_open(tdb_kv_t** out_kv, tdb_blockdev_t* bdev, const tdb_kv_cfg_t* cfg) {
     if (!out_kv || !bdev)
         return TDB_ERR_INVALID_ARG;
@@ -245,6 +288,12 @@ tdb_status_t tdb_kv_open(tdb_kv_t** out_kv, tdb_blockdev_t* bdev, const tdb_kv_c
     bi.psize = pol.page_size;
     bi.cachesize = 2u * bi.psize; /* Still minimal; mpool has its own cache. */
     bi.minkeypage = 2;
+    /* Pin B-Tree on-disk byte order to the shared wire-endian configuration. */
+#if (TDB_WIRE_ENDIAN == TDB_ENDIAN_LITTLE)
+    bi.lorder = LITTLE_ENDIAN;
+#else
+    bi.lorder = BIG_ENDIAN;
+#endif
 
     kv->bdb = __bt_open("tdb_kv", O_RDWR | O_CREAT, 0600, &bi, 0);
     tdb_kv_unbind();
@@ -277,6 +326,10 @@ tdb_status_t tdb_kv_open(tdb_kv_t** out_kv, tdb_blockdev_t* bdev, const tdb_kv_c
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_kv_close.
+ * @param kv KV database handle.
+ */
 void tdb_kv_close(tdb_kv_t* kv) {
     if (!kv)
         return;
@@ -289,6 +342,15 @@ void tdb_kv_close(tdb_kv_t* kv) {
     free(kv);
 }
 
+/**
+ * @brief tdb_kv_put.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param val Value bytes.
+ * @param val_len Value length in bytes.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_put(tdb_kv_t* kv, const void* key, size_t key_len, const void* val,
                       size_t val_len) {
     if (!kv || (!key && key_len != 0) || (!val && val_len != 0)) {
@@ -301,6 +363,14 @@ tdb_status_t tdb_kv_put(tdb_kv_t* kv, const void* key, size_t key_len, const voi
     return tdb_from_bt_status(rc);
 }
 
+/**
+ * @brief tdb_kv_get.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param out Output buffer pointer.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_get(tdb_kv_t* kv, const void* key, size_t key_len, tdb_blob_t* out) {
     if (!kv || (!key && key_len != 0) || !out)
         return TDB_ERR_INVALID_ARG;
@@ -329,6 +399,14 @@ tdb_status_t tdb_kv_get(tdb_kv_t* kv, const void* key, size_t key_len, tdb_blob_
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_kv_get_len.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param out_len Output pointer receiving len.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_get_len(tdb_kv_t* kv, const void* key, size_t key_len, size_t* out_len) {
     if (out_len)
         *out_len = 0;
@@ -344,6 +422,16 @@ tdb_status_t tdb_kv_get_len(tdb_kv_t* kv, const void* key, size_t key_len, size_
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_kv_get_into.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @param out Output buffer pointer.
+ * @param out_len Output pointer receiving len.
+ * @param saved_len_out Output pointer receiving previous length.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_get_into(tdb_kv_t* kv, const void* key, size_t key_len, void* out, size_t out_len,
                            size_t* saved_len_out) {
     if (saved_len_out)
@@ -366,6 +454,13 @@ tdb_status_t tdb_kv_get_into(tdb_kv_t* kv, const void* key, size_t key_len, void
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_kv_del.
+ * @param kv KV database handle.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_del(tdb_kv_t* kv, const void* key, size_t key_len) {
     if (!kv || (!key && key_len != 0))
         return TDB_ERR_INVALID_ARG;
@@ -375,6 +470,11 @@ tdb_status_t tdb_kv_del(tdb_kv_t* kv, const void* key, size_t key_len) {
     return tdb_from_bt_status(rc);
 }
 
+/**
+ * @brief tdb_kv_sync.
+ * @param kv KV database handle.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_sync(tdb_kv_t* kv) {
     if (!kv || !kv->bdb)
         return TDB_ERR_INVALID_ARG;
@@ -382,6 +482,13 @@ tdb_status_t tdb_kv_sync(tdb_kv_t* kv) {
     return tdb_from_bt_status(rc);
 }
 
+/**
+ * @brief tdb_kv_max_val_len.
+ * @param kv KV database handle.
+ * @param key_len Key length in bytes.
+ * @param out_max_val_len Output pointer receiving max val.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_max_val_len(const tdb_kv_t* kv, size_t key_len, size_t* out_max_val_len) {
     if (out_max_val_len)
         *out_max_val_len = 0;
@@ -470,6 +577,12 @@ tdb_status_t tdb_kv_cursor_open_ge(tdb_kv_t* kv,
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_kv_cursor_next.
+ * @param cur KV cursor handle.
+ * @param out_has_item Output pointer receiving has item.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_cursor_next(tdb_kv_cursor_t* cur, int* out_has_item) {
     if (!cur || !out_has_item)
         return TDB_ERR_INVALID_ARG;
@@ -521,6 +634,12 @@ tdb_status_t tdb_kv_cursor_next(tdb_kv_cursor_t* cur, int* out_has_item) {
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_kv_cursor_key.
+ * @param cur KV cursor handle.
+ * @param out_key Output pointer receiving key.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_cursor_key(const tdb_kv_cursor_t* cur, tdb_blob_t* out_key) {
     if (!cur || !out_key)
         return TDB_ERR_INVALID_ARG;
@@ -531,6 +650,12 @@ tdb_status_t tdb_kv_cursor_key(const tdb_kv_cursor_t* cur, tdb_blob_t* out_key) 
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_kv_cursor_val.
+ * @param cur KV cursor handle.
+ * @param out_val Output pointer receiving val.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_cursor_val(const tdb_kv_cursor_t* cur, tdb_blob_t* out_val) {
     if (!cur || !out_val)
         return TDB_ERR_INVALID_ARG;
@@ -541,6 +666,10 @@ tdb_status_t tdb_kv_cursor_val(const tdb_kv_cursor_t* cur, tdb_blob_t* out_val) 
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_kv_cursor_close.
+ * @param cur KV cursor handle.
+ */
 void tdb_kv_cursor_close(tdb_kv_cursor_t* cur) {
     if (!cur)
         return;
@@ -549,6 +678,15 @@ void tdb_kv_cursor_close(tdb_kv_cursor_t* cur) {
     free(cur);
 }
 
+/**
+ * @brief tdb_kv_iter_prefix.
+ * @param kv KV database handle.
+ * @param prefix Input pointer.
+ * @param prefix_len Length in bytes.
+ * @param cb Callback function.
+ * @param arg Callback/user context.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_iter_prefix(tdb_kv_t* kv, const void* prefix, size_t prefix_len, tdb_key_cb cb,
                               void* arg) {
     if (!kv || (!prefix && prefix_len != 0) || !cb)
@@ -577,6 +715,12 @@ tdb_status_t tdb_kv_iter_prefix(tdb_kv_t* kv, const void* prefix, size_t prefix_
     return st;
 }
 
+/**
+ * @brief tdb_kv_gc_step.
+ * @param kv KV database handle.
+ * @param budget_bytes Length in bytes.
+ * @return Status code (TDB_OK on success).
+ */
 tdb_status_t tdb_kv_gc_step(tdb_kv_t* kv, size_t budget_bytes) {
     int rc = tdb_kv_gc_step_more(kv, budget_bytes);
     if (rc < 0)
@@ -584,6 +728,12 @@ tdb_status_t tdb_kv_gc_step(tdb_kv_t* kv, size_t budget_bytes) {
     return TDB_OK;
 }
 
+/**
+ * @brief tdb_kv_gc_step_more.
+ * @param kv KV database handle.
+ * @param budget_bytes Length in bytes.
+ * @return 1 if more GC work remains, 0 if idle, negative TDB_ERR_* on error.
+ */
 int tdb_kv_gc_step_more(tdb_kv_t* kv, size_t budget_bytes) {
     if (!kv || !kv->bdb)
         return TDB_ERR_INVALID_ARG;

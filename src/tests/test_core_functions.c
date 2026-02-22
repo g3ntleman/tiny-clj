@@ -78,6 +78,11 @@ TEST_SHARED(test_take_zero) {
     assert_eval_truthy("(empty? (take 0 '(1 2 3)))");
 }
 
+TEST_SHARED(test_take_large_iterative) {
+    // Regression: take should run iteratively (no deep recursion stack pressure).
+    assert_eval_truthy("(= (count (take 2000 (range 5000))) 2000)");
+}
+
 // --- drop ---
 
 TEST_SHARED(test_drop_normal) {
@@ -95,6 +100,11 @@ TEST_SHARED(test_drop_zero) {
     // (drop 0 '(1 2 3)) => (1 2 3)
     assert_eval_truthy("(= (count (drop 0 '(1 2 3))) 3)");
     assert_eval_truthy("(= (first (drop 0 '(1 2 3))) 1)");
+}
+
+TEST_SHARED(test_drop_large_iterative) {
+    // Regression: drop should run iteratively (no deep recursion stack pressure).
+    assert_eval_truthy("(= (first (drop 2000 (range 5000))) 2000)");
 }
 
 // --- last ---

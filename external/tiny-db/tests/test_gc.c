@@ -58,6 +58,9 @@ static void make_bdev(tdb_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size
     bdev->geom.erase_granularity = 4096;
 }
 
+/**
+ * @brief test_gc_state_defaults_on_new_db.
+ */
 static void test_gc_state_defaults_on_new_db(void) {
     static uint8_t storage[16384];
     ramdev_t rd = {0};
@@ -78,6 +81,9 @@ static void test_gc_state_defaults_on_new_db(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_gc_state_survives_close_open.
+ */
 static void test_gc_state_survives_close_open(void) {
     static uint8_t storage[16384];
     ramdev_t rd = {0};
@@ -106,6 +112,9 @@ static void test_gc_state_survives_close_open(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_gc_allows_open_cursor_and_preserves_snapshot.
+ */
 static void test_gc_allows_open_cursor_and_preserves_snapshot(void) {
     static uint8_t storage[16384];
     ramdev_t rd = {0};
@@ -152,6 +161,9 @@ static void test_gc_allows_open_cursor_and_preserves_snapshot(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_recovery_persists_across_reinit.
+ */
 static void test_recovery_persists_across_reinit(void) {
     static uint8_t storage[16384];
     ramdev_t rd = {0};
@@ -173,6 +185,9 @@ static void test_recovery_persists_across_reinit(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_gc_preserves_latest_value_after_many_updates.
+ */
 static void test_gc_preserves_latest_value_after_many_updates(void) {
     static uint8_t storage[65536];
     ramdev_t rd = {0};
@@ -200,10 +215,18 @@ static void test_gc_preserves_latest_value_after_many_updates(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief le_u32_read.
+ * @param p Input pointer.
+ * @return Computed 32-bit value.
+ */
 static uint32_t le_u32_read(const uint8_t* p) {
     return ((uint32_t)p[0]) | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
+/**
+ * @brief test_gc_persists_periodically_during_gc_steps.
+ */
 static void test_gc_persists_periodically_during_gc_steps(void) {
     /* Must keep writes within the active half to satisfy mpool's GC invariants. */
     static uint8_t storage[1048576];
@@ -250,6 +273,9 @@ static void test_gc_persists_periodically_during_gc_steps(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief test_free_list_reuses_tombstoned_pages_and_persists.
+ */
 static void test_free_list_reuses_tombstoned_pages_and_persists(void) {
 #if TDB_MPOOL_O1_RAM
     TEST_IGNORE_MESSAGE("TDB_MPOOL_O1_RAM: simple mode does not reuse freed pgno numbers");
@@ -299,6 +325,9 @@ static void test_free_list_reuses_tombstoned_pages_and_persists(void) {
     tdb_kv_close(kv);
 }
 
+/**
+ * @brief tdb_register_tests_gc.
+ */
 void tdb_register_tests_gc(void) {
     RUN_TEST(test_gc_state_defaults_on_new_db);
     RUN_TEST(test_gc_state_survives_close_open);

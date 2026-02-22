@@ -23,25 +23,38 @@ extern bool clj_equal_full(ID a, ID b);
 #include "to_string.h"      // For to_string(), pr_str; strings.h for string_data
 #include "callbacks.h"  // For clj_set_callbacks
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdbool.h>
+
+#define SYMBOL_TABLE_MAX_LOAD_PERCENT 90u
 
 // Statically allocated global runtime struct (all pointers initialized to NULL).
 TinyClJRuntime g_runtime = {
     .ns_registry = NULL,
     .resolve_cache_epoch = 0,
+    .resolve_cache_generation = 0,
     .symbol_table = NULL,
     .meta_registry = NULL,
-    .embedded_source_map = NULL,
+    .record_registry = NULL,
     .pool_stack = NULL,
     .builtins_registered = false,
     .task_queue = NULL,
-    .timer_queue = NULL,
     .timer_id_counter = 0
 };
 
-// Monotonic epoch for callsite cache invalidation.
-// Must never be reset to avoid re-validating stale cached pointers across runtime_reset().
-static uint64_t g_resolve_cache_epoch_counter = 1;
+// Epoch for callsite-cache invalidation events (namespace mutations).
+// Reset on runtime_reset() to start each runtime lifecycle from a clean baseline.
+static uint32_t g_resolve_cache_epoch_counter = 1;
+// Lightweight lifecycle generation for runtime_init activation epochs.
+static uint8_t g_resolve_cache_lifecycle_generation = 0;
+
+static inline uint8_t runtime_next_lifecycle_generation(void) {
+    uint8_t next = (uint8_t)(g_resolve_cache_lifecycle_generation + 1u);
+    // Keep 0 reserved for "disabled".
+    if (next == 0u) next = 1u;
+    g_resolve_cache_lifecycle_generation = next;
+    return next;
+}
 
 #if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
 static void zombie_log_fn(CljObject *v, bool is_double_free) {
@@ -56,13 +69,29 @@ static void zombie_log_fn(CljObject *v, bool is_double_free) {
 }
 #endif
 
-uint64_t runtime_next_resolve_epoch(void) {
-    uint64_t next = ++g_resolve_cache_epoch_counter;
-    // Protect against overflow to 0 (epoch 0 means disabled)
+uint16_t runtime_next_resolve_epoch(uint8_t *out_generation) {
+    uint32_t next = ++g_resolve_cache_epoch_counter;
+    // Protect against 32-bit overflow to 0.
     if (next == 0) {
         next = ++g_resolve_cache_epoch_counter;
     }
-    return next;
+    uint16_t epoch = (uint16_t)(next & 0xFFFFu);
+    uint8_t generation = (uint8_t)((next >> 16) & 0xFFu);
+    // Keep epoch 0 reserved for "cache disabled" and epoch 1 for lifecycle activation.
+    while (epoch == 0 || epoch == 1) {
+        next = ++g_resolve_cache_epoch_counter;
+        epoch = (uint16_t)(next & 0xFFFFu);
+        generation = (uint8_t)((next >> 16) & 0xFFu);
+    }
+    if ((next % 1000u) == 0u) {
+        fprintf(stderr,
+                "Warning: resolve_cache_epoch=%" PRIu32 " (16-bit limit=%u)\n",
+                next, (unsigned)UINT16_MAX);
+    }
+    if (out_generation) {
+        *out_generation = generation;
+    }
+    return epoch;
 }
 
 void runtime_init(TinyClJRuntime *runtime) {
@@ -84,10 +113,13 @@ void runtime_init(TinyClJRuntime *runtime) {
     // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
     if (!runtime->symbol_table) {
         runtime->symbol_table = make_hashset(512);  // HashSet for O(1) symbol lookup
+        hashset_set_max_load_percent(runtime->symbol_table, SYMBOL_TABLE_MAX_LOAD_PERCENT);
     }
     
-    // Keep epoch non-zero for callsite caches.
-    runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
+    // Activate callsite caching for this runtime lifecycle without attributing
+    // setup churn to invalidation counters.
+    runtime->resolve_cache_epoch = 1;
+    runtime->resolve_cache_generation = runtime_next_lifecycle_generation();
     
     // Initialize event loop queues as transient vectors (only if not already set)
     if (!runtime->task_queue) {
@@ -98,19 +130,11 @@ void runtime_init(TinyClJRuntime *runtime) {
             ASSIGN(runtime->task_queue, transient_task);
         }
     }
-    if (!runtime->timer_queue) {
-        CljPersistentVector* timer_vec = make_vector(8, false);
-        if (timer_vec) {
-            CljTransientVector* transient_timer = vector_transient(timer_vec);
-            RELEASE(timer_vec); // vector_transient() retains the result
-            ASSIGN(runtime->timer_queue, transient_timer);
-        }
-    }
+    // Timer queue is a static C array in event_loop.c – no heap init needed.
     
     // Reset primitive fields
     runtime->builtins_registered = false;
     runtime->timer_id_counter = 0;
-    runtime->embedded_source_map = NULL;
     
     // Register hashmap release function with memory system
     hashmap_register_release_fn();
@@ -135,7 +159,7 @@ void runtime_init(TinyClJRuntime *runtime) {
     // depends on clj_hash()/clj_equal() for correct behavior.
     init_special_symbols();
 
-    // Initialize embedded source map once (read-only, retained for runtime lifetime).
+    // Initialize embedded source registry (static table + on-demand byte-array views).
     embedded_source_map_init();
 }
 
@@ -151,15 +175,17 @@ void runtime_reset(TinyClJRuntime *runtime) {
     reset_eval_arg_depth();
     
     ASSIGN(runtime->task_queue, NULL);
-    ASSIGN(runtime->timer_queue, NULL);
-    // Invalidate callsite caches.
-    runtime->resolve_cache_epoch = runtime_next_resolve_epoch();
+    // Reset cache epoch to disabled state. runtime_init() re-enables callsite caching
+    // with a fresh monotonic epoch for the next runtime lifecycle.
+    runtime->resolve_cache_epoch = 0;
+    runtime->resolve_cache_generation = 0;
+    g_resolve_cache_epoch_counter = 1;
+    g_resolve_cache_lifecycle_generation = 0;
     ASSIGN(runtime->pool_stack, NULL);
     ASSIGN(runtime->meta_registry, NULL);
-    // embedded_source_map is read-only and kept across resets
+    ASSIGN(runtime->record_registry, NULL);
     
     runtime->builtins_registered = false;
     runtime->timer_id_counter = 0;
-    ASSIGN(runtime->embedded_source_map, NULL);
     event_loop_clear();
 }

@@ -56,14 +56,6 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns a sequence of the collection. Returns nil if coll is empty or nil."}
 (defn seq [coll] :native)
-^#^{:doc "Returns the first item in the collection. Calls seq on its argument. If coll is nil, returns nil."}
-(defn first [coll] :native)
-^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil."}
-(defn rest [coll] :native)
-^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil (not a sequence)."}
-(defn next [coll] :native)
-^#^{:doc "Returns the number of items in the collection. (count nil) returns 0. Also works on strings, arrays, and Java Collections."}
-(defn count [coll] :native)
 
 ^#^{:doc "Returns the logical complement of x. Returns true if x is false or nil, false otherwise."}
 (defn not [x] :native)
@@ -80,34 +72,13 @@ R"CLOJURE(
 ^#^{:doc "Returns a vector of the contents of coll."}
 (defn vec [coll] :native)
 ^#^{:doc "Returns a lazy sequence of the first n items in coll."}
-(defn take [n coll]
-  (if (or (<= n 0) (empty? coll))
-    (list)
-    (cons (first coll) (take (dec n) (rest coll)))))
+(defn take [n coll] :native)
 ^#^{:doc "Returns a lazy sequence of all but the first n items in coll."}
-(defn drop [n coll]
-  (if (or (<= n 0) (empty? coll))
-    coll
-    (drop (dec n) (rest coll))))
+(defn drop [n coll] :native)
 
 ; ============================================================================
 ; Arithmetic Functions (Native) - defined early for use in numeric predicates
 ; ============================================================================
-^#^{:doc "Returns the sum of numbers. (+) returns 0."}
-(defn + [& args] :native)
-^#^{:doc "Returns the difference of numbers. (- x) returns negation of x. (- x y) returns x minus y."}
-(defn - [& args] :native)
-^#^{:doc "Returns the product of numbers. (*) returns 1."}
-(defn * [& args] :native)
-^#^{:doc "Returns the quotient of dividing numerator by denominator(s)."}
-(defn / [& args] :native)
-^#^{:doc "Modulus of num and div. Truncates toward negative infinity."}
-(defn mod [num div] :native)
-^#^{:doc "quot[ient] of dividing numerator by denominator."}
-(defn quot [num div] :native)
-^#^{:doc "Bitwise left shift. Shifts x left by n bits."}
-(defn bit-shift-left [x n] :native)
-
 ^#^{:doc "Increments a number by 1. Returns the number plus one."}
 (def inc (fn [x] (+ x 1)))
 ^#^{:doc "Decrements a number by 1. Returns the number minus one."}
@@ -134,8 +105,6 @@ R"CLOJURE(
 ; ============================================================================
 ; Collection Functions
 ; ============================================================================
-^#^{:doc "Returns the second item in coll. Returns nil if coll contains less than 2 items."}
-(def second (fn [coll] (first (rest coll))))
 ^#^{:doc "Returns true if coll has no items - same as (not (seq coll)). Please use the idiom (seq coll) when testing whether a collection is non-empty."}
 (def empty? (fn [coll] 
   (not (seq coll))))
@@ -165,10 +134,6 @@ R"CLOJURE(
 ; ============================================================================
 ; Type Predicates (needed by Threading Macros)
 ; ============================================================================
-^#^{:doc "Returns true if x is a kind of persistent list."}
-(defn list? [x] :native)
-^#^{:doc "Returns true if x is a vector, false otherwise."}
-(defn vector? [x] :native)
 ^#^{:doc "Returns true if x is a map, false otherwise."}
 (defn map? [x] :native)
 ^#^{:doc "Returns true if x implements IFn."}
@@ -241,15 +206,6 @@ R"CLOJURE(
                         (cons x (build (dec n)))))]
           (vec (build n))))
       (throw "repeat requires 1 or 2 arguments"))))
-
-^#^{:doc "Returns a lazy sequence of lists of n items each."}
-(defn partition [n coll]
-  (if (empty? coll)
-    (list)
-    (let [p (take n coll)]
-      (if (< (count (vector p)) n)
-        (list)
-        (cons (vector p) (partition n (drop n coll)))))))
 
 ^#^{:doc "Generate unique symbol names."}
 (defn gensym [& prefix] :native)
@@ -465,30 +421,10 @@ R"CLOJURE(
 ; ============================================================================
 ; Collection Functions (Native)
 ; ============================================================================
-^#^{:doc "Returns a new array map with supplied mappings."}
-(defn array-map [& keyvals] :native)
-^#^{:doc "Creates a new vector containing the args."}
-(defn vector [& args] :native)
-^#^{:doc "Returns a vector of the contents of coll."}
-(defn vec [coll] :native)
 ^#^{:doc "Returns the value at the index. get returns nil if index out of bounds, nth throws an exception unless not-found is supplied. nth also works for strings, Java arrays, regex Matchers and Lists, and, in O(n) time, for sequences."}
 (defn nth [coll index & not-found] :native)
 ^#^{:doc "For a list or queue, same as first, for a vector, same as, but much more efficient than, last. If the collection is empty, returns nil."}
 (defn peek [coll] :native)
-^#^{:doc "For a list or queue, returns a new list/queue without the first item, for a vector, returns a new vector without the last item. If the collection is empty, returns nil."}
-(defn pop [coll] :native)
-^#^{:doc "Returns the first item in the collection. Calls seq on its argument. If coll is nil, returns nil."}
-(defn first [coll] :native)
-^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil."}
-(defn rest [coll] :native)
-^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil (not a sequence)."}
-(defn next [coll] :native)
-^#^{:doc "Same as (next (next x))."}
-(defn nnext [x] :native)
-^#^{:doc "Returns the number of items in the collection. (count nil) returns 0. Also works on strings, arrays, and Java Collections."}
-(defn count [coll] :native)
-^#^{:doc "Returns the value at the index. get returns nil if index out of bounds, nth throws an exception unless not-found is supplied. nth also works for strings, Java arrays, regex Matchers and Lists, and, in O(n) time, for sequences."}
-(defn nth [coll index & not-found] :native)
 ^#^{:doc "For a list or queue, returns a new list/queue without the first item, for a vector, returns a new vector without the last item. If the collection is empty, returns nil."}
 (defn pop [coll] :native)
 ^#^{:doc "Returns a persistent vector of the items in vector from start (inclusive) to end (exclusive). If end is not supplied, defaults to (count vector)."}
@@ -505,15 +441,6 @@ R"CLOJURE(
 ; ============================================================================
 ; Predicate Functions (Native)
 ; ============================================================================
-^#^{:doc "Returns true if x is a vector, false otherwise."}
-(defn vector? [x] :native)
-; nil? is now defined earlier (before Threading Macros)
-; vector? and map? are now defined earlier (before Threading Macros)
-^#^{:doc "Returns true if x is a map, false otherwise."}
-(defn map? [x] :native)
-^#^{:doc "Returns true if x is a kind of persistent list."}
-(defn list? [x] :native)
-
 ; ============================================================================
 ; Type Predicates (Native)
 ; ============================================================================
@@ -523,25 +450,8 @@ R"CLOJURE(
 (defn integer? [x] :native)
 ^#^{:doc "Returns true if n is a floating point number."}
 (defn float? [x] :native)
-; string?, keyword?, and fn? are now defined earlier (before Threading Macros)
-^#^{:doc "Returns true if x is a Symbol."}
-(defn symbol? [x] :native)
 ^#^{:doc "Returns true if x is a Character."}
 (defn char? [x] :native)
-
-; ============================================================================
-; Vector Functions (Native)
-; ============================================================================
-^#^{:doc "Creates a new vector containing the args."}
-(defn vector [& args] :native)
-^#^{:doc "Returns a vector of the contents of coll."}
-(defn vec [coll] :native)
-^#^{:doc "For a list or queue, same as first, for a vector, same as, but much more efficient than, last. If the collection is empty, returns nil."}
-(defn peek [coll] :native)
-^#^{:doc "For a list or queue, returns a new list/queue without the first item, for a vector, returns a new vector without the last item. If the collection is empty, returns nil."}
-(defn pop [coll] :native)
-^#^{:doc "Returns a persistent vector of the items in vector from start (inclusive) to end (exclusive). If end is not supplied, defaults to (count vector)."}
-(defn subvec [v start & end] :native)
 
 ; ============================================================================
 ; Boolean Functions (Native)
@@ -554,15 +464,14 @@ R"CLOJURE(
 (defn false? [x] (identical? x false))
 ^#^{:doc "Returns true if x is a Boolean."}
 (defn boolean? [x] (or (true? x) (false? x)))
-^#^{:doc "Returns true if x is a kind of persistent set."}
-(defn set? [x] :native)
-; coll?, seq?, seqable?, and ifn? are now defined earlier (before Threading Macros)
 
 ; ============================================================================
 ; Map Functions (Native)
 ; ============================================================================
 ^#^{:doc "Returns a new array map with supplied mappings."}
 (defn array-map [& keyvals] :native)
+^#^{:doc "Returns a new hash map with supplied mappings."}
+(defn hash-map [& keyvals] :native)
 ^#^{:doc "Associates key with val in map. When key is a keyword, returns a new map with the key/value added. When key is not a keyword, returns a new map with the key/value added. If a key already exists, its value is replaced."}
 (defn assoc [map key val & kvs] :native)
 ^#^{:doc "Dissociates. Returns a new map of the same (hashed/sorted) type, that does not contain a mapping for key(s)."}
@@ -585,6 +494,14 @@ R"CLOJURE(
 (defn find [map key] :native)
 ^#^{:doc "Updates a value in an associative structure, where k is a key and f is a function that will take the old value and any supplied args and return the new value. If the key does not exist, nil is passed as the old value."}
 (defn update [map key f & args] :native)
+^#^{:doc "Registers a record descriptor for a type symbol and ordered field list."}
+(defn record-register [type-name fields] :native)
+^#^{:doc "Creates a record instance from type symbol and ordered values."}
+(defn record-create [type-name values] :native)
+^#^{:doc "Creates a record instance from type symbol and map-like source."}
+(defn record-from-map [type-name m] :native)
+^#^{:doc "Internal fast-path: record lookup by precomputed field index."}
+(defn record-get-index [record idx not-found] :native)
 
 ; ============================================================================
 ; Transient Functions (Native)
@@ -611,63 +528,41 @@ R"CLOJURE(
 ; ============================================================================
 ; String Functions (Native)
 ; ============================================================================
-^#^{:doc "With no args, returns the empty string. With one arg x, returns x.toString(). (str nil) returns empty string. With more than one arg, returns the concatenation of str values of the args."}
-(defn str [& args] :native)
-^#^{:doc "Returns the substring of s beginning at start inclusive, and ending at end (defaults to length of string), exclusive."}
-(defn subs [s start & end] :native)
 ^#^{:doc "Formats a string using java.lang.String.format, see java.util.Formatter for format string syntax."}
 (defn format [fmt & args] :native)
 
 ; ============================================================================
 ; Symbol/Keyword Functions (Native)
 ; ============================================================================
-^#^{:doc "Returns a Symbol with the given namespace and name."}
-(defn symbol [& args] :native)
 ^#^{:doc "Returns a Keyword with the given namespace and name."}
 (defn keyword [& args] :native)
 ^#^{:doc "Returns the name String of a string, symbol or keyword."}
 (defn name [x] :native)
 
-; ============================================================================
-; Type Functions (Native)
-; ============================================================================
-^#^{:doc "Returns the type of x."}
-(defn type [x] :native)
-^#^{:doc "Returns a globally unique symbol with the given prefix."}
-(defn gensym [& prefix] :native)
-
-; ============================================================================
-; Metadata Functions (Native)
-; ============================================================================
-^#^{:doc "Returns the metadata of obj, returns nil if there is no metadata."}
-(defn meta [x] :native)
-^#^{:doc "Returns an object of the same type and value as obj, with map m as its metadata."}
-(defn with-meta [obj m] :native)
-
-; ============================================================================
-; Reduce Function (Native)
-; ============================================================================
-^#^{:doc "f should be a function of 2 arguments. Returns the result of applying f to val and the first item in coll, then applying f to that result and the 2nd item, etc. If coll contains no items, returns val and f is not called."}
-(defn reduce [f coll] :native)
+^#^{:doc "Defines a record type with compact field layout plus ->Type/map->Type constructors."}
+(defmacro defrecord [type-name fields]
+  (let [ctor (symbol (str "->" (name type-name)))
+        map-ctor (symbol (str "map->" (name type-name)))
+        m (symbol "m")
+        ctor-body (list 'record-create (list 'quote type-name) fields)
+        map-body (list 'record-from-map (list 'quote type-name) m)]
+    (list 'do
+          (list 'record-register (list 'quote type-name) (list 'quote fields))
+          (list 'def ctor (list 'fn ctor fields ctor-body))
+          (list 'def map-ctor (list 'fn map-ctor [m] map-body))
+          (list 'quote type-name))))
 
 ; ============================================================================
 ; Sequence Functions (Native)
 ; ============================================================================
 ^#^{:doc "Returns a lazy seq of numbers from start (inclusive) to end (exclusive), by step, where start defaults to 0, step to 1, and end to infinity."}
 (defn range [& args] :native)
-; repeat is defined earlier (lazy, variadic)
 ^#^{:doc "Returns the nth next of coll, (seq coll) when n is 0."}
 (defn nthnext [coll n] :native)
 ^#^{:doc "Returns the first logical true value of (pred x) for any x in coll, else nil. Native implementation."}
 (defn some [pred coll] :native)
 ^#^{:doc "Returns a lazy sequence of lists of n items each. Native implementation."}
 (defn partition [n coll] :native)
-
-; ============================================================================
-; Math Functions (Native)
-; ============================================================================
-^#^{:doc "Returns the square root of x."}
-(defn sqrt [x] :native)
 
 ; ============================================================================
 ; Control Flow Functions (Native)
@@ -779,101 +674,6 @@ R"CLOJURE(
 ; ============================================================================
 
 ; ============================================================================
-; Arithmetic Functions (Derived)
-; ============================================================================
-^#^{:doc "Increments a number by 1. Returns the number plus one."}
-(def inc (fn [x] (+ x 1)))
-^#^{:doc "Decrements a number by 1. Returns the number minus one."}
-(def dec (fn [x] (- x 1)))
-
-; ============================================================================
-; Numeric Predicates (Derived)
-; ============================================================================
-^#^{:doc "Returns true if x is zero, false otherwise."}
-(def zero? (fn [x] (= x 0)))
-^#^{:doc "Returns true if x is positive, false otherwise."}
-(def pos? (fn [x] (> x 0)))
-^#^{:doc "Returns true if x is negative, false otherwise."}
-(def neg? (fn [x] (< x 0)))
-^#^{:doc "Returns true if x is even, false otherwise."}
-(def even? (fn [x] (= (mod x 2) 0)))
-^#^{:doc "Returns true if x is odd, false otherwise."}
-(def odd? (fn [x] (= (mod x 2) 1)))
-
-; ============================================================================
-; Comparison & Logic (Derived)
-; ============================================================================
-^#^{:doc "Returns true if x is logical false, false otherwise."}
-(def not (fn [x] (if x false true)))
-^#^{:doc "Returns the maximum of a and b."}
-(def max (fn [a b] (if (> a b) a b)))
-^#^{:doc "Returns the minimum of a and b."}
-(def min (fn [a b] (if (< a b) a b)))
-
-; ============================================================================
-; Collection Functions (Derived)
-; ============================================================================
-^#^{:doc "Returns the second item in coll. Returns nil if coll contains less than 2 items."}
-(def second (fn [coll] (first (rest coll))))
-^#^{:doc "Returns true if coll has no items - same as (not (seq coll)). Please use the idiom (seq coll) when testing whether a collection is non-empty."}
-(def empty? (fn [coll] 
-  (not (seq coll))))
-
-; ============================================================================
-; Utility Functions
-; ============================================================================
-^#^{:doc "Returns its argument."}
-(def identity (fn [x] x))
-^#^{:doc "Returns a function that takes one argument and returns x. Note: Variadic functions (& args) are not yet supported, so the returned function accepts only one argument instead of any number of arguments."}
-(def constantly (fn [x] (fn [arg] x)))
-
-; ============================================================================
-; Higher-Order Functions (using now-defined list, cons, first, rest, empty?)
-; ============================================================================
-^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Requires at least f and one coll (transducers not supported)."}
-(defn map [f & colls] :native)
-
-^#^{:doc "Returns a sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects."}
-(defn filter [pred coll] :native)
-
-; ============================================================================
-; Type Predicates (Clojure-based)
-; ============================================================================
-^#^{:doc "Returns true if x is not nil, false otherwise."}
-(defn some? [x] (not (nil? x)))
-^#^{:doc "Returns true if x is the value true, false otherwise."}
-(defn true? [x] (identical? x true))
-^#^{:doc "Returns true if x is the value false, false otherwise."}
-(defn false? [x] (identical? x false))
-^#^{:doc "Returns true if x is a Boolean."}
-(defn boolean? [x] (or (true? x) (false? x)))
-^#^{:doc "Returns true if x is a kind of persistent set."}
-(defn set? [x] :native)
-^#^{:doc "Returns true if x is a persistent collection."}
-(defn coll? [x] (or (list? x) (vector? x) (map? x) (set? x)))
-^#^{:doc "Returns true if x implements ISeq."}
-(defn seq? [x] (list? x))
-^#^{:doc "Returns true if (seq x) will succeed, false otherwise."}
-(defn seqable? [x] (or (nil? x) (coll? x) (string? x)))
-^#^{:doc "Returns true if x implements IFn. Note that many data structures implement IFn."}
-(defn ifn? [x] (or (fn? x) (keyword? x) (map? x) (vector? x)))
-
-; ============================================================================
-; Sequence Functions (Phase 1)
-; ============================================================================
-
-
-^#^{:doc "Returns the nth next of coll, (seq coll) when n is 0."}
-(defn nthnext [coll n] :native)
-^#^{:doc "Returns the last item in coll, in linear time."}
-(defn last [coll]
-  (if (empty? coll)
-    nil
-    (if (empty? (rest coll))
-      (first coll)
-      (last (rest coll)))))
-
-; ============================================================================
 ; Predicate Functions (Phase 2)
 ; ============================================================================
 
@@ -963,7 +763,7 @@ R"CLOJURE(
                  (conj out x)))))))
 
 ; ============================================================================
-; Partitioning Functions (Phase 5) - partition is now defined earlier
+; Partitioning Functions (Phase 5)
 ; ============================================================================
 
 ^#^{:doc "Returns a lazy sequence of lists like partition, but may include partitions with fewer than n items at the end."}

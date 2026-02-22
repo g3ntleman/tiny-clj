@@ -34,6 +34,7 @@ typedef enum {
     LINE_EDITOR_EOF = -1,
     LINE_EDITOR_SUCCESS = 0,
     LINE_EDITOR_LINE_READY = 1,
+    LINE_EDITOR_INTERRUPT = 2,
 } LineEditorResult;
 
 // Return value contract for GetCharFunc:

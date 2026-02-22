@@ -64,7 +64,42 @@ static inline int tdb_is_len_aligned(size_t len, uint32_t gran) {
 
 /* ============== Memory/String Utilities ============== */
 
-/* ============== Fixed byte order encoding (little-endian) ============== */
+/* ============== Endian Configuration ============== */
+
+#define TDB_ENDIAN_LITTLE 1234
+#define TDB_ENDIAN_BIG 4321
+
+/*
+ * Unified on-wire byte order for tiny-db metadata and key suffix fields.
+ * Default is little-endian (ESP32-native).
+ */
+#ifndef TDB_WIRE_ENDIAN
+#define TDB_WIRE_ENDIAN TDB_ENDIAN_LITTLE
+#endif
+
+#if (TDB_WIRE_ENDIAN != TDB_ENDIAN_LITTLE) && (TDB_WIRE_ENDIAN != TDB_ENDIAN_BIG)
+#error "TDB_WIRE_ENDIAN must be TDB_ENDIAN_LITTLE or TDB_ENDIAN_BIG"
+#endif
+
+/* ============== Fixed byte order encoding helpers ============== */
+
+static inline void tdb_u16_le_write(uint8_t* p, uint16_t v) {
+    p[0] = (uint8_t)(v & 0xFFu);
+    p[1] = (uint8_t)((v >> 8) & 0xFFu);
+}
+
+static inline uint16_t tdb_u16_le_read(const uint8_t* p) {
+    return (uint16_t)(((uint16_t)p[0]) | ((uint16_t)p[1] << 8));
+}
+
+static inline void tdb_u16_be_write(uint8_t* p, uint16_t v) {
+    p[0] = (uint8_t)((v >> 8) & 0xFFu);
+    p[1] = (uint8_t)(v & 0xFFu);
+}
+
+static inline uint16_t tdb_u16_be_read(const uint8_t* p) {
+    return (uint16_t)(((uint16_t)p[0] << 8) | (uint16_t)p[1]);
+}
 
 /**
  * Write a uint32_t in little-endian order.
@@ -82,6 +117,52 @@ static inline void tdb_u32_le_write(uint8_t* p, uint32_t v) {
 static inline uint32_t tdb_u32_le_read(const uint8_t* p) {
     return ((uint32_t)p[0]) | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
            ((uint32_t)p[3] << 24);
+}
+
+static inline void tdb_u32_be_write(uint8_t* p, uint32_t v) {
+    p[0] = (uint8_t)((v >> 24) & 0xFFu);
+    p[1] = (uint8_t)((v >> 16) & 0xFFu);
+    p[2] = (uint8_t)((v >> 8) & 0xFFu);
+    p[3] = (uint8_t)(v & 0xFFu);
+}
+
+static inline uint32_t tdb_u32_be_read(const uint8_t* p) {
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) |
+           (uint32_t)p[3];
+}
+
+/* ============== Configured on-wire encoding helpers ============== */
+
+static inline void tdb_u16_wire_write(uint8_t* p, uint16_t v) {
+#if (TDB_WIRE_ENDIAN == TDB_ENDIAN_LITTLE)
+    tdb_u16_le_write(p, v);
+#else
+    tdb_u16_be_write(p, v);
+#endif
+}
+
+static inline uint16_t tdb_u16_wire_read(const uint8_t* p) {
+#if (TDB_WIRE_ENDIAN == TDB_ENDIAN_LITTLE)
+    return tdb_u16_le_read(p);
+#else
+    return tdb_u16_be_read(p);
+#endif
+}
+
+static inline void tdb_u32_wire_write(uint8_t* p, uint32_t v) {
+#if (TDB_WIRE_ENDIAN == TDB_ENDIAN_LITTLE)
+    tdb_u32_le_write(p, v);
+#else
+    tdb_u32_be_write(p, v);
+#endif
+}
+
+static inline uint32_t tdb_u32_wire_read(const uint8_t* p) {
+#if (TDB_WIRE_ENDIAN == TDB_ENDIAN_LITTLE)
+    return tdb_u32_le_read(p);
+#else
+    return tdb_u32_be_read(p);
+#endif
 }
 
 /**

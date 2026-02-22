@@ -52,6 +52,12 @@ static char sccsid[] = "@(#)bt_page.c	8.2 (Berkeley) 2/21/94";
  * Returns:
  *	RET_ERROR, RET_SUCCESS
  */
+/**
+ * @brief __bt_free.
+ * @param t B-Tree context.
+ * @param h Page pointer.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int __bt_free(BTREE* t, PAGE* h) {
     /* Insert the page at the start of the free list. */
     h->prevpg = P_INVALID;
@@ -71,6 +77,12 @@ int __bt_free(BTREE* t, PAGE* h) {
  *
  * Returns:
  *	Pointer to a page, NULL on error.
+ */
+/**
+ * @brief __bt_new.
+ * @param t B-Tree context.
+ * @param npg Page number.
+ * @return Page pointer, or NULL on failure.
  */
 PAGE* __bt_new(BTREE* t, pgno_t* npg) {
     PAGE* h;

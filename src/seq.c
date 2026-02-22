@@ -14,6 +14,7 @@
 #include "vector.h"
 #include "strings.h"
 #include "map.h"
+#include "record.h"
 #include "hashset.h"
 #include "symbol.h"
 #include "memory.h"    // For subjective_c_register_release_fn
@@ -160,12 +161,33 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
 
 static ID make_map_entry_vector(ID map_obj, int index) {
     CljPersistentMap *map = map_backing(map_obj);
-    if (!map || index < 0 || index >= map->count) {
-        return NULL;
-    }
+    CLJ_ASSERT(map && "make_map_entry_vector expects map-like object");
+    CLJ_ASSERT(index >= 0 && index < map->count && "make_map_entry_vector index out of bounds");
 
     CljObject *key = map->data[index * 2];
     CljObject *value = map->data[index * 2 + 1];
+
+    CljPersistentVector *entry = make_vector(2, STRONG);
+    if (!entry) {
+        return NULL;
+    }
+
+    entry = vector_conj(entry, key);
+    entry = vector_conj(entry, value);
+
+    return AUTORELEASE(entry);
+}
+
+static ID make_record_entry_vector(ID record_obj, int index) {
+    CLJ_ASSERT(record_obj && TAG(record_obj) == CLJ_RECORD && "make_record_entry_vector expects CLJ_RECORD");
+    CLJ_ASSERT(index >= 0 && "make_record_entry_vector index must be non-negative");
+
+    CljPersistentRecord *record = as_record(record_obj);
+    unsigned int field_count = record_declared_field_count(record);
+    CLJ_ASSERT(record && index < (int)field_count && "make_record_entry_vector index out of bounds");
+
+    ID key = record_key_at_index(record_obj, (unsigned int)index);
+    ID value = record_get_by_index(record_obj, (unsigned int)index);
 
     CljPersistentVector *entry = make_vector(2, STRONG);
     if (!entry) {
@@ -183,7 +205,7 @@ static ID make_map_entry_vector(ID map_obj, int index) {
 // ============================================================================
 
 static int hashset_next_slot(const CljHashSet *set, int start) {
-    if (!set) return -1;
+    CLJ_ASSERT(set && "hashset_next_slot expects non-null set");
     unsigned int i = start < 0 ? 0u : (unsigned int)start;
     for (; i < set->capacity; i++) {
         ID key = set->data[i];
@@ -308,7 +330,8 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
         }
         case CLJ_HASHSET: {
             CljHashSet *set = (CljHashSet*)obj;
-            if (!set || hashset_count(set) == 0) {
+            CLJ_ASSERT(set && "CLJ_HASHSET tag implies non-null set");
+            if (hashset_count(set) == 0) {
                 return true;  // Empty set
             }
             int idx = hashset_next_slot(set, 0);
@@ -320,6 +343,20 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
             iter->state.hset.capacity = (int)set->capacity;
             iter->seq_type = CLJ_HASHSET;
             iter->container = (CljObject*)set;
+            return true;
+        }
+        case CLJ_RECORD: {
+            CljPersistentRecord *record = as_record(obj);
+            CLJ_ASSERT(record && "CLJ_RECORD tag implies non-null record");
+            unsigned int field_count = record_declared_field_count(record);
+            if (field_count == 0) {
+                return true;  // Empty record
+            }
+            iter->state.record.record = record;
+            iter->state.record.index = 0;
+            iter->state.record.count = (int)field_count;
+            iter->seq_type = CLJ_RECORD;
+            iter->container = (CljObject*)record;
             return true;
         }
 
@@ -338,18 +375,16 @@ ID seq_iter_first(const SeqIterator *iter) {
     
     switch (iter->seq_type) {
         case CLJ_LIST: {
-            if (iter->state.list.current) {
-                CljList *node = as_list(iter->state.list.current);
-                ID elem = LIST_FIRST(node);
-                // Convert SYM_NIL to NULL (nil representation)
-                return (elem == SYM_NIL) ? NULL : elem;
-            }
-            return NULL;
+            CLJ_ASSERT(iter->state.list.current && "non-empty CLJ_LIST iterator must have current node");
+            CljList *node = as_list(iter->state.list.current);
+            ID elem = LIST_FIRST(node);
+            // Convert SYM_NIL to NULL (nil representation)
+            return (elem == SYM_NIL) ? NULL : elem;
         }
 
         case CLJ_LAZY_SEQ: {
             CljLazySeq *lazy = as_lazy_seq(iter->state.list.current);
-            if (!lazy) return NULL;
+            CLJ_ASSERT(lazy && "CLJ_LAZY_SEQ iterator state must hold lazy seq");
             lazy_seq_realize(lazy);
             ID first = lazy->first;
             if (first == NOT_FOUND) {
@@ -394,6 +429,13 @@ ID seq_iter_first(const SeqIterator *iter) {
             }
             return NULL;
         }
+
+        case CLJ_RECORD: {
+            if (iter->state.record.index < iter->state.record.count) {
+                return make_record_entry_vector((ID)iter->state.record.record, iter->state.record.index);
+            }
+            return NULL;
+        }
         
         default:
             return NULL;
@@ -407,27 +449,26 @@ bool seq_iter_next(SeqIterator *iter) {
     
     switch (iter->seq_type) {
         case CLJ_LIST: {
-            if (iter->state.list.current) {
-                CljList *node = as_list(iter->state.list.current);
-                CljObject *rest = LIST_REST(node);
+            CLJ_ASSERT(iter->state.list.current && "non-empty CLJ_LIST iterator must have current node");
+            CljList *node = as_list(iter->state.list.current);
+            CljObject *rest = LIST_REST(node);
 
-                // If rest is a proper list node, keep iterating list nodes.
-                // Use list_empty to properly handle list with nil element.
-                if (rest && is_list_type(TAG(rest))) {
-                    CljList *rest_list = as_list(rest);
-                    if (!list_empty(rest_list)) {
-                        iter->state.list.current = rest;
-                        iter->state.list.index++;
-                        return true;
-                    }
+            // If rest is a proper list node, keep iterating list nodes.
+            // Use list_empty to properly handle list with nil element.
+            if (rest && is_list_type(TAG(rest))) {
+                CljList *rest_list = as_list(rest);
+                if (!list_empty(rest_list)) {
+                    iter->state.list.current = rest;
+                    iter->state.list.index++;
+                    return true;
                 }
+            }
 
-                // Support "improper" list tails that are still seqable (e.g. LazySeq).
-                // Advance by re-initializing the iterator from the tail.
-                if (rest && is_seqable(rest)) {
-                    if (seq_iter_init(iter, rest)) {
-                        return !seq_iter_empty(iter);
-                    }
+            // Support "improper" list tails that are still seqable (e.g. LazySeq).
+            // Advance by re-initializing the iterator from the tail.
+            if (rest && is_seqable(rest)) {
+                if (seq_iter_init(iter, rest)) {
+                    return !seq_iter_empty(iter);
                 }
             }
             // Mark as exhausted
@@ -437,7 +478,7 @@ bool seq_iter_next(SeqIterator *iter) {
 
         case CLJ_LAZY_SEQ: {
             CljLazySeq *lazy = as_lazy_seq(iter->state.list.current);
-            if (!lazy) return false;
+            CLJ_ASSERT(lazy && "CLJ_LAZY_SEQ iterator state must hold lazy seq");
             lazy_seq_realize(lazy);
             ID rest = lazy->cached_rest;
 
@@ -488,6 +529,15 @@ bool seq_iter_next(SeqIterator *iter) {
             iter->state.hset.index = iter->state.hset.capacity;
             return false;
         }
+
+        case CLJ_RECORD: {
+            if (iter->state.record.index < iter->state.record.count - 1) {
+                iter->state.record.index++;
+                return true;
+            }
+            iter->state.record.index = iter->state.record.count;
+            return false;
+        }
         
         default:
             return false;
@@ -530,7 +580,7 @@ bool seq_iter_empty(const SeqIterator *iter) {
 
         case CLJ_LAZY_SEQ: {
             CljLazySeq *lazy = as_lazy_seq(iter->state.list.current);
-            if (!lazy) return true;
+            CLJ_ASSERT(lazy && "CLJ_LAZY_SEQ iterator state must hold lazy seq");
             lazy_seq_realize(lazy);
             return lazy->first == NULL && lazy->cached_rest == NULL;
         }
@@ -547,6 +597,9 @@ bool seq_iter_empty(const SeqIterator *iter) {
         
         case CLJ_HASHSET:
             return iter->state.hset.index < 0 || iter->state.hset.index >= iter->state.hset.capacity;
+
+        case CLJ_RECORD:
+            return iter->state.record.index >= iter->state.record.count;
         
         default:
             // If seq_type is 0 (not set), it's an empty sequence
@@ -569,6 +622,8 @@ int seq_iter_position(const SeqIterator *iter) {
             return iter->state.map.index;
         case CLJ_HASHSET:
             return iter->state.hset.index;
+        case CLJ_RECORD:
+            return iter->state.record.index;
         default:
             return 0;
     }
@@ -583,16 +638,22 @@ bool collection_empty(ID obj) {
     unsigned char t = TAG(obj);
     if (t == CLJ_VECTOR_PERSISTENT) {
         CljPersistentVector *v = as_persistent_vector(obj);
-        return !v || vector_count(v) == 0;
+        CLJ_ASSERT(v && "CLJ_VECTOR_PERSISTENT must cast to non-null vector");
+        return vector_count(v) == 0;
     }
     if (is_list_type(t)) return list_empty(as_list((CljObject*)obj));
     if (t == CLJ_MAP_PERSISTENT || t == CLJ_MAP_TRANSIENT) {
         CljPersistentMap *m = as_map(obj);
-        return !m || m->count == 0;
+        CLJ_ASSERT(m && "map tag must cast to non-null map");
+        return m->count == 0;
+    }
+    if (t == CLJ_RECORD) {
+        return record_count(obj) == 0;
     }
     if (t == CLJ_HASHSET) {
         CljHashSet *s = (CljHashSet*)obj;
-        return !s || hashset_count(s) == 0;
+        CLJ_ASSERT(s && "CLJ_HASHSET tag must cast to non-null set");
+        return hashset_count(s) == 0;
     }
     if (t == CLJ_STRING) return string_length(obj) == 0;
     if (t == CLJ_SEQ) return seq_empty(obj);
@@ -636,7 +697,7 @@ ID seq_first(ID seq_obj) {
     if (!seq_obj) return NULL;
     if (TAG(seq_obj) == CLJ_LAZY_SEQ) {
         CljLazySeq *lazy = as_lazy_seq(seq_obj);
-        if (!lazy) return NULL;
+        CLJ_ASSERT(lazy && "CLJ_LAZY_SEQ tag must cast to non-null lazy seq");
         lazy_seq_realize(lazy);
         ID first = lazy->first;
         if (first == NOT_FOUND) return NULL;
@@ -679,7 +740,7 @@ ID seq_next(ID seq_obj) {
     if (!seq_obj) return NULL;
     if (TAG(seq_obj) == CLJ_LAZY_SEQ) {
         CljLazySeq *lazy = as_lazy_seq(seq_obj);
-        if (!lazy) return NULL;
+        CLJ_ASSERT(lazy && "CLJ_LAZY_SEQ tag must cast to non-null lazy seq");
         lazy_seq_realize(lazy);
         ID rest = lazy->cached_rest;
         return (rest == NOT_FOUND) ? NULL : rest;
@@ -687,14 +748,11 @@ ID seq_next(ID seq_obj) {
     /* If the original sequence was a CLJ_LIST, return CLJ_LIST directly (native_next semantics). */
     CljSeqIterator *seq = as_seq(seq_obj);
     if (seq && seq->iter.seq_type == CLJ_LIST) {
-        if (seq->iter.state.list.current) {
-            CljList *current_list = as_list(seq->iter.state.list.current);
-            if (current_list) {
-                CljObject *rest = LIST_REST(current_list);
-                return rest;
-            }
-        }
-        return NULL;
+        if (!seq->iter.state.list.current) return NULL;
+        CljList *current_list = as_list(seq->iter.state.list.current);
+        CLJ_ASSERT(current_list && "CLJ_LIST seq iterator must hold list node");
+        CljObject *rest = LIST_REST(current_list);
+        return rest;
     }
 
     // For other types (CLJ_VECTOR_PERSISTENT, CLJ_STRING, etc.), use seq_rest
@@ -819,6 +877,8 @@ int seq_count(ID obj) {
                 }
                 return remaining;
             }
+            case CLJ_RECORD:
+                return seq->iter.state.record.count - seq->iter.state.record.index;
             default:
                 return 0;
         }
@@ -862,6 +922,7 @@ bool is_seqable(ID obj) {
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_MAP_PERSISTENT:
         case CLJ_MAP_TRANSIENT:
+        case CLJ_RECORD:
         case CLJ_HASHSET:
         case CLJ_STRING:
         case CLJ_SEQ:  // Sequences are seqable

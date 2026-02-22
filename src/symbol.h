@@ -255,6 +255,7 @@ extern CljSymbol *SYM_LIST_BATCH;
 void symbol_table_add(CljSymbol *symbol);
 CljSymbol* symbol_table_lookup(CljSymbol *ns_name, const char *cname);
 void symbol_table_cleanup(void);
+void symbol_table_fit_startup_reserve(unsigned int reserve_percent);
 
 struct CljNamespace;
 struct CljNamespace* symbol_get_namespace(CljSymbol *sym);
@@ -338,6 +339,7 @@ extern StaticSymbolData sym_subs_data;
 extern StaticSymbolData sym_symbol_data;
 extern StaticSymbolData sym_type_data;
 extern StaticSymbolData sym_array_map_data;
+extern StaticSymbolData sym_hash_map_data;
 extern StaticSymbolData sym_vector_data;
 extern StaticSymbolData sym_vec_data;
 extern StaticSymbolData sym_peek_data;
@@ -401,6 +403,18 @@ extern StaticSymbolData sym_reset_bang_data;
 extern StaticSymbolData sym_swap_bang_data;
 extern StaticSymbolData sym_slurp_data;
 extern StaticSymbolData sym_spit_data;
+
+// Audio symbols
+extern StaticSymbolData sym_audio_load_track_data;
+extern StaticSymbolData sym_audio_unload_track_data;
+extern StaticSymbolData sym_audio_play_music_data;
+extern StaticSymbolData sym_audio_stop_track_data;
+extern StaticSymbolData sym_audio_stop_music_data;
+extern StaticSymbolData sym_audio_play_sfx_data;
+extern StaticSymbolData sym_audio_stop_all_data;
+extern StaticSymbolData sym_audio_set_track_volume_data;
+extern StaticSymbolData sym_audio_set_music_volume_data;
+extern StaticSymbolData sym_audio_on_finished_data;
 
 // Extended Symbol for Special Forms with embedded evaluation function
 typedef struct CljSpecialSymbol {

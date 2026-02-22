@@ -7,6 +7,14 @@
 
 #include <string.h>
 
+/**
+ * @brief tdb_lex_bytes_cmp.
+ * @param a Input pointer.
+ * @param a_len Length in bytes.
+ * @param b Input pointer.
+ * @param b_len Length in bytes.
+ * @return Comparison result (<0, 0, >0).
+ */
 int tdb_lex_bytes_cmp(const void* a, size_t a_len, const void* b, size_t b_len) {
     const size_t min_len = (a_len < b_len) ? a_len : b_len;
     int c = 0;
@@ -21,6 +29,14 @@ int tdb_lex_bytes_cmp(const void* a, size_t a_len, const void* b, size_t b_len) 
     return 0;
 }
 
+/**
+ * @brief tdb_lower_bound_kv.
+ * @param entries Input pointer.
+ * @param n Element count.
+ * @param key Key bytes.
+ * @param key_len Key length in bytes.
+ * @return Computed size value.
+ */
 size_t tdb_lower_bound_kv(const tdb_kv_ref_t* entries, size_t n, const void* key, size_t key_len) {
     size_t lo = 0;
     size_t hi = n;

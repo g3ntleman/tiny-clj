@@ -31,16 +31,37 @@ R"DT(
 (def ms-per-minute 60000)
 (def ms-per-second 1000)
 
+;; Qualified keys (interned once)
+(def kw-year (dt-kw "year"))
+(def kw-month (dt-kw "month"))
+(def kw-day (dt-kw "day"))
+(def kw-hour (dt-kw "hour"))
+(def kw-minute (dt-kw "minute"))
+(def kw-second (dt-kw "second"))
+(def kw-millis (dt-kw "millis"))
+(def kw-days (dt-kw "days"))
+(def kw-ms (dt-kw "ms"))
+
+;; Fixed-shape records for compact date/time payloads
+(def civil-type 'tiny-clj.datetime/DateTimeCivil)
+(def time-type 'tiny-clj.datetime/DateTimeTime)
+(def raw-type 'tiny-clj.datetime/DateTimeRaw)
+
+(record-register civil-type [kw-year kw-month kw-day])
+(record-register time-type [kw-hour kw-minute kw-second kw-millis])
+(record-register raw-type [kw-days kw-ms])
+
 ;; =============================================================================
 ;; Time conversion functions
 ;; =============================================================================
 
 ^#^{:doc "Converts milliseconds within a day (0-86399999) to a time map with qualified keys :tiny-clj.datetime/hour etc."}
 (defn time-from-millis [ms]
-  (assoc {} (dt-kw "hour")   (quot ms ms-per-hour)
-             (dt-kw "minute") (quot (mod ms ms-per-hour) ms-per-minute)
-             (dt-kw "second") (quot (mod ms ms-per-minute) ms-per-second)
-             (dt-kw "millis") (mod ms ms-per-second)))
+  (let [hour   (quot ms ms-per-hour)
+        minute (quot (mod ms ms-per-hour) ms-per-minute)
+        second (quot (mod ms ms-per-minute) ms-per-second)
+        millis (mod ms ms-per-second)]
+    (record-create time-type [hour minute second millis])))
 
 ^#^{:doc "Converts hour, minute, second, millis to milliseconds within a day (0-86399999)"}
 (defn millis-from-time [hour minute second millis]
@@ -75,7 +96,7 @@ R"DT(
         m (+ mp (if (< mp 10) 3 -9))
         ;; Adjust year for Jan/Feb
         y (if (<= m 2) (+ y 1) y)]
-    (assoc {} (dt-kw "year") y (dt-kw "month") m (dt-kw "day") d)))
+    (record-create civil-type [y m d])))
 
 ^#^{:doc "Converts year, month, day to days since Unix epoch (1970-01-01). Based on Howard Hinnant's algorithm."}
 (defn days-from-civil [year month day]
@@ -103,28 +124,41 @@ R"DT(
 ^#^{:doc "Converts a raw timestamp {:days d :ms m} to a full date-time map with qualified keys. Original :days and :ms are preserved."}
 (defn date-time [raw]
   (let [raw-map (cond
-                  (and raw (map? raw)) raw
-                  (inst? raw) (assoc {} (dt-kw "days") (instant-days raw) (dt-kw "ms") (instant-ms raw))
-                  :else (to-raw raw))
-        days (get raw-map (dt-kw "days"))
-        ms   (get raw-map (dt-kw "ms"))]
-    (merge raw-map
-           (civil-from-days days)
-           (time-from-millis ms))))
+                  ;; normalize map-like input (incl. records) to a persistent map
+                  (and raw (map? raw)) (merge raw)
+                  (inst? raw) (assoc {} kw-days (instant-days raw) kw-ms (instant-ms raw))
+                  :else (let [raw-rec (to-raw raw)]
+                          (assoc {} kw-days (get raw-rec kw-days)
+                                   kw-ms   (get raw-rec kw-ms))))
+        days (get raw-map kw-days)
+        ms   (get raw-map kw-ms)
+        c    (civil-from-days days)
+        t    (time-from-millis ms)]
+    (assoc raw-map
+           kw-year   (get c kw-year)
+           kw-month  (get c kw-month)
+           kw-day    (get c kw-day)
+           kw-hour   (get t kw-hour)
+           kw-minute (get t kw-minute)
+           kw-second (get t kw-second)
+           kw-millis (get t kw-millis))))
 
-^#^{:doc "Converts a date-time map back to raw {:days :ms} format with qualified keys. Uses existing :days/:ms if present, otherwise calculates from components."}
+^#^{:doc "Converts a date-time map back to a compact raw record with qualified keys :tiny-clj.datetime/days and :tiny-clj.datetime/ms. Uses existing :days/:ms if present, otherwise calculates from components."}
 (defn to-raw [dt]
-  (let [days   (get dt (dt-kw "days"))
-        ms     (get dt (dt-kw "ms"))
-        year   (get dt (dt-kw "year"))
-        month  (get dt (dt-kw "month"))
-        day    (get dt (dt-kw "day"))
-        hour   (get dt (dt-kw "hour"))
-        minute (get dt (dt-kw "minute"))
-        second (get dt (dt-kw "second"))
-        millis (get dt (dt-kw "millis"))]
-    (assoc {} (dt-kw "days") (or days (days-from-civil year month day))
-             (dt-kw "ms")   (or ms (millis-from-time hour minute second (or millis 0))))))
+  (if (inst? dt)
+    (record-create raw-type [(instant-days dt) (instant-ms dt)])
+    (let [days   (get dt kw-days)
+          ms     (get dt kw-ms)
+          year   (get dt kw-year)
+          month  (get dt kw-month)
+          day    (get dt kw-day)
+          hour   (get dt kw-hour)
+          minute (get dt kw-minute)
+          second (get dt kw-second)
+          millis (get dt kw-millis)
+          raw-days (or days (days-from-civil year month day))
+          raw-ms   (or ms (millis-from-time hour minute second (or millis 0)))]
+      (record-create raw-type [raw-days raw-ms]))))
 
 ;; =============================================================================
 ;; Formatting
@@ -132,12 +166,12 @@ R"DT(
 
 ^#^{:doc "Formats a date-time map as ISO-8601 string like 2024-12-23T14:30:45. Expects qualified keys."}
 (defn format-iso [m]
-  (let [year   (get m (dt-kw "year"))
-        month  (get m (dt-kw "month"))
-        day    (get m (dt-kw "day"))
-        hour   (get m (dt-kw "hour"))
-        minute (get m (dt-kw "minute"))
-        second (get m (dt-kw "second"))]
+  (let [year   (get m kw-year)
+        month  (get m kw-month)
+        day    (get m kw-day)
+        hour   (get m kw-hour)
+        minute (get m kw-minute)
+        second (get m kw-second)]
     (str (clojure.string/pad-left (str year) 4 "0") "-"
          (clojure.string/pad-left (str month) 2 "0") "-"
          (clojure.string/pad-left (str day) 2 "0") "T"

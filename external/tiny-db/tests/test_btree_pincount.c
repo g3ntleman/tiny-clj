@@ -44,6 +44,13 @@ static tdb_status_t ram_erase(void* ctx, uint32_t addr, size_t len) {
     return TDB_OK;
 }
 
+/**
+ * @brief make_bdev.
+ * @param bdev Block-device descriptor.
+ * @param rd RAM-device state.
+ * @param storage Backing storage buffer.
+ * @param storage_len Length in bytes.
+ */
 static void make_bdev(tdb_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size_t storage_len) {
     memset(storage, 0xFF, storage_len);
     rd->buf = storage;
@@ -58,6 +65,9 @@ static void make_bdev(tdb_blockdev_t* bdev, ramdev_t* rd, uint8_t* storage, size
     bdev->geom.erase_granularity = 4096;
 }
 
+/**
+ * @brief test_btree_peak_pinned_pages_current.
+ */
 static void test_btree_peak_pinned_pages_current(void) {
     static uint8_t storage[8 * 1024 * 1024];
     ramdev_t rd = {0};
@@ -110,6 +120,9 @@ static void test_btree_peak_pinned_pages_current(void) {
     tdb_kv_unbind();
 }
 
+/**
+ * @brief tdb_register_tests_btree_pincount.
+ */
 void tdb_register_tests_btree_pincount(void) {
     RUN_TEST(test_btree_peak_pinned_pages_current);
 }

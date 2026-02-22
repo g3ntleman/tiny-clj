@@ -93,6 +93,46 @@ TEST(test_schedule_zero_delay_executes_immediately) {
     }
 }
 
+// High-level regression: zero-delay timer callback with lexical SlotRef capture
+// must execute without assertion/crash and must observe captured state.
+TEST(test_schedule_zero_delay_lexical_capture_regression_high_level) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    event_loop_clear();
+
+    // Keep observed state in a global atom, but capture it through a local let
+    // symbol to exercise closure SlotRef resolution in async callback context.
+    TRY {
+        (void)eval_string(
+            "(do "
+            "  (def timer-reg-hits (atom 0)) "
+            "  (let [hits timer-reg-hits] "
+            "    (schedule 0 (fn [] (swap! hits inc)))))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("setup expression should not throw");
+        return;
+    } END_TRY
+
+    // Execute queued timer callback (high-level event loop path).
+    bool ran = event_loop_run_next(NULL, g_test_eval_state);
+    TEST_ASSERT_TRUE_MESSAGE(ran, "run_next should execute scheduled callback");
+
+    ID hits_val = NULL;
+    TRY {
+        hits_val = eval_string("(deref timer-reg-hits)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("reading timer-reg-hits should not throw");
+        return;
+    } END_TRY
+
+    TEST_ASSERT_NOT_NULL(hits_val);
+    TEST_ASSERT_TRUE(is_fixnum(hits_val));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, as_fixnum(hits_val),
+        "captured lexical state should be incremented exactly once");
+
+    event_loop_clear();
+}
+
 // Test that schedule-periodic creates a repeating timer
 TEST(test_schedule_periodic_repeats) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -396,99 +436,74 @@ TEST(test_cancel_timer_accepts_named_key) {
 
 // Test that timer_enqueue with delay 0 correctly enqueues task
 TEST(test_timer_enqueue_zero_delay_enqueues_task) {
-    WITH_AUTORELEASE_POOL({
-        // Clear event loop first
-        event_loop_clear();
-        
-        // Create a simple function
-        CljObject *fn = eval_string("(fn [] 42)", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(fn);
-        
-        // Check initial count (should be 0)
-        CljTransientVector *task_queue = g_runtime.task_queue;
-        CljPersistentVector *task_vec = task_queue ? vector_persistent(task_queue) : NULL;
-        TEST_ASSERT_NOT_NULL(task_vec);
-        unsigned int count_before = vector_count(task_vec);
-        TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,
-            "Initial count should be 0");
-        
-        // Enqueue timer with 0ms delay (should execute immediately)
-        int32_t timer_id = timer_enqueue(fn, 0, false, 0);
-        TEST_ASSERT_TRUE_MESSAGE(timer_id > 0,
-            "timer_enqueue should return a valid timer ID");
-        
-        // Check that count is now 1 (re-read queue; conj_inplace may replace it)
-        task_queue = g_runtime.task_queue;
-        task_vec = task_queue ? vector_persistent(task_queue) : NULL;
-        unsigned int count_after = vector_count(task_vec);
-        TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after,
-            "timer_enqueue with delay 0 should increment count from 0 to 1");
-        
-        // Check that vector_as_array returns non-NULL
-        ID *data = vector_as_array(task_vec);
-        TEST_ASSERT_NOT_NULL_MESSAGE(data,
-            "vector_as_array should return non-NULL after timer_enqueue");
-        
-        // Check that data[0] is not NULL (task should be there)
-        TEST_ASSERT_NOT_NULL_MESSAGE(data[0],
-            "data[0] should contain the enqueued task");
-        
-        // Cleanup - remove the task from the queue
-        if (g_runtime.task_queue) {
-            vector_remove_at(g_runtime.task_queue, 0);
-        }
-        RELEASE(fn);
-    });
+    event_loop_clear();
+
+    CljObject *fn = eval_string("(fn [] 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+
+    CljTransientVector *task_queue = g_runtime.task_queue;
+    CljPersistentVector *task_vec = task_queue ? vector_persistent(task_queue) : NULL;
+    TEST_ASSERT_NOT_NULL(task_vec);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, vector_count(task_vec),
+        "Initial count should be 0");
+
+    int32_t timer_id = timer_enqueue(fn, 0, false, 0);
+    TEST_ASSERT_TRUE_MESSAGE(timer_id > 0,
+        "timer_enqueue should return a valid timer ID");
+
+    task_queue = g_runtime.task_queue;
+    task_vec = task_queue ? vector_persistent(task_queue) : NULL;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, vector_count(task_vec),
+        "timer_enqueue with delay 0 should increment count from 0 to 1");
+
+    ID *data = vector_as_array(task_vec);
+    TEST_ASSERT_NOT_NULL_MESSAGE(data,
+        "vector_as_array should return non-NULL after timer_enqueue");
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(data[0],
+        "data[0] should contain the enqueued task");
+
+    if (g_runtime.task_queue) {
+        vector_remove_at(g_runtime.task_queue, 0);
+    }
+    // fn is autoreleased from eval_string; TEST() pool handles cleanup.
 }
 
 // Test that timer_enqueue with delay 0 works correctly with event_loop_run_next
 TEST(test_timer_enqueue_zero_delay_with_run_next) {
-    WITH_AUTORELEASE_POOL({
-        // Clear event loop first
-        event_loop_clear();
-        
-        // Create a simple function
-        CljObject *fn = eval_string("(fn [] 42)", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(fn);
-        
-        // Check initial count (should be 0)
-        CljTransientVector *task_queue = g_runtime.task_queue;
-        CljPersistentVector *task_vec = task_queue ? vector_persistent(task_queue) : NULL;
-        TEST_ASSERT_NOT_NULL(task_vec);
-        unsigned int count_before = vector_count(task_vec);
-        TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,
-            "Initial count should be 0");
-        
-        // Enqueue timer with 0ms delay (should execute immediately)
-        int32_t timer_id = timer_enqueue(fn, 0, false, 0);
-        TEST_ASSERT_TRUE_MESSAGE(timer_id > 0,
-            "timer_enqueue should return a valid timer ID");
-        
-        // Re-read queue; conj_inplace may replace it
-        task_queue = g_runtime.task_queue;
-        task_vec = task_queue ? vector_persistent(task_queue) : NULL;
-        unsigned int count_after_enqueue = vector_count(task_vec);
-        TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after_enqueue,
-            "timer_enqueue with delay 0 should increment count from 0 to 1");
-        
-        // Check that vector_as_array returns non-NULL
-        ID *data = vector_as_array(task_vec);
-        TEST_ASSERT_NOT_NULL_MESSAGE(data,
-            "vector_as_array should return non-NULL after timer_enqueue");
-        
-        // Now test event_loop_run_next - it should see the count and return true
-        task_queue = g_runtime.task_queue;
-        CljPersistentVector *task_vec_fresh = task_queue ? vector_persistent(task_queue) : NULL;
-        TEST_ASSERT_NOT_NULL(task_vec_fresh);
-        unsigned int count_before_run = vector_count(task_vec_fresh);
-        TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_before_run,
-            "Count should be 1 before event_loop_run_next");
-        
-        // Cleanup - remove the task from the queue
-        if (g_runtime.task_queue) {
-            vector_remove_at(g_runtime.task_queue, 0);
-        }
-        RELEASE(fn);
-    });
+    event_loop_clear();
+
+    CljObject *fn = eval_string("(fn [] 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+
+    CljTransientVector *task_queue = g_runtime.task_queue;
+    CljPersistentVector *task_vec = task_queue ? vector_persistent(task_queue) : NULL;
+    TEST_ASSERT_NOT_NULL(task_vec);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, vector_count(task_vec),
+        "Initial count should be 0");
+
+    int32_t timer_id = timer_enqueue(fn, 0, false, 0);
+    TEST_ASSERT_TRUE_MESSAGE(timer_id > 0,
+        "timer_enqueue should return a valid timer ID");
+
+    task_queue = g_runtime.task_queue;
+    task_vec = task_queue ? vector_persistent(task_queue) : NULL;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, vector_count(task_vec),
+        "timer_enqueue with delay 0 should increment count from 0 to 1");
+
+    ID *data = vector_as_array(task_vec);
+    TEST_ASSERT_NOT_NULL_MESSAGE(data,
+        "vector_as_array should return non-NULL after timer_enqueue");
+
+    task_queue = g_runtime.task_queue;
+    CljPersistentVector *task_vec_fresh = task_queue ? vector_persistent(task_queue) : NULL;
+    TEST_ASSERT_NOT_NULL(task_vec_fresh);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, vector_count(task_vec_fresh),
+        "Count should be 1 before event_loop_run_next");
+
+    if (g_runtime.task_queue) {
+        vector_remove_at(g_runtime.task_queue, 0);
+    }
+    // fn is autoreleased from eval_string; TEST() pool handles cleanup.
 }
 

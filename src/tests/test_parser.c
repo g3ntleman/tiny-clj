@@ -277,6 +277,44 @@ TEST(test_parse_metadata_mixed) {
     evalstate_free(eval_state);
 }
 
+TEST(test_parse_disable_meta_does_not_intern_metadata_tokens) {
+#if defined(META_ENABLED) && META_ENABLED
+    TEST_IGNORE_MESSAGE("requires META_ENABLED=0");
+#else
+    EvalState *eval_state = evalstate_new(false);
+    const char *kw = ":__meta_skip_should_not_intern__";
+
+    TEST_ASSERT_NULL(symbol_table_lookup(NULL, kw));
+
+    ID result = parse("^:__meta_skip_should_not_intern__ \"ok\"", eval_state);
+
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(result));
+    TEST_ASSERT_NULL(symbol_table_lookup(NULL, kw));
+
+    evalstate_free(eval_state);
+#endif
+}
+
+TEST(test_parse_disable_meta_combined_hash_caret_does_not_intern_tokens) {
+#if defined(META_ENABLED) && META_ENABLED
+    TEST_IGNORE_MESSAGE("requires META_ENABLED=0");
+#else
+    EvalState *eval_state = evalstate_new(false);
+    const char *kw = ":__meta_skip_hash_caret__";
+
+    TEST_ASSERT_NULL(symbol_table_lookup(NULL, kw));
+
+    ID result = parse("^#^{:__meta_skip_hash_caret__ true} \"ok\"", eval_state);
+
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(result));
+    TEST_ASSERT_NULL(symbol_table_lookup(NULL, kw));
+
+    evalstate_free(eval_state);
+#endif
+}
+
 TEST(test_parse_utf8_symbols) {
     EvalState *eval_state = evalstate_new(false);
 

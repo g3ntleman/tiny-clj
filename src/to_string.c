@@ -24,6 +24,7 @@
 #include "vector.h"
 #include "list.h"
 #include "map.h"
+#include "record.h"
 #include "hashset.h"
 #include "function.h"
 #include "ast.h"
@@ -290,6 +291,31 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             }
             if (v->type == CLJ_MAP_TRANSIENT) {
                 len += 12; // "<transient " (11) + ">" (1)
+            }
+            return len;
+        }
+
+        case CLJ_RECORD: {
+            CljPersistentRecord *record = as_record(v);
+            if (!record || !record->descriptor || !record->descriptor->type_symbol) {
+                return 9; // "#Record{}"
+            }
+
+            const CljSymbol *type_sym = record->descriptor->type_symbol;
+            size_t type_len = type_sym->cname ? strlen(type_sym->cname) : 6;
+            if (type_sym->ns_name && type_sym->ns_name->cname) {
+                type_len += strlen(type_sym->ns_name->cname) + 1; // ns + '/'
+            }
+
+            size_t len = 1 + type_len + 2; // "#Type{}"
+            unsigned int field_count = record_declared_field_count(record);
+            for (unsigned int i = 0; i < field_count; i++) {
+                if (i > 0) len += 2; // ", "
+                ID key = record_key_at_index((ID)record, i);
+                ID val = record_get_by_index((ID)record, i);
+                len += to_string_calc_length((CljObject*)key, escape_strings);
+                len += 1; // space
+                len += to_string_calc_length((CljObject*)val, escape_strings);
             }
             return len;
         }
@@ -661,6 +687,37 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                 buffer[*offset] = '>';
                 *offset += 1;
             }
+            return;
+        }
+
+        case CLJ_RECORD: {
+            CljPersistentRecord *record = as_record(v);
+            append_char(buffer, offset, '#');
+
+            if (!record || !record->descriptor || !record->descriptor->type_symbol) {
+                append_cstr(buffer, offset, "Record");
+            } else {
+                CljSymbol *type_sym = record->descriptor->type_symbol;
+                if (type_sym->ns_name && type_sym->ns_name->cname) {
+                    append_cstr(buffer, offset, type_sym->ns_name->cname);
+                    append_char(buffer, offset, '/');
+                }
+                append_cstr(buffer, offset, type_sym->cname ? type_sym->cname : "Record");
+            }
+
+            append_char(buffer, offset, '{');
+            unsigned int field_count = record_declared_field_count(record);
+            for (unsigned int i = 0; i < field_count; i++) {
+                if (i > 0) {
+                    append_cstr(buffer, offset, ", ");
+                }
+                ID key = record_key_at_index((ID)record, i);
+                ID val = record_get_by_index((ID)record, i);
+                to_string_build_string((CljObject*)key, buffer, offset, escape_strings);
+                append_char(buffer, offset, ' ');
+                to_string_build_string((CljObject*)val, buffer, offset, escape_strings);
+            }
+            append_char(buffer, offset, '}');
             return;
         }
         case CLJ_HASHSET: {

@@ -82,6 +82,9 @@ const char *EXCEPTION_INDEX_OUT_OF_BOUNDS = "IndexOutOfBoundsException";
 /** @brief Static exception type: FileNotFoundException */
 const char *EXCEPTION_FILE_NOT_FOUND = "FileNotFoundException";
 
+/** @brief Static exception type: NotImplementedException */
+const char *EXCEPTION_NOT_IMPLEMENTED = "NotImplementedException";
+
 /** @brief Static exception type: StackOverflowError */
 const char *EXCEPTION_STACK_OVERFLOW = "StackOverflowError";
 

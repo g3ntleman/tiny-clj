@@ -7,6 +7,7 @@
 #include "../ast_canon.h"
 #include "../ast.h"
 #include "../list.h"
+#include <stdint.h>
 
 // ============================================================================
 // TEST: Canonicalization rewrites fn params in body to SlotRefs
@@ -226,4 +227,17 @@ TEST(test_slot_ref_depth2_nested_closures_capture_works_at_runtime) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
+}
+
+TEST(test_slot_ref_layout_has_no_lookup_hint_payload) {
+#if defined(DEBUG) && UINTPTR_MAX == 0xffffffffffffffffULL
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(16, sizeof(CljSlotRef),
+                                   "SlotRef should stay compact (no per-slot lookup-hint payload)");
+#elif defined(DEBUG) && UINTPTR_MAX == 0xffffffffULL
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(8, sizeof(CljSlotRef),
+                                   "SlotRef should stay compact on 32-bit debug builds");
+#else
+    TEST_ASSERT_TRUE_MESSAGE(sizeof(CljSlotRef) <= 16,
+                             "SlotRef should not carry lookup-hint pointer payload");
+#endif
 }

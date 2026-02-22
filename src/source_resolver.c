@@ -1,9 +1,8 @@
 #include "source_resolver.h"
 
 #include "fs_layer.h"
-#include "runtime.h"
-#include "map.h"
-#include "strings.h"
+#include "embedded_sources.h"
+#include "byte_array.h"
 #include "value.h"
 #include "memory.h"
 
@@ -17,15 +16,12 @@ ID resolve_path_to_bytes(const char *path) {
         if (kv_bytes && TAG(kv_bytes) == CLJ_BYTE_ARRAY) return kv_bytes;
     }
 
-    CljPersistentMap *emb = g_runtime.embedded_source_map;
-    if (emb) {
-        ID key = (ID)make_string(path);
-        if (!key) return NULL;
-        ID val = map_get(emb, key);
-        RELEASE(key);
-        if (val != NOT_FOUND && val != NULL && TAG(val) == CLJ_BYTE_ARRAY) {
-            return AUTORELEASE(RETAIN(val));
-        }
+    const uint8_t *embedded_data = NULL;
+    int embedded_len = 0;
+    if (embedded_source_lookup(path, &embedded_data, &embedded_len) && embedded_data && embedded_len >= 0) {
+        CljByteArray *view = make_byte_array_view((uint8_t *)embedded_data, embedded_len);
+        if (!view) return NULL;
+        return AUTORELEASE((ID)view);
     }
 
     return NULL;

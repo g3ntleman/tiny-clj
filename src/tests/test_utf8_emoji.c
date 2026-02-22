@@ -7,6 +7,13 @@
 #include "tests_common.h"
 #include "strings.h"
 
+static int32_t as_unsigned_byte(ID value) {
+    TEST_ASSERT_NOT_NULL(value);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(value), "nth result should be a fixnum");
+    int32_t raw = as_fixnum(value);
+    return (raw < 0) ? (raw + 256) : raw;
+}
+
 TEST(test_utf8_emoji_in_string) {
     EvalState *st = g_test_eval_state;
     
@@ -59,4 +66,34 @@ TEST(test_utf8_emoji_in_string) {
     ID result4 = eval_string(test4, st);
     TEST_ASSERT_NOT_NULL_MESSAGE(result4, "Multiple emojis should parse successfully");
     TEST_ASSERT_EQUAL(CLJ_STRING, TAG(result4));
+}
+
+TEST(test_string_nth_ascii_and_utf8_bytes) {
+    EvalState *st = g_test_eval_state;
+    TEST_ASSERT_NOT_NULL(st);
+
+    ID ascii_count = eval_string("(count \"G5\")", st);
+    assert_fixnum(ascii_count, 2);
+    ID ascii0 = eval_string("(nth \"G5\" 0)", st);
+    ID ascii1 = eval_string("(nth \"G5\" 1)", st);
+    TEST_ASSERT_EQUAL_INT(0x47, as_unsigned_byte(ascii0)); // 'G'
+    TEST_ASSERT_EQUAL_INT(0x35, as_unsigned_byte(ascii1)); // '5'
+
+    ID umlaut_count = eval_string("(count \"ä\")", st);
+    assert_fixnum(umlaut_count, 2);
+    ID umlaut0 = eval_string("(nth \"ä\" 0)", st);
+    ID umlaut1 = eval_string("(nth \"ä\" 1)", st);
+    TEST_ASSERT_EQUAL_INT(0xC3, as_unsigned_byte(umlaut0));
+    TEST_ASSERT_EQUAL_INT(0xA4, as_unsigned_byte(umlaut1));
+
+    ID emoji_count = eval_string("(count \"🙂\")", st);
+    assert_fixnum(emoji_count, 4);
+    ID emoji0 = eval_string("(nth \"🙂\" 0)", st);
+    ID emoji1 = eval_string("(nth \"🙂\" 1)", st);
+    ID emoji2 = eval_string("(nth \"🙂\" 2)", st);
+    ID emoji3 = eval_string("(nth \"🙂\" 3)", st);
+    TEST_ASSERT_EQUAL_INT(0xF0, as_unsigned_byte(emoji0));
+    TEST_ASSERT_EQUAL_INT(0x9F, as_unsigned_byte(emoji1));
+    TEST_ASSERT_EQUAL_INT(0x99, as_unsigned_byte(emoji2));
+    TEST_ASSERT_EQUAL_INT(0x82, as_unsigned_byte(emoji3));
 }

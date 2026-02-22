@@ -9,7 +9,12 @@
 // - CljTransientVector: wrapper (TAG CLJ_VECTOR_TRANSIENT) with `backing` (always persistent tag).
 //   Transient mutation API: vector_push, vector_pop, vector_set_nth_transient, vector_remove_at, vector_insert_at.
 
-typedef struct CljPersistentVector CljPersistentVector;
+typedef struct CljPersistentVector {
+    CljObject base;
+    unsigned int count;
+    int capacity;
+    ID data[];  // flexible array (capacity entries)
+} CljPersistentVector;
 
 typedef struct CljTransientVector {
     CljObject base;                 // type == CLJ_VECTOR_TRANSIENT
@@ -67,7 +72,9 @@ static inline CljTransientVector* as_transient_vector(ID obj) {
  * @param vec Vector to count
  * @return Number of elements
  */
-unsigned int vector_count(CljPersistentVector *vec);
+static INLINE __attribute__((unused)) unsigned int vector_count(CljPersistentVector *vec) {
+    return vec ? vec->count : 0u;
+}
 
 /** @brief Get capacity (allocated size) of vector
  * @param vec Vector to query

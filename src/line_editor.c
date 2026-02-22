@@ -808,6 +808,17 @@ int line_editor_process_input(LineEditor *editor) {
         return line_editor_process_input(editor);
     }
     
+    // Handle Ctrl-C (interrupt current line, keep REPL alive)
+    if (c == 3) {
+        editor->last_was_cr = false;
+        history_exit(editor);
+        buffer_clear(&editor->buffer);
+        editor->cursor_pos = 0;
+        editor->line_ready = false;
+        editor->put_char(editor->ctx, '\n');
+        return LINE_EDITOR_INTERRUPT;
+    }
+
     // Handle Ctrl-D (EOF)
     if (c == 4) {
         editor->last_was_cr = false;

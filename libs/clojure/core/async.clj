@@ -48,17 +48,19 @@
 ;; -----------------------------------------------------------------------------
 ;; Channels (subset step 1)
 ;;
-;; Represented as an Atom holding a mutable state map:
-;;   {:items [...] :head 0 :cap N :buf-type :fixed|:sliding|:dropping :closed false
-;;    ;; Step 2 (callbacks):
-;;    :takes [...] :takes-head 0
-;;    :puts  [...] :puts-head  0
-;;    :deliveries [...]}
+;; Represented as an Atom holding a ChannelState record:
+;;   :items [...] :head 0 :cap N :buf-type :fixed|:sliding|:dropping :closed false
+;;   ;; Step 2 (callbacks):
+;;   :takes [...] :takes-head 0
+;;   :puts  [...] :puts-head  0
+;;   :deliveries [...]
 ;;
 ;; Notes:
 ;; - nil values are not allowed (core.async rule).
 ;; - This is macOS-first; ESP32 backend can later replace the internals.
 ;; -----------------------------------------------------------------------------
+
+(defrecord ChannelState [items head cap buf-type closed takes takes-head puts puts-head deliveries])
 
 (defn parse-buf-or-n [buf-or-n]
   (if (nil? buf-or-n)
@@ -100,26 +102,14 @@
           (let [spec (parse-buf-or-n buf-or-n)
                 cap (get spec :cap)
                 buf-type (get spec :buf-type)
-                st0 {}
-                st1 (assoc st0 :items (vector))
-                st2 (assoc st1 :head 0)
-                st3 (assoc st2 :cap cap)
-                st4 (assoc st3 :buf-type buf-type)
-                st5 (assoc st4 :closed false)
-                ;; Step 2 queues + delivery queue
-                st6 (assoc st5 :takes (vector))
-                st7 (assoc st6 :takes-head 0)
-                st8 (assoc st7 :puts (vector))
-                st9 (assoc st8 :puts-head 0)
-                st10 (assoc st9 :deliveries (vector))
-                st st10]
+                st (->ChannelState (vector) 0 cap buf-type false (vector) 0 (vector) 0 (vector))]
             (atom st)))))))
 
 (defn compact-queue [st items-k head-k]
   (let [h (get st head-k)
         items (get st items-k)]
     (if (> h 32)
-      (let [s1 (assoc st items-k (vec (drop h items)))
+      (let [s1 (assoc st items-k (subvec items h))
             s2 (assoc s1 head-k 0)]
         s2)
       st)))
@@ -314,7 +304,7 @@
         items (get st :items)]
     ;; Simple heuristic (avoid relying on division helpers).
     (if (> head 32)
-      (let [s1 (assoc st :items (vec (drop head items)))
+      (let [s1 (assoc st :items (subvec items head))
             s2 (assoc s1 :head 0)]
         s2)
       st)))
@@ -512,4 +502,3 @@
 
 (defmacro alts! [ports & opts]
   (list 'clojure.core.async/unsupported! "alts!"))
-

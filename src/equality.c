@@ -17,6 +17,7 @@
 #include "list.h"
 #include "seq.h"
 #include "hashset.h"
+#include "record.h"
 
 #include "instant.h"
 #include "uuid.h"
@@ -41,7 +42,7 @@ bool clj_equal_full(ID a, ID b) {
     // Handle CljObject* types
     CljObject *a_obj = (CljObject*)a;
     CljObject *b_obj = (CljObject*)b;
-    if (!a_obj || !b_obj) return false;
+    CLJ_ASSERT(a_obj && b_obj && "clj_equal_full expects non-null heap objects after immediate checks");
 
     // Clojure-compatible sequential equality:
     // Lists, vectors, seq wrappers and lazy seqs compare by element sequence,
@@ -69,17 +70,20 @@ bool clj_equal_full(ID a, ID b) {
     if (ta == CLJ_SYMBOL_TOKEN && tb == CLJ_SYMBOL) {
         const char *tok = symbol_token_data((CljSymbolToken*)a);
         const CljSymbol *sym = (const CljSymbol*)b;
-        return tok && sym && sym->cname && strcmp(tok, sym->cname) == 0;
+        CLJ_ASSERT(tok && sym && sym->cname && "symbol-token vs symbol compare expects valid names");
+        return strcmp(tok, sym->cname) == 0;
     }
     if (tb == CLJ_SYMBOL_TOKEN && ta == CLJ_SYMBOL) {
         const char *tok = symbol_token_data((CljSymbolToken*)b);
         const CljSymbol *sym = (const CljSymbol*)a;
-        return tok && sym && sym->cname && strcmp(tok, sym->cname) == 0;
+        CLJ_ASSERT(tok && sym && sym->cname && "symbol-token vs symbol compare expects valid names");
+        return strcmp(tok, sym->cname) == 0;
     }
     if (ta == CLJ_SYMBOL_TOKEN && tb == CLJ_SYMBOL_TOKEN) {
         const char *a_tok = symbol_token_data((CljSymbolToken*)a);
         const char *b_tok = symbol_token_data((CljSymbolToken*)b);
-        return a_tok && b_tok && strcmp(a_tok, b_tok) == 0;
+        CLJ_ASSERT(a_tok && b_tok && "symbol-token compare expects valid token strings");
+        return strcmp(a_tok, b_tok) == 0;
     }
 
     // Otherwise require same concrete type for structural equality.
@@ -128,23 +132,23 @@ bool clj_equal_full(ID a, ID b) {
         case CLJ_SYMBOL: {
             const CljSymbol *sa = (const CljSymbol*)a;
             const CljSymbol *sb = (const CljSymbol*)b;
-            if (!sa || !sb) return false;
+            CLJ_ASSERT(sa && sb && sa->cname && sb->cname && "CLJ_SYMBOL values must have names");
             if (sa->cname == sb->cname) {
                 // Fast path: shared name pointer (interned)
             } else {
-                if (!sa->cname || !sb->cname) return false;
                 if (strcmp(sa->cname, sb->cname) != 0) return false;
             }
             const CljSymbol *nsa = (const CljSymbol*)sa->ns_name;
             const CljSymbol *nsb = (const CljSymbol*)sb->ns_name;
             if (nsa == nsb) return true; // includes both NULL
             if (!nsa || !nsb) return false;
-            if (!nsa->cname || !nsb->cname) return false;
+            CLJ_ASSERT(nsa->cname && nsb->cname && "symbol namespace symbols must have names");
             return strcmp(nsa->cname, nsb->cname) == 0;
         }
         case CLJ_MAP_PERSISTENT: {
             CljPersistentMap *map_a = as_map(a);
             CljPersistentMap *map_b = as_map(b);
+            CLJ_ASSERT(map_a && map_b && "CLJ_MAP_PERSISTENT values must have backing maps");
             if (map_a->count != map_b->count) return false;
             MAP_FOR_EACH(map_a, key_a, val_a) {
                 ID val_b = map_get(map_b, key_a);
@@ -154,9 +158,26 @@ bool clj_equal_full(ID a, ID b) {
             return true;
         }
 
+        case CLJ_RECORD: {
+            CljPersistentRecord *ra = as_record(a);
+            CljPersistentRecord *rb = as_record(b);
+            CLJ_ASSERT(ra && rb && ra->descriptor && rb->descriptor && "record equality requires valid descriptors");
+            // Record type identity is descriptor identity; same type symbol alone is not sufficient
+            // across unload/reload scenarios with potentially different field layouts.
+            if (ra->descriptor != rb->descriptor) return false;
+            unsigned int count_a = record_declared_field_count(ra);
+            unsigned int count_b = record_declared_field_count(rb);
+            if (count_a != count_b) return false;
+            for (unsigned int i = 0; i < count_a; i++) {
+                if (!clj_equal(ra->values[i], rb->values[i])) return false;
+            }
+            return true;
+        }
+
         case CLJ_HASHSET: {
             CljHashSet *hs_a = (CljHashSet*)a;
             CljHashSet *hs_b = (CljHashSet*)b;
+            CLJ_ASSERT(hs_a && hs_b && "CLJ_HASHSET values must be non-null");
             if (hashset_count(hs_a) != hashset_count(hs_b)) return false;
             ID key;
             HASHSET_FOR_EACH(hs_a, key) {

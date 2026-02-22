@@ -17,6 +17,11 @@ Keys (always present):
 Optional:
 - :os-version (string, e.g. macOS \"14.2.1\", ESP-IDF \"v5.3.4\")
 - :gpio-event-drops (integer, count of dropped GPIO ISR events due to full ring buffer)
+- :audio-cmd-drop-count (integer, dropped audio commands due to full command queue)
+- :audio-tick-overrun-count (integer, ticks that hit bounded work limits)
+- :audio-queue-high-watermark (integer, max pending audio command queue depth)
+- :audio-sfx-drop-count (integer, dropped one-shot SFX triggers)
+- :audio-finished-drop-count (integer, dropped finished notifications due to full queue)
 
 Optional keys (only present when the platform provides the value):
 - :heap-bytes-free (integer, bytes)

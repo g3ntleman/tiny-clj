@@ -57,6 +57,10 @@ static tdb_blockdev_t make_ram_bdev(uint8_t* storage, size_t storage_len, uint32
     return bdev;
 }
 
+/**
+ * @brief free_ram_bdev.
+ * @param bdev Block-device descriptor.
+ */
 static void free_ram_bdev(tdb_blockdev_t* bdev) {
     if (bdev && bdev->ctx) {
         free(bdev->ctx);
@@ -64,6 +68,9 @@ static void free_ram_bdev(tdb_blockdev_t* bdev) {
     }
 }
 
+/**
+ * @brief test_erase_sets_ff.
+ */
 static void test_erase_sets_ff(void) {
     uint8_t storage[128];
     memset(storage, 0x00, sizeof(storage));
@@ -78,6 +85,9 @@ static void test_erase_sets_ff(void) {
     free_ram_bdev(&bdev);
 }
 
+/**
+ * @brief test_prog_is_one_to_zero_only.
+ */
 static void test_prog_is_one_to_zero_only(void) {
     uint8_t storage[64];
     memset(storage, 0xFF, sizeof(storage));
@@ -97,6 +107,9 @@ static void test_prog_is_one_to_zero_only(void) {
     free_ram_bdev(&bdev);
 }
 
+/**
+ * @brief test_granularity_enforced.
+ */
 static void test_granularity_enforced(void) {
     uint8_t storage[64];
     memset(storage, 0xFF, sizeof(storage));
@@ -112,6 +125,9 @@ static void test_granularity_enforced(void) {
     free_ram_bdev(&bdev);
 }
 
+/**
+ * @brief tdb_register_tests_blockdev.
+ */
 void tdb_register_tests_blockdev(void) {
     RUN_TEST(test_erase_sets_ff);
     RUN_TEST(test_prog_is_one_to_zero_only);

@@ -26,6 +26,7 @@ set(TINYCLJ_SRCS
   "../../../src/eval.c"
   "../../../src/function.c"
   "../../../src/optimize.c"
+  "../../../src/record.c"
   "../../../src/environment.c"
   "../../../src/equality.c"
   "../../../src/list.c"
@@ -49,6 +50,9 @@ set(TINYCLJ_SRCS
   "../../../src/embedded_sources.c"
   "../../../src/fs_layer.c"
   "../../../src/gpio_esp32.c"
+  "../../../src/audio_engine.c"
+  "../../../src/builtins_audio.c"
+  "../../../src/audio_backend_esp32.c"
   "../../../src/line_editor.c"
   "../../../src/repl.c"
   "../../../src/repl_history_backend.c"
@@ -69,6 +73,7 @@ idf_component_register(
     subjective-c
     tiny-db
     driver
+    esp_timer
     esp_partition
 )
 

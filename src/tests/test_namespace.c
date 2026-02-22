@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdint.h>
 
 
 // Forward declaration for value_by_parsing_expr
@@ -712,6 +713,100 @@ TEST(test_resolve_list_operator_uses_cache) {
 
     // Cleanup: inc_sym is from intern (singleton). eval_body returns autoreleased; no RELEASE(result1).
     RELEASE(inc_sym);
+}
+
+TEST(test_callsite_cache_epoch_is_16bit) {
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(sizeof(uint16_t), sizeof(g_runtime.resolve_cache_epoch),
+                                   "resolve_cache_epoch should use uint16_t for embedded footprint");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(sizeof(uint16_t), sizeof(((CljCallsiteCache *)0)->epoch),
+                                   "CljCallsiteCache.epoch should use uint16_t");
+}
+
+TEST(test_resolve_cache_first_definition_does_not_invalidate) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    evalstate_set_ns(g_test_eval_state, "user");
+    CljNamespace *ns = g_test_eval_state->current_ns;
+    TEST_ASSERT_NOT_NULL(ns);
+
+    uint16_t before_epoch = g_runtime.resolve_cache_epoch;
+    uint8_t before_generation = g_runtime.resolve_cache_generation;
+
+    CljSymbol *sym = intern_symbol_global("epoch-first-define-only");
+    TEST_ASSERT_NOT_NULL(sym);
+
+    ns_define(ns, sym, fixnum(1));
+    TEST_ASSERT_EQUAL_UINT16(before_epoch, g_runtime.resolve_cache_epoch);
+    TEST_ASSERT_EQUAL_UINT8(before_generation, g_runtime.resolve_cache_generation);
+
+    ns_define(ns, sym, fixnum(2));
+    bool epoch_advanced = (g_runtime.resolve_cache_epoch != before_epoch) ||
+                          (g_runtime.resolve_cache_generation != before_generation);
+    TEST_ASSERT_TRUE_MESSAGE(epoch_advanced, "redefinition must invalidate resolve caches");
+
+    RELEASE(sym);
+}
+
+TEST(test_resolve_cache_batch_coalesces_invalidations) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    evalstate_set_ns(g_test_eval_state, "user");
+    CljNamespace *ns = g_test_eval_state->current_ns;
+    TEST_ASSERT_NOT_NULL(ns);
+
+    CljSymbol *sym_a = intern_symbol_global("batch-a");
+    CljSymbol *sym_b = intern_symbol_global("batch-b");
+    TEST_ASSERT_NOT_NULL(sym_a);
+    TEST_ASSERT_NOT_NULL(sym_b);
+
+    // First definitions do not invalidate.
+    ns_define(ns, sym_a, fixnum(1));
+    ns_define(ns, sym_b, fixnum(2));
+
+    uint16_t before_epoch = g_runtime.resolve_cache_epoch;
+    uint8_t before_generation = g_runtime.resolve_cache_generation;
+
+    ns_begin_resolve_cache_batch();
+    ns_define(ns, sym_a, fixnum(3)); // redefine -> would invalidate without batch
+    ns_define(ns, sym_b, fixnum(4)); // redefine -> would invalidate without batch
+
+    // Epoch must not move while batching is active.
+    TEST_ASSERT_EQUAL_UINT16(before_epoch, g_runtime.resolve_cache_epoch);
+    TEST_ASSERT_EQUAL_UINT8(before_generation, g_runtime.resolve_cache_generation);
+
+    ns_end_resolve_cache_batch();
+
+    bool epoch_advanced = (g_runtime.resolve_cache_epoch != before_epoch) ||
+                          (g_runtime.resolve_cache_generation != before_generation);
+    TEST_ASSERT_TRUE_MESSAGE(epoch_advanced, "batched invalidation should bump epoch once on flush");
+
+    RELEASE(sym_a);
+    RELEASE(sym_b);
+}
+
+TEST(test_keyword_callsite_cache_populates_after_lookup) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    evalstate_set_ns(g_test_eval_state, "user");
+
+    ID parsed = parse_canonicalized("(:x {:x 1})", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE_MESSAGE(is_ast_call(parsed), "expected AST call for keyword invocation");
+    CljASTCall *call = as_ast_call(parsed);
+    TEST_ASSERT_NOT_NULL(call);
+
+    ID cache_before = ast_call_get_callsite_cache(call);
+    TEST_ASSERT_NULL_MESSAGE(cache_before, "callsite cache should be empty before first evaluation");
+
+    ID first = eval_body(parsed, g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_TRUE(is_fixnum(first));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(first));
+
+    ID cache_after_first = ast_call_get_callsite_cache(call);
+    TEST_ASSERT_NOT_NULL_MESSAGE(cache_after_first, "keyword call should populate callsite cache");
+
+    ID second = eval_body(parsed, g_test_eval_state->current_ns->mappings, g_test_eval_state, NULL);
+    TEST_ASSERT_NOT_NULL(second);
+    TEST_ASSERT_TRUE(is_fixnum(second));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(second));
 }
 
 // Ensure redefinition in current namespace is visible to ns_resolve (no stale cache).

@@ -1,8 +1,8 @@
 /*
- * Tail Call Optimization (TCO) for Tiny-CLJ
- * 
- * This module provides functions to detect and transform recursive tail calls
- * into explicit `recur` calls, following the Clojure approach.
+ * Function body optimization walk for Tiny-CLJ.
+ *
+ * This module exposes a single recursive walk that applies multiple
+ * optimization rules in one traversal.
  */
 
 #ifndef OPTIMIZE_H
@@ -24,11 +24,12 @@ bool is_recursive_call(CljObject *call_expr, CljObject *func_name);
 // Validate that all recur calls are in tail position
 void validate_recur_positions(CljObject *body, CljObject *parent_body);
 
-// Transform recursive tail calls to recur
-// This is the main entry point for TCO transformation
-CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name, 
-                                          CljObject **params, int param_count,
-                                          CljObject *parent_body);
+// Optimize a function body expression via a recursive walk.
+// Current optimizations include:
+// - recursive tail-call rewrite to `recur`
+// - record constant-key lookup rewrite to index lookups
+CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
+                                       CljObject **params, int param_count,
+                                       CljObject *parent_body);
 
 #endif // OPTIMIZE_H
-

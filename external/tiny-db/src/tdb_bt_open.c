@@ -81,6 +81,15 @@ static int nroot __P((BTREE*));
  *	NULL on failure, pointer to DB on success.
  *
  */
+/**
+ * @brief __bt_open.
+ * @param fname File path or name.
+ * @param flags Option flags controlling operation behavior.
+ * @param mode Open mode flags.
+ * @param openinfo Input pointer.
+ * @param dflags Option flags controlling operation behavior.
+ * @return Database handle, or NULL on failure.
+ */
 DB* __bt_open(const char* fname, int flags, int mode, const BTREEINFO* openinfo, int dflags) {
     struct stat sb;
     BTMETA m;
@@ -306,6 +315,11 @@ err:
  * Returns:
  *	RET_ERROR, RET_SUCCESS
  */
+/**
+ * @brief nroot.
+ * @param t B-Tree context.
+ * @return RET_SUCCESS on success, RET_ERROR on failure.
+ */
 static int nroot(BTREE* t) {
     PAGE *meta, *root;
     pgno_t npg;
@@ -336,6 +350,10 @@ static int nroot(BTREE* t) {
     return (RET_SUCCESS);
 }
 
+/**
+ * @brief byteorder.
+ * @return BIG_ENDIAN or LITTLE_ENDIAN for the host CPU.
+ */
 static int byteorder(void) {
     u_int32_t x;
     u_char* p;
@@ -352,6 +370,11 @@ static int byteorder(void) {
     }
 }
 
+/**
+ * @brief __bt_fd.
+ * @param dbp B-Tree database handle.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int __bt_fd(const DB* dbp) {
     BTREE* t;
 

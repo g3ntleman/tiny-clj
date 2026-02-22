@@ -287,9 +287,8 @@ char *subjective_c_test_extract_filename_from_path(const char *file_path) {
  * @param pattern Pattern (* matches any sequence)
  * @return true if match, false otherwise
  */
-bool subjective_c_test_name_matches_pattern(const char *name, const char *pattern) {
+static bool test_name_matches_pattern_exact(const char *name, const char *pattern) {
     if (!name || !pattern) return false;
-
     size_t pattern_len = strlen(pattern);
     /* Worst case: every input char needs escaping (+1), plus ^, $, and terminator. */
     size_t max_regex_len = (pattern_len * 2) + 3;
@@ -326,4 +325,28 @@ bool subjective_c_test_name_matches_pattern(const char *name, const char *patter
 
     CLJ_FREE(regex_pattern);
     return matched;
+}
+
+bool subjective_c_test_name_matches_pattern(const char *name, const char *pattern) {
+    if (!name || !pattern) return false;
+
+    if (test_name_matches_pattern_exact(name, pattern)) {
+        return true;
+    }
+
+    // Backward-compat: TEST_SHARED groups are prefixed with "shared_".
+    // Accept both forms in CLI patterns, e.g. test_equal/* <-> shared_test_equal/*.
+    const char *shared_prefix = "shared_";
+    const size_t shared_prefix_len = 7;
+    bool name_is_shared = strncmp(name, shared_prefix, shared_prefix_len) == 0;
+    bool pattern_is_shared = strncmp(pattern, shared_prefix, shared_prefix_len) == 0;
+
+    if (name_is_shared && test_name_matches_pattern_exact(name + shared_prefix_len, pattern)) {
+        return true;
+    }
+    if (pattern_is_shared && test_name_matches_pattern_exact(name, pattern + shared_prefix_len)) {
+        return true;
+    }
+
+    return false;
 }

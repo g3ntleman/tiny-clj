@@ -60,6 +60,14 @@ static char sccsid[] = "@(#)bt_utils.c	8.4 (Berkeley) 2/21/94";
  * Returns:
  *	RET_SUCCESS, RET_ERROR.
  */
+/**
+ * @brief __bt_ret.
+ * @param t B-Tree context.
+ * @param e Page/index search state.
+ * @param key Key bytes.
+ * @param data Value bytes.
+ * @return Return code (RET_SUCCESS on success).
+ */
 int __bt_ret(BTREE* t, EPG* e, DBT* key, DBT* data) {
     register BLEAF* bl;
     register void* p;
@@ -126,6 +134,13 @@ int __bt_ret(BTREE* t, EPG* e, DBT* key, DBT* data) {
  *	= 0 if k1 is = record
  *	> 0 if k1 is > record
  */
+/**
+ * @brief __bt_cmp.
+ * @param t B-Tree context.
+ * @param k1 Key bytes.
+ * @param e Page/index search state.
+ * @return Comparison result (<0, 0, >0).
+ */
 int __bt_cmp(BTREE* t, const DBT* k1, EPG* e) {
     BINTERNAL* bi;
     BLEAF* bl;
@@ -181,6 +196,12 @@ int __bt_cmp(BTREE* t, const DBT* k1, EPG* e) {
  *	= 0 if a is = b
  *	> 0 if a is > b
  */
+/**
+ * @brief __bt_defcmp.
+ * @param a Input pointer.
+ * @param b Input pointer.
+ * @return Comparison result (<0, 0, >0).
+ */
 int __bt_defcmp(const DBT* a, const DBT* b) {
     size_t len;
     register u_char *p1, *p2;
@@ -207,6 +228,12 @@ int __bt_defcmp(const DBT* a, const DBT* b) {
  *
  * Returns:
  *	Number of bytes needed to distinguish b from a.
+ */
+/**
+ * @brief __bt_defpfx.
+ * @param a Input pointer.
+ * @param b Input pointer.
+ * @return Computed size value.
  */
 size_t __bt_defpfx(const DBT* a, const DBT* b) {
     register u_char *p1, *p2;

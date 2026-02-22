@@ -681,12 +681,37 @@ void parse_error(const char *msg, EvalState *st) {
  * @param symbol Symbol to define
  * @param value Value to bind to symbol
  */
+// Coalesce repeated namespace mutations (bootstrap/require) into one epoch bump.
+static uint16_t g_resolve_cache_batch_depth = 0;
+static bool g_resolve_cache_batch_dirty = false;
+
+void ns_begin_resolve_cache_batch(void) {
+    if (g_resolve_cache_batch_depth < UINT16_MAX) {
+        g_resolve_cache_batch_depth++;
+    }
+}
+
+void ns_end_resolve_cache_batch(void) {
+    if (g_resolve_cache_batch_depth == 0) {
+        return;
+    }
+    g_resolve_cache_batch_depth--;
+    if (g_resolve_cache_batch_depth == 0 && g_resolve_cache_batch_dirty) {
+        g_resolve_cache_batch_dirty = false;
+        g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch(&g_runtime.resolve_cache_generation);
+    }
+}
+
 /**
  * @brief Invalidate resolution callsite caches by bumping the global epoch.
  */
 void ns_invalidate_resolve_cache(void) {
+    if (g_resolve_cache_batch_depth > 0) {
+        g_resolve_cache_batch_dirty = true;
+        return;
+    }
     // Invalidate callsite caches by bumping the global epoch counter.
-    g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch();
+    g_runtime.resolve_cache_epoch = runtime_next_resolve_epoch(&g_runtime.resolve_cache_generation);
 }
 
 /**
@@ -750,20 +775,37 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
 
     CLJ_ASSERT(ns->mappings != NULL);
 
+    bool changed = false;
+
     // Store symbol-value binding (overwrites existing)
     // For def: store qualified symbol (e.g., user/my-var)
     // IMPORTANT: Use owned/in-place update to keep rc==1 during core load (COW hot path).
+    ID prev = map_get_sentinel(ns->mappings, qualified_symbol, NOT_FOUND);
+    bool had_qualified_binding = (prev != NOT_FOUND);
+    if (had_qualified_binding && prev != value) {
+        changed = true;
+    }
     map_assoc_inplace(&ns->mappings, qualified_symbol, value);
+
+    // Defining a qualified key for the first time can still shadow an existing
+    // unqualified binding in the same namespace (e.g. referred clojure.core symbol).
+    if (!had_qualified_binding && ns->name != SYM_CLOJURE_CORE && sym->ns_name == NULL) {
+        ID prev_unqualified = map_get_sentinel(ns->mappings, sym, NOT_FOUND);
+        if (prev_unqualified != NOT_FOUND && prev_unqualified != value) {
+            changed = true;
+        }
+    }
 
     // For clojure.core, also keep an unqualified binding for compatibility.
     if (ns->name == SYM_CLOJURE_CORE && sym->ns_name == NULL) {
         map_assoc_inplace(&ns->mappings, sym, value);
     }
 
-    // OPTIMIZATION: Invalidate resolve cache completely instead of removing individual symbols
-    // This avoids ~23 map_assoc() calls per require and is more efficient.
-    // The cache will be automatically rebuilt on the next ns_resolve() call.
-    ns_invalidate_resolve_cache();
+    if (changed) {
+        // OPTIMIZATION: Invalidate resolve cache completely instead of removing individual symbols.
+        // The cache will be automatically rebuilt on the next ns_resolve() call.
+        ns_invalidate_resolve_cache();
+    }
 }
 
 // For :refer :all - stores qualified symbol (clojure.core remains special-cased)
@@ -778,17 +820,23 @@ void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
 
     CLJ_ASSERT(ns->mappings != NULL);
 
-
+    bool changed = false;
     // DRY: Use helper function for qualified symbol (for consistency with def/defn entries)
     // Store qualified symbol for consistency with def/defn entries
     if (ns->name && ns->name->cname) {
         CljSymbol *qualified_sym = get_namespace_mapping_key(ns, sym);
         if (qualified_sym) {
+            ID prev = map_get_sentinel(ns->mappings, qualified_sym, NOT_FOUND);
+            if (prev != NOT_FOUND && prev != value) {
+                changed = true;
+            }
             map_assoc_inplace(&ns->mappings, qualified_sym, value);
         }
     }
 
-    ns_invalidate_resolve_cache();
+    if (changed) {
+        ns_invalidate_resolve_cache();
+    }
 }
 
 /**

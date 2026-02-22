@@ -431,7 +431,9 @@ int load_clojure_core(EvalState *st) {
       core = st->current_ns;
     if (core) {
       st->current_ns = core;
+      ns_begin_resolve_cache_batch();
       bool ok = eval_core_source(clojure_core_override, strlen(clojure_core_override), "clojure.core.clj", st);
+      ns_end_resolve_cache_batch();
       if (ok) core->loaded = true;
       if (orig_ns) st->current_ns = orig_ns;
       if (ok) loaded = true;
@@ -447,6 +449,7 @@ int load_clojure_core(EvalState *st) {
   if (!inc_sym) return 0;
   CljObject *inc_val = (CljObject *)map_get_sentinel((CljValue)core->mappings, (CljValue)inc_sym, NULL);
   if (!inc_val || (TAG(inc_val) != CLJ_FUNC && TAG(inc_val) != CLJ_CLOSURE)) return 0;
+  symbol_table_fit_startup_reserve(0u);
   return 1;
 }
 
