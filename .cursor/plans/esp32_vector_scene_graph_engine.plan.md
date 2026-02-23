@@ -24,7 +24,7 @@ Build a reduced SVG-like 2D graphics engine with a strict PoC-first delivery pat
 - macOS host simulator is mandatory before device bring-up
 - Shared render core between simulator and ESP32 (avoid logic forks)
 - Host emulation must happen at driver/backend level (not above primitive rasterization),
-  so primitive generation/rasterization bugs are debuggable on host.
+so primitive generation/rasterization bugs are debuggable on host.
 - No required full framebuffer on device
 - tiny-clj should not do per-pixel rendering work
 - Engine must stay compact and record-friendly
@@ -88,7 +88,7 @@ Tasks:
 - Add a host-side simulator target for 320x240 rendering.
 - Implement offscreen RGB565 frame target in host memory.
 - Implement host simulator as a driver/backend implementation under the same primitive/render API
-  used by ESP32 (do not bypass primitive rasterizers with a separate host-only drawing path).
+used by ESP32 (do not bypass primitive rasterizers with a separate host-only drawing path).
 - Add deterministic frame export (PPM or raw dump) for golden testing.
 - Add frame checksum utility to compare expected vs actual output.
 - Ensure simulator consumes the same canonical scene data format as embedded.
@@ -211,7 +211,7 @@ Tasks:
 - Integrate validated raster output with SPI transport model:
   - set window + burst writes
 - Keep backend boundary identical between host and ESP32 so host can emulate the device driver layer
-  while still exercising the same primitive rasterization pipeline.
+while still exercising the same primitive rasterization pipeline.
 - Keep full framebuffer optional (not mandatory).
 - Implement minimal clipping/culling before draw submission.
 - Add optional dirty-region mode switch.
@@ -294,3 +294,4 @@ Rule:
   - Mitigation: stable IDs, bounded patch vectors, canonicalized compact render data.
 - Risk: Float drift/non-determinism in long animations.
   - Mitigation: optional fixed-point transform core (16.16).
+
