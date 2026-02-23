@@ -22,22 +22,13 @@ CljAtom* make_atom(ID value) {
     return atom;
 }
 
-/** Get the current value of an atom.
- * @param atom Atom object
- * @return Current value (caller must release if not immediate)
- */
 ID atom_deref(CljAtom *atom) {
     if (!atom) return NULL;
-    // RETAIN handles nil and immediates safely (ignores them)
-    return RETAIN(atom->value);
+    return AUTORELEASE(RETAIN(atom->value));
 }
 
-/** Set the value of an atom directly.
- * @param atom Atom object
- * @param new_value New value (can be NULL/nil or immediate)
- * @return New value (caller must release if not immediate)
- */
-ID atom_reset(CljAtom *atom, ID new_value) {
+/** Internal helper: set atom value and return owned result. */
+static ID atom_reset_owned(CljAtom *atom, ID new_value) {
     if (!atom) return NULL;
 
     // Use ASSIGN to safely replace atom value (releases old, retains new)
@@ -47,14 +38,18 @@ ID atom_reset(CljAtom *atom, ID new_value) {
     return RETAIN(new_value);
 }
 
-/** Apply a function to the atom's value and update it.
+ID atom_reset(CljAtom *atom, ID new_value) {
+    return AUTORELEASE(atom_reset_owned(atom, new_value));
+}
+
+/** Apply a function to the atom's value and update it (owned result).
  * @param atom Atom object
  * @param fn Function to apply
  * @param args Additional arguments (can be NULL)
  * @param argc Number of additional arguments
  * @return New value (caller must release if not immediate)
  */
-ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
+static ID atom_swap_owned(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     // Validate arguments (Clojure/JVM behavior: throw IllegalArgumentException)
     if (!atom) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires an atom",
@@ -125,5 +120,9 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     }
 
     // Update atom with new value
-    return atom_reset(atom, new_value);
+    return atom_reset_owned(atom, new_value);
+}
+
+ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
+    return AUTORELEASE(atom_swap_owned(atom, fn, args, argc));
 }

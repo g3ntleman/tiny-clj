@@ -63,7 +63,6 @@ TEST(test_atom_deref_returns_value) {
     ID value = atom_deref(atom);
     TEST_ASSERT_NOT_NULL(value);
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)value));
-    RELEASE(value);
     RELEASE(atom);
 }
 
@@ -84,7 +83,6 @@ TEST(test_atom_reset_changes_value) {
     TEST_ASSERT_NOT_NULL(new_value);
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)new_value));
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)atom->value));
-    RELEASE(new_value);
     RELEASE(atom);
 }
 
@@ -115,7 +113,6 @@ TEST(test_atom_swap_simple) {
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
         TEST_ASSERT_EQUAL(43, as_fixnum((CljValue)result));
-        // Don't RELEASE result - atom_swap returns autoreleased object
     } else {
         TEST_FAIL_MESSAGE("Could not resolve 'inc' function from clojure.core");
     }
@@ -138,7 +135,6 @@ TEST(test_atom_swap_with_args) {
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
         TEST_ASSERT_EQUAL(15, as_fixnum((CljValue)result));
-        RELEASE(result);
     } else {
         TEST_FAIL_MESSAGE("Could not resolve '+' function from clojure.core");
     }
@@ -163,7 +159,6 @@ TEST(test_atom_swap_persists) {
         ID value = atom_deref(atom);
         TEST_ASSERT_NOT_NULL(value);
         TEST_ASSERT_EQUAL(43, as_fixnum((CljValue)value));
-        RELEASE(value);
     }
     
     RELEASE(atom);
@@ -181,14 +176,12 @@ TEST(test_atom_swap_multiple_times) {
     if (inc_func && inc_func != NOT_FOUND) {
         ID args[] = {};
         for (int i = 0; i < 5; i++) {
-            ID result = atom_swap(atom, inc_func, args, 0);
-            RELEASE(result);
+            (void)atom_swap(atom, inc_func, args, 0);
         }
         
         ID value = atom_deref(atom);
         TEST_ASSERT_NOT_NULL(value);
         TEST_ASSERT_EQUAL(5, as_fixnum((CljValue)value));
-        RELEASE(value);
     }
     
     RELEASE(atom);
@@ -279,7 +272,6 @@ TEST(test_atom_reference_sharing) {
     atom_reset(atom1, fixnum(100));
     ID value2 = atom_deref(atom2);
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)value2));
-    RELEASE(value2);
     
     RELEASE(atom1);
     RELEASE(atom2);
@@ -368,15 +360,13 @@ TEST(test_atom_real_world_usage) {
         ID args[] = {};
         // Increment multiple times
         for (int i = 0; i < 10; i++) {
-            ID result = atom_swap(counter, inc_func, args, 0);
-            RELEASE(result);
+            (void)atom_swap(counter, inc_func, args, 0);
         }
         
         // Verify final value
         ID value = atom_deref(counter);
         TEST_ASSERT_NOT_NULL(value);
         TEST_ASSERT_EQUAL(10, as_fixnum((CljValue)value));
-        RELEASE(value);
     }
     
     RELEASE(counter);

@@ -27,27 +27,13 @@ static inline CljAtom* as_atom(ID obj) {
  */
 CljAtom* make_atom(ID value);
 
-/** Get the current value of an atom.
- * @param atom Atom object
- * @return Current value (caller must release if not immediate)
- */
+/** Get the current value of an atom (MEMORY_POLICY: usable/pool-safe return). */
 ID atom_deref(CljAtom *atom);
 
-/** Set the value of an atom directly.
- * @param atom Atom object
- * @param new_value New value (can be NULL/nil or immediate)
- * @return New value (caller must release if not immediate)
- */
+/** Set the value of an atom directly (MEMORY_POLICY: usable/pool-safe return). */
 ID atom_reset(CljAtom *atom, ID new_value);
 
-/** Apply a function to the atom's value and update it.
- * @param atom Atom object
- * @param fn Function to apply
- * @param args Additional arguments (can be NULL)
- * @param argc Number of additional arguments
- * @return New value (caller must release if not immediate)
- */
+/** Apply a function to the atom's value and update it (MEMORY_POLICY: usable/pool-safe return). */
 ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc);
 
 #endif // TINY_CLJ_ATOM_H
-

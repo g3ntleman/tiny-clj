@@ -670,6 +670,284 @@ TEST(test_runtime_stats_reduce_range_loop_stable_after_warmup)
 #endif
 
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_eval_read_string_fn_literal_no_slotref_growth)
+{
+    const char *expr = "(heap (eval (read-string \"(count ((fn [x] (list x)) 1))\")))";
+
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    init_special_symbols();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, true);
+
+    ID k_total = (ID)intern_symbol_global(":total");
+    ID k_slotref = (ID)intern_symbol_global(":SlotRef");
+
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID result = eval_string(expr, g_test_eval_state);
+            TEST_ASSERT_NOT_NULL(result);
+            TEST_ASSERT_TRUE(is_map(result));
+
+            ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+            TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+            TEST_ASSERT_TRUE(is_fixnum(v_total));
+            TEST_ASSERT_EQUAL_INT_MESSAGE(0, as_fixnum(v_total),
+                                          "fn-literal eval(read-string) heap delta should stay at 0 after SlotRef fix");
+
+            ID v_slotref = map_get_sentinel((CljPersistentMap *)result, k_slotref, NOT_FOUND);
+            TEST_ASSERT_EQUAL_MESSAGE(NOT_FOUND, v_slotref,
+                                      "SlotRef bytes must not grow in heap(eval(read-string ...)) path");
+        });
+    }
+}
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_eval_read_string_let_binding_alias_no_growth)
+{
+    const char *expr = "(heap (eval (read-string \"(let [v [1 2 3]] v)\")))";
+
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    init_special_symbols();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, true);
+
+    ID k_total = (ID)intern_symbol_global(":total");
+
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID result = eval_string(expr, g_test_eval_state);
+            TEST_ASSERT_NOT_NULL(result);
+            TEST_ASSERT_TRUE(is_map(result));
+
+            ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+            TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+            TEST_ASSERT_TRUE(is_fixnum(v_total));
+            TEST_ASSERT_EQUAL_INT_MESSAGE(0, as_fixnum(v_total),
+                                          "let binding alias result should not leak frame/loop preserved refs");
+        });
+    }
+}
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_eval_read_string_loop_binding_alias_no_growth)
+{
+    const char *expr = "(heap (eval (read-string \"(loop [v [1 2 3]] v)\")))";
+
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    init_special_symbols();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, true);
+
+    ID k_total = (ID)intern_symbol_global(":total");
+
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID result = eval_string(expr, g_test_eval_state);
+            TEST_ASSERT_NOT_NULL(result);
+            TEST_ASSERT_TRUE(is_map(result));
+
+            ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+            TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+            TEST_ASSERT_TRUE(is_fixnum(v_total));
+            TEST_ASSERT_EQUAL_INT_MESSAGE(0, as_fixnum(v_total),
+                                          "loop binding alias result should not leak frame/recur preserved refs");
+        });
+    }
+}
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_eval_read_string_first_borrowed_list_alias_no_growth)
+{
+    const char *expr = "(heap (eval (read-string \"(first (quote ((range 3))))\")))";
+
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    init_special_symbols();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, true);
+
+    ID k_total = (ID)intern_symbol_global(":total");
+    ID k_list = (ID)intern_symbol_global(":List");
+
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID result = eval_string(expr, g_test_eval_state);
+            TEST_ASSERT_NOT_NULL(result);
+            TEST_ASSERT_TRUE(is_map(result));
+
+            ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+            TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+            TEST_ASSERT_TRUE(is_fixnum(v_total));
+            TEST_ASSERT_EQUAL_INT_MESSAGE(0, as_fixnum(v_total),
+                                          "first on quoted nested list should not leak borrowed list alias");
+
+            ID v_list = map_get_sentinel((CljPersistentMap *)result, k_list, NOT_FOUND);
+            TEST_ASSERT_EQUAL_MESSAGE(NOT_FOUND, v_list,
+                                      "List bytes must not grow for first borrowed sublist alias");
+        });
+    }
+}
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_function_recur_no_arg_retain_growth)
+{
+    const char *init_expr = "(def rf (fn [x n] (if (= n 0) x (recur x (dec n)))))";
+    const char *expr = "(heap (rf '(1 2) 3))";
+
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    init_special_symbols();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, true);
+
+    WITH_AUTORELEASE_POOL({
+        ID init = eval_string(init_expr, g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(init);
+    });
+
+    ID k_total = (ID)intern_symbol_global(":total");
+    ID k_list = (ID)intern_symbol_global(":List");
+
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID result = eval_string(expr, g_test_eval_state);
+            TEST_ASSERT_NOT_NULL(result);
+            TEST_ASSERT_TRUE(is_map(result));
+
+            ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+            TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+            TEST_ASSERT_TRUE(is_fixnum(v_total));
+            TEST_ASSERT_EQUAL_INT_MESSAGE(0, as_fixnum(v_total),
+                                          "function recur path must release transferred recur-arg retains");
+
+            ID v_list = map_get_sentinel((CljPersistentMap *)result, k_list, NOT_FOUND);
+            TEST_ASSERT_EQUAL_MESSAGE(NOT_FOUND, v_list,
+                                      "recur should not leak list arguments across iterations");
+        });
+    }
+}
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_eval_read_string_macroexpand_1_thread_first_no_list_growth)
+{
+    const char *expr = "(heap (eval (read-string \"(macroexpand-1 (quote (-> 1 inc inc)))\")))";
+
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    init_special_symbols();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, true);
+
+    ID k_total = (ID)intern_symbol_global(":total");
+    ID k_list = (ID)intern_symbol_global(":List");
+
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID result = eval_string(expr, g_test_eval_state);
+            TEST_ASSERT_NOT_NULL(result);
+            TEST_ASSERT_TRUE(is_map(result));
+
+            ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+            TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+            TEST_ASSERT_TRUE(is_fixnum(v_total));
+            TEST_ASSERT_TRUE_MESSAGE(as_fixnum(v_total) <= 0,
+                                     "macroexpand-1 on -> must not leak threaded intermediate lists");
+
+            ID v_list = map_get_sentinel((CljPersistentMap *)result, k_list, NOT_FOUND);
+            TEST_ASSERT_EQUAL_MESSAGE(NOT_FOUND, v_list,
+                                      "macroexpand-1 threading macro should not grow List bytes");
+        });
+    }
+}
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_eval_read_string_let_named_fn_if_optimizer_no_ast_growth)
+{
+    const char *expr =
+        "(heap (eval (read-string \"(let [f (fn f [x] (if (list? x) x nil))] 1)\")))";
+
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+    event_loop_init();
+    meta_registry_init();
+    init_special_symbols();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+    evalstate_reset(&g_test_eval_state, true);
+
+    ID k_total = (ID)intern_symbol_global(":total");
+    ID k_vector = (ID)intern_symbol_global(":Vector");
+    ID k_astcall = (ID)intern_symbol_global(":ASTCall");
+    ID k_slotref = (ID)intern_symbol_global(":SlotRef");
+
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID result = eval_string(expr, g_test_eval_state);
+            TEST_ASSERT_NOT_NULL(result);
+            TEST_ASSERT_TRUE(is_map(result));
+
+            ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+            TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+            TEST_ASSERT_TRUE(is_fixnum(v_total));
+            TEST_ASSERT_EQUAL_INT_MESSAGE(0, as_fixnum(v_total),
+                                          "named local fn optimizer must not leak retained AST helper nodes");
+
+            TEST_ASSERT_EQUAL_MESSAGE(NOT_FOUND,
+                                      map_get_sentinel((CljPersistentMap *)result, k_vector, NOT_FOUND),
+                                      "optimizer must not grow Vector bytes for unchanged AST args");
+            TEST_ASSERT_EQUAL_MESSAGE(NOT_FOUND,
+                                      map_get_sentinel((CljPersistentMap *)result, k_astcall, NOT_FOUND),
+                                      "optimizer must not grow ASTCall bytes for unchanged nested calls");
+            TEST_ASSERT_EQUAL_MESSAGE(NOT_FOUND,
+                                      map_get_sentinel((CljPersistentMap *)result, k_slotref, NOT_FOUND),
+                                      "optimizer must release retained SlotRef results from recursive walk");
+        });
+    }
+}
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 /*
  * Regression test for (assoc var key val): after warmup, one eval must not grow heap.
  */
@@ -746,4 +1024,3 @@ TEST(test_heap_plus_does_not_intern_user_plus_when_missing)
     TEST_ASSERT_EQUAL(NOT_FOUND, v_symbol);
 }
 #endif
-

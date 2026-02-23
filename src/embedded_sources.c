@@ -43,6 +43,10 @@ static const char tiny_snd_composer_code[] =
 #include "tiny-clj.audio.clj"
     ;
 
+static const char tiny_snd_runtime_code[] =
+#include "tiny_snd_runtime.clj"
+    ;
+
 static const char tiny_clj_net_code[] =
 #include "tiny-clj.net.clj"
     ;
@@ -78,6 +82,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     { "/libs/tiny-clj/runtime.clj", (const uint8_t *)tiny_clj_runtime_code, (int)(sizeof(tiny_clj_runtime_code) - 1) },
     { "/libs/tiny-clj/fs.clj", (const uint8_t *)tiny_clj_fs_code, (int)(sizeof(tiny_clj_fs_code) - 1) },
     { "/libs/tiny-snd/composer.clj", (const uint8_t *)tiny_snd_composer_code, (int)(sizeof(tiny_snd_composer_code) - 1) },
+    { "/libs/tiny-snd/runtime.clj", (const uint8_t *)tiny_snd_runtime_code, (int)(sizeof(tiny_snd_runtime_code) - 1) },
     { "/libs/tiny-clj/net.clj", (const uint8_t *)tiny_clj_net_code, (int)(sizeof(tiny_clj_net_code) - 1) },
     { "/libs/tiny-clj/net/mdns.clj", (const uint8_t *)tiny_clj_net_mdns_code, (int)(sizeof(tiny_clj_net_mdns_code) - 1) },
     { "/libs/tiny-db/kv.clj", (const uint8_t *)tiny_db_kv_code, (int)(sizeof(tiny_db_kv_code) - 1) },

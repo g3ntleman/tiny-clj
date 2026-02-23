@@ -4,7 +4,7 @@
  * Consolidated tests for core Clojure functions from clojure.core namespace
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 200
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 0
 #include "tests_common.h"
 #include "namespace.h"
 #include "symbol.h"
@@ -627,4 +627,3 @@ TEST_SHARED(test_core_range) {
     TEST_ASSERT_TRUE(is_fixnum(result2));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(result2));
 }
-

@@ -486,7 +486,8 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
                 if (lexical_lookup(*scope_stack, sym, &depth, &slot)) {
                     if (depth == 0) {
                         ID ref = (ID)make_slot_ref(sym, 0, slot);
-                        if (ref) return ref;
+                        // Canonicalizer returns pool-safe heap values; SlotRef must match.
+                        return AUTORELEASE(ref);
                     }
                 }
             }

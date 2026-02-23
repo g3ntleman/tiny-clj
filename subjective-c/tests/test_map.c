@@ -394,7 +394,6 @@ TEST(test_map_copy_capacity_growth) {
     TEST_ASSERT_TRUE(expanded_map != map);
     TEST_ASSERT_EQUAL_INT(3, expanded_map->count);
     TEST_ASSERT_EQUAL_INT(4, expanded_map->capacity);
-    RELEASE(expanded_map);
 
     RETAIN(map);
     CljPersistentMap *copied_map = map_assoc(map, kw1, fixnum(10));
@@ -406,7 +405,6 @@ TEST(test_map_copy_capacity_growth) {
     TEST_ASSERT_NOT_NULL(val_kw1);
     TEST_ASSERT_TRUE(is_fixnum(val_kw1));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(val_kw1));
-    RELEASE(copied_map);
     RELEASE(map);
 }
 

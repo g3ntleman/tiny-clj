@@ -5,7 +5,7 @@
  * in different contexts (let, for*, etc.)
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 200
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 0
 #include "tests_common.h"
 #include "../eval.h"
 #include "../vector.h"

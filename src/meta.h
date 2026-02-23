@@ -24,10 +24,10 @@ void meta_registry_cleanup(void);
 // Note: Uses void* to avoid circular dependencies in header
 CljPersistentMap* make_location_meta(void *reader, void *st);
 
-// Helper function to merge metadata maps
+// Helper function to merge metadata maps (MEMORY_POLICY: usable/pool-safe return)
 CljPersistentMap* meta_merge(CljPersistentMap *existing_meta, CljPersistentMap *location_meta);
 
-// Merge metadata maps with second map taking precedence (overwrites conflicting keys)
+// Merge metadata maps with second map taking precedence (MEMORY_POLICY: usable/pool-safe return)
 CljPersistentMap* meta_merge_with_precedence(CljPersistentMap *existing_meta, CljPersistentMap *form_meta);
 #else
 // Stubs when meta is disabled

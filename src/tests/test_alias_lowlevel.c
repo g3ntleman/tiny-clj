@@ -40,9 +40,9 @@ TEST(test_lowlevel_alias_sym_extraction) {
     
     // Create vector
     CljPersistentVector *vec = AUTORELEASE(make_vector(3, STRONG));
-    vec = AUTORELEASE(vector_conj(vec, ns_sym));
-    vec = AUTORELEASE(vector_conj(vec, as_kw));
-    vec = AUTORELEASE(vector_conj(vec, str_alias));
+    vec = vector_conj(vec, ns_sym);
+    vec = vector_conj(vec, as_kw);
+    vec = vector_conj(vec, str_alias);
     
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
@@ -104,9 +104,9 @@ TEST(test_lowlevel_native_require_sets_alias_preloaded) {
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
     CljPersistentVector *vec = AUTORELEASE(make_vector(3, STRONG));
-    vec = AUTORELEASE(vector_conj(vec, ns_sym));
-    vec = AUTORELEASE(vector_conj(vec, as_kw));
-    vec = AUTORELEASE(vector_conj(vec, str_alias));
+    vec = vector_conj(vec, ns_sym);
+    vec = vector_conj(vec, as_kw);
+    vec = vector_conj(vec, str_alias);
     
     // Call native_require
     builtin_set_eval_state(g_test_eval_state);
@@ -175,9 +175,9 @@ TEST(test_lowlevel_alias_sym_not_null_when_preloaded) {
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
     CljPersistentVector *vec = AUTORELEASE(make_vector(3, STRONG));
-    vec = AUTORELEASE(vector_conj(vec, ns_sym));
-    vec = AUTORELEASE(vector_conj(vec, as_kw));
-    vec = AUTORELEASE(vector_conj(vec, str_alias));
+    vec = vector_conj(vec, ns_sym);
+    vec = vector_conj(vec, as_kw);
+    vec = vector_conj(vec, str_alias);
     
     // Verify vector is correct before calling native_require
     TEST_ASSERT_NOT_NULL(vec);
@@ -226,9 +226,9 @@ TEST(test_lowlevel_current_ns_correct_when_alias_set) {
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
     CljPersistentVector *vec = AUTORELEASE(make_vector(3, STRONG));
-    vec = AUTORELEASE(vector_conj(vec, ns_sym));
-    vec = AUTORELEASE(vector_conj(vec, as_kw));
-    vec = AUTORELEASE(vector_conj(vec, str_alias));
+    vec = vector_conj(vec, ns_sym);
+    vec = vector_conj(vec, as_kw);
+    vec = vector_conj(vec, str_alias);
     
     // Call native_require
     builtin_set_eval_state(g_test_eval_state);
@@ -249,4 +249,3 @@ TEST(test_lowlevel_current_ns_correct_when_alias_set) {
     TEST_ASSERT_NOT_NULL_MESSAGE(ns_name_new, "Alias should be in new namespace");
     TEST_ASSERT_NULL_MESSAGE(ns_name_orig, "Alias should NOT be in original namespace");
 }
-

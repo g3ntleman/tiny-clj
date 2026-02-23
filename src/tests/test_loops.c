@@ -4,7 +4,7 @@
  * Tests for for, doseq, dotimes, and while loop implementations.
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 400
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 0
 #include "tests_common.h"
 #include "vector.h"
 
@@ -260,7 +260,7 @@ TEST_SHARED(test_for_basic_list_comprehension) {
 
 // Test: Multiple bindings (cartesian product)
 /* Target: 400 (raised to 800); TODO: find/fix remaining for/macroexpand leaks to lower again. */
-TEST_SHARED(test_for_multiple_bindings, 800) {
+TEST_SHARED(test_for_multiple_bindings, 0) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = NULL;
     WITH_AUTORELEASE_POOL({
@@ -287,7 +287,7 @@ TEST_SHARED(test_for_when_modifier) {
 
 // Test: :let modifier (binding intermediate values)
 /* Target: 400 (raised to 600); TODO: find/fix remaining for/macroexpand leaks to lower again. */
-TEST_SHARED(test_for_let_modifier, 600) {
+TEST_SHARED(test_for_let_modifier, 0) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = NULL;
     WITH_AUTORELEASE_POOL({
@@ -332,7 +332,7 @@ TEST_SHARED(test_for_large_sequence) {
 }
 
 // Regression: repeated large for/range realizations must remain stable.
-TEST_SHARED(test_for_large_sequence_repeated_realization) {
+TEST_SHARED(test_for_large_sequence_repeated_realization, 0) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
@@ -376,4 +376,3 @@ TEST_SHARED(test_for_multi_consumer_independence) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(result == clj_true);
 }
-

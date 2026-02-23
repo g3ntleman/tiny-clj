@@ -11,7 +11,7 @@
 // ============================================================================
 
 // H1/H2/H3: Test map_assoc with AUTORELEASE returns correct value
-TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum, 900) {
+TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum, 0) {
     // This test must run FIRST to verify AUTORELEASE behavior
     CljPersistentMap *map = make_map(4);
     TEST_ASSERT_NOT_NULL(map);
@@ -34,7 +34,7 @@ TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum, 900) {
 }
 
 // H6: Test ns_define and ns_resolve pattern
-TEST_SHARED(test_aab_ns_define_resolve_pattern, 900) {
+TEST_SHARED(test_aab_ns_define_resolve_pattern, 0) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     TEST_ASSERT_NOT_NULL(g_test_eval_state->current_ns);
     
@@ -668,7 +668,7 @@ TEST_SHARED(test_list_equal_empty_lists) {
 // NOT= TESTS
 // ============================================================================
 
-TEST_SHARED(test_not_eq, 900) {
+TEST_SHARED(test_not_eq, 0) {
     if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
@@ -709,61 +709,61 @@ TEST_SHARED(test_not_eq, 900) {
 // HIGH-LEVEL COLLECTION EQUALITY TESTS (using eval_string)
 // ============================================================================
 
-TEST_SHARED(test_equal_quoted_lists, 900) {
+TEST_SHARED(test_equal_quoted_lists, 0) {
     // Test: (= '(1 2 3) '(1 2 3)) => true
     CljObject *result = eval_string("(= '(1 2 3) '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= '(1 2 3) '(1 2 3)) should be true");
 }
 
-TEST_SHARED(test_equal_quoted_lists_different, 900) {
+TEST_SHARED(test_equal_quoted_lists_different, 0) {
     // Test: (= '(1 2) '(1 2 3)) => false
     CljObject *result = eval_string("(= '(1 2) '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= '(1 2) '(1 2 3)) should be false");
 }
 
-TEST_SHARED(test_equal_vectors, 900) {
+TEST_SHARED(test_equal_vectors, 0) {
     // Test: (= [1 2 3] [1 2 3]) => true
     CljObject *result = eval_string("(= [1 2 3] [1 2 3])", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= [1 2 3] [1 2 3]) should be true");
 }
 
-TEST_SHARED(test_equal_vectors_different, 900) {
+TEST_SHARED(test_equal_vectors_different, 0) {
     // Test: (= [1 2] [1 2 3]) => false
     CljObject *result = eval_string("(= [1 2] [1 2 3])", g_test_eval_state);
     TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= [1 2] [1 2 3]) should be false");
 }
 
-TEST_SHARED(test_equal_maps, 900) {
+TEST_SHARED(test_equal_maps, 0) {
     // Test: (= {:a 1 :b 2} {:a 1 :b 2}) => true
     CljObject *result = eval_string("(= {:a 1 :b 2} {:a 1 :b 2})", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= {:a 1 :b 2} {:a 1 :b 2}) should be true");
 }
 
-TEST_SHARED(test_equal_maps_different, 900) {
+TEST_SHARED(test_equal_maps_different, 0) {
     // Test: (= {:a 1} {:a 2}) => false
     CljObject *result = eval_string("(= {:a 1} {:a 2})", g_test_eval_state);
     TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= {:a 1} {:a 2}) should be false");
 }
 
-TEST_SHARED(test_equal_sets, 900) {
+TEST_SHARED(test_equal_sets, 0) {
     // Test: (= #{1 2} #{2 1}) => true (order independent)
     CljObject *result = eval_string("(= #{1 2} #{2 1})", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= #{1 2} #{2 1}) should be true");
 }
 
-TEST_SHARED(test_equal_sets_different, 900) {
+TEST_SHARED(test_equal_sets_different, 0) {
     // Test: (= #{1 2} #{1 2 3}) => false
     CljObject *result = eval_string("(= #{1 2} #{1 2 3})", g_test_eval_state);
     TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= #{1 2} #{1 2 3}) should be false");
 }
 
-TEST_SHARED(test_equal_list_function_result, 900) {
+TEST_SHARED(test_equal_list_function_result, 0) {
     // Test: (= (list 1 2 3) '(1 2 3)) => true
     CljObject *result = eval_string("(= (list 1 2 3) '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= (list 1 2 3) '(1 2 3)) should be true");
 }
 
-TEST_SHARED(test_equal_take_result, 1000) {
+TEST_SHARED(test_equal_take_result, 0) {
     // Test: take result equality via first/last comparison
     // Direct list comparison may fail due to structural differences
     CljObject *take_exists = eval_string("(fn? take)", g_test_eval_state);
@@ -777,7 +777,7 @@ TEST_SHARED(test_equal_take_result, 1000) {
     }
 }
 
-TEST_SHARED(test_equal_empty_collections, 100) {
+TEST_SHARED(test_equal_empty_collections, 0) {
     // Test: (= [] []) => true (vectors work)
     CljObject *result2 = eval_string("(= [] [])", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result2), "(= [] []) should be true");

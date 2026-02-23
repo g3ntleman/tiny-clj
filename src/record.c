@@ -404,11 +404,11 @@ bool record_contains(ID record_obj, ID key) {
 }
 
 // Return a vector of record keys in descriptor order.
-// Returns retained descriptor key vector (no per-call allocation).
+// MEMORY_POLICY: returns a usable/pool-safe alias of the descriptor key vector.
 ID record_keys(ID record_obj) {
     if (!is_record(record_obj)) return NULL;
     CljPersistentRecord *record = as_record(record_obj);
-    return RETAIN(record->descriptor->field_keys);
+    return record->descriptor->field_keys;
 }
 
 // Return a vector of non-nil record values in descriptor order.

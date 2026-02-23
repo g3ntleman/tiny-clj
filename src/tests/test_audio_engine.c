@@ -573,18 +573,18 @@ TEST(test_audio_finished_callback_runs_via_event_loop) {
 TEST(test_audio_native_lookup) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-    /* All audio builtins should be resolvable */
+    /* All audio builtins in tiny-snd.runtime should be resolvable */
     const char *names[] = {
-        "audio-load-track!", "audio-unload-track!",
-        "audio-play-music!", "audio-stop-track!",
-        "audio-stop-music!", "audio-play-sfx!",
-        "audio-stop-all!", "audio-set-track-volume!",
-        "audio-set-music-volume!", "audio-on-finished!",
-        "audio-play-test-tone!", "audio-host-status!",
+        "tiny-snd.runtime/audio-load-track!", "tiny-snd.runtime/audio-unload-track!",
+        "tiny-snd.runtime/audio-play-music!", "tiny-snd.runtime/audio-stop-track!",
+        "tiny-snd.runtime/audio-stop-music!", "tiny-snd.runtime/audio-play-sfx!",
+        "tiny-snd.runtime/audio-stop-all!", "tiny-snd.runtime/audio-set-track-volume!",
+        "tiny-snd.runtime/audio-set-music-volume!", "tiny-snd.runtime/audio-on-finished!",
+        "tiny-snd.runtime/audio-play-test-tone!", "tiny-snd.runtime/audio-host-status!",
     };
 
     for (int i = 0; i < 12; i++) {
-        char buf[128];
+        char buf[192];
         test_snprintf(buf, sizeof(buf), "(fn? %s)", names[i]);
         ID result = NULL;
         TRY {
@@ -629,7 +629,7 @@ TEST(test_audio_native_play_test_tone_returns_bool) {
 
     ID result = NULL;
     TRY {
-        result = eval_string("(audio-play-test-tone! 440 100)", g_test_eval_state);
+        result = eval_string("(tiny-snd.runtime/audio-play-test-tone! 440 100)", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("audio-play-test-tone! should not throw");
     } END_TRY
@@ -642,7 +642,7 @@ TEST(test_audio_native_play_test_tone_with_volume_returns_bool) {
 
     ID result = NULL;
     TRY {
-        result = eval_string("(audio-play-test-tone! 523 120 64)", g_test_eval_state);
+        result = eval_string("(tiny-snd.runtime/audio-play-test-tone! 523 120 64)", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("audio-play-test-tone! with volume should not throw");
     } END_TRY
@@ -655,7 +655,7 @@ TEST(test_audio_native_host_status_returns_map) {
 
     ID result = NULL;
     TRY {
-        result = eval_string("(audio-host-status!)", g_test_eval_state);
+        result = eval_string("(tiny-snd.runtime/audio-host-status!)", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("audio-host-status! should not throw");
     } END_TRY

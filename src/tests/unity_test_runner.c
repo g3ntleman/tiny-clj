@@ -164,8 +164,8 @@ void setUp(void) {
             g_heap_check_enabled = true;
             g_heap_growth_limit_bytes = limit;
         } else if (g_heap_check_enabled) {
-            // Shared tests with UNSPECIFIED: allow small growth (lazy/concat etc.)
-            g_heap_growth_limit_bytes = 2048;
+            // Shared tests with UNSPECIFIED: require zero heap growth.
+            g_heap_growth_limit_bytes = 0;
         }
     }
     

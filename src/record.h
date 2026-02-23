@@ -56,6 +56,7 @@ ID record_key_at_index(ID record_obj, unsigned int index);
 ID record_get_by_index(ID record_obj, unsigned int index);
 ID record_get_sentinel(ID record_obj, ID key, ID not_found);
 bool record_contains(ID record_obj, ID key);
+// MEMORY_POLICY: usable/pool-safe return (descriptor key vector, retained+autoreleased).
 ID record_keys(ID record_obj);
 ID record_vals(ID record_obj);
 

@@ -58,7 +58,7 @@ ID native_str(ID *args, unsigned int argc) {
 
     // Optimization: If only one argument and it's already a string, return it directly
     if (argc == 1 && args[0] && TAG(args[0]) == CLJ_STRING) {
-        return AUTORELEASE(args[0]);
+        return args[0];
     }
 
     // Calculate total length

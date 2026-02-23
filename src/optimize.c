@@ -363,8 +363,8 @@ void validate_recur_positions(CljObject *body, CljObject *parent_body) {
     }
 }
 
-// Helper: Transform call to (recur ...)
-static CljObject* transform_to_recur(CljList *call_list, CljSymbol *func_sym) {
+// Build (recur ...) from an existing call tail. Returns a retained list.
+static CljObject* make_recur_list(CljList *call_list, CljSymbol *func_sym) {
     (void)func_sym;  // Unused parameter (kept for API consistency)
 
     CljObject *rest_obj = call_list->rest;
@@ -374,12 +374,11 @@ static CljObject* transform_to_recur(CljList *call_list, CljSymbol *func_sym) {
         RETAIN(rest_obj);
         new_list->rest = rest_obj;
     }
-    RETAIN(new_list);
     return (CljObject*)new_list;
 }
 
 // Forward declaration
-static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, CljObject *func_name,
+static CljObject* optimize_function_body_walk_with_bindings_owned(CljObject *body, CljObject *func_name,
                                                             CljObject **params, int param_count,
                                                             CljObject *parent_body,
                                                             const RecordBinding *binding_env,
@@ -399,12 +398,13 @@ static bool optimize_ast_call_arg_inplace(CljASTCall *call, unsigned int index,
     ID arg = vector_nth(call->args, index);
     if (!arg) return true;
 
-    CljObject *transformed = optimize_function_body_walk_with_bindings(arg, func_name, params, param_count,
+    CljObject *transformed = optimize_function_body_walk_with_bindings_owned(arg, func_name, params, param_count,
                                                                        parent_body, binding_env, slot_env);
     if (!transformed) return false;
     if (transformed != arg) {
         vector_assoc_inplace(&call->args, index, transformed);
     }
+    RELEASE(transformed);
     return true;
 }
 
@@ -422,7 +422,7 @@ static CljList* optimize_list_walk_inplace(CljList *list, CljObject *func_name,
         CljObject *expr = current->first;
         if (!expr) continue;
 
-        CljObject *transformed = optimize_function_body_walk_with_bindings(expr, func_name, params, param_count,
+        CljObject *transformed = optimize_function_body_walk_with_bindings_owned(expr, func_name, params, param_count,
                                                                            parent_body, binding_env, slot_env);
         if (!transformed) return NULL;
 
@@ -430,6 +430,7 @@ static CljList* optimize_list_walk_inplace(CljList *list, CljObject *func_name,
             RELEASE(expr);
             current->first = transformed ? RETAIN(transformed) : NULL;
         }
+        RELEASE(transformed);
     }
 
     return list;
@@ -472,8 +473,8 @@ static bool expr_contains_recur(ID expr) {
     return false;
 }
 
-// Helper: Build list with 1-3 elements
-static CljList* build_list(CljObject *first, CljObject *second, CljObject *third) {
+// Build a list with 1-3 elements. Returns an owned list.
+static CljList* make_list3(CljObject *first, CljObject *second, CljObject *third) {
     CljList *list = (CljList*)make_list(first, NULL);
     if (!list) return NULL;
 
@@ -500,8 +501,9 @@ static CljList* build_list(CljObject *first, CljObject *second, CljObject *third
     return list;
 }
 
-// Build an AST_CALL recur node while preserving existing call arguments.
-static CljObject* transform_ast_call_to_recur(CljASTCall *call) {
+// Build an AST_CALL (recur ...) node while preserving existing call arguments.
+// Returns an owned AST_CALL.
+static CljObject* make_recur_ast_call(CljASTCall *call) {
     if (!call) return NULL;
     // Preserve AST_CALL representation so recur is evaluated as a special form.
     CljASTCall *recur_call = make_ast_call((CljObject*)SYM_RECUR, call->args);
@@ -559,7 +561,7 @@ static bool optimize_binding_form_ast_call(CljASTCall *call,
         unsigned int slot_index = i / 2;
         ID init_expr = vector_nth(bindings, i + 1);
         CljObject *transformed = init_expr
-            ? optimize_function_body_walk_with_bindings(init_expr, func_name, params, param_count,
+            ? optimize_function_body_walk_with_bindings_owned(init_expr, func_name, params, param_count,
                                                         parent_body, current_env, slot_env)
             : NULL;
         if (init_expr && !transformed) {
@@ -569,6 +571,9 @@ static bool optimize_binding_form_ast_call(CljASTCall *call,
         }
         if (init_expr && transformed != init_expr) {
             vector_assoc_inplace(&bindings, i + 1, transformed);
+        }
+        if (init_expr) {
+            RELEASE(transformed);
         }
 
         ID sym_id = vector_nth(bindings, i);
@@ -615,7 +620,7 @@ static bool optimize_binding_form_ast_call(CljASTCall *call,
 }
 
 // Optimize function body via one recursive walk with multiple optimizations.
-static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, CljObject *func_name,
+static CljObject* optimize_function_body_walk_with_bindings_owned(CljObject *body, CljObject *func_name,
                                                             CljObject **params, int param_count,
                                                             CljObject *parent_body,
                                                             const RecordBinding *binding_env,
@@ -627,7 +632,7 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
         bool is_recursive = is_recursive_call(body, func_name);
         bool is_tail = is_tail_position(body, context);
         if (is_recursive && is_tail) {
-            CljObject *recur_list = transform_ast_call_to_recur(call);
+            CljObject *recur_list = make_recur_ast_call(call);
             if (!recur_list) return NULL;
             return recur_list;
         }
@@ -699,7 +704,7 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
     bool is_tail = is_tail_position(body, context);
     if (is_recursive && is_tail) {
         CljSymbol *func_sym = func_name && TAG(func_name) == CLJ_SYMBOL ? as_symbol(func_name) : NULL;
-        return transform_to_recur(body_list, func_sym);
+        return make_recur_list(body_list, func_sym);
     }
 
     // Recurse through special forms (same optimization walk).
@@ -709,7 +714,7 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
     if (head == SYM_IF) {
         // Transform (if cond then else)
         CljObject *cond = rest->first;
-        CljObject *t_cond = cond ? optimize_function_body_walk_with_bindings(cond, func_name, params, param_count,
+        CljObject *t_cond = cond ? optimize_function_body_walk_with_bindings_owned(cond, func_name, params, param_count,
                                                                               body, binding_env, slot_env)
                                  : NULL;
         if (cond && !t_cond) return NULL;
@@ -718,19 +723,19 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
         CljObject *t_then = NULL, *t_else = NULL;
 
         if (then_list && then_list->first) {
-            t_then = optimize_function_body_walk_with_bindings(then_list->first, func_name, params, param_count,
+            t_then = optimize_function_body_walk_with_bindings_owned(then_list->first, func_name, params, param_count,
                                                                body, binding_env, slot_env);
             if (!t_then) {
-                if (t_cond && t_cond != cond) RELEASE(t_cond);
+                RELEASE(t_cond);
                 return NULL;
             }
 
             CljList *else_list = as_list(then_list->rest);
             if (else_list && else_list->first) {
-                t_else = optimize_function_body_walk_with_bindings(else_list->first, func_name, params, param_count,
+                t_else = optimize_function_body_walk_with_bindings_owned(else_list->first, func_name, params, param_count,
                                                                    body, binding_env, slot_env);
                 if (!t_else) {
-                    if (t_cond && t_cond != cond) RELEASE(t_cond);
+                    RELEASE(t_cond);
                     RELEASE(t_then);
                     return NULL;
                 }
@@ -738,12 +743,10 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
         }
 
         CljObject *cond_to_use = t_cond ? t_cond : cond;
-        if (t_cond != cond) RETAIN(cond_to_use);
 
-        CljList *new_if = build_list((CljObject*)SYM_IF, cond_to_use, t_then);
+        CljList *new_if = make_list3((CljObject*)SYM_IF, cond_to_use, t_then);
         if (!new_if) {
-            if (t_cond && t_cond != cond) RELEASE(t_cond);
-            if (cond_to_use != cond) RELEASE(cond_to_use);
+            RELEASE(t_cond);
             RELEASE(t_then);
             RELEASE(t_else);
             return NULL;
@@ -759,7 +762,7 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
                         then_node->rest = (CljObject*)else_node;
                     } else {
                         RELEASE(new_if);
-                        if (t_cond && t_cond != cond) RELEASE(t_cond);
+                        RELEASE(t_cond);
                         RELEASE(t_then);
                         RELEASE(t_else);
                         return NULL;
@@ -768,7 +771,9 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
             }
         }
 
-        RETAIN(new_if);
+        RELEASE(t_cond);
+        RELEASE(t_then);
+        RELEASE(t_else);
         return (CljObject*)new_if;
     }
 
@@ -776,7 +781,7 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
         // Transform (let [bindings] body...)
         CljObject *bindings = rest->first;
         CljObject *t_bindings = bindings
-            ? optimize_function_body_walk_with_bindings(bindings, func_name, params, param_count,
+            ? optimize_function_body_walk_with_bindings_owned(bindings, func_name, params, param_count,
                                                         body, binding_env, slot_env)
             : NULL;
         if (bindings && !t_bindings) return NULL;
@@ -788,33 +793,36 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
         // If body_exprs has only one element, transform it directly
         // Otherwise, transform the list
         CljObject *t_body_obj = NULL;
+        bool t_body_obj_owned = false;
         if (body_exprs->first && !body_exprs->rest) {
             // Single expression - transform directly
-            t_body_obj = optimize_function_body_walk_with_bindings(body_exprs->first, func_name, params, param_count,
+            t_body_obj = optimize_function_body_walk_with_bindings_owned(body_exprs->first, func_name, params, param_count,
                                                                    body, binding_env, slot_env);
             if (!t_body_obj) {
-                if (t_bindings && t_bindings != bindings) RELEASE(t_bindings);
+                RELEASE(t_bindings);
                 return NULL;
             }
+            t_body_obj_owned = true;
         } else {
             // Multiple expressions - transform list
             CljList *t_body = optimize_list_walk_inplace(body_exprs, func_name, params, param_count,
                                                          body, binding_env, slot_env);
             if (!t_body) {
-                if (t_bindings && t_bindings != bindings) RELEASE(t_bindings);
+                RELEASE(t_bindings);
                 return NULL;
             }
             t_body_obj = (CljObject*)t_body;
         }
 
-        CljList *new_let = build_list((CljObject*)SYM_LET, t_bindings ? t_bindings : bindings, t_body_obj);
+        CljList *new_let = make_list3((CljObject*)SYM_LET, t_bindings ? t_bindings : bindings, t_body_obj);
         if (!new_let) {
-            if (t_bindings && t_bindings != bindings) RELEASE(t_bindings);
-            RELEASE(t_body_obj);
+            RELEASE(t_bindings);
+            if (t_body_obj_owned) RELEASE(t_body_obj);
             return NULL;
         }
 
-        RETAIN(new_let);
+        RELEASE(t_bindings);
+        if (t_body_obj_owned) RELEASE(t_body_obj);
         return (CljObject*)new_let;
     }
 
@@ -832,11 +840,9 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
         // Create new cond form: (cond test expr ...)
         CljList *new_cond = (CljList*)make_list((CljObject*)SYM_COND, (CljList*)t_rest);
         if (!new_cond) {
-            RELEASE(t_rest);
             return NULL;
         }
 
-        RETAIN(new_cond);
         return (CljObject*)new_cond;
     }
 
@@ -849,7 +855,7 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
         // The entire expression is in tail position - check if it's a recursive call
         if (is_recursive_call(body, func_name)) {
             CljSymbol *func_sym = func_name && TAG(func_name) == CLJ_SYMBOL ? as_symbol(func_name) : NULL;
-            return transform_to_recur(body_list, func_sym);
+            return make_recur_list(body_list, func_sym);
         }
         // Not a recursive call, but in tail position - don't transform nested calls
         // because they are not in tail position (e.g., arguments of + are not in tail position)
@@ -865,6 +871,6 @@ static CljObject* optimize_function_body_walk_with_bindings(CljObject *body, Clj
 CljObject* optimize_function_body_walk(CljObject *body, CljObject *func_name,
                                        CljObject **params, int param_count,
                                        CljObject *parent_body) {
-    return optimize_function_body_walk_with_bindings(body, func_name, params, param_count,
+    return optimize_function_body_walk_with_bindings_owned(body, func_name, params, param_count,
                                                      parent_body, NULL, NULL);
 }

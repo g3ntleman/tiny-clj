@@ -1560,7 +1560,6 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
           // Apply merged metadata to object
           meta_set((CljObject*)obj, (CljObject*)merged_meta);
         }
-        RELEASE(merged_meta);
       }
     }
     RELEASE(new_meta);
@@ -1611,7 +1610,6 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
           // Update meta if it was merged
           meta_set(obj, (CljObject*)merged_meta);
         }
-        RELEASE(merged_meta);
       }
     } else {
       // No existing metadata, just set location metadata

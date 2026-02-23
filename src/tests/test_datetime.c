@@ -16,7 +16,7 @@ TEST_SHARED(test_time_basic_functionality) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
 }
 
-TEST_SHARED(test_time_arity_validation, 1100) {
+TEST_SHARED(test_time_arity_validation, 0) {
     CljPersistentVector *time_args = AUTORELEASE(make_vector(0, STRONG));
     CljPersistentMap *env = AUTORELEASE(make_map(16));
     
@@ -28,7 +28,7 @@ TEST_SHARED(test_time_arity_validation, 1100) {
     } END_TRY
 }
 
-TEST_SHARED(test_time_with_too_many_arguments, 1400) {
+TEST_SHARED(test_time_with_too_many_arguments, 0) {
     CljPersistentVector *time_args = AUTORELEASE(make_vector(2, STRONG));
     vector_conj_inplace(&time_args, fixnum(1));
     vector_conj_inplace(&time_args, fixnum(2));
@@ -49,7 +49,7 @@ TEST_SHARED(test_time_no_double_evaluation) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
 }
 
-TEST_SHARED(test_time_with_dotimes, 500) {
+TEST_SHARED(test_time_with_dotimes, 0) {
     // Simpler: use eval_string instead of manual AST construction
     ID result = eval_string("(time (dotimes [i 1000] (+ 1 2 3 4 5)))", g_test_eval_state);
     TEST_ASSERT_NIL(result);  // dotimes returns nil

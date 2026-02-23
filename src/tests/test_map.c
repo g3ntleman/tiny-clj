@@ -1450,11 +1450,11 @@ TEST(test_embedded_array_capacity_growth) {
 
 TEST(test_embedded_array_performance) {
     WITH_AUTORELEASE_POOL({
-        CljPersistentMap *env = make_map(4);
+        CljPersistentMap *env = AUTORELEASE(make_map(4));
         
         // Simulate loop pattern with embedded arrays
         for (int i = 0; i < 50; i++) {
-            env = AUTORELEASE(map_assoc(env, fixnum(i), fixnum(i * 10)));
+            env = map_assoc(env, fixnum(i), fixnum(i * 10));
             
             // RC should stay 1 (in-place optimization)
             TEST_ASSERT_EQUAL(1, env->base.rc);

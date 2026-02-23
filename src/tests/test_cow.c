@@ -58,14 +58,16 @@ TEST(test_autorelease_with_retain) {
 TEST(test_multiple_autorelease_same_object) {
     
     WITH_AUTORELEASE_POOL({
-        // Test 6: Multiple AUTORELEASE same object
+        // Multiple AUTORELEASE on the same object requires an extra RETAIN each time.
         CljPersistentMap *map = (CljPersistentMap*)make_map(4);
         
         AUTORELEASE(map);
+        RETAIN(map);
         AUTORELEASE(map);
+        RETAIN(map);
         AUTORELEASE(map);
         
-        TEST_ASSERT_EQUAL(1, map->base.rc); // Should stay 1
+        TEST_ASSERT_EQUAL(3, map->base.rc); // 1 + two explicit RETAINs; AUTORELEASE does not change rc
         
     });
 }
@@ -196,7 +198,7 @@ TEST(test_cow_with_autorelease) {
         
         // COW with AUTORELEASE
         CljValue new_map = map_assoc((CljValue)map, fixnum(1), fixnum(10));
-        AUTORELEASE(new_map);
+        (void)new_map;
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
     });
@@ -217,7 +219,7 @@ TEST(test_cow_memory_leak_detection) {
         // RETAIN to trigger COW
         RETAIN(map);
         CljPersistentMap *new_map = map_assoc(map, fixnum(5), fixnum(50));
-        AUTORELEASE(new_map);
+        (void)new_map;
         
         // Cleanup
         RELEASE(map);
@@ -233,11 +235,11 @@ TEST(test_cow_environment_loop_mutation) {
     
     WITH_AUTORELEASE_POOL({
         // Test 1: Environment-Mutation in Loop
-        CljPersistentMap *env = (CljPersistentMap*)make_map(4);
+        CljPersistentMap *env = (CljPersistentMap*)AUTORELEASE(make_map(4));
         
         for (int i = 0; i < 100; i++) {
             CljValue new_env = map_assoc((CljValue)env, fixnum(i), fixnum(i * 10));
-            AUTORELEASE(new_env);
+            (void)new_env;
             
             if (i % 20 == 0) {
             }
@@ -250,7 +252,7 @@ TEST(test_cow_closure_environment_sharing) {
     
     WITH_AUTORELEASE_POOL({
         // Test 2: Closure-Environment-Sharing
-        CljPersistentMap *env = (CljPersistentMap*)make_map(4);
+        CljPersistentMap *env = (CljPersistentMap*)AUTORELEASE(make_map(4));
         env = map_assoc(env, intern_symbol_global("x"), fixnum(1));
         
         // Simulate closure holding reference
@@ -283,7 +285,7 @@ TEST(test_cow_memory_efficiency_benchmark) {
         
         for (int i = 0; i < 100; i++) {
             CljValue new_env = map_assoc((CljValue)env, fixnum(i), fixnum(i * 10));
-            AUTORELEASE(new_env);
+            (void)new_env;
             
             if (i % 10 == 0) {
             }
@@ -296,13 +298,12 @@ TEST(test_cow_real_clojure_simulation) {
     
     WITH_AUTORELEASE_POOL({
         // Test 5: Real Clojure Code Simulation
-        CljPersistentMap *env = (CljPersistentMap*)make_map(4);
+        CljPersistentMap *env = (CljPersistentMap*)AUTORELEASE(make_map(4));
         
         CljValue current_env = (CljValue)env;
         
         for (int i = 0; i < 100; i++) {
             CljValue new_env = map_assoc(current_env, fixnum(i), fixnum(i * 10));
-            AUTORELEASE(new_env);
             current_env = new_env; // Update to the new map
             
             if (i % 20 == 0) {

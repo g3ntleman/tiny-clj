@@ -418,6 +418,16 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
 
 int load_clojure_core(EvalState *st) {
   if (!st) return 0;
+  CljNamespace *existing_core = ns_find("clojure.core");
+  if (existing_core && existing_core->loaded && existing_core->mappings) {
+    CljSymbol *inc_sym = intern_symbol_global("inc");
+    if (!inc_sym) return 0;
+    CljObject *inc_val =
+        (CljObject *)map_get_sentinel((CljValue)existing_core->mappings, (CljValue)inc_sym, NULL);
+    if (inc_val && (TAG(inc_val) == CLJ_FUNC || TAG(inc_val) == CLJ_CLOSURE)) {
+      return 1;
+    }
+  }
   bool loaded = false;
   ID bytes = resolve_path_to_bytes("/libs/clojure/core.clj");
   if (bytes)

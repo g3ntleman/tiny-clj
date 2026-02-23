@@ -1,4 +1,4 @@
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 25
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 0
 #include "tests_common.h"
 
 // Test hook controls implemented in test_yield_sleep_hooks.c
@@ -51,4 +51,3 @@ TEST_SHARED(test_sleep_wraps_over_24h_boundary) {
 
     test_yield_sleep_hooks_disable();
 }
-

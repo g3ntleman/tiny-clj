@@ -4,7 +4,7 @@
  * Tests for string manipulation functions from clojure.string namespace
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 12
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 0
 #include "tests_common.h"
 #include "namespace.h"
 #include "symbol.h"
@@ -225,5 +225,4 @@ TEST(test_string_pad_left_empty_string) {
     CljString *str1 = as_clj_string(result1);
     TEST_ASSERT_EQUAL_STRING("xxx", clj_string_data(str1));
 }
-
 

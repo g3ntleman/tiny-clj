@@ -20,6 +20,7 @@ typedef struct {
 
     // Evaluation state
     EvalState *st;         // Evaluation state (can be NULL)
+    ID current_fn;         // Currently executing closure for self-recursion resolution (can be NULL)
 
     // Recur state
     ID *recur_args;        // Recur arguments (can be NULL)
@@ -32,8 +33,10 @@ typedef ID (*SpecialFormEvalFn)(CljPersistentVector *args, CljPersistentMap *env
 
 // Extended function-call entry points
 ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env, EvalState *st);
+// MEMORY_POLICY: returns a caller-usable result (heap objects are pool-managed).
 ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 // Internal function - uses EvalContext for parameter substitution
+// MEMORY_POLICY: returns a caller-usable result (heap objects are pool-managed).
 ID eval_body_with_params(ID body, const EvalContext *ctx);
 
 // Special form evaluators

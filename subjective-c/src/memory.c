@@ -52,19 +52,6 @@ static THREAD_LOCAL bool g_in_drain = false;
 
 #ifdef DEBUG
 static THREAD_LOCAL uint32_t g_pool_peak_count = 0;
-
-// DEBUG-only diagnostic helper.
-// Must never be used in production code and must not drive ownership semantics
-// or control flow decisions in retain/release/autorelease paths.
-static inline bool autorelease_pool_contains(CljObject *obj) {
-    if (!obj || !g_pool) return false;
-    unsigned int c = vector_count(g_pool);
-    ID *arr = vector_as_array(g_pool);
-    for (unsigned int i = 0; i < c; i++) {
-        if ((CljObject*)arr[i] == obj) return true;
-    }
-    return false;
-}
 #endif
 
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
@@ -418,10 +405,6 @@ CljObject *autorelease(CljObject *v) {
         return (CljObject*)NULL;
     }
 #ifdef DEBUG
-    if (autorelease_pool_contains(v)) {
-        return v;
-    }
-
     {
         const char *trace_list = getenv("TINYCLJ_TRACE_LIST_AUTORELEASE");
         const char *trace_ast = getenv("TINYCLJ_TRACE_AST_AUTORELEASE");
@@ -471,7 +454,9 @@ CljObject *autorelease(CljObject *v) {
         }
     }
 #endif
-    ASSIGN(g_pool, vector_conj_owned(g_pool, v));
+    // Keep pool RC at 1 across growth. ASSIGN(..., vector_conj_owned(...)) would leak the
+    // owned return on COW growth and force every subsequent push down the COW path.
+    vector_conj_inplace(&g_pool, v);
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
     rchist_push(v, 'A', v->rc);
 #endif
@@ -577,6 +562,25 @@ void autorelease_pool_drain_to_depth(uint32_t mark) {
     }
     END_TRY
     g_in_drain = false;
+
+    // Reset pool capacity after large spikes so nested pools do not leave permanent
+    // Vector growth visible to heap-growth tests (e.g. many AUTORELEASEs in one eval).
+    unsigned int keep = vector_count(g_pool);
+    unsigned int target_capacity = POOL_INITIAL_CAPACITY;
+    while (target_capacity < keep && target_capacity < (1u << 30)) {
+        target_capacity <<= 1;
+    }
+    if (g_pool && g_pool->capacity > (int)target_capacity) {
+        CljPersistentVector *new_pool = make_vector((int)target_capacity, WEAK);
+        if (new_pool) {
+            if (keep > 0) {
+                memcpy(new_pool->data, g_pool->data, keep * sizeof(ID));
+                new_pool->count = keep;
+            }
+            RELEASE(g_pool);
+            g_pool = new_pool;
+        }
+    }
 }
 
 void autorelease_pool_free(void) {
@@ -854,9 +858,9 @@ static void release_object_default(CljObject *v) {
                 RELEASE(func->params[i]);
             }
             RELEASE(func->body);
-            // Named fn: env_stack holds (name_sym -> self). RELEASE(env_stack) would double-free.
-            // Skip and accept the retain-cycle leak.
-            if (func->env_stack && !is_pointer_on_stack(func->env_stack) && !func->name_sym)
+            // env_stack is always heap-managed (or NULL) for persistent closures.
+            // Local self-recursion no longer relies on env_stack self-cycles.
+            if (func->env_stack && !is_pointer_on_stack(func->env_stack))
                 RELEASE(func->env_stack);
             RELEASE(func->ns);
             break;

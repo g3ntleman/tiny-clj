@@ -133,9 +133,9 @@ CljPersistentMap* make_location_meta(void *reader_ptr, void *st_ptr) {
  * 
  * DRY: Wiederverwendbare Funktion zum Zusammenführen von Meta-Maps
  */
-CljPersistentMap* meta_merge(CljPersistentMap *existing_meta, CljPersistentMap *location_meta) {
-    if (!location_meta) return existing_meta;
-    if (!existing_meta) return location_meta;
+static CljPersistentMap* meta_merge_owned(CljPersistentMap *existing_meta, CljPersistentMap *location_meta) {
+    if (!location_meta) return (CljPersistentMap*)RETAIN(existing_meta);
+    if (!existing_meta) return (CljPersistentMap*)RETAIN(location_meta);
 
     CljPersistentMap *missing_entries = NULL;
     int has_missing = 0;
@@ -171,9 +171,9 @@ CljPersistentMap* meta_merge(CljPersistentMap *existing_meta, CljPersistentMap *
 
 // Merge metadata maps with second map taking precedence (overwrites conflicting keys)
 // Used when form metadata should override existing metadata (e.g., from register_builtins)
-CljPersistentMap* meta_merge_with_precedence(CljPersistentMap *existing_meta, CljPersistentMap *form_meta) {
-    if (!form_meta) return existing_meta;
-    if (!existing_meta) return form_meta;
+static CljPersistentMap* meta_merge_with_precedence_owned(CljPersistentMap *existing_meta, CljPersistentMap *form_meta) {
+    if (!form_meta) return (CljPersistentMap*)RETAIN(existing_meta);
+    if (!existing_meta) return (CljPersistentMap*)RETAIN(form_meta);
 
     CljPersistentMap *result = as_map(RETAIN(existing_meta));
     
@@ -195,5 +195,12 @@ CljPersistentMap* meta_merge_with_precedence(CljPersistentMap *existing_meta, Cl
     return result;
 }
 
-#endif // META_ENABLED
+CljPersistentMap* meta_merge(CljPersistentMap *existing_meta, CljPersistentMap *location_meta) {
+    return AUTORELEASE(meta_merge_owned(existing_meta, location_meta));
+}
 
+CljPersistentMap* meta_merge_with_precedence(CljPersistentMap *existing_meta, CljPersistentMap *form_meta) {
+    return AUTORELEASE(meta_merge_with_precedence_owned(existing_meta, form_meta));
+}
+
+#endif // META_ENABLED

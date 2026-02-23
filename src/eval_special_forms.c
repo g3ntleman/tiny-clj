@@ -76,7 +76,8 @@ static INLINE ID ensure_ast_call(ID form, EvalState *st) {
     return form;
 }
 
-static ID seq_to_list_value(ID seq_obj) {
+// Internal helper: returns an owned list value (retained if input is already a list).
+static ID seq_to_list_value_owned(ID seq_obj) {
     if (!seq_obj) return NULL;
     if (is_list_type(TAG(seq_obj))) return RETAIN(seq_obj);
     SeqIterator iter;
@@ -513,6 +514,8 @@ ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState
             if (updated && updated != loop_env_map && loop_ctx.env_stack) {
                 unsigned int top_idx = vector_count(loop_ctx.env_stack) - 1;
                 vector_assoc_inplace(&loop_ctx.env_stack, top_idx, (ID)updated);
+                // vector_assoc_inplace may COW and shift ownership to a new vector.
+                loop_stack = loop_ctx.env_stack;
                 loop_env_map = updated;
             }
         }
@@ -565,8 +568,26 @@ ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState
                 if (updated && updated != loop_env_map && loop_ctx.env_stack) {
                     unsigned int top_idx = vector_count(loop_ctx.env_stack) - 1;
                     vector_assoc_inplace(&loop_ctx.env_stack, top_idx, (ID)updated);
+                    // Keep local owner pointer aligned with loop_ctx.env_stack after COW.
+                    loop_stack = loop_ctx.env_stack;
                     loop_env_map = updated;
                 }
+            }
+        }
+    }
+
+    int preserved_result_loop_refs = 0;
+    if (result && !IS_IMMEDIATE(result)) {
+        if (loop_frame) {
+            for (int i = 0; i < pair_count; i++) {
+                if (frame_decode_value(loop_frame->values[i]) == result) {
+                    preserved_result_loop_refs++;
+                }
+            }
+        }
+        for (int i = 0; i < pair_count; i++) {
+            if (recur_args[i] == result) {
+                preserved_result_loop_refs++;
             }
         }
     }
@@ -583,6 +604,9 @@ ID eval_special_loop(CljPersistentVector *args, CljPersistentMap *env, EvalState
         }
     }
     RELEASE(loop_stack);
+    while (preserved_result_loop_refs-- > 0) {
+        RELEASE(result);
+    }
 
     return result;
 }
@@ -916,6 +940,30 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
     return NULL;
 }
 
+static inline ID eval_recur_arg_owned(ID arg, const EvalContext *ctx) {
+    if (!arg) return NULL;
+    if (IS_IMMEDIATE(arg)) return arg;
+
+    if (TAG(arg) == CLJ_SLOT_REF) {
+        const CljSlotRef *ref = (const CljSlotRef*)arg;
+        CLJ_ASSERT(ctx && ctx->frame && "CLJ_SLOT_REF requires frame context");
+        ID v = frame_get_slot(ctx->frame, ref->depth, ref->slot);
+        if (v == NOT_FOUND || !v) return NULL;
+        return RETAIN(v);
+    }
+
+    if (ctx && ctx->frame && TAG(arg) == CLJ_SYMBOL && !IS_KEYWORD(arg)) {
+        ID frame_value = NOT_FOUND;
+        if (frame_lookup(ctx->frame, arg, &frame_value)) {
+            if (frame_value == NOT_FOUND) return NULL;
+            return RETAIN(frame_value);
+        }
+    }
+
+    // Fallback to the public eval path, then convert its MEMORY_POLICY result to owned.
+    return RETAIN(eval_body_with_params(arg, ctx));
+}
+
 ID eval_handle_recur(CljPersistentVector *args, const EvalContext *ctx) {
     if (!ctx || !ctx->recur_args || !ctx->recur_arg_count) {
         throw_exception(EXCEPTION_RUNTIME, "recur can only be used inside function bodies", NULL, 0, 0);
@@ -951,12 +999,7 @@ ID eval_handle_recur(CljPersistentVector *args, const EvalContext *ctx) {
     };
     for (int arg_index = 0; arg_index < expected; arg_index++) {
         ID arg = args_nth(args, (unsigned int)arg_index);
-        if (arg) {
-            ID eval_arg = eval_body_with_params(arg, &arg_ctx);
-            if (eval_arg) {
-                evaluated_args[arg_index] = RETAIN(eval_arg);
-            }
-        }
+        evaluated_args[arg_index] = eval_recur_arg_owned(arg, &arg_ctx);
     }
 
     if (provided > expected) {
@@ -1029,7 +1072,7 @@ ID eval_special_quasiquote(CljPersistentVector *args, CljPersistentMap *env, Eva
     }
 
     if (value && is_seq(value) && !is_list_type(TAG(value))) {
-        ID list_value = seq_to_list_value(value);
+        ID list_value = seq_to_list_value_owned(value);
         if (list_value) {
             value = list_value;
         }

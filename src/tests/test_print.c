@@ -179,7 +179,7 @@ TEST_SHARED(test_print_str_special_values) {
 // ============================================================================
 // TEST: Native print functions (print, println, pr, prn)
 // ============================================================================
-TEST_SHARED(test_native_print_functions, 300) {
+TEST_SHARED(test_native_print_functions, 0) {
     WITH_AUTORELEASE_POOL({
         // Test: (print "Hello") should print without quotes, without newline
         // Note: This test captures stdout, but for now we just test that it doesn't crash
@@ -208,7 +208,7 @@ TEST_SHARED(test_native_print_functions, 300) {
 // ============================================================================
 // TEST: Native print functions with multiple arguments
 // ============================================================================
-TEST_SHARED(test_native_print_multiple_args, 200) {
+TEST_SHARED(test_native_print_multiple_args, 0) {
     WITH_AUTORELEASE_POOL({
         // Test: (println "a" "b" "c") should print "a b c" with newline
         // Use global st from setUp

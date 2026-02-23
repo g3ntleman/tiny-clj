@@ -1,5 +1,6 @@
 R"TINY_SND_CMP(
-(ns tiny-snd.composer)
+(ns tiny-snd.composer
+  (:require [tiny-snd.runtime :refer :all]))
 
 ;; -----------------------------------------------------------------------------
 ;; Note helpers

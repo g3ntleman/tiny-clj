@@ -12,9 +12,6 @@ typedef struct CljSymbolToken {
     char data[];
 } CljSymbolToken;
 
-CljSymbolToken* make_symbol_token(const char *str);
-CljSymbolToken* make_symbol_token_with_loc(const char *str, uint16_t line, uint16_t col);
-
 static inline bool is_symbol_token(ID obj) {
     return TAG(obj) == CLJ_SYMBOL_TOKEN;
 }
@@ -28,4 +25,3 @@ static inline uint16_t symbol_token_length(const CljSymbolToken *token) {
 }
 
 #endif // TINY_CLJ_SYMBOL_TOKEN_H
-

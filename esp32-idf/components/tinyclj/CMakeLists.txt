@@ -63,10 +63,22 @@ set(TINYCLJ_SRCS
 # Build time (UTC epoch seconds) for runtime stats :build-time
 string(TIMESTAMP BUILD_EPOCH_SECONDS "%s" UTC)
 
+get_filename_component(TINYCLJ_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+
+# Generate build_info.h for the ESP-IDF component build. The desktop/host build
+# generates this header in its own build dir, but IDF compiles the same sources
+# in a separate build graph and needs its own generated copy.
+configure_file(
+  "${TINYCLJ_REPO_ROOT}/build_info.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/build_info.h"
+  @ONLY
+)
+
 idf_component_register(
   SRCS
     ${TINYCLJ_SRCS}
   INCLUDE_DIRS
+    "${CMAKE_CURRENT_BINARY_DIR}"
     "../../../src"
     "../../../"
   REQUIRES
@@ -82,7 +94,6 @@ target_compile_definitions(${COMPONENT_LIB} PUBLIC
   TINYCLJ_RAM_BACKEND_ENABLED=0
   LINE_EDITING_ENABLED=1
   DEBUG=1
-  BUILD_EPOCH_SECONDS=${BUILD_EPOCH_SECONDS}
   MEMORY_PROFILING_ENABLED=0
   META_ENABLED=0
 )

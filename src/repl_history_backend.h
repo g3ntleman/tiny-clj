@@ -54,13 +54,4 @@ CljPersistentVector *repl_history_backend_load(const ReplHistoryBackend *backend
  */
 bool repl_history_backend_save(const ReplHistoryBackend *backend, CljPersistentVector *history);
 
-/**
- * @brief Persists current line editor history through a backend.
- *
- * @param backend Persistence backend descriptor.
- * @param editor Line editor whose history is persisted.
- * @return true when persistence succeeds.
- */
-bool repl_history_backend_save_from_editor(const ReplHistoryBackend *backend, LineEditor *editor);
-
 #endif /* REPL_HISTORY_BACKEND_H */

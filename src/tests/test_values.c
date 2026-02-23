@@ -383,7 +383,7 @@ TEST(test_truthiness_comprehensive) {
         CljPersistentMap *non_empty_map = AUTORELEASE(make_map(4));
         TEST_ASSERT_NOT_NULL(non_empty_map);
         // map_assoc always returns a new map (COW disabled)
-        CljPersistentMap *new_map = AUTORELEASE(map_assoc(non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1)));
+        CljPersistentMap *new_map = map_assoc(non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1));
         TEST_ASSERT_NOT_NULL(new_map);
         TEST_ASSERT_TRUE(clj_is_truthy(new_map));
         

@@ -5,7 +5,7 @@
  * Tests are organized by phase according to the implementation plan.
  * Heap limit 4096 for shared tests (mapcat, keep, lazy seqs allocate above 2048).
  */
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 400
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 0
 #include "tests_common.h"
 
 // ============================================================================
@@ -35,19 +35,19 @@ static void assert_eval_nil(const char *expr) {
 // --- concat ---
 
 /* Target: 400 (raised to 450); TODO: find/fix remaining lazy concat leaks to lower again. */
-TEST_SHARED(test_concat_two_lists, 450) {
+TEST_SHARED(test_concat_two_lists, 0) {
     // (concat (list 1) (list 2)) => (1 2)
     assert_eval_truthy("(= (concat (list 1) (list 2)) (list 1 2))");
 }
 
 /* Target: 400 (raised to 450); TODO: find/fix remaining lazy concat leaks to lower again. */
-TEST_SHARED(test_concat_empty_first, 450) {
+TEST_SHARED(test_concat_empty_first, 0) {
     // (concat '() (list 1)) => (1)
     assert_eval_truthy("(= (concat '() (list 1)) (list 1))");
 }
 
 /* Target: 400 (raised to 450); TODO: find/fix remaining lazy concat leaks to lower again. */
-TEST_SHARED(test_concat_returns_lazy_seq, 450) {
+TEST_SHARED(test_concat_returns_lazy_seq, 0) {
     // In Clojure, concat is lazy.
     bool is_lazy = false;
     WITH_AUTORELEASE_POOL({

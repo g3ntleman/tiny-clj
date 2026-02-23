@@ -5,7 +5,7 @@
  *
  * Heap limit 200 after fixing pool accumulation (tearDown: autorelease_pool_free()).
  */
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 50
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 0
 #include "tests_common.h"
 
 // ============================================================================

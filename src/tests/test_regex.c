@@ -5,7 +5,7 @@
  * Based on tiny-regex-c (Public Domain)
  */
 
-#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 150
+#define TEST_SHARED_DEFAULT_HEAP_GROWTH_LIMIT 0
 #include "tests_common.h"
 
 // ============================================================================
@@ -290,4 +290,3 @@ TEST_SHARED(test_regex_string_representation_in_collection) {
 // The implementation correctly rejects these patterns with clear error messages:
 // - "Unsupported regex feature: alternation '|'"
 // - "Unsupported regex feature: quantifier bounds '{n,m}'"
-

@@ -965,7 +965,9 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
     char acc[REPL_ACC_CAP_DEFAULT]; acc[0] = '\0';
     bool prompt_shown = false;
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     uint32_t seen_stdout_generation = g_repl_stdout_generation;
+#endif
 
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Initialize line editor
@@ -1018,14 +1020,18 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     // Print initial prompt after line editor init so the editor can track it for redraws.
     print_prompt(st, true);
     prompt_shown = true;
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     seen_stdout_generation = g_repl_stdout_generation;
+#endif
 
     while (true) {
         // Print prompt only once per input cycle to avoid flooding
         if (!prompt_shown) {
             print_prompt(st, repl_form_state(acc, NULL) == REPL_FORM_BALANCED);
             prompt_shown = true;
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
             seen_stdout_generation = g_repl_stdout_generation;
+#endif
         }
 
         // Unified input processing

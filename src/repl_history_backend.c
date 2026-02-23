@@ -320,26 +320,3 @@ bool repl_history_backend_save(const ReplHistoryBackend *backend, CljPersistentV
     CLJ_FREE(owned_payload);
     return true;
 }
-
-/**
- * @brief Persists current line editor history through a backend.
- *
- * @param backend Persistence backend descriptor.
- * @param editor Line editor whose history is persisted.
- * @return true when persistence succeeds.
- */
-bool repl_history_backend_save_from_editor(const ReplHistoryBackend *backend, LineEditor *editor)
-{
-    if (!editor) {
-        return false;
-    }
-
-    CljPersistentVector *history = line_editor_get_history_vector(editor);
-    if (!history) {
-        return false;
-    }
-
-    bool saved = repl_history_backend_save(backend, history);
-    RELEASE(history);
-    return saved;
-}

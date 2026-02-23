@@ -189,7 +189,7 @@ static CljPersistentVector* vector_insert_at_core(CljPersistentVector* vec, unsi
 
 CljPersistentVector* vector_by_inserting_at(CljPersistentVector* vec, unsigned int index, ID item) {
     CljPersistentVector* result = vector_insert_at_core(vec, index, item);
-    if (result && result != vec) return AUTORELEASE(result);
+    if (result != vec) return AUTORELEASE(result);
     return result;
 }
 
@@ -290,7 +290,7 @@ CljPersistentVector* vector_conj_owned(CljPersistentVector* vec, ID item) {
 
 CljPersistentVector* vector_conj(CljPersistentVector* vec, ID item) {
     CljPersistentVector* result = vector_conj_owned(vec, item);
-    if (result && result != vec) return AUTORELEASE(result);
+    if (result != vec) return AUTORELEASE(result);
     return result;
 }
 
@@ -362,7 +362,7 @@ static CljPersistentVector* vector_assoc_core(CljPersistentVector* vec, unsigned
 
 CljPersistentVector* vector_assoc(CljPersistentVector* vec, unsigned int index, ID value) {
     CljPersistentVector* result = vector_assoc_core(vec, index, value);
-    if (result && result != vec) return AUTORELEASE(result);
+    if (result != vec) return AUTORELEASE(result);
     return result;
 }
 

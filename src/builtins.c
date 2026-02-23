@@ -601,7 +601,6 @@ ID native_peek(ID *args, unsigned int argc)
     int count = vector_count(v);
     if (!count)
         return NULL; // nil for empty vector
-    // vector_nth returns element with lifetime tied to vector - no retain needed
     return vector_nth(v, count - 1);
 }
 
@@ -775,7 +774,7 @@ ID native_conj(ID *args, unsigned int argc)
     if (argc == 1)
     {
         // conj with one arg returns the collection unchanged
-        return args[0]; // caller gave us a retained instance. just return it.
+        return args[0];
     }
 
     // For 2+ args, conj all values to the collection
@@ -789,7 +788,7 @@ ID native_conj(ID *args, unsigned int argc)
             ID val = args[i];
             result = make_list(val, result);
         }
-        return result;
+        return AUTORELEASE(result);
     }
 
     unsigned char tag = TAG(coll);
@@ -821,7 +820,9 @@ ID native_conj(ID *args, unsigned int argc)
                 result = new_result;
             }
         }
-        return result;
+        return (result == (CljHashSet *)coll)
+                   ? (ID)result
+                   : AUTORELEASE((ID)result);
     }
 
     // Lists: conj adds to front
@@ -832,7 +833,7 @@ ID native_conj(ID *args, unsigned int argc)
         {
             result = make_list(args[i], result);
         }
-        return result;
+        return AUTORELEASE(result);
     }
 
     // Throw exception for unsupported collection type
@@ -842,7 +843,6 @@ ID native_conj(ID *args, unsigned int argc)
     return NULL;
 }
 
-// First function that works with BuiltinFn signature
 ID native_first(ID *args, unsigned int argc)
 {
     CLJ_ASSERT(args != NULL);
@@ -868,21 +868,21 @@ ID native_first(ID *args, unsigned int argc)
         // Arguments are evaluated, but list elements might still be SYM_NIL
         // Convert SYM_NIL to NULL (nil representation)
         if (first == SYM_NIL) return NULL;
-        return RETAIN(first);
+        return first;
     }
 
     case CLJ_SEQ:
     {
         // Already a sequence - just call seq_first (DRY)
         ID first = seq_first(coll);
-        return RETAIN(first);
+        return first;
     }
 
     default:
     {
         CljSeqIterator *it = make_seq(coll);
         if (!it) return NULL;
-        ID result = RETAIN(seq_first(it));
+        ID result = AUTORELEASE(RETAIN(seq_first(it)));
         RELEASE(it);
         return result;
     }
@@ -1126,7 +1126,7 @@ ID native_nthnext(ID *args, unsigned int argc)
         {
             return NULL;
         }
-        return coll; // Return as-is for non-empty
+        return coll; // Parameter alias return
     }
 
     // Apply next n times
@@ -2031,9 +2031,9 @@ ID native_reduce(ID *args, unsigned int argc)
 
     ID fn = args[0];
     bool has_init = (argc == 3);
-    ID acc = has_init ? args[1] : NULL;
+    ID acc = has_init ? RETAIN(args[1]) : NULL;
     ID coll = args[has_init ? 2 : 1];
-    bool acc_owned = false;
+    bool acc_owned = has_init;
 
     SeqIterator iter;
     bool has_seq = false;
@@ -2046,15 +2046,15 @@ ID native_reduce(ID *args, unsigned int argc)
     {
         if (has_init)
         {
-            return acc;
+            return AUTORELEASE(acc);
         }
         return eval_function_call(fn, NULL, 0, NULL, st);
     }
 
     if (!has_init)
     {
-        acc = seq_iter_first(&iter);
-        acc_owned = false;
+        acc = RETAIN(seq_iter_first(&iter));
+        acc_owned = true;
         seq_iter_next(&iter);
     }
 
@@ -2063,17 +2063,15 @@ ID native_reduce(ID *args, unsigned int argc)
         ID current = seq_iter_first(&iter);
         ID call_args[2] = {acc, current};
         ID new_acc = eval_function_call(fn, call_args, 2, NULL, st);
-        if (new_acc && !IS_IMMEDIATE(new_acc)) {
-            RETAIN(new_acc);
-        }
+        RETAIN(new_acc);
         if (acc_owned)
             RELEASE(acc);
         acc = new_acc;
-        acc_owned = (new_acc && !IS_IMMEDIATE(new_acc));
+        acc_owned = true;
         seq_iter_next(&iter);
     }
 
-    return acc;
+    return AUTORELEASE(acc);
 }
 
 // group-by: group elements of coll by f
@@ -2257,7 +2255,7 @@ ID native_assoc(ID *args, unsigned int argc)
         // Clojure semantics: (assoc nil k v ...) => start from empty map.
         if (!result)
         {
-            result = make_map(4);
+            result = AUTORELEASE(make_map(4));
             if (!result)
                 return NULL;
         }
@@ -2268,7 +2266,7 @@ ID native_assoc(ID *args, unsigned int argc)
             return NULL;
     }
 
-    return AUTORELEASE(result);
+    return result;
 }
 
 // dissoc: Remove keys from map (supports multiple keys like Clojure)
@@ -3263,7 +3261,7 @@ ID native_vec(ID *args, unsigned int argc)
     }
 
     // If already a vector, return same object (No-Op - Clojure behavior).
-    // Eval path values are already pool-safe; do not AUTORELEASE again here.
+    // Alias return must still be caller-safe per MEMORY_POLICY.
     if (TAG(coll) == CLJ_VECTOR_PERSISTENT)
     {
         return coll;
@@ -4230,7 +4228,7 @@ ID native_stacktrace_str(ID *args, unsigned int argc)
         return NULL;
     }
 
-    return AUTORELEASE(RETAIN(ex->stacktrace));
+    return ex->stacktrace;
 }
 #endif
 
@@ -4831,10 +4829,10 @@ ID native_with_meta(ID *args, unsigned int argc)
     // NOTE: This mutates the object. For true immutability, we'd need to copy.
     // For now, this matches the common pattern in embedded Clojure implementations.
     meta_set(obj, meta_map);
-    return RETAIN(obj);
+    return obj;
 #else
     (void)meta_map;
-    return RETAIN(obj);
+    return obj;
 #endif
 }
 
@@ -4845,7 +4843,7 @@ ID native_get_macro(ID *args, unsigned int argc)
     if (!args[0] || TAG(args[0]) != CLJ_SYMBOL || !g_current_eval_state)
         return NULL;
     CljFunction *macro = lookup_macro_resolve(g_current_eval_state, as_symbol(args[0]));
-    return macro ? RETAIN(macro) : NULL;
+    return (ID)macro;
 }
 
 // Apply function to arguments: (apply f args) or (apply f a b c args)
@@ -5908,7 +5906,7 @@ ID native_add_variadic(ID *args, unsigned int argc)
     if (argc == 0)
         return create_fixnum_result(0);
     if (argc == 1)
-        return RETAIN(args[0]);
+        return args[0];
 
     bool sawFixed = false;
     int acc_i = 0;
@@ -6003,7 +6001,7 @@ ID native_mul_variadic(ID *args, unsigned int argc)
     if (argc == 0)
         return create_fixnum_result(1);
     if (argc == 1)
-        return RETAIN(args[0]);
+        return args[0];
 
     bool sawFixed = false;
     int acc_i = 1;
@@ -6661,7 +6659,8 @@ ID native_eval(ID *args, unsigned int argc)
     if (!validate_builtin_args(argc, 1, "eval"))
         return NULL;
 
-    if (!g_current_eval_state)
+    EvalState *st = g_current_eval_state;
+    if (!st)
     {
         throw_exception(EXCEPTION_RUNTIME, "eval: EvalState not available",
                         __FILE__, __LINE__, 0);
@@ -6674,8 +6673,10 @@ ID native_eval(ID *args, unsigned int argc)
     if (!form) return NULL;
     if (IS_IMMEDIATE(form)) return form;
 
-    form = canonicalize_ast(form, g_current_eval_state);
-    return eval_canonical_form(form, g_current_eval_state, NULL);
+    // Macro expansion during canonicalize_ast may invoke nested evals and temporarily
+    // clobber the thread-local builtin EvalState. Keep a stable local pointer.
+    form = canonicalize_ast(form, st);
+    return eval_canonical_form(form, st, NULL);
 }
 
 ID native_read_string(ID *args, unsigned int argc)
@@ -7416,8 +7417,7 @@ ID native_deref(ID *args, unsigned int argc)
 
     CljAtom *atom = as_atom(obj);
     ID value = atom_deref(atom);
-
-    return AUTORELEASE(value); // Can be NULL (nil) or immediate
+    return value; // atom_deref follows MEMORY_POLICY
 }
 
 // Native reset! implementation
@@ -7438,8 +7438,7 @@ ID native_reset_bang(ID *args, unsigned int argc)
     ID new_value = args[1]; // Can be NULL (nil) or immediate
 
     ID result = atom_reset(atom, new_value);
-
-    return AUTORELEASE(result); // Returns new value (can be NULL/nil or immediate)
+    return result; // atom_reset follows MEMORY_POLICY
 }
 
 // Native swap! implementation
@@ -7493,7 +7492,7 @@ ID native_swap_bang(ID *args, unsigned int argc)
         CLJ_FREE(fn_args);
     }
 
-    return AUTORELEASE(result); // Returns new value (can be NULL/nil or immediate)
+    return result; // atom_swap follows MEMORY_POLICY
 }
 
 // Note: def and ns are special forms (not builtins) because they require non-evaluated arguments.
@@ -8105,15 +8104,11 @@ static void register_builtin(const char *cname, BuiltinFn func)
         // Qualified symbol: split into namespace and name
         size_t ns_len = slash - cname;
 
-        // CLOJURE COMPATIBILITY: Only auto-register clojure.* namespaces.
-        // Other namespaces (tiny-clj.*, user libs) must use (require 'ns) first,
-        // then (defn ... :native) will look up the function in native_function_table.
-        if (ns_len < 8 || strncmp(cname, "clojure.", 8) != 0) {
-            // Not a clojure.* namespace - skip direct registration.
-            // The function is already in native_function_table and will be
-            // activated when the .clj file defines (defn foo [] :native).
-            return;
-        }
+        // Auto-register clojure.* and tiny-snd.runtime (audio API) namespaces.
+        // Other namespaces must use (require 'ns) first, then (defn ... :native).
+        bool allow = (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0)
+            || (ns_len >= 15 && strncmp(cname, "tiny-snd.runtime", 15) == 0);
+        if (!allow) return;
 
         char *ns_name = (char *)CLJ_MALLOC(ns_len + 1);
         strncpy(ns_name, cname, ns_len);
@@ -8207,19 +8202,19 @@ void register_builtins()
         register_builtin(entry->register_cname, entry->native_func);
     }
 
-    // Audio builtins
-    register_builtin("audio-load-track!", native_audio_load_track);
-    register_builtin("audio-unload-track!", native_audio_unload_track);
-    register_builtin("audio-play-music!", native_audio_play_music);
-    register_builtin("audio-stop-track!", native_audio_stop_track);
-    register_builtin("audio-stop-music!", native_audio_stop_music);
-    register_builtin("audio-play-sfx!", native_audio_play_sfx);
-    register_builtin("audio-stop-all!", native_audio_stop_all);
-    register_builtin("audio-set-track-volume!", native_audio_set_track_volume);
-    register_builtin("audio-set-music-volume!", native_audio_set_music_volume);
-    register_builtin("audio-on-finished!", native_audio_on_finished);
-    register_builtin("audio-play-test-tone!", native_audio_play_test_tone);
-    register_builtin("audio-host-status!", native_audio_host_status);
+    // Audio builtins (Runtime API in tiny-snd.runtime per plan)
+    register_builtin("tiny-snd.runtime/audio-load-track!", native_audio_load_track);
+    register_builtin("tiny-snd.runtime/audio-unload-track!", native_audio_unload_track);
+    register_builtin("tiny-snd.runtime/audio-play-music!", native_audio_play_music);
+    register_builtin("tiny-snd.runtime/audio-stop-track!", native_audio_stop_track);
+    register_builtin("tiny-snd.runtime/audio-stop-music!", native_audio_stop_music);
+    register_builtin("tiny-snd.runtime/audio-play-sfx!", native_audio_play_sfx);
+    register_builtin("tiny-snd.runtime/audio-stop-all!", native_audio_stop_all);
+    register_builtin("tiny-snd.runtime/audio-set-track-volume!", native_audio_set_track_volume);
+    register_builtin("tiny-snd.runtime/audio-set-music-volume!", native_audio_set_music_volume);
+    register_builtin("tiny-snd.runtime/audio-on-finished!", native_audio_on_finished);
+    register_builtin("tiny-snd.runtime/audio-play-test-tone!", native_audio_play_test_tone);
+    register_builtin("tiny-snd.runtime/audio-host-status!", native_audio_host_status);
 
     // Prime concat thunk function object during setup so tests do not pay
     // one-time cached_named_func allocation in per-test heap assertions.

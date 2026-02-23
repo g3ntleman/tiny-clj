@@ -760,7 +760,6 @@ TEST(test_meta_merge_does_not_overwrite) {
 
     RELEASE(existing_meta);
     RELEASE(location_meta);
-    RELEASE(merged);
     evalstate_free(eval_state);
 }
 
