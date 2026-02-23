@@ -13,10 +13,21 @@
 #define VIEW_W 320
 #define VIEW_H 240
 
+/** Letterbox viewport in window coordinates (avoids MiniFB's scale division which breaks on Retina). */
+static void set_letterbox_viewport(struct mfb_window *window, unsigned win_w, unsigned win_h) {
+    if (win_w == 0 || win_h == 0) return;
+    float scale = (float)win_w / (float)VIEW_W;
+    float scale_y = (float)win_h / (float)VIEW_H;
+    if (scale_y < scale) scale = scale_y;
+    unsigned draw_w = (unsigned)((float)VIEW_W * scale + 0.5f);
+    unsigned draw_h = (unsigned)((float)VIEW_H * scale + 0.5f);
+    unsigned offset_x = (win_w - draw_w) >> 1;
+    unsigned offset_y = (win_h - draw_h) >> 1;
+    (void)mfb_set_viewport(window, offset_x, offset_y, draw_w, draw_h);
+}
+
 static void on_window_resize(struct mfb_window *window, int width, int height) {
-    (void)width;
-    (void)height;
-    (void)mfb_set_viewport_best_fit(window, VIEW_W, VIEW_H);
+    set_letterbox_viewport(window, (unsigned)width, (unsigned)height);
 }
 
 static uint32_t rgb565_to_xrgb8888(uint16_t c) {
@@ -51,7 +62,7 @@ int main(void) {
     }
     mfb_show_cursor(window, true);
     mfb_set_resize_callback(window, on_window_resize);
-    (void)mfb_set_viewport_best_fit(window, VIEW_W, VIEW_H);
+    set_letterbox_viewport(window, VIEW_W, VIEW_H);
     struct mfb_timer *timer = mfb_timer_create();
     if (!timer) {
         fprintf(stderr, "Failed to create MiniFB timer\n");
