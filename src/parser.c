@@ -46,35 +46,35 @@ static size_t format_append_hex_byte(char *dest, size_t offset, size_t capacity,
 
 // Helper function for parser exceptions
 static void throw_parser_exception(const char *message, Reader *reader) {
-    if (reader && reader->src) {
-        enum { PREVIEW_LEN = 64 };
-        size_t start = reader->index;
-        if (start > reader->length) {
-            start = reader->length;
-        }
-        char preview[PREVIEW_LEN + 1];
-        size_t copied = 0;
-        for (size_t i = 0; i < PREVIEW_LEN && (start + i) < reader->length; i++) {
-            char c = reader->src[start + i];
-            if (c == '\n' || c == '\r') {
-                break;
-            }
-            if ((unsigned char)c < 32 || (unsigned char)c == 127) {
-                c = '?';
-            }
-            preview[copied++] = c;
-        }
-        preview[copied] = '\0';
-        const char *source_name = reader_get_source_name(reader);
-        if (!source_name || !source_name[0]) {
-            source_name = "parser";
-        }
-        throw_exception_formatted(EXCEPTION_PARSE, source_name, reader->line, reader->column,
-                                  "%s (line %d, column %d, near \"%s\")",
-                                  message, reader->line, reader->column, preview);
-    } else {
-        throw_exception(EXCEPTION_PARSE, message, "parser", reader ? reader->line : 0, reader ? reader->column : 0);
+  if (reader && reader->src) {
+    enum { PREVIEW_LEN = 64 };
+    size_t start = reader->index;
+    if (start > reader->length) {
+      start = reader->length;
     }
+    char preview[PREVIEW_LEN + 1];
+    size_t copied = 0;
+    for (size_t i = 0; i < PREVIEW_LEN && (start + i) < reader->length; i++) {
+      char c = reader->src[start + i];
+      if (c == '\n' || c == '\r') {
+        break;
+      }
+      if ((unsigned char)c < 32 || (unsigned char)c == 127) {
+        c = '?';
+      }
+      preview[copied++] = c;
+    }
+    preview[copied] = '\0';
+    const char *source_name = reader_get_source_name(reader);
+    if (!source_name || !source_name[0]) {
+      source_name = "parser";
+    }
+    throw_exception_formatted(EXCEPTION_PARSE, source_name, reader->line, reader->column,
+                              "%s (line %d, column %d, near \"%s\")",
+                              message, reader->line, reader->column, preview);
+  } else {
+    throw_exception(EXCEPTION_PARSE, message, "parser", reader ? reader->line : 0, reader ? reader->column : 0);
+  }
 }
 
 static void throw_parser_exceptionf(Reader *reader, const char *format, ...) {
@@ -84,19 +84,19 @@ static void throw_parser_exceptionf(Reader *reader, const char *format, ...) {
   (void)reader;
   throw_parser_exception((format != NULL) ? format : "Parse error", reader);
 #else
-    enum { MSG_LEN = 128 };
-    char buffer[MSG_LEN];
-    va_list args;
-    va_start(args, format);
-    vsnprintf(buffer, sizeof(buffer), format, args);
-    va_end(args);
-    throw_parser_exception(buffer, reader);
+  enum { MSG_LEN = 128 };
+  char buffer[MSG_LEN];
+  va_list args;
+  va_start(args, format);
+  vsnprintf(buffer, sizeof(buffer), format, args);
+  va_end(args);
+  throw_parser_exception(buffer, reader);
 #endif
 }
 
 // Parser buffer constants (keep stack use bounded on embedded targets).
-#define PARSER_SYMBOL_BUF 128   /* symbols limited by SYMBOL_NAME_MAX_LEN (64) */
-#define PARSER_NUMBER_BUF 128   /* number literals are short */
+#define PARSER_SYMBOL_BUF 128 /* symbols limited by SYMBOL_NAME_MAX_LEN (64) */
+#define PARSER_NUMBER_BUF 128 /* number literals are short */
 #define MAX_STACK_STRING_SIZE 2048
 
 /** @brief Check if character is a digit */
@@ -104,7 +104,7 @@ static bool is_digit(char c) { return c >= '0' && c <= '9'; }
 
 /** @brief Check if character is alphabetic */
 static bool is_alpha(char c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
 /** @brief Check if character is alphanumeric or symbol character */
@@ -218,7 +218,7 @@ static ID parse_tagged_literal(Reader *reader, EvalState *st) {
   return NULL;
 }
 static ID parse_character(Reader *reader, EvalState *st);
-static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
+static CljObject *make_number_by_parsing(Reader *reader, EvalState *st);
 
 // Ensure that every parse step advances the reader or hits EOF, otherwise throw
 static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
@@ -233,7 +233,8 @@ static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
 
 // Skip one form without constructing runtime objects (used when metadata is disabled).
 static bool skip_string_no_alloc(Reader *reader) {
-  if (!reader || reader_current(reader) != '"') return false;
+  if (!reader || reader_current(reader) != '"')
+    return false;
   reader_next(reader); // opening quote
   while (!reader_eof(reader)) {
     char c = reader_next(reader);
@@ -241,13 +242,15 @@ static bool skip_string_no_alloc(Reader *reader) {
       reader_next(reader); // escaped byte
       continue;
     }
-    if (c == '"') return true;
+    if (c == '"')
+      return true;
   }
   return false;
 }
 
 static bool skip_token_no_alloc(Reader *reader) {
-  if (!reader) return false;
+  if (!reader)
+    return false;
   while (!reader_eof(reader)) {
     char c = reader_current(reader);
     if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ',' ||
@@ -264,94 +267,104 @@ static bool skip_token_no_alloc(Reader *reader) {
 }
 
 static bool skip_delimited_form_no_alloc(Reader *reader, char open, char close) {
-  if (!reader || reader_current(reader) != open) return false;
+  if (!reader || reader_current(reader) != open)
+    return false;
   reader_next(reader); // consume opener
   for (;;) {
     reader_skip_all(reader);
-    if (reader_eof(reader)) return false;
+    if (reader_eof(reader))
+      return false;
     if (reader_current(reader) == close) {
       reader_next(reader);
       return true;
     }
-    if (!skip_form_no_alloc(reader)) return false;
+    if (!skip_form_no_alloc(reader))
+      return false;
   }
 }
 
 static bool skip_dispatch_form_no_alloc(Reader *reader) {
-  if (!reader || reader_current(reader) != '#') return false;
+  if (!reader || reader_current(reader) != '#')
+    return false;
   reader_next(reader); // consume '#'
-  if (reader_eof(reader)) return false;
+  if (reader_eof(reader))
+    return false;
 
   char c = reader_current(reader);
   switch (c) {
-    case '|':
-      // Block comment reader macro (#| ... |#): consume comment, then skip next real form.
-      if (!reader_skip_block_comment(reader)) return false;
-      return skip_form_no_alloc(reader);
-    case '{':
-      return skip_delimited_form_no_alloc(reader, '{', '}');
-    case '(':
-      return skip_delimited_form_no_alloc(reader, '(', ')');
-    case '"':
-      return skip_string_no_alloc(reader); // regex literal #"..."
-    case '^':
-      // Metadata reader macro #^meta obj: skip meta and target.
-      reader_next(reader); // consume '^'
-      if (!skip_form_no_alloc(reader)) return false;
-      return skip_form_no_alloc(reader);
-    case '_':
-      // Discard next form.
-      reader_next(reader); // consume '_'
-      return skip_form_no_alloc(reader);
-    case ':':
-      // Namespaced map literal #:ns {...} / #::{...}
-      reader_next(reader); // first ':'
-      if (!reader_eof(reader) && reader_current(reader) == ':') {
-        reader_next(reader); // optional second ':'
-      }
-      (void)skip_token_no_alloc(reader); // optional namespace token
-      return skip_form_no_alloc(reader); // usually a map form
-    default:
-      // Tagged literal: #inst "...", #uuid "...", #foo/bar value
-      (void)skip_token_no_alloc(reader);
-      return skip_form_no_alloc(reader);
+  case '|':
+    // Block comment reader macro (#| ... |#): consume comment, then skip next real form.
+    if (!reader_skip_block_comment(reader))
+      return false;
+    return skip_form_no_alloc(reader);
+  case '{':
+    return skip_delimited_form_no_alloc(reader, '{', '}');
+  case '(':
+    return skip_delimited_form_no_alloc(reader, '(', ')');
+  case '"':
+    return skip_string_no_alloc(reader); // regex literal #"..."
+  case '^':
+    // Metadata reader macro #^meta obj: skip meta and target.
+    reader_next(reader); // consume '^'
+    if (!skip_form_no_alloc(reader))
+      return false;
+    return skip_form_no_alloc(reader);
+  case '_':
+    // Discard next form.
+    reader_next(reader); // consume '_'
+    return skip_form_no_alloc(reader);
+  case ':':
+    // Namespaced map literal #:ns {...} / #::{...}
+    reader_next(reader); // first ':'
+    if (!reader_eof(reader) && reader_current(reader) == ':') {
+      reader_next(reader); // optional second ':'
+    }
+    (void)skip_token_no_alloc(reader); // optional namespace token
+    return skip_form_no_alloc(reader); // usually a map form
+  default:
+    // Tagged literal: #inst "...", #uuid "...", #foo/bar value
+    (void)skip_token_no_alloc(reader);
+    return skip_form_no_alloc(reader);
   }
 }
 
 static bool skip_form_no_alloc(Reader *reader) {
-  if (!reader) return false;
+  if (!reader)
+    return false;
   reader_skip_all(reader);
-  if (reader_eof(reader)) return false;
+  if (reader_eof(reader))
+    return false;
 
   char c = reader_current(reader);
   switch (c) {
-    case '"':
-      return skip_string_no_alloc(reader);
-    case '(':
-      return skip_delimited_form_no_alloc(reader, '(', ')');
-    case '[':
-      return skip_delimited_form_no_alloc(reader, '[', ']');
-    case '{':
-      return skip_delimited_form_no_alloc(reader, '{', '}');
-    case '\'':
-    case '`':
-    case '@':
-      reader_next(reader); // quote/syntax-quote/deref prefix
-      return skip_form_no_alloc(reader);
-    case '~':
-      reader_next(reader); // unquote prefix
-      if (!reader_eof(reader) && reader_current(reader) == '@') {
-        reader_next(reader); // unquote-splicing
-      }
-      return skip_form_no_alloc(reader);
-    case '^':
-      reader_next(reader); // metadata prefix
-      if (!skip_form_no_alloc(reader)) return false; // metadata payload
-      return skip_form_no_alloc(reader);             // target object
-    case '#':
-      return skip_dispatch_form_no_alloc(reader);
-    default:
-      return skip_token_no_alloc(reader);
+  case '"':
+    return skip_string_no_alloc(reader);
+  case '(':
+    return skip_delimited_form_no_alloc(reader, '(', ')');
+  case '[':
+    return skip_delimited_form_no_alloc(reader, '[', ']');
+  case '{':
+    return skip_delimited_form_no_alloc(reader, '{', '}');
+  case '\'':
+  case '`':
+  case '@':
+    reader_next(reader); // quote/syntax-quote/deref prefix
+    return skip_form_no_alloc(reader);
+  case '~':
+    reader_next(reader); // unquote prefix
+    if (!reader_eof(reader) && reader_current(reader) == '@') {
+      reader_next(reader); // unquote-splicing
+    }
+    return skip_form_no_alloc(reader);
+  case '^':
+    reader_next(reader); // metadata prefix
+    if (!skip_form_no_alloc(reader))
+      return false;                    // metadata payload
+    return skip_form_no_alloc(reader); // target object
+  case '#':
+    return skip_dispatch_form_no_alloc(reader);
+  default:
+    return skip_token_no_alloc(reader);
   }
 }
 
@@ -376,180 +389,185 @@ ID parse_expr(Reader *reader, EvalState *st) {
   char c = reader_current(reader);
 
   switch (c) {
-    case '^':
-      return parse_meta(reader, st);
+  case '^':
+    return parse_meta(reader, st);
 
-    case '#': {
-      char next = reader_peek_ahead(reader, 1);
-      if (next == '^')
-        return parse_meta_map(reader, st);
-      if (next == '(')
-        return parse_anon_fn(reader, st);
-      if (next == '{')
-        return parse_set(reader, st);
-      return parse_tagged_literal(reader, st);
+  case '#': {
+    char next = reader_peek_ahead(reader, 1);
+    if (next == '^')
+      return parse_meta_map(reader, st);
+    if (next == '(')
+      return parse_anon_fn(reader, st);
+    if (next == '{')
+      return parse_set(reader, st);
+    return parse_tagged_literal(reader, st);
+  }
+
+  case '[':
+    return parse_vector(reader, st);
+
+  case '{':
+    return parse_map(reader, st);
+
+  case '(':
+    return parse_list(reader, st);
+
+  case '"':
+    return parse_string_internal(reader, st);
+
+  case '-':
+    if (isdigit((unsigned char)reader_peek_ahead(reader, 1)))
+      return make_number_by_parsing(reader, st);
+    break;
+
+  case '.':
+    if (isdigit((unsigned char)reader_peek_ahead(reader, 1))) {
+      // Check for invalid decimal syntax like .01 (should be 0.01)
+      char invalid_decimal[32];
+      int pos = 0;
+      invalid_decimal[pos++] = c; // include the '.'
+      reader_next(reader);        // consume '.'
+      while (isdigit((unsigned char)reader_peek_char(reader)) && pos < (int)sizeof(invalid_decimal) - 1) {
+        invalid_decimal[pos++] = reader_next(reader);
+      }
+      invalid_decimal[pos] = '\0';
+
+      throw_parser_exceptionf(reader,
+                              "Syntax error compiling.\nUnable to resolve symbol: %s in this context",
+                              invalid_decimal);
+      return NULL;
     }
+    break;
 
-    case '[':
-      return parse_vector(reader, st);
-
-    case '{':
-      return parse_map(reader, st);
-
-    case '(':
-      return parse_list(reader, st);
-
-    case '"':
-      return parse_string_internal(reader, st);
-
-    case '-':
-      if (isdigit((unsigned char)reader_peek_ahead(reader, 1)))
-        return make_number_by_parsing(reader, st);
-      break;
-
-    case '.':
-      if (isdigit((unsigned char)reader_peek_ahead(reader, 1))) {
-        // Check for invalid decimal syntax like .01 (should be 0.01)
-        char invalid_decimal[32];
-        int pos = 0;
-        invalid_decimal[pos++] = c; // include the '.'
-        reader_next(reader); // consume '.'
-        while (isdigit((unsigned char)reader_peek_char(reader)) && pos < (int)sizeof(invalid_decimal) - 1) {
-          invalid_decimal[pos++] = reader_next(reader);
-        }
-        invalid_decimal[pos] = '\0';
-
-        throw_parser_exceptionf(reader,
-            "Syntax error compiling.\nUnable to resolve symbol: %s in this context",
-            invalid_decimal);
-        return NULL;
+  case 'n':
+    // Handle nil literal - parse as SYM_NIL symbol (not NULL)
+    if (reader_peek_ahead(reader, 1) == 'i' &&
+        reader_peek_ahead(reader, 2) == 'l' &&
+        !is_alphanumeric(reader_peek_ahead(reader, 3))) {
+      reader_consume(reader); // 'n'
+      reader_consume(reader); // 'i'
+      reader_consume(reader); // 'l'
+      CljSymbol *nil_sym = intern_symbol_global("nil");
+      if (nil_sym == SYM_NIL) {
+        return SYM_NIL;
       }
-      break;
+      return AUTORELEASE(nil_sym);
+    }
+    break;
 
-    case 'n':
-      // Handle nil literal - parse as SYM_NIL symbol (not NULL)
-      if (reader_peek_ahead(reader, 1) == 'i' &&
-          reader_peek_ahead(reader, 2) == 'l' &&
-          !is_alphanumeric(reader_peek_ahead(reader, 3))) {
-        reader_consume(reader); // 'n'
-        reader_consume(reader); // 'i'
-        reader_consume(reader); // 'l'
-        CljSymbol *nil_sym = intern_symbol_global("nil");
-        if (nil_sym == SYM_NIL) {
-          return SYM_NIL;
-        }
-        return AUTORELEASE(nil_sym);
-      }
-      break;
+  case 't':
+    // Handle true literal
+    if (reader_peek_ahead(reader, 1) == 'r' &&
+        reader_peek_ahead(reader, 2) == 'u' &&
+        reader_peek_ahead(reader, 3) == 'e' &&
+        !is_alphanumeric(reader_peek_ahead(reader, 4))) {
+      reader_consume(reader); // 't'
+      reader_consume(reader); // 'r'
+      reader_consume(reader); // 'u'
+      reader_consume(reader); // 'e'
+      return clj_true;
+    }
+    break;
 
-    case 't':
-      // Handle true literal
-      if (reader_peek_ahead(reader, 1) == 'r' &&
-          reader_peek_ahead(reader, 2) == 'u' &&
-          reader_peek_ahead(reader, 3) == 'e' &&
-          !is_alphanumeric(reader_peek_ahead(reader, 4))) {
-        reader_consume(reader); // 't'
-        reader_consume(reader); // 'r'
-        reader_consume(reader); // 'u'
-        reader_consume(reader); // 'e'
-        return clj_true;
-      }
-      break;
+  case 'f':
+    // Handle false literal
+    if (reader_peek_ahead(reader, 1) == 'a' &&
+        reader_peek_ahead(reader, 2) == 'l' &&
+        reader_peek_ahead(reader, 3) == 's' &&
+        reader_peek_ahead(reader, 4) == 'e' &&
+        !is_alphanumeric(reader_peek_ahead(reader, 5))) {
+      reader_consume(reader); // 'f'
+      reader_consume(reader); // 'a'
+      reader_consume(reader); // 'l'
+      reader_consume(reader); // 's'
+      reader_consume(reader); // 'e'
+      return clj_false;
+    }
+    break;
 
-    case 'f':
-      // Handle false literal
-      if (reader_peek_ahead(reader, 1) == 'a' &&
-          reader_peek_ahead(reader, 2) == 'l' &&
-          reader_peek_ahead(reader, 3) == 's' &&
-          reader_peek_ahead(reader, 4) == 'e' &&
-          !is_alphanumeric(reader_peek_ahead(reader, 5))) {
-        reader_consume(reader); // 'f'
-        reader_consume(reader); // 'a'
-        reader_consume(reader); // 'l'
-        reader_consume(reader); // 's'
-        reader_consume(reader); // 'e'
-        return clj_false;
-      }
-      break;
+  case '\'':
+    // Handle quote 'x => (quote x)
+    reader_consume(reader); // consume '
+    reader_skip_all(reader);
+    size_t qb_before = reader_offset(reader);
+    ID quoted = parse_expr(reader, st);
+    size_t qb_after = reader_offset(reader);
+    if (qb_after <= qb_before && !reader_eof(reader)) {
+      throw_parser_exception("Parser made no progress after quote", reader);
+    }
+    if (!quoted)
+      return NULL;
+    // Create (quote <expr>) list: (quote expr)
+    return AUTORELEASE(make_ast_list(SYM_QUOTE, AUTORELEASE(make_ast_list(quoted, NULL))));
 
-    case '\'':
-      // Handle quote 'x => (quote x)
-      reader_consume(reader); // consume '
-      reader_skip_all(reader);
-      size_t qb_before = reader_offset(reader);
-      ID quoted = parse_expr(reader, st);
-      size_t qb_after = reader_offset(reader);
-      if (qb_after <= qb_before && !reader_eof(reader)) {
-        throw_parser_exception("Parser made no progress after quote", reader);
-      }
-      if (!quoted) return NULL;
-      // Create (quote <expr>) list: (quote expr)
-      return AUTORELEASE(make_ast_list(SYM_QUOTE, AUTORELEASE(make_ast_list(quoted, NULL))));
+  case '@':
+    // Handle deref @x => (deref x)
+    reader_consume(reader); // consume @
+    reader_skip_all(reader);
+    size_t db_before = reader_offset(reader);
+    ID atom_expr = parse_expr(reader, st);
+    size_t db_after = reader_offset(reader);
+    if (db_after <= db_before && !reader_eof(reader)) {
+      throw_parser_exception("Parser made no progress after @", reader);
+    }
+    if (!atom_expr)
+      return NULL;
+    // Create (deref <expr>) list: (deref expr)
+    return AUTORELEASE(make_ast_list(SYM_DEREF, AUTORELEASE(make_ast_list(atom_expr, NULL))));
 
-    case '@':
-      // Handle deref @x => (deref x)
+  case '`':
+    // Handle quasiquote `x => (quasiquote x)
+    reader_consume(reader); // consume `
+    reader_skip_all(reader);
+    size_t qq_before = reader_offset(reader);
+    ID qq_expr = parse_expr(reader, st);
+    size_t qq_after = reader_offset(reader);
+    if (qq_after <= qq_before && !reader_eof(reader)) {
+      throw_parser_exception("Parser made no progress after quasiquote", reader);
+    }
+    if (!qq_expr)
+      return NULL;
+    // Create (quasiquote <expr>) list
+    return AUTORELEASE(make_ast_list(SYM_QUASIQUOTE, AUTORELEASE(make_ast_list(qq_expr, NULL))));
+
+  case '~':
+    // Handle unquote ~x => (unquote x) or unquote-splice ~@x => (unquote-splice x)
+    reader_consume(reader); // consume ~
+    if (reader_peek_char(reader) == '@') {
+      // unquote-splice ~@x
       reader_consume(reader); // consume @
       reader_skip_all(reader);
-      size_t db_before = reader_offset(reader);
-      ID atom_expr = parse_expr(reader, st);
-      size_t db_after = reader_offset(reader);
-      if (db_after <= db_before && !reader_eof(reader)) {
-        throw_parser_exception("Parser made no progress after @", reader);
+      size_t sq_before = reader_offset(reader);
+      ID sq_expr = parse_expr(reader, st);
+      size_t sq_after = reader_offset(reader);
+      if (sq_after <= sq_before && !reader_eof(reader)) {
+        throw_parser_exception("Parser made no progress after unquote-splice", reader);
       }
-      if (!atom_expr) return NULL;
-      // Create (deref <expr>) list: (deref expr)
-      return AUTORELEASE(make_ast_list(SYM_DEREF, AUTORELEASE(make_ast_list(atom_expr, NULL))));
-
-    case '`':
-      // Handle quasiquote `x => (quasiquote x)
-      reader_consume(reader); // consume `
+      if (!sq_expr)
+        return NULL;
+      // Create (unquote-splice <expr>) list
+      return AUTORELEASE(make_ast_list(SYM_UNQUOTE_SPLICE, AUTORELEASE(make_ast_list(sq_expr, NULL))));
+    } else {
+      // unquote ~x
       reader_skip_all(reader);
-      size_t qq_before = reader_offset(reader);
-      ID qq_expr = parse_expr(reader, st);
-      size_t qq_after = reader_offset(reader);
-      if (qq_after <= qq_before && !reader_eof(reader)) {
-        throw_parser_exception("Parser made no progress after quasiquote", reader);
+      size_t uq_before = reader_offset(reader);
+      ID uq_expr = parse_expr(reader, st);
+      size_t uq_after = reader_offset(reader);
+      if (uq_after <= uq_before && !reader_eof(reader)) {
+        throw_parser_exception("Parser made no progress after unquote", reader);
       }
-      if (!qq_expr) return NULL;
-      // Create (quasiquote <expr>) list
-      return AUTORELEASE(make_ast_list(SYM_QUASIQUOTE, AUTORELEASE(make_ast_list(qq_expr, NULL))));
+      if (!uq_expr)
+        return NULL;
+      // Create (unquote <expr>) list
+      return AUTORELEASE(make_ast_list(SYM_UNQUOTE, AUTORELEASE(make_ast_list(uq_expr, NULL))));
+    }
 
-    case '~':
-      // Handle unquote ~x => (unquote x) or unquote-splice ~@x => (unquote-splice x)
-      reader_consume(reader); // consume ~
-      if (reader_peek_char(reader) == '@') {
-        // unquote-splice ~@x
-        reader_consume(reader); // consume @
-        reader_skip_all(reader);
-        size_t sq_before = reader_offset(reader);
-        ID sq_expr = parse_expr(reader, st);
-        size_t sq_after = reader_offset(reader);
-        if (sq_after <= sq_before && !reader_eof(reader)) {
-          throw_parser_exception("Parser made no progress after unquote-splice", reader);
-        }
-        if (!sq_expr) return NULL;
-        // Create (unquote-splice <expr>) list
-        return AUTORELEASE(make_ast_list(SYM_UNQUOTE_SPLICE, AUTORELEASE(make_ast_list(sq_expr, NULL))));
-      } else {
-        // unquote ~x
-        reader_skip_all(reader);
-        size_t uq_before = reader_offset(reader);
-        ID uq_expr = parse_expr(reader, st);
-        size_t uq_after = reader_offset(reader);
-        if (uq_after <= uq_before && !reader_eof(reader)) {
-          throw_parser_exception("Parser made no progress after unquote", reader);
-        }
-        if (!uq_expr) return NULL;
-        // Create (unquote <expr>) list
-        return AUTORELEASE(make_ast_list(SYM_UNQUOTE, AUTORELEASE(make_ast_list(uq_expr, NULL))));
-      }
+  case '\\':
+    // Handle character literals: \a, \space, \tab, \newline, \return, etc.
+    return parse_character(reader, st);
 
-    case '\\':
-      // Handle character literals: \a, \space, \tab, \newline, \return, etc.
-      return parse_character(reader, st);
-
-    default:
-      break;
+  default:
+    break;
   }
 
   // Handle digits
@@ -599,7 +617,6 @@ ID parse_expr(Reader *reader, EvalState *st) {
  * @return Parsed CljObject (caller must release) or NULL on error
  */
 
-
 /**
  * @brief Evaluate an already-canonical expression (same dispatch as after canonicalize in require/load).
  * @param expr Canonical AST (e.g. from canonicalize_ast)
@@ -608,23 +625,24 @@ ID parse_expr(Reader *reader, EvalState *st) {
  * @return The evaluated result (autoreleased) or NULL only if result is nil
  */
 ID eval_canonical_form(ID expr, EvalState *eval_state, CljPersistentMap *env) {
-    CLJ_ASSERT(eval_state != NULL);
-    if (!expr) return NULL;
-    CljPersistentMap *eval_env = env;
-    if (!eval_env) {
-        CLJ_ASSERT(eval_state->current_ns != NULL);
-        eval_env = (CljPersistentMap*)eval_state->current_ns->mappings;
-    }
-    CljType expr_tag = TAG(expr);
-    if (expr_tag == CLJ_AST_CALL)
-        return eval_body(expr, eval_env, eval_state, NULL);
-    if (is_list_type(expr_tag))
-        return eval_body(expr, eval_env, eval_state, NULL);
-    if (expr_tag == CLJ_SYMBOL)
-        return eval_symbol(as_symbol(expr), eval_state);
-    if (TAG(expr) == CLJ_MAP_PERSISTENT || TAG(expr) == CLJ_VECTOR_PERSISTENT)
-        return eval_body(expr, eval_env, eval_state, NULL);
-    return expr;
+  CLJ_ASSERT(eval_state != NULL);
+  if (!expr)
+    return NULL;
+  CljPersistentMap *eval_env = env;
+  if (!eval_env) {
+    CLJ_ASSERT(eval_state->current_ns != NULL);
+    eval_env = (CljPersistentMap *)eval_state->current_ns->mappings;
+  }
+  CljType expr_tag = TAG(expr);
+  if (expr_tag == CLJ_AST_CALL)
+    return eval_body(expr, eval_env, eval_state, NULL);
+  if (is_list_type(expr_tag))
+    return eval_body(expr, eval_env, eval_state, NULL);
+  if (expr_tag == CLJ_SYMBOL)
+    return eval_symbol(as_symbol(expr), eval_state);
+  if (TAG(expr) == CLJ_MAP_PERSISTENT || TAG(expr) == CLJ_VECTOR_PERSISTENT)
+    return eval_body(expr, eval_env, eval_state, NULL);
+  return expr;
 }
 
 /**
@@ -635,21 +653,22 @@ ID eval_canonical_form(ID expr, EvalState *eval_state, CljPersistentMap *env) {
  * @return The evaluated result (autoreleased) or NULL only if result is nil
  */
 ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljPersistentMap *env) {
-    CLJ_ASSERT(eval_state != NULL);
-    if (!parsed_expr) return NULL;
-    if (IS_IMMEDIATE(parsed_expr)) return parsed_expr;
-    // Same canonicalization as require/load: convert symbol tokens, quote, and non-special calls to AST_CALL
+  CLJ_ASSERT(eval_state != NULL);
+  if (!parsed_expr)
+    return NULL;
+  if (IS_IMMEDIATE(parsed_expr))
+    return parsed_expr;
+  // Same canonicalization as require/load: convert symbol tokens, quote, and non-special calls to AST_CALL
 #ifdef PROFILE_STARTUP
-    extern double g_canon_time_ms;
-    clock_t canon_start = clock();
-    parsed_expr = canonicalize_ast(parsed_expr, eval_state);
-    g_canon_time_ms += (double)(clock() - canon_start) * 1000.0 / CLOCKS_PER_SEC;
+  extern double g_canon_time_ms;
+  clock_t canon_start = clock();
+  parsed_expr = canonicalize_ast(parsed_expr, eval_state);
+  g_canon_time_ms += (double)(clock() - canon_start) * 1000.0 / CLOCKS_PER_SEC;
 #else
-    parsed_expr = canonicalize_ast(parsed_expr, eval_state);
+  parsed_expr = canonicalize_ast(parsed_expr, eval_state);
 #endif
-    return eval_canonical_form(parsed_expr, eval_state, env);
+  return eval_canonical_form(parsed_expr, eval_state, env);
 }
-
 
 /**
  * @brief Parse vector literal [a b c] using Reader
@@ -667,7 +686,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     // Create transient vector for efficient building
     CljPersistentVector *vec = make_vector(6, STRONG);
     CljTransientVector *tvec = vector_transient(vec);
-    RELEASE(vec);  // Release original, use transient
+    RELEASE(vec); // Release original, use transient
 
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
       size_t before = reader_offset(reader);
@@ -699,7 +718,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
       return NULL;
     }
 
-    return AUTORELEASE(vec);  // No location meta - symbols have inline line/col
+    return AUTORELEASE(vec); // No location meta - symbols have inline line/col
   }
   return NULL;
 }
@@ -889,14 +908,14 @@ static ID parse_list(Reader *reader, EvalState *st) {
         // For if-let macro expansion, use current position as approximation
         int nested_open_line = reader->line;
         int nested_open_column = reader->column > 1 ? reader->column - 1 : 1;
-        throw_parser_exceptionf(reader, 
+        throw_parser_exceptionf(reader,
                                 "Unclosed list - missing closing ')' (opened at line %d, column %d)",
                                 nested_open_line, nested_open_column);
         return NULL;
       }
 
       RELEASE(rest);
-      return AUTORELEASE(expanded);  // No location meta - symbols have inline line/col
+      return AUTORELEASE(expanded); // No location meta - symbols have inline line/col
     }
   }
 
@@ -905,7 +924,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
 
   // Build list from first and rest
   // Return autoreleased object - caller can use until pool is popped
-  ID result = make_ast_list(first, (CljList*)rest);
+  ID result = make_ast_list(first, (CljList *)rest);
   RELEASE(rest);
 
   // Skip whitespace before checking for closing parenthesis
@@ -914,13 +933,13 @@ static ID parse_list(Reader *reader, EvalState *st) {
   if (reader_eof(reader) || !reader_match(reader, ')')) {
     RELEASE(result);
     // Include position of opening parenthesis in error message
-    throw_parser_exceptionf(reader, 
+    throw_parser_exceptionf(reader,
                             "Unclosed list - missing closing ')' (opened at line %d, column %d)",
                             open_line, open_column);
     return NULL;
   }
 
-  return AUTORELEASE(result);  // No location meta - symbols have inline line/col
+  return AUTORELEASE(result); // No location meta - symbols have inline line/col
 }
 
 /**
@@ -991,24 +1010,30 @@ static ID parse_character(Reader *reader, EvalState *st) {
   if (pos > 1) {
     // Named character literal - use switch on first char for performance
     switch (cname[0]) {
-      case 's':
-        if (strcmp(cname, "space") == 0) return character(' ');
-        break;
-      case 't':
-        if (strcmp(cname, "tab") == 0) return character('\t');
-        break;
-      case 'n':
-        if (strcmp(cname, "newline") == 0) return character('\n');
-        break;
-      case 'r':
-        if (strcmp(cname, "return") == 0) return character('\r');
-        break;
-      case 'b':
-        if (strcmp(cname, "backspace") == 0) return character('\b');
-        break;
-      case 'f':
-        if (strcmp(cname, "formfeed") == 0) return character('\f');
-        break;
+    case 's':
+      if (strcmp(cname, "space") == 0)
+        return character(' ');
+      break;
+    case 't':
+      if (strcmp(cname, "tab") == 0)
+        return character('\t');
+      break;
+    case 'n':
+      if (strcmp(cname, "newline") == 0)
+        return character('\n');
+      break;
+    case 'r':
+      if (strcmp(cname, "return") == 0)
+        return character('\r');
+      break;
+    case 'b':
+      if (strcmp(cname, "backspace") == 0)
+        return character('\b');
+      break;
+    case 'f':
+      if (strcmp(cname, "formfeed") == 0)
+        return character('\f');
+      break;
     }
     char msg[128];
     size_t msg_pos = 0;
@@ -1019,20 +1044,20 @@ static ID parse_character(Reader *reader, EvalState *st) {
   } else {
     char c = reader_next(reader);
     switch (c) {
-      case 'n':
-        return character('\n');
-      case 't':
-        return character('\t');
-      case 'r':
-        return character('\r');
-      case '\\':
-        return character('\\');
-      case 'b':
-        return character('\b');
-      case 'f':
-        return character('\f');
-      default:
-        return character((unsigned char)c);
+    case 'n':
+      return character('\n');
+    case 't':
+      return character('\t');
+    case 'r':
+      return character('\r');
+    case '\\':
+      return character('\\');
+    case 'b':
+      return character('\b');
+    case 'f':
+      return character('\f');
+    default:
+      return character((unsigned char)c);
     }
   }
 }
@@ -1043,39 +1068,40 @@ static ID parse_character(Reader *reader, EvalState *st) {
  * @param alias_str Alias string (without ':' prefix)
  * @return Resolved namespace name symbol, or NULL if alias not found
  */
-CljSymbol* resolve_alias_in_namespace(EvalState *st, const char *alias_str) {
-    if (!alias_str || alias_str[0] == '\0') {
-        return NULL;
-    }
-
-    // Built-in alias: Math -> clojure.core (for Math/sqrt style lookups)
-    if (strcmp(alias_str, "Math") == 0 && SYM_CLOJURE_CORE) {
-        return SYM_CLOJURE_CORE;
-    }
-    
-    if (!st) {
-        return NULL;
-    }
-
-    CljNamespace *ns = st->resolve_ns ? st->resolve_ns : st->current_ns;
-    if (!ns) {
-        return NULL;
-    }
-
-    // Check if aliases map exists
-    if (!ns->aliases) {
-        return NULL;
-    }
-    
-    CljSymbol *alias_sym = intern_symbol_global(alias_str);
-    if (!alias_sym) return NULL;
-    
-    CljObject *resolved_ns_obj = ns_get_alias(ns, alias_sym);
-    if (resolved_ns_obj && TAG(resolved_ns_obj) == CLJ_SYMBOL) {
-        return as_symbol(resolved_ns_obj);
-    }
-    
+CljSymbol *resolve_alias_in_namespace(EvalState *st, const char *alias_str) {
+  if (!alias_str || alias_str[0] == '\0') {
     return NULL;
+  }
+
+  // Built-in alias: Math -> clojure.core (for Math/sqrt style lookups)
+  if (strcmp(alias_str, "Math") == 0 && SYM_CLOJURE_CORE) {
+    return SYM_CLOJURE_CORE;
+  }
+
+  if (!st) {
+    return NULL;
+  }
+
+  CljNamespace *ns = st->resolve_ns ? st->resolve_ns : st->current_ns;
+  if (!ns) {
+    return NULL;
+  }
+
+  // Check if aliases map exists
+  if (!ns->aliases) {
+    return NULL;
+  }
+
+  CljSymbol *alias_sym = intern_symbol_global(alias_str);
+  if (!alias_sym)
+    return NULL;
+
+  CljObject *resolved_ns_obj = ns_get_alias(ns, alias_sym);
+  if (resolved_ns_obj && TAG(resolved_ns_obj) == CLJ_SYMBOL) {
+    return as_symbol(resolved_ns_obj);
+  }
+
+  return NULL;
 }
 
 /**
@@ -1092,20 +1118,21 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
   char buffer[PARSER_SYMBOL_BUF];
   int pos = 0;
   int slash_pos = -1;
-  bool auto_qualify = false;  // Track if :: was detected
+  bool auto_qualify = false; // Track if :: was detected
 
   // Handle keyword prefix
   if (reader_peek_char(reader) == ':') {
     buffer[pos++] = reader_next(reader);
     if (reader_peek_char(reader) == ':') {
       buffer[pos++] = reader_next(reader);
-      auto_qualify = true;  // :: detected - will auto-qualify with current namespace
+      auto_qualify = true; // :: detected - will auto-qualify with current namespace
     }
   }
 
   while (!reader_eof(reader) && pos < PARSER_SYMBOL_BUF - 1) {
     int cp = reader_peek_codepoint(reader);
-    if (cp < 0) break;
+    if (cp < 0)
+      break;
 
     if (utf8_is_symbol_char(cp)) {
       // Track position of '/' for namespace-qualified symbols
@@ -1124,7 +1151,8 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       }
 
       size_t bytes_to_copy = next - current;
-      if (pos + bytes_to_copy >= PARSER_SYMBOL_BUF) break;
+      if (pos + bytes_to_copy >= PARSER_SYMBOL_BUF)
+        break;
 
       // Copy UTF-8 bytes
       for (size_t i = 0; i < bytes_to_copy; i++) {
@@ -1182,9 +1210,9 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
     if (slash_pos > 0 && slash_pos < pos - 1) {
       // ::alias/keyword - auto-qualify with alias namespace
       buffer[slash_pos] = '\0';
-      const char *alias_str = buffer + 2;  // Skip ::
+      const char *alias_str = buffer + 2; // Skip ::
       const char *keyword_name = buffer + slash_pos + 1;
-      
+
       if (alias_str[0] != '\0' && keyword_name[0] != '\0') {
         CljSymbol *ns_name_sym = resolve_alias_in_namespace(st, alias_str);
         if (ns_name_sym && ns_name_sym->cname) {
@@ -1195,7 +1223,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
           (void)format_append(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), keyword_name);
           CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
           if (kw) {
-            return AUTORELEASE(kw);  // No location meta for atoms
+            return AUTORELEASE(kw); // No location meta for atoms
           }
         }
       }
@@ -1204,8 +1232,8 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       // ::keyword - auto-qualify with current namespace
       if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname) {
         const char *current_ns_name = st->current_ns->name->cname;
-        const char *keyword_name = buffer + 2;  // Skip ::
-        
+        const char *keyword_name = buffer + 2; // Skip ::
+
         if (keyword_name[0] != '\0') {
           CljSymbol *ns_name_sym = intern_symbol_global(current_ns_name);
           if (ns_name_sym) {
@@ -1216,7 +1244,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
             (void)format_append(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), keyword_name);
             CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
             if (kw) {
-              return AUTORELEASE(kw);  // No location meta for atoms
+              return AUTORELEASE(kw); // No location meta for atoms
             }
           }
         }
@@ -1235,11 +1263,11 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
     if (ns_str[0] != '\0' && symbol_str[0] != '\0') {
       // CRITICAL: Create symbol with namespace set (not full string name)
       // This allows eval_symbol to quickly check symbol->ns instead of parsing in hot-path
-      
+
       // For keywords (ns_str starts with ':'), extract namespace name without ':'
       // and keep ':' prefix in symbol_str for IS_KEYWORD to work
       bool is_keyword_symbol = (ns_str && ns_str[0] == ':');
-      
+
       // Resolve alias if available (for both keywords and regular symbols)
       CljSymbol *resolved_ns_name_sym = NULL;
       if (is_keyword_symbol) {
@@ -1250,7 +1278,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
         // For regular symbols, try alias resolution
         resolved_ns_name_sym = resolve_alias_in_namespace(st, ns_str);
       }
-      
+
       // Use resolved namespace if found, otherwise use original ns_str
       CljSymbol *ns_name_sym = resolved_ns_name_sym;
       if (!ns_name_sym) {
@@ -1260,7 +1288,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
           ns_name_sym = ns_str ? intern_symbol_global(ns_str) : NULL;
         }
       }
-      
+
       if (is_keyword_symbol) {
         // Add ':' prefix to symbol name for IS_KEYWORD to work
         char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
@@ -1269,21 +1297,21 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
         (void)format_append(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), symbol_str);
         CljSymbol *sym = intern_symbol(ns_name_sym, keyword_with_colon);
         if (sym) {
-          return AUTORELEASE(sym);  // No location meta for atoms
+          return AUTORELEASE(sym); // No location meta for atoms
         }
         // If intern fails, fall through to return unqualified symbol
       } else {
         // Regular qualified symbol (not a keyword)
         CljSymbol *sym = intern_symbol(ns_name_sym, symbol_str);
         if (sym) {
-          return AUTORELEASE(sym);  // No location meta for atoms
+          return AUTORELEASE(sym); // No location meta for atoms
         }
         // If intern fails, fall through to return unqualified symbol
       }
     }
   }
 
-  return AUTORELEASE(intern_symbol_global(buffer));  // No location meta for atoms
+  return AUTORELEASE(intern_symbol_global(buffer)); // No location meta for atoms
 }
 
 /**
@@ -1371,19 +1399,20 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
       } else {
         // Copy complete UTF-8 sequence
         size_t bytes_to_copy = next - current;
-        if (pos + bytes_to_copy >= MAX_STACK_STRING_SIZE) break;
+        if (pos + bytes_to_copy >= MAX_STACK_STRING_SIZE)
+          break;
         for (size_t i = 0; i < bytes_to_copy; i++) {
           buf[pos++] = current[i];
         }
         // Advance reader by codepoint
         // Update line/column tracking for newlines
         for (size_t i = 0; i < bytes_to_copy; i++) {
-            if (current[i] == '\n') {
-                reader->line++;
-                reader->column = 1;
-            } else {
-                reader->column++;
-            }
+          if (current[i] == '\n') {
+            reader->line++;
+            reader->column = 1;
+          } else {
+            reader->column++;
+          }
         }
         reader->index += bytes_to_copy;
       }
@@ -1410,7 +1439,7 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed number CljObject or NULL on error
  */
-static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
+static CljObject *make_number_by_parsing(Reader *reader, EvalState *st) {
   (void)st;
   char buf[PARSER_NUMBER_BUF];
   int pos = 0;
@@ -1493,7 +1522,8 @@ CljValue value_by_parsing_expr(Reader *reader, EvalState *st) {
  * @return Parsed CljValue or NULL on error
  */
 CljValue parse_from_reader(Reader *reader, EvalState *st) {
-  if (!reader || !st) return NULL;
+  if (!reader || !st)
+    return NULL;
 
   // value_by_parsing_expr already returns AUTORELEASE objects
   // No need for additional WITH_AUTORELEASE_POOL - just return the result
@@ -1508,7 +1538,8 @@ CljValue parse_from_reader(Reader *reader, EvalState *st) {
  * @return Parsed CljValue or NULL on error
  */
 ID parse(const char *input, EvalState *st) {
-  if (!input || !st) return NULL;
+  if (!input || !st)
+    return NULL;
 
   Reader reader;
   reader_init(&reader, input);
@@ -1520,7 +1551,8 @@ ID parse(const char *input, EvalState *st) {
 }
 
 ID parse_from_string(CljString *str, EvalState *st) {
-  if (!str || !st) return NULL;
+  if (!str || !st)
+    return NULL;
   if (TAG((ID)str) != CLJ_STRING) {
     throw_exception(EXCEPTION_TYPE, "parse_from_string expects a string", __FILE__, __LINE__, 0);
     return NULL;
@@ -1531,7 +1563,6 @@ ID parse_from_string(CljString *str, EvalState *st) {
   reader_set_source_name(&reader, "<string input>");
   return parse_from_reader(&reader, st);
 }
-
 
 /**
  * @brief Merge new metadata with existing metadata on object (DRY helper)
@@ -1548,28 +1579,28 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
   }
 
   // Check if the object already has metadata (from nested metadata parsing)
-  ID existing_meta = meta_get((CljObject*)obj);
+  ID existing_meta = meta_get((CljObject *)obj);
   if (existing_meta) {
     // Merge existing metadata with new metadata (existing takes precedence)
     CljPersistentMap *existing_map = as_map(existing_meta);
     CljPersistentMap *new_map = as_map(new_meta);
     if (existing_map && new_map) {
-      CljPersistentMap *merged_meta = (CljPersistentMap*)meta_merge(existing_map, new_map);
+      CljPersistentMap *merged_meta = (CljPersistentMap *)meta_merge(existing_map, new_map);
       if (merged_meta) {
         if (merged_meta != existing_meta) {
           // Apply merged metadata to object
-          meta_set((CljObject*)obj, (CljObject*)merged_meta);
+          meta_set((CljObject *)obj, (CljObject *)merged_meta);
         }
       }
     }
     RELEASE(new_meta);
-    return obj;  // Return object (caller will handle AUTORELEASE)
+    return obj; // Return object (caller will handle AUTORELEASE)
   }
 
   // No existing metadata, apply new metadata directly
-  meta_set((CljObject*)obj, (CljObject*)new_meta);
+  meta_set((CljObject *)obj, (CljObject *)new_meta);
   RELEASE(new_meta);
-  return obj;  // Return object (caller will handle AUTORELEASE)
+  return obj; // Return object (caller will handle AUTORELEASE)
 }
 #endif
 
@@ -1583,8 +1614,8 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
  */
 #if defined(META_ENABLED) && META_ENABLED
 static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID obj) {
-  (void)reader;  // Unused parameter
-  (void)st;      // Unused parameter
+  (void)reader; // Unused parameter
+  (void)st;     // Unused parameter
   if (!obj) {
     RELEASE(meta);
     return NULL;
@@ -1597,23 +1628,23 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
 
 #if defined(META_ENABLED) && META_ENABLED
   // Automatically add source code location metadata
-  CljPersistentMap *location_meta = (CljPersistentMap*)make_location_meta(reader, st);
+  CljPersistentMap *location_meta = (CljPersistentMap *)make_location_meta(reader, st);
   if (location_meta) {
     // Get current metadata (might be from meta parameter or existing)
-    ID current_meta = meta ? meta : meta_get((CljObject*)obj);
+    ID current_meta = meta ? meta : meta_get((CljObject *)obj);
     CljPersistentMap *current_map = current_meta ? as_map(current_meta) : NULL;
     if (current_map) {
       // Merge location metadata with existing metadata (doesn't overwrite)
-      CljPersistentMap *merged_meta = (CljPersistentMap*)meta_merge(current_map, location_meta);
+      CljPersistentMap *merged_meta = (CljPersistentMap *)meta_merge(current_map, location_meta);
       if (merged_meta) {
         if (merged_meta != current_meta) {
           // Update meta if it was merged
-          meta_set(obj, (CljObject*)merged_meta);
+          meta_set(obj, (CljObject *)merged_meta);
         }
       }
     } else {
       // No existing metadata, just set location metadata
-      meta_set(obj, (CljObject*)location_meta);
+      meta_set(obj, (CljObject *)location_meta);
     }
     RELEASE(location_meta);
   }
@@ -1640,7 +1671,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   if (!reader_eof(reader) && reader_current(reader) == '#') {
     char next = reader_peek_ahead(reader, 1);
     if (next == '^') {
-      reader_next(reader);  // consume '#'
+      reader_next(reader); // consume '#'
       return parse_meta_map(reader, st);
     }
   }
@@ -1653,7 +1684,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     if (next == '^') {
       // This is ^#^{...} syntax - delegate to parse_meta_map
       // But we need to consume the '#' first
-      reader_next(reader);  // Consume '#'
+      reader_next(reader); // Consume '#'
       return parse_meta_map(reader, st);
     }
   }
@@ -1802,7 +1833,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
  * @return Object with applied metadata map or NULL on error
  */
 static ID parse_meta_map(Reader *reader,
-                                        EvalState *st) {
+                         EvalState *st) {
 #if !(defined(META_ENABLED) && META_ENABLED)
   reader_skip_all(reader);
   if (!reader_eof(reader) && reader_current(reader) == '#') {
@@ -1813,7 +1844,7 @@ static ID parse_meta_map(Reader *reader,
   if (reader_eof(reader) || reader_current(reader) != '^') {
     return NULL;
   }
-  reader_next(reader);  // Consume '^'
+  reader_next(reader); // Consume '^'
 
   // Skip metadata payload without constructing objects.
   return parse_after_skipping_meta_payload(reader, st);
@@ -1823,14 +1854,14 @@ static ID parse_meta_map(Reader *reader,
   reader_skip_all(reader);
   if (!reader_eof(reader) && reader_current(reader) == '#') {
     // Called from parse_expr - consume '#' first
-    reader_next(reader);  // Consume '#'
+    reader_next(reader); // Consume '#'
   }
   // Now we should be at '^' (either from parse_expr after '#' or from parse_meta)
   reader_skip_all(reader);
   if (reader_eof(reader) || reader_current(reader) != '^') {
     return NULL;
   }
-  reader_next(reader);  // Consume '^'
+  reader_next(reader); // Consume '^'
 
   reader_skip_all(reader);
   ID meta = parse_map(reader, st);

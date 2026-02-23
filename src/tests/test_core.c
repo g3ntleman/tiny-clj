@@ -1,6 +1,6 @@
 /*
  * Unity Tests for clojure.core functions in Tiny-CLJ
- * 
+ *
  * Consolidated tests for core Clojure functions from clojure.core namespace
  */
 
@@ -25,95 +25,95 @@ ID native_nilp(ID *args, unsigned int argc);
 // ============================================================================
 
 TEST_SHARED(test_core_count) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (count [1 2 3]) => 3
-    CljObject *result1 = eval_string("(count [1 2 3])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result1));
-    
-    // Test: (count '()) => 0
-    CljObject *result2 = eval_string("(count '())", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result2));
-    
-    // Test: (count nil) => 0
-    CljObject *result3 = eval_string("(count nil)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_TRUE(is_fixnum(result3));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result3));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (count [1 2 3]) => 3
+  CljObject *result1 = eval_string("(count [1 2 3])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(3, as_fixnum(result1));
+
+  // Test: (count '()) => 0
+  CljObject *result2 = eval_string("(count '())", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(is_fixnum(result2));
+  TEST_ASSERT_EQUAL_INT(0, as_fixnum(result2));
+
+  // Test: (count nil) => 0
+  CljObject *result3 = eval_string("(count nil)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result3);
+  TEST_ASSERT_TRUE(is_fixnum(result3));
+  TEST_ASSERT_EQUAL_INT(0, as_fixnum(result3));
 }
 
 TEST_SHARED(test_core_first) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (first [1 2 3]) => 1
-    CljObject *result1 = eval_string("(first [1 2 3])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result1));
-    
-    // Test: (first nil) => nil
-    CljObject *result2 = eval_string("(first nil)", g_test_eval_state);
-    TEST_ASSERT_NULL(result2);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (first [1 2 3]) => 1
+  CljObject *result1 = eval_string("(first [1 2 3])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(1, as_fixnum(result1));
+
+  // Test: (first nil) => nil
+  CljObject *result2 = eval_string("(first nil)", g_test_eval_state);
+  TEST_ASSERT_NULL(result2);
 }
 
 TEST_SHARED(test_core_rest) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (first (rest [1 2 3])) => 2
-    CljObject *result1 = eval_string("(first (rest [1 2 3]))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
-    
-    // Test: (rest []) => ()
-    CljObject *result2 = eval_string("(rest [])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (first (rest [1 2 3])) => 2
+  CljObject *result1 = eval_string("(first (rest [1 2 3]))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
+
+  // Test: (rest []) => ()
+  CljObject *result2 = eval_string("(rest [])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
 }
 
 TEST_SHARED(test_core_conj) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (conj [1 2] 3) => [1 2 3]
-    CljObject *result1 = eval_string("(count (conj [1 2] 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result1));
-    
-    // Test: vector conj puts element at end
-    CljObject *result2 = eval_string("(nth (conj [1 2] 3) 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result2));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (conj [1 2] 3) => [1 2 3]
+  CljObject *result1 = eval_string("(count (conj [1 2] 3))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(3, as_fixnum(result1));
+
+  // Test: vector conj puts element at end
+  CljObject *result2 = eval_string("(nth (conj [1 2] 3) 2)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(is_fixnum(result2));
+  TEST_ASSERT_EQUAL_INT(3, as_fixnum(result2));
 }
 
 TEST_SHARED(test_core_cons) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (cons 1 [2 3]) => (1 2 3)
-    CljObject *result1 = eval_string("(first (cons 1 [2 3]))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result1));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (cons 1 [2 3]) => (1 2 3)
+  CljObject *result1 = eval_string("(first (cons 1 [2 3]))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(1, as_fixnum(result1));
 }
 
 TEST_SHARED(test_core_nth) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (nth [1 2 3] 1) => 2
-    CljObject *result1 = eval_string("(nth [1 2 3] 1)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
-    
-    // Test: (nth [1 2 3] 0) => 1
-    CljObject *result2 = eval_string("(nth [1 2 3] 0)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result2));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (nth [1 2 3] 1) => 2
+  CljObject *result1 = eval_string("(nth [1 2 3] 1)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
+
+  // Test: (nth [1 2 3] 0) => 1
+  CljObject *result2 = eval_string("(nth [1 2 3] 0)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(is_fixnum(result2));
+  TEST_ASSERT_EQUAL_INT(1, as_fixnum(result2));
 }
 
 // ============================================================================
@@ -121,83 +121,83 @@ TEST_SHARED(test_core_nth) {
 // ============================================================================
 
 TEST_SHARED(test_core_inc) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (inc 1) => 2
-    CljObject *result1 = eval_string("(inc 1)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
-    
-    // Test: (inc 0) => 1
-    CljObject *result2 = eval_string("(inc 0)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result2));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (inc 1) => 2
+  CljObject *result1 = eval_string("(inc 1)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
+
+  // Test: (inc 0) => 1
+  CljObject *result2 = eval_string("(inc 0)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(is_fixnum(result2));
+  TEST_ASSERT_EQUAL_INT(1, as_fixnum(result2));
 }
 
 TEST_SHARED(test_core_dec) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (dec 2) => 1
-    CljObject *result1 = eval_string("(dec 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result1));
-    
-    // Test: (dec 0) => -1
-    CljObject *result2 = eval_string("(dec 0)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(-1, as_fixnum(result2));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (dec 2) => 1
+  CljObject *result1 = eval_string("(dec 2)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(1, as_fixnum(result1));
+
+  // Test: (dec 0) => -1
+  CljObject *result2 = eval_string("(dec 0)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(is_fixnum(result2));
+  TEST_ASSERT_EQUAL_INT(-1, as_fixnum(result2));
 }
 
 TEST_SHARED(test_core_plus) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (+ 1 2) => 3
-    CljObject *result1 = eval_string("(+ 1 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result1));
-    
-    // Test: (+ 1 2 3 4) => 10
-    CljObject *result2 = eval_string("(+ 1 2 3 4)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(10, as_fixnum(result2));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (+ 1 2) => 3
+  CljObject *result1 = eval_string("(+ 1 2)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(3, as_fixnum(result1));
+
+  // Test: (+ 1 2 3 4) => 10
+  CljObject *result2 = eval_string("(+ 1 2 3 4)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(is_fixnum(result2));
+  TEST_ASSERT_EQUAL_INT(10, as_fixnum(result2));
 }
 
 TEST_SHARED(test_core_minus) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (- 5 3) => 2
-    CljObject *result1 = eval_string("(- 5 3)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
-    
-    // Test: (- 10) => -10
-    CljObject *result2 = eval_string("(- 10)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(-10, as_fixnum(result2));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (- 5 3) => 2
+  CljObject *result1 = eval_string("(- 5 3)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
+
+  // Test: (- 10) => -10
+  CljObject *result2 = eval_string("(- 10)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(is_fixnum(result2));
+  TEST_ASSERT_EQUAL_INT(-10, as_fixnum(result2));
 }
 
 TEST_SHARED(test_core_multiply) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (* 2 3) => 6
-    CljObject *result1 = eval_string("(* 2 3)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(6, as_fixnum(result1));
-    
-    // Test: (* 2 3 4) => 24
-    CljObject *result2 = eval_string("(* 2 3 4)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(24, as_fixnum(result2));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (* 2 3) => 6
+  CljObject *result1 = eval_string("(* 2 3)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(6, as_fixnum(result1));
+
+  // Test: (* 2 3 4) => 24
+  CljObject *result2 = eval_string("(* 2 3 4)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(is_fixnum(result2));
+  TEST_ASSERT_EQUAL_INT(24, as_fixnum(result2));
 }
 
 // ============================================================================
@@ -205,64 +205,64 @@ TEST_SHARED(test_core_multiply) {
 // ============================================================================
 
 TEST_SHARED(test_core_equals) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (= 1 1) => true
-    CljObject *result1 = eval_string("(= 1 1)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 == clj_true);
-    
-    // Test: (= 1 2) => false
-    CljObject *result2 = eval_string("(= 1 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_false);
-    
-    // Test: (= [1 2] [1 2]) => true
-    CljObject *result3 = eval_string("(= [1 2] [1 2])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_TRUE(result3 == clj_true);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (= 1 1) => true
+  CljObject *result1 = eval_string("(= 1 1)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(result1 == clj_true);
+
+  // Test: (= 1 2) => false
+  CljObject *result2 = eval_string("(= 1 2)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(result2 == clj_false);
+
+  // Test: (= [1 2] [1 2]) => true
+  CljObject *result3 = eval_string("(= [1 2] [1 2])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result3);
+  TEST_ASSERT_TRUE(result3 == clj_true);
 }
 
 TEST_SHARED(test_core_not_equals) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (not= 1 2) => true
-    CljObject *result1 = eval_string("(not= 1 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 == clj_true);
-    
-    // Test: (not= 1 1) => false
-    CljObject *result2 = eval_string("(not= 1 1)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_false);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (not= 1 2) => true
+  CljObject *result1 = eval_string("(not= 1 2)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(result1 == clj_true);
+
+  // Test: (not= 1 1) => false
+  CljObject *result2 = eval_string("(not= 1 1)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
 TEST_SHARED(test_core_less_than) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (< 1 2) => true
-    CljObject *result1 = eval_string("(< 1 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 == clj_true);
-    
-    // Test: (< 2 1) => false
-    CljObject *result2 = eval_string("(< 2 1)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_false);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (< 1 2) => true
+  CljObject *result1 = eval_string("(< 1 2)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(result1 == clj_true);
+
+  // Test: (< 2 1) => false
+  CljObject *result2 = eval_string("(< 2 1)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
 TEST_SHARED(test_core_greater_than) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (> 2 1) => true
-    CljObject *result1 = eval_string("(> 2 1)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 == clj_true);
-    
-    // Test: (> 1 2) => false
-    CljObject *result2 = eval_string("(> 1 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_false);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (> 2 1) => true
+  CljObject *result1 = eval_string("(> 2 1)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(result1 == clj_true);
+
+  // Test: (> 1 2) => false
+  CljObject *result2 = eval_string("(> 1 2)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
 // ============================================================================
@@ -271,211 +271,211 @@ TEST_SHARED(test_core_greater_than) {
 
 // Low-level test for native_nilp function
 TEST(test_native_nilp_low_level) {
-    // Test native_nilp directly with fixnum 5
-    ID args[1];
-    args[0] = (ID)fixnum(5);
-    
-    ID result = native_nilp(args, 1);
-    
-    // native_nilp should return clj_false (value 5, tag 5)
-    TEST_ASSERT_NOT_NULL(result);
-    CljValue result_val = (CljValue)result;
-    uint8_t result_tag = get_tag(result_val);
-    
-    TEST_ASSERT_EQUAL_INT(TAG_BOOL, result_tag);
-    TEST_ASSERT_TRUE(result == clj_false);
-    TEST_ASSERT_TRUE(is_special(result_val));
-    TEST_ASSERT_FALSE(is_fixed(result_val));
-    TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result_val));
-    
-    // Test with NULL (nil)
-    args[0] = NULL;
-    ID result2 = native_nilp(args, 1);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_true);
-    
-    // Test with fixnum 1
-    args[0] = (ID)fixnum(1);
-    ID result3 = native_nilp(args, 1);
-    TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_TRUE(result3 == clj_false);
-    
-    // Test truthiness of clj_false
-    TEST_ASSERT_FALSE(clj_is_truthy(clj_false));
-    TEST_ASSERT_FALSE(clj_is_truthy(result));
-    TEST_ASSERT_FALSE(clj_is_truthy(result3));
-    
-    // Test via make_named_func and CljCFunc->fn (simulating eval_function_call)
-    ID func_obj = make_named_func(native_nilp, intern_symbol_global("nil?"));
-    TEST_ASSERT_NOT_NULL(func_obj);
-    CljCFunc *native_func = (CljCFunc*)func_obj;
-    TEST_ASSERT_NOT_NULL(native_func->fn);
-    
-    // Call via CljCFunc->fn signature (as done in eval_function_call)
-    ID cast_args[1];
-    cast_args[0] = (ID)fixnum(5);
-    ID cast_result = native_func->fn(cast_args, 1);
-    
-    if (cast_result) {
-        CljValue cast_result_val = (CljValue)cast_result;
-        uint8_t cast_result_tag = get_tag(cast_result_val);
-        
-        TEST_ASSERT_EQUAL_INT(TAG_BOOL, cast_result_tag);
-        TEST_ASSERT_TRUE(cast_result == clj_false);
-        TEST_ASSERT_TRUE(is_special(cast_result_val));
-        TEST_ASSERT_FALSE(is_fixed(cast_result_val));
-    }
-    
-    RELEASE(func_obj);
+  // Test native_nilp directly with fixnum 5
+  ID args[1];
+  args[0] = (ID)fixnum(5);
+
+  ID result = native_nilp(args, 1);
+
+  // native_nilp should return clj_false (value 5, tag 5)
+  TEST_ASSERT_NOT_NULL(result);
+  CljValue result_val = (CljValue)result;
+  uint8_t result_tag = get_tag(result_val);
+
+  TEST_ASSERT_EQUAL_INT(TAG_BOOL, result_tag);
+  TEST_ASSERT_TRUE(result == clj_false);
+  TEST_ASSERT_TRUE(is_special(result_val));
+  TEST_ASSERT_FALSE(is_fixed(result_val));
+  TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result_val));
+
+  // Test with NULL (nil)
+  args[0] = NULL;
+  ID result2 = native_nilp(args, 1);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(result2 == clj_true);
+
+  // Test with fixnum 1
+  args[0] = (ID)fixnum(1);
+  ID result3 = native_nilp(args, 1);
+  TEST_ASSERT_NOT_NULL(result3);
+  TEST_ASSERT_TRUE(result3 == clj_false);
+
+  // Test truthiness of clj_false
+  TEST_ASSERT_FALSE(clj_is_truthy(clj_false));
+  TEST_ASSERT_FALSE(clj_is_truthy(result));
+  TEST_ASSERT_FALSE(clj_is_truthy(result3));
+
+  // Test via make_named_func and CljCFunc->fn (simulating eval_function_call)
+  ID func_obj = make_named_func(native_nilp, intern_symbol_global("nil?"));
+  TEST_ASSERT_NOT_NULL(func_obj);
+  CljCFunc *native_func = (CljCFunc *)func_obj;
+  TEST_ASSERT_NOT_NULL(native_func->fn);
+
+  // Call via CljCFunc->fn signature (as done in eval_function_call)
+  ID cast_args[1];
+  cast_args[0] = (ID)fixnum(5);
+  ID cast_result = native_func->fn(cast_args, 1);
+
+  if (cast_result) {
+    CljValue cast_result_val = (CljValue)cast_result;
+    uint8_t cast_result_tag = get_tag(cast_result_val);
+
+    TEST_ASSERT_EQUAL_INT(TAG_BOOL, cast_result_tag);
+    TEST_ASSERT_TRUE(cast_result == clj_false);
+    TEST_ASSERT_TRUE(is_special(cast_result_val));
+    TEST_ASSERT_FALSE(is_fixed(cast_result_val));
+  }
+
+  RELEASE(func_obj);
 }
 
 TEST_SHARED(test_core_nil_predicate) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (nil? nil) => true
-    CljObject *result1 = eval_string("(nil? nil)", g_test_eval_state);
-    // clj_true is an immediate value, might fail TEST_ASSERT_NOT_NULL
-    if (result1) {
-        TEST_ASSERT_TRUE(result1 == clj_true);
-    }
-    
-    // Test: (nil? 1) => false
-    CljObject *result2 = eval_string("(nil? 1)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);  // nil? returns clj_false which might be NULL-like
-    TEST_ASSERT_TRUE(result2 == clj_false);
-    
-    // Test: (nil? 5) => false
-    CljObject *result3 = eval_string("(nil? 5)", g_test_eval_state);
-    // clj_false is an immediate value, not NULL
-    TEST_ASSERT_TRUE(result3 == clj_false);
-    
-    // Test: (str (nil? 5)) should return "false", not "0.20"
-    CljObject *str_result = eval_string("(str (nil? 5))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(str_result);
-    TEST_ASSERT_TRUE(TAG(str_result) == CLJ_STRING);
-    CljString *str = as_clj_string(str_result);
-    TEST_ASSERT_EQUAL_STRING("false", string_data(str));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (nil? nil) => true
+  CljObject *result1 = eval_string("(nil? nil)", g_test_eval_state);
+  // clj_true is an immediate value, might fail TEST_ASSERT_NOT_NULL
+  if (result1) {
+    TEST_ASSERT_TRUE(result1 == clj_true);
+  }
+
+  // Test: (nil? 1) => false
+  CljObject *result2 = eval_string("(nil? 1)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2); // nil? returns clj_false which might be NULL-like
+  TEST_ASSERT_TRUE(result2 == clj_false);
+
+  // Test: (nil? 5) => false
+  CljObject *result3 = eval_string("(nil? 5)", g_test_eval_state);
+  // clj_false is an immediate value, not NULL
+  TEST_ASSERT_TRUE(result3 == clj_false);
+
+  // Test: (str (nil? 5)) should return "false", not "0.20"
+  CljObject *str_result = eval_string("(str (nil? 5))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(str_result);
+  TEST_ASSERT_TRUE(TAG(str_result) == CLJ_STRING);
+  CljString *str = as_clj_string(str_result);
+  TEST_ASSERT_EQUAL_STRING("false", string_data(str));
 }
 
 TEST_SHARED(test_str_with_boolean) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // First test: Direct to_string with clj_false
-    // Debug: Check clj_false value and type
-    CljValue false_val = (CljValue)clj_false;
-    uint8_t tag = get_tag(false_val);
-    TEST_ASSERT_EQUAL_INT(TAG_BOOL, tag);
-    TEST_ASSERT_TRUE(is_special(false_val));
-    TEST_ASSERT_FALSE(is_fixed(false_val));
-    TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(false_val));
-    
-    // Test with CljObject* cast (as used in to_string)
-    CljObject *false_obj = (CljObject*)clj_false;
-    CljValue false_val2 = (CljValue)false_obj;
-    uint8_t tag2 = get_tag(false_val2);
-    TEST_ASSERT_EQUAL_INT(TAG_BOOL, tag2);
-    TEST_ASSERT_TRUE(is_special(false_val2));
-    TEST_ASSERT_FALSE(is_fixed(false_val2));
-    
-    CljString *direct_result = to_string(clj_false);
-    TEST_ASSERT_NOT_NULL(direct_result);
-    const char *result_str = string_data(direct_result);
-    TEST_ASSERT_EQUAL_STRING("false", result_str);
-    
-    // Test: (str false) should return "false"
-    CljObject *str_result3 = eval_string("(str false)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(str_result3);
-    TEST_ASSERT_TRUE(TAG(str_result3) == CLJ_STRING);
-    CljString *str3 = as_clj_string(str_result3);
-    TEST_ASSERT_EQUAL_STRING("false", string_data(str3));
-    
-    // Test: (str true) should return "true"
-    CljObject *str_result4 = eval_string("(str true)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(str_result4);
-    TEST_ASSERT_TRUE(TAG(str_result4) == CLJ_STRING);
-    CljString *str4 = as_clj_string(str_result4);
-    TEST_ASSERT_EQUAL_STRING("true", string_data(str4));
-    
-    // Test: (str (nil? 5)) should return "false"
-    CljObject *str_result = eval_string("(str (nil? 5))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(str_result);
-    TEST_ASSERT_TRUE(TAG(str_result) == CLJ_STRING);
-    CljString *str = as_clj_string(str_result);
-    TEST_ASSERT_EQUAL_STRING("false", string_data(str));
-    
-    // Test: (str (nil? nil)) should return "true"
-    CljObject *str_result2 = eval_string("(str (nil? nil))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(str_result2);
-    TEST_ASSERT_TRUE(TAG(str_result2) == CLJ_STRING);
-    CljString *str2 = as_clj_string(str_result2);
-    TEST_ASSERT_EQUAL_STRING("true", string_data(str2));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // First test: Direct to_string with clj_false
+  // Debug: Check clj_false value and type
+  CljValue false_val = (CljValue)clj_false;
+  uint8_t tag = get_tag(false_val);
+  TEST_ASSERT_EQUAL_INT(TAG_BOOL, tag);
+  TEST_ASSERT_TRUE(is_special(false_val));
+  TEST_ASSERT_FALSE(is_fixed(false_val));
+  TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(false_val));
+
+  // Test with CljObject* cast (as used in to_string)
+  CljObject *false_obj = (CljObject *)clj_false;
+  CljValue false_val2 = (CljValue)false_obj;
+  uint8_t tag2 = get_tag(false_val2);
+  TEST_ASSERT_EQUAL_INT(TAG_BOOL, tag2);
+  TEST_ASSERT_TRUE(is_special(false_val2));
+  TEST_ASSERT_FALSE(is_fixed(false_val2));
+
+  CljString *direct_result = to_string(clj_false);
+  TEST_ASSERT_NOT_NULL(direct_result);
+  const char *result_str = string_data(direct_result);
+  TEST_ASSERT_EQUAL_STRING("false", result_str);
+
+  // Test: (str false) should return "false"
+  CljObject *str_result3 = eval_string("(str false)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(str_result3);
+  TEST_ASSERT_TRUE(TAG(str_result3) == CLJ_STRING);
+  CljString *str3 = as_clj_string(str_result3);
+  TEST_ASSERT_EQUAL_STRING("false", string_data(str3));
+
+  // Test: (str true) should return "true"
+  CljObject *str_result4 = eval_string("(str true)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(str_result4);
+  TEST_ASSERT_TRUE(TAG(str_result4) == CLJ_STRING);
+  CljString *str4 = as_clj_string(str_result4);
+  TEST_ASSERT_EQUAL_STRING("true", string_data(str4));
+
+  // Test: (str (nil? 5)) should return "false"
+  CljObject *str_result = eval_string("(str (nil? 5))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(str_result);
+  TEST_ASSERT_TRUE(TAG(str_result) == CLJ_STRING);
+  CljString *str = as_clj_string(str_result);
+  TEST_ASSERT_EQUAL_STRING("false", string_data(str));
+
+  // Test: (str (nil? nil)) should return "true"
+  CljObject *str_result2 = eval_string("(str (nil? nil))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(str_result2);
+  TEST_ASSERT_TRUE(TAG(str_result2) == CLJ_STRING);
+  CljString *str2 = as_clj_string(str_result2);
+  TEST_ASSERT_EQUAL_STRING("true", string_data(str2));
 }
 
 TEST_SHARED(test_core_empty_predicate) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (empty? []) => true
-    CljObject *result1 = eval_string("(empty? [])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 == clj_true);
-    
-    // Test: (empty? [1]) => false
-    CljObject *result2 = eval_string("(empty? [1])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_false);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (empty? []) => true
+  CljObject *result1 = eval_string("(empty? [])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(result1 == clj_true);
+
+  // Test: (empty? [1]) => false
+  CljObject *result2 = eval_string("(empty? [1])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
 TEST_SHARED(test_core_vector_predicate) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (vector? []) => true
-    CljObject *result1 = eval_string("(vector? [])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 == clj_true);
-    
-    // Test: (vector? '()) => false
-    CljObject *result2 = eval_string("(vector? '())", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_false);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (vector? []) => true
+  CljObject *result1 = eval_string("(vector? [])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(result1 == clj_true);
+
+  // Test: (vector? '()) => false
+  CljObject *result2 = eval_string("(vector? '())", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
 TEST_SHARED(test_core_map_predicate) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (map? {}) => true
-    CljObject *result1 = eval_string("(map? {})", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 == clj_true);
-    
-    // Test: (map? {:a 1 :b 2}) => true
-    CljObject *result2 = eval_string("(map? {:a 1 :b 2})", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_true);
-    
-    // Test: (map? []) => false
-    CljObject *result3 = eval_string("(map? [])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_TRUE(result3 == clj_false);
-    
-    // Test: (map? '()) => false
-    CljObject *result4 = eval_string("(map? '())", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result4);
-    TEST_ASSERT_TRUE(result4 == clj_false);
-    
-    // Test: (map? nil) => false
-    CljObject *result5 = eval_string("(map? nil)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result5);
-    TEST_ASSERT_TRUE(result5 == clj_false);
-    
-    // Test: (map? 42) => false
-    CljObject *result6 = eval_string("(map? 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result6);
-    TEST_ASSERT_TRUE(result6 == clj_false);
-    
-    // Test: (map? "string") => false
-    CljObject *result7 = eval_string("(map? \"string\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result7);
-    TEST_ASSERT_TRUE(result7 == clj_false);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (map? {}) => true
+  CljObject *result1 = eval_string("(map? {})", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(result1 == clj_true);
+
+  // Test: (map? {:a 1 :b 2}) => true
+  CljObject *result2 = eval_string("(map? {:a 1 :b 2})", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(result2 == clj_true);
+
+  // Test: (map? []) => false
+  CljObject *result3 = eval_string("(map? [])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result3);
+  TEST_ASSERT_TRUE(result3 == clj_false);
+
+  // Test: (map? '()) => false
+  CljObject *result4 = eval_string("(map? '())", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result4);
+  TEST_ASSERT_TRUE(result4 == clj_false);
+
+  // Test: (map? nil) => false
+  CljObject *result5 = eval_string("(map? nil)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result5);
+  TEST_ASSERT_TRUE(result5 == clj_false);
+
+  // Test: (map? 42) => false
+  CljObject *result6 = eval_string("(map? 42)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result6);
+  TEST_ASSERT_TRUE(result6 == clj_false);
+
+  // Test: (map? "string") => false
+  CljObject *result7 = eval_string("(map? \"string\")", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result7);
+  TEST_ASSERT_TRUE(result7 == clj_false);
 }
 
 // ============================================================================
@@ -483,53 +483,53 @@ TEST_SHARED(test_core_map_predicate) {
 // ============================================================================
 
 TEST_SHARED(test_core_get) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *ok = NULL;
-    WITH_AUTORELEASE_POOL({
-        ok = eval_string("(let [m {:a 1}] (and (= 1 (get m :a)) (nil? (get m :b)) (= 99 (get m :b 99))))", g_test_eval_state);
-    });
-    TEST_ASSERT_NOT_NULL(ok);
-    TEST_ASSERT_TRUE(ok == clj_true);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+  CljObject *ok = NULL;
+  WITH_AUTORELEASE_POOL({
+    ok = eval_string("(let [m {:a 1}] (and (= 1 (get m :a)) (nil? (get m :b)) (= 99 (get m :b 99))))", g_test_eval_state);
+  });
+  TEST_ASSERT_NOT_NULL(ok);
+  TEST_ASSERT_TRUE(ok == clj_true);
 }
 
 TEST_SHARED(test_core_assoc) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (get (assoc {} :a 1) :a) => 1
-    CljObject *result1 = eval_string("(get (assoc {} :a 1) :a)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result1));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (get (assoc {} :a 1) :a) => 1
+  CljObject *result1 = eval_string("(get (assoc {} :a 1) :a)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(1, as_fixnum(result1));
 }
 
 TEST_SHARED(test_core_dissoc) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *ok = NULL;
-    WITH_AUTORELEASE_POOL({
-        ok = eval_string("(let [m (dissoc {:a 1 :b 2} :a)] (and (nil? (get m :a)) (= 2 (get m :b))))", g_test_eval_state);
-    });
-    TEST_ASSERT_NOT_NULL(ok);
-    TEST_ASSERT_TRUE(ok == clj_true);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+  CljObject *ok = NULL;
+  WITH_AUTORELEASE_POOL({
+    ok = eval_string("(let [m (dissoc {:a 1 :b 2} :a)] (and (nil? (get m :a)) (= 2 (get m :b))))", g_test_eval_state);
+  });
+  TEST_ASSERT_NOT_NULL(ok);
+  TEST_ASSERT_TRUE(ok == clj_true);
 }
 
 TEST_SHARED(test_core_keys) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (count (keys {:a 1 :b 2})) => 2
-    CljObject *result1 = eval_string("(count (keys {:a 1 :b 2}))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (count (keys {:a 1 :b 2})) => 2
+  CljObject *result1 = eval_string("(count (keys {:a 1 :b 2}))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
 }
 
 TEST_SHARED(test_core_vals) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (count (vals {:a 1 :b 2})) => 2
-    CljObject *result1 = eval_string("(count (vals {:a 1 :b 2}))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (count (vals {:a 1 :b 2})) => 2
+  CljObject *result1 = eval_string("(count (vals {:a 1 :b 2}))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
 }
 
 // ============================================================================
@@ -537,38 +537,38 @@ TEST_SHARED(test_core_vals) {
 // ============================================================================
 
 TEST_SHARED(test_core_not) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (not true) => false
-    CljObject *result1 = eval_string("(not true)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(result1 == clj_false);
-    
-    // Test: (not false) => true
-    CljObject *result2 = eval_string("(not false)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_true);
-    
-    // Test: (not nil) => true
-    CljObject *result3 = eval_string("(not nil)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_TRUE(result3 == clj_true);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (not true) => false
+  CljObject *result1 = eval_string("(not true)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(result1 == clj_false);
+
+  // Test: (not false) => true
+  CljObject *result2 = eval_string("(not false)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(result2 == clj_true);
+
+  // Test: (not nil) => true
+  CljObject *result3 = eval_string("(not nil)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result3);
+  TEST_ASSERT_TRUE(result3 == clj_true);
 }
 
 TEST_SHARED(test_core_not_first_class) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: not can be passed as parameter to map (first-class function)
-    // (map not [true false true]) => (false true false)
-    CljObject *result1 = eval_string("(vec (map not [true false true]))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(TAG(result1) == CLJ_VECTOR_PERSISTENT);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-    CljPersistentVector *v = (CljPersistentVector*)result1;
-    TEST_ASSERT_EQUAL_INT(3, vector_count(v));
-    TEST_ASSERT_TRUE(vector_nth(v, 0) == clj_false);
-    TEST_ASSERT_TRUE(vector_nth(v, 1) == clj_true);
-    TEST_ASSERT_TRUE(vector_nth(v, 2) == clj_false);
+  // Test: not can be passed as parameter to map (first-class function)
+  // (map not [true false true]) => (false true false)
+  CljObject *result1 = eval_string("(vec (map not [true false true]))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(TAG(result1) == CLJ_VECTOR_PERSISTENT);
+
+  CljPersistentVector *v = (CljPersistentVector *)result1;
+  TEST_ASSERT_EQUAL_INT(3, vector_count(v));
+  TEST_ASSERT_TRUE(vector_nth(v, 0) == clj_false);
+  TEST_ASSERT_TRUE(vector_nth(v, 1) == clj_true);
+  TEST_ASSERT_TRUE(vector_nth(v, 2) == clj_false);
 }
 
 // ============================================================================
@@ -576,54 +576,54 @@ TEST_SHARED(test_core_not_first_class) {
 // ============================================================================
 
 TEST_SHARED(test_core_map) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (first (map inc [1 2 3])) => 2
-    CljObject *result1 = eval_string("(first (map inc [1 2 3]))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (first (map inc [1 2 3])) => 2
+  CljObject *result1 = eval_string("(first (map inc [1 2 3]))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
 }
 
 TEST_SHARED(test_core_filter) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (count (filter (fn [x] (> x 2)) [1 2 3 4])) => 2
-    // Use let to bind once (avoids evaluation issues with lazy sequences)
-    CljObject *result1 = eval_string("(let [f (filter (fn [x] (> x 2)) [1 2 3 4])] (count f))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (count (filter (fn [x] (> x 2)) [1 2 3 4])) => 2
+  // Use let to bind once (avoids evaluation issues with lazy sequences)
+  CljObject *result1 = eval_string("(let [f (filter (fn [x] (> x 2)) [1 2 3 4])] (count f))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
 }
 
 TEST_SHARED(test_core_reduce) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (reduce + [1 2 3 4]) => 10
-    CljObject *result1 = eval_string("(reduce + [1 2 3 4])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(10, as_fixnum(result1));
-    
-    // Test: (reduce + 100 [1 2 3]) => 106
-    CljObject *result2 = eval_string("(reduce + 100 [1 2 3])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(106, as_fixnum(result2));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (reduce + [1 2 3 4]) => 10
+  CljObject *result1 = eval_string("(reduce + [1 2 3 4])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(10, as_fixnum(result1));
+
+  // Test: (reduce + 100 [1 2 3]) => 106
+  CljObject *result2 = eval_string("(reduce + 100 [1 2 3])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(is_fixnum(result2));
+  TEST_ASSERT_EQUAL_INT(106, as_fixnum(result2));
 }
 
 TEST_SHARED(test_core_range) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (count (range 5)) => 5
-    CljObject *result1 = eval_string("(count (range 5))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(5, as_fixnum(result1));
-    
-    // Test: (first (range 5)) => 0
-    CljObject *result2 = eval_string("(first (range 5))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result2));
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  // Test: (count (range 5)) => 5
+  CljObject *result1 = eval_string("(count (range 5))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_TRUE(is_fixnum(result1));
+  TEST_ASSERT_EQUAL_INT(5, as_fixnum(result1));
+
+  // Test: (first (range 5)) => 0
+  CljObject *result2 = eval_string("(first (range 5))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_TRUE(is_fixnum(result2));
+  TEST_ASSERT_EQUAL_INT(0, as_fixnum(result2));
 }

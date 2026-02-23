@@ -17,21 +17,21 @@ typedef struct ReplHistoryBackend ReplHistoryBackend;
  * All callbacks return true on success and false on failure.
  */
 struct ReplHistoryBackend {
-    void *ctx;
-    const char *source_name;
-    size_t max_read_bytes;
-    size_t default_byte_limit;
-    size_t max_entries;
-    int trim_num;
-    int trim_den;
-    bool verify_after_save;
-    bool verify_after_reopen;
-    bool (*query_size)(void *ctx, size_t *out_size);
-    bool (*read)(void *ctx, uint8_t *buf, size_t cap, size_t *out_size);
-    bool (*write)(void *ctx, const uint8_t *buf, size_t len);
-    bool (*sync)(void *ctx);
-    size_t (*effective_limit)(void *ctx, size_t default_limit);
-    bool (*reopen_for_verify)(void *ctx);
+  void *ctx;
+  const char *source_name;
+  size_t max_read_bytes;
+  size_t default_byte_limit;
+  size_t max_entries;
+  int trim_num;
+  int trim_den;
+  bool verify_after_save;
+  bool verify_after_reopen;
+  bool (*query_size)(void *ctx, size_t *out_size);
+  bool (*read)(void *ctx, uint8_t *buf, size_t cap, size_t *out_size);
+  bool (*write)(void *ctx, const uint8_t *buf, size_t len);
+  bool (*sync)(void *ctx);
+  size_t (*effective_limit)(void *ctx, size_t default_limit);
+  bool (*reopen_for_verify)(void *ctx);
 };
 
 /**

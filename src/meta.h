@@ -22,13 +22,13 @@ void meta_registry_cleanup(void);
 
 // Helper function for source code location metadata
 // Note: Uses void* to avoid circular dependencies in header
-CljPersistentMap* make_location_meta(void *reader, void *st);
+CljPersistentMap *make_location_meta(void *reader, void *st);
 
 // Helper function to merge metadata maps (MEMORY_POLICY: usable/pool-safe return)
-CljPersistentMap* meta_merge(CljPersistentMap *existing_meta, CljPersistentMap *location_meta);
+CljPersistentMap *meta_merge(CljPersistentMap *existing_meta, CljPersistentMap *location_meta);
 
 // Merge metadata maps with second map taking precedence (MEMORY_POLICY: usable/pool-safe return)
-CljPersistentMap* meta_merge_with_precedence(CljPersistentMap *existing_meta, CljPersistentMap *form_meta);
+CljPersistentMap *meta_merge_with_precedence(CljPersistentMap *existing_meta, CljPersistentMap *form_meta);
 #else
 // Stubs when meta is disabled
 #define meta_set(v, meta) ((void)0)
@@ -36,9 +36,9 @@ CljPersistentMap* meta_merge_with_precedence(CljPersistentMap *existing_meta, Cl
 #define meta_clear(v) ((void)0)
 #define meta_registry_init() ((void)0)
 #define meta_registry_cleanup() ((void)0)
-#define make_location_meta(reader, st) ((CljPersistentMap*)NULL)
-#define meta_merge(existing, location) ((CljPersistentMap*)((existing) ? (existing) : (location)))
-#define meta_merge_with_precedence(existing, form) ((CljPersistentMap*)((form) ? (form) : (existing)))
+#define make_location_meta(reader, st) ((CljPersistentMap *)NULL)
+#define meta_merge(existing, location) ((CljPersistentMap *)((existing) ? (existing) : (location)))
+#define meta_merge_with_precedence(existing, form) ((CljPersistentMap *)((form) ? (form) : (existing)))
 #endif
 
 #endif

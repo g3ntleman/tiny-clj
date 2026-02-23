@@ -1,21 +1,21 @@
 // clojure.core.c
 
 #include "exception.h"
-#include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
+#include "symbol.h" // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include "tiny_clj.h"
 #include "reader.h"
-#include "value.h"  // For IS_IMMEDIATE macro
-#include "runtime.h" // For g_runtime
-#include "list.h"    // For LIST_FIRST
-#include "eval.h"  // For SYM_DEF, SYM_NS, SYM_DEFMACRO
-#include "map.h"     // For map_get
-#include "parser.h"  // For eval_parsed
-#include "to_string.h" // For pr_str debug printing
-#include "strings.h" // For string_data
+#include "value.h"           // For IS_IMMEDIATE macro
+#include "runtime.h"         // For g_runtime
+#include "list.h"            // For LIST_FIRST
+#include "eval.h"            // For SYM_DEF, SYM_NS, SYM_DEFMACRO
+#include "map.h"             // For map_get
+#include "parser.h"          // For eval_parsed
+#include "to_string.h"       // For pr_str debug printing
+#include "strings.h"         // For string_data
 #include "source_resolver.h" // For resolve_path_to_bytes (load_clojure_repl, override fallback)
 #include "builtins.h"        // For load_namespace_from_bytes
-#include "types.h"  // For clj_type_name
+#include "types.h"           // For clj_type_name
 #include "memory_profiler.h"
 #include "mini_format.h"
 #include <stdbool.h>
@@ -33,16 +33,19 @@ static bool g_core_quiet = false;
 
 static int getenv_int(const char *name, int default_value) {
   const char *v = getenv(name);
-  if (!v || !v[0]) return default_value;
+  if (!v || !v[0])
+    return default_value;
   char *end = NULL;
   long n = strtol(v, &end, 10);
-  if (end == v) return default_value;
+  if (end == v)
+    return default_value;
   return (int)n;
 }
 
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 static void core_mem_print_top_types(const char *label, int top_n) {
-  if (top_n <= 0) return;
+  if (top_n <= 0)
+    return;
   // Track top-N by bytes_current.
   size_t top_bytes[8];
   int top_types[8];
@@ -54,7 +57,8 @@ static void core_mem_print_top_types(const char *label, int top_n) {
 
   for (int ti = 0; ti < CLJ_TYPE_COUNT; ti++) {
     size_t bc = g_memory_stats.bytes_current_by_type[ti];
-    if (bc == 0) continue;
+    if (bc == 0)
+      continue;
     for (int slot = 0; slot < max_n; slot++) {
       if (bc > top_bytes[slot]) {
         // Shift down.
@@ -74,7 +78,8 @@ static void core_mem_print_top_types(const char *label, int top_n) {
           g_memory_stats.current_memory_usage,
           g_memory_stats.peak_memory_usage);
   for (int i = 0; i < max_n; i++) {
-    if (top_types[i] < 0 || top_bytes[i] == 0) continue;
+    if (top_types[i] < 0 || top_bytes[i] == 0)
+      continue;
     int ti = top_types[i];
     fprintf(stderr, "  %s: bytes=%zu alloc=%zu dealloc=%zu\n",
             clj_type_name((CljType)ti),
@@ -99,7 +104,8 @@ static void core_mem_print_delta(const char *label,
                                  const MemoryStats *before,
                                  const MemoryStats *after,
                                  int top_n) {
-  if (!before || !after || top_n <= 0) return;
+  if (!before || !after || top_n <= 0)
+    return;
 
   const int max_n = (top_n > 8) ? 8 : top_n;
   CoreMemDeltaSlot slots[8];
@@ -111,9 +117,9 @@ static void core_mem_print_delta(const char *label,
   }
 
   for (int ti = 0; ti < CLJ_TYPE_COUNT; ti++) {
-    long bytes_delta = (long)after->bytes_current_by_type[ti]
-                     - (long)before->bytes_current_by_type[ti];
-    if (bytes_delta == 0) continue;
+    long bytes_delta = (long)after->bytes_current_by_type[ti] - (long)before->bytes_current_by_type[ti];
+    if (bytes_delta == 0)
+      continue;
     long abs_bytes = core_mem_abs_long(bytes_delta);
 
     for (int slot = 0; slot < max_n; slot++) {
@@ -139,7 +145,8 @@ static void core_mem_print_delta(const char *label,
           label ? label : "<core>", current_delta, peak_delta);
 
   for (int i = 0; i < max_n; i++) {
-    if (slots[i].type < 0 || slots[i].bytes_delta == 0) continue;
+    if (slots[i].type < 0 || slots[i].bytes_delta == 0)
+      continue;
     int ti = slots[i].type;
     fprintf(stderr, "  %s: bytes=%+ld alloc=%+ld dealloc=%+ld\n",
             clj_type_name((CljType)ti),
@@ -150,12 +157,8 @@ static void core_mem_print_delta(const char *label,
 }
 #endif
 
-
-
 // Keyword symbol definitions for fs_layer and others
 extern CljSymbol *SYM_KW_SIZE;
-
-
 
 // Optional override for core source (tests/custom); default from embedded_sources.c via resolve_path_to_bytes.
 static const char *clojure_core_override = NULL;
@@ -168,7 +171,7 @@ extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 static double g_parse_time_ms = 0;
 static double g_eval_time_ms = 0;
 static int g_form_count = 0;
-double g_canon_time_ms = 0;  // extern in parser.c
+double g_canon_time_ms = 0; // extern in parser.c
 #endif
 
 static bool eval_core_source(const char *src, size_t src_len, const char *source_name, EvalState *st) {
@@ -177,7 +180,7 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
   if (src_len == 0) {
     src_len = strlen(src);
   }
-  
+
   // Caller has set st->current_ns to the target namespace; use it for all defs.
   CljNamespace *target_ns = st->current_ns;
 
@@ -193,7 +196,7 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
     }
   }
   reader_set_source_name(&reader, label);
-  
+
   int expr_count = 0;
   int success_count = 0;
 
@@ -225,13 +228,14 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
   const int ar_threshold = 0;
   (void)ar_threshold;
 #endif
-  
+
   // Wrap entire parsing loop in TRY/CATCH to catch any unhandled ParseErrors
   TRY {
     // Parse and evaluate all expressions in the source with TRY/CATCH
     while (!reader_is_eof(&reader)) {
       reader_skip_all(&reader);
-      if (reader_is_eof(&reader)) break;
+      if (reader_is_eof(&reader))
+        break;
 
       // Update crash diagnostics as early as possible for this iteration.
       g_clojure_core_last_form = expr_count + 1;
@@ -260,7 +264,8 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
           if (form && !IS_IMMEDIATE((CljValue)form)) {
             RETAIN((CljValue)form); // keep form alive across pool boundary
           }
-        } CATCH(ex) {
+        }
+        CATCH(ex) {
           // ParseError during parsing - log and continue to next expression
           if (ex) {
             if (!g_core_quiet) {
@@ -273,7 +278,8 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
             reader_advance(&reader);
           }
           parse_ok = false;
-        } END_TRY
+        }
+        END_TRY
 #ifdef PROFILE_STARTUP
         g_parse_time_ms += (double)(clock() - parse_start) * 1000.0 / CLOCKS_PER_SEC;
 #endif
@@ -299,7 +305,7 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
 #ifdef PROFILE_STARTUP
             clock_t eval_start = clock();
 #endif
-            ID result = eval_parsed((CljObject*)form, st, NULL);
+            ID result = eval_parsed((CljObject *)form, st, NULL);
 #ifdef PROFILE_STARTUP
             g_eval_time_ms += (double)(clock() - eval_start) * 1000.0 / CLOCKS_PER_SEC;
             g_form_count++;
@@ -313,19 +319,25 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
                 CljObject *first = LIST_FIRST(list);
                 if (first && TAG(first) == CLJ_SYMBOL) {
                   CljSymbol *first_sym = as_symbol(first);
-                  if (first_sym == SYM_DEF) { success_count++; }
-                  else if (first_sym == SYM_NS) { success_count++; }
+                  if (first_sym == SYM_DEF) {
+                    success_count++;
+                  } else if (first_sym == SYM_NS) {
+                    success_count++;
+                  }
                 }
               }
             }
-          } CATCH(ex) {
+          }
+          CATCH(ex) {
             bool is_def_expr = false;
             if (form && is_list_type(TAG((CljValue)form))) {
               CljList *list = as_list((CljValue)form);
               CljObject *first = LIST_FIRST(list);
               if (first && TAG(first) == CLJ_SYMBOL) {
                 CljSymbol *first_sym = as_symbol(first);
-                if (first_sym == SYM_DEF || first_sym == SYM_DEFMACRO) { is_def_expr = true; }
+                if (first_sym == SYM_DEF || first_sym == SYM_DEFMACRO) {
+                  is_def_expr = true;
+                }
               }
             }
             const char *error_type = (ex && ex->type[0]) ? ex->type : "Exception";
@@ -333,18 +345,21 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
             const char *error_file = (ex && ex->file[0]) ? ex->file : "<unknown>";
             int error_line = ex ? ex->line : 0;
             const char *ns_name = target_ns && target_ns->name && target_ns->name->cname
-                                  ? target_ns->name->cname : "clojure.core";
-            bool is_clojure_repl = target_ns && target_ns->name && target_ns->name->cname
-                                  && strcmp(target_ns->name->cname, "clojure.repl") == 0;
+                                      ? target_ns->name->cname
+                                      : "clojure.core";
+            bool is_clojure_repl = target_ns && target_ns->name && target_ns->name->cname && strcmp(target_ns->name->cname, "clojure.repl") == 0;
             if (!g_core_quiet || is_clojure_repl || is_def_expr) {
               fprintf(stderr, "[%s] Failed to eval form #%d%s: %s (%s:%d) [%s]\n",
                       ns_name, expr_count + 1, is_def_expr ? " (def)" : "",
                       error_msg, error_file, error_line, error_type);
 #ifdef DEBUG
-              if (is_def_expr && ex) { print_exception(ex); }
+              if (is_def_expr && ex) {
+                print_exception(ex);
+              }
 #endif
             }
-          } END_TRY
+          }
+          END_TRY
 
 #if defined(DEBUG) && defined(TINYCLJ_AUTORELEASE_DIAGNOSTICS) && TINYCLJ_AUTORELEASE_DIAGNOSTICS
           if (ar_threshold > 0) {
@@ -361,45 +376,47 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
       if (form && !IS_IMMEDIATE((CljValue)form)) {
         RELEASE((CljValue)form);
       }
-    expr_count++;
+      expr_count++;
 
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
-    if (debug_mem_delta > 0 && mem_before_valid && g_memory_profiling_enabled) {
-      char label_buf[64];
-      mini_snprintf(label_buf, sizeof(label_buf), "delta form %d", expr_count);
-      core_mem_print_delta(label_buf, &mem_before, &g_memory_stats, debug_mem_delta);
-    }
-#endif
-
-#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
-    if (debug_mem_every > 0 && (expr_count % debug_mem_every) == 0) {
-      char label_buf[64];
-      mini_snprintf(label_buf, sizeof(label_buf), "after form %d", expr_count);
-      core_mem_print_top_types(label_buf, 5);
-    }
-#endif
-
-    if (stop_after_form > 0 && expr_count >= stop_after_form) {
-      if (!g_core_quiet) {
-        fprintf(stderr, "[%s] DEBUG stopping after core form #%d (TINYCLJ_DEBUG_CORE_STOP_AFTER)\n",
-                label, expr_count);
+      if (debug_mem_delta > 0 && mem_before_valid && g_memory_profiling_enabled) {
+        char label_buf[64];
+        mini_snprintf(label_buf, sizeof(label_buf), "delta form %d", expr_count);
+        core_mem_print_delta(label_buf, &mem_before, &g_memory_stats, debug_mem_delta);
       }
-      return true;
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+      if (debug_mem_every > 0 && (expr_count % debug_mem_every) == 0) {
+        char label_buf[64];
+        mini_snprintf(label_buf, sizeof(label_buf), "after form %d", expr_count);
+        core_mem_print_top_types(label_buf, 5);
+      }
+#endif
+
+      if (stop_after_form > 0 && expr_count >= stop_after_form) {
+        if (!g_core_quiet) {
+          fprintf(stderr, "[%s] DEBUG stopping after core form #%d (TINYCLJ_DEBUG_CORE_STOP_AFTER)\n",
+                  label, expr_count);
+        }
+        return true;
+      }
     }
-    }
-  } CATCH(ex) {
+  }
+  CATCH(ex) {
     if (ex && !g_core_quiet) {
       fprintf(stderr, "Warning: Exception during namespace loading [%s]: %s - %s\n",
               label, ex->type, ex->message);
     }
     // Continue - return success if at least some expressions loaded
-  } END_TRY
-  
+  }
+  END_TRY
+
   // CRITICAL: Keep st->current_ns pointing to target_ns until after verification
   // Don't restore original_ns here - let load_clojure_core handle it after verification
   // This ensures the verification can check the correct namespace
   // target_ns is already registered in ns_registry, no cache needed
-  
+
   if (!g_core_quiet) {
     fprintf(stderr, "[%s] Evaluated %d form(s), %d succeeded.\n",
             label, expr_count, success_count);
@@ -417,11 +434,13 @@ static bool eval_core_source(const char *src, size_t src_len, const char *source
 }
 
 int load_clojure_core(EvalState *st) {
-  if (!st) return 0;
+  if (!st)
+    return 0;
   CljNamespace *existing_core = ns_find("clojure.core");
   if (existing_core && existing_core->loaded && existing_core->mappings) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
-    if (!inc_sym) return 0;
+    if (!inc_sym)
+      return 0;
     CljObject *inc_val =
         (CljObject *)map_get_sentinel((CljValue)existing_core->mappings, (CljValue)inc_sym, NULL);
     if (inc_val && (TAG(inc_val) == CLJ_FUNC || TAG(inc_val) == CLJ_CLOSURE)) {
@@ -436,29 +455,37 @@ int load_clojure_core(EvalState *st) {
     CljNamespace *orig_ns = st->current_ns;
     evalstate_set_ns(st, "clojure.core");
     CljNamespace *core = ns_find("clojure.core");
-    if (!core && st->current_ns->name && st->current_ns->name->cname
-        && strcmp(st->current_ns->name->cname, "clojure.core") == 0)
+    if (!core && st->current_ns->name && st->current_ns->name->cname && strcmp(st->current_ns->name->cname, "clojure.core") == 0)
       core = st->current_ns;
     if (core) {
       st->current_ns = core;
       ns_begin_resolve_cache_batch();
       bool ok = eval_core_source(clojure_core_override, strlen(clojure_core_override), "clojure.core.clj", st);
       ns_end_resolve_cache_batch();
-      if (ok) core->loaded = true;
-      if (orig_ns) st->current_ns = orig_ns;
-      if (ok) loaded = true;
+      if (ok)
+        core->loaded = true;
+      if (orig_ns)
+        st->current_ns = orig_ns;
+      if (ok)
+        loaded = true;
     }
   }
-  if (!loaded) return 0;
+  if (!loaded)
+    return 0;
   CljNamespace *core = ns_find("clojure.core");
-  if (!core) return 0;
+  if (!core)
+    return 0;
   CljSymbol *math_alias = intern_symbol_global("Math");
-  if (math_alias && SYM_CLOJURE_CORE) ns_set_alias(core, math_alias, SYM_CLOJURE_CORE);
-  if (!core->mappings) return 0;
+  if (math_alias && SYM_CLOJURE_CORE)
+    ns_set_alias(core, math_alias, SYM_CLOJURE_CORE);
+  if (!core->mappings)
+    return 0;
   CljSymbol *inc_sym = intern_symbol_global("inc");
-  if (!inc_sym) return 0;
+  if (!inc_sym)
+    return 0;
   CljObject *inc_val = (CljObject *)map_get_sentinel((CljValue)core->mappings, (CljValue)inc_sym, NULL);
-  if (!inc_val || (TAG(inc_val) != CLJ_FUNC && TAG(inc_val) != CLJ_CLOSURE)) return 0;
+  if (!inc_val || (TAG(inc_val) != CLJ_FUNC && TAG(inc_val) != CLJ_CLOSURE))
+    return 0;
   symbol_table_fit_startup_reserve(0u);
   return 1;
 }
@@ -473,6 +500,7 @@ void clojure_core_set_source(const char *src) { clojure_core_override = src; }
 
 // Load clojure.repl namespace via unified require path/embedded resolution.
 int load_clojure_repl(EvalState *st) {
-  if (!st) return 0;
+  if (!st)
+    return 0;
   return require_namespace_by_name(st, "clojure.repl") ? 1 : 0;
 }

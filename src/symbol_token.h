@@ -5,23 +5,23 @@
 #include <stdint.h>
 
 typedef struct CljSymbolToken {
-    CljObject base;
-    uint16_t length;
-    uint16_t line;   // Source line (1-based), 0 = unknown
-    uint16_t col;    // Source column (1-based), 0 = unknown
-    char data[];
+  CljObject base;
+  uint16_t length;
+  uint16_t line; // Source line (1-based), 0 = unknown
+  uint16_t col;  // Source column (1-based), 0 = unknown
+  char data[];
 } CljSymbolToken;
 
 static inline bool is_symbol_token(ID obj) {
-    return TAG(obj) == CLJ_SYMBOL_TOKEN;
+  return TAG(obj) == CLJ_SYMBOL_TOKEN;
 }
 
-static inline const char* symbol_token_data(const CljSymbolToken *token) {
-    return token ? token->data : "";
+static inline const char *symbol_token_data(const CljSymbolToken *token) {
+  return token ? token->data : "";
 }
 
 static inline uint16_t symbol_token_length(const CljSymbolToken *token) {
-    return token ? token->length : 0;
+  return token ? token->length : 0;
 }
 
 #endif // TINY_CLJ_SYMBOL_TOKEN_H

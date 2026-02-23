@@ -3,6 +3,13 @@
 #include <string.h>
 #include <stddef.h>
 
+#define EMBEDDED_SOURCE_ENTRY(path_literal, source_array) \
+  {                                                       \
+      (path_literal),                                     \
+      (uint16_t)(sizeof(path_literal) - 1u),              \
+      (const uint8_t *)(source_array),                    \
+      (int)(sizeof(source_array) - 1u)}
+
 static const char clojure_core_code[] =
 #include "clojure.core.clj"
     ;
@@ -68,45 +75,83 @@ static const char tiny_db_rrd_spline_code[] =
     ;
 
 typedef struct {
-    const char *path;
-    const uint8_t *data;
-    int len;
+  const char *path;
+  uint16_t path_len;
+  const uint8_t *data;
+  int len;
 } EmbeddedSourceEntry;
 
 static const EmbeddedSourceEntry g_embedded_sources[] = {
-    { "/libs/clojure/core.clj", (const uint8_t *)clojure_core_code, (int)(sizeof(clojure_core_code) - 1) },
-    { "/libs/clojure/string.clj", (const uint8_t *)clojure_string_code, (int)(sizeof(clojure_string_code) - 1) },
-    { "/libs/clojure/repl.clj", (const uint8_t *)clojure_repl_code, (int)(sizeof(clojure_repl_code) - 1) },
-    { "/libs/clojure/pprint.clj", (const uint8_t *)clojure_pprint_code, (int)(sizeof(clojure_pprint_code) - 1) },
-    { "/libs/clojure/stacktrace.clj", (const uint8_t *)clojure_stacktrace_code, (int)(sizeof(clojure_stacktrace_code) - 1) },
-    { "/libs/tiny-clj/runtime.clj", (const uint8_t *)tiny_clj_runtime_code, (int)(sizeof(tiny_clj_runtime_code) - 1) },
-    { "/libs/tiny-clj/fs.clj", (const uint8_t *)tiny_clj_fs_code, (int)(sizeof(tiny_clj_fs_code) - 1) },
-    { "/libs/tiny-snd/composer.clj", (const uint8_t *)tiny_snd_composer_code, (int)(sizeof(tiny_snd_composer_code) - 1) },
-    { "/libs/tiny-snd/runtime.clj", (const uint8_t *)tiny_snd_runtime_code, (int)(sizeof(tiny_snd_runtime_code) - 1) },
-    { "/libs/tiny-clj/net.clj", (const uint8_t *)tiny_clj_net_code, (int)(sizeof(tiny_clj_net_code) - 1) },
-    { "/libs/tiny-clj/net/mdns.clj", (const uint8_t *)tiny_clj_net_mdns_code, (int)(sizeof(tiny_clj_net_mdns_code) - 1) },
-    { "/libs/tiny-db/kv.clj", (const uint8_t *)tiny_db_kv_code, (int)(sizeof(tiny_db_kv_code) - 1) },
-    { "/libs/tiny-db/rrd.clj", (const uint8_t *)tiny_db_rrd_code, (int)(sizeof(tiny_db_rrd_code) - 1) },
-    { "/libs/tiny-db/rrd-classic.clj", (const uint8_t *)tiny_db_rrd_classic_code, (int)(sizeof(tiny_db_rrd_classic_code) - 1) },
-    { "/libs/tiny-db/rrd-spline.clj", (const uint8_t *)tiny_db_rrd_spline_code, (int)(sizeof(tiny_db_rrd_spline_code) - 1) },
-    { "/libs/tiny-clj/datetime.clj", (const uint8_t *)tiny_clj_datetime_code, (int)(sizeof(tiny_clj_datetime_code) - 1) },
+    EMBEDDED_SOURCE_ENTRY("/libs/clojure/core.clj", clojure_core_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/clojure/string.clj", clojure_string_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/clojure/repl.clj", clojure_repl_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/clojure/pprint.clj", clojure_pprint_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/clojure/stacktrace.clj", clojure_stacktrace_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/runtime.clj", tiny_clj_runtime_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/fs.clj", tiny_clj_fs_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-snd/composer.clj", tiny_snd_composer_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-snd/runtime.clj", tiny_snd_runtime_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net.clj", tiny_clj_net_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net/mdns.clj", tiny_clj_net_mdns_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/kv.clj", tiny_db_kv_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/rrd.clj", tiny_db_rrd_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/rrd-classic.clj", tiny_db_rrd_classic_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/rrd-spline.clj", tiny_db_rrd_spline_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/datetime.clj", tiny_clj_datetime_code),
 };
 
-void embedded_source_map_init(void) {
-    // No-op: embedded sources are served via static lookup + on-demand byte-array views.
-}
-
-bool embedded_source_lookup(const char *path, const uint8_t **out_data, int *out_len) {
-    if (!path || !out_data || !out_len) return false;
-
-    for (size_t i = 0; i < sizeof(g_embedded_sources) / sizeof(g_embedded_sources[0]); i++) {
-        const EmbeddedSourceEntry *e = &g_embedded_sources[i];
-        if (strcmp(path, e->path) == 0) {
-            *out_data = e->data;
-            *out_len = e->len;
-            return true;
-        }
-    }
-
+/**
+ * @brief Returns true when @p path matches an embedded source table entry.
+ *
+ * Uses a single caller-computed path length and length-first filtering to
+ * reduce repeated scans over long `/libs/...` prefixes on embedded targets.
+ *
+ * @param e Table entry.
+ * @param path Lookup path.
+ * @param path_len Precomputed `strlen(path)`.
+ * @return true when the path matches exactly.
+ */
+static bool embedded_source_path_matches(const EmbeddedSourceEntry *e, const char *path, size_t path_len) {
+  if (!e || !path) {
     return false;
+  }
+  return (size_t)e->path_len == path_len && memcmp(e->path, path, path_len) == 0;
 }
+
+/**
+ * @brief Initializes the embedded source registry.
+ *
+ * Embedded sources are served from a static table in this build, so this is a
+ * no-op kept for API symmetry with other source backends.
+ */
+void embedded_source_map_init(void) {
+  // No-op: embedded sources are served via static lookup + on-demand byte-array views.
+}
+
+/**
+ * @brief Looks up embedded source bytes by virtual path.
+ *
+ * @param path Virtual path (e.g. `/libs/clojure/core.clj`).
+ * @param out_data Receives pointer to immutable embedded bytes.
+ * @param out_len Receives byte length.
+ * @return true when an embedded source exists for @p path.
+ */
+bool embedded_source_lookup(const char *path, const uint8_t **out_data, int *out_len) {
+  if (!path || !out_data || !out_len)
+    return false;
+
+  size_t path_len = strlen(path);
+
+  for (size_t i = 0; i < sizeof(g_embedded_sources) / sizeof(g_embedded_sources[0]); i++) {
+    const EmbeddedSourceEntry *e = &g_embedded_sources[i];
+    if (embedded_source_path_matches(e, path, path_len)) {
+      *out_data = e->data;
+      *out_len = e->len;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+#undef EMBEDDED_SOURCE_ENTRY

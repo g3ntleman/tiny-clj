@@ -187,7 +187,9 @@ ID native_re_seq(ID *args, unsigned int argc) {
         memcpy(match_str->data, match_start, match_len);
         match_str->data[match_len] = '\0';
 
+        CljList *old_result = result;
         result = make_list(match_str, result);
+        RELEASE(old_result);
         RELEASE(match_str);
 
         pos = match_end;
@@ -207,7 +209,9 @@ ID native_re_seq(ID *args, unsigned int argc) {
     CljList *reversed = NULL;
     for (CljList *cur = result; cur; cur = as_list(cur->rest)) {
         ID elem = cur->first;
+        CljList *old_reversed = reversed;
         reversed = make_list(elem, reversed);
+        RELEASE(old_reversed);
     }
     // Release original list; reversed retains elements.
     RELEASE(result);

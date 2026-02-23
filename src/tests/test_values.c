@@ -1,6 +1,6 @@
 /*
  * Value Tests using Unity Framework
- * 
+ *
  * Tests for CljValue API, immediate values, and value-related functionality.
  */
 
@@ -15,282 +15,281 @@
 // ============================================================================
 
 TEST(test_cljvalue_immediate_helpers) {
-    WITH_AUTORELEASE_POOL({
-        // Test immediate value helpers
-        CljValue fixnum_val = fixnum(42);
-        TEST_ASSERT_TRUE(is_fixnum(fixnum_val));
-        TEST_ASSERT_EQUAL_INT(42, as_fixnum(fixnum_val));
-        
-        CljValue char_val = character('A');
-        TEST_ASSERT_TRUE(is_character(char_val));
-        TEST_ASSERT_EQUAL_INT('A', as_character(char_val));
-        
-        CljValue bool_val = clj_true;
-        TEST_ASSERT_TRUE(is_bool(bool_val));
-        TEST_ASSERT_TRUE(bool_val == clj_true);
-        
-        CljValue nil_val = SPECIAL_NIL;
-        TEST_ASSERT_NIL(nil_val);  // nil is NULL in our system
-    });
+  WITH_AUTORELEASE_POOL({
+    // Test immediate value helpers
+    CljValue fixnum_val = fixnum(42);
+    TEST_ASSERT_TRUE(is_fixnum(fixnum_val));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(fixnum_val));
+
+    CljValue char_val = character('A');
+    TEST_ASSERT_TRUE(is_character(char_val));
+    TEST_ASSERT_EQUAL_INT('A', as_character(char_val));
+
+    CljValue bool_val = clj_true;
+    TEST_ASSERT_TRUE(is_bool(bool_val));
+    TEST_ASSERT_TRUE(bool_val == clj_true);
+
+    CljValue nil_val = SPECIAL_NIL;
+    TEST_ASSERT_NIL(nil_val); // nil is NULL in our system
+  });
 }
 
 TEST(test_cljvalue_vector_api) {
-    WITH_AUTORELEASE_POOL({
-        // Test vector API
-        CljPersistentVector *vec = make_vector(0, false);
-        TEST_ASSERT_NOT_NULL(vec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
+  WITH_AUTORELEASE_POOL({
+    // Test vector API
+    CljPersistentVector *vec = make_vector(0, false);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
 
-        // Test vector operations using vector_conj
-        vec = vector_conj(vec, fixnum(1));
-        vec = vector_conj(vec, fixnum(2));
-        vec = vector_conj(vec, fixnum(3));
-        
-        TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
-        ID elem0 = vector_nth(vec, 0);
-        ID elem1 = vector_nth(vec, 1);
-        ID elem2 = vector_nth(vec, 2);
-        TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)elem0));
-        TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)elem1));
-        TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)elem2));
-    });
+    // Test vector operations using vector_conj
+    vec = vector_conj(vec, fixnum(1));
+    vec = vector_conj(vec, fixnum(2));
+    vec = vector_conj(vec, fixnum(3));
+
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    ID elem0 = vector_nth(vec, 0);
+    ID elem1 = vector_nth(vec, 1);
+    ID elem2 = vector_nth(vec, 2);
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)elem0));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)elem1));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)elem2));
+  });
 }
 
 TEST(test_cljvalue_transient_vector) {
-    WITH_AUTORELEASE_POOL({
-        // Test transient vector operations
-        CljPersistentVector *vec = AUTORELEASE(make_vector(0, false));  // Create persistent vector first
-        TEST_ASSERT_NOT_NULL(vec);
-        CljTransientVector *tvec = AUTORELEASE(vector_transient(vec));  // Convert to transient
-        TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, TAG(tvec));
-        // Capacity is implementation detail, only test that vector was created
-        
-        // Test transient operations using clj_conj
-        // clj_conj mutates the transient vector in-place
-        vector_push(tvec, fixnum(10));
-        vector_push(tvec, fixnum(20));
-        CljPersistentVector *backing = vector_persistent(tvec);
-        TEST_ASSERT_NOT_NULL(backing);
-        TEST_ASSERT_EQUAL_INT(2, vector_count(backing));
-        ID elem0 = vector_nth(backing, 0);
-        ID elem1 = vector_nth(backing, 1);
-        TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)elem0));
-        TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)elem1));
-    });
+  WITH_AUTORELEASE_POOL({
+    // Test transient vector operations
+    CljPersistentVector *vec = AUTORELEASE(make_vector(0, false)); // Create persistent vector first
+    TEST_ASSERT_NOT_NULL(vec);
+    CljTransientVector *tvec = AUTORELEASE(vector_transient(vec)); // Convert to transient
+    TEST_ASSERT_NOT_NULL(tvec);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, TAG(tvec));
+    // Capacity is implementation detail, only test that vector was created
+
+    // Test transient operations using clj_conj
+    // clj_conj mutates the transient vector in-place
+    vector_push(tvec, fixnum(10));
+    vector_push(tvec, fixnum(20));
+    CljPersistentVector *backing = vector_persistent(tvec);
+    TEST_ASSERT_NOT_NULL(backing);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(backing));
+    ID elem0 = vector_nth(backing, 0);
+    ID elem1 = vector_nth(backing, 1);
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)elem0));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)elem1));
+  });
 }
 
 TEST(test_cljvalue_clojure_semantics) {
-    WITH_AUTORELEASE_POOL({
-        // Test Clojure semantics
-        CljPersistentVector *vec = make_vector(0, false);
-        
-        // Add elements using vector_conj
-        vec = vector_conj(vec, fixnum(1));
-        vec = vector_conj(vec, fixnum(2));
-        
-        // Test vector access
-        ID elem0 = vector_nth(vec, 0);
-        ID elem1 = vector_nth(vec, 1);
-        TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)elem0));
-        TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)elem1));
-        
-        // Test vector count
-        TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
-    });
+  WITH_AUTORELEASE_POOL({
+    // Test Clojure semantics
+    CljPersistentVector *vec = make_vector(0, false);
+
+    // Add elements using vector_conj
+    vec = vector_conj(vec, fixnum(1));
+    vec = vector_conj(vec, fixnum(2));
+
+    // Test vector access
+    ID elem0 = vector_nth(vec, 0);
+    ID elem1 = vector_nth(vec, 1);
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)elem0));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)elem1));
+
+    // Test vector count
+    TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
+  });
 }
 
 TEST(test_cljvalue_wrapper_functions) {
-    WITH_AUTORELEASE_POOL({
-        // Test wrapper functions
-        CljValue fixnum_val = fixnum(123);
-        TEST_ASSERT_TRUE(is_fixnum(fixnum_val));
-        TEST_ASSERT_EQUAL_INT(123, as_fixnum(fixnum_val));
-        
-        CljValue char_val = character('Z');
-        TEST_ASSERT_TRUE(is_character(char_val));
-        TEST_ASSERT_EQUAL_INT('Z', as_character(char_val));
-        
-        CljValue bool_val = clj_false;
-        TEST_ASSERT_TRUE(is_bool(bool_val));
-        TEST_ASSERT_TRUE(bool_val == clj_false);
-    });
+  WITH_AUTORELEASE_POOL({
+    // Test wrapper functions
+    CljValue fixnum_val = fixnum(123);
+    TEST_ASSERT_TRUE(is_fixnum(fixnum_val));
+    TEST_ASSERT_EQUAL_INT(123, as_fixnum(fixnum_val));
+
+    CljValue char_val = character('Z');
+    TEST_ASSERT_TRUE(is_character(char_val));
+    TEST_ASSERT_EQUAL_INT('Z', as_character(char_val));
+
+    CljValue bool_val = clj_false;
+    TEST_ASSERT_TRUE(is_bool(bool_val));
+    TEST_ASSERT_TRUE(bool_val == clj_false);
+  });
 }
 
 TEST(test_cljvalue_immediates_fixnum) {
-    WITH_AUTORELEASE_POOL({
-        // Test fixnum immediates
-        CljValue val1 = fixnum(0);
-        TEST_ASSERT_TRUE(is_fixnum(val1));
-        TEST_ASSERT_EQUAL_INT(0, as_fixnum(val1));
-        
-        CljValue val2 = fixnum(42);
-        TEST_ASSERT_TRUE(is_fixnum(val2));
-        TEST_ASSERT_EQUAL_INT(42, as_fixnum(val2));
-        
-        CljValue val3 = fixnum(-100);
-        TEST_ASSERT_TRUE(is_fixnum(val3));
-        TEST_ASSERT_EQUAL_INT(-100, as_fixnum(val3));
-        
-        // Test fixnum limits
-        CljValue max_val = fixnum(2147483647);
-        TEST_ASSERT_TRUE(is_fixnum(max_val));
-        TEST_ASSERT_EQUAL_INT(2147483647, as_fixnum(max_val));
-    });
+  WITH_AUTORELEASE_POOL({
+    // Test fixnum immediates
+    CljValue val1 = fixnum(0);
+    TEST_ASSERT_TRUE(is_fixnum(val1));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(val1));
+
+    CljValue val2 = fixnum(42);
+    TEST_ASSERT_TRUE(is_fixnum(val2));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(val2));
+
+    CljValue val3 = fixnum(-100);
+    TEST_ASSERT_TRUE(is_fixnum(val3));
+    TEST_ASSERT_EQUAL_INT(-100, as_fixnum(val3));
+
+    // Test fixnum limits
+    CljValue max_val = fixnum(2147483647);
+    TEST_ASSERT_TRUE(is_fixnum(max_val));
+    TEST_ASSERT_EQUAL_INT(2147483647, as_fixnum(max_val));
+  });
 }
 
 TEST(test_cljvalue_immediates_char) {
-    WITH_AUTORELEASE_POOL({
-        // Test char immediates
-        CljValue char1 = character('A');
-        TEST_ASSERT_TRUE(is_character(char1));
-        TEST_ASSERT_EQUAL_INT('A', as_character(char1));
-        
-        CljValue char2 = character('z');
-        TEST_ASSERT_TRUE(is_character(char2));
-        TEST_ASSERT_EQUAL_INT('z', as_character(char2));
-        
-        CljValue char3 = character('0');
-        TEST_ASSERT_TRUE(is_character(char3));
-        TEST_ASSERT_EQUAL_INT('0', as_character(char3));
-        
-        CljValue char4 = character(' ');
-        TEST_ASSERT_TRUE(is_character(char4));
-        TEST_ASSERT_EQUAL_INT(' ', as_character(char4));
-    });
+  WITH_AUTORELEASE_POOL({
+    // Test char immediates
+    CljValue char1 = character('A');
+    TEST_ASSERT_TRUE(is_character(char1));
+    TEST_ASSERT_EQUAL_INT('A', as_character(char1));
+
+    CljValue char2 = character('z');
+    TEST_ASSERT_TRUE(is_character(char2));
+    TEST_ASSERT_EQUAL_INT('z', as_character(char2));
+
+    CljValue char3 = character('0');
+    TEST_ASSERT_TRUE(is_character(char3));
+    TEST_ASSERT_EQUAL_INT('0', as_character(char3));
+
+    CljValue char4 = character(' ');
+    TEST_ASSERT_TRUE(is_character(char4));
+    TEST_ASSERT_EQUAL_INT(' ', as_character(char4));
+  });
 }
 
 TEST(test_cljvalue_immediates_special) {
-    WITH_AUTORELEASE_POOL({
-        // Test special immediates
-        CljValue nil_val = SPECIAL_NIL;
-        TEST_ASSERT_NIL(nil_val);  // nil is NULL in our system
-        
-        CljValue true_val = clj_true;
-        TEST_ASSERT_TRUE(is_bool(true_val));
-        TEST_ASSERT_TRUE(true_val == clj_true);
-        
-        CljValue false_val = clj_false;
-        TEST_ASSERT_TRUE(is_bool(false_val));
-        TEST_ASSERT_TRUE(false_val == clj_false);
-        
-        // Test nil is not equal to false
-        TEST_ASSERT_FALSE(is_bool(nil_val));
-    });
+  WITH_AUTORELEASE_POOL({
+    // Test special immediates
+    CljValue nil_val = SPECIAL_NIL;
+    TEST_ASSERT_NIL(nil_val); // nil is NULL in our system
+
+    CljValue true_val = clj_true;
+    TEST_ASSERT_TRUE(is_bool(true_val));
+    TEST_ASSERT_TRUE(true_val == clj_true);
+
+    CljValue false_val = clj_false;
+    TEST_ASSERT_TRUE(is_bool(false_val));
+    TEST_ASSERT_TRUE(false_val == clj_false);
+
+    // Test nil is not equal to false
+    TEST_ASSERT_FALSE(is_bool(nil_val));
+  });
 }
 
 TEST(test_cljvalue_immediates_fixed) {
-    WITH_AUTORELEASE_POOL({
-        // Test fixed-point immediates
-        CljValue fixed_val = fixed(123.45f);
-        TEST_ASSERT_TRUE(is_fixed(fixed_val));
-        TEST_ASSERT_EQUAL_FLOAT(123.45f, as_fixed(fixed_val));
-        
-        CljValue fixed_neg = fixed(-67.89f);
-        TEST_ASSERT_TRUE(is_fixed(fixed_neg));
-        TEST_ASSERT_EQUAL_FLOAT(-67.89f, as_fixed(fixed_neg));
-    });
+  WITH_AUTORELEASE_POOL({
+    // Test fixed-point immediates
+    CljValue fixed_val = fixed(123.45f);
+    TEST_ASSERT_TRUE(is_fixed(fixed_val));
+    TEST_ASSERT_EQUAL_FLOAT(123.45f, as_fixed(fixed_val));
+
+    CljValue fixed_neg = fixed(-67.89f);
+    TEST_ASSERT_TRUE(is_fixed(fixed_neg));
+    TEST_ASSERT_EQUAL_FLOAT(-67.89f, as_fixed(fixed_neg));
+  });
 }
 
 TEST(test_cljvalue_parser_immediates) {
-    WITH_AUTORELEASE_POOL({
-        // Test parser immediate value creation
-        TEST_ASSERT_NOT_NULL(g_test_eval_state);
-        
-        // Test parsing fixnums
-        CljObject *fixnum_obj = eval_string("42", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(fixnum_obj);
-        TEST_ASSERT_TRUE(is_fixnum(fixnum_obj));
-        TEST_ASSERT_EQUAL_INT(42, as_fixnum(fixnum_obj));
-        
-        // Test parsing characters - skip for now due to syntax issues
-        // CljObject *char_obj = eval_string("\\A", g_test_eval_state);
-        // if (char_obj) {
-        //     TEST_ASSERT_TRUE(is_character(char_obj));
-        //     TEST_ASSERT_EQUAL_INT('A', as_character(char_obj));
-        // } else {
-        //     // Parse failed due to exception - this is OK
-        // }
-        
-        // Test parsing booleans
-        CljObject *true_obj = eval_string("true", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(true_obj);
-        TEST_ASSERT_TRUE(is_bool(true_obj));
-        TEST_ASSERT_TRUE((CljValue)true_obj == clj_true);
-        
-        CljObject *false_obj = eval_string("false", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(false_obj);
-        TEST_ASSERT_TRUE(is_bool(false_obj));
-        TEST_ASSERT_TRUE((CljValue)false_obj == clj_false);
-        
-        // Test parsing nil
-        CljObject *nil_obj = eval_string("nil", g_test_eval_state);
-        TEST_ASSERT_NIL(nil_obj);  // nil is NULL in our system
-        
-    });
+  WITH_AUTORELEASE_POOL({
+    // Test parser immediate value creation
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Test parsing fixnums
+    CljObject *fixnum_obj = eval_string("42", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fixnum_obj);
+    TEST_ASSERT_TRUE(is_fixnum(fixnum_obj));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(fixnum_obj));
+
+    // Test parsing characters - skip for now due to syntax issues
+    // CljObject *char_obj = eval_string("\\A", g_test_eval_state);
+    // if (char_obj) {
+    //     TEST_ASSERT_TRUE(is_character(char_obj));
+    //     TEST_ASSERT_EQUAL_INT('A', as_character(char_obj));
+    // } else {
+    //     // Parse failed due to exception - this is OK
+    // }
+
+    // Test parsing booleans
+    CljObject *true_obj = eval_string("true", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(true_obj);
+    TEST_ASSERT_TRUE(is_bool(true_obj));
+    TEST_ASSERT_TRUE((CljValue)true_obj == clj_true);
+
+    CljObject *false_obj = eval_string("false", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(false_obj);
+    TEST_ASSERT_TRUE(is_bool(false_obj));
+    TEST_ASSERT_TRUE((CljValue)false_obj == clj_false);
+
+    // Test parsing nil
+    CljObject *nil_obj = eval_string("nil", g_test_eval_state);
+    TEST_ASSERT_NIL(nil_obj); // nil is NULL in our system
+  });
 }
 
 TEST(test_cljvalue_memory_efficiency) {
-    WITH_AUTORELEASE_POOL({
-        // Test memory efficiency of immediate values
-        CljValue fixnum_val = fixnum(42);
-        TEST_ASSERT_TRUE(is_fixnum(fixnum_val));
-        
-        // Immediate values should not require heap allocation
-        // They are stored directly in the pointer value
-        // TEST_ASSERT_TRUE(IS_IMMEDIATE(fixnum_val)); // Disabled due to implementation issues
-        
-        CljValue char_val = character('A');
-        TEST_ASSERT_TRUE(is_character(char_val));
-        // TEST_ASSERT_TRUE(IS_IMMEDIATE(char_val)); // Disabled due to implementation issues
-        
-        CljValue bool_val = clj_true;
-        TEST_ASSERT_TRUE(is_bool(bool_val));
-        // TEST_ASSERT_TRUE(IS_IMMEDIATE(bool_val)); // Disabled due to implementation issues
-        
-        CljValue nil_val = SPECIAL_NIL;
-        TEST_ASSERT_NIL(nil_val);  // nil is NULL in our system
-        // TEST_ASSERT_TRUE(IS_IMMEDIATE(nil_val)); // Disabled due to implementation issues
-    });
+  WITH_AUTORELEASE_POOL({
+    // Test memory efficiency of immediate values
+    CljValue fixnum_val = fixnum(42);
+    TEST_ASSERT_TRUE(is_fixnum(fixnum_val));
+
+    // Immediate values should not require heap allocation
+    // They are stored directly in the pointer value
+    // TEST_ASSERT_TRUE(IS_IMMEDIATE(fixnum_val)); // Disabled due to implementation issues
+
+    CljValue char_val = character('A');
+    TEST_ASSERT_TRUE(is_character(char_val));
+    // TEST_ASSERT_TRUE(IS_IMMEDIATE(char_val)); // Disabled due to implementation issues
+
+    CljValue bool_val = clj_true;
+    TEST_ASSERT_TRUE(is_bool(bool_val));
+    // TEST_ASSERT_TRUE(IS_IMMEDIATE(bool_val)); // Disabled due to implementation issues
+
+    CljValue nil_val = SPECIAL_NIL;
+    TEST_ASSERT_NIL(nil_val); // nil is NULL in our system
+                              // TEST_ASSERT_TRUE(IS_IMMEDIATE(nil_val)); // Disabled due to implementation issues
+  });
 }
 
 TEST(test_cljvalue_vectors_high_level) {
-    WITH_AUTORELEASE_POOL({
-        // Test vectors at high level
-        CljPersistentVector *vec = make_vector(0, false);
-        TEST_ASSERT_NOT_NULL(vec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
+  WITH_AUTORELEASE_POOL({
+    // Test vectors at high level
+    CljPersistentVector *vec = make_vector(0, false);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(vec));
 
-        // Capacity is implementation detail, only test that vector was created
-        TEST_ASSERT_EQUAL_INT(0, vector_count(vec));
+    // Capacity is implementation detail, only test that vector was created
+    TEST_ASSERT_EQUAL_INT(0, vector_count(vec));
 
-        // Test vector operations using vector_conj
-        vec = vector_conj(vec, fixnum(1));
-        vec = vector_conj(vec, fixnum(2));
-        vec = vector_conj(vec, fixnum(3));
-        
-        TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
-    });
+    // Test vector operations using vector_conj
+    vec = vector_conj(vec, fixnum(1));
+    vec = vector_conj(vec, fixnum(2));
+    vec = vector_conj(vec, fixnum(3));
+
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+  });
 }
 
 TEST(test_cljvalue_immediates_high_level) {
-    WITH_AUTORELEASE_POOL({
-        // Test immediates at high level
-        CljValue fixnum_val = fixnum(42);
-        TEST_ASSERT_TRUE(is_fixnum(fixnum_val));
-        TEST_ASSERT_EQUAL_INT(42, as_fixnum(fixnum_val));
-        
-        CljValue char_val = character('A');
-        TEST_ASSERT_TRUE(is_character(char_val));
-        TEST_ASSERT_EQUAL_INT('A', as_character(char_val));
-        
-        CljValue bool_val = clj_true;
-        TEST_ASSERT_TRUE(is_bool(bool_val));
-        TEST_ASSERT_TRUE(bool_val == clj_true);
-        
-        CljValue nil_val = SPECIAL_NIL;
-        TEST_ASSERT_NIL(nil_val);  // nil is NULL in our system
-    });
+  WITH_AUTORELEASE_POOL({
+    // Test immediates at high level
+    CljValue fixnum_val = fixnum(42);
+    TEST_ASSERT_TRUE(is_fixnum(fixnum_val));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(fixnum_val));
+
+    CljValue char_val = character('A');
+    TEST_ASSERT_TRUE(is_character(char_val));
+    TEST_ASSERT_EQUAL_INT('A', as_character(char_val));
+
+    CljValue bool_val = clj_true;
+    TEST_ASSERT_TRUE(is_bool(bool_val));
+    TEST_ASSERT_TRUE(bool_val == clj_true);
+
+    CljValue nil_val = SPECIAL_NIL;
+    TEST_ASSERT_NIL(nil_val); // nil is NULL in our system
+  });
 }
 
 // ============================================================================
@@ -300,141 +299,141 @@ TEST(test_cljvalue_immediates_high_level) {
 // Comprehensive test for all truthiness combinations
 // In Clojure, only nil and false are falsy, everything else is truthy
 TEST(test_truthiness_comprehensive) {
-    WITH_AUTORELEASE_POOL({
-        // ===== FALSY VALUES =====
-        // nil (NULL) is falsy
-        TEST_ASSERT_FALSE(clj_is_truthy(NULL));
-        
-        // false is falsy
-        CljValue false_val = clj_false;
-        TEST_ASSERT_FALSE(clj_is_truthy(false_val));
-        
-        // ===== TRUTHY VALUES =====
-        // true is truthy
-        CljValue true_val = clj_true;
-        TEST_ASSERT_TRUE(clj_is_truthy(true_val));
-        
-        // Fixnums are truthy (including 0)
-        CljValue fixnum_zero = fixnum(0);
-        TEST_ASSERT_TRUE(clj_is_truthy(fixnum_zero));
-        
-        CljValue fixnum_one = fixnum(1);
-        TEST_ASSERT_TRUE(clj_is_truthy(fixnum_one));
-        
-        CljValue fixnum_negative = fixnum(-1);
-        TEST_ASSERT_TRUE(clj_is_truthy(fixnum_negative));
-        
-        CljValue fixnum_large = fixnum(42);
-        TEST_ASSERT_TRUE(clj_is_truthy(fixnum_large));
-        
-        // Characters are truthy
-        CljValue char_val = character('A');
-        TEST_ASSERT_TRUE(clj_is_truthy(char_val));
-        
-        CljValue char_zero = character('\0');
-        TEST_ASSERT_TRUE(clj_is_truthy(char_zero));
-        
-        // Strings are truthy (including empty strings)
-        CljString *empty_string = AUTORELEASE(make_string(""));
-        TEST_ASSERT_NOT_NULL(empty_string);
-        TEST_ASSERT_TRUE(clj_is_truthy(empty_string));
-        
-        CljString *non_empty_string = AUTORELEASE(make_string("hello"));
-        TEST_ASSERT_NOT_NULL(non_empty_string);
-        TEST_ASSERT_TRUE(clj_is_truthy(non_empty_string));
-        
-        // Keywords are truthy
-        CljSymbol *keyword = AUTORELEASE(intern_symbol_global(":test"));
-        TEST_ASSERT_NOT_NULL(keyword);
-        TEST_ASSERT_TRUE(clj_is_truthy(keyword));
-        
-        // Symbols are truthy
-        CljSymbol *symbol = AUTORELEASE(intern_symbol_global("test"));
-        TEST_ASSERT_NOT_NULL(symbol);
-        TEST_ASSERT_TRUE(clj_is_truthy(symbol));
-        
-        // Empty list is truthy (in Clojure, empty collections are truthy)
-        // Note: empty_list() returns a singleton, which should be truthy
-        // We test this via eval_string to ensure it works correctly
-        // (see edge cases section below)
-        
-        // Non-empty list is truthy
-        CljList *non_empty_list = AUTORELEASE(make_list(fixnum(1), NULL));
-        TEST_ASSERT_NOT_NULL(non_empty_list);
-        TEST_ASSERT_TRUE(clj_is_truthy(non_empty_list));
-        
-        // Empty vector is truthy
-        CljPersistentVector *empty_vec = AUTORELEASE(make_vector(0, false));
-        TEST_ASSERT_NOT_NULL(empty_vec);
-        TEST_ASSERT_TRUE(clj_is_truthy(empty_vec));
-        
-        // Non-empty vector is truthy
-        CljPersistentVector *non_empty_vec = AUTORELEASE(make_vector(0, false));
-        TEST_ASSERT_NOT_NULL(non_empty_vec);
-        non_empty_vec = vector_conj(non_empty_vec, fixnum(1));
-        TEST_ASSERT_TRUE(clj_is_truthy(non_empty_vec));
-        
-        // Empty map is truthy
-        CljPersistentMap *empty_map = AUTORELEASE(make_map(0));
-        TEST_ASSERT_NOT_NULL(empty_map);
-        TEST_ASSERT_TRUE(clj_is_truthy(empty_map));
-        
-        // Non-empty map is truthy
-        CljPersistentMap *non_empty_map = AUTORELEASE(make_map(4));
-        TEST_ASSERT_NOT_NULL(non_empty_map);
-        // map_assoc always returns a new map (COW disabled)
-        CljPersistentMap *new_map = map_assoc(non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1));
-        TEST_ASSERT_NOT_NULL(new_map);
-        TEST_ASSERT_TRUE(clj_is_truthy(new_map));
-        
-        // Fixed-point numbers are truthy (including 0.0)
-        CljValue fixed_val = fixed(3.14f);
-        TEST_ASSERT_TRUE(clj_is_truthy(fixed_val));
-        
-        CljValue fixed_zero = fixed(0.0f);
-        TEST_ASSERT_TRUE(clj_is_truthy(fixed_zero));
-        
-        // ===== EDGE CASES =====
-        // Test with eval_string for high-level truthiness checks
-        CljObject *nil_result = eval_string("nil", g_test_eval_state);
-        TEST_ASSERT_NIL(nil_result);
-        TEST_ASSERT_FALSE(clj_is_truthy(nil_result));
-        
-        CljObject *false_result = eval_string("false", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(false_result);
-        TEST_ASSERT_FALSE(clj_is_truthy(false_result));
-        // Don't RELEASE false_result - eval_string returns autoreleased object
-        
-        CljObject *true_result = eval_string("true", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(true_result);
-        TEST_ASSERT_TRUE(clj_is_truthy(true_result));
-        // Don't RELEASE true_result - eval_string returns autoreleased object
-        
-        CljObject *zero_result = eval_string("0", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(zero_result);
-        TEST_ASSERT_TRUE(clj_is_truthy(zero_result));
-        // Don't RELEASE zero_result - eval_string returns autoreleased object
-        
-        CljObject *empty_list_result = eval_string("(list)", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(empty_list_result);
-        TEST_ASSERT_TRUE(clj_is_truthy(empty_list_result));
-        // Don't RELEASE empty_list_result - eval_string returns autoreleased object
-        
-        CljObject *empty_vector_result = eval_string("[]", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(empty_vector_result);
-        TEST_ASSERT_TRUE(clj_is_truthy(empty_vector_result));
-        // Don't RELEASE empty_vector_result - eval_string returns autoreleased object
-        
-        CljObject *empty_map_result = eval_string("{}", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(empty_map_result);
-        TEST_ASSERT_TRUE(clj_is_truthy(empty_map_result));
-        // Don't RELEASE empty_map_result - eval_string returns autoreleased object
-        
-        CljObject *keyword_result = eval_string(":test", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(keyword_result);
-        TEST_ASSERT_TRUE(clj_is_truthy(keyword_result));
-        // Don't RELEASE keyword_result - eval_string returns autoreleased object
-    });
+  WITH_AUTORELEASE_POOL({
+    // ===== FALSY VALUES =====
+    // nil (NULL) is falsy
+    TEST_ASSERT_FALSE(clj_is_truthy(NULL));
+
+    // false is falsy
+    CljValue false_val = clj_false;
+    TEST_ASSERT_FALSE(clj_is_truthy(false_val));
+
+    // ===== TRUTHY VALUES =====
+    // true is truthy
+    CljValue true_val = clj_true;
+    TEST_ASSERT_TRUE(clj_is_truthy(true_val));
+
+    // Fixnums are truthy (including 0)
+    CljValue fixnum_zero = fixnum(0);
+    TEST_ASSERT_TRUE(clj_is_truthy(fixnum_zero));
+
+    CljValue fixnum_one = fixnum(1);
+    TEST_ASSERT_TRUE(clj_is_truthy(fixnum_one));
+
+    CljValue fixnum_negative = fixnum(-1);
+    TEST_ASSERT_TRUE(clj_is_truthy(fixnum_negative));
+
+    CljValue fixnum_large = fixnum(42);
+    TEST_ASSERT_TRUE(clj_is_truthy(fixnum_large));
+
+    // Characters are truthy
+    CljValue char_val = character('A');
+    TEST_ASSERT_TRUE(clj_is_truthy(char_val));
+
+    CljValue char_zero = character('\0');
+    TEST_ASSERT_TRUE(clj_is_truthy(char_zero));
+
+    // Strings are truthy (including empty strings)
+    CljString *empty_string = AUTORELEASE(make_string(""));
+    TEST_ASSERT_NOT_NULL(empty_string);
+    TEST_ASSERT_TRUE(clj_is_truthy(empty_string));
+
+    CljString *non_empty_string = AUTORELEASE(make_string("hello"));
+    TEST_ASSERT_NOT_NULL(non_empty_string);
+    TEST_ASSERT_TRUE(clj_is_truthy(non_empty_string));
+
+    // Keywords are truthy
+    CljSymbol *keyword = AUTORELEASE(intern_symbol_global(":test"));
+    TEST_ASSERT_NOT_NULL(keyword);
+    TEST_ASSERT_TRUE(clj_is_truthy(keyword));
+
+    // Symbols are truthy
+    CljSymbol *symbol = AUTORELEASE(intern_symbol_global("test"));
+    TEST_ASSERT_NOT_NULL(symbol);
+    TEST_ASSERT_TRUE(clj_is_truthy(symbol));
+
+    // Empty list is truthy (in Clojure, empty collections are truthy)
+    // Note: empty_list() returns a singleton, which should be truthy
+    // We test this via eval_string to ensure it works correctly
+    // (see edge cases section below)
+
+    // Non-empty list is truthy
+    CljList *non_empty_list = AUTORELEASE(make_list(fixnum(1), NULL));
+    TEST_ASSERT_NOT_NULL(non_empty_list);
+    TEST_ASSERT_TRUE(clj_is_truthy(non_empty_list));
+
+    // Empty vector is truthy
+    CljPersistentVector *empty_vec = AUTORELEASE(make_vector(0, false));
+    TEST_ASSERT_NOT_NULL(empty_vec);
+    TEST_ASSERT_TRUE(clj_is_truthy(empty_vec));
+
+    // Non-empty vector is truthy
+    CljPersistentVector *non_empty_vec = AUTORELEASE(make_vector(0, false));
+    TEST_ASSERT_NOT_NULL(non_empty_vec);
+    non_empty_vec = vector_conj(non_empty_vec, fixnum(1));
+    TEST_ASSERT_TRUE(clj_is_truthy(non_empty_vec));
+
+    // Empty map is truthy
+    CljPersistentMap *empty_map = AUTORELEASE(make_map(0));
+    TEST_ASSERT_NOT_NULL(empty_map);
+    TEST_ASSERT_TRUE(clj_is_truthy(empty_map));
+
+    // Non-empty map is truthy
+    CljPersistentMap *non_empty_map = AUTORELEASE(make_map(4));
+    TEST_ASSERT_NOT_NULL(non_empty_map);
+    // map_assoc always returns a new map (COW disabled)
+    CljPersistentMap *new_map = map_assoc(non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1));
+    TEST_ASSERT_NOT_NULL(new_map);
+    TEST_ASSERT_TRUE(clj_is_truthy(new_map));
+
+    // Fixed-point numbers are truthy (including 0.0)
+    CljValue fixed_val = fixed(3.14f);
+    TEST_ASSERT_TRUE(clj_is_truthy(fixed_val));
+
+    CljValue fixed_zero = fixed(0.0f);
+    TEST_ASSERT_TRUE(clj_is_truthy(fixed_zero));
+
+    // ===== EDGE CASES =====
+    // Test with eval_string for high-level truthiness checks
+    CljObject *nil_result = eval_string("nil", g_test_eval_state);
+    TEST_ASSERT_NIL(nil_result);
+    TEST_ASSERT_FALSE(clj_is_truthy(nil_result));
+
+    CljObject *false_result = eval_string("false", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(false_result);
+    TEST_ASSERT_FALSE(clj_is_truthy(false_result));
+    // Don't RELEASE false_result - eval_string returns autoreleased object
+
+    CljObject *true_result = eval_string("true", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(true_result);
+    TEST_ASSERT_TRUE(clj_is_truthy(true_result));
+    // Don't RELEASE true_result - eval_string returns autoreleased object
+
+    CljObject *zero_result = eval_string("0", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(zero_result);
+    TEST_ASSERT_TRUE(clj_is_truthy(zero_result));
+    // Don't RELEASE zero_result - eval_string returns autoreleased object
+
+    CljObject *empty_list_result = eval_string("(list)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(empty_list_result);
+    TEST_ASSERT_TRUE(clj_is_truthy(empty_list_result));
+    // Don't RELEASE empty_list_result - eval_string returns autoreleased object
+
+    CljObject *empty_vector_result = eval_string("[]", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(empty_vector_result);
+    TEST_ASSERT_TRUE(clj_is_truthy(empty_vector_result));
+    // Don't RELEASE empty_vector_result - eval_string returns autoreleased object
+
+    CljObject *empty_map_result = eval_string("{}", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(empty_map_result);
+    TEST_ASSERT_TRUE(clj_is_truthy(empty_map_result));
+    // Don't RELEASE empty_map_result - eval_string returns autoreleased object
+
+    CljObject *keyword_result = eval_string(":test", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(keyword_result);
+    TEST_ASSERT_TRUE(clj_is_truthy(keyword_result));
+    // Don't RELEASE keyword_result - eval_string returns autoreleased object
+  });
 }
 
 // ============================================================================

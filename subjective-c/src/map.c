@@ -232,7 +232,7 @@ CljPersistentMap* map_merge(CljPersistentMap* a, CljPersistentMap* b, bool overw
   return result;
 }
 
-/** Return a vector of keys (retained). Owned (no AUTORELEASE); caller must RELEASE. */
+/** Return a vector of keys (retained). MEMORY_POLICY: usable/pool-safe return. */
 ID map_keys(ID map) {
   CljPersistentMap *map_data = map_backing(map);
   if (!map_data) return NULL;
@@ -243,10 +243,10 @@ ID map_keys(ID map) {
     CljPersistentVector *next = vector_conj_owned(keys_vec, RETAIN(key));
     if (next != keys_vec) { RELEASE(keys_vec); keys_vec = next; }
   }
-  return keys_vec;
+  return AUTORELEASE(keys_vec);
 }
 
-/** Return a vector of values (retained). Owned (no AUTORELEASE); caller must RELEASE. */
+/** Return a vector of values (retained). MEMORY_POLICY: usable/pool-safe return. */
 ID map_vals(ID map) {
   CljPersistentMap *map_data = map_backing(map);
   if (!map_data) return NULL;
@@ -260,7 +260,7 @@ ID map_vals(ID map) {
       if (next != vals_vec) { RELEASE(vals_vec); vals_vec = next; }
     }
   }
-  return vals_vec;
+  return AUTORELEASE(vals_vec);
 }
 
 /** Return number of key/value pairs. */

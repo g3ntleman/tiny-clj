@@ -1,6 +1,6 @@
 /*
  * Test Predicates for Tiny-CLJ
- * 
+ *
  * Tests for type predicate functions: number?, integer?, float?, string?,
  * keyword?, symbol?, fn?, char?, some?, true?, false?, boolean?, list?,
  * set?, coll?, seq?, seqable?, ifn?
@@ -14,21 +14,21 @@
 // ============================================================================
 
 TEST_SHARED(test_predicate_number_true_integer) {
-    CljObject *result = eval_string("(number? 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(number? 42)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_number_true_float) {
-    CljObject *result = eval_string("(number? 3.14)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(number? 3.14)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_number_false_string) {
-    CljObject *result = eval_string("(number? \"42\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(number? \"42\")", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -36,15 +36,15 @@ TEST_SHARED(test_predicate_number_false_string) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_integer_true) {
-    CljObject *result = eval_string("(integer? 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(integer? 42)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_integer_false_float) {
-    CljObject *result = eval_string("(integer? 3.14)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(integer? 3.14)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -52,15 +52,15 @@ TEST_SHARED(test_predicate_integer_false_float) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_float_true) {
-    CljObject *result = eval_string("(float? 3.14)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(float? 3.14)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_float_false_integer) {
-    CljObject *result = eval_string("(float? 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(float? 42)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -68,15 +68,15 @@ TEST_SHARED(test_predicate_float_false_integer) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_string_true) {
-    CljObject *result = eval_string("(string? \"hello\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(string? \"hello\")", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_string_false_number) {
-    CljObject *result = eval_string("(string? 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(string? 42)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -84,15 +84,15 @@ TEST_SHARED(test_predicate_string_false_number) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_keyword_true) {
-    CljObject *result = eval_string("(keyword? :foo)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(keyword? :foo)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_keyword_false_symbol) {
-    CljObject *result = eval_string("(keyword? 'foo)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(keyword? 'foo)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -100,15 +100,15 @@ TEST_SHARED(test_predicate_keyword_false_symbol) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_symbol_true) {
-    CljObject *result = eval_string("(symbol? 'foo)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(symbol? 'foo)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_symbol_false_keyword) {
-    CljObject *result = eval_string("(symbol? :foo)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(symbol? :foo)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -116,21 +116,21 @@ TEST_SHARED(test_predicate_symbol_false_keyword) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_fn_true_builtin) {
-    CljObject *result = eval_string("(fn? inc)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(fn? inc)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_fn_true_lambda) {
-    CljObject *result = eval_string("(fn? (fn [x] x))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(fn? (fn [x] x))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_fn_false_number) {
-    CljObject *result = eval_string("(fn? 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(fn? 42)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -138,16 +138,16 @@ TEST_SHARED(test_predicate_fn_false_number) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_char_true) {
-    // Use \newline as it's a named character that's supported
-    CljObject *result = eval_string("(char? \\newline)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  // Use \newline as it's a named character that's supported
+  CljObject *result = eval_string("(char? \\newline)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_char_false_string) {
-    CljObject *result = eval_string("(char? \"a\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(char? \"a\")", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -155,15 +155,15 @@ TEST_SHARED(test_predicate_char_false_string) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_some_true) {
-    CljObject *result = eval_string("(some? 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(some? 42)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_some_false) {
-    CljObject *result = eval_string("(some? nil)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(some? nil)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -171,22 +171,22 @@ TEST_SHARED(test_predicate_some_false) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_true_true) {
-    CljObject *result = eval_string("(true? true)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(true? true)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_true_false) {
-    CljObject *result = eval_string("(true? false)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(true? false)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 TEST_SHARED(test_predicate_true_false_number) {
-    // 1 is truthy but not true
-    CljObject *result = eval_string("(true? 1)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  // 1 is truthy but not true
+  CljObject *result = eval_string("(true? 1)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -194,22 +194,22 @@ TEST_SHARED(test_predicate_true_false_number) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_false_true) {
-    CljObject *result = eval_string("(false? false)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(false? false)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_false_false) {
-    CljObject *result = eval_string("(false? true)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(false? true)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 TEST_SHARED(test_predicate_false_false_nil) {
-    // nil is falsy but not false
-    CljObject *result = eval_string("(false? nil)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  // nil is falsy but not false
+  CljObject *result = eval_string("(false? nil)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -217,21 +217,21 @@ TEST_SHARED(test_predicate_false_false_nil) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_boolean_true_true) {
-    CljObject *result = eval_string("(boolean? true)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(boolean? true)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_boolean_true_false) {
-    CljObject *result = eval_string("(boolean? false)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(boolean? false)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_boolean_false_nil) {
-    CljObject *result = eval_string("(boolean? nil)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(boolean? nil)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -239,15 +239,15 @@ TEST_SHARED(test_predicate_boolean_false_nil) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_list_true) {
-    CljObject *result = eval_string("(list? '(1 2 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(list? '(1 2 3))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_list_false_vector) {
-    CljObject *result = eval_string("(list? [1 2 3])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(list? [1 2 3])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -255,25 +255,25 @@ TEST_SHARED(test_predicate_list_false_vector) {
 // ============================================================================
 
 TEST_SHARED(test_quoted_list_type_is_list) {
-    // This test verifies the canonicalize fix: quoted lists should be CljList, not ASTNode
-    // Use list? predicate to verify - it compares (type x) with 'clojure.lang/PersistentList
-    CljObject *result = eval_string("(list? '(1 2 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  // This test verifies the canonicalize fix: quoted lists should be CljList, not ASTNode
+  // Use list? predicate to verify - it compares (type x) with 'clojure.lang/PersistentList
+  CljObject *result = eval_string("(list? '(1 2 3))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_quoted_nested_list_type) {
-    // Nested quoted lists should also be CljList
-    CljObject *result = eval_string("(list? (first '((1 2) 3)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  // Nested quoted lists should also be CljList
+  CljObject *result = eval_string("(list? (first '((1 2) 3)))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_quoted_symbol_type) {
-    // Symbols in quoted lists should still be symbols (not strings)
-    CljObject *result = eval_string("(symbol? (first '(foo bar)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  // Symbols in quoted lists should still be symbols (not strings)
+  CljObject *result = eval_string("(symbol? (first '(foo bar)))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 // ============================================================================
@@ -281,27 +281,27 @@ TEST_SHARED(test_quoted_symbol_type) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_set_true_literal) {
-    CljObject *result = eval_string("(set? #{1 2 3})", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(set? #{1 2 3})", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_set_true_hash_set) {
-    CljObject *result = eval_string("(set? (hash-set 1 2))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(set? (hash-set 1 2))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_set_false_map) {
-    CljObject *result = eval_string("(set? {:a 1})", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(set? {:a 1})", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 TEST_SHARED(test_predicate_set_false_vector) {
-    CljObject *result = eval_string("(set? [1 2 3])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(set? [1 2 3])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -309,33 +309,33 @@ TEST_SHARED(test_predicate_set_false_vector) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_coll_true_list) {
-    CljObject *result = eval_string("(coll? '(1 2 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(coll? '(1 2 3))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_coll_true_vector) {
-    CljObject *result = eval_string("(coll? [1 2 3])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(coll? [1 2 3])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_coll_true_map) {
-    CljObject *result = eval_string("(coll? {:a 1})", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(coll? {:a 1})", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_coll_true_set) {
-    CljObject *result = eval_string("(coll? #{1 2 3})", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(coll? #{1 2 3})", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_coll_false_number) {
-    CljObject *result = eval_string("(coll? 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(coll? 42)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -343,15 +343,15 @@ TEST_SHARED(test_predicate_coll_false_number) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_seq_true_list) {
-    CljObject *result = eval_string("(seq? '(1 2 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(seq? '(1 2 3))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_seq_false_vector) {
-    CljObject *result = eval_string("(seq? [1 2 3])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(seq? [1 2 3])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -359,33 +359,33 @@ TEST_SHARED(test_predicate_seq_false_vector) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_seqable_true_list) {
-    CljObject *result = eval_string("(seqable? '(1 2 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(seqable? '(1 2 3))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_seqable_true_string) {
-    CljObject *result = eval_string("(seqable? \"hello\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(seqable? \"hello\")", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_seqable_true_set) {
-    CljObject *result = eval_string("(seqable? #{1 2})", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(seqable? #{1 2})", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_seqable_true_nil) {
-    CljObject *result = eval_string("(seqable? nil)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(seqable? nil)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_seqable_false_number) {
-    CljObject *result = eval_string("(seqable? 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(seqable? 42)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 // ============================================================================
@@ -393,60 +393,60 @@ TEST_SHARED(test_predicate_seqable_false_number) {
 // ============================================================================
 
 TEST_SHARED(test_contains_set_true) {
-    CljObject *result = eval_string("(contains? #{1 2} 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(contains? #{1 2} 2)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_contains_set_false) {
-    CljObject *result = eval_string("(contains? #{1 2} 3)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(contains? #{1 2} 3)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }
 
 TEST_SHARED(test_conj_disj_set) {
-    CljObject *ok = NULL;
-    WITH_AUTORELEASE_POOL({
-        ok = eval_string("(let [a (conj (hash-set 1) 2) b (disj (hash-set 1 2) 2)] (and (contains? a 2) (not (contains? b 2))))", g_test_eval_state);
-    });
-    TEST_ASSERT_NOT_NULL(ok);
-    TEST_ASSERT_TRUE(ok == clj_true);
+  CljObject *ok = NULL;
+  WITH_AUTORELEASE_POOL({
+    ok = eval_string("(let [a (conj (hash-set 1) 2) b (disj (hash-set 1 2) 2)] (and (contains? a 2) (not (contains? b 2))))", g_test_eval_state);
+  });
+  TEST_ASSERT_NOT_NULL(ok);
+  TEST_ASSERT_TRUE(ok == clj_true);
 }
 
 TEST_SHARED(test_hash_set_dedup_count) {
-    CljObject *result = eval_string("(= 2 (count (hash-set 1 1 2)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(= 2 (count (hash-set 1 1 2)))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_conj_set_duplicate_no_growth) {
-    CljObject *result = eval_string("(= 2 (count (conj #{1 2} 2)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(= 2 (count (conj #{1 2} 2)))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_disj_set_missing_key_no_change) {
-    CljObject *result = eval_string("(= #{1 2} (disj #{1 2} 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(= #{1 2} (disj #{1 2} 3))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_set_seq_empty_nil) {
-    CljObject *result = eval_string("(nil? (seq #{}))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(nil? (seq #{}))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_set_seq_count_matches) {
-    CljObject *result = eval_string("(= 3 (count (seq #{1 2 3})))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(= 3 (count (seq #{1 2 3})))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_set_round_trip_read_string) {
-    CljObject *result = eval_string("(= #{1 2 3} (read-string (str #{1 2 3})))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(= #{1 2 3} (read-string (str #{1 2 3})))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 // ============================================================================
@@ -454,31 +454,31 @@ TEST_SHARED(test_set_round_trip_read_string) {
 // ============================================================================
 
 TEST_SHARED(test_predicate_ifn_true_fn) {
-    CljObject *result = eval_string("(ifn? inc)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(ifn? inc)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_ifn_true_keyword) {
-    CljObject *result = eval_string("(ifn? :foo)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(ifn? :foo)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_ifn_true_map) {
-    CljObject *result = eval_string("(ifn? {:a 1})", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(ifn? {:a 1})", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_ifn_true_vector) {
-    CljObject *result = eval_string("(ifn? [1 2 3])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_true);
+  CljObject *result = eval_string("(ifn? [1 2 3])", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_true);
 }
 
 TEST_SHARED(test_predicate_ifn_false_number) {
-    CljObject *result = eval_string("(ifn? 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result == clj_false);
+  CljObject *result = eval_string("(ifn? 42)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(result == clj_false);
 }

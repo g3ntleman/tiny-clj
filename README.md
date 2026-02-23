@@ -2,7 +2,7 @@
 
 An **embedded-first Clojure interpreter** for microcontrollers (ESP32) and desktop platforms (macOS, Linux). Written in pure C99/C11 for maximum portability and minimal resource usage.
 
-## Status: Not usable, yet. Pre-alpha. Embedded target not functional, yet.
+## Status: usable Alpha-Version 0.4.
 
 ## Prerequisites
 

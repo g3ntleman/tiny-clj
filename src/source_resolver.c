@@ -6,6 +6,15 @@
 #include "value.h"
 #include "memory.h"
 
+/**
+ * @brief Resolves a virtual path to byte content from KV store or embedded sources.
+ *
+ * Lookup order is KV store first (to allow overrides), then the compiled-in
+ * embedded source table. Returns a caller-usable byte-array object on success.
+ *
+ * @param path Virtual path to resolve.
+ * @return Byte-array object (pool-managed) or NULL when not found.
+ */
 ID resolve_path_to_bytes(const char *path) {
     if (!path || !path[0]) return NULL;
 
