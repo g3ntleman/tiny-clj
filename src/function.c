@@ -50,15 +50,20 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVe
 // Native function constructor (CljCFunc)
 // -----------------------------------------------------------------------------
 /** Wrap C builtin as callable function; rc=1, caller releases. */
-ID make_named_func(BuiltinFn fn, CljSymbol *name_sym)
-{
+ID make_named_func_with_flags(BuiltinFn fn, CljSymbol *name_sym, uint8_t flags) {
     CljCFunc *func = ALLOC(CljCFunc, 1);
 
     func->base.type = CLJ_FUNC;
     func->fn = fn;
+    func->flags = flags;
 
     // Name is stored as an interned symbol (singleton), so we can safely borrow it.
     func->name_sym = name_sym;
 
     return (ID)func;
+}
+
+/** Wrap C builtin as callable function; rc=1, caller releases. */
+ID make_named_func(BuiltinFn fn, CljSymbol *name_sym) {
+    return make_named_func_with_flags(fn, name_sym, 0u);
 }

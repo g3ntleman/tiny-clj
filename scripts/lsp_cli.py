@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Direct LSP CLI for fast definition lookup, summaries, references, call sites, and renames via clangd.
+"""Direct LSP CLI for fast symbol work over stdio LSP servers (clangd, TS, Kotlin).
 
 Examples:
   scripts/lsp_cli.py definition src/builtins.c:10:5
+  scripts/lsp_cli.py --server typescript definition web/src/app.ts:42:7
+  scripts/lsp_cli.py --server kotlin summary app/src/main/kotlin/Foo.kt:12:9
   scripts/lsp_cli.py summary src/builtins.c:10:5
   scripts/lsp_cli.py references src/builtins.c:10:5
   scripts/lsp_cli.py callsites src/builtins.c:10:5
@@ -16,17 +18,19 @@ import difflib
 import json
 import os
 import queue
+import shlex
 import subprocess
 import sys
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import unquote, urlparse
 
 
 JSON = Dict[str, Any]
+SERVER_PRESETS = ("clangd", "typescript", "vtsls", "kotlin")
 
 
 def eprint(*args: Any) -> None:
@@ -50,6 +54,20 @@ def detect_language_id(path: Path) -> str:
         return "c"
     if suffix in {".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx"}:
         return "cpp"
+    if suffix in {".ts", ".mts", ".cts"}:
+        return "typescript"
+    if suffix == ".tsx":
+        return "typescriptreact"
+    if suffix in {".js", ".mjs", ".cjs"}:
+        return "javascript"
+    if suffix == ".jsx":
+        return "javascriptreact"
+    if suffix in {".kt", ".kts"}:
+        return "kotlin"
+    if suffix in {".json"}:
+        return "json"
+    if suffix in {".py"}:
+        return "python"
     return "plaintext"
 
 
@@ -144,32 +162,66 @@ class LspProtocolError(RuntimeError):
     pass
 
 
+def default_server_bin(server: str) -> str:
+    if server == "clangd":
+        return "clangd"
+    if server == "typescript":
+        return "typescript-language-server"
+    if server == "vtsls":
+        return "vtsls"
+    if server == "kotlin":
+        return "kotlin-language-server"
+    raise ValueError(f"Unknown server preset: {server}")
+
+
+def default_server_args(server: str, compile_commands_dir: Optional[Path]) -> List[str]:
+    if server == "clangd":
+        args: List[str] = []
+        if compile_commands_dir is not None:
+            args.append(f"--compile-commands-dir={str(compile_commands_dir)}")
+        # Quiet down noisy diagnostics; still available on stderr if --verbose.
+        args.append("--log=error")
+        return args
+    if server in {"typescript", "vtsls"}:
+        return ["--stdio"]
+    if server == "kotlin":
+        return []
+    raise ValueError(f"Unknown server preset: {server}")
+
+
+def build_server_command_from_preset(
+    server: str,
+    server_bin_override: Optional[str],
+    extra_args: Sequence[str],
+    compile_commands_dir: Optional[Path],
+) -> List[str]:
+    cmd = [server_bin_override or default_server_bin(server)]
+    cmd.extend(default_server_args(server, compile_commands_dir))
+    cmd.extend(extra_args)
+    return cmd
+
+
 class LspClient:
     def __init__(
         self,
-        clangd_cmd: str,
+        server_cmd: Sequence[str],
         workspace: Path,
-        compile_commands_dir: Optional[Path],
         timeout: float,
         verbose: bool = False,
+        server_label: Optional[str] = None,
     ) -> None:
         self.workspace = workspace.resolve()
         self.timeout = timeout
         self.verbose = verbose
+        self.server_label = server_label or Path(server_cmd[0]).name
         self.position_encoding = "utf-16"
         self._next_id = 1
         self._queue: "queue.Queue[Optional[JSON]]" = queue.Queue()
         self._stderr_lines: "queue.Queue[str]" = queue.Queue()
         self._open_docs: Dict[str, Tuple[str, int]] = {}
 
-        cmd = [clangd_cmd]
-        if compile_commands_dir is not None:
-            cmd.append(f"--compile-commands-dir={str(compile_commands_dir)}")
-        # Quiet down noisy diagnostics; still available on stderr if --verbose.
-        cmd.append("--log=error")
-
         self.proc = subprocess.Popen(
-            cmd,
+            list(server_cmd),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -212,7 +264,7 @@ class LspClient:
             line = raw.decode("utf-8", errors="replace").rstrip("\n")
             self._stderr_lines.put(line)
             if self.verbose:
-                eprint(f"[clangd] {line}")
+                eprint(f"[{self.server_label}] {line}")
 
     def _read_loop(self) -> None:
         assert self.proc.stdout is not None
@@ -309,7 +361,7 @@ class LspClient:
                 "callHierarchy": {},
             },
             "general": {"positionEncodings": ["utf-8", "utf-16"]},
-            # clangd extension (older versions)
+            # clangd extension (older versions); other servers should ignore it.
             "offsetEncoding": ["utf-8", "utf-16"],
         }
         params: JSON = {
@@ -670,17 +722,40 @@ def find_default_compile_commands_dir(workspace: Path) -> Optional[Path]:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Direct clangd LSP CLI for definitions, references, call sites, summaries, and renames."
+        description="Direct stdio-LSP CLI for definitions, references, call sites, summaries, and renames."
     )
-    p.add_argument("--clangd", default="clangd", help="clangd executable (default: clangd)")
+    p.add_argument(
+        "--server",
+        choices=SERVER_PRESETS,
+        default="clangd",
+        help="LSP server preset (default: clangd)",
+    )
+    p.add_argument(
+        "--server-bin",
+        default=None,
+        help="Override executable for the selected --server preset",
+    )
+    p.add_argument(
+        "--server-command",
+        default=None,
+        help="Full LSP server command as a shell-style string (overrides --server preset)",
+    )
+    p.add_argument(
+        "--server-arg",
+        action="append",
+        default=[],
+        help="Extra argument appended to the server command (repeatable)",
+    )
+    # Backward-compat alias for existing local usage. Equivalent to --server clangd --server-bin <value>.
+    p.add_argument("--clangd", default=None, help=argparse.SUPPRESS)
     p.add_argument("--workspace", default=None, help="Workspace root (default: auto-detect via .git)")
     p.add_argument(
         "--compile-commands-dir",
         default=None,
-        help="Directory containing compile_commands.json (default: build/ if present)",
+        help="Directory containing compile_commands.json (clangd preset only; default: build/ if present)",
     )
     p.add_argument("--timeout", type=float, default=10.0, help="Per-request timeout in seconds")
-    p.add_argument("--verbose", action="store_true", help="Print clangd stderr and sent requests")
+    p.add_argument("--verbose", action="store_true", help="Print server stderr and sent requests")
 
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -983,23 +1058,45 @@ def main(argv: Optional[List[str]] = None) -> int:
     cwd = Path.cwd()
     workspace = Path(args.workspace).resolve() if args.workspace else find_default_workspace(cwd)
 
-    compile_commands_dir: Optional[Path]
-    if args.compile_commands_dir:
-        compile_commands_dir = Path(args.compile_commands_dir)
-        if not compile_commands_dir.is_absolute():
-            compile_commands_dir = (workspace / compile_commands_dir).resolve()
-    else:
-        compile_commands_dir = find_default_compile_commands_dir(workspace)
+    if args.clangd and args.server_bin:
+        parser.error("Use either --server-bin or --clangd, not both")
 
-    if compile_commands_dir is not None and not (compile_commands_dir / "compile_commands.json").exists():
-        parser.error(f"compile_commands.json not found in {compile_commands_dir}")
+    server_preset = args.server
+    server_bin = args.server_bin or args.clangd
+
+    compile_commands_dir: Optional[Path] = None
+    if server_preset == "clangd" and not args.server_command:
+        if args.compile_commands_dir:
+            compile_commands_dir = Path(args.compile_commands_dir)
+            if not compile_commands_dir.is_absolute():
+                compile_commands_dir = (workspace / compile_commands_dir).resolve()
+        else:
+            compile_commands_dir = find_default_compile_commands_dir(workspace)
+
+        if compile_commands_dir is not None and not (compile_commands_dir / "compile_commands.json").exists():
+            parser.error(f"compile_commands.json not found in {compile_commands_dir}")
+
+    if args.server_command:
+        server_cmd = shlex.split(args.server_command)
+        if not server_cmd:
+            parser.error("--server-command produced an empty command")
+        server_cmd.extend(args.server_arg)
+        server_label = Path(server_cmd[0]).name
+    else:
+        server_cmd = build_server_command_from_preset(
+            server=server_preset,
+            server_bin_override=server_bin,
+            extra_args=args.server_arg,
+            compile_commands_dir=compile_commands_dir,
+        )
+        server_label = server_preset
 
     client = LspClient(
-        clangd_cmd=args.clangd,
+        server_cmd=server_cmd,
         workspace=workspace,
-        compile_commands_dir=compile_commands_dir,
         timeout=args.timeout,
         verbose=args.verbose,
+        server_label=server_label,
     )
     try:
         if args.command == "definition":

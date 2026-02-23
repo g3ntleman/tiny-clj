@@ -88,9 +88,15 @@ static ID make_thunk_body_ast_call(ID fn_obj) {
   return call ? call : NULL;
 }
 
+bool builtin_native_fn_needs_eval_state(BuiltinFn fn);
+
+static inline uint8_t native_cfunc_flags(BuiltinFn fn) {
+  return builtin_native_fn_needs_eval_state(fn) ? CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE : 0u;
+}
+
 static inline ID cached_named_func(BuiltinFn fn, CljSymbol *name_sym, ID *slot) {
   if (!*slot) {
-    *slot = make_named_func(fn, name_sym);
+    *slot = make_named_func_with_flags(fn, name_sym, native_cfunc_flags(fn));
   }
   return *slot;
 }
@@ -6137,6 +6143,27 @@ void builtin_set_eval_state(EvalState *st) {
   g_current_eval_state = st;
 }
 
+bool builtin_native_fn_needs_eval_state(BuiltinFn fn) {
+  return fn == native_map_thunk_executor ||
+         fn == native_mapcat_thunk_executor ||
+         fn == native_filter ||
+         fn == native_some ||
+         fn == native_reduce ||
+         fn == native_group_by ||
+         fn == native_update ||
+         fn == native_source ||
+         fn == native_repl_dir ||
+         fn == native_get_thread_bindings ||
+         fn == native_meta ||
+         fn == native_get_macro ||
+         fn == native_apply ||
+         fn == native_load_file ||
+         fn == native_require ||
+         fn == native_eval ||
+         fn == native_read_string ||
+         fn == native_keyword;
+}
+
 ID native_eval(ID *args, unsigned int argc) {
   if (!validate_builtin_args(argc, 1, "eval"))
     return NULL;
@@ -7562,7 +7589,7 @@ static void register_builtin(const char *cname, BuiltinFn func) {
   } else {
     symbol = intern_symbol_global(symbol_name);
   }
-  ID func_obj = make_named_func(func, intern_symbol_global(cname));
+  ID func_obj = make_named_func_with_flags(func, intern_symbol_global(cname), native_cfunc_flags(func));
   if (symbol && func_obj) {
     ns_define(target_ns, symbol, func_obj);
 

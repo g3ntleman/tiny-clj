@@ -30,6 +30,7 @@ void builtins_reset_cached_funcs(void);
 // Native function lookup for stubs
 // Returns NULL if not found
 BuiltinFn native_function_lookup(CljSymbol *symbol);
+bool builtin_native_fn_needs_eval_state(BuiltinFn fn);
 
 // Variadic functions (Phase 1)
 ID native_str(ID *args, unsigned int argc);

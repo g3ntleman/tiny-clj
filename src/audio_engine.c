@@ -353,7 +353,8 @@ void audio_engine_init(int voice_count) {
     audio_cmd_queue_init(&g_audio_engine.cmd_queue);
     atomic_store_explicit(&g_audio_engine.finished_write, 0, memory_order_relaxed);
     atomic_store_explicit(&g_audio_engine.finished_read, 0, memory_order_relaxed);
-    g_audio_engine.finished_dispatch_fn = make_named_func(audio_dispatch_finished_native, NULL);
+    g_audio_engine.finished_dispatch_fn =
+        make_named_func_with_flags(audio_dispatch_finished_native, NULL, CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE);
     audio_backend_init(voice_count);
 }
 

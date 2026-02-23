@@ -101,7 +101,8 @@ static inline void gpio_ensure_initialized(void) {
 
     // Create cached drain function object once.
     SYM_GPIO_DRAIN = intern_symbol_global("tiny-clj.gpio/drain-events");
-    g_gpio_drain_fn_obj = make_named_func(native_gpio_drain_events, SYM_GPIO_DRAIN);
+    g_gpio_drain_fn_obj =
+        make_named_func_with_flags(native_gpio_drain_events, SYM_GPIO_DRAIN, CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE);
 }
 
 static inline void gpio_pwm_bindings_init(void) {

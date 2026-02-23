@@ -15,7 +15,12 @@ typedef struct {
     CljObject base;
     ID (*fn)(ID*args, unsigned int argc);
     struct CljSymbol *name_sym;
+    uint8_t flags;
 } CljCFunc;
+
+enum {
+    CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE = 1u << 0
+};
 
 typedef struct {
     CljObject base;
@@ -31,6 +36,7 @@ typedef struct {
 CljFunction* make_function(ID *params, int param_count, ID body, CljPersistentVector *env_stack, struct CljSymbol *name_sym, struct CljNamespace *ns);
 
 // Native function constructor (CljCFunc)
+ID make_named_func_with_flags(BuiltinFn fn, struct CljSymbol *name_sym, uint8_t flags);
 ID make_named_func(BuiltinFn fn, struct CljSymbol *name_sym);
 
 
