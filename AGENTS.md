@@ -1,13 +1,13 @@
 # AGENTS.md
 
-## LSP CLI (clangd) für Symbolarbeit
+## LSP CLI (clangd) for Symbol Work
 
-Für Symbolsuche und Umbenennungen in diesem Repo zuerst das direkte LSP-Tool prüfen, nicht nur `grep`.
+For symbol lookup and renames in this repo, check the direct LSP tool first, not just `grep`.
 
 - Tool: `scripts/lsp_cli.py`
-- Zweck: schnelle `definition`, `references`, `callsites`, `summary`, `rename`
-- Voraussetzung: `clangd` im `PATH` und `build/compile_commands.json`
-- Hilfe/Usage: `scripts/lsp_cli.py --help` sowie `scripts/lsp_cli.py <command> --help`
+- Purpose: fast `definition`, `references`, `callsites`, `summary`, `rename`
+- Requirement: `clangd` in `PATH` and `build/compile_commands.json`
+- Help/usage: `scripts/lsp_cli.py --help` and `scripts/lsp_cli.py <command> --help`
 
 Beispiele:
 
@@ -19,14 +19,20 @@ scripts/lsp_cli.py references src/repl_history_backend.c:279:6 --include-declara
 scripts/lsp_cli.py rename src/repl_history_backend.c:279:6 neuer_name
 ```
 
-Hinweis: `callsites`, `incoming-calls` und `outgoing-calls` nutzen nach Möglichkeit LSP Call Hierarchy; je nach `clangd`-Version kann das teilweise fehlen.
+Note: `callsites`, `incoming-calls`, and `outgoing-calls` use LSP Call Hierarchy when available; depending on the `clangd` version this may be partially unavailable.
 
-Keywords für Auffindbarkeit: `lsp`, `clangd`, `definition`, `references`, `callsites`, `summary`, `rename`, `grep`.
+Keywords for discoverability: `lsp`, `clangd`, `definition`, `references`, `callsites`, `summary`, `rename`, `grep`.
 
-## Memory Policy (verbindlich)
+## Memory Policy (mandatory)
 
-Alle Funktionen sollen sich an `MEMORY_POLICY.md` halten.
+All functions must follow `MEMORY_POLICY.md`.
 
-- Public/API-/`native_*`-/`eval_*`-Funktionen: `MEMORY_POLICY.md` direkt einhalten.
-- Interne Ausnahmen nur explizit als `make_*` oder `*_owned` (klarer Owned-Contract).
-- Keine impliziten/branchabhängigen Ownership-Contracts.
+- Public/API/`native_*`/`eval_*` functions: follow `MEMORY_POLICY.md` directly.
+- Internal exceptions only if explicitly marked as `make_*` or `*_owned` (clear owned contract).
+- No implicit or branch-dependent ownership contracts.
+
+## Debugging (mandatory)
+
+Capture bug hypotheses as regression unit tests first, before (or alongside) the fix.
+
+- Formulate the hypothesis so the test isolates the suspected mechanism (minimal repro, not just a large end-to-end test).
