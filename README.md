@@ -138,6 +138,15 @@ python -m esptool --chip esp32 -b 460800 --before default_reset --after hard_res
 ./build/tiny-clj-repl -f program.clj
 ```
 
+### Host Viewer Font
+
+The vector host viewer uses a monospace single-stroke "Star-Wars arcade" font
+for uppercase letters and digits (`A-Z`, `0-9`). The glyph data is derived from
+the open-source `arcadefont` project (MIT license):
+
+- https://github.com/coolbutuseless/arcadefont
+- https://raw.githubusercontent.com/coolbutuseless/arcadefont/master/man/figures/README-starwars-1.png
+
 ### Build Information
 
 Build information (type, date, compiler, enabled features) is automatically displayed:

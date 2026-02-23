@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 3.10)
 project(tiny-clj)
+include(CheckLanguage)
+check_language(OBJC)
+if(CMAKE_OBJC_COMPILER)
+    enable_language(OBJC)
+endif()
+
+option(TINYCLJ_HOST_VIEWER "Build optional MiniFB host viewer" OFF)
 
 # Generate compile_commands.json for IDE (Go to Definition, IntelliSense)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -217,6 +224,7 @@ list(APPEND SOURCES
     src/builtins_audio.c
     src/audio_backend_host.c
     src/repl_history_backend.c
+    src/vector_scene_graph.c
     src/source_resolver.c
 
 )
@@ -524,6 +532,7 @@ add_executable(unit-tests
     src/tests/test_mdns_resolver.c
     src/tests/test_mdns_bindings.c
     src/tests/test_platform_mdns.c
+    src/tests/test_vector_scene_graph.c
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
@@ -855,6 +864,39 @@ set_tests_properties(repl-history-multiple PROPERTIES
 # Subjective-C Unity suite (C tests)
 add_test(NAME unit-tests COMMAND $<TARGET_FILE:unit-tests>)
 set_tests_properties(unit-tests PROPERTIES LABELS "unit")
+
+if(TINYCLJ_HOST_VIEWER)
+    include(FetchContent)
+    # Force macOS MiniFB backend without Metal. Some hosts (VMs/older GPUs)
+    # report no Metal support and crash during MTK initialization.
+    if(APPLE)
+        set(MINIFB_USE_METAL_API OFF CACHE BOOL "" FORCE)
+        set(USE_METAL_API OFF CACHE BOOL "" FORCE)
+    endif()
+    FetchContent_Declare(
+        minifb
+        GIT_REPOSITORY https://github.com/emoon/minifb.git
+        GIT_TAG master
+    )
+    FetchContent_MakeAvailable(minifb)
+
+    if(NOT TARGET minifb)
+        message(FATAL_ERROR "MiniFB target 'minifb' was not created by dependency build.")
+    endif()
+
+    add_executable(vector-host-viewer
+        src/host_viewer_minifb.c
+        src/vector_scene_graph.c
+    )
+    if(APPLE)
+        target_sources(vector-host-viewer PRIVATE src/host_viewer_macos_menu.m)
+    endif()
+    target_include_directories(vector-host-viewer PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+    )
+    target_compile_definitions(vector-host-viewer PRIVATE TINYCLJ_WITH_MINIFB=1)
+    target_link_libraries(vector-host-viewer PRIVATE minifb m)
+endif()
 
 # Seq Benchmark (REMOVED - File no longer exists)
 # Use run-tests for sequence testing instead
