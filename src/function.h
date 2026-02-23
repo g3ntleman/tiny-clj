@@ -15,11 +15,11 @@ typedef struct {
     CljObject base;
     ID (*fn)(ID*args, unsigned int argc);
     struct CljSymbol *name_sym;
-    uint8_t flags;
 } CljCFunc;
 
 enum {
-    CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE = 1u << 0
+    /* Stored in CljObject.base.flags for CLJ_FUNC objects (type-specific flag usage). */
+    CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE = 0x10u
 };
 
 typedef struct {

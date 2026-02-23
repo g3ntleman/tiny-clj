@@ -261,7 +261,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
     CljCFunc *native_func = (CljCFunc *)fn;
     CLJ_ASSERT(native_func && native_func->fn);
     ID result;
-    if (UNLIKELY((native_func->flags & CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE) != 0u)) {
+    if (UNLIKELY((native_func->base.flags & CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE) != 0u)) {
       extern void builtin_set_eval_state(EvalState * st);
       builtin_set_eval_state(st);
       result = native_func->fn(args, argc);

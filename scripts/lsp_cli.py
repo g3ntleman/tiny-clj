@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Direct LSP CLI for fast symbol work over stdio LSP servers (clangd, TS, Kotlin).
+"""Direct LSP CLI for fast symbol work over stdio LSP servers (clangd, TS, Kotlin, Pyright).
 
 Examples:
   scripts/lsp_cli.py definition src/builtins.c:10:5
   scripts/lsp_cli.py --server typescript definition web/src/app.ts:42:7
   scripts/lsp_cli.py --server kotlin summary app/src/main/kotlin/Foo.kt:12:9
+  scripts/lsp_cli.py --server pyright definition tools/foo.py:10:3
   scripts/lsp_cli.py summary src/builtins.c:10:5
   scripts/lsp_cli.py references src/builtins.c:10:5
   scripts/lsp_cli.py callsites src/builtins.c:10:5
@@ -30,7 +31,7 @@ from urllib.parse import unquote, urlparse
 
 
 JSON = Dict[str, Any]
-SERVER_PRESETS = ("clangd", "typescript", "vtsls", "kotlin")
+SERVER_PRESETS = ("clangd", "typescript", "vtsls", "kotlin", "pyright")
 
 
 def eprint(*args: Any) -> None:
@@ -171,6 +172,8 @@ def default_server_bin(server: str) -> str:
         return "vtsls"
     if server == "kotlin":
         return "kotlin-language-server"
+    if server == "pyright":
+        return "pyright-langserver"
     raise ValueError(f"Unknown server preset: {server}")
 
 
@@ -182,7 +185,7 @@ def default_server_args(server: str, compile_commands_dir: Optional[Path]) -> Li
         # Quiet down noisy diagnostics; still available on stderr if --verbose.
         args.append("--log=error")
         return args
-    if server in {"typescript", "vtsls"}:
+    if server in {"typescript", "vtsls", "pyright"}:
         return ["--stdio"]
     if server == "kotlin":
         return []
