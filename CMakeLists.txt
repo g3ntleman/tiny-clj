@@ -225,6 +225,7 @@ list(APPEND SOURCES
     src/audio_backend_host.c
     src/repl_history_backend.c
     src/vector_scene_graph.c
+    src/vector_scene_graph_records.c
     src/source_resolver.c
 
 )
@@ -533,6 +534,7 @@ add_executable(unit-tests
     src/tests/test_mdns_bindings.c
     src/tests/test_platform_mdns.c
     src/tests/test_vector_scene_graph.c
+    src/tests/test_tiny_drw_svg.c
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
@@ -886,7 +888,8 @@ if(TINYCLJ_HOST_VIEWER)
 
     add_executable(vector-host-viewer
         src/host_viewer_minifb.c
-        src/vector_scene_graph.c
+        src/platform_macos.c
+        ${SOURCES}
     )
     if(APPLE)
         target_sources(vector-host-viewer PRIVATE src/host_viewer_macos_menu.m)
@@ -895,7 +898,13 @@ if(TINYCLJ_HOST_VIEWER)
         ${CMAKE_SOURCE_DIR}/src
     )
     target_compile_definitions(vector-host-viewer PRIVATE TINYCLJ_WITH_MINIFB=1)
-    target_link_libraries(vector-host-viewer PRIVATE minifb m)
+    target_link_libraries(vector-host-viewer PRIVATE minifb m subjective-c tiny-db)
+    if(APPLE)
+        target_link_libraries(vector-host-viewer PRIVATE "-framework CoreFoundation")
+        target_link_libraries(vector-host-viewer PRIVATE "-framework CoreAudio" "-framework AudioUnit")
+        target_link_directories(vector-host-viewer PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
+        target_link_libraries(vector-host-viewer PRIVATE system_dnssd)
+    endif()
 endif()
 
 # Seq Benchmark (REMOVED - File no longer exists)

@@ -1,5 +1,6 @@
 #include "tests_common.h"
 #include "../vector_scene_graph.h"
+#include "../vector_scene_graph_records.h"
 
 #define TEST_W 64
 #define TEST_H 48
@@ -94,6 +95,155 @@ TEST(test_vector_scene_graph_nested_group_transform_affects_child_line) {
 
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)5 * TEST_W + 7]);
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)5 * TEST_W + 17]);
+}
+
+TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID scene = eval_string(
+        "(do "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565]) "
+        "  (->Scene "
+        "    (->Group 100 nil nil true "
+        "             [(->Line 101 nil (->Style 65535 1 true false 0) true 4 6 18 6)]) "
+        "    nil nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 4]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 18]);
+}
+
+TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID scene = eval_string(
+        "(do "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565]) "
+        "  (->Scene "
+        "    (->Group 200 (->Transform 7 5 1 1 0) nil true "
+        "             [(->Line 201 nil (->Style 65535 1 true false 0) true 0 0 10 0)]) "
+        "    nil nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)5 * TEST_W + 7]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)5 * TEST_W + 17]);
+}
+
+TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID scene = eval_string(
+        "(do "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565]) "
+        "  (->Scene "
+        "    (->Group 300 nil nil true "
+        "             [(->Line 301 nil (->Style 65535 1 true false 0) true 0 10 63 10)]) "
+        "    [20 8 10 6] "
+        "    63488))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x1234u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+
+    /* Shared clip/erase rect: inside area gets erase color first. */
+    TEST_ASSERT_EQUAL_HEX16(0xf800u, pixels[(size_t)9 * TEST_W + 22]);
+    /* Clip-Rect begrenzt die Linie */
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 10]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 24]);
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 35]);
+    /* Outside shared clip/erase area remains untouched. */
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)2 * TEST_W + 2]);
+}
+
+TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID scene = eval_string(
+        "(do "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px]) "
+        "  (->FrameScene "
+        "    (->Line 401 nil (->Style 65535 1 true false 0) true 2 3 8 3) "
+        "    [1 2 10 12] "
+        "    3 true true 0 1))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    VgRenderSlot slot;
+    TEST_ASSERT_TRUE(vg_decode_frame_slot_record(scene, &slot));
+    TEST_ASSERT_EQUAL_INT(1, slot.clip_rect.x);
+    TEST_ASSERT_EQUAL_INT(2, slot.clip_rect.y);
+    TEST_ASSERT_EQUAL_INT(10, slot.clip_rect.w);
+    TEST_ASSERT_EQUAL_INT(12, slot.clip_rect.h);
+    TEST_ASSERT_EQUAL_INT(3, slot.z);
+    TEST_ASSERT_TRUE(slot.visible);
+    TEST_ASSERT_TRUE(slot.opaque);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, slot.clear_rgb565);
+    TEST_ASSERT_EQUAL_INT(1, slot.guard_px);
+    TEST_ASSERT_NOT_NULL(slot.root);
+}
+
+TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID scene = eval_string(
+        "(do "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px]) "
+        "  (->FrameScene "
+        "    (->Line 501 nil (->Style 65535 1 true false 0) true 0 10 63 10) "
+        "    [20 8 10 6] "
+        "    0 true true 0 0))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x1234u);
+
+    VgRenderSlotState state = {0};
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u));
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 10]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 24]);
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 35]);
+
+    TEST_ASSERT_FALSE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u));
 }
 
 TEST(test_vector_scene_graph_fixed_transform_compose_apply_px_scale_translate_exact) {
@@ -196,6 +346,82 @@ TEST(test_vector_scene_graph_deterministic_frame_checksum_for_mixed_scene) {
     uint32_t checksum_a = vg_framebuffer_checksum(&fb_a);
     uint32_t checksum_b = vg_framebuffer_checksum(&fb_b);
     TEST_ASSERT_EQUAL_HEX32(checksum_a, checksum_b);
+}
+
+TEST(test_vector_scene_graph_clipped_render_limits_written_pixels) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+
+    VgNode line = {
+        .id = 26,
+        .type = VG_NODE_LINE,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.line = {.x1 = 0, .y1 = 10, .x2 = 63, .y2 = 10}
+    };
+
+    VgClipRect clip = {.x = 20, .y = 8, .w = 10, .h = 6};
+    vg_render_scene_clipped(&line, &fb, clip);
+
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 10]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 24]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 35]);
+}
+
+TEST(test_vector_scene_graph_render_slot_if_changed_skips_unchanged_and_clears_moved_union) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x1234u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+
+    VgNode line = {
+        .id = 27,
+        .type = VG_NODE_LINE,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.line = {.x1 = 2, .y1 = 2, .x2 = 8, .y2 = 2}
+    };
+
+    VgRenderSlot slot = {
+        .root = &line,
+        .clip_rect = {.x = 0, .y = 0, .w = 16, .h = 16},
+        .z = 0,
+        .visible = true,
+        .opaque = true,
+        .clear_rgb565 = 0x0000u,
+        .guard_px = 0
+    };
+    VgRenderSlotState state = {0};
+
+    TEST_ASSERT_TRUE(vg_render_slot_if_changed(&slot, &state, &fb, 1u));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)2 * TEST_W + 4]);
+    uint32_t after_first = vg_framebuffer_checksum(&fb);
+
+    TEST_ASSERT_FALSE(vg_render_slot_if_changed(&slot, &state, &fb, 1u));
+    uint32_t after_second = vg_framebuffer_checksum(&fb);
+    TEST_ASSERT_EQUAL_HEX32(after_first, after_second);
+
+    line.has_transform = true;
+    line.transform = vg_transform_identity();
+    line.transform.tx = 20.0f;
+    slot.clip_rect.x = 20;
+    slot.clip_rect.w = 16;
+
+    TEST_ASSERT_TRUE(vg_render_slot_if_changed(&slot, &state, &fb, 2u));
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)2 * TEST_W + 4]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)2 * TEST_W + 24]);
 }
 
 TEST(test_vector_scene_graph_thick_line_changes_coverage) {

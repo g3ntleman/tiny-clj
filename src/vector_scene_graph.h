@@ -111,6 +111,33 @@ typedef struct {
     size_t pixel_count;
 } VgFrameBuffer;
 
+typedef struct {
+    int16_t x;
+    int16_t y;
+    int16_t w;
+    int16_t h;
+} VgClipRect;
+
+typedef struct {
+    const VgNode *root;
+    VgClipRect clip_rect;
+    int16_t z;
+    bool visible;
+    bool opaque;
+    uint16_t clear_rgb565;
+    uint8_t guard_px;
+} VgRenderSlot;
+
+typedef struct {
+    bool initialized;
+    uint32_t snapshot_id;
+    VgClipRect last_clip_rect;
+    bool last_visible;
+    bool last_opaque;
+    uint16_t last_clear_rgb565;
+    uint8_t last_guard_px;
+} VgRenderSlotState;
+
 typedef enum {
     VG_PATCH_TRANSFORM = 1,
     VG_PATCH_TEXT = 2,
@@ -144,6 +171,11 @@ uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb);
 bool vg_framebuffer_dump_ppm(const VgFrameBuffer *fb, const char *path);
 
 void vg_render_scene(const VgNode *root, VgFrameBuffer *fb);
+void vg_render_scene_clipped(const VgNode *root, VgFrameBuffer *fb, VgClipRect clip_rect);
+bool vg_render_slot_if_changed(const VgRenderSlot *slot,
+                               VgRenderSlotState *state,
+                               VgFrameBuffer *fb,
+                               uint32_t snapshot_id);
 bool vg_scene_apply_patch(VgNode *root, const VgPatch *patch);
 
 #endif

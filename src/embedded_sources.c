@@ -62,6 +62,14 @@ static const char tiny_clj_net_mdns_code[] =
 #include "tiny-clj.net.mdns.clj"
     ;
 
+static const char tiny_drw_scene_code[] =
+#include "tiny-drw.scene.clj"
+    ;
+
+static const char tiny_drw_svg_code[] =
+#include "tiny-drw.svg.clj"
+    ;
+
 static const char tiny_db_rrd_code[] =
 #include "tiny-db.rrd.clj"
     ;
@@ -93,6 +101,8 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-snd/runtime.clj", tiny_snd_runtime_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net.clj", tiny_clj_net_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net/mdns.clj", tiny_clj_net_mdns_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-drw/scene.clj", tiny_drw_scene_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-drw/svg.clj", tiny_drw_svg_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/kv.clj", tiny_db_kv_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/rrd.clj", tiny_db_rrd_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/rrd-classic.clj", tiny_db_rrd_classic_code),

@@ -2,6 +2,7 @@
 #include "value.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,85 @@ typedef struct {
     float m12;
 } VgMatrix2D;
 
+typedef struct {
+    bool enabled;
+    int x0;
+    int y0;
+    int x1;
+    int y1;
+} VgActiveClip;
+
+static VgActiveClip g_active_clip = {false, 0, 0, 0, 0};
+
+static bool clip_rect_is_empty(VgClipRect r) {
+    return r.w <= 0 || r.h <= 0;
+}
+
+static bool clip_rect_equal(VgClipRect a, VgClipRect b) {
+    return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
+}
+
+static VgClipRect clip_rect_expand(VgClipRect r, uint8_t guard_px) {
+    if (clip_rect_is_empty(r) || guard_px == 0) {
+        return r;
+    }
+    int gx = (int)guard_px;
+    int x0 = (int)r.x - gx;
+    int y0 = (int)r.y - gx;
+    int x1 = (int)r.x + (int)r.w + gx;
+    int y1 = (int)r.y + (int)r.h + gx;
+    if (x0 < INT16_MIN) x0 = INT16_MIN;
+    if (y0 < INT16_MIN) y0 = INT16_MIN;
+    if (x1 > INT16_MAX) x1 = INT16_MAX;
+    if (y1 > INT16_MAX) y1 = INT16_MAX;
+    VgClipRect out;
+    out.x = (int16_t)x0;
+    out.y = (int16_t)y0;
+    out.w = (int16_t)(x1 - x0);
+    out.h = (int16_t)(y1 - y0);
+    return out;
+}
+
+static VgClipRect clip_rect_union(VgClipRect a, VgClipRect b) {
+    if (clip_rect_is_empty(a)) return b;
+    if (clip_rect_is_empty(b)) return a;
+    int ax1 = (int)a.x + (int)a.w;
+    int ay1 = (int)a.y + (int)a.h;
+    int bx1 = (int)b.x + (int)b.w;
+    int by1 = (int)b.y + (int)b.h;
+    int x0 = ((int)a.x < (int)b.x) ? (int)a.x : (int)b.x;
+    int y0 = ((int)a.y < (int)b.y) ? (int)a.y : (int)b.y;
+    int x1 = (ax1 > bx1) ? ax1 : bx1;
+    int y1 = (ay1 > by1) ? ay1 : by1;
+    VgClipRect out;
+    out.x = (int16_t)x0;
+    out.y = (int16_t)y0;
+    out.w = (int16_t)(x1 - x0);
+    out.h = (int16_t)(y1 - y0);
+    return out;
+}
+
+static bool clip_rect_intersect_fb(VgClipRect in, const VgFrameBuffer *fb, VgClipRect *out) {
+    if (!fb || !out || clip_rect_is_empty(in)) {
+        return false;
+    }
+    int x0 = (int)in.x;
+    int y0 = (int)in.y;
+    int x1 = (int)in.x + (int)in.w;
+    int y1 = (int)in.y + (int)in.h;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > fb->width) x1 = fb->width;
+    if (y1 > fb->height) y1 = fb->height;
+    if (x1 <= x0 || y1 <= y0) {
+        return false;
+    }
+    out->x = (int16_t)x0;
+    out->y = (int16_t)y0;
+    out->w = (int16_t)(x1 - x0);
+    out->h = (int16_t)(y1 - y0);
+    return true;
+}
 static VgMatrix2D matrix_from_transform(VgTransform t) {
     float r = t.rot_deg * (float)M_PI / 180.0f;
     float c = cosf(r);
@@ -255,6 +335,12 @@ static void put_pixel(VgFrameBuffer *fb, int x, int y, uint16_t color) {
     if (x < 0 || y < 0 || x >= fb->width || y >= fb->height) {
         return;
     }
+    if (g_active_clip.enabled) {
+        if (x < g_active_clip.x0 || x >= g_active_clip.x1 ||
+            y < g_active_clip.y0 || y >= g_active_clip.y1) {
+            return;
+        }
+    }
     fb->pixels[(size_t)y * (size_t)fb->width + (size_t)x] = color;
 }
 
@@ -284,7 +370,32 @@ static uint16_t blend_rgb565(uint16_t bg, uint16_t fg, uint8_t alpha) {
 static void put_pixel_aa_bg(VgFrameBuffer *fb, int x, int y, uint16_t fg, uint16_t bg, uint8_t alpha) {
     if (!fb || !fb->pixels) return;
     if (x < 0 || y < 0 || x >= fb->width || y >= fb->height) return;
+    if (g_active_clip.enabled) {
+        if (x < g_active_clip.x0 || x >= g_active_clip.x1 ||
+            y < g_active_clip.y0 || y >= g_active_clip.y1) {
+            return;
+        }
+    }
     fb->pixels[(size_t)y * (size_t)fb->width + (size_t)x] = blend_rgb565(bg, fg, alpha);
+}
+
+static void framebuffer_clear_rect(VgFrameBuffer *fb, VgClipRect rect, uint16_t color) {
+    if (!fb || !fb->pixels || clip_rect_is_empty(rect)) {
+        return;
+    }
+    VgClipRect clipped;
+    if (!clip_rect_intersect_fb(rect, fb, &clipped)) {
+        return;
+    }
+    int x0 = clipped.x;
+    int y0 = clipped.y;
+    int x1 = clipped.x + clipped.w;
+    int y1 = clipped.y + clipped.h;
+    for (int y = y0; y < y1; y++) {
+        for (int x = x0; x < x1; x++) {
+            fb->pixels[(size_t)y * (size_t)fb->width + (size_t)x] = color;
+        }
+    }
 }
 
 static void draw_fill_rect(VgFrameBuffer *fb, int x, int y, int w, int h, uint16_t color) {
@@ -999,7 +1110,68 @@ void vg_render_scene(const VgNode *root, VgFrameBuffer *fb) {
     if (!root || !fb) {
         return;
     }
+    VgActiveClip prev_clip = g_active_clip;
+    g_active_clip.enabled = false;
     render_node(root, vg_transform_fixed_identity(), fb);
+    g_active_clip = prev_clip;
+}
+
+void vg_render_scene_clipped(const VgNode *root, VgFrameBuffer *fb, VgClipRect clip_rect) {
+    if (!root || !fb) {
+        return;
+    }
+    VgClipRect clipped;
+    if (!clip_rect_intersect_fb(clip_rect, fb, &clipped)) {
+        return;
+    }
+    VgActiveClip prev_clip = g_active_clip;
+    g_active_clip.enabled = true;
+    g_active_clip.x0 = clipped.x;
+    g_active_clip.y0 = clipped.y;
+    g_active_clip.x1 = clipped.x + clipped.w;
+    g_active_clip.y1 = clipped.y + clipped.h;
+    render_node(root, vg_transform_fixed_identity(), fb);
+    g_active_clip = prev_clip;
+}
+
+bool vg_render_slot_if_changed(const VgRenderSlot *slot,
+                               VgRenderSlotState *state,
+                               VgFrameBuffer *fb,
+                               uint32_t snapshot_id) {
+    if (!slot || !state || !fb) {
+        return false;
+    }
+    VgClipRect slot_rect = clip_rect_expand(slot->clip_rect, slot->guard_px);
+    bool props_changed = !state->initialized ||
+                         state->last_visible != slot->visible ||
+                         state->last_opaque != slot->opaque ||
+                         state->last_clear_rgb565 != slot->clear_rgb565 ||
+                         state->last_guard_px != slot->guard_px ||
+                         !clip_rect_equal(state->last_clip_rect, slot->clip_rect);
+    bool snapshot_changed = !state->initialized || state->snapshot_id != snapshot_id;
+    if (!props_changed && !snapshot_changed) {
+        return false;
+    }
+
+    VgClipRect dirty_rect = slot_rect;
+    if (state->initialized) {
+        VgClipRect prev_rect = clip_rect_expand(state->last_clip_rect, state->last_guard_px);
+        dirty_rect = clip_rect_union(prev_rect, slot_rect);
+    }
+    framebuffer_clear_rect(fb, dirty_rect, slot->clear_rgb565);
+
+    if (slot->visible && slot->root) {
+        vg_render_scene_clipped(slot->root, fb, slot_rect);
+    }
+
+    state->initialized = true;
+    state->snapshot_id = snapshot_id;
+    state->last_clip_rect = slot->clip_rect;
+    state->last_visible = slot->visible;
+    state->last_opaque = slot->opaque;
+    state->last_clear_rgb565 = slot->clear_rgb565;
+    state->last_guard_px = slot->guard_px;
+    return true;
 }
 
 static VgNode *find_node_by_id(VgNode *node, uint32_t id) {

@@ -40,3 +40,9 @@ All functions must follow `MEMORY_POLICY.md`.
 Capture bug hypotheses as regression unit tests first, before (or alongside) the fix.
 
 - Formulate the hypothesis so the test isolates the suspected mechanism (minimal repro, not just a large end-to-end test).
+
+## Commit Messages
+
+Do not add this trailer to commits:
+
+`Co-authored-by: Cursor <cursoragent@cursor.com>`
