@@ -13,6 +13,8 @@ Build a reduced SVG-like 2D graphics engine with a strict PoC-first delivery pat
 
 - Record-first scene nodes (type is implicit by record, no `:type` tag dispatch in game code)
 - Group-based scene graph with inherited transforms
+- Snapshot-based rendering directly from tiny-clj/subjective-c records (no mandatory patching/canonical C scene cache for PoC)
+- Multiple independently updatable scene slots (`game`, `score`, `deco`) with clip rectangles
 - Deterministic rendering pipeline validated first on macOS host simulator
 - Deterministic immediate rendering on SPI displays (ST7789 class) after host PoC is stable
 - Thick-stroke primitives suitable for game, menu, and animated vector title screens
@@ -36,14 +38,15 @@ so primitive generation/rasterization bugs are debuggable on host.
 3. Required primitives work: `Group`, `Line`, `Polyline`, `Rect`, `Tri`, `VText`.
 4. Thick stroke (`width >= 1`) looks stable and readable on 320x240.
 5. World movement is achievable by updating group transform fields only (e.g. `world.t.tx`).
-6. SPI backend supports clipping + window/burst writes without requiring a full-screen redraw.
-7. Stable `id`-based patch updates work for transform/text/visibility/style changes.
+6. Multiple scene slots with `clip-rect` can be rendered independently and unchanged slots are skipped.
+7. SPI backend supports slot-scoped clipping + window/burst writes without requiring a full-screen redraw.
+8. Optional-later delta paths (id-based patches and/or pointer-identity subtree reuse) are compatible with the same render core.
 
 ## Delivery Strategy (Stepwise)
 
 Phase A (PoC on host):
 
-- Build and validate scene model, transforms, rasterization, thick lines, and patch flow on macOS.
+- Build and validate scene model, transforms, rasterization, thick lines, and snapshot-slot render flow on macOS.
 - Use deterministic frame dumps/checksums as regression gates.
 
 Phase B (embedded integration):
@@ -53,7 +56,7 @@ Phase B (embedded integration):
 
 ## Milestone 0: Scene Contract + Record Schema
 
-Status: TODO
+Status: PARTIAL (C scene structs exist; tiny-clj record schema + slot-index cache still TODO)
 
 Tasks:
 
@@ -73,15 +76,21 @@ Tasks:
   - `style` (at least stroke color + width)
   - `visible` (optional bool)
 - Define default values and validation rules.
-- Define canonicalization step from tiny-clj records into compact C render data.
+- Define nil/optional decoding contract (record-friendly direct render path):
+  - any field value may be `nil`
+  - C decoders must apply typed defaults (`0`, `1`, `true`, etc.) and inheritance semantics where applicable
+  - `nil` and explicit `false` must remain semantically distinct
+- Define direct-render record contract for C (slot-indexed field access; no keyword lookup in render hot path).
+- Keep canonicalization/compiled C scene cache optional for later optimization.
 
 Done when:
 
-- Record schema and canonicalization contract are documented and testable.
+- Record schema and direct-render access contract are documented and testable.
+- Nil/default/inheritance decoding behavior is documented and covered by schema-level tests.
 
 ## Milestone 1: macOS Host Simulator Skeleton (PoC Gate 1)
 
-Status: TODO
+Status: DONE
 
 Tasks:
 
@@ -91,7 +100,7 @@ Tasks:
 used by ESP32 (do not bypass primitive rasterizers with a separate host-only drawing path).
 - Add deterministic frame export (PPM or raw dump) for golden testing.
 - Add frame checksum utility to compare expected vs actual output.
-- Ensure simulator consumes the same canonical scene data format as embedded.
+- Ensure simulator and embedded paths share the same render core and record-slot scene contract.
 
 Done when:
 
@@ -99,7 +108,7 @@ Done when:
 
 ## Milestone 2: Transform System (SVG-like behavior)
 
-Status: TODO
+Status: DONE
 
 Tasks:
 
@@ -122,7 +131,7 @@ Done when:
 
 ## Milestone 3: Primitive Rasterizers (Baseline Stroke = 1)
 
-Status: TODO
+Status: DONE
 
 Tasks:
 
@@ -142,7 +151,7 @@ Done when:
 
 ## Milestone 4: Thick Line Engine (Required)
 
-Status: TODO
+Status: PARTIAL (functional and used by host demo; explicit cap/join semantics + perf gates still TODO)
 
 Tasks:
 
@@ -163,32 +172,43 @@ Done when:
 
 - Thick lines are visually stable in simulator output and within host frame-time budget.
 
-## Milestone 5: Record-Friendly Diff/Patch Path (PoC Gate 2)
+## Milestone 5: Snapshot Slot Update Path (PoC Gate 2, Patch Optional)
 
-Status: TODO
+Status: TODO (architecture agreed; implementation pending, existing single-patch path remains optional support code)
 
 Tasks:
 
-- Enforce stable `id` per node.
-- Define minimal patch operations:
-  - transform changed
-  - text changed
-  - visibility changed
-  - style (`stroke`, `width`) changed
-- Implement low-allocation patch apply path in host runtime.
-- Add guardrails:
-  - max patches per frame
-  - fallback behavior on overflow
-- Validate scrolling by patching one group transform (`world.t.tx`) only.
-- Validate parallax via second group transform (`bg.t.tx = world.t.tx * k`).
+- Define `FrameScene`/render-slot record contract:
+  - `root`
+  - `clip-rect`
+  - `z`
+  - `visible?`
+  - `opaque?` / clear policy
+  - optional guard pixels for conservative clipping
+- Define snapshot publication protocol for render thread consumption:
+  - atomically replace one `FrameScene` descriptor (or equivalent) without in-place mutation of the active snapshot
+- Render multiple explicit scene roots/atoms in host runtime (e.g. `game`, `score`, `deco`).
+- In render thread, track previous slot snapshot and only clear/render/send slot region when the slot snapshot or slot properties change.
+- Render only the affected slot region (`clip-rect`), not the full framebuffer.
+- If a slot moves, treat dirty region as `union(old_clip_rect, new_clip_rect)`.
+- Validate non-overlapping slot convention with conservative bounds (stroke width / text fringe guard).
+- Validate scrolling/parallax using separate scene slots or group transforms within a slot.
+- Current state (optional support path): `vg_scene_apply_patch()` exists for single `id`-based patch application.
+- Optional later explicit patch path (not required for PoC):
+  - define minimal patch operations (`transform`, `text`, `visibility`, `style`)
+  - batch apply, guardrails, overflow behavior
+- Optional later optimization path (not required for PoC):
+  - for persistent tiny-clj/subjective-c render records, use pointer-identity diffing
+    (`old_subtree_ptr == new_subtree_ptr`) to skip unchanged subtrees / reuse cached decode
+  - treat this as a complementary delta strategy to explicit patch vectors, not a replacement mandate
 
 Done when:
 
-- Common animation and scrolling updates are expressible as small `id`-based patches.
+- Multiple scene slots render correctly on host, and unchanged slots are skipped without visual artifacts.
 
 ## Milestone 6: VText (Vector/Stroke Font)
 
-Status: TODO
+Status: DONE (PoC/host path)
 
 Tasks:
 
@@ -197,6 +217,7 @@ Tasks:
 - Support `scale`, `rot`, and inherited parent transforms.
 - Support style-based stroke color and width.
 - Validate animated/rotated title text ("flying text") use case in simulator.
+- Current state: arcadefont-based glyphs are integrated with host-viewer visual regression coverage.
 
 Done when:
 
@@ -210,11 +231,20 @@ Tasks:
 
 - Integrate validated raster output with SPI transport model:
   - set window + burst writes
+- Map each render slot `clip-rect` to SPI address windows (one window per dirty slot in the simple path).
 - Keep backend boundary identical between host and ESP32 so host can emulate the device driver layer
 while still exercising the same primitive rasterization pipeline.
 - Keep full framebuffer optional (not mandatory).
 - Implement minimal clipping/culling before draw submission.
-- Add optional dirty-region mode switch.
+- Add slot-dirty update mode:
+  - only clear/render/send changed slots
+  - prefer a small number of larger slot windows over many tiny widget windows
+- Define per-slot background policy for no-readback displays:
+  - opaque slots can overwrite fully
+  - non-opaque slots require explicit clear of dirty region
+- Account for slot movement:
+  - dirty window = `union(old_rect, new_rect)` to avoid trails
+- Add optional dirty-region mode switch (sub-slot refinement later).
 - Add backend conformance checks:
   - same scene input should produce same primitive command sequence as simulator.
 
@@ -224,15 +254,18 @@ Done when:
 
 ## Milestone 8: Fixed-Point Transform Path (Optional, Recommended)
 
-Status: TODO
+Status: PARTIAL (text transform path uses fixed-point; full renderer/backend switch still TODO)
 
 Tasks:
 
-- Add optional 16.16 fixed-point transform core.
-- Keep tiny-clj API unchanged (canonicalize converts numeric inputs).
+- Add optional fixed-point transform core aligned with `subjective-c` numeric representation:
+  - integer values remain `fixnum`
+  - fractional fixed path uses `subjective-c` fixed payload fractional bits (`CLJ_FIXED_FRAC_BITS`)
+- Keep tiny-clj API unchanged (record render adapter decodes numeric inputs into renderer fixed/integer math).
 - Keep renderer hot path fixed-point/integer only.
 - Maintain integer clipping and integer rasterization.
 - Add compile-time switch for float vs fixed backend.
+- Current state: text transform path already uses renderer fixed-point math and now shares fractional-bit constants with `subjective-c`; thick-line rasterization still uses float math.
 
 Done when:
 
@@ -248,7 +281,8 @@ Tasks:
   - gameplay HUD
   - menu UI
   - vector title animation
-- Validate update path from tiny-clj game state -> scene patches -> renderer.
+- Validate update path from tiny-clj game state -> frame scene slots (snapshots) -> renderer.
+- Optionally validate patch-based hotpath updates for selected widgets/animations.
 - Run long soak tests on host and ESP32 to check stability and memory behavior.
 
 Done when:
@@ -271,14 +305,15 @@ Done when:
 3. M2 transform stack + composition
 4. M3 baseline primitives (`width=1`)
 5. M4 thick line support
-6. M5 id-based patch path + scrolling/parallax PoC
+6. M5 snapshot slot update path (`FrameScene` + `clip-rect` + changed-slot-only render)
 7. M6 VText integration
-8. M7 SPI backend integration
+8. M7 SPI backend integration (slot windows on SPI)
 9. M9 game/menu/title integration
+10. Optional later: explicit patch path + pointer-identity subtree reuse
 
 Rule:
 
-- Do not start M7 (ESP32 SPI integration) before M5 passes in host simulator.
+- Do not start M7 (ESP32 SPI integration) before M5 snapshot-slot rendering passes in host simulator.
 
 ## Risk Register
 
@@ -290,8 +325,9 @@ Rule:
   - Mitigation: shallow graph conventions, iterative traversal, compact matrix representation.
 - Risk: SPI bandwidth limits visible complexity.
   - Mitigation: clipping/culling, dirty-region mode, avoid pathological tiny draw commands.
-- Risk: tiny-clj allocation spikes during patch generation.
-  - Mitigation: stable IDs, bounded patch vectors, canonicalized compact render data.
+- Risk: tiny-clj allocation spikes during snapshot rebuilds.
+  - Mitigation: persistent data sharing, coarse scene slots, changed-slot-only rendering, optional compiled caches later.
+- Risk: Slot rectangles appear non-overlapping logically but overlap in raster output due to stroke/text fringes.
+  - Mitigation: conservative `clip-rect` guard bands, explicit slot background policy, test coverage for edge clipping.
 - Risk: Float drift/non-determinism in long animations.
-  - Mitigation: optional fixed-point transform core (16.16).
-
+  - Mitigation: optional fixed-point transform core aligned with `subjective-c` fixed fractional bits (currently `CLJ_FIXED_FRAC_BITS = 13`).

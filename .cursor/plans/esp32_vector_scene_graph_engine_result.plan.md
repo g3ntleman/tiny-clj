@@ -65,7 +65,7 @@ The active Star-Wars-style font is converted into renderer glyph segments as fol
    - Alphanumeric glyph switch-cases (`A-Z`, `0-9`) are emitted into `draw_text_node`.
 
 5. Runtime rendering:
-   - Text transform is applied via fixed-point path (`Q16.16`) in the text renderer.
+   - Text transform is applied via a fixed-point path in the text renderer (fractional bits now aligned with `subjective-c` fixed payload constants, `CLJ_FIXED_FRAC_BITS`, currently 13).
    - Segments are rasterized with the renderer’s 1px/thick line path (including text-specific anti-dropout handling).
 
 ## Important Technical Finding

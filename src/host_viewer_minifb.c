@@ -12,6 +12,7 @@
 
 #define VIEW_W 320
 #define VIEW_H 240
+#define VIEW_DEFAULT_WINDOW_SCALE 2u
 
 /** Letterbox viewport in window coordinates (avoids MiniFB's scale division which breaks on Retina). */
 static void set_letterbox_viewport(struct mfb_window *window, unsigned win_w, unsigned win_h) {
@@ -55,14 +56,16 @@ int main(void) {
 #if defined(__APPLE__)
     tinyclj_host_viewer_install_macos_menu();
 #endif
-    struct mfb_window *window = mfb_open_ex("tiny-clj vector host viewer (MiniFB)", VIEW_W, VIEW_H, WF_RESIZABLE);
+    const unsigned default_win_w = VIEW_W * VIEW_DEFAULT_WINDOW_SCALE;
+    const unsigned default_win_h = VIEW_H * VIEW_DEFAULT_WINDOW_SCALE;
+    struct mfb_window *window = mfb_open_ex("tiny-clj vector host viewer (MiniFB)", default_win_w, default_win_h, WF_RESIZABLE);
     if (!window) {
         fprintf(stderr, "Failed to open MiniFB window\n");
         return 1;
     }
     mfb_show_cursor(window, true);
     mfb_set_resize_callback(window, on_window_resize);
-    set_letterbox_viewport(window, VIEW_W, VIEW_H);
+    set_letterbox_viewport(window, default_win_w, default_win_h);
     struct mfb_timer *timer = mfb_timer_create();
     if (!timer) {
         fprintf(stderr, "Failed to create MiniFB timer\n");
@@ -183,7 +186,7 @@ int main(void) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = text_white_aa,
-        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "THE QUICK BROWN FOX"}
+        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "THE QUICK, BROWN FOX!"}
     };
     VgNode text_large = {
         .id = 108,
@@ -191,7 +194,7 @@ int main(void) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = text_cyan_aa,
-        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "JUMPS OVER THE LAZY DOG"}
+        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "JUMPS OVER THE LAZY DOG?"}
     };
     VgNode text_small = {
         .id = 109,
@@ -199,7 +202,7 @@ int main(void) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = text_white_aa,
-        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "MONOSPACE UPPERCASE"}
+        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "MONOSPACE_UPPERCASE"}
     };
     VgNode text_digits = {
         .id = 114,
@@ -207,7 +210,7 @@ int main(void) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = text_white_aa,
-        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "0123456789"}
+        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "0123/45\\67-89"}
     };
     VgNode text_rot = {
         .id = 111,
@@ -215,7 +218,7 @@ int main(void) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = text_cyan_aa,
-        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "MOVE"}
+        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "MOVE?"}
     };
     VgNode fps_text = {
         .id = 112,
@@ -231,7 +234,7 @@ int main(void) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = text_white_aa,
-        .data.text = {.x = 0, .y = 0, .scale = 0.6f, .rot_deg = 0.0f, .text = "SIZE 0.6"}
+        .data.text = {.x = 0, .y = 0, .scale = 0.5f, .rot_deg = 0.0f, .text = "SIZE; 0.5"}
     };
     VgNode text_size_base = {
         .id = 116,
@@ -247,7 +250,7 @@ int main(void) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = text_white_aa,
-        .data.text = {.x = 0, .y = 0, .scale = 1.4f, .rot_deg = 0.0f, .text = "SIZE 1.4"}
+        .data.text = {.x = 0, .y = 0, .scale = 1.5f, .rot_deg = 0.0f, .text = "SIZE 1.5"}
     };
     VgNode text_zoom = {
         .id = 118,
@@ -255,7 +258,7 @@ int main(void) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = text_cyan_aa,
-        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "ZOOM"}
+        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "ZOOM_(%)"}
     };
 
     VgNode *static_children[] = {
@@ -351,19 +354,19 @@ int main(void) {
     fps_text.transform = fps_text_local;
     VgTransform text_size_small_local = vg_transform_identity();
     text_size_small_local.tx = 180.0f;
-    text_size_small_local.ty = 130.0f;
+    text_size_small_local.ty = 110.0f;
     text_size_small_local.rot_deg = 0.0f;
     text_size_small.has_transform = true;
     text_size_small.transform = text_size_small_local;
     VgTransform text_size_base_local = vg_transform_identity();
     text_size_base_local.tx = 180.0f;
-    text_size_base_local.ty = 146.0f;
+    text_size_base_local.ty = 126.0f;
     text_size_base_local.rot_deg = 0.0f;
     text_size_base.has_transform = true;
     text_size_base.transform = text_size_base_local;
     VgTransform text_size_large_local = vg_transform_identity();
     text_size_large_local.tx = 180.0f;
-    text_size_large_local.ty = 166.0f;
+    text_size_large_local.ty = 146.0f;
     text_size_large_local.rot_deg = 0.0f;
     text_size_large.has_transform = true;
     text_size_large.transform = text_size_large_local;

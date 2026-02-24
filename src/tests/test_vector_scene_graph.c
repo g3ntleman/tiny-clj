@@ -96,6 +96,29 @@ TEST(test_vector_scene_graph_nested_group_transform_affects_child_line) {
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)5 * TEST_W + 17]);
 }
 
+TEST(test_vector_scene_graph_fixed_transform_compose_apply_px_scale_translate_exact) {
+    VgTransform parent = vg_transform_identity();
+    parent.tx = 10.0f;
+    parent.ty = -2.0f;
+    parent.sx = 2.0f;
+    parent.sy = 3.0f;
+
+    VgTransform local = vg_transform_identity();
+    local.tx = 4.0f;
+    local.ty = 5.0f;
+
+    VgTransformFixed parent_f = vg_transform_fixed_from_transform(parent);
+    VgTransformFixed local_f = vg_transform_fixed_from_transform(local);
+    VgTransformFixed composed = vg_transform_fixed_compose(parent_f, local_f);
+
+    int out_x = 0;
+    int out_y = 0;
+    vg_transform_fixed_apply_px(composed, 7, 8, &out_x, &out_y);
+
+    TEST_ASSERT_EQUAL_INT(32, out_x);
+    TEST_ASSERT_EQUAL_INT(37, out_y);
+}
+
 TEST(test_vector_scene_graph_deterministic_frame_checksum_for_mixed_scene) {
     uint16_t pixels_a[TEST_W * TEST_H];
     uint16_t pixels_b[TEST_W * TEST_H];
@@ -409,4 +432,425 @@ TEST(test_vector_scene_graph_hv_mono_problem_glyphs_not_half_height) {
     size_t height = max_y - min_y + 1;
     // Regression intent: avoid accidentally squashing glyphs to half height.
     TEST_ASSERT_TRUE(height >= 7);
+}
+
+TEST(test_vector_scene_graph_punctuation_dot_and_colon_are_compact_blobs) {
+    uint16_t pixels_dot[TEST_W * TEST_H];
+    uint16_t pixels_colon[TEST_W * TEST_H];
+    VgFrameBuffer fb_dot;
+    VgFrameBuffer fb_colon;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb_dot, TEST_W, TEST_H, pixels_dot, TEST_W * TEST_H));
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb_colon, TEST_W, TEST_H, pixels_colon, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb_dot, 0x0000u);
+    vg_framebuffer_clear(&fb_colon, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+
+    VgNode dot = {
+        .id = 71,
+        .type = VG_NODE_VTEXT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "."}
+    };
+    VgNode colon = dot;
+    colon.id = 72;
+    colon.data.text.text = ":";
+
+    vg_render_scene(&dot, &fb_dot);
+    vg_render_scene(&colon, &fb_colon);
+
+    size_t min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+    TEST_ASSERT_TRUE(find_non_bg_bounds(pixels_dot, TEST_W, TEST_H, 0x0000u, &min_x, &min_y, &max_x, &max_y));
+    size_t dot_w = max_x - min_x + 1;
+    size_t dot_h = max_y - min_y + 1;
+    /* Arcade period cell is rendered as a compact blob at the cell center. */
+    TEST_ASSERT_TRUE(min_x >= 3);
+    TEST_ASSERT_TRUE(dot_w <= 8);
+    TEST_ASSERT_TRUE(dot_h >= 1);
+    TEST_ASSERT_TRUE(count_not_color(pixels_dot, TEST_W * TEST_H, 0x0000u) >= 1);
+
+    TEST_ASSERT_TRUE(find_non_bg_bounds(pixels_colon, TEST_W, TEST_H, 0x0000u, &min_x, &min_y, &max_x, &max_y));
+    size_t colon_w = max_x - min_x + 1;
+    size_t colon_h = max_y - min_y + 1;
+    /* Arcade colon: two compact blobs (one per filled cell). */
+    TEST_ASSERT_TRUE(colon_w <= 10);
+    TEST_ASSERT_TRUE(colon_h >= 4);
+    TEST_ASSERT_TRUE(count_not_color(pixels_colon, TEST_W * TEST_H, 0x0000u) >= 2);
+}
+
+TEST(test_vector_scene_graph_comma_sits_lower_than_period_and_not_left) {
+    uint16_t pixels_dot[TEST_W * TEST_H];
+    uint16_t pixels_comma[TEST_W * TEST_H];
+    VgFrameBuffer fb_dot;
+    VgFrameBuffer fb_comma;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb_dot, TEST_W, TEST_H, pixels_dot, TEST_W * TEST_H));
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb_comma, TEST_W, TEST_H, pixels_comma, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb_dot, 0x0000u);
+    vg_framebuffer_clear(&fb_comma, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+
+    VgNode dot = {
+        .id = 73,
+        .type = VG_NODE_VTEXT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "."}
+    };
+    VgNode comma = dot;
+    comma.id = 74;
+    comma.data.text.text = ",";
+
+    vg_render_scene(&dot, &fb_dot);
+    vg_render_scene(&comma, &fb_comma);
+
+    size_t dot_min_x = 0, dot_min_y = 0, dot_max_x = 0, dot_max_y = 0;
+    size_t comma_min_x = 0, comma_min_y = 0, comma_max_x = 0, comma_max_y = 0;
+    TEST_ASSERT_TRUE(find_non_bg_bounds(pixels_dot, TEST_W, TEST_H, 0x0000u,
+                                        &dot_min_x, &dot_min_y, &dot_max_x, &dot_max_y));
+    TEST_ASSERT_TRUE(find_non_bg_bounds(pixels_comma, TEST_W, TEST_H, 0x0000u,
+                                        &comma_min_x, &comma_min_y, &comma_max_x, &comma_max_y));
+
+    TEST_ASSERT_TRUE(comma_max_y > dot_max_y);
+    TEST_ASSERT_TRUE(comma_min_x >= dot_min_x);
+}
+
+TEST(test_vector_scene_graph_additional_ascii_punctuation_avoids_box_fallback) {
+    typedef struct {
+        const char *text;
+        size_t max_width;
+        size_t min_height;
+        size_t min_ink;
+    } GlyphExpect;
+
+    const GlyphExpect cases[] = {
+        {";", 10, 6, 5},
+        {"!", 4, 8, 6},
+        {"?", 6, 8, 9},
+        {"(", 4, 9, 8},
+        {")", 4, 9, 8},
+    };
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+
+    VgNode text = {
+        .id = 81,
+        .type = VG_NODE_VTEXT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = NULL}
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        vg_framebuffer_clear(&fb, 0x0000u);
+        text.id = 81u + (uint32_t)i;
+        text.data.text.text = cases[i].text;
+        vg_render_scene(&text, &fb);
+
+        size_t min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+        TEST_ASSERT_TRUE(find_non_bg_bounds(pixels, TEST_W, TEST_H, 0x0000u, &min_x, &min_y, &max_x, &max_y));
+        size_t w = max_x - min_x + 1;
+        size_t h = max_y - min_y + 1;
+        size_t ink = count_not_color(pixels, TEST_W * TEST_H, 0x0000u);
+
+        // Default fallback is a 6x11 box; these glyphs should be narrower and shaped.
+        TEST_ASSERT_TRUE(w <= cases[i].max_width);
+        TEST_ASSERT_TRUE(h >= cases[i].min_height);
+        TEST_ASSERT_TRUE(ink >= cases[i].min_ink);
+    }
+}
+
+TEST(test_vector_scene_graph_compact_punctuation_disables_aa_fringe_even_with_bg) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_bg_rgb565 = true;
+    style.bg_rgb565 = 0x0000u;
+
+    VgNode text = {
+        .id = 91,
+        .type = VG_NODE_VTEXT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = NULL}
+    };
+
+    const char *cases[] = {".", ":"};
+    for (size_t ci = 0; ci < sizeof(cases) / sizeof(cases[0]); ci++) {
+        vg_framebuffer_clear(&fb, 0x0000u);
+        text.id = 91u + (uint32_t)ci;
+        text.data.text.text = cases[ci];
+        vg_render_scene(&text, &fb);
+
+        size_t intermediate = 0;
+        size_t ink = 0;
+        for (size_t i = 0; i < TEST_W * TEST_H; i++) {
+            uint16_t p = pixels[i];
+            if (p == 0x0000u) continue;
+            ink++;
+            if (p != 0xffffu) {
+                intermediate++;
+            }
+        }
+        TEST_ASSERT_TRUE(ink > 0);
+        TEST_ASSERT_EQUAL_size_t(0, intermediate);
+    }
+}
+
+TEST(test_vector_scene_graph_arcade_text_disables_aa_fringe_even_with_bg) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_bg_rgb565 = true;
+    style.bg_rgb565 = 0x0000u;
+
+    VgNode text = {
+        .id = 95,
+        .type = VG_NODE_VTEXT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "FPS: 59.9"}
+    };
+
+    vg_framebuffer_clear(&fb, 0x0000u);
+    vg_render_scene(&text, &fb);
+
+    size_t intermediate = 0;
+    size_t ink = 0;
+    for (size_t i = 0; i < TEST_W * TEST_H; i++) {
+        uint16_t p = pixels[i];
+        if (p == 0x0000u) continue;
+        ink++;
+        if (p != 0xffffu) {
+            intermediate++;
+        }
+    }
+
+    TEST_ASSERT_TRUE(ink > 0);
+    TEST_ASSERT_EQUAL_size_t(0, intermediate);
+}
+
+TEST(test_vector_scene_graph_arcade_z_scale_1_5_diagonal_stays_within_expected_bounds) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_bg_rgb565 = true;
+    style.bg_rgb565 = 0x0000u;
+
+    VgNode text = {
+        .id = 96,
+        .type = VG_NODE_VTEXT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.text = {.x = 2, .y = 2, .scale = 1.5f, .rot_deg = 0.0f, .text = "Z"}
+    };
+
+    vg_render_scene(&text, &fb);
+
+    size_t min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+    TEST_ASSERT_TRUE(find_non_bg_bounds(pixels, TEST_W, TEST_H, 0x0000u, &min_x, &min_y, &max_x, &max_y));
+
+    TEST_ASSERT_EQUAL_size_t(13, (max_x - min_x + 1));
+    TEST_ASSERT_EQUAL_size_t(13, (max_y - min_y + 1));
+}
+
+TEST(test_vector_scene_graph_slash_backslash_scale_1_5_are_not_one_pixel_too_low) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_bg_rgb565 = true;
+    style.bg_rgb565 = 0x0000u;
+
+    VgNode text = {
+        .id = 97,
+        .type = VG_NODE_VTEXT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.text = {.x = 2, .y = 2, .scale = 1.5f, .rot_deg = 0.0f, .text = NULL}
+    };
+
+    const char *cases[] = {"/", "\\"};
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        vg_framebuffer_clear(&fb, 0x0000u);
+        text.id = 97u + (uint32_t)i;
+        text.data.text.text = cases[i];
+        vg_render_scene(&text, &fb);
+
+        size_t min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+        TEST_ASSERT_TRUE(find_non_bg_bounds(pixels, TEST_W, TEST_H, 0x0000u, &min_x, &min_y, &max_x, &max_y));
+        TEST_ASSERT_TRUE(min_x >= 3);
+        TEST_ASSERT_EQUAL_size_t(16, max_y);
+    }
+}
+
+TEST(test_vector_scene_graph_arcade_exclamation_has_detached_dot) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_bg_rgb565 = true;
+    style.bg_rgb565 = 0x0000u;
+
+    VgNode text = {
+        .id = 98,
+        .type = VG_NODE_VTEXT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "!"}
+    };
+
+    vg_render_scene(&text, &fb);
+
+    size_t min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+    TEST_ASSERT_TRUE(find_non_bg_bounds(pixels, TEST_W, TEST_H, 0x0000u, &min_x, &min_y, &max_x, &max_y));
+
+    bool seen_ink = false;
+    bool seen_gap_after_ink = false;
+    bool seen_ink_after_gap = false;
+    for (size_t y = min_y; y <= max_y; y++) {
+        bool row_has_ink = false;
+        for (size_t x = min_x; x <= max_x; x++) {
+            if (pixels[y * TEST_W + x] != 0x0000u) {
+                row_has_ink = true;
+                break;
+            }
+        }
+        if (row_has_ink) {
+            if (seen_gap_after_ink) {
+                seen_ink_after_gap = true;
+            }
+            seen_ink = true;
+        } else if (seen_ink && !seen_ink_after_gap) {
+            seen_gap_after_ink = true;
+        }
+    }
+
+    TEST_ASSERT_TRUE(seen_gap_after_ink);
+    TEST_ASSERT_TRUE(seen_ink_after_gap);
+}
+
+TEST(test_vector_scene_graph_colon_blobs_are_vertically_aligned) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_bg_rgb565 = true;
+    style.bg_rgb565 = 0x0000u;
+
+    VgNode text = {
+        .id = 92,
+        .type = VG_NODE_VTEXT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = ":"}
+    };
+
+    vg_render_scene(&text, &fb);
+
+    size_t min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+    TEST_ASSERT_TRUE(find_non_bg_bounds(pixels, TEST_W, TEST_H, 0x0000u, &min_x, &min_y, &max_x, &max_y));
+
+    size_t mid_y = (min_y + max_y) / 2;
+    size_t top_sum_x = 0, top_count = 0;
+    size_t bot_sum_x = 0, bot_count = 0;
+    for (size_t y = min_y; y <= max_y; y++) {
+        for (size_t x = min_x; x <= max_x; x++) {
+            if (pixels[y * TEST_W + x] == 0x0000u) continue;
+            if (y <= mid_y) {
+                top_sum_x += x;
+                top_count++;
+            } else {
+                bot_sum_x += x;
+                bot_count++;
+            }
+        }
+    }
+
+    TEST_ASSERT_TRUE(top_count > 0);
+    TEST_ASSERT_TRUE(bot_count > 0);
+    int top_cx = (int)((top_sum_x + (top_count / 2)) / top_count);
+    int bot_cx = (int)((bot_sum_x + (bot_count / 2)) / bot_count);
+    int dx = top_cx - bot_cx;
+    if (dx < 0) dx = -dx;
+    TEST_ASSERT_TRUE(dx <= 1);
+}
+
+TEST(test_vector_scene_graph_arcade_j_has_bottom_bar_shape) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+
+    VgNode text = {
+        .id = 93,
+        .type = VG_NODE_VTEXT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "J"}
+    };
+
+    vg_render_scene(&text, &fb);
+
+    size_t min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+    TEST_ASSERT_TRUE(find_non_bg_bounds(pixels, TEST_W, TEST_H, 0x0000u, &min_x, &min_y, &max_x, &max_y));
+
+    size_t top_row_ink = 0;
+    size_t bottom_row_ink = 0;
+    for (size_t x = min_x; x <= max_x; x++) {
+        if (pixels[min_y * TEST_W + x] != 0x0000u) top_row_ink++;
+        if (pixels[max_y * TEST_W + x] != 0x0000u) bottom_row_ink++;
+    }
+
+    // Arcade J has the horizontal bar at the bottom (renderer y grows downward).
+    TEST_ASSERT_TRUE(bottom_row_ink > top_row_ink);
 }

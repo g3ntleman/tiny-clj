@@ -14,6 +14,15 @@ typedef struct {
 } VgTransform;
 
 typedef struct {
+    int32_t m00;
+    int32_t m01;
+    int32_t m02;
+    int32_t m10;
+    int32_t m11;
+    int32_t m12;
+} VgTransformFixed;
+
+typedef struct {
     int16_t x;
     int16_t y;
 } VgPoint;
@@ -124,6 +133,10 @@ VgTransform vg_transform_identity(void);
 VgStyle vg_style_default(void);
 VgTransform vg_transform_compose(VgTransform parent, VgTransform local);
 void vg_transform_apply(VgTransform t, float x, float y, float *out_x, float *out_y);
+VgTransformFixed vg_transform_fixed_identity(void);
+VgTransformFixed vg_transform_fixed_from_transform(VgTransform t);
+VgTransformFixed vg_transform_fixed_compose(VgTransformFixed parent, VgTransformFixed local);
+void vg_transform_fixed_apply_px(VgTransformFixed t, int16_t x, int16_t y, int *out_x, int *out_y);
 
 bool vg_framebuffer_init(VgFrameBuffer *fb, int width, int height, uint16_t *pixels, size_t pixel_count);
 void vg_framebuffer_clear(VgFrameBuffer *fb, uint16_t color);

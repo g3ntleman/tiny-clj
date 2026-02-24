@@ -33,6 +33,10 @@ extern struct CljNamespace* ns_get_or_create(const char *cname, const char *file
 #define TAG_VECTOR   4
 #define TAG_MAP      6
 
+/* Raw fixed-point payload for TAG_FIXED values (signed int32, Q19.13). */
+#define CLJ_FIXED_FRAC_BITS 13
+#define CLJ_FIXED_SCALE ((int32_t)(1 << CLJ_FIXED_FRAC_BITS))
+
 static inline CljValue make_pointer(void *ptr, uint8_t tag) {
     return (CljValue)(((uintptr_t)ptr & ~TAG_MASK) | tag);
 }
@@ -111,7 +115,7 @@ static inline bool is_fixed(CljValue val) {
 static inline float as_fixed(CljValue val) {
     assert(is_fixed(val));
     int32_t fixed = (int32_t)((intptr_t)val >> TAG_BITS);
-    return (float)fixed / 8192.0f;
+    return (float)fixed / (float)CLJ_FIXED_SCALE;
 }
 
 static inline bool is_immediate(CljValue val) {

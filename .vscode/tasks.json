@@ -140,6 +140,26 @@
       }
     },
     {
+      "label": "run-host-viewer",
+      "type": "shell",
+      "command": "pkill -f '/vector-host-viewer' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTINYCLJ_HOST_VIEWER=ON -B build-hostviewer && cmake --build build-hostviewer --target vector-host-viewer && ./build/vector-host-viewer",
+      "group": "none",
+      "detail": "Configure Debug host-viewer build, build vector-host-viewer, then run the generated binary.",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "isBackground": false,
+      "runOptions": {
+        "instanceLimit": 2
+      }
+    },
+    {
       "label": "run-tests",
       "type": "shell",
       "command": "cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target unit-tests && ./build/unit-tests",
