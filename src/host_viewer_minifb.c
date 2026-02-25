@@ -140,7 +140,7 @@ typedef struct {
     ID t_transform, t_style, t_group, t_line, t_polyline, t_rect, t_tri, t_vtext, t_frame_scene;
     unsigned int n_transform, n_style, n_group, n_line, n_polyline, n_rect, n_tri, n_vtext, n_frame_scene;
     int transform_tx, transform_ty, transform_sx, transform_sy, transform_rot;
-    int style_stroke_rgb565, style_stroke_width, style_visible, style_has_bg_rgb565, style_bg_rgb565;
+    int style_stroke_rgb565, style_stroke_width, style_visible, style_has_fill, style_fill_rgb565, style_has_bg_rgb565, style_bg_rgb565;
     int group_id, group_t, group_style, group_visible, group_children;
     int line_id, line_t, line_style, line_visible, line_x1, line_y1, line_x2, line_y2;
     int poly_id, poly_t, poly_style, poly_visible, poly_pts, poly_closed;
@@ -185,6 +185,8 @@ static bool ensure_vector_scene_record_schema(EvalState *st) {
     ID k_rot = intern_symbol_global(":rot");
     ID k_stroke_rgb565 = intern_symbol_global(":stroke_rgb565");
     ID k_stroke_width = intern_symbol_global(":stroke_width");
+    ID k_has_fill = intern_symbol_global(":has_fill");
+    ID k_fill_rgb565 = intern_symbol_global(":fill_rgb565");
     ID k_visible = intern_symbol_global(":visible");
     ID k_has_bg_rgb565 = intern_symbol_global(":has_bg_rgb565");
     ID k_bg_rgb565 = intern_symbol_global(":bg_rgb565");
@@ -254,6 +256,8 @@ static bool ensure_vector_scene_record_schema(EvalState *st) {
     g_record_schema.style_stroke_rgb565 = descriptor_index_of(d_style, k_stroke_rgb565);
     g_record_schema.style_stroke_width = descriptor_index_of(d_style, k_stroke_width);
     g_record_schema.style_visible = descriptor_index_of(d_style, k_visible);
+    g_record_schema.style_has_fill = descriptor_index_of(d_style, k_has_fill);
+    g_record_schema.style_fill_rgb565 = descriptor_index_of(d_style, k_fill_rgb565);
     g_record_schema.style_has_bg_rgb565 = descriptor_index_of(d_style, k_has_bg_rgb565);
     g_record_schema.style_bg_rgb565 = descriptor_index_of(d_style, k_bg_rgb565);
     g_record_schema.group_id = descriptor_index_of(d_group, k_id);
@@ -312,7 +316,8 @@ static bool ensure_vector_scene_record_schema(EvalState *st) {
 
     if (g_record_schema.transform_tx < 0 || g_record_schema.transform_ty < 0 || g_record_schema.transform_sx < 0 ||
         g_record_schema.transform_sy < 0 || g_record_schema.transform_rot < 0 || g_record_schema.style_stroke_rgb565 < 0 ||
-        g_record_schema.style_stroke_width < 0 || g_record_schema.style_visible < 0 || g_record_schema.style_has_bg_rgb565 < 0 ||
+        g_record_schema.style_stroke_width < 0 || g_record_schema.style_visible < 0 || g_record_schema.style_has_fill < 0 ||
+        g_record_schema.style_fill_rgb565 < 0 || g_record_schema.style_has_bg_rgb565 < 0 ||
         g_record_schema.style_bg_rgb565 < 0 || g_record_schema.group_id < 0 || g_record_schema.group_t < 0 ||
         g_record_schema.group_style < 0 || g_record_schema.group_visible < 0 || g_record_schema.group_children < 0 ||
         g_record_schema.line_id < 0 || g_record_schema.line_t < 0 || g_record_schema.line_style < 0 ||
@@ -371,6 +376,8 @@ static ID make_style_record(VgStyle style) {
     slots[g_record_schema.style_stroke_rgb565] = fixnum((int)style.stroke_rgb565);
     slots[g_record_schema.style_stroke_width] = fixnum((int)style.stroke_width);
     slots[g_record_schema.style_visible] = style.visible ? clj_true : clj_false;
+    slots[g_record_schema.style_has_fill] = style.has_fill ? clj_true : clj_false;
+    slots[g_record_schema.style_fill_rgb565] = fixnum((int)style.fill_rgb565);
     slots[g_record_schema.style_has_bg_rgb565] = style.has_bg_rgb565 ? clj_true : clj_false;
     slots[g_record_schema.style_bg_rgb565] = fixnum((int)style.bg_rgb565);
     return create_record_from_slots(g_record_schema.t_style, g_record_schema.n_style, slots);
@@ -630,13 +637,15 @@ int main(void) {
     VgStyle game_obstacle_style = vg_style_default();
     game_obstacle_style.stroke_rgb565 = 0xffe0u;
     game_obstacle_style.stroke_width = 2;
-    game_obstacle_style.has_bg_rgb565 = true;
-    game_obstacle_style.bg_rgb565 = 0xffe0u;
+    game_obstacle_style.has_fill = true;
+    game_obstacle_style.fill_rgb565 = 0xffe0u;
+    game_obstacle_style.has_bg_rgb565 = false;
     VgStyle game_obstacle_nose_style = vg_style_default();
     game_obstacle_nose_style.stroke_rgb565 = 0xf800u;
     game_obstacle_nose_style.stroke_width = 2;
-    game_obstacle_nose_style.has_bg_rgb565 = true;
-    game_obstacle_nose_style.bg_rgb565 = 0xf800u;
+    game_obstacle_nose_style.has_fill = true;
+    game_obstacle_nose_style.fill_rgb565 = 0xf800u;
+    game_obstacle_nose_style.has_bg_rgb565 = false;
 
     VgClipRect score_clip = {.x = 0, .y = 0, .w = VIEW_W, .h = 32};
     VgClipRect game_clip = {.x = 0, .y = 40, .w = VIEW_W, .h = 136};

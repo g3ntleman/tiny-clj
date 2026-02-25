@@ -18,7 +18,7 @@ R"TINY_GFX_SCENE(
 (def frame-scene-type 'FrameScene)
 
 (def transform-fields [:tx :ty :sx :sy :rot])
-(def style-fields [:stroke_rgb565 :stroke_width :visible :has_bg_rgb565 :bg_rgb565])
+(def style-fields [:stroke_rgb565 :stroke_width :visible :has_fill :fill_rgb565 :has_bg_rgb565 :bg_rgb565])
 (def group-fields [:id :t :style :visible :children])
 (def line-fields [:id :t :style :visible :x1 :y1 :x2 :y2])
 (def polyline-fields [:id :t :style :visible :pts :closed])

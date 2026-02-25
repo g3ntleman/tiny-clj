@@ -37,6 +37,8 @@ typedef struct {
     ID k_sy;
     ID k_stroke_rgb565;
     ID k_stroke_width;
+    ID k_has_fill;
+    ID k_fill_rgb565;
     ID k_has_bg_rgb565;
     ID k_bg_rgb565;
     ID k_clip_rect;
@@ -74,6 +76,8 @@ static VgRecordKeys vg_record_keys(void) {
     k.k_sy = intern_symbol_global(":sy");
     k.k_stroke_rgb565 = intern_symbol_global(":stroke_rgb565");
     k.k_stroke_width = intern_symbol_global(":stroke_width");
+    k.k_has_fill = intern_symbol_global(":has_fill");
+    k.k_fill_rgb565 = intern_symbol_global(":fill_rgb565");
     k.k_has_bg_rgb565 = intern_symbol_global(":has_bg_rgb565");
     k.k_bg_rgb565 = intern_symbol_global(":bg_rgb565");
     k.k_clip_rect = intern_symbol_global(":clip-rect");
@@ -225,6 +229,8 @@ static VgStyle decode_style(ID node_obj, const VgRecordKeys *k) {
     if (style_obj) {
         s.stroke_rgb565 = id_to_u16_default(get_field(style_obj, k->k_stroke_rgb565, NULL), s.stroke_rgb565);
         s.stroke_width = id_to_u8_default(get_field(style_obj, k->k_stroke_width, NULL), s.stroke_width);
+        s.has_fill = id_to_bool_default(get_field(style_obj, k->k_has_fill, NULL), s.has_fill);
+        s.fill_rgb565 = id_to_u16_default(get_field(style_obj, k->k_fill_rgb565, NULL), s.fill_rgb565);
         s.has_bg_rgb565 = id_to_bool_default(get_field(style_obj, k->k_has_bg_rgb565, NULL), s.has_bg_rgb565);
         s.bg_rgb565 = id_to_u16_default(get_field(style_obj, k->k_bg_rgb565, NULL), s.bg_rgb565);
         s.visible = id_to_bool_default(get_field(style_obj, k->k_visible, NULL), s.visible);

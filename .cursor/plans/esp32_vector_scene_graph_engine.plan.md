@@ -96,8 +96,8 @@ Tasks:
 - Current implementation notes:
   - `tiny-gfx.scene` exists and registers the record descriptors used by the C renderer.
   - Runtime schema lookup/caching from C is implemented (descriptor-driven field indices).
-  - Host-only tooling namespace is `tiny-gfx.codegen` under `libs/tiny-gfx/codegen.clj` (not embedded in C sources).
-  - `tiny-gfx.codegen` currently contains:
+  - Host-only tooling namespace is `tiny-gfx.converter` under `libs/tiny-gfx/converter.clj` (not embedded in C sources).
+  - `tiny-gfx.converter` currently contains:
     - C header generation helpers (`c-header-string`, `spit-c-header!`)
     - SVG subset conversion helper (`group-from-svg`)
   - Remaining TODO in this milestone: wire automatic build-time header generation into CMake/CI (today it is callable from REPL/scripted host tooling).

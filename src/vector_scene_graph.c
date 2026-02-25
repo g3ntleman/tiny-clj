@@ -140,6 +140,8 @@ VgStyle vg_style_default(void) {
     s.stroke_rgb565 = 0xffffu;
     s.stroke_width = 1;
     s.visible = true;
+    s.has_fill = false;
+    s.fill_rgb565 = 0x0000u;
     s.has_bg_rgb565 = false;
     s.bg_rgb565 = 0x0000u;
     return s;
@@ -424,8 +426,8 @@ static void draw_polyline_node(VgFrameBuffer *fb, const VgPolylineData *p, VgTra
         int vx[GFX_FILL_MAX_VERTS];
         int vy[GFX_FILL_MAX_VERTS];
         if (transform_polyline_points_fixed(p, tf, vx, vy)) {
-            if (p->closed && style.has_bg_rgb565 && p->point_count >= 3) {
-                fill_polygon_scanline(fb, vx, vy, p->point_count, style.bg_rgb565);
+            if (p->closed && style.has_fill && p->point_count >= 3) {
+                fill_polygon_scanline(fb, vx, vy, p->point_count, style.fill_rgb565);
             }
             draw_stroke_polyline_xy(fb, vx, vy, p->point_count, p->closed, style);
             return;
@@ -451,6 +453,11 @@ static void draw_rect_node(VgFrameBuffer *fb, const VgRectData *r, VgTransformFi
     apply_xy_fixed_px(&tf, (int16_t)(r->x + r->w), r->y, &x2, &y2);
     apply_xy_fixed_px(&tf, (int16_t)(r->x + r->w), (int16_t)(r->y + r->h), &x3, &y3);
     apply_xy_fixed_px(&tf, r->x, (int16_t)(r->y + r->h), &x4, &y4);
+    if (style.has_fill) {
+        int vx[4] = {x1, x2, x3, x4};
+        int vy[4] = {y1, y2, y3, y4};
+        fill_polygon_scanline(fb, vx, vy, 4, style.fill_rgb565);
+    }
     draw_line_thick(fb, x1, y1, x2, y2, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
     draw_line_thick(fb, x2, y2, x3, y3, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
     draw_line_thick(fb, x3, y3, x4, y4, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
@@ -463,8 +470,8 @@ static void draw_tri_node(VgFrameBuffer *fb, const VgTriData *tr, VgTransformFix
     apply_xy_fixed_px(&tf, tr->x1, tr->y1, &vx[0], &vy[0]);
     apply_xy_fixed_px(&tf, tr->x2, tr->y2, &vx[1], &vy[1]);
     apply_xy_fixed_px(&tf, tr->x3, tr->y3, &vx[2], &vy[2]);
-    if (style.has_bg_rgb565) {
-        fill_polygon_scanline(fb, vx, vy, 3, style.bg_rgb565);
+    if (style.has_fill) {
+        fill_polygon_scanline(fb, vx, vy, 3, style.fill_rgb565);
     }
     draw_stroke_polyline_xy(fb, vx, vy, 3, true, style);
 }

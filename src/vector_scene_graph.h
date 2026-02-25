@@ -31,6 +31,8 @@ typedef struct {
     uint16_t stroke_rgb565;
     uint8_t stroke_width;
     bool visible;
+    bool has_fill;
+    uint16_t fill_rgb565;
     bool has_bg_rgb565;
     uint16_t bg_rgb565;
 } VgStyle;
