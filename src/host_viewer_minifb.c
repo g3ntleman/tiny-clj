@@ -19,6 +19,10 @@
 #define VIEW_H 240
 #define VIEW_DEFAULT_WINDOW_SCALE 2u
 #define VIEWER_SLOT_COUNT 3
+/* Toggle for easy A/B: 1=fixed simulation timestep, 0=legacy frame-coupled updates. */
+#define HOST_VIEWER_FIXED_TIMESTEP_ENABLED 1
+#define HOST_VIEWER_SIM_HZ 60.0
+#define HOST_VIEWER_MAX_SIM_STEPS_PER_FRAME 4u
 
 /** Letterbox viewport in window coordinates (avoids MiniFB's scale division which breaks on Retina). */
 static void set_letterbox_viewport(struct mfb_window *window, unsigned win_w, unsigned win_h) {
@@ -614,6 +618,8 @@ int main(void) {
         return 1;
     }
     double fps_window_start_s = mfb_timer_now(timer);
+    double sim_prev_time_s = fps_window_start_s;
+    double sim_accumulator_s = 0.0;
     unsigned fps_frame_count = 0;
     char fps_label[32];
     (void)snprintf(fps_label, sizeof(fps_label), "FPS: --.-");
@@ -814,10 +820,33 @@ int main(void) {
             }
         }
 
+#if HOST_VIEWER_FIXED_TIMESTEP_ENABLED
+        double sim_now_s = (double)mfb_timer_now(timer);
+        double frame_dt_s = sim_now_s - sim_prev_time_s;
+        sim_prev_time_s = sim_now_s;
+        if (frame_dt_s < 0.0) frame_dt_s = 0.0;
+        if (frame_dt_s > 0.25) frame_dt_s = 0.25;
+        const double sim_dt_s = 1.0 / HOST_VIEWER_SIM_HZ;
+        sim_accumulator_s += frame_dt_s;
+        unsigned sim_steps = 0;
+        while (sim_accumulator_s >= sim_dt_s && sim_steps < HOST_VIEWER_MAX_SIM_STEPS_PER_FRAME) {
+            frame_tick++;
+            if (collision_cooldown_frames > 0) {
+                collision_cooldown_frames--;
+            }
+            sim_accumulator_s -= sim_dt_s;
+            sim_steps++;
+        }
+        if (sim_steps == HOST_VIEWER_MAX_SIM_STEPS_PER_FRAME && sim_accumulator_s > sim_dt_s) {
+            /* Drop backlog to avoid visible spiral-of-death stutter. */
+            sim_accumulator_s = sim_dt_s;
+        }
+#else
         frame_tick++;
         if (collision_cooldown_frames > 0) {
             collision_cooldown_frames--;
         }
+#endif
         int terrain_scroll_px = (int)((frame_tick * 2u) % 320u);
         int player_bob_y = player_bob_lut[frame_tick % (sizeof(player_bob_lut) / sizeof(player_bob_lut[0]))];
         int obstacle_x = 319 - (int)((frame_tick * 3u) % 360u);
