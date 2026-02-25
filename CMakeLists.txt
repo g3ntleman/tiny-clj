@@ -224,6 +224,7 @@ list(APPEND SOURCES
     src/builtins_audio.c
     src/audio_backend_host.c
     src/repl_history_backend.c
+    src/gfx.c
     src/vector_scene_graph.c
     src/vector_scene_graph_records.c
     src/source_resolver.c
@@ -534,7 +535,7 @@ add_executable(unit-tests
     src/tests/test_mdns_bindings.c
     src/tests/test_platform_mdns.c
     src/tests/test_vector_scene_graph.c
-    src/tests/test_tiny_drw_svg.c
+    src/tests/test_gfx_svg.c
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}

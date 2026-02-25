@@ -174,7 +174,7 @@ static bool ensure_vector_scene_record_schema(EvalState *st) {
     if (!st) {
         return false;
     }
-    if (!require_namespace_by_name(st, "tiny-drw.scene")) {
+    if (!require_namespace_by_name(st, "tiny-gfx.scene")) {
         return false;
     }
 
@@ -579,7 +579,7 @@ int main(void) {
     }
     evalstate_set_ns(viewer_eval_state, "user");
     if (!ensure_vector_scene_record_schema(viewer_eval_state)) {
-        fprintf(stderr, "Failed to initialize vector scene record schema via tiny-drw.scene\n");
+        fprintf(stderr, "Failed to initialize vector scene record schema via tiny-gfx.scene\n");
         return 1;
     }
 
@@ -630,11 +630,13 @@ int main(void) {
     VgStyle game_obstacle_style = vg_style_default();
     game_obstacle_style.stroke_rgb565 = 0xffe0u;
     game_obstacle_style.stroke_width = 2;
-    game_obstacle_style.has_bg_rgb565 = false;
+    game_obstacle_style.has_bg_rgb565 = true;
+    game_obstacle_style.bg_rgb565 = 0xffe0u;
     VgStyle game_obstacle_nose_style = vg_style_default();
     game_obstacle_nose_style.stroke_rgb565 = 0xf800u;
     game_obstacle_nose_style.stroke_width = 2;
-    game_obstacle_nose_style.has_bg_rgb565 = false;
+    game_obstacle_nose_style.has_bg_rgb565 = true;
+    game_obstacle_nose_style.bg_rgb565 = 0xf800u;
 
     VgClipRect score_clip = {.x = 0, .y = 0, .w = VIEW_W, .h = 32};
     VgClipRect game_clip = {.x = 0, .y = 40, .w = VIEW_W, .h = 136};

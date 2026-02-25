@@ -1,7 +1,7 @@
-R"TINY_DRW_SCENE(
-(ns tiny-drw.scene)
+R"TINY_GFX_SCENE(
+(ns tiny-gfx.scene)
 
-;; Central scene-record schema for tiny-drw/tiny-clj vector rendering.
+;; Central scene-record schema for tiny-gfx/tiny-clj vector rendering.
 ;;
 ;; We keep unqualified type symbols (e.g. 'Group) because the C renderer
 ;; matches record type names by exact symbol cname ("Group", "Line", ...).
@@ -47,4 +47,4 @@ Returns nil and is idempotent."
 ;; Register eagerly on require so other namespaces can immediately create records.
 (ensure-scene-records!)
 
-)TINY_DRW_SCENE"
+)TINY_GFX_SCENE"

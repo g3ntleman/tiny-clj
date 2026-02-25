@@ -1,10 +1,10 @@
 #include "tests_common.h"
 
-TEST(test_tiny_drw_svg_group_from_line) {
+TEST(test_gfx_svg_group_from_line) {
   ID ok = eval_string(
       "(do "
-      "  (require 'tiny-drw.svg) "
-      "  (def gsvg (tiny-drw.svg/group-from-svg "
+      "  (require 'tiny-gfx.svg) "
+      "  (def gsvg (tiny-gfx.svg/group-from-svg "
       "             \"<svg><line x1='1' y1='2' x2='30' y2='40' stroke='#FF0000' stroke-width='2'/></svg>\")) "
       "  true)",
       g_test_eval_state);
@@ -27,11 +27,11 @@ TEST(test_tiny_drw_svg_group_from_line) {
   TEST_ASSERT_EQUAL_INT(2, as_fixnum(stroke_width));
 }
 
-TEST(test_tiny_drw_svg_polygon_maps_to_closed_polyline) {
+TEST(test_gfx_svg_polygon_maps_to_closed_polyline) {
   ID ok = eval_string(
       "(do "
-      "  (require 'tiny-drw.svg) "
-      "  (def gsvg_poly (tiny-drw.svg/group-from-svg "
+      "  (require 'tiny-gfx.svg) "
+      "  (def gsvg_poly (tiny-gfx.svg/group-from-svg "
       "                  \"<svg><polygon points='0,0 10,0 10,10 0,10' fill='#00FF00'/></svg>\")) "
       "  true)",
       g_test_eval_state);

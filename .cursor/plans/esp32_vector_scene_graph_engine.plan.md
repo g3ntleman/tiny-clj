@@ -89,15 +89,15 @@ Tasks:
   - `nil` and explicit `false` must remain semantically distinct
 - Define direct-render record contract for C (slot-indexed field access; no keyword lookup in render hot path).
 - Decision (layout consistency between Clojure and C):
-  - `tiny-drw.scene` is the single source of truth for record field order.
-  - A build-time converter/generator must emit a C header from `tiny-drw.scene` (field-count constants + ordered slot indices per record type).
+  - `tiny-gfx.scene` is the single source of truth for record field order.
+  - A build-time converter/generator must emit a C header from `tiny-gfx.scene` (field-count constants + ordered slot indices per record type).
   - C code uses only generated indices/struct-like layouts for record slot access (no hand-maintained index tables).
   - Keep runtime checks minimal (descriptor presence/type), avoid large handwritten index-preparation/validation blocks in hot paths.
 - Current implementation notes:
-  - `tiny-drw.scene` exists and registers the record descriptors used by the C renderer.
+  - `tiny-gfx.scene` exists and registers the record descriptors used by the C renderer.
   - Runtime schema lookup/caching from C is implemented (descriptor-driven field indices).
-  - Host-only tooling namespace is `tiny-drw.codegen` under `libs/tiny-drw/codegen.clj` (not embedded in C sources).
-  - `tiny-drw.codegen` currently contains:
+  - Host-only tooling namespace is `tiny-gfx.codegen` under `libs/tiny-gfx/codegen.clj` (not embedded in C sources).
+  - `tiny-gfx.codegen` currently contains:
     - C header generation helpers (`c-header-string`, `spit-c-header!`)
     - SVG subset conversion helper (`group-from-svg`)
   - Remaining TODO in this milestone: wire automatic build-time header generation into CMake/CI (today it is callable from REPL/scripted host tooling).
