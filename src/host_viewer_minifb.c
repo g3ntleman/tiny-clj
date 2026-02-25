@@ -591,7 +591,7 @@ int main(void) {
     }
 
 #if defined(__APPLE__)
-    tinyclj_host_viewer_install_macos_menu();
+    macos_viewer_install_menu();
 #endif
     const unsigned default_win_w = VIEW_W * VIEW_DEFAULT_WINDOW_SCALE;
     const unsigned default_win_h = VIEW_H * VIEW_DEFAULT_WINDOW_SCALE;
@@ -600,6 +600,10 @@ int main(void) {
         fprintf(stderr, "Failed to open MiniFB window\n");
         return 1;
     }
+#if defined(__APPLE__)
+    macos_viewer_register_window_callbacks();
+    macos_viewer_restore_window_position();
+#endif
     mfb_show_cursor(window, true);
     mfb_set_resize_callback(window, on_window_resize);
     set_letterbox_viewport(window, default_win_w, default_win_h);
@@ -791,7 +795,7 @@ int main(void) {
             (void)snprintf(score_line, sizeof(score_line), "SCORE %04d    LIFES 3", score % 10000);
             char title[96];
             (void)snprintf(title, sizeof(title), "tiny-clj vector host viewer (MiniFB) - %.1f FPS", fps);
-            tinyclj_host_viewer_set_macos_window_title(title);
+            macos_viewer_set_window_title(title);
             fps_window_start_s = (double)time_s;
             fps_frame_count = 0;
             score_changed = true;
@@ -899,6 +903,9 @@ int main(void) {
     }
 
     mfb_timer_destroy(timer);
+#if defined(__APPLE__)
+    macos_viewer_save_window_position();
+#endif
     mfb_close(window);
     for (size_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
         RELEASE(g_published_slots[i]);
