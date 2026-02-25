@@ -536,6 +536,7 @@ add_executable(unit-tests
     src/tests/test_platform_mdns.c
     src/tests/test_vector_scene_graph.c
     src/tests/test_gfx_svg.c
+    src/tests/test_gfx_collision_contract.c
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}

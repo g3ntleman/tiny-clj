@@ -10,7 +10,9 @@
  * @brief Resolves a virtual path to byte content from KV store or embedded sources.
  *
  * Lookup order is KV store first (to allow overrides), then the compiled-in
- * embedded source table. Returns a caller-usable byte-array object on success.
+ * embedded source table. The resolver must not force KV backend initialization:
+ * if the global KV store is not initialized yet, embedded sources are used
+ * directly. Returns a caller-usable byte-array object on success.
  *
  * @param path Virtual path to resolve.
  * @return Byte-array object (pool-managed) or NULL when not found.
@@ -18,8 +20,9 @@
 ID resolve_path_to_bytes(const char *path) {
     if (!path || !path[0]) return NULL;
 
-    // Consult the KV store first (create/open on demand).
-    FsKvStore *st = fs_global_store();
+    // Consult KV overrides only when the store is already initialized.
+    // This keeps plain require() from creating host-side tiny-db files.
+    FsKvStore *st = fs_global_store_if_initialized();
     if (st) {
         ID kv_bytes = fs_read_bytes(st, path);
         if (kv_bytes && TAG(kv_bytes) == CLJ_BYTE_ARRAY) return kv_bytes;

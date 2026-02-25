@@ -1,0 +1,90 @@
+#include "tests_common.h"
+#include "../record.h"
+#include "../symbol.h"
+#include "../vector.h"
+
+TEST(test_gfx_collision_contract_registers_record_descriptors) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string("(do (require 'tiny-gfx.scene) true)", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+
+    ID t_rule = intern_symbol_global("CollisionRule");
+    ID t_event = intern_symbol_global("CollisionEvent");
+    CljRecordDescriptor *d_rule = record_descriptor_lookup(t_rule);
+    CljRecordDescriptor *d_event = record_descriptor_lookup(t_event);
+    TEST_ASSERT_NOT_NULL(d_rule);
+    TEST_ASSERT_NOT_NULL(d_event);
+    TEST_ASSERT_NOT_NULL(d_rule->field_keys);
+    TEST_ASSERT_NOT_NULL(d_event->field_keys);
+    TEST_ASSERT_EQUAL_UINT(7, vector_count(d_rule->field_keys));
+    TEST_ASSERT_EQUAL_UINT(7, vector_count(d_event->field_keys));
+
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":id"), vector_nth(d_rule->field_keys, 0));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":slot"), vector_nth(d_rule->field_keys, 1));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":a-id"), vector_nth(d_rule->field_keys, 2));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":b-id"), vector_nth(d_rule->field_keys, 3));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":phase-mask"), vector_nth(d_rule->field_keys, 4));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enabled"), vector_nth(d_rule->field_keys, 5));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":cooldown-ms"), vector_nth(d_rule->field_keys, 6));
+}
+
+TEST(test_gfx_collision_contract_normalize_rule_defaults) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.scene) "
+        "  (let [r (tiny-gfx.scene/normalize-collision-rule {:id :r1 :a-id 1 :b-id 2})] "
+        "    [(:slot r) (:enabled r) (:cooldown-ms r) (:phase-mask r)]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(4, vector_count(v));
+
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":game"), vector_nth(v, 0));
+    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 1));
+    TEST_ASSERT_TRUE(is_fixnum(vector_nth(v, 2)));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 2)));
+    ID phase_mask = vector_nth(v, 3);
+    TEST_ASSERT_TRUE(TAG(phase_mask) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *mask_vec = as_vector(phase_mask);
+    TEST_ASSERT_NOT_NULL(mask_vec);
+    TEST_ASSERT_EQUAL_UINT(2, vector_count(mask_vec));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enter"), vector_nth(mask_vec, 0));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":exit"), vector_nth(mask_vec, 1));
+}
+
+TEST(test_gfx_collision_contract_phase_mask_normalization_and_enabled_false) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.scene) "
+        "  (let [r1 (tiny-gfx.scene/normalize-collision-rule "
+        "             {:id :r1 :a-id 1 :b-id 2 :phase-mask [:stay :foo] :enabled false}) "
+        "        r2 (tiny-gfx.scene/normalize-collision-rule "
+        "             {:id :r2 :a-id 1 :b-id 2 :phase-mask []})] "
+        "    [(:phase-mask r1) (:enabled r1) (:phase-mask r2)]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(3, vector_count(v));
+
+    ID r1_mask = vector_nth(v, 0);
+    TEST_ASSERT_TRUE(TAG(r1_mask) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *r1_mask_vec = as_vector(r1_mask);
+    TEST_ASSERT_NOT_NULL(r1_mask_vec);
+    TEST_ASSERT_EQUAL_UINT(1, vector_count(r1_mask_vec));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":stay"), vector_nth(r1_mask_vec, 0));
+    TEST_ASSERT_EQUAL_PTR(clj_false, vector_nth(v, 1));
+
+    ID r2_mask = vector_nth(v, 2);
+    TEST_ASSERT_TRUE(TAG(r2_mask) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *r2_mask_vec = as_vector(r2_mask);
+    TEST_ASSERT_NOT_NULL(r2_mask_vec);
+    TEST_ASSERT_EQUAL_UINT(2, vector_count(r2_mask_vec));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enter"), vector_nth(r2_mask_vec, 0));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":exit"), vector_nth(r2_mask_vec, 1));
+}

@@ -342,6 +342,10 @@ Tasks:
   - menu UI
   - vector title animation
 - Validate update path from tiny-clj game state -> frame scene slots (snapshots) -> renderer.
+- Integrate with the existing tiny-clj scheduler (no additional scheduler layer in `tiny-gfx`):
+  - scene/game updates are timer/event-driven as scheduled by tiny-clj (not mandatory fixed per-tick loop)
+  - updates publish only changed slot snapshots (`deco`, `score`, `game`) to keep render wakeups sparse
+  - `tiny-gfx` remains render/game-state focused and does not own input handling
 - Optionally validate patch-based hotpath updates for selected widgets/animations.
 - Run long soak tests on host and ESP32 to check stability and memory behavior.
 
@@ -353,6 +357,125 @@ Done when:
 
 Status: TODO
 
+Collision spec (first-class contract):
+
+- Collision rules are declared in Clojure and published with the scene snapshot.
+- Proposed rule shape (record or map-like equivalent):
+  - `:id` stable rule id (for debug/traceability)
+  - `:slot` optional slot selector (`:game`, `:score`, `:deco`), default `:game`
+  - `:a-id` stable object id
+  - `:b-id` stable object id
+  - `:phase-mask` set of phases to emit (`#{:enter :stay :exit}`), default `#{:enter :exit}`
+  - `:enabled` bool, default true
+  - optional `:cooldown-ms` (minimum delay between repeated `:stay` callbacks)
+- Determinism rules:
+  - pair identity is canonicalized in C (`min(id), max(id)`) for stable latch keys
+  - unchanged overlap state must not re-emit `:enter`
+  - disabling/removing a rule clears its latch state without synthetic events
+
+Collision callback event contract (C -> scheduler):
+
+- Event payload includes at least:
+  - `:rule-id`
+  - `:slot`
+  - `:a-id`
+  - `:b-id`
+  - `:phase` (`:enter`/`:stay`/`:exit`)
+  - `:snapshot-gen` (or equivalent monotonically increasing generation)
+  - `:ts-ms` host/device monotonic timestamp used by C
+- Ordering rules:
+  - events are emitted in deterministic rule iteration order per processed snapshot
+  - scheduler consumption order must match enqueue order (FIFO)
+
+Thread-safety integration boundary (required for scheduler callbacks):
+
+- Keep scheduler logic single-threaded; only ingress is thread-safe.
+- C render/collision thread must never mutate scheduler internals directly.
+- Introduce thread-safe callback ingress queue (MPSC -> scheduler consumer):
+  - producer: C render/collision thread enqueues callback events
+  - consumer: scheduler thread drains queue at safe points
+  - wakeup: condition/event signal (no busy polling)
+  - shutdown: explicit close/drain semantics to avoid lost events
+- Memory/ownership rule for ingress payloads:
+  - producer writes immutable payload copies
+  - consumer owns processing + cleanup on scheduler thread
+
+Stepwise delivery plan (implementation order):
+
+1. Collision contract freeze (Clojure side, no runtime behavior change yet)
+   - finalize collision-rule schema fields and defaults
+   - finalize callback-event payload fields and phase vocabulary
+   - document canonical pair-id behavior and latch semantics
+   - add schema-level tests for rule decoding/default handling
+
+2. Scheduler callback ingress (thread-safe boundary only)
+   - implement thread-safe ingress queue (MPSC + FIFO)
+   - add wakeup signaling and scheduler-thread drain API
+   - add close/drain shutdown semantics
+   - tests: FIFO ordering, concurrent producer safety, scheduler-thread-only handler execution
+
+3. C collision engine baseline (without callback wiring enabled by default)
+   - decode collision rules from snapshot
+   - resolve object ids to render objects and compute overlap
+   - maintain enter/stay/exit latch state per canonical pair key
+   - tests: deterministic overlap transitions from synthetic snapshots
+
+4. Bridge C collision events into scheduler ingress
+   - enqueue callback payloads from C collision pass
+   - drain and dispatch callback handlers on scheduler thread
+   - tests: deterministic event order, no duplicate `:enter` on unchanged overlap
+
+5. Slot/scenario integration and rollout in host viewer
+   - enable collision rules first for `:game` slot
+   - keep manual hitbox override path until auto-bounds contract is fully validated
+   - add feature flag for safe rollback during integration
+   - tests: host demo scenario coverage (`enter`/`exit`, moving obstacle, stable-id updates)
+
+6. Hardening and performance pass
+   - bounded queue/backpressure policy for event bursts
+   - watchdog/metrics hooks for dropped/queued callback counts
+   - soak tests with long-running host scene updates
+   - prepare ESP32 follow-up checklist (same contract, backend-specific limits)
+
+Execution gates per step (must pass before next step):
+
+- Gate 1 (after step 1):
+  - collision rule schema + defaults are fixed and documented
+  - callback payload schema is fixed and versioned in docs/tests
+  - no runtime behavior change in renderer/scheduler yet
+
+- Gate 2 (after step 2):
+  - scheduler ingress queue API is available and thread-safe
+  - callback handlers still run exclusively on scheduler thread
+  - queue close/drain is covered by unit tests
+
+- Gate 3 (after step 3):
+  - C collision evaluation produces deterministic phase transitions from synthetic snapshots
+  - latch state behavior is stable across unchanged frames and rule removal
+  - callback bridge still disabled by default (feature-gated)
+
+- Gate 4 (after step 4):
+  - C collision events are enqueued and dispatched via scheduler ingress
+  - event ordering remains deterministic (rule order -> FIFO drain order)
+  - no duplicate `:enter` events on unchanged overlap
+
+- Gate 5 (after step 5):
+  - host viewer integrates `:game` collision rules end-to-end under feature flag
+  - fallback path (manual hitbox behavior) remains available
+  - demo scenarios validate `:enter`/`:exit` semantics with stable ids
+
+- Gate 6 (after step 6):
+  - burst behavior/backpressure policy is validated
+  - queue/dispatch metrics are available for diagnostics
+  - soak runs complete without callback loss, deadlock, or scheduler thread violations
+
+Immediate next implementation slice:
+
+- Start with Step 1 only (contract freeze):
+  - add explicit rule/event schema docs in code comments and plan references
+  - add schema-focused tests (defaults, disabled rules, phase-mask normalization)
+  - postpone all scheduler/C runtime changes until Gate 1 passes
+
 Tasks:
 
 - Define collision-spec records in tiny-clj with stable `:id` references:
@@ -360,17 +483,24 @@ Tasks:
   - ids must be stable across snapshot updates to keep collision routing deterministic
 - Define how collision checks are attached to a scene/slot snapshot:
   - collision rule vector is part of the published scene snapshot contract
+  - tiny-clj is the source of truth for which collision pairs are checked
   - missing/unknown ids are ignored safely (no hard crash in render/update loop)
-- Implement collision evaluation in C as an automatic step per frame/snapshot:
-  - C resolves ids to objects, executes configured overlap tests, and detects state changes (enter/stay/exit)
+- Implement collision evaluation in C as an automatic step for each relevant snapshot update:
+  - C resolves configured ids to objects, executes overlap tests, and detects state changes (enter/stay/exit)
   - no per-pixel logic in tiny-clj; checks use decoded primitive bounds/shape semantics
 - Emit collision events back into the tiny-clj scheduler via callback bridge:
   - callback payload includes at least `:a-id`, `:b-id`, `:phase` (`:enter`/`:stay`/`:exit`) and optional frame/slot metadata
-  - callback delivery is deterministic and ordered per frame
+  - callback delivery is deterministic and ordered per scheduler callback dispatch
+- Implement scheduler ingress thread-safety for collision callbacks:
+  - add thread-safe callback queue + wakeup signaling
+  - ensure scheduler-thread-only processing of queued callbacks
+  - add queue close/drain behavior for clean shutdown
 - Add host-side tests for collision determinism and callback behavior:
   - stable ids across snapshots
   - moved object triggers enter/exit transitions correctly
   - unchanged frame does not duplicate `:enter` events
+  - enqueue/drain order remains FIFO under concurrent producer activity
+  - scheduler thread alone executes callback handlers (no cross-thread handler execution)
 - Current host-demo state (intermediate step):
   - obstacle world bounding box is already derived automatically from geometry + explicit transform application and cached across frames
   - collision hitbox is intentionally still set manually for gameplay tuning/stability
@@ -379,7 +509,7 @@ Tasks:
 Done when:
 
 - Collision pairs are specified declaratively via stable ids in scene records.
-- C collision checks run automatically from snapshot input and dispatch deterministic callbacks into the Clojure scheduler.
+- C collision checks run automatically from snapshot input using Clojure-declared pair specs and dispatch deterministic callbacks into the existing Clojure scheduler.
 
 ## Optional Extension A: Render-Thread Interpolation Animations (Off-Main-Thread)
 
