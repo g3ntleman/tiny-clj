@@ -115,8 +115,13 @@ static void macos_viewer_apply_saved_screen_placement(NSWindow *window) {
     }
     double saved_w = [defaults doubleForKey:kMacosViewerWidthKey];
     double saved_h = [defaults doubleForKey:kMacosViewerHeightKey];
-    if (saved_w > 0.0) frame.size.width = saved_w;
-    if (saved_h > 0.0) frame.size.height = saved_h;
+    NSRect content_check = [NSWindow contentRectForFrameRect:
+                            NSMakeRect(0, 0, saved_w, saved_h)
+                                                   styleMask:[window styleMask]];
+    if (saved_w >= 200.0 && content_check.size.height >= 100.0) {
+        frame.size.width  = saved_w;
+        frame.size.height = saved_h;
+    }
 
     [window setFrame:frame display:NO];
     g_macos_viewer_screen_restore_applied = true;
@@ -160,6 +165,10 @@ static NSWindow *macos_viewer_primary_window(void) {
 - (void)windowDidMoveOrChangeScreen:(NSNotification *)note {
     id obj = [note object];
     if (![obj isKindOfClass:[NSWindow class]]) {
+        return;
+    }
+    // Avoid clobbering persisted frame/screen during startup before restore applies.
+    if (!g_macos_viewer_screen_restore_applied) {
         return;
     }
     NSWindow *window = (NSWindow *)obj;
@@ -251,5 +260,22 @@ void macos_viewer_save_window_position(void) {
         }
         macos_viewer_store_screen_position_for_window(window);
         [window saveFrameUsingName:kMacosViewerWindowAutosaveName];
+    }
+}
+
+bool macos_viewer_get_content_size(unsigned *out_w, unsigned *out_h) {
+    if (!out_w || !out_h) return false;
+    @autoreleasepool {
+        NSWindow *window = macos_viewer_primary_window();
+        if (!window) return false;
+        NSRect frame = [window frame];
+        NSRect content = [NSWindow contentRectForFrameRect:frame
+                                                 styleMask:[window styleMask]];
+        unsigned w = (unsigned)content.size.width;
+        unsigned h = (unsigned)content.size.height;
+        if (w == 0 || h == 0) return false;
+        *out_w = w;
+        *out_h = h;
+        return true;
     }
 }

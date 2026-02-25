@@ -19,10 +19,14 @@
 #define VIEW_H 240
 #define VIEW_DEFAULT_WINDOW_SCALE 2u
 #define VIEWER_SLOT_COUNT 3
-/* Toggle for easy A/B: 1=fixed simulation timestep, 0=legacy frame-coupled updates. */
-#define HOST_VIEWER_FIXED_TIMESTEP_ENABLED 1
-#define HOST_VIEWER_SIM_HZ 60.0
-#define HOST_VIEWER_MAX_SIM_STEPS_PER_FRAME 4u
+#define TARGET_FPS           60u
+
+#define TERRAIN_SPEED_PXS  120    /* px/s  → 2 px/frame @60 */
+#define OBSTACLE_SPEED_PXS 120    /* px/s  → 2 px/frame @60 */
+#define PLAYER_BOB_HZ        5    /* Hz    → 1 LUT step/frame @60 (12 entries) */
+
+#define TERRAIN_PPF  (TERRAIN_SPEED_PXS / TARGET_FPS)   /* 2 */
+#define OBSTACLE_PPF (OBSTACLE_SPEED_PXS / TARGET_FPS)  /* 1 */
 
 /** Letterbox viewport in window coordinates (avoids MiniFB's scale division which breaks on Retina). */
 static void set_letterbox_viewport(struct mfb_window *window, unsigned win_w, unsigned win_h) {
@@ -38,6 +42,13 @@ static void set_letterbox_viewport(struct mfb_window *window, unsigned win_w, un
 }
 
 static void on_window_resize(struct mfb_window *window, int width, int height) {
+#if defined(__APPLE__)
+    unsigned content_w = 0, content_h = 0;
+    if (macos_viewer_get_content_size(&content_w, &content_h)) {
+        set_letterbox_viewport(window, content_w, content_h);
+        return;
+    }
+#endif
     set_letterbox_viewport(window, (unsigned)width, (unsigned)height);
 }
 
@@ -366,11 +377,11 @@ static ID make_transform_record(const VgNode *node) {
     }
     ID *slots = STACK_ALLOC(ID, g_record_schema.n_transform);
     for (unsigned int i = 0; i < g_record_schema.n_transform; i++) slots[i] = NULL;
-    slots[g_record_schema.transform_tx] = fixed(node->transform.tx);
-    slots[g_record_schema.transform_ty] = fixed(node->transform.ty);
-    slots[g_record_schema.transform_sx] = fixed(node->transform.sx);
-    slots[g_record_schema.transform_sy] = fixed(node->transform.sy);
-    slots[g_record_schema.transform_rot] = fixed(node->transform.rot_deg);
+    slots[g_record_schema.transform_tx] = fixnum(node->transform.tx);
+    slots[g_record_schema.transform_ty] = fixnum(node->transform.ty);
+    slots[g_record_schema.transform_sx] = (ID)(((uintptr_t)node->transform.sx << TAG_BITS) | TAG_FIXED);
+    slots[g_record_schema.transform_sy] = (ID)(((uintptr_t)node->transform.sy << TAG_BITS) | TAG_FIXED);
+    slots[g_record_schema.transform_rot] = fixnum(node->transform.rot_deg);
     return create_record_from_slots(g_record_schema.t_transform, g_record_schema.n_transform, slots);
 }
 
@@ -501,8 +512,8 @@ static ID make_node_record(const VgNode *node) {
             slots[g_record_schema.text_visible] = visible;
             slots[g_record_schema.text_x] = fixnum((int)node->data.text.x);
             slots[g_record_schema.text_y] = fixnum((int)node->data.text.y);
-            slots[g_record_schema.text_scale] = fixed(node->data.text.scale);
-            slots[g_record_schema.text_rot] = fixed(node->data.text.rot_deg);
+            slots[g_record_schema.text_scale] = (ID)(((uintptr_t)node->data.text.scale << TAG_BITS) | TAG_FIXED);
+            slots[g_record_schema.text_rot] = fixnum(node->data.text.rot_deg);
             slots[g_record_schema.text_text] = text;
             return create_record_from_slots(g_record_schema.t_vtext, g_record_schema.n_vtext, slots);
         }
@@ -599,7 +610,7 @@ int main(void) {
 #endif
     const unsigned default_win_w = VIEW_W * VIEW_DEFAULT_WINDOW_SCALE;
     const unsigned default_win_h = VIEW_H * VIEW_DEFAULT_WINDOW_SCALE;
-    struct mfb_window *window = mfb_open_ex("tiny-clj vector host viewer (MiniFB)", default_win_w, default_win_h, WF_RESIZABLE);
+    struct mfb_window *window = mfb_open_ex("tiny-clj host viewer", default_win_w, default_win_h, WF_RESIZABLE);
     if (!window) {
         fprintf(stderr, "Failed to open MiniFB window\n");
         return 1;
@@ -610,7 +621,18 @@ int main(void) {
 #endif
     mfb_show_cursor(window, true);
     mfb_set_resize_callback(window, on_window_resize);
+#if defined(__APPLE__)
+    {
+        unsigned content_w = 0, content_h = 0;
+        if (macos_viewer_get_content_size(&content_w, &content_h)) {
+            set_letterbox_viewport(window, content_w, content_h);
+        } else {
+            set_letterbox_viewport(window, default_win_w, default_win_h);
+        }
+    }
+#else
     set_letterbox_viewport(window, default_win_w, default_win_h);
+#endif
     struct mfb_timer *timer = mfb_timer_create();
     if (!timer) {
         fprintf(stderr, "Failed to create MiniFB timer\n");
@@ -618,8 +640,6 @@ int main(void) {
         return 1;
     }
     double fps_window_start_s = mfb_timer_now(timer);
-    double sim_prev_time_s = fps_window_start_s;
-    double sim_accumulator_s = 0.0;
     unsigned fps_frame_count = 0;
     char fps_label[32];
     (void)snprintf(fps_label, sizeof(fps_label), "FPS: --.-");
@@ -699,10 +719,10 @@ int main(void) {
         .has_transform = true,
         .transform = vg_transform_identity(),
         .style = score_style,
-        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = score_line}
+        .data.text = {.x = 0, .y = 0, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = score_line}
     };
-    score_text.transform.tx = 6.0f;
-    score_text.transform.ty = 10.0f;
+    score_text.transform.tx = 6;
+    score_text.transform.ty = 10;
     VgNode *score_children[] = {&score_text};
     VgNode score_root = {
         .id = 2000,
@@ -762,10 +782,10 @@ int main(void) {
         .has_transform = true,
         .transform = vg_transform_identity(),
         .style = score_style,
-        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "GAME SCENE"}
+        .data.text = {.x = 0, .y = 0, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "GAME SCENE"}
     };
-    game_caption.transform.tx = 96.0f;
-    game_caption.transform.ty = 52.0f;
+    game_caption.transform.tx = 96;
+    game_caption.transform.ty = 52;
     VgNode *game_children[] = {&game_terrain, &game_player, &game_obstacle_body, &game_obstacle_nose, &game_caption};
     VgNode game_root = {
         .id = 3000,
@@ -779,9 +799,9 @@ int main(void) {
     VgRenderSlotState slot_states[VIEWER_SLOT_COUNT] = {0};
     bool player_small = false;
     bool collision_latched = false;
-    int collision_cooldown_frames = 0;
+    float collision_cooldown_end_s = 0.0f;
     ObstacleBBoxCache obstacle_bbox_cache = {0};
-    uint32_t frame_tick = 0;
+    unsigned frame_count = 0;
     static const int player_bob_lut[] = {0, -1, -3, -5, -4, -2, 0, 1, 0, -1, -2, -1};
     vg_framebuffer_clear(&fb, 0x0000u);
     publish_frame_scene_slot(0, &deco_root, deco_clip, 0, true, true, 0x0000u, 1);
@@ -800,7 +820,7 @@ int main(void) {
             (void)snprintf(fps_label, sizeof(fps_label), "FPS: %.1f", fps);
             (void)snprintf(score_line, sizeof(score_line), "SCORE %04d    LIFES 3", score % 10000);
             char title[96];
-            (void)snprintf(title, sizeof(title), "tiny-clj vector host viewer (MiniFB) - %.1f FPS", fps);
+            (void)snprintf(title, sizeof(title), "tiny-clj host viewer - %.1f FPS", fps);
             macos_viewer_set_window_title(title);
             fps_window_start_s = (double)time_s;
             fps_frame_count = 0;
@@ -820,49 +840,25 @@ int main(void) {
             }
         }
 
-#if HOST_VIEWER_FIXED_TIMESTEP_ENABLED
-        double sim_now_s = (double)mfb_timer_now(timer);
-        double frame_dt_s = sim_now_s - sim_prev_time_s;
-        sim_prev_time_s = sim_now_s;
-        if (frame_dt_s < 0.0) frame_dt_s = 0.0;
-        if (frame_dt_s > 0.25) frame_dt_s = 0.25;
-        const double sim_dt_s = 1.0 / HOST_VIEWER_SIM_HZ;
-        sim_accumulator_s += frame_dt_s;
-        unsigned sim_steps = 0;
-        while (sim_accumulator_s >= sim_dt_s && sim_steps < HOST_VIEWER_MAX_SIM_STEPS_PER_FRAME) {
-            frame_tick++;
-            if (collision_cooldown_frames > 0) {
-                collision_cooldown_frames--;
-            }
-            sim_accumulator_s -= sim_dt_s;
-            sim_steps++;
-        }
-        if (sim_steps == HOST_VIEWER_MAX_SIM_STEPS_PER_FRAME && sim_accumulator_s > sim_dt_s) {
-            /* Drop backlog to avoid visible spiral-of-death stutter. */
-            sim_accumulator_s = sim_dt_s;
-        }
-#else
-        frame_tick++;
-        if (collision_cooldown_frames > 0) {
-            collision_cooldown_frames--;
-        }
-#endif
-        int terrain_scroll_px = (int)((frame_tick * 2u) % 320u);
-        int player_bob_y = player_bob_lut[frame_tick % (sizeof(player_bob_lut) / sizeof(player_bob_lut[0]))];
-        int obstacle_x = 319 - (int)((frame_tick * 3u) % 360u);
+        frame_count++;
+        bool collision_cooldown_active = (time_s < collision_cooldown_end_s);
+        unsigned bob_lut_len = (unsigned)(sizeof(player_bob_lut) / sizeof(player_bob_lut[0]));
+        int terrain_scroll_px = (int)((frame_count * TERRAIN_PPF) % 320u);
+        int player_bob_y = player_bob_lut[frame_count % bob_lut_len];
+        int obstacle_x = 319 - (int)((frame_count * OBSTACLE_PPF) % 360u);
 
         game_terrain.transform = vg_transform_identity();
-        game_terrain.transform.tx = (float)(-terrain_scroll_px);
+        game_terrain.transform.tx = (int16_t)(-terrain_scroll_px);
         game_player.transform = vg_transform_identity();
-        game_player.transform.ty = (float)player_bob_y;
+        game_player.transform.ty = (int16_t)player_bob_y;
         game_obstacle_body.transform = vg_transform_identity();
-        game_obstacle_body.transform.tx = (float)(obstacle_x + 20);
-        game_obstacle_body.transform.ty = 126.0f;
-        game_obstacle_body.transform.rot_deg = -90.0f;
+        game_obstacle_body.transform.tx = (int16_t)(obstacle_x + 20);
+        game_obstacle_body.transform.ty = 126;
+        game_obstacle_body.transform.rot_deg = -90;
         game_obstacle_nose.transform = vg_transform_identity();
-        game_obstacle_nose.transform.tx = (float)(obstacle_x + 20);
-        game_obstacle_nose.transform.ty = 126.0f;
-        game_obstacle_nose.transform.rot_deg = -90.0f;
+        game_obstacle_nose.transform.tx = (int16_t)(obstacle_x + 20);
+        game_obstacle_nose.transform.ty = 126;
+        game_obstacle_nose.transform.rot_deg = -90;
 
         // Derived automatically from geometry + manual transform call.
         // Collision remains on manual hitbox for now.
@@ -901,10 +897,10 @@ int main(void) {
             bool colliding = (player_max_x >= obstacle_min_x_i) && (player_min_x <= obstacle_max_x_i) &&
                              (player_max_y >= obstacle_min_y_i) && (player_min_y <= obstacle_max_y_i);
 
-            if (colliding && !collision_latched && collision_cooldown_frames == 0) {
+            if (colliding && !collision_latched && !collision_cooldown_active) {
                 player_small = !player_small;
                 collision_latched = true;
-                collision_cooldown_frames = 18;
+                collision_cooldown_end_s = time_s + 0.3f;
             } else if (!colliding) {
                 collision_latched = false;
             }

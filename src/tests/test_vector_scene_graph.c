@@ -80,8 +80,8 @@ TEST(test_vector_scene_graph_nested_group_transform_affects_child_line) {
 
     VgNode *children[] = {&line};
     VgTransform group_t = vg_transform_identity();
-    group_t.tx = 7.0f;
-    group_t.ty = 5.0f;
+    group_t.tx = 7;
+    group_t.ty = 5;
     VgNode group = {
         .id = 10,
         .type = VG_NODE_GROUP,
@@ -248,14 +248,14 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
 
 TEST(test_vector_scene_graph_fixed_transform_compose_apply_px_scale_translate_exact) {
     VgTransform parent = vg_transform_identity();
-    parent.tx = 10.0f;
-    parent.ty = -2.0f;
-    parent.sx = 2.0f;
-    parent.sy = 3.0f;
+    parent.tx = 10;
+    parent.ty = -2;
+    parent.sx = 2 * VG_SCALE_ONE;
+    parent.sy = 3 * VG_SCALE_ONE;
 
     VgTransform local = vg_transform_identity();
-    local.tx = 4.0f;
-    local.ty = 5.0f;
+    local.tx = 4;
+    local.ty = 5;
 
     VgTransformFixed parent_f = vg_transform_fixed_from_transform(parent);
     VgTransformFixed local_f = vg_transform_fixed_from_transform(local);
@@ -267,6 +267,28 @@ TEST(test_vector_scene_graph_fixed_transform_compose_apply_px_scale_translate_ex
 
     TEST_ASSERT_EQUAL_INT(32, out_x);
     TEST_ASSERT_EQUAL_INT(37, out_y);
+}
+
+TEST(test_vector_scene_graph_fixed_transform_cardinal_rotation_is_exact) {
+    int one_fp = vg_transform_fixed_identity().m00;
+    VgTransform t = vg_transform_identity();
+    t.tx = 10;
+    t.ty = 20;
+    t.sx = VG_SCALE_ONE;
+    t.sy = VG_SCALE_ONE;
+    t.rot_deg = -90;
+
+    VgTransformFixed tf = vg_transform_fixed_from_transform(t);
+    TEST_ASSERT_EQUAL_INT(0, tf.m00);
+    TEST_ASSERT_EQUAL_INT(one_fp, tf.m01);
+    TEST_ASSERT_EQUAL_INT(-one_fp, tf.m10);
+    TEST_ASSERT_EQUAL_INT(0, tf.m11);
+
+    int out_x = 0;
+    int out_y = 0;
+    vg_transform_fixed_apply_px(tf, 3, 4, &out_x, &out_y);
+    TEST_ASSERT_EQUAL_INT(14, out_x);
+    TEST_ASSERT_EQUAL_INT(17, out_y);
 }
 
 TEST(test_vector_scene_graph_deterministic_frame_checksum_for_mixed_scene) {
@@ -327,7 +349,7 @@ TEST(test_vector_scene_graph_deterministic_frame_checksum_for_mixed_scene) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = white,
-        .data.text = {.x = 34, .y = 30, .scale = 1.0f, .rot_deg = 0.0f, .text = "HI"}
+        .data.text = {.x = 34, .y = 30, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "HI"}
     };
 
     VgNode *children[] = {&line, &rect, &tri, &poly, &text};
@@ -415,7 +437,7 @@ TEST(test_vector_scene_graph_render_slot_if_changed_skips_unchanged_and_clears_m
 
     line.has_transform = true;
     line.transform = vg_transform_identity();
-    line.transform.tx = 20.0f;
+    line.transform.tx = 20;
     slot.clip_rect.x = 20;
     slot.clip_rect.w = 16;
 
@@ -484,7 +506,7 @@ TEST(test_vector_scene_graph_patch_updates_transform_visibility_style_and_text) 
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 4, .scale = 1.0f, .rot_deg = 0.0f, .text = "A"}
+        .data.text = {.x = 2, .y = 4, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "A"}
     };
 
     VgNode line = {
@@ -511,8 +533,8 @@ TEST(test_vector_scene_graph_patch_updates_transform_visibility_style_and_text) 
 
     VgPatch tpatch = {.id = 42, .type = VG_PATCH_TRANSFORM};
     tpatch.value.transform = vg_transform_identity();
-    tpatch.value.transform.tx = 20.0f;
-    tpatch.value.transform.ty = -8.0f;
+    tpatch.value.transform.tx = 20;
+    tpatch.value.transform.ty = -8;
     TEST_ASSERT_TRUE(vg_scene_apply_patch(&root, &tpatch));
 
     VgPatch spatch = {.id = 42, .type = VG_PATCH_STYLE};
@@ -612,7 +634,7 @@ TEST(test_vector_scene_graph_hv_mono_has_inter_glyph_gap) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "A"}
+        .data.text = {.x = 0, .y = 0, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "A"}
     };
     VgNode text_aa = text_a;
     text_aa.id = 62;
@@ -647,7 +669,7 @@ TEST(test_vector_scene_graph_hv_mono_problem_glyphs_not_half_height) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "MWXYR"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "MWXYR"}
     };
 
     vg_render_scene(&text, &fb);
@@ -680,7 +702,7 @@ TEST(test_vector_scene_graph_punctuation_dot_and_colon_are_compact_blobs) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "."}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "."}
     };
     VgNode colon = dot;
     colon.id = 72;
@@ -728,7 +750,7 @@ TEST(test_vector_scene_graph_comma_sits_lower_than_period_and_not_left) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "."}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "."}
     };
     VgNode comma = dot;
     comma.id = 74;
@@ -778,7 +800,7 @@ TEST(test_vector_scene_graph_additional_ascii_punctuation_avoids_box_fallback) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = NULL}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = NULL}
     };
 
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
@@ -817,7 +839,7 @@ TEST(test_vector_scene_graph_compact_punctuation_disables_aa_fringe_even_with_bg
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = NULL}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = NULL}
     };
 
     const char *cases[] = {".", ":"};
@@ -859,7 +881,7 @@ TEST(test_vector_scene_graph_arcade_text_disables_aa_fringe_even_with_bg) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "FPS: 59.9"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "FPS: 59.9"}
     };
 
     vg_framebuffer_clear(&fb, 0x0000u);
@@ -898,7 +920,7 @@ TEST(test_vector_scene_graph_arcade_z_scale_1_5_diagonal_stays_within_expected_b
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.5f, .rot_deg = 0.0f, .text = "Z"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE * 3 / 2, .rot_deg = 0, .text = "Z"}
     };
 
     vg_render_scene(&text, &fb);
@@ -927,7 +949,7 @@ TEST(test_vector_scene_graph_slash_backslash_scale_1_5_are_not_one_pixel_too_low
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.5f, .rot_deg = 0.0f, .text = NULL}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE * 3 / 2, .rot_deg = 0, .text = NULL}
     };
 
     const char *cases[] = {"/", "\\"};
@@ -962,7 +984,7 @@ TEST(test_vector_scene_graph_arcade_exclamation_has_detached_dot) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "!"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "!"}
     };
 
     vg_render_scene(&text, &fb);
@@ -1013,7 +1035,7 @@ TEST(test_vector_scene_graph_colon_blobs_are_vertically_aligned) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = ":"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = ":"}
     };
 
     vg_render_scene(&text, &fb);
@@ -1062,7 +1084,7 @@ TEST(test_vector_scene_graph_arcade_j_has_bottom_bar_shape) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "J"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "J"}
     };
 
     vg_render_scene(&text, &fb);

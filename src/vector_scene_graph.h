@@ -5,12 +5,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/** Fixed-point 1.0× for scale fields (Q19.13, matches CLJ_FIXED_SCALE). */
+#define VG_SCALE_ONE (1 << 13)
+
 typedef struct {
-    float tx;
-    float ty;
-    float sx;
-    float sy;
-    float rot_deg;
+    int16_t tx;
+    int16_t ty;
+    int32_t sx;       /* Q19.13 fixed-point scale (VG_SCALE_ONE = 1.0×) */
+    int32_t sy;       /* Q19.13 fixed-point scale (VG_SCALE_ONE = 1.0×) */
+    int16_t rot_deg;
 } VgTransform;
 
 typedef struct {
@@ -85,8 +88,8 @@ typedef struct {
 typedef struct {
     int16_t x;
     int16_t y;
-    float scale;
-    float rot_deg;
+    int32_t scale;     /* Q19.13 fixed-point scale (VG_SCALE_ONE = 1.0×) */
+    int16_t rot_deg;
     const char *text;
 } VgTextData;
 
@@ -161,7 +164,6 @@ typedef struct {
 VgTransform vg_transform_identity(void);
 VgStyle vg_style_default(void);
 VgTransform vg_transform_compose(VgTransform parent, VgTransform local);
-void vg_transform_apply(VgTransform t, float x, float y, float *out_x, float *out_y);
 VgTransformFixed vg_transform_fixed_identity(void);
 VgTransformFixed vg_transform_fixed_from_transform(VgTransform t);
 VgTransformFixed vg_transform_fixed_compose(VgTransformFixed parent, VgTransformFixed local);

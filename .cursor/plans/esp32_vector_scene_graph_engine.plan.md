@@ -327,9 +327,50 @@ Tasks:
 - Add compile-time switch for float vs fixed backend.
 - Current state: text transform path already uses renderer fixed-point math and now shares fractional-bit constants with `subjective-c`; thick-line rasterization still uses float math.
 
+### Step 8a: Eliminate float VgTransform — make VgTransform integer-only
+
+Motivation: `VgTransform` currently uses `float` fields (`tx`, `ty`, `sx`, `sy`, `rot_deg`).
+All values set by callers are integers (pixel positions, 90° rotations, scale=1).
+The floats are immediately converted to fixed-point in `vg_transform_fixed_from_transform`.
+Eliminating the float detour removes the last float dependency from the scene-graph hot path.
+
+Tasks:
+
+1. **Header (`vector_scene_graph.h`)**:
+   - Change `VgTransform` fields from `float` to `int16_t` for `tx`, `ty`, `rot_deg` and `uint8_t` (or `int16_t`) for `sx`, `sy` (fixed-point 8.8 or plain integer scale).
+   - Decision: `sx`/`sy` use Q8.8 fixed-point (`int16_t`, 256 = 1.0×) to support fractional scales (e.g. 1.5×) without float.
+   - Change `VgTextData.scale` and `VgTextData.rot_deg` from `float` to matching integer/fixed types.
+   - Update `vg_transform_apply` signature (currently takes/returns `float`) — either remove (unused outside compose) or convert to fixed-point.
+
+2. **Implementation (`vector_scene_graph.c`)**:
+   - `vg_transform_identity()`: return integer defaults (`tx=0, ty=0, sx=256, sy=256, rot_deg=0`).
+   - `vg_transform_fixed_from_transform()`: read integer fields directly into fixed-point matrix — no `fp_from_float` needed for tx/ty/rot_deg; Q8.8 scale converts via shift.
+   - `matrix_from_transform()` / `transform_from_matrix()` / `vg_transform_compose()`: convert to integer math or remove if unused after refactor.
+   - `draw_text_node()`: adapt text scale/rot from integer fields.
+
+3. **Record decoder (`vector_scene_graph_records.c`)**:
+   - `decode_transform()`: replace `id_to_float_default` calls with integer decoders (`id_to_i16_default` or equivalent).
+   - Text record: decode `scale` and `rot` as integer/Q8.8.
+
+4. **Host viewer (`host_viewer_minifb.c`)**:
+   - Remove all `(float)` casts when setting transform fields — values are already `int`.
+   - Adapt scale literals (`1.0f` → `256` for Q8.8).
+
+5. **Tests (`test_vector_scene_graph.c`)**:
+   - Replace float literals in transform setup with integer equivalents.
+   - Verify golden checksums remain identical (rendering must not change).
+
+6. **`VgPatch` union** (`vector_scene_graph.h`):
+   - `VgPatch.value.transform` is `VgTransform` — automatically updated by struct change.
+
+7. **Build + regression**:
+   - All 26+ scene graph tests pass with identical checksums.
+   - Host viewer renders identically (visual + no float warnings).
+
 Done when:
 
 - Fixed-point mode is stable, deterministic, and measurably beneficial in hot paths.
+- `VgTransform` contains no `float` fields; the scene-graph hot path is float-free.
 
 ## Milestone 9: Game/Menu/Title Integration
 

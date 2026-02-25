@@ -109,23 +109,16 @@ static bool id_to_bool_default(ID v, bool default_value) {
     return v != clj_false;
 }
 
-static bool id_to_float_default(ID v, float default_value, float *out) {
-    if (!out) {
-        return false;
-    }
-    if (!v) {
-        *out = default_value;
-        return true;
-    }
+/** Decode a Clojure numeric value to raw Q19.13 fixed-point (same as CLJ_FIXED_SCALE). */
+static int32_t id_to_fixed_raw_default(ID v, int32_t default_value) {
+    if (!v) return default_value;
     if (is_fixnum(v)) {
-        *out = (float)as_fixnum(v);
-        return true;
+        return (int32_t)as_fixnum(v) << CLJ_FIXED_FRAC_BITS;
     }
     if (is_fixed(v)) {
-        *out = as_fixed(v);
-        return true;
+        return (int32_t)((intptr_t)v >> TAG_BITS);
     }
-    return false;
+    return default_value;
 }
 
 static int16_t id_to_i16_default(ID v, int16_t default_value) {
@@ -212,11 +205,11 @@ static VgTransform decode_transform(ID obj, const VgRecordKeys *k) {
     if (!obj || !k) {
         return t;
     }
-    id_to_float_default(get_field(obj, k->k_tx, NULL), 0.0f, &t.tx);
-    id_to_float_default(get_field(obj, k->k_ty, NULL), 0.0f, &t.ty);
-    id_to_float_default(get_field(obj, k->k_sx, NULL), 1.0f, &t.sx);
-    id_to_float_default(get_field(obj, k->k_sy, NULL), 1.0f, &t.sy);
-    id_to_float_default(get_field(obj, k->k_rot, NULL), 0.0f, &t.rot_deg);
+    t.tx = id_to_i16_default(get_field(obj, k->k_tx, NULL), 0);
+    t.ty = id_to_i16_default(get_field(obj, k->k_ty, NULL), 0);
+    t.sx = id_to_fixed_raw_default(get_field(obj, k->k_sx, NULL), VG_SCALE_ONE);
+    t.sy = id_to_fixed_raw_default(get_field(obj, k->k_sy, NULL), VG_SCALE_ONE);
+    t.rot_deg = id_to_i16_default(get_field(obj, k->k_rot, NULL), 0);
     return t;
 }
 
@@ -496,8 +489,8 @@ static bool render_record_node(ID node_obj,
         temp.type = VG_NODE_VTEXT;
         temp.data.text.x = id_to_i16_default(get_field(node_obj, k->k_x, NULL), 0);
         temp.data.text.y = id_to_i16_default(get_field(node_obj, k->k_y, NULL), 0);
-        id_to_float_default(get_field(node_obj, k->k_scale, NULL), 1.0f, &temp.data.text.scale);
-        id_to_float_default(get_field(node_obj, k->k_rot, NULL), 0.0f, &temp.data.text.rot_deg);
+        temp.data.text.scale = id_to_fixed_raw_default(get_field(node_obj, k->k_scale, NULL), VG_SCALE_ONE);
+        temp.data.text.rot_deg = id_to_i16_default(get_field(node_obj, k->k_rot, NULL), 0);
         temp.data.text.text = id_to_text_cstr(get_field(node_obj, k->k_text, NULL));
         return render_one_temp_node(&temp, fb, use_clip, clip_rect);
     }

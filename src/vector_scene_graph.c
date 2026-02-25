@@ -9,15 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-
-typedef struct {
-    float m00;
-    float m01;
-    float m02;
-    float m10;
-    float m11;
-    float m12;
-} VgMatrix2D;
+_Static_assert(VG_SCALE_ONE == CLJ_FIXED_SCALE, "VG_SCALE_ONE must match CLJ_FIXED_SCALE");
 
 static GfxClip g_active_clip = {false, 0, 0, 0, 0};
 
@@ -90,48 +82,14 @@ static bool clip_rect_intersect_fb(VgClipRect in, const VgFrameBuffer *fb, VgCli
     out->h = (int16_t)(y1 - y0);
     return true;
 }
-static VgMatrix2D matrix_from_transform(VgTransform t) {
-    float r = t.rot_deg * (float)M_PI / 180.0f;
-    float c = cosf(r);
-    float s = sinf(r);
-    VgMatrix2D m;
-    m.m00 = c * t.sx;
-    m.m01 = -s * t.sy;
-    m.m02 = t.tx;
-    m.m10 = s * t.sx;
-    m.m11 = c * t.sy;
-    m.m12 = t.ty;
-    return m;
-}
-
-static VgMatrix2D matrix_mul(VgMatrix2D a, VgMatrix2D b) {
-    VgMatrix2D m;
-    m.m00 = (a.m00 * b.m00) + (a.m01 * b.m10);
-    m.m01 = (a.m00 * b.m01) + (a.m01 * b.m11);
-    m.m02 = (a.m00 * b.m02) + (a.m01 * b.m12) + a.m02;
-    m.m10 = (a.m10 * b.m00) + (a.m11 * b.m10);
-    m.m11 = (a.m10 * b.m01) + (a.m11 * b.m11);
-    m.m12 = (a.m10 * b.m02) + (a.m11 * b.m12) + a.m12;
-    return m;
-}
-
-static VgTransform transform_from_matrix(VgMatrix2D m) {
-    VgTransform t = vg_transform_identity();
-    t.tx = m.m02;
-    t.ty = m.m12;
-    t.sx = sqrtf((m.m00 * m.m00) + (m.m10 * m.m10));
-    t.sy = sqrtf((m.m01 * m.m01) + (m.m11 * m.m11));
-    t.rot_deg = atan2f(m.m10, m.m00) * (180.0f / (float)M_PI);
-    return t;
-}
 
 VgTransform vg_transform_identity(void) {
     VgTransform t;
-    t.tx = 0.0f;
-    t.ty = 0.0f;
-    t.sx = 1.0f;
-    t.sy = 1.0f;
-    t.rot_deg = 0.0f;
+    t.tx = 0;
+    t.ty = 0;
+    t.sx = VG_SCALE_ONE;
+    t.sy = VG_SCALE_ONE;
+    t.rot_deg = 0;
     return t;
 }
 
@@ -145,22 +103,6 @@ VgStyle vg_style_default(void) {
     s.has_bg_rgb565 = false;
     s.bg_rgb565 = 0x0000u;
     return s;
-}
-
-VgTransform vg_transform_compose(VgTransform parent, VgTransform local) {
-    VgMatrix2D pm = matrix_from_transform(parent);
-    VgMatrix2D lm = matrix_from_transform(local);
-    return transform_from_matrix(matrix_mul(pm, lm));
-}
-
-void vg_transform_apply(VgTransform t, float x, float y, float *out_x, float *out_y) {
-    VgMatrix2D m = matrix_from_transform(t);
-    if (out_x) {
-        *out_x = (m.m00 * x) + (m.m01 * y) + m.m02;
-    }
-    if (out_y) {
-        *out_y = (m.m10 * x) + (m.m11 * y) + m.m12;
-    }
 }
 
 bool vg_framebuffer_init(VgFrameBuffer *fb, int width, int height, uint16_t *pixels, size_t pixel_count) {
@@ -282,23 +224,81 @@ VgTransformFixed vg_transform_fixed_compose(VgTransformFixed parent, VgTransform
 }
 
 VgTransformFixed vg_transform_fixed_from_transform(VgTransform t) {
-    if (t.rot_deg == 0.0f) {
+    int16_t rot = t.rot_deg;
+    while (rot <= -180) rot = (int16_t)(rot + 360);
+    while (rot > 180)  rot = (int16_t)(rot - 360);
+
+    int32_t tx_fp = ((int32_t)t.tx) << VG_FP_SHIFT;
+    int32_t ty_fp = ((int32_t)t.ty) << VG_FP_SHIFT;
+
+    if (rot == 0) {
         VgTransformFixed mf = vg_transform_fixed_identity();
-        mf.m00 = fp_from_float(t.sx);
-        mf.m11 = fp_from_float(t.sy);
-        mf.m02 = fp_from_float(t.tx);
-        mf.m12 = fp_from_float(t.ty);
+        mf.m00 = t.sx;
+        mf.m11 = t.sy;
+        mf.m02 = tx_fp;
+        mf.m12 = ty_fp;
         return mf;
     }
-    VgMatrix2D m = matrix_from_transform(t);
+    if (rot == 90) {
+        VgTransformFixed mf = vg_transform_fixed_identity();
+        mf.m00 = 0;
+        mf.m01 = -t.sy;
+        mf.m10 = t.sx;
+        mf.m11 = 0;
+        mf.m02 = tx_fp;
+        mf.m12 = ty_fp;
+        return mf;
+    }
+    if (rot == -90) {
+        VgTransformFixed mf = vg_transform_fixed_identity();
+        mf.m00 = 0;
+        mf.m01 = t.sy;
+        mf.m10 = -t.sx;
+        mf.m11 = 0;
+        mf.m02 = tx_fp;
+        mf.m12 = ty_fp;
+        return mf;
+    }
+    if (rot == 180 || rot == -180) {
+        VgTransformFixed mf = vg_transform_fixed_identity();
+        mf.m00 = -t.sx;
+        mf.m11 = -t.sy;
+        mf.m02 = tx_fp;
+        mf.m12 = ty_fp;
+        return mf;
+    }
+
+    /* Non-cardinal angle: float trig fallback (cold path). */
+    float r = (float)rot * ((float)M_PI / 180.0f);
+    float c = cosf(r);
+    float s = sinf(r);
+    float sx_f = (float)t.sx / (float)VG_FP_ONE;
+    float sy_f = (float)t.sy / (float)VG_FP_ONE;
     VgTransformFixed mf;
-    mf.m00 = fp_from_float(m.m00);
-    mf.m01 = fp_from_float(m.m01);
-    mf.m02 = fp_from_float(m.m02);
-    mf.m10 = fp_from_float(m.m10);
-    mf.m11 = fp_from_float(m.m11);
-    mf.m12 = fp_from_float(m.m12);
+    mf.m00 = fp_from_float(c * sx_f);
+    mf.m01 = fp_from_float(-s * sy_f);
+    mf.m02 = tx_fp;
+    mf.m10 = fp_from_float(s * sx_f);
+    mf.m11 = fp_from_float(c * sy_f);
+    mf.m12 = ty_fp;
     return mf;
+}
+
+VgTransform vg_transform_compose(VgTransform parent, VgTransform local) {
+    VgTransformFixed pf = vg_transform_fixed_from_transform(parent);
+    VgTransformFixed lf = vg_transform_fixed_from_transform(local);
+    VgTransformFixed cf = vg_transform_fixed_compose(pf, lf);
+    VgTransform result;
+    result.tx = (int16_t)(cf.m02 >> VG_FP_SHIFT);
+    result.ty = (int16_t)(cf.m12 >> VG_FP_SHIFT);
+    int32_t sx2 = fp_mul_fixed(cf.m00, cf.m00) + fp_mul_fixed(cf.m10, cf.m10);
+    int32_t sy2 = fp_mul_fixed(cf.m01, cf.m01) + fp_mul_fixed(cf.m11, cf.m11);
+    float sx_f = sqrtf((float)sx2 / (float)VG_FP_ONE);
+    float sy_f = sqrtf((float)sy2 / (float)VG_FP_ONE);
+    result.sx = (int32_t)lroundf(sx_f * VG_FP_ONE);
+    result.sy = (int32_t)lroundf(sy_f * VG_FP_ONE);
+    result.rot_deg = (int16_t)lroundf(atan2f((float)cf.m10, (float)cf.m00) * (180.0f / (float)M_PI));
+    return result;
 }
 
 static void apply_xy_half_fixed(const VgTransformFixed *m, int x_half, int y_half, int *out_x, int *out_y) {
@@ -480,8 +480,7 @@ static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransform
     if (!txt->text || txt->text[0] == '\0') {
         return;
     }
-    float scale_f = (txt->scale > 0.0f) ? txt->scale : 1.0f;
-    int32_t scale_fp = fp_from_float(scale_f);
+    int32_t scale_fp = (txt->scale > 0) ? txt->scale : VG_FP_ONE;
     bool text_scale_large = (scale_fp >= ((VG_FP_ONE * 5) / 4));
 
     VgTransformFixed local = vg_transform_fixed_identity();
@@ -489,14 +488,14 @@ static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransform
     local.m12 = ((int32_t)txt->y) << VG_FP_SHIFT;
     local.m00 = scale_fp;
     local.m11 = scale_fp;
-    if (txt->rot_deg != 0.0f) {
-        VgTransform local_f = vg_transform_identity();
-        local_f.tx = (float)txt->x;
-        local_f.ty = (float)txt->y;
-        local_f.sx = scale_f;
-        local_f.sy = scale_f;
-        local_f.rot_deg = txt->rot_deg;
-        local = vg_transform_fixed_from_transform(local_f);
+    if (txt->rot_deg != 0) {
+        VgTransform local_t = vg_transform_identity();
+        local_t.tx = txt->x;
+        local_t.ty = txt->y;
+        local_t.sx = scale_fp;
+        local_t.sy = scale_fp;
+        local_t.rot_deg = txt->rot_deg;
+        local = vg_transform_fixed_from_transform(local_t);
     }
     VgTransformFixed t_fixed = vg_transform_fixed_compose(parent_t, local);
 
