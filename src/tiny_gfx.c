@@ -1,7 +1,6 @@
 #include "tiny_gfx.h"
 
 #include "builtins.h"
-#include "map.h"
 #include "symbol.h"
 #include "value.h"
 #include "vector.h"
@@ -158,6 +157,16 @@ bool tiny_gfx_ensure_schema(EvalState *st) {
         return false;
     }
 
+    g_record_schema.d_transform = d_transform;
+    g_record_schema.d_style = d_style;
+    g_record_schema.d_group = d_group;
+    g_record_schema.d_line = d_line;
+    g_record_schema.d_polyline = d_poly;
+    g_record_schema.d_rect = d_rect;
+    g_record_schema.d_tri = d_tri;
+    g_record_schema.d_vtext = d_text;
+    g_record_schema.d_frame_scene = d_frame;
+
     g_record_schema.n_transform = vector_count(d_transform->field_keys);
     g_record_schema.n_style = vector_count(d_style->field_keys);
     g_record_schema.n_group = vector_count(d_group->field_keys);
@@ -272,16 +281,12 @@ const VgRecordKeys *tiny_gfx_record_keys(void) {
     return &g_record_keys;
 }
 
-ID tiny_gfx_get_field(ID obj, ID key, ID not_found) {
-    if (!obj || !key) {
+ID tiny_gfx_get_field(ID record_obj, ID key, ID not_found) {
+    if (!record_obj || !key) {
         return not_found;
     }
-    CljType tag = TAG(obj);
-    if (tag == CLJ_RECORD) {
-        return record_get_sentinel(obj, key, not_found);
-    }
-    if (tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT) {
-        return map_get_sentinel(obj, key, not_found);
+    if (TAG(record_obj) == CLJ_RECORD) {
+        return record_get_sentinel(record_obj, key, not_found);
     }
     return not_found;
 }

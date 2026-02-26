@@ -66,35 +66,43 @@ static bool ensure_vector_scene_record_schema(EvalState *st) {
 
 #define g_record_schema (*tiny_gfx_schema())
 
-static ID create_record_from_slots(ID type_symbol, unsigned int field_count, ID *slots) {
-    return tiny_gfx_create_record_from_slots(type_symbol, field_count, slots);
+static CljPersistentRecord *make_record_with_descriptor(CljRecordDescriptor *desc) {
+    CljPersistentRecord *record = record_create_with_descriptor(desc, NULL);
+    if (!record) {
+        return NULL;
+    }
+    return AUTORELEASE(record);
 }
 
 static ID make_transform_record(const VgNode *node) {
     if (!node || !node->has_transform) {
         return NULL;
     }
-    ID *slots = STACK_ALLOC(ID, g_record_schema.n_transform);
-    for (unsigned int i = 0; i < g_record_schema.n_transform; i++) slots[i] = NULL;
-    slots[g_record_schema.transform_tx] = fixnum(node->transform.tx);
-    slots[g_record_schema.transform_ty] = fixnum(node->transform.ty);
-    slots[g_record_schema.transform_sx] = (ID)(((uintptr_t)node->transform.sx << TAG_BITS) | TAG_FIXED);
-    slots[g_record_schema.transform_sy] = (ID)(((uintptr_t)node->transform.sy << TAG_BITS) | TAG_FIXED);
-    slots[g_record_schema.transform_rot] = fixnum(node->transform.rot_deg);
-    return create_record_from_slots(g_record_schema.t_transform, g_record_schema.n_transform, slots);
+    Transform *record = (Transform *)make_record_with_descriptor(g_record_schema.d_transform);
+    if (!record) {
+        return NULL;
+    }
+    ASSIGN(record->tx, fixnum(node->transform.tx));
+    ASSIGN(record->ty, fixnum(node->transform.ty));
+    ASSIGN(record->sx, (ID)(((uintptr_t)node->transform.sx << TAG_BITS) | TAG_FIXED));
+    ASSIGN(record->sy, (ID)(((uintptr_t)node->transform.sy << TAG_BITS) | TAG_FIXED));
+    ASSIGN(record->rot, fixnum(node->transform.rot_deg));
+    return record;
 }
 
 static ID make_style_record(VgStyle style) {
-    ID *slots = STACK_ALLOC(ID, g_record_schema.n_style);
-    for (unsigned int i = 0; i < g_record_schema.n_style; i++) slots[i] = NULL;
-    slots[g_record_schema.style_stroke_rgb565] = fixnum((int)style.stroke_rgb565);
-    slots[g_record_schema.style_stroke_width] = fixnum((int)style.stroke_width);
-    slots[g_record_schema.style_visible] = style.visible ? clj_true : clj_false;
-    slots[g_record_schema.style_has_fill] = style.has_fill ? clj_true : clj_false;
-    slots[g_record_schema.style_fill_rgb565] = fixnum((int)style.fill_rgb565);
-    slots[g_record_schema.style_has_bg_rgb565] = style.has_bg_rgb565 ? clj_true : clj_false;
-    slots[g_record_schema.style_bg_rgb565] = fixnum((int)style.bg_rgb565);
-    return create_record_from_slots(g_record_schema.t_style, g_record_schema.n_style, slots);
+    Style *record = (Style *)make_record_with_descriptor(g_record_schema.d_style);
+    if (!record) {
+        return NULL;
+    }
+    ASSIGN(record->stroke_rgb565, fixnum((int)style.stroke_rgb565));
+    ASSIGN(record->stroke_width, fixnum((int)style.stroke_width));
+    ASSIGN(record->visible, style.visible ? clj_true : clj_false);
+    ASSIGN(record->has_fill, style.has_fill ? clj_true : clj_false);
+    ASSIGN(record->fill_rgb565, fixnum((int)style.fill_rgb565));
+    ASSIGN(record->has_bg_rgb565, style.has_bg_rgb565 ? clj_true : clj_false);
+    ASSIGN(record->bg_rgb565, fixnum((int)style.bg_rgb565));
+    return record;
 }
 
 static ID make_node_record(const VgNode *node);
@@ -139,82 +147,82 @@ static ID make_node_record(const VgNode *node) {
     switch (node->type) {
         case VG_NODE_GROUP: {
             ID children = make_group_children_vector(node);
-            ID *slots = STACK_ALLOC(ID, g_record_schema.n_group);
-            for (unsigned int i = 0; i < g_record_schema.n_group; i++) slots[i] = NULL;
-            slots[g_record_schema.group_id] = fixnum((int)node->id);
-            slots[g_record_schema.group_t] = t_rec;
-            slots[g_record_schema.group_style] = s_rec;
-            slots[g_record_schema.group_visible] = visible;
-            slots[g_record_schema.group_children] = children;
-            return create_record_from_slots(g_record_schema.t_group, g_record_schema.n_group, slots);
+            Group *record = (Group *)make_record_with_descriptor(g_record_schema.d_group);
+            if (!record) return NULL;
+            ASSIGN(record->id, fixnum((int)node->id));
+            ASSIGN(record->t, t_rec);
+            ASSIGN(record->style, s_rec);
+            ASSIGN(record->visible, visible);
+            ASSIGN(record->children, children);
+            return record;
         }
         case VG_NODE_LINE: {
-            ID *slots = STACK_ALLOC(ID, g_record_schema.n_line);
-            for (unsigned int i = 0; i < g_record_schema.n_line; i++) slots[i] = NULL;
-            slots[g_record_schema.line_id] = fixnum((int)node->id);
-            slots[g_record_schema.line_t] = t_rec;
-            slots[g_record_schema.line_style] = s_rec;
-            slots[g_record_schema.line_visible] = visible;
-            slots[g_record_schema.line_x1] = fixnum((int)node->data.line.x1);
-            slots[g_record_schema.line_y1] = fixnum((int)node->data.line.y1);
-            slots[g_record_schema.line_x2] = fixnum((int)node->data.line.x2);
-            slots[g_record_schema.line_y2] = fixnum((int)node->data.line.y2);
-            return create_record_from_slots(g_record_schema.t_line, g_record_schema.n_line, slots);
+            Line *record = (Line *)make_record_with_descriptor(g_record_schema.d_line);
+            if (!record) return NULL;
+            ASSIGN(record->id, fixnum((int)node->id));
+            ASSIGN(record->t, t_rec);
+            ASSIGN(record->style, s_rec);
+            ASSIGN(record->visible, visible);
+            ASSIGN(record->x1, fixnum((int)node->data.line.x1));
+            ASSIGN(record->y1, fixnum((int)node->data.line.y1));
+            ASSIGN(record->x2, fixnum((int)node->data.line.x2));
+            ASSIGN(record->y2, fixnum((int)node->data.line.y2));
+            return record;
         }
         case VG_NODE_POLYLINE: {
             ID pts = make_polyline_points_vector(node);
-            ID *slots = STACK_ALLOC(ID, g_record_schema.n_polyline);
-            for (unsigned int i = 0; i < g_record_schema.n_polyline; i++) slots[i] = NULL;
-            slots[g_record_schema.poly_id] = fixnum((int)node->id);
-            slots[g_record_schema.poly_t] = t_rec;
-            slots[g_record_schema.poly_style] = s_rec;
-            slots[g_record_schema.poly_visible] = visible;
-            slots[g_record_schema.poly_pts] = pts;
-            slots[g_record_schema.poly_closed] = node->data.polyline.closed ? clj_true : clj_false;
-            return create_record_from_slots(g_record_schema.t_polyline, g_record_schema.n_polyline, slots);
+            Polyline *record = (Polyline *)make_record_with_descriptor(g_record_schema.d_polyline);
+            if (!record) return NULL;
+            ASSIGN(record->id, fixnum((int)node->id));
+            ASSIGN(record->t, t_rec);
+            ASSIGN(record->style, s_rec);
+            ASSIGN(record->visible, visible);
+            ASSIGN(record->pts, pts);
+            ASSIGN(record->closed, node->data.polyline.closed ? clj_true : clj_false);
+            return record;
         }
         case VG_NODE_RECT: {
-            ID *slots = STACK_ALLOC(ID, g_record_schema.n_rect);
-            for (unsigned int i = 0; i < g_record_schema.n_rect; i++) slots[i] = NULL;
-            slots[g_record_schema.rect_id] = fixnum((int)node->id);
-            slots[g_record_schema.rect_t] = t_rec;
-            slots[g_record_schema.rect_style] = s_rec;
-            slots[g_record_schema.rect_visible] = visible;
-            slots[g_record_schema.rect_x] = fixnum((int)node->data.rect.x);
-            slots[g_record_schema.rect_y] = fixnum((int)node->data.rect.y);
-            slots[g_record_schema.rect_w] = fixnum((int)node->data.rect.w);
-            slots[g_record_schema.rect_h] = fixnum((int)node->data.rect.h);
-            return create_record_from_slots(g_record_schema.t_rect, g_record_schema.n_rect, slots);
+            Rect *record = (Rect *)make_record_with_descriptor(g_record_schema.d_rect);
+            if (!record) return NULL;
+            ASSIGN(record->id, fixnum((int)node->id));
+            ASSIGN(record->t, t_rec);
+            ASSIGN(record->style, s_rec);
+            ASSIGN(record->visible, visible);
+            ASSIGN(record->x, fixnum((int)node->data.rect.x));
+            ASSIGN(record->y, fixnum((int)node->data.rect.y));
+            ASSIGN(record->w, fixnum((int)node->data.rect.w));
+            ASSIGN(record->h, fixnum((int)node->data.rect.h));
+            return record;
         }
         case VG_NODE_TRI: {
-            ID *slots = STACK_ALLOC(ID, g_record_schema.n_tri);
-            for (unsigned int i = 0; i < g_record_schema.n_tri; i++) slots[i] = NULL;
-            slots[g_record_schema.tri_id] = fixnum((int)node->id);
-            slots[g_record_schema.tri_t] = t_rec;
-            slots[g_record_schema.tri_style] = s_rec;
-            slots[g_record_schema.tri_visible] = visible;
-            slots[g_record_schema.tri_x1] = fixnum((int)node->data.tri.x1);
-            slots[g_record_schema.tri_y1] = fixnum((int)node->data.tri.y1);
-            slots[g_record_schema.tri_x2] = fixnum((int)node->data.tri.x2);
-            slots[g_record_schema.tri_y2] = fixnum((int)node->data.tri.y2);
-            slots[g_record_schema.tri_x3] = fixnum((int)node->data.tri.x3);
-            slots[g_record_schema.tri_y3] = fixnum((int)node->data.tri.y3);
-            return create_record_from_slots(g_record_schema.t_tri, g_record_schema.n_tri, slots);
+            Tri *record = (Tri *)make_record_with_descriptor(g_record_schema.d_tri);
+            if (!record) return NULL;
+            ASSIGN(record->id, fixnum((int)node->id));
+            ASSIGN(record->t, t_rec);
+            ASSIGN(record->style, s_rec);
+            ASSIGN(record->visible, visible);
+            ASSIGN(record->x1, fixnum((int)node->data.tri.x1));
+            ASSIGN(record->y1, fixnum((int)node->data.tri.y1));
+            ASSIGN(record->x2, fixnum((int)node->data.tri.x2));
+            ASSIGN(record->y2, fixnum((int)node->data.tri.y2));
+            ASSIGN(record->x3, fixnum((int)node->data.tri.x3));
+            ASSIGN(record->y3, fixnum((int)node->data.tri.y3));
+            return record;
         }
         case VG_NODE_VTEXT: {
             ID text = AUTORELEASE(make_string(node->data.text.text ? node->data.text.text : ""));
-            ID *slots = STACK_ALLOC(ID, g_record_schema.n_vtext);
-            for (unsigned int i = 0; i < g_record_schema.n_vtext; i++) slots[i] = NULL;
-            slots[g_record_schema.text_id] = fixnum((int)node->id);
-            slots[g_record_schema.text_t] = t_rec;
-            slots[g_record_schema.text_style] = s_rec;
-            slots[g_record_schema.text_visible] = visible;
-            slots[g_record_schema.text_x] = fixnum((int)node->data.text.x);
-            slots[g_record_schema.text_y] = fixnum((int)node->data.text.y);
-            slots[g_record_schema.text_scale] = (ID)(((uintptr_t)node->data.text.scale << TAG_BITS) | TAG_FIXED);
-            slots[g_record_schema.text_rot] = fixnum(node->data.text.rot_deg);
-            slots[g_record_schema.text_text] = text;
-            return create_record_from_slots(g_record_schema.t_vtext, g_record_schema.n_vtext, slots);
+            VText *record = (VText *)make_record_with_descriptor(g_record_schema.d_vtext);
+            if (!record) return NULL;
+            ASSIGN(record->id, fixnum((int)node->id));
+            ASSIGN(record->t, t_rec);
+            ASSIGN(record->style, s_rec);
+            ASSIGN(record->visible, visible);
+            ASSIGN(record->x, fixnum((int)node->data.text.x));
+            ASSIGN(record->y, fixnum((int)node->data.text.y));
+            ASSIGN(record->scale, (ID)(((uintptr_t)node->data.text.scale << TAG_BITS) | TAG_FIXED));
+            ASSIGN(record->rot, fixnum(node->data.text.rot_deg));
+            ASSIGN(record->text, text);
+            return record;
         }
         default:
             return NULL;
@@ -238,16 +246,18 @@ static ID make_frame_scene_record(const VgNode *root,
     vector_conj_inplace(&clip_vec, fixnum(clip_rect.w));
     vector_conj_inplace(&clip_vec, fixnum(clip_rect.h));
 
-    ID *slots = STACK_ALLOC(ID, g_record_schema.n_frame_scene);
-    for (unsigned int i = 0; i < g_record_schema.n_frame_scene; i++) slots[i] = NULL;
-    slots[g_record_schema.frame_root] = root_rec;
-    slots[g_record_schema.frame_clip_rect] = clip_vec;
-    slots[g_record_schema.frame_z] = fixnum(z);
-    slots[g_record_schema.frame_visible] = visible ? clj_true : clj_false;
-    slots[g_record_schema.frame_opaque] = opaque ? clj_true : clj_false;
-    slots[g_record_schema.frame_erase_rgb565] = fixnum((int)erase_rgb565);
-    slots[g_record_schema.frame_guard_px] = fixnum((int)guard_px);
-    ID scene = create_record_from_slots(g_record_schema.t_frame_scene, g_record_schema.n_frame_scene, slots);
+    FrameScene *scene = (FrameScene *)make_record_with_descriptor(g_record_schema.d_frame_scene);
+    if (!scene) {
+        RELEASE(clip_vec);
+        return NULL;
+    }
+    ASSIGN(scene->root, root_rec);
+    ASSIGN(scene->clip_rect, clip_vec);
+    ASSIGN(scene->z, fixnum(z));
+    ASSIGN(scene->visible, visible ? clj_true : clj_false);
+    ASSIGN(scene->opaque, opaque ? clj_true : clj_false);
+    ASSIGN(scene->erase_rgb565, fixnum((int)erase_rgb565));
+    ASSIGN(scene->guard_px, fixnum((int)guard_px));
     RELEASE(clip_vec);
     return scene;
 }
@@ -269,10 +279,8 @@ static void publish_frame_scene_slot(size_t slot_index,
     WITH_AUTORELEASE_POOL({
         ID scene = make_frame_scene_record(root, clip_rect, z, visible, opaque, erase_rgb565, guard_px);
         if (scene) {
-            RETAIN(scene);
             ASSIGN(g_published_slots[slot_index], scene);
             g_published_slot_generation[slot_index]++;
-            RELEASE(scene);
         }
     });
 }

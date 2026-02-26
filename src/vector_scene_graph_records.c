@@ -180,7 +180,7 @@ static bool decode_rect(ID obj, const VgRecordKeys *k, VgClipRect *out_rect) {
         out_rect->h = id_to_i16_default(vector_nth(v, 3), 0);
         return !vg_clip_rect_is_empty(*out_rect);
     }
-    if (obj_tag == CLJ_RECORD || obj_tag == CLJ_MAP_PERSISTENT || obj_tag == CLJ_MAP_TRANSIENT) {
+    if (obj_tag == CLJ_RECORD) {
         out_rect->x = id_to_i16_default(get_field(obj, k->k_x, NULL), 0);
         out_rect->y = id_to_i16_default(get_field(obj, k->k_y, NULL), 0);
         out_rect->w = id_to_i16_default(get_field(obj, k->k_w, NULL), 0);
