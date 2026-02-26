@@ -88,3 +88,71 @@ TEST(test_gfx_collision_contract_phase_mask_normalization_and_enabled_false) {
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enter"), vector_nth(r2_mask_vec, 0));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":exit"), vector_nth(r2_mask_vec, 1));
 }
+
+TEST(test_gfx_scene_update_nodes_applies_batched_changes) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.scene) "
+        "  (let [tree {:id :root :children "
+        "              [{:id :a :x 10 :y 20} "
+        "               {:id :b :x 30 :y 40} "
+        "               {:id :c :x 50 :y 60}]} "
+        "        t2 (tiny-gfx.scene/update-nodes tree "
+        "             {:a (fn [n] (assoc n :x 99)) "
+        "              :c (fn [n] (assoc n :y 0))})] "
+        "    [(:x (nth (:children t2) 0)) "
+        "     (:y (nth (:children t2) 0)) "
+        "     (:x (nth (:children t2) 1)) "
+        "     (:y (nth (:children t2) 1)) "
+        "     (:x (nth (:children t2) 2)) "
+        "     (:y (nth (:children t2) 2))]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_EQUAL_UINT(6, vector_count(v));
+    TEST_ASSERT_EQUAL_INT(99, as_fixnum(vector_nth(v, 0)));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum(vector_nth(v, 1)));
+    TEST_ASSERT_EQUAL_INT(30, as_fixnum(vector_nth(v, 2)));
+    TEST_ASSERT_EQUAL_INT(40, as_fixnum(vector_nth(v, 3)));
+    TEST_ASSERT_EQUAL_INT(50, as_fixnum(vector_nth(v, 4)));
+    TEST_ASSERT_EQUAL_INT( 0, as_fixnum(vector_nth(v, 5)));
+}
+
+TEST(test_gfx_scene_update_nodes_empty_updates_returns_unchanged) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.scene) "
+        "  (let [tree {:id :root :x 5} "
+        "        t2 (tiny-gfx.scene/update-nodes tree {})] "
+        "    (:x t2)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(is_fixnum(out));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(out));
+}
+
+TEST(test_gfx_scene_update_nodes_nested_groups) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.scene) "
+        "  (let [tree {:id :root :children "
+        "              [{:id :g1 :children "
+        "                [{:id :deep :val 1}]} "
+        "               {:id :leaf :val 2}]} "
+        "        t2 (tiny-gfx.scene/update-nodes tree "
+        "             {:deep (fn [n] (assoc n :val 100)) "
+        "              :leaf (fn [n] (assoc n :val 200))})] "
+        "    [(:val (first (:children (first (:children t2))))) "
+        "     (:val (nth (:children t2) 1))]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_EQUAL_UINT(2, vector_count(v));
+    TEST_ASSERT_EQUAL_INT(100, as_fixnum(vector_nth(v, 0)));
+    TEST_ASSERT_EQUAL_INT(200, as_fixnum(vector_nth(v, 1)));
+}

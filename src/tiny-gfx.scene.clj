@@ -94,6 +94,24 @@ Returns nil and is idempotent."
   (record-register collision-event-type collision-event-fields)
   nil)
 
+(defn update-nodes
+  "Batched scene-tree update. Takes a root node and a map of
+   {:id update-fn ...}. Performs a single recursive walk, applying
+   each update-fn to the node with matching :id. Once all updates
+   have been applied, remaining subtrees are returned unchanged."
+  [node updates]
+  (if (empty? updates)
+    node
+    (let [id       (:id node)
+          upd-fn   (when id (get updates id))
+          node2    (if upd-fn (upd-fn node) node)
+          updates2 (if upd-fn (dissoc updates id) updates)
+          children (:children node2)]
+      (if children
+        (assoc node2 :children
+          (mapv (fn [ch] (update-nodes ch updates2)) children))
+        node2))))
+
 ;; Register eagerly on require so other namespaces can immediately create records.
 (ensure-scene-records!)
 

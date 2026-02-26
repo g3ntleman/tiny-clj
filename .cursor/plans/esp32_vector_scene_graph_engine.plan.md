@@ -361,6 +361,46 @@ Done when:
 - Deterministic frame outputs stay stable across runs.
 - CPU cost in representative ESP32 scenes is reduced or at least non-regressed.
 
+## Milestone 8b: Batched Scene Update API (Clojure-Side)
+
+Status: DONE
+
+Motivation:
+
+- Game scenes have 50+ sprites and 10+ groups; per-entity tree walks don't scale.
+- A single batched walk with N lookups is O(nodes) instead of O(N × nodes).
+- This is the Clojure-side primitive that both timer-based and future core.async-based animation patterns build on.
+
+Tasks:
+
+1. **`update-nodes` function in `tiny-gfx.scene`:**
+   - Takes a root node and a map `{:id update-fn ...}`.
+   - Single recursive walk over the tree.
+   - For each node with `:id` in the map: apply `update-fn`, remove `:id` from map (`dissoc`).
+   - Early exit: when map is empty (`(empty? updates)`), return remaining subtree unchanged (no recursion).
+   - Works with plain maps and records alike (uses `:id` and `:children` keywords).
+
+2. **Unit tests:**
+   - Flat children: 2 of 3 nodes updated, 1 unchanged.
+   - Empty updates map: node returned unchanged.
+   - Nested groups: updates at different tree depths.
+
+3. **Integration with game-state pattern:**
+   - Designed for `(swap! game-scene update-nodes {...})` with `schedule-periodic` timers.
+   - Compatible with future core.async go-block orchestration (same primitive, different scheduling).
+
+Complexity characteristics:
+
+- 1 walk per frame (not N walks for N changes).
+- O(nodes) visits worst case, often less due to early exit after all changes applied.
+- O(1) map lookup per visited node (change-set is a persistent map).
+- Allokations: only changed nodes + path to root (structural sharing for unchanged subtrees).
+
+Done when:
+
+- `tiny-gfx.scene/update-nodes` is available and tested.
+- Game code can batch all per-frame entity updates into a single tree walk.
+
 ## Milestone 9: Game/Menu/Title Integration
 
 Status: TODO
@@ -371,7 +411,10 @@ Tasks:
   - gameplay HUD
   - menu UI
   - vector title animation
-- Validate update path from tiny-clj game state -> frame scene slots (snapshots) -> renderer.
+- Validate update path from tiny-clj game state -> frame scene slots (snapshots) -> renderer:
+  - use `tiny-gfx.scene/update-nodes` (M8b) for batched per-frame entity updates via `(swap! scene-atom update-nodes {...})`
+  - combine with `schedule-periodic` timers for game-tick driven animation
+  - compatible with future core.async go-block orchestration (same primitive, different scheduling)
 - Integrate with the existing tiny-clj scheduler (no additional scheduler layer in `tiny-gfx`):
   - scene/game updates are timer/event-driven as scheduled by tiny-clj (not mandatory fixed per-tick loop)
   - updates publish only changed slot snapshots (`deco`, `score`, `game`) to keep render wakeups sparse
@@ -596,12 +639,13 @@ Done when:
 5. M3 baseline primitives (`width=1`)
 6. M4 thick line support
 7. M4b solid fill-color MVP (`has_fill` + `fill_rgb565`, no fill-rule yet)
-8. M5 snapshot slot update path (`FrameScene` + `clip-rect` + changed-slot-only render)
-9. M6 VText integration
-10. M7 SPI backend integration (slot windows on SPI)
-11. M9 game/menu/title integration
-12. M10 collision contract + C-driven callback
-13. Optional later: explicit patch path + pointer-identity subtree reuse
+8. M8b batched scene update API (`update-nodes` for efficient per-frame state changes)
+9. M5 snapshot slot update path (`FrameScene` + `clip-rect` + changed-slot-only render)
+10. M6 VText integration
+11. M7 SPI backend integration (slot windows on SPI)
+12. M9 game/menu/title integration
+13. M10 collision contract + C-driven callback
+14. Optional later: explicit patch path + pointer-identity subtree reuse
 
 Rule:
 
