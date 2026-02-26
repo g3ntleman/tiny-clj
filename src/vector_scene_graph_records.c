@@ -1,6 +1,6 @@
 #include "vector_scene_graph_records.h"
+#include "gfx.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 #include "map.h"
@@ -164,11 +164,12 @@ static const char *id_to_text_cstr(ID v) {
     if (!v) {
         return "";
     }
-    if (TAG(v) == CLJ_STRING) {
+    CljType v_tag = TAG(v);
+    if (v_tag == CLJ_STRING) {
         const char *s = string_data(v);
         return s ? s : "";
     }
-    if (TAG(v) == CLJ_SYMBOL) {
+    if (v_tag == CLJ_SYMBOL) {
         CljSymbol *sym = as_symbol(v);
         if (sym && sym->cname) {
             return sym->cname;
@@ -247,65 +248,12 @@ static bool render_record_node(ID node_obj,
                                bool use_clip,
                                VgClipRect clip_rect);
 
-static bool rect_is_empty(VgClipRect r) {
-    return r.w <= 0 || r.h <= 0;
-}
-
-static bool rect_intersect(VgClipRect a, VgClipRect b, VgClipRect *out) {
-    if (!out) {
-        return false;
-    }
-    int ax1 = (int)a.x + (int)a.w;
-    int ay1 = (int)a.y + (int)a.h;
-    int bx1 = (int)b.x + (int)b.w;
-    int by1 = (int)b.y + (int)b.h;
-    int x0 = ((int)a.x > (int)b.x) ? (int)a.x : (int)b.x;
-    int y0 = ((int)a.y > (int)b.y) ? (int)a.y : (int)b.y;
-    int x1 = (ax1 < bx1) ? ax1 : bx1;
-    int y1 = (ay1 < by1) ? ay1 : by1;
-    if (x1 <= x0 || y1 <= y0) {
-        return false;
-    }
-    out->x = (int16_t)x0;
-    out->y = (int16_t)y0;
-    out->w = (int16_t)(x1 - x0);
-    out->h = (int16_t)(y1 - y0);
-    return true;
-}
-
-static VgClipRect rect_union(VgClipRect a, VgClipRect b) {
-    if (rect_is_empty(a)) return b;
-    if (rect_is_empty(b)) return a;
-    int ax1 = (int)a.x + (int)a.w;
-    int ay1 = (int)a.y + (int)a.h;
-    int bx1 = (int)b.x + (int)b.w;
-    int by1 = (int)b.y + (int)b.h;
-    int x0 = ((int)a.x < (int)b.x) ? (int)a.x : (int)b.x;
-    int y0 = ((int)a.y < (int)b.y) ? (int)a.y : (int)b.y;
-    int x1 = (ax1 > bx1) ? ax1 : bx1;
-    int y1 = (ay1 > by1) ? ay1 : by1;
-    VgClipRect out = {(int16_t)x0, (int16_t)y0, (int16_t)(x1 - x0), (int16_t)(y1 - y0)};
-    return out;
-}
-
-static VgClipRect rect_expand(VgClipRect r, uint8_t guard_px) {
-    if (guard_px == 0 || rect_is_empty(r)) {
-        return r;
-    }
-    int g = (int)guard_px;
-    int x0 = (int)r.x - g;
-    int y0 = (int)r.y - g;
-    int x1 = (int)r.x + (int)r.w + g;
-    int y1 = (int)r.y + (int)r.h + g;
-    VgClipRect out = {(int16_t)x0, (int16_t)y0, (int16_t)(x1 - x0), (int16_t)(y1 - y0)};
-    return out;
-}
-
 static bool decode_rect(ID obj, const VgRecordKeys *k, VgClipRect *out_rect) {
     if (!obj || !k || !out_rect) {
         return false;
     }
-    if (TAG(obj) == CLJ_VECTOR_PERSISTENT || TAG(obj) == CLJ_VECTOR_TRANSIENT) {
+    CljType obj_tag = TAG(obj);
+    if (obj_tag == CLJ_VECTOR_PERSISTENT || obj_tag == CLJ_VECTOR_TRANSIENT) {
         CljPersistentVector *v = as_vector(obj);
         if (vector_count(v) < 4) {
             return false;
@@ -314,14 +262,14 @@ static bool decode_rect(ID obj, const VgRecordKeys *k, VgClipRect *out_rect) {
         out_rect->y = id_to_i16_default(vector_nth(v, 1), 0);
         out_rect->w = id_to_i16_default(vector_nth(v, 2), 0);
         out_rect->h = id_to_i16_default(vector_nth(v, 3), 0);
-        return !rect_is_empty(*out_rect);
+        return !vg_clip_rect_is_empty(*out_rect);
     }
-    if (TAG(obj) == CLJ_RECORD || TAG(obj) == CLJ_MAP_PERSISTENT || TAG(obj) == CLJ_MAP_TRANSIENT) {
+    if (obj_tag == CLJ_RECORD || obj_tag == CLJ_MAP_PERSISTENT || obj_tag == CLJ_MAP_TRANSIENT) {
         out_rect->x = id_to_i16_default(get_field(obj, k->k_x, NULL), 0);
         out_rect->y = id_to_i16_default(get_field(obj, k->k_y, NULL), 0);
         out_rect->w = id_to_i16_default(get_field(obj, k->k_w, NULL), 0);
         out_rect->h = id_to_i16_default(get_field(obj, k->k_h, NULL), 0);
-        return !rect_is_empty(*out_rect);
+        return !vg_clip_rect_is_empty(*out_rect);
     }
     return false;
 }
@@ -330,27 +278,6 @@ static bool is_scene_record_type(ID obj) {
     return record_type_is(obj, "Scene") || record_type_is(obj, "FrameScene");
 }
 
-static void clear_rect(VgFrameBuffer *fb, VgClipRect r, uint16_t color) {
-    if (!fb || !fb->pixels || rect_is_empty(r)) {
-        return;
-    }
-    int x0 = r.x;
-    int y0 = r.y;
-    int x1 = (int)r.x + (int)r.w;
-    int y1 = (int)r.y + (int)r.h;
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
-    if (x1 > fb->width) x1 = fb->width;
-    if (y1 > fb->height) y1 = fb->height;
-    if (x1 <= x0 || y1 <= y0) {
-        return;
-    }
-    for (int y = y0; y < y1; y++) {
-        for (int x = x0; x < x1; x++) {
-            fb->pixels[(size_t)y * (size_t)fb->width + (size_t)x] = color;
-        }
-    }
-}
 
 static bool render_one_temp_node(const VgNode *node, VgFrameBuffer *fb, bool use_clip, VgClipRect clip_rect) {
     if (!node || !fb) {
@@ -377,22 +304,17 @@ static bool render_polyline_record(ID node_obj,
     }
     CljPersistentVector *pv = as_vector(pts);
     unsigned int n = vector_count(pv);
-    if (n < 2) {
-        return true;
+    if (n < 2 || n > GFX_FILL_MAX_VERTS) {
+        return n < 2;
     }
-    VgPoint *points = (VgPoint *)malloc(sizeof(VgPoint) * (size_t)n);
-    if (!points) {
-        return false;
-    }
+    VgPoint points[GFX_FILL_MAX_VERTS];
     for (unsigned int i = 0; i < n; i++) {
         ID point = vector_nth(pv, i);
         if (!point || TAG(point) != CLJ_VECTOR_PERSISTENT) {
-            free(points);
             return false;
         }
         CljPersistentVector *xy = as_vector(point);
         if (vector_count(xy) < 2) {
-            free(points);
             return false;
         }
         points[i].x = id_to_i16_default(vector_nth(xy, 0), 0);
@@ -408,9 +330,7 @@ static bool render_polyline_record(ID node_obj,
     temp.data.polyline.points = points;
     temp.data.polyline.point_count = (size_t)n;
     temp.data.polyline.closed = id_to_bool_default(get_field(node_obj, k->k_closed, NULL), false);
-    bool ok = render_one_temp_node(&temp, fb, use_clip, clip_rect);
-    free(points);
-    return ok;
+    return render_one_temp_node(&temp, fb, use_clip, clip_rect);
 }
 
 static bool render_record_node(ID node_obj,
@@ -516,7 +436,7 @@ bool vg_render_scene_record(ID scene_record, VgFrameBuffer *fb) {
 
     if (has_effective_rect) {
         uint16_t erase_rgb565 = id_to_u16_default(get_field(scene_record, keys.k_erase_rgb565, NULL), 0x0000u);
-        clear_rect(fb, effective_rect, erase_rgb565);
+        vg_framebuffer_clear_rect(fb, effective_rect, erase_rgb565);
     }
 
     if (!root) {
@@ -543,7 +463,7 @@ bool vg_render_scene_record_clipped(ID scene_record, VgFrameBuffer *fb, VgClipRe
     VgClipRect scene_clip = {0, 0, 0, 0};
     bool has_scene_clip = decode_rect(get_field(scene_record, keys.k_clip_rect, NULL), &keys, &scene_clip);
     if (has_scene_clip) {
-        if (!rect_intersect(clip_rect, scene_clip, &effective_clip)) {
+        if (!vg_clip_rect_intersect(clip_rect, scene_clip, &effective_clip)) {
             return true;
         }
     }
@@ -589,21 +509,18 @@ bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
                          state->last_opaque != slot.opaque ||
                          state->last_clear_rgb565 != slot.clear_rgb565 ||
                          state->last_guard_px != slot.guard_px ||
-                         state->last_clip_rect.x != slot.clip_rect.x ||
-                         state->last_clip_rect.y != slot.clip_rect.y ||
-                         state->last_clip_rect.w != slot.clip_rect.w ||
-                         state->last_clip_rect.h != slot.clip_rect.h;
+                         !vg_clip_rect_equal(state->last_clip_rect, slot.clip_rect);
     bool snapshot_changed = !state->initialized || state->snapshot_id != snapshot_id;
     if (!props_changed && !snapshot_changed) {
         return false;
     }
 
-    VgClipRect dirty = rect_expand(slot.clip_rect, slot.guard_px);
+    VgClipRect dirty = vg_clip_rect_expand(slot.clip_rect, slot.guard_px);
     if (state->initialized) {
-        VgClipRect prev = rect_expand(state->last_clip_rect, state->last_guard_px);
-        dirty = rect_union(prev, dirty);
+        VgClipRect prev = vg_clip_rect_expand(state->last_clip_rect, state->last_guard_px);
+        dirty = vg_clip_rect_union(prev, dirty);
     }
-    clear_rect(fb, dirty, slot.clear_rgb565);
+    vg_framebuffer_clear_rect(fb, dirty, slot.clear_rgb565);
 
     if (slot.visible) {
         (void)vg_render_scene_record_clipped(frame_scene_record, fb, slot.clip_rect);

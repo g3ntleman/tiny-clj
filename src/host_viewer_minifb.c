@@ -5,10 +5,10 @@
 #if defined(TINYCLJ_WITH_MINIFB)
 #include "vector_scene_graph.h"
 #include "vector_scene_graph_records.h"
+#include "builtins.h"
 #include "value.h"
 #include "runtime.h"
 #include "record.h"
-#include "builtins.h"
 #include "event_loop.h"
 #include "MiniFB.h"
 #if defined(__APPLE__)
@@ -57,98 +57,6 @@ static uint32_t rgb565_to_xrgb8888(uint16_t c) {
     uint32_t g = (uint32_t)((((c >> 5) & 0x3f) * 255) / 63);
     uint32_t b = (uint32_t)(((c & 0x1f) * 255) / 31);
     return 0xff000000u | (r << 16) | (g << 8) | b;
-}
-
-typedef struct {
-    int min_x;
-    int min_y;
-    int max_x;
-    int max_y;
-} VgIntAabb;
-
-typedef struct {
-    bool valid;
-    VgTransform body_t;
-    VgTransform nose_t;
-    VgIntAabb world_aabb;
-} ObstacleBBoxCache;
-
-static void aabb_init(VgIntAabb *b, int x, int y) {
-    if (!b) return;
-    b->min_x = x;
-    b->max_x = x;
-    b->min_y = y;
-    b->max_y = y;
-}
-
-static void aabb_expand(VgIntAabb *b, int x, int y) {
-    if (!b) return;
-    if (x < b->min_x) b->min_x = x;
-    if (x > b->max_x) b->max_x = x;
-    if (y < b->min_y) b->min_y = y;
-    if (y > b->max_y) b->max_y = y;
-}
-
-static bool transforms_equal(VgTransform a, VgTransform b) {
-    return a.tx == b.tx && a.ty == b.ty && a.sx == b.sx && a.sy == b.sy && a.rot_deg == b.rot_deg;
-}
-
-static bool compute_polyline_world_aabb_manual_transform(const VgNode *poly, VgIntAabb *out) {
-    if (!poly || !out || poly->type != VG_NODE_POLYLINE || !poly->data.polyline.points || poly->data.polyline.point_count == 0) {
-        return false;
-    }
-    VgTransformFixed t = vg_transform_fixed_from_transform(poly->transform);
-    int wx = 0, wy = 0;
-    vg_transform_fixed_apply_px(t, poly->data.polyline.points[0].x, poly->data.polyline.points[0].y, &wx, &wy);
-    aabb_init(out, wx, wy);
-    for (size_t i = 1; i < poly->data.polyline.point_count; i++) {
-        vg_transform_fixed_apply_px(t, poly->data.polyline.points[i].x, poly->data.polyline.points[i].y, &wx, &wy);
-        aabb_expand(out, wx, wy);
-    }
-    return true;
-}
-
-static bool compute_tri_world_aabb_manual_transform(const VgNode *tri, VgIntAabb *out) {
-    if (!tri || !out || tri->type != VG_NODE_TRI) {
-        return false;
-    }
-    VgTransformFixed t = vg_transform_fixed_from_transform(tri->transform);
-    int wx = 0, wy = 0;
-    vg_transform_fixed_apply_px(t, (int16_t)tri->data.tri.x1, (int16_t)tri->data.tri.y1, &wx, &wy);
-    aabb_init(out, wx, wy);
-    vg_transform_fixed_apply_px(t, (int16_t)tri->data.tri.x2, (int16_t)tri->data.tri.y2, &wx, &wy);
-    aabb_expand(out, wx, wy);
-    vg_transform_fixed_apply_px(t, (int16_t)tri->data.tri.x3, (int16_t)tri->data.tri.y3, &wx, &wy);
-    aabb_expand(out, wx, wy);
-    return true;
-}
-
-static bool compute_obstacle_world_aabb_cached_manual_transform(const VgNode *body,
-                                                                const VgNode *nose,
-                                                                ObstacleBBoxCache *cache,
-                                                                VgIntAabb *out) {
-    if (!body || !nose || !cache || !out) {
-        return false;
-    }
-    if (cache->valid && transforms_equal(cache->body_t, body->transform) && transforms_equal(cache->nose_t, nose->transform)) {
-        *out = cache->world_aabb;
-        return true;
-    }
-    VgIntAabb body_box = {0};
-    VgIntAabb nose_box = {0};
-    if (!compute_polyline_world_aabb_manual_transform(body, &body_box) ||
-        !compute_tri_world_aabb_manual_transform(nose, &nose_box)) {
-        return false;
-    }
-    VgIntAabb merged = body_box;
-    aabb_expand(&merged, nose_box.min_x, nose_box.min_y);
-    aabb_expand(&merged, nose_box.max_x, nose_box.max_y);
-    cache->valid = true;
-    cache->body_t = body->transform;
-    cache->nose_t = nose->transform;
-    cache->world_aabb = merged;
-    *out = merged;
-    return true;
 }
 
 typedef struct {
@@ -641,8 +549,6 @@ int main(void) {
     }
     double fps_window_start_s = mfb_timer_now(timer);
     unsigned fps_frame_count = 0;
-    char fps_label[32];
-    (void)snprintf(fps_label, sizeof(fps_label), "FPS: --.-");
 
     VgStyle deco_style = vg_style_default();
     deco_style.stroke_rgb565 = 0x07ffu;
@@ -800,7 +706,6 @@ int main(void) {
     bool player_small = false;
     bool collision_latched = false;
     float collision_cooldown_end_s = 0.0f;
-    ObstacleBBoxCache obstacle_bbox_cache = {0};
     unsigned frame_count = 0;
     static const int player_bob_lut[] = {0, -1, -3, -5, -4, -2, 0, 1, 0, -1, -2, -1};
     vg_framebuffer_clear(&fb, 0x0000u);
@@ -817,7 +722,6 @@ int main(void) {
         if (fps_elapsed_s >= 1.0) {
             double fps = (double)fps_frame_count / fps_elapsed_s;
             int score = (int)(time_s * 120.0f);
-            (void)snprintf(fps_label, sizeof(fps_label), "FPS: %.1f", fps);
             (void)snprintf(score_line, sizeof(score_line), "SCORE %04d    LIFES 3", score % 10000);
             char title[96];
             (void)snprintf(title, sizeof(title), "tiny-clj host viewer - %.1f FPS", fps);
@@ -859,14 +763,6 @@ int main(void) {
         game_obstacle_nose.transform.tx = (int16_t)(obstacle_x + 20);
         game_obstacle_nose.transform.ty = 126;
         game_obstacle_nose.transform.rot_deg = -90;
-
-        // Derived automatically from geometry + manual transform call.
-        // Collision remains on manual hitbox for now.
-        VgIntAabb obstacle_bbox_auto = {0};
-        bool obstacle_bbox_auto_ok = compute_obstacle_world_aabb_cached_manual_transform(
-            &game_obstacle_body, &game_obstacle_nose, &obstacle_bbox_cache, &obstacle_bbox_auto);
-        (void)obstacle_bbox_auto_ok;
-        (void)obstacle_bbox_auto;
 
         if (player_small) {
             game_player.data.tri.x1 = 60;

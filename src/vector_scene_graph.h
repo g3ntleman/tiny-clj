@@ -123,6 +123,47 @@ typedef struct {
     int16_t h;
 } VgClipRect;
 
+static inline bool vg_clip_rect_is_empty(VgClipRect r) {
+    return r.w <= 0 || r.h <= 0;
+}
+
+static inline bool vg_clip_rect_equal(VgClipRect a, VgClipRect b) {
+    return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
+}
+
+static inline VgClipRect vg_clip_rect_union(VgClipRect a, VgClipRect b) {
+    if (vg_clip_rect_is_empty(a)) return b;
+    if (vg_clip_rect_is_empty(b)) return a;
+    int ax1 = (int)a.x + (int)a.w, ay1 = (int)a.y + (int)a.h;
+    int bx1 = (int)b.x + (int)b.w, by1 = (int)b.y + (int)b.h;
+    int x0 = ((int)a.x < (int)b.x) ? (int)a.x : (int)b.x;
+    int y0 = ((int)a.y < (int)b.y) ? (int)a.y : (int)b.y;
+    VgClipRect out = {(int16_t)x0, (int16_t)y0,
+                      (int16_t)((ax1 > bx1 ? ax1 : bx1) - x0),
+                      (int16_t)((ay1 > by1 ? ay1 : by1) - y0)};
+    return out;
+}
+
+static inline VgClipRect vg_clip_rect_expand(VgClipRect r, uint8_t guard_px) {
+    if (guard_px == 0 || vg_clip_rect_is_empty(r)) return r;
+    int g = (int)guard_px;
+    VgClipRect out = {(int16_t)((int)r.x - g), (int16_t)((int)r.y - g),
+                      (int16_t)((int)r.w + 2 * g), (int16_t)((int)r.h + 2 * g)};
+    return out;
+}
+
+static inline bool vg_clip_rect_intersect(VgClipRect a, VgClipRect b, VgClipRect *out) {
+    int ax1 = (int)a.x + (int)a.w, ay1 = (int)a.y + (int)a.h;
+    int bx1 = (int)b.x + (int)b.w, by1 = (int)b.y + (int)b.h;
+    int x0 = ((int)a.x > (int)b.x) ? (int)a.x : (int)b.x;
+    int y0 = ((int)a.y > (int)b.y) ? (int)a.y : (int)b.y;
+    int x1 = (ax1 < bx1) ? ax1 : bx1;
+    int y1 = (ay1 < by1) ? ay1 : by1;
+    if (x1 <= x0 || y1 <= y0) return false;
+    if (out) { out->x = (int16_t)x0; out->y = (int16_t)y0; out->w = (int16_t)(x1 - x0); out->h = (int16_t)(y1 - y0); }
+    return true;
+}
+
 typedef struct {
     const VgNode *root;
     VgClipRect clip_rect;
@@ -171,8 +212,8 @@ void vg_transform_fixed_apply_px(VgTransformFixed t, int16_t x, int16_t y, int *
 
 bool vg_framebuffer_init(VgFrameBuffer *fb, int width, int height, uint16_t *pixels, size_t pixel_count);
 void vg_framebuffer_clear(VgFrameBuffer *fb, uint16_t color);
+void vg_framebuffer_clear_rect(VgFrameBuffer *fb, VgClipRect rect, uint16_t color);
 uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb);
-bool vg_framebuffer_dump_ppm(const VgFrameBuffer *fb, const char *path);
 
 void vg_render_scene(const VgNode *root, VgFrameBuffer *fb);
 void vg_render_scene_clipped(const VgNode *root, VgFrameBuffer *fb, VgClipRect clip_rect);

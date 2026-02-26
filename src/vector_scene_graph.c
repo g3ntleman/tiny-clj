@@ -3,84 +3,17 @@
 #include "value.h"
 
 #include <ctype.h>
-#include <limits.h>
 #include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 _Static_assert(VG_SCALE_ONE == CLJ_FIXED_SCALE, "VG_SCALE_ONE must match CLJ_FIXED_SCALE");
 
 static GfxClip g_active_clip = {false, 0, 0, 0, 0};
 
-static bool clip_rect_is_empty(VgClipRect r) {
-    return r.w <= 0 || r.h <= 0;
-}
-
-static bool clip_rect_equal(VgClipRect a, VgClipRect b) {
-    return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
-}
-
-static VgClipRect clip_rect_expand(VgClipRect r, uint8_t guard_px) {
-    if (clip_rect_is_empty(r) || guard_px == 0) {
-        return r;
-    }
-    int gx = (int)guard_px;
-    int x0 = (int)r.x - gx;
-    int y0 = (int)r.y - gx;
-    int x1 = (int)r.x + (int)r.w + gx;
-    int y1 = (int)r.y + (int)r.h + gx;
-    if (x0 < INT16_MIN) x0 = INT16_MIN;
-    if (y0 < INT16_MIN) y0 = INT16_MIN;
-    if (x1 > INT16_MAX) x1 = INT16_MAX;
-    if (y1 > INT16_MAX) y1 = INT16_MAX;
-    VgClipRect out;
-    out.x = (int16_t)x0;
-    out.y = (int16_t)y0;
-    out.w = (int16_t)(x1 - x0);
-    out.h = (int16_t)(y1 - y0);
-    return out;
-}
-
-static VgClipRect clip_rect_union(VgClipRect a, VgClipRect b) {
-    if (clip_rect_is_empty(a)) return b;
-    if (clip_rect_is_empty(b)) return a;
-    int ax1 = (int)a.x + (int)a.w;
-    int ay1 = (int)a.y + (int)a.h;
-    int bx1 = (int)b.x + (int)b.w;
-    int by1 = (int)b.y + (int)b.h;
-    int x0 = ((int)a.x < (int)b.x) ? (int)a.x : (int)b.x;
-    int y0 = ((int)a.y < (int)b.y) ? (int)a.y : (int)b.y;
-    int x1 = (ax1 > bx1) ? ax1 : bx1;
-    int y1 = (ay1 > by1) ? ay1 : by1;
-    VgClipRect out;
-    out.x = (int16_t)x0;
-    out.y = (int16_t)y0;
-    out.w = (int16_t)(x1 - x0);
-    out.h = (int16_t)(y1 - y0);
-    return out;
-}
-
 static bool clip_rect_intersect_fb(VgClipRect in, const VgFrameBuffer *fb, VgClipRect *out) {
-    if (!fb || !out || clip_rect_is_empty(in)) {
-        return false;
-    }
-    int x0 = (int)in.x;
-    int y0 = (int)in.y;
-    int x1 = (int)in.x + (int)in.w;
-    int y1 = (int)in.y + (int)in.h;
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
-    if (x1 > fb->width) x1 = fb->width;
-    if (y1 > fb->height) y1 = fb->height;
-    if (x1 <= x0 || y1 <= y0) {
-        return false;
-    }
-    out->x = (int16_t)x0;
-    out->y = (int16_t)y0;
-    out->w = (int16_t)(x1 - x0);
-    out->h = (int16_t)(y1 - y0);
-    return true;
+    if (!fb || !out) return false;
+    VgClipRect fb_rect = {0, 0, (int16_t)fb->width, (int16_t)fb->height};
+    return vg_clip_rect_intersect(in, fb_rect, out);
 }
 
 VgTransform vg_transform_identity(void) {
@@ -143,44 +76,6 @@ uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb) {
         h *= 16777619u;
     }
     return h;
-}
-
-static uint8_t rgb565_to_r8(uint16_t c) {
-    return (uint8_t)((((c >> 11) & 0x1f) * 255) / 31);
-}
-
-static uint8_t rgb565_to_g8(uint16_t c) {
-    return (uint8_t)((((c >> 5) & 0x3f) * 255) / 63);
-}
-
-static uint8_t rgb565_to_b8(uint16_t c) {
-    return (uint8_t)(((c & 0x1f) * 255) / 31);
-}
-
-bool vg_framebuffer_dump_ppm(const VgFrameBuffer *fb, const char *path) {
-    if (!fb || !fb->pixels || !path) {
-        return false;
-    }
-    FILE *f = fopen(path, "wb");
-    if (!f) {
-        return false;
-    }
-    if (fprintf(f, "P6\n%d %d\n255\n", fb->width, fb->height) < 0) {
-        fclose(f);
-        return false;
-    }
-    for (int y = 0; y < fb->height; y++) {
-        for (int x = 0; x < fb->width; x++) {
-            uint16_t c = fb->pixels[(size_t)y * (size_t)fb->width + (size_t)x];
-            uint8_t rgb[3] = {rgb565_to_r8(c), rgb565_to_g8(c), rgb565_to_b8(c)};
-            if (fwrite(rgb, 1, sizeof(rgb), f) != sizeof(rgb)) {
-                fclose(f);
-                return false;
-            }
-        }
-    }
-    fclose(f);
-    return true;
 }
 
 #define VG_FP_SHIFT CLJ_FIXED_FRAC_BITS
@@ -323,8 +218,8 @@ void vg_transform_fixed_apply_px(VgTransformFixed t, int16_t x, int16_t y, int *
     }
 }
 
-static void framebuffer_clear_rect(VgFrameBuffer *fb, VgClipRect rect, uint16_t color) {
-    if (!fb || !fb->pixels || clip_rect_is_empty(rect)) {
+void vg_framebuffer_clear_rect(VgFrameBuffer *fb, VgClipRect rect, uint16_t color) {
+    if (!fb || !fb->pixels || vg_clip_rect_is_empty(rect)) {
         return;
     }
     VgClipRect clipped;
@@ -987,13 +882,13 @@ bool vg_render_slot_if_changed(const VgRenderSlot *slot,
     if (!slot || !state || !fb) {
         return false;
     }
-    VgClipRect slot_rect = clip_rect_expand(slot->clip_rect, slot->guard_px);
+    VgClipRect slot_rect = vg_clip_rect_expand(slot->clip_rect, slot->guard_px);
     bool props_changed = !state->initialized ||
                          state->last_visible != slot->visible ||
                          state->last_opaque != slot->opaque ||
                          state->last_clear_rgb565 != slot->clear_rgb565 ||
                          state->last_guard_px != slot->guard_px ||
-                         !clip_rect_equal(state->last_clip_rect, slot->clip_rect);
+                         !vg_clip_rect_equal(state->last_clip_rect, slot->clip_rect);
     bool snapshot_changed = !state->initialized || state->snapshot_id != snapshot_id;
     if (!props_changed && !snapshot_changed) {
         return false;
@@ -1001,10 +896,10 @@ bool vg_render_slot_if_changed(const VgRenderSlot *slot,
 
     VgClipRect dirty_rect = slot_rect;
     if (state->initialized) {
-        VgClipRect prev_rect = clip_rect_expand(state->last_clip_rect, state->last_guard_px);
-        dirty_rect = clip_rect_union(prev_rect, slot_rect);
+        VgClipRect prev_rect = vg_clip_rect_expand(state->last_clip_rect, state->last_guard_px);
+        dirty_rect = vg_clip_rect_union(prev_rect, slot_rect);
     }
-    framebuffer_clear_rect(fb, dirty_rect, slot->clear_rgb565);
+    vg_framebuffer_clear_rect(fb, dirty_rect, slot->clear_rgb565);
 
     if (slot->visible && slot->root) {
         vg_render_scene_clipped(slot->root, fb, slot_rect);
