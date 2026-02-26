@@ -279,6 +279,12 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
   if (!func) {
     return make_exception(EXCEPTION_RUNTIME, "Invalid function object", NULL, 0, 0);
   }
+  CljNamespace *saved_ns = st ? st->current_ns : NULL;
+  bool switched_ns = false;
+  if (st && func->ns && st->current_ns != func->ns) {
+    st->current_ns = func->ns;
+    switched_ns = true;
+  }
 
   // Arity check - variadic functions accept >= required params
   int param_count = (int)func->param_count;
@@ -287,11 +293,18 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
   if (vi < 0) {
     if (argc != required) {
       throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
+      if (switched_ns) {
+        st->current_ns = saved_ns;
+      }
       return NULL;
     }
   } else {
     if (argc < (unsigned int)vi) {
       throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
+      if (switched_ns) {
+        st->current_ns = saved_ns;
+      }
+      return NULL;
     }
   }
 
@@ -453,6 +466,9 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
   RELEASE(call_env_stack);
   if (variadic_rest && (ID)variadic_rest != result) {
     RELEASE(variadic_rest);
+  }
+  if (switched_ns) {
+    st->current_ns = saved_ns;
   }
 
   return result;

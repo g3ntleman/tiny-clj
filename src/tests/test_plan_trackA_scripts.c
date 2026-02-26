@@ -61,6 +61,33 @@ TEST(test_plan_trackB_core_async_parking_script) {
     assert_load_file_ok("libs/test/core_async/parking.clj");
 }
 
+TEST(test_plan_trackB_core_async_qualified_go_returns_channel_result) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do "
+            "  (require 'clojure.core.async) "
+            "  (defn __drain_tasks_for_test__ [] "
+            "    (if (run-next-task) "
+            "      (__drain_tasks_for_test__) "
+            "      nil)) "
+            "  (let [out (clojure.core.async/go (+ 1 2))] "
+            "    (__drain_tasks_for_test__) "
+            "    (clojure.core.async/poll! out)))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        if (ex) {
+            print_exception((CLJException*)ex);
+        }
+        TEST_FAIL_MESSAGE("qualified clojure.core.async/go should evaluate without exception");
+    } END_TRY
+
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result), "qualified clojure.core.async/go must yield fixnum result");
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
+}
+
 TEST(test_plan_trackA_gpio_smoke_script) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     require_readable_script_or_ignore("libs/test/gpio/smoke.clj");
