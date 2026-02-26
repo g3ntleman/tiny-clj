@@ -196,7 +196,7 @@ Done when:
 
 ## Milestone 4b: Solid Fill Color (SVG-like MVP)
 
-Status: TODO
+Status: DONE (implementation + regression tests)
 
 Tasks:
 
@@ -316,7 +316,7 @@ Done when:
 
 ## Milestone 8: Fixed-First Decode + Transform Path (Required for ESP32)
 
-Status: PARTIAL (fixed transform core exists; decoder/raster boundary policy still mixed)
+Status: DONE (core decode/transform/render pipeline is fixed-first; documentation + perf benchmark optional)
 
 Motivation:
 

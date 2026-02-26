@@ -1102,3 +1102,278 @@ TEST(test_vector_scene_graph_arcade_j_has_bottom_bar_shape) {
     // Arcade J has the horizontal bar at the bottom (renderer y grows downward).
     TEST_ASSERT_TRUE(bottom_row_ink > top_row_ink);
 }
+
+/* ---------- M4b: Solid Fill Color Tests ---------- */
+
+TEST(test_vector_scene_graph_filled_rect_produces_interior_pixels) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0x07e0u; /* green */
+
+    VgNode rect = {
+        .id = 1001,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 10, .y = 10, .w = 20, .h = 12}
+    };
+
+    vg_render_scene(&rect, &fb);
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0x07e0u);
+    size_t stroke_count = count_color(pixels, TEST_W * TEST_H, 0xffffu);
+    TEST_ASSERT_TRUE(fill_count > 0);
+    TEST_ASSERT_TRUE(stroke_count > 0);
+    TEST_ASSERT_TRUE(fill_count > stroke_count);
+}
+
+TEST(test_vector_scene_graph_filled_tri_produces_interior_pixels) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0xf800u; /* red */
+
+    VgNode tri = {
+        .id = 1002,
+        .type = VG_NODE_TRI,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.tri = {.x1 = 32, .y1 = 4, .x2 = 50, .y2 = 40, .x3 = 14, .y3 = 40}
+    };
+
+    vg_render_scene(&tri, &fb);
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0xf800u);
+    size_t stroke_count = count_color(pixels, TEST_W * TEST_H, 0xffffu);
+    TEST_ASSERT_TRUE(fill_count > 0);
+    TEST_ASSERT_TRUE(stroke_count > 0);
+    TEST_ASSERT_TRUE(fill_count > stroke_count);
+}
+
+TEST(test_vector_scene_graph_filled_closed_polyline_produces_interior_pixels) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0x001fu; /* blue */
+
+    VgPoint pts[] = {{10, 5}, {50, 5}, {50, 35}, {10, 35}};
+
+    VgNode poly = {
+        .id = 1003,
+        .type = VG_NODE_POLYLINE,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.polyline = {.points = pts, .point_count = 4, .closed = true}
+    };
+
+    vg_render_scene(&poly, &fb);
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0x001fu);
+    size_t stroke_count = count_color(pixels, TEST_W * TEST_H, 0xffffu);
+    TEST_ASSERT_TRUE(fill_count > 0);
+    TEST_ASSERT_TRUE(stroke_count > 0);
+    TEST_ASSERT_TRUE(fill_count > stroke_count);
+}
+
+TEST(test_vector_scene_graph_open_polyline_does_not_fill) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0x001fu;
+
+    VgPoint pts[] = {{10, 5}, {50, 5}, {50, 35}, {10, 35}};
+
+    VgNode poly = {
+        .id = 1004,
+        .type = VG_NODE_POLYLINE,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.polyline = {.points = pts, .point_count = 4, .closed = false}
+    };
+
+    vg_render_scene(&poly, &fb);
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0x001fu);
+    TEST_ASSERT_EQUAL_size_t(0, fill_count);
+}
+
+TEST(test_vector_scene_graph_fill_paint_order_fill_under_stroke) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 2;
+    style.has_fill = true;
+    style.fill_rgb565 = 0xf800u; /* red fill */
+
+    VgNode rect = {
+        .id = 1005,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 10, .y = 10, .w = 30, .h = 20}
+    };
+
+    vg_render_scene(&rect, &fb);
+
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 10]);
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0xf800u);
+    size_t stroke_count = count_color(pixels, TEST_W * TEST_H, 0xffffu);
+    TEST_ASSERT_TRUE(fill_count > 0);
+    TEST_ASSERT_TRUE(stroke_count > 0);
+}
+
+TEST(test_vector_scene_graph_no_fill_when_has_fill_false) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = false;
+    style.fill_rgb565 = 0xf800u;
+
+    VgNode rect = {
+        .id = 1006,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 10, .y = 10, .w = 20, .h = 12}
+    };
+
+    vg_render_scene(&rect, &fb);
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0xf800u);
+    TEST_ASSERT_EQUAL_size_t(0, fill_count);
+}
+
+TEST(test_vector_scene_graph_filled_rect_clipped) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0x07e0u; /* green */
+
+    VgNode rect = {
+        .id = 1007,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 5, .y = 5, .w = 50, .h = 35}
+    };
+
+    VgClipRect clip = {.x = 20, .y = 15, .w = 10, .h = 10};
+    vg_render_scene_clipped(&rect, &fb, clip);
+
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 10]);
+    size_t fill_in_clip = 0;
+    for (int y = 15; y < 25; y++) {
+        for (int x = 20; x < 30; x++) {
+            if (pixels[y * TEST_W + x] != 0x0000u) fill_in_clip++;
+        }
+    }
+    TEST_ASSERT_TRUE(fill_in_clip > 0);
+    size_t outside_clip = count_not_color(pixels, TEST_W * TEST_H, 0x0000u) - fill_in_clip;
+    TEST_ASSERT_EQUAL_size_t(0, outside_clip);
+}
+
+TEST(test_vector_scene_graph_filled_rect_deterministic_checksum) {
+    uint16_t pixels_a[TEST_W * TEST_H];
+    uint16_t pixels_b[TEST_W * TEST_H];
+    VgFrameBuffer fb_a, fb_b;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb_a, TEST_W, TEST_H, pixels_a, TEST_W * TEST_H));
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb_b, TEST_W, TEST_H, pixels_b, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb_a, 0x0000u);
+    vg_framebuffer_clear(&fb_b, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0x07e0u;
+
+    VgNode rect = {
+        .id = 1008,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 8, .y = 6, .w = 25, .h = 18}
+    };
+
+    vg_render_scene(&rect, &fb_a);
+    vg_render_scene(&rect, &fb_b);
+
+    TEST_ASSERT_EQUAL_HEX32(vg_framebuffer_checksum(&fb_a), vg_framebuffer_checksum(&fb_b));
+}
+
+TEST(test_vector_scene_graph_filled_rect_from_clojure_records) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID scene = eval_string(
+        "(do "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Rect [id t style visible x y w h]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565]) "
+        "  (->Scene "
+        "    (->Rect 1009 nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12) "
+        "    nil nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0x07e0u);
+    size_t stroke_count = count_color(pixels, TEST_W * TEST_H, 0xffffu);
+    TEST_ASSERT_TRUE(fill_count > 0);
+    TEST_ASSERT_TRUE(stroke_count > 0);
+}
