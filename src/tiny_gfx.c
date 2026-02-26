@@ -1,6 +1,7 @@
 #include "tiny_gfx.h"
 
 #include "builtins.h"
+#include "callbacks.h"
 #include "symbol.h"
 #include "value.h"
 #include "vector.h"
@@ -67,6 +68,7 @@ STATIC_SYMBOL_DATA(sym_type_rect_data, "Rect");
 STATIC_SYMBOL_DATA(sym_type_tri_data, "Tri");
 STATIC_SYMBOL_DATA(sym_type_vtext_data, "VText");
 STATIC_SYMBOL_DATA(sym_type_frame_scene_data, "FrameScene");
+STATIC_SYMBOL_DATA(sym_type_scene_data, "Scene");
 
 #undef STATIC_SYMBOL_DATA
 
@@ -131,6 +133,7 @@ bool tiny_gfx_ensure_schema(EvalState *st) {
     if (!require_namespace_by_name(st, "tiny-gfx.scene")) {
         return false;
     }
+    if (g_record_schema_initialized) return true;
 
     init_record_keys();
 
@@ -143,6 +146,7 @@ bool tiny_gfx_ensure_schema(EvalState *st) {
     g_record_schema.t_tri = &sym_type_tri_data.sym;
     g_record_schema.t_vtext = &sym_type_vtext_data.sym;
     g_record_schema.t_frame_scene = &sym_type_frame_scene_data.sym;
+    g_record_schema.t_scene = &sym_type_scene_data.sym;
 
     CljRecordDescriptor *d_transform = record_descriptor_lookup(g_record_schema.t_transform);
     CljRecordDescriptor *d_style = record_descriptor_lookup(g_record_schema.t_style);
@@ -153,7 +157,8 @@ bool tiny_gfx_ensure_schema(EvalState *st) {
     CljRecordDescriptor *d_tri = record_descriptor_lookup(g_record_schema.t_tri);
     CljRecordDescriptor *d_text = record_descriptor_lookup(g_record_schema.t_vtext);
     CljRecordDescriptor *d_frame = record_descriptor_lookup(g_record_schema.t_frame_scene);
-    if (!d_transform || !d_style || !d_group || !d_line || !d_poly || !d_rect || !d_tri || !d_text || !d_frame) {
+    CljRecordDescriptor *d_scene = record_descriptor_lookup(g_record_schema.t_scene);
+    if (!d_transform || !d_style || !d_group || !d_line || !d_poly || !d_rect || !d_tri || !d_text || !d_frame || !d_scene) {
         return false;
     }
 
@@ -166,6 +171,18 @@ bool tiny_gfx_ensure_schema(EvalState *st) {
     g_record_schema.d_tri = d_tri;
     g_record_schema.d_vtext = d_text;
     g_record_schema.d_frame_scene = d_frame;
+    g_record_schema.d_scene = d_scene;
+
+    g_record_schema.h_transform = clj_hash(g_record_schema.t_transform);
+    g_record_schema.h_style = clj_hash(g_record_schema.t_style);
+    g_record_schema.h_group = clj_hash(g_record_schema.t_group);
+    g_record_schema.h_line = clj_hash(g_record_schema.t_line);
+    g_record_schema.h_polyline = clj_hash(g_record_schema.t_polyline);
+    g_record_schema.h_rect = clj_hash(g_record_schema.t_rect);
+    g_record_schema.h_tri = clj_hash(g_record_schema.t_tri);
+    g_record_schema.h_vtext = clj_hash(g_record_schema.t_vtext);
+    g_record_schema.h_frame_scene = clj_hash(g_record_schema.t_frame_scene);
+    g_record_schema.h_scene = clj_hash(g_record_schema.t_scene);
 
     g_record_schema.n_transform = vector_count(d_transform->field_keys);
     g_record_schema.n_style = vector_count(d_style->field_keys);
@@ -176,6 +193,7 @@ bool tiny_gfx_ensure_schema(EvalState *st) {
     g_record_schema.n_tri = vector_count(d_tri->field_keys);
     g_record_schema.n_vtext = vector_count(d_text->field_keys);
     g_record_schema.n_frame_scene = vector_count(d_frame->field_keys);
+    g_record_schema.n_scene = vector_count(d_scene->field_keys);
 
     g_record_schema.transform_tx = descriptor_index_of(d_transform, g_record_keys.k_tx);
     g_record_schema.transform_ty = descriptor_index_of(d_transform, g_record_keys.k_ty);

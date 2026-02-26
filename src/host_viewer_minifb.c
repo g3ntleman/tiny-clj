@@ -60,10 +60,6 @@ static uint32_t rgb565_to_xrgb8888(uint16_t c) {
     return 0xff000000u | (r << 16) | (g << 8) | b;
 }
 
-static bool ensure_vector_scene_record_schema(EvalState *st) {
-    return tiny_gfx_ensure_schema(st);
-}
-
 #define g_record_schema (*tiny_gfx_schema())
 
 static CljPersistentRecord *make_record_with_descriptor(CljRecordDescriptor *desc) {
@@ -307,7 +303,7 @@ int main(void) {
         return 1;
     }
     evalstate_set_ns(viewer_eval_state, "user");
-    if (!ensure_vector_scene_record_schema(viewer_eval_state)) {
+    if (!tiny_gfx_ensure_schema(viewer_eval_state)) {
         fprintf(stderr, "Failed to initialize vector scene record schema via tiny-gfx.scene\n");
         return 1;
     }

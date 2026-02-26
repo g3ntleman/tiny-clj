@@ -134,18 +134,17 @@ TEST(test_vector_scene_graph_group_visible_false_skips_children) {
 
 TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
     ID scene = eval_string(
-        "(do "
+        "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord Group [id t style visible children]) "
-        "  (defrecord Scene [root clip-rect erase-rgb565]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
         "  (->Scene "
         "    (->Group 100 nil nil true "
         "             [(->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6)]) "
-        "    nil nil))",
+        "    nil nil nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -161,18 +160,17 @@ TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
 
 TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
     ID scene = eval_string(
-        "(do "
+        "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord Group [id t style visible children]) "
-        "  (defrecord Scene [root clip-rect erase-rgb565]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
         "  (->Scene "
         "    (->Group 120 nil nil false "
         "             [(->Line 121 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6)]) "
-        "    nil nil))",
+        "    nil nil nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -188,18 +186,17 @@ TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
 
 TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
     ID scene = eval_string(
-        "(do "
+        "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord Group [id t style visible children]) "
-        "  (defrecord Scene [root clip-rect erase-rgb565]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
         "  (->Scene "
         "    (->Group 200 (->Transform 7 5 1 1 0) nil true "
         "             [(->Line 201 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0)]) "
-        "    nil nil))",
+        "    nil nil nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -215,19 +212,18 @@ TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
 
 TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
     ID scene = eval_string(
-        "(do "
+        "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord Group [id t style visible children]) "
-        "  (defrecord Scene [root clip-rect erase-rgb565]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
         "  (->Scene "
         "    (->Group 300 nil nil true "
         "             [(->Line 301 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10)]) "
         "    [20 8 10 6] "
-        "    63488))",
+        "    63488 nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -250,17 +246,16 @@ TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
 
 TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
     ID scene = eval_string(
-        "(do "
+        "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px collision-rules]) "
         "  (->FrameScene "
         "    (->Line 401 nil (->Style 65535 1 true false 0 false 0) true 2 3 8 3) "
         "    [1 2 10 12] "
-        "    3 true true 0 1))",
+        "    3 true true 0 1 nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -280,17 +275,16 @@ TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
 
 TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
     ID scene = eval_string(
-        "(do "
+        "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px collision-rules]) "
         "  (->FrameScene "
         "    (->Line 501 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
         "    [20 8 10 6] "
-        "    0 true true 0 0))",
+        "    0 true true 0 0 nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -310,17 +304,16 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
 
 TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_when_slot_invisible) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
     ID scene = eval_string(
-        "(do "
+        "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px collision-rules]) "
         "  (->FrameScene "
         "    (->Line 511 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
         "    [20 8 10 6] "
-        "    0 false true 0 0))",
+        "    0 false true 0 0 nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1441,17 +1434,16 @@ TEST(test_vector_scene_graph_filled_rect_deterministic_checksum) {
 
 TEST(test_vector_scene_graph_filled_rect_from_clojure_records) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
     ID scene = eval_string(
-        "(do "
+        "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Rect [id t style visible x y w h]) "
         "  (defrecord Group [id t style visible children]) "
-        "  (defrecord Scene [root clip-rect erase-rgb565]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
         "  (->Scene "
         "    (->Rect 1009 nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12) "
-        "    nil nil))",
+        "    nil nil nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 

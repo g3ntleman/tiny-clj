@@ -2,13 +2,81 @@
 #include "gfx.h"
 #include "tiny_gfx.h"
 
-#include <string.h>
-
+#include <limits.h>
+#include "callbacks.h"
 #include "record.h"
 #include "strings.h"
 #include "symbol.h"
 #include "value.h"
 #include "vector.h"
+
+static inline uint32_t record_type_hash(ID obj) {
+    CljPersistentRecord *r = (CljPersistentRecord *)obj;
+    return r->descriptor ? clj_hash(r->descriptor->type_symbol) : 0;
+}
+
+static inline void transform_point(VgTransformFixed t, int16_t x, int16_t y, int *ox, int *oy) {
+    vg_transform_fixed_apply_px(t, x, y, ox, oy);
+}
+
+static inline bool aabb_outside_fb(int min_x, int min_y, int max_x, int max_y,
+                                   int fb_w, int fb_h,
+                                   bool use_clip, VgClipRect clip) {
+    int lo_x = 0, lo_y = 0, hi_x = fb_w, hi_y = fb_h;
+    if (use_clip) {
+        lo_x = clip.x; lo_y = clip.y;
+        hi_x = clip.x + clip.w; hi_y = clip.y + clip.h;
+    }
+    return max_x < lo_x || min_x >= hi_x || max_y < lo_y || min_y >= hi_y;
+}
+
+static inline bool node_culled_line(VgTransformFixed t, int16_t x1, int16_t y1,
+                                    int16_t x2, int16_t y2, int sw,
+                                    int fb_w, int fb_h, bool use_clip, VgClipRect clip) {
+    int ax, ay, bx, by;
+    transform_point(t, x1, y1, &ax, &ay);
+    transform_point(t, x2, y2, &bx, &by);
+    int mn_x = (ax < bx ? ax : bx) - sw;
+    int mn_y = (ay < by ? ay : by) - sw;
+    int mx_x = (ax > bx ? ax : bx) + sw;
+    int mx_y = (ay > by ? ay : by) + sw;
+    return aabb_outside_fb(mn_x, mn_y, mx_x, mx_y, fb_w, fb_h, use_clip, clip);
+}
+
+static inline bool node_culled_rect(VgTransformFixed t, int16_t x, int16_t y,
+                                    int16_t w, int16_t h, int sw,
+                                    int fb_w, int fb_h, bool use_clip, VgClipRect clip) {
+    int c[8];
+    transform_point(t, x,     y,     &c[0], &c[1]);
+    transform_point(t, (int16_t)(x+w), y,     &c[2], &c[3]);
+    transform_point(t, (int16_t)(x+w), (int16_t)(y+h), &c[4], &c[5]);
+    transform_point(t, x,     (int16_t)(y+h), &c[6], &c[7]);
+    int mn_x = c[0], mx_x = c[0], mn_y = c[1], mx_y = c[1];
+    for (int i = 2; i < 8; i += 2) {
+        if (c[i]   < mn_x) mn_x = c[i];
+        if (c[i]   > mx_x) mx_x = c[i];
+        if (c[i+1] < mn_y) mn_y = c[i+1];
+        if (c[i+1] > mx_y) mx_y = c[i+1];
+    }
+    return aabb_outside_fb(mn_x - sw, mn_y - sw, mx_x + sw, mx_y + sw, fb_w, fb_h, use_clip, clip);
+}
+
+static inline bool node_culled_tri(VgTransformFixed t,
+                                   int16_t x1, int16_t y1,
+                                   int16_t x2, int16_t y2,
+                                   int16_t x3, int16_t y3, int sw,
+                                   int fb_w, int fb_h, bool use_clip, VgClipRect clip) {
+    int ax, ay, bx, by, cx, cy;
+    transform_point(t, x1, y1, &ax, &ay);
+    transform_point(t, x2, y2, &bx, &by);
+    transform_point(t, x3, y3, &cx, &cy);
+    int mn_x = ax, mx_x = ax, mn_y = ay, mx_y = ay;
+    if (bx < mn_x) mn_x = bx; if (bx > mx_x) mx_x = bx;
+    if (by < mn_y) mn_y = by; if (by > mx_y) mx_y = by;
+    if (cx < mn_x) mn_x = cx; if (cx > mx_x) mx_x = cx;
+    if (cy < mn_y) mn_y = cy; if (cy > mx_y) mx_y = cy;
+    return aabb_outside_fb(mn_x - sw, mn_y - sw, mx_x + sw, mx_y + sw, fb_w, fb_h, use_clip, clip);
+}
 
 static int32_t fixed_payload_raw(ID v) {
     return (int32_t)((intptr_t)v >> TAG_BITS);
@@ -94,43 +162,14 @@ static const char *id_to_text_cstr(ID v) {
     return "";
 }
 
-static bool record_type_is(ID record_obj, const char *simple_type_name) {
-    if (!record_obj || TAG(record_obj) != CLJ_RECORD || !simple_type_name) {
-        return false;
-    }
-    ID type_sym = record_type_symbol(record_obj);
-    if (!type_sym || TAG(type_sym) != CLJ_SYMBOL) {
-        return false;
-    }
-    CljSymbol *sym = as_symbol(type_sym);
-    if (!sym || !sym->cname) {
-        return false;
-    }
-    const char *name = sym->cname;
-    if (strcmp(name, simple_type_name) == 0) {
-        return true;
-    }
-    const char *slash = strrchr(name, '/');
-    if (!slash) {
-        return false;
-    }
-    return strcmp(slash + 1, simple_type_name) == 0;
-}
 
-static void assert_record_field_count_at_least(ID record_obj, unsigned int min_count, const char *type_name) {
-    CLJ_ASSERT(record_obj && TAG(record_obj) == CLJ_RECORD && "expected record object");
-    CljPersistentRecord *record = record_obj;
-    CLJ_ASSERT(record_declared_field_count(record) >= min_count && "record layout mismatch for typed overlay");
-    (void)type_name;
-}
 
-static VgTransformFixed decode_transform_fixed(ID obj) {
+static VgTransformFixed decode_transform_fixed(ID obj, const VgRecordSchema *s) {
     VgTransform t = vg_transform_identity();
-    if (!obj) {
+    if (!obj || TAG(obj) != CLJ_RECORD) {
         return vg_transform_fixed_identity();
     }
-    if (record_type_is(obj, "Transform")) {
-        assert_record_field_count_at_least(obj, 5, "Transform");
+    if (record_type_hash(obj) == s->h_transform) {
         Transform *tr = obj;
         t.tx = id_to_i16_default(tr->tx, 0);
         t.ty = id_to_i16_default(tr->ty, 0);
@@ -142,101 +181,52 @@ static VgTransformFixed decode_transform_fixed(ID obj) {
     return vg_transform_fixed_identity();
 }
 
-static ID node_style_field(ID node_obj) {
-    if (record_type_is(node_obj, "Group")) {
-        assert_record_field_count_at_least(node_obj, 5, "Group");
-        Group *r = node_obj;
-        return r->style;
-    }
-    if (record_type_is(node_obj, "Line")) {
-        assert_record_field_count_at_least(node_obj, 8, "Line");
-        Line *r = node_obj;
-        return r->style;
-    }
-    if (record_type_is(node_obj, "Polyline")) {
-        assert_record_field_count_at_least(node_obj, 6, "Polyline");
-        Polyline *r = node_obj;
-        return r->style;
-    }
-    if (record_type_is(node_obj, "Rect")) {
-        assert_record_field_count_at_least(node_obj, 8, "Rect");
-        Rect *r = node_obj;
-        return r->style;
-    }
-    if (record_type_is(node_obj, "Tri")) {
-        assert_record_field_count_at_least(node_obj, 10, "Tri");
-        Tri *r = node_obj;
-        return r->style;
-    }
-    if (record_type_is(node_obj, "VText")) {
-        assert_record_field_count_at_least(node_obj, 9, "VText");
-        VText *r = node_obj;
-        return r->style;
-    }
+static ID node_style_field(ID node_obj, uint32_t h, const VgRecordSchema *s) {
+    if (h == s->h_group)    return ((Group *)node_obj)->style;
+    if (h == s->h_line)     return ((Line *)node_obj)->style;
+    if (h == s->h_polyline) return ((Polyline *)node_obj)->style;
+    if (h == s->h_rect)     return ((Rect *)node_obj)->style;
+    if (h == s->h_tri)      return ((Tri *)node_obj)->style;
+    if (h == s->h_vtext)    return ((VText *)node_obj)->style;
     return NULL;
 }
 
-static ID node_visible_field(ID node_obj) {
-    if (record_type_is(node_obj, "Group")) {
-        assert_record_field_count_at_least(node_obj, 5, "Group");
-        Group *r = node_obj;
-        return r->visible;
-    }
-    if (record_type_is(node_obj, "Line")) {
-        assert_record_field_count_at_least(node_obj, 8, "Line");
-        Line *r = node_obj;
-        return r->visible;
-    }
-    if (record_type_is(node_obj, "Polyline")) {
-        assert_record_field_count_at_least(node_obj, 6, "Polyline");
-        Polyline *r = node_obj;
-        return r->visible;
-    }
-    if (record_type_is(node_obj, "Rect")) {
-        assert_record_field_count_at_least(node_obj, 8, "Rect");
-        Rect *r = node_obj;
-        return r->visible;
-    }
-    if (record_type_is(node_obj, "Tri")) {
-        assert_record_field_count_at_least(node_obj, 10, "Tri");
-        Tri *r = node_obj;
-        return r->visible;
-    }
-    if (record_type_is(node_obj, "VText")) {
-        assert_record_field_count_at_least(node_obj, 9, "VText");
-        VText *r = node_obj;
-        return r->visible;
-    }
+static ID node_visible_field(ID node_obj, uint32_t h, const VgRecordSchema *s) {
+    if (h == s->h_group)    return ((Group *)node_obj)->visible;
+    if (h == s->h_line)     return ((Line *)node_obj)->visible;
+    if (h == s->h_polyline) return ((Polyline *)node_obj)->visible;
+    if (h == s->h_rect)     return ((Rect *)node_obj)->visible;
+    if (h == s->h_tri)      return ((Tri *)node_obj)->visible;
+    if (h == s->h_vtext)    return ((VText *)node_obj)->visible;
     return NULL;
 }
 
-static VgStyle decode_style(ID node_obj) {
-    VgStyle s = vg_style_default();
+static VgStyle decode_style(ID node_obj, uint32_t node_h, const VgRecordSchema *sc) {
+    VgStyle st = vg_style_default();
     if (!node_obj) {
-        return s;
+        return st;
     }
-    ID style_obj = node_style_field(node_obj);
-    if (style_obj && record_type_is(style_obj, "Style")) {
-        assert_record_field_count_at_least(style_obj, 7, "Style");
+    ID style_obj = node_style_field(node_obj, node_h, sc);
+    if (style_obj && TAG(style_obj) == CLJ_RECORD && record_type_hash(style_obj) == sc->h_style) {
         Style *sr = style_obj;
-        s.stroke_rgb565 = id_to_u16_default(sr->stroke_rgb565, s.stroke_rgb565);
-        s.stroke_width = id_to_u8_default(sr->stroke_width, s.stroke_width);
-        s.has_fill = id_to_bool_default(sr->has_fill, s.has_fill);
-        s.fill_rgb565 = id_to_u16_default(sr->fill_rgb565, s.fill_rgb565);
-        s.has_bg_rgb565 = id_to_bool_default(sr->has_bg_rgb565, s.has_bg_rgb565);
-        s.bg_rgb565 = id_to_u16_default(sr->bg_rgb565, s.bg_rgb565);
-        s.visible = id_to_bool_default(sr->visible, s.visible);
+        st.stroke_rgb565 = id_to_u16_default(sr->stroke_rgb565, st.stroke_rgb565);
+        st.stroke_width = id_to_u8_default(sr->stroke_width, st.stroke_width);
+        st.has_fill = id_to_bool_default(sr->has_fill, st.has_fill);
+        st.fill_rgb565 = id_to_u16_default(sr->fill_rgb565, st.fill_rgb565);
+        st.has_bg_rgb565 = id_to_bool_default(sr->has_bg_rgb565, st.has_bg_rgb565);
+        st.bg_rgb565 = id_to_u16_default(sr->bg_rgb565, st.bg_rgb565);
+        st.visible = id_to_bool_default(sr->visible, st.visible);
     }
-    ID node_visible = node_visible_field(node_obj);
+    ID node_visible = node_visible_field(node_obj, node_h, sc);
     if (node_visible) {
-        s.visible = id_to_bool_default(node_visible, s.visible);
+        st.visible = id_to_bool_default(node_visible, st.visible);
     } else if (node_visible == clj_false) {
-        s.visible = false;
+        st.visible = false;
     }
-    if (s.stroke_width == 0) {
-        s.stroke_width = 1;
+    if (st.stroke_width == 0) {
+        st.stroke_width = 1;
     }
-    return s;
+    return st;
 }
 
 static bool render_record_node(ID node_obj,
@@ -245,7 +235,7 @@ static bool render_record_node(ID node_obj,
                                bool use_clip,
                                VgClipRect clip_rect);
 
-static bool decode_rect(ID obj, VgClipRect *out_rect) {
+static bool decode_rect(ID obj, VgClipRect *out_rect, const VgRecordSchema *sc) {
     if (!obj || !out_rect) {
         return false;
     }
@@ -261,8 +251,7 @@ static bool decode_rect(ID obj, VgClipRect *out_rect) {
         out_rect->h = id_to_i16_default(vector_nth(v, 3), 0);
         return !vg_clip_rect_is_empty(*out_rect);
     }
-    if (obj_tag == CLJ_RECORD && record_type_is(obj, "Rect")) {
-        assert_record_field_count_at_least(obj, 8, "Rect");
+    if (obj_tag == CLJ_RECORD && record_type_hash(obj) == sc->h_rect) {
         Rect *r = obj;
         out_rect->x = id_to_i16_default(r->x, 0);
         out_rect->y = id_to_i16_default(r->y, 0);
@@ -291,7 +280,6 @@ static bool render_polyline_record(ID node_obj,
                                    VgFrameBuffer *fb,
                                    bool use_clip,
                                    VgClipRect clip_rect) {
-    assert_record_field_count_at_least(node_obj, 6, "Polyline");
     Polyline *pr = node_obj;
     ID pts = pr->pts;
     ID closed = pr->closed;
@@ -317,6 +305,20 @@ static bool render_polyline_record(ID node_obj,
         points[i].y = id_to_i16_default(vector_nth(xy, 1), 0);
     }
 
+    int sw = style.stroke_width ? style.stroke_width : 1;
+    {
+        int mn_x = INT_MAX, mn_y = INT_MAX, mx_x = INT_MIN, mx_y = INT_MIN;
+        for (unsigned int i = 0; i < n; i++) {
+            int wx, wy;
+            transform_point(world_t, points[i].x, points[i].y, &wx, &wy);
+            if (wx < mn_x) mn_x = wx; if (wx > mx_x) mx_x = wx;
+            if (wy < mn_y) mn_y = wy; if (wy > mx_y) mx_y = wy;
+        }
+        if (aabb_outside_fb(mn_x - sw, mn_y - sw, mx_x + sw, mx_y + sw,
+                            fb->width, fb->height, use_clip, clip_rect))
+            return true;
+    }
+
     VgNode temp;
     memset(&temp, 0, sizeof(temp));
     temp.type = VG_NODE_POLYLINE;
@@ -336,45 +338,28 @@ static bool render_record_node(ID node_obj,
     if (!node_obj || TAG(node_obj) != CLJ_RECORD || !fb) {
         return false;
     }
+    const VgRecordSchema *sc = tiny_gfx_schema();
+    uint32_t h = record_type_hash(node_obj);
 
     ID local_t_obj = NULL;
-    if (record_type_is(node_obj, "Group")) {
-        assert_record_field_count_at_least(node_obj, 5, "Group");
-        Group *r = node_obj;
-        local_t_obj = r->t;
-    } else if (record_type_is(node_obj, "Line")) {
-        assert_record_field_count_at_least(node_obj, 8, "Line");
-        Line *r = node_obj;
-        local_t_obj = r->t;
-    } else if (record_type_is(node_obj, "Polyline")) {
-        assert_record_field_count_at_least(node_obj, 6, "Polyline");
-        Polyline *r = node_obj;
-        local_t_obj = r->t;
-    } else if (record_type_is(node_obj, "Rect")) {
-        assert_record_field_count_at_least(node_obj, 8, "Rect");
-        Rect *r = node_obj;
-        local_t_obj = r->t;
-    } else if (record_type_is(node_obj, "Tri")) {
-        assert_record_field_count_at_least(node_obj, 10, "Tri");
-        Tri *r = node_obj;
-        local_t_obj = r->t;
-    } else if (record_type_is(node_obj, "VText")) {
-        assert_record_field_count_at_least(node_obj, 9, "VText");
-        VText *r = node_obj;
-        local_t_obj = r->t;
-    }
+    if      (h == sc->h_group)    local_t_obj = ((Group *)node_obj)->t;
+    else if (h == sc->h_line)     local_t_obj = ((Line *)node_obj)->t;
+    else if (h == sc->h_polyline) local_t_obj = ((Polyline *)node_obj)->t;
+    else if (h == sc->h_rect)     local_t_obj = ((Rect *)node_obj)->t;
+    else if (h == sc->h_tri)      local_t_obj = ((Tri *)node_obj)->t;
+    else if (h == sc->h_vtext)    local_t_obj = ((VText *)node_obj)->t;
+
     VgTransformFixed world_t = parent_t;
     if (local_t_obj) {
-        VgTransformFixed local_t = decode_transform_fixed(local_t_obj);
+        VgTransformFixed local_t = decode_transform_fixed(local_t_obj, sc);
         world_t = vg_transform_fixed_compose(parent_t, local_t);
     }
-    VgStyle style = decode_style(node_obj);
+    VgStyle style = decode_style(node_obj, h, sc);
     if (!style.visible) {
         return true;
     }
 
-    if (record_type_is(node_obj, "Group")) {
-        assert_record_field_count_at_least(node_obj, 5, "Group");
+    if (h == sc->h_group) {
         Group *group = node_obj;
         ID children = group->children;
         if (!children || TAG(children) != CLJ_VECTOR_PERSISTENT) {
@@ -394,34 +379,42 @@ static bool render_record_node(ID node_obj,
         return true;
     }
 
+    int sw = style.stroke_width ? style.stroke_width : 1;
+    int fb_w = fb->width, fb_h = fb->height;
+
     VgNode temp;
     memset(&temp, 0, sizeof(temp));
     temp.has_transform = false;
     temp.style = style;
 
-    if (record_type_is(node_obj, "Line")) {
+    if (h == sc->h_line) {
         temp.type = VG_NODE_LINE;
-        assert_record_field_count_at_least(node_obj, 8, "Line");
         Line *line = node_obj;
         temp.data.line.x1 = id_to_i16_default(line->x1, 0);
         temp.data.line.y1 = id_to_i16_default(line->y1, 0);
         temp.data.line.x2 = id_to_i16_default(line->x2, 0);
         temp.data.line.y2 = id_to_i16_default(line->y2, 0);
+        if (node_culled_line(world_t, temp.data.line.x1, temp.data.line.y1,
+                             temp.data.line.x2, temp.data.line.y2, sw,
+                             fb_w, fb_h, use_clip, clip_rect))
+            return true;
         return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
     }
-    if (record_type_is(node_obj, "Rect")) {
+    if (h == sc->h_rect) {
         temp.type = VG_NODE_RECT;
-        assert_record_field_count_at_least(node_obj, 8, "Rect");
         Rect *rect = node_obj;
         temp.data.rect.x = id_to_i16_default(rect->x, 0);
         temp.data.rect.y = id_to_i16_default(rect->y, 0);
         temp.data.rect.w = id_to_i16_default(rect->w, 0);
         temp.data.rect.h = id_to_i16_default(rect->h, 0);
+        if (node_culled_rect(world_t, temp.data.rect.x, temp.data.rect.y,
+                             temp.data.rect.w, temp.data.rect.h, sw,
+                             fb_w, fb_h, use_clip, clip_rect))
+            return true;
         return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
     }
-    if (record_type_is(node_obj, "Tri")) {
+    if (h == sc->h_tri) {
         temp.type = VG_NODE_TRI;
-        assert_record_field_count_at_least(node_obj, 10, "Tri");
         Tri *tri = node_obj;
         temp.data.tri.x1 = id_to_i16_default(tri->x1, 0);
         temp.data.tri.y1 = id_to_i16_default(tri->y1, 0);
@@ -429,11 +422,16 @@ static bool render_record_node(ID node_obj,
         temp.data.tri.y2 = id_to_i16_default(tri->y2, 0);
         temp.data.tri.x3 = id_to_i16_default(tri->x3, 0);
         temp.data.tri.y3 = id_to_i16_default(tri->y3, 0);
+        if (node_culled_tri(world_t,
+                            temp.data.tri.x1, temp.data.tri.y1,
+                            temp.data.tri.x2, temp.data.tri.y2,
+                            temp.data.tri.x3, temp.data.tri.y3, sw,
+                            fb_w, fb_h, use_clip, clip_rect))
+            return true;
         return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
     }
-    if (record_type_is(node_obj, "VText")) {
+    if (h == sc->h_vtext) {
         temp.type = VG_NODE_VTEXT;
-        assert_record_field_count_at_least(node_obj, 9, "VText");
         VText *text = node_obj;
         temp.data.text.x = id_to_i16_default(text->x, 0);
         temp.data.text.y = id_to_i16_default(text->y, 0);
@@ -442,23 +440,24 @@ static bool render_record_node(ID node_obj,
         temp.data.text.text = id_to_text_cstr(text->text);
         return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
     }
-    if (record_type_is(node_obj, "Polyline")) {
+    if (h == sc->h_polyline) {
         return render_polyline_record(node_obj, world_t, style, fb, use_clip, clip_rect);
     }
     return false;
 }
 
 static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_clip, ID *out_erase) {
-    if (record_type_is(scene_record, "FrameScene")) {
-        assert_record_field_count_at_least(scene_record, 7, "FrameScene");
+    if (!scene_record || TAG(scene_record) != CLJ_RECORD) return false;
+    const VgRecordSchema *sc = tiny_gfx_schema();
+    uint32_t h = record_type_hash(scene_record);
+    if (h == sc->h_frame_scene) {
         FrameScene *fs = scene_record;
         *out_root = fs->root;
         *out_clip = fs->clip_rect;
         if (out_erase) *out_erase = fs->erase_rgb565;
         return true;
     }
-    if (record_type_is(scene_record, "Scene")) {
-        assert_record_field_count_at_least(scene_record, 3, "Scene");
+    if (h == sc->h_scene) {
         Scene *s = scene_record;
         *out_root = s->root;
         *out_clip = s->clip_rect;
@@ -480,8 +479,9 @@ bool vg_render_scene_record(ID scene_record, VgFrameBuffer *fb) {
         return false;
     }
 
+    const VgRecordSchema *sc = tiny_gfx_schema();
     VgClipRect effective_rect = {0, 0, 0, 0};
-    bool has_effective_rect = decode_rect(clip_source, &effective_rect);
+    bool has_effective_rect = decode_rect(clip_source, &effective_rect, sc);
 
     if (has_effective_rect) {
         uint16_t erase_rgb565 = id_to_u16_default(erase_source, 0x0000u);
@@ -508,9 +508,10 @@ bool vg_render_scene_record_clipped(ID scene_record, VgFrameBuffer *fb, VgClipRe
         return true;
     }
 
+    const VgRecordSchema *sc = tiny_gfx_schema();
     VgClipRect effective_clip = clip_rect;
     VgClipRect scene_clip = {0, 0, 0, 0};
-    bool has_scene_clip = decode_rect(clip_source, &scene_clip);
+    bool has_scene_clip = decode_rect(clip_source, &scene_clip, sc);
     if (has_scene_clip) {
         if (!vg_clip_rect_intersect(clip_rect, scene_clip, &effective_clip)) {
             return true;
@@ -523,14 +524,15 @@ bool vg_decode_frame_slot_record(ID frame_scene_record, VgRenderSlot *out_slot) 
     if (!frame_scene_record || !out_slot || TAG(frame_scene_record) != CLJ_RECORD) {
         return false;
     }
-    if (!record_type_is(frame_scene_record, "FrameScene")) {
+    if (TAG(frame_scene_record) != CLJ_RECORD) return false;
+    const VgRecordSchema *sc = tiny_gfx_schema();
+    if (record_type_hash(frame_scene_record) != sc->h_frame_scene) {
         return false;
     }
 
-    assert_record_field_count_at_least(frame_scene_record, 7, "FrameScene");
     FrameScene *scene = frame_scene_record;
     VgClipRect clip = {0, 0, 0, 0};
-    if (!decode_rect(scene->clip_rect, &clip)) {
+    if (!decode_rect(scene->clip_rect, &clip, sc)) {
         return false;
     }
 
