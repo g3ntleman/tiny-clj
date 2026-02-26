@@ -80,6 +80,10 @@ Tasks:
   - any field value may be `nil`
   - C decoders must apply typed defaults (`0`, `1`, `true`, etc.) and inheritance semantics where applicable
   - `nil` and explicit `false` must remain semantically distinct
+- Define slot-index cache invariant for direct record rendering:
+  - slot indices for required record fields are precomputed during schema setup and treated as always known
+  - enforce this with `CLJ_ASSERT(...)` during schema initialization / validation
+  - optionality applies to slot values (`nil`), not to slot-index discovery in the render hot path
 - Define direct-render record contract for C (slot-indexed field access; no keyword lookup in render hot path).
 - Keep canonicalization/compiled C scene cache optional for later optimization.
 
