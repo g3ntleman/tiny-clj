@@ -488,8 +488,63 @@
 (defn timeout [msecs]
   (unsupported! "timeout"))
 
+;; -----------------------------------------------------------------------------
+;; Minimal go parking subset (Track B seed)
+;;
+;; Supported in `go`:
+;; - (go (<! ch))   ; parks until value is available, then resumes
+;; - (go (>! ch v)) ; parks until put callback resolves
+;; - (go expr...)   ; evaluates asynchronously via event loop and delivers result
+;;
+;; Out-of-scope for now:
+;; - Full IOC/state-machine compilation
+;; - Nested/complex <!/>! control flow forms
+;; -----------------------------------------------------------------------------
+
+(defn go-complete! [out v]
+  (put! out v (fn [_] (close! out))))
+
+(defn go-fail! [out]
+  (close! out))
+
+(defn go-run-immediate [thunk]
+  (let [out (chan 1)]
+    (clojure.core/schedule
+      0
+      (fn []
+        (try
+          (go-complete! out (thunk))
+          (catch Exception e
+            (go-fail! out)))))
+    out))
+
+(defn go-park-take [ch]
+  (let [out (chan 1)]
+    (take! ch (fn [v] (go-complete! out v)))
+    out))
+
+(defn go-park-put [ch v]
+  (let [out (chan 1)]
+    (put! ch v (fn [ok] (go-complete! out ok)))
+    out))
+
 (defmacro go [& body]
-  (list 'clojure.core.async/unsupported! "go"))
+  (if (= (count body) 1)
+    (let [expr (first body)]
+      (if (and (list? expr)
+               (symbol? (first expr))
+               (= (name (first expr)) "<!")
+               (= (count expr) 2))
+        (list 'clojure.core.async/go-park-take (second expr))
+        (if (and (list? expr)
+                 (symbol? (first expr))
+                 (= (name (first expr)) ">!")
+                 (= (count expr) 3))
+          (list 'clojure.core.async/go-park-put (second expr) (nth expr 2))
+          (list 'clojure.core.async/go-run-immediate
+                (list 'fn [] expr)))))
+    (list 'clojure.core.async/go-run-immediate
+          (cons 'fn (cons [] body)))))
 
 (defmacro go-loop [bindings & body]
   (list 'clojure.core.async/unsupported! "go-loop"))

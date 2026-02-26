@@ -13,6 +13,19 @@ This plan captures two tracks:
 
 The repository rule is “macOS-first”: everything should be testable on macOS before moving to ESP32.
 
+## Progress update (2026-02-26)
+
+- Added minimal `go` support in `libs/clojure/core/async.clj`:
+  - `(go (<! ch))` parks and resumes via callback.
+  - `(go (>! ch v))` waits for put callback completion.
+  - `(go expr...)` runs asynchronously via `clojure.core/schedule`.
+- Added parking script test: `libs/test/core_async/parking.clj`.
+- Hooked test into `src/tests/test_plan_trackA_scripts.c`:
+  - `test_plan_trackB_core_async_parking_script`.
+- Verified green on macOS:
+  - `./build/unit-tests --test "test_plan_trackA_scripts/*core_async*"`
+  - Result: 5 tests, 0 failures.
+
 ---
 
 ## Track A — ESP32 serial REPL + core.async subset (do this first)
@@ -67,6 +80,10 @@ Preference: channel-first (composes with existing core.async subset).
   - Creates a channel, registers callbacks, and ensures delivery order is stable.
   - Simulates “GPIO events” using a fake platform hook.
   - Drives the REPL using a simulated character stream and verifies editing/history basics.
+- Status:
+  - Core async scripts exist and pass (`smoke`, `callbacks`, `go_unsupported`, `parking`).
+  - GPIO channel script exists and passes.
+  - REPL character-stream editing/history test is still open.
 
 ---
 
@@ -106,4 +123,7 @@ When `go` exists, also consider:
 - “smoke” test: `(go 1)` returns a channel delivering `1`.
 - parking test: `<!` from empty channel parks and later resumes.
 - exception test: throw inside `go` propagates as channel close + error payload (define semantics).
+- Status:
+  - `smoke` and `parking` are now covered by script tests.
+  - Exception semantics are still open and need explicit test contract.
 
