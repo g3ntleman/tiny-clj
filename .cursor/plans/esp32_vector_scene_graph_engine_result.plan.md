@@ -83,7 +83,7 @@ The following were repeatedly executed during finalization:
 
 - `cmake --build build --target unit-tests`
 - Focused unit tests in `test_vector_scene_graph_*`
-- `cmake --build build-hostviewer --target vector-host-viewer`
+- `cmake --build build-hostviewer --target host-viewer`
 
 Status: passing in the final Star-Wars-font cleanup state.
 

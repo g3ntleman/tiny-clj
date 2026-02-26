@@ -1,5 +1,6 @@
 #include "tests_common.h"
 #include "../vector_scene_graph.h"
+#include "../scene.h"
 
 #define TEST_W 64
 #define TEST_H 48
@@ -79,8 +80,8 @@ TEST(test_vector_scene_graph_nested_group_transform_affects_child_line) {
 
     VgNode *children[] = {&line};
     VgTransform group_t = vg_transform_identity();
-    group_t.tx = 7.0f;
-    group_t.ty = 5.0f;
+    group_t.tx = 7;
+    group_t.ty = 5;
     VgNode group = {
         .id = 10,
         .type = VG_NODE_GROUP,
@@ -96,16 +97,248 @@ TEST(test_vector_scene_graph_nested_group_transform_affects_child_line) {
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)5 * TEST_W + 17]);
 }
 
+TEST(test_vector_scene_graph_group_visible_false_skips_children) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle line_style = vg_style_default();
+    line_style.stroke_rgb565 = 0xffffu;
+    VgNode line = {
+        .id = 111,
+        .type = VG_NODE_LINE,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = line_style,
+        .data.line = {.x1 = 4, .y1 = 6, .x2 = 18, .y2 = 6}
+    };
+
+    VgStyle hidden_group_style = vg_style_default();
+    hidden_group_style.visible = false;
+    VgNode *children[] = {&line};
+    VgNode group = {
+        .id = 110,
+        .type = VG_NODE_GROUP,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = hidden_group_style,
+        .data.group = {.children = children, .child_count = 1}
+    };
+
+    vg_render_scene(&group, &fb);
+
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)6 * TEST_W + 4]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)6 * TEST_W + 18]);
+}
+
+TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
+        "  (->Scene "
+        "    (->Group 100 nil nil true "
+        "             [(->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6)]) "
+        "    nil nil nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 4]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 18]);
+}
+
+TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
+        "  (->Scene "
+        "    (->Group 120 nil nil false "
+        "             [(->Line 121 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6)]) "
+        "    nil nil nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)6 * TEST_W + 4]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)6 * TEST_W + 18]);
+}
+
+TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
+        "  (->Scene "
+        "    (->Group 200 (->Transform 7 5 1 1 0) nil true "
+        "             [(->Line 201 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0)]) "
+        "    nil nil nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)5 * TEST_W + 7]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)5 * TEST_W + 17]);
+}
+
+TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
+        "  (->Scene "
+        "    (->Group 300 nil nil true "
+        "             [(->Line 301 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10)]) "
+        "    [20 8 10 6] "
+        "    63488 nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x1234u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+
+    /* Shared clip/erase rect: inside area gets erase color first. */
+    TEST_ASSERT_EQUAL_HEX16(0xf800u, pixels[(size_t)9 * TEST_W + 22]);
+    /* Clip-Rect begrenzt die Linie */
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 10]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 24]);
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 35]);
+    /* Outside shared clip/erase area remains untouched. */
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)2 * TEST_W + 2]);
+}
+
+TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px collision-rules]) "
+        "  (->FrameScene "
+        "    (->Line 401 nil (->Style 65535 1 true false 0 false 0) true 2 3 8 3) "
+        "    [1 2 10 12] "
+        "    3 true true 0 1 nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    VgRenderSlot slot;
+    TEST_ASSERT_TRUE(vg_decode_frame_slot_record(scene, &slot));
+    TEST_ASSERT_EQUAL_INT(1, slot.clip_rect.x);
+    TEST_ASSERT_EQUAL_INT(2, slot.clip_rect.y);
+    TEST_ASSERT_EQUAL_INT(10, slot.clip_rect.w);
+    TEST_ASSERT_EQUAL_INT(12, slot.clip_rect.h);
+    TEST_ASSERT_EQUAL_INT(3, slot.z);
+    TEST_ASSERT_TRUE(slot.visible);
+    TEST_ASSERT_TRUE(slot.opaque);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, slot.clear_rgb565);
+    TEST_ASSERT_EQUAL_INT(1, slot.guard_px);
+    TEST_ASSERT_NOT_NULL(slot.root);
+}
+
+TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px collision-rules]) "
+        "  (->FrameScene "
+        "    (->Line 501 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
+        "    [20 8 10 6] "
+        "    0 true true 0 0 nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x1234u);
+
+    VgRenderSlotState state = {0};
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u));
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 10]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 24]);
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 35]);
+
+    TEST_ASSERT_FALSE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u));
+}
+
+TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_when_slot_invisible) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px collision-rules]) "
+        "  (->FrameScene "
+        "    (->Line 511 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
+        "    [20 8 10 6] "
+        "    0 false true 0 0 nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x1234u);
+
+    VgRenderSlotState state = {0};
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u));
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)9 * TEST_W + 22]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 24]);
+    TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)2 * TEST_W + 2]);
+}
+
 TEST(test_vector_scene_graph_fixed_transform_compose_apply_px_scale_translate_exact) {
     VgTransform parent = vg_transform_identity();
-    parent.tx = 10.0f;
-    parent.ty = -2.0f;
-    parent.sx = 2.0f;
-    parent.sy = 3.0f;
+    parent.tx = 10;
+    parent.ty = -2;
+    parent.sx = 2 * VG_SCALE_ONE;
+    parent.sy = 3 * VG_SCALE_ONE;
 
     VgTransform local = vg_transform_identity();
-    local.tx = 4.0f;
-    local.ty = 5.0f;
+    local.tx = 4;
+    local.ty = 5;
 
     VgTransformFixed parent_f = vg_transform_fixed_from_transform(parent);
     VgTransformFixed local_f = vg_transform_fixed_from_transform(local);
@@ -117,6 +350,28 @@ TEST(test_vector_scene_graph_fixed_transform_compose_apply_px_scale_translate_ex
 
     TEST_ASSERT_EQUAL_INT(32, out_x);
     TEST_ASSERT_EQUAL_INT(37, out_y);
+}
+
+TEST(test_vector_scene_graph_fixed_transform_cardinal_rotation_is_exact) {
+    int one_fp = vg_transform_fixed_identity().m00;
+    VgTransform t = vg_transform_identity();
+    t.tx = 10;
+    t.ty = 20;
+    t.sx = VG_SCALE_ONE;
+    t.sy = VG_SCALE_ONE;
+    t.rot_deg = -90;
+
+    VgTransformFixed tf = vg_transform_fixed_from_transform(t);
+    TEST_ASSERT_EQUAL_INT(0, tf.m00);
+    TEST_ASSERT_EQUAL_INT(one_fp, tf.m01);
+    TEST_ASSERT_EQUAL_INT(-one_fp, tf.m10);
+    TEST_ASSERT_EQUAL_INT(0, tf.m11);
+
+    int out_x = 0;
+    int out_y = 0;
+    vg_transform_fixed_apply_px(tf, 3, 4, &out_x, &out_y);
+    TEST_ASSERT_EQUAL_INT(14, out_x);
+    TEST_ASSERT_EQUAL_INT(17, out_y);
 }
 
 TEST(test_vector_scene_graph_deterministic_frame_checksum_for_mixed_scene) {
@@ -177,7 +432,7 @@ TEST(test_vector_scene_graph_deterministic_frame_checksum_for_mixed_scene) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = white,
-        .data.text = {.x = 34, .y = 30, .scale = 1.0f, .rot_deg = 0.0f, .text = "HI"}
+        .data.text = {.x = 34, .y = 30, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "HI"}
     };
 
     VgNode *children[] = {&line, &rect, &tri, &poly, &text};
@@ -196,6 +451,82 @@ TEST(test_vector_scene_graph_deterministic_frame_checksum_for_mixed_scene) {
     uint32_t checksum_a = vg_framebuffer_checksum(&fb_a);
     uint32_t checksum_b = vg_framebuffer_checksum(&fb_b);
     TEST_ASSERT_EQUAL_HEX32(checksum_a, checksum_b);
+}
+
+TEST(test_vector_scene_graph_clipped_render_limits_written_pixels) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+
+    VgNode line = {
+        .id = 26,
+        .type = VG_NODE_LINE,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.line = {.x1 = 0, .y1 = 10, .x2 = 63, .y2 = 10}
+    };
+
+    VgClipRect clip = {.x = 20, .y = 8, .w = 10, .h = 6};
+    vg_render_scene_clipped(&line, &fb, clip);
+
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 10]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 24]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 35]);
+}
+
+TEST(test_vector_scene_graph_render_slot_if_changed_skips_unchanged_and_clears_moved_union) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x1234u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+
+    VgNode line = {
+        .id = 27,
+        .type = VG_NODE_LINE,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.line = {.x1 = 2, .y1 = 2, .x2 = 8, .y2 = 2}
+    };
+
+    VgRenderSlot slot = {
+        .root = &line,
+        .clip_rect = {.x = 0, .y = 0, .w = 16, .h = 16},
+        .z = 0,
+        .visible = true,
+        .opaque = true,
+        .clear_rgb565 = 0x0000u,
+        .guard_px = 0
+    };
+    VgRenderSlotState state = {0};
+
+    TEST_ASSERT_TRUE(vg_render_slot_if_changed(&slot, &state, &fb, 1u));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)2 * TEST_W + 4]);
+    uint32_t after_first = vg_framebuffer_checksum(&fb);
+
+    TEST_ASSERT_FALSE(vg_render_slot_if_changed(&slot, &state, &fb, 1u));
+    uint32_t after_second = vg_framebuffer_checksum(&fb);
+    TEST_ASSERT_EQUAL_HEX32(after_first, after_second);
+
+    line.has_transform = true;
+    line.transform = vg_transform_identity();
+    line.transform.tx = 20;
+    slot.clip_rect.x = 20;
+    slot.clip_rect.w = 16;
+
+    TEST_ASSERT_TRUE(vg_render_slot_if_changed(&slot, &state, &fb, 2u));
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)2 * TEST_W + 4]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)2 * TEST_W + 24]);
 }
 
 TEST(test_vector_scene_graph_thick_line_changes_coverage) {
@@ -258,7 +589,7 @@ TEST(test_vector_scene_graph_patch_updates_transform_visibility_style_and_text) 
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 4, .scale = 1.0f, .rot_deg = 0.0f, .text = "A"}
+        .data.text = {.x = 2, .y = 4, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "A"}
     };
 
     VgNode line = {
@@ -285,8 +616,8 @@ TEST(test_vector_scene_graph_patch_updates_transform_visibility_style_and_text) 
 
     VgPatch tpatch = {.id = 42, .type = VG_PATCH_TRANSFORM};
     tpatch.value.transform = vg_transform_identity();
-    tpatch.value.transform.tx = 20.0f;
-    tpatch.value.transform.ty = -8.0f;
+    tpatch.value.transform.tx = 20;
+    tpatch.value.transform.ty = -8;
     TEST_ASSERT_TRUE(vg_scene_apply_patch(&root, &tpatch));
 
     VgPatch spatch = {.id = 42, .type = VG_PATCH_STYLE};
@@ -386,7 +717,7 @@ TEST(test_vector_scene_graph_hv_mono_has_inter_glyph_gap) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 0, .y = 0, .scale = 1.0f, .rot_deg = 0.0f, .text = "A"}
+        .data.text = {.x = 0, .y = 0, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "A"}
     };
     VgNode text_aa = text_a;
     text_aa.id = 62;
@@ -421,7 +752,7 @@ TEST(test_vector_scene_graph_hv_mono_problem_glyphs_not_half_height) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "MWXYR"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "MWXYR"}
     };
 
     vg_render_scene(&text, &fb);
@@ -454,7 +785,7 @@ TEST(test_vector_scene_graph_punctuation_dot_and_colon_are_compact_blobs) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "."}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "."}
     };
     VgNode colon = dot;
     colon.id = 72;
@@ -502,7 +833,7 @@ TEST(test_vector_scene_graph_comma_sits_lower_than_period_and_not_left) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "."}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "."}
     };
     VgNode comma = dot;
     comma.id = 74;
@@ -552,7 +883,7 @@ TEST(test_vector_scene_graph_additional_ascii_punctuation_avoids_box_fallback) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = NULL}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = NULL}
     };
 
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
@@ -591,7 +922,7 @@ TEST(test_vector_scene_graph_compact_punctuation_disables_aa_fringe_even_with_bg
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = NULL}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = NULL}
     };
 
     const char *cases[] = {".", ":"};
@@ -633,7 +964,7 @@ TEST(test_vector_scene_graph_arcade_text_disables_aa_fringe_even_with_bg) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "FPS: 59.9"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "FPS: 59.9"}
     };
 
     vg_framebuffer_clear(&fb, 0x0000u);
@@ -672,7 +1003,7 @@ TEST(test_vector_scene_graph_arcade_z_scale_1_5_diagonal_stays_within_expected_b
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.5f, .rot_deg = 0.0f, .text = "Z"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE * 3 / 2, .rot_deg = 0, .text = "Z"}
     };
 
     vg_render_scene(&text, &fb);
@@ -701,7 +1032,7 @@ TEST(test_vector_scene_graph_slash_backslash_scale_1_5_are_not_one_pixel_too_low
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.5f, .rot_deg = 0.0f, .text = NULL}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE * 3 / 2, .rot_deg = 0, .text = NULL}
     };
 
     const char *cases[] = {"/", "\\"};
@@ -736,7 +1067,7 @@ TEST(test_vector_scene_graph_arcade_exclamation_has_detached_dot) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "!"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "!"}
     };
 
     vg_render_scene(&text, &fb);
@@ -787,7 +1118,7 @@ TEST(test_vector_scene_graph_colon_blobs_are_vertically_aligned) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = ":"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = ":"}
     };
 
     vg_render_scene(&text, &fb);
@@ -836,7 +1167,7 @@ TEST(test_vector_scene_graph_arcade_j_has_bottom_bar_shape) {
         .has_transform = false,
         .transform = vg_transform_identity(),
         .style = style,
-        .data.text = {.x = 2, .y = 2, .scale = 1.0f, .rot_deg = 0.0f, .text = "J"}
+        .data.text = {.x = 2, .y = 2, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "J"}
     };
 
     vg_render_scene(&text, &fb);
@@ -853,4 +1184,278 @@ TEST(test_vector_scene_graph_arcade_j_has_bottom_bar_shape) {
 
     // Arcade J has the horizontal bar at the bottom (renderer y grows downward).
     TEST_ASSERT_TRUE(bottom_row_ink > top_row_ink);
+}
+
+/* ---------- M4b: Solid Fill Color Tests ---------- */
+
+TEST(test_vector_scene_graph_filled_rect_produces_interior_pixels) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0x07e0u; /* green */
+
+    VgNode rect = {
+        .id = 1001,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 10, .y = 10, .w = 20, .h = 12}
+    };
+
+    vg_render_scene(&rect, &fb);
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0x07e0u);
+    size_t stroke_count = count_color(pixels, TEST_W * TEST_H, 0xffffu);
+    TEST_ASSERT_TRUE(fill_count > 0);
+    TEST_ASSERT_TRUE(stroke_count > 0);
+    TEST_ASSERT_TRUE(fill_count > stroke_count);
+}
+
+TEST(test_vector_scene_graph_filled_tri_produces_interior_pixels) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0xf800u; /* red */
+
+    VgNode tri = {
+        .id = 1002,
+        .type = VG_NODE_TRI,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.tri = {.x1 = 32, .y1 = 4, .x2 = 50, .y2 = 40, .x3 = 14, .y3 = 40}
+    };
+
+    vg_render_scene(&tri, &fb);
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0xf800u);
+    size_t stroke_count = count_color(pixels, TEST_W * TEST_H, 0xffffu);
+    TEST_ASSERT_TRUE(fill_count > 0);
+    TEST_ASSERT_TRUE(stroke_count > 0);
+    TEST_ASSERT_TRUE(fill_count > stroke_count);
+}
+
+TEST(test_vector_scene_graph_filled_closed_polyline_produces_interior_pixels) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0x001fu; /* blue */
+
+    VgPoint pts[] = {{10, 5}, {50, 5}, {50, 35}, {10, 35}};
+
+    VgNode poly = {
+        .id = 1003,
+        .type = VG_NODE_POLYLINE,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.polyline = {.points = pts, .point_count = 4, .closed = true}
+    };
+
+    vg_render_scene(&poly, &fb);
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0x001fu);
+    size_t stroke_count = count_color(pixels, TEST_W * TEST_H, 0xffffu);
+    TEST_ASSERT_TRUE(fill_count > 0);
+    TEST_ASSERT_TRUE(stroke_count > 0);
+    TEST_ASSERT_TRUE(fill_count > stroke_count);
+}
+
+TEST(test_vector_scene_graph_open_polyline_does_not_fill) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0x001fu;
+
+    VgPoint pts[] = {{10, 5}, {50, 5}, {50, 35}, {10, 35}};
+
+    VgNode poly = {
+        .id = 1004,
+        .type = VG_NODE_POLYLINE,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.polyline = {.points = pts, .point_count = 4, .closed = false}
+    };
+
+    vg_render_scene(&poly, &fb);
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0x001fu);
+    TEST_ASSERT_EQUAL_size_t(0, fill_count);
+}
+
+TEST(test_vector_scene_graph_fill_paint_order_fill_under_stroke) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 2;
+    style.has_fill = true;
+    style.fill_rgb565 = 0xf800u; /* red fill */
+
+    VgNode rect = {
+        .id = 1005,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 10, .y = 10, .w = 30, .h = 20}
+    };
+
+    vg_render_scene(&rect, &fb);
+
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 10]);
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0xf800u);
+    size_t stroke_count = count_color(pixels, TEST_W * TEST_H, 0xffffu);
+    TEST_ASSERT_TRUE(fill_count > 0);
+    TEST_ASSERT_TRUE(stroke_count > 0);
+}
+
+TEST(test_vector_scene_graph_no_fill_when_has_fill_false) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = false;
+    style.fill_rgb565 = 0xf800u;
+
+    VgNode rect = {
+        .id = 1006,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 10, .y = 10, .w = 20, .h = 12}
+    };
+
+    vg_render_scene(&rect, &fb);
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0xf800u);
+    TEST_ASSERT_EQUAL_size_t(0, fill_count);
+}
+
+TEST(test_vector_scene_graph_filled_rect_clipped) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0x07e0u; /* green */
+
+    VgNode rect = {
+        .id = 1007,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 5, .y = 5, .w = 50, .h = 35}
+    };
+
+    VgClipRect clip = {.x = 20, .y = 15, .w = 10, .h = 10};
+    vg_render_scene_clipped(&rect, &fb, clip);
+
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 10]);
+    size_t fill_in_clip = 0;
+    for (int y = 15; y < 25; y++) {
+        for (int x = 20; x < 30; x++) {
+            if (pixels[y * TEST_W + x] != 0x0000u) fill_in_clip++;
+        }
+    }
+    TEST_ASSERT_TRUE(fill_in_clip > 0);
+    size_t outside_clip = count_not_color(pixels, TEST_W * TEST_H, 0x0000u) - fill_in_clip;
+    TEST_ASSERT_EQUAL_size_t(0, outside_clip);
+}
+
+TEST(test_vector_scene_graph_filled_rect_deterministic_checksum) {
+    uint16_t pixels_a[TEST_W * TEST_H];
+    uint16_t pixels_b[TEST_W * TEST_H];
+    VgFrameBuffer fb_a, fb_b;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb_a, TEST_W, TEST_H, pixels_a, TEST_W * TEST_H));
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb_b, TEST_W, TEST_H, pixels_b, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb_a, 0x0000u);
+    vg_framebuffer_clear(&fb_b, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_rgb565 = 0x07e0u;
+
+    VgNode rect = {
+        .id = 1008,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 8, .y = 6, .w = 25, .h = 18}
+    };
+
+    vg_render_scene(&rect, &fb_a);
+    vg_render_scene(&rect, &fb_b);
+
+    TEST_ASSERT_EQUAL_HEX32(vg_framebuffer_checksum(&fb_a), vg_framebuffer_checksum(&fb_b));
+}
+
+TEST(test_vector_scene_graph_filled_rect_from_clojure_records) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Rect [id t style visible x y w h]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
+        "  (->Scene "
+        "    (->Rect 1009 nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12) "
+        "    nil nil nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+
+    size_t fill_count = count_color(pixels, TEST_W * TEST_H, 0x07e0u);
+    size_t stroke_count = count_color(pixels, TEST_W * TEST_H, 0xffffu);
+    TEST_ASSERT_TRUE(fill_count > 0);
+    TEST_ASSERT_TRUE(stroke_count > 0);
 }

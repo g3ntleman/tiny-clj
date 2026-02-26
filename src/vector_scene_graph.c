@@ -1,64 +1,28 @@
 #include "vector_scene_graph.h"
+#include "gfx.h"
 #include "value.h"
 
 #include <ctype.h>
 #include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
+_Static_assert(VG_SCALE_ONE == CLJ_FIXED_SCALE, "VG_SCALE_ONE must match CLJ_FIXED_SCALE");
 
-typedef struct {
-    float m00;
-    float m01;
-    float m02;
-    float m10;
-    float m11;
-    float m12;
-} VgMatrix2D;
+static GfxClip g_active_clip = {false, 0, 0, 0, 0};
 
-static VgMatrix2D matrix_from_transform(VgTransform t) {
-    float r = t.rot_deg * (float)M_PI / 180.0f;
-    float c = cosf(r);
-    float s = sinf(r);
-    VgMatrix2D m;
-    m.m00 = c * t.sx;
-    m.m01 = -s * t.sy;
-    m.m02 = t.tx;
-    m.m10 = s * t.sx;
-    m.m11 = c * t.sy;
-    m.m12 = t.ty;
-    return m;
-}
-
-static VgMatrix2D matrix_mul(VgMatrix2D a, VgMatrix2D b) {
-    VgMatrix2D m;
-    m.m00 = (a.m00 * b.m00) + (a.m01 * b.m10);
-    m.m01 = (a.m00 * b.m01) + (a.m01 * b.m11);
-    m.m02 = (a.m00 * b.m02) + (a.m01 * b.m12) + a.m02;
-    m.m10 = (a.m10 * b.m00) + (a.m11 * b.m10);
-    m.m11 = (a.m10 * b.m01) + (a.m11 * b.m11);
-    m.m12 = (a.m10 * b.m02) + (a.m11 * b.m12) + a.m12;
-    return m;
-}
-
-static VgTransform transform_from_matrix(VgMatrix2D m) {
-    VgTransform t = vg_transform_identity();
-    t.tx = m.m02;
-    t.ty = m.m12;
-    t.sx = sqrtf((m.m00 * m.m00) + (m.m10 * m.m10));
-    t.sy = sqrtf((m.m01 * m.m01) + (m.m11 * m.m11));
-    t.rot_deg = atan2f(m.m10, m.m00) * (180.0f / (float)M_PI);
-    return t;
+static bool clip_rect_intersect_fb(VgClipRect in, const VgFrameBuffer *fb, VgClipRect *out) {
+    if (!fb || !out) return false;
+    VgClipRect fb_rect = {0, 0, (int16_t)fb->width, (int16_t)fb->height};
+    return vg_clip_rect_intersect(in, fb_rect, out);
 }
 
 VgTransform vg_transform_identity(void) {
     VgTransform t;
-    t.tx = 0.0f;
-    t.ty = 0.0f;
-    t.sx = 1.0f;
-    t.sy = 1.0f;
-    t.rot_deg = 0.0f;
+    t.tx = 0;
+    t.ty = 0;
+    t.sx = VG_SCALE_ONE;
+    t.sy = VG_SCALE_ONE;
+    t.rot_deg = 0;
     return t;
 }
 
@@ -67,25 +31,11 @@ VgStyle vg_style_default(void) {
     s.stroke_rgb565 = 0xffffu;
     s.stroke_width = 1;
     s.visible = true;
+    s.has_fill = false;
+    s.fill_rgb565 = 0x0000u;
     s.has_bg_rgb565 = false;
     s.bg_rgb565 = 0x0000u;
     return s;
-}
-
-VgTransform vg_transform_compose(VgTransform parent, VgTransform local) {
-    VgMatrix2D pm = matrix_from_transform(parent);
-    VgMatrix2D lm = matrix_from_transform(local);
-    return transform_from_matrix(matrix_mul(pm, lm));
-}
-
-void vg_transform_apply(VgTransform t, float x, float y, float *out_x, float *out_y) {
-    VgMatrix2D m = matrix_from_transform(t);
-    if (out_x) {
-        *out_x = (m.m00 * x) + (m.m01 * y) + m.m02;
-    }
-    if (out_y) {
-        *out_y = (m.m10 * x) + (m.m11 * y) + m.m12;
-    }
 }
 
 bool vg_framebuffer_init(VgFrameBuffer *fb, int width, int height, uint16_t *pixels, size_t pixel_count) {
@@ -126,44 +76,6 @@ uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb) {
         h *= 16777619u;
     }
     return h;
-}
-
-static uint8_t rgb565_to_r8(uint16_t c) {
-    return (uint8_t)((((c >> 11) & 0x1f) * 255) / 31);
-}
-
-static uint8_t rgb565_to_g8(uint16_t c) {
-    return (uint8_t)((((c >> 5) & 0x3f) * 255) / 63);
-}
-
-static uint8_t rgb565_to_b8(uint16_t c) {
-    return (uint8_t)(((c & 0x1f) * 255) / 31);
-}
-
-bool vg_framebuffer_dump_ppm(const VgFrameBuffer *fb, const char *path) {
-    if (!fb || !fb->pixels || !path) {
-        return false;
-    }
-    FILE *f = fopen(path, "wb");
-    if (!f) {
-        return false;
-    }
-    if (fprintf(f, "P6\n%d %d\n255\n", fb->width, fb->height) < 0) {
-        fclose(f);
-        return false;
-    }
-    for (int y = 0; y < fb->height; y++) {
-        for (int x = 0; x < fb->width; x++) {
-            uint16_t c = fb->pixels[(size_t)y * (size_t)fb->width + (size_t)x];
-            uint8_t rgb[3] = {rgb565_to_r8(c), rgb565_to_g8(c), rgb565_to_b8(c)};
-            if (fwrite(rgb, 1, sizeof(rgb), f) != sizeof(rgb)) {
-                fclose(f);
-                return false;
-            }
-        }
-    }
-    fclose(f);
-    return true;
 }
 
 #define VG_FP_SHIFT CLJ_FIXED_FRAC_BITS
@@ -207,22 +119,63 @@ VgTransformFixed vg_transform_fixed_compose(VgTransformFixed parent, VgTransform
 }
 
 VgTransformFixed vg_transform_fixed_from_transform(VgTransform t) {
-    if (t.rot_deg == 0.0f) {
+    int16_t rot = t.rot_deg;
+    while (rot <= -180) rot = (int16_t)(rot + 360);
+    while (rot > 180)  rot = (int16_t)(rot - 360);
+
+    int32_t tx_fp = ((int32_t)t.tx) << VG_FP_SHIFT;
+    int32_t ty_fp = ((int32_t)t.ty) << VG_FP_SHIFT;
+
+    if (rot == 0) {
         VgTransformFixed mf = vg_transform_fixed_identity();
-        mf.m00 = fp_from_float(t.sx);
-        mf.m11 = fp_from_float(t.sy);
-        mf.m02 = fp_from_float(t.tx);
-        mf.m12 = fp_from_float(t.ty);
+        mf.m00 = t.sx;
+        mf.m11 = t.sy;
+        mf.m02 = tx_fp;
+        mf.m12 = ty_fp;
         return mf;
     }
-    VgMatrix2D m = matrix_from_transform(t);
+    if (rot == 90) {
+        VgTransformFixed mf = vg_transform_fixed_identity();
+        mf.m00 = 0;
+        mf.m01 = -t.sy;
+        mf.m10 = t.sx;
+        mf.m11 = 0;
+        mf.m02 = tx_fp;
+        mf.m12 = ty_fp;
+        return mf;
+    }
+    if (rot == -90) {
+        VgTransformFixed mf = vg_transform_fixed_identity();
+        mf.m00 = 0;
+        mf.m01 = t.sy;
+        mf.m10 = -t.sx;
+        mf.m11 = 0;
+        mf.m02 = tx_fp;
+        mf.m12 = ty_fp;
+        return mf;
+    }
+    if (rot == 180 || rot == -180) {
+        VgTransformFixed mf = vg_transform_fixed_identity();
+        mf.m00 = -t.sx;
+        mf.m11 = -t.sy;
+        mf.m02 = tx_fp;
+        mf.m12 = ty_fp;
+        return mf;
+    }
+
+    /* Non-cardinal angle: float trig fallback (cold path). */
+    float r = (float)rot * ((float)M_PI / 180.0f);
+    float c = cosf(r);
+    float s = sinf(r);
+    float sx_f = (float)t.sx / (float)VG_FP_ONE;
+    float sy_f = (float)t.sy / (float)VG_FP_ONE;
     VgTransformFixed mf;
-    mf.m00 = fp_from_float(m.m00);
-    mf.m01 = fp_from_float(m.m01);
-    mf.m02 = fp_from_float(m.m02);
-    mf.m10 = fp_from_float(m.m10);
-    mf.m11 = fp_from_float(m.m11);
-    mf.m12 = fp_from_float(m.m12);
+    mf.m00 = fp_from_float(c * sx_f);
+    mf.m01 = fp_from_float(-s * sy_f);
+    mf.m02 = tx_fp;
+    mf.m10 = fp_from_float(s * sx_f);
+    mf.m11 = fp_from_float(c * sy_f);
+    mf.m12 = ty_fp;
     return mf;
 }
 
@@ -248,227 +201,92 @@ void vg_transform_fixed_apply_px(VgTransformFixed t, int16_t x, int16_t y, int *
     }
 }
 
-static void put_pixel(VgFrameBuffer *fb, int x, int y, uint16_t color) {
-    if (!fb || !fb->pixels) {
+void vg_framebuffer_clear_rect(VgFrameBuffer *fb, VgClipRect rect, uint16_t color) {
+    if (!fb || !fb->pixels || vg_clip_rect_is_empty(rect)) {
         return;
     }
-    if (x < 0 || y < 0 || x >= fb->width || y >= fb->height) {
+    VgClipRect clipped;
+    if (!clip_rect_intersect_fb(rect, fb, &clipped)) {
         return;
     }
-    fb->pixels[(size_t)y * (size_t)fb->width + (size_t)x] = color;
-}
-
-static uint16_t blend_rgb565(uint16_t bg, uint16_t fg, uint8_t alpha) {
-    if (alpha == 0) return bg;
-    if (alpha == 255) return fg;
-    uint32_t inv = (uint32_t)(255u - alpha);
-
-    uint32_t br = (bg >> 11) & 0x1fu;
-    uint32_t bgc = (bg >> 5) & 0x3fu;
-    uint32_t bb = bg & 0x1fu;
-
-    uint32_t fr = (fg >> 11) & 0x1fu;
-    uint32_t fgc = (fg >> 5) & 0x3fu;
-    uint32_t fb = fg & 0x1fu;
-
-    uint32_t rr = (br * inv + fr * (uint32_t)alpha + 127u) / 255u;
-    uint32_t rg = (bgc * inv + fgc * (uint32_t)alpha + 127u) / 255u;
-    uint32_t rb = (bb * inv + fb * (uint32_t)alpha + 127u) / 255u;
-
-    if (rr > 0x1fu) rr = 0x1fu;
-    if (rg > 0x3fu) rg = 0x3fu;
-    if (rb > 0x1fu) rb = 0x1fu;
-    return (uint16_t)((rr << 11) | (rg << 5) | rb);
-}
-
-static void put_pixel_aa_bg(VgFrameBuffer *fb, int x, int y, uint16_t fg, uint16_t bg, uint8_t alpha) {
-    if (!fb || !fb->pixels) return;
-    if (x < 0 || y < 0 || x >= fb->width || y >= fb->height) return;
-    fb->pixels[(size_t)y * (size_t)fb->width + (size_t)x] = blend_rgb565(bg, fg, alpha);
+    int x0 = clipped.x;
+    int y0 = clipped.y;
+    int x1 = clipped.x + clipped.w;
+    int y1 = clipped.y + clipped.h;
+    for (int y = y0; y < y1; y++) {
+        for (int x = x0; x < x1; x++) {
+            fb->pixels[(size_t)y * (size_t)fb->width + (size_t)x] = color;
+        }
+    }
 }
 
 static void draw_fill_rect(VgFrameBuffer *fb, int x, int y, int w, int h, uint16_t color) {
-    if (w <= 0 || h <= 0) {
-        return;
-    }
-    int x0 = x;
-    int y0 = y;
-    int x1 = x + w - 1;
-    int y1 = y + h - 1;
-    if (x1 < 0 || y1 < 0 || x0 >= fb->width || y0 >= fb->height) {
-        return;
-    }
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
-    if (x1 >= fb->width) x1 = fb->width - 1;
-    if (y1 >= fb->height) y1 = fb->height - 1;
-    for (int yy = y0; yy <= y1; yy++) {
-        for (int xx = x0; xx <= x1; xx++) {
-            put_pixel(fb, xx, yy, color);
-        }
-    }
+    gfx_draw_fill_rect(fb, x, y, w, h, color, &g_active_clip);
 }
 
-static void draw_line_basic(VgFrameBuffer *fb, int x0, int y0, int x1, int y1, uint16_t color) {
-    int dx = abs(x1 - x0);
-    int sx = (x0 < x1) ? 1 : -1;
-    int dy = -abs(y1 - y0);
-    int sy = (y0 < y1) ? 1 : -1;
-    int err = dx + dy;
-    while (true) {
-        put_pixel(fb, x0, y0, color);
-        if (x0 == x1 && y0 == y1) {
-            break;
-        }
-        int e2 = err * 2;
-        if (e2 >= dy) {
-            err += dy;
-            x0 += sx;
-        }
-        if (e2 <= dx) {
-            err += dx;
-            y0 += sy;
-        }
-    }
+static void fill_polygon_scanline(VgFrameBuffer *fb,
+                                  const int *vx,
+                                  const int *vy,
+                                  size_t count,
+                                  uint16_t color) {
+    gfx_fill_polygon_scanline(fb, vx, vy, count, color, &g_active_clip);
 }
 
 static void draw_line_supercover(VgFrameBuffer *fb, int x0, int y0, int x1, int y1, uint16_t color) {
-    int dx = abs(x1 - x0);
-    int sx = (x1 >= x0) ? 1 : -1;
-    int dy = abs(y1 - y0);
-    int sy = (y1 >= y0) ? 1 : -1;
-
-    // The supercover branch logic below assumes both axes may advance.
-    // For purely horizontal/vertical segments it can add a stray orthogonal
-    // pixel, which is very visible on tiny punctuation boxes (':' '.').
-    if (dx == 0 || dy == 0) {
-        draw_line_basic(fb, x0, y0, x1, y1, color);
-        return;
-    }
-
-    int x = x0;
-    int y = y0;
-    put_pixel(fb, x, y, color);
-
-    if (dx >= dy) {
-        int err = dx / 2;
-        for (int i = 0; i < dx; i++) {
-            x += sx;
-            err -= dy;
-            if (err <= 0) {
-                // Supercover: ensure corner transitions stay connected.
-                put_pixel(fb, x, y, color);
-                y += sy;
-                err += dx;
-            }
-            put_pixel(fb, x, y, color);
-        }
-    } else {
-        int err = dy / 2;
-        for (int i = 0; i < dy; i++) {
-            y += sy;
-            err -= dx;
-            if (err <= 0) {
-                // Supercover: ensure corner transitions stay connected.
-                put_pixel(fb, x, y, color);
-                x += sx;
-                err += dy;
-            }
-            put_pixel(fb, x, y, color);
-        }
-    }
-}
-
-static void draw_line_aa_1px_bg(VgFrameBuffer *fb,
-                                int x0, int y0, int x1, int y1,
-                                uint16_t fg, uint16_t bg) {
-    // Always draw a crisp 1px core first, then add only anti-aliased fringe.
-    draw_line_basic(fb, x0, y0, x1, y1, fg);
-    int dx = abs(x1 - x0);
-    int sx = (x0 < x1) ? 1 : -1;
-    int dy = -abs(y1 - y0);
-    int sy = (y0 < y1) ? 1 : -1;
-    int err = dx + dy;
-    bool x_major = (dx >= -dy);
-    uint8_t alpha = 72; // subtle fringe to keep crisp center
-
-    while (true) {
-        if (x_major) {
-            put_pixel_aa_bg(fb, x0, y0 - 1, fg, bg, alpha);
-            put_pixel_aa_bg(fb, x0, y0 + 1, fg, bg, alpha);
-        } else {
-            put_pixel_aa_bg(fb, x0 - 1, y0, fg, bg, alpha);
-            put_pixel_aa_bg(fb, x0 + 1, y0, fg, bg, alpha);
-        }
-
-        if (x0 == x1 && y0 == y1) {
-            break;
-        }
-        int e2 = err * 2;
-        if (e2 >= dy) {
-            err += dy;
-            x0 += sx;
-        }
-        if (e2 <= dx) {
-            err += dx;
-            y0 += sy;
-        }
-    }
+    gfx_draw_line_supercover(fb, x0, y0, x1, y1, color, &g_active_clip);
 }
 
 static void draw_line_thick(VgFrameBuffer *fb,
                             int x0, int y0, int x1, int y1,
                             uint16_t color, int width,
                             bool has_bg, uint16_t bg_color) {
-    if (width <= 1) {
-        if (has_bg) {
-            draw_line_aa_1px_bg(fb, x0, y0, x1, y1, color, bg_color);
-            return;
-        }
-        draw_line_basic(fb, x0, y0, x1, y1, color);
-        return;
-    }
-    if (x0 == x1) {
-        int y_min = (y0 < y1) ? y0 : y1;
-        int y_max = (y0 > y1) ? y0 : y1;
-        int half = width / 2;
-        draw_fill_rect(fb, x0 - half, y_min, width, (y_max - y_min) + 1, color);
-        return;
-    }
-    if (y0 == y1) {
-        int x_min = (x0 < x1) ? x0 : x1;
-        int x_max = (x0 > x1) ? x0 : x1;
-        int half = width / 2;
-        draw_fill_rect(fb, x_min, y0 - half, (x_max - x_min) + 1, width, color);
-        return;
-    }
-    // Integer-only fallback for general thick lines: stamp a square brush
-    // along the Bresenham centerline. This keeps the raster hot path float-free.
-    int dx = abs(x1 - x0);
-    int sx = (x0 < x1) ? 1 : -1;
-    int dy = -abs(y1 - y0);
-    int sy = (y0 < y1) ? 1 : -1;
-    int err = dx + dy;
-    int half = width / 2;
-    while (true) {
-        draw_fill_rect(fb, x0 - half, y0 - half, width, width, color);
-        if (x0 == x1 && y0 == y1) {
-            break;
-        }
-        int e2 = err * 2;
-        if (e2 >= dy) {
-            err += dy;
-            x0 += sx;
-        }
-        if (e2 <= dx) {
-            err += dx;
-            y0 += sy;
-        }
-    }
+    gfx_draw_line_thick(fb, x0, y0, x1, y1, color, width, has_bg, bg_color, &g_active_clip);
 }
 
 static void apply_xy_fixed_px(const VgTransformFixed *m, int16_t x, int16_t y, int *out_x, int *out_y) {
     vg_transform_fixed_apply_px(*m, x, y, out_x, out_y);
+}
+
+static void draw_stroke_polyline_xy(VgFrameBuffer *fb,
+                                    const int *vx,
+                                    const int *vy,
+                                    size_t count,
+                                    bool closed,
+                                    VgStyle style) {
+    if (!fb || !vx || !vy || count < 2) {
+        return;
+    }
+    for (size_t i = 1; i < count; i++) {
+        draw_line_thick(fb,
+                        vx[i - 1], vy[i - 1],
+                        vx[i], vy[i],
+                        style.stroke_rgb565,
+                        (int)style.stroke_width,
+                        style.has_bg_rgb565,
+                        style.bg_rgb565);
+    }
+    if (closed && count > 2) {
+        draw_line_thick(fb,
+                        vx[count - 1], vy[count - 1],
+                        vx[0], vy[0],
+                        style.stroke_rgb565,
+                        (int)style.stroke_width,
+                        style.has_bg_rgb565,
+                        style.bg_rgb565);
+    }
+}
+
+static bool transform_polyline_points_fixed(const VgPolylineData *p,
+                                            VgTransformFixed tf,
+                                            int *vx,
+                                            int *vy) {
+    if (!p || !vx || !vy || !p->points || p->point_count == 0 || p->point_count > GFX_FILL_MAX_VERTS) {
+        return false;
+    }
+    for (size_t i = 0; i < p->point_count; i++) {
+        apply_xy_fixed_px(&tf, p->points[i].x, p->points[i].y, &vx[i], &vy[i]);
+    }
+    return true;
 }
 
 static void draw_line_node(VgFrameBuffer *fb, const VgLineData *l, VgTransformFixed tf, VgStyle style) {
@@ -481,6 +299,17 @@ static void draw_line_node(VgFrameBuffer *fb, const VgLineData *l, VgTransformFi
 static void draw_polyline_node(VgFrameBuffer *fb, const VgPolylineData *p, VgTransformFixed tf, VgStyle style) {
     if (!p->points || p->point_count < 2) {
         return;
+    }
+    if (p->point_count <= GFX_FILL_MAX_VERTS) {
+        int vx[GFX_FILL_MAX_VERTS];
+        int vy[GFX_FILL_MAX_VERTS];
+        if (transform_polyline_points_fixed(p, tf, vx, vy)) {
+            if (p->closed && style.has_fill && p->point_count >= 3) {
+                fill_polygon_scanline(fb, vx, vy, p->point_count, style.fill_rgb565);
+            }
+            draw_stroke_polyline_xy(fb, vx, vy, p->point_count, p->closed, style);
+            return;
+        }
     }
     for (size_t i = 1; i < p->point_count; i++) {
         int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
@@ -502,6 +331,11 @@ static void draw_rect_node(VgFrameBuffer *fb, const VgRectData *r, VgTransformFi
     apply_xy_fixed_px(&tf, (int16_t)(r->x + r->w), r->y, &x2, &y2);
     apply_xy_fixed_px(&tf, (int16_t)(r->x + r->w), (int16_t)(r->y + r->h), &x3, &y3);
     apply_xy_fixed_px(&tf, r->x, (int16_t)(r->y + r->h), &x4, &y4);
+    if (style.has_fill) {
+        int vx[4] = {x1, x2, x3, x4};
+        int vy[4] = {y1, y2, y3, y4};
+        fill_polygon_scanline(fb, vx, vy, 4, style.fill_rgb565);
+    }
     draw_line_thick(fb, x1, y1, x2, y2, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
     draw_line_thick(fb, x2, y2, x3, y3, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
     draw_line_thick(fb, x3, y3, x4, y4, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
@@ -509,21 +343,22 @@ static void draw_rect_node(VgFrameBuffer *fb, const VgRectData *r, VgTransformFi
 }
 
 static void draw_tri_node(VgFrameBuffer *fb, const VgTriData *tr, VgTransformFixed tf, VgStyle style) {
-    int x1 = 0, y1 = 0, x2 = 0, y2 = 0, x3 = 0, y3 = 0;
-    apply_xy_fixed_px(&tf, tr->x1, tr->y1, &x1, &y1);
-    apply_xy_fixed_px(&tf, tr->x2, tr->y2, &x2, &y2);
-    apply_xy_fixed_px(&tf, tr->x3, tr->y3, &x3, &y3);
-    draw_line_thick(fb, x1, y1, x2, y2, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
-    draw_line_thick(fb, x2, y2, x3, y3, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
-    draw_line_thick(fb, x3, y3, x1, y1, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
+    int vx[3] = {0, 0, 0};
+    int vy[3] = {0, 0, 0};
+    apply_xy_fixed_px(&tf, tr->x1, tr->y1, &vx[0], &vy[0]);
+    apply_xy_fixed_px(&tf, tr->x2, tr->y2, &vx[1], &vy[1]);
+    apply_xy_fixed_px(&tf, tr->x3, tr->y3, &vx[2], &vy[2]);
+    if (style.has_fill) {
+        fill_polygon_scanline(fb, vx, vy, 3, style.fill_rgb565);
+    }
+    draw_stroke_polyline_xy(fb, vx, vy, 3, true, style);
 }
 
 static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransformFixed parent_t, VgStyle style) {
     if (!txt->text || txt->text[0] == '\0') {
         return;
     }
-    float scale_f = (txt->scale > 0.0f) ? txt->scale : 1.0f;
-    int32_t scale_fp = fp_from_float(scale_f);
+    int32_t scale_fp = (txt->scale > 0) ? txt->scale : VG_FP_ONE;
     bool text_scale_large = (scale_fp >= ((VG_FP_ONE * 5) / 4));
 
     VgTransformFixed local = vg_transform_fixed_identity();
@@ -531,14 +366,14 @@ static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransform
     local.m12 = ((int32_t)txt->y) << VG_FP_SHIFT;
     local.m00 = scale_fp;
     local.m11 = scale_fp;
-    if (txt->rot_deg != 0.0f) {
-        VgTransform local_f = vg_transform_identity();
-        local_f.tx = (float)txt->x;
-        local_f.ty = (float)txt->y;
-        local_f.sx = scale_f;
-        local_f.sy = scale_f;
-        local_f.rot_deg = txt->rot_deg;
-        local = vg_transform_fixed_from_transform(local_f);
+    if (txt->rot_deg != 0) {
+        VgTransform local_t = vg_transform_identity();
+        local_t.tx = txt->x;
+        local_t.ty = txt->y;
+        local_t.sx = scale_fp;
+        local_t.sy = scale_fp;
+        local_t.rot_deg = txt->rot_deg;
+        local = vg_transform_fixed_from_transform(local_t);
     }
     VgTransformFixed t_fixed = vg_transform_fixed_compose(parent_t, local);
 
@@ -995,11 +830,132 @@ static void render_node(const VgNode *node, VgTransformFixed parent_t, VgFrameBu
     }
 }
 
+static void render_node_with_world_transform(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb) {
+    if (!node || !fb) {
+        return;
+    }
+    VgStyle style = node->style;
+    if (style.stroke_width == 0) {
+        style.stroke_width = 1;
+    }
+    if (!style.visible) {
+        return;
+    }
+    switch (node->type) {
+        case VG_NODE_LINE:
+            draw_line_node(fb, &node->data.line, world_t, style);
+            break;
+        case VG_NODE_POLYLINE:
+            draw_polyline_node(fb, &node->data.polyline, world_t, style);
+            break;
+        case VG_NODE_RECT:
+            draw_rect_node(fb, &node->data.rect, world_t, style);
+            break;
+        case VG_NODE_TRI:
+            draw_tri_node(fb, &node->data.tri, world_t, style);
+            break;
+        case VG_NODE_VTEXT:
+            draw_text_node(fb, &node->data.text, world_t, style);
+            break;
+        default:
+            break;
+    }
+}
+
 void vg_render_scene(const VgNode *root, VgFrameBuffer *fb) {
     if (!root || !fb) {
         return;
     }
+    GfxClip prev_clip = g_active_clip;
+    g_active_clip.enabled = false;
     render_node(root, vg_transform_fixed_identity(), fb);
+    g_active_clip = prev_clip;
+}
+
+void vg_render_scene_clipped(const VgNode *root, VgFrameBuffer *fb, VgClipRect clip_rect) {
+    if (!root || !fb) {
+        return;
+    }
+    VgClipRect clipped;
+    if (!clip_rect_intersect_fb(clip_rect, fb, &clipped)) {
+        return;
+    }
+    GfxClip prev_clip = g_active_clip;
+    g_active_clip.enabled = true;
+    g_active_clip.x0 = clipped.x;
+    g_active_clip.y0 = clipped.y;
+    g_active_clip.x1 = clipped.x + clipped.w;
+    g_active_clip.y1 = clipped.y + clipped.h;
+    render_node(root, vg_transform_fixed_identity(), fb);
+    g_active_clip = prev_clip;
+}
+
+void vg_render_node_fixed(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb) {
+    if (!node || !fb) {
+        return;
+    }
+    GfxClip prev_clip = g_active_clip;
+    g_active_clip.enabled = false;
+    render_node_with_world_transform(node, world_t, fb);
+    g_active_clip = prev_clip;
+}
+
+void vg_render_node_fixed_clipped(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb, VgClipRect clip_rect) {
+    if (!node || !fb) {
+        return;
+    }
+    VgClipRect clipped;
+    if (!clip_rect_intersect_fb(clip_rect, fb, &clipped)) {
+        return;
+    }
+    GfxClip prev_clip = g_active_clip;
+    g_active_clip.enabled = true;
+    g_active_clip.x0 = clipped.x;
+    g_active_clip.y0 = clipped.y;
+    g_active_clip.x1 = clipped.x + clipped.w;
+    g_active_clip.y1 = clipped.y + clipped.h;
+    render_node_with_world_transform(node, world_t, fb);
+    g_active_clip = prev_clip;
+}
+
+bool vg_render_slot_if_changed(const VgRenderSlot *slot,
+                               VgRenderSlotState *state,
+                               VgFrameBuffer *fb,
+                               uint32_t snapshot_id) {
+    if (!slot || !state || !fb) {
+        return false;
+    }
+    VgClipRect slot_rect = vg_clip_rect_expand(slot->clip_rect, slot->guard_px);
+    bool props_changed = !state->initialized ||
+                         state->last_visible != slot->visible ||
+                         state->last_opaque != slot->opaque ||
+                         state->last_clear_rgb565 != slot->clear_rgb565 ||
+                         state->last_guard_px != slot->guard_px ||
+                         !vg_clip_rect_equal(state->last_clip_rect, slot->clip_rect);
+    bool snapshot_changed = !state->initialized || state->snapshot_id != snapshot_id;
+    if (!props_changed && !snapshot_changed) {
+        return false;
+    }
+
+    VgClipRect dirty_rect = slot_rect;
+    if (state->initialized) {
+        VgClipRect prev_rect = vg_clip_rect_expand(state->last_clip_rect, state->last_guard_px);
+        dirty_rect = vg_clip_rect_union(prev_rect, slot_rect);
+    }
+    vg_framebuffer_clear_rect(fb, dirty_rect, slot->clear_rgb565);
+
+    if (slot->visible && slot->root) {
+        vg_render_scene_clipped(slot->root, fb, slot_rect);
+    }
+
+    state->initialized = true;
+    state->snapshot_id = snapshot_id;
+    state->last_clip_rect = slot->clip_rect;
+    state->last_visible = slot->visible;
+    state->last_opaque = slot->opaque;
+    state->last_clear_rgb565 = slot->clear_rgb565;
+    state->last_guard_px = slot->guard_px;
+    return true;
 }
 
 static VgNode *find_node_by_id(VgNode *node, uint32_t id) {

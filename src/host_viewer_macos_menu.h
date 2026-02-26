@@ -1,7 +1,13 @@
-#ifndef TINY_CLJ_HOST_VIEWER_MACOS_MENU_H
-#define TINY_CLJ_HOST_VIEWER_MACOS_MENU_H
+#ifndef MACOS_VIEWER_MENU_H
+#define MACOS_VIEWER_MENU_H
 
-void tinyclj_host_viewer_install_macos_menu(void);
-void tinyclj_host_viewer_set_macos_window_title(const char *title);
+#include <stdbool.h>
+
+void macos_viewer_install_menu(void);
+void macos_viewer_set_window_title(const char *title);
+void macos_viewer_register_window_callbacks(void);
+void macos_viewer_restore_window_position(void);
+void macos_viewer_save_window_position(void);
+bool macos_viewer_get_content_size(unsigned *out_w, unsigned *out_h);
 
 #endif

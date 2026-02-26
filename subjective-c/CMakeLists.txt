@@ -57,6 +57,7 @@ set(SUBJECTIVE_C_SOURCES
     src/mini_format.c
     src/exception.c
     src/map.c
+    src/record.c
     src/byte_array.c
     src/hashmap.c
     src/hashset.c

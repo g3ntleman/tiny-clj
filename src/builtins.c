@@ -51,6 +51,7 @@
 #include "hashmap.h"
 #include "datetime_utc.h"
 #include "platform.h"
+#include "tiny_gfx.h"
 #if defined(ESP32_BUILD)
 #include "gpio_esp32.h"
 #endif
@@ -4999,6 +5000,25 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
   }
 }
 
+typedef bool (*NsInitFn)(EvalState *st);
+
+#define NS_INIT_TABLE_MAX 8
+static struct { const char *ns_name; NsInitFn fn; } g_ns_init_table[NS_INIT_TABLE_MAX];
+static unsigned int g_ns_init_count = 0;
+
+void ns_register_init(const char *ns_name, NsInitFn init_fn) {
+  if (!ns_name || !init_fn || g_ns_init_count >= NS_INIT_TABLE_MAX) return;
+  g_ns_init_table[g_ns_init_count++] = (typeof(g_ns_init_table[0])){ns_name, init_fn};
+}
+
+static NsInitFn ns_lookup_init(const char *ns_name) {
+  for (unsigned int i = 0; i < g_ns_init_count; i++) {
+    if (strcmp(g_ns_init_table[i].ns_name, ns_name) == 0)
+      return g_ns_init_table[i].fn;
+  }
+  return NULL;
+}
+
 bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, const char *source_path) {
   if (!st || !ns_name || !source_path || !bytes || TAG(bytes) != CLJ_BYTE_ARRAY)
     return false;
@@ -5024,6 +5044,10 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
   bool ok = eval_source_in_current_state(source_str, source_path, st);
   ns_end_resolve_cache_batch();
   target_ns->loaded = true;
+  if (ok) {
+    NsInitFn init_fn = ns_lookup_init(ns_name);
+    if (init_fn) ok = init_fn(st);
+  }
   st->current_ns = orig_ns;
   st->resolve_ns = orig_resolve_ns;
   RELEASE(source_str);
@@ -7664,5 +7688,7 @@ void register_builtins() {
     (void)cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
 
     ns_end_resolve_cache_batch();
+
+    ns_register_init("tiny-gfx.scene", tiny_gfx_ensure_schema);
   });
 }

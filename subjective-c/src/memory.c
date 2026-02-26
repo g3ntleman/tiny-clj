@@ -28,7 +28,7 @@
 #include "hashmap.h"    // For CljHashMap
 #include "hashset.h"    // For CljHashSet
 #include "byte_array.h" // For CljByteArray and external buffer flags
-#include "record.h"     // For CljPersistentRecord/CljRecordDescriptor
+#include "subjective-c/record.h" // For CljPersistentRecord/CljRecordDescriptor
 #include "thread_local.h"
 #include "mini_format.h"
 #include <string.h>

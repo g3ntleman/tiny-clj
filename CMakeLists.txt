@@ -224,7 +224,10 @@ list(APPEND SOURCES
     src/builtins_audio.c
     src/audio_backend_host.c
     src/repl_history_backend.c
+    src/gfx.c
+    src/tiny_gfx.c
     src/vector_scene_graph.c
+    src/scene.c
     src/source_resolver.c
 
 )
@@ -533,6 +536,8 @@ add_executable(unit-tests
     src/tests/test_mdns_bindings.c
     src/tests/test_platform_mdns.c
     src/tests/test_vector_scene_graph.c
+    src/tests/test_gfx_svg.c
+    src/tests/test_gfx_collision_contract.c
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
@@ -884,18 +889,25 @@ if(TINYCLJ_HOST_VIEWER)
         message(FATAL_ERROR "MiniFB target 'minifb' was not created by dependency build.")
     endif()
 
-    add_executable(vector-host-viewer
+    add_executable(host-viewer
         src/host_viewer_minifb.c
-        src/vector_scene_graph.c
+        src/platform_macos.c
+        ${SOURCES}
     )
     if(APPLE)
-        target_sources(vector-host-viewer PRIVATE src/host_viewer_macos_menu.m)
+        target_sources(host-viewer PRIVATE src/host_viewer_macos_menu.m)
     endif()
-    target_include_directories(vector-host-viewer PRIVATE
+    target_include_directories(host-viewer PRIVATE
         ${CMAKE_SOURCE_DIR}/src
     )
-    target_compile_definitions(vector-host-viewer PRIVATE TINYCLJ_WITH_MINIFB=1)
-    target_link_libraries(vector-host-viewer PRIVATE minifb m)
+    target_compile_definitions(host-viewer PRIVATE TINYCLJ_WITH_MINIFB=1)
+    target_link_libraries(host-viewer PRIVATE minifb m subjective-c tiny-db)
+    if(APPLE)
+        target_link_libraries(host-viewer PRIVATE "-framework CoreFoundation")
+        target_link_libraries(host-viewer PRIVATE "-framework CoreAudio" "-framework AudioUnit")
+        target_link_directories(host-viewer PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
+        target_link_libraries(host-viewer PRIVATE system_dnssd)
+    endif()
 endif()
 
 # Seq Benchmark (REMOVED - File no longer exists)
