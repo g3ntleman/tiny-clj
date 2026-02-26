@@ -1,105 +1,21 @@
 #include "vector_scene_graph_records.h"
 #include "gfx.h"
+#include "tiny_gfx.h"
 
 #include <string.h>
 
-#include "map.h"
 #include "record.h"
 #include "strings.h"
 #include "symbol.h"
 #include "value.h"
 #include "vector.h"
 
-typedef struct {
-    ID k_root;
-    ID k_t;
-    ID k_style;
-    ID k_visible;
-    ID k_children;
-    ID k_x1;
-    ID k_y1;
-    ID k_x2;
-    ID k_y2;
-    ID k_x3;
-    ID k_y3;
-    ID k_x;
-    ID k_y;
-    ID k_w;
-    ID k_h;
-    ID k_pts;
-    ID k_closed;
-    ID k_scale;
-    ID k_rot;
-    ID k_text;
-    ID k_tx;
-    ID k_ty;
-    ID k_sx;
-    ID k_sy;
-    ID k_stroke_rgb565;
-    ID k_stroke_width;
-    ID k_has_fill;
-    ID k_fill_rgb565;
-    ID k_has_bg_rgb565;
-    ID k_bg_rgb565;
-    ID k_clip_rect;
-    ID k_erase_rgb565;
-    ID k_z;
-    ID k_opaque;
-    ID k_guard_px;
-} VgRecordKeys;
-
 static VgRecordKeys vg_record_keys(void) {
-    VgRecordKeys k;
-    k.k_root = intern_symbol_global(":root");
-    k.k_t = intern_symbol_global(":t");
-    k.k_style = intern_symbol_global(":style");
-    k.k_visible = intern_symbol_global(":visible");
-    k.k_children = intern_symbol_global(":children");
-    k.k_x1 = intern_symbol_global(":x1");
-    k.k_y1 = intern_symbol_global(":y1");
-    k.k_x2 = intern_symbol_global(":x2");
-    k.k_y2 = intern_symbol_global(":y2");
-    k.k_x3 = intern_symbol_global(":x3");
-    k.k_y3 = intern_symbol_global(":y3");
-    k.k_x = intern_symbol_global(":x");
-    k.k_y = intern_symbol_global(":y");
-    k.k_w = intern_symbol_global(":w");
-    k.k_h = intern_symbol_global(":h");
-    k.k_pts = intern_symbol_global(":pts");
-    k.k_closed = intern_symbol_global(":closed");
-    k.k_scale = intern_symbol_global(":scale");
-    k.k_rot = intern_symbol_global(":rot");
-    k.k_text = intern_symbol_global(":text");
-    k.k_tx = intern_symbol_global(":tx");
-    k.k_ty = intern_symbol_global(":ty");
-    k.k_sx = intern_symbol_global(":sx");
-    k.k_sy = intern_symbol_global(":sy");
-    k.k_stroke_rgb565 = intern_symbol_global(":stroke_rgb565");
-    k.k_stroke_width = intern_symbol_global(":stroke_width");
-    k.k_has_fill = intern_symbol_global(":has_fill");
-    k.k_fill_rgb565 = intern_symbol_global(":fill_rgb565");
-    k.k_has_bg_rgb565 = intern_symbol_global(":has_bg_rgb565");
-    k.k_bg_rgb565 = intern_symbol_global(":bg_rgb565");
-    k.k_clip_rect = intern_symbol_global(":clip-rect");
-    k.k_erase_rgb565 = intern_symbol_global(":erase-rgb565");
-    k.k_z = intern_symbol_global(":z");
-    k.k_opaque = intern_symbol_global(":opaque");
-    k.k_guard_px = intern_symbol_global(":guard-px");
-    return k;
+    return *tiny_gfx_record_keys();
 }
 
 static ID get_field(ID obj, ID key, ID not_found) {
-    if (!obj || !key) {
-        return not_found;
-    }
-    CljType tag = TAG(obj);
-    if (tag == CLJ_RECORD) {
-        return record_get_sentinel(obj, key, not_found);
-    }
-    if (tag == CLJ_MAP_PERSISTENT || tag == CLJ_MAP_TRANSIENT) {
-        return map_get_sentinel(obj, key, not_found);
-    }
-    return not_found;
+    return tiny_gfx_get_field(obj, key, not_found);
 }
 
 static bool id_to_bool_default(ID v, bool default_value) {

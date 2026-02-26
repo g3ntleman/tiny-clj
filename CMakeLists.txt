@@ -225,6 +225,7 @@ list(APPEND SOURCES
     src/audio_backend_host.c
     src/repl_history_backend.c
     src/gfx.c
+    src/tiny_gfx.c
     src/vector_scene_graph.c
     src/vector_scene_graph_records.c
     src/source_resolver.c
