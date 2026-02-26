@@ -179,27 +179,6 @@ VgTransformFixed vg_transform_fixed_from_transform(VgTransform t) {
     return mf;
 }
 
-VgTransform vg_transform_from_fixed(VgTransformFixed t) {
-    VgTransform result;
-    result.tx = (int16_t)(t.m02 >> VG_FP_SHIFT);
-    result.ty = (int16_t)(t.m12 >> VG_FP_SHIFT);
-    int32_t sx2 = fp_mul_fixed(t.m00, t.m00) + fp_mul_fixed(t.m10, t.m10);
-    int32_t sy2 = fp_mul_fixed(t.m01, t.m01) + fp_mul_fixed(t.m11, t.m11);
-    float sx_f = sqrtf((float)sx2 / (float)VG_FP_ONE);
-    float sy_f = sqrtf((float)sy2 / (float)VG_FP_ONE);
-    result.sx = (int32_t)lroundf(sx_f * VG_FP_ONE);
-    result.sy = (int32_t)lroundf(sy_f * VG_FP_ONE);
-    result.rot_deg = (int16_t)lroundf(atan2f((float)t.m10, (float)t.m00) * (180.0f / (float)M_PI));
-    return result;
-}
-
-VgTransform vg_transform_compose(VgTransform parent, VgTransform local) {
-    VgTransformFixed pf = vg_transform_fixed_from_transform(parent);
-    VgTransformFixed lf = vg_transform_fixed_from_transform(local);
-    VgTransformFixed cf = vg_transform_fixed_compose(pf, lf);
-    return vg_transform_from_fixed(cf);
-}
-
 static void apply_xy_half_fixed(const VgTransformFixed *m, int x_half, int y_half, int *out_x, int *out_y) {
     int32_t x_fp = ((int32_t)x_half) << (VG_FP_SHIFT - 1);
     int32_t y_fp = ((int32_t)y_half) << (VG_FP_SHIFT - 1);

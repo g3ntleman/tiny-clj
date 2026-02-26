@@ -71,6 +71,7 @@ DEFRECORD(Rect, id, t, style, visible, x, y, w, h)
 DEFRECORD(Tri, id, t, style, visible, x1, y1, x2, y2, x3, y3)
 DEFRECORD(VText, id, t, style, visible, x, y, scale, rot, text)
 DEFRECORD(FrameScene, root, clip_rect, z, visible, opaque, erase_rgb565, guard_px)
+DEFRECORD(Scene, root, clip_rect, erase_rgb565)
 
 bool tiny_gfx_ensure_schema(EvalState *st);
 const VgRecordSchema *tiny_gfx_schema(void);

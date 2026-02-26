@@ -1,6 +1,0 @@
-#ifndef TINY_CLJ_VECTOR_SCENE_GRAPH_RECORDS_H
-#define TINY_CLJ_VECTOR_SCENE_GRAPH_RECORDS_H
-
-#include "scene.h"
-
-#endif
