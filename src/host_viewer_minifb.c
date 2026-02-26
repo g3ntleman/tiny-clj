@@ -4,7 +4,7 @@
 
 #if defined(TINYCLJ_WITH_MINIFB)
 #include "vector_scene_graph.h"
-#include "vector_scene_graph_records.h"
+#include "scene.h"
 #include "tiny_gfx.h"
 #include "builtins.h"
 #include "value.h"

@@ -179,21 +179,25 @@ VgTransformFixed vg_transform_fixed_from_transform(VgTransform t) {
     return mf;
 }
 
-VgTransform vg_transform_compose(VgTransform parent, VgTransform local) {
-    VgTransformFixed pf = vg_transform_fixed_from_transform(parent);
-    VgTransformFixed lf = vg_transform_fixed_from_transform(local);
-    VgTransformFixed cf = vg_transform_fixed_compose(pf, lf);
+VgTransform vg_transform_from_fixed(VgTransformFixed t) {
     VgTransform result;
-    result.tx = (int16_t)(cf.m02 >> VG_FP_SHIFT);
-    result.ty = (int16_t)(cf.m12 >> VG_FP_SHIFT);
-    int32_t sx2 = fp_mul_fixed(cf.m00, cf.m00) + fp_mul_fixed(cf.m10, cf.m10);
-    int32_t sy2 = fp_mul_fixed(cf.m01, cf.m01) + fp_mul_fixed(cf.m11, cf.m11);
+    result.tx = (int16_t)(t.m02 >> VG_FP_SHIFT);
+    result.ty = (int16_t)(t.m12 >> VG_FP_SHIFT);
+    int32_t sx2 = fp_mul_fixed(t.m00, t.m00) + fp_mul_fixed(t.m10, t.m10);
+    int32_t sy2 = fp_mul_fixed(t.m01, t.m01) + fp_mul_fixed(t.m11, t.m11);
     float sx_f = sqrtf((float)sx2 / (float)VG_FP_ONE);
     float sy_f = sqrtf((float)sy2 / (float)VG_FP_ONE);
     result.sx = (int32_t)lroundf(sx_f * VG_FP_ONE);
     result.sy = (int32_t)lroundf(sy_f * VG_FP_ONE);
-    result.rot_deg = (int16_t)lroundf(atan2f((float)cf.m10, (float)cf.m00) * (180.0f / (float)M_PI));
+    result.rot_deg = (int16_t)lroundf(atan2f((float)t.m10, (float)t.m00) * (180.0f / (float)M_PI));
     return result;
+}
+
+VgTransform vg_transform_compose(VgTransform parent, VgTransform local) {
+    VgTransformFixed pf = vg_transform_fixed_from_transform(parent);
+    VgTransformFixed lf = vg_transform_fixed_from_transform(local);
+    VgTransformFixed cf = vg_transform_fixed_compose(pf, lf);
+    return vg_transform_from_fixed(cf);
 }
 
 static void apply_xy_half_fixed(const VgTransformFixed *m, int x_half, int y_half, int *out_x, int *out_y) {
@@ -847,6 +851,38 @@ static void render_node(const VgNode *node, VgTransformFixed parent_t, VgFrameBu
     }
 }
 
+static void render_node_with_world_transform(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb) {
+    if (!node || !fb) {
+        return;
+    }
+    VgStyle style = node->style;
+    if (style.stroke_width == 0) {
+        style.stroke_width = 1;
+    }
+    if (!style.visible) {
+        return;
+    }
+    switch (node->type) {
+        case VG_NODE_LINE:
+            draw_line_node(fb, &node->data.line, world_t, style);
+            break;
+        case VG_NODE_POLYLINE:
+            draw_polyline_node(fb, &node->data.polyline, world_t, style);
+            break;
+        case VG_NODE_RECT:
+            draw_rect_node(fb, &node->data.rect, world_t, style);
+            break;
+        case VG_NODE_TRI:
+            draw_tri_node(fb, &node->data.tri, world_t, style);
+            break;
+        case VG_NODE_VTEXT:
+            draw_text_node(fb, &node->data.text, world_t, style);
+            break;
+        default:
+            break;
+    }
+}
+
 void vg_render_scene(const VgNode *root, VgFrameBuffer *fb) {
     if (!root || !fb) {
         return;
@@ -872,6 +908,34 @@ void vg_render_scene_clipped(const VgNode *root, VgFrameBuffer *fb, VgClipRect c
     g_active_clip.x1 = clipped.x + clipped.w;
     g_active_clip.y1 = clipped.y + clipped.h;
     render_node(root, vg_transform_fixed_identity(), fb);
+    g_active_clip = prev_clip;
+}
+
+void vg_render_node_fixed(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb) {
+    if (!node || !fb) {
+        return;
+    }
+    GfxClip prev_clip = g_active_clip;
+    g_active_clip.enabled = false;
+    render_node_with_world_transform(node, world_t, fb);
+    g_active_clip = prev_clip;
+}
+
+void vg_render_node_fixed_clipped(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb, VgClipRect clip_rect) {
+    if (!node || !fb) {
+        return;
+    }
+    VgClipRect clipped;
+    if (!clip_rect_intersect_fb(clip_rect, fb, &clipped)) {
+        return;
+    }
+    GfxClip prev_clip = g_active_clip;
+    g_active_clip.enabled = true;
+    g_active_clip.x0 = clipped.x;
+    g_active_clip.y0 = clipped.y;
+    g_active_clip.x1 = clipped.x + clipped.w;
+    g_active_clip.y1 = clipped.y + clipped.h;
+    render_node_with_world_transform(node, world_t, fb);
     g_active_clip = prev_clip;
 }
 

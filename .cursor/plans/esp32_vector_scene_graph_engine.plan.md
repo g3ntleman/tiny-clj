@@ -16,6 +16,7 @@ Build a reduced SVG-like 2D graphics engine with a strict PoC-first delivery pat
 - Snapshot-based rendering directly from tiny-clj/subjective-c records (no mandatory patching/canonical C scene cache for PoC)
 - Multiple independently updatable scene slots (`game`, `score`, `deco`) with clip rectangles
 - Deterministic rendering pipeline validated first on macOS host simulator
+- Fixed-first decode/transform path (Q19.13 aligned with `subjective-c`) for deterministic behavior and lower ESP32 CPU load
 - Deterministic immediate rendering on SPI displays (ST7789 class) after host PoC is stable
 - Thick-stroke primitives suitable for game, menu, and animated vector title screens
 - Solid fill color for area primitives (SVG-like paint model MVP)
@@ -31,6 +32,7 @@ so primitive generation/rasterization bugs are debuggable on host.
 - No required full framebuffer on device
 - tiny-clj should not do per-pixel rendering work
 - Engine must stay compact and record-friendly
+- Decode + transform hot paths should prefer fixed-point (`CLJ_FIXED_FRAC_BITS`) and only quantize to integer at raster boundaries.
 - Render-thread safety rule:
   - the native C render thread is read-only on published scene snapshots
   - no MEMORY macros (`RETAIN`, `RELEASE`, `AUTORELEASE`, `ASSIGN`) in render-thread hot path
@@ -312,65 +314,52 @@ Done when:
 
 - Scene renders on device without full-frame requirement and with pacing consistent with simulator logic.
 
-## Milestone 8: Fixed-Point Transform Path (Optional, Recommended)
+## Milestone 8: Fixed-First Decode + Transform Path (Required for ESP32)
 
-Status: PARTIAL (text transform path uses fixed-point; full renderer/backend switch still TODO)
+Status: PARTIAL (fixed transform core exists; decoder/raster boundary policy still mixed)
 
-Tasks:
+Motivation:
 
-- Add optional fixed-point transform core aligned with `subjective-c` numeric representation:
-  - integer values remain `fixnum`
-  - fractional fixed path uses `subjective-c` fixed payload fractional bits (`CLJ_FIXED_FRAC_BITS`)
-- Keep tiny-clj API unchanged (record render adapter decodes numeric inputs into renderer fixed/integer math).
-- Keep renderer hot path fixed-point/integer only.
-- Maintain integer clipping and integer rasterization.
-- Add compile-time switch for float vs fixed backend.
-- Current state: text transform path already uses renderer fixed-point math and now shares fractional-bit constants with `subjective-c`; thick-line rasterization still uses float math.
-
-### Step 8a: Eliminate float VgTransform — make VgTransform integer-only
-
-Motivation: `VgTransform` currently uses `float` fields (`tx`, `ty`, `sx`, `sy`, `rot_deg`).
-All values set by callers are integers (pixel positions, 90° rotations, scale=1).
-The floats are immediately converted to fixed-point in `vg_transform_fixed_from_transform`.
-Eliminating the float detour removes the last float dependency from the scene-graph hot path.
+- Primary target is deterministic output with lower CPU load on ESP32.
+- `subjective-c` already provides fixed numeric representation (`CLJ_FIXED_FRAC_BITS`), so decode and transform should stay fixed as long as possible.
+- Integer conversion should happen only where raster APIs require pixel-space ints.
 
 Tasks:
 
-1. **Header (`vector_scene_graph.h`)**:
-   - Change `VgTransform` fields from `float` to `int16_t` for `tx`, `ty`, `rot_deg` and `uint8_t` (or `int16_t`) for `sx`, `sy` (fixed-point 8.8 or plain integer scale).
-   - Decision: `sx`/`sy` use Q8.8 fixed-point (`int16_t`, 256 = 1.0×) to support fractional scales (e.g. 1.5×) without float.
-   - Change `VgTextData.scale` and `VgTextData.rot_deg` from `float` to matching integer/fixed types.
-   - Update `vg_transform_apply` signature (currently takes/returns `float`) — either remove (unused outside compose) or convert to fixed-point.
+1. **Canonical numeric decode policy (`scene.c` decoder path):**
+   - Prefer fixed/raw decode for transform-relevant fields (`sx`, `sy`, text scale, composed transform internals).
+   - Keep `fixnum` + `fixed` accepted on input records; avoid float conversion in hot decode paths.
+   - Keep typed defaults deterministic (`nil` => stable defaults).
 
-2. **Implementation (`vector_scene_graph.c`)**:
-   - `vg_transform_identity()`: return integer defaults (`tx=0, ty=0, sx=256, sy=256, rot_deg=0`).
-   - `vg_transform_fixed_from_transform()`: read integer fields directly into fixed-point matrix — no `fp_from_float` needed for tx/ty/rot_deg; Q8.8 scale converts via shift.
-   - `matrix_from_transform()` / `transform_from_matrix()` / `vg_transform_compose()`: convert to integer math or remove if unused after refactor.
-   - `draw_text_node()`: adapt text scale/rot from integer fields.
+2. **Boundary-based quantization:**
+   - Keep world/local transform math in fixed-point until raster boundary.
+   - Convert to integer only at explicit raster boundaries (`gfx_draw_*`, clip/window setup, framebuffer index math).
+   - Avoid repeated fixed->int->fixed ping-pong across compose/apply stages.
 
-3. **Record decoder (`vector_scene_graph_records.c`)**:
-   - `decode_transform()`: replace `id_to_float_default` calls with integer decoders (`id_to_i16_default` or equivalent).
-   - Text record: decode `scale` and `rot` as integer/Q8.8.
+3. **Hot-path cleanup for ESP32 CPU:**
+   - Remove/avoid float-based helper usage in decode/transform hot path.
+   - Keep non-cardinal/trig fallback paths isolated and cold.
+   - Ensure branch structure favors common integer/fixed cases.
 
-4. **Host viewer (`host_viewer_minifb.c`)**:
-   - Remove all `(float)` casts when setting transform fields — values are already `int`.
-   - Adapt scale literals (`1.0f` → `256` for Q8.8).
+4. **Contract + assertions:**
+   - Document fixed-first contract for scene records (`Transform`, `VText`, slot clip fields).
+   - Keep `CLJ_ASSERT` guards for typed overlay layout assumptions in debug builds.
+   - No release-mode guard overhead on hot paths.
 
-5. **Tests (`test_vector_scene_graph.c`)**:
-   - Replace float literals in transform setup with integer equivalents.
-   - Verify golden checksums remain identical (rendering must not change).
+5. **Regression + determinism gates:**
+   - Scene graph test suite must pass with unchanged or intentionally updated golden checksums.
+   - Add/keep tests covering mixed numeric inputs (`fixnum` + `fixed`) and nil defaults.
+   - Verify host and ESP32 paths keep identical decode semantics.
 
-6. **`VgPatch` union** (`vector_scene_graph.h`):
-   - `VgPatch.value.transform` is `VgTransform` — automatically updated by struct change.
-
-7. **Build + regression**:
-   - All 26+ scene graph tests pass with identical checksums.
-   - Host viewer renders identically (visual + no float warnings).
+6. **Performance validation:**
+   - Add a small benchmark/profiling slice for decode+render on representative scene sizes.
+   - Compare before/after CPU usage on host and (where possible) ESP32.
 
 Done when:
 
-- Fixed-point mode is stable, deterministic, and measurably beneficial in hot paths.
-- `VgTransform` contains no `float` fields; the scene-graph hot path is float-free.
+- Decode + transform hot paths are fixed-first by default, with integer conversion only at raster boundaries.
+- Deterministic frame outputs stay stable across runs.
+- CPU cost in representative ESP32 scenes is reduced or at least non-regressed.
 
 ## Milestone 9: Game/Menu/Title Integration
 
@@ -603,15 +592,16 @@ Done when:
 1. M0 scene contract + record schema
 2. M1 macOS simulator skeleton + deterministic frame dumps
 3. M2 transform stack + composition
-4. M3 baseline primitives (`width=1`)
-5. M4 thick line support
-6. M4b solid fill-color MVP (`has_fill` + `fill_rgb565`, no fill-rule yet)
-7. M5 snapshot slot update path (`FrameScene` + `clip-rect` + changed-slot-only render)
-8. M6 VText integration
-9. M7 SPI backend integration (slot windows on SPI)
-10. M9 game/menu/title integration
-11. M10 collision contract + C-driven callback
-12. Optional later: explicit patch path + pointer-identity subtree reuse
+4. M8 fixed-first decode + transform policy (determinism + ESP32 CPU baseline)
+5. M3 baseline primitives (`width=1`)
+6. M4 thick line support
+7. M4b solid fill-color MVP (`has_fill` + `fill_rgb565`, no fill-rule yet)
+8. M5 snapshot slot update path (`FrameScene` + `clip-rect` + changed-slot-only render)
+9. M6 VText integration
+10. M7 SPI backend integration (slot windows on SPI)
+11. M9 game/menu/title integration
+12. M10 collision contract + C-driven callback
+13. Optional later: explicit patch path + pointer-identity subtree reuse
 
 Rule:
 
@@ -632,4 +622,4 @@ Rule:
 - Risk: Slot rectangles appear non-overlapping logically but overlap in raster output due to stroke/text fringes.
   - Mitigation: conservative `clip-rect` guard bands, explicit slot background policy, test coverage for edge clipping.
 - Risk: Float drift/non-determinism in long animations.
-  - Mitigation: optional fixed-point transform core aligned with `subjective-c` fixed fractional bits (currently `CLJ_FIXED_FRAC_BITS = 13`).
+  - Mitigation: fixed-first decode/transform path aligned with `subjective-c` fractional bits (`CLJ_FIXED_FRAC_BITS = 13`), integer quantization only at raster boundaries.

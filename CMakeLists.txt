@@ -227,7 +227,7 @@ list(APPEND SOURCES
     src/gfx.c
     src/tiny_gfx.c
     src/vector_scene_graph.c
-    src/vector_scene_graph_records.c
+    src/scene.c
     src/source_resolver.c
 
 )

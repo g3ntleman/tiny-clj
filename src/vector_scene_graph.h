@@ -208,6 +208,7 @@ VgTransform vg_transform_compose(VgTransform parent, VgTransform local);
 VgTransformFixed vg_transform_fixed_identity(void);
 VgTransformFixed vg_transform_fixed_from_transform(VgTransform t);
 VgTransformFixed vg_transform_fixed_compose(VgTransformFixed parent, VgTransformFixed local);
+VgTransform vg_transform_from_fixed(VgTransformFixed t);
 void vg_transform_fixed_apply_px(VgTransformFixed t, int16_t x, int16_t y, int *out_x, int *out_y);
 
 bool vg_framebuffer_init(VgFrameBuffer *fb, int width, int height, uint16_t *pixels, size_t pixel_count);
@@ -217,6 +218,8 @@ uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb);
 
 void vg_render_scene(const VgNode *root, VgFrameBuffer *fb);
 void vg_render_scene_clipped(const VgNode *root, VgFrameBuffer *fb, VgClipRect clip_rect);
+void vg_render_node_fixed(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb);
+void vg_render_node_fixed_clipped(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb, VgClipRect clip_rect);
 bool vg_render_slot_if_changed(const VgRenderSlot *slot,
                                VgRenderSlotState *state,
                                VgFrameBuffer *fb,

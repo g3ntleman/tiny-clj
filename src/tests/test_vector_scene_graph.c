@@ -1,6 +1,6 @@
 #include "tests_common.h"
 #include "../vector_scene_graph.h"
-#include "../vector_scene_graph_records.h"
+#include "../scene.h"
 
 #define TEST_W 64
 #define TEST_H 48
@@ -103,13 +103,13 @@ TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
     ID scene = eval_string(
         "(do "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord Group [id t style visible children]) "
         "  (defrecord Scene [root clip-rect erase-rgb565]) "
         "  (->Scene "
         "    (->Group 100 nil nil true "
-        "             [(->Line 101 nil (->Style 65535 1 true false 0) true 4 6 18 6)]) "
+        "             [(->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6)]) "
         "    nil nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -130,13 +130,13 @@ TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
     ID scene = eval_string(
         "(do "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord Group [id t style visible children]) "
         "  (defrecord Scene [root clip-rect erase-rgb565]) "
         "  (->Scene "
         "    (->Group 200 (->Transform 7 5 1 1 0) nil true "
-        "             [(->Line 201 nil (->Style 65535 1 true false 0) true 0 0 10 0)]) "
+        "             [(->Line 201 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0)]) "
         "    nil nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -157,13 +157,13 @@ TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
     ID scene = eval_string(
         "(do "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord Group [id t style visible children]) "
         "  (defrecord Scene [root clip-rect erase-rgb565]) "
         "  (->Scene "
         "    (->Group 300 nil nil true "
-        "             [(->Line 301 nil (->Style 65535 1 true false 0) true 0 10 63 10)]) "
+        "             [(->Line 301 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10)]) "
         "    [20 8 10 6] "
         "    63488))",
         g_test_eval_state);
@@ -192,11 +192,11 @@ TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
     ID scene = eval_string(
         "(do "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px]) "
         "  (->FrameScene "
-        "    (->Line 401 nil (->Style 65535 1 true false 0) true 2 3 8 3) "
+        "    (->Line 401 nil (->Style 65535 1 true false 0 false 0) true 2 3 8 3) "
         "    [1 2 10 12] "
         "    3 true true 0 1))",
         g_test_eval_state);
@@ -222,11 +222,11 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
     ID scene = eval_string(
         "(do "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px]) "
         "  (->FrameScene "
-        "    (->Line 501 nil (->Style 65535 1 true false 0) true 0 10 63 10) "
+        "    (->Line 501 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
         "    [20 8 10 6] "
         "    0 true true 0 0))",
         g_test_eval_state);
