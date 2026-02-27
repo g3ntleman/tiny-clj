@@ -66,7 +66,7 @@ Phase B (embedded integration):
 
 ## Milestone 0: Scene Contract + Record Schema
 
-Status: PARTIAL (record schema + runtime slot-index cache implemented; generated-header build hook still TODO)
+Status: DONE (`DEFRECORD` path active; header-serialization path removed)
 
 Tasks:
 
@@ -96,24 +96,23 @@ Tasks:
   - optionality applies to slot values (`nil`), not to slot-index discovery in the render hot path
 - Define direct-render record contract for C (slot-indexed field access; no keyword lookup in render hot path).
 - Decision (layout consistency between Clojure and C):
-  - `tiny-gfx.scene` is the single source of truth for record field order.
-  - A build-time converter/generator must emit a C header from `tiny-gfx.scene` (field-count constants + ordered slot indices per record type).
-  - C code uses only generated indices/struct-like layouts for record slot access (no hand-maintained index tables).
+  - `tiny-gfx.scene` and C `DEFRECORD` declarations are the single source of truth for record field order/layout.
+  - C code uses `DEFRECORD` typed overlays plus runtime descriptor-index cache populated in `tiny_gfx_ensure_schema(...)`.
+  - Build-time header generation/codegen has been removed from the active workflow.
   - Keep runtime checks minimal (descriptor presence/type), avoid large handwritten index-preparation/validation blocks in hot paths.
 - Current implementation notes:
   - `tiny-gfx.scene` exists and registers the record descriptors used by the C renderer.
   - Runtime schema lookup/caching from C is implemented (descriptor-driven field indices).
-  - Host-only tooling namespace is `tiny-gfx.converter` under `libs/tiny-gfx/converter.clj` (not embedded in C sources).
-  - `tiny-gfx.converter` currently contains:
-    - C header generation helpers (`c-header-string`, `spit-c-header!`)
-    - SVG subset conversion helper (`group-from-svg`)
-  - Remaining TODO in this milestone: wire automatic build-time header generation into CMake/CI (today it is callable from REPL/scripted host tooling).
+  - C-side layout-compatible overlays are declared via `DEFRECORD(...)` in `tiny_gfx.h`.
+  - Host-only tooling namespace `tiny-gfx.converter` under `libs/tiny-gfx/converter.clj` remains optional helper tooling (e.g. SVG subset conversion via `group-from-svg`), without any header-serialization helpers.
+  - Slot-index contract enforcement stays in C via runtime descriptor lookup + `CLJ_ASSERT(...)` (no generated index tables).
 - Keep canonicalization/compiled C scene cache optional for later optimization.
 
 Done when:
 
 - Record schema and direct-render access contract are documented and testable.
 - Nil/default/inheritance decoding behavior is documented and covered by schema-level tests.
+- No active header-serialization path remains in runtime/build/documented workflow.
 
 ## Milestone 1: macOS Host Simulator Skeleton (PoC Gate 1)
 
