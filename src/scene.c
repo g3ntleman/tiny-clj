@@ -696,11 +696,35 @@ bool vg_decode_frame_slot_record(ID frame_scene_record, VgRenderSlot *out_slot) 
     return true;
 }
 
+static uint32_t clip_rect_area_on_framebuffer(VgClipRect rect, const VgFrameBuffer *fb) {
+    if (!fb || vg_clip_rect_is_empty(rect) || fb->width <= 0 || fb->height <= 0) {
+        return 0u;
+    }
+    int x0 = (rect.x < 0) ? 0 : rect.x;
+    int y0 = (rect.y < 0) ? 0 : rect.y;
+    int x1 = (int)rect.x + (int)rect.w;
+    int y1 = (int)rect.y + (int)rect.h;
+    if (x1 > fb->width) {
+        x1 = fb->width;
+    }
+    if (y1 > fb->height) {
+        y1 = fb->height;
+    }
+    if (x1 <= x0 || y1 <= y0) {
+        return 0u;
+    }
+    return (uint32_t)((uint32_t)(x1 - x0) * (uint32_t)(y1 - y0));
+}
+
 bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
                                             VgRenderSlotState *state,
                                             VgFrameBuffer *fb,
-                                            uint32_t snapshot_id) {
+                                            uint32_t snapshot_id,
+                                            uint32_t *out_dirty_pixels) {
     VgRenderSlot slot;
+    if (out_dirty_pixels) {
+        *out_dirty_pixels = 0u;
+    }
     if (!state || !fb || !vg_decode_frame_slot_record(frame_scene_record, &slot)) {
         return false;
     }
@@ -720,6 +744,9 @@ bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
     if (state->initialized) {
         VgClipRect prev = vg_clip_rect_expand(state->last_clip_rect, state->last_guard_px);
         dirty = vg_clip_rect_union(prev, dirty);
+    }
+    if (out_dirty_pixels) {
+        *out_dirty_pixels = clip_rect_area_on_framebuffer(dirty, fb);
     }
     vg_framebuffer_clear_rect(fb, dirty, slot.clear_rgb565);
 

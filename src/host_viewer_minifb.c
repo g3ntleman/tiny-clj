@@ -22,7 +22,14 @@
 #define VIEW_DEFAULT_WINDOW_SCALE 2u
 #define VIEWER_SLOT_COUNT 3
 #define TARGET_FPS           60u
+#define SCENE_TARGET_FPS     30u
 #define SCENE_ERASE_RGB565   0x0000u
+#define RGB565_BYTES_PER_PIXEL 2u
+
+#if (TARGET_FPS % SCENE_TARGET_FPS) != 0
+#error "SCENE_TARGET_FPS must divide TARGET_FPS"
+#endif
+#define SCENE_FRAME_DIVIDER (TARGET_FPS / SCENE_TARGET_FPS)
 
 #define TERRAIN_SPEED_PXS  120    /* px/s  → 2 px/frame @60 */
 #define OBSTACLE_SPEED_PXS 120    /* px/s  → 2 px/frame @60 */
@@ -190,6 +197,71 @@ static uint32_t rgb565_to_xrgb8888(uint16_t c) {
     uint32_t g = (uint32_t)((((c >> 5) & 0x3f) * 255) / 63);
     uint32_t b = (uint32_t)(((c & 0x1f) * 255) / 31);
     return 0xff000000u | (r << 16) | (g << 8) | b;
+}
+
+typedef struct {
+    double window_start_s;
+    uint64_t window_frames;
+    uint64_t window_dirty_pixels;
+    uint64_t window_changed_slots;
+} ViewerPerfWindow;
+
+typedef struct {
+    double fps;
+    double avg_dirty_px_per_frame;
+    double dirty_ratio;
+    double dirty_bytes_per_s;
+    double full_bytes_per_s;
+    double avg_changed_slots;
+} ViewerPerfSnapshot;
+
+/* Initialize rolling perf window counters for throughput estimation. */
+static void perf_window_init(ViewerPerfWindow *perf, double start_s) {
+    if (!perf) {
+        return;
+    }
+    memset(perf, 0, sizeof(*perf));
+    perf->window_start_s = start_s;
+}
+
+/* Accumulate dirty-area and slot-change stats for one rendered frame. */
+static void perf_window_record_frame(ViewerPerfWindow *perf, uint32_t dirty_pixels, uint32_t changed_slots) {
+    if (!perf) {
+        return;
+    }
+    perf->window_frames++;
+    perf->window_dirty_pixels += dirty_pixels;
+    perf->window_changed_slots += changed_slots;
+}
+
+/* Emit one-second rolling perf snapshot and reset counters. */
+static bool perf_window_take_snapshot_if_due(ViewerPerfWindow *perf,
+                                              double now_s,
+                                              ViewerPerfSnapshot *out_snapshot) {
+    if (out_snapshot) {
+        memset(out_snapshot, 0, sizeof(*out_snapshot));
+    }
+    if (!perf) {
+        return false;
+    }
+    double elapsed_s = now_s - perf->window_start_s;
+    if (elapsed_s < 1.0 || perf->window_frames == 0u) {
+        return false;
+    }
+    if (out_snapshot) {
+        out_snapshot->fps = (double)perf->window_frames / elapsed_s;
+        out_snapshot->avg_dirty_px_per_frame = (double)perf->window_dirty_pixels / (double)perf->window_frames;
+        out_snapshot->dirty_ratio = out_snapshot->avg_dirty_px_per_frame / (double)(VIEW_W * VIEW_H);
+        out_snapshot->dirty_bytes_per_s =
+            ((double)perf->window_dirty_pixels * (double)RGB565_BYTES_PER_PIXEL) / elapsed_s;
+        out_snapshot->full_bytes_per_s = out_snapshot->fps * (double)(VIEW_W * VIEW_H * RGB565_BYTES_PER_PIXEL);
+        out_snapshot->avg_changed_slots = (double)perf->window_changed_slots / (double)perf->window_frames;
+    }
+    perf->window_start_s = now_s;
+    perf->window_frames = 0u;
+    perf->window_dirty_pixels = 0u;
+    perf->window_changed_slots = 0u;
+    return true;
 }
 
 #define g_record_schema (*tiny_gfx_schema())
@@ -421,7 +493,15 @@ static ID slot_atom_snapshot_owned(size_t slot_index) {
 /* Render only slots whose generation changed since the last frame. */
 static void render_changed_slot_records(VgFrameBuffer *fb,
                                         VgRenderSlotState *slot_states,
-                                        uint32_t *slot_seen_generations) {
+                                        uint32_t *slot_seen_generations,
+                                        uint32_t *out_dirty_pixels,
+                                        uint32_t *out_changed_slots) {
+    if (out_dirty_pixels) {
+        *out_dirty_pixels = 0u;
+    }
+    if (out_changed_slots) {
+        *out_changed_slots = 0u;
+    }
     if (!fb || !slot_states || !slot_seen_generations) {
         return;
     }
@@ -430,17 +510,34 @@ static void render_changed_slot_records(VgFrameBuffer *fb,
                                                                     slot_seen_generations,
                                                                     slot_generations,
                                                                     0u);
+    uint32_t frame_dirty_pixels = 0u;
+    uint32_t frame_changed_slots = 0u;
     for (size_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
         if ((changed_mask & (1u << i)) == 0u) {
             continue;
         }
         ID snapshot = slot_atom_snapshot_owned(i);
         if (snapshot) {
-            (void)vg_render_frame_slot_record_if_changed(snapshot, &slot_states[i], fb, slot_generations[i]);
+            uint32_t dirty_pixels = 0u;
+            bool rendered = vg_render_frame_slot_record_if_changed(snapshot,
+                                                                   &slot_states[i],
+                                                                   fb,
+                                                                   slot_generations[i],
+                                                                   &dirty_pixels);
+            if (rendered) {
+                frame_changed_slots++;
+                frame_dirty_pixels += dirty_pixels;
+            }
             RELEASE(snapshot);
         }
     }
     memcpy(slot_seen_generations, slot_generations, sizeof(slot_generations));
+    if (out_dirty_pixels) {
+        *out_dirty_pixels = frame_dirty_pixels;
+    }
+    if (out_changed_slots) {
+        *out_changed_slots = frame_changed_slots;
+    }
 }
 
 /* Publish a freshly built FrameScene into one slot atom and mark it dirty. */
@@ -539,8 +636,8 @@ int main(void) {
         fprintf(stderr, "Failed to create MiniFB timer\n");
         goto cleanup;
     }
-    double fps_window_start_s = mfb_timer_now(timer);
-    unsigned fps_frame_count = 0;
+    ViewerPerfWindow perf_window;
+    perf_window_init(&perf_window, mfb_timer_now(timer));
 
     VgStyle deco_style = make_style(0x07ffu, 2, false, 0u);
     VgStyle score_style = make_style(0xffffu, 1, false, 0u);
@@ -679,22 +776,7 @@ int main(void) {
 
     while (true) {
         float time_s = (float)mfb_timer_now(timer);
-        fps_frame_count++;
-        double fps_elapsed_s = (double)time_s - fps_window_start_s;
         bool score_changed = false;
-#if defined(__APPLE__)
-        if (fps_elapsed_s >= 1.0) {
-            double fps = (double)fps_frame_count / fps_elapsed_s;
-            int score = (int)(time_s * 120.0f);
-            (void)snprintf(score_line, sizeof(score_line), "SCORE %04d    LIFES 3", score % 10000);
-            char title[96];
-            (void)snprintf(title, sizeof(title), "tiny-clj host viewer - %.1f FPS", fps);
-            macos_viewer_set_window_title(title);
-            fps_window_start_s = (double)time_s;
-            fps_frame_count = 0;
-            score_changed = true;
-        }
-#endif
         if (!mfb_wait_sync(window)) {
             break;
         }
@@ -703,15 +785,11 @@ int main(void) {
         }
 
         frame_count++;
+        bool scene_tick = (frame_count % SCENE_FRAME_DIVIDER) == 0u;
         bool collision_cooldown_active = (time_s < collision_cooldown_end_s);
         int terrain_scroll_px = (int)((frame_count * TERRAIN_PPF) % 320u);
         int player_jump_y = compute_player_jump_y(frame_count);
         int obstacle_x = compute_obstacle_x(frame_count);
-
-        set_node_transform(&game_terrain, (int16_t)(-terrain_scroll_px), 0, 0);
-        set_node_transform(&game_player, 0, (int16_t)player_jump_y, 0);
-        set_obstacle_transforms(&game_obstacle_body, &game_obstacle_nose, obstacle_x);
-        set_player_geometry(&game_player, player_small);
 
         {
             bool colliding = detect_player_obstacle_collision(player_jump_y, obstacle_x);
@@ -725,11 +803,49 @@ int main(void) {
             }
         }
 
+        if (scene_tick) {
+            set_node_transform(&game_terrain, (int16_t)(-terrain_scroll_px), 0, 0);
+            set_node_transform(&game_player, 0, (int16_t)player_jump_y, 0);
+            set_obstacle_transforms(&game_obstacle_body, &game_obstacle_nose, obstacle_x);
+            set_player_geometry(&game_player, player_small);
+        }
+
         if (score_changed) {
             publish_frame_scene_slot(1, &score_root, score_clip, 1, true, true, SCENE_ERASE_RGB565, 1);
         }
-        publish_frame_scene_slot(2, &game_root, game_clip, 2, true, true, SCENE_ERASE_RGB565, 1);
-        render_changed_slot_records(&fb, slot_states, slot_seen_generations);
+        if (scene_tick) {
+            publish_frame_scene_slot(2, &game_root, game_clip, 2, true, true, SCENE_ERASE_RGB565, 1);
+        }
+        uint32_t dirty_pixels = 0u;
+        uint32_t changed_slots = 0u;
+        render_changed_slot_records(&fb,
+                                    slot_states,
+                                    slot_seen_generations,
+                                    &dirty_pixels,
+                                    &changed_slots);
+        perf_window_record_frame(&perf_window, dirty_pixels, changed_slots);
+        ViewerPerfSnapshot perf_snapshot;
+        bool perf_ready = perf_window_take_snapshot_if_due(&perf_window, (double)time_s, &perf_snapshot);
+#if defined(__APPLE__)
+        if (perf_ready) {
+            int score = (int)(time_s * 120.0f);
+            (void)snprintf(score_line, sizeof(score_line), "SCORE %04d    LIFES 3", score % 10000);
+            char title[192];
+            (void)snprintf(title,
+                           sizeof(title),
+                           "tiny-clj host viewer | FPS %.1f | Dirty %.1f%% | SPI %.2f MB/s (%.2f MB/s full) | Slots %.2f",
+                           perf_snapshot.fps,
+                           perf_snapshot.dirty_ratio * 100.0,
+                           perf_snapshot.dirty_bytes_per_s / 1000000.0,
+                           perf_snapshot.full_bytes_per_s / 1000000.0,
+                           perf_snapshot.avg_changed_slots);
+            macos_viewer_set_window_title(title);
+            score_changed = true;
+        }
+#else
+        (void)perf_snapshot;
+        (void)perf_ready;
+#endif
 
         for (size_t i = 0; i < (size_t)VIEW_W * (size_t)VIEW_H; i++) {
             window_pixels[i] = rgb565_to_xrgb8888(fb_pixels[i]);

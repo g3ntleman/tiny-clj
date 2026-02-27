@@ -41,6 +41,7 @@ bool vg_decode_frame_slot_record(ID frame_scene_record, VgRenderSlot *out_slot);
 bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
                                             VgRenderSlotState *state,
                                             VgFrameBuffer *fb,
-                                            uint32_t snapshot_id);
+                                            uint32_t snapshot_id,
+                                            uint32_t *out_dirty_pixels);
 
 #endif

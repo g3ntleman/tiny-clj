@@ -294,12 +294,16 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
     vg_framebuffer_clear(&fb, 0x1234u);
 
     VgRenderSlotState state = {0};
-    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u));
+    uint32_t dirty_pixels = 0u;
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u, &dirty_pixels));
+    TEST_ASSERT_EQUAL_UINT32(60u, dirty_pixels);
     TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 10]);
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 24]);
     TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 35]);
 
-    TEST_ASSERT_FALSE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u));
+    dirty_pixels = 123u;
+    TEST_ASSERT_FALSE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u, &dirty_pixels));
+    TEST_ASSERT_EQUAL_UINT32(0u, dirty_pixels);
 }
 
 TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_when_slot_invisible) {
@@ -323,7 +327,9 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_whe
     vg_framebuffer_clear(&fb, 0x1234u);
 
     VgRenderSlotState state = {0};
-    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u));
+    uint32_t dirty_pixels = 0u;
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u, &dirty_pixels));
+    TEST_ASSERT_EQUAL_UINT32(60u, dirty_pixels);
     TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)9 * TEST_W + 22]);
     TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 24]);
     TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)2 * TEST_W + 2]);
