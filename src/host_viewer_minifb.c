@@ -22,6 +22,7 @@
 #define VIEW_DEFAULT_WINDOW_SCALE 2u
 #define VIEWER_SLOT_COUNT 3
 #define TARGET_FPS           60u
+#define SCENE_ERASE_RGB565   0x0000u
 
 #define TERRAIN_SPEED_PXS  120    /* px/s  → 2 px/frame @60 */
 #define OBSTACLE_SPEED_PXS 120    /* px/s  → 2 px/frame @60 */
@@ -32,6 +33,7 @@
 #define TERRAIN_PPF  (TERRAIN_SPEED_PXS / TARGET_FPS)   /* 2 */
 #define OBSTACLE_PPF (OBSTACLE_SPEED_PXS / TARGET_FPS)  /* 2 */
 
+/* Convert engine q13 fixed-point to nearest integer for pixel-space updates. */
 static int q13_to_int_round(int32_t v_q13) {
     if (v_q13 >= 0) {
         return (int)((v_q13 + (VG_SCALE_ONE / 2)) / VG_SCALE_ONE);
@@ -39,6 +41,7 @@ static int q13_to_int_round(int32_t v_q13) {
     return (int)((v_q13 - (VG_SCALE_ONE / 2)) / VG_SCALE_ONE);
 }
 
+/* Runs one jump cycle with fixed-point easing and returns y offset in pixels. */
 static int compute_player_jump_y(unsigned frame_count) {
     uint32_t jump_half_frames = (PLAYER_JUMP_DURATION_FRAMES > 1u) ? (PLAYER_JUMP_DURATION_FRAMES / 2u) : 1u;
     uint32_t jump_phase = frame_count % PLAYER_JUMP_PERIOD_FRAMES;
@@ -65,6 +68,7 @@ static int compute_player_jump_y(unsigned frame_count) {
     return q13_to_int_round(jump_y_q13);
 }
 
+/* Scrolls the obstacle from right to left at constant speed. */
 static int compute_obstacle_x(unsigned frame_count) {
     uint32_t obstacle_phase_px = (frame_count * OBSTACLE_PPF) % 360u;
     int32_t obstacle_t = vg_anim_progress_q13(obstacle_phase_px, 360u);
@@ -75,6 +79,7 @@ static int compute_obstacle_x(unsigned frame_count) {
     return q13_to_int_round(obstacle_x_q13);
 }
 
+/* Handles immediate viewer exit shortcuts. */
 static bool viewer_should_exit_for_keys(const uint8_t *keys) {
     if (!keys) {
         return false;
@@ -85,6 +90,29 @@ static bool viewer_should_exit_for_keys(const uint8_t *keys) {
     return esc || cmd_q;
 }
 
+/* Reset transform and apply translation/rotation in one place. */
+static void set_node_transform(VgNode *node, int16_t tx, int16_t ty, int16_t rot_deg) {
+    if (!node) {
+        return;
+    }
+    node->transform = vg_transform_identity();
+    node->transform.tx = tx;
+    node->transform.ty = ty;
+    node->transform.rot_deg = rot_deg;
+}
+
+/* Build common style presets without repeating manual field writes. */
+static VgStyle make_style(uint16_t stroke_rgb565, uint8_t stroke_width, bool has_fill, uint16_t fill_rgb565) {
+    VgStyle style = vg_style_default();
+    style.stroke_rgb565 = stroke_rgb565;
+    style.stroke_width = stroke_width;
+    style.has_bg_rgb565 = false;
+    style.has_fill = has_fill;
+    style.fill_rgb565 = fill_rgb565;
+    return style;
+}
+
+/* Switches player triangle geometry between normal and small hit profile. */
 static void set_player_geometry(VgNode *game_player, bool player_small) {
     if (!game_player) {
         return;
@@ -106,21 +134,17 @@ static void set_player_geometry(VgNode *game_player, bool player_small) {
     }
 }
 
+/* Place both obstacle parts using one shared transform. */
 static void set_obstacle_transforms(VgNode *game_obstacle_body, VgNode *game_obstacle_nose, int obstacle_x) {
     if (!game_obstacle_body || !game_obstacle_nose) {
         return;
     }
-    game_obstacle_body->transform = vg_transform_identity();
-    game_obstacle_body->transform.tx = (int16_t)(obstacle_x + 20);
-    game_obstacle_body->transform.ty = 126;
-    game_obstacle_body->transform.rot_deg = -90;
-
-    game_obstacle_nose->transform = vg_transform_identity();
-    game_obstacle_nose->transform.tx = (int16_t)(obstacle_x + 20);
-    game_obstacle_nose->transform.ty = 126;
-    game_obstacle_nose->transform.rot_deg = -90;
+    int16_t tx = (int16_t)(obstacle_x + 20);
+    set_node_transform(game_obstacle_body, tx, 126, -90);
+    set_node_transform(game_obstacle_nose, tx, 126, -90);
 }
 
+/* Simple AABB overlap test in world-space pixel coordinates. */
 static bool detect_player_obstacle_collision(int player_jump_y, int obstacle_x) {
     // Collision uses a stable hitbox to avoid size-toggle feedback jitter.
     int player_min_x = 58;
@@ -148,6 +172,7 @@ static void set_letterbox_viewport(struct mfb_window *window, unsigned win_w, un
     (void)mfb_set_viewport(window, offset_x, offset_y, draw_w, draw_h);
 }
 
+/* Resize callback that prefers true content size on macOS Retina. */
 static void on_window_resize(struct mfb_window *window, int width, int height) {
 #if defined(__APPLE__)
     unsigned content_w = 0, content_h = 0;
@@ -159,6 +184,7 @@ static void on_window_resize(struct mfb_window *window, int width, int height) {
     set_letterbox_viewport(window, (unsigned)width, (unsigned)height);
 }
 
+/* Expand RGB565 framebuffer pixels to MiniFB's XRGB8888 format. */
 static uint32_t rgb565_to_xrgb8888(uint16_t c) {
     uint32_t r = (uint32_t)((((c >> 11) & 0x1f) * 255) / 31);
     uint32_t g = (uint32_t)((((c >> 5) & 0x3f) * 255) / 63);
@@ -168,14 +194,13 @@ static uint32_t rgb565_to_xrgb8888(uint16_t c) {
 
 #define g_record_schema (*tiny_gfx_schema())
 
+/* Allocate a record instance from an already resolved descriptor. */
 static CljPersistentRecord *make_record_with_descriptor(CljRecordDescriptor *desc) {
     CljPersistentRecord *record = record_create_with_descriptor(desc, NULL);
-    if (!record) {
-        return NULL;
-    }
-    return AUTORELEASE(record);
+    return record ? AUTORELEASE(record) : NULL;
 }
 
+/* Convert node transform into tiny-gfx Transform record (or nil when absent). */
 static ID make_transform_record(const VgNode *node) {
     if (!node || !node->has_transform) {
         return NULL;
@@ -192,6 +217,7 @@ static ID make_transform_record(const VgNode *node) {
     return record;
 }
 
+/* Convert runtime style struct to tiny-gfx Style record. */
 static ID make_style_record(VgStyle style) {
     Style *record = (Style *)make_record_with_descriptor(g_record_schema.d_style);
     if (!record) {
@@ -209,6 +235,7 @@ static ID make_style_record(VgStyle style) {
 
 static ID make_node_record(const VgNode *node);
 
+/* Convert group children recursively. */
 static ID make_group_children_vector(const VgNode *node) {
     CljPersistentVector *children_vec = make_vector((unsigned int)node->data.group.child_count, STRONG);
     if (!children_vec) return NULL;
@@ -223,6 +250,7 @@ static ID make_group_children_vector(const VgNode *node) {
     return AUTORELEASE(children_vec);
 }
 
+/* Convert polyline points into [[x y] ...] vector form expected by tiny-gfx. */
 static ID make_polyline_points_vector(const VgNode *node) {
     CljPersistentVector *pts = make_vector((unsigned int)node->data.polyline.point_count, STRONG);
     if (!pts) return NULL;
@@ -240,6 +268,15 @@ static ID make_polyline_points_vector(const VgNode *node) {
     return AUTORELEASE(pts);
 }
 
+#define ASSIGN_NODE_COMMON_FIELDS(record_ptr, node_ptr, t_rec, s_rec, visible_rec) \
+    do {                                                                             \
+        ASSIGN((record_ptr)->id, fixnum((int)(node_ptr)->id));                      \
+        ASSIGN((record_ptr)->t, (t_rec));                                            \
+        ASSIGN((record_ptr)->style, (s_rec));                                        \
+        ASSIGN((record_ptr)->visible, (visible_rec));                                \
+    } while (0)
+
+/* Convert one VgNode tree node to its defrecord representation. */
 static ID make_node_record(const VgNode *node) {
     if (!node) return NULL;
     ID t_rec = make_transform_record(node);
@@ -251,20 +288,14 @@ static ID make_node_record(const VgNode *node) {
             ID children = make_group_children_vector(node);
             Group *record = (Group *)make_record_with_descriptor(g_record_schema.d_group);
             if (!record) return NULL;
-            ASSIGN(record->id, fixnum((int)node->id));
-            ASSIGN(record->t, t_rec);
-            ASSIGN(record->style, s_rec);
-            ASSIGN(record->visible, visible);
+            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
             ASSIGN(record->children, children);
             return record;
         }
         case VG_NODE_LINE: {
             Line *record = (Line *)make_record_with_descriptor(g_record_schema.d_line);
             if (!record) return NULL;
-            ASSIGN(record->id, fixnum((int)node->id));
-            ASSIGN(record->t, t_rec);
-            ASSIGN(record->style, s_rec);
-            ASSIGN(record->visible, visible);
+            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
             ASSIGN(record->x1, fixnum((int)node->data.line.x1));
             ASSIGN(record->y1, fixnum((int)node->data.line.y1));
             ASSIGN(record->x2, fixnum((int)node->data.line.x2));
@@ -275,10 +306,7 @@ static ID make_node_record(const VgNode *node) {
             ID pts = make_polyline_points_vector(node);
             Polyline *record = (Polyline *)make_record_with_descriptor(g_record_schema.d_polyline);
             if (!record) return NULL;
-            ASSIGN(record->id, fixnum((int)node->id));
-            ASSIGN(record->t, t_rec);
-            ASSIGN(record->style, s_rec);
-            ASSIGN(record->visible, visible);
+            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
             ASSIGN(record->pts, pts);
             ASSIGN(record->closed, node->data.polyline.closed ? clj_true : clj_false);
             return record;
@@ -286,10 +314,7 @@ static ID make_node_record(const VgNode *node) {
         case VG_NODE_RECT: {
             Rect *record = (Rect *)make_record_with_descriptor(g_record_schema.d_rect);
             if (!record) return NULL;
-            ASSIGN(record->id, fixnum((int)node->id));
-            ASSIGN(record->t, t_rec);
-            ASSIGN(record->style, s_rec);
-            ASSIGN(record->visible, visible);
+            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
             ASSIGN(record->x, fixnum((int)node->data.rect.x));
             ASSIGN(record->y, fixnum((int)node->data.rect.y));
             ASSIGN(record->w, fixnum((int)node->data.rect.w));
@@ -299,10 +324,7 @@ static ID make_node_record(const VgNode *node) {
         case VG_NODE_TRI: {
             Tri *record = (Tri *)make_record_with_descriptor(g_record_schema.d_tri);
             if (!record) return NULL;
-            ASSIGN(record->id, fixnum((int)node->id));
-            ASSIGN(record->t, t_rec);
-            ASSIGN(record->style, s_rec);
-            ASSIGN(record->visible, visible);
+            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
             ASSIGN(record->x1, fixnum((int)node->data.tri.x1));
             ASSIGN(record->y1, fixnum((int)node->data.tri.y1));
             ASSIGN(record->x2, fixnum((int)node->data.tri.x2));
@@ -315,10 +337,7 @@ static ID make_node_record(const VgNode *node) {
             ID text = AUTORELEASE(make_string(node->data.text.text ? node->data.text.text : ""));
             VText *record = (VText *)make_record_with_descriptor(g_record_schema.d_vtext);
             if (!record) return NULL;
-            ASSIGN(record->id, fixnum((int)node->id));
-            ASSIGN(record->t, t_rec);
-            ASSIGN(record->style, s_rec);
-            ASSIGN(record->visible, visible);
+            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
             ASSIGN(record->x, fixnum((int)node->data.text.x));
             ASSIGN(record->y, fixnum((int)node->data.text.y));
             ASSIGN(record->scale, (ID)(((uintptr_t)node->data.text.scale << TAG_BITS) | TAG_FIXED));
@@ -331,6 +350,7 @@ static ID make_node_record(const VgNode *node) {
     }
 }
 
+/* Build one FrameScene record with clip/z/erase metadata for slot rendering. */
 static ID make_frame_scene_record(const VgNode *root,
                                    VgClipRect clip_rect,
                                    int z,
@@ -367,6 +387,7 @@ static ID make_frame_scene_record(const VgNode *root,
 static CljAtom *g_scene_slot_atoms[VIEWER_SLOT_COUNT] = {0};
 static VgSlotChangeTracker g_slot_change_tracker;
 
+/* Allocate one atom per slot used by the renderer. */
 static bool init_scene_slot_atoms(void) {
     for (size_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
         g_scene_slot_atoms[i] = make_atom(NULL);
@@ -381,6 +402,7 @@ static bool init_scene_slot_atoms(void) {
     return true;
 }
 
+/* Release all slot atoms and clear globals. */
 static void destroy_scene_slot_atoms(void) {
     for (size_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
         RELEASE(g_scene_slot_atoms[i]);
@@ -388,6 +410,7 @@ static void destroy_scene_slot_atoms(void) {
     }
 }
 
+/* Snapshot a slot atom value with owned lifetime for rendering. */
 static ID slot_atom_snapshot_owned(size_t slot_index) {
     if (slot_index >= VIEWER_SLOT_COUNT || !g_scene_slot_atoms[slot_index]) {
         return NULL;
@@ -395,6 +418,7 @@ static ID slot_atom_snapshot_owned(size_t slot_index) {
     return RETAIN(g_scene_slot_atoms[slot_index]->value);
 }
 
+/* Render only slots whose generation changed since the last frame. */
 static void render_changed_slot_records(VgFrameBuffer *fb,
                                         VgRenderSlotState *slot_states,
                                         uint32_t *slot_seen_generations) {
@@ -419,6 +443,7 @@ static void render_changed_slot_records(VgFrameBuffer *fb,
     memcpy(slot_seen_generations, slot_generations, sizeof(slot_generations));
 }
 
+/* Publish a freshly built FrameScene into one slot atom and mark it dirty. */
 static void publish_frame_scene_slot(size_t slot_index,
                                      const VgNode *root,
                                      VgClipRect clip_rect,
@@ -517,38 +542,12 @@ int main(void) {
     double fps_window_start_s = mfb_timer_now(timer);
     unsigned fps_frame_count = 0;
 
-    VgStyle deco_style = vg_style_default();
-    deco_style.stroke_rgb565 = 0x07ffu;
-    deco_style.stroke_width = 2;
-    deco_style.has_bg_rgb565 = false;
-
-    VgStyle score_style = vg_style_default();
-    score_style.stroke_rgb565 = 0xffffu;
-    score_style.stroke_width = 1;
-    score_style.has_bg_rgb565 = false;
-
-    VgStyle game_line_style = vg_style_default();
-    game_line_style.stroke_rgb565 = 0x07e0u;
-    game_line_style.stroke_width = 2;
-    game_line_style.has_bg_rgb565 = false;
-
-    VgStyle game_player_style = vg_style_default();
-    game_player_style.stroke_rgb565 = 0xf81fu;
-    game_player_style.stroke_width = 3;
-    game_player_style.has_bg_rgb565 = false;
-
-    VgStyle game_obstacle_style = vg_style_default();
-    game_obstacle_style.stroke_rgb565 = 0xffe0u;
-    game_obstacle_style.stroke_width = 2;
-    game_obstacle_style.has_fill = true;
-    game_obstacle_style.fill_rgb565 = 0xffe0u;
-    game_obstacle_style.has_bg_rgb565 = false;
-    VgStyle game_obstacle_nose_style = vg_style_default();
-    game_obstacle_nose_style.stroke_rgb565 = 0xf800u;
-    game_obstacle_nose_style.stroke_width = 2;
-    game_obstacle_nose_style.has_fill = true;
-    game_obstacle_nose_style.fill_rgb565 = 0xf800u;
-    game_obstacle_nose_style.has_bg_rgb565 = false;
+    VgStyle deco_style = make_style(0x07ffu, 2, false, 0u);
+    VgStyle score_style = make_style(0xffffu, 1, false, 0u);
+    VgStyle game_line_style = make_style(0x07e0u, 2, false, 0u);
+    VgStyle game_player_style = make_style(0xf81fu, 3, false, 0u);
+    VgStyle game_obstacle_style = make_style(0xffe0u, 2, true, 0xffe0u);
+    VgStyle game_obstacle_nose_style = make_style(0xf800u, 2, true, 0xf800u);
 
     VgClipRect score_clip = {.x = 0, .y = 0, .w = VIEW_W, .h = 32};
     VgClipRect game_clip = {.x = 0, .y = 40, .w = VIEW_W, .h = 136};
@@ -594,8 +593,7 @@ int main(void) {
         .style = score_style,
         .data.text = {.x = 0, .y = 0, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = score_line}
     };
-    score_text.transform.tx = 6;
-    score_text.transform.ty = 10;
+    set_node_transform(&score_text, 6, 10, 0);
     VgNode *score_children[] = {&score_text};
     VgNode score_root = {
         .id = 2000,
@@ -657,8 +655,7 @@ int main(void) {
         .style = score_style,
         .data.text = {.x = 0, .y = 0, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "GAME SCENE"}
     };
-    game_caption.transform.tx = 96;
-    game_caption.transform.ty = 52;
+    set_node_transform(&game_caption, 96, 52, 0);
     VgNode *game_children[] = {&game_terrain, &game_player, &game_obstacle_body, &game_obstacle_nose, &game_caption};
     VgNode game_root = {
         .id = 3000,
@@ -675,10 +672,10 @@ int main(void) {
     bool collision_latched = false;
     float collision_cooldown_end_s = 0.0f;
     unsigned frame_count = 0;
-    vg_framebuffer_clear(&fb, 0x0000u);
-    publish_frame_scene_slot(0, &deco_root, deco_clip, 0, true, true, 0x0000u, 1);
-    publish_frame_scene_slot(1, &score_root, score_clip, 1, true, true, 0x0000u, 1);
-    publish_frame_scene_slot(2, &game_root, game_clip, 2, true, true, 0x0000u, 1);
+    vg_framebuffer_clear(&fb, SCENE_ERASE_RGB565);
+    publish_frame_scene_slot(0, &deco_root, deco_clip, 0, true, true, SCENE_ERASE_RGB565, 1);
+    publish_frame_scene_slot(1, &score_root, score_clip, 1, true, true, SCENE_ERASE_RGB565, 1);
+    publish_frame_scene_slot(2, &game_root, game_clip, 2, true, true, SCENE_ERASE_RGB565, 1);
 
     while (true) {
         float time_s = (float)mfb_timer_now(timer);
@@ -711,10 +708,8 @@ int main(void) {
         int player_jump_y = compute_player_jump_y(frame_count);
         int obstacle_x = compute_obstacle_x(frame_count);
 
-        game_terrain.transform = vg_transform_identity();
-        game_terrain.transform.tx = (int16_t)(-terrain_scroll_px);
-        game_player.transform = vg_transform_identity();
-        game_player.transform.ty = (int16_t)player_jump_y;
+        set_node_transform(&game_terrain, (int16_t)(-terrain_scroll_px), 0, 0);
+        set_node_transform(&game_player, 0, (int16_t)player_jump_y, 0);
         set_obstacle_transforms(&game_obstacle_body, &game_obstacle_nose, obstacle_x);
         set_player_geometry(&game_player, player_small);
 
@@ -731,9 +726,9 @@ int main(void) {
         }
 
         if (score_changed) {
-            publish_frame_scene_slot(1, &score_root, score_clip, 1, true, true, 0x0000u, 1);
+            publish_frame_scene_slot(1, &score_root, score_clip, 1, true, true, SCENE_ERASE_RGB565, 1);
         }
-        publish_frame_scene_slot(2, &game_root, game_clip, 2, true, true, 0x0000u, 1);
+        publish_frame_scene_slot(2, &game_root, game_clip, 2, true, true, SCENE_ERASE_RGB565, 1);
         render_changed_slot_records(&fb, slot_states, slot_seen_generations);
 
         for (size_t i = 0; i < (size_t)VIEW_W * (size_t)VIEW_H; i++) {
