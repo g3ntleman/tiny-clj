@@ -198,6 +198,7 @@ list(APPEND SOURCES
     src/hash.c
     src/event_loop.c
     src/channel.c
+    src/lockfree_spsc_queue.c
     src/list.c
     src/ast.c
     src/atom.c
@@ -228,7 +229,6 @@ list(APPEND SOURCES
     src/tiny_gfx.c
     src/vector_scene_graph.c
     src/scene.c
-    src/source_resolver.c
 
 )
 
@@ -443,7 +443,6 @@ set_target_properties(tiny-clj-profile PROPERTIES
 # Unity Test Framework (central runner with separate test files)
 add_executable(unit-tests
     ${SOURCES}
-    src/line_editor.c
     subjective-c/tests/test_runner.c
     src/tests/unity_test_runner.c
     subjective-c/tests/test_registry.c
@@ -528,6 +527,7 @@ add_executable(unit-tests
     src/tests/test_print.c
     src/tests/test_static_keywords.c
     src/tests/test_audio_engine.c
+    src/tests/test_lockfree_spsc_queue.c
     src/tests/test_byte_array.c
     src/tests/test_byte_array_view.c
     src/tests/test_platform_net.c

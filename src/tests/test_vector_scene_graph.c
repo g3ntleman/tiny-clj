@@ -374,6 +374,50 @@ TEST(test_vector_scene_graph_fixed_transform_cardinal_rotation_is_exact) {
     TEST_ASSERT_EQUAL_INT(17, out_y);
 }
 
+TEST(test_vector_scene_graph_anim_fixed_progress_ease_and_lerp_are_deterministic) {
+    int32_t p0 = vg_anim_progress_q13(0u, 1000u);
+    int32_t p_half = vg_anim_progress_q13(500u, 1000u);
+    int32_t p_end = vg_anim_progress_q13(1000u, 1000u);
+    int32_t p_over = vg_anim_progress_q13(1200u, 1000u);
+    int32_t p_zero_dur = vg_anim_progress_q13(1u, 0u);
+
+    TEST_ASSERT_EQUAL_INT32(0, p0);
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE / 2, p_half);
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE, p_end);
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE, p_over);
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE, p_zero_dur);
+
+    TEST_ASSERT_EQUAL_INT32(0, vg_anim_ease_q13(VG_ANIM_EASE_LINEAR, -1));
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE, vg_anim_ease_q13(VG_ANIM_EASE_LINEAR, VG_SCALE_ONE + 1));
+    TEST_ASSERT_EQUAL_INT32(p_half, vg_anim_ease_q13(VG_ANIM_EASE_LINEAR, p_half));
+
+    int32_t eased_half = vg_anim_ease_q13(VG_ANIM_EASE_OUT_CUBIC, p_half);
+    TEST_ASSERT_TRUE(eased_half > p_half); /* ease-out should advance faster in first half */
+    TEST_ASSERT_EQUAL_INT32(0, vg_anim_ease_q13(VG_ANIM_EASE_OUT_CUBIC, 0));
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE, vg_anim_ease_q13(VG_ANIM_EASE_OUT_CUBIC, VG_SCALE_ONE));
+
+    int32_t from = 10 * VG_SCALE_ONE;
+    int32_t to = 20 * VG_SCALE_ONE;
+    int32_t mid_lin = vg_anim_lerp_q13(from, to, p_half);
+    int32_t mid_eased = vg_anim_lerp_q13(from, to, eased_half);
+    TEST_ASSERT_EQUAL_INT32(15 * VG_SCALE_ONE, mid_lin);
+    TEST_ASSERT_TRUE(mid_eased > mid_lin);
+
+    /* Determinism: same input -> same result. */
+    TEST_ASSERT_EQUAL_INT32(eased_half, vg_anim_ease_q13(VG_ANIM_EASE_OUT_CUBIC, p_half));
+    TEST_ASSERT_EQUAL_INT32(mid_eased, vg_anim_lerp_q13(from, to, eased_half));
+}
+
+TEST(test_vector_scene_graph_anim_fixed_in_out_quad_symmetry_samples) {
+    int32_t t1 = VG_SCALE_ONE / 4;
+    int32_t t2 = VG_SCALE_ONE - t1;
+    int32_t y1 = vg_anim_ease_q13(VG_ANIM_EASE_IN_OUT_QUAD, t1);
+    int32_t y2 = vg_anim_ease_q13(VG_ANIM_EASE_IN_OUT_QUAD, t2);
+
+    /* Symmetry around 0.5: y(1-t) ~= 1-y(t) in fixed arithmetic. */
+    TEST_ASSERT_INT_WITHIN(1, VG_SCALE_ONE - y1, y2);
+}
+
 TEST(test_vector_scene_graph_deterministic_frame_checksum_for_mixed_scene) {
     uint16_t pixels_a[TEST_W * TEST_H];
     uint16_t pixels_b[TEST_W * TEST_H];

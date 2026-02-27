@@ -38,6 +38,7 @@ so primitive generation/rasterization bugs are debuggable on host.
   - no MEMORY macros (`RETAIN`, `RELEASE`, `AUTORELEASE`, `ASSIGN`) in render-thread hot path
   - no autorelease pool setup/usage in render thread
   - memory ownership changes/allocation happen only in producer/update thread before atomic snapshot publish
+  - no blocking/channel operations in render hot path; use bounded lock-free queues for control/completion handoff
 
 ## Definition Of Done (project-level)
 
@@ -255,6 +256,7 @@ Tasks:
   - block/sleep until any scene slot snapshot changes (event/condition based wakeup)
   - avoid continuous busy rendering when no slot changed
   - rationale: lower power draw, better battery life, and reduced thermal load
+  - implementation note: generic bounded SPSC queue infrastructure exists already (`lockfree_spsc_queue`) and can be reused for control/completion handoff, but slot-change wait/wakeup API is still TODO
 - Render only the affected slot region (`clip-rect`), not the full framebuffer.
 - If a slot moves, treat dirty region as `union(old_clip_rect, new_clip_rect)`.
 - Validate non-overlapping slot convention with conservative bounds (stroke width / text fringe guard).
@@ -590,7 +592,7 @@ Done when:
 
 ## Optional Extension A: Render-Thread Interpolation Animations (Off-Main-Thread)
 
-Status: OPTIONAL-LATER
+Status: OPTIONAL-LATER (generic SPSC queue + fixed-point animator math prerequisites implemented; animation command/event wiring still TODO)
 
 Scope:
 
@@ -608,10 +610,23 @@ Tasks:
 - Implement C-side interpolation on render thread:
   - evaluate active animation value by render-time clock
   - apply interpolated value transiently at draw time (no scene topology mutation in render thread)
+  - prefer fixed-point interpolation/easing in the animator path (`CLJ_FIXED_FRAC_BITS`) and quantize only at raster/application boundaries
+  - rationale: reduce float conversion overhead and keep animation playback deterministic across host/device
 - Keep strict thread ownership:
   - producer thread publishes/updates animation descriptors
   - render thread reads descriptors and computes interpolation only
   - no MEMORY macros/autorelease pool usage in render hot path
+- Add bounded lock-free queue handoff (SPSC preferred):
+  - producer/update thread -> render thread: animation control commands (`start`, `cancel`, `replace-track`)
+  - render thread -> producer/event-loop: completion events (`:anim-finished`, optional `:anim-cancelled`)
+  - no per-frame progress messages; only coarse control + one-shot completion notifications
+  - define overflow policy (drop oldest/newest vs assert in debug) and counters for observability
+  - current implementation note (prerequisite done):
+    - generic bounded SPSC queue module exists in C (`lockfree_spsc_queue`)
+    - audio engine command + finished queues already use the generic queue as a production-tested reference path
+    - audio hot path uses direct generic queue calls (no forwarding wrappers)
+    - fixed-point animator math helpers (`progress`, `easing`, `lerp`, Q19.13 / `CLJ_FIXED_FRAC_BITS`) exist in `vector_scene_graph` and are covered by host unit tests
+    - host viewer demo already uses the fixed-point animator math helpers for existing movements (`player_bob`, `obstacle_x`) as an integration proof
 - Add scheduler callback integration:
   - optional deterministic event when animation reaches end (`:anim-finished`)
   - callback payload includes at least `:target-id`, `:property`, end timestamp

@@ -124,43 +124,6 @@ bool trk1_decode_varuint(const uint8_t **cursor, const uint8_t *end, uint32_t *o
 }
 
 /* ========================================================================= */
-/* SPSC command queue                                                        */
-/* ========================================================================= */
-
-void audio_cmd_queue_init(AudioCmdQueue *q) {
-    memset(q->slots, 0, sizeof(q->slots));
-    atomic_store_explicit(&q->write, 0, memory_order_relaxed);
-    atomic_store_explicit(&q->read, 0, memory_order_relaxed);
-}
-
-bool audio_cmd_push(AudioCmdQueue *q, AudioCmd cmd) {
-    uint32_t w = atomic_load_explicit(&q->write, memory_order_relaxed);
-    uint32_t r = atomic_load_explicit(&q->read, memory_order_acquire);
-    if ((w - r) >= AUDIO_CMD_QUEUE_CAP) {
-        g_audio_engine.telemetry.cmd_drop_count++;
-        return false;
-    }
-    q->slots[w % AUDIO_CMD_QUEUE_CAP] = cmd;
-    atomic_store_explicit(&q->write, w + 1, memory_order_release);
-    return true;
-}
-
-bool audio_cmd_pop(AudioCmdQueue *q, AudioCmd *out) {
-    uint32_t r = atomic_load_explicit(&q->read, memory_order_relaxed);
-    uint32_t w = atomic_load_explicit(&q->write, memory_order_acquire);
-    if (r == w) return false;
-    *out = q->slots[r % AUDIO_CMD_QUEUE_CAP];
-    atomic_store_explicit(&q->read, r + 1, memory_order_release);
-    return true;
-}
-
-bool audio_cmd_queue_empty(AudioCmdQueue *q) {
-    uint32_t r = atomic_load_explicit(&q->read, memory_order_relaxed);
-    uint32_t w = atomic_load_explicit(&q->write, memory_order_acquire);
-    return r == w;
-}
-
-/* ========================================================================= */
 /* Track registry helpers                                                    */
 /* ========================================================================= */
 
@@ -172,34 +135,12 @@ static AudioTrackEntry *find_track(ID track_id) {
     return NULL;
 }
 
-static bool finished_queue_push(ID track_id) {
-    uint32_t w = atomic_load_explicit(&g_audio_engine.finished_write, memory_order_relaxed);
-    uint32_t r = atomic_load_explicit(&g_audio_engine.finished_read, memory_order_acquire);
-    if ((w - r) >= AUDIO_FINISHED_QUEUE_CAP) {
-        g_audio_engine.telemetry.finished_drop_count++;
-        return false;
-    }
-    g_audio_engine.finished_queue[w % AUDIO_FINISHED_QUEUE_CAP] = track_id;
-    atomic_store_explicit(&g_audio_engine.finished_write, w + 1, memory_order_release);
-    return true;
-}
-
-bool audio_engine_pop_finished_track(ID *out_track_id) {
-    if (!out_track_id) return false;
-    uint32_t r = atomic_load_explicit(&g_audio_engine.finished_read, memory_order_relaxed);
-    uint32_t w = atomic_load_explicit(&g_audio_engine.finished_write, memory_order_acquire);
-    if (r == w) return false;
-    *out_track_id = g_audio_engine.finished_queue[r % AUDIO_FINISHED_QUEUE_CAP];
-    atomic_store_explicit(&g_audio_engine.finished_read, r + 1, memory_order_release);
-    return true;
-}
-
 static ID audio_dispatch_finished_native(ID *args, unsigned int argc) {
     (void)args;
     if (argc != 0) return NULL;
 
     ID finished_track = NULL;
-    if (!audio_engine_pop_finished_track(&finished_track)) return NULL;
+    if (!lockfree_spsc_queue_pop(&g_audio_engine.finished_queue, &finished_track)) return NULL;
 
     ID fn = g_audio_engine.on_finished_fn;
     if (!fn || !finished_track) return NULL;
@@ -327,7 +268,10 @@ static bool stream_parse_event(AudioStream *s, AudioVoice *voices, int voice_cou
 static void notify_finished(ID track_id) {
     ID fn = g_audio_engine.on_finished_fn;
     if (!fn) return;
-    if (!finished_queue_push(track_id)) return;
+    if (!lockfree_spsc_queue_push(&g_audio_engine.finished_queue, &track_id)) {
+        g_audio_engine.telemetry.finished_drop_count++;
+        return;
+    }
 #ifndef ESP32_BUILD
     if (g_audio_engine.finished_dispatch_fn) {
         CljTransientMap *result_channel = make_result_channel();
@@ -350,9 +294,23 @@ void audio_engine_init(int voice_count) {
     g_audio_engine.voice_count = voice_count;
     g_audio_engine.music_volume = 255;
     g_audio_engine.us_per_tick = 1000; /* 1ms default */
-    audio_cmd_queue_init(&g_audio_engine.cmd_queue);
-    atomic_store_explicit(&g_audio_engine.finished_write, 0, memory_order_relaxed);
-    atomic_store_explicit(&g_audio_engine.finished_read, 0, memory_order_relaxed);
+    memset(g_audio_engine.cmd_queue.slots, 0, sizeof(g_audio_engine.cmd_queue.slots));
+    {
+        bool ok = lockfree_spsc_queue_init(&g_audio_engine.cmd_queue.spsc,
+                                           g_audio_engine.cmd_queue.slots,
+                                           AUDIO_CMD_QUEUE_CAP,
+                                           sizeof(g_audio_engine.cmd_queue.slots[0]));
+        CLJ_ASSERT(ok);
+        if (!ok) return;
+    }
+    {
+        bool ok = lockfree_spsc_queue_init(&g_audio_engine.finished_queue,
+                                           g_audio_engine.finished_slots,
+                                           AUDIO_FINISHED_QUEUE_CAP,
+                                           sizeof(g_audio_engine.finished_slots[0]));
+        CLJ_ASSERT(ok);
+        if (!ok) return;
+    }
     g_audio_engine.finished_dispatch_fn =
         make_named_func_with_flags(audio_dispatch_finished_native, NULL, CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE);
     audio_backend_init(voice_count);
@@ -437,7 +395,8 @@ bool audio_engine_unload_track(ID track_id) {
 
 bool audio_engine_play_music(ID track_id, int32_t repeat) {
     AudioCmd cmd = { .type = AUDIO_CMD_PLAY_TRACK, .track_id = track_id, .int_param = repeat };
-    bool ok = audio_cmd_push(&g_audio_engine.cmd_queue, cmd);
+    bool ok = lockfree_spsc_queue_push(&g_audio_engine.cmd_queue.spsc, &cmd);
+    if (!ok) g_audio_engine.telemetry.cmd_drop_count++;
     if (ok && !g_audio_engine.tick_running) {
         audio_tick_start();
     }
@@ -446,12 +405,16 @@ bool audio_engine_play_music(ID track_id, int32_t repeat) {
 
 bool audio_engine_stop_track(ID track_id) {
     AudioCmd cmd = { .type = AUDIO_CMD_STOP_TRACK, .track_id = track_id };
-    return audio_cmd_push(&g_audio_engine.cmd_queue, cmd);
+    bool ok = lockfree_spsc_queue_push(&g_audio_engine.cmd_queue.spsc, &cmd);
+    if (!ok) g_audio_engine.telemetry.cmd_drop_count++;
+    return ok;
 }
 
 void audio_engine_stop_music(void) {
     AudioCmd cmd = { .type = AUDIO_CMD_STOP_MUSIC };
-    audio_cmd_push(&g_audio_engine.cmd_queue, cmd);
+    if (!lockfree_spsc_queue_push(&g_audio_engine.cmd_queue.spsc, &cmd)) {
+        g_audio_engine.telemetry.cmd_drop_count++;
+    }
 }
 
 bool audio_engine_play_sfx(ID sfx_id) {
@@ -471,7 +434,8 @@ bool audio_engine_play_sfx(ID sfx_id) {
     }
 
     AudioCmd cmd = { .type = AUDIO_CMD_PLAY_SFX, .track_id = sfx_id };
-    bool ok = audio_cmd_push(&g_audio_engine.cmd_queue, cmd);
+    bool ok = lockfree_spsc_queue_push(&g_audio_engine.cmd_queue.spsc, &cmd);
+    if (!ok) g_audio_engine.telemetry.cmd_drop_count++;
     if (ok && !g_audio_engine.tick_running) {
         audio_tick_start();
     }
@@ -480,21 +444,27 @@ bool audio_engine_play_sfx(ID sfx_id) {
 
 void audio_engine_stop_all(void) {
     AudioCmd cmd = { .type = AUDIO_CMD_STOP_ALL };
-    audio_cmd_push(&g_audio_engine.cmd_queue, cmd);
+    if (!lockfree_spsc_queue_push(&g_audio_engine.cmd_queue.spsc, &cmd)) {
+        g_audio_engine.telemetry.cmd_drop_count++;
+    }
 }
 
 bool audio_engine_set_track_volume(ID track_id, int32_t vol) {
     if (vol < 0) vol = 0;
     if (vol > 255) vol = 255;
     AudioCmd cmd = { .type = AUDIO_CMD_SET_TRACK_VOL, .track_id = track_id, .int_param = vol };
-    return audio_cmd_push(&g_audio_engine.cmd_queue, cmd);
+    bool ok = lockfree_spsc_queue_push(&g_audio_engine.cmd_queue.spsc, &cmd);
+    if (!ok) g_audio_engine.telemetry.cmd_drop_count++;
+    return ok;
 }
 
 void audio_engine_set_music_volume(int32_t vol) {
     if (vol < 0) vol = 0;
     if (vol > 255) vol = 255;
     AudioCmd cmd = { .type = AUDIO_CMD_SET_MUSIC_VOL, .int_param = vol };
-    audio_cmd_push(&g_audio_engine.cmd_queue, cmd);
+    if (!lockfree_spsc_queue_push(&g_audio_engine.cmd_queue.spsc, &cmd)) {
+        g_audio_engine.telemetry.cmd_drop_count++;
+    }
 }
 
 void audio_engine_on_finished(ID callback_fn) {
@@ -510,7 +480,7 @@ void audio_engine_on_finished(ID callback_fn) {
 static void tick_drain_commands(void) {
     AudioCmd cmd;
     int drained = 0;
-    while (drained < AUDIO_CMD_QUEUE_CAP && audio_cmd_pop(&g_audio_engine.cmd_queue, &cmd)) {
+    while (drained < AUDIO_CMD_QUEUE_CAP && lockfree_spsc_queue_pop(&g_audio_engine.cmd_queue.spsc, &cmd)) {
         drained++;
         switch (cmd.type) {
         case AUDIO_CMD_PLAY_TRACK: {
@@ -610,14 +580,12 @@ static void tick_drain_commands(void) {
         }
     }
 
-    if (!audio_cmd_queue_empty(&g_audio_engine.cmd_queue)) {
+    if (!lockfree_spsc_queue_empty(&g_audio_engine.cmd_queue.spsc)) {
         g_audio_engine.telemetry.tick_overrun_count++;
     }
 
     /* Update watermark */
-    uint32_t w = atomic_load_explicit(&g_audio_engine.cmd_queue.write, memory_order_relaxed);
-    uint32_t r = atomic_load_explicit(&g_audio_engine.cmd_queue.read, memory_order_relaxed);
-    uint32_t pending = w - r;
+    uint32_t pending = lockfree_spsc_queue_count(&g_audio_engine.cmd_queue.spsc);
     if (pending > g_audio_engine.telemetry.queue_high_watermark) {
         g_audio_engine.telemetry.queue_high_watermark = pending;
     }
@@ -726,7 +694,7 @@ void audio_engine_tick(void) {
     tick_update_voices();
 
     /* On-demand tick lifecycle: stop if nothing active and queue empty */
-    if (!tick_has_active_audio() && audio_cmd_queue_empty(&g_audio_engine.cmd_queue)) {
+    if (!tick_has_active_audio() && lockfree_spsc_queue_empty(&g_audio_engine.cmd_queue.spsc)) {
         if (g_audio_engine.tick_running) {
             audio_tick_stop();
             g_audio_engine.tick_running = false;

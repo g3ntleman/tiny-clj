@@ -24,10 +24,55 @@
 
 #define TERRAIN_SPEED_PXS  120    /* px/s  → 2 px/frame @60 */
 #define OBSTACLE_SPEED_PXS 120    /* px/s  → 2 px/frame @60 */
-#define PLAYER_BOB_HZ        5    /* Hz    → 1 LUT step/frame @60 (12 entries) */
+#define PLAYER_JUMP_HEIGHT_PX      10u  /* double previous bob peak (5px -> 10px) */
+#define PLAYER_JUMP_DURATION_FRAMES 16u
+#define PLAYER_JUMP_PERIOD_FRAMES   48u
 
 #define TERRAIN_PPF  (TERRAIN_SPEED_PXS / TARGET_FPS)   /* 2 */
-#define OBSTACLE_PPF (OBSTACLE_SPEED_PXS / TARGET_FPS)  /* 1 */
+#define OBSTACLE_PPF (OBSTACLE_SPEED_PXS / TARGET_FPS)  /* 2 */
+
+static int q13_to_int_round(int32_t v_q13) {
+    if (v_q13 >= 0) {
+        return (int)((v_q13 + (VG_SCALE_ONE / 2)) / VG_SCALE_ONE);
+    }
+    return (int)((v_q13 - (VG_SCALE_ONE / 2)) / VG_SCALE_ONE);
+}
+
+static int compute_player_jump_y(unsigned frame_count) {
+    uint32_t jump_half_frames = (PLAYER_JUMP_DURATION_FRAMES > 1u) ? (PLAYER_JUMP_DURATION_FRAMES / 2u) : 1u;
+    uint32_t jump_phase = frame_count % PLAYER_JUMP_PERIOD_FRAMES;
+    int32_t jump_y_q13 = 0;
+
+    if (jump_phase < PLAYER_JUMP_DURATION_FRAMES) {
+        int32_t jump_t = 0;
+        int32_t jump_eased = 0;
+        if (jump_phase < jump_half_frames) {
+            jump_t = vg_anim_progress_q13(jump_phase, jump_half_frames);
+            jump_eased = vg_anim_ease_q13(VG_ANIM_EASE_OUT_QUAD, jump_t);
+            jump_y_q13 = vg_anim_lerp_q13(0,
+                                          -(int32_t)(PLAYER_JUMP_HEIGHT_PX * VG_SCALE_ONE),
+                                          jump_eased);
+        } else {
+            jump_t = vg_anim_progress_q13(jump_phase - jump_half_frames, jump_half_frames);
+            jump_eased = vg_anim_ease_q13(VG_ANIM_EASE_IN_QUAD, jump_t);
+            jump_y_q13 = vg_anim_lerp_q13(-(int32_t)(PLAYER_JUMP_HEIGHT_PX * VG_SCALE_ONE),
+                                          0,
+                                          jump_eased);
+        }
+    }
+
+    return q13_to_int_round(jump_y_q13);
+}
+
+static int compute_obstacle_x(unsigned frame_count) {
+    uint32_t obstacle_phase_px = (frame_count * OBSTACLE_PPF) % 360u;
+    int32_t obstacle_t = vg_anim_progress_q13(obstacle_phase_px, 360u);
+    /* Keep behavior equivalent to the old constant-speed motion; linear easing is intentional. */
+    int32_t obstacle_x_q13 = vg_anim_lerp_q13(319 * VG_SCALE_ONE,
+                                              (319 - 360) * VG_SCALE_ONE,
+                                              vg_anim_ease_q13(VG_ANIM_EASE_LINEAR, obstacle_t));
+    return q13_to_int_round(obstacle_x_q13);
+}
 
 /** Letterbox viewport in window coordinates (avoids MiniFB's scale division which breaks on Retina). */
 static void set_letterbox_viewport(struct mfb_window *window, unsigned win_w, unsigned win_h) {
@@ -502,7 +547,6 @@ int main(void) {
     bool collision_latched = false;
     float collision_cooldown_end_s = 0.0f;
     unsigned frame_count = 0;
-    static const int player_bob_lut[] = {0, -1, -3, -5, -4, -2, 0, 1, 0, -1, -2, -1};
     vg_framebuffer_clear(&fb, 0x0000u);
     publish_frame_scene_slot(0, &deco_root, deco_clip, 0, true, true, 0x0000u, 1);
     publish_frame_scene_slot(1, &score_root, score_clip, 1, true, true, 0x0000u, 1);
@@ -541,15 +585,14 @@ int main(void) {
 
         frame_count++;
         bool collision_cooldown_active = (time_s < collision_cooldown_end_s);
-        unsigned bob_lut_len = (unsigned)(sizeof(player_bob_lut) / sizeof(player_bob_lut[0]));
         int terrain_scroll_px = (int)((frame_count * TERRAIN_PPF) % 320u);
-        int player_bob_y = player_bob_lut[frame_count % bob_lut_len];
-        int obstacle_x = 319 - (int)((frame_count * OBSTACLE_PPF) % 360u);
+        int player_jump_y = compute_player_jump_y(frame_count);
+        int obstacle_x = compute_obstacle_x(frame_count);
 
         game_terrain.transform = vg_transform_identity();
         game_terrain.transform.tx = (int16_t)(-terrain_scroll_px);
         game_player.transform = vg_transform_identity();
-        game_player.transform.ty = (int16_t)player_bob_y;
+        game_player.transform.ty = (int16_t)player_jump_y;
         game_obstacle_body.transform = vg_transform_identity();
         game_obstacle_body.transform.tx = (int16_t)(obstacle_x + 20);
         game_obstacle_body.transform.ty = 126;
@@ -579,8 +622,8 @@ int main(void) {
             // Collision uses a stable hitbox to avoid size-toggle feedback jitter.
             int player_min_x = 58;
             int player_max_x = 86;
-            int player_min_y = 124 + player_bob_y;
-            int player_max_y = 146 + player_bob_y;
+            int player_min_y = 124 + player_jump_y;
+            int player_max_y = 146 + player_jump_y;
             int obstacle_min_x_i = 13 + obstacle_x;
             int obstacle_max_x_i = 27 + obstacle_x;
             int obstacle_min_y_i = 106;

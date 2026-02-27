@@ -96,6 +96,58 @@ static int32_t fp_mul_fixed(int32_t a, int32_t b) {
     return (int32_t)(((int64_t)a * (int64_t)b) >> VG_FP_SHIFT);
 }
 
+static int32_t fp_clamp_unit(int32_t v) {
+    if (v <= 0) return 0;
+    if (v >= VG_FP_ONE) return VG_FP_ONE;
+    return v;
+}
+
+int32_t vg_anim_progress_q13(uint32_t elapsed_ms, uint32_t duration_ms) {
+    if (duration_ms == 0u) return VG_FP_ONE;
+    if (elapsed_ms == 0u) return 0;
+    if (elapsed_ms >= duration_ms) return VG_FP_ONE;
+    return (int32_t)(((uint64_t)elapsed_ms << VG_FP_SHIFT) / (uint64_t)duration_ms);
+}
+
+int32_t vg_anim_ease_q13(VgAnimEase ease, int32_t t_q13) {
+    int32_t t = fp_clamp_unit(t_q13);
+    int32_t inv;
+    int32_t sq;
+
+    switch (ease) {
+    case VG_ANIM_EASE_LINEAR:
+        return t;
+    case VG_ANIM_EASE_IN_QUAD:
+        return fp_mul_fixed(t, t);
+    case VG_ANIM_EASE_OUT_QUAD:
+        inv = VG_FP_ONE - t;
+        return VG_FP_ONE - fp_mul_fixed(inv, inv);
+    case VG_ANIM_EASE_IN_OUT_QUAD:
+        if (t <= (VG_FP_ONE >> 1)) {
+            sq = fp_mul_fixed(t, t);
+            return fp_clamp_unit(sq << 1);
+        }
+        inv = VG_FP_ONE - t;
+        sq = fp_mul_fixed(inv, inv);
+        return VG_FP_ONE - fp_clamp_unit(sq << 1);
+    case VG_ANIM_EASE_OUT_CUBIC: {
+        inv = VG_FP_ONE - t;
+        int32_t inv2 = fp_mul_fixed(inv, inv);
+        int32_t inv3 = fp_mul_fixed(inv2, inv);
+        return VG_FP_ONE - inv3;
+    }
+    default:
+        return t;
+    }
+}
+
+int32_t vg_anim_lerp_q13(int32_t from_q13, int32_t to_q13, int32_t t_q13) {
+    int32_t t = fp_clamp_unit(t_q13);
+    int64_t delta = (int64_t)to_q13 - (int64_t)from_q13;
+    int64_t scaled = (delta * (int64_t)t) >> VG_FP_SHIFT;
+    return (int32_t)((int64_t)from_q13 + scaled);
+}
+
 VgTransformFixed vg_transform_fixed_identity(void) {
     VgTransformFixed t;
     t.m00 = VG_FP_ONE;
