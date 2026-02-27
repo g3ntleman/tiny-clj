@@ -11,6 +11,7 @@
 #include "runtime.h"
 #include "record.h"
 #include "event_loop.h"
+#include "atom.h"
 #include "MiniFB.h"
 #if defined(__APPLE__)
 #include "host_viewer_macos_menu.h"
@@ -72,6 +73,66 @@ static int compute_obstacle_x(unsigned frame_count) {
                                               (319 - 360) * VG_SCALE_ONE,
                                               vg_anim_ease_q13(VG_ANIM_EASE_LINEAR, obstacle_t));
     return q13_to_int_round(obstacle_x_q13);
+}
+
+static bool viewer_should_exit_for_keys(const uint8_t *keys) {
+    if (!keys) {
+        return false;
+    }
+    bool esc = keys[KB_KEY_ESCAPE] != 0;
+    bool cmd_q = (keys[KB_KEY_Q] != 0) &&
+                 ((keys[KB_KEY_LEFT_SUPER] != 0) || (keys[KB_KEY_RIGHT_SUPER] != 0));
+    return esc || cmd_q;
+}
+
+static void set_player_geometry(VgNode *game_player, bool player_small) {
+    if (!game_player) {
+        return;
+    }
+    if (player_small) {
+        game_player->data.tri.x1 = 60;
+        game_player->data.tri.y1 = 146;
+        game_player->data.tri.x2 = 72;
+        game_player->data.tri.y2 = 126;
+        game_player->data.tri.x3 = 84;
+        game_player->data.tri.y3 = 146;
+    } else {
+        game_player->data.tri.x1 = 56;
+        game_player->data.tri.y1 = 146;
+        game_player->data.tri.x2 = 72;
+        game_player->data.tri.y2 = 118;
+        game_player->data.tri.x3 = 88;
+        game_player->data.tri.y3 = 146;
+    }
+}
+
+static void set_obstacle_transforms(VgNode *game_obstacle_body, VgNode *game_obstacle_nose, int obstacle_x) {
+    if (!game_obstacle_body || !game_obstacle_nose) {
+        return;
+    }
+    game_obstacle_body->transform = vg_transform_identity();
+    game_obstacle_body->transform.tx = (int16_t)(obstacle_x + 20);
+    game_obstacle_body->transform.ty = 126;
+    game_obstacle_body->transform.rot_deg = -90;
+
+    game_obstacle_nose->transform = vg_transform_identity();
+    game_obstacle_nose->transform.tx = (int16_t)(obstacle_x + 20);
+    game_obstacle_nose->transform.ty = 126;
+    game_obstacle_nose->transform.rot_deg = -90;
+}
+
+static bool detect_player_obstacle_collision(int player_jump_y, int obstacle_x) {
+    // Collision uses a stable hitbox to avoid size-toggle feedback jitter.
+    int player_min_x = 58;
+    int player_max_x = 86;
+    int player_min_y = 124 + player_jump_y;
+    int player_max_y = 146 + player_jump_y;
+    int obstacle_min_x_i = 13 + obstacle_x;
+    int obstacle_max_x_i = 27 + obstacle_x;
+    int obstacle_min_y_i = 106;
+    int obstacle_max_y_i = 146;
+    return (player_max_x >= obstacle_min_x_i) && (player_min_x <= obstacle_max_x_i) &&
+           (player_max_y >= obstacle_min_y_i) && (player_min_y <= obstacle_max_y_i);
 }
 
 /** Letterbox viewport in window coordinates (avoids MiniFB's scale division which breaks on Retina). */
@@ -303,8 +364,60 @@ static ID make_frame_scene_record(const VgNode *root,
     return scene;
 }
 
-static ID g_published_slots[VIEWER_SLOT_COUNT] = {0};
-static uint32_t g_published_slot_generation[VIEWER_SLOT_COUNT] = {0};
+static CljAtom *g_scene_slot_atoms[VIEWER_SLOT_COUNT] = {0};
+static VgSlotChangeTracker g_slot_change_tracker;
+
+static bool init_scene_slot_atoms(void) {
+    for (size_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
+        g_scene_slot_atoms[i] = make_atom(NULL);
+        if (!g_scene_slot_atoms[i]) {
+            for (size_t j = 0; j < i; j++) {
+                RELEASE(g_scene_slot_atoms[j]);
+                g_scene_slot_atoms[j] = NULL;
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+static void destroy_scene_slot_atoms(void) {
+    for (size_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
+        RELEASE(g_scene_slot_atoms[i]);
+        g_scene_slot_atoms[i] = NULL;
+    }
+}
+
+static ID slot_atom_snapshot_owned(size_t slot_index) {
+    if (slot_index >= VIEWER_SLOT_COUNT || !g_scene_slot_atoms[slot_index]) {
+        return NULL;
+    }
+    return RETAIN(g_scene_slot_atoms[slot_index]->value);
+}
+
+static void render_changed_slot_records(VgFrameBuffer *fb,
+                                        VgRenderSlotState *slot_states,
+                                        uint32_t *slot_seen_generations) {
+    if (!fb || !slot_states || !slot_seen_generations) {
+        return;
+    }
+    uint32_t slot_generations[VIEWER_SLOT_COUNT] = {0};
+    uint32_t changed_mask = vg_slot_change_tracker_wait_for_changes(&g_slot_change_tracker,
+                                                                    slot_seen_generations,
+                                                                    slot_generations,
+                                                                    0u);
+    for (size_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
+        if ((changed_mask & (1u << i)) == 0u) {
+            continue;
+        }
+        ID snapshot = slot_atom_snapshot_owned(i);
+        if (snapshot) {
+            (void)vg_render_frame_slot_record_if_changed(snapshot, &slot_states[i], fb, slot_generations[i]);
+            RELEASE(snapshot);
+        }
+    }
+    memcpy(slot_seen_generations, slot_generations, sizeof(slot_generations));
+}
 
 static void publish_frame_scene_slot(size_t slot_index,
                                      const VgNode *root,
@@ -320,8 +433,8 @@ static void publish_frame_scene_slot(size_t slot_index,
     WITH_AUTORELEASE_POOL({
         ID scene = make_frame_scene_record(root, clip_rect, z, visible, opaque, erase_rgb565, guard_px);
         if (scene) {
-            ASSIGN(g_published_slots[slot_index], scene);
-            g_published_slot_generation[slot_index]++;
+            (void)atom_reset(g_scene_slot_atoms[slot_index], scene);
+            (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, (uint8_t)slot_index, NULL);
         }
     });
 }
@@ -334,6 +447,11 @@ int main(void) {
 #else
     uint16_t fb_pixels[VIEW_W * VIEW_H];
     uint32_t window_pixels[VIEW_W * VIEW_H];
+    struct mfb_window *window = NULL;
+    struct mfb_timer *timer = NULL;
+    bool slot_atoms_initialized = false;
+    bool slot_tracker_initialized = false;
+    int exit_code = 1;
 
     VgFrameBuffer fb;
     if (!vg_framebuffer_init(&fb, VIEW_W, VIEW_H, fb_pixels, VIEW_W * VIEW_H)) {
@@ -345,23 +463,33 @@ int main(void) {
     EvalState *viewer_eval_state = evalstate_new(true);
     if (!viewer_eval_state) {
         fprintf(stderr, "Failed to initialize eval state\n");
-        return 1;
+        goto cleanup;
     }
     evalstate_set_ns(viewer_eval_state, "user");
     if (!tiny_gfx_ensure_schema(viewer_eval_state)) {
         fprintf(stderr, "Failed to initialize vector scene record schema via tiny-gfx.scene\n");
-        return 1;
+        goto cleanup;
     }
+    if (!init_scene_slot_atoms()) {
+        fprintf(stderr, "Failed to initialize scene slot atoms\n");
+        goto cleanup;
+    }
+    slot_atoms_initialized = true;
+    if (!vg_slot_change_tracker_init(&g_slot_change_tracker, VIEWER_SLOT_COUNT)) {
+        fprintf(stderr, "Failed to initialize slot change tracker\n");
+        goto cleanup;
+    }
+    slot_tracker_initialized = true;
 
 #if defined(__APPLE__)
     macos_viewer_install_menu();
 #endif
     const unsigned default_win_w = VIEW_W * VIEW_DEFAULT_WINDOW_SCALE;
     const unsigned default_win_h = VIEW_H * VIEW_DEFAULT_WINDOW_SCALE;
-    struct mfb_window *window = mfb_open_ex("tiny-clj host viewer", default_win_w, default_win_h, WF_RESIZABLE);
+    window = mfb_open_ex("tiny-clj host viewer", default_win_w, default_win_h, WF_RESIZABLE);
     if (!window) {
         fprintf(stderr, "Failed to open MiniFB window\n");
-        return 1;
+        goto cleanup;
     }
 #if defined(__APPLE__)
     macos_viewer_register_window_callbacks();
@@ -381,11 +509,10 @@ int main(void) {
 #else
     set_letterbox_viewport(window, default_win_w, default_win_h);
 #endif
-    struct mfb_timer *timer = mfb_timer_create();
+    timer = mfb_timer_create();
     if (!timer) {
         fprintf(stderr, "Failed to create MiniFB timer\n");
-        mfb_close(window);
-        return 1;
+        goto cleanup;
     }
     double fps_window_start_s = mfb_timer_now(timer);
     unsigned fps_frame_count = 0;
@@ -543,6 +670,7 @@ int main(void) {
     };
 
     VgRenderSlotState slot_states[VIEWER_SLOT_COUNT] = {0};
+    uint32_t slot_seen_generations[VIEWER_SLOT_COUNT] = {0};
     bool player_small = false;
     bool collision_latched = false;
     float collision_cooldown_end_s = 0.0f;
@@ -573,14 +701,8 @@ int main(void) {
         if (!mfb_wait_sync(window)) {
             break;
         }
-        const uint8_t *keys = mfb_get_key_buffer(window);
-        if (keys) {
-            bool esc = keys[KB_KEY_ESCAPE] != 0;
-            bool cmd_q = (keys[KB_KEY_Q] != 0) &&
-                         ((keys[KB_KEY_LEFT_SUPER] != 0) || (keys[KB_KEY_RIGHT_SUPER] != 0));
-            if (esc || cmd_q) {
-                break;
-            }
+        if (viewer_should_exit_for_keys(mfb_get_key_buffer(window))) {
+            break;
         }
 
         frame_count++;
@@ -593,43 +715,11 @@ int main(void) {
         game_terrain.transform.tx = (int16_t)(-terrain_scroll_px);
         game_player.transform = vg_transform_identity();
         game_player.transform.ty = (int16_t)player_jump_y;
-        game_obstacle_body.transform = vg_transform_identity();
-        game_obstacle_body.transform.tx = (int16_t)(obstacle_x + 20);
-        game_obstacle_body.transform.ty = 126;
-        game_obstacle_body.transform.rot_deg = -90;
-        game_obstacle_nose.transform = vg_transform_identity();
-        game_obstacle_nose.transform.tx = (int16_t)(obstacle_x + 20);
-        game_obstacle_nose.transform.ty = 126;
-        game_obstacle_nose.transform.rot_deg = -90;
-
-        if (player_small) {
-            game_player.data.tri.x1 = 60;
-            game_player.data.tri.y1 = 146;
-            game_player.data.tri.x2 = 72;
-            game_player.data.tri.y2 = 126;
-            game_player.data.tri.x3 = 84;
-            game_player.data.tri.y3 = 146;
-        } else {
-            game_player.data.tri.x1 = 56;
-            game_player.data.tri.y1 = 146;
-            game_player.data.tri.x2 = 72;
-            game_player.data.tri.y2 = 118;
-            game_player.data.tri.x3 = 88;
-            game_player.data.tri.y3 = 146;
-        }
+        set_obstacle_transforms(&game_obstacle_body, &game_obstacle_nose, obstacle_x);
+        set_player_geometry(&game_player, player_small);
 
         {
-            // Collision uses a stable hitbox to avoid size-toggle feedback jitter.
-            int player_min_x = 58;
-            int player_max_x = 86;
-            int player_min_y = 124 + player_jump_y;
-            int player_max_y = 146 + player_jump_y;
-            int obstacle_min_x_i = 13 + obstacle_x;
-            int obstacle_max_x_i = 27 + obstacle_x;
-            int obstacle_min_y_i = 106;
-            int obstacle_max_y_i = 146;
-            bool colliding = (player_max_x >= obstacle_min_x_i) && (player_min_x <= obstacle_max_x_i) &&
-                             (player_max_y >= obstacle_min_y_i) && (player_min_y <= obstacle_max_y_i);
+            bool colliding = detect_player_obstacle_collision(player_jump_y, obstacle_x);
 
             if (colliding && !collision_latched && !collision_cooldown_active) {
                 player_small = !player_small;
@@ -644,12 +734,7 @@ int main(void) {
             publish_frame_scene_slot(1, &score_root, score_clip, 1, true, true, 0x0000u, 1);
         }
         publish_frame_scene_slot(2, &game_root, game_clip, 2, true, true, 0x0000u, 1);
-
-        for (size_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
-            if (g_published_slots[i]) {
-                (void)vg_render_frame_slot_record_if_changed(g_published_slots[i], &slot_states[i], &fb, g_published_slot_generation[i]);
-            }
-        }
+        render_changed_slot_records(&fb, slot_states, slot_seen_generations);
 
         for (size_t i = 0; i < (size_t)VIEW_W * (size_t)VIEW_H; i++) {
             window_pixels[i] = rgb565_to_xrgb8888(fb_pixels[i]);
@@ -661,16 +746,27 @@ int main(void) {
         }
     }
 
-    mfb_timer_destroy(timer);
+    exit_code = 0;
+
+cleanup:
+    if (timer) {
+        mfb_timer_destroy(timer);
+    }
 #if defined(__APPLE__)
-    macos_viewer_save_window_position();
+    if (window) {
+        macos_viewer_save_window_position();
+    }
 #endif
-    mfb_close(window);
-    for (size_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
-        RELEASE(g_published_slots[i]);
-        g_published_slots[i] = NULL;
+    if (window) {
+        mfb_close(window);
+    }
+    if (slot_atoms_initialized) {
+        destroy_scene_slot_atoms();
+    }
+    if (slot_tracker_initialized) {
+        vg_slot_change_tracker_destroy(&g_slot_change_tracker);
     }
     runtime_reset(&g_runtime);
-    return 0;
+    return exit_code;
 #endif
 }

@@ -1,8 +1,12 @@
 #include "scene.h"
 #include "gfx.h"
 #include "tiny_gfx.h"
+#include "platform.h"
 
+#include <errno.h>
 #include <limits.h>
+#include <string.h>
+#include <time.h>
 #include "callbacks.h"
 #include "record.h"
 #include "strings.h"
@@ -13,6 +17,152 @@
 static inline uint32_t record_type_hash(ID obj) {
     CljPersistentRecord *r = (CljPersistentRecord *)obj;
     return r->descriptor ? clj_hash(r->descriptor->type_symbol) : 0;
+}
+
+static uint32_t slot_change_tracker_snapshot_mask(const VgSlotChangeTracker *tracker,
+                                                  const uint32_t *last_seen_generations,
+                                                  uint32_t *out_generations) {
+    if (!tracker || tracker->slot_count == 0 || tracker->slot_count > VG_SLOT_CHANGE_TRACKER_MAX_SLOTS) {
+        return 0;
+    }
+    uint32_t changed_mask = 0;
+    for (uint8_t i = 0; i < tracker->slot_count; i++) {
+        uint32_t current = tracker->generations[i];
+        if (out_generations) {
+            out_generations[i] = current;
+        }
+        uint32_t prev = last_seen_generations ? last_seen_generations[i] : 0u;
+        if (current != prev) {
+            changed_mask |= (1u << i);
+        }
+    }
+    return changed_mask;
+}
+
+#if VG_SLOT_CHANGE_TRACKER_USE_PTHREAD
+static void slot_change_tracker_deadline_from_now(uint32_t timeout_ms, struct timespec *out_deadline) {
+    if (!out_deadline) {
+        return;
+    }
+    (void)clock_gettime(CLOCK_REALTIME, out_deadline);
+    out_deadline->tv_sec += (time_t)(timeout_ms / 1000u);
+    long ns = out_deadline->tv_nsec + (long)(timeout_ms % 1000u) * 1000000L;
+    if (ns >= 1000000000L) {
+        out_deadline->tv_sec += 1;
+        ns -= 1000000000L;
+    }
+    out_deadline->tv_nsec = ns;
+}
+#endif
+
+bool vg_slot_change_tracker_init(VgSlotChangeTracker *tracker, uint8_t slot_count) {
+    if (!tracker || slot_count == 0 || slot_count > VG_SLOT_CHANGE_TRACKER_MAX_SLOTS) {
+        return false;
+    }
+    memset(tracker, 0, sizeof(*tracker));
+    tracker->slot_count = slot_count;
+#if VG_SLOT_CHANGE_TRACKER_USE_PTHREAD
+    if (pthread_mutex_init(&tracker->mutex, NULL) != 0) {
+        memset(tracker, 0, sizeof(*tracker));
+        return false;
+    }
+    if (pthread_cond_init(&tracker->cond, NULL) != 0) {
+        (void)pthread_mutex_destroy(&tracker->mutex);
+        memset(tracker, 0, sizeof(*tracker));
+        return false;
+    }
+#endif
+    return true;
+}
+
+void vg_slot_change_tracker_destroy(VgSlotChangeTracker *tracker) {
+    if (!tracker) {
+        return;
+    }
+#if VG_SLOT_CHANGE_TRACKER_USE_PTHREAD
+    if (tracker->slot_count > 0 && tracker->slot_count <= VG_SLOT_CHANGE_TRACKER_MAX_SLOTS) {
+        (void)pthread_cond_destroy(&tracker->cond);
+        (void)pthread_mutex_destroy(&tracker->mutex);
+    }
+#endif
+    memset(tracker, 0, sizeof(*tracker));
+}
+
+bool vg_slot_change_tracker_publish(VgSlotChangeTracker *tracker, uint8_t slot_index, uint32_t *out_generation) {
+    if (!tracker || slot_index >= tracker->slot_count || tracker->slot_count > VG_SLOT_CHANGE_TRACKER_MAX_SLOTS) {
+        return false;
+    }
+#if VG_SLOT_CHANGE_TRACKER_USE_PTHREAD
+    if (pthread_mutex_lock(&tracker->mutex) != 0) {
+        return false;
+    }
+#endif
+    uint32_t next = tracker->generations[slot_index] + 1u;
+    if (next == 0u) {
+        next = 1u;
+    }
+    tracker->generations[slot_index] = next;
+    tracker->sequence++;
+    if (out_generation) {
+        *out_generation = next;
+    }
+#if VG_SLOT_CHANGE_TRACKER_USE_PTHREAD
+    (void)pthread_cond_broadcast(&tracker->cond);
+    (void)pthread_mutex_unlock(&tracker->mutex);
+#endif
+    return true;
+}
+
+uint32_t vg_slot_change_tracker_wait_for_changes(VgSlotChangeTracker *tracker,
+                                                 const uint32_t *last_seen_generations,
+                                                 uint32_t *out_generations,
+                                                 uint32_t timeout_ms) {
+    if (!tracker || tracker->slot_count == 0 || tracker->slot_count > VG_SLOT_CHANGE_TRACKER_MAX_SLOTS) {
+        return 0;
+    }
+#if VG_SLOT_CHANGE_TRACKER_USE_PTHREAD
+    if (pthread_mutex_lock(&tracker->mutex) != 0) {
+        return 0;
+    }
+    uint32_t changed_mask = slot_change_tracker_snapshot_mask(tracker, last_seen_generations, out_generations);
+    if (changed_mask == 0u && timeout_ms > 0u) {
+        if (timeout_ms == UINT32_MAX) {
+            while (changed_mask == 0u) {
+                (void)pthread_cond_wait(&tracker->cond, &tracker->mutex);
+                changed_mask = slot_change_tracker_snapshot_mask(tracker, last_seen_generations, out_generations);
+            }
+        } else {
+            struct timespec deadline;
+            slot_change_tracker_deadline_from_now(timeout_ms, &deadline);
+            while (changed_mask == 0u) {
+                int rc = pthread_cond_timedwait(&tracker->cond, &tracker->mutex, &deadline);
+                if (rc == ETIMEDOUT) {
+                    break;
+                }
+                changed_mask = slot_change_tracker_snapshot_mask(tracker, last_seen_generations, out_generations);
+            }
+            if (changed_mask == 0u) {
+                changed_mask = slot_change_tracker_snapshot_mask(tracker, last_seen_generations, out_generations);
+            }
+        }
+    }
+    (void)pthread_mutex_unlock(&tracker->mutex);
+    return changed_mask;
+#else
+    uint32_t changed_mask = slot_change_tracker_snapshot_mask(tracker, last_seen_generations, out_generations);
+    if (changed_mask != 0u || timeout_ms == 0u) {
+        return changed_mask;
+    }
+    if (timeout_ms == UINT32_MAX) {
+        while (changed_mask == 0u) {
+            platform_sleep_ms(1u);
+            changed_mask = slot_change_tracker_snapshot_mask(tracker, last_seen_generations, out_generations);
+        }
+        return changed_mask;
+    }
+    platform_sleep_ms(timeout_ms);
+    return slot_change_tracker_snapshot_mask(tracker, last_seen_generations, out_generations);
+#endif
 }
 
 static inline void transform_point(VgTransformFixed t, int16_t x, int16_t y, int *ox, int *oy) {

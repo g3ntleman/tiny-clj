@@ -329,6 +329,60 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_whe
     TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)2 * TEST_W + 2]);
 }
 
+TEST(test_vector_scene_graph_slot_change_tracker_publish_and_wait_reports_changed_mask) {
+    VgSlotChangeTracker tracker;
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&tracker, 3));
+
+    uint32_t seen[3] = {0, 0, 0};
+    uint32_t current[3] = {0, 0, 0};
+
+    TEST_ASSERT_EQUAL_HEX32(0u, vg_slot_change_tracker_wait_for_changes(&tracker, seen, current, 0u));
+    TEST_ASSERT_EQUAL_UINT32(0u, current[0]);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[1]);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[2]);
+
+    uint32_t gen = 0;
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_publish(&tracker, 1, &gen));
+    TEST_ASSERT_EQUAL_UINT32(1u, gen);
+
+    uint32_t mask = vg_slot_change_tracker_wait_for_changes(&tracker, seen, current, 0u);
+    TEST_ASSERT_EQUAL_HEX32((1u << 1), mask);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[0]);
+    TEST_ASSERT_EQUAL_UINT32(1u, current[1]);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[2]);
+
+    seen[0] = current[0];
+    seen[1] = current[1];
+    seen[2] = current[2];
+
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_publish(&tracker, 2, NULL));
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_publish(&tracker, 1, &gen));
+    TEST_ASSERT_EQUAL_UINT32(2u, gen);
+
+    mask = vg_slot_change_tracker_wait_for_changes(&tracker, seen, current, 0u);
+    TEST_ASSERT_EQUAL_HEX32((1u << 1) | (1u << 2), mask);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[0]);
+    TEST_ASSERT_EQUAL_UINT32(2u, current[1]);
+    TEST_ASSERT_EQUAL_UINT32(1u, current[2]);
+
+    vg_slot_change_tracker_destroy(&tracker);
+}
+
+TEST(test_vector_scene_graph_slot_change_tracker_wait_timeout_returns_without_changes) {
+    VgSlotChangeTracker tracker;
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&tracker, 2));
+
+    uint32_t seen[2] = {0, 0};
+    uint32_t current[2] = {99, 99};
+
+    uint32_t mask = vg_slot_change_tracker_wait_for_changes(&tracker, seen, current, 2u);
+    TEST_ASSERT_EQUAL_HEX32(0u, mask);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[0]);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[1]);
+
+    vg_slot_change_tracker_destroy(&tracker);
+}
+
 TEST(test_vector_scene_graph_fixed_transform_compose_apply_px_scale_translate_exact) {
     VgTransform parent = vg_transform_identity();
     parent.tx = 10;

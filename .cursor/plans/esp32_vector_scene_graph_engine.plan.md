@@ -230,7 +230,7 @@ Done when:
 
 ## Milestone 5: Snapshot Slot Update Path (PoC Gate 2, Patch Optional)
 
-Status: TODO (architecture agreed; implementation pending, existing single-patch path remains optional support code)
+Status: PARTIAL (slot-change wait API + atom-bound changed-slot host rendering implemented; dedicated render-thread split still TODO)
 
 Tasks:
 
@@ -255,12 +255,24 @@ Tasks:
   - block/sleep until any scene slot snapshot changes (event/condition based wakeup)
   - avoid continuous busy rendering when no slot changed
   - rationale: lower power draw, better battery life, and reduced thermal load
-  - implementation note: generic bounded SPSC queue infrastructure exists already (`lockfree_spsc_queue`) and can be reused for control/completion handoff, but slot-change wait/wakeup API is still TODO
+  - implementation note: slot-change wait/wakeup API is available on host via `VgSlotChangeTracker`; dedicated cross-thread render split remains TODO
 - Render only the affected slot region (`clip-rect`), not the full framebuffer.
 - If a slot moves, treat dirty region as `union(old_clip_rect, new_clip_rect)`.
 - Validate non-overlapping slot convention with conservative bounds (stroke width / text fringe guard).
 - Validate scrolling/parallax using separate scene slots or group transforms within a slot.
 - Current state (optional support path): `vg_scene_apply_patch()` exists for single `id`-based patch application.
+- Current implementation notes (this milestone):
+  - Blocking slot-change API exists in C via `VgSlotChangeTracker` (`scene.h/.c`):
+    - per-slot generation counters
+    - publish API (`vg_slot_change_tracker_publish`)
+    - blocking wait API returning changed-slot bitmask + latest generations (`vg_slot_change_tracker_wait_for_changes`)
+  - Host viewer uses explicit scene-slot atoms (`deco`, `score`, `game`) as snapshot carriers:
+    - slot publications write immutable `FrameScene` snapshots via `atom_reset`
+    - render pass reads slot atom snapshots and renders only changed slots from tracker bitmask
+    - unchanged slots are skipped end-to-end in the host render pass
+  - Unit tests cover tracker behavior:
+    - changed-mask/generation reporting
+    - timeout/no-change behavior
 - Optional later explicit patch path (not required for PoC):
   - define minimal patch operations (`transform`, `text`, `visibility`, `style`)
   - batch apply, guardrails, overflow behavior
