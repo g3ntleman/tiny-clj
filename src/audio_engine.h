@@ -13,9 +13,9 @@
 
 #include "object.h"
 #include "value.h"
+#include "lockfree_spsc_queue.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdatomic.h>
 
 /* ========================================================================= */
 /* trk1 format constants                                                     */
@@ -87,15 +87,9 @@ typedef struct {
 } AudioCmd;
 
 typedef struct {
-    AudioCmd         slots[AUDIO_CMD_QUEUE_CAP];
-    _Atomic uint32_t write;
-    _Atomic uint32_t read;
+    AudioCmd           slots[AUDIO_CMD_QUEUE_CAP];
+    LockFreeSpscQueue  spsc;
 } AudioCmdQueue;
-
-void audio_cmd_queue_init(AudioCmdQueue *q);
-bool audio_cmd_push(AudioCmdQueue *q, AudioCmd cmd);
-bool audio_cmd_pop(AudioCmdQueue *q, AudioCmd *out);
-bool audio_cmd_queue_empty(AudioCmdQueue *q);
 
 /* ========================================================================= */
 /* Track registry                                                            */
@@ -193,9 +187,8 @@ typedef struct {
     /* Finished callback (Clojure function, retained) */
     ID              on_finished_fn;
     ID              finished_dispatch_fn;
-    ID              finished_queue[AUDIO_FINISHED_QUEUE_CAP];
-    _Atomic uint32_t finished_write;
-    _Atomic uint32_t finished_read;
+    ID              finished_slots[AUDIO_FINISHED_QUEUE_CAP];
+    LockFreeSpscQueue finished_queue;
 
     /* Tick lifecycle */
     bool            tick_running;
@@ -268,10 +261,6 @@ void audio_engine_on_finished(ID callback_fn);
 /* Process one tick. Drains command queue, advances streams, updates voices.
  * voice_output is filled with freq_hz values for each voice (0 = silent). */
 void audio_engine_tick(void);
-
-/* Pop one finished track id for control-thread dispatch.
- * Returns true when a finished id was available. */
-bool audio_engine_pop_finished_track(ID *out_track_id);
 
 /* ========================================================================= */
 /* Voice backend (platform-specific)                                         */

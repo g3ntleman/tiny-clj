@@ -38,6 +38,7 @@ so primitive generation/rasterization bugs are debuggable on host.
   - no MEMORY macros (`RETAIN`, `RELEASE`, `AUTORELEASE`, `ASSIGN`) in render-thread hot path
   - no autorelease pool setup/usage in render thread
   - memory ownership changes/allocation happen only in producer/update thread before atomic snapshot publish
+  - no blocking/channel operations in render hot path; use bounded lock-free queues for control/completion handoff
 
 ## Definition Of Done (project-level)
 
@@ -65,7 +66,7 @@ Phase B (embedded integration):
 
 ## Milestone 0: Scene Contract + Record Schema
 
-Status: PARTIAL (record schema + runtime slot-index cache implemented; generated-header build hook still TODO)
+Status: DONE (`DEFRECORD` path active; header-serialization path removed)
 
 Tasks:
 
@@ -89,26 +90,29 @@ Tasks:
   - any field value may be `nil`
   - C decoders must apply typed defaults (`0`, `1`, `true`, etc.) and inheritance semantics where applicable
   - `nil` and explicit `false` must remain semantically distinct
+- Define slot-index cache invariant for direct record rendering:
+  - slot indices for required record fields are precomputed during schema setup and treated as always known
+  - enforce this with `CLJ_ASSERT(...)` during schema initialization / validation
+  - optionality applies to slot values (`nil`), not to slot-index discovery in the render hot path
 - Define direct-render record contract for C (slot-indexed field access; no keyword lookup in render hot path).
 - Decision (layout consistency between Clojure and C):
-  - `tiny-gfx.scene` is the single source of truth for record field order.
-  - A build-time converter/generator must emit a C header from `tiny-gfx.scene` (field-count constants + ordered slot indices per record type).
-  - C code uses only generated indices/struct-like layouts for record slot access (no hand-maintained index tables).
+  - `tiny-gfx.scene` and C `DEFRECORD` declarations are the single source of truth for record field order/layout.
+  - C code uses `DEFRECORD` typed overlays plus runtime descriptor-index cache populated in `tiny_gfx_ensure_schema(...)`.
+  - Build-time header generation/codegen has been removed from the active workflow.
   - Keep runtime checks minimal (descriptor presence/type), avoid large handwritten index-preparation/validation blocks in hot paths.
 - Current implementation notes:
   - `tiny-gfx.scene` exists and registers the record descriptors used by the C renderer.
   - Runtime schema lookup/caching from C is implemented (descriptor-driven field indices).
-  - Host-only tooling namespace is `tiny-gfx.converter` under `libs/tiny-gfx/converter.clj` (not embedded in C sources).
-  - `tiny-gfx.converter` currently contains:
-    - C header generation helpers (`c-header-string`, `spit-c-header!`)
-    - SVG subset conversion helper (`group-from-svg`)
-  - Remaining TODO in this milestone: wire automatic build-time header generation into CMake/CI (today it is callable from REPL/scripted host tooling).
+  - C-side layout-compatible overlays are declared via `DEFRECORD(...)` in `tiny_gfx.h`.
+  - Host-only tooling namespace `tiny-gfx.converter` under `libs/tiny-gfx/converter.clj` remains optional helper tooling (e.g. SVG subset conversion via `group-from-svg`), without any header-serialization helpers.
+  - Slot-index contract enforcement stays in C via runtime descriptor lookup + `CLJ_ASSERT(...)` (no generated index tables).
 - Keep canonicalization/compiled C scene cache optional for later optimization.
 
 Done when:
 
 - Record schema and direct-render access contract are documented and testable.
 - Nil/default/inheritance decoding behavior is documented and covered by schema-level tests.
+- No active header-serialization path remains in runtime/build/documented workflow.
 
 ## Milestone 1: macOS Host Simulator Skeleton (PoC Gate 1)
 
@@ -226,7 +230,7 @@ Done when:
 
 ## Milestone 5: Snapshot Slot Update Path (PoC Gate 2, Patch Optional)
 
-Status: TODO (architecture agreed; implementation pending, existing single-patch path remains optional support code)
+Status: PARTIAL (slot-change wait API + atom-bound changed-slot host rendering implemented; dedicated render-thread split still TODO)
 
 Tasks:
 
@@ -251,11 +255,24 @@ Tasks:
   - block/sleep until any scene slot snapshot changes (event/condition based wakeup)
   - avoid continuous busy rendering when no slot changed
   - rationale: lower power draw, better battery life, and reduced thermal load
+  - implementation note: slot-change wait/wakeup API is available on host via `VgSlotChangeTracker`; dedicated cross-thread render split remains TODO
 - Render only the affected slot region (`clip-rect`), not the full framebuffer.
 - If a slot moves, treat dirty region as `union(old_clip_rect, new_clip_rect)`.
 - Validate non-overlapping slot convention with conservative bounds (stroke width / text fringe guard).
 - Validate scrolling/parallax using separate scene slots or group transforms within a slot.
 - Current state (optional support path): `vg_scene_apply_patch()` exists for single `id`-based patch application.
+- Current implementation notes (this milestone):
+  - Blocking slot-change API exists in C via `VgSlotChangeTracker` (`scene.h/.c`):
+    - per-slot generation counters
+    - publish API (`vg_slot_change_tracker_publish`)
+    - blocking wait API returning changed-slot bitmask + latest generations (`vg_slot_change_tracker_wait_for_changes`)
+  - Host viewer uses explicit scene-slot atoms (`deco`, `score`, `game`) as snapshot carriers:
+    - slot publications write immutable `FrameScene` snapshots via `atom_reset`
+    - render pass reads slot atom snapshots and renders only changed slots from tracker bitmask
+    - unchanged slots are skipped end-to-end in the host render pass
+  - Unit tests cover tracker behavior:
+    - changed-mask/generation reporting
+    - timeout/no-change behavior
 - Optional later explicit patch path (not required for PoC):
   - define minimal patch operations (`transform`, `text`, `visibility`, `style`)
   - batch apply, guardrails, overflow behavior
@@ -586,7 +603,7 @@ Done when:
 
 ## Optional Extension A: Render-Thread Interpolation Animations (Off-Main-Thread)
 
-Status: OPTIONAL-LATER
+Status: OPTIONAL-LATER (generic SPSC queue + fixed-point animator math prerequisites implemented; animation command/event wiring still TODO)
 
 Scope:
 
@@ -604,10 +621,23 @@ Tasks:
 - Implement C-side interpolation on render thread:
   - evaluate active animation value by render-time clock
   - apply interpolated value transiently at draw time (no scene topology mutation in render thread)
+  - prefer fixed-point interpolation/easing in the animator path (`CLJ_FIXED_FRAC_BITS`) and quantize only at raster/application boundaries
+  - rationale: reduce float conversion overhead and keep animation playback deterministic across host/device
 - Keep strict thread ownership:
   - producer thread publishes/updates animation descriptors
   - render thread reads descriptors and computes interpolation only
   - no MEMORY macros/autorelease pool usage in render hot path
+- Add bounded lock-free queue handoff (SPSC preferred):
+  - producer/update thread -> render thread: animation control commands (`start`, `cancel`, `replace-track`)
+  - render thread -> producer/event-loop: completion events (`:anim-finished`, optional `:anim-cancelled`)
+  - no per-frame progress messages; only coarse control + one-shot completion notifications
+  - define overflow policy (drop oldest/newest vs assert in debug) and counters for observability
+  - current implementation note (prerequisite done):
+    - generic bounded SPSC queue module exists in C (`lockfree_spsc_queue`)
+    - audio engine command + finished queues already use the generic queue as a production-tested reference path
+    - audio hot path uses direct generic queue calls (no forwarding wrappers)
+    - fixed-point animator math helpers (`progress`, `easing`, `lerp`, Q19.13 / `CLJ_FIXED_FRAC_BITS`) exist in `vector_scene_graph` and are covered by host unit tests
+    - host viewer demo already uses the fixed-point animator math helpers for existing movements (`player_bob`, `obstacle_x`) as an integration proof
 - Add scheduler callback integration:
   - optional deterministic event when animation reaches end (`:anim-finished`)
   - callback payload includes at least `:target-id`, `:property`, end timestamp

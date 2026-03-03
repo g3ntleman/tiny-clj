@@ -142,9 +142,9 @@
     {
       "label": "run-host-viewer",
       "type": "shell",
-      "command": "pkill -f '/host-viewer' || true; cmake --build build-hostviewer --target host-viewer && ./build/host-viewer",
+      "command": "pkill -f 'host-viewer' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTINYCLJ_HOST_VIEWER=ON -B build-hostviewer && cmake --build build-hostviewer --target host-viewer && ./build/host-viewer",
       "group": "none",
-      "detail": "Build host-viewer in existing build-hostviewer dir, then run the generated binary.",
+      "detail": "Configure (with TINYCLJ_HOST_VIEWER=ON), build host-viewer, then run.",
       "problemMatcher": [],
       "presentation": {
         "echo": true,

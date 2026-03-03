@@ -25,6 +25,14 @@ typedef struct {
     int32_t m12;
 } VgTransformFixed;
 
+typedef enum {
+    VG_ANIM_EASE_LINEAR = 0,
+    VG_ANIM_EASE_IN_QUAD = 1,
+    VG_ANIM_EASE_OUT_QUAD = 2,
+    VG_ANIM_EASE_IN_OUT_QUAD = 3,
+    VG_ANIM_EASE_OUT_CUBIC = 4
+} VgAnimEase;
+
 typedef struct {
     int16_t x;
     int16_t y;
@@ -208,6 +216,11 @@ VgTransformFixed vg_transform_fixed_identity(void);
 VgTransformFixed vg_transform_fixed_from_transform(VgTransform t);
 VgTransformFixed vg_transform_fixed_compose(VgTransformFixed parent, VgTransformFixed local);
 void vg_transform_fixed_apply_px(VgTransformFixed t, int16_t x, int16_t y, int *out_x, int *out_y);
+
+/* Fixed-point animation helpers for render-thread interpolation (Q19.13 / CLJ_FIXED_FRAC_BITS). */
+int32_t vg_anim_progress_q13(uint32_t elapsed_ms, uint32_t duration_ms);
+int32_t vg_anim_ease_q13(VgAnimEase ease, int32_t t_q13);
+int32_t vg_anim_lerp_q13(int32_t from_q13, int32_t to_q13, int32_t t_q13);
 
 bool vg_framebuffer_init(VgFrameBuffer *fb, int width, int height, uint16_t *pixels, size_t pixel_count);
 void vg_framebuffer_clear(VgFrameBuffer *fb, uint16_t color);

@@ -257,66 +257,70 @@ TEST(test_audio_varuint_truncated) {
 /* SPSC command queue tests                                                  */
 /* ========================================================================= */
 
+static void init_audio_cmd_test_queue(AudioCmdQueue *q) {
+  TEST_ASSERT_NOT_NULL(q);
+  memset(q->slots, 0, sizeof(q->slots));
+  TEST_ASSERT_TRUE(lockfree_spsc_queue_init(&q->spsc, q->slots, AUDIO_CMD_QUEUE_CAP, sizeof(q->slots[0])));
+}
+
 TEST(test_audio_cmd_queue_push_pop) {
   AudioCmdQueue q;
-  audio_cmd_queue_init(&q);
+  init_audio_cmd_test_queue(&q);
 
   AudioCmd cmd = {.type = AUDIO_CMD_PLAY_TRACK, .track_id = NULL, .int_param = 1};
-  TEST_ASSERT_TRUE(audio_cmd_push(&q, cmd));
+  TEST_ASSERT_TRUE(lockfree_spsc_queue_push(&q.spsc, &cmd));
 
   AudioCmd out;
-  TEST_ASSERT_TRUE(audio_cmd_pop(&q, &out));
+  TEST_ASSERT_TRUE(lockfree_spsc_queue_pop(&q.spsc, &out));
   TEST_ASSERT_EQUAL_INT(AUDIO_CMD_PLAY_TRACK, out.type);
   TEST_ASSERT_EQUAL_INT(1, out.int_param);
 }
 
 TEST(test_audio_cmd_queue_empty) {
   AudioCmdQueue q;
-  audio_cmd_queue_init(&q);
+  init_audio_cmd_test_queue(&q);
 
-  TEST_ASSERT_TRUE(audio_cmd_queue_empty(&q));
+  TEST_ASSERT_TRUE(lockfree_spsc_queue_empty(&q.spsc));
 
   AudioCmd cmd = {.type = AUDIO_CMD_STOP_ALL};
-  audio_cmd_push(&q, cmd);
-  TEST_ASSERT_FALSE(audio_cmd_queue_empty(&q));
+  TEST_ASSERT_TRUE(lockfree_spsc_queue_push(&q.spsc, &cmd));
+  TEST_ASSERT_FALSE(lockfree_spsc_queue_empty(&q.spsc));
 
   AudioCmd out;
-  audio_cmd_pop(&q, &out);
-  TEST_ASSERT_TRUE(audio_cmd_queue_empty(&q));
+  TEST_ASSERT_TRUE(lockfree_spsc_queue_pop(&q.spsc, &out));
+  TEST_ASSERT_TRUE(lockfree_spsc_queue_empty(&q.spsc));
 }
 
 TEST(test_audio_cmd_queue_full) {
   AudioCmdQueue q;
-  audio_cmd_queue_init(&q);
-  g_audio_engine.telemetry.cmd_drop_count = 0;
+  init_audio_cmd_test_queue(&q);
 
   for (int i = 0; i < AUDIO_CMD_QUEUE_CAP; i++) {
     AudioCmd cmd = {.type = AUDIO_CMD_STOP_ALL};
-    TEST_ASSERT_TRUE(audio_cmd_push(&q, cmd));
+    TEST_ASSERT_TRUE(lockfree_spsc_queue_push(&q.spsc, &cmd));
   }
 
   /* Queue full: next push should fail */
   AudioCmd cmd = {.type = AUDIO_CMD_STOP_ALL};
-  TEST_ASSERT_FALSE(audio_cmd_push(&q, cmd));
-  TEST_ASSERT_EQUAL_UINT32(1, g_audio_engine.telemetry.cmd_drop_count);
+  TEST_ASSERT_FALSE(lockfree_spsc_queue_push(&q.spsc, &cmd));
 }
 
 TEST(test_audio_cmd_queue_wraparound) {
   AudioCmdQueue q;
-  audio_cmd_queue_init(&q);
+  init_audio_cmd_test_queue(&q);
 
   /* Fill and drain multiple times to test wraparound */
   for (int round = 0; round < 3; round++) {
     for (int i = 0; i < AUDIO_CMD_QUEUE_CAP; i++) {
       AudioCmd cmd = {.type = AUDIO_CMD_PLAY_TRACK, .int_param = round * 100 + i};
-      TEST_ASSERT_TRUE(audio_cmd_push(&q, cmd));
+      TEST_ASSERT_TRUE(lockfree_spsc_queue_push(&q.spsc, &cmd));
     }
     for (int i = 0; i < AUDIO_CMD_QUEUE_CAP; i++) {
       AudioCmd out;
-      TEST_ASSERT_TRUE(audio_cmd_pop(&q, &out));
+      TEST_ASSERT_TRUE(lockfree_spsc_queue_pop(&q.spsc, &out));
       TEST_ASSERT_EQUAL_INT(round * 100 + i, out.int_param);
     }
-    TEST_ASSERT_TRUE(audio_cmd_queue_empty(&q));
+    TEST_ASSERT_TRUE(lockfree_spsc_queue_empty(&q.spsc));
   }
 }
 

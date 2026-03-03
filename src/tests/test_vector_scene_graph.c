@@ -294,12 +294,16 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
     vg_framebuffer_clear(&fb, 0x1234u);
 
     VgRenderSlotState state = {0};
-    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u));
+    uint32_t dirty_pixels = 0u;
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u, &dirty_pixels));
+    TEST_ASSERT_EQUAL_UINT32(60u, dirty_pixels);
     TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 10]);
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 24]);
     TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)10 * TEST_W + 35]);
 
-    TEST_ASSERT_FALSE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u));
+    dirty_pixels = 123u;
+    TEST_ASSERT_FALSE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u, &dirty_pixels));
+    TEST_ASSERT_EQUAL_UINT32(0u, dirty_pixels);
 }
 
 TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_when_slot_invisible) {
@@ -323,10 +327,66 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_whe
     vg_framebuffer_clear(&fb, 0x1234u);
 
     VgRenderSlotState state = {0};
-    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u));
+    uint32_t dirty_pixels = 0u;
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed(scene, &state, &fb, 1u, &dirty_pixels));
+    TEST_ASSERT_EQUAL_UINT32(60u, dirty_pixels);
     TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)9 * TEST_W + 22]);
     TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 24]);
     TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)2 * TEST_W + 2]);
+}
+
+TEST(test_vector_scene_graph_slot_change_tracker_publish_and_wait_reports_changed_mask) {
+    VgSlotChangeTracker tracker;
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&tracker, 3));
+
+    uint32_t seen[3] = {0, 0, 0};
+    uint32_t current[3] = {0, 0, 0};
+
+    TEST_ASSERT_EQUAL_HEX32(0u, vg_slot_change_tracker_wait_for_changes(&tracker, seen, current, 0u));
+    TEST_ASSERT_EQUAL_UINT32(0u, current[0]);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[1]);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[2]);
+
+    uint32_t gen = 0;
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_publish(&tracker, 1, &gen));
+    TEST_ASSERT_EQUAL_UINT32(1u, gen);
+
+    uint32_t mask = vg_slot_change_tracker_wait_for_changes(&tracker, seen, current, 0u);
+    TEST_ASSERT_EQUAL_HEX32((1u << 1), mask);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[0]);
+    TEST_ASSERT_EQUAL_UINT32(1u, current[1]);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[2]);
+
+    seen[0] = current[0];
+    seen[1] = current[1];
+    seen[2] = current[2];
+
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_publish(&tracker, 2, NULL));
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_publish(&tracker, 1, &gen));
+    TEST_ASSERT_EQUAL_UINT32(2u, gen);
+
+    mask = vg_slot_change_tracker_wait_for_changes(&tracker, seen, current, 0u);
+    TEST_ASSERT_EQUAL_HEX32((1u << 1) | (1u << 2), mask);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[0]);
+    TEST_ASSERT_EQUAL_UINT32(2u, current[1]);
+    TEST_ASSERT_EQUAL_UINT32(1u, current[2]);
+
+    vg_slot_change_tracker_destroy(&tracker);
+}
+
+TEST(test_vector_scene_graph_slot_change_tracker_wait_timeout_returns_without_changes) {
+    VgSlotChangeTracker tracker;
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&tracker, 2));
+
+    uint32_t seen[2] = {0, 0};
+    uint32_t current[2] = {99, 99};
+
+    uint32_t mask = vg_slot_change_tracker_wait_for_changes(&tracker, seen, current, 2u);
+    TEST_ASSERT_EQUAL_HEX32(0u, mask);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[0]);
+    TEST_ASSERT_EQUAL_UINT32(0u, current[1]);
+
+    vg_slot_change_tracker_destroy(&tracker);
 }
 
 TEST(test_vector_scene_graph_fixed_transform_compose_apply_px_scale_translate_exact) {
@@ -372,6 +432,50 @@ TEST(test_vector_scene_graph_fixed_transform_cardinal_rotation_is_exact) {
     vg_transform_fixed_apply_px(tf, 3, 4, &out_x, &out_y);
     TEST_ASSERT_EQUAL_INT(14, out_x);
     TEST_ASSERT_EQUAL_INT(17, out_y);
+}
+
+TEST(test_vector_scene_graph_anim_fixed_progress_ease_and_lerp_are_deterministic) {
+    int32_t p0 = vg_anim_progress_q13(0u, 1000u);
+    int32_t p_half = vg_anim_progress_q13(500u, 1000u);
+    int32_t p_end = vg_anim_progress_q13(1000u, 1000u);
+    int32_t p_over = vg_anim_progress_q13(1200u, 1000u);
+    int32_t p_zero_dur = vg_anim_progress_q13(1u, 0u);
+
+    TEST_ASSERT_EQUAL_INT32(0, p0);
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE / 2, p_half);
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE, p_end);
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE, p_over);
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE, p_zero_dur);
+
+    TEST_ASSERT_EQUAL_INT32(0, vg_anim_ease_q13(VG_ANIM_EASE_LINEAR, -1));
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE, vg_anim_ease_q13(VG_ANIM_EASE_LINEAR, VG_SCALE_ONE + 1));
+    TEST_ASSERT_EQUAL_INT32(p_half, vg_anim_ease_q13(VG_ANIM_EASE_LINEAR, p_half));
+
+    int32_t eased_half = vg_anim_ease_q13(VG_ANIM_EASE_OUT_CUBIC, p_half);
+    TEST_ASSERT_TRUE(eased_half > p_half); /* ease-out should advance faster in first half */
+    TEST_ASSERT_EQUAL_INT32(0, vg_anim_ease_q13(VG_ANIM_EASE_OUT_CUBIC, 0));
+    TEST_ASSERT_EQUAL_INT32(VG_SCALE_ONE, vg_anim_ease_q13(VG_ANIM_EASE_OUT_CUBIC, VG_SCALE_ONE));
+
+    int32_t from = 10 * VG_SCALE_ONE;
+    int32_t to = 20 * VG_SCALE_ONE;
+    int32_t mid_lin = vg_anim_lerp_q13(from, to, p_half);
+    int32_t mid_eased = vg_anim_lerp_q13(from, to, eased_half);
+    TEST_ASSERT_EQUAL_INT32(15 * VG_SCALE_ONE, mid_lin);
+    TEST_ASSERT_TRUE(mid_eased > mid_lin);
+
+    /* Determinism: same input -> same result. */
+    TEST_ASSERT_EQUAL_INT32(eased_half, vg_anim_ease_q13(VG_ANIM_EASE_OUT_CUBIC, p_half));
+    TEST_ASSERT_EQUAL_INT32(mid_eased, vg_anim_lerp_q13(from, to, eased_half));
+}
+
+TEST(test_vector_scene_graph_anim_fixed_in_out_quad_symmetry_samples) {
+    int32_t t1 = VG_SCALE_ONE / 4;
+    int32_t t2 = VG_SCALE_ONE - t1;
+    int32_t y1 = vg_anim_ease_q13(VG_ANIM_EASE_IN_OUT_QUAD, t1);
+    int32_t y2 = vg_anim_ease_q13(VG_ANIM_EASE_IN_OUT_QUAD, t2);
+
+    /* Symmetry around 0.5: y(1-t) ~= 1-y(t) in fixed arithmetic. */
+    TEST_ASSERT_INT_WITHIN(1, VG_SCALE_ONE - y1, y2);
 }
 
 TEST(test_vector_scene_graph_deterministic_frame_checksum_for_mixed_scene) {
