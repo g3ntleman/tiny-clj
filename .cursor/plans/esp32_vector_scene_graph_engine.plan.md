@@ -467,6 +467,11 @@ Done when:
 
 Status: TODO
 
+Conformance note (current gap):
+
+- The current `host-viewer` demo still assembles scene graphs in C (`VgNode ...` in `src/host_viewer_minifb.c`) for diagnostics/prototyping.
+- This does not yet fully enforce the intended architecture where scene authoring happens in Clojure and C only consumes published immutable `FrameScene` snapshots.
+
 Tasks:
 
 - Validate scene reuse across:
@@ -481,6 +486,10 @@ Tasks:
   - scene/game updates are timer/event-driven as scheduled by tiny-clj (not mandatory fixed per-tick loop)
   - updates publish only changed slot snapshots (`deco`, `score`, `game`) to keep render wakeups sparse
   - `tiny-gfx` remains render/game-state focused and does not own input handling
+- Host-viewer architecture parity task (required):
+  - replace C-authored demo scene assembly in `src/host_viewer_minifb.c` with Clojure-authored scene construction (`tiny-gfx.scene` records/maps)
+  - host-viewer C side may keep backend/pacing/presentation/metrics responsibilities, but scene topology/entity definitions must come from Clojure
+  - keep immutable snapshot publish contract unchanged (`FrameScene` per slot, changed-slot-only rendering)
 - Optionally validate patch-based hotpath updates for selected widgets/animations.
 - Run long soak tests on host and ESP32 to check stability and memory behavior.
 

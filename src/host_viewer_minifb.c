@@ -16,12 +16,14 @@
 #include "vector_scene_graph.h"
 #include "scene.h"
 #include "tiny_gfx.h"
+#include "tiny_clj.h"
 #include "builtins.h"
 #include "value.h"
 #include "runtime.h"
 #include "record.h"
 #include "event_loop.h"
 #include "atom.h"
+#include "vector.h"
 #include "MiniFB.h"
 #if defined(__APPLE__)
 #include "host_viewer_macos_menu.h"
@@ -35,14 +37,8 @@
 #define VIEWER_SLOT_SCORE 1u
 #define VIEWER_SLOT_GAME  2u
 #define TARGET_FPS           60u
-#define SCENE_TARGET_FPS     TARGET_FPS
 #define SCENE_ERASE_RGB565   0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
-
-#if (TARGET_FPS % SCENE_TARGET_FPS) != 0
-#error "SCENE_TARGET_FPS must divide TARGET_FPS"
-#endif
-#define SCENE_FRAME_DIVIDER (TARGET_FPS / SCENE_TARGET_FPS)
 
 #define TERRAIN_SPEED_PXS  120    /* px/s  → 2 px/frame @60 */
 #define OBSTACLE_SPEED_PXS 120    /* px/s  → 2 px/frame @60 */
@@ -110,58 +106,46 @@ static bool viewer_should_exit_for_keys(const uint8_t *keys) {
     return esc || cmd_q;
 }
 
-/* Reset transform and apply translation/rotation in one place. */
-static void set_node_transform(VgNode *node, int16_t tx, int16_t ty, int16_t rot_deg) {
-    if (!node) {
+/* Writes tx/ty/rot while keeping sx/sy unchanged. */
+static void set_transform_fields(Transform *transform, int tx, int ty, int rot_deg) {
+    if (!transform) {
         return;
     }
-    node->transform = vg_transform_identity();
-    node->transform.tx = tx;
-    node->transform.ty = ty;
-    node->transform.rot_deg = rot_deg;
-}
-
-/* Build common style presets without repeating manual field writes. */
-static VgStyle make_style(uint16_t stroke_rgb565, uint8_t stroke_width, bool has_fill, uint16_t fill_rgb565) {
-    VgStyle style = vg_style_default();
-    style.stroke_rgb565 = stroke_rgb565;
-    style.stroke_width = stroke_width;
-    style.has_bg_rgb565 = false;
-    style.has_fill = has_fill;
-    style.fill_rgb565 = fill_rgb565;
-    return style;
+    ASSIGN(transform->tx, fixnum(tx));
+    ASSIGN(transform->ty, fixnum(ty));
+    ASSIGN(transform->rot, fixnum(rot_deg));
 }
 
 /* Switches player triangle geometry between normal and small hit profile. */
-static void set_player_geometry(VgNode *game_player, bool player_small) {
+static void set_player_geometry(Tri *game_player, bool player_small) {
     if (!game_player) {
         return;
     }
     if (player_small) {
-        game_player->data.tri.x1 = 60;
-        game_player->data.tri.y1 = 146;
-        game_player->data.tri.x2 = 72;
-        game_player->data.tri.y2 = 126;
-        game_player->data.tri.x3 = 84;
-        game_player->data.tri.y3 = 146;
+        ASSIGN(game_player->x1, fixnum(60));
+        ASSIGN(game_player->y1, fixnum(146));
+        ASSIGN(game_player->x2, fixnum(72));
+        ASSIGN(game_player->y2, fixnum(126));
+        ASSIGN(game_player->x3, fixnum(84));
+        ASSIGN(game_player->y3, fixnum(146));
     } else {
-        game_player->data.tri.x1 = 56;
-        game_player->data.tri.y1 = 146;
-        game_player->data.tri.x2 = 72;
-        game_player->data.tri.y2 = 118;
-        game_player->data.tri.x3 = 88;
-        game_player->data.tri.y3 = 146;
+        ASSIGN(game_player->x1, fixnum(56));
+        ASSIGN(game_player->y1, fixnum(146));
+        ASSIGN(game_player->x2, fixnum(72));
+        ASSIGN(game_player->y2, fixnum(118));
+        ASSIGN(game_player->x3, fixnum(88));
+        ASSIGN(game_player->y3, fixnum(146));
     }
 }
 
 /* Place both obstacle parts using one shared transform. */
-static void set_obstacle_transforms(VgNode *game_obstacle_body, VgNode *game_obstacle_nose, int obstacle_x) {
-    if (!game_obstacle_body || !game_obstacle_nose) {
+static void set_obstacle_transforms(Transform *body_t, Transform *nose_t, int obstacle_x) {
+    if (!body_t || !nose_t) {
         return;
     }
-    int16_t tx = (int16_t)(obstacle_x + 20);
-    set_node_transform(game_obstacle_body, tx, 126, -90);
-    set_node_transform(game_obstacle_nose, tx, 126, -90);
+    int tx = obstacle_x + 20;
+    set_transform_fields(body_t, tx, 126, -90);
+    set_transform_fields(nose_t, tx, 126, -90);
 }
 
 /* Simple AABB overlap test in world-space pixel coordinates. */
@@ -211,6 +195,128 @@ typedef struct {
     uint64_t skipped_max_slot;
 } ViewerPerfSnapshot;
 
+typedef struct {
+    uint64_t min_ns;
+    uint64_t max_ns;
+    uint64_t sum_ns;
+    uint32_t count;
+} TimingAccumulator;
+
+enum {
+    DEMO_BUNDLE_DECO_SCENE = 0,
+    DEMO_BUNDLE_SCORE_SCENE = 1,
+    DEMO_BUNDLE_GAME_SCENE = 2,
+    DEMO_BUNDLE_TERRAIN_T = 3,
+    DEMO_BUNDLE_PLAYER_T = 4,
+    DEMO_BUNDLE_OBSTACLE_BODY_T = 5,
+    DEMO_BUNDLE_OBSTACLE_NOSE_T = 6,
+    DEMO_BUNDLE_HBAR_T = 7,
+    DEMO_BUNDLE_GAME_PLAYER = 8,
+    DEMO_BUNDLE_SCORE_TEXT = 9,
+    DEMO_BUNDLE_COUNT = 10
+};
+
+typedef struct {
+    ID bundle_root;
+    FrameScene *deco_scene;
+    FrameScene *score_scene;
+    FrameScene *game_scene;
+    Transform *terrain_t;
+    Transform *player_t;
+    Transform *obstacle_body_t;
+    Transform *obstacle_nose_t;
+    Transform *hbar_t;
+    Tri *game_player;
+    VText *score_text;
+} ViewerDemoBundle;
+
+static bool init_demo_bundle(EvalState *st, ViewerDemoBundle *out_bundle) {
+    if (!st || !out_bundle) {
+        return false;
+    }
+    memset(out_bundle, 0, sizeof(*out_bundle));
+    if (!require_namespace_by_name(st, "tiny-gfx.host-viewer-demo")) {
+        return false;
+    }
+    ID bundle = eval_string("(tiny-gfx.host-viewer-demo/create-demo-bundle)", st);
+    if (!bundle || !is_vector(bundle)) {
+        return false;
+    }
+    CljPersistentVector *vec = as_vector(bundle);
+    if (!vec || vector_count(vec) < DEMO_BUNDLE_COUNT) {
+        return false;
+    }
+    RETAIN(bundle);
+    out_bundle->bundle_root = bundle;
+    out_bundle->deco_scene = (FrameScene *)vector_nth(vec, DEMO_BUNDLE_DECO_SCENE);
+    out_bundle->score_scene = (FrameScene *)vector_nth(vec, DEMO_BUNDLE_SCORE_SCENE);
+    out_bundle->game_scene = (FrameScene *)vector_nth(vec, DEMO_BUNDLE_GAME_SCENE);
+    out_bundle->terrain_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_TERRAIN_T);
+    out_bundle->player_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_PLAYER_T);
+    out_bundle->obstacle_body_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_OBSTACLE_BODY_T);
+    out_bundle->obstacle_nose_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_OBSTACLE_NOSE_T);
+    out_bundle->hbar_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_HBAR_T);
+    out_bundle->game_player = (Tri *)vector_nth(vec, DEMO_BUNDLE_GAME_PLAYER);
+    out_bundle->score_text = (VText *)vector_nth(vec, DEMO_BUNDLE_SCORE_TEXT);
+    return out_bundle->deco_scene && out_bundle->score_scene && out_bundle->game_scene &&
+           out_bundle->terrain_t && out_bundle->player_t && out_bundle->obstacle_body_t &&
+           out_bundle->obstacle_nose_t && out_bundle->hbar_t &&
+           out_bundle->game_player && out_bundle->score_text;
+}
+
+static void destroy_demo_bundle(ViewerDemoBundle *bundle) {
+    if (!bundle) {
+        return;
+    }
+    RELEASE(bundle->bundle_root);
+    memset(bundle, 0, sizeof(*bundle));
+}
+
+static void timing_accumulator_reset(TimingAccumulator *acc) {
+    if (!acc) {
+        return;
+    }
+    acc->min_ns = UINT64_MAX;
+    acc->max_ns = 0u;
+    acc->sum_ns = 0u;
+    acc->count = 0u;
+}
+
+static void timing_accumulator_add(TimingAccumulator *acc, uint64_t sample_ns) {
+    if (!acc) {
+        return;
+    }
+    acc->sum_ns += sample_ns;
+    acc->count++;
+    if (sample_ns < acc->min_ns) {
+        acc->min_ns = sample_ns;
+    }
+    if (sample_ns > acc->max_ns) {
+        acc->max_ns = sample_ns;
+    }
+}
+
+static double timing_accumulator_avg_ms(const TimingAccumulator *acc) {
+    if (!acc || acc->count == 0u) {
+        return 0.0;
+    }
+    return (double)acc->sum_ns / (double)acc->count / 1e6;
+}
+
+static double timing_accumulator_min_ms(const TimingAccumulator *acc) {
+    if (!acc || acc->min_ns == UINT64_MAX) {
+        return 0.0;
+    }
+    return (double)acc->min_ns / 1e6;
+}
+
+static double timing_accumulator_max_ms(const TimingAccumulator *acc) {
+    if (!acc || acc->max_ns == 0u) {
+        return 0.0;
+    }
+    return (double)acc->max_ns / 1e6;
+}
+
 /* Initialize rolling perf window counters for throughput estimation. */
 static void perf_window_init(ViewerPerfWindow *perf, double start_s) {
     if (!perf) {
@@ -258,198 +364,6 @@ static bool perf_window_take_snapshot_if_due(ViewerPerfWindow *perf,
     perf->window_dirty_pixels = 0u;
     perf->window_changed_slots = 0u;
     return true;
-}
-
-#define g_record_schema (*tiny_gfx_schema())
-
-/* Allocate a record instance from an already resolved descriptor. */
-static CljPersistentRecord *make_record_with_descriptor(CljRecordDescriptor *desc) {
-    CljPersistentRecord *record = record_create_with_descriptor(desc, NULL);
-    return record ? AUTORELEASE(record) : NULL;
-}
-
-/* Convert node transform into tiny-gfx Transform record (or nil when absent). */
-static ID make_transform_record(const VgNode *node) {
-    if (!node || !node->has_transform) {
-        return NULL;
-    }
-    Transform *record = (Transform *)make_record_with_descriptor(g_record_schema.d_transform);
-    if (!record) {
-        return NULL;
-    }
-    ASSIGN(record->tx, fixnum(node->transform.tx));
-    ASSIGN(record->ty, fixnum(node->transform.ty));
-    ASSIGN(record->sx, (ID)(((uintptr_t)node->transform.sx << TAG_BITS) | TAG_FIXED));
-    ASSIGN(record->sy, (ID)(((uintptr_t)node->transform.sy << TAG_BITS) | TAG_FIXED));
-    ASSIGN(record->rot, fixnum(node->transform.rot_deg));
-    return record;
-}
-
-/* Convert runtime style struct to tiny-gfx Style record. */
-static ID make_style_record(VgStyle style) {
-    Style *record = (Style *)make_record_with_descriptor(g_record_schema.d_style);
-    if (!record) {
-        return NULL;
-    }
-    ASSIGN(record->stroke_rgb565, fixnum((int)style.stroke_rgb565));
-    ASSIGN(record->stroke_width, fixnum((int)style.stroke_width));
-    ASSIGN(record->visible, style.visible ? clj_true : clj_false);
-    ASSIGN(record->has_fill, style.has_fill ? clj_true : clj_false);
-    ASSIGN(record->fill_rgb565, fixnum((int)style.fill_rgb565));
-    ASSIGN(record->has_bg_rgb565, style.has_bg_rgb565 ? clj_true : clj_false);
-    ASSIGN(record->bg_rgb565, fixnum((int)style.bg_rgb565));
-    return record;
-}
-
-static ID make_node_record(const VgNode *node);
-
-/* Convert group children recursively. */
-static ID make_group_children_vector(const VgNode *node) {
-    CljPersistentVector *children_vec = make_vector((unsigned int)node->data.group.child_count, STRONG);
-    if (!children_vec) return NULL;
-    for (size_t i = 0; i < node->data.group.child_count; i++) {
-        ID child = make_node_record(node->data.group.children[i]);
-        if (!child) {
-            RELEASE(children_vec);
-            return NULL;
-        }
-        vector_conj_inplace(&children_vec, child);
-    }
-    return AUTORELEASE(children_vec);
-}
-
-/* Convert polyline points into [[x y] ...] vector form expected by tiny-gfx. */
-static ID make_polyline_points_vector(const VgNode *node) {
-    CljPersistentVector *pts = make_vector((unsigned int)node->data.polyline.point_count, STRONG);
-    if (!pts) return NULL;
-    for (size_t i = 0; i < node->data.polyline.point_count; i++) {
-        CljPersistentVector *xy = make_vector(2, STRONG);
-        if (!xy) {
-            RELEASE(pts);
-            return NULL;
-        }
-        vector_conj_inplace(&xy, fixnum((int)node->data.polyline.points[i].x));
-        vector_conj_inplace(&xy, fixnum((int)node->data.polyline.points[i].y));
-        vector_conj_inplace(&pts, xy);
-        RELEASE(xy);
-    }
-    return AUTORELEASE(pts);
-}
-
-#define ASSIGN_NODE_COMMON_FIELDS(record_ptr, node_ptr, t_rec, s_rec, visible_rec) \
-    do {                                                                             \
-        ASSIGN((record_ptr)->id, fixnum((int)(node_ptr)->id));                      \
-        ASSIGN((record_ptr)->t, (t_rec));                                            \
-        ASSIGN((record_ptr)->style, (s_rec));                                        \
-        ASSIGN((record_ptr)->visible, (visible_rec));                                \
-    } while (0)
-
-/* Convert one VgNode tree node to its defrecord representation. */
-static ID make_node_record(const VgNode *node) {
-    if (!node) return NULL;
-    ID t_rec = make_transform_record(node);
-    ID s_rec = make_style_record(node->style);
-    ID visible = node->style.visible ? clj_true : clj_false;
-
-    switch (node->type) {
-        case VG_NODE_GROUP: {
-            ID children = make_group_children_vector(node);
-            Group *record = (Group *)make_record_with_descriptor(g_record_schema.d_group);
-            if (!record) return NULL;
-            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
-            ASSIGN(record->children, children);
-            return record;
-        }
-        case VG_NODE_LINE: {
-            Line *record = (Line *)make_record_with_descriptor(g_record_schema.d_line);
-            if (!record) return NULL;
-            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
-            ASSIGN(record->x1, fixnum((int)node->data.line.x1));
-            ASSIGN(record->y1, fixnum((int)node->data.line.y1));
-            ASSIGN(record->x2, fixnum((int)node->data.line.x2));
-            ASSIGN(record->y2, fixnum((int)node->data.line.y2));
-            return record;
-        }
-        case VG_NODE_POLYLINE: {
-            ID pts = make_polyline_points_vector(node);
-            Polyline *record = (Polyline *)make_record_with_descriptor(g_record_schema.d_polyline);
-            if (!record) return NULL;
-            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
-            ASSIGN(record->pts, pts);
-            ASSIGN(record->closed, node->data.polyline.closed ? clj_true : clj_false);
-            return record;
-        }
-        case VG_NODE_RECT: {
-            Rect *record = (Rect *)make_record_with_descriptor(g_record_schema.d_rect);
-            if (!record) return NULL;
-            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
-            ASSIGN(record->x, fixnum((int)node->data.rect.x));
-            ASSIGN(record->y, fixnum((int)node->data.rect.y));
-            ASSIGN(record->w, fixnum((int)node->data.rect.w));
-            ASSIGN(record->h, fixnum((int)node->data.rect.h));
-            return record;
-        }
-        case VG_NODE_TRI: {
-            Tri *record = (Tri *)make_record_with_descriptor(g_record_schema.d_tri);
-            if (!record) return NULL;
-            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
-            ASSIGN(record->x1, fixnum((int)node->data.tri.x1));
-            ASSIGN(record->y1, fixnum((int)node->data.tri.y1));
-            ASSIGN(record->x2, fixnum((int)node->data.tri.x2));
-            ASSIGN(record->y2, fixnum((int)node->data.tri.y2));
-            ASSIGN(record->x3, fixnum((int)node->data.tri.x3));
-            ASSIGN(record->y3, fixnum((int)node->data.tri.y3));
-            return record;
-        }
-        case VG_NODE_VTEXT: {
-            ID text = AUTORELEASE(make_string(node->data.text.text ? node->data.text.text : ""));
-            VText *record = (VText *)make_record_with_descriptor(g_record_schema.d_vtext);
-            if (!record) return NULL;
-            ASSIGN_NODE_COMMON_FIELDS(record, node, t_rec, s_rec, visible);
-            ASSIGN(record->x, fixnum((int)node->data.text.x));
-            ASSIGN(record->y, fixnum((int)node->data.text.y));
-            ASSIGN(record->scale, (ID)(((uintptr_t)node->data.text.scale << TAG_BITS) | TAG_FIXED));
-            ASSIGN(record->rot, fixnum(node->data.text.rot_deg));
-            ASSIGN(record->text, text);
-            return record;
-        }
-        default:
-            return NULL;
-    }
-}
-
-/* Build one FrameScene record with clip/z/erase metadata for slot rendering. */
-static ID make_frame_scene_record(const VgNode *root,
-                                   VgClipRect clip_rect,
-                                   int z,
-                                   bool visible,
-                                   bool opaque,
-                                   uint16_t erase_rgb565,
-                                   uint8_t guard_px) {
-    ID root_rec = make_node_record(root);
-    if (!root_rec) return NULL;
-
-    CljPersistentVector *clip_vec = make_vector(4, STRONG);
-    if (!clip_vec) return NULL;
-    vector_conj_inplace(&clip_vec, fixnum(clip_rect.x));
-    vector_conj_inplace(&clip_vec, fixnum(clip_rect.y));
-    vector_conj_inplace(&clip_vec, fixnum(clip_rect.w));
-    vector_conj_inplace(&clip_vec, fixnum(clip_rect.h));
-
-    FrameScene *scene = (FrameScene *)make_record_with_descriptor(g_record_schema.d_frame_scene);
-    if (!scene) {
-        RELEASE(clip_vec);
-        return NULL;
-    }
-    ASSIGN(scene->root, root_rec);
-    ASSIGN(scene->clip_rect, clip_vec);
-    ASSIGN(scene->z, fixnum(z));
-    ASSIGN(scene->visible, visible ? clj_true : clj_false);
-    ASSIGN(scene->opaque, opaque ? clj_true : clj_false);
-    ASSIGN(scene->erase_rgb565, fixnum((int)erase_rgb565));
-    ASSIGN(scene->guard_px, fixnum((int)guard_px));
-    RELEASE(clip_vec);
-    return scene;
 }
 
 static CljAtom *g_scene_slot_atoms[VIEWER_SLOT_COUNT] = {0};
@@ -735,29 +649,20 @@ static void stop_render_thread(void) {
     memset(&g_render_thread, 0, sizeof(g_render_thread));
 }
 
-/* Publish a freshly built FrameScene into one slot atom and mark it dirty. */
-static void publish_frame_scene_slot(size_t slot_index,
-                                     const VgNode *root,
-                                     VgClipRect clip_rect,
-                                     int z,
-                                     bool visible,
-                                     bool opaque,
-                                     uint16_t erase_rgb565,
-                                     uint8_t guard_px) {
+/* Publish one already-built FrameScene record into one slot atom and mark it dirty. */
+static void publish_frame_scene_slot_record(size_t slot_index, ID scene) {
     if (slot_index >= VIEWER_SLOT_COUNT) {
         return;
     }
-    WITH_AUTORELEASE_POOL({
-        ID scene = make_frame_scene_record(root, clip_rect, z, visible, opaque, erase_rgb565, guard_px);
-        if (scene) {
-            if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
-                return;
-            }
-            (void)atom_reset(g_scene_slot_atoms[slot_index], scene);
-            (void)pthread_mutex_unlock(&g_render_thread.mutex);
-            (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, (uint8_t)slot_index, NULL);
-        }
-    });
+    if (!scene) {
+        return;
+    }
+    if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
+        return;
+    }
+    (void)atom_reset(g_scene_slot_atoms[slot_index], scene);
+    (void)pthread_mutex_unlock(&g_render_thread.mutex);
+    (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, (uint8_t)slot_index, NULL);
 }
 #endif
 
@@ -773,6 +678,8 @@ int main(void) {
     bool slot_atoms_initialized = false;
     bool slot_tracker_initialized = false;
     bool render_thread_started = false;
+    bool demo_bundle_initialized = false;
+    ViewerDemoBundle demo_bundle = {0};
     int exit_code = 1;
     viewer_set_realtime_thread_policy();
 
@@ -834,141 +741,14 @@ int main(void) {
     ViewerPerfWindow perf_window;
     perf_window_init(&perf_window, mfb_timer_now(timer));
 
-    VgStyle deco_style = make_style(0x07ffu, 2, false, 0u);
-    VgStyle score_style = make_style(0xffffu, 1, false, 0u);
-    VgStyle game_line_style = make_style(0x07e0u, 2, false, 0u);
-    VgStyle game_player_style = make_style(0xf81fu, 3, false, 0u);
-    VgStyle game_obstacle_style = make_style(0xffe0u, 2, true, 0xffe0u);
-    VgStyle game_obstacle_nose_style = make_style(0xf800u, 2, true, 0xf800u);
-
-    VgClipRect score_clip = {.x = 0, .y = 0, .w = VIEW_W, .h = 32};
-    VgClipRect game_clip = {.x = 0, .y = 40, .w = VIEW_W, .h = 136};
-    VgClipRect deco_clip = {.x = 0, .y = 184, .w = VIEW_W, .h = 56};
-
-    VgPoint mountain_pts[] = {
-        {0, 228}, {26, 206}, {58, 226}, {92, 196}, {126, 225},
-        {162, 202}, {198, 230}, {238, 192}, {276, 226}, {319, 204}
-    };
-    VgNode mountains = {
-        .id = 1001,
-        .type = VG_NODE_POLYLINE,
-        .has_transform = false,
-        .transform = vg_transform_identity(),
-        .style = deco_style,
-        .data.polyline = {.points = mountain_pts, .point_count = sizeof(mountain_pts) / sizeof(mountain_pts[0]), .closed = false}
-    };
-    VgNode deco_horizon = {
-        .id = 1002,
-        .type = VG_NODE_LINE,
-        .has_transform = false,
-        .transform = vg_transform_identity(),
-        .style = deco_style,
-        .data.line = {.x1 = 0, .y1 = 236, .x2 = 319, .y2 = 236}
-    };
-    VgNode *deco_children[] = {&mountains, &deco_horizon};
-    VgNode deco_root = {
-        .id = 1000,
-        .type = VG_NODE_GROUP,
-        .has_transform = false,
-        .transform = vg_transform_identity(),
-        .style = vg_style_default(),
-        .data.group = {.children = deco_children, .child_count = sizeof(deco_children) / sizeof(deco_children[0])}
-    };
+    if (!init_demo_bundle(viewer_eval_state, &demo_bundle)) {
+        fprintf(stderr, "Failed to create host-viewer demo bundle from tiny-gfx.host-viewer-demo\n");
+        goto cleanup;
+    }
+    demo_bundle_initialized = true;
 
     char score_line[64];
     (void)snprintf(score_line, sizeof(score_line), "SCORE 0000    LIFES 3");
-    VgNode score_text = {
-        .id = 2001,
-        .type = VG_NODE_VTEXT,
-        .has_transform = true,
-        .transform = vg_transform_identity(),
-        .style = score_style,
-        .data.text = {.x = 0, .y = 0, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = score_line}
-    };
-    set_node_transform(&score_text, 6, 10, 0);
-    VgNode *score_children[] = {&score_text};
-    VgNode score_root = {
-        .id = 2000,
-        .type = VG_NODE_GROUP,
-        .has_transform = false,
-        .transform = vg_transform_identity(),
-        .style = vg_style_default(),
-        .data.group = {.children = score_children, .child_count = 1}
-    };
-
-    VgPoint terrain_pts[] = {
-        {0, 156}, {60, 156}, {100, 144}, {150, 156}, {220, 156}, {260, 146}, {319, 156},
-        {380, 156}, {420, 146}, {480, 156}, {560, 156}, {620, 144}
-    };
-    VgNode game_terrain = {
-        .id = 3001,
-        .type = VG_NODE_POLYLINE,
-        .has_transform = true,
-        .transform = vg_transform_identity(),
-        .style = game_line_style,
-        .data.polyline = {.points = terrain_pts, .point_count = sizeof(terrain_pts) / sizeof(terrain_pts[0]), .closed = false}
-    };
-    VgNode game_player = {
-        .id = 3002,
-        .type = VG_NODE_TRI,
-        .has_transform = true,
-        .transform = vg_transform_identity(),
-        .style = game_player_style,
-        .data.tri = {.x1 = 56, .y1 = 146, .x2 = 72, .y2 = 118, .x3 = 88, .y3 = 146}
-    };
-    /* Missile silhouette: original right-facing geometry, oriented upward via transform rotation. */
-    VgPoint missile_body_pts[] = {
-        {-12, 3}, {8, 3}, {8, -3}, {-12, -3},
-        {-16, -7}, {-20, -7}, {-20, -2}, {-13, -2},
-        {-13, -1}, {-20, -1}, {-20, 1}, {-13, 1},
-        {-13, 2}, {-20, 2}, {-20, 7}, {-16, 7}
-    };
-    VgNode game_obstacle_body = {
-        .id = 3003,
-        .type = VG_NODE_POLYLINE,
-        .has_transform = true,
-        .transform = vg_transform_identity(),
-        .style = game_obstacle_style,
-        .data.polyline = {.points = missile_body_pts, .point_count = sizeof(missile_body_pts) / sizeof(missile_body_pts[0]), .closed = true}
-    };
-    VgNode game_obstacle_nose = {
-        .id = 3005,
-        .type = VG_NODE_TRI,
-        .has_transform = true,
-        .transform = vg_transform_identity(),
-        .style = game_obstacle_nose_style,
-        .data.tri = {.x1 = 20, .y1 = 0, .x2 = 10, .y2 = -3, .x3 = 10, .y3 = 3}
-    };
-    VgNode game_caption = {
-        .id = 3004,
-        .type = VG_NODE_VTEXT,
-        .has_transform = true,
-        .transform = vg_transform_identity(),
-        .style = score_style,
-        .data.text = {.x = 0, .y = 0, .scale = VG_SCALE_ONE, .rot_deg = 0, .text = "GAME SCENE"}
-    };
-    set_node_transform(&game_caption, 96, 52, 0);
-
-    VgStyle hbar_style = make_style(0xffffu, 1, true, 0xffffu);
-    VgNode game_hbar = {
-        .id = 3010,
-        .type = VG_NODE_TRI,
-        .has_transform = true,
-        .transform = vg_transform_identity(),
-        .style = hbar_style,
-        .data.tri = {.x1 = 0, .y1 = -4, .x2 = 20, .y2 = 0, .x3 = 0, .y3 = 4}
-    };
-    set_node_transform(&game_hbar, 0, 80, 0);
-
-    VgNode *game_children[] = {&game_terrain, &game_player, &game_obstacle_body, &game_obstacle_nose, &game_caption, &game_hbar};
-    VgNode game_root = {
-        .id = 3000,
-        .type = VG_NODE_GROUP,
-        .has_transform = false,
-        .transform = vg_transform_identity(),
-        .style = vg_style_default(),
-        .data.group = {.children = game_children, .child_count = sizeof(game_children) / sizeof(game_children[0])}
-    };
 
     bool player_small = false;
     bool collision_latched = false;
@@ -986,22 +766,16 @@ int main(void) {
     const uint64_t target_frame_ns = 1000000000ull / TARGET_FPS;
     uint64_t next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
     uint64_t last_present_ns = 0u;
-    uint64_t frame_dt_min_ns = UINT64_MAX;
-    uint64_t frame_dt_max_ns = 0u;
-    uint64_t frame_dt_sum_ns = 0u;
-    uint32_t frame_dt_count = 0u;
-    uint64_t waitsync_min_ns = UINT64_MAX;
-    uint64_t waitsync_max_ns = 0u;
-    uint64_t waitsync_sum_ns = 0u;
-    uint32_t waitsync_count = 0u;
-    uint64_t update_min_ns = UINT64_MAX;
-    uint64_t update_max_ns = 0u;
-    uint64_t update_sum_ns = 0u;
-    uint32_t update_count = 0u;
+    TimingAccumulator frame_dt_stats;
+    TimingAccumulator waitsync_stats;
+    TimingAccumulator update_stats;
+    timing_accumulator_reset(&frame_dt_stats);
+    timing_accumulator_reset(&waitsync_stats);
+    timing_accumulator_reset(&update_stats);
     vg_framebuffer_clear(&fb, SCENE_ERASE_RGB565);
-    publish_frame_scene_slot(VIEWER_SLOT_DECO, &deco_root, deco_clip, 0, true, true, SCENE_ERASE_RGB565, 1);
-    publish_frame_scene_slot(VIEWER_SLOT_SCORE, &score_root, score_clip, 1, true, true, SCENE_ERASE_RGB565, 1);
-    publish_frame_scene_slot(VIEWER_SLOT_GAME, &game_root, game_clip, 2, true, true, SCENE_ERASE_RGB565, 1);
+    publish_frame_scene_slot_record(VIEWER_SLOT_DECO, demo_bundle.deco_scene);
+    publish_frame_scene_slot_record(VIEWER_SLOT_SCORE, demo_bundle.score_scene);
+    publish_frame_scene_slot_record(VIEWER_SLOT_GAME, demo_bundle.game_scene);
 
     while (true) {
         float time_s = (float)mfb_timer_now(timer);
@@ -1043,10 +817,7 @@ int main(void) {
         uint64_t waitsync_ns = (waitsync_end_ns > waitsync_begin_ns)
                                    ? (waitsync_end_ns - waitsync_begin_ns)
                                    : 0u;
-        waitsync_sum_ns += waitsync_ns;
-        waitsync_count++;
-        if (waitsync_ns < waitsync_min_ns) waitsync_min_ns = waitsync_ns;
-        if (waitsync_ns > waitsync_max_ns) waitsync_max_ns = waitsync_ns;
+        timing_accumulator_add(&waitsync_stats, waitsync_ns);
         if (!waitsync_ok) {
             break;
         }
@@ -1074,7 +845,6 @@ int main(void) {
         }
 
         frame_count++;
-        bool scene_tick = (frame_count % SCENE_FRAME_DIVIDER) == 0u;
         bool collision_cooldown_active = (time_s < collision_cooldown_end_s);
         int terrain_scroll_px = (int)((frame_count * TERRAIN_PPF) % 320u);
         int player_jump_y = compute_player_jump_y(frame_count);
@@ -1092,48 +862,37 @@ int main(void) {
             }
         }
 
-        if (scene_tick) {
-            set_node_transform(&game_terrain, (int16_t)(-terrain_scroll_px), 0, 0);
-            set_node_transform(&game_player, 0, (int16_t)player_jump_y, 0);
-            set_obstacle_transforms(&game_obstacle_body, &game_obstacle_nose, obstacle_x);
-            set_player_geometry(&game_player, player_small);
-            int hbar_x = (int)((frame_count * 2u) % 340u) - 10;
-            set_node_transform(&game_hbar, (int16_t)hbar_x, 80, 0);
-        }
+        set_transform_fields(demo_bundle.terrain_t, -terrain_scroll_px, 0, 0);
+        set_transform_fields(demo_bundle.player_t, 0, player_jump_y, 0);
+        set_obstacle_transforms(demo_bundle.obstacle_body_t, demo_bundle.obstacle_nose_t, obstacle_x);
+        set_player_geometry(demo_bundle.game_player, player_small);
+        int hbar_x = (int)((frame_count * 2u) % 340u) - 10;
+        set_transform_fields(demo_bundle.hbar_t, hbar_x, 80, 0);
 
         uint32_t dirty_pixels = 0u;
         uint32_t changed_slots = 0u;
         uint_fast32_t frame_serial = 0u;
 
         if (sync_mode) {
-            if (scene_tick) {
-                WITH_AUTORELEASE_POOL({
-                    ID scene = make_frame_scene_record(&game_root, game_clip, 2, true, true, SCENE_ERASE_RGB565, 1);
-                    if (scene) {
-                        sync_slot_generation++;
-                        uint32_t dp = 0u;
-                        if (vg_render_frame_slot_record_if_changed(scene,
-                                                                    &sync_slot_states[VIEWER_SLOT_GAME],
-                                                                    &fb,
-                                                                    sync_slot_generation,
-                                                                    &dp)) {
-                            dirty_pixels += dp;
-                            changed_slots++;
-                        }
-                    }
-                });
-                frame_serial = sync_slot_generation;
+            sync_slot_generation++;
+            uint32_t dp = 0u;
+            if (vg_render_frame_slot_record_if_changed(demo_bundle.game_scene,
+                                                        &sync_slot_states[VIEWER_SLOT_GAME],
+                                                        &fb,
+                                                        sync_slot_generation,
+                                                        &dp)) {
+                dirty_pixels += dp;
+                changed_slots++;
             }
+            frame_serial = sync_slot_generation;
         } else {
-            if (scene_tick) {
-                uint_fast32_t pre_serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
-                publish_frame_scene_slot(VIEWER_SLOT_GAME, &game_root, game_clip, 2, true, true, SCENE_ERASE_RGB565, 1);
-                (void)pthread_mutex_lock(&g_render_thread.render_done_mutex);
-                while (atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire) == pre_serial) {
-                    (void)pthread_cond_wait(&g_render_thread.render_done_cond, &g_render_thread.render_done_mutex);
-                }
-                (void)pthread_mutex_unlock(&g_render_thread.render_done_mutex);
+            uint_fast32_t pre_serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
+            publish_frame_scene_slot_record(VIEWER_SLOT_GAME, demo_bundle.game_scene);
+            (void)pthread_mutex_lock(&g_render_thread.render_done_mutex);
+            while (atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire) == pre_serial) {
+                (void)pthread_cond_wait(&g_render_thread.render_done_cond, &g_render_thread.render_done_mutex);
             }
+            (void)pthread_mutex_unlock(&g_render_thread.render_done_mutex);
             uint64_t main_lock_begin_ns = monotonic_now_ns();
             if (pthread_mutex_lock(&g_render_thread.mutex) == 0) {
                 uint64_t main_lock_acquired_ns = monotonic_now_ns();
@@ -1174,28 +933,20 @@ int main(void) {
             if (periodic_score_updates_enabled) {
                 int score = (int)(time_s * 120.0f);
                 (void)snprintf(score_line, sizeof(score_line), "SCORE %04d    LIFES 3", score % 10000);
+                ASSIGN(demo_bundle.score_text->text, AUTORELEASE(make_string(score_line)));
             }
-            double dt_avg_ms = (frame_dt_count > 0u) ? ((double)frame_dt_sum_ns / (double)frame_dt_count / 1e6) : 0.0;
-            double dt_min_ms = (frame_dt_min_ns < UINT64_MAX) ? ((double)frame_dt_min_ns / 1e6) : 0.0;
-            double dt_max_ms = (frame_dt_max_ns > 0u) ? ((double)frame_dt_max_ns / 1e6) : 0.0;
-            double ws_avg_ms = (waitsync_count > 0u) ? ((double)waitsync_sum_ns / (double)waitsync_count / 1e6) : 0.0;
-            double ws_min_ms = (waitsync_min_ns < UINT64_MAX) ? ((double)waitsync_min_ns / 1e6) : 0.0;
-            double ws_max_ms = (waitsync_max_ns > 0u) ? ((double)waitsync_max_ns / 1e6) : 0.0;
-            double up_avg_ms = (update_count > 0u) ? ((double)update_sum_ns / (double)update_count / 1e6) : 0.0;
-            double up_min_ms = (update_min_ns < UINT64_MAX) ? ((double)update_min_ns / 1e6) : 0.0;
-            double up_max_ms = (update_max_ns > 0u) ? ((double)update_max_ns / 1e6) : 0.0;
-            frame_dt_min_ns = UINT64_MAX;
-            frame_dt_max_ns = 0u;
-            frame_dt_sum_ns = 0u;
-            frame_dt_count = 0u;
-            waitsync_min_ns = UINT64_MAX;
-            waitsync_max_ns = 0u;
-            waitsync_sum_ns = 0u;
-            waitsync_count = 0u;
-            update_min_ns = UINT64_MAX;
-            update_max_ns = 0u;
-            update_sum_ns = 0u;
-            update_count = 0u;
+            double dt_avg_ms = timing_accumulator_avg_ms(&frame_dt_stats);
+            double dt_min_ms = timing_accumulator_min_ms(&frame_dt_stats);
+            double dt_max_ms = timing_accumulator_max_ms(&frame_dt_stats);
+            double ws_avg_ms = timing_accumulator_avg_ms(&waitsync_stats);
+            double ws_min_ms = timing_accumulator_min_ms(&waitsync_stats);
+            double ws_max_ms = timing_accumulator_max_ms(&waitsync_stats);
+            double up_avg_ms = timing_accumulator_avg_ms(&update_stats);
+            double up_min_ms = timing_accumulator_min_ms(&update_stats);
+            double up_max_ms = timing_accumulator_max_ms(&update_stats);
+            timing_accumulator_reset(&frame_dt_stats);
+            timing_accumulator_reset(&waitsync_stats);
+            timing_accumulator_reset(&update_stats);
             char title[192];
             (void)snprintf(title,
                            sizeof(title),
@@ -1209,14 +960,7 @@ int main(void) {
                            up_min_ms, up_avg_ms, up_max_ms);
             macos_viewer_set_window_title(title);
             if (periodic_score_updates_enabled) {
-                publish_frame_scene_slot(VIEWER_SLOT_SCORE,
-                                         &score_root,
-                                         score_clip,
-                                         1,
-                                         true,
-                                         true,
-                                         SCENE_ERASE_RGB565,
-                                         1);
+                publish_frame_scene_slot_record(VIEWER_SLOT_SCORE, demo_bundle.score_scene);
             }
         }
 #else
@@ -1228,10 +972,7 @@ int main(void) {
             uint64_t now_ns = monotonic_now_ns();
             if (last_present_ns > 0u) {
                 uint64_t dt = (now_ns > last_present_ns) ? (now_ns - last_present_ns) : 0u;
-                frame_dt_sum_ns += dt;
-                frame_dt_count++;
-                if (dt < frame_dt_min_ns) frame_dt_min_ns = dt;
-                if (dt > frame_dt_max_ns) frame_dt_max_ns = dt;
+                timing_accumulator_add(&frame_dt_stats, dt);
             }
             last_present_ns = now_ns;
         }
@@ -1241,10 +982,7 @@ int main(void) {
         uint64_t update_ns = (update_end_ns > update_begin_ns)
                                  ? (update_end_ns - update_begin_ns)
                                  : 0u;
-        update_sum_ns += update_ns;
-        update_count++;
-        if (update_ns < update_min_ns) update_min_ns = update_ns;
-        if (update_ns > update_max_ns) update_max_ns = update_ns;
+        timing_accumulator_add(&update_stats, update_ns);
         if (state != STATE_OK) {
             break;
         }
@@ -1273,6 +1011,9 @@ cleanup:
     }
     if (slot_tracker_initialized) {
         vg_slot_change_tracker_destroy(&g_slot_change_tracker);
+    }
+    if (demo_bundle_initialized) {
+        destroy_demo_bundle(&demo_bundle);
     }
     runtime_reset(&g_runtime);
     return exit_code;

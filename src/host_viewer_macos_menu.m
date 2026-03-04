@@ -77,8 +77,7 @@ static void macos_viewer_store_screen_position_for_window(NSWindow *window) {
     [defaults setObject:screen_uuid forKey:kMacosViewerScreenUUIDKey];
     [defaults setDouble:frame.origin.x forKey:kMacosViewerFrameXKey];
     [defaults setDouble:frame.origin.y forKey:kMacosViewerFrameYKey];
-    [defaults setDouble:frame.size.width forKey:kMacosViewerWidthKey];
-    [defaults setDouble:frame.size.height forKey:kMacosViewerHeightKey];
+    /* Width/height intentionally not saved — host viewer uses fixed 2x scale. */
 }
 
 static void macos_viewer_apply_saved_screen_placement(NSWindow *window) {
@@ -114,15 +113,7 @@ static void macos_viewer_apply_saved_screen_placement(NSWindow *window) {
     if ([defaults objectForKey:kMacosViewerFrameYKey]) {
         frame.origin.y = [defaults doubleForKey:kMacosViewerFrameYKey];
     }
-    double saved_w = [defaults doubleForKey:kMacosViewerWidthKey];
-    double saved_h = [defaults doubleForKey:kMacosViewerHeightKey];
-    NSRect content_check = [NSWindow contentRectForFrameRect:
-                            NSMakeRect(0, 0, saved_w, saved_h)
-                                                   styleMask:[window styleMask]];
-    if (saved_w >= 200.0 && content_check.size.height >= 100.0) {
-        frame.size.width  = saved_w;
-        frame.size.height = saved_h;
-    }
+    /* Size is intentionally NOT restored — the host viewer uses a fixed 2x scale. */
 
     [window setFrame:frame display:NO];
     g_macos_viewer_screen_restore_applied = true;
@@ -132,8 +123,6 @@ static void macos_viewer_bind_window_autosave(NSWindow *window) {
     if (!window || g_macos_viewer_window_autosave_bound) {
         return;
     }
-    // Keep Cocoa autosave enabled for compatibility, but restore geometry/screen ourselves.
-    [window setFrameAutosaveName:kMacosViewerWindowAutosaveName];
     macos_viewer_apply_saved_screen_placement(window);
     g_macos_viewer_window_autosave_bound = true;
 }
@@ -260,7 +249,6 @@ void macos_viewer_save_window_position(void) {
             return;
         }
         macos_viewer_store_screen_position_for_window(window);
-        [window saveFrameUsingName:kMacosViewerWindowAutosaveName];
     }
 }
 
