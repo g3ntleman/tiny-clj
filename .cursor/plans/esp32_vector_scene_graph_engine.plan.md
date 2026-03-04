@@ -39,6 +39,10 @@ so primitive generation/rasterization bugs are debuggable on host.
   - no autorelease pool setup/usage in render thread
   - memory ownership changes/allocation happen only in producer/update thread before atomic snapshot publish
   - no blocking/channel operations in render hot path; use bounded lock-free queues for control/completion handoff
+- Backend-parity rule (host <-> ESP32):
+  - define one shared backend submission interface (e.g. `begin_frame`, `submit_rect`, `end_frame`)
+  - render thread owns backend submission on both targets
+  - macOS main/UI thread is presentation-only (`mfb_update_ex`), matching ESP32 where render thread drives SPI writes
 
 ## Definition Of Done (project-level)
 
@@ -177,7 +181,7 @@ Done when:
 
 ## Milestone 4: Thick Line Engine (Required)
 
-Status: PARTIAL (functional and used by host demo; explicit cap/join semantics + perf gates still TODO)
+Status: DONE for now (functional and used by host demo; explicit cap/join semantics + perf gates deferred)
 
 Tasks:
 
@@ -191,8 +195,9 @@ Tasks:
 - Define initial cap/join behavior:
   - caps: `:butt` default
   - joins: bevel/none default
-- Keep advanced caps/joins optional for later:
+- Keep advanced caps/joins optional for later (deferred):
   - `:square`, `:round`, miter/round joins
+- Perf/frame-time budget validation deferred.
 
 Done when:
 
@@ -230,7 +235,7 @@ Done when:
 
 ## Milestone 5: Snapshot Slot Update Path (PoC Gate 2, Patch Optional)
 
-Status: PARTIAL (slot-change wait API + atom-bound changed-slot host rendering implemented; dedicated render-thread split still TODO)
+Status: DONE for host PoC (slot-change wait API + atom-bound changed-slot host rendering + dedicated render-thread split implemented)
 
 Tasks:
 
@@ -255,7 +260,7 @@ Tasks:
   - block/sleep until any scene slot snapshot changes (event/condition based wakeup)
   - avoid continuous busy rendering when no slot changed
   - rationale: lower power draw, better battery life, and reduced thermal load
-  - implementation note: slot-change wait/wakeup API is available on host via `VgSlotChangeTracker`; dedicated cross-thread render split remains TODO
+  - implementation note: host path uses `VgSlotChangeTracker` with a dedicated render thread that blocks on slot-change wakeups
 - Render only the affected slot region (`clip-rect`), not the full framebuffer.
 - If a slot moves, treat dirty region as `union(old_clip_rect, new_clip_rect)`.
 - Validate non-overlapping slot convention with conservative bounds (stroke width / text fringe guard).
@@ -268,8 +273,9 @@ Tasks:
     - blocking wait API returning changed-slot bitmask + latest generations (`vg_slot_change_tracker_wait_for_changes`)
   - Host viewer uses explicit scene-slot atoms (`deco`, `score`, `game`) as snapshot carriers:
     - slot publications write immutable `FrameScene` snapshots via `atom_reset`
-    - render pass reads slot atom snapshots and renders only changed slots from tracker bitmask
-    - unchanged slots are skipped end-to-end in the host render pass
+    - dedicated render thread blocks for tracker changes and renders only changed slots
+    - main/UI thread only presents framebuffer output and does not execute slot rasterization
+    - unchanged slots are skipped end-to-end in the host render path
   - Unit tests cover tracker behavior:
     - changed-mask/generation reporting
     - timeout/no-change behavior
@@ -278,7 +284,7 @@ Tasks:
   - batch apply, guardrails, overflow behavior
 - Optional later optimization path (not required for PoC):
   - for persistent tiny-clj/subjective-c render records, use pointer-identity diffing
-    (`old_subtree_ptr == new_subtree_ptr`) to skip unchanged subtrees / reuse cached decode
+  (`old_subtree_ptr == new_subtree_ptr`) to skip unchanged subtrees / reuse cached decode
   - treat this as a complementary delta strategy to explicit patch vectors, not a replacement mandate
 
 Done when:
@@ -310,6 +316,10 @@ Tasks:
 
 - Integrate validated raster output with SPI transport model:
   - set window + burst writes
+- Introduce/consume shared backend submission interface used by both host and ESP32:
+  - backend command surface (frame begin/end + dirty-rect submission)
+  - keep renderer/backend boundary identical across targets
+  - no host-only rendering branch above this interface
 - Map each render slot `clip-rect` to SPI address windows (one window per dirty slot in the simple path).
 - Keep backend boundary identical between host and ESP32 so host can emulate the device driver layer
 while still exercising the same primitive rasterization pipeline.
@@ -326,10 +336,52 @@ while still exercising the same primitive rasterization pipeline.
 - Add optional dirty-region mode switch (sub-slot refinement later).
 - Add backend conformance checks:
   - same scene input should produce same primitive command sequence as simulator.
+- Define host-analogue execution model:
+  - render thread performs backend submission stage on macOS too
+  - UI thread only presents completed front buffer/frame
+  - host backend path follows the same dirty-rect submission contract as ESP32 SPI path
+
+Proposed backend interface sketch (implementation target for this milestone):
+
+```c
+typedef struct {
+    int16_t x;
+    int16_t y;
+    int16_t w;
+    int16_t h;
+} VgBackendRect;
+
+typedef struct {
+    /* Called once per output frame before dirty rect submissions. */
+    bool (*begin_frame)(void *ctx, uint32_t frame_id);
+    /* Submit one dirty rect in framebuffer coordinates. */
+    bool (*submit_rect)(void *ctx,
+                        VgBackendRect rect,
+                        const uint16_t *rgb565_pixels,
+                        uint16_t stride_px);
+    /* Called after all rect submissions for this frame. */
+    bool (*end_frame)(void *ctx, uint32_t frame_id);
+} VgBackendOps;
+```
+
+Execution contract for this interface:
+
+- `submit_rect` receives clipped dirty regions only; no backend-side scene traversal.
+- Render thread owns all `VgBackendOps` calls on both targets.
+- macOS backend implementation:
+  - copies submitted RGB565 dirty regions into host present buffer (or staging buffer)
+  - UI/main thread performs presentation only (`mfb_update_ex`) and does not call render APIs
+- ESP32 backend implementation:
+  - maps each submitted rect to SPI window + burst write sequence
+  - no full-frame requirement in the default path
+- Determinism/conformance:
+  - for identical scene snapshots, host and ESP32 must observe equivalent rect submission order/data contract
+  - backend conformance tests compare emitted rect sequences for representative scenes
 
 Done when:
 
 - Scene renders on device without full-frame requirement and with pacing consistent with simulator logic.
+- Shared backend submission interface is used on both targets, and conformance checks pass for representative scenes.
 
 ## Milestone 8: Fixed-First Decode + Transform Path (Required for ESP32)
 
@@ -344,33 +396,28 @@ Motivation:
 Tasks:
 
 1. **Canonical numeric decode policy (`scene.c` decoder path):**
-   - Prefer fixed/raw decode for transform-relevant fields (`sx`, `sy`, text scale, composed transform internals).
-   - Keep `fixnum` + `fixed` accepted on input records; avoid float conversion in hot decode paths.
-   - Keep typed defaults deterministic (`nil` => stable defaults).
-
+  - Prefer fixed/raw decode for transform-relevant fields (`sx`, `sy`, text scale, composed transform internals).
+  - Keep `fixnum` + `fixed` accepted on input records; avoid float conversion in hot decode paths.
+  - Keep typed defaults deterministic (`nil` => stable defaults).
 2. **Boundary-based quantization:**
-   - Keep world/local transform math in fixed-point until raster boundary.
-   - Convert to integer only at explicit raster boundaries (`gfx_draw_*`, clip/window setup, framebuffer index math).
-   - Avoid repeated fixed->int->fixed ping-pong across compose/apply stages.
-
+  - Keep world/local transform math in fixed-point until raster boundary.
+  - Convert to integer only at explicit raster boundaries (`gfx_draw_`*, clip/window setup, framebuffer index math).
+  - Avoid repeated fixed->int->fixed ping-pong across compose/apply stages.
 3. **Hot-path cleanup for ESP32 CPU:**
-   - Remove/avoid float-based helper usage in decode/transform hot path.
-   - Keep non-cardinal/trig fallback paths isolated and cold.
-   - Ensure branch structure favors common integer/fixed cases.
-
+  - Remove/avoid float-based helper usage in decode/transform hot path.
+  - Keep non-cardinal/trig fallback paths isolated and cold.
+  - Ensure branch structure favors common integer/fixed cases.
 4. **Contract + assertions:**
-   - Document fixed-first contract for scene records (`Transform`, `VText`, slot clip fields).
-   - Keep `CLJ_ASSERT` guards for typed overlay layout assumptions in debug builds.
-   - No release-mode guard overhead on hot paths.
-
+  - Document fixed-first contract for scene records (`Transform`, `VText`, slot clip fields).
+  - Keep `CLJ_ASSERT` guards for typed overlay layout assumptions in debug builds.
+  - No release-mode guard overhead on hot paths.
 5. **Regression + determinism gates:**
-   - Scene graph test suite must pass with unchanged or intentionally updated golden checksums.
-   - Add/keep tests covering mixed numeric inputs (`fixnum` + `fixed`) and nil defaults.
-   - Verify host and ESP32 paths keep identical decode semantics.
-
+  - Scene graph test suite must pass with unchanged or intentionally updated golden checksums.
+  - Add/keep tests covering mixed numeric inputs (`fixnum` + `fixed`) and nil defaults.
+  - Verify host and ESP32 paths keep identical decode semantics.
 6. **Performance validation:**
-   - Add a small benchmark/profiling slice for decode+render on representative scene sizes.
-   - Compare before/after CPU usage on host and (where possible) ESP32.
+  - Add a small benchmark/profiling slice for decode+render on representative scene sizes.
+  - Compare before/after CPU usage on host and (where possible) ESP32.
 
 Done when:
 
@@ -390,21 +437,19 @@ Motivation:
 
 Tasks:
 
-1. **`update-nodes` function in `tiny-gfx.scene`:**
-   - Takes a root node and a map `{:id update-fn ...}`.
-   - Single recursive walk over the tree.
-   - For each node with `:id` in the map: apply `update-fn`, remove `:id` from map (`dissoc`).
-   - Early exit: when map is empty (`(empty? updates)`), return remaining subtree unchanged (no recursion).
-   - Works with plain maps and records alike (uses `:id` and `:children` keywords).
-
+1. `**update-nodes` function in `tiny-gfx.scene`:**
+  - Takes a root node and a map `{:id update-fn ...}`.
+  - Single recursive walk over the tree.
+  - For each node with `:id` in the map: apply `update-fn`, remove `:id` from map (`dissoc`).
+  - Early exit: when map is empty (`(empty? updates)`), return remaining subtree unchanged (no recursion).
+  - Works with plain maps and records alike (uses `:id` and `:children` keywords).
 2. **Unit tests:**
-   - Flat children: 2 of 3 nodes updated, 1 unchanged.
-   - Empty updates map: node returned unchanged.
-   - Nested groups: updates at different tree depths.
-
+  - Flat children: 2 of 3 nodes updated, 1 unchanged.
+  - Empty updates map: node returned unchanged.
+  - Nested groups: updates at different tree depths.
 3. **Integration with game-state pattern:**
-   - Designed for `(swap! game-scene update-nodes {...})` with `schedule-periodic` timers.
-   - Compatible with future core.async go-block orchestration (same primitive, different scheduling).
+  - Designed for `(swap! game-scene update-nodes {...})` with `schedule-periodic` timers.
+  - Compatible with future core.async go-block orchestration (same primitive, different scheduling).
 
 Complexity characteristics:
 
@@ -493,39 +538,34 @@ Thread-safety integration boundary (required for scheduler callbacks):
 Stepwise delivery plan (implementation order):
 
 1. Collision contract freeze (Clojure side, no runtime behavior change yet)
-   - finalize collision-rule schema fields and defaults
-   - finalize callback-event payload fields and phase vocabulary
-   - document canonical pair-id behavior and latch semantics
-   - add schema-level tests for rule decoding/default handling
-
+  - finalize collision-rule schema fields and defaults
+  - finalize callback-event payload fields and phase vocabulary
+  - document canonical pair-id behavior and latch semantics
+  - add schema-level tests for rule decoding/default handling
 2. Scheduler callback ingress (thread-safe boundary only)
-   - implement thread-safe ingress queue (MPSC + FIFO)
-   - add wakeup signaling and scheduler-thread drain API
-   - add close/drain shutdown semantics
-   - tests: FIFO ordering, concurrent producer safety, scheduler-thread-only handler execution
-
+  - implement thread-safe ingress queue (MPSC + FIFO)
+  - add wakeup signaling and scheduler-thread drain API
+  - add close/drain shutdown semantics
+  - tests: FIFO ordering, concurrent producer safety, scheduler-thread-only handler execution
 3. C collision engine baseline (without callback wiring enabled by default)
-   - decode collision rules from snapshot
-   - resolve object ids to render objects and compute overlap
-   - maintain enter/stay/exit latch state per canonical pair key
-   - tests: deterministic overlap transitions from synthetic snapshots
-
+  - decode collision rules from snapshot
+  - resolve object ids to render objects and compute overlap
+  - maintain enter/stay/exit latch state per canonical pair key
+  - tests: deterministic overlap transitions from synthetic snapshots
 4. Bridge C collision events into scheduler ingress
-   - enqueue callback payloads from C collision pass
-   - drain and dispatch callback handlers on scheduler thread
-   - tests: deterministic event order, no duplicate `:enter` on unchanged overlap
-
+  - enqueue callback payloads from C collision pass
+  - drain and dispatch callback handlers on scheduler thread
+  - tests: deterministic event order, no duplicate `:enter` on unchanged overlap
 5. Slot/scenario integration and rollout in host viewer
-   - enable collision rules first for `:game` slot
-   - keep manual hitbox override path until auto-bounds contract is fully validated
-   - add feature flag for safe rollback during integration
-   - tests: host demo scenario coverage (`enter`/`exit`, moving obstacle, stable-id updates)
-
+  - enable collision rules first for `:game` slot
+  - keep manual hitbox override path until auto-bounds contract is fully validated
+  - add feature flag for safe rollback during integration
+  - tests: host demo scenario coverage (`enter`/`exit`, moving obstacle, stable-id updates)
 6. Hardening and performance pass
-   - bounded queue/backpressure policy for event bursts
-   - watchdog/metrics hooks for dropped/queued callback counts
-   - soak tests with long-running host scene updates
-   - prepare ESP32 follow-up checklist (same contract, backend-specific limits)
+  - bounded queue/backpressure policy for event bursts
+  - watchdog/metrics hooks for dropped/queued callback counts
+  - soak tests with long-running host scene updates
+  - prepare ESP32 follow-up checklist (same contract, backend-specific limits)
 
 Execution gates per step (must pass before next step):
 
@@ -533,27 +573,22 @@ Execution gates per step (must pass before next step):
   - collision rule schema + defaults are fixed and documented
   - callback payload schema is fixed and versioned in docs/tests
   - no runtime behavior change in renderer/scheduler yet
-
 - Gate 2 (after step 2):
   - scheduler ingress queue API is available and thread-safe
   - callback handlers still run exclusively on scheduler thread
   - queue close/drain is covered by unit tests
-
 - Gate 3 (after step 3):
   - C collision evaluation produces deterministic phase transitions from synthetic snapshots
   - latch state behavior is stable across unchanged frames and rule removal
   - callback bridge still disabled by default (feature-gated)
-
 - Gate 4 (after step 4):
   - C collision events are enqueued and dispatched via scheduler ingress
   - event ordering remains deterministic (rule order -> FIFO drain order)
   - no duplicate `:enter` events on unchanged overlap
-
 - Gate 5 (after step 5):
   - host viewer integrates `:game` collision rules end-to-end under feature flag
   - fallback path (manual hitbox behavior) remains available
   - demo scenarios validate `:enter`/`:exit` semantics with stable ids
-
 - Gate 6 (after step 6):
   - burst behavior/backpressure policy is validated
   - queue/dispatch metrics are available for diagnostics
@@ -697,3 +732,4 @@ Rule:
   - Mitigation: conservative `clip-rect` guard bands, explicit slot background policy, test coverage for edge clipping.
 - Risk: Float drift/non-determinism in long animations.
   - Mitigation: fixed-first decode/transform path aligned with `subjective-c` fractional bits (`CLJ_FIXED_FRAC_BITS = 13`), integer quantization only at raster boundaries.
+

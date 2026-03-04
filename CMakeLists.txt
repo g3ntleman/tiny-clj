@@ -7,6 +7,7 @@ if(CMAKE_OBJC_COMPILER)
 endif()
 
 option(TINYCLJ_HOST_VIEWER "Build optional MiniFB host viewer" OFF)
+option(TINYCLJ_MINIFB_METAL "Use MiniFB Metal backend on macOS" OFF)
 
 # Generate compile_commands.json for IDE (Go to Definition, IntelliSense)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -872,11 +873,15 @@ set_tests_properties(unit-tests PROPERTIES LABELS "unit")
 
 if(TINYCLJ_HOST_VIEWER)
     include(FetchContent)
-    # Force macOS MiniFB backend without Metal. Some hosts (VMs/older GPUs)
-    # report no Metal support and crash during MTK initialization.
+    # Select MiniFB macOS backend explicitly to keep runs reproducible.
     if(APPLE)
-        set(MINIFB_USE_METAL_API OFF CACHE BOOL "" FORCE)
-        set(USE_METAL_API OFF CACHE BOOL "" FORCE)
+        if(TINYCLJ_MINIFB_METAL)
+            set(MINIFB_USE_METAL_API ON CACHE BOOL "" FORCE)
+            set(USE_METAL_API ON CACHE BOOL "" FORCE)
+        else()
+            set(MINIFB_USE_METAL_API OFF CACHE BOOL "" FORCE)
+            set(USE_METAL_API OFF CACHE BOOL "" FORCE)
+        endif()
     endif()
     FetchContent_Declare(
         minifb

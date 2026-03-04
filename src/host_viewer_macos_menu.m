@@ -8,6 +8,7 @@ static NSString *const kMacosViewerFrameXKey = @"macos_viewer.window.frame_x";
 static NSString *const kMacosViewerFrameYKey = @"macos_viewer.window.frame_y";
 static NSString *const kMacosViewerWidthKey = @"macos_viewer.window.width";
 static NSString *const kMacosViewerHeightKey = @"macos_viewer.window.height";
+static id g_macos_viewer_performance_activity = nil;
 static bool g_macos_viewer_window_autosave_bound = false;
 static bool g_macos_viewer_window_callbacks_registered = false;
 static bool g_macos_viewer_screen_restore_applied = false;
@@ -277,5 +278,35 @@ bool macos_viewer_get_content_size(unsigned *out_w, unsigned *out_h) {
         *out_w = w;
         *out_h = h;
         return true;
+    }
+}
+
+void macos_viewer_begin_performance_activity(void) {
+    @autoreleasepool {
+        if (g_macos_viewer_performance_activity != nil) {
+            return;
+        }
+        NSProcessInfo *proc = [NSProcessInfo processInfo];
+        if (![proc respondsToSelector:@selector(beginActivityWithOptions:reason:)]) {
+            return;
+        }
+        NSActivityOptions opts = NSActivityUserInitiatedAllowingIdleSystemSleep |
+                                 NSActivityAutomaticTerminationDisabled;
+        g_macos_viewer_performance_activity =
+            [proc beginActivityWithOptions:opts
+                                    reason:@"tiny-clj host viewer render loop"];
+    }
+}
+
+void macos_viewer_end_performance_activity(void) {
+    @autoreleasepool {
+        if (g_macos_viewer_performance_activity == nil) {
+            return;
+        }
+        NSProcessInfo *proc = [NSProcessInfo processInfo];
+        if ([proc respondsToSelector:@selector(endActivity:)]) {
+            [proc endActivity:g_macos_viewer_performance_activity];
+        }
+        g_macos_viewer_performance_activity = nil;
     }
 }
