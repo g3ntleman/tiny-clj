@@ -8,11 +8,26 @@
 #include <string.h>
 #include <time.h>
 #include "callbacks.h"
+#include "map.h"
 #include "record.h"
 #include "strings.h"
 #include "symbol.h"
 #include "value.h"
 #include "vector.h"
+
+#define STATIC_SYMBOL_DATA(name, cname_literal) \
+    static StaticSymbolData name = { \
+        .sym = { \
+            .base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = 0}, \
+            .ns_name = NULL, \
+            .unqualified = NULL, \
+            .cname = cname_literal \
+        } \
+    }
+
+STATIC_SYMBOL_DATA(sym_entity_root_data, "root");
+
+#undef STATIC_SYMBOL_DATA
 
 static inline uint32_t record_type_hash(ID obj) {
     CljPersistentRecord *r = (CljPersistentRecord *)obj;
@@ -221,10 +236,30 @@ static inline bool node_culled_tri(VgTransformFixed t,
     transform_point(t, x2, y2, &bx, &by);
     transform_point(t, x3, y3, &cx, &cy);
     int mn_x = ax, mx_x = ax, mn_y = ay, mx_y = ay;
-    if (bx < mn_x) mn_x = bx; if (bx > mx_x) mx_x = bx;
-    if (by < mn_y) mn_y = by; if (by > mx_y) mx_y = by;
-    if (cx < mn_x) mn_x = cx; if (cx > mx_x) mx_x = cx;
-    if (cy < mn_y) mn_y = cy; if (cy > mx_y) mx_y = cy;
+    if (bx < mn_x) {
+        mn_x = bx;
+    }
+    if (bx > mx_x) {
+        mx_x = bx;
+    }
+    if (by < mn_y) {
+        mn_y = by;
+    }
+    if (by > mx_y) {
+        mx_y = by;
+    }
+    if (cx < mn_x) {
+        mn_x = cx;
+    }
+    if (cx > mx_x) {
+        mx_x = cx;
+    }
+    if (cy < mn_y) {
+        mn_y = cy;
+    }
+    if (cy > mx_y) {
+        mx_y = cy;
+    }
     return aabb_outside_fb(mn_x - sw, mn_y - sw, mx_x + sw, mx_y + sw, fb_w, fb_h, use_clip, clip);
 }
 
@@ -312,21 +347,300 @@ static const char *id_to_text_cstr(ID v) {
     return "";
 }
 
+static bool id_is_vector(ID v) {
+    if (!v) {
+        return false;
+    }
+    CljType tag = TAG(v);
+    return tag == CLJ_VECTOR_PERSISTENT || tag == CLJ_VECTOR_TRANSIENT;
+}
 
+static uint32_t id_to_u32_default(ID v, uint32_t default_value) {
+    if (!v) {
+        return default_value;
+    }
+    if (is_fixnum(v)) {
+        int32_t value = as_fixnum(v);
+        if (value <= 0) {
+            return 0u;
+        }
+        return (uint32_t)value;
+    }
+    if (is_fixed(v)) {
+        int32_t raw = fixed_payload_raw(v);
+        int32_t value = fixed_raw_to_int_trunc_zero(raw);
+        if (value <= 0) {
+            return 0u;
+        }
+        return (uint32_t)value;
+    }
+    return default_value;
+}
 
-static VgTransformFixed decode_transform_fixed(ID obj, const VgRecordSchema *s) {
-    VgTransform t = vg_transform_identity();
-    if (!obj || TAG(obj) != CLJ_RECORD) {
+static bool id_to_fixed_raw(ID v, int32_t *out_raw) {
+    if (!v || !out_raw) {
+        return false;
+    }
+    if (is_fixnum(v)) {
+        *out_raw = (int32_t)as_fixnum(v) << CLJ_FIXED_FRAC_BITS;
+        return true;
+    }
+    if (is_fixed(v)) {
+        *out_raw = fixed_payload_raw(v);
+        return true;
+    }
+    return false;
+}
+
+static ID fixed_raw_to_id(int32_t raw) {
+    if ((raw % CLJ_FIXED_SCALE) == 0) {
+        int32_t integer = raw / CLJ_FIXED_SCALE;
+        if (integer >= FIXNUM_MIN && integer <= FIXNUM_MAX) {
+            return fixnum(integer);
+        }
+    }
+    return (ID)(((intptr_t)raw << TAG_BITS) | TAG_FIXED);
+}
+
+static bool timeline_keyframe_at(ID keyframes_obj, unsigned int index, uint32_t *out_time_ms, ID *out_value) {
+    if (!id_is_vector(keyframes_obj)) {
+        return false;
+    }
+    CljPersistentVector *keyframes = as_vector(keyframes_obj);
+    if (!keyframes || index >= vector_count(keyframes)) {
+        return false;
+    }
+    ID entry = vector_nth(keyframes, index);
+    if (!id_is_vector(entry)) {
+        return false;
+    }
+    CljPersistentVector *pair = as_vector(entry);
+    if (!pair || vector_count(pair) < 2) {
+        return false;
+    }
+    if (out_time_ms) {
+        *out_time_ms = id_to_u32_default(vector_nth(pair, 0), 0u);
+    }
+    if (out_value) {
+        *out_value = vector_nth(pair, 1);
+    }
+    return true;
+}
+
+static uint32_t timeline_phase_ms(uint32_t now_ms, uint32_t period_ms, bool loop) {
+    if (loop && period_ms > 0u) {
+        return now_ms % period_ms;
+    }
+    return now_ms;
+}
+
+static ID resolve_timeline_value(ID raw_value, uint32_t now_ms, const VgRecordSchema *sc) {
+    if (!raw_value || !sc || TAG(raw_value) != CLJ_RECORD || record_type_hash(raw_value) != sc->h_timeline) {
+        return raw_value;
+    }
+
+    Timeline *timeline = (Timeline *)raw_value;
+    ID keyframes_obj = timeline->keyframes;
+    if (!id_is_vector(keyframes_obj)) {
+        return NULL;
+    }
+    CljPersistentVector *keyframes = as_vector(keyframes_obj);
+    unsigned int count = keyframes ? vector_count(keyframes) : 0u;
+    if (count == 0u) {
+        return NULL;
+    }
+
+    uint32_t first_ms = 0u;
+    ID first_value = NULL;
+    if (!timeline_keyframe_at(keyframes_obj, 0u, &first_ms, &first_value)) {
+        return NULL;
+    }
+    if (count == 1u) {
+        return first_value;
+    }
+
+    uint32_t last_ms = first_ms;
+    ID last_value = first_value;
+    for (unsigned int i = 1; i < count; i++) {
+        uint32_t frame_ms = 0u;
+        ID frame_value = NULL;
+        if (!timeline_keyframe_at(keyframes_obj, i, &frame_ms, &frame_value)) {
+            continue;
+        }
+        last_ms = frame_ms;
+        last_value = frame_value;
+    }
+
+    bool loop = id_to_bool_default(timeline->loop, false);
+    uint32_t phase_ms = timeline_phase_ms(now_ms, last_ms, loop);
+    if (!loop && phase_ms >= last_ms) {
+        return last_value;
+    }
+    if (phase_ms <= first_ms) {
+        return first_value;
+    }
+
+    uint32_t prev_ms = first_ms;
+    ID prev_value = first_value;
+    for (unsigned int i = 1; i < count; i++) {
+        uint32_t curr_ms = 0u;
+        ID curr_value = NULL;
+        if (!timeline_keyframe_at(keyframes_obj, i, &curr_ms, &curr_value)) {
+            continue;
+        }
+        if (phase_ms < curr_ms) {
+            if (curr_ms <= prev_ms) {
+                return prev_value;
+            }
+            int32_t from_raw = 0;
+            int32_t to_raw = 0;
+            if (id_to_fixed_raw(prev_value, &from_raw) && id_to_fixed_raw(curr_value, &to_raw)) {
+                uint32_t elapsed = phase_ms - prev_ms;
+                uint32_t duration = curr_ms - prev_ms;
+                int32_t progress = vg_anim_progress_q13(elapsed, duration);
+                int32_t interpolated = vg_anim_lerp_q13(from_raw, to_raw, progress);
+                return fixed_raw_to_id(interpolated);
+            }
+            return prev_value;
+        }
+        prev_ms = curr_ms;
+        prev_value = curr_value;
+    }
+    return prev_value;
+}
+
+static bool timeline_transform_keyframe_at(ID keyframes_obj,
+                                           unsigned int index,
+                                           uint32_t *out_time_ms,
+                                           Transform **out_transform,
+                                           const VgRecordSchema *sc) {
+    ID value = NULL;
+    if (!timeline_keyframe_at(keyframes_obj, index, out_time_ms, &value)) {
+        return false;
+    }
+    if (!value || TAG(value) != CLJ_RECORD || record_type_hash(value) != sc->h_transform) {
+        return false;
+    }
+    if (out_transform) {
+        *out_transform = (Transform *)value;
+    }
+    return true;
+}
+
+static VgTransformFixed interpolate_transform_keyframes(Transform *from,
+                                                        Transform *to,
+                                                        uint32_t from_ms,
+                                                        uint32_t to_ms,
+                                                        uint32_t phase_ms) {
+    if (!from || !to || to_ms <= from_ms) {
         return vg_transform_fixed_identity();
     }
-    if (record_type_hash(obj) == s->h_transform) {
-        Transform *tr = obj;
-        t.tx = id_to_i16_default(tr->tx, 0);
-        t.ty = id_to_i16_default(tr->ty, 0);
-        t.sx = id_to_fixed_raw_default(tr->sx, VG_SCALE_ONE);
-        t.sy = id_to_fixed_raw_default(tr->sy, VG_SCALE_ONE);
-        t.rot_deg = id_to_i16_default(tr->rot, 0);
-        return vg_transform_fixed_from_transform(t);
+    uint32_t elapsed = phase_ms - from_ms;
+    uint32_t duration = to_ms - from_ms;
+    int32_t progress = vg_anim_progress_q13(elapsed, duration);
+
+    int32_t from_tx = id_to_fixed_raw_default(from->tx, 0);
+    int32_t from_ty = id_to_fixed_raw_default(from->ty, 0);
+    int32_t from_sx = id_to_fixed_raw_default(from->sx, VG_SCALE_ONE);
+    int32_t from_sy = id_to_fixed_raw_default(from->sy, VG_SCALE_ONE);
+    int32_t from_rot = id_to_fixed_raw_default(from->rot, 0);
+
+    int32_t to_tx = id_to_fixed_raw_default(to->tx, 0);
+    int32_t to_ty = id_to_fixed_raw_default(to->ty, 0);
+    int32_t to_sx = id_to_fixed_raw_default(to->sx, VG_SCALE_ONE);
+    int32_t to_sy = id_to_fixed_raw_default(to->sy, VG_SCALE_ONE);
+    int32_t to_rot = id_to_fixed_raw_default(to->rot, 0);
+
+    VgTransform interpolated = vg_transform_identity();
+    interpolated.tx = (int16_t)fixed_raw_to_int_trunc_zero(vg_anim_lerp_q13(from_tx, to_tx, progress));
+    interpolated.ty = (int16_t)fixed_raw_to_int_trunc_zero(vg_anim_lerp_q13(from_ty, to_ty, progress));
+    interpolated.sx = vg_anim_lerp_q13(from_sx, to_sx, progress);
+    interpolated.sy = vg_anim_lerp_q13(from_sy, to_sy, progress);
+    interpolated.rot_deg = (int16_t)fixed_raw_to_int_trunc_zero(vg_anim_lerp_q13(from_rot, to_rot, progress));
+    return vg_transform_fixed_from_transform(interpolated);
+}
+
+static VgTransformFixed decode_transform_record_fixed(const Transform *tr) {
+    if (!tr) {
+        return vg_transform_fixed_identity();
+    }
+    VgTransform t = vg_transform_identity();
+    t.tx = id_to_i16_default(tr->tx, 0);
+    t.ty = id_to_i16_default(tr->ty, 0);
+    t.sx = id_to_fixed_raw_default(tr->sx, VG_SCALE_ONE);
+    t.sy = id_to_fixed_raw_default(tr->sy, VG_SCALE_ONE);
+    t.rot_deg = id_to_i16_default(tr->rot, 0);
+    return vg_transform_fixed_from_transform(t);
+}
+
+static VgTransformFixed decode_transform_fixed(ID obj, uint32_t now_ms, const VgRecordSchema *s) {
+    if (!obj) {
+        return vg_transform_fixed_identity();
+    }
+    if (TAG(obj) == CLJ_RECORD && record_type_hash(obj) == s->h_timeline) {
+        Timeline *timeline = (Timeline *)obj;
+        ID keyframes_obj = timeline->keyframes;
+        if (!id_is_vector(keyframes_obj)) {
+            return vg_transform_fixed_identity();
+        }
+        CljPersistentVector *keyframes = as_vector(keyframes_obj);
+        unsigned int count = keyframes ? vector_count(keyframes) : 0u;
+        if (count == 0u) {
+            return vg_transform_fixed_identity();
+        }
+
+        uint32_t first_ms = 0u;
+        Transform *first_transform = NULL;
+        if (!timeline_transform_keyframe_at(keyframes_obj, 0u, &first_ms, &first_transform, s)) {
+            return vg_transform_fixed_identity();
+        }
+        if (count == 1u) {
+            return decode_transform_record_fixed(first_transform);
+        }
+
+        uint32_t last_ms = first_ms;
+        Transform *last_transform = first_transform;
+        for (unsigned int i = 1; i < count; i++) {
+            uint32_t frame_ms = 0u;
+            Transform *frame_transform = NULL;
+            if (!timeline_transform_keyframe_at(keyframes_obj, i, &frame_ms, &frame_transform, s)) {
+                continue;
+            }
+            last_ms = frame_ms;
+            last_transform = frame_transform;
+        }
+
+        bool loop = id_to_bool_default(timeline->loop, false);
+        uint32_t phase_ms = timeline_phase_ms(now_ms, last_ms, loop);
+        if (!loop && phase_ms >= last_ms) {
+            return decode_transform_record_fixed(last_transform);
+        }
+        if (phase_ms <= first_ms) {
+            return decode_transform_record_fixed(first_transform);
+        }
+
+        uint32_t prev_ms = first_ms;
+        Transform *prev_transform = first_transform;
+        for (unsigned int i = 1; i < count; i++) {
+            uint32_t curr_ms = 0u;
+            Transform *curr_transform = NULL;
+            if (!timeline_transform_keyframe_at(keyframes_obj, i, &curr_ms, &curr_transform, s)) {
+                continue;
+            }
+            if (phase_ms < curr_ms) {
+                return interpolate_transform_keyframes(prev_transform,
+                                                       curr_transform,
+                                                       prev_ms,
+                                                       curr_ms,
+                                                       phase_ms);
+            }
+            prev_ms = curr_ms;
+            prev_transform = curr_transform;
+        }
+        return decode_transform_record_fixed(prev_transform);
+    }
+    if (TAG(obj) == CLJ_RECORD && record_type_hash(obj) == s->h_transform) {
+        return decode_transform_record_fixed((Transform *)obj);
     }
     return vg_transform_fixed_identity();
 }
@@ -351,27 +665,25 @@ static ID node_visible_field(ID node_obj, uint32_t h, const VgRecordSchema *s) {
     return NULL;
 }
 
-static VgStyle decode_style(ID node_obj, uint32_t node_h, const VgRecordSchema *sc) {
+static VgStyle decode_style(ID node_obj, uint32_t node_h, uint32_t now_ms, const VgRecordSchema *sc) {
     VgStyle st = vg_style_default();
     if (!node_obj) {
         return st;
     }
-    ID style_obj = node_style_field(node_obj, node_h, sc);
+    ID style_obj = resolve_timeline_value(node_style_field(node_obj, node_h, sc), now_ms, sc);
     if (style_obj && TAG(style_obj) == CLJ_RECORD && record_type_hash(style_obj) == sc->h_style) {
         Style *sr = style_obj;
-        st.stroke_color = id_to_u16_default(sr->stroke_color, st.stroke_color);
-        st.stroke_width = id_to_u8_default(sr->stroke_width, st.stroke_width);
-        st.has_fill = id_to_bool_default(sr->has_fill, st.has_fill);
-        st.fill_color = id_to_u16_default(sr->fill_color, st.fill_color);
-        st.has_bg_color = id_to_bool_default(sr->has_bg_color, st.has_bg_color);
-        st.bg_color = id_to_u16_default(sr->bg_color, st.bg_color);
-        st.visible = id_to_bool_default(sr->visible, st.visible);
+        st.stroke_color = id_to_u16_default(resolve_timeline_value(sr->stroke_color, now_ms, sc), st.stroke_color);
+        st.stroke_width = id_to_u8_default(resolve_timeline_value(sr->stroke_width, now_ms, sc), st.stroke_width);
+        st.has_fill = id_to_bool_default(resolve_timeline_value(sr->has_fill, now_ms, sc), st.has_fill);
+        st.fill_color = id_to_u16_default(resolve_timeline_value(sr->fill_color, now_ms, sc), st.fill_color);
+        st.has_bg_color = id_to_bool_default(resolve_timeline_value(sr->has_bg_color, now_ms, sc), st.has_bg_color);
+        st.bg_color = id_to_u16_default(resolve_timeline_value(sr->bg_color, now_ms, sc), st.bg_color);
+        st.visible = id_to_bool_default(resolve_timeline_value(sr->visible, now_ms, sc), st.visible);
     }
-    ID node_visible = node_visible_field(node_obj, node_h, sc);
+    ID node_visible = resolve_timeline_value(node_visible_field(node_obj, node_h, sc), now_ms, sc);
     if (node_visible) {
         st.visible = id_to_bool_default(node_visible, st.visible);
-    } else if (node_visible == clj_false) {
-        st.visible = false;
     }
     if (st.stroke_width == 0) {
         st.stroke_width = 1;
@@ -380,17 +692,18 @@ static VgStyle decode_style(ID node_obj, uint32_t node_h, const VgRecordSchema *
 }
 
 static bool render_record_node(ID node_obj,
+                               ID entity_map,
                                VgTransformFixed parent_t,
                                VgFrameBuffer *fb,
                                bool use_clip,
-                               VgClipRect clip_rect);
+                               VgClipRect clip_rect,
+                               uint32_t now_ms);
 
 static bool decode_rect(ID obj, VgClipRect *out_rect, const VgRecordSchema *sc) {
     if (!obj || !out_rect) {
         return false;
     }
-    CljType obj_tag = TAG(obj);
-    if (obj_tag == CLJ_VECTOR_PERSISTENT || obj_tag == CLJ_VECTOR_TRANSIENT) {
+    if (id_is_vector(obj)) {
         CljPersistentVector *v = as_vector(obj);
         if (vector_count(v) < 4) {
             return false;
@@ -401,7 +714,7 @@ static bool decode_rect(ID obj, VgClipRect *out_rect, const VgRecordSchema *sc) 
         out_rect->h = id_to_i16_default(vector_nth(v, 3), 0);
         return !vg_clip_rect_is_empty(*out_rect);
     }
-    if (obj_tag == CLJ_RECORD && record_type_hash(obj) == sc->h_rect) {
+    if (TAG(obj) == CLJ_RECORD && record_type_hash(obj) == sc->h_rect) {
         Rect *r = obj;
         out_rect->x = id_to_i16_default(r->x, 0);
         out_rect->y = id_to_i16_default(r->y, 0);
@@ -429,11 +742,13 @@ static bool render_polyline_record(ID node_obj,
                                    VgStyle style,
                                    VgFrameBuffer *fb,
                                    bool use_clip,
-                                   VgClipRect clip_rect) {
+                                   VgClipRect clip_rect,
+                                   uint32_t now_ms,
+                                   const VgRecordSchema *sc) {
     Polyline *pr = node_obj;
-    ID pts = pr->pts;
-    ID closed = pr->closed;
-    if (!pts || TAG(pts) != CLJ_VECTOR_PERSISTENT) {
+    ID pts = resolve_timeline_value(pr->pts, now_ms, sc);
+    ID closed = resolve_timeline_value(pr->closed, now_ms, sc);
+    if (!id_is_vector(pts)) {
         return true;
     }
     CljPersistentVector *pv = as_vector(pts);
@@ -444,7 +759,7 @@ static bool render_polyline_record(ID node_obj,
     VgPoint points[GFX_FILL_MAX_VERTS];
     for (unsigned int i = 0; i < n; i++) {
         ID point = vector_nth(pv, i);
-        if (!point || TAG(point) != CLJ_VECTOR_PERSISTENT) {
+        if (!id_is_vector(point)) {
             return false;
         }
         CljPersistentVector *xy = as_vector(point);
@@ -461,8 +776,18 @@ static bool render_polyline_record(ID node_obj,
         for (unsigned int i = 0; i < n; i++) {
             int wx, wy;
             transform_point(world_t, points[i].x, points[i].y, &wx, &wy);
-            if (wx < mn_x) mn_x = wx; if (wx > mx_x) mx_x = wx;
-            if (wy < mn_y) mn_y = wy; if (wy > mx_y) mx_y = wy;
+            if (wx < mn_x) {
+                mn_x = wx;
+            }
+            if (wx > mx_x) {
+                mx_x = wx;
+            }
+            if (wy < mn_y) {
+                mn_y = wy;
+            }
+            if (wy > mx_y) {
+                mx_y = wy;
+            }
         }
         if (aabb_outside_fb(mn_x - sw, mn_y - sw, mx_x + sw, mx_y + sw,
                             fb->width, fb->height, use_clip, clip_rect))
@@ -481,10 +806,12 @@ static bool render_polyline_record(ID node_obj,
 }
 
 static bool render_record_node(ID node_obj,
+                               ID entity_map,
                                VgTransformFixed parent_t,
                                VgFrameBuffer *fb,
                                bool use_clip,
-                               VgClipRect clip_rect) {
+                               VgClipRect clip_rect,
+                               uint32_t now_ms) {
     if (!node_obj || TAG(node_obj) != CLJ_RECORD || !fb) {
         return false;
     }
@@ -501,28 +828,41 @@ static bool render_record_node(ID node_obj,
 
     VgTransformFixed world_t = parent_t;
     if (local_t_obj) {
-        VgTransformFixed local_t = decode_transform_fixed(local_t_obj, sc);
+        VgTransformFixed local_t = decode_transform_fixed(local_t_obj, now_ms, sc);
         world_t = vg_transform_fixed_compose(parent_t, local_t);
     }
-    VgStyle style = decode_style(node_obj, h, sc);
+    VgStyle style = decode_style(node_obj, h, now_ms, sc);
     if (!style.visible) {
         return true;
     }
 
     if (h == sc->h_group) {
         Group *group = node_obj;
-        ID children = group->children;
-        if (!children || TAG(children) != CLJ_VECTOR_PERSISTENT) {
+        ID children = resolve_timeline_value(group->children, now_ms, sc);
+        if (!children || !id_is_vector(children)) {
             return true;
         }
         CljPersistentVector *vec = as_vector(children);
         unsigned int count = vector_count(vec);
         for (unsigned int i = 0; i < count; i++) {
-            ID child = vector_nth(vec, i);
-            if (!child) {
+            ID child_ref = vector_nth(vec, i);
+            if (!child_ref) {
                 continue;
             }
-            if (!render_record_node(child, world_t, fb, use_clip, clip_rect)) {
+            ID child_node = child_ref;
+            if (TAG(child_node) != CLJ_RECORD) {
+                if (!entity_map || !is_map(entity_map)) {
+                    return false;
+                }
+                child_node = map_get_sentinel(entity_map, child_ref, NULL);
+                if (!child_node) {
+                    return false;
+                }
+            }
+            if (TAG(child_node) != CLJ_RECORD) {
+                return false;
+            }
+            if (!render_record_node(child_node, entity_map, world_t, fb, use_clip, clip_rect, now_ms)) {
                 return false;
             }
         }
@@ -540,10 +880,10 @@ static bool render_record_node(ID node_obj,
     if (h == sc->h_line) {
         temp.type = VG_NODE_LINE;
         Line *line = node_obj;
-        temp.data.line.x1 = id_to_i16_default(line->x1, 0);
-        temp.data.line.y1 = id_to_i16_default(line->y1, 0);
-        temp.data.line.x2 = id_to_i16_default(line->x2, 0);
-        temp.data.line.y2 = id_to_i16_default(line->y2, 0);
+        temp.data.line.x1 = id_to_i16_default(resolve_timeline_value(line->x1, now_ms, sc), 0);
+        temp.data.line.y1 = id_to_i16_default(resolve_timeline_value(line->y1, now_ms, sc), 0);
+        temp.data.line.x2 = id_to_i16_default(resolve_timeline_value(line->x2, now_ms, sc), 0);
+        temp.data.line.y2 = id_to_i16_default(resolve_timeline_value(line->y2, now_ms, sc), 0);
         if (node_culled_line(world_t, temp.data.line.x1, temp.data.line.y1,
                              temp.data.line.x2, temp.data.line.y2, sw,
                              fb_w, fb_h, use_clip, clip_rect))
@@ -553,10 +893,10 @@ static bool render_record_node(ID node_obj,
     if (h == sc->h_rect) {
         temp.type = VG_NODE_RECT;
         Rect *rect = node_obj;
-        temp.data.rect.x = id_to_i16_default(rect->x, 0);
-        temp.data.rect.y = id_to_i16_default(rect->y, 0);
-        temp.data.rect.w = id_to_i16_default(rect->w, 0);
-        temp.data.rect.h = id_to_i16_default(rect->h, 0);
+        temp.data.rect.x = id_to_i16_default(resolve_timeline_value(rect->x, now_ms, sc), 0);
+        temp.data.rect.y = id_to_i16_default(resolve_timeline_value(rect->y, now_ms, sc), 0);
+        temp.data.rect.w = id_to_i16_default(resolve_timeline_value(rect->w, now_ms, sc), 0);
+        temp.data.rect.h = id_to_i16_default(resolve_timeline_value(rect->h, now_ms, sc), 0);
         if (node_culled_rect(world_t, temp.data.rect.x, temp.data.rect.y,
                              temp.data.rect.w, temp.data.rect.h, sw,
                              fb_w, fb_h, use_clip, clip_rect))
@@ -566,12 +906,12 @@ static bool render_record_node(ID node_obj,
     if (h == sc->h_tri) {
         temp.type = VG_NODE_TRI;
         Tri *tri = node_obj;
-        temp.data.tri.x1 = id_to_i16_default(tri->x1, 0);
-        temp.data.tri.y1 = id_to_i16_default(tri->y1, 0);
-        temp.data.tri.x2 = id_to_i16_default(tri->x2, 0);
-        temp.data.tri.y2 = id_to_i16_default(tri->y2, 0);
-        temp.data.tri.x3 = id_to_i16_default(tri->x3, 0);
-        temp.data.tri.y3 = id_to_i16_default(tri->y3, 0);
+        temp.data.tri.x1 = id_to_i16_default(resolve_timeline_value(tri->x1, now_ms, sc), 0);
+        temp.data.tri.y1 = id_to_i16_default(resolve_timeline_value(tri->y1, now_ms, sc), 0);
+        temp.data.tri.x2 = id_to_i16_default(resolve_timeline_value(tri->x2, now_ms, sc), 0);
+        temp.data.tri.y2 = id_to_i16_default(resolve_timeline_value(tri->y2, now_ms, sc), 0);
+        temp.data.tri.x3 = id_to_i16_default(resolve_timeline_value(tri->x3, now_ms, sc), 0);
+        temp.data.tri.y3 = id_to_i16_default(resolve_timeline_value(tri->y3, now_ms, sc), 0);
         if (node_culled_tri(world_t,
                             temp.data.tri.x1, temp.data.tri.y1,
                             temp.data.tri.x2, temp.data.tri.y2,
@@ -583,17 +923,41 @@ static bool render_record_node(ID node_obj,
     if (h == sc->h_vtext) {
         temp.type = VG_NODE_VTEXT;
         VText *text = node_obj;
-        temp.data.text.x = id_to_i16_default(text->x, 0);
-        temp.data.text.y = id_to_i16_default(text->y, 0);
-        temp.data.text.scale = id_to_fixed_raw_default(text->scale, VG_SCALE_ONE);
-        temp.data.text.rot_deg = id_to_i16_default(text->rot, 0);
-        temp.data.text.text = id_to_text_cstr(text->text);
+        temp.data.text.x = id_to_i16_default(resolve_timeline_value(text->x, now_ms, sc), 0);
+        temp.data.text.y = id_to_i16_default(resolve_timeline_value(text->y, now_ms, sc), 0);
+        temp.data.text.scale = id_to_fixed_raw_default(resolve_timeline_value(text->scale, now_ms, sc), VG_SCALE_ONE);
+        temp.data.text.rot_deg = id_to_i16_default(resolve_timeline_value(text->rot, now_ms, sc), 0);
+        temp.data.text.text = id_to_text_cstr(resolve_timeline_value(text->text, now_ms, sc));
         return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
     }
     if (h == sc->h_polyline) {
-        return render_polyline_record(node_obj, world_t, style, fb, use_clip, clip_rect);
+        return render_polyline_record(node_obj, world_t, style, fb, use_clip, clip_rect, now_ms, sc);
     }
     return false;
+}
+
+static bool resolve_root_node(ID root_field, ID *out_root_node, ID *out_entity_map) {
+    if (out_root_node) {
+        *out_root_node = NULL;
+    }
+    if (out_entity_map) {
+        *out_entity_map = NULL;
+    }
+    if (!out_root_node) {
+        return false;
+    }
+    if (!root_field) {
+        return true;
+    }
+    if (!is_map(root_field)) {
+        *out_root_node = root_field;
+        return true;
+    }
+    if (out_entity_map) {
+        *out_entity_map = root_field;
+    }
+    *out_root_node = map_get_sentinel(root_field, (ID)&sym_entity_root_data.sym, NULL);
+    return *out_root_node != NULL;
 }
 
 static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_clip, ID *out_erase) {
@@ -617,7 +981,7 @@ static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_clip, ID 
     return false;
 }
 
-bool vg_render_scene_record(ID scene_record, VgFrameBuffer *fb) {
+bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t now_ms) {
     if (!scene_record || !fb || TAG(scene_record) != CLJ_RECORD) {
         return false;
     }
@@ -630,21 +994,39 @@ bool vg_render_scene_record(ID scene_record, VgFrameBuffer *fb) {
     }
 
     const VgRecordSchema *sc = tiny_gfx_schema();
+    ID resolved_root = resolve_timeline_value(root, now_ms, sc);
+    ID resolved_clip_source = resolve_timeline_value(clip_source, now_ms, sc);
     VgClipRect effective_rect = {0, 0, 0, 0};
-    bool has_effective_rect = decode_rect(clip_source, &effective_rect, sc);
+    bool has_effective_rect = decode_rect(resolved_clip_source, &effective_rect, sc);
+    ID entity_map = NULL;
+    ID root_node = NULL;
+    if (!resolve_root_node(resolved_root, &root_node, &entity_map)) {
+        return false;
+    }
 
+    ID resolved_erase = resolve_timeline_value(erase_source, now_ms, sc);
     if (has_effective_rect) {
-        uint16_t erase_color = id_to_u16_default(erase_source, 0x0000u);
+        uint16_t erase_color = id_to_u16_default(resolved_erase, 0x0000u);
         vg_framebuffer_clear_rect(fb, effective_rect, erase_color);
     }
 
-    if (!root) {
+    if (!root_node) {
         return true;
     }
-    return render_record_node(root, vg_transform_fixed_identity(), fb, has_effective_rect, effective_rect);
+    return render_record_node(root_node,
+                              entity_map,
+                              vg_transform_fixed_identity(),
+                              fb,
+                              has_effective_rect,
+                              effective_rect,
+                              now_ms);
 }
 
-bool vg_render_scene_record_clipped(ID scene_record, VgFrameBuffer *fb, VgClipRect clip_rect) {
+bool vg_render_scene_record(ID scene_record, VgFrameBuffer *fb) {
+    return vg_render_scene_record_at_ms(scene_record, fb, platform_current_time_ms());
+}
+
+bool vg_render_scene_record_clipped_at_ms(ID scene_record, VgFrameBuffer *fb, VgClipRect clip_rect, uint32_t now_ms) {
     if (!scene_record || !fb || TAG(scene_record) != CLJ_RECORD) {
         return false;
     }
@@ -654,27 +1036,43 @@ bool vg_render_scene_record_clipped(ID scene_record, VgFrameBuffer *fb, VgClipRe
     if (!decode_scene_fields(scene_record, &root, &clip_source, NULL)) {
         return false;
     }
-    if (!root) {
-        return true;
-    }
 
     const VgRecordSchema *sc = tiny_gfx_schema();
+    ID resolved_root = resolve_timeline_value(root, now_ms, sc);
+    ID resolved_clip_source = resolve_timeline_value(clip_source, now_ms, sc);
     VgClipRect effective_clip = clip_rect;
     VgClipRect scene_clip = {0, 0, 0, 0};
-    bool has_scene_clip = decode_rect(clip_source, &scene_clip, sc);
+    bool has_scene_clip = decode_rect(resolved_clip_source, &scene_clip, sc);
     if (has_scene_clip) {
         if (!vg_clip_rect_intersect(clip_rect, scene_clip, &effective_clip)) {
             return true;
         }
     }
-    return render_record_node(root, vg_transform_fixed_identity(), fb, true, effective_clip);
+    ID entity_map = NULL;
+    ID root_node = NULL;
+    if (!resolve_root_node(resolved_root, &root_node, &entity_map)) {
+        return false;
+    }
+    if (!root_node) {
+        return true;
+    }
+    return render_record_node(root_node,
+                              entity_map,
+                              vg_transform_fixed_identity(),
+                              fb,
+                              true,
+                              effective_clip,
+                              now_ms);
+}
+
+bool vg_render_scene_record_clipped(ID scene_record, VgFrameBuffer *fb, VgClipRect clip_rect) {
+    return vg_render_scene_record_clipped_at_ms(scene_record, fb, clip_rect, platform_current_time_ms());
 }
 
 bool vg_decode_frame_slot_record(ID frame_scene_record, VgRenderSlot *out_slot) {
     if (!frame_scene_record || !out_slot || TAG(frame_scene_record) != CLJ_RECORD) {
         return false;
     }
-    if (TAG(frame_scene_record) != CLJ_RECORD) return false;
     const VgRecordSchema *sc = tiny_gfx_schema();
     if (record_type_hash(frame_scene_record) != sc->h_frame_scene) {
         return false;

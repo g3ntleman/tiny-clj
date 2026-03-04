@@ -37,6 +37,8 @@ uint32_t vg_slot_change_tracker_wait_for_changes(VgSlotChangeTracker *tracker,
 
 bool vg_render_scene_record(ID root_record, VgFrameBuffer *fb);
 bool vg_render_scene_record_clipped(ID root_record, VgFrameBuffer *fb, VgClipRect clip_rect);
+bool vg_render_scene_record_at_ms(ID root_record, VgFrameBuffer *fb, uint32_t now_ms);
+bool vg_render_scene_record_clipped_at_ms(ID root_record, VgFrameBuffer *fb, VgClipRect clip_rect, uint32_t now_ms);
 bool vg_decode_frame_slot_record(ID frame_scene_record, VgRenderSlot *out_slot);
 bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
                                             VgRenderSlotState *state,

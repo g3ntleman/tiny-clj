@@ -46,6 +46,12 @@ Missing values are omitted (the key will not be present)."}
   (fn print-stats []
     (stats)))
 
+;; vector-scene-bench - Benchmark decode+render path for demo scenes.
+;; Returns a map with total-ms and us-per-frame metrics for deco/score/game scenes.
+;; Optional args: (vector-scene-bench iterations warmup)
+^#^{:doc "Benchmarks vector scene decode+render path and returns a metrics map. Usage: (vector-scene-bench) or (vector-scene-bench iterations warmup)."}
+(def vector-scene-bench (fn vector-scene-bench [& args] :native))
+
 ;; print-ast - Print AST structure with internals for debugging
 ;; Only available in DEBUG builds
 ^#^{:doc "Prints the AST (Abstract Syntax Tree) structure of an object with internal type information. Only available in DEBUG builds. Usage: (print-ast obj)"}

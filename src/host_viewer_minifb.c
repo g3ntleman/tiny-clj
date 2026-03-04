@@ -210,10 +210,9 @@ enum {
     DEMO_BUNDLE_PLAYER_T = 4,
     DEMO_BUNDLE_OBSTACLE_BODY_T = 5,
     DEMO_BUNDLE_OBSTACLE_NOSE_T = 6,
-    DEMO_BUNDLE_HBAR_T = 7,
-    DEMO_BUNDLE_GAME_PLAYER = 8,
-    DEMO_BUNDLE_SCORE_TEXT = 9,
-    DEMO_BUNDLE_COUNT = 10
+    DEMO_BUNDLE_GAME_PLAYER = 7,
+    DEMO_BUNDLE_SCORE_TEXT = 8,
+    DEMO_BUNDLE_COUNT = 9
 };
 
 typedef struct {
@@ -225,7 +224,6 @@ typedef struct {
     Transform *player_t;
     Transform *obstacle_body_t;
     Transform *obstacle_nose_t;
-    Transform *hbar_t;
     Tri *game_player;
     VText *score_text;
 } ViewerDemoBundle;
@@ -255,12 +253,11 @@ static bool init_demo_bundle(EvalState *st, ViewerDemoBundle *out_bundle) {
     out_bundle->player_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_PLAYER_T);
     out_bundle->obstacle_body_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_OBSTACLE_BODY_T);
     out_bundle->obstacle_nose_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_OBSTACLE_NOSE_T);
-    out_bundle->hbar_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_HBAR_T);
     out_bundle->game_player = (Tri *)vector_nth(vec, DEMO_BUNDLE_GAME_PLAYER);
     out_bundle->score_text = (VText *)vector_nth(vec, DEMO_BUNDLE_SCORE_TEXT);
     return out_bundle->deco_scene && out_bundle->score_scene && out_bundle->game_scene &&
            out_bundle->terrain_t && out_bundle->player_t && out_bundle->obstacle_body_t &&
-           out_bundle->obstacle_nose_t && out_bundle->hbar_t &&
+           out_bundle->obstacle_nose_t &&
            out_bundle->game_player && out_bundle->score_text;
 }
 
@@ -866,8 +863,6 @@ int main(void) {
         set_transform_fields(demo_bundle.player_t, 0, player_jump_y, 0);
         set_obstacle_transforms(demo_bundle.obstacle_body_t, demo_bundle.obstacle_nose_t, obstacle_x);
         set_player_geometry(demo_bundle.game_player, player_small);
-        int hbar_x = (int)((frame_count * 2u) % 340u) - 10;
-        set_transform_fields(demo_bundle.hbar_t, hbar_x, 80, 0);
 
         uint32_t dirty_pixels = 0u;
         uint32_t changed_slots = 0u;

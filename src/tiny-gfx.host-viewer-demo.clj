@@ -1,7 +1,7 @@
 R"TINY_GFX_HOST(
 (ns tiny-gfx.host-viewer-demo
   (:require [tiny-gfx.scene :refer [->Transform ->Style ->Group ->Polyline
-                                     ->Tri ->VText ->FrameScene color]]))
+                                     ->Tri ->VText ->FrameScene ->Timeline color]]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
@@ -18,6 +18,11 @@ R"TINY_GFX_HOST(
   [{:keys [tx ty sx sy rot]
     :or   {tx 0 ty 0 sx 1 sy 1 rot 0}}]
   (->Transform tx ty sx sy rot))
+
+(defn timeline
+  [{:keys [keyframes loop]
+    :or   {keyframes [] loop true}}]
+  (->Timeline keyframes loop))
 
 (defn polyline
   [{:keys [id t style visible pts closed]
@@ -56,6 +61,7 @@ R"TINY_GFX_HOST(
 (def color-magenta (color 0xFF00FF))
 (def color-yellow (color 0xFFFF00))
 (def color-red (color 0xFF0000))
+(def root-id 'root)
 
 (def style-deco (style {:stroke-color color-cyan :stroke-width 2}))
 (def style-score (style {:stroke-color color-white :stroke-width 1}))
@@ -85,22 +91,27 @@ Index layout:
 4 player-transform
 5 rocket-body-transform
 6 rocket-nose-transform
-7 hbar-transform
-8 player-tri
-9 score-text"
+7 player-tri
+8 score-text"
   []
   (let [mountains (polyline {:id 1001 :style style-deco :pts mountain-pts})
-        deco-root (group {:id 1000 :style style-deco :children [mountains]})
-        deco-scene (frame-scene {:root deco-root :clip-rect [0 184 320 56] :z 0})]
+        deco-root (group {:id root-id :style style-deco :children [1001]})
+        deco-entities {root-id deco-root
+                       1001 mountains}
+        deco-scene (frame-scene {:root deco-entities :clip-rect [0 184 320 56] :z 0})]
     (let [score-t (transform {:tx 8 :ty 21})
           score-text (vtext {:id 2001 :t score-t :style style-score :text "SCORE 0000    LIFES 3"})
-          score-root (group {:id 2000 :style style-score :children [score-text]})
-          score-scene (frame-scene {:root score-root :clip-rect [0 0 320 32] :z 1})]
+          score-root (group {:id root-id :style style-score :children [2001]})
+          score-entities {root-id score-root
+                          2001 score-text}
+          score-scene (frame-scene {:root score-entities :clip-rect [0 0 320 32] :z 1})]
       (let [terrain-t (transform {})
             player-t (transform {})
             rocket-body-t (transform {})
             rocket-nose-t (transform {})
-            hbar-t (transform {})
+            hbar-timeline (timeline {:keyframes [[0 (transform {:tx -10 :ty 80 :rot 0})]
+                                                 [1700 (transform {:tx 330 :ty 80 :rot 0})]]
+                                     :loop true})
             game-terrain (polyline {:id 3001 :t terrain-t :style style-game-line
                                     :pts [[0 156] [60 156] [100 144] [150 156] [220 156] [260 146] [319 156]
                                           [380 156] [420 146] [480 156] [560 156] [620 144]]})
@@ -112,11 +123,18 @@ Index layout:
                                    :x1 20 :y1 0 :x2 10 :y2 -3 :x3 10 :y3 3})
             game-caption-t (transform {:tx 96 :ty 52})
             game-caption (vtext {:id 3004 :t game-caption-t :style style-score :text "GAME SCENE"})
-            game-hbar (tri {:id 3010 :t hbar-t :style style-hbar
+            game-hbar (tri {:id 3010 :t hbar-timeline :style style-hbar
                             :x1 0 :y1 -4 :x2 20 :y2 0 :x3 0 :y3 4})
-            game-root (group {:id 3000 :style style-score
-                              :children [game-terrain game-player game-rocket-body game-rocket-nose game-caption game-hbar]})
-            game-scene (frame-scene {:root game-root :clip-rect [0 40 320 136] :z 2})]
+            game-root (group {:id root-id :style style-score
+                              :children [3001 3002 3003 3005 3004 3010]})
+            game-entities {root-id game-root
+                           3001 game-terrain
+                           3002 game-player
+                           3003 game-rocket-body
+                           3005 game-rocket-nose
+                           3004 game-caption
+                           3010 game-hbar}
+            game-scene (frame-scene {:root game-entities :clip-rect [0 40 320 136] :z 2})]
         [deco-scene
          score-scene
          game-scene
@@ -124,7 +142,6 @@ Index layout:
          player-t
          rocket-body-t
          rocket-nose-t
-         hbar-t
          game-player
          score-text]))))
 

@@ -52,6 +52,7 @@
 #include "datetime_utc.h"
 #include "platform.h"
 #include "tiny_gfx.h"
+#include "scene.h"
 #if defined(ESP32_BUILD)
 #include "gpio_esp32.h"
 #endif
@@ -148,6 +149,7 @@ ID native_tinyclj_net_mdns_browse_bang(ID *args, unsigned int argc);
 ID native_tinyclj_net_mdns_close_bang(ID *args, unsigned int argc);
 
 static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc);
+static ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc);
 static ID native_clojure_pprint_pprint_str(ID *args, unsigned int argc);
 
 // clojure.core sequence functions (used by :native stubs)
@@ -4048,6 +4050,11 @@ static StaticSymbolData sym_tinyclj_runtime_stats_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-clj.runtime/stats"}};
+static StaticSymbolData sym_tinyclj_runtime_vector_scene_bench_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.runtime/vector-scene-bench"}};
 
 static StaticSymbolData sym_tinyclj_fs_spit_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
@@ -4219,6 +4226,9 @@ static const NativeFunctionEntry native_function_table[] = {
     // libs' :native stubs (pseudo-qualified cname entries)
     NATIVE_ENTRY(&sym_clojure_pprint_pprint_str_qualified_data.sym, native_clojure_pprint_pprint_str),
     NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_stats_qualified_data.sym, native_tinyclj_runtime_stats, "tiny-clj.runtime/stats"),
+    NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_vector_scene_bench_qualified_data.sym,
+                      native_tinyclj_runtime_vector_scene_bench,
+                      "tiny-clj.runtime/vector-scene-bench"),
     NATIVE_ENTRY(&sym_tinyclj_fs_spit_bytes_qualified_data.sym, native_tinyclj_fs_spit_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat),
@@ -6242,6 +6252,7 @@ bool builtin_native_fn_needs_eval_state(BuiltinFn fn) {
          fn == native_require ||
          fn == native_eval ||
          fn == native_read_string ||
+         fn == native_tinyclj_runtime_vector_scene_bench ||
          fn == native_keyword;
 }
 
@@ -7050,6 +7061,234 @@ ID native_now(ID *args, unsigned int argc) {
 // -----------------------------------------------------------------------------
 // libs support: tiny-clj.runtime/stats + clojure.pprint/pprint-str
 // -----------------------------------------------------------------------------
+
+static bool tinyclj_scene_bench_parse_u32_arg(ID v, uint32_t default_value, uint32_t *out_value) {
+  if (!out_value) {
+    return false;
+  }
+  *out_value = default_value;
+  if (!v) {
+    return true;
+  }
+  int32_t parsed = 0;
+  if (is_fixnum(v)) {
+    parsed = as_fixnum(v);
+  } else if (is_fixed(v)) {
+    parsed = (int32_t)as_fixed(v);
+  } else {
+    return false;
+  }
+  if (parsed <= 0) {
+    return false;
+  }
+  *out_value = (uint32_t)parsed;
+  return true;
+}
+
+static uint32_t tinyclj_scene_bench_elapsed_ms(uint32_t start_ms, uint32_t end_ms) {
+  if (end_ms >= start_ms) {
+    return end_ms - start_ms;
+  }
+  /* platform_current_time_ms is modulo 24h. */
+  return (86400000u - start_ms) + end_ms;
+}
+
+static bool tinyclj_scene_bench_run_scene(ID scene,
+                                          VgFrameBuffer *fb,
+                                          uint32_t warmup_iterations,
+                                          uint32_t measured_iterations,
+                                          uint32_t *out_total_ms) {
+  if (!scene || !fb || !out_total_ms || measured_iterations == 0u) {
+    return false;
+  }
+  for (uint32_t i = 0; i < warmup_iterations; i++) {
+    if (!vg_render_scene_record(scene, fb)) {
+      return false;
+    }
+  }
+  uint32_t start_ms = platform_current_time_ms();
+  for (uint32_t i = 0; i < measured_iterations; i++) {
+    if (!vg_render_scene_record(scene, fb)) {
+      return false;
+    }
+  }
+  uint32_t end_ms = platform_current_time_ms();
+  *out_total_ms = tinyclj_scene_bench_elapsed_ms(start_ms, end_ms);
+  return true;
+}
+
+static int32_t tinyclj_scene_bench_clamp_fixnum(uint64_t v) {
+  if (v > (uint64_t)FIXNUM_MAX) {
+    return (int32_t)FIXNUM_MAX;
+  }
+  return (int32_t)v;
+}
+
+static ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
+  if (argc > 2) {
+    throw_exception(EXCEPTION_ARITY,
+                    "tiny-clj.runtime/vector-scene-bench takes 0, 1, or 2 arguments",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+  EvalState *st = g_current_eval_state;
+  if (!st) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "tiny-clj.runtime/vector-scene-bench: EvalState not available",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+
+  uint32_t iterations = 800u;
+  uint32_t warmup = 40u;
+  if (argc >= 1 && !tinyclj_scene_bench_parse_u32_arg(args[0], iterations, &iterations)) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                    "tiny-clj.runtime/vector-scene-bench iterations must be a positive integer",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+  if (argc >= 2 && !tinyclj_scene_bench_parse_u32_arg(args[1], warmup, &warmup)) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                    "tiny-clj.runtime/vector-scene-bench warmup must be a positive integer",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+
+  if (!tiny_gfx_ensure_schema(st) || !require_namespace_by_name(st, "tiny-gfx.host-viewer-demo")) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "tiny-clj.runtime/vector-scene-bench failed to initialize tiny-gfx scene schema",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+
+  ID bundle = eval_string("(tiny-gfx.host-viewer-demo/create-demo-bundle)", st);
+  if (!bundle || !is_vector(bundle)) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "tiny-clj.runtime/vector-scene-bench failed to build demo scene bundle",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+  CljPersistentVector *vec = as_vector(bundle);
+  if (!vec || vector_count(vec) < 3) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "tiny-clj.runtime/vector-scene-bench demo bundle shape mismatch",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+
+  ID deco_scene = vector_nth(vec, 0);
+  ID score_scene = vector_nth(vec, 1);
+  ID game_scene = vector_nth(vec, 2);
+  if (!deco_scene || !score_scene || !game_scene) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "tiny-clj.runtime/vector-scene-bench demo scenes are missing",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+
+  enum {
+    BENCH_W = 320,
+    BENCH_H = 240
+  };
+  size_t pixel_count = (size_t)BENCH_W * (size_t)BENCH_H;
+  uint16_t *pixels = (uint16_t *)CLJ_MALLOC(pixel_count * sizeof(uint16_t));
+  if (!pixels) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "tiny-clj.runtime/vector-scene-bench failed to allocate framebuffer",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+
+  VgFrameBuffer fb;
+  if (!vg_framebuffer_init(&fb, BENCH_W, BENCH_H, pixels, pixel_count)) {
+    CLJ_FREE(pixels);
+    throw_exception(EXCEPTION_RUNTIME,
+                    "tiny-clj.runtime/vector-scene-bench framebuffer init failed",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+  vg_framebuffer_clear(&fb, 0x0000u);
+
+  uint32_t deco_total_ms = 0u;
+  uint32_t score_total_ms = 0u;
+  uint32_t game_total_ms = 0u;
+  bool ok = tinyclj_scene_bench_run_scene(deco_scene, &fb, warmup, iterations, &deco_total_ms) &&
+            tinyclj_scene_bench_run_scene(score_scene, &fb, warmup, iterations, &score_total_ms) &&
+            tinyclj_scene_bench_run_scene(game_scene, &fb, warmup, iterations, &game_total_ms);
+  CLJ_FREE(pixels);
+
+  if (!ok) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "tiny-clj.runtime/vector-scene-bench render failed",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+
+  uint64_t deco_us_per_frame = ((uint64_t)deco_total_ms * 1000ull) / (uint64_t)iterations;
+  uint64_t score_us_per_frame = ((uint64_t)score_total_ms * 1000ull) / (uint64_t)iterations;
+  uint64_t game_us_per_frame = ((uint64_t)game_total_ms * 1000ull) / (uint64_t)iterations;
+  uint64_t total_ms = (uint64_t)deco_total_ms + (uint64_t)score_total_ms + (uint64_t)game_total_ms;
+
+  CljPersistentMap *result = make_map(16);
+  if (!result) {
+    return NULL;
+  }
+  CljSymbol *k_platform = intern_symbol_global(":platform");
+  CljSymbol *k_iterations = intern_symbol_global(":iterations");
+  CljSymbol *k_warmup = intern_symbol_global(":warmup");
+  CljSymbol *k_deco_total_ms = intern_symbol_global(":deco-total-ms");
+  CljSymbol *k_score_total_ms = intern_symbol_global(":score-total-ms");
+  CljSymbol *k_game_total_ms = intern_symbol_global(":game-total-ms");
+  CljSymbol *k_deco_us_per_frame = intern_symbol_global(":deco-us-per-frame");
+  CljSymbol *k_score_us_per_frame = intern_symbol_global(":score-us-per-frame");
+  CljSymbol *k_game_us_per_frame = intern_symbol_global(":game-us-per-frame");
+  CljSymbol *k_total_ms = intern_symbol_global(":total-ms");
+
+  if (k_platform) {
+    ID platform_str = make_string(platform_name());
+    map_assoc_inplace(&result, k_platform, platform_str);
+    RELEASE(platform_str);
+  }
+  if (k_iterations) map_assoc_inplace(&result, k_iterations, fixnum((int32_t)iterations));
+  if (k_warmup) map_assoc_inplace(&result, k_warmup, fixnum((int32_t)warmup));
+  if (k_deco_total_ms) map_assoc_inplace(&result, k_deco_total_ms, fixnum((int32_t)deco_total_ms));
+  if (k_score_total_ms) map_assoc_inplace(&result, k_score_total_ms, fixnum((int32_t)score_total_ms));
+  if (k_game_total_ms) map_assoc_inplace(&result, k_game_total_ms, fixnum((int32_t)game_total_ms));
+  if (k_deco_us_per_frame) {
+    map_assoc_inplace(&result, k_deco_us_per_frame, fixnum(tinyclj_scene_bench_clamp_fixnum(deco_us_per_frame)));
+  }
+  if (k_score_us_per_frame) {
+    map_assoc_inplace(&result, k_score_us_per_frame, fixnum(tinyclj_scene_bench_clamp_fixnum(score_us_per_frame)));
+  }
+  if (k_game_us_per_frame) {
+    map_assoc_inplace(&result, k_game_us_per_frame, fixnum(tinyclj_scene_bench_clamp_fixnum(game_us_per_frame)));
+  }
+  if (k_total_ms) map_assoc_inplace(&result, k_total_ms, fixnum(tinyclj_scene_bench_clamp_fixnum(total_ms)));
+
+  return AUTORELEASE(result);
+}
 
 static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   (void)args;

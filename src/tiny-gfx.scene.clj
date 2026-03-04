@@ -15,6 +15,7 @@ R"TINY_GFX_SCENE(
 (defrecord Rect [id t style visible x y w h])
 (defrecord Tri [id t style visible x1 y1 x2 y2 x3 y3])
 (defrecord VText [id t style visible x y scale rot text])
+(defrecord Timeline [keyframes loop])
 (defrecord Scene [root clip-rect erase-color collision-rules])
 (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules])
 (defrecord CollisionRule [id slot a-id b-id phase-mask enabled cooldown-ms])

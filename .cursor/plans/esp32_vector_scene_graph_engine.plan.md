@@ -490,7 +490,7 @@ Done when:
 
 ## Milestone 8: Fixed-First Decode + Transform Path (Required for ESP32)
 
-Status: DONE (core decode/transform/render pipeline is fixed-first; documentation + perf benchmark optional)
+Status: DONE (core decode/transform/render pipeline is fixed-first; host documentation + micro benchmark captured; ESP32 build path validated; side-by-side device perf capture still optional/pending)
 
 Motivation:
 
@@ -523,6 +523,14 @@ Tasks:
 6. **Performance validation:**
   - Add a small benchmark/profiling slice for decode+render on representative scene sizes.
   - Compare before/after CPU usage on host and (where possible) ESP32.
+
+Implementation notes (2026-03-04):
+- Fixed-first contract + quantization boundaries documented in `docs/VECTOR_SCENE_FIXED_FIRST.md`.
+- Host decode+render micro benchmark added in `test_vector_scene_graph_decode_render_host_micro_benchmark`.
+- Host sample timings recorded for `deco`, `score`, and `game` frame scenes (Debug build).
+- Cross-target runtime benchmark function added: `tiny-clj.runtime/vector-scene-bench` (host + ESP32 UART REPL).
+- ESP32 IDF component source lists were aligned with host build sources for this path (`subjective-c/record.c`, `gfx.c`, `vector_scene_graph.c`, `scene.c`, `tiny_gfx.c`, `lockfree_spsc_queue.c`), and `./build_idf.sh --no-move` now completes successfully.
+- ESP32 side-by-side CPU comparison remains an optional follow-up, pending device run/capture on hardware.
 
 Done when:
 
@@ -570,7 +578,7 @@ Done when:
 
 ## Milestone 9: Flat Entity Map + Timeline + Declarative Scene Architecture
 
-Status: TODO (color authoring subtask DONE)
+Status: IN PROGRESS (`9a` + `9b` + `9c` baseline DONE on host/ESP32 build path; `9d` AnimState + remaining host-viewer ASSIGN removals still TODO)
 
 Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Architecture"):
 
@@ -582,9 +590,9 @@ Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Arc
 
 Current gap:
 
-- Scene topology is authored in Clojure (`tiny-gfx.host-viewer-demo`) but as a nested tree.
-- C mutates Record fields directly (`ASSIGN(transform->tx, fixnum(x))`).
-- No flat entity map, no Timeline Records, no C-side interpolation state.
+- Flat entity maps and Timeline decode are now in place, but host-viewer still mutates several gameplay records directly from C (`ASSIGN(...)`).
+- Smooth event-driven interpolation state (`AnimState`) is not implemented yet.
+- Full elimination of direct C-authored per-frame target writes is still pending.
 
 ### 9a: Flat Entity Map (Clojure side)
 
@@ -593,6 +601,9 @@ Current gap:
 - Groups list children as ID vectors: `(group {:id root :children [3001 3002 3003]})`.
 - Updates via `(swap! slot assoc-in [id :field] new-value)` – O(1), no tree walk.
 - `update-nodes` (M8b) becomes optional convenience; direct `assoc-in` is the primary API.
+- Implementation note (2026-03-04):
+  - `tiny-gfx.host-viewer-demo/create-demo-bundle` now publishes slot roots as flat `{id -> Record}` maps.
+  - Root entity key/id is symbol `root`; groups reference children by ID vectors (not embedded records).
 
 Example:
 ```clojure
@@ -613,6 +624,12 @@ Example:
 - Any entity field can hold a Timeline instead of a plain value.
 - C resolves during traversal: check if field is Timeline, resolve by wall clock.
 - No Clojure eval, no timers needed for periodic animations.
+- Implementation notes (2026-03-04):
+  - `tiny-gfx.scene` now defines `Timeline` (`[keyframes loop]`).
+  - `scene.c` resolves Timeline fields during traversal.
+  - Numeric keyframes interpolate linearly (Q19.13), including looped phase wrapping.
+  - Transform keyframes interpolate `tx/ty/sx/sy/rot` and compose via `vg_transform_fixed_from_transform`.
+  - Deterministic render entry points added for tests: `vg_render_scene_record_at_ms` and `vg_render_scene_record_clipped_at_ms`.
 
 Example (alien cycling 3 forms with different durations):
 ```clojure
@@ -629,6 +646,10 @@ Example (alien cycling 3 forms with different durations):
 - Transform inheritance: compose parent transform with each child's `:t` field.
 - Timeline resolution: at each field read, check for Timeline Record, resolve by time.
 - Entity map lookup by ID must be efficient (persistent map `get` or C-side index cache).
+- Implementation note (2026-03-04):
+  - `scene.c` render traversal now supports both legacy embedded-tree scenes and flat-map scenes.
+  - If `FrameScene.root`/`Scene.root` is a map, renderer resolves `root` symbol entry and traverses group child IDs via `map_get`.
+  - Timeline resolution is integrated in primitive/style/transform field reads during record traversal.
 
 ```c
 void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
@@ -678,6 +699,10 @@ void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
   `atom_deref → resolve Timelines → interpolate → render` pipeline.
 - Move target-setting logic to Clojure (event-driven) where possible.
 - Keep C-owned: frame pacing, backend submission, metrics, presentation.
+- Implementation notes (2026-03-04):
+  - Demo includes first periodic Timeline slice in production path: moving `hbar` now uses a looping transform Timeline from Clojure data.
+  - Host viewer no longer updates `hbar` via C-side transform `ASSIGN`.
+  - Remaining gameplay transform/geometry writes (`terrain/player/obstacle`) are still C-driven and tracked as follow-up.
 
 ### 9g: Validate scene reuse + scheduler integration
 
@@ -951,4 +976,3 @@ Rule:
   - Mitigation: conservative `clip-rect` guard bands, explicit slot background policy, test coverage for edge clipping.
 - Risk: Float drift/non-determinism in long animations.
   - Mitigation: fixed-first decode/transform path aligned with `subjective-c` fractional bits (`CLJ_FIXED_FRAC_BITS = 13`), integer quantization only at raster boundaries.
-

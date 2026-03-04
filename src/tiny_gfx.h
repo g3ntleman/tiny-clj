@@ -8,10 +8,10 @@
 #include "namespace.h"
 
 typedef struct {
-    ID t_transform, t_style, t_group, t_line, t_polyline, t_rect, t_tri, t_vtext, t_frame_scene, t_scene;
-    CljRecordDescriptor *d_transform, *d_style, *d_group, *d_line, *d_polyline, *d_rect, *d_tri, *d_vtext, *d_frame_scene, *d_scene;
-    uint32_t h_transform, h_style, h_group, h_line, h_polyline, h_rect, h_tri, h_vtext, h_frame_scene, h_scene;
-    unsigned int n_transform, n_style, n_group, n_line, n_polyline, n_rect, n_tri, n_vtext, n_frame_scene, n_scene;
+    ID t_transform, t_style, t_group, t_line, t_polyline, t_rect, t_tri, t_vtext, t_timeline, t_frame_scene, t_scene;
+    CljRecordDescriptor *d_transform, *d_style, *d_group, *d_line, *d_polyline, *d_rect, *d_tri, *d_vtext, *d_timeline, *d_frame_scene, *d_scene;
+    uint32_t h_transform, h_style, h_group, h_line, h_polyline, h_rect, h_tri, h_vtext, h_timeline, h_frame_scene, h_scene;
+    unsigned int n_transform, n_style, n_group, n_line, n_polyline, n_rect, n_tri, n_vtext, n_timeline, n_frame_scene, n_scene;
     int transform_tx, transform_ty, transform_sx, transform_sy, transform_rot;
     int style_stroke_color, style_stroke_width, style_visible, style_has_fill, style_fill_color, style_has_bg_color, style_bg_color;
     int group_id, group_t, group_style, group_visible, group_children;
@@ -20,6 +20,7 @@ typedef struct {
     int rect_id, rect_t, rect_style, rect_visible, rect_x, rect_y, rect_w, rect_h;
     int tri_id, tri_t, tri_style, tri_visible, tri_x1, tri_y1, tri_x2, tri_y2, tri_x3, tri_y3;
     int text_id, text_t, text_style, text_visible, text_x, text_y, text_scale, text_rot, text_text;
+    int timeline_keyframes, timeline_loop;
     int frame_root, frame_clip_rect, frame_z, frame_visible, frame_opaque, frame_erase_color, frame_guard_px;
 } VgRecordSchema;
 
@@ -45,6 +46,8 @@ typedef struct {
     ID k_scale;
     ID k_rot;
     ID k_text;
+    ID k_keyframes;
+    ID k_loop;
     ID k_tx;
     ID k_ty;
     ID k_sx;
@@ -71,6 +74,7 @@ DEFRECORD(Polyline, id, t, style, visible, pts, closed)
 DEFRECORD(Rect, id, t, style, visible, x, y, w, h)
 DEFRECORD(Tri, id, t, style, visible, x1, y1, x2, y2, x3, y3)
 DEFRECORD(VText, id, t, style, visible, x, y, scale, rot, text)
+DEFRECORD(Timeline, keyframes, loop)
 DEFRECORD(FrameScene, root, clip_rect, z, visible, opaque, erase_color, guard_px)
 DEFRECORD(Scene, root, clip_rect, erase_color)
 

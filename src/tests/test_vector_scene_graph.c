@@ -1,6 +1,7 @@
 #include "tests_common.h"
 #include "../vector_scene_graph.h"
 #include "../scene.h"
+#include <time.h>
 
 #define TEST_W 64
 #define TEST_H 48
@@ -58,6 +59,39 @@ static bool find_non_bg_bounds(const uint16_t *pixels, size_t w, size_t h, uint1
     if (out_max_x) *out_max_x = max_x;
     if (out_max_y) *out_max_y = max_y;
     return true;
+}
+
+static uint64_t monotonic_now_ns(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0u;
+    }
+    return ((uint64_t)ts.tv_sec * 1000000000ull) + (uint64_t)ts.tv_nsec;
+}
+
+static uint64_t benchmark_scene_record_render_ns(ID scene,
+                                                 VgFrameBuffer *fb,
+                                                 unsigned warmup_iterations,
+                                                 unsigned measured_iterations) {
+    if (!scene || !fb || measured_iterations == 0u) {
+        return 0u;
+    }
+    for (unsigned i = 0; i < warmup_iterations; i++) {
+        if (!vg_render_scene_record(scene, fb)) {
+            return 0u;
+        }
+    }
+    uint64_t start_ns = monotonic_now_ns();
+    for (unsigned i = 0; i < measured_iterations; i++) {
+        if (!vg_render_scene_record(scene, fb)) {
+            return 0u;
+        }
+    }
+    uint64_t end_ns = monotonic_now_ns();
+    if (end_ns <= start_ns) {
+        return 0u;
+    }
+    return end_ns - start_ns;
 }
 
 TEST(test_vector_scene_graph_nested_group_transform_affects_child_line) {
@@ -156,6 +190,193 @@ TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
     TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 4]);
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 18]);
+}
+
+TEST(test_vector_scene_graph_renders_line_from_flat_entity_map_records) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
+        "  (let [entities {'root (->Group 'root nil nil true [101]) "
+        "                  101 (->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6)}] "
+        "    (->Scene entities nil nil nil)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 4]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 18]);
+}
+
+TEST(test_vector_scene_graph_flat_entity_map_nested_group_transform_inheritance) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
+        "  (let [entities {'root (->Group 'root (->Transform 2 3 1 1 0) nil true [210]) "
+        "                  210 (->Group 210 (->Transform 5 2 1 1 0) nil true [211]) "
+        "                  211 (->Line 211 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0)}] "
+        "    (->Scene entities nil nil nil)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)5 * TEST_W + 7]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)5 * TEST_W + 17]);
+}
+
+TEST(test_vector_scene_graph_flat_entity_map_missing_root_symbol_fails) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
+        "  (let [entities {100 (->Group 100 nil nil true [])}] "
+        "    (->Scene entities nil nil nil)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_FALSE(vg_render_scene_record(scene, &fb));
+}
+
+TEST(test_vector_scene_graph_flat_entity_map_missing_child_id_fails) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
+        "  (let [entities {'root (->Group 'root nil nil true [999])}] "
+        "    (->Scene entities nil nil nil)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_FALSE(vg_render_scene_record(scene, &fb));
+}
+
+TEST(test_vector_scene_graph_host_viewer_demo_bundle_uses_flat_entity_maps) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.host-viewer-demo) "
+        "  (let [bundle (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "        root0 (:root (nth bundle 0)) "
+        "        root1 (:root (nth bundle 1)) "
+        "        root2 (:root (nth bundle 2))] "
+        "    (and (map? root0) (map? root1) (map? root2) "
+        "         (contains? root0 'root) "
+        "         (contains? root1 'root) "
+        "         (contains? root2 'root))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok && ok != clj_false);
+}
+
+TEST(test_vector_scene_graph_timeline_numeric_interpolation_moves_line) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Timeline [keyframes loop]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
+        "  (let [x1-t (->Timeline [[0 4] [100 14]] false) "
+        "        x2-t (->Timeline [[0 18] [100 28]] false)] "
+        "    (->Scene "
+        "      (->Line 101 nil (->Style 65535 1 true false 0 false 0) true x1-t 6 x2-t 6) "
+        "      nil nil nil)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record_at_ms(scene, &fb, 50u));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 9]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 23]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)6 * TEST_W + 4]);
+}
+
+TEST(test_vector_scene_graph_timeline_transform_interpolation_moves_line) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Timeline [keyframes loop]) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
+        "  (let [t (->Timeline [[0 (->Transform 0 0 1 1 0)] "
+        "                       [100 (->Transform 20 0 1 1 0)]] false)] "
+        "    (->Scene "
+        "      (->Line 101 t (->Style 65535 1 true false 0 false 0) true 0 6 10 6) "
+        "      nil nil nil)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record_at_ms(scene, &fb, 50u));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 10]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 20]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)6 * TEST_W + 0]);
+}
+
+TEST(test_vector_scene_graph_timeline_loop_wraps_phase) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Timeline [keyframes loop]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
+        "  (let [x1-t (->Timeline [[0 4] [100 14]] true) "
+        "        x2-t (->Timeline [[0 18] [100 28]] true)] "
+        "    (->Scene "
+        "      (->Line 101 nil (->Style 65535 1 true false 0 false 0) true x1-t 6 x2-t 6) "
+        "      nil nil nil)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record_at_ms(scene, &fb, 150u));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 9]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 23]);
 }
 
 TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
@@ -1562,4 +1783,127 @@ TEST(test_vector_scene_graph_filled_rect_from_clojure_records) {
     size_t stroke_count = count_color(pixels, TEST_W * TEST_H, 0xffffu);
     TEST_ASSERT_TRUE(fill_count > 0);
     TEST_ASSERT_TRUE(stroke_count > 0);
+}
+
+TEST(test_vector_scene_graph_decode_render_host_micro_benchmark) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID deco_scene = eval_string(
+        "(do (require 'tiny-gfx.host-viewer-demo) "
+        "    (nth (tiny-gfx.host-viewer-demo/create-demo-bundle) 0))",
+        g_test_eval_state);
+    ID score_scene = eval_string(
+        "(do (require 'tiny-gfx.host-viewer-demo) "
+        "    (nth (tiny-gfx.host-viewer-demo/create-demo-bundle) 1))",
+        g_test_eval_state);
+    ID game_scene = eval_string(
+        "(do (require 'tiny-gfx.host-viewer-demo) "
+        "    (nth (tiny-gfx.host-viewer-demo/create-demo-bundle) 2))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(deco_scene);
+    TEST_ASSERT_NOT_NULL(score_scene);
+    TEST_ASSERT_NOT_NULL(game_scene);
+
+    enum { BENCH_W = 320, BENCH_H = 240 };
+    uint16_t pixels[BENCH_W * BENCH_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, BENCH_W, BENCH_H, pixels, BENCH_W * BENCH_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    const unsigned warmup_iterations = 40u;
+    const unsigned measured_iterations = 800u;
+
+    uint64_t deco_ns = benchmark_scene_record_render_ns(deco_scene, &fb, warmup_iterations, measured_iterations);
+    uint64_t score_ns = benchmark_scene_record_render_ns(score_scene, &fb, warmup_iterations, measured_iterations);
+    uint64_t game_ns = benchmark_scene_record_render_ns(game_scene, &fb, warmup_iterations, measured_iterations);
+
+    TEST_ASSERT_TRUE(deco_ns > 0u);
+    TEST_ASSERT_TRUE(score_ns > 0u);
+    TEST_ASSERT_TRUE(game_ns > 0u);
+
+    double deco_total_ms = (double)deco_ns / 1e6;
+    double score_total_ms = (double)score_ns / 1e6;
+    double game_total_ms = (double)game_ns / 1e6;
+    double deco_per_frame_ms = deco_total_ms / (double)measured_iterations;
+    double score_per_frame_ms = score_total_ms / (double)measured_iterations;
+    double game_per_frame_ms = game_total_ms / (double)measured_iterations;
+    double deco_fps = ((double)measured_iterations * 1000.0) / deco_total_ms;
+    double score_fps = ((double)measured_iterations * 1000.0) / score_total_ms;
+    double game_fps = ((double)measured_iterations * 1000.0) / game_total_ms;
+
+    printf("BENCH vector_scene_record/deco iterations=%u total_ms=%.3f per_frame_ms=%.6f fps=%.1f\n",
+           measured_iterations, deco_total_ms, deco_per_frame_ms, deco_fps);
+    printf("BENCH vector_scene_record/score iterations=%u total_ms=%.3f per_frame_ms=%.6f fps=%.1f\n",
+           measured_iterations, score_total_ms, score_per_frame_ms, score_fps);
+    printf("BENCH vector_scene_record/game iterations=%u total_ms=%.3f per_frame_ms=%.6f fps=%.1f\n",
+           measured_iterations, game_total_ms, game_per_frame_ms, game_fps);
+}
+
+TEST(test_vector_scene_graph_runtime_vector_scene_bench_returns_metrics_map) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID result = eval_string(
+        "(do (require 'tiny-clj.runtime) "
+        "    (tiny-clj.runtime/vector-scene-bench 120 8))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(result));
+
+    ID v_iterations = map_get(result, (ID)intern_symbol_global(":iterations"));
+    ID v_warmup = map_get(result, (ID)intern_symbol_global(":warmup"));
+    ID v_deco_total_ms = map_get(result, (ID)intern_symbol_global(":deco-total-ms"));
+    ID v_score_total_ms = map_get(result, (ID)intern_symbol_global(":score-total-ms"));
+    ID v_game_total_ms = map_get(result, (ID)intern_symbol_global(":game-total-ms"));
+    ID v_deco_us_pf = map_get(result, (ID)intern_symbol_global(":deco-us-per-frame"));
+    ID v_score_us_pf = map_get(result, (ID)intern_symbol_global(":score-us-per-frame"));
+    ID v_game_us_pf = map_get(result, (ID)intern_symbol_global(":game-us-per-frame"));
+    ID v_total_ms = map_get(result, (ID)intern_symbol_global(":total-ms"));
+
+    TEST_ASSERT_TRUE(is_fixnum(v_iterations));
+    TEST_ASSERT_TRUE(is_fixnum(v_warmup));
+    TEST_ASSERT_TRUE(is_fixnum(v_deco_total_ms));
+    TEST_ASSERT_TRUE(is_fixnum(v_score_total_ms));
+    TEST_ASSERT_TRUE(is_fixnum(v_game_total_ms));
+    TEST_ASSERT_TRUE(is_fixnum(v_deco_us_pf));
+    TEST_ASSERT_TRUE(is_fixnum(v_score_us_pf));
+    TEST_ASSERT_TRUE(is_fixnum(v_game_us_pf));
+    TEST_ASSERT_TRUE(is_fixnum(v_total_ms));
+
+    TEST_ASSERT_EQUAL_INT(120, as_fixnum(v_iterations));
+    TEST_ASSERT_EQUAL_INT(8, as_fixnum(v_warmup));
+    TEST_ASSERT_TRUE(as_fixnum(v_deco_us_pf) >= 0);
+    TEST_ASSERT_TRUE(as_fixnum(v_score_us_pf) >= 0);
+    TEST_ASSERT_TRUE(as_fixnum(v_game_us_pf) >= 0);
+    TEST_ASSERT_TRUE(as_fixnum(v_total_ms) >= 0);
+}
+
+TEST(test_vector_scene_graph_runtime_vector_scene_bench_arity_and_arg_validation) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    bool arity_exception_caught = false;
+    TRY {
+        (void)eval_string(
+            "(do (require 'tiny-clj.runtime) "
+            "    (tiny-clj.runtime/vector-scene-bench 1 2 3))",
+            g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected arity exception for vector-scene-bench");
+    } CATCH(ex) {
+        arity_exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("ArityException", ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE(arity_exception_caught);
+
+    bool arg_exception_caught = false;
+    TRY {
+        (void)eval_string(
+            "(do (require 'tiny-clj.runtime) "
+            "    (tiny-clj.runtime/vector-scene-bench \"x\"))",
+            g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected argument exception for vector-scene-bench");
+    } CATCH(ex) {
+        arg_exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE(arg_exception_caught);
 }
