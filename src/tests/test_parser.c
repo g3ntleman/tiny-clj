@@ -48,6 +48,12 @@ TEST(test_parse_basic_types) {
   }
   TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(sym_result));
 
+  // Test hex integer parsing
+  CljObject *hex_result = parse("0xFF", eval_state);
+  TEST_ASSERT_NOT_NULL(hex_result);
+  TEST_ASSERT_TRUE(is_fixnum((CljValue)hex_result));
+  TEST_ASSERT_EQUAL_INT(255, as_fixnum((CljValue)hex_result));
+
   evalstate_free(eval_state);
 }
 

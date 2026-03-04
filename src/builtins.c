@@ -175,6 +175,9 @@ ID native_div_variadic(ID *args, unsigned int argc);
 ID native_mod(ID *args, unsigned int argc);
 ID native_quot(ID *args, unsigned int argc);
 ID native_bit_shift_left(ID *args, unsigned int argc);
+ID native_bit_shift_right(ID *args, unsigned int argc);
+ID native_bit_and(ID *args, unsigned int argc);
+ID native_bit_or(ID *args, unsigned int argc);
 ID native_range(ID *args, unsigned int argc);
 ID native_repeat(ID *args, unsigned int argc);
 ID native_take(ID *args, unsigned int argc);
@@ -4265,6 +4268,9 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT(&sym_mod_data.sym, native_mod, "mod"),
     NATIVE_ENTRY_BOOT(&sym_quot_data.sym, native_quot, "quot"),
     NATIVE_ENTRY(&sym_bit_shift_left_data.sym, native_bit_shift_left),
+    NATIVE_ENTRY(&sym_bit_shift_right_data.sym, native_bit_shift_right),
+    NATIVE_ENTRY(&sym_bit_and_data.sym, native_bit_and),
+    NATIVE_ENTRY(&sym_bit_or_data.sym, native_bit_or),
     NATIVE_ENTRY(&sym_range_data.sym, native_range),
     NATIVE_ENTRY(&sym_repeat_data.sym, native_repeat),
     NATIVE_ENTRY(&sym_take_native_data.sym, native_take),
@@ -5930,6 +5936,57 @@ ID native_bit_shift_left(ID *args, unsigned int argc) {
   }
 
   return create_fixnum_result(a << b);
+}
+
+ID native_bit_shift_right(ID *args, unsigned int argc) {
+  if (!validate_builtin_args(argc, 2, "bit-shift-right"))
+    return NULL;
+
+  if (TAG(args[0]) != CLJ_INT || TAG(args[1]) != CLJ_INT) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "bit-shift-right requires integer arguments",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  int a = AS_FIXNUM(args[0]);
+  int b = AS_FIXNUM(args[1]);
+  if (b < 0 || b >= 32) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "bit-shift-right shift amount must be 0-31",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  return create_fixnum_result(a >> b);
+}
+
+ID native_bit_and(ID *args, unsigned int argc) {
+  if (!validate_builtin_args(argc, 2, "bit-and"))
+    return NULL;
+
+  if (TAG(args[0]) != CLJ_INT || TAG(args[1]) != CLJ_INT) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "bit-and requires integer arguments",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  int a = AS_FIXNUM(args[0]);
+  int b = AS_FIXNUM(args[1]);
+  return create_fixnum_result(a & b);
+}
+
+ID native_bit_or(ID *args, unsigned int argc) {
+  if (!validate_builtin_args(argc, 2, "bit-or"))
+    return NULL;
+
+  if (TAG(args[0]) != CLJ_INT || TAG(args[1]) != CLJ_INT) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "bit-or requires integer arguments",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  int a = AS_FIXNUM(args[0]);
+  int b = AS_FIXNUM(args[1]);
+  return create_fixnum_result(a | b);
 }
 
 static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {

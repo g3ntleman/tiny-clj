@@ -1,6 +1,6 @@
 (ns tiny-gfx.converter
   (:require [clojure.string :as str]
-            [tiny-gfx.scene :as scene]))
+            [tiny-gfx.scene :as scene :refer [->Group ->Line ->Rect ->Polyline ->Style]]))
 
 ;; tiny-gfx.converter
 ;;
@@ -163,7 +163,7 @@
         display (str/lower-case (str/trim (or (attr-get attrs style-map "display") "")))
         visibility (str/lower-case (str/trim (or (attr-get attrs style-map "visibility") "")))
         visible (not (or (= display "none") (= visibility "hidden")))]
-    (record-create scene/style-type [stroke-rgb565 stroke-width visible has-fill fill-rgb565 false 0])))
+    (->Style stroke-rgb565 stroke-width visible has-fill fill-rgb565 false 0)))
 
 (defn- parse-points
   [points-str]
@@ -193,44 +193,40 @@
         visible (get style :visible)]
     (cond
       (= tag-name "line")
-      (record-create scene/line-type
-                     [node-id
-                      nil
-                      style
-                      visible
-                      (parse-int-default (get attrs "x1") 0)
-                      (parse-int-default (get attrs "y1") 0)
-                      (parse-int-default (get attrs "x2") 0)
-                      (parse-int-default (get attrs "y2") 0)])
+      (->Line node-id
+              nil
+              style
+              visible
+              (parse-int-default (get attrs "x1") 0)
+              (parse-int-default (get attrs "y1") 0)
+              (parse-int-default (get attrs "x2") 0)
+              (parse-int-default (get attrs "y2") 0))
 
       (= tag-name "rect")
-      (record-create scene/rect-type
-                     [node-id
-                      nil
-                      style
-                      visible
-                      (parse-int-default (get attrs "x") 0)
-                      (parse-int-default (get attrs "y") 0)
-                      (parse-int-default (get attrs "width") (parse-int-default (get attrs "w") 0))
-                      (parse-int-default (get attrs "height") (parse-int-default (get attrs "h") 0))])
+      (->Rect node-id
+              nil
+              style
+              visible
+              (parse-int-default (get attrs "x") 0)
+              (parse-int-default (get attrs "y") 0)
+              (parse-int-default (get attrs "width") (parse-int-default (get attrs "w") 0))
+              (parse-int-default (get attrs "height") (parse-int-default (get attrs "h") 0)))
 
       (= tag-name "polyline")
-      (record-create scene/polyline-type
-                     [node-id
-                      nil
-                      style
-                      visible
-                      (parse-points (or (get attrs "points") ""))
-                      false])
+      (->Polyline node-id
+                  nil
+                  style
+                  visible
+                  (parse-points (or (get attrs "points") ""))
+                  false)
 
       (= tag-name "polygon")
-      (record-create scene/polyline-type
-                     [node-id
-                      nil
-                      style
-                      visible
-                      (parse-points (or (get attrs "points") ""))
-                      true])
+      (->Polyline node-id
+                  nil
+                  style
+                  visible
+                  (parse-points (or (get attrs "points") ""))
+                  true)
 
       :else nil)))
 
@@ -260,18 +256,17 @@ MVP behavior:
 - Coordinates are integer-based (decimal values are truncated)."}
 (defn group-from-svg
   [svg-str]
-  (scene/ensure-scene-records!)
   (if (or (nil? svg-str) (= (str/trim svg-str) ""))
-    (record-create scene/group-type [1 nil nil true []])
+    (->Group 1 nil nil true [])
     (loop [idx 0
            next-id 100
            nodes []]
       (let [lt (str/index-of svg-str "<" idx)]
         (if (nil? lt)
-          (record-create scene/group-type [1 nil nil true nodes])
+          (->Group 1 nil nil true nodes)
           (let [gt (str/index-of svg-str ">" (+ lt 1))]
             (if (nil? gt)
-              (record-create scene/group-type [1 nil nil true nodes])
+              (->Group 1 nil nil true nodes)
               (let [tag (subs svg-str (+ lt 1) gt)
                     parsed (parse-tag-body tag next-id)
                     node (first parsed)

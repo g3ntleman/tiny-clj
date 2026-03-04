@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <limits.h>
 
 static size_t format_append_hex_byte(char *dest, size_t offset, size_t capacity, unsigned char value) {
   static const char digits[] = "0123456789abcdef";
@@ -1448,6 +1449,41 @@ static CljObject *make_number_by_parsing(Reader *reader, EvalState *st) {
 
   if (reader_peek_char(reader) == '-')
     buf[pos++] = reader_next(reader);
+
+  // Hex integer literal support: 0xFF / -0xFF
+  if (reader_peek_char(reader) == '0' &&
+      (reader_peek_ahead(reader, 1) == 'x' || reader_peek_ahead(reader, 1) == 'X')) {
+    if (!isxdigit((unsigned char)reader_peek_ahead(reader, 2))) {
+      throw_parser_exception("Invalid hex number literal", reader);
+      return NULL;
+    }
+    buf[pos++] = reader_next(reader); // 0
+    buf[pos++] = reader_next(reader); // x/X
+    while (isxdigit((unsigned char)reader_peek_char(reader)) && pos < PARSER_NUMBER_BUF - 1) {
+      buf[pos++] = reader_next(reader);
+    }
+    buf[pos] = '\0';
+
+    char *digits = buf;
+    bool negative = false;
+    if (buf[0] == '-') {
+      negative = true;
+      digits++;
+    }
+    // Skip 0x/0X prefix for conversion
+    digits += 2;
+
+    long parsed = strtol(digits, NULL, 16);
+    if (negative) {
+      parsed = -parsed;
+    }
+    if (parsed > INT_MAX || parsed < INT_MIN) {
+      throw_parser_exception("Hex number out of integer range", reader);
+      return NULL;
+    }
+    return fixnum((int)parsed);
+  }
+
   if (!isdigit((unsigned char)reader_peek_char(reader))) {
     // Check if this is a decimal starting with '.' (invalid in Clojure)
     if (reader_peek_char(reader) == '.') {

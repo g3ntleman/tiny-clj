@@ -260,6 +260,57 @@ TEST_SHARED(test_bit_shift_left) {
   TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result4));
 }
 
+// Test bit-shift-right
+TEST_SHARED(test_bit_shift_right) {
+  // Test: (bit-shift-right 8 3) => 1
+  CljObject *result1 = eval_string("(bit-shift-right 8 3)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result1));
+  TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)result1));
+
+  // Test: (bit-shift-right 7 1) => 3
+  CljObject *result2 = eval_string("(bit-shift-right 7 1)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result2));
+  TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result2));
+
+  // Test: (bit-shift-right 1 0) => 1
+  CljObject *result3 = eval_string("(bit-shift-right 1 0)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result3);
+  TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result3));
+  TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)result3));
+}
+
+// Test bit-and
+TEST_SHARED(test_bit_and) {
+  // Test: (bit-and 6 3) => 2
+  CljObject *result1 = eval_string("(bit-and 6 3)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result1));
+  TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)result1));
+
+  // Test: (bit-and 255 15) => 15
+  CljObject *result2 = eval_string("(bit-and 255 15)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result2));
+  TEST_ASSERT_EQUAL_INT(15, as_fixnum((CljValue)result2));
+}
+
+// Test bit-or
+TEST_SHARED(test_bit_or) {
+  // Test: (bit-or 6 3) => 7
+  CljObject *result1 = eval_string("(bit-or 6 3)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result1);
+  TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result1));
+  TEST_ASSERT_EQUAL_INT(7, as_fixnum((CljValue)result1));
+
+  // Test: (bit-or 16 1) => 17
+  CljObject *result2 = eval_string("(bit-or 16 1)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result2);
+  TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result2));
+  TEST_ASSERT_EQUAL_INT(17, as_fixnum((CljValue)result2));
+}
+
 // Test Math/sqrt
 TEST_SHARED(test_math_sqrt) {
   // Test: (Math/sqrt 4) => 2.0

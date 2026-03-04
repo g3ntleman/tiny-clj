@@ -373,6 +373,12 @@ R"CLOJURE(
 (defn quot [num div] :native)
 ^#^{:doc "Bitwise left shift. Shifts x left by n bits."}
 (defn bit-shift-left [x n] :native)
+^#^{:doc "Bitwise right shift. Shifts x right by n bits."}
+(defn bit-shift-right [x n] :native)
+^#^{:doc "Bitwise AND of two integers."}
+(defn bit-and [x y] :native)
+^#^{:doc "Bitwise OR of two integers."}
+(defn bit-or [x y] :native)
 
 ; ============================================================================
 ; Comparison Functions (Native)
