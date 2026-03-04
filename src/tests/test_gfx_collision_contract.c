@@ -156,3 +156,45 @@ TEST(test_gfx_scene_update_nodes_nested_groups) {
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(200, as_fixnum(vector_nth(v, 1)));
 }
+
+TEST(test_gfx_scene_web_hex_color_conversion) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.scene) "
+        "  [(tiny-gfx.scene/web-hex->color \"#00FFFF\") "
+        "   (tiny-gfx.scene/web-hex->color \"#FFFFFF\") "
+        "   (tiny-gfx.scene/web-hex->color \"#FF00FF\") "
+        "   (tiny-gfx.scene/web-hex->color \"#FF0000\")])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(4, vector_count(v));
+    TEST_ASSERT_EQUAL_INT(2047, as_fixnum(vector_nth(v, 0)));  // cyan
+    TEST_ASSERT_EQUAL_INT(65535, as_fixnum(vector_nth(v, 1))); // white
+    TEST_ASSERT_EQUAL_INT(63519, as_fixnum(vector_nth(v, 2))); // magenta
+    TEST_ASSERT_EQUAL_INT(63488, as_fixnum(vector_nth(v, 3))); // red
+}
+
+TEST(test_gfx_scene_web_hex_color_invalid_input) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.scene) "
+        "  [(tiny-gfx.scene/web-hex->color nil) "
+        "   (tiny-gfx.scene/web-hex->color \"\") "
+        "   (tiny-gfx.scene/web-hex->color \"#FFF\") "
+        "   (tiny-gfx.scene/web-hex->color \"#GG00FF\")])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(4, vector_count(v));
+    TEST_ASSERT_NULL(vector_nth(v, 0));
+    TEST_ASSERT_NULL(vector_nth(v, 1));
+    TEST_ASSERT_NULL(vector_nth(v, 2));
+    TEST_ASSERT_NULL(vector_nth(v, 3));
+}

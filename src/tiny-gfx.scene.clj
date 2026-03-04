@@ -20,6 +20,68 @@ R"TINY_GFX_SCENE(
 (defrecord CollisionRule [id slot a-id b-id phase-mask enabled cooldown-ms])
 (defrecord CollisionEvent [rule-id slot a-id b-id phase snapshot-gen ts-ms])
 
+;; Color helpers
+;;
+;; web-hex->color converts CSS-like #RRGGBB strings to RGB565 integer colors.
+;; Returns nil for invalid input.
+(defn- hex-digit-value
+  [c]
+  (cond
+    (or (= c \0) (= c 48)) 0
+    (or (= c \1) (= c 49)) 1
+    (or (= c \2) (= c 50)) 2
+    (or (= c \3) (= c 51)) 3
+    (or (= c \4) (= c 52)) 4
+    (or (= c \5) (= c 53)) 5
+    (or (= c \6) (= c 54)) 6
+    (or (= c \7) (= c 55)) 7
+    (or (= c \8) (= c 56)) 8
+    (or (= c \9) (= c 57)) 9
+    (or (= c \a) (= c 97)) 10
+    (or (= c \b) (= c 98)) 11
+    (or (= c \c) (= c 99)) 12
+    (or (= c \d) (= c 100)) 13
+    (or (= c \e) (= c 101)) 14
+    (or (= c \f) (= c 102)) 15
+    (or (= c \A) (= c 65)) 10
+    (or (= c \B) (= c 66)) 11
+    (or (= c \C) (= c 67)) 12
+    (or (= c \D) (= c 68)) 13
+    (or (= c \E) (= c 69)) 14
+    (or (= c \F) (= c 70)) 15
+    :else -1))
+
+(defn- parse-hex2
+  [s offset]
+  (let [c1 (hex-digit-value (nth s offset))
+        c2 (hex-digit-value (nth s (+ offset 1)))]
+    (if (or (< c1 0) (< c2 0))
+      nil
+      (+ (* c1 16) c2))))
+
+(defn rgb888->color
+  "Converts 8-bit RGB channels to RGB565 integer color."
+  [r g b]
+  (let [r5 (quot (* r 31) 255)
+        g6 (quot (* g 63) 255)
+        b5 (quot (* b 31) 255)]
+    (+ (* r5 2048) (* g6 32) b5)))
+
+(defn web-hex->color
+  "Converts #RRGGBB into RGB565 integer color. Returns nil for invalid input."
+  [s]
+  (if (nil? s)
+    nil
+    (let [t (str s)]
+      (if (and (= (count t) 7) (= (subs t 0 1) "#"))
+        (let [r (parse-hex2 t 1)
+              g (parse-hex2 t 3)
+              b (parse-hex2 t 5)]
+          (if (or (nil? r) (nil? g) (nil? b))
+            nil
+            (rgb888->color r g b)))
+        nil))))
+
 ;; Collision contract helpers (Step 1: contract freeze, no runtime wiring yet).
 (def default-collision-slot :game)
 (def default-collision-phase-mask [:enter :exit])
