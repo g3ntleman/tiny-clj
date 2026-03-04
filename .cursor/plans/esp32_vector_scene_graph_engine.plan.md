@@ -21,6 +21,111 @@ Build a reduced SVG-like 2D graphics engine with a strict PoC-first delivery pat
 - Thick-stroke primitives suitable for game, menu, and animated vector title screens
 - Solid fill color for area primitives (SVG-like paint model MVP)
 
+## Target Architecture: Flat Entity Map + Timeline Animations + C Interpolation
+
+### Scene Model: Flat Entity Map per Slot
+
+Each scene slot (e.g. `game`, `score`, `deco`) is one Atom holding an immutable **flat map**
+of `{id → Record}`. Groups reference children by ID, not by embedding. The root entity
+has the symbol `root` as its `:id`.
+
+```clojure
+(def game-slot (atom
+  {root (group {:id root :style style-default :children [3001 3002 3003]})
+   3001 (polyline {:id 3001 :t (transform {:tx 0}) :style style-line :pts terrain-pts})
+   3002 (tri      {:id 3002 :t (transform {:tx 72 :ty 146}) :style style-player
+                   :x1 56 :y1 146 :x2 72 :y2 118 :x3 88 :y3 146})
+   3003 (polyline {:id 3003 :t (transform {:tx 200 :ty 126 :rot -90})
+                   :style style-rocket
+                   :pts (->Timeline [[0 pts-open] [300 pts-mid] [400 pts-closed]] true)})}))
+```
+
+Properties:
+
+- **Flat, not nested.** Entities stored by ID in a persistent map. No tree embedding.
+- **Groups reference children by ID.** Logical tree arises from `root` → `:children` → ID lookups.
+- **Root = symbol `root`.** C starts rendering at `map_get(entities, sym_root)`.
+- **Updates are O(1).** `(swap! game-slot assoc-in [3002 :t] new-transform)` – no tree walk.
+- **Structural sharing.** Only the changed entity + outer map are re-allocated.
+- **`update-nodes` (M8b) no longer needed** for typical updates; direct `assoc-in` replaces tree walking.
+
+### Timeline Animations (declarative, C-evaluated)
+
+Any Record field can hold a `Timeline` instead of a plain value:
+
+```clojure
+(defrecord Timeline [keyframes loop])
+;; keyframes = [[time-ms value] [time-ms value] ...]
+
+;; Alien cycles through 3 forms with different durations:
+(polyline {:id 3003
+           :pts   (->Timeline [[0 pts-open] [300 pts-mid] [400 pts-closed]] true)
+           :style (->Timeline [[0 style-green] [400 style-red]] true)})
+```
+
+C resolves Timelines during traversal – no Clojure eval, no timers:
+
+```c
+ID field_val = record_get(entity, FIELD_PTS);
+if (is_timeline(field_val)) {
+    field_val = timeline_resolve(field_val, current_time_ms);
+}
+```
+
+Timeline resolution for looping: `phase_ms = time_ms % total_period`, then linear scan
+over keyframes (typically 2–5 entries). Cheap enough for the render hot path.
+
+### Three-Layer Separation
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 1: Clojure – Scene State (immutable flat entity map) │
+│                                                             │
+│  (def game-slot (atom {root (group ...) 3001 (tri ...) ..}))│
+│                                                             │
+│  • Flat map of {id → Record} per slot, in an Atom           │
+│  • State changes via swap!/assoc-in (event-driven)          │
+│  • Timeline Records on fields for periodic animations       │
+│  • No Clojure eval in the frame loop                        │
+└────────────────────────┬────────────────────────────────────┘
+                         │ atom_deref (once per frame, no eval)
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 2: C – Interpolation + Timeline Resolution           │
+│                                                             │
+│  • Reads flat entity map snapshot from Atom                 │
+│  • Resolves Timeline fields by wall clock (modulo arith.)   │
+│  • Interpolates transform targets (lerp/easing for smooth   │
+│    motion) using mutable C-owned AnimState structs          │
+│  • Owns animation timing (dt, framerate-independent)        │
+└────────────────────────┬────────────────────────────────────┘
+                         │ renders resolved values
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 3: C – Renderer                                      │
+│                                                             │
+│  • Traverses logical tree (root → children IDs → lookup)    │
+│  • Composes inherited transforms                            │
+│  • Rasterizes primitives with resolved field values         │
+│  • Read-only on the Clojure snapshot                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Design Principles
+
+- **Clojure never mutates Records.** State changes produce new immutable Records via `swap!`.
+- **C never mutates the Clojure snapshot.** C reads via `atom_deref` (cheap pointer read).
+- **Records over Maps** for entities: C knows Record layout (`DEFRECORD`), field access is O(1).
+- **No Clojure eval per frame.** Clojure sets state event-driven (collision, timer, input).
+  C resolves Timelines and interpolates every frame with fixed time budget.
+- **Interruption-safe.** New target mid-animation → C interpolates from current visual
+  position toward new target (no jump, no restart).
+- **Timelines are data, not code.** Periodic animations (form cycling, blinking, color pulsing)
+  are Timeline Records on fields – C evaluates them with pure arithmetic, no timers needed.
+- **Animation descriptors (TODO).** Declarative transition animations (easing, duration, from/to
+  for smooth motion) should also execute in C. Exact contract to be designed after flat entity
+  map and Timeline are stable (see Optional Extension A for initial sketch).
+
 ## Constraints
 
 - MCU class: ESP32 (resource-constrained embedded target)
@@ -463,57 +568,138 @@ Done when:
 - `tiny-gfx.scene/update-nodes` is available and tested.
 - Game code can batch all per-frame entity updates into a single tree walk.
 
-## Milestone 9: Game/Menu/Title Integration
+## Milestone 9: Flat Entity Map + Timeline + Declarative Scene Architecture
 
-Status: TODO
+Status: TODO (color authoring subtask DONE)
 
-Conformance note (current gap):
+Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Architecture"):
 
-- The current `host-viewer` demo still assembles scene graphs in C (`VgNode ...` in `src/host_viewer_minifb.c`) for diagnostics/prototyping.
-- This does not yet fully enforce the intended architecture where scene authoring happens in Clojure and C only consumes published immutable `FrameScene` snapshots.
+- Each slot = one Atom holding `{id → Record}` (flat, not nested)
+- Root entity has `:id root` (symbol)
+- Groups reference children by ID
+- Timeline Records on fields for periodic animations (C-evaluated, no timers)
+- C reads snapshot via `atom_deref`, resolves Timelines, interpolates, renders
 
-Tasks:
+Current gap:
 
-- Validate scene reuse across:
-  - gameplay HUD
-  - menu UI
-  - vector title animation
-- Validate update path from tiny-clj game state -> frame scene slots (snapshots) -> renderer:
-  - use `tiny-gfx.scene/update-nodes` (M8b) for batched per-frame entity updates via `(swap! scene-atom update-nodes {...})`
-  - combine with `schedule-periodic` timers for game-tick driven animation
-  - compatible with future core.async go-block orchestration (same primitive, different scheduling)
-- Integrate with the existing tiny-clj scheduler (no additional scheduler layer in `tiny-gfx`):
-  - scene/game updates are timer/event-driven as scheduled by tiny-clj (not mandatory fixed per-tick loop)
-  - updates publish only changed slot snapshots (`deco`, `score`, `game`) to keep render wakeups sparse
-  - `tiny-gfx` remains render/game-state focused and does not own input handling
-- Host-viewer architecture parity task (required):
-  - replace C-authored demo scene assembly in `src/host_viewer_minifb.c` with Clojure-authored scene construction (`tiny-gfx.scene` records/maps)
-  - host-viewer C side may keep backend/pacing/presentation/metrics responsibilities, but scene topology/entity definitions must come from Clojure
-  - keep immutable snapshot publish contract unchanged (`FrameScene` per slot, changed-slot-only rendering)
-- Host-viewer color authoring readability task (required):
-  - move color conversion utility to `tiny-gfx.scene` so scene namespaces share one API
-  - allow host scene palettes to be authored in web-hex form (`#RRGGBB`) and converted centrally to renderer color format
-  - prerequisites status update (2026-03-04):
-    - implemented: `bit-and`, `bit-or`, `bit-shift-right` as `:native` core functions
-    - implemented: `0x...` integer literal reader support in tiny-clj parser
-    - implemented: shared `tiny-gfx.scene/web-hex->color` + `rgb888->color` helpers
-    - implemented: `tiny-gfx.host-viewer-demo` palette migrated to web-hex source values
-  - next rollout task (required):
-    - support direct hex-literal scene authoring path without strings, e.g. `(color 0x00FFFF)` for color constants
-    - migrate remaining scene/color call sites from legacy numeric RGB565 constants to either:
-      - `web-hex->color "#RRGGBB"` (string source), or
-      - `color 0xRRGGBB` (hex-literal source)
-    - choose one primary style for new code and document it in `tiny-gfx.scene` docstrings/comments
-  - add regression tests for:
-    - deterministic web-hex -> renderer color conversion (`#00FFFF`, `#FFFFFF`, `#FF00FF`, etc.)
-    - deterministic hex-literal -> renderer color conversion (`0x00FFFF`, `0xFFFFFF`, etc.)
-    - invalid input handling (length/charset)
-    - unchanged rendered output checksums after palette migration
-- Optionally validate patch-based hotpath updates for selected widgets/animations.
-- Run long soak tests on host and ESP32 to check stability and memory behavior.
+- Scene topology is authored in Clojure (`tiny-gfx.host-viewer-demo`) but as a nested tree.
+- C mutates Record fields directly (`ASSIGN(transform->tx, fixnum(x))`).
+- No flat entity map, no Timeline Records, no C-side interpolation state.
 
-Done when:
+### 9a: Flat Entity Map (Clojure side)
 
+- Restructure scene from nested tree to flat `{id → Record}` map per slot.
+- Root entity uses symbol `root` as `:id`. C starts rendering at `root`.
+- Groups list children as ID vectors: `(group {:id root :children [3001 3002 3003]})`.
+- Updates via `(swap! slot assoc-in [id :field] new-value)` – O(1), no tree walk.
+- `update-nodes` (M8b) becomes optional convenience; direct `assoc-in` is the primary API.
+
+Example:
+```clojure
+(def game-slot (atom
+  {root (group {:id root :children [3001 3002 3003]})
+   3001 (polyline {:id 3001 :t (transform {:tx 0}) :style style-line :pts terrain-pts})
+   3002 (tri      {:id 3002 :t (transform {:tx 72 :ty 146}) :style style-player
+                   :x1 56 :y1 146 :x2 72 :y2 118 :x3 88 :y3 146})
+   3003 (polyline {:id 3003 :t (transform {:tx 200 :ty 126 :rot -90})
+                   :style style-rocket :pts rocket-pts})}))
+```
+
+### 9b: Timeline Record for periodic animations
+
+- Define `(defrecord Timeline [keyframes loop])`.
+  - `keyframes` = vector of `[time-ms value]` pairs, per-keyframe durations (unequal allowed).
+  - `loop` = boolean (true → `time_ms % total_period`; false → clamp at last keyframe).
+- Any entity field can hold a Timeline instead of a plain value.
+- C resolves during traversal: check if field is Timeline, resolve by wall clock.
+- No Clojure eval, no timers needed for periodic animations.
+
+Example (alien cycling 3 forms with different durations):
+```clojure
+{3003 (polyline {:id 3003
+                 :pts   (->Timeline [[0 pts-open] [300 pts-mid] [400 pts-closed]] true)
+                 :style (->Timeline [[0 style-green] [400 style-red]] true)})}
+;; C resolves: phase_ms = time_ms % 600; scan keyframes to find active frame
+```
+
+### 9c: C Renderer for flat entity map
+
+- C reads the flat map snapshot from Atom via `atom_deref`.
+- Traversal: lookup `root` → read `:children` → lookup each child ID → recurse.
+- Transform inheritance: compose parent transform with each child's `:t` field.
+- Timeline resolution: at each field read, check for Timeline Record, resolve by time.
+- Entity map lookup by ID must be efficient (persistent map `get` or C-side index cache).
+
+```c
+void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
+    ID entity = map_get(entity_map, id);
+    ID raw_t = record_get(entity, FIELD_T);
+    ID resolved_t = is_timeline(raw_t) ? timeline_resolve(raw_t, time_ms) : raw_t;
+    Transform t = compose(parent_t, decode_transform(resolved_t));
+
+    if (is_group(entity)) {
+        ID children = record_get(entity, FIELD_CHILDREN);
+        for (int i = 0; i < vec_count(children); i++) {
+            render_entity(entity_map, vec_nth(children, i), t, time_ms);
+        }
+    } else {
+        render_primitive(entity, t, time_ms);  // resolves Timeline fields
+    }
+}
+// Entry: render_entity(entity_map, sym_root, identity, now_ms);
+```
+
+### 9d: C Interpolation State for smooth motion (AnimState)
+
+- For transform targets that change event-driven (e.g. player jump, rocket move),
+  C maintains mutable `AnimState` structs to interpolate smoothly.
+- Per frame: read target transform from entity map, lerp `current → target`.
+- Interruption-safe: new target mid-animation → interpolate from current visual position.
+- AnimState is separate from the Clojure snapshot (C-owned, mutable).
+- Timeline (periodic, data-driven) and AnimState (smooth motion, C-driven) are complementary:
+  Timeline = cyclic field replacement; AnimState = continuous interpolation toward targets.
+
+### 9e: Animation descriptors (TODO – to be clarified)
+
+- Declarative transition animations (easing, duration, from/to for smooth motion)
+  must execute in C, not the interpreter.
+- Open questions:
+  - Are animation descriptors authored in Clojure (as Records) and consumed by C?
+  - How do they interact with Timeline fields?
+    (Timeline = periodic/cyclic; animation descriptor = one-shot/transition?)
+  - Completion callbacks back to scheduler (reuse collision callback ingress?)
+- See Optional Extension A for initial animation record sketch.
+- Decision deferred until 9a–9d are stable.
+
+### 9f: Migration of host-viewer demo
+
+- Restructure `tiny-gfx.host-viewer-demo` from nested `create-demo-bundle` to flat entity maps.
+- Replace direct `ASSIGN(transform->tx, ...)` calls in C with the
+  `atom_deref → resolve Timelines → interpolate → render` pipeline.
+- Move target-setting logic to Clojure (event-driven) where possible.
+- Keep C-owned: frame pacing, backend submission, metrics, presentation.
+
+### 9g: Validate scene reuse + scheduler integration
+
+- Gameplay HUD, menu UI, vector title animation.
+- Scene updates via `(swap! slot assoc-in [id :field] new-value)`.
+- Timer/event-driven via existing tiny-clj scheduler.
+- Publish only changed slot snapshots to keep render wakeups sparse.
+
+### 9h: Host-viewer color authoring readability (DONE)
+
+- Status: DONE (2026-03-04).
+- `tiny-gfx.scene/color` converts `0xRRGGBB` → RGB565.
+- `tiny-gfx.scene/web-hex->color` converts `"#RRGGBB"` → RGB565.
+- Demo palette migrated to `(color 0xRRGGBB)` style.
+
+### Done when
+
+- Host-viewer demo uses flat entity map architecture end-to-end:
+  Clojure `{id → Record}` in Atom → C resolves Timelines + interpolates → renders.
+- Root entity is identified by symbol `root`.
+- Periodic animations run via Timeline Records (no Clojure timers for visual cycling).
+- No direct `ASSIGN` of computed positions from C into scene Records.
 - One vertical slice runs the same scene model in simulator and on device.
 
 ## Milestone 10: Collision Contract + C-Driven Callback
@@ -667,6 +853,11 @@ Done when:
 ## Optional Extension A: Render-Thread Interpolation Animations (Off-Main-Thread)
 
 Status: OPTIONAL-LATER (generic SPSC queue + fixed-point animator math prerequisites implemented; animation command/event wiring still TODO)
+
+Relationship to Milestone 9: This extension builds on the three-layer target architecture
+(M9). The interpolation layer (Layer 2) is the foundation; this extension adds declarative
+animation descriptors that drive the interpolation automatically. Key open question from M9d:
+animations must run in C (not interpreter) – this extension defines how.
 
 Scope:
 
