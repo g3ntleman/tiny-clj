@@ -1,7 +1,7 @@
 R"TINY_GFX_HOST(
 (ns tiny-gfx.host-viewer-demo
   (:require [tiny-gfx.scene :refer [->Transform ->Style ->Group ->Polyline
-                                     ->Tri ->VText ->FrameScene web-hex->color]]))
+                                     ->Tri ->VText ->FrameScene color]]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
@@ -50,12 +50,12 @@ R"TINY_GFX_HOST(
            collision-rules nil}}]
   (->FrameScene root clip-rect z visible opaque erase-color guard-px collision-rules))
 
-(def color-cyan (web-hex->color "#00FFFF"))
-(def color-white (web-hex->color "#FFFFFF"))
-(def color-green (web-hex->color "#00FF00"))
-(def color-magenta (web-hex->color "#FF00FF"))
-(def color-yellow (web-hex->color "#FFFF00"))
-(def color-red (web-hex->color "#FF0000"))
+(def color-cyan (color 0x00FFFF))
+(def color-white (color 0xFFFFFF))
+(def color-green (color 0x00FF00))
+(def color-magenta (color 0xFF00FF))
+(def color-yellow (color 0xFFFF00))
+(def color-red (color 0xFF0000))
 
 (def style-deco (style {:stroke-color color-cyan :stroke-width 2}))
 (def style-score (style {:stroke-color color-white :stroke-width 1}))

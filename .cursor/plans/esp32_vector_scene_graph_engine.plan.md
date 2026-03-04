@@ -493,15 +493,20 @@ Tasks:
 - Host-viewer color authoring readability task (required):
   - move color conversion utility to `tiny-gfx.scene` so scene namespaces share one API
   - allow host scene palettes to be authored in web-hex form (`#RRGGBB`) and converted centrally to renderer color format
-  - prerequisites check (2026-03-04):
-    - available: `bit-shift-left`, `quot`, `mod`
-    - missing: `bit-and`, `bit-or`, `bit-shift-right`
-    - missing: `0x...` number literal reader support in tiny-clj
-  - implementation split (both required before rollout):
-    1. add numeric prerequisites in tiny-clj core/runtime (bitwise ops + web-hex-friendly literal/parse path), or provide an equivalent tested parser API
-    2. add shared conversion helper in `tiny-gfx.scene` and migrate `tiny-gfx.host-viewer-demo` color constants to web-hex source values
+  - prerequisites status update (2026-03-04):
+    - implemented: `bit-and`, `bit-or`, `bit-shift-right` as `:native` core functions
+    - implemented: `0x...` integer literal reader support in tiny-clj parser
+    - implemented: shared `tiny-gfx.scene/web-hex->color` + `rgb888->color` helpers
+    - implemented: `tiny-gfx.host-viewer-demo` palette migrated to web-hex source values
+  - next rollout task (required):
+    - support direct hex-literal scene authoring path without strings, e.g. `(color 0x00FFFF)` for color constants
+    - migrate remaining scene/color call sites from legacy numeric RGB565 constants to either:
+      - `web-hex->color "#RRGGBB"` (string source), or
+      - `color 0xRRGGBB` (hex-literal source)
+    - choose one primary style for new code and document it in `tiny-gfx.scene` docstrings/comments
   - add regression tests for:
     - deterministic web-hex -> renderer color conversion (`#00FFFF`, `#FFFFFF`, `#FF00FF`, etc.)
+    - deterministic hex-literal -> renderer color conversion (`0x00FFFF`, `0xFFFFFF`, etc.)
     - invalid input handling (length/charset)
     - unchanged rendered output checksums after palette migration
 - Optionally validate patch-based hotpath updates for selected widgets/animations.

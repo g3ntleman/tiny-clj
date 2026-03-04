@@ -67,6 +67,20 @@ R"TINY_GFX_SCENE(
         b5 (quot (* b 31) 255)]
     (+ (* r5 2048) (* g6 32) b5)))
 
+(defn color
+  "Converts a 24-bit RGB888 integer (0xRRGGBB) to RGB565 integer color.
+Returns nil for invalid input."
+  [rgb]
+  (if (or (nil? rgb)
+          (not (integer? rgb))
+          (< rgb 0)
+          (> rgb 16777215))
+    nil
+    (let [r (bit-and (bit-shift-right rgb 16) 255)
+          g (bit-and (bit-shift-right rgb 8) 255)
+          b (bit-and rgb 255)]
+      (rgb888->color r g b))))
+
 (defn web-hex->color
   "Converts #RRGGBB into RGB565 integer color. Returns nil for invalid input."
   [s]
@@ -79,7 +93,7 @@ R"TINY_GFX_SCENE(
               b (parse-hex2 t 5)]
           (if (or (nil? r) (nil? g) (nil? b))
             nil
-            (rgb888->color r g b)))
+            (color (+ (* r 65536) (* g 256) b))))
         nil))))
 
 ;; Collision contract helpers (Step 1: contract freeze, no runtime wiring yet).
