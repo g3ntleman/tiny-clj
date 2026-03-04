@@ -47,14 +47,14 @@ STATIC_SYMBOL_DATA(sym_kw_tx_data, ":tx");
 STATIC_SYMBOL_DATA(sym_kw_ty_data, ":ty");
 STATIC_SYMBOL_DATA(sym_kw_sx_data, ":sx");
 STATIC_SYMBOL_DATA(sym_kw_sy_data, ":sy");
-STATIC_SYMBOL_DATA(sym_kw_stroke_rgb565_data, ":stroke_rgb565");
+STATIC_SYMBOL_DATA(sym_kw_stroke_color_data, ":stroke_color");
 STATIC_SYMBOL_DATA(sym_kw_stroke_width_data, ":stroke_width");
 STATIC_SYMBOL_DATA(sym_kw_has_fill_data, ":has_fill");
-STATIC_SYMBOL_DATA(sym_kw_fill_rgb565_data, ":fill_rgb565");
-STATIC_SYMBOL_DATA(sym_kw_has_bg_rgb565_data, ":has_bg_rgb565");
-STATIC_SYMBOL_DATA(sym_kw_bg_rgb565_data, ":bg_rgb565");
+STATIC_SYMBOL_DATA(sym_kw_fill_color_data, ":fill_color");
+STATIC_SYMBOL_DATA(sym_kw_has_bg_color_data, ":has_bg_color");
+STATIC_SYMBOL_DATA(sym_kw_bg_color_data, ":bg_color");
 STATIC_SYMBOL_DATA(sym_kw_clip_rect_data, ":clip-rect");
-STATIC_SYMBOL_DATA(sym_kw_erase_rgb565_data, ":erase-rgb565");
+STATIC_SYMBOL_DATA(sym_kw_erase_color_data, ":erase-color");
 STATIC_SYMBOL_DATA(sym_kw_z_data, ":z");
 STATIC_SYMBOL_DATA(sym_kw_opaque_data, ":opaque");
 STATIC_SYMBOL_DATA(sym_kw_guard_px_data, ":guard-px");
@@ -109,14 +109,14 @@ static void init_record_keys(void) {
     g_record_keys.k_ty = &sym_kw_ty_data.sym;
     g_record_keys.k_sx = &sym_kw_sx_data.sym;
     g_record_keys.k_sy = &sym_kw_sy_data.sym;
-    g_record_keys.k_stroke_rgb565 = &sym_kw_stroke_rgb565_data.sym;
+    g_record_keys.k_stroke_color = &sym_kw_stroke_color_data.sym;
     g_record_keys.k_stroke_width = &sym_kw_stroke_width_data.sym;
     g_record_keys.k_has_fill = &sym_kw_has_fill_data.sym;
-    g_record_keys.k_fill_rgb565 = &sym_kw_fill_rgb565_data.sym;
-    g_record_keys.k_has_bg_rgb565 = &sym_kw_has_bg_rgb565_data.sym;
-    g_record_keys.k_bg_rgb565 = &sym_kw_bg_rgb565_data.sym;
+    g_record_keys.k_fill_color = &sym_kw_fill_color_data.sym;
+    g_record_keys.k_has_bg_color = &sym_kw_has_bg_color_data.sym;
+    g_record_keys.k_bg_color = &sym_kw_bg_color_data.sym;
     g_record_keys.k_clip_rect = &sym_kw_clip_rect_data.sym;
-    g_record_keys.k_erase_rgb565 = &sym_kw_erase_rgb565_data.sym;
+    g_record_keys.k_erase_color = &sym_kw_erase_color_data.sym;
     g_record_keys.k_z = &sym_kw_z_data.sym;
     g_record_keys.k_opaque = &sym_kw_opaque_data.sym;
     g_record_keys.k_guard_px = &sym_kw_guard_px_data.sym;
@@ -200,13 +200,13 @@ bool tiny_gfx_ensure_schema(EvalState *st) {
     g_record_schema.transform_sx = descriptor_index_of(d_transform, g_record_keys.k_sx);
     g_record_schema.transform_sy = descriptor_index_of(d_transform, g_record_keys.k_sy);
     g_record_schema.transform_rot = descriptor_index_of(d_transform, g_record_keys.k_rot);
-    g_record_schema.style_stroke_rgb565 = descriptor_index_of(d_style, g_record_keys.k_stroke_rgb565);
+    g_record_schema.style_stroke_color = descriptor_index_of(d_style, g_record_keys.k_stroke_color);
     g_record_schema.style_stroke_width = descriptor_index_of(d_style, g_record_keys.k_stroke_width);
     g_record_schema.style_visible = descriptor_index_of(d_style, g_record_keys.k_visible);
     g_record_schema.style_has_fill = descriptor_index_of(d_style, g_record_keys.k_has_fill);
-    g_record_schema.style_fill_rgb565 = descriptor_index_of(d_style, g_record_keys.k_fill_rgb565);
-    g_record_schema.style_has_bg_rgb565 = descriptor_index_of(d_style, g_record_keys.k_has_bg_rgb565);
-    g_record_schema.style_bg_rgb565 = descriptor_index_of(d_style, g_record_keys.k_bg_rgb565);
+    g_record_schema.style_fill_color = descriptor_index_of(d_style, g_record_keys.k_fill_color);
+    g_record_schema.style_has_bg_color = descriptor_index_of(d_style, g_record_keys.k_has_bg_color);
+    g_record_schema.style_bg_color = descriptor_index_of(d_style, g_record_keys.k_bg_color);
     g_record_schema.group_id = descriptor_index_of(d_group, g_record_keys.k_id);
     g_record_schema.group_t = descriptor_index_of(d_group, g_record_keys.k_t);
     g_record_schema.group_style = descriptor_index_of(d_group, g_record_keys.k_style);
@@ -258,14 +258,14 @@ bool tiny_gfx_ensure_schema(EvalState *st) {
     g_record_schema.frame_z = descriptor_index_of(d_frame, g_record_keys.k_z);
     g_record_schema.frame_visible = descriptor_index_of(d_frame, g_record_keys.k_visible);
     g_record_schema.frame_opaque = descriptor_index_of(d_frame, g_record_keys.k_opaque);
-    g_record_schema.frame_erase_rgb565 = descriptor_index_of(d_frame, g_record_keys.k_erase_rgb565);
+    g_record_schema.frame_erase_color = descriptor_index_of(d_frame, g_record_keys.k_erase_color);
     g_record_schema.frame_guard_px = descriptor_index_of(d_frame, g_record_keys.k_guard_px);
 
     if (g_record_schema.transform_tx < 0 || g_record_schema.transform_ty < 0 || g_record_schema.transform_sx < 0 ||
-        g_record_schema.transform_sy < 0 || g_record_schema.transform_rot < 0 || g_record_schema.style_stroke_rgb565 < 0 ||
+        g_record_schema.transform_sy < 0 || g_record_schema.transform_rot < 0 || g_record_schema.style_stroke_color < 0 ||
         g_record_schema.style_stroke_width < 0 || g_record_schema.style_visible < 0 || g_record_schema.style_has_fill < 0 ||
-        g_record_schema.style_fill_rgb565 < 0 || g_record_schema.style_has_bg_rgb565 < 0 ||
-        g_record_schema.style_bg_rgb565 < 0 || g_record_schema.group_id < 0 || g_record_schema.group_t < 0 ||
+        g_record_schema.style_fill_color < 0 || g_record_schema.style_has_bg_color < 0 ||
+        g_record_schema.style_bg_color < 0 || g_record_schema.group_id < 0 || g_record_schema.group_t < 0 ||
         g_record_schema.group_style < 0 || g_record_schema.group_visible < 0 || g_record_schema.group_children < 0 ||
         g_record_schema.line_id < 0 || g_record_schema.line_t < 0 || g_record_schema.line_style < 0 ||
         g_record_schema.line_visible < 0 || g_record_schema.line_x1 < 0 || g_record_schema.line_y1 < 0 ||
@@ -282,7 +282,7 @@ bool tiny_gfx_ensure_schema(EvalState *st) {
         g_record_schema.text_x < 0 || g_record_schema.text_y < 0 || g_record_schema.text_scale < 0 ||
         g_record_schema.text_rot < 0 || g_record_schema.text_text < 0 || g_record_schema.frame_root < 0 ||
         g_record_schema.frame_clip_rect < 0 || g_record_schema.frame_z < 0 || g_record_schema.frame_visible < 0 ||
-        g_record_schema.frame_opaque < 0 || g_record_schema.frame_erase_rgb565 < 0 || g_record_schema.frame_guard_px < 0) {
+        g_record_schema.frame_opaque < 0 || g_record_schema.frame_erase_color < 0 || g_record_schema.frame_guard_px < 0) {
         return false;
     }
 

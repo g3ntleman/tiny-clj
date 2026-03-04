@@ -28,13 +28,13 @@ VgTransform vg_transform_identity(void) {
 
 VgStyle vg_style_default(void) {
     VgStyle s;
-    s.stroke_rgb565 = 0xffffu;
+    s.stroke_color = 0xffffu;
     s.stroke_width = 1;
     s.visible = true;
     s.has_fill = false;
-    s.fill_rgb565 = 0x0000u;
-    s.has_bg_rgb565 = false;
-    s.bg_rgb565 = 0x0000u;
+    s.fill_color = 0x0000u;
+    s.has_bg_color = false;
+    s.bg_color = 0x0000u;
     return s;
 }
 
@@ -312,19 +312,19 @@ static void draw_stroke_polyline_xy(VgFrameBuffer *fb,
         draw_line_thick(fb,
                         vx[i - 1], vy[i - 1],
                         vx[i], vy[i],
-                        style.stroke_rgb565,
+                        style.stroke_color,
                         (int)style.stroke_width,
-                        style.has_bg_rgb565,
-                        style.bg_rgb565);
+                        style.has_bg_color,
+                        style.bg_color);
     }
     if (closed && count > 2) {
         draw_line_thick(fb,
                         vx[count - 1], vy[count - 1],
                         vx[0], vy[0],
-                        style.stroke_rgb565,
+                        style.stroke_color,
                         (int)style.stroke_width,
-                        style.has_bg_rgb565,
-                        style.bg_rgb565);
+                        style.has_bg_color,
+                        style.bg_color);
     }
 }
 
@@ -345,7 +345,7 @@ static void draw_line_node(VgFrameBuffer *fb, const VgLineData *l, VgTransformFi
     int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
     apply_xy_fixed_px(&tf, l->x1, l->y1, &x1, &y1);
     apply_xy_fixed_px(&tf, l->x2, l->y2, &x2, &y2);
-    draw_line_thick(fb, x1, y1, x2, y2, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
+    draw_line_thick(fb, x1, y1, x2, y2, style.stroke_color, (int)style.stroke_width, style.has_bg_color, style.bg_color);
 }
 
 static void draw_polyline_node(VgFrameBuffer *fb, const VgPolylineData *p, VgTransformFixed tf, VgStyle style) {
@@ -357,7 +357,7 @@ static void draw_polyline_node(VgFrameBuffer *fb, const VgPolylineData *p, VgTra
         int vy[GFX_FILL_MAX_VERTS];
         if (transform_polyline_points_fixed(p, tf, vx, vy)) {
             if (p->closed && style.has_fill && p->point_count >= 3) {
-                fill_polygon_scanline(fb, vx, vy, p->point_count, style.fill_rgb565);
+                fill_polygon_scanline(fb, vx, vy, p->point_count, style.fill_color);
             }
             draw_stroke_polyline_xy(fb, vx, vy, p->point_count, p->closed, style);
             return;
@@ -367,13 +367,13 @@ static void draw_polyline_node(VgFrameBuffer *fb, const VgPolylineData *p, VgTra
         int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
         apply_xy_fixed_px(&tf, p->points[i - 1].x, p->points[i - 1].y, &x1, &y1);
         apply_xy_fixed_px(&tf, p->points[i].x, p->points[i].y, &x2, &y2);
-        draw_line_thick(fb, x1, y1, x2, y2, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
+        draw_line_thick(fb, x1, y1, x2, y2, style.stroke_color, (int)style.stroke_width, style.has_bg_color, style.bg_color);
     }
     if (p->closed && p->point_count > 2) {
         int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
         apply_xy_fixed_px(&tf, p->points[p->point_count - 1].x, p->points[p->point_count - 1].y, &x1, &y1);
         apply_xy_fixed_px(&tf, p->points[0].x, p->points[0].y, &x2, &y2);
-        draw_line_thick(fb, x1, y1, x2, y2, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
+        draw_line_thick(fb, x1, y1, x2, y2, style.stroke_color, (int)style.stroke_width, style.has_bg_color, style.bg_color);
     }
 }
 
@@ -386,12 +386,12 @@ static void draw_rect_node(VgFrameBuffer *fb, const VgRectData *r, VgTransformFi
     if (style.has_fill) {
         int vx[4] = {x1, x2, x3, x4};
         int vy[4] = {y1, y2, y3, y4};
-        fill_polygon_scanline(fb, vx, vy, 4, style.fill_rgb565);
+        fill_polygon_scanline(fb, vx, vy, 4, style.fill_color);
     }
-    draw_line_thick(fb, x1, y1, x2, y2, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
-    draw_line_thick(fb, x2, y2, x3, y3, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
-    draw_line_thick(fb, x3, y3, x4, y4, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
-    draw_line_thick(fb, x4, y4, x1, y1, style.stroke_rgb565, (int)style.stroke_width, style.has_bg_rgb565, style.bg_rgb565);
+    draw_line_thick(fb, x1, y1, x2, y2, style.stroke_color, (int)style.stroke_width, style.has_bg_color, style.bg_color);
+    draw_line_thick(fb, x2, y2, x3, y3, style.stroke_color, (int)style.stroke_width, style.has_bg_color, style.bg_color);
+    draw_line_thick(fb, x3, y3, x4, y4, style.stroke_color, (int)style.stroke_width, style.has_bg_color, style.bg_color);
+    draw_line_thick(fb, x4, y4, x1, y1, style.stroke_color, (int)style.stroke_width, style.has_bg_color, style.bg_color);
 }
 
 static void draw_tri_node(VgFrameBuffer *fb, const VgTriData *tr, VgTransformFixed tf, VgStyle style) {
@@ -401,7 +401,7 @@ static void draw_tri_node(VgFrameBuffer *fb, const VgTriData *tr, VgTransformFix
     apply_xy_fixed_px(&tf, tr->x2, tr->y2, &vx[1], &vy[1]);
     apply_xy_fixed_px(&tf, tr->x3, tr->y3, &vx[2], &vy[2]);
     if (style.has_fill) {
-        fill_polygon_scanline(fb, vx, vy, 3, style.fill_rgb565);
+        fill_polygon_scanline(fb, vx, vy, 3, style.fill_color);
     }
     draw_stroke_polyline_xy(fb, vx, vy, 3, true, style);
 }
@@ -434,16 +434,16 @@ static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransform
     // - at larger non-integer scales (e.g. 1.4), draw diagonal strokes with a
     //   minimal extra thickness to prevent intermittent missing pixels.
     #define DRAW_TEXT_SEGMENT(xa, ya, xb, yb, st) do { \
-        if ((st).stroke_width <= 1 && !(st).has_bg_rgb565) { \
+        if ((st).stroke_width <= 1 && !(st).has_bg_color) { \
             int _dx = abs((xb) - (xa)); \
             int _dy = abs((yb) - (ya)); \
             if (text_scale_large && !is_arcade_ascii_glyph && _dx > 0 && _dy > 0) { \
-                draw_line_thick(fb, (xa), (ya), (xb), (yb), (st).stroke_rgb565, 2, false, (st).bg_rgb565); \
+                draw_line_thick(fb, (xa), (ya), (xb), (yb), (st).stroke_color, 2, false, (st).bg_color); \
             } else { \
-                draw_line_supercover(fb, (xa), (ya), (xb), (yb), (st).stroke_rgb565); \
+                draw_line_supercover(fb, (xa), (ya), (xb), (yb), (st).stroke_color); \
             } \
         } else { \
-            draw_line_thick(fb, (xa), (ya), (xb), (yb), (st).stroke_rgb565, (int)(st).stroke_width, (st).has_bg_rgb565, (st).bg_rgb565); \
+            draw_line_thick(fb, (xa), (ya), (xb), (yb), (st).stroke_color, (int)(st).stroke_width, (st).has_bg_color, (st).bg_color); \
         } \
     } while (0)
 
@@ -469,7 +469,7 @@ static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransform
             // The arcade glyph set is built from crisp grid segments; the
             // generic 1px AA fringe produces visible halos (e.g. "FPS: 59.9")
             // and frays tiny punctuation blobs. Keep arcade glyphs crisp.
-            glyph_style.has_bg_rgb565 = false;
+            glyph_style.has_bg_color = false;
         }
 
 #define GL(x1, y1, x2, y2) do { \
@@ -493,7 +493,7 @@ static void draw_text_node(VgFrameBuffer *fb, const VgTextData *txt, VgTransform
                 int _xmax = (_gx0 > _gx1) ? _gx0 : _gx1; \
                 int _ymin = (_gy0 < _gy1) ? _gy0 : _gy1; \
                 int _ymax = (_gy0 > _gy1) ? _gy0 : _gy1; \
-                draw_fill_rect(fb, _xmin, _ymin, (_xmax - _xmin) + 1, (_ymax - _ymin) + 1, glyph_style.stroke_rgb565); \
+                draw_fill_rect(fb, _xmin, _ymin, (_xmax - _xmin) + 1, (_ymax - _ymin) + 1, glyph_style.stroke_color); \
             } else { \
                 GL((x), (y), (x), ((y) + 1)); \
                 GL((x), ((y) + 1), ((x) + 1), ((y) + 1)); \
@@ -981,7 +981,7 @@ bool vg_render_slot_if_changed(const VgRenderSlot *slot,
     bool props_changed = !state->initialized ||
                          state->last_visible != slot->visible ||
                          state->last_opaque != slot->opaque ||
-                         state->last_clear_rgb565 != slot->clear_rgb565 ||
+                         state->last_clear_color != slot->clear_color ||
                          state->last_guard_px != slot->guard_px ||
                          !vg_clip_rect_equal(state->last_clip_rect, slot->clip_rect);
     bool snapshot_changed = !state->initialized || state->snapshot_id != snapshot_id;
@@ -994,7 +994,7 @@ bool vg_render_slot_if_changed(const VgRenderSlot *slot,
         VgClipRect prev_rect = vg_clip_rect_expand(state->last_clip_rect, state->last_guard_px);
         dirty_rect = vg_clip_rect_union(prev_rect, slot_rect);
     }
-    vg_framebuffer_clear_rect(fb, dirty_rect, slot->clear_rgb565);
+    vg_framebuffer_clear_rect(fb, dirty_rect, slot->clear_color);
 
     if (slot->visible && slot->root) {
         vg_render_scene_clipped(slot->root, fb, slot_rect);
@@ -1005,7 +1005,7 @@ bool vg_render_slot_if_changed(const VgRenderSlot *slot,
     state->last_clip_rect = slot->clip_rect;
     state->last_visible = slot->visible;
     state->last_opaque = slot->opaque;
-    state->last_clear_rgb565 = slot->clear_rgb565;
+    state->last_clear_color = slot->clear_color;
     state->last_guard_px = slot->guard_px;
     return true;
 }

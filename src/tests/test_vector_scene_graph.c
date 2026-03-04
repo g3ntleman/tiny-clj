@@ -67,7 +67,7 @@ TEST(test_vector_scene_graph_nested_group_transform_affects_child_line) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
 
     VgNode line = {
         .id = 11,
@@ -104,7 +104,7 @@ TEST(test_vector_scene_graph_group_visible_false_skips_children) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle line_style = vg_style_default();
-    line_style.stroke_rgb565 = 0xffffu;
+    line_style.stroke_color = 0xffffu;
     VgNode line = {
         .id = 111,
         .type = VG_NODE_LINE,
@@ -137,10 +137,10 @@ TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
     ID scene = eval_string(
         "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord Group [id t style visible children]) "
-        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (->Scene "
         "    (->Group 100 nil nil true "
         "             [(->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6)]) "
@@ -163,10 +163,10 @@ TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
     ID scene = eval_string(
         "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord Group [id t style visible children]) "
-        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (->Scene "
         "    (->Group 120 nil nil false "
         "             [(->Line 121 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6)]) "
@@ -189,10 +189,10 @@ TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
     ID scene = eval_string(
         "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord Group [id t style visible children]) "
-        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (->Scene "
         "    (->Group 200 (->Transform 7 5 1 1 0) nil true "
         "             [(->Line 201 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0)]) "
@@ -215,10 +215,10 @@ TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
     ID scene = eval_string(
         "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord Group [id t style visible children]) "
-        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (->Scene "
         "    (->Group 300 nil nil true "
         "             [(->Line 301 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10)]) "
@@ -249,9 +249,9 @@ TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
     ID scene = eval_string(
         "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px collision-rules]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
         "    (->Line 401 nil (->Style 65535 1 true false 0 false 0) true 2 3 8 3) "
         "    [1 2 10 12] "
@@ -268,7 +268,7 @@ TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
     TEST_ASSERT_EQUAL_INT(3, slot.z);
     TEST_ASSERT_TRUE(slot.visible);
     TEST_ASSERT_TRUE(slot.opaque);
-    TEST_ASSERT_EQUAL_HEX16(0x0000u, slot.clear_rgb565);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, slot.clear_color);
     TEST_ASSERT_EQUAL_INT(1, slot.guard_px);
     TEST_ASSERT_NOT_NULL(slot.root);
 }
@@ -278,9 +278,9 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
     ID scene = eval_string(
         "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px collision-rules]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
         "    (->Line 501 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
         "    [20 8 10 6] "
@@ -311,9 +311,9 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_whe
     ID scene = eval_string(
         "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px collision-rules]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
         "    (->Line 511 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
         "    [20 8 10 6] "
@@ -489,12 +489,12 @@ TEST(test_vector_scene_graph_deterministic_frame_checksum_for_mixed_scene) {
     vg_framebuffer_clear(&fb_b, 0x0000u);
 
     VgStyle white = vg_style_default();
-    white.stroke_rgb565 = 0xffffu;
+    white.stroke_color = 0xffffu;
     VgStyle green = vg_style_default();
-    green.stroke_rgb565 = 0x07e0u;
+    green.stroke_color = 0x07e0u;
     green.stroke_width = 2;
     VgStyle red = vg_style_default();
-    red.stroke_rgb565 = 0xf800u;
+    red.stroke_color = 0xf800u;
 
     VgPoint pts[] = {{10, 25}, {20, 30}, {30, 24}, {40, 30}};
 
@@ -564,7 +564,7 @@ TEST(test_vector_scene_graph_clipped_render_limits_written_pixels) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
 
     VgNode line = {
@@ -591,7 +591,7 @@ TEST(test_vector_scene_graph_render_slot_if_changed_skips_unchanged_and_clears_m
     vg_framebuffer_clear(&fb, 0x1234u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
 
     VgNode line = {
@@ -609,7 +609,7 @@ TEST(test_vector_scene_graph_render_slot_if_changed_skips_unchanged_and_clears_m
         .z = 0,
         .visible = true,
         .opaque = true,
-        .clear_rgb565 = 0x0000u,
+        .clear_color = 0x0000u,
         .guard_px = 0
     };
     VgRenderSlotState state = {0};
@@ -640,7 +640,7 @@ TEST(test_vector_scene_graph_thick_line_changes_coverage) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle thin = vg_style_default();
-    thin.stroke_rgb565 = 0xffffu;
+    thin.stroke_color = 0xffffu;
     thin.stroke_width = 1;
     VgStyle thick = thin;
     thick.stroke_width = 4;
@@ -686,7 +686,7 @@ TEST(test_vector_scene_graph_patch_updates_transform_visibility_style_and_text) 
     vg_framebuffer_clear(&fb_after, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     VgNode text = {
         .id = 41,
         .type = VG_NODE_VTEXT,
@@ -726,7 +726,7 @@ TEST(test_vector_scene_graph_patch_updates_transform_visibility_style_and_text) 
 
     VgPatch spatch = {.id = 42, .type = VG_PATCH_STYLE};
     spatch.value.style = style;
-    spatch.value.style.stroke_rgb565 = 0xf800u;
+    spatch.value.style.stroke_color = 0xf800u;
     spatch.value.style.stroke_width = 3;
     TEST_ASSERT_TRUE(vg_scene_apply_patch(&root, &spatch));
 
@@ -754,13 +754,13 @@ TEST(test_vector_scene_graph_aa_only_when_bg_given_for_1px_lines) {
     vg_framebuffer_clear(&fb_aa, 0x0000u);
 
     VgStyle noaa = vg_style_default();
-    noaa.stroke_rgb565 = 0xffffu;
+    noaa.stroke_color = 0xffffu;
     noaa.stroke_width = 1;
-    noaa.has_bg_rgb565 = false;
+    noaa.has_bg_color = false;
 
     VgStyle aa = noaa;
-    aa.has_bg_rgb565 = true;
-    aa.bg_rgb565 = 0x0000u;
+    aa.has_bg_color = true;
+    aa.bg_color = 0x0000u;
 
     VgNode line_noaa = {
         .id = 51,
@@ -812,7 +812,7 @@ TEST(test_vector_scene_graph_hv_mono_has_inter_glyph_gap) {
     vg_framebuffer_clear(&fb_aa, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
 
     VgNode text_a = {
@@ -847,7 +847,7 @@ TEST(test_vector_scene_graph_hv_mono_problem_glyphs_not_half_height) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
 
     VgNode text = {
@@ -880,7 +880,7 @@ TEST(test_vector_scene_graph_punctuation_dot_and_colon_are_compact_blobs) {
     vg_framebuffer_clear(&fb_colon, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
 
     VgNode dot = {
@@ -928,7 +928,7 @@ TEST(test_vector_scene_graph_comma_sits_lower_than_period_and_not_left) {
     vg_framebuffer_clear(&fb_comma, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
 
     VgNode dot = {
@@ -978,7 +978,7 @@ TEST(test_vector_scene_graph_additional_ascii_punctuation_avoids_box_fallback) {
     TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
 
     VgNode text = {
@@ -1015,10 +1015,10 @@ TEST(test_vector_scene_graph_compact_punctuation_disables_aa_fringe_even_with_bg
     TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
-    style.has_bg_rgb565 = true;
-    style.bg_rgb565 = 0x0000u;
+    style.has_bg_color = true;
+    style.bg_color = 0x0000u;
 
     VgNode text = {
         .id = 91,
@@ -1057,10 +1057,10 @@ TEST(test_vector_scene_graph_arcade_text_disables_aa_fringe_even_with_bg) {
     TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
-    style.has_bg_rgb565 = true;
-    style.bg_rgb565 = 0x0000u;
+    style.has_bg_color = true;
+    style.bg_color = 0x0000u;
 
     VgNode text = {
         .id = 95,
@@ -1096,10 +1096,10 @@ TEST(test_vector_scene_graph_arcade_z_scale_1_5_diagonal_stays_within_expected_b
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
-    style.has_bg_rgb565 = true;
-    style.bg_rgb565 = 0x0000u;
+    style.has_bg_color = true;
+    style.bg_color = 0x0000u;
 
     VgNode text = {
         .id = 96,
@@ -1125,10 +1125,10 @@ TEST(test_vector_scene_graph_slash_backslash_scale_1_5_are_not_one_pixel_too_low
     TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
-    style.has_bg_rgb565 = true;
-    style.bg_rgb565 = 0x0000u;
+    style.has_bg_color = true;
+    style.bg_color = 0x0000u;
 
     VgNode text = {
         .id = 97,
@@ -1160,10 +1160,10 @@ TEST(test_vector_scene_graph_arcade_exclamation_has_detached_dot) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
-    style.has_bg_rgb565 = true;
-    style.bg_rgb565 = 0x0000u;
+    style.has_bg_color = true;
+    style.bg_color = 0x0000u;
 
     VgNode text = {
         .id = 98,
@@ -1211,10 +1211,10 @@ TEST(test_vector_scene_graph_colon_blobs_are_vertically_aligned) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
-    style.has_bg_rgb565 = true;
-    style.bg_rgb565 = 0x0000u;
+    style.has_bg_color = true;
+    style.bg_color = 0x0000u;
 
     VgNode text = {
         .id = 92,
@@ -1262,7 +1262,7 @@ TEST(test_vector_scene_graph_arcade_j_has_bottom_bar_shape) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
 
     VgNode text = {
@@ -1299,10 +1299,10 @@ TEST(test_vector_scene_graph_filled_rect_produces_interior_pixels) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
     style.has_fill = true;
-    style.fill_rgb565 = 0x07e0u; /* green */
+    style.fill_color = 0x07e0u; /* green */
 
     VgNode rect = {
         .id = 1001,
@@ -1329,10 +1329,10 @@ TEST(test_vector_scene_graph_filled_tri_produces_interior_pixels) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
     style.has_fill = true;
-    style.fill_rgb565 = 0xf800u; /* red */
+    style.fill_color = 0xf800u; /* red */
 
     VgNode tri = {
         .id = 1002,
@@ -1359,10 +1359,10 @@ TEST(test_vector_scene_graph_filled_closed_polyline_produces_interior_pixels) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
     style.has_fill = true;
-    style.fill_rgb565 = 0x001fu; /* blue */
+    style.fill_color = 0x001fu; /* blue */
 
     VgPoint pts[] = {{10, 5}, {50, 5}, {50, 35}, {10, 35}};
 
@@ -1391,10 +1391,10 @@ TEST(test_vector_scene_graph_open_polyline_does_not_fill) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
     style.has_fill = true;
-    style.fill_rgb565 = 0x001fu;
+    style.fill_color = 0x001fu;
 
     VgPoint pts[] = {{10, 5}, {50, 5}, {50, 35}, {10, 35}};
 
@@ -1420,10 +1420,10 @@ TEST(test_vector_scene_graph_fill_paint_order_fill_under_stroke) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 2;
     style.has_fill = true;
-    style.fill_rgb565 = 0xf800u; /* red fill */
+    style.fill_color = 0xf800u; /* red fill */
 
     VgNode rect = {
         .id = 1005,
@@ -1450,10 +1450,10 @@ TEST(test_vector_scene_graph_no_fill_when_has_fill_false) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
     style.has_fill = false;
-    style.fill_rgb565 = 0xf800u;
+    style.fill_color = 0xf800u;
 
     VgNode rect = {
         .id = 1006,
@@ -1477,10 +1477,10 @@ TEST(test_vector_scene_graph_filled_rect_clipped) {
     vg_framebuffer_clear(&fb, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
     style.has_fill = true;
-    style.fill_rgb565 = 0x07e0u; /* green */
+    style.fill_color = 0x07e0u; /* green */
 
     VgNode rect = {
         .id = 1007,
@@ -1516,10 +1516,10 @@ TEST(test_vector_scene_graph_filled_rect_deterministic_checksum) {
     vg_framebuffer_clear(&fb_b, 0x0000u);
 
     VgStyle style = vg_style_default();
-    style.stroke_rgb565 = 0xffffu;
+    style.stroke_color = 0xffffu;
     style.stroke_width = 1;
     style.has_fill = true;
-    style.fill_rgb565 = 0x07e0u;
+    style.fill_color = 0x07e0u;
 
     VgNode rect = {
         .id = 1008,
@@ -1541,10 +1541,10 @@ TEST(test_vector_scene_graph_filled_rect_from_clojure_records) {
     ID scene = eval_string(
         "(do (require 'tiny-gfx.scene) "
         "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Rect [id t style visible x y w h]) "
         "  (defrecord Group [id t style visible children]) "
-        "  (defrecord Scene [root clip-rect erase-rgb565 collision-rules]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (->Scene "
         "    (->Rect 1009 nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12) "
         "    nil nil nil))",

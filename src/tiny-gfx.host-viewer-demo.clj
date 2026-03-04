@@ -1,26 +1,18 @@
 R"TINY_GFX_HOST(
 (ns tiny-gfx.host-viewer-demo
-  (:require [tiny-gfx.scene]))
-
-;; Keep constructors local in this namespace for host-viewer bootstrap.
-(defrecord Transform [tx ty sx sy rot])
-(defrecord Style [stroke_rgb565 stroke_width visible has_fill fill_rgb565 has_bg_rgb565 bg_rgb565])
-(defrecord Group [id t style visible children])
-(defrecord Polyline [id t style visible pts closed])
-(defrecord Tri [id t style visible x1 y1 x2 y2 x3 y3])
-(defrecord VText [id t style visible x y scale rot text])
-(defrecord FrameScene [root clip-rect z visible opaque erase-rgb565 guard-px collision-rules])
+  (:require [tiny-gfx.scene :refer [->Transform ->Style ->Group ->Polyline
+                                     ->Tri ->VText ->FrameScene]]))
 
 (defn style
-  [{:keys [stroke-rgb565 stroke-width visible has-fill fill-rgb565 has-bg-rgb565 bg-rgb565]
-    :or   {stroke-rgb565 0
+  [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
+    :or   {stroke-color 0
            stroke-width 1
            visible true
            has-fill false
-           fill-rgb565 0
-           has-bg-rgb565 false
-           bg-rgb565 0}}]
-  (->Style stroke-rgb565 stroke-width visible has-fill fill-rgb565 has-bg-rgb565 bg-rgb565))
+           fill-color 0
+           has-bg-color false
+           bg-color 0}}]
+  (->Style stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color))
 
 (defn transform
   [{:keys [tx ty sx sy rot]
@@ -48,15 +40,15 @@ R"TINY_GFX_HOST(
   (->Group id t style visible children))
 
 (defn frame-scene
-  [{:keys [root clip-rect z visible opaque erase-rgb565 guard-px collision-rules]
+  [{:keys [root clip-rect z visible opaque erase-color guard-px collision-rules]
     :or   {clip-rect [0 0 320 240]
            z 0
            visible true
            opaque true
-           erase-rgb565 0
+           erase-color 0
            guard-px 1
            collision-rules nil}}]
-  (->FrameScene root clip-rect z visible opaque erase-rgb565 guard-px collision-rules))
+  (->FrameScene root clip-rect z visible opaque erase-color guard-px collision-rules))
 
 (def color-cyan 2047)
 (def color-white 65535)
@@ -65,13 +57,13 @@ R"TINY_GFX_HOST(
 (def color-yellow 65504)
 (def color-red 63488)
 
-(def style-deco (style {:stroke-rgb565 color-cyan :stroke-width 2}))
-(def style-score (style {:stroke-rgb565 color-white :stroke-width 1}))
-(def style-game-line (style {:stroke-rgb565 color-green :stroke-width 2}))
-(def style-game-player (style {:stroke-rgb565 color-magenta :stroke-width 3}))
-(def style-rocket-body (style {:stroke-rgb565 color-yellow :stroke-width 2 :has-fill true :fill-rgb565 color-yellow}))
-(def style-rocket-nose (style {:stroke-rgb565 color-red :stroke-width 2 :has-fill true :fill-rgb565 color-red}))
-(def style-hbar (style {:stroke-rgb565 color-white :stroke-width 1 :has-fill true :fill-rgb565 color-white}))
+(def style-deco (style {:stroke-color color-cyan :stroke-width 2}))
+(def style-score (style {:stroke-color color-white :stroke-width 1}))
+(def style-game-line (style {:stroke-color color-green :stroke-width 2}))
+(def style-game-player (style {:stroke-color color-magenta :stroke-width 3}))
+(def style-rocket-body (style {:stroke-color color-yellow :stroke-width 2 :has-fill true :fill-color color-yellow}))
+(def style-rocket-nose (style {:stroke-color color-red :stroke-width 2 :has-fill true :fill-color color-red}))
+(def style-hbar (style {:stroke-color color-white :stroke-width 1 :has-fill true :fill-color color-white}))
 
 (def mountain-pts
   [[0 228] [26 206] [58 226] [92 196] [126 225]

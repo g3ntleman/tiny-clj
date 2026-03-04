@@ -490,6 +490,20 @@ Tasks:
   - replace C-authored demo scene assembly in `src/host_viewer_minifb.c` with Clojure-authored scene construction (`tiny-gfx.scene` records/maps)
   - host-viewer C side may keep backend/pacing/presentation/metrics responsibilities, but scene topology/entity definitions must come from Clojure
   - keep immutable snapshot publish contract unchanged (`FrameScene` per slot, changed-slot-only rendering)
+- Host-viewer color authoring readability task (required):
+  - move color conversion utility to `tiny-gfx.scene` so scene namespaces share one API
+  - allow host scene palettes to be authored in web-hex form (`#RRGGBB`) and converted centrally to renderer color format
+  - prerequisites check (2026-03-04):
+    - available: `bit-shift-left`, `quot`, `mod`
+    - missing: `bit-and`, `bit-or`, `bit-shift-right`
+    - missing: `0x...` number literal reader support in tiny-clj
+  - implementation split (both required before rollout):
+    1. add numeric prerequisites in tiny-clj core/runtime (bitwise ops + web-hex-friendly literal/parse path), or provide an equivalent tested parser API
+    2. add shared conversion helper in `tiny-gfx.scene` and migrate `tiny-gfx.host-viewer-demo` color constants to web-hex source values
+  - add regression tests for:
+    - deterministic web-hex -> renderer color conversion (`#00FFFF`, `#FFFFFF`, `#FF00FF`, etc.)
+    - invalid input handling (length/charset)
+    - unchanged rendered output checksums after palette migration
 - Optionally validate patch-based hotpath updates for selected widgets/animations.
 - Run long soak tests on host and ESP32 to check stability and memory behavior.
 

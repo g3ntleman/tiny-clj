@@ -39,13 +39,13 @@ typedef struct {
 } VgPoint;
 
 typedef struct {
-    uint16_t stroke_rgb565;
+    uint16_t stroke_color;
     uint8_t stroke_width;
     bool visible;
     bool has_fill;
-    uint16_t fill_rgb565;
-    bool has_bg_rgb565;
-    uint16_t bg_rgb565;
+    uint16_t fill_color;
+    bool has_bg_color;
+    uint16_t bg_color;
 } VgStyle;
 
 typedef enum {
@@ -178,7 +178,7 @@ typedef struct {
     int16_t z;
     bool visible;
     bool opaque;
-    uint16_t clear_rgb565;
+    uint16_t clear_color;
     uint8_t guard_px;
 } VgRenderSlot;
 
@@ -188,7 +188,7 @@ typedef struct {
     VgClipRect last_clip_rect;
     bool last_visible;
     bool last_opaque;
-    uint16_t last_clear_rgb565;
+    uint16_t last_clear_color;
     uint8_t last_guard_px;
 } VgRenderSlotState;
 

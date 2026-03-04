@@ -359,12 +359,12 @@ static VgStyle decode_style(ID node_obj, uint32_t node_h, const VgRecordSchema *
     ID style_obj = node_style_field(node_obj, node_h, sc);
     if (style_obj && TAG(style_obj) == CLJ_RECORD && record_type_hash(style_obj) == sc->h_style) {
         Style *sr = style_obj;
-        st.stroke_rgb565 = id_to_u16_default(sr->stroke_rgb565, st.stroke_rgb565);
+        st.stroke_color = id_to_u16_default(sr->stroke_color, st.stroke_color);
         st.stroke_width = id_to_u8_default(sr->stroke_width, st.stroke_width);
         st.has_fill = id_to_bool_default(sr->has_fill, st.has_fill);
-        st.fill_rgb565 = id_to_u16_default(sr->fill_rgb565, st.fill_rgb565);
-        st.has_bg_rgb565 = id_to_bool_default(sr->has_bg_rgb565, st.has_bg_rgb565);
-        st.bg_rgb565 = id_to_u16_default(sr->bg_rgb565, st.bg_rgb565);
+        st.fill_color = id_to_u16_default(sr->fill_color, st.fill_color);
+        st.has_bg_color = id_to_bool_default(sr->has_bg_color, st.has_bg_color);
+        st.bg_color = id_to_u16_default(sr->bg_color, st.bg_color);
         st.visible = id_to_bool_default(sr->visible, st.visible);
     }
     ID node_visible = node_visible_field(node_obj, node_h, sc);
@@ -604,14 +604,14 @@ static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_clip, ID 
         FrameScene *fs = scene_record;
         *out_root = fs->root;
         *out_clip = fs->clip_rect;
-        if (out_erase) *out_erase = fs->erase_rgb565;
+        if (out_erase) *out_erase = fs->erase_color;
         return true;
     }
     if (h == sc->h_scene) {
         Scene *s = scene_record;
         *out_root = s->root;
         *out_clip = s->clip_rect;
-        if (out_erase) *out_erase = s->erase_rgb565;
+        if (out_erase) *out_erase = s->erase_color;
         return true;
     }
     return false;
@@ -634,8 +634,8 @@ bool vg_render_scene_record(ID scene_record, VgFrameBuffer *fb) {
     bool has_effective_rect = decode_rect(clip_source, &effective_rect, sc);
 
     if (has_effective_rect) {
-        uint16_t erase_rgb565 = id_to_u16_default(erase_source, 0x0000u);
-        vg_framebuffer_clear_rect(fb, effective_rect, erase_rgb565);
+        uint16_t erase_color = id_to_u16_default(erase_source, 0x0000u);
+        vg_framebuffer_clear_rect(fb, effective_rect, erase_color);
     }
 
     if (!root) {
@@ -691,7 +691,7 @@ bool vg_decode_frame_slot_record(ID frame_scene_record, VgRenderSlot *out_slot) 
     out_slot->z = id_to_i16_default(scene->z, 0);
     out_slot->visible = id_to_bool_default(scene->visible, true);
     out_slot->opaque = id_to_bool_default(scene->opaque, true);
-    out_slot->clear_rgb565 = id_to_u16_default(scene->erase_rgb565, 0x0000u);
+    out_slot->clear_color = id_to_u16_default(scene->erase_color, 0x0000u);
     out_slot->guard_px = id_to_u8_default(scene->guard_px, 0);
     return true;
 }
@@ -732,7 +732,7 @@ bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
     bool props_changed = !state->initialized ||
                          state->last_visible != slot.visible ||
                          state->last_opaque != slot.opaque ||
-                         state->last_clear_rgb565 != slot.clear_rgb565 ||
+                         state->last_clear_color != slot.clear_color ||
                          state->last_guard_px != slot.guard_px ||
                          !vg_clip_rect_equal(state->last_clip_rect, slot.clip_rect);
     bool snapshot_changed = !state->initialized || state->snapshot_id != snapshot_id;
@@ -748,7 +748,7 @@ bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
     if (out_dirty_pixels) {
         *out_dirty_pixels = clip_rect_area_on_framebuffer(dirty, fb);
     }
-    vg_framebuffer_clear_rect(fb, dirty, slot.clear_rgb565);
+    vg_framebuffer_clear_rect(fb, dirty, slot.clear_color);
 
     if (slot.visible) {
         (void)vg_render_scene_record_clipped(frame_scene_record, fb, slot.clip_rect);
@@ -759,7 +759,7 @@ bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
     state->last_clip_rect = slot.clip_rect;
     state->last_visible = slot.visible;
     state->last_opaque = slot.opaque;
-    state->last_clear_rgb565 = slot.clear_rgb565;
+    state->last_clear_color = slot.clear_color;
     state->last_guard_px = slot.guard_px;
     return true;
 }

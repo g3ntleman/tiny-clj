@@ -37,7 +37,7 @@
 #define VIEWER_SLOT_SCORE 1u
 #define VIEWER_SLOT_GAME  2u
 #define TARGET_FPS           60u
-#define SCENE_ERASE_RGB565   0x0000u
+#define SCENE_ERASE_COLOR   0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
 
 #define TERRAIN_SPEED_PXS  120    /* px/s  → 2 px/frame @60 */
@@ -772,7 +772,7 @@ int main(void) {
     timing_accumulator_reset(&frame_dt_stats);
     timing_accumulator_reset(&waitsync_stats);
     timing_accumulator_reset(&update_stats);
-    vg_framebuffer_clear(&fb, SCENE_ERASE_RGB565);
+    vg_framebuffer_clear(&fb, SCENE_ERASE_COLOR);
     publish_frame_scene_slot_record(VIEWER_SLOT_DECO, demo_bundle.deco_scene);
     publish_frame_scene_slot_record(VIEWER_SLOT_SCORE, demo_bundle.score_scene);
     publish_frame_scene_slot_record(VIEWER_SLOT_GAME, demo_bundle.game_scene);
