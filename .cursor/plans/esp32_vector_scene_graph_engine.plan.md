@@ -860,6 +860,51 @@ state – e.g. "has the player reached position X?", "is the animation done?".
 - Clojure reads → lock-free deref of last-published snapshot.
 - No mutex needed. Clojure may see a 1-frame-old snapshot (acceptable).
 
+### 9j: Remaining task list (execution order)
+
+1. **Main-loop entkoppeln (host-viewer):**
+   - Remove demo-specific gameplay writes from C main loop:
+     - `viewer_apply_gameplay_step`
+     - `set_transform_fields` / `set_player_geometry` / `set_obstacle_transforms`
+     - direct score-text `ASSIGN`
+   - Keep C main loop app-agnostic (pacing, input forwarding, presentation, metrics only).
+2. **Clojure-driven scene updates finalisieren:**
+   - Move remaining gameplay target updates (`terrain`, `player`, `obstacle`, score text) into Clojure slot updates.
+   - Keep update contract: per-slot atomic snapshot via `swap!`/`reset!` on flat maps.
+3. **Renderer lifecycle API aus Clojure:**
+   - Add native API and docs:
+     - `(start-renderer! [game-slot score-slot deco-slot])`
+     - `(stop-renderer!)`
+   - Ensure deterministic start/stop semantics and clean shutdown ordering.
+4. **Rendered-state query API implementieren (9i):**
+   - C-side snapshot structs + atomic publish per frame.
+   - Native Clojure functions:
+     - `renderer-state`
+     - `renderer-timeline-step`
+     - `renderer-timeline-progress`
+   - Verify lock-free read contract and 1-frame staleness behavior.
+5. **Tests + acceptance gates for M9:**
+   - Unit tests: AnimState + Timeline interaction, rendered-state query correctness.
+   - Integration tests: app-agnostic loop path, renderer start/stop from Clojure, no C gameplay writes.
+   - Host run: verify continuous rendering with Clojure-driven updates and stable performance counters.
+
+### 9k: End-of-M9 code cleanup (required)
+
+After all M9 features are implemented, do a cleanup pass before declaring M9 done:
+
+- Remove dead code and compatibility shims from host-viewer:
+  - obsolete demo-specific helpers and structs
+  - stale ASSIGN-based mutation paths
+  - temporary migration flags no longer needed
+- Consolidate naming/docs around the final architecture:
+  - Tiny-RTOS/Clojure main thread vs render thread responsibilities
+  - rendered-state query API docs + examples
+- Keep only one canonical path in runtime code for:
+  - slot snapshot publication
+  - render-thread snapshot consumption
+  - Clojure API for renderer lifecycle
+- Run formatting/lint cleanup where applicable and update plan status notes.
+
 ### Done when
 
 - Host-viewer demo uses flat entity map architecture end-to-end:
