@@ -40,67 +40,8 @@
 #define SCENE_ERASE_COLOR   0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
 
-#define TERRAIN_SPEED_PXS  120    /* px/s  → 2 px/frame @60 */
-#define OBSTACLE_SPEED_PXS 120    /* px/s  → 2 px/frame @60 */
-#define PLAYER_JUMP_HEIGHT_PX      10u  /* double previous bob peak (5px -> 10px) */
-#define PLAYER_JUMP_DURATION_FRAMES 16u
-#define PLAYER_JUMP_PERIOD_FRAMES   48u
-#define PLAYER_ANIM_RESPONSE_MS     70u
-#define TERRAIN_ANIM_RESPONSE_MS    24u
-#define OBSTACLE_ANIM_RESPONSE_MS   24u
-#define COLLISION_COOLDOWN_MS      300u
-
-#define TERRAIN_PPF  (TERRAIN_SPEED_PXS / TARGET_FPS)   /* 2 */
-#define OBSTACLE_PPF (OBSTACLE_SPEED_PXS / TARGET_FPS)  /* 2 */
-
 static uint64_t monotonic_now_ns(void);
 typedef struct ViewerDemoBundle ViewerDemoBundle;
-
-/* Convert engine q13 fixed-point to nearest integer for pixel-space updates. */
-static int q13_to_int_round(int32_t v_q13) {
-    if (v_q13 >= 0) {
-        return (int)((v_q13 + (VG_SCALE_ONE / 2)) / VG_SCALE_ONE);
-    }
-    return (int)((v_q13 - (VG_SCALE_ONE / 2)) / VG_SCALE_ONE);
-}
-
-/* Runs one jump cycle with fixed-point easing and returns y offset in pixels. */
-static int compute_player_jump_y(unsigned frame_count) {
-    uint32_t jump_half_frames = (PLAYER_JUMP_DURATION_FRAMES > 1u) ? (PLAYER_JUMP_DURATION_FRAMES / 2u) : 1u;
-    uint32_t jump_phase = frame_count % PLAYER_JUMP_PERIOD_FRAMES;
-    int32_t jump_y_q13 = 0;
-
-    if (jump_phase < PLAYER_JUMP_DURATION_FRAMES) {
-        int32_t jump_t = 0;
-        int32_t jump_eased = 0;
-        if (jump_phase < jump_half_frames) {
-            jump_t = vg_anim_progress_q13(jump_phase, jump_half_frames);
-            jump_eased = vg_anim_ease_q13(VG_ANIM_EASE_OUT_QUAD, jump_t);
-            jump_y_q13 = vg_anim_lerp_q13(0,
-                                          -(int32_t)(PLAYER_JUMP_HEIGHT_PX * VG_SCALE_ONE),
-                                          jump_eased);
-        } else {
-            jump_t = vg_anim_progress_q13(jump_phase - jump_half_frames, jump_half_frames);
-            jump_eased = vg_anim_ease_q13(VG_ANIM_EASE_IN_QUAD, jump_t);
-            jump_y_q13 = vg_anim_lerp_q13(-(int32_t)(PLAYER_JUMP_HEIGHT_PX * VG_SCALE_ONE),
-                                          0,
-                                          jump_eased);
-        }
-    }
-
-    return q13_to_int_round(jump_y_q13);
-}
-
-/* Scrolls the obstacle from right to left at constant speed. */
-static int compute_obstacle_x(unsigned frame_count) {
-    uint32_t obstacle_phase_px = (frame_count * OBSTACLE_PPF) % 360u;
-    int32_t obstacle_t = vg_anim_progress_q13(obstacle_phase_px, 360u);
-    /* Keep behavior equivalent to the old constant-speed motion; linear easing is intentional. */
-    int32_t obstacle_x_q13 = vg_anim_lerp_q13(319 * VG_SCALE_ONE,
-                                              (319 - 360) * VG_SCALE_ONE,
-                                              vg_anim_ease_q13(VG_ANIM_EASE_LINEAR, obstacle_t));
-    return q13_to_int_round(obstacle_x_q13);
-}
 
 /* Handles immediate viewer exit shortcuts. */
 static bool viewer_should_exit_for_keys(const uint8_t *keys) {
@@ -113,114 +54,13 @@ static bool viewer_should_exit_for_keys(const uint8_t *keys) {
     return esc || cmd_q;
 }
 
-/* Writes tx/ty/rot while keeping sx/sy unchanged. */
-static void set_transform_fields(Transform *transform, int tx, int ty, int rot_deg) {
-    if (!transform) {
-        return;
-    }
-    ASSIGN(transform->tx, fixnum(tx));
-    ASSIGN(transform->ty, fixnum(ty));
-    ASSIGN(transform->rot, fixnum(rot_deg));
-}
-
-/* Switches player triangle geometry between normal and small hit profile. */
-static void set_player_geometry(Tri *game_player, bool player_small) {
-    if (!game_player) {
-        return;
-    }
-    if (player_small) {
-        ASSIGN(game_player->x1, fixnum(60));
-        ASSIGN(game_player->y1, fixnum(146));
-        ASSIGN(game_player->x2, fixnum(72));
-        ASSIGN(game_player->y2, fixnum(126));
-        ASSIGN(game_player->x3, fixnum(84));
-        ASSIGN(game_player->y3, fixnum(146));
-    } else {
-        ASSIGN(game_player->x1, fixnum(56));
-        ASSIGN(game_player->y1, fixnum(146));
-        ASSIGN(game_player->x2, fixnum(72));
-        ASSIGN(game_player->y2, fixnum(118));
-        ASSIGN(game_player->x3, fixnum(88));
-        ASSIGN(game_player->y3, fixnum(146));
-    }
-}
-
-/* Place both obstacle parts using one shared transform. */
-static void set_obstacle_transforms(Transform *body_t, Transform *nose_t, int obstacle_x) {
-    if (!body_t || !nose_t) {
-        return;
-    }
-    int tx = obstacle_x + 20;
-    set_transform_fields(body_t, tx, 126, -90);
-    set_transform_fields(nose_t, tx, 126, -90);
-}
-
-/* Simple AABB overlap test in world-space pixel coordinates. */
-static bool detect_player_obstacle_collision(int player_jump_y, int obstacle_x) {
-    // Collision uses a stable hitbox to avoid size-toggle feedback jitter.
-    int player_min_x = 58;
-    int player_max_x = 86;
-    int player_min_y = 124 + player_jump_y;
-    int player_max_y = 146 + player_jump_y;
-    int obstacle_min_x_i = 13 + obstacle_x;
-    int obstacle_max_x_i = 27 + obstacle_x;
-    int obstacle_min_y_i = 106;
-    int obstacle_max_y_i = 146;
-    return (player_max_x >= obstacle_min_x_i) && (player_min_x <= obstacle_max_x_i) &&
-           (player_max_y >= obstacle_min_y_i) && (player_min_y <= obstacle_max_y_i);
-}
-
-static VgTransform make_transform_target(int tx, int ty, int rot_deg) {
-    VgTransform t = vg_transform_identity();
-    t.tx = (int16_t)tx;
-    t.ty = (int16_t)ty;
-    t.rot_deg = (int16_t)rot_deg;
-    return t;
-}
-
-static bool has_wrap_jump_on_tx(const VgAnimTransformState *state, int target_tx, int wrap_period_px) {
-    if (!state || !state->initialized || wrap_period_px <= 0) {
-        return false;
-    }
-    int half_period = wrap_period_px / 2;
-    VgTransform current = vg_anim_transform_state_current(state);
-    int delta = target_tx - (int)current.tx;
-    return (delta > half_period) || (delta < -half_period);
-}
-
-static void set_transform_anim_target_with_wrap_snap(VgAnimTransformState *state,
-                                                     VgTransform target,
-                                                     int wrap_period_px) {
-    if (!state) {
-        return;
-    }
-    if (has_wrap_jump_on_tx(state, (int)target.tx, wrap_period_px)) {
-        vg_anim_transform_state_reset(state, target, state->response_ms, state->ease);
-        return;
-    }
-    vg_anim_transform_state_set_target(state, target);
-}
 
 typedef struct {
     bool sync_mode;
     bool use_mfb_waitsync;
-    bool periodic_score_updates_enabled;
     bool s_key_was_down;
     bool w_key_was_down;
-    bool p_key_was_down;
 } ViewerRuntimeFlags;
-
-typedef struct {
-    unsigned frame_count;
-    bool player_small;
-    bool collision_latched;
-    uint32_t collision_cooldown_end_ms;
-    bool anim_states_initialized;
-    VgAnimTransformState terrain_anim;
-    VgAnimTransformState player_anim;
-    VgAnimTransformState obstacle_anim;
-    uint32_t last_update_ms;
-} ViewerGameplayState;
 
 typedef struct {
     uint32_t dirty_pixels;
@@ -251,9 +91,6 @@ static void viewer_update_runtime_flags(const uint8_t *keys,
     if (viewer_key_pressed_once(keys, KB_KEY_W, &flags->w_key_was_down)) {
         flags->use_mfb_waitsync = !flags->use_mfb_waitsync;
         *next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
-    }
-    if (viewer_key_pressed_once(keys, KB_KEY_P, &flags->p_key_was_down)) {
-        flags->periodic_score_updates_enabled = !flags->periodic_score_updates_enabled;
     }
 }
 
@@ -299,13 +136,7 @@ enum {
     DEMO_BUNDLE_DECO_SCENE = 0,
     DEMO_BUNDLE_SCORE_SCENE = 1,
     DEMO_BUNDLE_GAME_SCENE = 2,
-    DEMO_BUNDLE_TERRAIN_T = 3,
-    DEMO_BUNDLE_PLAYER_T = 4,
-    DEMO_BUNDLE_OBSTACLE_BODY_T = 5,
-    DEMO_BUNDLE_OBSTACLE_NOSE_T = 6,
-    DEMO_BUNDLE_GAME_PLAYER = 7,
-    DEMO_BUNDLE_SCORE_TEXT = 8,
-    DEMO_BUNDLE_COUNT = 9
+    DEMO_BUNDLE_COUNT = 3
 };
 
 struct ViewerDemoBundle {
@@ -313,12 +144,6 @@ struct ViewerDemoBundle {
     FrameScene *deco_scene;
     FrameScene *score_scene;
     FrameScene *game_scene;
-    Transform *terrain_t;
-    Transform *player_t;
-    Transform *obstacle_body_t;
-    Transform *obstacle_nose_t;
-    Tri *game_player;
-    VText *score_text;
 };
 
 static bool init_demo_bundle(EvalState *st, ViewerDemoBundle *out_bundle) {
@@ -342,16 +167,7 @@ static bool init_demo_bundle(EvalState *st, ViewerDemoBundle *out_bundle) {
     out_bundle->deco_scene = (FrameScene *)vector_nth(vec, DEMO_BUNDLE_DECO_SCENE);
     out_bundle->score_scene = (FrameScene *)vector_nth(vec, DEMO_BUNDLE_SCORE_SCENE);
     out_bundle->game_scene = (FrameScene *)vector_nth(vec, DEMO_BUNDLE_GAME_SCENE);
-    out_bundle->terrain_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_TERRAIN_T);
-    out_bundle->player_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_PLAYER_T);
-    out_bundle->obstacle_body_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_OBSTACLE_BODY_T);
-    out_bundle->obstacle_nose_t = (Transform *)vector_nth(vec, DEMO_BUNDLE_OBSTACLE_NOSE_T);
-    out_bundle->game_player = (Tri *)vector_nth(vec, DEMO_BUNDLE_GAME_PLAYER);
-    out_bundle->score_text = (VText *)vector_nth(vec, DEMO_BUNDLE_SCORE_TEXT);
-    return out_bundle->deco_scene && out_bundle->score_scene && out_bundle->game_scene &&
-           out_bundle->terrain_t && out_bundle->player_t && out_bundle->obstacle_body_t &&
-           out_bundle->obstacle_nose_t &&
-           out_bundle->game_player && out_bundle->score_text;
+    return out_bundle->deco_scene && out_bundle->score_scene && out_bundle->game_scene;
 }
 
 static void destroy_demo_bundle(ViewerDemoBundle *bundle) {
@@ -360,63 +176,6 @@ static void destroy_demo_bundle(ViewerDemoBundle *bundle) {
     }
     RELEASE(bundle->bundle_root);
     memset(bundle, 0, sizeof(*bundle));
-}
-
-static void viewer_apply_gameplay_step(const ViewerDemoBundle *bundle,
-                                       ViewerGameplayState *state,
-                                       uint32_t now_ms,
-                                       uint32_t dt_ms) {
-    if (!bundle || !state) {
-        return;
-    }
-
-    state->frame_count++;
-    int terrain_scroll_px = (int)((state->frame_count * TERRAIN_PPF) % 320u);
-    int player_jump_target_y = compute_player_jump_y(state->frame_count);
-    int obstacle_target_x = compute_obstacle_x(state->frame_count);
-
-    VgTransform terrain_target = make_transform_target(-terrain_scroll_px, 0, 0);
-    VgTransform player_target = make_transform_target(0, player_jump_target_y, 0);
-    VgTransform obstacle_target = make_transform_target(obstacle_target_x + 20, 126, -90);
-
-    if (!state->anim_states_initialized) {
-        vg_anim_transform_state_reset(&state->terrain_anim,
-                                      terrain_target,
-                                      TERRAIN_ANIM_RESPONSE_MS,
-                                      VG_ANIM_EASE_LINEAR);
-        vg_anim_transform_state_reset(&state->player_anim,
-                                      player_target,
-                                      PLAYER_ANIM_RESPONSE_MS,
-                                      VG_ANIM_EASE_OUT_CUBIC);
-        vg_anim_transform_state_reset(&state->obstacle_anim,
-                                      obstacle_target,
-                                      OBSTACLE_ANIM_RESPONSE_MS,
-                                      VG_ANIM_EASE_LINEAR);
-        state->anim_states_initialized = true;
-    }
-
-    set_transform_anim_target_with_wrap_snap(&state->terrain_anim, terrain_target, 320);
-    vg_anim_transform_state_set_target(&state->player_anim, player_target);
-    set_transform_anim_target_with_wrap_snap(&state->obstacle_anim, obstacle_target, 360);
-
-    VgTransform terrain_visual = vg_anim_transform_state_step(&state->terrain_anim, dt_ms);
-    VgTransform player_visual = vg_anim_transform_state_step(&state->player_anim, dt_ms);
-    VgTransform obstacle_visual = vg_anim_transform_state_step(&state->obstacle_anim, dt_ms);
-
-    set_transform_fields(bundle->terrain_t, terrain_visual.tx, terrain_visual.ty, terrain_visual.rot_deg);
-    set_transform_fields(bundle->player_t, player_visual.tx, player_visual.ty, player_visual.rot_deg);
-    set_obstacle_transforms(bundle->obstacle_body_t, bundle->obstacle_nose_t, obstacle_visual.tx - 20);
-
-    bool collision_cooldown_active = (now_ms < state->collision_cooldown_end_ms);
-    bool colliding = detect_player_obstacle_collision(player_visual.ty, obstacle_visual.tx - 20);
-    if (colliding && !state->collision_latched && !collision_cooldown_active) {
-        state->player_small = !state->player_small;
-        state->collision_latched = true;
-        state->collision_cooldown_end_ms = now_ms + COLLISION_COOLDOWN_MS;
-    } else if (!colliding) {
-        state->collision_latched = false;
-    }
-    set_player_geometry(bundle->game_player, state->player_small);
 }
 
 static void timing_accumulator_reset(TimingAccumulator *acc) {
@@ -1023,14 +782,8 @@ int main(void) {
     }
     demo_bundle_initialized = true;
 
-    char score_line[64];
-    (void)snprintf(score_line, sizeof(score_line), "SCORE 0000    LIFES 3");
-
-    ViewerGameplayState gameplay_state = {0};
     uint_fast32_t last_presented_frame_serial = 0u;
-    ViewerRuntimeFlags runtime_flags = {
-        .periodic_score_updates_enabled = true
-    };
+    ViewerRuntimeFlags runtime_flags = {0};
     VgRenderSlotState sync_slot_states[VIEWER_SLOT_COUNT] = {0};
     uint32_t sync_slot_generation = 1u;
     const uint64_t target_frame_ns = 1000000000ull / TARGET_FPS;
@@ -1062,21 +815,6 @@ int main(void) {
             break;
         }
         viewer_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
-        uint64_t gameplay_now_ns = monotonic_now_ns();
-        uint32_t gameplay_now_ms = (uint32_t)(gameplay_now_ns / 1000000u);
-        uint32_t gameplay_dt_ms = 1000u / TARGET_FPS;
-        if (gameplay_state.last_update_ms != 0u) {
-            uint32_t raw_dt_ms = gameplay_now_ms - gameplay_state.last_update_ms;
-            if (raw_dt_ms == 0u) {
-                raw_dt_ms = 1u;
-            }
-            if (raw_dt_ms > 250u) {
-                raw_dt_ms = 250u;
-            }
-            gameplay_dt_ms = raw_dt_ms;
-        }
-        gameplay_state.last_update_ms = gameplay_now_ms;
-        viewer_apply_gameplay_step(&demo_bundle, &gameplay_state, gameplay_now_ms, gameplay_dt_ms);
 
         ViewerFrameRenderResult frame_result = runtime_flags.sync_mode
                                                    ? viewer_render_game_frame_sync(demo_bundle.game_scene,
@@ -1100,11 +838,6 @@ int main(void) {
         }
 #if defined(__APPLE__)
         if (perf_ready) {
-            if (runtime_flags.periodic_score_updates_enabled) {
-                int score = (int)(time_s * 120.0f);
-                (void)snprintf(score_line, sizeof(score_line), "SCORE %04d    LIFES 3", score % 10000);
-                ASSIGN(demo_bundle.score_text->text, AUTORELEASE(make_string(score_line)));
-            }
             double dt_avg_ms = timing_accumulator_avg_ms(&frame_dt_stats);
             double dt_min_ms = timing_accumulator_min_ms(&frame_dt_stats);
             double dt_max_ms = timing_accumulator_max_ms(&frame_dt_stats);
@@ -1120,18 +853,14 @@ int main(void) {
             char title[192];
             (void)snprintf(title,
                            sizeof(title),
-                           "[%s|%s|SC%s] | FPS %.1f | dt %.1f/%.1f/%.1fms | ws %.1f/%.1f/%.1fms | up %.1f/%.1f/%.1fms",
+                           "[%s|%s] | FPS %.1f | dt %.1f/%.1f/%.1fms | ws %.1f/%.1f/%.1fms | up %.1f/%.1f/%.1fms",
                            runtime_flags.sync_mode ? "SYNC" : "ASYNC",
                            runtime_flags.use_mfb_waitsync ? "WAITSYNC" : "CUSTOM",
-                           runtime_flags.periodic_score_updates_enabled ? "ON" : "OFF",
                            perf_snapshot.fps,
                            dt_min_ms, dt_avg_ms, dt_max_ms,
                            ws_min_ms, ws_avg_ms, ws_max_ms,
                            up_min_ms, up_avg_ms, up_max_ms);
             macos_viewer_set_window_title(title);
-            if (runtime_flags.periodic_score_updates_enabled) {
-                publish_frame_scene_slot_record(VIEWER_SLOT_SCORE, demo_bundle.score_scene, NULL);
-            }
         }
 #else
         (void)perf_snapshot;

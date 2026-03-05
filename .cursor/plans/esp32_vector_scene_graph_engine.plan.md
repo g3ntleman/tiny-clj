@@ -797,6 +797,8 @@ void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
   - Demo includes first periodic Timeline slice: `hbar` uses looping transform Timeline.
   - Host viewer no longer updates `hbar` via C-side `ASSIGN`.
   - Remaining gameplay writes (`terrain/player/obstacle`) are still C-driven – tracked as follow-up.
+  - 2026-03-05 follow-up: direct score-text mutation (`ASSIGN(demo_bundle.score_text->text, ...)`) removed from host-viewer loop.
+  - 2026-03-05 follow-up: host-viewer demo switched terrain/player/rocket motion to Clojure-authored Timeline transforms; C-side `viewer_apply_gameplay_step()` removed from main loop.
 
 ### 9g: Validate scene reuse + scheduler integration
 

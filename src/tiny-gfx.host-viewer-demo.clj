@@ -81,18 +81,29 @@ R"TINY_GFX_HOST(
    [-13 -1] [-20 -1] [-20 1] [-13 1]
    [-13 2] [-20 2] [-20 7] [-16 7]])
 
+(def terrain-timeline
+  (timeline {:keyframes [[0 (transform {:tx 0 :ty 0 :rot 0})]
+                         [2666 (transform {:tx -320 :ty 0 :rot 0})]]
+             :loop true}))
+
+(def player-jump-timeline
+  (timeline {:keyframes [[0 (transform {:tx 0 :ty 0 :rot 0})]
+                         [133 (transform {:tx 0 :ty -10 :rot 0})]
+                         [266 (transform {:tx 0 :ty 0 :rot 0})]
+                         [800 (transform {:tx 0 :ty 0 :rot 0})]]
+             :loop true}))
+
+(def rocket-timeline
+  (timeline {:keyframes [[0 (transform {:tx 339 :ty 126 :rot -90})]
+                         [3000 (transform {:tx -21 :ty 126 :rot -90})]]
+             :loop true}))
+
 (defn create-demo-bundle
-  "Returns a vector with the demo frame-scenes and mutable handles used by the host viewer.
+  "Returns a vector with the demo frame-scenes used by the host viewer.
 Index layout:
 0 deco-scene
 1 score-scene
-2 game-scene
-3 terrain-transform
-4 player-transform
-5 rocket-body-transform
-6 rocket-nose-transform
-7 player-tri
-8 score-text"
+2 game-scene"
   []
   (let [mountains (polyline {:id 1001 :style style-deco :pts mountain-pts})
         deco-root (group {:id root-id :style style-deco :children [1001]})
@@ -105,21 +116,17 @@ Index layout:
           score-entities {root-id score-root
                           2001 score-text}
           score-scene (frame-scene {:root score-entities :clip-rect [0 0 320 32] :z 1})]
-      (let [terrain-t (transform {})
-            player-t (transform {})
-            rocket-body-t (transform {})
-            rocket-nose-t (transform {})
-            hbar-timeline (timeline {:keyframes [[0 (transform {:tx -10 :ty 80 :rot 0})]
+      (let [hbar-timeline (timeline {:keyframes [[0 (transform {:tx -10 :ty 80 :rot 0})]
                                                  [1700 (transform {:tx 330 :ty 80 :rot 0})]]
                                      :loop true})
-            game-terrain (polyline {:id 3001 :t terrain-t :style style-game-line
+            game-terrain (polyline {:id 3001 :t terrain-timeline :style style-game-line
                                     :pts [[0 156] [60 156] [100 144] [150 156] [220 156] [260 146] [319 156]
                                           [380 156] [420 146] [480 156] [560 156] [620 144]]})
-            game-player (tri {:id 3002 :t player-t :style style-game-player
+            game-player (tri {:id 3002 :t player-jump-timeline :style style-game-player
                               :x1 56 :y1 146 :x2 72 :y2 118 :x3 88 :y3 146})
-            game-rocket-body (polyline {:id 3003 :t rocket-body-t :style style-rocket-body
+            game-rocket-body (polyline {:id 3003 :t rocket-timeline :style style-rocket-body
                                         :pts rocket-body-pts :closed true})
-            game-rocket-nose (tri {:id 3005 :t rocket-nose-t :style style-rocket-nose
+            game-rocket-nose (tri {:id 3005 :t rocket-timeline :style style-rocket-nose
                                    :x1 20 :y1 0 :x2 10 :y2 -3 :x3 10 :y3 3})
             game-caption-t (transform {:tx 96 :ty 52})
             game-caption (vtext {:id 3004 :t game-caption-t :style style-score :text "GAME SCENE"})
@@ -137,12 +144,6 @@ Index layout:
             game-scene (frame-scene {:root game-entities :clip-rect [0 40 320 136] :z 2})]
         [deco-scene
          score-scene
-         game-scene
-         terrain-t
-         player-t
-         rocket-body-t
-         rocket-nose-t
-         game-player
-         score-text]))))
+         game-scene]))))
 
 )TINY_GFX_HOST"
