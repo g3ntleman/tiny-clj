@@ -98,6 +98,19 @@ R"TINY_GFX_HOST(
                          [3000 (transform {:tx -21 :ty 126 :rot -90})]]
              :loop true}))
 
+(def score-text-timeline
+  (timeline {:keyframes [[0 "SCORE 0000    LIFES 3"]
+                         [1000 "SCORE 0120    LIFES 3"]
+                         [2000 "SCORE 0240    LIFES 3"]
+                         [3000 "SCORE 0360    LIFES 3"]
+                         [4000 "SCORE 0480    LIFES 3"]
+                         [5000 "SCORE 0600    LIFES 3"]
+                         [6000 "SCORE 0720    LIFES 3"]
+                         [7000 "SCORE 0840    LIFES 3"]
+                         [8000 "SCORE 0960    LIFES 3"]
+                         [9000 "SCORE 1080    LIFES 3"]]
+             :loop true}))
+
 (defn create-demo-bundle
   "Returns a vector with the demo frame-scenes used by the host viewer.
 Index layout:
@@ -111,7 +124,7 @@ Index layout:
                        1001 mountains}
         deco-scene (frame-scene {:root deco-entities :clip-rect [0 184 320 56] :z 0})]
     (let [score-t (transform {:tx 8 :ty 21})
-          score-text (vtext {:id 2001 :t score-t :style style-score :text "SCORE 0000    LIFES 3"})
+          score-text (vtext {:id 2001 :t score-t :style style-score :text score-text-timeline})
           score-root (group {:id root-id :style style-score :children [2001]})
           score-entities {root-id score-root
                           2001 score-text}

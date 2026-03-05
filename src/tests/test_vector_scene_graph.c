@@ -298,6 +298,21 @@ TEST(test_vector_scene_graph_host_viewer_demo_bundle_uses_flat_entity_maps) {
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
+TEST(test_vector_scene_graph_host_viewer_demo_score_text_is_timeline_driven) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.host-viewer-demo) "
+        "  (let [bundle (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "        score-root (:root (nth bundle 1)) "
+        "        score-text (get score-root 2001) "
+        "        score-field (:text score-text)] "
+        "    (and (contains? score-field :keyframes) "
+        "         (contains? score-field :loop))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok && ok != clj_false);
+}
+
 TEST(test_vector_scene_graph_timeline_numeric_interpolation_moves_line) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(

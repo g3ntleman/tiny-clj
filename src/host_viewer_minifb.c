@@ -39,6 +39,8 @@
 #define TARGET_FPS           60u
 #define SCENE_ERASE_COLOR   0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
+#define SCORE_TIMELINE_STEP_MS   1000u
+#define SCORE_TIMELINE_STEPS     10u
 
 static uint64_t monotonic_now_ns(void);
 typedef struct ViewerDemoBundle ViewerDemoBundle;
@@ -786,6 +788,7 @@ int main(void) {
     ViewerRuntimeFlags runtime_flags = {0};
     VgRenderSlotState sync_slot_states[VIEWER_SLOT_COUNT] = {0};
     uint32_t sync_slot_generation = 1u;
+    uint32_t last_score_step = UINT32_MAX;
     const uint64_t target_frame_ns = 1000000000ull / TARGET_FPS;
     uint64_t next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
     uint64_t last_present_ns = 0u;
@@ -815,6 +818,12 @@ int main(void) {
             break;
         }
         viewer_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
+        uint32_t score_step = (uint32_t)((monotonic_now_ns() / 1000000ull) / SCORE_TIMELINE_STEP_MS) %
+                              SCORE_TIMELINE_STEPS;
+        if (score_step != last_score_step) {
+            publish_frame_scene_slot_record(VIEWER_SLOT_SCORE, demo_bundle.score_scene, NULL);
+            last_score_step = score_step;
+        }
 
         ViewerFrameRenderResult frame_result = runtime_flags.sync_mode
                                                    ? viewer_render_game_frame_sync(demo_bundle.game_scene,

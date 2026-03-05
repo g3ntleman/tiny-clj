@@ -171,6 +171,9 @@ On macOS, the only synchronization point is the framebuffer handoff to the Cocoa
 - **Snapshot-per-frame.** Render thread snapshots all slot Atoms once at frame start.
   The entire frame renders from this consistent state. Intermediate Clojure updates
   are picked up at the next frame start – no tearing, no partial state.
+- **Static slots skip rendering.** If a slot has no Timelines and no active AnimState,
+  its output is frame-identical. Render thread skips erase + re-render until
+  Clojure publishes a new snapshot. If all slots are static, render thread sleeps.
 - **Interruption-safe.** New target mid-animation → C interpolates from current visual
   position toward new target (no jump, no restart).
 - **Timelines are data, not code.** Periodic animations (form cycling, blinking, color pulsing)
@@ -501,6 +504,12 @@ while still exercising the same primitive rasterization pipeline.
 - Add slot-dirty update mode:
   - only clear/render/send changed slots
   - prefer a small number of larger slot windows over many tiny widget windows
+- Leverage static-slot optimization from M9 for SPI throughput:
+  - static slots (no Timelines, no active AnimState) produce frame-identical output
+  - render thread skips erase + rasterize + SPI transfer for static slots entirely
+  - SPI bandwidth is reserved for animated slots only
+  - typical layout: 2 of 3 slots static (score HUD, deco landscape) → ~60% fewer SPI transfers per frame
+  - when all slots are static, no SPI writes at all (render thread sleeps until Atom change)
 - Define per-slot background policy for no-readback displays:
   - opaque slots can overwrite fully
   - non-opaque slots require explicit clear of dirty region
@@ -783,9 +792,25 @@ void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
 - At frame start: `atom_deref` per slot Atom → immutable snapshot (lock-free).
 - Render entire frame from snapshot: resolve Timelines, interpolate AnimState, rasterize.
 - Frame done: signal main thread, loop back to frame start with fresh snapshot.
-- No slot-change-tracker wakeup needed for continuous animation (Timeline-driven);
-  render thread can run at target FPS and always re-snapshot.
-  Slot-change-tracker remains useful for power-saving mode (block until state changes).
+
+**Static vs. animated slot optimization:**
+- During rendering, the render thread determines per slot whether the scene contains
+  any active Timelines or AnimState interpolations (= **animated**) or not (= **static**).
+- **Static slot:** No Timelines, no AnimState in progress. The rendered output is
+  identical across frames. The render thread skips erase + re-render for this slot
+  in subsequent frames until:
+  - Clojure publishes a new snapshot (`swap!`/`reset!` changes the Atom value), or
+  - an AnimState target changes (which also implies a new snapshot).
+- **Animated slot:** Contains at least one Timeline or active AnimState interpolation.
+  Must be re-rendered every frame (Timelines depend on wall clock, AnimState converges
+  over time).
+- Detection is cheap: during traversal, set a `slot_has_animation` flag when any
+  Timeline field or non-converged AnimState is encountered. Cache the flag per slot.
+- This is the generalized version of the existing slot-change-tracker concept:
+  static slots behave like unchanged slots (skip rendering), animated slots always
+  re-render regardless of whether the Clojure snapshot changed.
+- Power savings: if **all** slots are static, the render thread can block/sleep until
+  any Atom changes (event-driven wakeup, no busy loop).
 
 **Clojure side (target):**
 - `tiny-gfx.host-viewer-demo` defines all scene entities as flat maps per slot.
@@ -796,9 +821,9 @@ void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
 - Implementation notes (2026-03-04):
   - Demo includes first periodic Timeline slice: `hbar` uses looping transform Timeline.
   - Host viewer no longer updates `hbar` via C-side `ASSIGN`.
-  - Remaining gameplay writes (`terrain/player/obstacle`) are still C-driven – tracked as follow-up.
   - 2026-03-05 follow-up: direct score-text mutation (`ASSIGN(demo_bundle.score_text->text, ...)`) removed from host-viewer loop.
   - 2026-03-05 follow-up: host-viewer demo switched terrain/player/rocket motion to Clojure-authored Timeline transforms; C-side `viewer_apply_gameplay_step()` removed from main loop.
+  - 2026-03-05 follow-up: score text switched to Timeline-driven updates in Clojure demo data (`score-text-timeline`), no C-side score writes.
 
 ### 9g: Validate scene reuse + scheduler integration
 
