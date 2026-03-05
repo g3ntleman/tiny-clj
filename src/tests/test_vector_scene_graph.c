@@ -313,6 +313,102 @@ TEST(test_vector_scene_graph_host_viewer_demo_score_text_is_timeline_driven) {
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
+TEST(test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.host-viewer-demo) "
+        "  (let [bundle (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "        game-root (:root (nth bundle 2)) "
+        "        terrain (get game-root 3001) "
+        "        player (get game-root 3002) "
+        "        rocket-body (get game-root 3003) "
+        "        rocket-nose (get game-root 3005)] "
+        "    (and (contains? (:t terrain) :keyframes) "
+        "         (contains? (:t terrain) :loop) "
+        "         (contains? (:t player) :keyframes) "
+        "         (contains? (:t player) :loop) "
+        "         (contains? (:t rocket-body) :keyframes) "
+        "         (contains? (:t rocket-body) :loop) "
+        "         (contains? (:t rocket-nose) :keyframes) "
+        "         (contains? (:t rocket-nose) :loop))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok && ok != clj_false);
+}
+
+TEST(test_vector_scene_graph_host_viewer_demo_contains_blinking_stars) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.host-viewer-demo) "
+        "  (let [bundle (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "        game-root (:root (nth bundle 2)) "
+        "        terrain (get game-root 3001) "
+        "        stars-group (get game-root 3020) "
+        "        s1 (get game-root 3021) "
+        "        s2 (get game-root 3022) "
+        "        s3 (get game-root 3023) "
+        "        s4 (get game-root 3024) "
+        "        s5 (get game-root 3025) "
+        "        s6 (get game-root 3026)] "
+        "    (and (= [3021 3022 3023 3024 3025 3026] (:children stars-group)) "
+        "         (= 3020 (first (:children (get game-root 'root)))) "
+        "         (contains? (:t stars-group) :keyframes) "
+        "         (contains? (:t stars-group) :loop) "
+        "         (> (first (second (:keyframes (:t stars-group)))) "
+        "            (first (second (:keyframes (:t terrain))))) "
+        "         (contains? (:style s1) :keyframes) "
+        "         (contains? (:style s2) :keyframes) "
+        "         (contains? (:style s3) :keyframes) "
+        "         (contains? (:style s4) :keyframes) "
+        "         (contains? (:style s5) :keyframes) "
+        "         (contains? (:style s6) :keyframes) "
+        "         (contains? s1 :pts) "
+        "         (contains? s2 :pts) "
+        "         (contains? s3 :pts) "
+        "         (contains? s4 :pts) "
+        "         (contains? s5 :pts) "
+        "         (contains? s6 :pts) "
+        "         (= 5 (count (:pts s1))) "
+        "         (= 5 (count (:pts s2))) "
+        "         (= 5 (count (:pts s3))) "
+        "         (= 5 (count (:pts s4))) "
+        "         (= 5 (count (:pts s5))) "
+        "         (= 5 (count (:pts s6))) "
+        "         (not= (:keyframes (:style s1)) (:keyframes (:style s2))) "
+        "         (not= (:keyframes (:style s1)) (:keyframes (:style s3))) "
+        "         (not= (:keyframes (:style s1)) (:keyframes (:style s4))) "
+        "         (not= (:keyframes (:style s1)) (:keyframes (:style s5))) "
+        "         (not= (:keyframes (:style s1)) (:keyframes (:style s6))) "
+        "         (= 0 (:stroke_color (second (second (:keyframes (:style s1)))))) "
+        "         (= 0 (:stroke_color (second (second (:keyframes (:style s2)))))) "
+        "         (= 0 (:stroke_color (second (second (:keyframes (:style s3)))))) "
+        "         (= 0 (:stroke_color (second (second (:keyframes (:style s4)))))) "
+        "         (= 0 (:stroke_color (second (second (:keyframes (:style s5)))))) "
+        "         (= 0 (:stroke_color (second (second (:keyframes (:style s6)))))))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok && ok != clj_false);
+}
+
+TEST(test_vector_scene_graph_merge_nested_record_maps_regression) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.host-viewer-demo) "
+        "  (let [style (tiny-gfx.host-viewer-demo/style {:stroke-color 65535 :stroke-width 1}) "
+        "        root (tiny-gfx.host-viewer-demo/group {:id 'root :style style :children [3021 3022]}) "
+        "        star-a (tiny-gfx.host-viewer-demo/tri {:id 3021 :style style :x1 8 :y1 8 :x2 10 :y2 4 :x3 12 :y3 8}) "
+        "        star-b (tiny-gfx.host-viewer-demo/tri {:id 3022 :style style :x1 18 :y1 8 :x2 20 :y2 4 :x3 22 :y3 8}) "
+        "        base {'root root} "
+        "        stars {3021 star-a 3022 star-b} "
+        "        merged (merge base stars)] "
+        "    (and (contains? merged 'root) "
+        "         (contains? merged 3021) "
+        "         (contains? merged 3022))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok && ok != clj_false);
+}
+
 TEST(test_vector_scene_graph_timeline_numeric_interpolation_moves_line) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
