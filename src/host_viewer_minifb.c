@@ -807,7 +807,14 @@ static void publish_frame_scene_slot_record(size_t slot_index, ID scene) {
     if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
         return;
     }
-    (void)atom_reset(g_scene_slot_atoms[slot_index], scene);
+    CljAtom *slot_atom = g_scene_slot_atoms[slot_index];
+    if (slot_atom) {
+        /*
+         * Do not use atom_reset() here: its usable/pool-safe return value adds
+         * an extra RETAIN+AUTORELEASE that is unnecessary in this hot publish path.
+         */
+        ASSIGN(slot_atom->value, scene);
+    }
     (void)pthread_mutex_unlock(&g_render_thread.mutex);
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, (uint8_t)slot_index, NULL);
 }
@@ -1103,7 +1110,7 @@ int main(void) {
             char title[192];
             (void)snprintf(title,
                            sizeof(title),
-                           "tiny-clj [%s|%s|SC%s] | FPS %.1f | dt %.1f/%.1f/%.1fms | ws %.1f/%.1f/%.1fms | up %.1f/%.1f/%.1fms",
+                           "[%s|%s|SC%s] | FPS %.1f | dt %.1f/%.1f/%.1fms | ws %.1f/%.1f/%.1fms | up %.1f/%.1f/%.1fms",
                            runtime_flags.sync_mode ? "SYNC" : "ASYNC",
                            runtime_flags.use_mfb_waitsync ? "WAITSYNC" : "CUSTOM",
                            runtime_flags.periodic_score_updates_enabled ? "ON" : "OFF",
