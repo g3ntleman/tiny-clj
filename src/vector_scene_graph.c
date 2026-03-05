@@ -3,6 +3,7 @@
 #include "value.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <math.h>
 #include <string.h>
 
@@ -146,6 +147,144 @@ int32_t vg_anim_lerp_q13(int32_t from_q13, int32_t to_q13, int32_t t_q13) {
     int64_t delta = (int64_t)to_q13 - (int64_t)from_q13;
     int64_t scaled = (delta * (int64_t)t) >> VG_FP_SHIFT;
     return (int32_t)((int64_t)from_q13 + scaled);
+}
+
+static int16_t anim_q13_to_i16_round_sat(int32_t value_q13) {
+    int32_t value = 0;
+    if (value_q13 >= 0) {
+        value = (int32_t)(((int64_t)value_q13 + (VG_FP_ONE / 2)) / VG_FP_ONE);
+    } else {
+        int64_t abs_q13 = -(int64_t)value_q13;
+        value = (int32_t)-((abs_q13 + (VG_FP_ONE / 2)) / VG_FP_ONE);
+    }
+    if (value < INT16_MIN) {
+        return INT16_MIN;
+    }
+    if (value > INT16_MAX) {
+        return INT16_MAX;
+    }
+    return (int16_t)value;
+}
+
+static int32_t anim_i16_to_q13(int16_t value) {
+    return ((int32_t)value) << VG_FP_SHIFT;
+}
+
+static int32_t anim_step_toward_q13(int32_t current_q13, int32_t target_q13, int32_t eased_t_q13) {
+    if (current_q13 == target_q13) {
+        return current_q13;
+    }
+    int32_t next_q13 = vg_anim_lerp_q13(current_q13, target_q13, eased_t_q13);
+    if (next_q13 == current_q13) {
+        next_q13 += (target_q13 > current_q13) ? 1 : -1;
+    }
+    if (target_q13 > current_q13 && next_q13 > target_q13) {
+        return target_q13;
+    }
+    if (target_q13 < current_q13 && next_q13 < target_q13) {
+        return target_q13;
+    }
+    return next_q13;
+}
+
+static void anim_set_current_and_target(VgAnimTransformState *state, VgTransform value) {
+    if (!state) {
+        return;
+    }
+    int32_t tx_q13 = anim_i16_to_q13(value.tx);
+    int32_t ty_q13 = anim_i16_to_q13(value.ty);
+    int32_t rot_q13 = anim_i16_to_q13(value.rot_deg);
+    state->current_tx_q13 = tx_q13;
+    state->current_ty_q13 = ty_q13;
+    state->current_sx_q13 = value.sx;
+    state->current_sy_q13 = value.sy;
+    state->current_rot_q13 = rot_q13;
+    state->target_tx_q13 = tx_q13;
+    state->target_ty_q13 = ty_q13;
+    state->target_sx_q13 = value.sx;
+    state->target_sy_q13 = value.sy;
+    state->target_rot_q13 = rot_q13;
+}
+
+VgTransform vg_anim_transform_state_current(const VgAnimTransformState *state) {
+    if (!state || !state->initialized) {
+        return vg_transform_identity();
+    }
+    VgTransform out = vg_transform_identity();
+    out.tx = anim_q13_to_i16_round_sat(state->current_tx_q13);
+    out.ty = anim_q13_to_i16_round_sat(state->current_ty_q13);
+    out.sx = state->current_sx_q13;
+    out.sy = state->current_sy_q13;
+    out.rot_deg = anim_q13_to_i16_round_sat(state->current_rot_q13);
+    return out;
+}
+
+void vg_anim_transform_state_reset(VgAnimTransformState *state,
+                                   VgTransform initial,
+                                   uint32_t response_ms,
+                                   VgAnimEase ease) {
+    if (!state) {
+        return;
+    }
+    state->initialized = true;
+    state->response_ms = response_ms;
+    state->ease = ease;
+    anim_set_current_and_target(state, initial);
+}
+
+void vg_anim_transform_state_set_target(VgAnimTransformState *state, VgTransform target) {
+    if (!state) {
+        return;
+    }
+    if (!state->initialized) {
+        vg_anim_transform_state_reset(state, target, state->response_ms, state->ease);
+        return;
+    }
+    state->target_tx_q13 = anim_i16_to_q13(target.tx);
+    state->target_ty_q13 = anim_i16_to_q13(target.ty);
+    state->target_sx_q13 = target.sx;
+    state->target_sy_q13 = target.sy;
+    state->target_rot_q13 = anim_i16_to_q13(target.rot_deg);
+}
+
+VgTransform vg_anim_transform_state_step(VgAnimTransformState *state, uint32_t dt_ms) {
+    if (!state) {
+        return vg_transform_identity();
+    }
+    if (!state->initialized) {
+        VgTransform initial = vg_transform_identity();
+        vg_anim_transform_state_reset(state, initial, state->response_ms, state->ease);
+        return initial;
+    }
+    if (state->response_ms == 0u) {
+        state->current_tx_q13 = state->target_tx_q13;
+        state->current_ty_q13 = state->target_ty_q13;
+        state->current_sx_q13 = state->target_sx_q13;
+        state->current_sy_q13 = state->target_sy_q13;
+        state->current_rot_q13 = state->target_rot_q13;
+        return vg_anim_transform_state_current(state);
+    }
+
+    int32_t progress_q13 = vg_anim_progress_q13(dt_ms, state->response_ms);
+    int32_t eased_q13 = vg_anim_ease_q13(state->ease, progress_q13);
+    if (eased_q13 <= 0) {
+        return vg_anim_transform_state_current(state);
+    }
+    if (eased_q13 >= VG_FP_ONE) {
+        state->current_tx_q13 = state->target_tx_q13;
+        state->current_ty_q13 = state->target_ty_q13;
+        state->current_sx_q13 = state->target_sx_q13;
+        state->current_sy_q13 = state->target_sy_q13;
+        state->current_rot_q13 = state->target_rot_q13;
+        return vg_anim_transform_state_current(state);
+    }
+
+    state->current_tx_q13 = anim_step_toward_q13(state->current_tx_q13, state->target_tx_q13, eased_q13);
+    state->current_ty_q13 = anim_step_toward_q13(state->current_ty_q13, state->target_ty_q13, eased_q13);
+    state->current_sx_q13 = anim_step_toward_q13(state->current_sx_q13, state->target_sx_q13, eased_q13);
+    state->current_sy_q13 = anim_step_toward_q13(state->current_sy_q13, state->target_sy_q13, eased_q13);
+    state->current_rot_q13 = anim_step_toward_q13(state->current_rot_q13, state->target_rot_q13, eased_q13);
+    return vg_anim_transform_state_current(state);
 }
 
 VgTransformFixed vg_transform_fixed_identity(void) {

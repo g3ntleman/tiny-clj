@@ -689,6 +689,90 @@ TEST(test_vector_scene_graph_anim_fixed_progress_ease_and_lerp_are_deterministic
     TEST_ASSERT_EQUAL_INT32(mid_eased, vg_anim_lerp_q13(from, to, eased_half));
 }
 
+TEST(test_vector_scene_graph_anim_transform_state_converges_and_is_deterministic) {
+    VgTransform initial = vg_transform_identity();
+    VgTransform target = vg_transform_identity();
+    target.tx = 48;
+    target.ty = -12;
+    target.sx = (VG_SCALE_ONE * 3) / 2;
+    target.sy = (VG_SCALE_ONE * 5) / 4;
+    target.rot_deg = 30;
+
+    VgAnimTransformState state_a = {0};
+    VgAnimTransformState state_b = {0};
+    vg_anim_transform_state_reset(&state_a, initial, 120u, VG_ANIM_EASE_OUT_CUBIC);
+    vg_anim_transform_state_reset(&state_b, initial, 120u, VG_ANIM_EASE_OUT_CUBIC);
+    vg_anim_transform_state_set_target(&state_a, target);
+    vg_anim_transform_state_set_target(&state_b, target);
+
+    VgTransform prev = initial;
+    for (int i = 0; i < 32; i++) {
+        VgTransform step_a = vg_anim_transform_state_step(&state_a, 16u);
+        VgTransform step_b = vg_anim_transform_state_step(&state_b, 16u);
+        TEST_ASSERT_EQUAL_INT16(step_a.tx, step_b.tx);
+        TEST_ASSERT_EQUAL_INT16(step_a.ty, step_b.ty);
+        TEST_ASSERT_EQUAL_INT32(step_a.sx, step_b.sx);
+        TEST_ASSERT_EQUAL_INT32(step_a.sy, step_b.sy);
+        TEST_ASSERT_EQUAL_INT16(step_a.rot_deg, step_b.rot_deg);
+
+        TEST_ASSERT_TRUE(step_a.tx >= prev.tx);
+        TEST_ASSERT_TRUE(step_a.ty <= prev.ty);
+        TEST_ASSERT_TRUE(step_a.rot_deg >= prev.rot_deg);
+        prev = step_a;
+    }
+
+    VgTransform settled = vg_anim_transform_state_step(&state_a, 200u);
+    TEST_ASSERT_EQUAL_INT16(target.tx, settled.tx);
+    TEST_ASSERT_EQUAL_INT16(target.ty, settled.ty);
+    TEST_ASSERT_EQUAL_INT32(target.sx, settled.sx);
+    TEST_ASSERT_EQUAL_INT32(target.sy, settled.sy);
+    TEST_ASSERT_EQUAL_INT16(target.rot_deg, settled.rot_deg);
+}
+
+TEST(test_vector_scene_graph_anim_transform_state_is_interrupt_safe) {
+    VgTransform initial = vg_transform_identity();
+    VgAnimTransformState state = {0};
+    vg_anim_transform_state_reset(&state, initial, 100u, VG_ANIM_EASE_LINEAR);
+
+    VgTransform target_right = vg_transform_identity();
+    target_right.tx = 100;
+    vg_anim_transform_state_set_target(&state, target_right);
+    VgTransform mid = vg_anim_transform_state_step(&state, 50u);
+    TEST_ASSERT_TRUE(mid.tx > 0);
+    TEST_ASSERT_TRUE(mid.tx < 100);
+
+    VgTransform target_left = vg_transform_identity();
+    target_left.tx = 0;
+    vg_anim_transform_state_set_target(&state, target_left);
+    VgTransform backtrack = vg_anim_transform_state_step(&state, 50u);
+    TEST_ASSERT_TRUE(backtrack.tx < mid.tx);
+    TEST_ASSERT_TRUE(backtrack.tx > 0);
+
+    VgTransform settled = vg_anim_transform_state_step(&state, 200u);
+    TEST_ASSERT_EQUAL_INT16(0, settled.tx);
+}
+
+TEST(test_vector_scene_graph_anim_transform_state_zero_response_snaps_immediately) {
+    VgTransform initial = vg_transform_identity();
+    VgAnimTransformState state = {0};
+    vg_anim_transform_state_reset(&state, initial, 0u, VG_ANIM_EASE_OUT_QUAD);
+
+    VgTransform target = vg_transform_identity();
+    target.tx = -17;
+    target.ty = 9;
+    target.rot_deg = -45;
+    target.sx = VG_SCALE_ONE / 2;
+    target.sy = VG_SCALE_ONE * 2;
+    vg_anim_transform_state_set_target(&state, target);
+
+    VgTransform out = vg_anim_transform_state_step(&state, 1u);
+    TEST_ASSERT_EQUAL_INT16(target.tx, out.tx);
+    TEST_ASSERT_EQUAL_INT16(target.ty, out.ty);
+    TEST_ASSERT_EQUAL_INT16(target.rot_deg, out.rot_deg);
+    TEST_ASSERT_EQUAL_INT32(target.sx, out.sx);
+    TEST_ASSERT_EQUAL_INT32(target.sy, out.sy);
+}
+
 TEST(test_vector_scene_graph_anim_fixed_in_out_quad_symmetry_samples) {
     int32_t t1 = VG_SCALE_ONE / 4;
     int32_t t2 = VG_SCALE_ONE - t1;

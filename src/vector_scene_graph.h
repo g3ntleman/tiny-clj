@@ -34,6 +34,22 @@ typedef enum {
 } VgAnimEase;
 
 typedef struct {
+    bool initialized;
+    uint32_t response_ms;
+    VgAnimEase ease;
+    int32_t current_tx_q13;
+    int32_t current_ty_q13;
+    int32_t current_sx_q13;
+    int32_t current_sy_q13;
+    int32_t current_rot_q13;
+    int32_t target_tx_q13;
+    int32_t target_ty_q13;
+    int32_t target_sx_q13;
+    int32_t target_sy_q13;
+    int32_t target_rot_q13;
+} VgAnimTransformState;
+
+typedef struct {
     int16_t x;
     int16_t y;
 } VgPoint;
@@ -221,6 +237,13 @@ void vg_transform_fixed_apply_px(VgTransformFixed t, int16_t x, int16_t y, int *
 int32_t vg_anim_progress_q13(uint32_t elapsed_ms, uint32_t duration_ms);
 int32_t vg_anim_ease_q13(VgAnimEase ease, int32_t t_q13);
 int32_t vg_anim_lerp_q13(int32_t from_q13, int32_t to_q13, int32_t t_q13);
+void vg_anim_transform_state_reset(VgAnimTransformState *state,
+                                   VgTransform initial,
+                                   uint32_t response_ms,
+                                   VgAnimEase ease);
+void vg_anim_transform_state_set_target(VgAnimTransformState *state, VgTransform target);
+VgTransform vg_anim_transform_state_step(VgAnimTransformState *state, uint32_t dt_ms);
+VgTransform vg_anim_transform_state_current(const VgAnimTransformState *state);
 
 bool vg_framebuffer_init(VgFrameBuffer *fb, int width, int height, uint16_t *pixels, size_t pixel_count);
 void vg_framebuffer_clear(VgFrameBuffer *fb, uint16_t color);

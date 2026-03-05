@@ -45,9 +45,16 @@
 #define PLAYER_JUMP_HEIGHT_PX      10u  /* double previous bob peak (5px -> 10px) */
 #define PLAYER_JUMP_DURATION_FRAMES 16u
 #define PLAYER_JUMP_PERIOD_FRAMES   48u
+#define PLAYER_ANIM_RESPONSE_MS     70u
+#define TERRAIN_ANIM_RESPONSE_MS    24u
+#define OBSTACLE_ANIM_RESPONSE_MS   24u
+#define COLLISION_COOLDOWN_MS      300u
 
 #define TERRAIN_PPF  (TERRAIN_SPEED_PXS / TARGET_FPS)   /* 2 */
 #define OBSTACLE_PPF (OBSTACLE_SPEED_PXS / TARGET_FPS)  /* 2 */
+
+static uint64_t monotonic_now_ns(void);
+typedef struct ViewerDemoBundle ViewerDemoBundle;
 
 /* Convert engine q13 fixed-point to nearest integer for pixel-space updates. */
 static int q13_to_int_round(int32_t v_q13) {
@@ -163,6 +170,92 @@ static bool detect_player_obstacle_collision(int player_jump_y, int obstacle_x) 
            (player_max_y >= obstacle_min_y_i) && (player_min_y <= obstacle_max_y_i);
 }
 
+static VgTransform make_transform_target(int tx, int ty, int rot_deg) {
+    VgTransform t = vg_transform_identity();
+    t.tx = (int16_t)tx;
+    t.ty = (int16_t)ty;
+    t.rot_deg = (int16_t)rot_deg;
+    return t;
+}
+
+static bool has_wrap_jump_on_tx(const VgAnimTransformState *state, int target_tx, int wrap_period_px) {
+    if (!state || !state->initialized || wrap_period_px <= 0) {
+        return false;
+    }
+    int half_period = wrap_period_px / 2;
+    VgTransform current = vg_anim_transform_state_current(state);
+    int delta = target_tx - (int)current.tx;
+    return (delta > half_period) || (delta < -half_period);
+}
+
+static void set_transform_anim_target_with_wrap_snap(VgAnimTransformState *state,
+                                                     VgTransform target,
+                                                     int wrap_period_px) {
+    if (!state) {
+        return;
+    }
+    if (has_wrap_jump_on_tx(state, (int)target.tx, wrap_period_px)) {
+        vg_anim_transform_state_reset(state, target, state->response_ms, state->ease);
+        return;
+    }
+    vg_anim_transform_state_set_target(state, target);
+}
+
+typedef struct {
+    bool sync_mode;
+    bool use_mfb_waitsync;
+    bool periodic_score_updates_enabled;
+    bool s_key_was_down;
+    bool w_key_was_down;
+    bool p_key_was_down;
+} ViewerRuntimeFlags;
+
+typedef struct {
+    unsigned frame_count;
+    bool player_small;
+    bool collision_latched;
+    uint32_t collision_cooldown_end_ms;
+    bool anim_states_initialized;
+    VgAnimTransformState terrain_anim;
+    VgAnimTransformState player_anim;
+    VgAnimTransformState obstacle_anim;
+    uint32_t last_update_ms;
+} ViewerGameplayState;
+
+typedef struct {
+    uint32_t dirty_pixels;
+    uint32_t changed_slots;
+    uint_fast32_t frame_serial;
+} ViewerFrameRenderResult;
+
+static bool viewer_key_pressed_once(const uint8_t *keys, int key, bool *was_down) {
+    if (!was_down) {
+        return false;
+    }
+    bool down = keys && keys[key] != 0;
+    bool pressed = down && !(*was_down);
+    *was_down = down;
+    return pressed;
+}
+
+static void viewer_update_runtime_flags(const uint8_t *keys,
+                                        ViewerRuntimeFlags *flags,
+                                        uint64_t *next_frame_deadline_ns,
+                                        uint64_t target_frame_ns) {
+    if (!flags || !next_frame_deadline_ns) {
+        return;
+    }
+    if (viewer_key_pressed_once(keys, KB_KEY_S, &flags->s_key_was_down)) {
+        flags->sync_mode = !flags->sync_mode;
+    }
+    if (viewer_key_pressed_once(keys, KB_KEY_W, &flags->w_key_was_down)) {
+        flags->use_mfb_waitsync = !flags->use_mfb_waitsync;
+        *next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
+    }
+    if (viewer_key_pressed_once(keys, KB_KEY_P, &flags->p_key_was_down)) {
+        flags->periodic_score_updates_enabled = !flags->periodic_score_updates_enabled;
+    }
+}
 
 /* Expand RGB565 framebuffer pixels to MiniFB's XRGB8888 format. */
 static uint32_t rgb565_to_xrgb8888(uint16_t c) {
@@ -215,7 +308,7 @@ enum {
     DEMO_BUNDLE_COUNT = 9
 };
 
-typedef struct {
+struct ViewerDemoBundle {
     ID bundle_root;
     FrameScene *deco_scene;
     FrameScene *score_scene;
@@ -226,7 +319,7 @@ typedef struct {
     Transform *obstacle_nose_t;
     Tri *game_player;
     VText *score_text;
-} ViewerDemoBundle;
+};
 
 static bool init_demo_bundle(EvalState *st, ViewerDemoBundle *out_bundle) {
     if (!st || !out_bundle) {
@@ -267,6 +360,63 @@ static void destroy_demo_bundle(ViewerDemoBundle *bundle) {
     }
     RELEASE(bundle->bundle_root);
     memset(bundle, 0, sizeof(*bundle));
+}
+
+static void viewer_apply_gameplay_step(const ViewerDemoBundle *bundle,
+                                       ViewerGameplayState *state,
+                                       uint32_t now_ms,
+                                       uint32_t dt_ms) {
+    if (!bundle || !state) {
+        return;
+    }
+
+    state->frame_count++;
+    int terrain_scroll_px = (int)((state->frame_count * TERRAIN_PPF) % 320u);
+    int player_jump_target_y = compute_player_jump_y(state->frame_count);
+    int obstacle_target_x = compute_obstacle_x(state->frame_count);
+
+    VgTransform terrain_target = make_transform_target(-terrain_scroll_px, 0, 0);
+    VgTransform player_target = make_transform_target(0, player_jump_target_y, 0);
+    VgTransform obstacle_target = make_transform_target(obstacle_target_x + 20, 126, -90);
+
+    if (!state->anim_states_initialized) {
+        vg_anim_transform_state_reset(&state->terrain_anim,
+                                      terrain_target,
+                                      TERRAIN_ANIM_RESPONSE_MS,
+                                      VG_ANIM_EASE_LINEAR);
+        vg_anim_transform_state_reset(&state->player_anim,
+                                      player_target,
+                                      PLAYER_ANIM_RESPONSE_MS,
+                                      VG_ANIM_EASE_OUT_CUBIC);
+        vg_anim_transform_state_reset(&state->obstacle_anim,
+                                      obstacle_target,
+                                      OBSTACLE_ANIM_RESPONSE_MS,
+                                      VG_ANIM_EASE_LINEAR);
+        state->anim_states_initialized = true;
+    }
+
+    set_transform_anim_target_with_wrap_snap(&state->terrain_anim, terrain_target, 320);
+    vg_anim_transform_state_set_target(&state->player_anim, player_target);
+    set_transform_anim_target_with_wrap_snap(&state->obstacle_anim, obstacle_target, 360);
+
+    VgTransform terrain_visual = vg_anim_transform_state_step(&state->terrain_anim, dt_ms);
+    VgTransform player_visual = vg_anim_transform_state_step(&state->player_anim, dt_ms);
+    VgTransform obstacle_visual = vg_anim_transform_state_step(&state->obstacle_anim, dt_ms);
+
+    set_transform_fields(bundle->terrain_t, terrain_visual.tx, terrain_visual.ty, terrain_visual.rot_deg);
+    set_transform_fields(bundle->player_t, player_visual.tx, player_visual.ty, player_visual.rot_deg);
+    set_obstacle_transforms(bundle->obstacle_body_t, bundle->obstacle_nose_t, obstacle_visual.tx - 20);
+
+    bool collision_cooldown_active = (now_ms < state->collision_cooldown_end_ms);
+    bool colliding = detect_player_obstacle_collision(player_visual.ty, obstacle_visual.tx - 20);
+    if (colliding && !state->collision_latched && !collision_cooldown_active) {
+        state->player_small = !state->player_small;
+        state->collision_latched = true;
+        state->collision_cooldown_end_ms = now_ms + COLLISION_COOLDOWN_MS;
+    } else if (!colliding) {
+        state->collision_latched = false;
+    }
+    set_player_geometry(bundle->game_player, state->player_small);
 }
 
 static void timing_accumulator_reset(TimingAccumulator *acc) {
@@ -661,6 +811,118 @@ static void publish_frame_scene_slot_record(size_t slot_index, ID scene) {
     (void)pthread_mutex_unlock(&g_render_thread.mutex);
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, (uint8_t)slot_index, NULL);
 }
+
+static bool viewer_wait_for_frame_pacing(struct mfb_window *window,
+                                         bool use_mfb_waitsync,
+                                         uint64_t target_frame_ns,
+                                         uint64_t *next_frame_deadline_ns,
+                                         TimingAccumulator *waitsync_stats) {
+    uint64_t waitsync_begin_ns = monotonic_now_ns();
+    bool waitsync_ok = true;
+    if (use_mfb_waitsync) {
+        waitsync_ok = mfb_wait_sync(window);
+    } else {
+#if defined(__APPLE__)
+        uint64_t deadline_mach = mach_absolute_time() +
+            ns_to_mach_abs((*next_frame_deadline_ns > waitsync_begin_ns)
+                           ? (*next_frame_deadline_ns - waitsync_begin_ns)
+                           : 0u);
+        (void)mach_wait_until(deadline_mach);
+#else
+        uint64_t t = waitsync_begin_ns;
+        while (t < *next_frame_deadline_ns) {
+            uint64_t remaining_ns = *next_frame_deadline_ns - t;
+            if (remaining_ns > 1500000u) {
+                struct timespec ts;
+                ts.tv_sec = 0;
+                ts.tv_nsec = (long)(remaining_ns - 800000u);
+                (void)nanosleep(&ts, NULL);
+            } else {
+                sched_yield();
+            }
+            t = monotonic_now_ns();
+        }
+#endif
+        uint64_t now_ns = monotonic_now_ns();
+        *next_frame_deadline_ns += target_frame_ns;
+        if (now_ns > *next_frame_deadline_ns + (target_frame_ns * 3u)) {
+            *next_frame_deadline_ns = now_ns + target_frame_ns;
+        }
+    }
+    uint64_t waitsync_end_ns = monotonic_now_ns();
+    uint64_t waitsync_ns = (waitsync_end_ns > waitsync_begin_ns)
+                               ? (waitsync_end_ns - waitsync_begin_ns)
+                               : 0u;
+    timing_accumulator_add(waitsync_stats, waitsync_ns);
+    return waitsync_ok;
+}
+
+static ViewerFrameRenderResult viewer_render_game_frame_sync(FrameScene *game_scene,
+                                                             VgRenderSlotState *sync_slot_states,
+                                                             uint32_t *sync_slot_generation,
+                                                             VgFrameBuffer *fb) {
+    ViewerFrameRenderResult result = {0};
+    if (!game_scene || !sync_slot_states || !sync_slot_generation || !fb) {
+        return result;
+    }
+    (*sync_slot_generation)++;
+    uint32_t dirty_pixels = 0u;
+    if (vg_render_frame_slot_record_if_changed(game_scene,
+                                               &sync_slot_states[VIEWER_SLOT_GAME],
+                                               fb,
+                                               *sync_slot_generation,
+                                               &dirty_pixels)) {
+        result.dirty_pixels = dirty_pixels;
+        result.changed_slots = 1u;
+    }
+    result.frame_serial = *sync_slot_generation;
+    return result;
+}
+
+static ViewerFrameRenderResult viewer_render_game_frame_async(FrameScene *game_scene,
+                                                              const uint16_t *fb_pixels) {
+    ViewerFrameRenderResult result = {0};
+    if (!game_scene || !fb_pixels) {
+        return result;
+    }
+    uint_fast32_t pre_serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
+    publish_frame_scene_slot_record(VIEWER_SLOT_GAME, game_scene);
+    (void)pthread_mutex_lock(&g_render_thread.render_done_mutex);
+    while (atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire) == pre_serial) {
+        (void)pthread_cond_wait(&g_render_thread.render_done_cond, &g_render_thread.render_done_mutex);
+    }
+    (void)pthread_mutex_unlock(&g_render_thread.render_done_mutex);
+
+    uint64_t main_lock_begin_ns = monotonic_now_ns();
+    if (pthread_mutex_lock(&g_render_thread.mutex) == 0) {
+        uint64_t main_lock_acquired_ns = monotonic_now_ns();
+        result.frame_serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
+        result.dirty_pixels = g_render_thread.last_dirty_pixels;
+        result.changed_slots = g_render_thread.last_changed_slots;
+        memcpy(g_present_copy_rgb565, fb_pixels, sizeof(g_present_copy_rgb565));
+        uint64_t main_lock_release_ns = monotonic_now_ns();
+        (void)pthread_mutex_unlock(&g_render_thread.mutex);
+        uint64_t wait_ns = (main_lock_acquired_ns > main_lock_begin_ns)
+                               ? (main_lock_acquired_ns - main_lock_begin_ns)
+                               : 0u;
+        uint64_t hold_ns = (main_lock_release_ns > main_lock_acquired_ns)
+                               ? (main_lock_release_ns - main_lock_acquired_ns)
+                               : 0u;
+        atomic_fetch_add_explicit(&g_render_thread.main_lock_wait_ns_total, wait_ns, memory_order_relaxed);
+        atomic_fetch_add_explicit(&g_render_thread.main_lock_hold_ns_total, hold_ns, memory_order_relaxed);
+        atomic_fetch_add_explicit(&g_render_thread.main_lock_samples, 1u, memory_order_relaxed);
+    }
+    return result;
+}
+
+static void viewer_expand_rgb565_to_window(const uint16_t *src, uint32_t *dst, size_t count) {
+    if (!src || !dst) {
+        return;
+    }
+    for (size_t i = 0; i < count; i++) {
+        dst[i] = rgb565_to_xrgb8888(src[i]);
+    }
+}
 #endif
 
 int main(void) {
@@ -747,17 +1009,11 @@ int main(void) {
     char score_line[64];
     (void)snprintf(score_line, sizeof(score_line), "SCORE 0000    LIFES 3");
 
-    bool player_small = false;
-    bool collision_latched = false;
-    float collision_cooldown_end_s = 0.0f;
-    unsigned frame_count = 0;
+    ViewerGameplayState gameplay_state = {0};
     uint_fast32_t last_presented_frame_serial = 0u;
-    bool sync_mode = false;
-    bool s_key_was_down = false;
-    bool w_key_was_down = false;
-    bool p_key_was_down = false;
-    bool use_mfb_waitsync = false;
-    bool periodic_score_updates_enabled = true;
+    ViewerRuntimeFlags runtime_flags = {
+        .periodic_score_updates_enabled = true
+    };
     VgRenderSlotState sync_slot_states[VIEWER_SLOT_COUNT] = {0};
     uint32_t sync_slot_generation = 1u;
     const uint64_t target_frame_ns = 1000000000ull / TARGET_FPS;
@@ -776,148 +1032,50 @@ int main(void) {
 
     while (true) {
         float time_s = (float)mfb_timer_now(timer);
-        uint64_t waitsync_begin_ns = monotonic_now_ns();
-        bool waitsync_ok = true;
-        if (use_mfb_waitsync) {
-            waitsync_ok = mfb_wait_sync(window);
-        } else {
-#if defined(__APPLE__)
-            uint64_t deadline_mach = mach_absolute_time() +
-                ns_to_mach_abs((next_frame_deadline_ns > waitsync_begin_ns)
-                               ? (next_frame_deadline_ns - waitsync_begin_ns)
-                               : 0u);
-            (void)mach_wait_until(deadline_mach);
-#else
-            {
-                uint64_t t = waitsync_begin_ns;
-                while (t < next_frame_deadline_ns) {
-                    uint64_t remaining_ns = next_frame_deadline_ns - t;
-                    if (remaining_ns > 1500000u) {
-                        struct timespec ts;
-                        ts.tv_sec = 0;
-                        ts.tv_nsec = (long)(remaining_ns - 800000u);
-                        (void)nanosleep(&ts, NULL);
-                    } else {
-                        sched_yield();
-                    }
-                    t = monotonic_now_ns();
-                }
-            }
-#endif
-            uint64_t now_ns = monotonic_now_ns();
-            next_frame_deadline_ns += target_frame_ns;
-            if (now_ns > next_frame_deadline_ns + (target_frame_ns * 3u)) {
-                next_frame_deadline_ns = now_ns + target_frame_ns;
-            }
-        }
-        uint64_t waitsync_end_ns = monotonic_now_ns();
-        uint64_t waitsync_ns = (waitsync_end_ns > waitsync_begin_ns)
-                                   ? (waitsync_end_ns - waitsync_begin_ns)
-                                   : 0u;
-        timing_accumulator_add(&waitsync_stats, waitsync_ns);
-        if (!waitsync_ok) {
+        if (!viewer_wait_for_frame_pacing(window,
+                                          runtime_flags.use_mfb_waitsync,
+                                          target_frame_ns,
+                                          &next_frame_deadline_ns,
+                                          &waitsync_stats)) {
             break;
         }
+
         const uint8_t *keys = mfb_get_key_buffer(window);
         if (viewer_should_exit_for_keys(keys)) {
             break;
         }
-        {
-            bool s_down = keys && keys[KB_KEY_S] != 0;
-            if (s_down && !s_key_was_down) {
-                sync_mode = !sync_mode;
+        viewer_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
+        uint64_t gameplay_now_ns = monotonic_now_ns();
+        uint32_t gameplay_now_ms = (uint32_t)(gameplay_now_ns / 1000000u);
+        uint32_t gameplay_dt_ms = 1000u / TARGET_FPS;
+        if (gameplay_state.last_update_ms != 0u) {
+            uint32_t raw_dt_ms = gameplay_now_ms - gameplay_state.last_update_ms;
+            if (raw_dt_ms == 0u) {
+                raw_dt_ms = 1u;
             }
-            s_key_was_down = s_down;
-            bool w_down = keys && keys[KB_KEY_W] != 0;
-            if (w_down && !w_key_was_down) {
-                use_mfb_waitsync = !use_mfb_waitsync;
-                next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
+            if (raw_dt_ms > 250u) {
+                raw_dt_ms = 250u;
             }
-            w_key_was_down = w_down;
-            bool p_down = keys && keys[KB_KEY_P] != 0;
-            if (p_down && !p_key_was_down) {
-                periodic_score_updates_enabled = !periodic_score_updates_enabled;
-            }
-            p_key_was_down = p_down;
+            gameplay_dt_ms = raw_dt_ms;
+        }
+        gameplay_state.last_update_ms = gameplay_now_ms;
+        viewer_apply_gameplay_step(&demo_bundle, &gameplay_state, gameplay_now_ms, gameplay_dt_ms);
+
+        ViewerFrameRenderResult frame_result = runtime_flags.sync_mode
+                                                   ? viewer_render_game_frame_sync(demo_bundle.game_scene,
+                                                                                   sync_slot_states,
+                                                                                   &sync_slot_generation,
+                                                                                   &fb)
+                                                   : viewer_render_game_frame_async(demo_bundle.game_scene, fb_pixels);
+
+        const uint16_t *src = runtime_flags.sync_mode ? fb_pixels : g_present_copy_rgb565;
+        viewer_expand_rgb565_to_window(src, window_pixels, (size_t)VIEW_W * (size_t)VIEW_H);
+
+        if (frame_result.frame_serial != last_presented_frame_serial) {
+            perf_window_record_frame(&perf_window, frame_result.dirty_pixels, frame_result.changed_slots);
+            last_presented_frame_serial = frame_result.frame_serial;
         }
 
-        frame_count++;
-        bool collision_cooldown_active = (time_s < collision_cooldown_end_s);
-        int terrain_scroll_px = (int)((frame_count * TERRAIN_PPF) % 320u);
-        int player_jump_y = compute_player_jump_y(frame_count);
-        int obstacle_x = compute_obstacle_x(frame_count);
-
-        {
-            bool colliding = detect_player_obstacle_collision(player_jump_y, obstacle_x);
-
-            if (colliding && !collision_latched && !collision_cooldown_active) {
-                player_small = !player_small;
-                collision_latched = true;
-                collision_cooldown_end_s = time_s + 0.3f;
-            } else if (!colliding) {
-                collision_latched = false;
-            }
-        }
-
-        set_transform_fields(demo_bundle.terrain_t, -terrain_scroll_px, 0, 0);
-        set_transform_fields(demo_bundle.player_t, 0, player_jump_y, 0);
-        set_obstacle_transforms(demo_bundle.obstacle_body_t, demo_bundle.obstacle_nose_t, obstacle_x);
-        set_player_geometry(demo_bundle.game_player, player_small);
-
-        uint32_t dirty_pixels = 0u;
-        uint32_t changed_slots = 0u;
-        uint_fast32_t frame_serial = 0u;
-
-        if (sync_mode) {
-            sync_slot_generation++;
-            uint32_t dp = 0u;
-            if (vg_render_frame_slot_record_if_changed(demo_bundle.game_scene,
-                                                        &sync_slot_states[VIEWER_SLOT_GAME],
-                                                        &fb,
-                                                        sync_slot_generation,
-                                                        &dp)) {
-                dirty_pixels += dp;
-                changed_slots++;
-            }
-            frame_serial = sync_slot_generation;
-        } else {
-            uint_fast32_t pre_serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
-            publish_frame_scene_slot_record(VIEWER_SLOT_GAME, demo_bundle.game_scene);
-            (void)pthread_mutex_lock(&g_render_thread.render_done_mutex);
-            while (atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire) == pre_serial) {
-                (void)pthread_cond_wait(&g_render_thread.render_done_cond, &g_render_thread.render_done_mutex);
-            }
-            (void)pthread_mutex_unlock(&g_render_thread.render_done_mutex);
-            uint64_t main_lock_begin_ns = monotonic_now_ns();
-            if (pthread_mutex_lock(&g_render_thread.mutex) == 0) {
-                uint64_t main_lock_acquired_ns = monotonic_now_ns();
-                frame_serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
-                dirty_pixels = g_render_thread.last_dirty_pixels;
-                changed_slots = g_render_thread.last_changed_slots;
-                memcpy(g_present_copy_rgb565, fb_pixels, sizeof(g_present_copy_rgb565));
-                uint64_t main_lock_release_ns = monotonic_now_ns();
-                (void)pthread_mutex_unlock(&g_render_thread.mutex);
-                uint64_t wait_ns = (main_lock_acquired_ns > main_lock_begin_ns)
-                                       ? (main_lock_acquired_ns - main_lock_begin_ns)
-                                       : 0u;
-                uint64_t hold_ns = (main_lock_release_ns > main_lock_acquired_ns)
-                                       ? (main_lock_release_ns - main_lock_acquired_ns)
-                                       : 0u;
-                atomic_fetch_add_explicit(&g_render_thread.main_lock_wait_ns_total, wait_ns, memory_order_relaxed);
-                atomic_fetch_add_explicit(&g_render_thread.main_lock_hold_ns_total, hold_ns, memory_order_relaxed);
-                atomic_fetch_add_explicit(&g_render_thread.main_lock_samples, 1u, memory_order_relaxed);
-            }
-        }
-        {
-            const uint16_t *src = sync_mode ? fb_pixels : g_present_copy_rgb565;
-            for (size_t i = 0; i < (size_t)VIEW_W * (size_t)VIEW_H; i++) {
-                window_pixels[i] = rgb565_to_xrgb8888(src[i]);
-            }
-        }
-        if (frame_serial != last_presented_frame_serial) {
-            perf_window_record_frame(&perf_window, dirty_pixels, changed_slots);
-            last_presented_frame_serial = frame_serial;
-        }
         ViewerPerfSnapshot perf_snapshot;
         bool perf_ready = perf_window_take_snapshot_if_due(&perf_window, (double)time_s, &perf_snapshot);
         if (perf_ready) {
@@ -925,7 +1083,7 @@ int main(void) {
         }
 #if defined(__APPLE__)
         if (perf_ready) {
-            if (periodic_score_updates_enabled) {
+            if (runtime_flags.periodic_score_updates_enabled) {
                 int score = (int)(time_s * 120.0f);
                 (void)snprintf(score_line, sizeof(score_line), "SCORE %04d    LIFES 3", score % 10000);
                 ASSIGN(demo_bundle.score_text->text, AUTORELEASE(make_string(score_line)));
@@ -946,15 +1104,15 @@ int main(void) {
             (void)snprintf(title,
                            sizeof(title),
                            "tiny-clj [%s|%s|SC%s] | FPS %.1f | dt %.1f/%.1f/%.1fms | ws %.1f/%.1f/%.1fms | up %.1f/%.1f/%.1fms",
-                           sync_mode ? "SYNC" : "ASYNC",
-                           use_mfb_waitsync ? "WAITSYNC" : "CUSTOM",
-                           periodic_score_updates_enabled ? "ON" : "OFF",
+                           runtime_flags.sync_mode ? "SYNC" : "ASYNC",
+                           runtime_flags.use_mfb_waitsync ? "WAITSYNC" : "CUSTOM",
+                           runtime_flags.periodic_score_updates_enabled ? "ON" : "OFF",
                            perf_snapshot.fps,
                            dt_min_ms, dt_avg_ms, dt_max_ms,
                            ws_min_ms, ws_avg_ms, ws_max_ms,
                            up_min_ms, up_avg_ms, up_max_ms);
             macos_viewer_set_window_title(title);
-            if (periodic_score_updates_enabled) {
+            if (runtime_flags.periodic_score_updates_enabled) {
                 publish_frame_scene_slot_record(VIEWER_SLOT_SCORE, demo_bundle.score_scene);
             }
         }
@@ -963,14 +1121,13 @@ int main(void) {
         (void)perf_ready;
 #endif
 
-        {
-            uint64_t now_ns = monotonic_now_ns();
-            if (last_present_ns > 0u) {
-                uint64_t dt = (now_ns > last_present_ns) ? (now_ns - last_present_ns) : 0u;
-                timing_accumulator_add(&frame_dt_stats, dt);
-            }
-            last_present_ns = now_ns;
+        uint64_t now_ns = monotonic_now_ns();
+        if (last_present_ns > 0u) {
+            uint64_t dt = (now_ns > last_present_ns) ? (now_ns - last_present_ns) : 0u;
+            timing_accumulator_add(&frame_dt_stats, dt);
         }
+        last_present_ns = now_ns;
+
         uint64_t update_begin_ns = monotonic_now_ns();
         mfb_update_state state = mfb_update_ex(window, window_pixels, VIEW_W, VIEW_H);
         uint64_t update_end_ns = monotonic_now_ns();

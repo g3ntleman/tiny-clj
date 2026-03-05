@@ -75,53 +75,112 @@ if (is_timeline(field_val)) {
 Timeline resolution for looping: `phase_ms = time_ms % total_period`, then linear scan
 over keyframes (typically 2–5 entries). Cheap enough for the render hot path.
 
-### Three-Layer Separation
+### Threading Model
+
+The architecture requires exactly **two application threads**. A third thread exists
+only on macOS as a platform quirk (Cocoa requires the OS main thread for UI).
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Thread 1: Tiny-RTOS / Clojure  (= application main thread)            │
+│                                                                         │
+│  • Runs tiny-clj scheduler, game logic, event handling                  │
+│  • Owns all scene state as flat entity maps in Atoms (one per slot)     │
+│  • Updates via swap!/reset! – never blocks                              │
+│  • Starts/stops the render thread via Clojure functions:                │
+│      (start-renderer! [game-slot score-slot deco-slot])                 │
+│      (stop-renderer!)                                                   │
+│                                                                         │
+│  On ESP32: RTOS task (the one running tiny-clj)                         │
+│  On macOS: any thread (not necessarily the OS main thread)              │
+└────────────────────────┬────────────────────────────────────────────────┘
+                         │ atom_deref per slot (lock-free pointer read)
+                         ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Thread 2: Render Thread  (spawned/stopped by Clojure)                  │
+│                                                                         │
+│  • At frame start: atom_deref per slot → immutable snapshot             │
+│  • Renders entire frame from consistent snapshot:                       │
+│    resolve Timelines, interpolate AnimState, rasterize                  │
+│  • Frame done → loop back, pick up latest snapshot for next frame       │
+│  • Read-only on Clojure data – no ASSIGN, no RETAIN/RELEASE            │
+│                                                                         │
+│  On ESP32: writes framebuffer directly to SPI/DMA → display             │
+│  On macOS: fills RGB565 framebuffer, signals UI thread for presentation │
+└────────────────────────┬────────────────────────────────────────────────┘
+                         │ (macOS only: framebuffer handoff)
+                         ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  macOS only – Cocoa UI Thread  (platform requirement, not architectural)│
+│                                                                         │
+│  • Copies rendered framebuffer → window (mfb_update_ex)                 │
+│  • MiniFB event loop, input forwarding, frame pacing, metrics           │
+│  • No scene logic, no Record mutation                                   │
+│                                                                         │
+│  Does not exist on ESP32 – render thread drives display directly.       │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**No additional RTOS threads needed** for the scene-graph engine. Other subsystems
+(audio, networking, sensor polling) may have their own threads but are orthogonal to this plan.
+
+**Key property:** The two threads are decoupled via immutable snapshots in Atoms.
+No mutex is needed for scene data exchange – `atom_deref` is a lock-free pointer read.
+On macOS, the only synchronization point is the framebuffer handoff to the Cocoa UI thread.
+
+### Layer Separation
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Layer 1: Clojure – Scene State (immutable flat entity map) │
+│  Thread 1: Tiny-RTOS / Clojure (= main thread)             │
 │                                                             │
 │  (def game-slot (atom {root (group ...) 3001 (tri ...) ..}))│
+│  (start-renderer! [game-slot score-slot deco-slot])         │
 │                                                             │
 │  • Flat map of {id → Record} per slot, in an Atom           │
 │  • State changes via swap!/assoc-in (event-driven)          │
 │  • Timeline Records on fields for periodic animations       │
-│  • No Clojure eval in the frame loop                        │
+│  • No Clojure eval in the render loop                       │
 └────────────────────────┬────────────────────────────────────┘
-                         │ atom_deref (once per frame, no eval)
+                         │ atom_deref (once per frame, lock-free)
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Layer 2: C – Interpolation + Timeline Resolution           │
+│  Thread 2: Render Thread (spawned by Clojure)               │
 │                                                             │
-│  • Reads flat entity map snapshot from Atom                 │
+│  • Snapshots flat entity maps from Atoms at frame start     │
 │  • Resolves Timeline fields by wall clock (modulo arith.)   │
 │  • Interpolates transform targets (lerp/easing for smooth   │
 │    motion) using mutable C-owned AnimState structs          │
 │  • Owns animation timing (dt, framerate-independent)        │
-└────────────────────────┬────────────────────────────────────┘
-                         │ renders resolved values
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 3: C – Renderer                                      │
-│                                                             │
 │  • Traverses logical tree (root → children IDs → lookup)    │
 │  • Composes inherited transforms                            │
 │  • Rasterizes primitives with resolved field values         │
 │  • Read-only on the Clojure snapshot                        │
+│  • ESP32: writes directly to SPI/DMA                        │
+│  • macOS: fills framebuffer, hands off to Cocoa UI thread   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Design Principles
 
 - **Clojure never mutates Records.** State changes produce new immutable Records via `swap!`.
-- **C never mutates the Clojure snapshot.** C reads via `atom_deref` (cheap pointer read).
+- **C never mutates the Clojure snapshot.** C reads via `atom_deref` (lock-free pointer read).
 - **Records over Maps** for entities: C knows Record layout (`DEFRECORD`), field access is O(1).
 - **No Clojure eval per frame.** Clojure sets state event-driven (collision, timer, input).
   C resolves Timelines and interpolates every frame with fixed time budget.
+- **Snapshot-per-frame.** Render thread snapshots all slot Atoms once at frame start.
+  The entire frame renders from this consistent state. Intermediate Clojure updates
+  are picked up at the next frame start – no tearing, no partial state.
 - **Interruption-safe.** New target mid-animation → C interpolates from current visual
   position toward new target (no jump, no restart).
 - **Timelines are data, not code.** Periodic animations (form cycling, blinking, color pulsing)
   are Timeline Records on fields – C evaluates them with pure arithmetic, no timers needed.
+- **Two threads, Clojure-controlled.** Tiny-RTOS/Clojure is the main thread. Render thread
+  is started/stopped from Clojure via `(start-renderer!)` / `(stop-renderer!)`.
+  macOS Cocoa UI thread is a platform detail, not an architectural thread.
+  No additional RTOS threads needed for the scene-graph engine.
+- **No game logic in C.** All game/app logic lives in Clojure (target states via `swap!`).
+  C render thread only interpolates and rasterizes. No demo-specific gameplay functions in C.
 - **Animation descriptors (TODO).** Declarative transition animations (easing, duration, from/to
   for smooth motion) should also execute in C. Exact contract to be designed after flat entity
   map and Timeline are stable (see Optional Extension A for initial sketch).
@@ -144,6 +203,15 @@ so primitive generation/rasterization bugs are debuggable on host.
   - no autorelease pool setup/usage in render thread
   - memory ownership changes/allocation happen only in producer/update thread before atomic snapshot publish
   - no blocking/channel operations in render hot path; use bounded lock-free queues for control/completion handoff
+  - render thread acquires scene snapshots via lock-free `atom_deref` at frame start;
+    renders the full frame from the consistent snapshot; picks up new state at next frame start
+- Thread ownership rule (target architecture – two threads):
+  - Thread 1 – Tiny-RTOS / Clojure (= main thread): owns scene state (Atoms with flat entity
+    maps), all game/app logic, starts/stops render thread via `(start-renderer!)` / `(stop-renderer!)`
+  - Thread 2 – Render thread (spawned by Clojure): owns interpolation (AnimState), Timeline
+    resolution, rasterization; read-only on Clojure snapshots; on ESP32 drives SPI directly
+  - macOS Cocoa UI thread: platform quirk, presentation only – not an architectural thread
+  - No game logic in C; no direct ASSIGN into scene Records from any C thread
 - Backend-parity rule (host <-> ESP32):
   - define one shared backend submission interface (e.g. `begin_frame`, `submit_rect`, `end_frame`)
   - render thread owns backend submission on both targets
@@ -578,7 +646,7 @@ Done when:
 
 ## Milestone 9: Flat Entity Map + Timeline + Declarative Scene Architecture
 
-Status: IN PROGRESS (`9a` + `9b` + `9c` baseline DONE on host/ESP32 build path; `9d` AnimState + remaining host-viewer ASSIGN removals still TODO)
+Status: IN PROGRESS (`9a` + `9b` + `9c` + `9d` baseline DONE on host/ESP32 build path; remaining host-viewer ASSIGN removals and app-agnostic loop migration still TODO)
 
 Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Architecture"):
 
@@ -591,7 +659,6 @@ Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Arc
 Current gap:
 
 - Flat entity maps and Timeline decode are now in place, but host-viewer still mutates several gameplay records directly from C (`ASSIGN(...)`).
-- Smooth event-driven interpolation state (`AnimState`) is not implemented yet.
 - Full elimination of direct C-authored per-frame target writes is still pending.
 
 ### 9a: Flat Entity Map (Clojure side)
@@ -679,6 +746,14 @@ void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
 - AnimState is separate from the Clojure snapshot (C-owned, mutable).
 - Timeline (periodic, data-driven) and AnimState (smooth motion, C-driven) are complementary:
   Timeline = cyclic field replacement; AnimState = continuous interpolation toward targets.
+- Implementation notes (2026-03-05):
+  - Added fixed-point `VgAnimTransformState` API in `vector_scene_graph`:
+    `vg_anim_transform_state_reset`, `vg_anim_transform_state_set_target`,
+    `vg_anim_transform_state_step`, `vg_anim_transform_state_current`.
+  - Added deterministic unit tests for convergence, interruption-safe target switching,
+    and zero-duration snap behavior.
+  - Host viewer gameplay step now uses `AnimState` for terrain/player/obstacle transforms.
+    Interpolation step is integer/fixed-point only (`dt_ms`/`now_ms`), no float math in the interpolation path.
 
 ### 9e: Animation descriptors (TODO – to be clarified)
 
@@ -692,17 +767,36 @@ void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
 - See Optional Extension A for initial animation record sketch.
 - Decision deferred until 9a–9d are stable.
 
-### 9f: Migration of host-viewer demo
+### 9f: Generalized main loop + host-viewer migration
 
-- Restructure `tiny-gfx.host-viewer-demo` from nested `create-demo-bundle` to flat entity maps.
-- Replace direct `ASSIGN(transform->tx, ...)` calls in C with the
-  `atom_deref → resolve Timelines → interpolate → render` pipeline.
-- Move target-setting logic to Clojure (event-driven) where possible.
-- Keep C-owned: frame pacing, backend submission, metrics, presentation.
+**Generalized C main loop (target):**
+- The main loop becomes app-agnostic – no demo-specific gameplay logic in C.
+- Main loop responsibilities: frame pacing, input forwarding, framebuffer presentation, metrics.
+- All game/app logic moves to Clojure (scene state updates via `swap!` on slot Atoms).
+- Current demo-specific code to remove from C main loop:
+  - `viewer_apply_gameplay_step()` (terrain scroll, player jump, obstacle position, collision)
+  - `set_transform_fields()`, `set_player_geometry()`, `set_obstacle_transforms()`
+  - Direct `ASSIGN(demo_bundle.score_text->text, ...)` calls
+  - `ViewerDemoBundle` struct and all per-entity handle tracking
+
+**Render thread (target):**
+- At frame start: `atom_deref` per slot Atom → immutable snapshot (lock-free).
+- Render entire frame from snapshot: resolve Timelines, interpolate AnimState, rasterize.
+- Frame done: signal main thread, loop back to frame start with fresh snapshot.
+- No slot-change-tracker wakeup needed for continuous animation (Timeline-driven);
+  render thread can run at target FPS and always re-snapshot.
+  Slot-change-tracker remains useful for power-saving mode (block until state changes).
+
+**Clojure side (target):**
+- `tiny-gfx.host-viewer-demo` defines all scene entities as flat maps per slot.
+- Game logic (terrain scroll, player jump, obstacle, collision, score) runs as
+  Clojure functions triggered by `schedule-periodic` timers or input events.
+- Each game tick: `(swap! game-slot assoc-in [entity-id :t] new-transform)`.
+
 - Implementation notes (2026-03-04):
-  - Demo includes first periodic Timeline slice in production path: moving `hbar` now uses a looping transform Timeline from Clojure data.
-  - Host viewer no longer updates `hbar` via C-side transform `ASSIGN`.
-  - Remaining gameplay transform/geometry writes (`terrain/player/obstacle`) are still C-driven and tracked as follow-up.
+  - Demo includes first periodic Timeline slice: `hbar` uses looping transform Timeline.
+  - Host viewer no longer updates `hbar` via C-side `ASSIGN`.
+  - Remaining gameplay writes (`terrain/player/obstacle`) are still C-driven – tracked as follow-up.
 
 ### 9g: Validate scene reuse + scheduler integration
 
@@ -717,6 +811,54 @@ void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
 - `tiny-gfx.scene/color` converts `0xRRGGBB` → RGB565.
 - `tiny-gfx.scene/web-hex->color` converts `"#RRGGBB"` → RGB565.
 - Demo palette migrated to `(color 0xRRGGBB)` style.
+
+### 9i: Rendered-State Query API (Clojure → Render Thread)
+
+The Clojure Atom holds the **target** state. The render thread holds the **current visual**
+state (after interpolation + Timeline resolution). Game logic often needs the current visual
+state – e.g. "has the player reached position X?", "is the animation done?".
+
+**Rendered-State Snapshot:**
+- After each frame, the render thread writes resolved per-entity values into a shared
+  snapshot structure (one per slot, indexed by entity ID).
+- Clojure reads this snapshot via native functions (lock-free read of last-completed frame).
+- Snapshot is updated atomically per frame – Clojure always sees a consistent frame state.
+
+**Clojure API:**
+
+```clojure
+;; Current visual transform of an entity (after interpolation):
+(renderer-state slot entity-id)
+;; => {:tx 45 :ty -12 :rot 0 :sx 1 :sy 1}
+
+;; Current Timeline keyframe index for a specific field:
+(renderer-timeline-step slot entity-id :pts)
+;; => 1  (second keyframe currently active)
+
+;; Timeline progress through full period [0.0 .. 1.0]:
+(renderer-timeline-progress slot entity-id :pts)
+;; => 0.7  (70% through the cycle)
+```
+
+**Use cases:**
+- Game logic: "has entity reached target?" → compare `renderer-state` with target atom
+- Collision: based on actual visual position, not target
+- Animation control: `(renderer-timeline-progress ... :pts)` = 1.0 means done (for `loop=false`)
+- REPL debugging: inspect live visual state
+
+**Implementation sketch (C side):**
+- Render thread maintains per-slot `RenderedEntityState` array/map.
+- After resolving each entity during traversal, writes:
+  - composed world-space transform (`tx, ty, rot, sx, sy`)
+  - active Timeline keyframe index + phase offset per animated field
+- Published atomically (pointer swap or generation counter) after frame completes.
+- Native functions `renderer_state`, `renderer_timeline_step`, `renderer_timeline_progress`
+  read from the last-published snapshot.
+
+**Threading safety:**
+- Render thread writes → atomic publish (pointer swap).
+- Clojure reads → lock-free deref of last-published snapshot.
+- No mutex needed. Clojure may see a 1-frame-old snapshot (acceptable).
 
 ### Done when
 
