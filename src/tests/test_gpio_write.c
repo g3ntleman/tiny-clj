@@ -162,6 +162,76 @@ TEST(test_gpio_read_call_returns_fixnum_on_host) {
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
 }
 
+TEST(test_gpio_simulate_updates_read_value_on_host) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string("(do (gpio-simulate! 7 1) (gpio-read 7))", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("gpio-simulate! should update host pin state");
+        return;
+    } END_TRY
+
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result), "gpio-read should return fixnum after gpio-simulate!");
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
+}
+
+TEST(test_gpio_watch_and_simulate_enqueue_callback_event_on_host) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do "
+            "  (def gpio-watch-events (atom [])) "
+            "  (def gpio-watch-id "
+            "    (gpio-watch 8 (fn [ev] (swap! gpio-watch-events conj ev) nil))) "
+            "  (gpio-simulate! 8 1) "
+            "  (run-next-task) "
+            "  (let [events @gpio-watch-events] "
+            "    (gpio-unwatch gpio-watch-id) "
+            "    events))",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("gpio-watch + gpio-simulate! should deliver one event on host");
+        return;
+    } END_TRY
+
+    TEST_ASSERT_TRUE_MESSAGE(is_vector(result), "watch callback should record vector of events");
+    TEST_ASSERT_EQUAL_INT(1, vector_count((CljPersistentVector *)result));
+
+    ID first_event = vector_nth((CljPersistentVector *)result, 0);
+    TEST_ASSERT_TRUE_MESSAGE(is_vector(first_event), "recorded event should be a vector");
+    TEST_ASSERT_EQUAL_INT(2, vector_count((CljPersistentVector *)first_event));
+    TEST_ASSERT_EQUAL_INT(8, as_fixnum(vector_nth((CljPersistentVector *)first_event, 0)));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth((CljPersistentVector *)first_event, 1)));
+}
+
+TEST(test_gpio_unwatch_stops_future_host_events) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = NULL;
+    TRY {
+        result = eval_string(
+            "(do "
+            "  (def gpio-watch-events-2 (atom [])) "
+            "  (def gpio-watch-id-2 "
+            "    (gpio-watch 9 (fn [ev] (swap! gpio-watch-events-2 conj ev) nil))) "
+            "  (gpio-unwatch gpio-watch-id-2) "
+            "  (gpio-simulate! 9 1) "
+            "  (run-next-task) "
+            "  @gpio-watch-events-2)",
+            g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("gpio-unwatch should prevent future host events");
+        return;
+    } END_TRY
+
+    TEST_ASSERT_TRUE_MESSAGE(is_vector(result), "event accumulator should remain a vector");
+    TEST_ASSERT_EQUAL_INT(0, vector_count((CljPersistentVector *)result));
+}
+
 TEST(test_gpio_pwm_validates_arity) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 

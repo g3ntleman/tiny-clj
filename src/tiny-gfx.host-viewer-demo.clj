@@ -279,11 +279,12 @@ Index layout:
                            3024 star-4
                             3025 star-5
                             3026 star-6}
-            game-rule (->SpatialRule :player-vs-rocket :game :collision obstacle-entity-id player-entity-id 0 nil)
+            collision-rule (->SpatialRule :player-vs-rocket :game :collision obstacle-entity-id player-entity-id 0 nil)
+            hearing-rule (->SpatialRule :enemy-hearing :game :proximity obstacle-entity-id player-entity-id 24 :hearing)
             game-scene (frame-scene {:root game-entities
                                      :clip-rect [0 40 320 136]
                                      :z 2
-                                     :collision-rules [game-rule]})]
+                                     :collision-rules [collision-rule hearing-rule]})]
         (reset! player-small-state false)
         (reset! game-scene-state game-scene)
         (configure-collision-toggle-callback!)

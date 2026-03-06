@@ -374,14 +374,20 @@ TEST(test_vector_scene_graph_tiny_gfx_runtime_host_viewer_config_shape) {
         "        bundle (:bundle cfg) "
         "        game-scene (nth bundle 2) "
         "        rules (:collision-rules game-scene) "
-        "        rule (first rules)] "
+        "        rule1 (first rules) "
+        "        rule2 (second rules)] "
         "    (and (= 3 (count bundle)) "
-        "         (= 1 (count rules)) "
-        "         (= :collision (:kind rule)) "
-        "         (nil? (:channel rule)) "
-        "         (= 0 (:radius rule)) "
-        "         (= 3003 (:a-id rule)) "
-        "         (= 3002 (:b-id rule)))))",
+        "         (= 2 (count rules)) "
+        "         (= :collision (:kind rule1)) "
+        "         (nil? (:channel rule1)) "
+        "         (= 0 (:radius rule1)) "
+        "         (= :proximity (:kind rule2)) "
+        "         (= :hearing (:channel rule2)) "
+        "         (= 24 (:radius rule2)) "
+        "         (= 3003 (:a-id rule1)) "
+        "         (= 3002 (:b-id rule1)) "
+        "         (= 3003 (:a-id rule2)) "
+        "         (= 3002 (:b-id rule2)))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }

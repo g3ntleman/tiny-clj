@@ -29,6 +29,7 @@
 #include "viewer_collision.h"
 #include "platform.h"
 #include "atom.h"
+#include "gpio_host.h"
 #include "vector.h"
 #include "MiniFB.h"
 #if defined(__APPLE__)
@@ -46,6 +47,7 @@
 #define SCENE_ERASE_COLOR       0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
 #define VIEWER_ANIMATED_WAIT_TIMEOUT_MS 8u
+#define VIEWER_MAX_SPATIAL_RULES 16u
 
 static uint64_t monotonic_now_ns(void);
 typedef struct ViewerDemoBundle ViewerDemoBundle;
@@ -71,6 +73,7 @@ static bool viewer_should_exit_for_keys(const uint8_t *keys) {
 typedef struct {
     bool use_mfb_waitsync;
     bool w_key_was_down;
+    bool gpio_key_was_down[10];
 } ViewerRuntimeFlags;
 
 typedef struct {
@@ -99,6 +102,45 @@ static void viewer_update_runtime_flags(const uint8_t *keys,
     if (viewer_key_pressed_once(keys, KB_KEY_W, &flags->w_key_was_down)) {
         flags->use_mfb_waitsync = !flags->use_mfb_waitsync;
         *next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
+    }
+}
+
+static bool viewer_drain_one_runloop_task(EvalState *st) {
+    if (!st) {
+        return false;
+    }
+    bool ran = false;
+    TRY {
+        ran = event_loop_run_next(NULL, st);
+    } CATCH(ex) {
+        (void)ex;
+        ran = false;
+    } END_TRY
+    return ran;
+}
+
+static void viewer_simulate_gpio_keys(const uint8_t *keys, ViewerRuntimeFlags *flags, EvalState *st) {
+    if (!flags) {
+        return;
+    }
+
+    static const struct {
+        int key;
+        int32_t pin;
+    } gpio_key_map[] = {
+        {KB_KEY_1, 1}, {KB_KEY_2, 2}, {KB_KEY_3, 3}, {KB_KEY_4, 4}, {KB_KEY_5, 5},
+        {KB_KEY_6, 6}, {KB_KEY_7, 7}, {KB_KEY_8, 8}, {KB_KEY_9, 9}, {KB_KEY_0, 0},
+    };
+
+    for (size_t i = 0; i < (sizeof(gpio_key_map) / sizeof(gpio_key_map[0])); i++) {
+        bool down = keys && keys[gpio_key_map[i].key] != 0;
+        if (down == flags->gpio_key_was_down[i]) {
+            continue;
+        }
+        flags->gpio_key_was_down[i] = down;
+        if (gpio_host_simulate_pin_change(gpio_key_map[i].pin, down ? 1 : 0)) {
+            (void)viewer_drain_one_runloop_task(st);
+        }
     }
 }
 
@@ -163,6 +205,12 @@ struct ViewerCollisionPolicy {
     ID channel;
 };
 
+typedef struct {
+    ViewerCollisionPolicy items[VIEWER_MAX_SPATIAL_RULES];
+    VgCollisionState states[VIEWER_MAX_SPATIAL_RULES];
+    uint32_t count;
+} ViewerSpatialRuleSet;
+
 static void destroy_demo_bundle(ViewerDemoBundle *bundle) {
     if (!bundle) {
         return;
@@ -179,6 +227,31 @@ static void destroy_collision_policy(ViewerCollisionPolicy *policy) {
     RELEASE(policy->kind);
     RELEASE(policy->channel);
     memset(policy, 0, sizeof(*policy));
+}
+
+static void destroy_spatial_rule_set(ViewerSpatialRuleSet *rule_set) {
+    if (!rule_set) {
+        return;
+    }
+    for (uint32_t i = 0; i < rule_set->count && i < VIEWER_MAX_SPATIAL_RULES; i++) {
+        destroy_collision_policy(&rule_set->items[i]);
+    }
+    memset(rule_set, 0, sizeof(*rule_set));
+}
+
+static bool viewer_collision_policy_same_identity(const ViewerCollisionPolicy *a,
+                                                  const ViewerCollisionPolicy *b) {
+    if (!a || !b) {
+        return false;
+    }
+    if (a->rule_id && b->rule_id) {
+        return a->rule_id == b->rule_id;
+    }
+    return a->a_entity_id == b->a_entity_id &&
+           a->b_entity_id == b->b_entity_id &&
+           a->radius_px == b->radius_px &&
+           a->kind == b->kind &&
+           a->channel == b->channel;
 }
 
 static bool viewer_fixnum_at(ID seq_obj, uint32_t idx, int *out_value) {
@@ -426,22 +499,11 @@ static ID viewer_make_spatial_event(const ViewerDemoBundle *bundle,
     return event_rec;
 }
 
-static bool viewer_load_host_viewer_config(EvalState *st,
-                                           ViewerDemoBundle *out_bundle,
-                                           ViewerCollisionPolicy *out_policy) {
-    if (!st || !out_bundle || !out_policy) {
+static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
+                                                 ViewerSpatialRuleSet *io_rule_set) {
+    if (!game_scene || !io_rule_set) {
         return false;
     }
-    memset(out_bundle, 0, sizeof(*out_bundle));
-    memset(out_policy, 0, sizeof(*out_policy));
-    if (!require_namespace_by_name(st, "tiny-gfx.runtime")) {
-        return false;
-    }
-    ID cfg = eval_string("(tiny-gfx.runtime/host-viewer-config)", st);
-    if (!cfg || !is_map(cfg)) {
-        return false;
-    }
-    static CljSymbol *k_bundle = NULL;
     static CljSymbol *k_collision_rules = NULL;
     static CljSymbol *k_id = NULL;
     static CljSymbol *k_kind = NULL;
@@ -449,8 +511,7 @@ static bool viewer_load_host_viewer_config(EvalState *st,
     static CljSymbol *k_radius = NULL;
     static CljSymbol *k_a_id = NULL;
     static CljSymbol *k_b_id = NULL;
-    if (!k_bundle) {
-        k_bundle = intern_symbol_global(":bundle");
+    if (!k_collision_rules) {
         k_collision_rules = intern_symbol_global(":collision-rules");
         k_id = intern_symbol_global(":id");
         k_kind = intern_symbol_global(":kind");
@@ -459,45 +520,90 @@ static bool viewer_load_host_viewer_config(EvalState *st,
         k_a_id = intern_symbol_global(":a-id");
         k_b_id = intern_symbol_global(":b-id");
     }
-    if (!k_bundle || !k_collision_rules || !k_id || !k_kind || !k_channel ||
-        !k_radius || !k_a_id || !k_b_id) {
+    if (!k_collision_rules || !k_id || !k_kind || !k_channel || !k_radius || !k_a_id || !k_b_id) {
+        return false;
+    }
+    ID rules = tiny_gfx_get_field((ID)game_scene, k_collision_rules, NULL);
+    if (!rules || !is_vector(rules)) {
+        destroy_spatial_rule_set(io_rule_set);
+        return false;
+    }
+    CljPersistentVector *rules_vec = as_vector(rules);
+    if (!rules_vec) {
+        destroy_spatial_rule_set(io_rule_set);
+        return false;
+    }
+    ViewerSpatialRuleSet next_rule_set = {0};
+    uint32_t rule_count = vector_count(rules_vec);
+    if (rule_count > VIEWER_MAX_SPATIAL_RULES) {
+        rule_count = VIEWER_MAX_SPATIAL_RULES;
+    }
+    for (uint32_t i = 0; i < rule_count; i++) {
+        ID rule = vector_nth(rules_vec, i);
+        if (!rule || TAG(rule) != CLJ_RECORD) {
+            destroy_spatial_rule_set(&next_rule_set);
+            return false;
+        }
+        ID id_obj = tiny_gfx_get_field(rule, k_id, NULL);
+        ID kind_obj = tiny_gfx_get_field(rule, k_kind, intern_symbol_global(":collision"));
+        ID channel_obj = tiny_gfx_get_field(rule, k_channel, NULL);
+        ID radius_obj = tiny_gfx_get_field(rule, k_radius, fixnum(0));
+        ID a_id_obj = tiny_gfx_get_field(rule, k_a_id, NULL);
+        ID b_id_obj = tiny_gfx_get_field(rule, k_b_id, NULL);
+        if (!is_fixnum(radius_obj) || !is_fixnum(a_id_obj) || !is_fixnum(b_id_obj)) {
+            destroy_spatial_rule_set(&next_rule_set);
+            return false;
+        }
+        ViewerCollisionPolicy *dst = &next_rule_set.items[next_rule_set.count];
+        dst->a_entity_id = AS_FIXNUM(a_id_obj);
+        dst->b_entity_id = AS_FIXNUM(b_id_obj);
+        dst->radius_px = AS_FIXNUM(radius_obj);
+        dst->rule_id = RETAIN(id_obj);
+        dst->kind = RETAIN(kind_obj);
+        dst->channel = RETAIN(channel_obj);
+        for (uint32_t j = 0; j < io_rule_set->count; j++) {
+            if (viewer_collision_policy_same_identity(dst, &io_rule_set->items[j])) {
+                next_rule_set.states[next_rule_set.count] = io_rule_set->states[j];
+                break;
+            }
+        }
+        next_rule_set.count++;
+    }
+    destroy_spatial_rule_set(io_rule_set);
+    *io_rule_set = next_rule_set;
+    return true;
+}
+
+static bool viewer_load_host_viewer_config(EvalState *st,
+                                           ViewerDemoBundle *out_bundle,
+                                           ViewerSpatialRuleSet *out_rule_set) {
+    if (!st || !out_bundle || !out_rule_set) {
+        return false;
+    }
+    memset(out_bundle, 0, sizeof(*out_bundle));
+    memset(out_rule_set, 0, sizeof(*out_rule_set));
+    if (!require_namespace_by_name(st, "tiny-gfx.runtime")) {
+        return false;
+    }
+    ID cfg = eval_string("(tiny-gfx.runtime/host-viewer-config)", st);
+    if (!cfg || !is_map(cfg)) {
+        return false;
+    }
+    static CljSymbol *k_bundle = NULL;
+    if (!k_bundle) {
+        k_bundle = intern_symbol_global(":bundle");
+    }
+    if (!k_bundle) {
         return false;
     }
     ID bundle = map_get_sentinel(cfg, k_bundle, NULL);
     if (!viewer_extract_demo_bundle(bundle, out_bundle)) {
         return false;
     }
-    ID rules = tiny_gfx_get_field((ID)out_bundle->game_scene, k_collision_rules, NULL);
-    if (!rules || !is_vector(rules)) {
+    if (!viewer_load_spatial_rules_from_scene(out_bundle->game_scene, out_rule_set)) {
         destroy_demo_bundle(out_bundle);
         return false;
     }
-    CljPersistentVector *rules_vec = as_vector(rules);
-    if (!rules_vec || vector_count(rules_vec) == 0u) {
-        destroy_demo_bundle(out_bundle);
-        return false;
-    }
-    ID rule = vector_nth(rules_vec, 0);
-    if (!rule || TAG(rule) != CLJ_RECORD) {
-        destroy_demo_bundle(out_bundle);
-        return false;
-    }
-    ID id_obj = tiny_gfx_get_field(rule, k_id, NULL);
-    ID kind_obj = tiny_gfx_get_field(rule, k_kind, intern_symbol_global(":collision"));
-    ID channel_obj = tiny_gfx_get_field(rule, k_channel, NULL);
-    ID radius_obj = tiny_gfx_get_field(rule, k_radius, fixnum(0));
-    ID a_id_obj = tiny_gfx_get_field(rule, k_a_id, NULL);
-    ID b_id_obj = tiny_gfx_get_field(rule, k_b_id, NULL);
-    if (!is_fixnum(radius_obj) || !is_fixnum(a_id_obj) || !is_fixnum(b_id_obj)) {
-        destroy_demo_bundle(out_bundle);
-        return false;
-    }
-    out_policy->a_entity_id = AS_FIXNUM(a_id_obj);
-    out_policy->b_entity_id = AS_FIXNUM(b_id_obj);
-    out_policy->radius_px = AS_FIXNUM(radius_obj);
-    out_policy->rule_id = RETAIN(id_obj);
-    out_policy->kind = RETAIN(kind_obj);
-    out_policy->channel = RETAIN(channel_obj);
     return true;
 }
 
@@ -1020,91 +1126,95 @@ static FrameScene *viewer_current_game_scene_from_clojure(EvalState *st) {
 }
 
 static bool viewer_apply_collision_step(ViewerDemoBundle *bundle,
-                                        VgCollisionState *state,
-                                        const ViewerCollisionPolicy *policy,
+                                        ViewerSpatialRuleSet *rule_set,
                                         EvalState *st,
                                         uint32_t now_ms) {
-    if (!bundle || !state || !policy || !st || !bundle->game_scene) {
+    if (!bundle || !rule_set || !st || !bundle->game_scene) {
         return false;
     }
 
     (void)now_ms;
-    VgRenderedEntityState a_state;
-    VgRenderedEntityState b_state;
-    bool have_a = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
-                                                 (uintptr_t)fixnum(policy->a_entity_id),
-                                                 &a_state);
-    bool have_b = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
-                                                 (uintptr_t)fixnum(policy->b_entity_id),
-                                                 &b_state);
-    if (!have_a || !have_b) {
-        return false;
-    }
-    ID root = bundle->game_scene->root;
-    if (!root || !is_map(root)) {
-        return false;
-    }
-    ID a_record = map_get_sentinel(root, fixnum(policy->a_entity_id), NULL);
-    ID b_record = map_get_sentinel(root, fixnum(policy->b_entity_id), NULL);
-    if (!a_record || !b_record) {
-        return false;
-    }
-
-    VgAabb a_box = {0};
-    VgAabb b_box = {0};
-    if (!viewer_record_world_aabb(a_record, a_state.world_t, &a_box) ||
-        !viewer_record_world_aabb(b_record, b_state.world_t, &b_box)) {
-        return false;
-    }
-    VgAabb sense_box = a_box;
-    sense_box.min_x -= policy->radius_px;
-    sense_box.max_x += policy->radius_px;
-    sense_box.min_y -= policy->radius_px;
-    sense_box.max_y += policy->radius_px;
-    bool inside = vg_collision_detect_aabb_overlap(&sense_box, &b_box);
-    bool was_inside = state->collision_latched;
-    if (inside == was_inside) {
-        return false;
-    }
-    state->collision_latched = inside;
+    bool any_triggered = false;
     static ID phase_enter = NULL;
     static ID phase_exit = NULL;
     if (!phase_enter) {
         phase_enter = intern_symbol_global(":enter");
         phase_exit = intern_symbol_global(":exit");
     }
-    ID phase = inside ? phase_enter : phase_exit;
-    ID event_payload = viewer_make_spatial_event(bundle,
-                                                 policy,
-                                                 phase,
-                                                 b_state.snapshot_generation,
-                                                 &a_box,
-                                                 &b_box);
-    if (!event_payload) {
-        return false;
-    }
-
-    if (!viewer_invoke_collision_callback(st, event_payload)) {
+    for (uint32_t i = 0; i < rule_set->count; i++) {
+        ViewerCollisionPolicy *policy = &rule_set->items[i];
+        VgCollisionState *state = &rule_set->states[i];
+        VgRenderedEntityState a_state;
+        VgRenderedEntityState b_state;
+        bool have_a = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
+                                                     (uintptr_t)fixnum(policy->a_entity_id),
+                                                     &a_state);
+        bool have_b = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
+                                                     (uintptr_t)fixnum(policy->b_entity_id),
+                                                     &b_state);
+        if (!have_a || !have_b) {
+            continue;
+        }
+        ID root = bundle->game_scene->root;
+        if (!root || !is_map(root)) {
+            continue;
+        }
+        ID a_record = map_get_sentinel(root, fixnum(policy->a_entity_id), NULL);
+        ID b_record = map_get_sentinel(root, fixnum(policy->b_entity_id), NULL);
+        if (!a_record || !b_record) {
+            continue;
+        }
+        VgAabb a_box = {0};
+        VgAabb b_box = {0};
+        if (!viewer_record_world_aabb(a_record, a_state.world_t, &a_box) ||
+            !viewer_record_world_aabb(b_record, b_state.world_t, &b_box)) {
+            continue;
+        }
+        VgAabb sense_box = a_box;
+        sense_box.min_x -= policy->radius_px;
+        sense_box.max_x += policy->radius_px;
+        sense_box.min_y -= policy->radius_px;
+        sense_box.max_y += policy->radius_px;
+        bool inside = vg_collision_detect_aabb_overlap(&sense_box, &b_box);
+        bool was_inside = state->collision_latched;
+        if (inside == was_inside) {
+            continue;
+        }
+        state->collision_latched = inside;
+        ID phase = inside ? phase_enter : phase_exit;
+        ID event_payload = viewer_make_spatial_event(bundle,
+                                                     policy,
+                                                     phase,
+                                                     b_state.snapshot_generation,
+                                                     &a_box,
+                                                     &b_box);
+        if (!event_payload) {
+            continue;
+        }
+        bool invoked = viewer_invoke_collision_callback(st, event_payload);
         RELEASE(event_payload);
-        return false;
+        if (!invoked) {
+            continue;
+        }
+        FrameScene *updated_game_scene = viewer_current_game_scene_from_clojure(st);
+        if (!updated_game_scene) {
+            continue;
+        }
+        if (updated_game_scene != bundle->game_scene) {
+            bundle->game_scene = updated_game_scene;
+            (void)viewer_load_spatial_rules_from_scene(updated_game_scene, rule_set);
+            if (pthread_mutex_lock(&g_render_thread.mutex) == 0) {
+                CljAtom *slot_atom = g_scene_slot_atoms[VIEWER_SLOT_GAME];
+                if (slot_atom) {
+                    ASSIGN(slot_atom->value, updated_game_scene);
+                }
+                (void)pthread_mutex_unlock(&g_render_thread.mutex);
+                (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, VIEWER_SLOT_GAME, NULL);
+            }
+        }
+        any_triggered = true;
     }
-    RELEASE(event_payload);
-    FrameScene *updated_game_scene = viewer_current_game_scene_from_clojure(st);
-    if (!updated_game_scene) {
-        return false;
-    }
-    bundle->game_scene = updated_game_scene;
-
-    if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
-        return false;
-    }
-    CljAtom *slot_atom = g_scene_slot_atoms[VIEWER_SLOT_GAME];
-    if (slot_atom) {
-        ASSIGN(slot_atom->value, updated_game_scene);
-    }
-    (void)pthread_mutex_unlock(&g_render_thread.mutex);
-    (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, VIEWER_SLOT_GAME, NULL);
-    return true;
+    return any_triggered;
 }
 
 static bool viewer_wait_for_frame_pacing(struct mfb_window *window,
@@ -1190,8 +1300,7 @@ int main(void) {
     bool render_thread_started = false;
     bool demo_bundle_initialized = false;
     ViewerDemoBundle demo_bundle = {0};
-    ViewerCollisionPolicy collision_policy = {0};
-    VgCollisionState collision_state = {0};
+    ViewerSpatialRuleSet spatial_rules = {0};
     int exit_code = 1;
     viewer_set_realtime_thread_policy();
 
@@ -1260,7 +1369,7 @@ int main(void) {
     ViewerPerfWindow perf_window;
     perf_window_init(&perf_window, mfb_timer_now(timer));
 
-    if (!viewer_load_host_viewer_config(viewer_eval_state, &demo_bundle, &collision_policy)) {
+    if (!viewer_load_host_viewer_config(viewer_eval_state, &demo_bundle, &spatial_rules)) {
         fprintf(stderr, "Failed to load host-viewer config from tiny-gfx.runtime/host-viewer-config\n");
         goto cleanup;
     }
@@ -1302,11 +1411,11 @@ int main(void) {
             break;
         }
         viewer_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
+        viewer_simulate_gpio_keys(keys, &runtime_flags, viewer_eval_state);
 
         ViewerFrameRenderResult frame_result = viewer_poll_render_frame();
         (void)viewer_apply_collision_step(&demo_bundle,
-                                          &collision_state,
-                                          &collision_policy,
+                                          &spatial_rules,
                                           viewer_eval_state,
                                           platform_current_time_ms());
 
@@ -1434,7 +1543,7 @@ cleanup:
     if (demo_bundle_initialized) {
         destroy_demo_bundle(&demo_bundle);
     }
-    destroy_collision_policy(&collision_policy);
+    destroy_spatial_rule_set(&spatial_rules);
     g_gram_pixels = NULL;
     runtime_reset(&g_runtime);
     return exit_code;
