@@ -1133,6 +1133,19 @@ TEST(test_merge_record_field_override_with_nil_value) {
       "    (and (contains? merged :b) (nil? (:b merged)) (= 1 (:a merged)))))");
 }
 
+TEST(test_merge_non_map_argument_throws_illegal_argument_exception) {
+  bool exception_caught = false;
+  TRY {
+    (void)eval_string("(merge {:a 1} 42)", g_test_eval_state);
+    TEST_FAIL_MESSAGE("merge should throw for non-map argument");
+  } CATCH(ex) {
+    exception_caught = true;
+    TEST_ASSERT_NOT_NULL(ex);
+    TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
+  } END_TRY
+  TEST_ASSERT_TRUE(exception_caught);
+}
+
 TEST(test_hash_map_basic_binding) {
   ASSERT_TRUE_RESULT("(= (hash-map :a 1 :b 2) {:a 1 :b 2})");
 }
