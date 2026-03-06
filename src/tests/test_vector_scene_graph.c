@@ -372,13 +372,16 @@ TEST(test_vector_scene_graph_tiny_gfx_runtime_host_viewer_config_shape) {
         "  (require 'tiny-gfx.runtime) "
         "  (let [cfg (tiny-gfx.runtime/host-viewer-config) "
         "        bundle (:bundle cfg) "
-        "        policy (:collision-policy cfg) "
-        "        ids (:collision-entity-ids cfg)] "
+        "        game-scene (nth bundle 2) "
+        "        rules (:collision-rules game-scene) "
+        "        rule (first rules)] "
         "    (and (= 3 (count bundle)) "
-        "         (= 10 (count policy)) "
-        "         (= 2 (count ids)) "
-        "         (= 3002 (first ids)) "
-        "         (= 3003 (second ids)))))",
+        "         (= 1 (count rules)) "
+        "         (= :collision (:kind rule)) "
+        "         (nil? (:channel rule)) "
+        "         (= 0 (:radius rule)) "
+        "         (= 3003 (:a-id rule)) "
+        "         (= 3002 (:b-id rule)))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
@@ -423,11 +426,11 @@ TEST(test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_
         "        game0 (nth bundle 2) "
         "        p0 (get (:root game0) 3002) "
         "        _ (tiny-gfx.collision/set-collision-callback! nil) "
-        "        disabled-ret (tiny-gfx.collision/invoke-collision-callback!) "
+        "        disabled-ret (tiny-gfx.collision/invoke-collision-callback! nil) "
         "        _ (tiny-gfx.host-viewer-demo/configure-collision-toggle-callback!) "
-        "        ret1 (tiny-gfx.collision/invoke-collision-callback!) "
+        "        ret1 (tiny-gfx.collision/invoke-collision-callback! {:kind :collision :phase :enter}) "
         "        p1 (get (:root @tiny-gfx.host-viewer-demo/game-scene-state) 3002) "
-        "        ret2 (tiny-gfx.collision/invoke-collision-callback!) "
+        "        ret2 (tiny-gfx.collision/invoke-collision-callback! {:kind :collision :phase :exit}) "
         "        p2 (get (:root @tiny-gfx.host-viewer-demo/game-scene-state) 3002)] "
         "    (and (nil? disabled-ret) (nil? ret1) (nil? ret2) "
         "         (= 56 (:x1 p0)) (= 118 (:y2 p0)) "
@@ -442,14 +445,14 @@ TEST(test_vector_scene_graph_tiny_gfx_collision_callback_reconfiguration) {
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-gfx.collision) "
-        "  (def collision-test-cb-a (fn collision-test-cb-a [] 11)) "
-        "  (def collision-test-cb-b (fn collision-test-cb-b [] 22)) "
+        "  (def collision-test-cb-a (fn collision-test-cb-a [event] 11)) "
+        "  (def collision-test-cb-b (fn collision-test-cb-b [event] 22)) "
         "  (let [_ (tiny-gfx.collision/set-collision-callback! collision-test-cb-a) "
-        "        v1 (tiny-gfx.collision/invoke-collision-callback!) "
+        "        v1 (tiny-gfx.collision/invoke-collision-callback! {:phase :enter}) "
         "        _ (tiny-gfx.collision/set-collision-callback! collision-test-cb-b) "
-        "        v2 (tiny-gfx.collision/invoke-collision-callback!) "
+        "        v2 (tiny-gfx.collision/invoke-collision-callback! {:phase :exit}) "
         "        _ (tiny-gfx.collision/set-collision-callback! nil) "
-        "        v3 (tiny-gfx.collision/invoke-collision-callback!)] "
+        "        v3 (tiny-gfx.collision/invoke-collision-callback! nil)] "
         "    (and (= 11 v1) (= 22 v2) (nil? v3))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);

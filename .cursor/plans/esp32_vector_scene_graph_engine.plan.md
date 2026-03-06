@@ -22,6 +22,7 @@ Build a reduced SVG-like 2D graphics engine with a strict PoC-first delivery pat
 - Solid fill color for area primitives (SVG-like paint model MVP)
 - Generalized Clojure collision API: rules and callback routing are declared/configured in Clojure, while per-frame collision detection remains in C
 - Collision callbacks are Closure-based and dispatched from C via scheduler/runloop ingress; callback return values are ignored
+- Long-term goal: enable complete games to be authored in Clojure, with C primarily providing deterministic rendering, spatial evaluation, and platform/runtime services
 
 ## Target Architecture: Flat Entity Map + Timeline Animations + C Interpolation
 

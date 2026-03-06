@@ -29,6 +29,10 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
 // Takes ownership via RETAIN on success; returns false when queue is full or input invalid.
 bool event_loop_enqueue_ingress(CljObject *fn_zero_arity);
 
+// Thread-safe ingress queue for cross-thread callback dispatch with one payload argument.
+// Takes ownership via RETAIN on success for both fn and arg; returns false when queue is full or input invalid.
+bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg);
+
 // Returns true when the ingress queue has pending tasks.
 bool event_loop_ingress_has_pending(void);
 

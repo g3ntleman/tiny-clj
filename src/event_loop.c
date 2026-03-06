@@ -23,6 +23,7 @@
 // Task Map keys (go-block tasks only)
 static CljSymbol *KW_FN;
 static CljSymbol *KW_RESULT_CHAN;
+static CljSymbol *KW_ARG;
 
 typedef struct NamedTimerEntry {
     ID key;
@@ -140,8 +141,8 @@ static void event_loop_ingress_drain(void) {
 }
 
 // Go-block task map helpers (tasks WITH result channel)
-static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan) {
-    CljPersistentMap *task_map = make_map(2, STRONG);
+static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan, ID arg) {
+    CljPersistentMap *task_map = make_map(3, STRONG);
     if (!task_map) return NULL;
     
     CljTransientMap *tmap = map_transient(task_map);
@@ -152,6 +153,9 @@ static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan
     if (result_chan) {
         map_conj(tmap, KW_RESULT_CHAN, result_chan);
     }
+    if (arg) {
+        map_conj(tmap, KW_ARG, arg);
+    }
     
     CljPersistentMap *pmap = map_persistent(tmap);
     RETAIN(pmap);
@@ -159,16 +163,18 @@ static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan
     return pmap;
 }
 
-static bool task_from_map(CljPersistentMap *task_map, CljObject **fn, CljTransientMap **result_chan) {
+static bool task_from_map(CljPersistentMap *task_map, CljObject **fn, CljTransientMap **result_chan, ID *arg) {
     if (!task_map) return false;
     
     ID fn_val = map_get_sentinel(task_map, KW_FN, NULL);
     ID result_chan_val = map_get_sentinel(task_map, KW_RESULT_CHAN, NULL);
+    ID arg_val = map_get_sentinel(task_map, KW_ARG, NULL);
     
     if (!fn_val) return false;
     
     if (fn) *fn = fn_val;
     if (result_chan) *result_chan = result_chan_val ? result_chan_val : NULL;
+    if (arg) *arg = arg_val;
     
     return true;
 }
@@ -347,6 +353,7 @@ static CljTransientVector* task_queue_get(void) {
 void event_loop_init(void) {
     KW_FN = intern_symbol_global(":fn");
     KW_RESULT_CHAN = intern_symbol_global(":result-chan");
+    KW_ARG = intern_symbol_global(":arg");
     g_event_loop_ingress_closed = false;
     g_event_loop_ingress_accepted_count = 0u;
     g_event_loop_ingress_rejected_count = 0u;
@@ -398,7 +405,7 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
         return;
     }
     
-    CljPersistentMap *task_map = task_to_map(RETAIN(fn_zero_arity), RETAIN(result_channel));
+    CljPersistentMap *task_map = task_to_map(RETAIN(fn_zero_arity), RETAIN(result_channel), NULL);
     if (!task_map) {
         RELEASE(fn_zero_arity);
         RELEASE(result_channel);
@@ -416,6 +423,21 @@ bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
         return true;
     }
     RELEASE(retained);
+    return false;
+}
+
+bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
+    if (!fn_one_arity) return false;
+    CljPersistentMap *task_map = task_to_map(RETAIN(fn_one_arity), NULL, RETAIN(arg));
+    if (!task_map) {
+        RELEASE(fn_one_arity);
+        RELEASE(arg);
+        return false;
+    }
+    if (event_loop_ingress_push(task_map)) {
+        return true;
+    }
+    RELEASE(task_map);
     return false;
 }
 
@@ -513,15 +535,17 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
 
     CljObject *fn = NULL;
     CljTransientMap *result_chan = NULL;
+    ID arg = NULL;
 
     if (TAG(entry) == CLJ_MAP_PERSISTENT) {
         CljPersistentMap *task_map = entry;
-        if (!task_from_map(task_map, &fn, &result_chan)) {
+        if (!task_from_map(task_map, &fn, &result_chan, &arg)) {
             RELEASE(task_map);
             return false;
         }
         RETAIN(fn);
         RETAIN(result_chan);
+        RETAIN(arg);
         RELEASE(task_map);
     } else {
         fn = entry;
@@ -544,7 +568,12 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     bool ok = true;
     TRY {
         WITH_AUTORELEASE_POOL({
-            result = eval_function_call(fn, NULL, 0, env, st);
+            if (arg) {
+                ID call_args[1] = {arg};
+                result = eval_function_call(fn, call_args, 1, env, st);
+            } else {
+                result = eval_function_call(fn, NULL, 0, env, st);
+            }
         });
     } CATCH(ex) {
         ok = false;
@@ -559,6 +588,7 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     }
 
     if (!IS_IMMEDIATE(result)) RELEASE(result);
+    RELEASE(arg);
     RELEASE(fn);
     uint64_t tick_end_ns = event_loop_monotonic_now_ns();
     if (tick_start_ns != 0u && tick_end_ns > tick_start_ns) {

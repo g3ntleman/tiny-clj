@@ -1,7 +1,7 @@
 R"TINY_GFX_HOST(
 (ns tiny-gfx.host-viewer-demo
   (:require [tiny-gfx.scene :refer [->Transform ->Style ->Group ->Polyline
-                                     ->Tri ->VText ->FrameScene ->Timeline color]]
+                                     ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
             [tiny-gfx.collision :as collision]))
 
 (defn style
@@ -202,11 +202,18 @@ R"TINY_GFX_HOST(
     (assoc game-scene :root root2)))
 
 (defn on-player-collision-toggle!
-  "Host-viewer collision callback: toggles player geometry in `game-scene-state`.
+  "Host-viewer spatial callback: reacts to `:collision` `:enter`/`:exit`
+by changing player geometry.
 Returns nil; host-side callback dispatch ignores return values."
-  []
-  (let [player-small? (swap! player-small-state not)
+  [event]
+  (let [phase (:phase event)
+        kind (:kind event)
+        player-small? (cond
+                        (not= kind :collision) @player-small-state
+                        (= phase :exit) false
+                        :else true)
         game-scene @game-scene-state]
+    (reset! player-small-state player-small?)
     (when game-scene
       (let [updated-game-scene (apply-player-geometry game-scene player-small?)]
         (reset! game-scene-state updated-game-scene)))
@@ -272,7 +279,11 @@ Index layout:
                            3024 star-4
                             3025 star-5
                             3026 star-6}
-            game-scene (frame-scene {:root game-entities :clip-rect [0 40 320 136] :z 2})]
+            game-rule (->SpatialRule :player-vs-rocket :game :collision obstacle-entity-id player-entity-id 0 nil)
+            game-scene (frame-scene {:root game-entities
+                                     :clip-rect [0 40 320 136]
+                                     :z 2
+                                     :collision-rules [game-rule]})]
         (reset! player-small-state false)
         (reset! game-scene-state game-scene)
         (configure-collision-toggle-callback!)

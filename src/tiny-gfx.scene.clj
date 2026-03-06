@@ -22,8 +22,10 @@ R"TINY_GFX_SCENE(
 ;;   root may be flat entity map ({id -> Record}) or legacy nested root node.
 ;;   clip-rect is [x y w h], guard-px expands dirty area for slot rerender diffing.
 ;;   collision-rules are schema-level contract data; runtime collision-engine binding is milestone-tracked.
-;; - CollisionRule [id slot a-id b-id phase-mask enabled cooldown-ms]
-;; - CollisionEvent [rule-id slot a-id b-id phase snapshot-gen ts-ms]
+;; - CollisionRule / CollisionEvent are legacy names kept for compatibility.
+;; - SpatialRule [id slot kind a-id b-id radius channel]
+;; - Aabb [min-x min-y max-x max-y]
+;; - SpatialEvent [rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel]
 
 (defrecord Transform [tx ty sx sy rot])
 (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color])
@@ -38,6 +40,9 @@ R"TINY_GFX_SCENE(
 (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules])
 (defrecord CollisionRule [id slot a-id b-id phase-mask enabled cooldown-ms])
 (defrecord CollisionEvent [rule-id slot a-id b-id phase snapshot-gen ts-ms])
+(defrecord SpatialRule [id slot kind a-id b-id radius channel])
+(defrecord Aabb [min-x min-y max-x max-y])
+(defrecord SpatialEvent [rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel])
 
 ;; Color helpers
 ;;
@@ -118,6 +123,7 @@ Returns nil for invalid input."
 ;; Collision contract helpers (Step 1: contract freeze, no runtime wiring yet).
 (def default-collision-slot :game)
 (def default-collision-phase-mask [:enter :exit])
+(def default-spatial-kind :collision)
 
 (defn- phase-present?
   [xs v]
@@ -138,9 +144,8 @@ Accepts vector/list/keyword/nil and returns a validated vector."
               (list? phase-mask) (vec phase-mask)
               (keyword? phase-mask) [phase-mask]
               :else [])
-        normalized (let [out [] 
+        normalized (let [out []
                          out (if (phase-present? raw :enter) (conj out :enter) out)
-                         out (if (phase-present? raw :stay) (conj out :stay) out)
                          out (if (phase-present? raw :exit) (conj out :exit) out)]
                      out)]
     (if (empty? normalized)
@@ -158,6 +163,18 @@ Accepts vector/list/keyword/nil and returns a validated vector."
    :enabled (if (nil? (get rule :enabled)) true (not= (get rule :enabled) false))
    :cooldown-ms (let [v (get rule :cooldown-ms)]
                   (if (nil? v) 0 v))})
+
+(defn normalize-spatial-rule
+  "Applies spatial-rule defaults for proximity/collision event wiring."
+  [rule]
+  {:id (get rule :id)
+   :slot (or (get rule :slot) default-collision-slot)
+   :kind (or (get rule :kind) default-spatial-kind)
+   :a-id (get rule :a-id)
+   :b-id (get rule :b-id)
+   :radius (let [v (get rule :radius)]
+             (if (nil? v) 0 v))
+   :channel (get rule :channel)})
 
 (defn update-nodes
   "Batched scene-tree update. Takes a root node and a map of

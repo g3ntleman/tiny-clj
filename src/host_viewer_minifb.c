@@ -56,13 +56,6 @@ static inline uint32_t viewer_record_type_hash(ID obj) {
     return r->descriptor ? clj_hash(r->descriptor->type_symbol) : 0u;
 }
 
-static int32_t viewer_fixed_raw_to_int_trunc_zero(int32_t raw) {
-    if (raw >= 0) {
-        return raw >> CLJ_FIXED_FRAC_BITS;
-    }
-    return -(((-raw) >> CLJ_FIXED_FRAC_BITS));
-}
-
 /* Handles immediate viewer exit shortcuts. */
 static bool viewer_should_exit_for_keys(const uint8_t *keys) {
     if (!keys) {
@@ -162,18 +155,12 @@ struct ViewerDemoBundle {
 };
 
 struct ViewerCollisionPolicy {
-    int player_entity_id;
-    int obstacle_entity_id;
-    int player_min_x;
-    int player_max_x;
-    int player_min_y_base;
-    int player_max_y_base;
-    int obstacle_min_x_base;
-    int obstacle_max_x_base;
-    int obstacle_min_y;
-    int obstacle_max_y;
-    int obstacle_anchor_x;
-    uint32_t cooldown_ms;
+    int a_entity_id;
+    int b_entity_id;
+    int radius_px;
+    ID rule_id;
+    ID kind;
+    ID channel;
 };
 
 static void destroy_demo_bundle(ViewerDemoBundle *bundle) {
@@ -182,6 +169,127 @@ static void destroy_demo_bundle(ViewerDemoBundle *bundle) {
     }
     RELEASE(bundle->bundle_root);
     memset(bundle, 0, sizeof(*bundle));
+}
+
+static void destroy_collision_policy(ViewerCollisionPolicy *policy) {
+    if (!policy) {
+        return;
+    }
+    RELEASE(policy->rule_id);
+    RELEASE(policy->kind);
+    RELEASE(policy->channel);
+    memset(policy, 0, sizeof(*policy));
+}
+
+static bool viewer_fixnum_at(ID seq_obj, uint32_t idx, int *out_value) {
+    if (!seq_obj || !out_value || !is_vector(seq_obj)) {
+        return false;
+    }
+    CljPersistentVector *vec = as_vector(seq_obj);
+    if (!vec || vector_count(vec) <= idx) {
+        return false;
+    }
+    ID v = vector_nth(vec, idx);
+    if (!is_fixnum(v)) {
+        return false;
+    }
+    *out_value = AS_FIXNUM(v);
+    return true;
+}
+
+static void viewer_aabb_include_point(VgAabb *box, int x, int y, bool *initialized) {
+    if (!box || !initialized) {
+        return;
+    }
+    if (!*initialized) {
+        box->min_x = x;
+        box->max_x = x;
+        box->min_y = y;
+        box->max_y = y;
+        *initialized = true;
+        return;
+    }
+    if (x < box->min_x) box->min_x = x;
+    if (x > box->max_x) box->max_x = x;
+    if (y < box->min_y) box->min_y = y;
+    if (y > box->max_y) box->max_y = y;
+}
+
+static bool viewer_record_world_aabb(ID record_obj, VgTransformFixed world_t, VgAabb *out_box) {
+    if (!record_obj || !out_box || TAG(record_obj) != CLJ_RECORD) {
+        return false;
+    }
+    const VgRecordSchema *schema = tiny_gfx_schema();
+    if (!schema) {
+        return false;
+    }
+    uint32_t h = viewer_record_type_hash(record_obj);
+    bool initialized = false;
+    VgAabb box = {0};
+    if (h == schema->h_tri) {
+        Tri *tri = (Tri *)record_obj;
+        int xs[3] = {AS_FIXNUM(tri->x1), AS_FIXNUM(tri->x2), AS_FIXNUM(tri->x3)};
+        int ys[3] = {AS_FIXNUM(tri->y1), AS_FIXNUM(tri->y2), AS_FIXNUM(tri->y3)};
+        for (int i = 0; i < 3; i++) {
+            int wx = 0;
+            int wy = 0;
+            vg_transform_fixed_apply_px(world_t, (int16_t)xs[i], (int16_t)ys[i], &wx, &wy);
+            viewer_aabb_include_point(&box, wx, wy, &initialized);
+        }
+    } else if (h == schema->h_line) {
+        Line *line = (Line *)record_obj;
+        int xs[2] = {AS_FIXNUM(line->x1), AS_FIXNUM(line->x2)};
+        int ys[2] = {AS_FIXNUM(line->y1), AS_FIXNUM(line->y2)};
+        for (int i = 0; i < 2; i++) {
+            int wx = 0;
+            int wy = 0;
+            vg_transform_fixed_apply_px(world_t, (int16_t)xs[i], (int16_t)ys[i], &wx, &wy);
+            viewer_aabb_include_point(&box, wx, wy, &initialized);
+        }
+    } else if (h == schema->h_rect) {
+        Rect *rect = (Rect *)record_obj;
+        int x = AS_FIXNUM(rect->x);
+        int y = AS_FIXNUM(rect->y);
+        int w = AS_FIXNUM(rect->w);
+        int hgt = AS_FIXNUM(rect->h);
+        int xs[4] = {x, x + w, x + w, x};
+        int ys[4] = {y, y, y + hgt, y + hgt};
+        for (int i = 0; i < 4; i++) {
+            int wx = 0;
+            int wy = 0;
+            vg_transform_fixed_apply_px(world_t, (int16_t)xs[i], (int16_t)ys[i], &wx, &wy);
+            viewer_aabb_include_point(&box, wx, wy, &initialized);
+        }
+    } else if (h == schema->h_polyline) {
+        Polyline *poly = (Polyline *)record_obj;
+        if (!poly->pts || !is_vector(poly->pts)) {
+            return false;
+        }
+        CljPersistentVector *pts = as_vector(poly->pts);
+        if (!pts) {
+            return false;
+        }
+        unsigned int point_count = vector_count(pts);
+        for (unsigned int i = 0; i < point_count; i++) {
+            ID pt = vector_nth(pts, i);
+            int px = 0;
+            int py = 0;
+            if (!viewer_fixnum_at(pt, 0u, &px) || !viewer_fixnum_at(pt, 1u, &py)) {
+                return false;
+            }
+            int wx = 0;
+            int wy = 0;
+            vg_transform_fixed_apply_px(world_t, (int16_t)px, (int16_t)py, &wx, &wy);
+            viewer_aabb_include_point(&box, wx, wy, &initialized);
+        }
+    } else {
+        return false;
+    }
+    if (!initialized) {
+        return false;
+    }
+    *out_box = box;
+    return true;
 }
 
 static bool viewer_extract_demo_bundle(ID bundle, ViewerDemoBundle *out_bundle) {
@@ -200,16 +308,122 @@ static bool viewer_extract_demo_bundle(ID bundle, ViewerDemoBundle *out_bundle) 
     return out_bundle->deco_scene && out_bundle->score_scene && out_bundle->game_scene;
 }
 
-static bool viewer_policy_int_at(CljPersistentVector *vec, uint32_t idx, int *out_value) {
-    if (!vec || !out_value) {
-        return false;
+static ID viewer_make_aabb_record(const VgAabb *box) {
+    if (!box) {
+        return NULL;
     }
-    ID v = vector_nth(vec, idx);
-    if (!v || !is_fixnum(v)) {
-        return false;
+    static ID t_aabb = NULL;
+    static ID k_min_x = NULL;
+    static ID k_min_y = NULL;
+    static ID k_max_x = NULL;
+    static ID k_max_y = NULL;
+    if (!t_aabb) {
+        t_aabb = intern_symbol_global("Aabb");
+        k_min_x = intern_symbol_global(":min-x");
+        k_min_y = intern_symbol_global(":min-y");
+        k_max_x = intern_symbol_global(":max-x");
+        k_max_y = intern_symbol_global(":max-y");
     }
-    *out_value = AS_FIXNUM(v);
-    return true;
+    if (!t_aabb || !k_min_x || !k_min_y || !k_max_x || !k_max_y) {
+        return NULL;
+    }
+    CljPersistentMap *m = make_map(4, STRONG);
+    if (!m) {
+        return NULL;
+    }
+    map_assoc_inplace(&m, k_min_x, fixnum(box->min_x));
+    map_assoc_inplace(&m, k_min_y, fixnum(box->min_y));
+    map_assoc_inplace(&m, k_max_x, fixnum(box->max_x));
+    map_assoc_inplace(&m, k_max_y, fixnum(box->max_y));
+    ID rec = (ID)record_create_from_map(t_aabb, (ID)m);
+    RELEASE(m);
+    return rec;
+}
+
+static ID viewer_make_spatial_event(const ViewerDemoBundle *bundle,
+                                    const ViewerCollisionPolicy *policy,
+                                    ID phase,
+                                    uint32_t snapshot_gen,
+                                    const VgAabb *a_box,
+                                    const VgAabb *b_box) {
+    if (!bundle || !policy || !bundle->game_scene || !phase || !a_box || !b_box) {
+        return NULL;
+    }
+    static ID t_spatial_event = NULL;
+    static ID k_rule_id = NULL;
+    static ID k_slot = NULL;
+    static ID k_kind = NULL;
+    static ID k_phase = NULL;
+    static ID k_snapshot_gen = NULL;
+    static ID k_a = NULL;
+    static ID k_b = NULL;
+    static ID k_a_aabb = NULL;
+    static ID k_b_aabb = NULL;
+    static ID k_radius = NULL;
+    static ID k_channel = NULL;
+    static ID slot_game = NULL;
+    if (!t_spatial_event) {
+        t_spatial_event = intern_symbol_global("SpatialEvent");
+        k_rule_id = intern_symbol_global(":rule-id");
+        k_slot = intern_symbol_global(":slot");
+        k_kind = intern_symbol_global(":kind");
+        k_phase = intern_symbol_global(":phase");
+        k_snapshot_gen = intern_symbol_global(":snapshot-gen");
+        k_a = intern_symbol_global(":a");
+        k_b = intern_symbol_global(":b");
+        k_a_aabb = intern_symbol_global(":a-aabb");
+        k_b_aabb = intern_symbol_global(":b-aabb");
+        k_radius = intern_symbol_global(":radius");
+        k_channel = intern_symbol_global(":channel");
+        slot_game = intern_symbol_global(":game");
+    }
+    if (!t_spatial_event || !k_rule_id || !k_slot || !k_kind || !k_phase ||
+        !k_snapshot_gen || !k_a || !k_b || !k_a_aabb || !k_b_aabb ||
+        !k_radius || !k_channel || !slot_game) {
+        return NULL;
+    }
+    ID root = bundle->game_scene->root;
+    if (!root || !is_map(root)) {
+        return NULL;
+    }
+    ID a_rec = map_get_sentinel(root, fixnum(policy->a_entity_id), NULL);
+    ID b_rec = map_get_sentinel(root, fixnum(policy->b_entity_id), NULL);
+    if (!a_rec || !b_rec) {
+        return NULL;
+    }
+    ID a_aabb_rec = viewer_make_aabb_record(a_box);
+    ID b_aabb_rec = viewer_make_aabb_record(b_box);
+    if (!a_aabb_rec || !b_aabb_rec) {
+        RELEASE(a_aabb_rec);
+        RELEASE(b_aabb_rec);
+        return NULL;
+    }
+    CljPersistentMap *m = make_map(11, STRONG);
+    if (!m) {
+        RELEASE(a_aabb_rec);
+        RELEASE(b_aabb_rec);
+        return NULL;
+    }
+    if (policy->rule_id) {
+        map_assoc_inplace(&m, k_rule_id, policy->rule_id);
+    }
+    map_assoc_inplace(&m, k_slot, slot_game);
+    map_assoc_inplace(&m, k_kind, policy->kind);
+    map_assoc_inplace(&m, k_phase, phase);
+    map_assoc_inplace(&m, k_snapshot_gen, fixnum((int32_t)snapshot_gen));
+    map_assoc_inplace(&m, k_a, a_rec);
+    map_assoc_inplace(&m, k_b, b_rec);
+    map_assoc_inplace(&m, k_a_aabb, a_aabb_rec);
+    map_assoc_inplace(&m, k_b_aabb, b_aabb_rec);
+    map_assoc_inplace(&m, k_radius, fixnum(policy->radius_px));
+    if (policy->channel) {
+        map_assoc_inplace(&m, k_channel, policy->channel);
+    }
+    ID event_rec = (ID)record_create_from_map(t_spatial_event, (ID)m);
+    RELEASE(m);
+    RELEASE(a_aabb_rec);
+    RELEASE(b_aabb_rec);
+    return event_rec;
 }
 
 static bool viewer_load_host_viewer_config(EvalState *st,
@@ -228,61 +442,62 @@ static bool viewer_load_host_viewer_config(EvalState *st,
         return false;
     }
     static CljSymbol *k_bundle = NULL;
-    static CljSymbol *k_collision_policy = NULL;
-    static CljSymbol *k_collision_entity_ids = NULL;
+    static CljSymbol *k_collision_rules = NULL;
+    static CljSymbol *k_id = NULL;
+    static CljSymbol *k_kind = NULL;
+    static CljSymbol *k_channel = NULL;
+    static CljSymbol *k_radius = NULL;
+    static CljSymbol *k_a_id = NULL;
+    static CljSymbol *k_b_id = NULL;
     if (!k_bundle) {
         k_bundle = intern_symbol_global(":bundle");
-        k_collision_policy = intern_symbol_global(":collision-policy");
-        k_collision_entity_ids = intern_symbol_global(":collision-entity-ids");
+        k_collision_rules = intern_symbol_global(":collision-rules");
+        k_id = intern_symbol_global(":id");
+        k_kind = intern_symbol_global(":kind");
+        k_channel = intern_symbol_global(":channel");
+        k_radius = intern_symbol_global(":radius");
+        k_a_id = intern_symbol_global(":a-id");
+        k_b_id = intern_symbol_global(":b-id");
     }
-    if (!k_bundle || !k_collision_policy || !k_collision_entity_ids) {
+    if (!k_bundle || !k_collision_rules || !k_id || !k_kind || !k_channel ||
+        !k_radius || !k_a_id || !k_b_id) {
         return false;
     }
     ID bundle = map_get_sentinel(cfg, k_bundle, NULL);
-    ID policy = map_get_sentinel(cfg, k_collision_policy, NULL);
-    ID ids = map_get_sentinel(cfg, k_collision_entity_ids, NULL);
     if (!viewer_extract_demo_bundle(bundle, out_bundle)) {
         return false;
     }
-    if (!policy || !is_vector(policy) || !ids || !is_vector(ids)) {
+    ID rules = tiny_gfx_get_field((ID)out_bundle->game_scene, k_collision_rules, NULL);
+    if (!rules || !is_vector(rules)) {
         destroy_demo_bundle(out_bundle);
         return false;
     }
-    CljPersistentVector *policy_vec = as_vector(policy);
-    CljPersistentVector *ids_vec = as_vector(ids);
-    if (!policy_vec || !ids_vec) {
+    CljPersistentVector *rules_vec = as_vector(rules);
+    if (!rules_vec || vector_count(rules_vec) == 0u) {
         destroy_demo_bundle(out_bundle);
         return false;
     }
-    int vals[9] = {0};
-    for (uint32_t i = 0; i < 9u; i++) {
-        if (!viewer_policy_int_at(policy_vec, i, &vals[i])) {
-            destroy_demo_bundle(out_bundle);
-            return false;
-        }
-    }
-    int cooldown_val = 0;
-    int player_id = 0;
-    int obstacle_id = 0;
-    if (!viewer_policy_int_at(policy_vec, 9u, &cooldown_val) ||
-        cooldown_val < 0 ||
-        !viewer_policy_int_at(ids_vec, 0u, &player_id) ||
-        !viewer_policy_int_at(ids_vec, 1u, &obstacle_id)) {
+    ID rule = vector_nth(rules_vec, 0);
+    if (!rule || TAG(rule) != CLJ_RECORD) {
         destroy_demo_bundle(out_bundle);
         return false;
     }
-    out_policy->player_entity_id = player_id;
-    out_policy->obstacle_entity_id = obstacle_id;
-    out_policy->player_min_x = vals[0];
-    out_policy->player_max_x = vals[1];
-    out_policy->player_min_y_base = vals[2];
-    out_policy->player_max_y_base = vals[3];
-    out_policy->obstacle_min_x_base = vals[4];
-    out_policy->obstacle_max_x_base = vals[5];
-    out_policy->obstacle_min_y = vals[6];
-    out_policy->obstacle_max_y = vals[7];
-    out_policy->obstacle_anchor_x = vals[8];
-    out_policy->cooldown_ms = (uint32_t)cooldown_val;
+    ID id_obj = tiny_gfx_get_field(rule, k_id, NULL);
+    ID kind_obj = tiny_gfx_get_field(rule, k_kind, intern_symbol_global(":collision"));
+    ID channel_obj = tiny_gfx_get_field(rule, k_channel, NULL);
+    ID radius_obj = tiny_gfx_get_field(rule, k_radius, fixnum(0));
+    ID a_id_obj = tiny_gfx_get_field(rule, k_a_id, NULL);
+    ID b_id_obj = tiny_gfx_get_field(rule, k_b_id, NULL);
+    if (!is_fixnum(radius_obj) || !is_fixnum(a_id_obj) || !is_fixnum(b_id_obj)) {
+        destroy_demo_bundle(out_bundle);
+        return false;
+    }
+    out_policy->a_entity_id = AS_FIXNUM(a_id_obj);
+    out_policy->b_entity_id = AS_FIXNUM(b_id_obj);
+    out_policy->radius_px = AS_FIXNUM(radius_obj);
+    out_policy->rule_id = RETAIN(id_obj);
+    out_policy->kind = RETAIN(kind_obj);
+    out_policy->channel = RETAIN(channel_obj);
     return true;
 }
 
@@ -745,8 +960,8 @@ static ID viewer_collision_dispatch_fn(EvalState *st) {
     return callback_dispatch_fn;
 }
 
-static bool viewer_invoke_collision_callback(EvalState *st) {
-    if (!st) {
+static bool viewer_invoke_collision_callback(EvalState *st, ID event_payload) {
+    if (!st || !event_payload) {
         return false;
     }
     ID callback_dispatch_fn = NULL;
@@ -761,7 +976,7 @@ static bool viewer_invoke_collision_callback(EvalState *st) {
              * on the Clojure runloop path. Callback return values are intentionally
              * ignored by the C host bridge.
              */
-            if (!event_loop_enqueue_ingress(callback_dispatch_fn)) {
+            if (!event_loop_enqueue_ingress_call(callback_dispatch_fn, event_payload)) {
                 success = false;
             } else {
                 success = event_loop_run_next(NULL, st);
@@ -813,46 +1028,67 @@ static bool viewer_apply_collision_step(ViewerDemoBundle *bundle,
         return false;
     }
 
-    VgRenderedEntityState player_state;
-    VgRenderedEntityState obstacle_state;
-    bool have_player = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
-                                                      (uintptr_t)fixnum(policy->player_entity_id),
-                                                      &player_state);
-    bool have_obstacle = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
-                                                        (uintptr_t)fixnum(policy->obstacle_entity_id),
-                                                        &obstacle_state);
-    if (!have_player || !have_obstacle) {
+    (void)now_ms;
+    VgRenderedEntityState a_state;
+    VgRenderedEntityState b_state;
+    bool have_a = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
+                                                 (uintptr_t)fixnum(policy->a_entity_id),
+                                                 &a_state);
+    bool have_b = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
+                                                 (uintptr_t)fixnum(policy->b_entity_id),
+                                                 &b_state);
+    if (!have_a || !have_b) {
+        return false;
+    }
+    ID root = bundle->game_scene->root;
+    if (!root || !is_map(root)) {
+        return false;
+    }
+    ID a_record = map_get_sentinel(root, fixnum(policy->a_entity_id), NULL);
+    ID b_record = map_get_sentinel(root, fixnum(policy->b_entity_id), NULL);
+    if (!a_record || !b_record) {
         return false;
     }
 
-    int player_tx = (int)viewer_fixed_raw_to_int_trunc_zero(player_state.world_t.m02);
-    int player_ty = (int)viewer_fixed_raw_to_int_trunc_zero(player_state.world_t.m12);
-    int obstacle_x = (int)viewer_fixed_raw_to_int_trunc_zero(obstacle_state.world_t.m02) -
-                     policy->obstacle_anchor_x;
-    VgAabb player_box = {
-        .min_x = policy->player_min_x + player_tx,
-        .max_x = policy->player_max_x + player_tx,
-        .min_y = policy->player_min_y_base + player_ty,
-        .max_y = policy->player_max_y_base + player_ty
-    };
-    VgAabb obstacle_box = {
-        .min_x = policy->obstacle_min_x_base + obstacle_x,
-        .max_x = policy->obstacle_max_x_base + obstacle_x,
-        .min_y = policy->obstacle_min_y,
-        .max_y = policy->obstacle_max_y
-    };
-    bool colliding = vg_collision_detect_aabb_overlap(&player_box, &obstacle_box);
-    bool toggled = vg_collision_step_latched_cooldown(state,
-                                                       now_ms,
-                                                       policy->cooldown_ms,
-                                                       colliding);
-    if (!toggled) {
+    VgAabb a_box = {0};
+    VgAabb b_box = {0};
+    if (!viewer_record_world_aabb(a_record, a_state.world_t, &a_box) ||
+        !viewer_record_world_aabb(b_record, b_state.world_t, &b_box)) {
+        return false;
+    }
+    VgAabb sense_box = a_box;
+    sense_box.min_x -= policy->radius_px;
+    sense_box.max_x += policy->radius_px;
+    sense_box.min_y -= policy->radius_px;
+    sense_box.max_y += policy->radius_px;
+    bool inside = vg_collision_detect_aabb_overlap(&sense_box, &b_box);
+    bool was_inside = state->collision_latched;
+    if (inside == was_inside) {
+        return false;
+    }
+    state->collision_latched = inside;
+    static ID phase_enter = NULL;
+    static ID phase_exit = NULL;
+    if (!phase_enter) {
+        phase_enter = intern_symbol_global(":enter");
+        phase_exit = intern_symbol_global(":exit");
+    }
+    ID phase = inside ? phase_enter : phase_exit;
+    ID event_payload = viewer_make_spatial_event(bundle,
+                                                 policy,
+                                                 phase,
+                                                 b_state.snapshot_generation,
+                                                 &a_box,
+                                                 &b_box);
+    if (!event_payload) {
         return false;
     }
 
-    if (!viewer_invoke_collision_callback(st)) {
+    if (!viewer_invoke_collision_callback(st, event_payload)) {
+        RELEASE(event_payload);
         return false;
     }
+    RELEASE(event_payload);
     FrameScene *updated_game_scene = viewer_current_game_scene_from_clojure(st);
     if (!updated_game_scene) {
         return false;
@@ -1198,6 +1434,7 @@ cleanup:
     if (demo_bundle_initialized) {
         destroy_demo_bundle(&demo_bundle);
     }
+    destroy_collision_policy(&collision_policy);
     g_gram_pixels = NULL;
     runtime_reset(&g_runtime);
     return exit_code;
