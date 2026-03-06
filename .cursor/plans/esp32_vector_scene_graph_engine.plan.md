@@ -1290,6 +1290,17 @@ Step 1 checklist (next concrete tasks):
 - Add contract tests that callback return values are ignored by C (one-way dispatch contract).
 - Keep renderer/scheduler runtime behavior unchanged while Gate 1 tests are established.
 
+Implementation notes (2026-03-06):
+
+- Added callback configuration contract docs in `tiny-gfx.collision` (set/clear/invoke semantics, closure dispatch path, no-return C contract).
+- Added schema-focused collision contract tests in `test_gfx_collision_contract`:
+  - defaults + phase-mask normalization
+  - disabled-rule (`:enabled false`) behavior
+  - callback set/clear/invoke shape + invalid non-fn rejection
+  - demo callback mutates Clojure scene state explicitly
+- Host-viewer callback bridge now dispatches via event-loop API (`event_loop_enqueue`/`event_loop_run_next`) and ignores callback return values in C.
+- Remaining Gate-1 gap: add dedicated bridge-level regression that asserts one-way no-return behavior without relying on demo callback shape.
+
 Tasks:
 
 - Define collision-spec records in tiny-clj with stable `:id` references:

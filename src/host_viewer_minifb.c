@@ -46,12 +46,10 @@
 #define SCENE_ERASE_COLOR       0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
 #define VIEWER_ANIMATED_WAIT_TIMEOUT_MS 8u
-#define VIEWER_PLAYER_ENTITY_ID 3002
-#define VIEWER_OBSTACLE_ENTITY_ID 3003
-#define VIEWER_COLLISION_COOLDOWN_MS 300u
 
 static uint64_t monotonic_now_ns(void);
 typedef struct ViewerDemoBundle ViewerDemoBundle;
+typedef struct ViewerCollisionPolicy ViewerCollisionPolicy;
 
 static inline uint32_t viewer_record_type_hash(ID obj) {
     CljPersistentRecord *r = (CljPersistentRecord *)obj;
@@ -168,16 +166,31 @@ struct ViewerDemoBundle {
     FrameScene *game_scene;
 };
 
-static bool init_demo_bundle(EvalState *st, ViewerDemoBundle *out_bundle) {
-    if (!st || !out_bundle) {
-        return false;
+struct ViewerCollisionPolicy {
+    int player_entity_id;
+    int obstacle_entity_id;
+    int player_min_x;
+    int player_max_x;
+    int player_min_y_base;
+    int player_max_y_base;
+    int obstacle_min_x_base;
+    int obstacle_max_x_base;
+    int obstacle_min_y;
+    int obstacle_max_y;
+    int obstacle_anchor_x;
+    uint32_t cooldown_ms;
+};
+
+static void destroy_demo_bundle(ViewerDemoBundle *bundle) {
+    if (!bundle) {
+        return;
     }
-    memset(out_bundle, 0, sizeof(*out_bundle));
-    if (!require_namespace_by_name(st, "tiny-gfx.host-viewer-demo")) {
-        return false;
-    }
-    ID bundle = eval_string("(tiny-gfx.host-viewer-demo/create-demo-bundle)", st);
-    if (!bundle || !is_vector(bundle)) {
+    RELEASE(bundle->bundle_root);
+    memset(bundle, 0, sizeof(*bundle));
+}
+
+static bool viewer_extract_demo_bundle(ID bundle, ViewerDemoBundle *out_bundle) {
+    if (!bundle || !out_bundle || !is_vector(bundle)) {
         return false;
     }
     CljPersistentVector *vec = as_vector(bundle);
@@ -192,12 +205,90 @@ static bool init_demo_bundle(EvalState *st, ViewerDemoBundle *out_bundle) {
     return out_bundle->deco_scene && out_bundle->score_scene && out_bundle->game_scene;
 }
 
-static void destroy_demo_bundle(ViewerDemoBundle *bundle) {
-    if (!bundle) {
-        return;
+static bool viewer_policy_int_at(CljPersistentVector *vec, uint32_t idx, int *out_value) {
+    if (!vec || !out_value) {
+        return false;
     }
-    RELEASE(bundle->bundle_root);
-    memset(bundle, 0, sizeof(*bundle));
+    ID v = vector_nth(vec, idx);
+    if (!v || !is_fixnum(v)) {
+        return false;
+    }
+    *out_value = AS_FIXNUM(v);
+    return true;
+}
+
+static bool viewer_load_host_viewer_config(EvalState *st,
+                                           ViewerDemoBundle *out_bundle,
+                                           ViewerCollisionPolicy *out_policy) {
+    if (!st || !out_bundle || !out_policy) {
+        return false;
+    }
+    memset(out_bundle, 0, sizeof(*out_bundle));
+    memset(out_policy, 0, sizeof(*out_policy));
+    if (!require_namespace_by_name(st, "tiny-gfx.runtime")) {
+        return false;
+    }
+    ID cfg = eval_string("(tiny-gfx.runtime/host-viewer-config)", st);
+    if (!cfg || !is_map(cfg)) {
+        return false;
+    }
+    static CljSymbol *k_bundle = NULL;
+    static CljSymbol *k_collision_policy = NULL;
+    static CljSymbol *k_collision_entity_ids = NULL;
+    if (!k_bundle) {
+        k_bundle = intern_symbol_global(":bundle");
+        k_collision_policy = intern_symbol_global(":collision-policy");
+        k_collision_entity_ids = intern_symbol_global(":collision-entity-ids");
+    }
+    if (!k_bundle || !k_collision_policy || !k_collision_entity_ids) {
+        return false;
+    }
+    ID bundle = map_get_sentinel(cfg, k_bundle, NULL);
+    ID policy = map_get_sentinel(cfg, k_collision_policy, NULL);
+    ID ids = map_get_sentinel(cfg, k_collision_entity_ids, NULL);
+    if (!viewer_extract_demo_bundle(bundle, out_bundle)) {
+        return false;
+    }
+    if (!policy || !is_vector(policy) || !ids || !is_vector(ids)) {
+        destroy_demo_bundle(out_bundle);
+        return false;
+    }
+    CljPersistentVector *policy_vec = as_vector(policy);
+    CljPersistentVector *ids_vec = as_vector(ids);
+    if (!policy_vec || !ids_vec) {
+        destroy_demo_bundle(out_bundle);
+        return false;
+    }
+    int vals[9] = {0};
+    for (uint32_t i = 0; i < 9u; i++) {
+        if (!viewer_policy_int_at(policy_vec, i, &vals[i])) {
+            destroy_demo_bundle(out_bundle);
+            return false;
+        }
+    }
+    int cooldown_val = 0;
+    int player_id = 0;
+    int obstacle_id = 0;
+    if (!viewer_policy_int_at(policy_vec, 9u, &cooldown_val) ||
+        cooldown_val < 0 ||
+        !viewer_policy_int_at(ids_vec, 0u, &player_id) ||
+        !viewer_policy_int_at(ids_vec, 1u, &obstacle_id)) {
+        destroy_demo_bundle(out_bundle);
+        return false;
+    }
+    out_policy->player_entity_id = player_id;
+    out_policy->obstacle_entity_id = obstacle_id;
+    out_policy->player_min_x = vals[0];
+    out_policy->player_max_x = vals[1];
+    out_policy->player_min_y_base = vals[2];
+    out_policy->player_max_y_base = vals[3];
+    out_policy->obstacle_min_x_base = vals[4];
+    out_policy->obstacle_max_x_base = vals[5];
+    out_policy->obstacle_min_y = vals[6];
+    out_policy->obstacle_max_y = vals[7];
+    out_policy->obstacle_anchor_x = vals[8];
+    out_policy->cooldown_ms = (uint32_t)cooldown_val;
+    return true;
 }
 
 static void timing_accumulator_reset(TimingAccumulator *acc) {
@@ -623,7 +714,7 @@ static void publish_frame_scene_slot_record(size_t slot_index, ID scene, uint32_
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, (uint8_t)slot_index, out_generation);
 }
 
-static ID viewer_collision_invoke_callback(EvalState *st) {
+static ID viewer_collision_dispatch_fn(EvalState *st) {
     if (!st) {
         return NULL;
     }
@@ -646,23 +737,27 @@ static ID viewer_collision_invoke_callback(EvalState *st) {
     if (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE) {
         return NULL;
     }
-    return eval_function_call(callback_dispatch_fn, NULL, 0u, NULL, st);
+    return callback_dispatch_fn;
 }
 
-static bool viewer_invoke_collision_callback(EvalState *st, FrameScene **out_updated_scene) {
-    if (!st || !out_updated_scene) {
+static bool viewer_invoke_collision_callback(EvalState *st) {
+    if (!st) {
         return false;
     }
-    ID updated_scene = NULL;
+    ID callback_dispatch_fn = NULL;
     bool success = false;
     TRY {
-        updated_scene = viewer_collision_invoke_callback(st);
-        if (updated_scene && TAG(updated_scene) == CLJ_RECORD) {
-            const VgRecordSchema *schema = tiny_gfx_schema();
-            if (schema && viewer_record_type_hash(updated_scene) == schema->h_frame_scene) {
-                *out_updated_scene = (FrameScene *)updated_scene;
-                success = true;
-            }
+        callback_dispatch_fn = viewer_collision_dispatch_fn(st);
+        if (!callback_dispatch_fn || callback_dispatch_fn == NOT_FOUND) {
+            success = false;
+        } else {
+            /*
+             * Dispatch callback through the event-loop API so execution happens
+             * on the Clojure runloop path. Callback return values are intentionally
+             * ignored by the C host bridge.
+             */
+            event_loop_enqueue(RETAIN(callback_dispatch_fn), NULL);
+            success = event_loop_run_next(NULL, st);
         }
     } CATCH(ex) {
         (void)ex;
@@ -671,39 +766,87 @@ static bool viewer_invoke_collision_callback(EvalState *st, FrameScene **out_upd
     return success;
 }
 
+static FrameScene *viewer_current_game_scene_from_clojure(EvalState *st) {
+    if (!st) {
+        return NULL;
+    }
+    static CljSymbol *game_scene_state_sym = NULL;
+    if (!game_scene_state_sym) {
+        CljSymbol *demo_ns = intern_symbol_global("tiny-gfx.host-viewer-demo");
+        if (!demo_ns) {
+            return NULL;
+        }
+        game_scene_state_sym = intern_symbol(demo_ns, "game-scene-state");
+        if (!game_scene_state_sym) {
+            return NULL;
+        }
+    }
+    ID state_atom = ns_resolve(st, game_scene_state_sym);
+    if (!state_atom || state_atom == NOT_FOUND || TAG(state_atom) != CLJ_ATOM) {
+        return NULL;
+    }
+    ID scene = ((CljAtom *)state_atom)->value;
+    if (!scene || TAG(scene) != CLJ_RECORD) {
+        return NULL;
+    }
+    const VgRecordSchema *schema = tiny_gfx_schema();
+    if (!schema || viewer_record_type_hash(scene) != schema->h_frame_scene) {
+        return NULL;
+    }
+    return (FrameScene *)scene;
+}
+
 static bool viewer_apply_collision_step(ViewerDemoBundle *bundle,
                                         VgCollisionState *state,
+                                        const ViewerCollisionPolicy *policy,
                                         EvalState *st,
                                         uint32_t now_ms) {
-    if (!bundle || !state || !st || !bundle->game_scene) {
+    if (!bundle || !state || !policy || !st || !bundle->game_scene) {
         return false;
     }
 
     VgRenderedEntityState player_state;
     VgRenderedEntityState obstacle_state;
     bool have_player = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
-                                                      (uintptr_t)fixnum(VIEWER_PLAYER_ENTITY_ID),
+                                                      (uintptr_t)fixnum(policy->player_entity_id),
                                                       &player_state);
     bool have_obstacle = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
-                                                        (uintptr_t)fixnum(VIEWER_OBSTACLE_ENTITY_ID),
+                                                        (uintptr_t)fixnum(policy->obstacle_entity_id),
                                                         &obstacle_state);
     if (!have_player || !have_obstacle) {
         return false;
     }
 
-    int player_jump_y = (int)viewer_fixed_raw_to_int_trunc_zero(player_state.world_t.m12);
-    int obstacle_x = (int)viewer_fixed_raw_to_int_trunc_zero(obstacle_state.world_t.m02) - 20;
-    bool toggled = vg_collision_step_player_vs_obstacle(state,
-                                                        now_ms,
-                                                        VIEWER_COLLISION_COOLDOWN_MS,
-                                                        player_jump_y,
-                                                        obstacle_x);
+    int player_tx = (int)viewer_fixed_raw_to_int_trunc_zero(player_state.world_t.m02);
+    int player_ty = (int)viewer_fixed_raw_to_int_trunc_zero(player_state.world_t.m12);
+    int obstacle_x = (int)viewer_fixed_raw_to_int_trunc_zero(obstacle_state.world_t.m02) -
+                     policy->obstacle_anchor_x;
+    VgAabb player_box = {
+        .min_x = policy->player_min_x + player_tx,
+        .max_x = policy->player_max_x + player_tx,
+        .min_y = policy->player_min_y_base + player_ty,
+        .max_y = policy->player_max_y_base + player_ty
+    };
+    VgAabb obstacle_box = {
+        .min_x = policy->obstacle_min_x_base + obstacle_x,
+        .max_x = policy->obstacle_max_x_base + obstacle_x,
+        .min_y = policy->obstacle_min_y,
+        .max_y = policy->obstacle_max_y
+    };
+    bool colliding = vg_collision_detect_aabb_overlap(&player_box, &obstacle_box);
+    bool toggled = vg_collision_step_latched_cooldown(state,
+                                                       now_ms,
+                                                       policy->cooldown_ms,
+                                                       colliding);
     if (!toggled) {
         return false;
     }
 
-    FrameScene *updated_game_scene = NULL;
-    if (!viewer_invoke_collision_callback(st, &updated_game_scene) || !updated_game_scene) {
+    if (!viewer_invoke_collision_callback(st)) {
+        return false;
+    }
+    FrameScene *updated_game_scene = viewer_current_game_scene_from_clojure(st);
+    if (!updated_game_scene) {
         return false;
     }
     bundle->game_scene = updated_game_scene;
@@ -863,6 +1006,7 @@ int main(void) {
     bool render_thread_started = false;
     bool demo_bundle_initialized = false;
     ViewerDemoBundle demo_bundle = {0};
+    ViewerCollisionPolicy collision_policy = {0};
     VgCollisionState collision_state = {0};
     int exit_code = 1;
     viewer_set_realtime_thread_policy();
@@ -929,8 +1073,8 @@ int main(void) {
     ViewerPerfWindow perf_window;
     perf_window_init(&perf_window, mfb_timer_now(timer));
 
-    if (!init_demo_bundle(viewer_eval_state, &demo_bundle)) {
-        fprintf(stderr, "Failed to create host-viewer demo bundle from tiny-gfx.host-viewer-demo\n");
+    if (!viewer_load_host_viewer_config(viewer_eval_state, &demo_bundle, &collision_policy)) {
+        fprintf(stderr, "Failed to load host-viewer config from tiny-gfx.runtime/host-viewer-config\n");
         goto cleanup;
     }
     demo_bundle_initialized = true;
@@ -977,6 +1121,7 @@ int main(void) {
                                                    : viewer_render_game_frame_async(fb_pixels);
         (void)viewer_apply_collision_step(&demo_bundle,
                                           &collision_state,
+                                          &collision_policy,
                                           viewer_eval_state,
                                           platform_current_time_ms());
 

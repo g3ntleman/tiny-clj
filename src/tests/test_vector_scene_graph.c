@@ -365,6 +365,24 @@ TEST(test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven) {
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
+TEST(test_vector_scene_graph_tiny_gfx_runtime_host_viewer_config_shape) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.runtime) "
+        "  (let [cfg (tiny-gfx.runtime/host-viewer-config) "
+        "        bundle (:bundle cfg) "
+        "        policy (:collision-policy cfg) "
+        "        ids (:collision-entity-ids cfg)] "
+        "    (and (= 3 (count bundle)) "
+        "         (= 10 (count policy)) "
+        "         (= 2 (count ids)) "
+        "         (= 3002 (first ids)) "
+        "         (= 3003 (second ids)))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok && ok != clj_false);
+}
+
 TEST(test_vector_scene_graph_host_viewer_demo_player_entity_matches_tri_type_hash) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -405,13 +423,13 @@ TEST(test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_
         "        game0 (nth bundle 2) "
         "        p0 (get (:root game0) 3002) "
         "        _ (tiny-gfx.collision/set-collision-callback! nil) "
-        "        disabled (tiny-gfx.collision/invoke-collision-callback!) "
+        "        disabled-ret (tiny-gfx.collision/invoke-collision-callback!) "
         "        _ (tiny-gfx.host-viewer-demo/configure-collision-toggle-callback!) "
-        "        game1 (tiny-gfx.collision/invoke-collision-callback!) "
-        "        p1 (get (:root game1) 3002) "
-        "        game2 (tiny-gfx.collision/invoke-collision-callback!) "
-        "        p2 (get (:root game2) 3002)] "
-        "    (and (nil? disabled) "
+        "        ret1 (tiny-gfx.collision/invoke-collision-callback!) "
+        "        p1 (get (:root @tiny-gfx.host-viewer-demo/game-scene-state) 3002) "
+        "        ret2 (tiny-gfx.collision/invoke-collision-callback!) "
+        "        p2 (get (:root @tiny-gfx.host-viewer-demo/game-scene-state) 3002)] "
+        "    (and (nil? disabled-ret) (nil? ret1) (nil? ret2) "
         "         (= 56 (:x1 p0)) (= 118 (:y2 p0)) "
         "         (= 60 (:x1 p1)) (= 126 (:y2 p1)) "
         "         (= 56 (:x1 p2)) (= 118 (:y2 p2)))))",
@@ -2776,33 +2794,38 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_validate_arity_and_a
     TEST_ASSERT_TRUE(progress_arity_caught);
 }
 
-TEST(test_vector_scene_graph_collision_detect_player_vs_obstacle_bounds) {
-    TEST_ASSERT_TRUE(vg_collision_detect_player_vs_obstacle(0, 40));
-    TEST_ASSERT_FALSE(vg_collision_detect_player_vs_obstacle(0, 200));
-    TEST_ASSERT_FALSE(vg_collision_detect_player_vs_obstacle(-50, 40));
+TEST(test_vector_scene_graph_collision_detect_aabb_overlap_bounds) {
+    VgAabb player = {.min_x = 58, .max_x = 86, .min_y = 124, .max_y = 146};
+    VgAabb overlap_obstacle = {.min_x = 53, .max_x = 67, .min_y = 106, .max_y = 146};
+    VgAabb far_obstacle = {.min_x = 213, .max_x = 227, .min_y = 106, .max_y = 146};
+    VgAabb high_obstacle = {.min_x = 53, .max_x = 67, .min_y = 10, .max_y = 40};
+
+    TEST_ASSERT_TRUE(vg_collision_detect_aabb_overlap(&player, &overlap_obstacle));
+    TEST_ASSERT_FALSE(vg_collision_detect_aabb_overlap(&player, &far_obstacle));
+    TEST_ASSERT_FALSE(vg_collision_detect_aabb_overlap(&player, &high_obstacle));
 }
 
 TEST(test_vector_scene_graph_collision_step_latch_and_cooldown) {
     VgCollisionState state = {0};
 
-    bool toggled = vg_collision_step_player_vs_obstacle(&state, 1000u, 300u, 0, 40);
+    bool toggled = vg_collision_step_latched_cooldown(&state, 1000u, 300u, true);
     TEST_ASSERT_TRUE(toggled);
     TEST_ASSERT_TRUE(state.collision_latched);
     TEST_ASSERT_EQUAL_UINT32(1300u, state.collision_cooldown_end_ms);
 
-    toggled = vg_collision_step_player_vs_obstacle(&state, 1010u, 300u, 0, 40);
+    toggled = vg_collision_step_latched_cooldown(&state, 1010u, 300u, true);
     TEST_ASSERT_FALSE(toggled);
     TEST_ASSERT_TRUE(state.collision_latched);
 
-    toggled = vg_collision_step_player_vs_obstacle(&state, 1020u, 300u, 0, 200);
+    toggled = vg_collision_step_latched_cooldown(&state, 1020u, 300u, false);
     TEST_ASSERT_FALSE(toggled);
     TEST_ASSERT_FALSE(state.collision_latched);
 
-    toggled = vg_collision_step_player_vs_obstacle(&state, 1200u, 300u, 0, 40);
+    toggled = vg_collision_step_latched_cooldown(&state, 1200u, 300u, true);
     TEST_ASSERT_FALSE(toggled);
     TEST_ASSERT_FALSE(state.collision_latched);
 
-    toggled = vg_collision_step_player_vs_obstacle(&state, 1300u, 300u, 0, 40);
+    toggled = vg_collision_step_latched_cooldown(&state, 1300u, 300u, true);
     TEST_ASSERT_TRUE(toggled);
     TEST_ASSERT_TRUE(state.collision_latched);
     TEST_ASSERT_EQUAL_UINT32(1600u, state.collision_cooldown_end_ms);

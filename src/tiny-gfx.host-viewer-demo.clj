@@ -183,6 +183,8 @@ R"TINY_GFX_HOST(
 
 (def player-geometry-large {:x1 56 :y1 146 :x2 72 :y2 118 :x3 88 :y3 146})
 (def player-geometry-small {:x1 60 :y1 146 :x2 72 :y2 126 :x3 84 :y3 146})
+(def player-entity-id 3002)
+(def obstacle-entity-id 3003)
 
 (def player-small-state (atom false))
 (def game-scene-state (atom nil))
@@ -190,30 +192,35 @@ R"TINY_GFX_HOST(
 (defn- apply-player-geometry
   [game-scene player-small?]
   (let [root (:root game-scene)
-        player (get root 3002)
+        player (get root player-entity-id)
         g (if player-small? player-geometry-small player-geometry-large)
         player2 (assoc player
                   :x1 (:x1 g) :y1 (:y1 g)
                   :x2 (:x2 g) :y2 (:y2 g)
                   :x3 (:x3 g) :y3 (:y3 g))
-        root2 (assoc root 3002 player2)]
+        root2 (assoc root player-entity-id player2)]
     (assoc game-scene :root root2)))
 
 (defn on-player-collision-toggle!
-  "Host-viewer collision callback: toggles player geometry and returns updated game scene."
+  "Host-viewer collision callback: toggles player geometry in `game-scene-state`.
+Returns nil; host-side callback dispatch ignores return values."
   []
   (let [player-small? (swap! player-small-state not)
         game-scene @game-scene-state]
-    (if game-scene
+    (when game-scene
       (let [updated-game-scene (apply-player-geometry game-scene player-small?)]
-        (reset! game-scene-state updated-game-scene)
-        updated-game-scene)
-      nil)))
+        (reset! game-scene-state updated-game-scene)))
+    nil))
 
 (defn configure-collision-toggle-callback!
   "Configures the collision response callback used by the host viewer."
   []
   (collision/set-collision-callback! on-player-collision-toggle!))
+
+(defn collision-entity-ids
+  "Returns [player-entity-id obstacle-entity-id] for host collision state queries."
+  []
+  [player-entity-id obstacle-entity-id])
 
 (defn create-demo-bundle
   "Returns a vector with the demo frame-scenes used by the host viewer.
@@ -239,9 +246,9 @@ Index layout:
             game-terrain (polyline {:id 3001 :t terrain-timeline :style style-game-line
                                     :pts [[0 156] [60 156] [100 144] [150 156] [220 156] [260 146] [319 156]
                                           [380 156] [420 146] [480 156] [560 156] [620 144]]})
-            game-player (tri {:id 3002 :t player-jump-timeline :style style-game-player
+            game-player (tri {:id player-entity-id :t player-jump-timeline :style style-game-player
                               :x1 56 :y1 146 :x2 72 :y2 118 :x3 88 :y3 146})
-            game-rocket-body (polyline {:id 3003 :t rocket-timeline :style style-rocket-body
+            game-rocket-body (polyline {:id obstacle-entity-id :t rocket-timeline :style style-rocket-body
                                         :pts rocket-body-pts :closed true})
             game-rocket-nose (tri {:id 3005 :t rocket-timeline :style style-rocket-nose
                                    :x1 20 :y1 0 :x2 10 :y2 -3 :x3 10 :y3 3})
@@ -250,11 +257,11 @@ Index layout:
             game-hbar (tri {:id 3010 :t hbar-timeline :style style-hbar
                             :x1 0 :y1 -4 :x2 20 :y2 0 :x3 0 :y3 4})
             game-root (group {:id root-id :style style-score
-                              :children [3020 3001 3002 3003 3005 3004 3010]})
+                              :children [3020 3001 player-entity-id obstacle-entity-id 3005 3004 3010]})
             game-entities {root-id game-root
                            3001 game-terrain
-                           3002 game-player
-                           3003 game-rocket-body
+                           player-entity-id game-player
+                           obstacle-entity-id game-rocket-body
                            3005 game-rocket-nose
                            3004 game-caption
                            3010 game-hbar
