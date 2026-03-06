@@ -21,6 +21,7 @@ Build a reduced SVG-like 2D graphics engine with a strict PoC-first delivery pat
 - Thick-stroke primitives suitable for game, menu, and animated vector title screens
 - Solid fill color for area primitives (SVG-like paint model MVP)
 - Generalized Clojure collision API: rules and callback routing are declared/configured in Clojure, while per-frame collision detection remains in C
+- Collision callbacks are Closure-based and dispatched from C via scheduler/runloop ingress; callback return values are ignored
 
 ## Target Architecture: Flat Entity Map + Timeline Animations + C Interpolation
 
@@ -48,7 +49,7 @@ Properties:
 - **Root = symbol `root`.** C starts rendering at `map_get(entities, sym_root)`.
 - **Updates are O(1).** `(swap! game-slot assoc-in [3002 :t] new-transform)` – no tree walk.
 - **Structural sharing.** Only the changed entity + outer map are re-allocated.
-- **`update-nodes` (M8b) no longer needed** for typical updates; direct `assoc-in` replaces tree walking.
+- `**update-nodes` (M8b) no longer needed** for typical updates; direct `assoc-in` replaces tree walking.
 
 ### Timeline Animations (declarative, C-evaluated)
 
@@ -168,26 +169,26 @@ On macOS, the only synchronization point is the framebuffer handoff to the Cocoa
 - **C never mutates the Clojure snapshot.** C reads via `atom_deref` (lock-free pointer read).
 - **Records over Maps** for entities: C knows Record layout (`DEFRECORD`), field access is O(1).
 - **No Clojure eval per frame.** Clojure sets state event-driven (collision, timer, input).
-  C resolves Timelines and interpolates every frame with fixed time budget.
+C resolves Timelines and interpolates every frame with fixed time budget.
 - **Snapshot-per-frame.** Render thread snapshots all slot Atoms once at frame start.
-  The entire frame renders from this consistent state. Intermediate Clojure updates
-  are picked up at the next frame start – no tearing, no partial state.
+The entire frame renders from this consistent state. Intermediate Clojure updates
+are picked up at the next frame start – no tearing, no partial state.
 - **Static slots skip rendering.** If a slot has no Timelines and no active AnimState,
-  its output is frame-identical. Render thread skips erase + re-render until
-  Clojure publishes a new snapshot. If all slots are static, render thread sleeps.
+its output is frame-identical. Render thread skips erase + re-render until
+Clojure publishes a new snapshot. If all slots are static, render thread sleeps.
 - **Interruption-safe.** New target mid-animation → C interpolates from current visual
-  position toward new target (no jump, no restart).
+position toward new target (no jump, no restart).
 - **Timelines are data, not code.** Periodic animations (form cycling, blinking, color pulsing)
-  are Timeline Records on fields – C evaluates them with pure arithmetic, no timers needed.
+are Timeline Records on fields – C evaluates them with pure arithmetic, no timers needed.
 - **Two threads, Clojure-controlled.** Tiny-RTOS/Clojure is the main thread. Render thread
-  is started/stopped from Clojure via `(start-renderer!)` / `(stop-renderer!)`.
-  macOS Cocoa UI thread is a platform detail, not an architectural thread.
-  No additional RTOS threads needed for the scene-graph engine.
+is started/stopped from Clojure via `(start-renderer!)` / `(stop-renderer!)`.
+macOS Cocoa UI thread is a platform detail, not an architectural thread.
+No additional RTOS threads needed for the scene-graph engine.
 - **No game logic in C.** All game/app logic lives in Clojure (target states via `swap!`).
-  C render thread only interpolates and rasterizes. No demo-specific gameplay functions in C.
+C render thread only interpolates and rasterizes. No demo-specific gameplay functions in C.
 - **Animation descriptors (TODO).** Declarative transition animations (easing, duration, from/to
-  for smooth motion) should also execute in C. Exact contract to be designed after flat entity
-  map and Timeline are stable (see Optional Extension A for initial sketch).
+for smooth motion) should also execute in C. Exact contract to be designed after flat entity
+map and Timeline are stable (see Optional Extension A for initial sketch).
 
 ## Constraints
 
@@ -208,12 +209,12 @@ so primitive generation/rasterization bugs are debuggable on host.
   - memory ownership changes/allocation happen only in producer/update thread before atomic snapshot publish
   - no blocking/channel operations in render hot path; use bounded lock-free queues for control/completion handoff
   - render thread acquires scene snapshots via lock-free `atom_deref` at frame start;
-    renders the full frame from the consistent snapshot; picks up new state at next frame start
+  renders the full frame from the consistent snapshot; picks up new state at next frame start
 - Thread ownership rule (target architecture – two threads):
   - Thread 1 – Tiny-RTOS / Clojure (= main thread): owns scene state (Atoms with flat entity
-    maps), all game/app logic, starts/stops render thread via `(start-renderer!)` / `(stop-renderer!)`
+  maps), all game/app logic, starts/stops render thread via `(start-renderer!)` / `(stop-renderer!)`
   - Thread 2 – Render thread (spawned by Clojure): owns interpolation (AnimState), Timeline
-    resolution, rasterization; read-only on Clojure snapshots; on ESP32 drives SPI directly
+  resolution, rasterization; read-only on Clojure snapshots; on ESP32 drives SPI directly
   - macOS Cocoa UI thread: platform quirk, presentation only – not an architectural thread
   - No game logic in C; no direct ASSIGN into scene Records from any C thread
 - Backend-parity rule (host <-> ESP32):
@@ -603,6 +604,7 @@ Tasks:
   - Compare before/after CPU usage on host and (where possible) ESP32.
 
 Implementation notes (2026-03-04):
+
 - Fixed-first contract + quantization boundaries documented in `docs/VECTOR_SCENE_FIXED_FIRST.md`.
 - Host decode+render micro benchmark added in `test_vector_scene_graph_decode_render_host_micro_benchmark`.
 - Host sample timings recorded for `deco`, `score`, and `game` frame scenes (Debug build).
@@ -657,7 +659,7 @@ Done when:
 ## Milestone 9: Flat Entity Map + Timeline + Declarative Scene Architecture
 
 Status: DONE (`9a` + `9b` + `9c` + `9d` baseline DONE on host/ESP32 build path; renderer lifecycle + rendered-state query baseline DONE; host loop closeout + cleanup complete; collision callback API finalized in `tiny-gfx.collision`)
-Follow-up (2026-03-05): API parity + Clojure docs hardening in `tiny-gfx.*` is now tracked under `9n`.
+Follow-up (2026-03-05): API parity + Clojure docs hardening in `tiny-gfx.`* is now tracked under `9n`.
 
 Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Architecture"):
 
@@ -671,6 +673,8 @@ Final state:
 
 - Flat entity maps and Timeline decode are now in place, and collision response (triangle toggle) is already executed in Clojure callback code.
 - Collision callback dispatch now routes through `tiny-gfx.collision/invoke-collision-callback!` without string-eval hardcoding in the host-viewer C loop; callback target selection stays Clojure-configurable.
+- Callback execution model is one-way dispatch: C enqueues/invokes configured Clojure closure through runloop ingress and ignores return values.
+- Scene updates are explicit on the Clojure side (`swap!`/`reset!`); C never expects a returned `FrameScene` from callback execution.
 - Per-frame collision detection remains in C (required); demo-specific mutation coupling has been removed from C.
 
 ### 9a: Flat Entity Map (Clojure side)
@@ -685,6 +689,7 @@ Final state:
   - Root entity key/id is symbol `root`; groups reference children by ID vectors (not embedded records).
 
 Example:
+
 ```clojure
 (def game-slot (atom
   {root (group {:id root :children [3001 3002 3003]})
@@ -711,6 +716,7 @@ Example:
   - Deterministic render entry points added for tests: `vg_render_scene_record_at_ms` and `vg_render_scene_record_clipped_at_ms`.
 
 Example (alien cycling 3 forms with different durations):
+
 ```clojure
 {3003 (polyline {:id 3003
                  :pts   (->Timeline [[0 pts-open] [300 pts-mid] [400 pts-closed]] true)
@@ -752,29 +758,29 @@ void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
 ### 9d: C Interpolation State for smooth motion (AnimState)
 
 - For transform targets that change event-driven (e.g. player jump, rocket move),
-  C maintains mutable `AnimState` structs to interpolate smoothly.
+C maintains mutable `AnimState` structs to interpolate smoothly.
 - Per frame: read target transform from entity map, lerp `current → target`.
 - Interruption-safe: new target mid-animation → interpolate from current visual position.
 - AnimState is separate from the Clojure snapshot (C-owned, mutable).
 - Timeline (periodic, data-driven) and AnimState (smooth motion, C-driven) are complementary:
-  Timeline = cyclic field replacement; AnimState = continuous interpolation toward targets.
+Timeline = cyclic field replacement; AnimState = continuous interpolation toward targets.
 - Implementation notes (2026-03-05):
   - Added fixed-point `VgAnimTransformState` API in `vector_scene_graph`:
-    `vg_anim_transform_state_reset`, `vg_anim_transform_state_set_target`,
-    `vg_anim_transform_state_step`, `vg_anim_transform_state_current`.
+  `vg_anim_transform_state_reset`, `vg_anim_transform_state_set_target`,
+  `vg_anim_transform_state_step`, `vg_anim_transform_state_current`.
   - Added deterministic unit tests for convergence, interruption-safe target switching,
-    and zero-duration snap behavior.
+  and zero-duration snap behavior.
   - Host viewer gameplay step now uses `AnimState` for terrain/player/obstacle transforms.
-    Interpolation step is integer/fixed-point only (`dt_ms`/`now_ms`), no float math in the interpolation path.
+  Interpolation step is integer/fixed-point only (`dt_ms`/`now_ms`), no float math in the interpolation path.
 
 ### 9e: Animation descriptors (TODO – to be clarified)
 
 - Declarative transition animations (easing, duration, from/to for smooth motion)
-  must execute in C, not the interpreter.
+must execute in C, not the interpreter.
 - Open questions:
   - Are animation descriptors authored in Clojure (as Records) and consumed by C?
   - How do they interact with Timeline fields?
-    (Timeline = periodic/cyclic; animation descriptor = one-shot/transition?)
+  (Timeline = periodic/cyclic; animation descriptor = one-shot/transition?)
   - Completion callbacks back to scheduler (reuse collision callback ingress?)
 - See Optional Extension A for initial animation record sketch.
 - Decision deferred until 9a–9d are stable.
@@ -782,6 +788,7 @@ void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
 ### 9f: Generalized main loop + host-viewer migration
 
 **Generalized C main loop (target):**
+
 - The main loop becomes app-agnostic – no demo-specific gameplay logic in C.
 - Main loop responsibilities: frame pacing, input forwarding, framebuffer presentation, metrics.
 - All game/app logic moves to Clojure (scene state updates via `swap!` on slot Atoms).
@@ -792,35 +799,37 @@ void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
   - `ViewerDemoBundle` struct and all per-entity handle tracking
 
 **Render thread (target):**
+
 - At frame start: `atom_deref` per slot Atom → immutable snapshot (lock-free).
 - Render entire frame from snapshot: resolve Timelines, interpolate AnimState, rasterize.
 - Frame done: signal main thread, loop back to frame start with fresh snapshot.
 
 **Static vs. animated slot optimization:**
+
 - During rendering, the render thread determines per slot whether the scene contains
-  any active Timelines or AnimState interpolations (= **animated**) or not (= **static**).
+any active Timelines or AnimState interpolations (= **animated**) or not (= **static**).
 - **Static slot:** No Timelines, no AnimState in progress. The rendered output is
-  identical across frames. The render thread skips erase + re-render for this slot
-  in subsequent frames until:
+identical across frames. The render thread skips erase + re-render for this slot
+in subsequent frames until:
   - Clojure publishes a new snapshot (`swap!`/`reset!` changes the Atom value), or
   - an AnimState target changes (which also implies a new snapshot).
 - **Animated slot:** Contains at least one Timeline or active AnimState interpolation.
-  Must be re-rendered every frame (Timelines depend on wall clock, AnimState converges
-  over time).
+Must be re-rendered every frame (Timelines depend on wall clock, AnimState converges
+over time).
 - Detection is cheap: during traversal, set a `slot_has_animation` flag when any
-  Timeline field or non-converged AnimState is encountered. Cache the flag per slot.
+Timeline field or non-converged AnimState is encountered. Cache the flag per slot.
 - This is the generalized version of the existing slot-change-tracker concept:
-  static slots behave like unchanged slots (skip rendering), animated slots always
-  re-render regardless of whether the Clojure snapshot changed.
+static slots behave like unchanged slots (skip rendering), animated slots always
+re-render regardless of whether the Clojure snapshot changed.
 - Power savings: if **all** slots are static, the render thread can block/sleep until
-  any Atom changes (event-driven wakeup, no busy loop).
+any Atom changes (event-driven wakeup, no busy loop).
 
 **Clojure side (target):**
+
 - `tiny-gfx.host-viewer-demo` defines all scene entities as flat maps per slot.
 - Game logic (terrain scroll, player jump, obstacle, collision, score) runs as
-  Clojure functions triggered by `schedule-periodic` timers or input events.
+Clojure functions triggered by `schedule-periodic` timers or input events.
 - Each game tick: `(swap! game-slot assoc-in [entity-id :t] new-transform)`.
-
 - Implementation notes (2026-03-04):
   - Demo includes first periodic Timeline slice: `hbar` uses looping transform Timeline.
   - Host viewer no longer updates `hbar` via C-side `ASSIGN`.
@@ -850,8 +859,9 @@ state (after interpolation + Timeline resolution). Game logic often needs the cu
 state – e.g. "has the player reached position X?", "is the animation done?".
 
 **Rendered-State Snapshot:**
+
 - After each frame, the render thread writes resolved per-entity values into a shared
-  snapshot structure (one per slot, indexed by entity ID).
+snapshot structure (one per slot, indexed by entity ID).
 - Clojure reads this snapshot via native functions (lock-free read of last-completed frame).
 - Snapshot is updated atomically per frame – Clojure always sees a consistent frame state.
 
@@ -872,26 +882,30 @@ state – e.g. "has the player reached position X?", "is the animation done?".
 ```
 
 **Use cases:**
+
 - Game logic: "has entity reached target?" → compare `renderer-state` with target atom
 - Collision: based on actual visual position, not target
 - Animation control: `(renderer-timeline-progress ... :pts)` = 1.0 means done (for `loop=false`)
 - REPL debugging: inspect live visual state
 
 **Implementation sketch (C side):**
+
 - Render thread maintains per-slot `RenderedEntityState` array/map.
 - After resolving each entity during traversal, writes:
   - composed world-space transform (`tx, ty, rot, sx, sy`)
   - active Timeline keyframe index + phase offset per animated field
 - Published atomically (pointer swap or generation counter) after frame completes.
 - Native functions `renderer_state`, `renderer_timeline_step`, `renderer_timeline_progress`
-  read from the last-published snapshot.
+read from the last-published snapshot.
 
 **Threading safety:**
+
 - Render thread writes → atomic publish (pointer swap).
 - Clojure reads → lock-free deref of last-published snapshot.
 - No mutex needed. Clojure may see a 1-frame-old snapshot (acceptable).
 
 Implementation notes (2026-03-05):
+
 - Added runtime query natives:
   - `tiny-clj.runtime/renderer-state`
   - `tiny-clj.runtime/renderer-timeline-step`
@@ -903,43 +917,43 @@ Implementation notes (2026-03-05):
 ### 9j: Remaining task list (execution order)
 
 1. **Main-loop entkoppeln (host-viewer):**
-   - Remove demo-specific gameplay writes from C main loop:
-     - `viewer_apply_gameplay_step`
-     - `set_transform_fields` / `set_player_geometry` / `set_obstacle_transforms`
-     - direct score-text `ASSIGN`
-   - Keep C main loop app-agnostic (pacing, input forwarding, presentation, metrics only).
+  - Remove demo-specific gameplay writes from C main loop:
+    - `viewer_apply_gameplay_step`
+    - `set_transform_fields` / `set_player_geometry` / `set_obstacle_transforms`
+    - direct score-text `ASSIGN`
+  - Keep C main loop app-agnostic (pacing, input forwarding, presentation, metrics only).
 2. **Clojure-driven scene updates finalisieren:**
-   - Move remaining gameplay target updates (`terrain`, `player`, `obstacle`, score text) into Clojure slot updates.
-   - Keep update contract: per-slot atomic snapshot via `swap!`/`reset!` on flat maps.
-   - Status (2026-03-05): DONE for host-viewer demo vertical slice (terrain/player/rocket/score moved to Timeline-driven Clojure scene data; regression tests added).
+  - Move remaining gameplay target updates (`terrain`, `player`, `obstacle`, score text) into Clojure slot updates.
+  - Keep update contract: per-slot atomic snapshot via `swap!`/`reset!` on flat maps.
+  - Status (2026-03-05): DONE for host-viewer demo vertical slice (terrain/player/rocket/score moved to Timeline-driven Clojure scene data; regression tests added).
 3. **Renderer lifecycle API aus Clojure:**
-   - Add native API and docs:
-     - `(start-renderer! [game-slot score-slot deco-slot])`
-     - `(stop-renderer!)`
-   - Ensure deterministic start/stop semantics and clean shutdown ordering.
-   - Status (2026-03-05): baseline runtime API added (`tiny-clj.runtime/start-renderer!`, `tiny-clj.runtime/stop-renderer!`)
-     with deterministic idempotent bool semantics; default runtimes return `false` when no backend is registered.
-     Host-viewer now installs lifecycle callbacks through a shared renderer-lifecycle bridge and uses the same start/stop path.
+  - Add native API and docs:
+    - `(start-renderer! [game-slot score-slot deco-slot])`
+    - `(stop-renderer!)`
+  - Ensure deterministic start/stop semantics and clean shutdown ordering.
+  - Status (2026-03-05): baseline runtime API added (`tiny-clj.runtime/start-renderer!`, `tiny-clj.runtime/stop-renderer!`)
+  with deterministic idempotent bool semantics; default runtimes return `false` when no backend is registered.
+  Host-viewer now installs lifecycle callbacks through a shared renderer-lifecycle bridge and uses the same start/stop path.
 4. **Rendered-state query API implementieren (9i):**
-   - C-side snapshot structs + atomic publish per frame.
-   - Native Clojure functions:
-     - `renderer-state`
-     - `renderer-timeline-step`
-     - `renderer-timeline-progress`
-   - Verify lock-free read contract and 1-frame staleness behavior.
-   - Status (2026-03-05): baseline DONE on host path (double-buffer snapshot publish + runtime query natives + unit tests).
+  - C-side snapshot structs + atomic publish per frame.
+  - Native Clojure functions:
+    - `renderer-state`
+    - `renderer-timeline-step`
+    - `renderer-timeline-progress`
+  - Verify lock-free read contract and 1-frame staleness behavior.
+  - Status (2026-03-05): baseline DONE on host path (double-buffer snapshot publish + runtime query natives + unit tests).
 5. **Tests + acceptance gates for M9:**
-   - Unit tests: AnimState + Timeline interaction, rendered-state query correctness.
-   - Integration tests: app-agnostic loop path, renderer start/stop from Clojure, no C gameplay writes.
-   - Host run: verify continuous rendering with Clojure-driven updates and stable performance counters.
+  - Unit tests: AnimState + Timeline interaction, rendered-state query correctness.
+  - Integration tests: app-agnostic loop path, renderer start/stop from Clojure, no C gameplay writes.
+  - Host run: verify continuous rendering with Clojure-driven updates and stable performance counters.
 6. **Clojure-konfigurierbarer Collision-Toggle-Callback (neu):**
-   - Add a Clojure function to configure which callback is invoked on collision toggle.
-   - Remove hardcoded callback expression from C (`VIEWER_COLLISION_CALLBACK_EXPR`).
-   - Keep C side generic: invoke configured callback and accept updated `FrameScene` snapshot.
+  - Add a Clojure function to configure which callback is invoked on collision toggle.
+  - Remove hardcoded callback expression from C (`VIEWER_COLLISION_CALLBACK_EXPR`).
+  - Keep C side generic: invoke configured callback closure via scheduler/runloop ingress (no `FrameScene` return coupling).
 7. **Demo-Logik vollständig in Clojure verlagern (neu):**
-   - Keep collision detection + cooldown/latch evaluation per frame in C.
-   - Move collision **response** (scene mutation, gameplay state updates) to Clojure callbacks.
-   - C host loop keeps only renderer/pacing/presentation/input plus generic collision callback dispatch.
+  - Keep collision detection + cooldown/latch evaluation per frame in C.
+  - Move collision **response** (scene mutation, gameplay state updates) to Clojure callbacks.
+  - C host loop keeps only renderer/pacing/presentation/input plus generic collision callback dispatch.
 
 ### 9k: End-of-M9 code cleanup (required)
 
@@ -961,27 +975,27 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
 ### 9l: Final M9 closeout tasks (next implementation slice)
 
 1. **Host-viewer C loop endgültig app-agnostisch machen:**
-   - Verify no remaining demo-specific gameplay mutation path is reachable in C main loop.
-   - Keep only: pacing, input forwarding, presentation, metrics.
+  - Verify no remaining demo-specific gameplay mutation path is reachable in C main loop.
+  - Keep only: pacing, input forwarding, presentation, metrics.
 2. **Static-slot skip behavior implementieren/verifizieren (M9→M7 throughput bridge):**
-   - Persist per-slot `has_animation` detection from traversal.
-   - Skip erase + rasterize for static slots until next published slot snapshot.
-   - Add wake/sleep policy: if all slots static, render thread blocks on slot-change signal.
+  - Persist per-slot `has_animation` detection from traversal.
+  - Skip erase + rasterize for static slots until next published slot snapshot.
+  - Add wake/sleep policy: if all slots static, render thread blocks on slot-change signal.
 3. **Rendered-state query API vervollständigen:**
-   - Ensure slot/entity miss behavior is deterministic (`nil`/sentinel contract documented).
-   - Verify timeline step/progress semantics for non-timeline fields and `loop=false`.
+  - Ensure slot/entity miss behavior is deterministic (`nil`/sentinel contract documented).
+  - Verify timeline step/progress semantics for non-timeline fields and `loop=false`.
 4. **Acceptance + regression gate for M9:**
-   - Unit tests: static-slot detection, skip behavior, wakeup on publish.
-   - Integration tests: Clojure-driven slot updates visibly drive scene without C gameplay writes.
-   - Host run: stable FPS + reduced changed-slot/dirty-pixel metrics when slots are static.
+  - Unit tests: static-slot detection, skip behavior, wakeup on publish.
+  - Integration tests: Clojure-driven slot updates visibly drive scene without C gameplay writes.
+  - Host run: stable FPS + reduced changed-slot/dirty-pixel metrics when slots are static.
 5. **Execute 9k cleanup and freeze M9 contract:**
-   - Remove dead compatibility code paths.
-   - Update docs/comments to reflect final two-thread model and APIs.
-   - Mark M9 as DONE only after tests/build pass.
+  - Remove dead compatibility code paths.
+  - Update docs/comments to reflect final two-thread model and APIs.
+  - Mark M9 as DONE only after tests/build pass.
 
 ### 9m: Checkable PR task list (files + symbols)
 
-- [x] **PR-1: Static-slot skip + wake/sleep policy**
+- **PR-1: Static-slot skip + wake/sleep policy**
   - Files:
     - `src/host_viewer_minifb.c`
     - `src/scene.c`
@@ -1000,8 +1014,7 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
     - Added unit tests for `has_animation` tracking + forced animation tick without generation change.
     - Added blocking wakeup regression test: `wait_for_changes(UINT32_MAX)` resumes on single-slot publish with exact slot mask.
     - Added slot-level rerender regression test proving single-slot publish re-renders only that slot.
-
-- [x] **PR-2: Rendered-state query API finalize**
+- **PR-2: Rendered-state query API finalize**
   - Files:
     - `src/rendered_state_snapshot.c`
     - `src/rendered_state_snapshot.h`
@@ -1021,8 +1034,7 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
   - Done (2026-03-05):
     - Runtime docs now define deterministic `nil` miss semantics for all three query APIs.
     - Added unit tests for non-Timeline fields returning `nil` and `loop=false` end-clamp semantics in queried timeline progress.
-
-- [x] **PR-3: Host loop app-agnostic verification + cleanup**
+- **PR-3: Host loop app-agnostic verification + cleanup**
   - Files:
     - `src/host_viewer_minifb.c`
     - `src/renderer_lifecycle.c`
@@ -1038,10 +1050,9 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
   - Status (2026-03-05):
     - Async host path no longer republishes `:game` every frame; it now only presents the latest render-thread buffer.
     - Obsolete per-frame render completion wait/condvar path removed from host loop.
-    - Lifecycle integration gate re-run completed (`test_vector_scene_graph/*renderer_lifecycle*`: 38 tests, 0 failures).
+    - Lifecycle integration gate re-run completed (`test_vector_scene_graph/*renderer_lifecycle`*: 38 tests, 0 failures).
     - Integration proof covered by regression tests: scene motion data remains Timeline-driven from Clojure slot snapshots (`test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven`) and collision response is callback-routed from Clojure (`test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_geometry_in_clojure`).
-
-- [x] **PR-4: End-of-M9 cleanup + documentation freeze**
+- **PR-4: End-of-M9 cleanup + documentation freeze**
   - Files:
     - `src/host_viewer_minifb.c`
     - `src/scene.c`
@@ -1059,9 +1070,8 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
   - Done (2026-03-05):
     - Removed remaining legacy async compatibility republish path from host-viewer loop.
     - Finalized collision callback namespace split (`tiny-gfx.collision`) and removed collision callback API from `tiny-clj.runtime`.
-    - Re-ran M9 regression gates (`test_vector_scene_graph/*`, `test_vector_scene_graph/*renderer_lifecycle*`, host-viewer demo/collision subsets).
-
-- [x] **PR-5: Clojure-configurable collision callback + collision-response extraction**
+    - Re-ran M9 regression gates (`test_vector_scene_graph/`*, `test_vector_scene_graph/*renderer_lifecycle`*, host-viewer demo/collision subsets).
+- **PR-5: Clojure-configurable collision callback + collision-response extraction**
   - Files:
     - `src/tiny-gfx.host-viewer-demo.clj`
     - `src/tiny-gfx.collision.clj`
@@ -1074,11 +1084,13 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
     - Remove hardcoded callback expression from C.
     - Keep per-frame collision detection policy in C (`viewer_legacy_collision` path).
     - Move demo collision response/scene mutation into Clojure callback path only.
+    - Dispatch callback closures through scheduler/runloop ingress from C, without callback return-value coupling.
     - Delete obsolete C scene-mutation helpers after migration.
   - Acceptance:
     - Host demo still toggles player geometry on collisions.
     - Callback target is configurable from Clojure at runtime.
     - Collision detection remains in C; collision response is routed via Clojure callback.
+    - C ignores callback return values; scene mutations are explicitly performed by Clojure code.
     - Regression tests cover callback reconfiguration + toggle behavior.
   - Done (2026-03-05):
     - Added collision callback API in `tiny-gfx.collision` (`set-collision-callback!`, `invoke-collision-callback!`) with deterministic nil/dispatch behavior.
@@ -1091,8 +1103,8 @@ Status: IN PROGRESS (started 2026-03-05; initial runtime exposure + scene-contra
 
 Goal:
 
-- Expose the currently implemented vector-scene runtime capabilities through `tiny-gfx.*` namespaces.
-- Keep `tiny-clj.runtime/*` compatibility, but provide `tiny-gfx`-first API surface + docs.
+- Expose the currently implemented vector-scene runtime capabilities through `tiny-gfx.`* namespaces.
+- Keep `tiny-clj.runtime/`* compatibility, but provide `tiny-gfx`-first API surface + docs.
 - Document Clojure-side API contracts where users author scene/collision/runtime code.
 
 Scope (first slice):
@@ -1121,19 +1133,22 @@ Acceptance:
 
 Checklist:
 
-- [x] Add embedded `tiny-gfx.runtime` namespace and aliases.
-- [x] Add tests for alias parity (`unsupported` lifecycle path + rendered-state query nil path).
-- [x] Add/extend Clojure API docs in `tiny-gfx.scene` for consumed record contracts.
+- Add embedded `tiny-gfx.runtime` namespace and aliases.
+- Add tests for alias parity (`unsupported` lifecycle path + rendered-state query nil path).
+- Add/extend Clojure API docs in `tiny-gfx.scene` for consumed record contracts.
 
 ### Done when
 
 - Host-viewer demo uses flat entity map architecture end-to-end:
-  Clojure `{id → Record}` in Atom → C resolves Timelines + interpolates → renders.
+Clojure `{id → Record}` in Atom → C resolves Timelines + interpolates → renders.
 - Root entity is identified by symbol `root`.
 - Periodic animations run via Timeline Records (no Clojure timers for visual cycling).
 - No direct `ASSIGN` of computed positions from C into scene Records.
 - Collision callback target for demo is configured from Clojure (not hardcoded in C).
 - Per-frame collision detection remains in C; no direct demo-specific scene mutation remains in C host-viewer loop.
+- Callback dispatch from C to Clojure is closure-based via scheduler/runloop ingress.
+- Callback return values are not transferred back to C and are not used for scene updates.
+- Scene updates from collision response happen explicitly in Clojure (`swap!`/`reset!`).
 - Static slots are not erased/re-rendered/transferred until a new slot snapshot is published.
 - M9 cleanup pass (9k) is complete and obsolete code paths are removed.
 - One vertical slice runs the same scene model in simulator and on device.
@@ -1143,9 +1158,11 @@ Checklist:
 Status: NEXT UP (Step 1: generalized Clojure API contract freeze)
 
 Note:
+
 - This milestone is engine-level collision infrastructure.
 - Host demo gameplay remains Clojure-owned (including callback selection and scene mutation).
 - Milestone objective: generalized Clojure-facing collision API (rule declaration + callback configuration + deterministic event contract), with per-frame collision detection executed in C.
+- Callback execution model for this milestone: C dispatches configured closure callbacks through scheduler/runloop ingress; callback return values are ignored by C.
 
 Collision spec (first-class contract):
 
@@ -1173,6 +1190,11 @@ Collision callback event contract (C -> scheduler):
   - `:phase` (`:enter`/`:stay`/`:exit`)
   - `:snapshot-gen` (or equivalent monotonically increasing generation)
   - `:ts-ms` host/device monotonic timestamp used by C
+- Callback invocation semantics:
+  - callback target is a configured Clojure closure
+  - callback is dispatched via scheduler/runloop ingress (never executed inline on render thread)
+  - C does not consume callback return values
+  - any scene mutation must be performed explicitly by Clojure callback code (`swap!`/`reset!`)
 - Ordering rules:
   - events are emitted in deterministic rule iteration order per processed snapshot
   - scheduler consumption order must match enqueue order (FIFO)
@@ -1194,15 +1216,16 @@ Stepwise delivery plan (implementation order):
 
 1. Generalized Clojure API contract freeze (no runtime behavior change yet)
   - finalize collision-rule schema fields and defaults
-  - finalize callback-configuration API shape (function registration/selection from Clojure)
+  - finalize callback-configuration API shape (closure registration/selection from Clojure)
   - finalize callback-event payload fields and phase vocabulary
+  - freeze no-return callback contract (C ignores callback return values)
   - document canonical pair-id behavior and latch semantics
   - add schema-level tests for rule decoding/default handling
 2. Scheduler callback ingress (thread-safe boundary only)
   - implement thread-safe ingress queue (MPSC + FIFO)
   - add wakeup signaling and scheduler-thread drain API
   - add close/drain shutdown semantics
-  - tests: FIFO ordering, concurrent producer safety, scheduler-thread-only handler execution
+  - tests: FIFO ordering, concurrent producer safety, scheduler-thread-only closure execution
 3. C collision engine baseline (without callback wiring enabled by default)
   - decode collision rules from snapshot
   - resolve object ids to render objects and compute overlap
@@ -1210,7 +1233,7 @@ Stepwise delivery plan (implementation order):
   - tests: deterministic overlap transitions from synthetic snapshots
 4. Bridge C collision events into scheduler ingress
   - enqueue callback payloads from C collision pass
-  - drain and dispatch callback handlers on scheduler thread
+  - drain and dispatch callback closures on scheduler thread (one-way dispatch, no return-value use)
   - tests: deterministic event order, no duplicate `:enter` on unchanged overlap
 5. Slot/scenario integration and rollout in host viewer
   - enable collision rules first for `:game` slot
@@ -1228,10 +1251,11 @@ Execution gates per step (must pass before next step):
 - Gate 1 (after step 1):
   - collision rule schema + defaults are fixed and documented
   - callback payload schema is fixed and versioned in docs/tests
+  - no-return callback contract is fixed and documented (C ignores callback return values)
   - no runtime behavior change in renderer/scheduler yet
 - Gate 2 (after step 2):
   - scheduler ingress queue API is available and thread-safe
-  - callback handlers still run exclusively on scheduler thread
+  - callback closures still run exclusively on scheduler thread
   - queue close/drain is covered by unit tests
 - Gate 3 (after step 3):
   - C collision evaluation produces deterministic phase transitions from synthetic snapshots
@@ -1260,10 +1284,11 @@ Immediate next implementation slice:
 
 Step 1 checklist (next concrete tasks):
 
-- [ ] Add explicit API docs for `tiny-gfx.collision` callback configuration semantics (set/clear/invoke, nil behavior, expected return shape).
-- [ ] Add Clojure schema-level tests for collision-rule defaults and phase-mask normalization via `tiny-gfx.scene/normalize-collision-rule`.
-- [ ] Add Clojure schema-level tests for disabled-rule handling contract (`:enabled false`) without runtime engine coupling.
-- [ ] Keep renderer/scheduler runtime behavior unchanged while Gate 1 tests are established.
+- Add explicit API docs for `tiny-gfx.collision` callback configuration semantics (set/clear/invoke, nil behavior, closure dispatch path, no-return contract).
+- Add Clojure schema-level tests for collision-rule defaults and phase-mask normalization via `tiny-gfx.scene/normalize-collision-rule`.
+- Add Clojure schema-level tests for disabled-rule handling contract (`:enabled false`) without runtime engine coupling.
+- Add contract tests that callback return values are ignored by C (one-way dispatch contract).
+- Keep renderer/scheduler runtime behavior unchanged while Gate 1 tests are established.
 
 Tasks:
 
@@ -1280,6 +1305,7 @@ Tasks:
 - Emit collision events back into the tiny-clj scheduler via callback bridge:
   - callback payload includes at least `:a-id`, `:b-id`, `:phase` (`:enter`/`:stay`/`:exit`) and optional frame/slot metadata
   - callback delivery is deterministic and ordered per scheduler callback dispatch
+  - callback dispatch is one-way (C does not consume callback return values)
 - Implement scheduler ingress thread-safety for collision callbacks:
   - add thread-safe callback queue + wakeup signaling
   - ensure scheduler-thread-only processing of queued callbacks
@@ -1289,7 +1315,8 @@ Tasks:
   - moved object triggers enter/exit transitions correctly
   - unchanged frame does not duplicate `:enter` events
   - enqueue/drain order remains FIFO under concurrent producer activity
-  - scheduler thread alone executes callback handlers (no cross-thread handler execution)
+  - scheduler thread alone executes callback closures (no cross-thread callback execution)
+  - callback return values are ignored (no scene writeback contract to C)
 - Current host-demo state (intermediate step):
   - obstacle world bounding box is already derived automatically from geometry + explicit transform application and cached across frames
   - collision hitbox is intentionally still set manually for gameplay tuning/stability
@@ -1299,7 +1326,8 @@ Done when:
 
 - Collision pairs are specified declaratively via stable ids in scene records.
 - Collision callbacks are configurable from Clojure through one generalized API surface (not demo-specific hardcoded symbols).
-- C collision checks run automatically from snapshot input using Clojure-declared pair specs and dispatch deterministic callbacks into the existing Clojure scheduler.
+- C collision checks run automatically from snapshot input using Clojure-declared pair specs and dispatch deterministic closure callbacks into the existing Clojure scheduler.
+- Callback return values are ignored by C; scene updates are explicit Clojure-side mutations.
 
 ## Optional Extension A: Render-Thread Interpolation Animations (Off-Main-Thread)
 
@@ -1379,7 +1407,7 @@ Done when:
 10. M6 VText integration
 11. M7 SPI backend integration (slot windows on SPI)
 12. M9 game/menu/title integration
-13. M10 collision contract + C-driven callback
+13. M10 collision contract + C-dispatched closure callback
 14. Optional later: explicit patch path + pointer-identity subtree reuse
 
 Rule:
@@ -1454,3 +1482,4 @@ Done when:
 - `docs/USER_GUIDE_VECTOR_SCENE.md` exists and is linked from relevant docs/README entry points.
 - Guide covers all major feature areas: animations, collision detection, time-driven updates, object grouping/re-grouping, shape changes.
 - Guide examples are validated against current runtime API (no outdated symbols/contracts).
+
