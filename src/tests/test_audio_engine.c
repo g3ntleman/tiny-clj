@@ -607,6 +607,41 @@ TEST(test_audio_finished_callback_runs_via_event_loop) {
   audio_engine_shutdown();
 }
 
+TEST(test_audio_native_on_finished_callback_receives_event_map_shape) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  audio_engine_init(1);
+  event_loop_clear();
+
+  ID track_sym = (ID)intern_symbol_global(":finish-shape-test");
+  ID ba = make_test_trk1(72, 2, 1, 0);
+  TEST_ASSERT_TRUE(audio_engine_load_track(track_sym, ba));
+
+  ID setup = eval_string(
+      "(do "
+      "  (def audio-finished-shape (atom nil)) "
+      "  (tiny-snd.runtime/audio-on-finished! "
+      "    (fn [event] "
+      "      (reset! audio-finished-shape "
+      "              [(map? event) (:source event) (:kind event) (:track-id event)]) "
+      "      nil)) "
+      "  true)",
+      g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(setup);
+
+  TEST_ASSERT_TRUE(audio_engine_play_music(track_sym, 1));
+  audio_engine_tick();
+  TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
+  TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+
+  ID done = eval_string("(= @audio-finished-shape [true :audio :finished :finish-shape-test])",
+                        g_test_eval_state);
+  TEST_ASSERT_EQUAL(clj_true, done);
+
+  RELEASE(ba);
+  audio_engine_shutdown();
+}
+
 /* ========================================================================= */
 /* Native API wiring tests (via eval_string)                                 */
 /* ========================================================================= */

@@ -1290,11 +1290,12 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
   - Acceptance:
     - Integration tests confirm scene moves via Clojure slot updates only.
     - Runtime lifecycle tests still pass (`start-renderer!` / `stop-renderer!`).
-  - Status (2026-03-05):
+  - Done (2026-03-06):
     - Host path reads live framebuffer directly (lock-free, no copy buffer) — faithful ESP32 SPI/I80 GRAM simulation.
     - Obsolete per-frame render completion wait/condvar path removed from host loop.
     - Lifecycle integration gate re-run completed (`test_vector_scene_graph/*renderer_lifecycle`*: 38 tests, 0 failures).
     - Integration proof covered by regression tests: scene motion data remains Timeline-driven from Clojure slot snapshots (`test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven`) and collision response is callback-routed from Clojure (`test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_geometry_in_clojure`).
+    - Host viewer now consumes `:spatial-callback` and `:game-scene-atom` from `tiny-gfx.runtime/host-viewer-config`; the C loop no longer resolves demo/collision namespaces directly and only consumes runtime config plus render/input responsibilities.
 - **PR-4: End-of-M9 cleanup + documentation freeze**
   - Files:
     - `src/host_viewer_minifb.c`

@@ -201,6 +201,40 @@ TEST(test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value)
     event_loop_clear();
 }
 
+TEST(test_gfx_collision_contract_runloop_dispatch_preserves_spatial_envelope_fields) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    event_loop_clear();
+
+    ID dispatch_fn = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.collision) "
+        "  (def collision-envelope-marker (atom nil)) "
+        "  (tiny-gfx.collision/set-collision-callback! "
+        "    (fn collision-envelope-cb [event] "
+        "      (reset! collision-envelope-marker "
+        "              [(:source event) (:kind event) (:phase event) (:channel event)]) "
+        "      :ignored)) "
+        "  tiny-gfx.collision/invoke-collision-callback!)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(dispatch_fn);
+    TEST_ASSERT_TRUE(TAG(dispatch_fn) == CLJ_FUNC || TAG(dispatch_fn) == CLJ_CLOSURE);
+
+    ID event_payload = eval_string("{:source :spatial :kind :proximity :phase :enter :channel :hearing}",
+                                   g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(event_payload);
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call(dispatch_fn, event_payload));
+    TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+
+    ID marker = eval_string("(= @collision-envelope-marker [:spatial :proximity :enter :hearing])",
+                            g_test_eval_state);
+    TEST_ASSERT_EQUAL(clj_true, marker);
+
+    ID clear_ok = eval_string("(tiny-gfx.collision/set-collision-callback! nil)", g_test_eval_state);
+    TEST_ASSERT_NULL(clear_ok);
+    event_loop_clear();
+}
+
 TEST(test_gfx_scene_update_nodes_applies_batched_changes) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
