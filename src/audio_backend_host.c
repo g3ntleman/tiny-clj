@@ -13,20 +13,28 @@
 #ifndef ESP32_BUILD
 
 #include "audio_engine.h"
+#include "audio_tick_scheduler.h"
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
 
 #if defined(__APPLE__)
 #include <AudioUnit/AudioUnit.h>
+#include <mach/mach_time.h>
 #include <pthread.h>
+#include <errno.h>
 #include <unistd.h>
 
 #define HOST_AUDIO_SAMPLE_RATE 48000.0
 #define HOST_AUDIO_CHANNELS 2
 #define HOST_AUDIO_MAX_VOICES AUDIO_MAX_VOICES
+#define HOST_AUDIO_TICK_NS 1000000u
+#define HOST_AUDIO_IDLE_SLEEP_NS 2000000u
+#define HOST_AUDIO_MAX_CATCHUP_TICKS 4u
 
 static AudioComponentInstance g_output_unit = NULL;
+static AudioTickScheduler g_tick_scheduler;
 #ifndef TINY_CLJ_TEST_RUNNER
 static pthread_t g_tick_thread;
 static atomic_bool g_tick_thread_running = false;
@@ -38,6 +46,52 @@ static int g_host_voice_count = 0;
 static float g_voice_phase[HOST_AUDIO_MAX_VOICES];
 static _Atomic uint32_t g_voice_freq[HOST_AUDIO_MAX_VOICES];
 static _Atomic uint32_t g_voice_volume[HOST_AUDIO_MAX_VOICES];
+
+static uint64_t host_audio_monotonic_now_ns(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0u;
+    }
+    return ((uint64_t)ts.tv_sec * 1000000000ull) + (uint64_t)ts.tv_nsec;
+}
+
+#ifndef TINY_CLJ_TEST_RUNNER
+static mach_timebase_info_data_t g_host_audio_mach_timebase = {0};
+
+static void host_audio_init_mach_timebase(void) {
+    if (g_host_audio_mach_timebase.denom == 0) {
+        (void)mach_timebase_info(&g_host_audio_mach_timebase);
+    }
+}
+
+static uint64_t ns_to_mach_abs(uint64_t ns) {
+    host_audio_init_mach_timebase();
+    if (g_host_audio_mach_timebase.numer == 0) {
+        return ns;
+    }
+    return (ns * g_host_audio_mach_timebase.denom) / g_host_audio_mach_timebase.numer;
+}
+
+static void host_audio_sleep_until_ns(uint64_t deadline_ns) {
+    uint64_t now_ns = host_audio_monotonic_now_ns();
+    if (deadline_ns <= now_ns) {
+        return;
+    }
+
+#if defined(__APPLE__)
+    uint64_t wait_delta_ns = deadline_ns - now_ns;
+    uint64_t deadline_abs = mach_absolute_time() + ns_to_mach_abs(wait_delta_ns);
+    (void)mach_wait_until(deadline_abs);
+#else
+    uint64_t wait_ns = deadline_ns - now_ns;
+    struct timespec ts;
+    ts.tv_sec = (time_t)(wait_ns / 1000000000ull);
+    ts.tv_nsec = (long)(wait_ns % 1000000000ull);
+    while (nanosleep(&ts, &ts) != 0 && errno == EINTR) {
+    }
+#endif
+}
+#endif
 
 static OSStatus host_audio_render(void *in_ref_con,
                                   AudioUnitRenderActionFlags *io_action_flags,
@@ -137,10 +191,29 @@ static bool host_audio_init_unit(void) {
 static void *host_tick_thread_main(void *arg) {
     (void)arg;
     while (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire)) {
-        if (atomic_load_explicit(&g_tick_enabled, memory_order_relaxed)) {
+        if (!atomic_load_explicit(&g_tick_enabled, memory_order_relaxed)) {
+            host_audio_sleep_until_ns(host_audio_monotonic_now_ns() + HOST_AUDIO_IDLE_SLEEP_NS);
+            continue;
+        }
+
+        uint64_t now_ns = host_audio_monotonic_now_ns();
+        uint32_t skipped_ticks = 0u;
+        uint32_t due = audio_tick_scheduler_ticks_due(&g_tick_scheduler, now_ns, &skipped_ticks);
+        if (skipped_ticks > 0u) {
+            g_audio_engine.telemetry.tick_overrun_count += skipped_ticks;
+        }
+        if (due == 0u) {
+            host_audio_sleep_until_ns(g_tick_scheduler.next_deadline_ns);
+            continue;
+        }
+
+        for (uint32_t i = 0; i < due; i++) {
+            if (!atomic_load_explicit(&g_tick_thread_running, memory_order_acquire) ||
+                !atomic_load_explicit(&g_tick_enabled, memory_order_relaxed)) {
+                break;
+            }
             audio_engine_tick();
         }
-        usleep(1000);
     }
     return NULL;
 }
@@ -155,6 +228,7 @@ void audio_backend_init(int voice_count) {
         atomic_store_explicit(&g_voice_freq[i], 0, memory_order_relaxed);
         atomic_store_explicit(&g_voice_volume[i], 0, memory_order_relaxed);
     }
+    audio_tick_scheduler_init(&g_tick_scheduler, HOST_AUDIO_TICK_NS, HOST_AUDIO_MAX_CATCHUP_TICKS);
 
     if (!host_audio_init_unit()) {
         if (g_output_unit) {
@@ -201,6 +275,7 @@ void audio_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume) 
 
 void audio_tick_start(void) {
     g_audio_engine.tick_running = true;
+    audio_tick_scheduler_start(&g_tick_scheduler, host_audio_monotonic_now_ns());
     atomic_store_explicit(&g_tick_enabled, true, memory_order_release);
     atomic_store_explicit(&g_audio_running, true, memory_order_release);
     if (atomic_load_explicit(&g_audio_available, memory_order_acquire) && g_output_unit) {
@@ -210,6 +285,7 @@ void audio_tick_start(void) {
 
 void audio_tick_stop(void) {
     g_audio_engine.tick_running = false;
+    audio_tick_scheduler_stop(&g_tick_scheduler);
     atomic_store_explicit(&g_tick_enabled, false, memory_order_release);
     atomic_store_explicit(&g_audio_running, false, memory_order_release);
     if (g_output_unit) {

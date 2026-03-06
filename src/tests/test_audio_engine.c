@@ -7,6 +7,7 @@
 
 #include "tests_common.h"
 #include "../audio_engine.h"
+#include "../audio_tick_scheduler.h"
 #include "../event_loop.h"
 #include "byte_array.h"
 
@@ -1054,6 +1055,39 @@ TEST(test_audio_midi_note_to_freq) {
   TEST_ASSERT_EQUAL_UINT16(440, midi_note_to_freq(69)); /* A4 */
   TEST_ASSERT_EQUAL_UINT16(880, midi_note_to_freq(81)); /* A5 */
   TEST_ASSERT_EQUAL_UINT16(0, midi_note_to_freq(128));  /* out of range */
+}
+
+TEST(test_audio_tick_scheduler_waits_until_deadline) {
+  AudioTickScheduler scheduler;
+  uint32_t skipped = 99u;
+
+  audio_tick_scheduler_init(&scheduler, 1000000u, 4u);
+  audio_tick_scheduler_start(&scheduler, 10000000u);
+
+  TEST_ASSERT_EQUAL_UINT32(0u, audio_tick_scheduler_ticks_due(&scheduler, 10000000u, &skipped));
+  TEST_ASSERT_EQUAL_UINT32(0u, skipped);
+  TEST_ASSERT_EQUAL_UINT32(0u, audio_tick_scheduler_ticks_due(&scheduler, 10999999u, &skipped));
+  TEST_ASSERT_EQUAL_UINT32(0u, skipped);
+  TEST_ASSERT_EQUAL_UINT32(1u, audio_tick_scheduler_ticks_due(&scheduler, 11000000u, &skipped));
+  TEST_ASSERT_EQUAL_UINT32(0u, skipped);
+  TEST_ASSERT_EQUAL_UINT64(12000000u, scheduler.next_deadline_ns);
+}
+
+TEST(test_audio_tick_scheduler_caps_catchup_and_resyncs_deadline) {
+  AudioTickScheduler scheduler;
+  uint32_t skipped = 0u;
+
+  audio_tick_scheduler_init(&scheduler, 1000000u, 2u);
+  audio_tick_scheduler_start(&scheduler, 0u);
+
+  TEST_ASSERT_EQUAL_UINT32(2u, audio_tick_scheduler_ticks_due(&scheduler, 5500000u, &skipped));
+  TEST_ASSERT_EQUAL_UINT32(3u, skipped);
+  TEST_ASSERT_EQUAL_UINT64(6000000u, scheduler.next_deadline_ns);
+
+  TEST_ASSERT_EQUAL_UINT32(0u, audio_tick_scheduler_ticks_due(&scheduler, 5999999u, &skipped));
+  TEST_ASSERT_EQUAL_UINT32(0u, skipped);
+  TEST_ASSERT_EQUAL_UINT32(1u, audio_tick_scheduler_ticks_due(&scheduler, 6000000u, &skipped));
+  TEST_ASSERT_EQUAL_UINT32(0u, skipped);
 }
 
 /* ========================================================================= */

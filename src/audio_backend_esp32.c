@@ -8,6 +8,7 @@
 #ifdef ESP32_BUILD
 
 #include "audio_engine.h"
+#include "audio_tick_scheduler.h"
 #include "esp32-idf/main/vector_handheld_config.h"
 
 #include "driver/ledc.h"
@@ -43,9 +44,12 @@ static LedcVoice g_ledc_voices[] = {
 
 static esp_timer_handle_t g_audio_timer = NULL;
 static _Atomic bool g_audio_tick_in_callback = false;
+static AudioTickScheduler g_audio_tick_scheduler;
 
 /* Keep callback work within one tick budget. */
 #define AUDIO_TICK_BUDGET_US (VG_AUDIO_TICK_MS * 1000)
+#define AUDIO_TICK_PERIOD_NS ((uint64_t)VG_AUDIO_TICK_MS * 1000000ull)
+#define AUDIO_TICK_MAX_CATCHUP_TICKS 4u
 
 static bool ledc_mapping_valid(int voice_count) {
     for (int i = 0; i < voice_count; i++) {
@@ -77,9 +81,19 @@ static void audio_timer_callback(void *arg) {
     }
 
     int64_t start_us = esp_timer_get_time();
-    audio_engine_tick();
+    uint32_t skipped_ticks = 0u;
+    uint32_t due = audio_tick_scheduler_ticks_due(&g_audio_tick_scheduler,
+                                                  (uint64_t)start_us * 1000ull,
+                                                  &skipped_ticks);
+    if (skipped_ticks > 0u) {
+        g_audio_engine.telemetry.tick_overrun_count += skipped_ticks;
+    }
+    for (uint32_t i = 0; i < due; i++) {
+        audio_engine_tick();
+    }
     int64_t elapsed_us = esp_timer_get_time() - start_us;
-    if (elapsed_us > AUDIO_TICK_BUDGET_US) {
+    int64_t budget_us = (int64_t)AUDIO_TICK_BUDGET_US * (due > 0u ? (int64_t)due : 1ll);
+    if (elapsed_us > budget_us) {
         g_audio_engine.telemetry.tick_overrun_count++;
     }
     atomic_store_explicit(&g_audio_tick_in_callback, false, memory_order_release);
@@ -96,6 +110,7 @@ void audio_backend_init(int voice_count) {
     if (!ledc_mapping_valid(voice_count)) {
         return;
     }
+    audio_tick_scheduler_init(&g_audio_tick_scheduler, AUDIO_TICK_PERIOD_NS, AUDIO_TICK_MAX_CATCHUP_TICKS);
 
     for (int i = 0; i < voice_count; i++) {
         LedcVoice *v = &g_ledc_voices[i];
@@ -179,7 +194,9 @@ void audio_tick_start(void) {
         }
     }
 
+    audio_tick_scheduler_start(&g_audio_tick_scheduler, (uint64_t)esp_timer_get_time() * 1000ull);
     if (esp_timer_start_periodic(g_audio_timer, VG_AUDIO_TICK_MS * 1000) != ESP_OK) { /* us */
+        audio_tick_scheduler_stop(&g_audio_tick_scheduler);
         return;
     }
     g_audio_engine.tick_running = true;
@@ -190,6 +207,7 @@ void audio_tick_stop(void) {
     if (g_audio_timer) {
         esp_timer_stop(g_audio_timer);
     }
+    audio_tick_scheduler_stop(&g_audio_tick_scheduler);
     g_audio_engine.tick_running = false;
 
     /* Silence all voices on stop */

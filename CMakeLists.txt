@@ -184,6 +184,7 @@ list(APPEND SOURCES
     src/builtins_regex.c
     src/runtime.c
     src/namespace.c
+    src/audio_tick_scheduler.c
     src/symbol.c
     src/symbol_token.c
     src/parser.c

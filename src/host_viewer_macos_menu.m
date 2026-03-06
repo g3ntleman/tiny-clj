@@ -77,6 +77,8 @@ static void macos_viewer_store_screen_position_for_window(NSWindow *window) {
     [defaults setObject:screen_uuid forKey:kMacosViewerScreenUUIDKey];
     [defaults setDouble:frame.origin.x forKey:kMacosViewerFrameXKey];
     [defaults setDouble:frame.origin.y forKey:kMacosViewerFrameYKey];
+    /* Flush immediately so move-driven placement survives crashes or force quit. */
+    [defaults synchronize];
     /* Width/height intentionally not saved — host viewer uses fixed 2x scale. */
 }
 
