@@ -45,5 +45,18 @@ bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
                                             VgFrameBuffer *fb,
                                             uint32_t snapshot_id,
                                             uint32_t *out_dirty_pixels);
+bool vg_render_frame_slot_record_at_ms(ID frame_scene_record,
+                                       VgRenderSlotState *state,
+                                       VgFrameBuffer *fb,
+                                       uint32_t snapshot_id,
+                                       uint32_t now_ms,
+                                       bool force_render,
+                                       uint32_t *out_dirty_pixels);
+bool vg_render_frame_slot_record_if_changed_at_ms(ID frame_scene_record,
+                                                   VgRenderSlotState *state,
+                                                   VgFrameBuffer *fb,
+                                                   uint32_t snapshot_id,
+                                                   uint32_t now_ms,
+                                                   uint32_t *out_dirty_pixels);
 
 #endif

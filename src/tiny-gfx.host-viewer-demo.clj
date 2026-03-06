@@ -1,7 +1,8 @@
 R"TINY_GFX_HOST(
 (ns tiny-gfx.host-viewer-demo
   (:require [tiny-gfx.scene :refer [->Transform ->Style ->Group ->Polyline
-                                     ->Tri ->VText ->FrameScene ->Timeline color]]))
+                                     ->Tri ->VText ->FrameScene ->Timeline color]]
+            [tiny-gfx.collision :as collision]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
@@ -105,7 +106,7 @@ R"TINY_GFX_HOST(
 
 (def star-drift-timeline
   (timeline {:keyframes [[0 (transform {:tx 0 :ty 0 :rot 0})]
-                         [8000 (transform {:tx -320 :ty 0 :rot 0})]]
+                         [16000 (transform {:tx -320 :ty 0 :rot 0})]]
              :loop true}))
 
 (def score-text-timeline
@@ -122,51 +123,51 @@ R"TINY_GFX_HOST(
              :loop true}))
 
 (def star-style-1
-  (timeline {:keyframes [[0 style-star-white] [450 style-star-black]
-                         [1100 style-star-yellow] [1650 style-star-black]
-                         [2600 style-star-cyan] [3300 style-star-black]
-                         [4200 style-star-yellow] [5200 style-star-black]
-                         [6200 style-star-white]]
+  (timeline {:keyframes [[0 style-star-white] [900 style-star-black]
+                         [2200 style-star-yellow] [3300 style-star-black]
+                         [5200 style-star-cyan] [6600 style-star-black]
+                         [8400 style-star-yellow] [10400 style-star-black]
+                         [12400 style-star-white]]
              :loop true}))
 
 (def star-style-2
-  (timeline {:keyframes [[0 style-star-cyan] [380 style-star-black]
-                         [980 style-star-white] [1500 style-star-black]
-                         [2300 style-star-yellow] [3000 style-star-black]
-                         [3900 style-star-cyan] [4800 style-star-black]
-                         [5900 style-star-white]]
+  (timeline {:keyframes [[0 style-star-cyan] [760 style-star-black]
+                         [1960 style-star-white] [3000 style-star-black]
+                         [4600 style-star-yellow] [6000 style-star-black]
+                         [7800 style-star-cyan] [9600 style-star-black]
+                         [11800 style-star-white]]
              :loop true}))
 
 (def star-style-3
-  (timeline {:keyframes [[0 style-star-yellow] [520 style-star-black]
-                         [1200 style-star-white] [1750 style-star-black]
-                         [2550 style-star-cyan] [3400 style-star-black]
-                         [4300 style-star-white] [5150 style-star-black]
-                         [6100 style-star-yellow] [7000 style-star-white]]
+  (timeline {:keyframes [[0 style-star-yellow] [1040 style-star-black]
+                         [2400 style-star-white] [3500 style-star-black]
+                         [5100 style-star-cyan] [6800 style-star-black]
+                         [8600 style-star-white] [10300 style-star-black]
+                         [12200 style-star-yellow] [14000 style-star-white]]
              :loop true}))
 
 (def star-style-4
-  (timeline {:keyframes [[0 style-star-white] [600 style-star-black]
-                         [1450 style-star-cyan] [2100 style-star-black]
-                         [3150 style-star-yellow] [3900 style-star-black]
-                         [5050 style-star-cyan] [5800 style-star-black]
-                         [7000 style-star-white]]
+  (timeline {:keyframes [[0 style-star-white] [1200 style-star-black]
+                         [2900 style-star-cyan] [4200 style-star-black]
+                         [6300 style-star-yellow] [7800 style-star-black]
+                         [10100 style-star-cyan] [11600 style-star-black]
+                         [14000 style-star-white]]
              :loop true}))
 
 (def star-style-5
-  (timeline {:keyframes [[0 style-star-yellow] [470 style-star-black]
-                         [1180 style-star-cyan] [1880 style-star-black]
-                         [2800 style-star-white] [3550 style-star-black]
-                         [4500 style-star-yellow] [5400 style-star-black]
-                         [6500 style-star-cyan] [7400 style-star-white]]
+  (timeline {:keyframes [[0 style-star-yellow] [940 style-star-black]
+                         [2360 style-star-cyan] [3760 style-star-black]
+                         [5600 style-star-white] [7100 style-star-black]
+                         [9000 style-star-yellow] [10800 style-star-black]
+                         [13000 style-star-cyan] [14800 style-star-white]]
              :loop true}))
 
 (def star-style-6
-  (timeline {:keyframes [[0 style-star-cyan] [530 style-star-black]
-                         [1350 style-star-yellow] [1980 style-star-black]
-                         [3050 style-star-white] [3820 style-star-black]
-                         [4960 style-star-cyan] [5740 style-star-black]
-                         [6880 style-star-yellow] [7800 style-star-white]]
+  (timeline {:keyframes [[0 style-star-cyan] [1060 style-star-black]
+                         [2700 style-star-yellow] [3960 style-star-black]
+                         [6100 style-star-white] [7640 style-star-black]
+                         [9920 style-star-cyan] [11480 style-star-black]
+                         [13760 style-star-yellow] [15600 style-star-white]]
              :loop true}))
 
 (def game-stars-group
@@ -179,6 +180,40 @@ R"TINY_GFX_HOST(
 (def star-4 (polyline {:id 3024 :style star-style-4 :pts [[187 89] [187 91] [187 90] [186 90] [188 90]]}))
 (def star-5 (polyline {:id 3025 :style star-style-5 :pts [[239 105] [239 107] [239 106] [238 106] [240 106]]}))
 (def star-6 (polyline {:id 3026 :style star-style-6 :pts [[289 81] [289 83] [289 82] [288 82] [290 82]]}))
+
+(def player-geometry-large {:x1 56 :y1 146 :x2 72 :y2 118 :x3 88 :y3 146})
+(def player-geometry-small {:x1 60 :y1 146 :x2 72 :y2 126 :x3 84 :y3 146})
+
+(def player-small-state (atom false))
+(def game-scene-state (atom nil))
+
+(defn- apply-player-geometry
+  [game-scene player-small?]
+  (let [root (:root game-scene)
+        player (get root 3002)
+        g (if player-small? player-geometry-small player-geometry-large)
+        player2 (assoc player
+                  :x1 (:x1 g) :y1 (:y1 g)
+                  :x2 (:x2 g) :y2 (:y2 g)
+                  :x3 (:x3 g) :y3 (:y3 g))
+        root2 (assoc root 3002 player2)]
+    (assoc game-scene :root root2)))
+
+(defn on-player-collision-toggle!
+  "Host-viewer collision callback: toggles player geometry and returns updated game scene."
+  []
+  (let [player-small? (swap! player-small-state not)
+        game-scene @game-scene-state]
+    (if game-scene
+      (let [updated-game-scene (apply-player-geometry game-scene player-small?)]
+        (reset! game-scene-state updated-game-scene)
+        updated-game-scene)
+      nil)))
+
+(defn configure-collision-toggle-callback!
+  "Configures the collision response callback used by the host viewer."
+  []
+  (collision/set-collision-callback! on-player-collision-toggle!))
 
 (defn create-demo-bundle
   "Returns a vector with the demo frame-scenes used by the host viewer.
@@ -228,9 +263,12 @@ Index layout:
                            3022 star-2
                            3023 star-3
                            3024 star-4
-                           3025 star-5
-                           3026 star-6}
+                            3025 star-5
+                            3026 star-6}
             game-scene (frame-scene {:root game-entities :clip-rect [0 40 320 136] :z 2})]
+        (reset! player-small-state false)
+        (reset! game-scene-state game-scene)
+        (configure-collision-toggle-callback!)
         [deco-scene
          score-scene
          game-scene]))))

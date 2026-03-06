@@ -18,10 +18,16 @@
 #include "tiny_gfx.h"
 #include "tiny_clj.h"
 #include "builtins.h"
+#include "eval.h"
 #include "value.h"
+#include "callbacks.h"
 #include "runtime.h"
 #include "record.h"
 #include "event_loop.h"
+#include "renderer_lifecycle.h"
+#include "rendered_state_snapshot.h"
+#include "viewer_collision.h"
+#include "platform.h"
 #include "atom.h"
 #include "vector.h"
 #include "MiniFB.h"
@@ -36,14 +42,28 @@
 #define VIEWER_SLOT_DECO  0u
 #define VIEWER_SLOT_SCORE 1u
 #define VIEWER_SLOT_GAME  2u
-#define TARGET_FPS           60u
-#define SCENE_ERASE_COLOR   0x0000u
+#define TARGET_FPS              60u
+#define SCENE_ERASE_COLOR       0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
-#define SCORE_TIMELINE_STEP_MS   1000u
-#define SCORE_TIMELINE_STEPS     10u
+#define VIEWER_ANIMATED_WAIT_TIMEOUT_MS 8u
+#define VIEWER_PLAYER_ENTITY_ID 3002
+#define VIEWER_OBSTACLE_ENTITY_ID 3003
+#define VIEWER_COLLISION_COOLDOWN_MS 300u
 
 static uint64_t monotonic_now_ns(void);
 typedef struct ViewerDemoBundle ViewerDemoBundle;
+
+static inline uint32_t viewer_record_type_hash(ID obj) {
+    CljPersistentRecord *r = (CljPersistentRecord *)obj;
+    return r->descriptor ? clj_hash(r->descriptor->type_symbol) : 0u;
+}
+
+static int32_t viewer_fixed_raw_to_int_trunc_zero(int32_t raw) {
+    if (raw >= 0) {
+        return raw >> CLJ_FIXED_FRAC_BITS;
+    }
+    return -(((-raw) >> CLJ_FIXED_FRAC_BITS));
+}
 
 /* Handles immediate viewer exit shortcuts. */
 static bool viewer_should_exit_for_keys(const uint8_t *keys) {
@@ -285,8 +305,6 @@ static const uint8_t g_slot_render_priority[VIEWER_SLOT_COUNT] = {
 typedef struct {
     pthread_t thread;
     pthread_mutex_t mutex;
-    pthread_mutex_t render_done_mutex;
-    pthread_cond_t render_done_cond;
     atomic_bool running;
     bool started;
     VgRenderSlotState slot_states[VIEWER_SLOT_COUNT];
@@ -304,8 +322,22 @@ typedef struct {
     atomic_uint_fast64_t skipped_generations_total;
     atomic_uint_fast64_t skipped_max_frame;
     atomic_uint_fast64_t skipped_max_slot;
+    atomic_uint_fast32_t animated_slots_mask;
 } ViewerRenderThread;
 static ViewerRenderThread g_render_thread = {0};
+
+static uint32_t viewer_compute_animated_slots_mask(const VgRenderSlotState *slot_states) {
+    if (!slot_states) {
+        return 0u;
+    }
+    uint32_t mask = 0u;
+    for (uint8_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
+        if (slot_states[i].initialized && slot_states[i].has_animation) {
+            mask |= (1u << i);
+        }
+    }
+    return mask;
+}
 
 static uint64_t monotonic_now_ns(void) {
     struct timespec ts;
@@ -405,7 +437,7 @@ static void destroy_scene_slot_atoms(void) {
     }
 }
 
-/* Render-thread loop: blocks for changed slots and renders into shared framebuffer. */
+/* Render-thread loop: changed slots render immediately; animated slots tick continuously. */
 static void *viewer_render_thread_main(void *arg) {
     VgFrameBuffer *fb = (VgFrameBuffer *)arg;
     if (!fb) {
@@ -413,29 +445,34 @@ static void *viewer_render_thread_main(void *arg) {
     }
     viewer_set_realtime_thread_policy();
     while (atomic_load_explicit(&g_render_thread.running, memory_order_acquire)) {
+        uint32_t animated_mask = (uint32_t)atomic_load_explicit(&g_render_thread.animated_slots_mask,
+                                                                 memory_order_acquire);
+        uint32_t wait_timeout_ms = (animated_mask == 0u) ? UINT32_MAX : VIEWER_ANIMATED_WAIT_TIMEOUT_MS;
         uint32_t slot_generations[VIEWER_SLOT_COUNT] = {0};
         uint32_t changed_mask = vg_slot_change_tracker_wait_for_changes(&g_slot_change_tracker,
                                                                         g_render_thread.slot_seen_generations,
                                                                         slot_generations,
-                                                                        UINT32_MAX);
+                                                                        wait_timeout_ms);
         if (!atomic_load_explicit(&g_render_thread.running, memory_order_acquire)) {
             break;
         }
-        if (changed_mask == 0u) {
+        if (changed_mask == 0u && animated_mask == 0u) {
             continue;
         }
 
+        uint32_t frame_now_ms = platform_current_time_ms();
         uint32_t frame_dirty_pixels = 0u;
         uint32_t frame_changed_slots = 0u;
         uint64_t frame_skipped_total = 0u;
-        uint64_t lock_begin_ns = monotonic_now_ns();
         if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
             continue;
         }
         uint64_t lock_acquired_ns = monotonic_now_ns();
         for (size_t p = 0; p < VIEWER_SLOT_COUNT; p++) {
             uint8_t i = g_slot_render_priority[p];
-            if ((changed_mask & (1u << i)) == 0u) {
+            bool slot_changed = (changed_mask & (1u << i)) != 0u;
+            bool slot_animated_tick = !slot_changed && ((animated_mask & (1u << i)) != 0u);
+            if (!slot_changed && !slot_animated_tick) {
                 continue;
             }
             if (!g_scene_slot_atoms[i]) {
@@ -446,15 +483,23 @@ static void *viewer_render_thread_main(void *arg) {
                 continue;
             }
             uint32_t dirty_pixels = 0u;
-            bool rendered = vg_render_frame_slot_record_if_changed(snapshot,
-                                                                   &g_render_thread.slot_states[i],
-                                                                   fb,
-                                                                   slot_generations[i],
-                                                                   &dirty_pixels);
+            vg_rendered_state_capture_begin(i, slot_generations[i], frame_now_ms);
+            bool rendered = vg_render_frame_slot_record_at_ms(snapshot,
+                                                              &g_render_thread.slot_states[i],
+                                                              fb,
+                                                              slot_generations[i],
+                                                              frame_now_ms,
+                                                              slot_animated_tick,
+                                                              &dirty_pixels);
+            if (rendered) {
+                vg_rendered_state_capture_commit();
+            } else {
+                vg_rendered_state_capture_discard();
+            }
             if (rendered) {
                 uint32_t prev_gen = g_render_thread.last_rendered_generation[i];
                 uint32_t curr_gen = slot_generations[i];
-                if (curr_gen > (prev_gen + 1u)) {
+                if (slot_changed && curr_gen > (prev_gen + 1u)) {
                     uint64_t skipped = (uint64_t)(curr_gen - prev_gen - 1u);
                     frame_skipped_total += skipped;
                     atomic_fetch_add_explicit(&g_render_thread.skipped_generations_total,
@@ -485,6 +530,9 @@ static void *viewer_render_thread_main(void *arg) {
             }
         }
         memcpy(g_render_thread.slot_seen_generations, slot_generations, sizeof(slot_generations));
+        atomic_store_explicit(&g_render_thread.animated_slots_mask,
+                              viewer_compute_animated_slots_mask(g_render_thread.slot_states),
+                              memory_order_release);
         g_render_thread.last_dirty_pixels = frame_dirty_pixels;
         g_render_thread.last_changed_slots = frame_changed_slots;
         uint64_t lock_release_ns = monotonic_now_ns();
@@ -503,10 +551,6 @@ static void *viewer_render_thread_main(void *arg) {
         }
         (void)pthread_mutex_unlock(&g_render_thread.mutex);
         atomic_fetch_add_explicit(&g_render_thread.rendered_frame_serial, 1u, memory_order_release);
-        (void)pthread_mutex_lock(&g_render_thread.render_done_mutex);
-        (void)pthread_cond_signal(&g_render_thread.render_done_cond);
-        (void)pthread_mutex_unlock(&g_render_thread.render_done_mutex);
-        (void)lock_begin_ns;
     }
     return NULL;
 }
@@ -517,24 +561,14 @@ static bool start_render_thread(VgFrameBuffer *fb) {
         return false;
     }
     memset(&g_render_thread, 0, sizeof(g_render_thread));
+    atomic_store_explicit(&g_render_thread.animated_slots_mask, 0u, memory_order_release);
     if (pthread_mutex_init(&g_render_thread.mutex, NULL) != 0) {
-        return false;
-    }
-    if (pthread_mutex_init(&g_render_thread.render_done_mutex, NULL) != 0) {
-        (void)pthread_mutex_destroy(&g_render_thread.mutex);
-        return false;
-    }
-    if (pthread_cond_init(&g_render_thread.render_done_cond, NULL) != 0) {
-        (void)pthread_mutex_destroy(&g_render_thread.mutex);
-        (void)pthread_mutex_destroy(&g_render_thread.render_done_mutex);
         return false;
     }
     atomic_store_explicit(&g_render_thread.running, true, memory_order_release);
     if (pthread_create(&g_render_thread.thread, NULL, viewer_render_thread_main, fb) != 0) {
         atomic_store_explicit(&g_render_thread.running, false, memory_order_release);
         (void)pthread_mutex_destroy(&g_render_thread.mutex);
-        (void)pthread_mutex_destroy(&g_render_thread.render_done_mutex);
-        (void)pthread_cond_destroy(&g_render_thread.render_done_cond);
         return false;
     }
     g_render_thread.started = true;
@@ -549,12 +583,21 @@ static void stop_render_thread(void) {
     atomic_store_explicit(&g_render_thread.running, false, memory_order_release);
     /* Wake blocked render wait to allow clean shutdown. */
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, 0u, NULL);
-    (void)pthread_cond_signal(&g_render_thread.render_done_cond);
     (void)pthread_join(g_render_thread.thread, NULL);
     (void)pthread_mutex_destroy(&g_render_thread.mutex);
-    (void)pthread_mutex_destroy(&g_render_thread.render_done_mutex);
-    (void)pthread_cond_destroy(&g_render_thread.render_done_cond);
     memset(&g_render_thread, 0, sizeof(g_render_thread));
+}
+
+static bool viewer_renderer_start_callback(ID slot_atoms, void *user_data) {
+    (void)slot_atoms;
+    VgFrameBuffer *fb = (VgFrameBuffer *)user_data;
+    return start_render_thread(fb);
+}
+
+static bool viewer_renderer_stop_callback(void *user_data) {
+    (void)user_data;
+    stop_render_thread();
+    return true;
 }
 
 /* Publish one already-built FrameScene record into one slot atom and mark it dirty. */
@@ -578,6 +621,103 @@ static void publish_frame_scene_slot_record(size_t slot_index, ID scene, uint32_
     }
     (void)pthread_mutex_unlock(&g_render_thread.mutex);
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, (uint8_t)slot_index, out_generation);
+}
+
+static ID viewer_collision_invoke_callback(EvalState *st) {
+    if (!st) {
+        return NULL;
+    }
+    static CljSymbol *invoke_callback_sym = NULL;
+    if (!invoke_callback_sym) {
+        CljSymbol *collision_ns = intern_symbol_global("tiny-gfx.collision");
+        if (!collision_ns) {
+            return NULL;
+        }
+        invoke_callback_sym = intern_symbol(collision_ns, "invoke-collision-callback!");
+        if (!invoke_callback_sym) {
+            return NULL;
+        }
+    }
+    ID callback_dispatch_fn = ns_resolve(st, invoke_callback_sym);
+    if (!callback_dispatch_fn || callback_dispatch_fn == NOT_FOUND) {
+        return NULL;
+    }
+    unsigned char fn_tag = TAG(callback_dispatch_fn);
+    if (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE) {
+        return NULL;
+    }
+    return eval_function_call(callback_dispatch_fn, NULL, 0u, NULL, st);
+}
+
+static bool viewer_invoke_collision_callback(EvalState *st, FrameScene **out_updated_scene) {
+    if (!st || !out_updated_scene) {
+        return false;
+    }
+    ID updated_scene = NULL;
+    bool success = false;
+    TRY {
+        updated_scene = viewer_collision_invoke_callback(st);
+        if (updated_scene && TAG(updated_scene) == CLJ_RECORD) {
+            const VgRecordSchema *schema = tiny_gfx_schema();
+            if (schema && viewer_record_type_hash(updated_scene) == schema->h_frame_scene) {
+                *out_updated_scene = (FrameScene *)updated_scene;
+                success = true;
+            }
+        }
+    } CATCH(ex) {
+        (void)ex;
+        success = false;
+    } END_TRY
+    return success;
+}
+
+static bool viewer_apply_collision_step(ViewerDemoBundle *bundle,
+                                        VgCollisionState *state,
+                                        EvalState *st,
+                                        uint32_t now_ms) {
+    if (!bundle || !state || !st || !bundle->game_scene) {
+        return false;
+    }
+
+    VgRenderedEntityState player_state;
+    VgRenderedEntityState obstacle_state;
+    bool have_player = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
+                                                      (uintptr_t)fixnum(VIEWER_PLAYER_ENTITY_ID),
+                                                      &player_state);
+    bool have_obstacle = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
+                                                        (uintptr_t)fixnum(VIEWER_OBSTACLE_ENTITY_ID),
+                                                        &obstacle_state);
+    if (!have_player || !have_obstacle) {
+        return false;
+    }
+
+    int player_jump_y = (int)viewer_fixed_raw_to_int_trunc_zero(player_state.world_t.m12);
+    int obstacle_x = (int)viewer_fixed_raw_to_int_trunc_zero(obstacle_state.world_t.m02) - 20;
+    bool toggled = vg_collision_step_player_vs_obstacle(state,
+                                                        now_ms,
+                                                        VIEWER_COLLISION_COOLDOWN_MS,
+                                                        player_jump_y,
+                                                        obstacle_x);
+    if (!toggled) {
+        return false;
+    }
+
+    FrameScene *updated_game_scene = NULL;
+    if (!viewer_invoke_collision_callback(st, &updated_game_scene) || !updated_game_scene) {
+        return false;
+    }
+    bundle->game_scene = updated_game_scene;
+
+    if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
+        return false;
+    }
+    CljAtom *slot_atom = g_scene_slot_atoms[VIEWER_SLOT_GAME];
+    if (slot_atom) {
+        ASSIGN(slot_atom->value, updated_game_scene);
+    }
+    (void)pthread_mutex_unlock(&g_render_thread.mutex);
+    (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, VIEWER_SLOT_GAME, NULL);
+    return true;
 }
 
 static bool viewer_wait_for_frame_pacing(struct mfb_window *window,
@@ -634,43 +774,42 @@ static ViewerFrameRenderResult viewer_render_game_frame_sync(FrameScene *game_sc
         return result;
     }
     (*sync_slot_generation)++;
+    uint32_t now_ms = platform_current_time_ms();
     uint32_t dirty_pixels = 0u;
-    if (vg_render_frame_slot_record_if_changed(game_scene,
-                                               &sync_slot_states[VIEWER_SLOT_GAME],
-                                               fb,
-                                               *sync_slot_generation,
-                                               &dirty_pixels)) {
+    vg_rendered_state_capture_begin(VIEWER_SLOT_GAME, *sync_slot_generation, now_ms);
+    if (vg_render_frame_slot_record_if_changed_at_ms(game_scene,
+                                                     &sync_slot_states[VIEWER_SLOT_GAME],
+                                                     fb,
+                                                     *sync_slot_generation,
+                                                     now_ms,
+                                                     &dirty_pixels)) {
+        vg_rendered_state_capture_commit();
         result.dirty_pixels = dirty_pixels;
         result.changed_slots = 1u;
+    } else {
+        vg_rendered_state_capture_discard();
     }
     result.frame_serial = *sync_slot_generation;
     return result;
 }
 
-static ViewerFrameRenderResult viewer_render_game_frame_async(FrameScene *game_scene,
-                                                              const uint16_t *fb_pixels) {
+static ViewerFrameRenderResult viewer_render_game_frame_async(const uint16_t *fb_pixels) {
+    static uint_fast32_t cached_frame_serial = UINT_FAST32_MAX;
+    static uint32_t cached_dirty_pixels = 0u;
+    static uint32_t cached_changed_slots = 0u;
+
     ViewerFrameRenderResult result = {0};
-    if (!game_scene || !fb_pixels) {
+    if (!fb_pixels) {
         return result;
     }
-    uint_fast32_t pre_serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
-    uint32_t expected_game_generation = 0u;
-    publish_frame_scene_slot_record(VIEWER_SLOT_GAME, game_scene, &expected_game_generation);
-    (void)pthread_mutex_lock(&g_render_thread.render_done_mutex);
-    while (true) {
-        uint_fast32_t serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
-        uint32_t rendered_game_generation = 0u;
-        if (pthread_mutex_lock(&g_render_thread.mutex) == 0) {
-            rendered_game_generation = g_render_thread.last_rendered_generation[VIEWER_SLOT_GAME];
-            (void)pthread_mutex_unlock(&g_render_thread.mutex);
-        }
-        if (serial != pre_serial && rendered_game_generation >= expected_game_generation) {
-            break;
-        }
-        (void)pthread_cond_wait(&g_render_thread.render_done_cond, &g_render_thread.render_done_mutex);
-    }
-    (void)pthread_mutex_unlock(&g_render_thread.render_done_mutex);
 
+    uint_fast32_t serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
+    if (serial == cached_frame_serial) {
+        result.frame_serial = serial;
+        result.dirty_pixels = cached_dirty_pixels;
+        result.changed_slots = cached_changed_slots;
+        return result;
+    }
     uint64_t main_lock_begin_ns = monotonic_now_ns();
     if (pthread_mutex_lock(&g_render_thread.mutex) == 0) {
         uint64_t main_lock_acquired_ns = monotonic_now_ns();
@@ -689,6 +828,13 @@ static ViewerFrameRenderResult viewer_render_game_frame_async(FrameScene *game_s
         atomic_fetch_add_explicit(&g_render_thread.main_lock_wait_ns_total, wait_ns, memory_order_relaxed);
         atomic_fetch_add_explicit(&g_render_thread.main_lock_hold_ns_total, hold_ns, memory_order_relaxed);
         atomic_fetch_add_explicit(&g_render_thread.main_lock_samples, 1u, memory_order_relaxed);
+        cached_frame_serial = result.frame_serial;
+        cached_dirty_pixels = result.dirty_pixels;
+        cached_changed_slots = result.changed_slots;
+    } else {
+        result.frame_serial = serial;
+        result.dirty_pixels = cached_dirty_pixels;
+        result.changed_slots = cached_changed_slots;
     }
     return result;
 }
@@ -717,6 +863,7 @@ int main(void) {
     bool render_thread_started = false;
     bool demo_bundle_initialized = false;
     ViewerDemoBundle demo_bundle = {0};
+    VgCollisionState collision_state = {0};
     int exit_code = 1;
     viewer_set_realtime_thread_policy();
 
@@ -727,6 +874,7 @@ int main(void) {
     }
     runtime_init(&g_runtime);
     event_loop_init();
+    vg_rendered_state_reset_all();
     EvalState *viewer_eval_state = evalstate_new(true);
     if (!viewer_eval_state) {
         fprintf(stderr, "Failed to initialize eval state\n");
@@ -747,7 +895,10 @@ int main(void) {
         goto cleanup;
     }
     slot_tracker_initialized = true;
-    if (!start_render_thread(&fb)) {
+    tiny_renderer_lifecycle_set_callbacks(viewer_renderer_start_callback,
+                                          viewer_renderer_stop_callback,
+                                          &fb);
+    if (!tiny_renderer_lifecycle_start(NULL)) {
         fprintf(stderr, "Failed to start render thread\n");
         goto cleanup;
     }
@@ -788,7 +939,6 @@ int main(void) {
     ViewerRuntimeFlags runtime_flags = {0};
     VgRenderSlotState sync_slot_states[VIEWER_SLOT_COUNT] = {0};
     uint32_t sync_slot_generation = 1u;
-    uint32_t last_score_step = UINT32_MAX;
     const uint64_t target_frame_ns = 1000000000ull / TARGET_FPS;
     uint64_t next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
     uint64_t last_present_ns = 0u;
@@ -818,19 +968,17 @@ int main(void) {
             break;
         }
         viewer_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
-        uint32_t score_step = (uint32_t)((monotonic_now_ns() / 1000000ull) / SCORE_TIMELINE_STEP_MS) %
-                              SCORE_TIMELINE_STEPS;
-        if (score_step != last_score_step) {
-            publish_frame_scene_slot_record(VIEWER_SLOT_SCORE, demo_bundle.score_scene, NULL);
-            last_score_step = score_step;
-        }
 
         ViewerFrameRenderResult frame_result = runtime_flags.sync_mode
                                                    ? viewer_render_game_frame_sync(demo_bundle.game_scene,
                                                                                    sync_slot_states,
                                                                                    &sync_slot_generation,
                                                                                    &fb)
-                                                   : viewer_render_game_frame_async(demo_bundle.game_scene, fb_pixels);
+                                                   : viewer_render_game_frame_async(fb_pixels);
+        (void)viewer_apply_collision_step(&demo_bundle,
+                                          &collision_state,
+                                          viewer_eval_state,
+                                          platform_current_time_ms());
 
         const uint16_t *src = runtime_flags.sync_mode ? fb_pixels : g_present_copy_rgb565;
         viewer_expand_rgb565_to_window(src, window_pixels, (size_t)VIEW_W * (size_t)VIEW_H);
@@ -911,8 +1059,9 @@ cleanup:
         mfb_close(window);
     }
     if (render_thread_started) {
-        stop_render_thread();
+        (void)tiny_renderer_lifecycle_stop();
     }
+    tiny_renderer_lifecycle_set_callbacks(NULL, NULL, NULL);
     if (slot_atoms_initialized) {
         destroy_scene_slot_atoms();
     }

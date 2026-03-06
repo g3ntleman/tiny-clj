@@ -200,6 +200,7 @@ typedef struct {
 
 typedef struct {
     bool initialized;
+    bool has_animation;
     uint32_t snapshot_id;
     VgClipRect last_clip_rect;
     bool last_visible;

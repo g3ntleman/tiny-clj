@@ -198,6 +198,9 @@ list(APPEND SOURCES
     src/equality.c
     src/hash.c
     src/event_loop.c
+    src/renderer_lifecycle.c
+    src/rendered_state_snapshot.c
+    src/viewer_collision.c
     src/channel.c
     src/lockfree_spsc_queue.c
     src/list.c
@@ -265,6 +268,8 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/main_esp32.c
     src/platform_esp32_embedded.c
     src/event_loop.c
+    src/renderer_lifecycle.c
+    src/rendered_state_snapshot.c
     src/channel.c
     src/clojure_core.c
     src/object.c

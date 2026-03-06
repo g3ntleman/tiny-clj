@@ -1,7 +1,15 @@
 #include "tests_common.h"
 #include "../vector_scene_graph.h"
 #include "../scene.h"
+#include "../tiny_gfx.h"
+#include "../rendered_state_snapshot.h"
+#include "../viewer_collision.h"
+#include "callbacks.h"
+#include "record.h"
 #include <time.h>
+#if defined(__APPLE__) || defined(__linux__)
+#include <pthread.h>
+#endif
 
 #define TEST_W 64
 #define TEST_H 48
@@ -93,6 +101,27 @@ static uint64_t benchmark_scene_record_render_ns(ID scene,
     }
     return end_ns - start_ns;
 }
+
+#if defined(__APPLE__) || defined(__linux__)
+typedef struct {
+    VgSlotChangeTracker *tracker;
+    uint32_t seen[VG_SLOT_CHANGE_TRACKER_MAX_SLOTS];
+    uint32_t current[VG_SLOT_CHANGE_TRACKER_MAX_SLOTS];
+    uint32_t changed_mask;
+} SlotChangeWaitThreadArgs;
+
+static void *slot_change_wait_thread_main(void *arg) {
+    SlotChangeWaitThreadArgs *args = (SlotChangeWaitThreadArgs *)arg;
+    if (!args || !args->tracker) {
+        return NULL;
+    }
+    args->changed_mask = vg_slot_change_tracker_wait_for_changes(args->tracker,
+                                                                 args->seen,
+                                                                 args->current,
+                                                                 UINT32_MAX);
+    return NULL;
+}
+#endif
 
 TEST(test_vector_scene_graph_nested_group_transform_affects_child_line) {
     uint16_t pixels[TEST_W * TEST_H];
@@ -332,6 +361,78 @@ TEST(test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven) {
         "         (contains? (:t rocket-body) :loop) "
         "         (contains? (:t rocket-nose) :keyframes) "
         "         (contains? (:t rocket-nose) :loop))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok && ok != clj_false);
+}
+
+TEST(test_vector_scene_graph_host_viewer_demo_player_entity_matches_tri_type_hash) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID bundle = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.host-viewer-demo) "
+        "  (tiny-gfx.host-viewer-demo/create-demo-bundle))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(bundle);
+    TEST_ASSERT_TRUE(is_vector(bundle));
+    CljPersistentVector *vec = as_vector(bundle);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_TRUE(vector_count(vec) >= 3);
+
+    ID game_scene_obj = vector_nth(vec, 2);
+    TEST_ASSERT_NOT_NULL(game_scene_obj);
+    FrameScene *game_scene = (FrameScene *)game_scene_obj;
+    TEST_ASSERT_TRUE(is_map(game_scene->root));
+
+    ID player = map_get_sentinel(game_scene->root, fixnum(3002), NULL);
+    TEST_ASSERT_NOT_NULL(player);
+    TEST_ASSERT_TRUE(is_record(player));
+
+    const VgRecordSchema *schema = tiny_gfx_schema();
+    TEST_ASSERT_NOT_NULL(schema);
+    TEST_ASSERT_TRUE(as_record(player)->descriptor != NULL);
+    uint32_t player_type_hash = clj_hash(as_record(player)->descriptor->type_symbol);
+    TEST_ASSERT_EQUAL_UINT32(schema->h_tri, player_type_hash);
+}
+
+TEST(test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_geometry_in_clojure) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.host-viewer-demo) "
+        "  (require 'tiny-gfx.collision) "
+        "  (let [bundle (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "        game0 (nth bundle 2) "
+        "        p0 (get (:root game0) 3002) "
+        "        _ (tiny-gfx.collision/set-collision-callback! nil) "
+        "        disabled (tiny-gfx.collision/invoke-collision-callback!) "
+        "        _ (tiny-gfx.host-viewer-demo/configure-collision-toggle-callback!) "
+        "        game1 (tiny-gfx.collision/invoke-collision-callback!) "
+        "        p1 (get (:root game1) 3002) "
+        "        game2 (tiny-gfx.collision/invoke-collision-callback!) "
+        "        p2 (get (:root game2) 3002)] "
+        "    (and (nil? disabled) "
+        "         (= 56 (:x1 p0)) (= 118 (:y2 p0)) "
+        "         (= 60 (:x1 p1)) (= 126 (:y2 p1)) "
+        "         (= 56 (:x1 p2)) (= 118 (:y2 p2)))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok && ok != clj_false);
+}
+
+TEST(test_vector_scene_graph_tiny_gfx_collision_callback_reconfiguration) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.collision) "
+        "  (def collision-test-cb-a (fn collision-test-cb-a [] 11)) "
+        "  (def collision-test-cb-b (fn collision-test-cb-b [] 22)) "
+        "  (let [_ (tiny-gfx.collision/set-collision-callback! collision-test-cb-a) "
+        "        v1 (tiny-gfx.collision/invoke-collision-callback!) "
+        "        _ (tiny-gfx.collision/set-collision-callback! collision-test-cb-b) "
+        "        v2 (tiny-gfx.collision/invoke-collision-callback!) "
+        "        _ (tiny-gfx.collision/set-collision-callback! nil) "
+        "        v3 (tiny-gfx.collision/invoke-collision-callback!)] "
+        "    (and (= 11 v1) (= 22 v2) (nil? v3))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
@@ -667,6 +768,87 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_whe
     TEST_ASSERT_EQUAL_HEX16(0x1234u, pixels[(size_t)2 * TEST_W + 2]);
 }
 
+TEST(test_vector_scene_graph_render_frame_scene_slot_record_tracks_has_animation_flag) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID static_scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
+        "  (->FrameScene "
+        "    (->Line 521 nil (->Style 65535 1 true false 0 false 0) true 4 10 20 10) "
+        "    [0 8 30 6] "
+        "    0 true true 0 0 nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(static_scene);
+
+    ID animated_scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Timeline [keyframes loop]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
+        "  (->FrameScene "
+        "    (->Line 522 nil (->Style 65535 1 true false 0 false 0) true "
+        "            (->Timeline [[0 4] [100 14]] false) 10 20 10) "
+        "    [0 8 30 6] "
+        "    0 true true 0 0 nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(animated_scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgRenderSlotState state = {0};
+    uint32_t dirty_pixels = 0u;
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed_at_ms(static_scene, &state, &fb, 1u, 0u, &dirty_pixels));
+    TEST_ASSERT_FALSE(state.has_animation);
+
+    memset(&state, 0, sizeof(state));
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_if_changed_at_ms(animated_scene, &state, &fb, 1u, 0u, &dirty_pixels));
+    TEST_ASSERT_TRUE(state.has_animation);
+}
+
+TEST(test_vector_scene_graph_render_frame_scene_slot_record_force_render_ticks_animation_without_snapshot_change) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Timeline [keyframes loop]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
+        "  (->FrameScene "
+        "    (->Line 531 nil (->Style 65535 1 true false 0 false 0) true "
+        "            (->Timeline [[0 4] [100 14]] false) 10 20 10) "
+        "    [0 8 30 6] "
+        "    0 true true 0 0 nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgRenderSlotState state = {0};
+    uint32_t dirty_pixels = 0u;
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_at_ms(scene, &state, &fb, 1u, 0u, false, &dirty_pixels));
+    TEST_ASSERT_TRUE(state.has_animation);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 4]);
+
+    dirty_pixels = 123u;
+    TEST_ASSERT_FALSE(vg_render_frame_slot_record_at_ms(scene, &state, &fb, 1u, 50u, false, &dirty_pixels));
+    TEST_ASSERT_EQUAL_UINT32(0u, dirty_pixels);
+
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_at_ms(scene, &state, &fb, 1u, 50u, true, &dirty_pixels));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 9]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 4]);
+}
+
 TEST(test_vector_scene_graph_slot_change_tracker_publish_and_wait_reports_changed_mask) {
     VgSlotChangeTracker tracker;
     TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&tracker, 3));
@@ -706,6 +888,110 @@ TEST(test_vector_scene_graph_slot_change_tracker_publish_and_wait_reports_change
     vg_slot_change_tracker_destroy(&tracker);
 }
 
+TEST(test_vector_scene_graph_slot_change_tracker_single_slot_publish_rerenders_only_that_slot) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID scenes = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
+        "  [(->FrameScene (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 2 4 14 4) [0 0 20 10] 0 true true 0 0 nil) "
+        "   (->FrameScene (->Line 542 nil (->Style 65535 1 true false 0 false 0) true 2 8 14 8) [0 0 20 12] 1 true true 0 0 nil) "
+        "   (->FrameScene (->Line 543 nil (->Style 65535 1 true false 0 false 0) true 2 12 14 12) [0 0 20 14] 2 true true 0 0 nil)])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scenes);
+    TEST_ASSERT_TRUE(is_vector(scenes));
+
+    CljPersistentVector *scene_vec = as_vector(scenes);
+    TEST_ASSERT_NOT_NULL(scene_vec);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(scene_vec));
+
+    ID slot_scene_0 = vector_nth(scene_vec, 0);
+    ID slot_scene_1 = vector_nth(scene_vec, 1);
+    ID slot_scene_2 = vector_nth(scene_vec, 2);
+    TEST_ASSERT_NOT_NULL(slot_scene_0);
+    TEST_ASSERT_NOT_NULL(slot_scene_1);
+    TEST_ASSERT_NOT_NULL(slot_scene_2);
+
+    VgSlotChangeTracker tracker;
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&tracker, 3));
+
+    uint32_t gen0 = 0u;
+    uint32_t gen1 = 0u;
+    uint32_t gen2 = 0u;
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_publish(&tracker, 0u, &gen0));
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_publish(&tracker, 1u, &gen1));
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_publish(&tracker, 2u, &gen2));
+    TEST_ASSERT_EQUAL_UINT32(1u, gen0);
+    TEST_ASSERT_EQUAL_UINT32(1u, gen1);
+    TEST_ASSERT_EQUAL_UINT32(1u, gen2);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgRenderSlotState slot_states[3] = {0};
+    uint32_t seen[3] = {0u, 0u, 0u};
+    uint32_t current[3] = {0u, 0u, 0u};
+
+    uint32_t mask = vg_slot_change_tracker_wait_for_changes(&tracker, seen, current, 0u);
+    TEST_ASSERT_EQUAL_HEX32((1u << 0) | (1u << 1) | (1u << 2), mask);
+    uint32_t rendered_slots = 0u;
+    ID slot_scenes[3] = {slot_scene_0, slot_scene_1, slot_scene_2};
+    for (uint8_t i = 0; i < 3u; i++) {
+        if ((mask & (1u << i)) == 0u) {
+            continue;
+        }
+        uint32_t dirty = 0u;
+        if (vg_render_frame_slot_record_if_changed_at_ms(slot_scenes[i],
+                                                          &slot_states[i],
+                                                          &fb,
+                                                          current[i],
+                                                          0u,
+                                                          &dirty)) {
+            rendered_slots++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(3u, rendered_slots);
+
+    seen[0] = current[0];
+    seen[1] = current[1];
+    seen[2] = current[2];
+    uint32_t snapshot_slot0 = slot_states[0].snapshot_id;
+    uint32_t snapshot_slot1 = slot_states[1].snapshot_id;
+    uint32_t snapshot_slot2 = slot_states[2].snapshot_id;
+
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_publish(&tracker, 1u, &gen1));
+    TEST_ASSERT_EQUAL_UINT32(2u, gen1);
+
+    memset(current, 0, sizeof(current));
+    mask = vg_slot_change_tracker_wait_for_changes(&tracker, seen, current, 0u);
+    TEST_ASSERT_EQUAL_HEX32((1u << 1), mask);
+    rendered_slots = 0u;
+    for (uint8_t i = 0; i < 3u; i++) {
+        if ((mask & (1u << i)) == 0u) {
+            continue;
+        }
+        uint32_t dirty = 0u;
+        if (vg_render_frame_slot_record_if_changed_at_ms(slot_scenes[i],
+                                                          &slot_states[i],
+                                                          &fb,
+                                                          current[i],
+                                                          20u,
+                                                          &dirty)) {
+            rendered_slots++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(1u, rendered_slots);
+    TEST_ASSERT_EQUAL_UINT32(snapshot_slot0, slot_states[0].snapshot_id);
+    TEST_ASSERT_TRUE(slot_states[1].snapshot_id != snapshot_slot1);
+    TEST_ASSERT_EQUAL_UINT32(snapshot_slot2, slot_states[2].snapshot_id);
+
+    vg_slot_change_tracker_destroy(&tracker);
+}
+
 TEST(test_vector_scene_graph_slot_change_tracker_wait_timeout_returns_without_changes) {
     VgSlotChangeTracker tracker;
     TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&tracker, 2));
@@ -720,6 +1006,37 @@ TEST(test_vector_scene_graph_slot_change_tracker_wait_timeout_returns_without_ch
 
     vg_slot_change_tracker_destroy(&tracker);
 }
+
+#if defined(__APPLE__) || defined(__linux__)
+TEST(test_vector_scene_graph_slot_change_tracker_wait_blocks_until_single_slot_publish) {
+    VgSlotChangeTracker tracker;
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&tracker, 3));
+
+    SlotChangeWaitThreadArgs args;
+    memset(&args, 0, sizeof(args));
+    args.tracker = &tracker;
+
+    pthread_t waiter;
+    TEST_ASSERT_EQUAL_INT(0, pthread_create(&waiter, NULL, slot_change_wait_thread_main, &args));
+
+    struct timespec ts;
+    ts.tv_sec = 0;
+    ts.tv_nsec = 5 * 1000 * 1000;
+    (void)nanosleep(&ts, NULL);
+
+    uint32_t generation = 0u;
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_publish(&tracker, 2u, &generation));
+    TEST_ASSERT_EQUAL_UINT32(1u, generation);
+
+    TEST_ASSERT_EQUAL_INT(0, pthread_join(waiter, NULL));
+    TEST_ASSERT_EQUAL_HEX32((1u << 2), args.changed_mask);
+    TEST_ASSERT_EQUAL_UINT32(0u, args.current[0]);
+    TEST_ASSERT_EQUAL_UINT32(0u, args.current[1]);
+    TEST_ASSERT_EQUAL_UINT32(1u, args.current[2]);
+
+    vg_slot_change_tracker_destroy(&tracker);
+}
+#endif
 
 TEST(test_vector_scene_graph_fixed_transform_compose_apply_px_scale_translate_exact) {
     VgTransform parent = vg_transform_identity();
@@ -2101,4 +2418,392 @@ TEST(test_vector_scene_graph_runtime_vector_scene_bench_arity_and_arg_validation
         TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
     } END_TRY
     TEST_ASSERT_TRUE(arg_exception_caught);
+}
+
+TEST(test_vector_scene_graph_runtime_renderer_lifecycle_defaults_to_unsupported) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID result = eval_string(
+        "(do (require 'tiny-clj.runtime) "
+        "    [(tiny-clj.runtime/start-renderer!) "
+        "     (tiny-clj.runtime/stop-renderer!) "
+        "     (tiny-clj.runtime/start-renderer! [])])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
+    CljPersistentVector *vec = as_vector(result);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    TEST_ASSERT_TRUE(vector_nth(vec, 0) == clj_false);
+    TEST_ASSERT_TRUE(vector_nth(vec, 1) == clj_false);
+    TEST_ASSERT_TRUE(vector_nth(vec, 2) == clj_false);
+}
+
+TEST(test_vector_scene_graph_tiny_gfx_runtime_renderer_lifecycle_defaults_to_unsupported) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID result = eval_string(
+        "(do (require 'tiny-gfx.runtime) "
+        "    [(tiny-gfx.runtime/start-renderer!) "
+        "     (tiny-gfx.runtime/stop-renderer!) "
+        "     (tiny-gfx.runtime/start-renderer! [])])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
+    CljPersistentVector *vec = as_vector(result);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    TEST_ASSERT_TRUE(vector_nth(vec, 0) == clj_false);
+    TEST_ASSERT_TRUE(vector_nth(vec, 1) == clj_false);
+    TEST_ASSERT_TRUE(vector_nth(vec, 2) == clj_false);
+}
+
+TEST(test_vector_scene_graph_runtime_renderer_lifecycle_arity_and_arg_validation) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    bool start_arity_caught = false;
+    TRY {
+        (void)eval_string(
+            "(do (require 'tiny-clj.runtime) "
+            "    (tiny-clj.runtime/start-renderer! [] []))",
+            g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected arity exception for start-renderer!");
+    } CATCH(ex) {
+        start_arity_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("ArityException", ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE(start_arity_caught);
+
+    bool start_arg_caught = false;
+    TRY {
+        (void)eval_string(
+            "(do (require 'tiny-clj.runtime) "
+            "    (tiny-clj.runtime/start-renderer! :bad))",
+            g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected argument exception for start-renderer!");
+    } CATCH(ex) {
+        start_arg_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE(start_arg_caught);
+
+    bool stop_arity_caught = false;
+    TRY {
+        (void)eval_string(
+            "(do (require 'tiny-clj.runtime) "
+            "    (tiny-clj.runtime/stop-renderer! 1))",
+            g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected arity exception for stop-renderer!");
+    } CATCH(ex) {
+        stop_arity_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("ArityException", ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE(stop_arity_caught);
+}
+
+TEST(test_vector_scene_graph_runtime_rendered_state_queries_return_nil_without_captured_frames) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID result = eval_string(
+        "(do (require 'tiny-clj.runtime) "
+        "    [(tiny-clj.runtime/renderer-state :game 3001) "
+        "     (tiny-clj.runtime/renderer-timeline-step :game 3001 :t) "
+        "     (tiny-clj.runtime/renderer-timeline-progress :game 3001 :t)])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
+    CljPersistentVector *vec = as_vector(result);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    TEST_ASSERT_TRUE(vector_nth(vec, 0) == NULL);
+    TEST_ASSERT_TRUE(vector_nth(vec, 1) == NULL);
+    TEST_ASSERT_TRUE(vector_nth(vec, 2) == NULL);
+}
+
+TEST(test_vector_scene_graph_tiny_gfx_runtime_rendered_state_queries_return_nil_without_captured_frames) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID result = eval_string(
+        "(do (require 'tiny-gfx.runtime) "
+        "    [(tiny-gfx.runtime/renderer-state :game 3001) "
+        "     (tiny-gfx.runtime/renderer-timeline-step :game 3001 :t) "
+        "     (tiny-gfx.runtime/renderer-timeline-progress :game 3001 :t)])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
+    CljPersistentVector *vec = as_vector(result);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    TEST_ASSERT_TRUE(vector_nth(vec, 0) == NULL);
+    TEST_ASSERT_TRUE(vector_nth(vec, 1) == NULL);
+    TEST_ASSERT_TRUE(vector_nth(vec, 2) == NULL);
+}
+
+TEST(test_vector_scene_graph_runtime_rendered_state_queries_return_captured_values) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    vg_rendered_state_reset_all();
+
+    VgTransformFixed world_t = {
+        .m00 = VG_SCALE_ONE,
+        .m01 = 0,
+        .m02 = (12 << CLJ_FIXED_FRAC_BITS),
+        .m10 = 0,
+        .m11 = VG_SCALE_ONE,
+        .m12 = -(7 << CLJ_FIXED_FRAC_BITS),
+    };
+    VgRenderedTimelineSample sample = {
+        .step_index = 3u,
+        .keyframe_count = 9u,
+        .phase_ms = 450u,
+        .period_ms = 1800u,
+        .loop = true,
+    };
+
+    vg_rendered_state_capture_begin(2u, 17u, 1234u);
+    vg_rendered_state_capture_record_entity((uintptr_t)fixnum(3001), world_t);
+    vg_rendered_state_capture_record_timeline((uintptr_t)fixnum(3001), VG_RENDERED_FIELD_T, sample);
+    vg_rendered_state_capture_commit();
+
+    ID result = eval_string(
+        "(do (require 'tiny-clj.runtime) "
+        "    [(tiny-clj.runtime/renderer-state :game 3001) "
+        "     (tiny-clj.runtime/renderer-timeline-step :game 3001 :t) "
+        "     (tiny-clj.runtime/renderer-timeline-progress :game 3001 :t)])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
+    CljPersistentVector *vec = as_vector(result);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+
+    ID state_map = vector_nth(vec, 0);
+    TEST_ASSERT_NOT_NULL(state_map);
+    TEST_ASSERT_TRUE(is_map(state_map));
+    TEST_ASSERT_EQUAL_INT(12, as_fixnum(map_get(state_map, (ID)intern_symbol_global(":tx"))));
+    TEST_ASSERT_EQUAL_INT(-7, as_fixnum(map_get(state_map, (ID)intern_symbol_global(":ty"))));
+    TEST_ASSERT_EQUAL_INT(17, as_fixnum(map_get(state_map, (ID)intern_symbol_global(":snapshot-gen"))));
+    TEST_ASSERT_EQUAL_INT(1234, as_fixnum(map_get(state_map, (ID)intern_symbol_global(":ts-ms"))));
+
+    ID step = vector_nth(vec, 1);
+    TEST_ASSERT_NOT_NULL(step);
+    TEST_ASSERT_TRUE(is_fixnum(step));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(step));
+
+    ID progress_map = vector_nth(vec, 2);
+    TEST_ASSERT_NOT_NULL(progress_map);
+    TEST_ASSERT_TRUE(is_map(progress_map));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":step"))));
+    TEST_ASSERT_EQUAL_INT(9, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":count"))));
+    TEST_ASSERT_EQUAL_INT(450, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":phase-ms"))));
+    TEST_ASSERT_EQUAL_INT(1800, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":period-ms"))));
+    TEST_ASSERT_EQUAL_INT(250, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":permille"))));
+    TEST_ASSERT_TRUE(map_get(progress_map, (ID)intern_symbol_global(":loop")) == clj_true);
+
+    vg_rendered_state_reset_all();
+}
+
+TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_timeline_fields_return_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    vg_rendered_state_reset_all();
+
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Timeline [keyframes loop]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
+        "  (->FrameScene "
+        "    (->Line 7101 nil (->Style 65535 1 true false 0 false 0) true "
+        "            (->Timeline [[0 4] [100 14]] false) 6 20 6) "
+        "    [0 0 64 48] "
+        "    0 true true 0 0 nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgRenderSlotState state = {0};
+    uint32_t dirty_pixels = 0u;
+    vg_rendered_state_capture_begin(2u, 91u, 150u);
+    bool rendered = vg_render_frame_slot_record_if_changed_at_ms(scene, &state, &fb, 1u, 150u, &dirty_pixels);
+    if (rendered) {
+        vg_rendered_state_capture_commit();
+    } else {
+        vg_rendered_state_capture_discard();
+    }
+    TEST_ASSERT_TRUE(rendered);
+
+    ID result = eval_string(
+        "(do (require 'tiny-clj.runtime) "
+        "    [(tiny-clj.runtime/renderer-timeline-step :game 7101 :x2) "
+        "     (tiny-clj.runtime/renderer-timeline-progress :game 7101 :x2)])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
+    CljPersistentVector *vec = as_vector(result);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
+    TEST_ASSERT_TRUE(vector_nth(vec, 0) == NULL);
+    TEST_ASSERT_TRUE(vector_nth(vec, 1) == NULL);
+
+    vg_rendered_state_reset_all();
+}
+
+TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_loop_timeline_clamps_at_end) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    vg_rendered_state_reset_all();
+
+    ID scene = eval_string(
+        "(do (require 'tiny-gfx.scene) "
+        "  (defrecord Timeline [keyframes loop]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
+        "  (->FrameScene "
+        "    (->Line 7201 nil (->Style 65535 1 true false 0 false 0) true "
+        "            (->Timeline [[0 4] [100 14]] false) 8 20 8) "
+        "    [0 0 64 48] "
+        "    0 true true 0 0 nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgRenderSlotState state = {0};
+    uint32_t dirty_pixels = 0u;
+    vg_rendered_state_capture_begin(2u, 92u, 150u);
+    bool rendered = vg_render_frame_slot_record_if_changed_at_ms(scene, &state, &fb, 1u, 150u, &dirty_pixels);
+    if (rendered) {
+        vg_rendered_state_capture_commit();
+    } else {
+        vg_rendered_state_capture_discard();
+    }
+    TEST_ASSERT_TRUE(rendered);
+
+    ID result = eval_string(
+        "(do (require 'tiny-clj.runtime) "
+        "    [(tiny-clj.runtime/renderer-timeline-step :game 7201 :x1) "
+        "     (tiny-clj.runtime/renderer-timeline-progress :game 7201 :x1)])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
+    CljPersistentVector *vec = as_vector(result);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
+
+    ID step = vector_nth(vec, 0);
+    TEST_ASSERT_NOT_NULL(step);
+    TEST_ASSERT_TRUE(is_fixnum(step));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(step));
+
+    ID progress_map = vector_nth(vec, 1);
+    TEST_ASSERT_NOT_NULL(progress_map);
+    TEST_ASSERT_TRUE(is_map(progress_map));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":step"))));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":count"))));
+    TEST_ASSERT_EQUAL_INT(100, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":phase-ms"))));
+    TEST_ASSERT_EQUAL_INT(100, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":period-ms"))));
+    TEST_ASSERT_EQUAL_INT(1000, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":permille"))));
+    TEST_ASSERT_TRUE(map_get(progress_map, (ID)intern_symbol_global(":loop")) == clj_false);
+    TEST_ASSERT_EQUAL_INT(92, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":snapshot-gen"))));
+    TEST_ASSERT_EQUAL_INT(150, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":ts-ms"))));
+
+    vg_rendered_state_reset_all();
+}
+
+TEST(test_vector_scene_graph_runtime_rendered_state_queries_validate_arity_and_args) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    bool state_arity_caught = false;
+    TRY {
+        (void)eval_string(
+            "(do (require 'tiny-clj.runtime) "
+            "    (tiny-clj.runtime/renderer-state :game))",
+            g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected arity exception for renderer-state");
+    } CATCH(ex) {
+        state_arity_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("ArityException", ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE(state_arity_caught);
+
+    bool state_arg_caught = false;
+    TRY {
+        (void)eval_string(
+            "(do (require 'tiny-clj.runtime) "
+            "    (tiny-clj.runtime/renderer-state :bad 3001))",
+            g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected argument exception for renderer-state slot");
+    } CATCH(ex) {
+        state_arg_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE(state_arg_caught);
+
+    bool step_arg_caught = false;
+    TRY {
+        (void)eval_string(
+            "(do (require 'tiny-clj.runtime) "
+            "    (tiny-clj.runtime/renderer-timeline-step :game 3001 :bogus-field))",
+            g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected argument exception for renderer-timeline-step field");
+    } CATCH(ex) {
+        step_arg_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE(step_arg_caught);
+
+    bool progress_arity_caught = false;
+    TRY {
+        (void)eval_string(
+            "(do (require 'tiny-clj.runtime) "
+            "    (tiny-clj.runtime/renderer-timeline-progress :game 3001))",
+            g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected arity exception for renderer-timeline-progress");
+    } CATCH(ex) {
+        progress_arity_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("ArityException", ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE(progress_arity_caught);
+}
+
+TEST(test_vector_scene_graph_collision_detect_player_vs_obstacle_bounds) {
+    TEST_ASSERT_TRUE(vg_collision_detect_player_vs_obstacle(0, 40));
+    TEST_ASSERT_FALSE(vg_collision_detect_player_vs_obstacle(0, 200));
+    TEST_ASSERT_FALSE(vg_collision_detect_player_vs_obstacle(-50, 40));
+}
+
+TEST(test_vector_scene_graph_collision_step_latch_and_cooldown) {
+    VgCollisionState state = {0};
+
+    bool toggled = vg_collision_step_player_vs_obstacle(&state, 1000u, 300u, 0, 40);
+    TEST_ASSERT_TRUE(toggled);
+    TEST_ASSERT_TRUE(state.collision_latched);
+    TEST_ASSERT_EQUAL_UINT32(1300u, state.collision_cooldown_end_ms);
+
+    toggled = vg_collision_step_player_vs_obstacle(&state, 1010u, 300u, 0, 40);
+    TEST_ASSERT_FALSE(toggled);
+    TEST_ASSERT_TRUE(state.collision_latched);
+
+    toggled = vg_collision_step_player_vs_obstacle(&state, 1020u, 300u, 0, 200);
+    TEST_ASSERT_FALSE(toggled);
+    TEST_ASSERT_FALSE(state.collision_latched);
+
+    toggled = vg_collision_step_player_vs_obstacle(&state, 1200u, 300u, 0, 40);
+    TEST_ASSERT_FALSE(toggled);
+    TEST_ASSERT_FALSE(state.collision_latched);
+
+    toggled = vg_collision_step_player_vs_obstacle(&state, 1300u, 300u, 0, 40);
+    TEST_ASSERT_TRUE(toggled);
+    TEST_ASSERT_TRUE(state.collision_latched);
+    TEST_ASSERT_EQUAL_UINT32(1600u, state.collision_cooldown_end_ms);
 }

@@ -52,6 +52,27 @@ Missing values are omitted (the key will not be present)."}
 ^#^{:doc "Benchmarks vector scene decode+render path and returns a metrics map. Usage: (vector-scene-bench) or (vector-scene-bench iterations warmup)."}
 (def vector-scene-bench (fn vector-scene-bench [& args] :native))
 
+;; renderer lifecycle API (M9/9j)
+;; start-renderer! returns true on successful start (or already running),
+;; false when no renderer backend is available in the current runtime.
+^#^{:doc "Starts the renderer thread. Usage: (start-renderer!) or (start-renderer! [game-slot score-slot deco-slot]). Returns true on success, false when unsupported."}
+(def start-renderer! (fn start-renderer! [& args] :native))
+
+;; stop-renderer! returns true on successful stop (or already stopped),
+;; false when no renderer backend is available in the current runtime.
+^#^{:doc "Stops the renderer thread. Usage: (stop-renderer!). Returns true on success, false when unsupported."}
+(def stop-renderer! (fn stop-renderer! [] :native))
+
+;; rendered-state query API (M9/9i baseline)
+^#^{:doc "Returns current rendered transform/matrix state for one entity in one slot. Returns nil when slot/entity has no captured render state. Usage: (renderer-state :game 3001)."}
+(def renderer-state (fn renderer-state [slot entity-id] :native))
+
+^#^{:doc "Returns current active timeline keyframe index for one entity field. Returns nil when no timeline sample exists for this field (miss or non-Timeline field). Usage: (renderer-timeline-step :game 3001 :t)."}
+(def renderer-timeline-step (fn renderer-timeline-step [slot entity-id field] :native))
+
+^#^{:doc "Returns timeline phase metadata map for one entity field. Returns nil when no timeline sample exists for this field (miss or non-Timeline field). Usage: (renderer-timeline-progress :game 3001 :pts)."}
+(def renderer-timeline-progress (fn renderer-timeline-progress [slot entity-id field] :native))
+
 ;; print-ast - Print AST structure with internals for debugging
 ;; Only available in DEBUG builds
 ^#^{:doc "Prints the AST (Abstract Syntax Tree) structure of an object with internal type information. Only available in DEBUG builds. Usage: (print-ast obj)"}

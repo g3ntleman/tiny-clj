@@ -6,6 +6,24 @@ R"TINY_GFX_SCENE(
 ;; defrecord registers each type with the C renderer (which matches record
 ;; type names by exact unqualified symbol cname) and creates ->Type /
 ;; map->Type constructors that other namespaces can import via :refer.
+;;
+;; Record contracts consumed by the C renderer:
+;; - Transform [tx ty sx sy rot]
+;;   tx/ty: translation in px, sx/sy: scale factors, rot: degrees.
+;; - Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]
+;;   colors are RGB565 integers.
+;; - Group/Line/Polyline/Rect/Tri/VText all share [id t style visible ...].
+;;   :id must be stable across snapshot publishes for deterministic state/collision routing.
+;;   :t/:style fields can hold plain values or Timeline records.
+;; - Timeline [keyframes loop]
+;;   keyframes are [[time-ms value] ...] with monotonic time-ms.
+;; - Scene [root clip-rect erase-color collision-rules]
+;; - FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]
+;;   root may be flat entity map ({id -> Record}) or legacy nested root node.
+;;   clip-rect is [x y w h], guard-px expands dirty area for slot rerender diffing.
+;;   collision-rules are schema-level contract data; runtime collision-engine binding is milestone-tracked.
+;; - CollisionRule [id slot a-id b-id phase-mask enabled cooldown-ms]
+;; - CollisionEvent [rule-id slot a-id b-id phase snapshot-gen ts-ms]
 
 (defrecord Transform [tx ty sx sy rot])
 (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color])

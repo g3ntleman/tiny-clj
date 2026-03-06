@@ -1,6 +1,7 @@
 #include "scene.h"
 #include "gfx.h"
 #include "tiny_gfx.h"
+#include "rendered_state_snapshot.h"
 #include "platform.h"
 
 #include <errno.h>
@@ -434,10 +435,33 @@ static uint32_t timeline_phase_ms(uint32_t now_ms, uint32_t period_ms, bool loop
     return now_ms;
 }
 
-static ID resolve_timeline_value(ID raw_value, uint32_t now_ms, const VgRecordSchema *sc) {
+typedef struct {
+    bool is_timeline;
+    uint16_t step_index;
+    uint16_t keyframe_count;
+    uint32_t phase_ms;
+    uint32_t period_ms;
+    bool loop;
+} TimelineResolveInfo;
+
+static void mark_has_animation(bool *out_has_animation) {
+    if (out_has_animation) {
+        *out_has_animation = true;
+    }
+}
+
+static ID resolve_timeline_value_with_info(ID raw_value,
+                                           uint32_t now_ms,
+                                           const VgRecordSchema *sc,
+                                           TimelineResolveInfo *out_info,
+                                           bool *out_has_animation) {
+    if (out_info) {
+        memset(out_info, 0, sizeof(*out_info));
+    }
     if (!raw_value || !sc || TAG(raw_value) != CLJ_RECORD || record_type_hash(raw_value) != sc->h_timeline) {
         return raw_value;
     }
+    mark_has_animation(out_has_animation);
 
     Timeline *timeline = (Timeline *)raw_value;
     ID keyframes_obj = timeline->keyframes;
@@ -449,6 +473,10 @@ static ID resolve_timeline_value(ID raw_value, uint32_t now_ms, const VgRecordSc
     if (count == 0u) {
         return NULL;
     }
+    if (out_info) {
+        out_info->is_timeline = true;
+        out_info->keyframe_count = (uint16_t)count;
+    }
 
     uint32_t first_ms = 0u;
     ID first_value = NULL;
@@ -456,6 +484,12 @@ static ID resolve_timeline_value(ID raw_value, uint32_t now_ms, const VgRecordSc
         return NULL;
     }
     if (count == 1u) {
+        if (out_info) {
+            out_info->step_index = 0u;
+            out_info->phase_ms = 0u;
+            out_info->period_ms = first_ms;
+            out_info->loop = false;
+        }
         return first_value;
     }
 
@@ -473,15 +507,29 @@ static ID resolve_timeline_value(ID raw_value, uint32_t now_ms, const VgRecordSc
 
     bool loop = id_to_bool_default(timeline->loop, false);
     uint32_t phase_ms = timeline_phase_ms(now_ms, last_ms, loop);
+    if (out_info) {
+        out_info->phase_ms = phase_ms;
+        out_info->period_ms = last_ms;
+        out_info->loop = loop;
+    }
     if (!loop && phase_ms >= last_ms) {
+        if (out_info) {
+            out_info->phase_ms = last_ms;
+            out_info->step_index = (count > 0u) ? (uint16_t)(count - 1u) : 0u;
+        }
         return last_value;
     }
     if (phase_ms <= first_ms) {
+        if (out_info) {
+            out_info->phase_ms = first_ms;
+            out_info->step_index = 0u;
+        }
         return first_value;
     }
 
     uint32_t prev_ms = first_ms;
     ID prev_value = first_value;
+    unsigned int prev_index = 0u;
     for (unsigned int i = 1; i < count; i++) {
         uint32_t curr_ms = 0u;
         ID curr_value = NULL;
@@ -489,6 +537,9 @@ static ID resolve_timeline_value(ID raw_value, uint32_t now_ms, const VgRecordSc
             continue;
         }
         if (phase_ms < curr_ms) {
+            if (out_info) {
+                out_info->step_index = (uint16_t)prev_index;
+            }
             if (curr_ms <= prev_ms) {
                 return prev_value;
             }
@@ -505,8 +556,19 @@ static ID resolve_timeline_value(ID raw_value, uint32_t now_ms, const VgRecordSc
         }
         prev_ms = curr_ms;
         prev_value = curr_value;
+        prev_index = i;
+    }
+    if (out_info) {
+        out_info->step_index = (uint16_t)prev_index;
     }
     return prev_value;
+}
+
+static ID resolve_timeline_value(ID raw_value,
+                                 uint32_t now_ms,
+                                 const VgRecordSchema *sc,
+                                 bool *out_has_animation) {
+    return resolve_timeline_value_with_info(raw_value, now_ms, sc, NULL, out_has_animation);
 }
 
 static bool timeline_transform_keyframe_at(ID keyframes_obj,
@@ -573,7 +635,13 @@ static VgTransformFixed decode_transform_record_fixed(const Transform *tr) {
     return vg_transform_fixed_from_transform(t);
 }
 
-static VgTransformFixed decode_transform_fixed(ID obj, uint32_t now_ms, const VgRecordSchema *s) {
+static VgTransformFixed decode_transform_fixed_with_info(ID obj,
+                                                         uint32_t now_ms,
+                                                         const VgRecordSchema *s,
+                                                         TimelineResolveInfo *out_info) {
+    if (out_info) {
+        memset(out_info, 0, sizeof(*out_info));
+    }
     if (!obj) {
         return vg_transform_fixed_identity();
     }
@@ -588,6 +656,10 @@ static VgTransformFixed decode_transform_fixed(ID obj, uint32_t now_ms, const Vg
         if (count == 0u) {
             return vg_transform_fixed_identity();
         }
+        if (out_info) {
+            out_info->is_timeline = true;
+            out_info->keyframe_count = (uint16_t)count;
+        }
 
         uint32_t first_ms = 0u;
         Transform *first_transform = NULL;
@@ -595,6 +667,12 @@ static VgTransformFixed decode_transform_fixed(ID obj, uint32_t now_ms, const Vg
             return vg_transform_fixed_identity();
         }
         if (count == 1u) {
+            if (out_info) {
+                out_info->step_index = 0u;
+                out_info->phase_ms = 0u;
+                out_info->period_ms = first_ms;
+                out_info->loop = false;
+            }
             return decode_transform_record_fixed(first_transform);
         }
 
@@ -612,15 +690,29 @@ static VgTransformFixed decode_transform_fixed(ID obj, uint32_t now_ms, const Vg
 
         bool loop = id_to_bool_default(timeline->loop, false);
         uint32_t phase_ms = timeline_phase_ms(now_ms, last_ms, loop);
+        if (out_info) {
+            out_info->phase_ms = phase_ms;
+            out_info->period_ms = last_ms;
+            out_info->loop = loop;
+        }
         if (!loop && phase_ms >= last_ms) {
+            if (out_info) {
+                out_info->phase_ms = last_ms;
+                out_info->step_index = (count > 0u) ? (uint16_t)(count - 1u) : 0u;
+            }
             return decode_transform_record_fixed(last_transform);
         }
         if (phase_ms <= first_ms) {
+            if (out_info) {
+                out_info->phase_ms = first_ms;
+                out_info->step_index = 0u;
+            }
             return decode_transform_record_fixed(first_transform);
         }
 
         uint32_t prev_ms = first_ms;
         Transform *prev_transform = first_transform;
+        unsigned int prev_index = 0u;
         for (unsigned int i = 1; i < count; i++) {
             uint32_t curr_ms = 0u;
             Transform *curr_transform = NULL;
@@ -628,6 +720,9 @@ static VgTransformFixed decode_transform_fixed(ID obj, uint32_t now_ms, const Vg
                 continue;
             }
             if (phase_ms < curr_ms) {
+                if (out_info) {
+                    out_info->step_index = (uint16_t)prev_index;
+                }
                 return interpolate_transform_keyframes(prev_transform,
                                                        curr_transform,
                                                        prev_ms,
@@ -636,6 +731,10 @@ static VgTransformFixed decode_transform_fixed(ID obj, uint32_t now_ms, const Vg
             }
             prev_ms = curr_ms;
             prev_transform = curr_transform;
+            prev_index = i;
+        }
+        if (out_info) {
+            out_info->step_index = (uint16_t)prev_index;
         }
         return decode_transform_record_fixed(prev_transform);
     }
@@ -655,6 +754,16 @@ static ID node_style_field(ID node_obj, uint32_t h, const VgRecordSchema *s) {
     return NULL;
 }
 
+static ID node_id_field(ID node_obj, uint32_t h, const VgRecordSchema *s) {
+    if (h == s->h_group)    return ((Group *)node_obj)->id;
+    if (h == s->h_line)     return ((Line *)node_obj)->id;
+    if (h == s->h_polyline) return ((Polyline *)node_obj)->id;
+    if (h == s->h_rect)     return ((Rect *)node_obj)->id;
+    if (h == s->h_tri)      return ((Tri *)node_obj)->id;
+    if (h == s->h_vtext)    return ((VText *)node_obj)->id;
+    return NULL;
+}
+
 static ID node_visible_field(ID node_obj, uint32_t h, const VgRecordSchema *s) {
     if (h == s->h_group)    return ((Group *)node_obj)->visible;
     if (h == s->h_line)     return ((Line *)node_obj)->visible;
@@ -665,23 +774,70 @@ static ID node_visible_field(ID node_obj, uint32_t h, const VgRecordSchema *s) {
     return NULL;
 }
 
-static VgStyle decode_style(ID node_obj, uint32_t node_h, uint32_t now_ms, const VgRecordSchema *sc) {
+static void capture_timeline_for_entity_field(ID entity_id, VgRenderedField field, const TimelineResolveInfo *info) {
+    if (!entity_id || !info || !info->is_timeline || field == VG_RENDERED_FIELD_NONE) {
+        return;
+    }
+    VgRenderedTimelineSample sample;
+    sample.step_index = info->step_index;
+    sample.keyframe_count = info->keyframe_count;
+    sample.phase_ms = info->phase_ms;
+    sample.period_ms = info->period_ms;
+    sample.loop = info->loop;
+    vg_rendered_state_capture_record_timeline((uintptr_t)entity_id, field, sample);
+}
+
+static ID resolve_entity_field_value(ID entity_id,
+                                     VgRenderedField field,
+                                     ID raw_value,
+                                     uint32_t now_ms,
+                                     const VgRecordSchema *sc,
+                                     bool *out_has_animation) {
+    TimelineResolveInfo info;
+    ID resolved = resolve_timeline_value_with_info(raw_value, now_ms, sc, &info, out_has_animation);
+    capture_timeline_for_entity_field(entity_id, field, &info);
+    return resolved;
+}
+
+static VgStyle decode_style(ID node_obj,
+                            ID entity_id,
+                            uint32_t node_h,
+                            uint32_t now_ms,
+                            const VgRecordSchema *sc,
+                            bool *out_has_animation) {
     VgStyle st = vg_style_default();
     if (!node_obj) {
         return st;
     }
-    ID style_obj = resolve_timeline_value(node_style_field(node_obj, node_h, sc), now_ms, sc);
+    ID style_obj = resolve_entity_field_value(entity_id,
+                                              VG_RENDERED_FIELD_STYLE,
+                                              node_style_field(node_obj, node_h, sc),
+                                              now_ms,
+                                              sc,
+                                              out_has_animation);
     if (style_obj && TAG(style_obj) == CLJ_RECORD && record_type_hash(style_obj) == sc->h_style) {
         Style *sr = style_obj;
-        st.stroke_color = id_to_u16_default(resolve_timeline_value(sr->stroke_color, now_ms, sc), st.stroke_color);
-        st.stroke_width = id_to_u8_default(resolve_timeline_value(sr->stroke_width, now_ms, sc), st.stroke_width);
-        st.has_fill = id_to_bool_default(resolve_timeline_value(sr->has_fill, now_ms, sc), st.has_fill);
-        st.fill_color = id_to_u16_default(resolve_timeline_value(sr->fill_color, now_ms, sc), st.fill_color);
-        st.has_bg_color = id_to_bool_default(resolve_timeline_value(sr->has_bg_color, now_ms, sc), st.has_bg_color);
-        st.bg_color = id_to_u16_default(resolve_timeline_value(sr->bg_color, now_ms, sc), st.bg_color);
-        st.visible = id_to_bool_default(resolve_timeline_value(sr->visible, now_ms, sc), st.visible);
+        st.stroke_color = id_to_u16_default(resolve_timeline_value(sr->stroke_color, now_ms, sc, out_has_animation),
+                                            st.stroke_color);
+        st.stroke_width = id_to_u8_default(resolve_timeline_value(sr->stroke_width, now_ms, sc, out_has_animation),
+                                           st.stroke_width);
+        st.has_fill = id_to_bool_default(resolve_timeline_value(sr->has_fill, now_ms, sc, out_has_animation),
+                                         st.has_fill);
+        st.fill_color = id_to_u16_default(resolve_timeline_value(sr->fill_color, now_ms, sc, out_has_animation),
+                                          st.fill_color);
+        st.has_bg_color = id_to_bool_default(resolve_timeline_value(sr->has_bg_color, now_ms, sc, out_has_animation),
+                                             st.has_bg_color);
+        st.bg_color = id_to_u16_default(resolve_timeline_value(sr->bg_color, now_ms, sc, out_has_animation),
+                                        st.bg_color);
+        st.visible = id_to_bool_default(resolve_timeline_value(sr->visible, now_ms, sc, out_has_animation),
+                                        st.visible);
     }
-    ID node_visible = resolve_timeline_value(node_visible_field(node_obj, node_h, sc), now_ms, sc);
+    ID node_visible = resolve_entity_field_value(entity_id,
+                                                 VG_RENDERED_FIELD_VISIBLE,
+                                                 node_visible_field(node_obj, node_h, sc),
+                                                 now_ms,
+                                                 sc,
+                                                 out_has_animation);
     if (node_visible) {
         st.visible = id_to_bool_default(node_visible, st.visible);
     }
@@ -697,7 +853,8 @@ static bool render_record_node(ID node_obj,
                                VgFrameBuffer *fb,
                                bool use_clip,
                                VgClipRect clip_rect,
-                               uint32_t now_ms);
+                               uint32_t now_ms,
+                               bool *out_has_animation);
 
 static bool decode_rect(ID obj, VgClipRect *out_rect, const VgRecordSchema *sc) {
     if (!obj || !out_rect) {
@@ -738,16 +895,23 @@ static bool render_one_temp_node(const VgNode *node, VgTransformFixed world_t, V
 }
 
 static bool render_polyline_record(ID node_obj,
+                                   ID entity_id,
                                    VgTransformFixed world_t,
                                    VgStyle style,
                                    VgFrameBuffer *fb,
                                    bool use_clip,
                                    VgClipRect clip_rect,
                                    uint32_t now_ms,
-                                   const VgRecordSchema *sc) {
+                                   const VgRecordSchema *sc,
+                                   bool *out_has_animation) {
     Polyline *pr = node_obj;
-    ID pts = resolve_timeline_value(pr->pts, now_ms, sc);
-    ID closed = resolve_timeline_value(pr->closed, now_ms, sc);
+    ID pts = resolve_entity_field_value(entity_id, VG_RENDERED_FIELD_PTS, pr->pts, now_ms, sc, out_has_animation);
+    ID closed = resolve_entity_field_value(entity_id,
+                                           VG_RENDERED_FIELD_CLOSED,
+                                           pr->closed,
+                                           now_ms,
+                                           sc,
+                                           out_has_animation);
     if (!id_is_vector(pts)) {
         return true;
     }
@@ -811,12 +975,14 @@ static bool render_record_node(ID node_obj,
                                VgFrameBuffer *fb,
                                bool use_clip,
                                VgClipRect clip_rect,
-                               uint32_t now_ms) {
+                               uint32_t now_ms,
+                               bool *out_has_animation) {
     if (!node_obj || TAG(node_obj) != CLJ_RECORD || !fb) {
         return false;
     }
     const VgRecordSchema *sc = tiny_gfx_schema();
     uint32_t h = record_type_hash(node_obj);
+    ID entity_id = node_id_field(node_obj, h, sc);
 
     ID local_t_obj = NULL;
     if      (h == sc->h_group)    local_t_obj = ((Group *)node_obj)->t;
@@ -828,17 +994,30 @@ static bool render_record_node(ID node_obj,
 
     VgTransformFixed world_t = parent_t;
     if (local_t_obj) {
-        VgTransformFixed local_t = decode_transform_fixed(local_t_obj, now_ms, sc);
+        TimelineResolveInfo t_info;
+        VgTransformFixed local_t = decode_transform_fixed_with_info(local_t_obj, now_ms, sc, &t_info);
+        if (t_info.is_timeline) {
+            mark_has_animation(out_has_animation);
+        }
+        capture_timeline_for_entity_field(entity_id, VG_RENDERED_FIELD_T, &t_info);
         world_t = vg_transform_fixed_compose(parent_t, local_t);
     }
-    VgStyle style = decode_style(node_obj, h, now_ms, sc);
+    if (entity_id) {
+        vg_rendered_state_capture_record_entity((uintptr_t)entity_id, world_t);
+    }
+    VgStyle style = decode_style(node_obj, entity_id, h, now_ms, sc, out_has_animation);
     if (!style.visible) {
         return true;
     }
 
     if (h == sc->h_group) {
         Group *group = node_obj;
-        ID children = resolve_timeline_value(group->children, now_ms, sc);
+        ID children = resolve_entity_field_value(entity_id,
+                                                 VG_RENDERED_FIELD_CHILDREN,
+                                                 group->children,
+                                                 now_ms,
+                                                 sc,
+                                                 out_has_animation);
         if (!children || !id_is_vector(children)) {
             return true;
         }
@@ -862,7 +1041,14 @@ static bool render_record_node(ID node_obj,
             if (TAG(child_node) != CLJ_RECORD) {
                 return false;
             }
-            if (!render_record_node(child_node, entity_map, world_t, fb, use_clip, clip_rect, now_ms)) {
+            if (!render_record_node(child_node,
+                                    entity_map,
+                                    world_t,
+                                    fb,
+                                    use_clip,
+                                    clip_rect,
+                                    now_ms,
+                                    out_has_animation)) {
                 return false;
             }
         }
@@ -880,10 +1066,34 @@ static bool render_record_node(ID node_obj,
     if (h == sc->h_line) {
         temp.type = VG_NODE_LINE;
         Line *line = node_obj;
-        temp.data.line.x1 = id_to_i16_default(resolve_timeline_value(line->x1, now_ms, sc), 0);
-        temp.data.line.y1 = id_to_i16_default(resolve_timeline_value(line->y1, now_ms, sc), 0);
-        temp.data.line.x2 = id_to_i16_default(resolve_timeline_value(line->x2, now_ms, sc), 0);
-        temp.data.line.y2 = id_to_i16_default(resolve_timeline_value(line->y2, now_ms, sc), 0);
+        temp.data.line.x1 = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                         VG_RENDERED_FIELD_X1,
+                                                                         line->x1,
+                                                                         now_ms,
+                                                                         sc,
+                                                                         out_has_animation),
+                                              0);
+        temp.data.line.y1 = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                         VG_RENDERED_FIELD_Y1,
+                                                                         line->y1,
+                                                                         now_ms,
+                                                                         sc,
+                                                                         out_has_animation),
+                                              0);
+        temp.data.line.x2 = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                         VG_RENDERED_FIELD_X2,
+                                                                         line->x2,
+                                                                         now_ms,
+                                                                         sc,
+                                                                         out_has_animation),
+                                              0);
+        temp.data.line.y2 = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                         VG_RENDERED_FIELD_Y2,
+                                                                         line->y2,
+                                                                         now_ms,
+                                                                         sc,
+                                                                         out_has_animation),
+                                              0);
         if (node_culled_line(world_t, temp.data.line.x1, temp.data.line.y1,
                              temp.data.line.x2, temp.data.line.y2, sw,
                              fb_w, fb_h, use_clip, clip_rect))
@@ -893,10 +1103,34 @@ static bool render_record_node(ID node_obj,
     if (h == sc->h_rect) {
         temp.type = VG_NODE_RECT;
         Rect *rect = node_obj;
-        temp.data.rect.x = id_to_i16_default(resolve_timeline_value(rect->x, now_ms, sc), 0);
-        temp.data.rect.y = id_to_i16_default(resolve_timeline_value(rect->y, now_ms, sc), 0);
-        temp.data.rect.w = id_to_i16_default(resolve_timeline_value(rect->w, now_ms, sc), 0);
-        temp.data.rect.h = id_to_i16_default(resolve_timeline_value(rect->h, now_ms, sc), 0);
+        temp.data.rect.x = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_X,
+                                                                        rect->x,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
+        temp.data.rect.y = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_Y,
+                                                                        rect->y,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
+        temp.data.rect.w = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_W,
+                                                                        rect->w,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
+        temp.data.rect.h = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_H,
+                                                                        rect->h,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
         if (node_culled_rect(world_t, temp.data.rect.x, temp.data.rect.y,
                              temp.data.rect.w, temp.data.rect.h, sw,
                              fb_w, fb_h, use_clip, clip_rect))
@@ -906,12 +1140,48 @@ static bool render_record_node(ID node_obj,
     if (h == sc->h_tri) {
         temp.type = VG_NODE_TRI;
         Tri *tri = node_obj;
-        temp.data.tri.x1 = id_to_i16_default(resolve_timeline_value(tri->x1, now_ms, sc), 0);
-        temp.data.tri.y1 = id_to_i16_default(resolve_timeline_value(tri->y1, now_ms, sc), 0);
-        temp.data.tri.x2 = id_to_i16_default(resolve_timeline_value(tri->x2, now_ms, sc), 0);
-        temp.data.tri.y2 = id_to_i16_default(resolve_timeline_value(tri->y2, now_ms, sc), 0);
-        temp.data.tri.x3 = id_to_i16_default(resolve_timeline_value(tri->x3, now_ms, sc), 0);
-        temp.data.tri.y3 = id_to_i16_default(resolve_timeline_value(tri->y3, now_ms, sc), 0);
+        temp.data.tri.x1 = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_X1,
+                                                                        tri->x1,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
+        temp.data.tri.y1 = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_Y1,
+                                                                        tri->y1,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
+        temp.data.tri.x2 = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_X2,
+                                                                        tri->x2,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
+        temp.data.tri.y2 = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_Y2,
+                                                                        tri->y2,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
+        temp.data.tri.x3 = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_X3,
+                                                                        tri->x3,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
+        temp.data.tri.y3 = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_Y3,
+                                                                        tri->y3,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
         if (node_culled_tri(world_t,
                             temp.data.tri.x1, temp.data.tri.y1,
                             temp.data.tri.x2, temp.data.tri.y2,
@@ -923,15 +1193,53 @@ static bool render_record_node(ID node_obj,
     if (h == sc->h_vtext) {
         temp.type = VG_NODE_VTEXT;
         VText *text = node_obj;
-        temp.data.text.x = id_to_i16_default(resolve_timeline_value(text->x, now_ms, sc), 0);
-        temp.data.text.y = id_to_i16_default(resolve_timeline_value(text->y, now_ms, sc), 0);
-        temp.data.text.scale = id_to_fixed_raw_default(resolve_timeline_value(text->scale, now_ms, sc), VG_SCALE_ONE);
-        temp.data.text.rot_deg = id_to_i16_default(resolve_timeline_value(text->rot, now_ms, sc), 0);
-        temp.data.text.text = id_to_text_cstr(resolve_timeline_value(text->text, now_ms, sc));
+        temp.data.text.x = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_X,
+                                                                        text->x,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
+        temp.data.text.y = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                        VG_RENDERED_FIELD_Y,
+                                                                        text->y,
+                                                                        now_ms,
+                                                                        sc,
+                                                                        out_has_animation),
+                                             0);
+        temp.data.text.scale = id_to_fixed_raw_default(resolve_entity_field_value(entity_id,
+                                                                                   VG_RENDERED_FIELD_SCALE,
+                                                                                   text->scale,
+                                                                                   now_ms,
+                                                                                   sc,
+                                                                                   out_has_animation),
+                                                       VG_SCALE_ONE);
+        temp.data.text.rot_deg = id_to_i16_default(resolve_entity_field_value(entity_id,
+                                                                              VG_RENDERED_FIELD_ROT,
+                                                                              text->rot,
+                                                                              now_ms,
+                                                                              sc,
+                                                                              out_has_animation),
+                                                   0);
+        temp.data.text.text = id_to_text_cstr(resolve_entity_field_value(entity_id,
+                                                                         VG_RENDERED_FIELD_TEXT,
+                                                                         text->text,
+                                                                         now_ms,
+                                                                         sc,
+                                                                         out_has_animation));
         return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
     }
     if (h == sc->h_polyline) {
-        return render_polyline_record(node_obj, world_t, style, fb, use_clip, clip_rect, now_ms, sc);
+        return render_polyline_record(node_obj,
+                                      entity_id,
+                                      world_t,
+                                      style,
+                                      fb,
+                                      use_clip,
+                                      clip_rect,
+                                      now_ms,
+                                      sc,
+                                      out_has_animation);
     }
     return false;
 }
@@ -994,8 +1302,8 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
     }
 
     const VgRecordSchema *sc = tiny_gfx_schema();
-    ID resolved_root = resolve_timeline_value(root, now_ms, sc);
-    ID resolved_clip_source = resolve_timeline_value(clip_source, now_ms, sc);
+    ID resolved_root = resolve_timeline_value(root, now_ms, sc, NULL);
+    ID resolved_clip_source = resolve_timeline_value(clip_source, now_ms, sc, NULL);
     VgClipRect effective_rect = {0, 0, 0, 0};
     bool has_effective_rect = decode_rect(resolved_clip_source, &effective_rect, sc);
     ID entity_map = NULL;
@@ -1004,7 +1312,7 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
         return false;
     }
 
-    ID resolved_erase = resolve_timeline_value(erase_source, now_ms, sc);
+    ID resolved_erase = resolve_timeline_value(erase_source, now_ms, sc, NULL);
     if (has_effective_rect) {
         uint16_t erase_color = id_to_u16_default(resolved_erase, 0x0000u);
         vg_framebuffer_clear_rect(fb, effective_rect, erase_color);
@@ -1019,14 +1327,19 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
                               fb,
                               has_effective_rect,
                               effective_rect,
-                              now_ms);
+                              now_ms,
+                              NULL);
 }
 
 bool vg_render_scene_record(ID scene_record, VgFrameBuffer *fb) {
     return vg_render_scene_record_at_ms(scene_record, fb, platform_current_time_ms());
 }
 
-bool vg_render_scene_record_clipped_at_ms(ID scene_record, VgFrameBuffer *fb, VgClipRect clip_rect, uint32_t now_ms) {
+static bool render_scene_record_clipped_at_ms_internal(ID scene_record,
+                                                       VgFrameBuffer *fb,
+                                                       VgClipRect clip_rect,
+                                                       uint32_t now_ms,
+                                                       bool *out_has_animation) {
     if (!scene_record || !fb || TAG(scene_record) != CLJ_RECORD) {
         return false;
     }
@@ -1038,8 +1351,8 @@ bool vg_render_scene_record_clipped_at_ms(ID scene_record, VgFrameBuffer *fb, Vg
     }
 
     const VgRecordSchema *sc = tiny_gfx_schema();
-    ID resolved_root = resolve_timeline_value(root, now_ms, sc);
-    ID resolved_clip_source = resolve_timeline_value(clip_source, now_ms, sc);
+    ID resolved_root = resolve_timeline_value(root, now_ms, sc, out_has_animation);
+    ID resolved_clip_source = resolve_timeline_value(clip_source, now_ms, sc, out_has_animation);
     VgClipRect effective_clip = clip_rect;
     VgClipRect scene_clip = {0, 0, 0, 0};
     bool has_scene_clip = decode_rect(resolved_clip_source, &scene_clip, sc);
@@ -1062,7 +1375,12 @@ bool vg_render_scene_record_clipped_at_ms(ID scene_record, VgFrameBuffer *fb, Vg
                               fb,
                               true,
                               effective_clip,
-                              now_ms);
+                              now_ms,
+                              out_has_animation);
+}
+
+bool vg_render_scene_record_clipped_at_ms(ID scene_record, VgFrameBuffer *fb, VgClipRect clip_rect, uint32_t now_ms) {
+    return render_scene_record_clipped_at_ms_internal(scene_record, fb, clip_rect, now_ms, NULL);
 }
 
 bool vg_render_scene_record_clipped(ID scene_record, VgFrameBuffer *fb, VgClipRect clip_rect) {
@@ -1114,11 +1432,13 @@ static uint32_t clip_rect_area_on_framebuffer(VgClipRect rect, const VgFrameBuff
     return (uint32_t)((uint32_t)(x1 - x0) * (uint32_t)(y1 - y0));
 }
 
-bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
-                                            VgRenderSlotState *state,
-                                            VgFrameBuffer *fb,
-                                            uint32_t snapshot_id,
-                                            uint32_t *out_dirty_pixels) {
+bool vg_render_frame_slot_record_at_ms(ID frame_scene_record,
+                                       VgRenderSlotState *state,
+                                       VgFrameBuffer *fb,
+                                       uint32_t snapshot_id,
+                                       uint32_t now_ms,
+                                       bool force_render,
+                                       uint32_t *out_dirty_pixels) {
     VgRenderSlot slot;
     if (out_dirty_pixels) {
         *out_dirty_pixels = 0u;
@@ -1134,7 +1454,7 @@ bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
                          state->last_guard_px != slot.guard_px ||
                          !vg_clip_rect_equal(state->last_clip_rect, slot.clip_rect);
     bool snapshot_changed = !state->initialized || state->snapshot_id != snapshot_id;
-    if (!props_changed && !snapshot_changed) {
+    if (!props_changed && !snapshot_changed && !force_render) {
         return false;
     }
 
@@ -1148,11 +1468,17 @@ bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
     }
     vg_framebuffer_clear_rect(fb, dirty, slot.clear_color);
 
+    bool slot_has_animation = false;
     if (slot.visible) {
-        (void)vg_render_scene_record_clipped(frame_scene_record, fb, slot.clip_rect);
+        (void)render_scene_record_clipped_at_ms_internal(frame_scene_record,
+                                                         fb,
+                                                         slot.clip_rect,
+                                                         now_ms,
+                                                         &slot_has_animation);
     }
 
     state->initialized = true;
+    state->has_animation = slot_has_animation;
     state->snapshot_id = snapshot_id;
     state->last_clip_rect = slot.clip_rect;
     state->last_visible = slot.visible;
@@ -1160,4 +1486,32 @@ bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
     state->last_clear_color = slot.clear_color;
     state->last_guard_px = slot.guard_px;
     return true;
+}
+
+bool vg_render_frame_slot_record_if_changed_at_ms(ID frame_scene_record,
+                                                  VgRenderSlotState *state,
+                                                  VgFrameBuffer *fb,
+                                                  uint32_t snapshot_id,
+                                                  uint32_t now_ms,
+                                                  uint32_t *out_dirty_pixels) {
+    return vg_render_frame_slot_record_at_ms(frame_scene_record,
+                                             state,
+                                             fb,
+                                             snapshot_id,
+                                             now_ms,
+                                             false,
+                                             out_dirty_pixels);
+}
+
+bool vg_render_frame_slot_record_if_changed(ID frame_scene_record,
+                                            VgRenderSlotState *state,
+                                            VgFrameBuffer *fb,
+                                            uint32_t snapshot_id,
+                                            uint32_t *out_dirty_pixels) {
+    return vg_render_frame_slot_record_if_changed_at_ms(frame_scene_record,
+                                                         state,
+                                                         fb,
+                                                         snapshot_id,
+                                                         platform_current_time_ms(),
+                                                         out_dirty_pixels);
 }
