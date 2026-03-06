@@ -1,6 +1,7 @@
 R"TINY_GFX_RUNTIME(
 (ns tiny-gfx.runtime
   (:require [tiny-clj.runtime]
+            [tiny-gfx.collision]
             [tiny-gfx.host-viewer-demo]))
 
 ;; Direct var aliases to tiny-clj.runtime (no forwarding wrapper functions).
@@ -34,11 +35,15 @@ Usage: (renderer-timeline-progress :game 3001 :t)."}
 (def renderer-timeline-progress tiny-clj.runtime/renderer-timeline-progress)
 
 ^#^{:doc "Builds and returns host-viewer startup config map:
-{:bundle [deco-scene score-scene game-scene]}
-Used by native host-viewer startup. Spatial rules are read from the published
-`FrameScene` records themselves, so no separate collision/proximity policy map is needed."}
+{:bundle [deco-scene score-scene game-scene]
+ :spatial-callback tiny-gfx.collision/invoke-collision-callback!
+ :game-scene-atom tiny-gfx.host-viewer-demo/game-scene-state}
+Used by native host-viewer startup. The C host loop consumes only this config map,
+so callback dispatch and live game-scene updates stay app-defined on the Clojure side."}
 (def host-viewer-config
   (fn host-viewer-config []
-    {:bundle (tiny-gfx.host-viewer-demo/create-demo-bundle)}))
+    {:bundle (tiny-gfx.host-viewer-demo/create-demo-bundle)
+     :spatial-callback tiny-gfx.collision/invoke-collision-callback!
+     :game-scene-atom tiny-gfx.host-viewer-demo/game-scene-state}))
 
 )TINY_GFX_RUNTIME"

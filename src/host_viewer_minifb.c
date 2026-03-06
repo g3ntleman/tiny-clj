@@ -50,7 +50,7 @@
 #define VIEWER_MAX_SPATIAL_RULES 16u
 
 static uint64_t monotonic_now_ns(void);
-typedef struct ViewerDemoBundle ViewerDemoBundle;
+typedef struct ViewerSceneBundle ViewerSceneBundle;
 typedef struct ViewerCollisionPolicy ViewerCollisionPolicy;
 
 static inline uint32_t viewer_record_type_hash(ID obj) {
@@ -189,8 +189,10 @@ enum {
     DEMO_BUNDLE_COUNT = 3
 };
 
-struct ViewerDemoBundle {
+struct ViewerSceneBundle {
     ID bundle_root;
+    ID spatial_callback;
+    CljAtom *game_scene_atom;
     FrameScene *deco_scene;
     FrameScene *score_scene;
     FrameScene *game_scene;
@@ -211,11 +213,13 @@ typedef struct {
     uint32_t count;
 } ViewerSpatialRuleSet;
 
-static void destroy_demo_bundle(ViewerDemoBundle *bundle) {
+static void destroy_scene_bundle(ViewerSceneBundle *bundle) {
     if (!bundle) {
         return;
     }
     RELEASE(bundle->bundle_root);
+    RELEASE(bundle->spatial_callback);
+    RELEASE(bundle->game_scene_atom);
     memset(bundle, 0, sizeof(*bundle));
 }
 
@@ -365,7 +369,7 @@ static bool viewer_record_world_aabb(ID record_obj, VgTransformFixed world_t, Vg
     return true;
 }
 
-static bool viewer_extract_demo_bundle(ID bundle, ViewerDemoBundle *out_bundle) {
+static bool viewer_extract_scene_bundle(ID bundle, ViewerSceneBundle *out_bundle) {
     if (!bundle || !out_bundle || !is_vector(bundle)) {
         return false;
     }
@@ -413,7 +417,7 @@ static ID viewer_make_aabb_record(const VgAabb *box) {
     return rec;
 }
 
-static ID viewer_make_spatial_event(const ViewerDemoBundle *bundle,
+static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
                                     const ViewerCollisionPolicy *policy,
                                     ID phase,
                                     uint32_t snapshot_gen,
@@ -580,7 +584,7 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
 }
 
 static bool viewer_load_host_viewer_config(EvalState *st,
-                                           ViewerDemoBundle *out_bundle,
+                                           ViewerSceneBundle *out_bundle,
                                            ViewerSpatialRuleSet *out_rule_set) {
     if (!st || !out_bundle || !out_rule_set) {
         return false;
@@ -595,18 +599,40 @@ static bool viewer_load_host_viewer_config(EvalState *st,
         return false;
     }
     static CljSymbol *k_bundle = NULL;
+    static CljSymbol *k_spatial_callback = NULL;
+    static CljSymbol *k_game_scene_atom = NULL;
     if (!k_bundle) {
         k_bundle = intern_symbol_global(":bundle");
+        k_spatial_callback = intern_symbol_global(":spatial-callback");
+        k_game_scene_atom = intern_symbol_global(":game-scene-atom");
     }
-    if (!k_bundle) {
+    if (!k_bundle || !k_spatial_callback || !k_game_scene_atom) {
         return false;
     }
     ID bundle = map_get_sentinel(cfg, k_bundle, NULL);
-    if (!viewer_extract_demo_bundle(bundle, out_bundle)) {
+    ID spatial_callback = map_get_sentinel(cfg, k_spatial_callback, NULL);
+    ID game_scene_atom = map_get_sentinel(cfg, k_game_scene_atom, NULL);
+    if (!viewer_extract_scene_bundle(bundle, out_bundle)) {
+        return false;
+    }
+    if (!spatial_callback || !game_scene_atom || TAG(game_scene_atom) != CLJ_ATOM) {
+        destroy_scene_bundle(out_bundle);
+        return false;
+    }
+    unsigned char fn_tag = TAG(spatial_callback);
+    if ((fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE)) {
+        destroy_scene_bundle(out_bundle);
+        return false;
+    }
+    out_bundle->spatial_callback = RETAIN(spatial_callback);
+    out_bundle->game_scene_atom = (CljAtom *)RETAIN(game_scene_atom);
+    ID current_game_scene = out_bundle->game_scene_atom->value;
+    if (!current_game_scene || current_game_scene != out_bundle->game_scene) {
+        destroy_scene_bundle(out_bundle);
         return false;
     }
     if (!viewer_load_spatial_rules_from_scene(out_bundle->game_scene, out_rule_set)) {
-        destroy_demo_bundle(out_bundle);
+        destroy_scene_bundle(out_bundle);
         return false;
     }
     return true;
@@ -1045,41 +1071,15 @@ static void publish_frame_scene_slot_record(size_t slot_index, ID scene, uint32_
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, (uint8_t)slot_index, out_generation);
 }
 
-static ID viewer_collision_dispatch_fn(EvalState *st) {
-    if (!st) {
-        return NULL;
-    }
-    static CljSymbol *invoke_callback_sym = NULL;
-    if (!invoke_callback_sym) {
-        CljSymbol *collision_ns = intern_symbol_global("tiny-gfx.collision");
-        if (!collision_ns) {
-            return NULL;
-        }
-        invoke_callback_sym = intern_symbol(collision_ns, "invoke-collision-callback!");
-        if (!invoke_callback_sym) {
-            return NULL;
-        }
-    }
-    ID callback_dispatch_fn = ns_resolve(st, invoke_callback_sym);
-    if (!callback_dispatch_fn || callback_dispatch_fn == NOT_FOUND) {
-        return NULL;
-    }
-    unsigned char fn_tag = TAG(callback_dispatch_fn);
-    if (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE) {
-        return NULL;
-    }
-    return callback_dispatch_fn;
-}
-
-static bool viewer_invoke_collision_callback(EvalState *st, ID event_payload) {
-    if (!st || !event_payload) {
+static bool viewer_invoke_collision_callback(const ViewerSceneBundle *bundle,
+                                             EvalState *st,
+                                             ID event_payload) {
+    if (!bundle || !bundle->spatial_callback || !st || !event_payload) {
         return false;
     }
-    ID callback_dispatch_fn = NULL;
     bool success = false;
     TRY {
-        callback_dispatch_fn = viewer_collision_dispatch_fn(st);
-        if (!callback_dispatch_fn || callback_dispatch_fn == NOT_FOUND) {
+        if (!event_loop_enqueue_ingress_call(bundle->spatial_callback, event_payload)) {
             success = false;
         } else {
             /*
@@ -1087,11 +1087,7 @@ static bool viewer_invoke_collision_callback(EvalState *st, ID event_payload) {
              * on the Clojure runloop path. Callback return values are intentionally
              * ignored by the C host bridge.
              */
-            if (!event_loop_enqueue_ingress_call(callback_dispatch_fn, event_payload)) {
-                success = false;
-            } else {
-                success = event_loop_run_next(NULL, st);
-            }
+            success = event_loop_run_next(NULL, st);
         }
     } CATCH(ex) {
         (void)ex;
@@ -1100,26 +1096,11 @@ static bool viewer_invoke_collision_callback(EvalState *st, ID event_payload) {
     return success;
 }
 
-static FrameScene *viewer_current_game_scene_from_clojure(EvalState *st) {
-    if (!st) {
+static FrameScene *viewer_current_game_scene_from_clojure(const ViewerSceneBundle *bundle) {
+    if (!bundle || !bundle->game_scene_atom) {
         return NULL;
     }
-    static CljSymbol *game_scene_state_sym = NULL;
-    if (!game_scene_state_sym) {
-        CljSymbol *demo_ns = intern_symbol_global("tiny-gfx.host-viewer-demo");
-        if (!demo_ns) {
-            return NULL;
-        }
-        game_scene_state_sym = intern_symbol(demo_ns, "game-scene-state");
-        if (!game_scene_state_sym) {
-            return NULL;
-        }
-    }
-    ID state_atom = ns_resolve(st, game_scene_state_sym);
-    if (!state_atom || state_atom == NOT_FOUND || TAG(state_atom) != CLJ_ATOM) {
-        return NULL;
-    }
-    ID scene = ((CljAtom *)state_atom)->value;
+    ID scene = bundle->game_scene_atom->value;
     if (!scene || TAG(scene) != CLJ_RECORD) {
         return NULL;
     }
@@ -1130,7 +1111,7 @@ static FrameScene *viewer_current_game_scene_from_clojure(EvalState *st) {
     return (FrameScene *)scene;
 }
 
-static bool viewer_apply_collision_step(ViewerDemoBundle *bundle,
+static bool viewer_apply_collision_step(ViewerSceneBundle *bundle,
                                         ViewerSpatialRuleSet *rule_set,
                                         EvalState *st,
                                         uint32_t now_ms) {
@@ -1196,12 +1177,12 @@ static bool viewer_apply_collision_step(ViewerDemoBundle *bundle,
         if (!event_payload) {
             continue;
         }
-        bool invoked = viewer_invoke_collision_callback(st, event_payload);
+        bool invoked = viewer_invoke_collision_callback(bundle, st, event_payload);
         RELEASE(event_payload);
         if (!invoked) {
             continue;
         }
-        FrameScene *updated_game_scene = viewer_current_game_scene_from_clojure(st);
+        FrameScene *updated_game_scene = viewer_current_game_scene_from_clojure(bundle);
         if (!updated_game_scene) {
             continue;
         }
@@ -1304,7 +1285,7 @@ int main(void) {
     bool slot_tracker_initialized = false;
     bool render_thread_started = false;
     bool demo_bundle_initialized = false;
-    ViewerDemoBundle demo_bundle = {0};
+    ViewerSceneBundle demo_bundle = {0};
     ViewerSpatialRuleSet spatial_rules = {0};
     int exit_code = 1;
     viewer_set_realtime_thread_policy();
@@ -1546,7 +1527,7 @@ cleanup:
         vg_slot_change_tracker_destroy(&g_slot_change_tracker);
     }
     if (demo_bundle_initialized) {
-        destroy_demo_bundle(&demo_bundle);
+        destroy_scene_bundle(&demo_bundle);
     }
     destroy_spatial_rule_set(&spatial_rules);
     g_gram_pixels = NULL;
