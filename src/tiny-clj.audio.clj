@@ -312,7 +312,7 @@ R"TINY_SND_CMP(
     steps2))
 
 ;; -----------------------------------------------------------------------------
-;; Demo: piezo-friendly Star Wars title phrase
+;; Demo: piezo-friendly Star Wars title phrases
 ;; -----------------------------------------------------------------------------
 
 (def starwars-title-steps
@@ -323,7 +323,18 @@ R"TINY_SND_CMP(
    {:melody :Eb5 :backing [:C4] :dur :de}
    {:melody :Bb5 :backing [:F4] :dur :s}
    {:melody :G5 :backing [:D4] :dur :q}
-   {:rest :s}
+
+   {:melody :Eb5 :backing [:C4] :dur :de}
+   {:melody :Bb5 :backing [:F4] :dur :s}
+   {:melody :G5 :backing [:D4] :dur :q}
+   {:rest :e}
+
+   {:melody :D6 :backing [:A4] :dur :q}
+   {:melody :D6 :backing [:A4] :dur :q}
+   {:melody :D6 :backing [:A4] :dur :q}
+   {:melody :Eb6 :backing [:Bb4] :dur :de}
+   {:melody :Bb5 :backing [:F4] :dur :s}
+   {:melody :Gb5 :backing [:Db4] :dur :q}
 
    {:melody :Eb5 :backing [:C4] :dur :de}
    {:melody :Bb5 :backing [:F4] :dur :s}
@@ -369,7 +380,7 @@ R"TINY_SND_CMP(
     :wait :stopped|:timeout|:unknown}"
   []
   (let [start (play-starwars-title!)
-        wait (wait-until-audio-stopped! 6000)]
+        wait (wait-until-audio-stopped! 10000)]
     {:start start :wait wait}))
 
 )TINY_SND_CMP"
