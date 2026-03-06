@@ -423,6 +423,7 @@ static ID viewer_make_spatial_event(const ViewerDemoBundle *bundle,
         return NULL;
     }
     static ID t_spatial_event = NULL;
+    static ID k_source = NULL;
     static ID k_rule_id = NULL;
     static ID k_slot = NULL;
     static ID k_kind = NULL;
@@ -434,9 +435,11 @@ static ID viewer_make_spatial_event(const ViewerDemoBundle *bundle,
     static ID k_b_aabb = NULL;
     static ID k_radius = NULL;
     static ID k_channel = NULL;
+    static ID source_spatial = NULL;
     static ID slot_game = NULL;
     if (!t_spatial_event) {
         t_spatial_event = intern_symbol_global("SpatialEvent");
+        k_source = intern_symbol_global(":source");
         k_rule_id = intern_symbol_global(":rule-id");
         k_slot = intern_symbol_global(":slot");
         k_kind = intern_symbol_global(":kind");
@@ -448,11 +451,12 @@ static ID viewer_make_spatial_event(const ViewerDemoBundle *bundle,
         k_b_aabb = intern_symbol_global(":b-aabb");
         k_radius = intern_symbol_global(":radius");
         k_channel = intern_symbol_global(":channel");
+        source_spatial = intern_symbol_global(":spatial");
         slot_game = intern_symbol_global(":game");
     }
-    if (!t_spatial_event || !k_rule_id || !k_slot || !k_kind || !k_phase ||
+    if (!t_spatial_event || !k_source || !k_rule_id || !k_slot || !k_kind || !k_phase ||
         !k_snapshot_gen || !k_a || !k_b || !k_a_aabb || !k_b_aabb ||
-        !k_radius || !k_channel || !slot_game) {
+        !k_radius || !k_channel || !source_spatial || !slot_game) {
         return NULL;
     }
     ID root = bundle->game_scene->root;
@@ -471,12 +475,13 @@ static ID viewer_make_spatial_event(const ViewerDemoBundle *bundle,
         RELEASE(b_aabb_rec);
         return NULL;
     }
-    CljPersistentMap *m = make_map(11, STRONG);
+    CljPersistentMap *m = make_map(12, STRONG);
     if (!m) {
         RELEASE(a_aabb_rec);
         RELEASE(b_aabb_rec);
         return NULL;
     }
+    map_assoc_inplace(&m, k_source, source_spatial);
     if (policy->rule_id) {
         map_assoc_inplace(&m, k_rule_id, policy->rule_id);
     }

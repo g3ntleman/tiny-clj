@@ -446,6 +446,24 @@ TEST(test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
+TEST(test_vector_scene_graph_host_viewer_demo_gpio_press_triggers_demo_melody_once) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.host-viewer-demo) "
+        "  (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "  (gpio-simulate! 1 1) "
+        "  (run-next-task) "
+        "  (gpio-simulate! 1 0) "
+        "  (run-next-task) "
+        "  (let [count @tiny-gfx.host-viewer-demo/demo-melody-trigger-count* "
+        "        status (tiny-snd.runtime/audio-host-status!)] "
+        "    (and (= 1 count) "
+        "         (contains? status :tick-running))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok && ok != clj_false);
+}
+
 TEST(test_vector_scene_graph_tiny_gfx_collision_callback_reconfiguration) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(

@@ -3,7 +3,7 @@
  *
  * Streams trk1 byte arrays directly (no full-decode). Supports N voices,
  * SPSC command queue (Clojure -> Tick), and finished notification via
- * event-loop scheduler task (Tick -> Clojure, mutex-protected).
+ * generic event-loop ingress event maps (Tick -> Clojure).
  *
  * Host builds use stub backends; ESP32 builds drive LEDC PWM.
  */
@@ -12,7 +12,6 @@
 #define TINY_CLJ_AUDIO_ENGINE_H
 
 #include "object.h"
-#include "value.h"
 #include "lockfree_spsc_queue.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -186,9 +185,6 @@ typedef struct {
 
     /* Finished callback (Clojure function, retained) */
     ID              on_finished_fn;
-    ID              finished_dispatch_fn;
-    ID              finished_slots[AUDIO_FINISHED_QUEUE_CAP];
-    LockFreeSpscQueue finished_queue;
 
     /* Tick lifecycle */
     bool            tick_running;
@@ -251,7 +247,8 @@ bool audio_engine_set_track_volume(ID track_id, int32_t vol);
 /* Set global music volume. */
 void audio_engine_set_music_volume(int32_t vol);
 
-/* Register on-finished callback. Retains fn, releases previous. */
+/* Register on-finished callback. Retains fn, releases previous.
+ * Callback receives {:source :audio :kind :finished :track-id ...}. */
 void audio_engine_on_finished(ID callback_fn);
 
 /* ========================================================================= */

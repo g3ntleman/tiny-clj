@@ -2,7 +2,8 @@ R"TINY_GFX_HOST(
 (ns tiny-gfx.host-viewer-demo
   (:require [tiny-gfx.scene :refer [->Transform ->Style ->Group ->Polyline
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
-            [tiny-gfx.collision :as collision]))
+            [tiny-gfx.collision :as collision]
+            [tiny-snd.composer :as composer]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
@@ -185,9 +186,23 @@ R"TINY_GFX_HOST(
 (def player-geometry-small {:x1 60 :y1 146 :x2 72 :y2 126 :x3 84 :y3 146})
 (def player-entity-id 3002)
 (def obstacle-entity-id 3003)
+(def melody-input-pin 1)
+(def demo-melody-track-id :host-viewer-demo-melody)
+(def demo-melody-steps
+  [{:melody :G5 :backing [:D4] :dur :s}
+   {:melody :Bb5 :backing [:F4] :dur :s}
+   {:melody :D6 :backing [:G4] :dur :e}])
+(def demo-melody-opts
+  {:channel-count 2
+   :melody-vol 220
+   :backing-volumes [132]
+   :tempo-bpm 168
+   :gate-percent 78})
 
 (def player-small-state (atom false))
 (def game-scene-state (atom nil))
+(def demo-melody-trigger-count* (atom 0))
+(def demo-input-watcher-id* (atom nil))
 
 (defn- apply-player-geometry
   [game-scene player-small?]
@@ -223,6 +238,29 @@ Returns nil; host-side callback dispatch ignores return values."
   "Configures the collision response callback used by the host viewer."
   []
   (collision/set-collision-callback! on-player-collision-toggle!))
+
+(defn on-demo-gpio-input!
+  "Host-viewer GPIO callback: a rising edge on the demo input pin triggers
+a short melody from Clojure. Returns nil; host-side callback dispatch ignores
+return values."
+  [event]
+  (let [pin (:pin event)
+        value (:value event)]
+    (when (and (= pin melody-input-pin)
+               (= value 1))
+      (swap! demo-melody-trigger-count* inc)
+      (composer/play-steps! demo-melody-track-id demo-melody-steps demo-melody-opts))
+    nil))
+
+(defn configure-demo-input-watchers!
+  "Registers the demo GPIO watcher used by the host viewer input simulation."
+  []
+  (let [old-watcher-id @demo-input-watcher-id*]
+    (when old-watcher-id
+      (clojure.core/gpio-unwatch old-watcher-id))
+    (reset! demo-input-watcher-id*
+            (clojure.core/gpio-watch melody-input-pin on-demo-gpio-input!))
+    nil))
 
 (defn collision-entity-ids
   "Returns [player-entity-id obstacle-entity-id] for host collision state queries."
@@ -287,7 +325,9 @@ Index layout:
                                      :collision-rules [collision-rule hearing-rule]})]
         (reset! player-small-state false)
         (reset! game-scene-state game-scene)
+        (reset! demo-melody-trigger-count* 0)
         (configure-collision-toggle-callback!)
+        (configure-demo-input-watchers!)
         [deco-scene
          score-scene
          game-scene]))))

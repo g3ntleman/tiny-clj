@@ -37,8 +37,9 @@ TEST(test_gfx_collision_contract_registers_record_descriptors) {
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enabled"), vector_nth(d_rule->field_keys, 5));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":cooldown-ms"), vector_nth(d_rule->field_keys, 6));
     TEST_ASSERT_EQUAL_UINT(7, vector_count(d_spatial_rule->field_keys));
-    TEST_ASSERT_EQUAL_UINT(11, vector_count(d_spatial_event->field_keys));
+    TEST_ASSERT_EQUAL_UINT(12, vector_count(d_spatial_event->field_keys));
     TEST_ASSERT_EQUAL_UINT(4, vector_count(d_aabb->field_keys));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":source"), vector_nth(d_spatial_event->field_keys, 0));
 }
 
 TEST(test_gfx_collision_contract_normalize_rule_defaults) {

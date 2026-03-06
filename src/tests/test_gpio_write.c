@@ -202,10 +202,13 @@ TEST(test_gpio_watch_and_simulate_enqueue_callback_event_on_host) {
     TEST_ASSERT_EQUAL_INT(1, vector_count((CljPersistentVector *)result));
 
     ID first_event = vector_nth((CljPersistentVector *)result, 0);
-    TEST_ASSERT_TRUE_MESSAGE(is_vector(first_event), "recorded event should be a vector");
-    TEST_ASSERT_EQUAL_INT(2, vector_count((CljPersistentVector *)first_event));
-    TEST_ASSERT_EQUAL_INT(8, as_fixnum(vector_nth((CljPersistentVector *)first_event, 0)));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth((CljPersistentVector *)first_event, 1)));
+    TEST_ASSERT_TRUE_MESSAGE(is_map(first_event), "recorded event should be a map");
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":gpio"),
+                          map_get(first_event, intern_symbol_global(":source")));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":edge"),
+                          map_get(first_event, intern_symbol_global(":kind")));
+    TEST_ASSERT_EQUAL_INT(8, as_fixnum(map_get(first_event, intern_symbol_global(":pin"))));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(map_get(first_event, intern_symbol_global(":value"))));
 }
 
 TEST(test_gpio_unwatch_stops_future_host_events) {

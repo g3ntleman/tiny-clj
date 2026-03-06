@@ -12,11 +12,15 @@
 #include "map.h"
 #include "symbol.h"
 #include "value.h"
-#include "vector.h"
 
 static CljPersistentMap *g_gpio_watchers = NULL;
 static CljPersistentMap *g_gpio_pin_levels = NULL;
+static CljSymbol *KW_SOURCE = NULL;
+static CljSymbol *KW_KIND = NULL;
 static CljSymbol *KW_PIN = NULL;
+static CljSymbol *KW_VALUE = NULL;
+static CljSymbol *KW_GPIO = NULL;
+static CljSymbol *KW_EDGE = NULL;
 static int32_t g_next_watcher_id = 1;
 
 static inline void gpio_host_ensure_initialized(void)
@@ -24,13 +28,28 @@ static inline void gpio_host_ensure_initialized(void)
     if (g_gpio_watchers) return;
     g_gpio_watchers = make_map(4, STRONG);
     g_gpio_pin_levels = make_map(8, STRONG);
+    KW_SOURCE = intern_symbol_global(":source");
+    KW_KIND = intern_symbol_global(":kind");
     KW_PIN = intern_symbol_global(":pin");
+    KW_VALUE = intern_symbol_global(":value");
+    KW_GPIO = intern_symbol_global(":gpio");
+    KW_EDGE = intern_symbol_global(":edge");
 }
 
 static inline void gpio_host_store_level(int32_t pin, int32_t level)
 {
     gpio_host_ensure_initialized();
     map_assoc_inplace(&g_gpio_pin_levels, fixnum(pin), fixnum(level == 0 ? 0 : 1));
+}
+
+static ID gpio_host_make_watch_event(int32_t pin, int32_t level)
+{
+    gpio_host_ensure_initialized();
+    return make_map_from_kv(4,
+                            KW_SOURCE, KW_GPIO,
+                            KW_KIND, KW_EDGE,
+                            KW_PIN, fixnum(pin),
+                            KW_VALUE, fixnum(level == 0 ? 0 : 1));
 }
 
 static bool gpio_host_enqueue_watch_event(int32_t pin, int32_t level)
@@ -47,12 +66,13 @@ static bool gpio_host_enqueue_watch_event(int32_t pin, int32_t level)
         return false;
     }
 
-    CljPersistentVector *event_vec = make_vector(2, STRONG);
-    vector_conj_inplace(&event_vec, fixnum(pin));
-    vector_conj_inplace(&event_vec, fixnum(level == 0 ? 0 : 1));
+    ID event_map = gpio_host_make_watch_event(pin, level);
+    if (!event_map) {
+        return false;
+    }
 
-    bool enqueued = event_loop_enqueue_ingress_call(callback, event_vec);
-    RELEASE(event_vec);
+    bool enqueued = event_loop_enqueue_ingress_call(callback, event_map);
+    RELEASE(event_map);
     return enqueued;
 }
 
@@ -60,6 +80,19 @@ bool gpio_host_simulate_pin_change(int32_t pin, int32_t level)
 {
     gpio_host_store_level(pin, level);
     return gpio_host_enqueue_watch_event(pin, level);
+}
+
+void gpio_host_reset_state(void)
+{
+    ASSIGN(g_gpio_watchers, NULL);
+    ASSIGN(g_gpio_pin_levels, NULL);
+    KW_SOURCE = NULL;
+    KW_KIND = NULL;
+    KW_PIN = NULL;
+    KW_VALUE = NULL;
+    KW_GPIO = NULL;
+    KW_EDGE = NULL;
+    g_next_watcher_id = 1;
 }
 
 ID native_gpio_watch(ID *args, unsigned int argc)

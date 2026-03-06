@@ -17,14 +17,15 @@
 ^#^{:doc "Creates a core.async channel backed GPIO watcher.
 
 Args: (gpio-channel pin) or (gpio-channel pin buffer).
-Returns a map {:ch ch :watcher-id wid :close! (fn [])} where events are [pin value]."}
+Returns a map {:ch ch :watcher-id wid :close! (fn [])} where events are
+{:source :gpio :kind :edge :pin <pin> :value <0|1>}."}
 (defn gpio-channel [& args]
   ;; Returns a map with:
   ;; - :ch         core.async channel receiving events
   ;; - :watcher-id id returned by (clojure.core/gpio-watch ...)
   ;; - :close!     function to stop watching and close the channel
   ;;
-  ;; Event format: [pin value]
+  ;; Event format: {:source :gpio :kind :edge :pin <pin> :value <0|1>}
   (do
     (ensure-core-async!)
     (let [argc (count args)]

@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 bool gpio_host_simulate_pin_change(int32_t pin, int32_t level);
+void gpio_host_reset_state(void);
 
 #endif // !ESP32_BUILD
 

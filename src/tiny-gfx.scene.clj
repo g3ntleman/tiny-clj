@@ -25,7 +25,7 @@ R"TINY_GFX_SCENE(
 ;; - CollisionRule / CollisionEvent are legacy names kept for compatibility.
 ;; - SpatialRule [id slot kind a-id b-id radius channel]
 ;; - Aabb [min-x min-y max-x max-y]
-;; - SpatialEvent [rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel]
+;; - SpatialEvent [source rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel]
 
 (defrecord Transform [tx ty sx sy rot])
 (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color])
@@ -42,7 +42,7 @@ R"TINY_GFX_SCENE(
 (defrecord CollisionEvent [rule-id slot a-id b-id phase snapshot-gen ts-ms])
 (defrecord SpatialRule [id slot kind a-id b-id radius channel])
 (defrecord Aabb [min-x min-y max-x max-y])
-(defrecord SpatialEvent [rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel])
+(defrecord SpatialEvent [source rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel])
 
 ;; Color helpers
 ;;

@@ -584,7 +584,10 @@ TEST(test_audio_finished_callback_runs_via_event_loop) {
   ID atom_def = eval_string("(def audio-finished-track (atom nil))", g_test_eval_state);
   TEST_ASSERT_NOT_NULL(atom_def);
   ID cb_def = eval_string(
-      "(def audio-finished-cb (fn [track-id] (reset! audio-finished-track track-id)))",
+      "(def audio-finished-cb "
+      "  (fn [event] "
+      "    (reset! audio-finished-track [(:source event) (:kind event) (:track-id event)]) "
+      "    nil))",
       g_test_eval_state);
   TEST_ASSERT_NOT_NULL(cb_def);
   ID cb_fn = eval_string("audio-finished-cb", g_test_eval_state);
@@ -597,7 +600,7 @@ TEST(test_audio_finished_callback_runs_via_event_loop) {
   TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
   TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
 
-  ID done = eval_string("(= @audio-finished-track :finish-test)", g_test_eval_state);
+  ID done = eval_string("(= @audio-finished-track [:audio :finished :finish-test])", g_test_eval_state);
   TEST_ASSERT_EQUAL(clj_true, done);
 
   RELEASE(ba);

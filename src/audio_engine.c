@@ -8,10 +8,7 @@
 #include "byte_array.h"
 #include "memory.h"
 #include "event_loop.h"
-#include "channel.h"
-#include "function.h"
-#include "eval.h"
-#include "builtins.h"
+#include "symbol.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +16,11 @@
 
 /* Global engine instance */
 AudioEngine g_audio_engine;
+static ID KW_SOURCE = NULL;
+static ID KW_KIND = NULL;
+static ID KW_TRACK_ID = NULL;
+static ID KW_AUDIO = NULL;
+static ID KW_FINISHED = NULL;
 
 static bool audio_interp_debug_enabled(void) {
     static int init = 0;
@@ -135,22 +137,21 @@ static AudioTrackEntry *find_track(ID track_id) {
     return NULL;
 }
 
-static ID audio_dispatch_finished_native(ID *args, unsigned int argc) {
-    (void)args;
-    if (argc != 0) return NULL;
+static void audio_ensure_finished_event_keywords(void) {
+    if (KW_SOURCE) return;
+    KW_SOURCE = intern_symbol_global(":source");
+    KW_KIND = intern_symbol_global(":kind");
+    KW_TRACK_ID = intern_symbol_global(":track-id");
+    KW_AUDIO = intern_symbol_global(":audio");
+    KW_FINISHED = intern_symbol_global(":finished");
+}
 
-    ID finished_track = NULL;
-    if (!lockfree_spsc_queue_pop(&g_audio_engine.finished_queue, &finished_track)) return NULL;
-
-    ID fn = g_audio_engine.on_finished_fn;
-    if (!fn || !finished_track) return NULL;
-
-    ID call_args[1] = { finished_track };
-    EvalState *st = builtin_get_eval_state();
-    if (!st) return NULL;
-
-    (void)eval_function_call(fn, call_args, 1, NULL, st);
-    return NULL;
+static ID audio_make_finished_event(ID track_id) {
+    audio_ensure_finished_event_keywords();
+    return make_map_from_kv(3,
+                            KW_SOURCE, KW_AUDIO,
+                            KW_KIND, KW_FINISHED,
+                            KW_TRACK_ID, track_id);
 }
 
 /* ========================================================================= */
@@ -266,21 +267,21 @@ static bool stream_parse_event(AudioStream *s, AudioVoice *voices, int voice_cou
 /* ========================================================================= */
 
 static void notify_finished(ID track_id) {
-    ID fn = g_audio_engine.on_finished_fn;
+    ID fn = RETAIN(g_audio_engine.on_finished_fn);
     if (!fn) return;
-    if (!lockfree_spsc_queue_push(&g_audio_engine.finished_queue, &track_id)) {
+
+    ID event_payload = audio_make_finished_event(track_id);
+    if (!event_payload) {
         g_audio_engine.telemetry.finished_drop_count++;
+        RELEASE(fn);
         return;
     }
-#ifndef ESP32_BUILD
-    if (g_audio_engine.finished_dispatch_fn) {
-        CljTransientMap *result_channel = make_result_channel();
-        if (result_channel) {
-            event_loop_enqueue(g_audio_engine.finished_dispatch_fn, result_channel);
-            RELEASE(result_channel);
-        }
+
+    if (!event_loop_enqueue_ingress_call(fn, event_payload)) {
+        g_audio_engine.telemetry.finished_drop_count++;
     }
-#endif
+    RELEASE(event_payload);
+    RELEASE(fn);
 }
 
 /* ========================================================================= */
@@ -289,6 +290,7 @@ static void notify_finished(ID track_id) {
 
 void audio_engine_init(int voice_count) {
     memset(&g_audio_engine, 0, sizeof(g_audio_engine));
+    audio_ensure_finished_event_keywords();
     if (voice_count < 1) voice_count = 1;
     if (voice_count > AUDIO_MAX_VOICES) voice_count = AUDIO_MAX_VOICES;
     g_audio_engine.voice_count = voice_count;
@@ -303,16 +305,6 @@ void audio_engine_init(int voice_count) {
         CLJ_ASSERT(ok);
         if (!ok) return;
     }
-    {
-        bool ok = lockfree_spsc_queue_init(&g_audio_engine.finished_queue,
-                                           g_audio_engine.finished_slots,
-                                           AUDIO_FINISHED_QUEUE_CAP,
-                                           sizeof(g_audio_engine.finished_slots[0]));
-        CLJ_ASSERT(ok);
-        if (!ok) return;
-    }
-    g_audio_engine.finished_dispatch_fn =
-        make_named_func_with_flags(audio_dispatch_finished_native, NULL, CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE);
     audio_backend_init(voice_count);
 }
 
@@ -329,7 +321,6 @@ void audio_engine_shutdown(void) {
 
     /* Release on-finished callback */
     RELEASE(g_audio_engine.on_finished_fn);
-    RELEASE(g_audio_engine.finished_dispatch_fn);
 
     audio_backend_shutdown();
     memset(&g_audio_engine, 0, sizeof(g_audio_engine));

@@ -9,7 +9,6 @@
 #include "eval.h"  // For reset_eval_arg_depth()
 #include "event_loop.h"     // For event_loop_clear()
 #include "macro.h"          // For macro_cache_reset()
-#include "map.h"            // For make_map()
 #include "hashmap.h"        // For hashmap_register_release_fn()
 #include "hashset.h"        // For make_hashset(), hashset_register_release_fn()
 #include "seq.h"            // For seq_register_release_fn()
@@ -18,6 +17,9 @@
 #include "builtins.h"       // For builtins_reset_cached_funcs()
 #include "eval_special_forms.h" // For eval_special_forms_reset_caches()
 #include "embedded_sources.h"
+#ifndef ESP32_BUILD
+#include "gpio_host.h"
+#endif
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
 #include "to_string.h"      // For to_string(), pr_str; strings.h for string_data
@@ -188,4 +190,7 @@ void runtime_reset(TinyClJRuntime *runtime) {
     runtime->builtins_registered = false;
     runtime->timer_id_counter = 0;
     event_loop_clear();
+#ifndef ESP32_BUILD
+    gpio_host_reset_state();
+#endif
 }

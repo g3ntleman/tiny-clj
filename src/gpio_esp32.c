@@ -7,7 +7,7 @@
 // Design:
 // - Map-based watcher storage: g_gpio_watchers maps pin->watcher_map
 // - watcher_map: {:pin <fixnum> :callback-fn <fn> :watcher-id <fixnum>}
-// - ISR retains only callback-fn and enqueues a drain task via event loop.
+// - ISR retains only callback-fn; thread context drains into generic event-loop ingress maps.
 //
 // Defaults (see plan "answer_questions"):
 // - Pin config: GPIO input, interrupt on any edge, no pull-up/down.
@@ -20,16 +20,12 @@
 #include "gpio_esp32.h"
 #include "gpio_common.h"
 
-#include "builtins.h"   // builtin_get_eval_state()
-#include "eval.h"       // eval_function_call
 #include "exception.h"
 #include "function.h"   // is_callable
 #include "map.h"
 #include "memory.h"
-#include "runtime.h"
 #include "symbol.h"
 #include "value.h"
-#include "vector.h"
 #include "event_loop.h"
 
 #include <driver/gpio.h>
@@ -43,7 +39,12 @@ static CljPersistentMap *g_gpio_watchers = NULL;
 static int32_t g_next_watcher_id = 1;
 
 // Watcher map keys (interned keywords; singletons)
+static CljSymbol *KW_SOURCE = NULL;
+static CljSymbol *KW_KIND = NULL;
 static CljSymbol *KW_PIN = NULL;
+static CljSymbol *KW_VALUE = NULL;
+static CljSymbol *KW_GPIO = NULL;
+static CljSymbol *KW_EDGE = NULL;
 
 // ISR service installed once.
 static bool g_gpio_isr_service_installed = false;
@@ -60,15 +61,8 @@ enum { GPIO_EVENT_RING_CAP = 32 };
 static GpioEvent g_gpio_events[GPIO_EVENT_RING_CAP];
 static _Atomic uint32_t g_gpio_event_w = 0;
 static _Atomic uint32_t g_gpio_event_r = 0;
-static _Atomic bool g_gpio_drain_scheduled = false;
 static _Atomic bool g_gpio_drain_requested = false;
 static _Atomic uint32_t g_gpio_event_drop_count = 0;
-
-// Cached drain function object (zero-arity task for event loop).
-static ID g_gpio_drain_fn_obj = NULL;
-static CljSymbol *SYM_GPIO_DRAIN = NULL;
-
-static ID native_gpio_drain_events(ID *args, unsigned int argc);
 
 // PWM bindings (LEDC): static table, no heap.
 typedef struct {
@@ -97,12 +91,12 @@ static bool g_pwm_bindings_initialized = false;
 static inline void gpio_ensure_initialized(void) {
     if (g_gpio_watchers) return;
     g_gpio_watchers = make_map(4, STRONG);
+    KW_SOURCE = intern_symbol_global(":source");
+    KW_KIND = intern_symbol_global(":kind");
     KW_PIN = intern_symbol_global(":pin");
-
-    // Create cached drain function object once.
-    SYM_GPIO_DRAIN = intern_symbol_global("tiny-clj.gpio/drain-events");
-    g_gpio_drain_fn_obj =
-        make_named_func_with_flags(native_gpio_drain_events, SYM_GPIO_DRAIN, CLJ_CFUNC_FLAG_NEEDS_EVAL_STATE);
+    KW_VALUE = intern_symbol_global(":value");
+    KW_GPIO = intern_symbol_global(":gpio");
+    KW_EDGE = intern_symbol_global(":edge");
 }
 
 static inline void gpio_pwm_bindings_init(void) {
@@ -172,21 +166,46 @@ static inline void gpio_request_drain_from_isr(void) {
     atomic_store_explicit(&g_gpio_drain_requested, true, memory_order_release);
 }
 
-/** Promote pending ISR drain requests into one event-loop task (thread context only). */
+static ID gpio_make_watch_event(int32_t pin, int32_t value) {
+    gpio_ensure_initialized();
+    return make_map_from_kv(4,
+                            KW_SOURCE, KW_GPIO,
+                            KW_KIND, KW_EDGE,
+                            KW_PIN, fixnum(pin),
+                            KW_VALUE, fixnum(value == 0 ? 0 : 1));
+}
+
+/** Promote pending ISR events into generic event-loop ingress calls. */
 void gpio_esp32_poll_drain(void) {
     gpio_ensure_initialized();
 
     bool requested = atomic_load_explicit(&g_gpio_drain_requested, memory_order_acquire);
-    if (!requested) return;
-
-    bool expected = false;
-    if (!atomic_compare_exchange_strong_explicit(&g_gpio_drain_scheduled, &expected, true, memory_order_acq_rel, memory_order_relaxed)) {
+    uint32_t r = atomic_load_explicit(&g_gpio_event_r, memory_order_relaxed);
+    uint32_t w = atomic_load_explicit(&g_gpio_event_w, memory_order_acquire);
+    if (!requested && r == w) {
         return;
     }
 
-    // Consume the current request now that we're enqueuing one drain task.
     atomic_store_explicit(&g_gpio_drain_requested, false, memory_order_release);
-    event_loop_enqueue((CljObject*)g_gpio_drain_fn_obj, NULL);
+
+    GpioEvent ev;
+    while (gpio_event_ring_pop(&ev)) {
+        ID event_map = gpio_make_watch_event(ev.pin, ev.value);
+        bool enqueued = false;
+        if (event_map) {
+            enqueued = event_loop_enqueue_ingress_call(ev.callback_fn, event_map);
+            RELEASE(event_map);
+        }
+        if (!enqueued) {
+            atomic_fetch_add_explicit(&g_gpio_event_drop_count, 1u, memory_order_relaxed);
+        }
+        RELEASE(ev.callback_fn);
+    }
+
+    if (atomic_load_explicit(&g_gpio_event_r, memory_order_relaxed) !=
+        atomic_load_explicit(&g_gpio_event_w, memory_order_acquire)) {
+        atomic_store_explicit(&g_gpio_drain_requested, true, memory_order_release);
+    }
 }
 
 uint32_t gpio_esp32_get_event_drop_count(void) {
@@ -215,37 +234,6 @@ static void IRAM_ATTR gpio_isr_handler(void *arg) {
         return;
     }
     gpio_request_drain_from_isr();
-}
-
-/** Drain all queued GPIO events; invoke each callback with [pin value]; release callbacks. */
-static ID native_gpio_drain_events(ID *args, unsigned int argc) {
-    (void)args;
-    CHECK_ARITY(argc, 0, "tiny-clj.gpio/drain-events");
-
-    // Drain all pending events.
-    GpioEvent ev;
-    while (gpio_event_ring_pop(&ev)) {
-        CljPersistentVector *event_vec = make_vector(2, STRONG);
-        vector_conj_inplace(&event_vec, fixnum(ev.pin));
-        vector_conj_inplace(&event_vec, fixnum(ev.value));
-
-        ID call_args[1] = { (ID)event_vec };
-        (void)eval_function_call(ev.callback_fn, call_args, 1, NULL, builtin_get_eval_state());
-
-        RELEASE(event_vec);
-        RELEASE(ev.callback_fn);
-    }
-
-    // If queue is empty, allow future scheduling.
-    atomic_store_explicit(&g_gpio_drain_scheduled, false, memory_order_release);
-
-    // Race: ISR may have written new events while we were draining.
-    if (atomic_load_explicit(&g_gpio_event_r, memory_order_relaxed) != atomic_load_explicit(&g_gpio_event_w, memory_order_acquire)) {
-        atomic_store_explicit(&g_gpio_drain_requested, true, memory_order_release);
-        gpio_esp32_poll_drain();
-    }
-
-    return NULL;
 }
 
 /** Install ESP32 GPIO ISR service once; throw on failure. */
