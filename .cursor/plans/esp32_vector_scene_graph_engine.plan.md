@@ -297,15 +297,15 @@ Tasks:
   - optionality applies to slot values (`nil`), not to slot-index discovery in the render hot path
 - Define direct-render record contract for C (slot-indexed field access; no keyword lookup in render hot path).
 - Decision (layout consistency between Clojure and C):
-  - `tiny-gfx.scene` and C `DEFRECORD` declarations are the single source of truth for record field order/layout.
+  - `tiny-fx.gfx-scene` and C `DEFRECORD` declarations are the single source of truth for record field order/layout.
   - C code uses `DEFRECORD` typed overlays plus runtime descriptor-index cache populated in `tiny_gfx_ensure_schema(...)`.
   - Build-time header generation/codegen has been removed from the active workflow.
   - Keep runtime checks minimal (descriptor presence/type), avoid large handwritten index-preparation/validation blocks in hot paths.
 - Current implementation notes:
-  - `tiny-gfx.scene` exists and registers the record descriptors used by the C renderer.
+  - `tiny-fx.gfx-scene` exists and registers the record descriptors used by the C renderer.
   - Runtime schema lookup/caching from C is implemented (descriptor-driven field indices).
   - C-side layout-compatible overlays are declared via `DEFRECORD(...)` in `tiny_gfx.h`.
-  - Host-only tooling namespace `tiny-gfx.converter` under `libs/tiny-gfx/converter.clj` remains optional helper tooling (e.g. SVG subset conversion via `group-from-svg`), without any header-serialization helpers.
+  - Host-only tooling namespace `tiny-fx.gfx.converter` under `libs/tiny-gfx/converter.clj` remains optional helper tooling (e.g. SVG subset conversion via `group-from-svg`), without any header-serialization helpers.
   - Slot-index contract enforcement stays in C via runtime descriptor lookup + `CLJ_ASSERT(...)` (no generated index tables).
 - Keep canonicalization/compiled C scene cache optional for later optimization.
 
@@ -873,7 +873,7 @@ Motivation:
 
 Tasks:
 
-1. `**update-nodes` function in `tiny-gfx.scene`:**
+1. `**update-nodes` function in `tiny-fx.gfx-scene`:**
   - Takes a root node and a map `{:id update-fn ...}`.
   - Single recursive walk over the tree.
   - For each node with `:id` in the map: apply `update-fn`, remove `:id` from map (`dissoc`).
@@ -896,13 +896,13 @@ Complexity characteristics:
 
 Done when:
 
-- `tiny-gfx.scene/update-nodes` is available and tested.
+- `tiny-fx.gfx-scene/update-nodes` is available and tested.
 - Game code can batch all per-frame entity updates into a single tree walk.
 
 ## Milestone 9: Flat Entity Map + Timeline + Declarative Scene Architecture
 
-Status: DONE (`9a` + `9b` + `9c` + `9d` baseline DONE on host/ESP32 build path; renderer lifecycle + rendered-state query baseline DONE; host loop closeout + cleanup complete; collision callback API finalized in `tiny-gfx.collision`)
-Follow-up (2026-03-05): API parity + Clojure docs hardening in `tiny-gfx.`* is now tracked under `9n`.
+Status: DONE (`9a` + `9b` + `9c` + `9d` baseline DONE on host/ESP32 build path; renderer lifecycle + rendered-state query baseline DONE; host loop closeout + cleanup complete; collision callback API finalized in `tiny-fx.gfx-collision`)
+Follow-up (2026-03-05): API parity + Clojure docs hardening in `tiny-fx.gfx.`* is now tracked under `9n`.
 
 Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Architecture"):
 
@@ -915,7 +915,7 @@ Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Arc
 Final state:
 
 - Flat entity maps and Timeline decode are now in place, and collision response (triangle toggle) is already executed in Clojure callback code.
-- Collision callback dispatch now routes through `tiny-gfx.collision/invoke-collision-callback!` without string-eval hardcoding in the host-viewer C loop; callback target selection stays Clojure-configurable.
+- Collision callback dispatch now routes through `tiny-fx.gfx-collision/invoke-collision-callback!` without string-eval hardcoding in the host-viewer C loop; callback target selection stays Clojure-configurable.
 - Callback execution model is one-way dispatch: C enqueues/invokes configured Clojure closure through runloop ingress and ignores return values.
 - Scene updates are explicit on the Clojure side (`swap!`/`reset!`); C never expects a returned `FrameScene` from callback execution.
 - Per-frame collision detection remains in C (required); demo-specific mutation coupling has been removed from C.
@@ -928,7 +928,7 @@ Final state:
 - Updates via `(swap! slot assoc-in [id :field] new-value)` – O(1), no tree walk.
 - `update-nodes` (M8b) becomes optional convenience; direct `assoc-in` is the primary API.
 - Implementation note (2026-03-04):
-  - `tiny-gfx.host-viewer-demo/create-demo-bundle` now publishes slot roots as flat `{id -> Record}` maps.
+  - `tiny-fx.scene-demo/create-demo-bundle` now publishes slot roots as flat `{id -> Record}` maps.
   - Root entity key/id is symbol `root`; groups reference children by ID vectors (not embedded records).
 
 Example:
@@ -952,7 +952,7 @@ Example:
 - C resolves during traversal: check if field is Timeline, resolve by wall clock.
 - No Clojure eval, no timers needed for periodic animations.
 - Implementation notes (2026-03-04):
-  - `tiny-gfx.scene` now defines `Timeline` (`[keyframes loop]`).
+  - `tiny-fx.gfx-scene` now defines `Timeline` (`[keyframes loop]`).
   - `scene.c` resolves Timeline fields during traversal.
   - Numeric keyframes interpolate linearly (Q19.13), including looped phase wrapping.
   - Transform keyframes interpolate `tx/ty/sx/sy/rot` and compose via `vg_transform_fixed_from_transform`.
@@ -1069,7 +1069,7 @@ any Atom changes (event-driven wakeup, no busy loop).
 
 **Clojure side (target):**
 
-- `tiny-gfx.host-viewer-demo` defines all scene entities as flat maps per slot.
+- `tiny-fx.scene-demo` defines all scene entities as flat maps per slot.
 - Game logic (terrain scroll, player jump, obstacle, collision, score) runs as
 Clojure functions triggered by `schedule-periodic` timers or input events.
 - Each game tick: `(swap! game-slot assoc-in [entity-id :t] new-transform)`.
@@ -1091,8 +1091,8 @@ Clojure functions triggered by `schedule-periodic` timers or input events.
 ### 9h: Host-viewer color authoring readability (DONE)
 
 - Status: DONE (2026-03-04).
-- `tiny-gfx.scene/color` converts `0xRRGGBB` → RGB565.
-- `tiny-gfx.scene/web-hex->color` converts `"#RRGGBB"` → RGB565.
+- `tiny-fx.gfx-scene/color` converts `0xRRGGBB` → RGB565.
+- `tiny-fx.gfx-scene/web-hex->color` converts `"#RRGGBB"` → RGB565.
 - Demo palette migrated to `(color 0xRRGGBB)` style.
 
 ### 9i: Rendered-State Query API (Clojure → Render Thread)
@@ -1295,7 +1295,9 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
     - Obsolete per-frame render completion wait/condvar path removed from host loop.
     - Lifecycle integration gate re-run completed (`test_vector_scene_graph/*renderer_lifecycle`*: 38 tests, 0 failures).
     - Integration proof covered by regression tests: scene motion data remains Timeline-driven from Clojure slot snapshots (`test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven`) and collision response is callback-routed from Clojure (`test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_geometry_in_clojure`).
-    - Host viewer now consumes `:spatial-callback` and `:game-scene-atom` from `tiny-gfx.runtime/host-viewer-config`; the C loop no longer resolves demo/collision namespaces directly and only consumes runtime config plus render/input responsibilities.
+    - Host viewer now consumes `:slots`, `:spatial-callback`, and `:game-scene-atom` from `tiny-fx.gfx/host-viewer-config`; the C loop no longer resolves demo/collision namespaces directly and only consumes runtime config plus render/input responsibilities.
+    - Slot count, slot IDs/order, and per-slot atoms are now Clojure-defined via the ordered `:slots` descriptor list; C consumes only that configured list.
+    - Slots remain orientation-agnostic because layout continues to come from per-scene `clip-rect` data rather than from hardcoded horizontal host-viewer assumptions.
 - **PR-4: End-of-M9 cleanup + documentation freeze**
   - Files:
     - `src/host_viewer_minifb.c`
@@ -1313,11 +1315,11 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
     - M9 `Status` changed to DONE with final notes.
   - Done (2026-03-05):
     - Removed remaining legacy async compatibility republish path from host-viewer loop.
-    - Finalized collision callback namespace split (`tiny-gfx.collision`) and removed collision callback API from `tiny-clj.runtime`.
+    - Finalized collision callback namespace split (`tiny-fx.gfx-collision`) and removed collision callback API from `tiny-clj.runtime`.
     - Re-ran M9 regression gates (`test_vector_scene_graph/`*, `test_vector_scene_graph/*renderer_lifecycle`*, host-viewer demo/collision subsets).
 - **PR-5: Clojure-configurable collision callback + collision-response extraction**
   - Files:
-    - `src/tiny-gfx.host-viewer-demo.clj`
+    - `src/tiny-fx.scene-demo.clj`
     - `src/tiny-gfx.collision.clj`
     - `src/host_viewer_minifb.c`
     - `src/viewer_legacy_collision.c`
@@ -1337,7 +1339,7 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
     - C ignores callback return values; scene mutations are explicitly performed by Clojure code.
     - Regression tests cover callback reconfiguration + toggle behavior.
   - Done (2026-03-05):
-    - Added collision callback API in `tiny-gfx.collision` (`set-collision-callback!`, `invoke-collision-callback!`) with deterministic nil/dispatch behavior.
+    - Added collision callback API in `tiny-fx.gfx-collision` (`set-collision-callback!`, `invoke-collision-callback!`) with deterministic nil/dispatch behavior.
     - Host viewer collision callback invocation now resolves/calls runtime dispatcher directly (no hardcoded expression string eval path).
     - Added regression coverage for callback reconfiguration and retained toggle behavior through C-driven collision detection.
 
@@ -1347,13 +1349,13 @@ Status: IN PROGRESS (started 2026-03-05; initial runtime exposure + scene-contra
 
 Goal:
 
-- Expose the currently implemented vector-scene runtime capabilities through `tiny-gfx.`* namespaces.
+- Expose the currently implemented vector-scene runtime capabilities through `tiny-fx.gfx.`* namespaces.
 - Keep `tiny-clj.runtime/`* compatibility, but provide `tiny-gfx`-first API surface + docs.
 - Document Clojure-side API contracts where users author scene/collision/runtime code.
 
 Scope (first slice):
 
-- Add `tiny-gfx.runtime` namespace with documented direct aliases for:
+- Add `tiny-fx.gfx` namespace with documented direct aliases for:
   - `vector-scene-bench`
   - `start-renderer!` / `stop-renderer!`
   - `renderer-state`
@@ -1364,22 +1366,22 @@ Scope (first slice):
 
 Scope (second slice):
 
-- Expand `tiny-gfx.scene` Clojure docs for record contracts actually consumed by C:
+- Expand `tiny-fx.gfx-scene` Clojure docs for record contracts actually consumed by C:
   - `Transform`, `Style`, node records, `Timeline`, `FrameScene`, `CollisionRule`, `CollisionEvent`
   - field semantics for `clip-rect`, `guard-px`, `erase-color`, and collision rule defaults
 - Add contract notes for currently schema-only vs runtime-evaluated fields.
 
 Acceptance:
 
-- `require 'tiny-gfx.runtime` works in host/unit-test runtime.
+- `require 'tiny-fx.gfx` works in host/unit-test runtime.
 - Wrapper APIs return same values/errors as the underlying `tiny-clj.runtime` functions.
 - Clojure docs are present at API entry points used by scene authors.
 
 Checklist:
 
-- Add embedded `tiny-gfx.runtime` namespace and aliases.
+- Add embedded `tiny-fx.gfx` namespace and aliases.
 - Add tests for alias parity (`unsupported` lifecycle path + rendered-state query nil path).
-- Add/extend Clojure API docs in `tiny-gfx.scene` for consumed record contracts.
+- Add/extend Clojure API docs in `tiny-fx.gfx-scene` for consumed record contracts.
 
 ### Done when
 
@@ -1435,16 +1437,16 @@ Final event contract (C -> scheduler -> Clojure):
   (`a-aabb`, `b-aabb`) so Clojure callbacks do not need extra engine lookups just to inspect
   the trigger context.
 - Callback dispatch contract:
-  - callback target is configured from Clojure via `tiny-gfx.collision/set-collision-callback!`
+  - callback target is configured from Clojure via `tiny-fx.gfx-collision/set-collision-callback!`
   - C dispatches through the generic scheduler ingress (`event_loop_enqueue_ingress_call`)
   - callback return values are ignored by C
   - scene changes remain explicit Clojure mutations (`swap!` / `reset!`)
 
 Implementation notes:
 
-- `tiny-gfx.scene` now defines the active spatial schema (`SpatialRule`, `SpatialEvent`, `Aabb`)
+- `tiny-fx.gfx-scene` now defines the active spatial schema (`SpatialRule`, `SpatialEvent`, `Aabb`)
   while keeping legacy `CollisionRule` / `CollisionEvent` records for compatibility.
-- `tiny-gfx.collision` owns the configurable callback surface
+- `tiny-fx.gfx-collision` owns the configurable callback surface
   (`set-collision-callback!`, `invoke-collision-callback!`).
 - `event_loop` provides the thread-safe one-arg ingress that is also reused by GPIO and audio.
 - `host_viewer_minifb.c` now:
@@ -1453,9 +1455,11 @@ Implementation notes:
   - emits deterministic `:enter` / `:exit` events in rule order
   - refreshes the live game scene + rule set after Clojure-side callback mutations
   - accepts scenes with no `collision-rules` as "no triggers" instead of treating them as a load failure
-- `tiny-gfx.runtime/host-viewer-config` supplies the bundle plus `:spatial-callback` and
-  `:game-scene-atom`, so the native host loop consumes runtime config only and does not resolve
-  demo namespaces directly.
+- `tiny-fx.gfx/host-viewer-config` supplies the ordered `:slots` list plus
+  `:spatial-callback` and `:game-scene-atom`, so the native host loop consumes runtime config
+  only and does not resolve demo namespaces directly.
+- Slot count, slot IDs, and slot order are defined in Clojure; C only validates and consumes the
+  configured slot list, while slot placement/orientation remains `clip-rect`-driven.
 
 Verification:
 
@@ -1591,6 +1595,30 @@ Rule:
 - Risk: Float drift/non-determinism in long animations.
   - Mitigation: fixed-first decode/transform path aligned with `subjective-c` fractional bits (`CLJ_FIXED_FRAC_BITS = 13`), integer quantization only at raster boundaries.
 
+## Follow-up: Clojure-defined Slots
+
+Status: DONE (2026-03-06)
+
+Goal:
+
+- Remove the fixed `:deco/:score/:game` assumption from C.
+- Define slot count, slot IDs, slot order, and per-slot atoms in Clojure, with C consuming only the configured ordered slot list.
+
+Completed:
+
+- `tiny-fx.gfx/host-viewer-config` now publishes ordered `:slots` descriptors instead of a fixed `:bundle`.
+- `tiny-fx.scene-demo` now owns canonical slot atoms for all demo slots and exposes the shared descriptor list.
+- `tiny-clj.runtime/start-renderer!` validates and registers dynamic slot descriptors in C, and rendered-state queries resolve configured slot IDs through that registry.
+- `host_viewer_minifb.c` now allocates slot runtime state dynamically from the configured slot list and resolves the spatial-trigger slot through config instead of fixed constants.
+- Runtime docs/tests/bench path now use the configured slot list; slot placement remains orientation-agnostic through per-scene `clip-rect` data.
+- This follow-up is now tracked only in the main vector-scene plan; the temporary standalone slot plan has been removed.
+
+Verification:
+
+- `cmake --build build --target unit-tests && ./build/unit-tests -test 'test_vector_scene_graph/*'`
+- `./build/unit-tests -test 'test_gfx_collision_contract/*'`
+- `cmake --build build-hostviewer --target host-viewer`
+
 ## Milestone 11: User Guide (Markdown)
 
 Status: TODO
@@ -1599,6 +1627,7 @@ Goal:
 
 - Write a complete user-facing Markdown guide that documents the final engine API and workflows.
 - Target audience: developers building scenes/gameplay in Clojure on top of the renderer.
+- Existing Clojure entry points already have `:doc` strings in runtime namespaces; this milestone should consolidate and extend that information into one cohesive guide rather than replace it.
 
 Tasks:
 
