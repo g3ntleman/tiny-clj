@@ -756,8 +756,11 @@ static bool viewer_invoke_collision_callback(EvalState *st) {
              * on the Clojure runloop path. Callback return values are intentionally
              * ignored by the C host bridge.
              */
-            event_loop_enqueue(RETAIN(callback_dispatch_fn), NULL);
-            success = event_loop_run_next(NULL, st);
+            if (!event_loop_enqueue_ingress(callback_dispatch_fn)) {
+                success = false;
+            } else {
+                success = event_loop_run_next(NULL, st);
+            }
         }
     } CATCH(ex) {
         (void)ex;

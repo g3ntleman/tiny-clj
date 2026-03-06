@@ -1300,6 +1300,11 @@ Implementation notes (2026-03-06):
   - demo callback mutates Clojure scene state explicitly
 - Host-viewer callback bridge now dispatches via event-loop API (`event_loop_enqueue`/`event_loop_run_next`) and ignores callback return values in C.
 - Added dedicated bridge-level regression (`test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value`) proving runloop dispatch executes callback side effects while callback return values remain non-contractual to C.
+- Step-2 ingress foundation added in `event_loop`:
+  - thread-safe callback ingress API (`event_loop_enqueue_ingress`, `event_loop_ingress_has_pending`)
+  - runloop drains ingress queue before normal timer/task processing
+  - host-viewer collision bridge now uses ingress API for callback dispatch handoff
+  - regression coverage: `test_event_loop_latency/event_loop_ingress_enqueue_executes_on_run_next`
 
 Tasks:
 

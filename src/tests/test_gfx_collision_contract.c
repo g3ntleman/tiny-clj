@@ -169,7 +169,7 @@ TEST(test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value)
     TEST_ASSERT_NOT_NULL(dispatch_fn);
     TEST_ASSERT_TRUE(TAG(dispatch_fn) == CLJ_FUNC || TAG(dispatch_fn) == CLJ_CLOSURE);
 
-    event_loop_enqueue(RETAIN(dispatch_fn), NULL);
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress(dispatch_fn));
     TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
     bool ran = event_loop_run_next(NULL, g_test_eval_state);
     TEST_ASSERT_TRUE(ran);

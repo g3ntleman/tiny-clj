@@ -15,6 +15,13 @@ void event_loop_clear(void);
 // Enqueue go task for later execution. Takes ownership via RETAIN; releases after run.
 void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channel);
 
+// Thread-safe ingress queue for cross-thread callback dispatch.
+// Takes ownership via RETAIN on success; returns false when queue is full or input invalid.
+bool event_loop_enqueue_ingress(CljObject *fn_zero_arity);
+
+// Returns true when the ingress queue has pending tasks.
+bool event_loop_ingress_has_pending(void);
+
 // Run next enqueued task. Returns true if a task was executed, false if queue empty.
 bool event_loop_run_next(CljPersistentMap *env, EvalState *st);
 

@@ -10,6 +10,7 @@
 #include "map.h"
 #include "value.h"
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <string.h>
 #include <limits.h>
 #include <sys/time.h>
@@ -44,6 +45,58 @@ typedef struct {
 
 static TimerEntry g_timer_queue[TIMER_QUEUE_CAP];
 static int        g_timer_count = 0;
+
+#define EVENT_LOOP_INGRESS_CAP 64
+static ID g_event_loop_ingress_queue[EVENT_LOOP_INGRESS_CAP];
+static uint16_t g_event_loop_ingress_head = 0u;
+static uint16_t g_event_loop_ingress_count = 0u;
+static atomic_flag g_event_loop_ingress_lock = ATOMIC_FLAG_INIT;
+
+static inline void event_loop_ingress_lock_acquire(void) {
+    while (atomic_flag_test_and_set_explicit(&g_event_loop_ingress_lock, memory_order_acquire)) {
+    }
+}
+
+static inline void event_loop_ingress_lock_release(void) {
+    atomic_flag_clear_explicit(&g_event_loop_ingress_lock, memory_order_release);
+}
+
+static bool event_loop_ingress_push(ID fn_zero_arity) {
+    if (!fn_zero_arity) return false;
+    event_loop_ingress_lock_acquire();
+    bool ok = false;
+    if (g_event_loop_ingress_count < EVENT_LOOP_INGRESS_CAP) {
+        uint16_t tail = (uint16_t)((g_event_loop_ingress_head + g_event_loop_ingress_count) % EVENT_LOOP_INGRESS_CAP);
+        g_event_loop_ingress_queue[tail] = fn_zero_arity;
+        g_event_loop_ingress_count++;
+        ok = true;
+    }
+    event_loop_ingress_lock_release();
+    return ok;
+}
+
+static ID event_loop_ingress_pop(void) {
+    ID out = NULL;
+    event_loop_ingress_lock_acquire();
+    if (g_event_loop_ingress_count > 0u) {
+        out = g_event_loop_ingress_queue[g_event_loop_ingress_head];
+        g_event_loop_ingress_queue[g_event_loop_ingress_head] = NULL;
+        g_event_loop_ingress_head = (uint16_t)((g_event_loop_ingress_head + 1u) % EVENT_LOOP_INGRESS_CAP);
+        g_event_loop_ingress_count--;
+    }
+    event_loop_ingress_lock_release();
+    return out;
+}
+
+static void event_loop_ingress_drain(void) {
+    while (true) {
+        ID fn = event_loop_ingress_pop();
+        if (!fn) {
+            return;
+        }
+        event_loop_enqueue(fn, NULL);
+    }
+}
 
 // Go-block task map helpers (tasks WITH result channel)
 static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan) {
@@ -271,6 +324,14 @@ void event_loop_clear(void) {
     }
     g_timer_count = 0;
     timer_named_clear_all();
+
+    while (true) {
+        ID fn = event_loop_ingress_pop();
+        if (!fn) {
+            break;
+        }
+        RELEASE(fn);
+    }
 }
 
 void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channel) {
@@ -295,7 +356,25 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
     RELEASE(task_map);
 }
 
+bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
+    if (!fn_zero_arity) return false;
+    ID retained = RETAIN(fn_zero_arity);
+    if (event_loop_ingress_push(retained)) {
+        return true;
+    }
+    RELEASE(retained);
+    return false;
+}
+
+bool event_loop_ingress_has_pending(void) {
+    event_loop_ingress_lock_acquire();
+    bool pending = g_event_loop_ingress_count > 0u;
+    event_loop_ingress_lock_release();
+    return pending;
+}
+
 bool event_loop_has_pending_tasks(void) {
+    if (event_loop_ingress_has_pending()) return true;
     CljTransientVector *task_vec = task_queue_get();
     if (!task_vec || !task_vec->backing) return false;
     return vector_count(task_vec->backing) > 0;
@@ -333,7 +412,10 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     // Promote ISR-raised drain requests into regular event-loop tasks.
     gpio_esp32_poll_drain();
 #endif
-    
+
+    // Consume cross-thread callback ingress before timer/task processing.
+    event_loop_ingress_drain();
+
     timer_process();
     
     CljTransientVector *task_vec = task_queue_get();

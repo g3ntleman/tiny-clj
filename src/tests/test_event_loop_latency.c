@@ -70,3 +70,32 @@ TEST(test_event_loop_time_until_next_timer_does_not_consume_timer_entry) {
     TEST_ASSERT_TRUE_MESSAGE(timer_cancel(timer_id), "timer should still exist and be cancellable");
     TEST_ASSERT_EQUAL_INT(-1, event_loop_time_until_next_timer_ms());
 }
+
+TEST(test_event_loop_ingress_enqueue_executes_on_run_next) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_ingress_has_pending(), "ingress queue should start empty");
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-ingress-marker (atom 0)) "
+        "  (fn event-loop-ingress-task [] "
+        "    (reset! event-loop-ingress-marker 1) "
+        "    123))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress(fn), "ingress enqueue should succeed");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_ingress_has_pending(), "ingress queue should report pending task");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_has_pending_tasks(), "event loop should report pending task");
+
+    bool ran = event_loop_run_next(NULL, g_test_eval_state);
+    TEST_ASSERT_TRUE_MESSAGE(ran, "run_next should execute one ingress task");
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_ingress_has_pending(), "ingress queue should be empty after drain");
+
+    ID marker = eval_string("@event-loop-ingress-marker", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(marker);
+    TEST_ASSERT_TRUE(is_fixnum(marker));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(marker));
+}
