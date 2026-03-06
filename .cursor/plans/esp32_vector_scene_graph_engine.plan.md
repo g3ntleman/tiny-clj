@@ -656,7 +656,8 @@ Done when:
 
 ## Milestone 9: Flat Entity Map + Timeline + Declarative Scene Architecture
 
-Status: IN PROGRESS (`9a` + `9b` + `9c` + `9d` baseline DONE on host/ESP32 build path; renderer lifecycle + rendered-state query baseline DONE; collision response callback moved to Clojure; remaining M9 closeout tasks below)
+Status: DONE (`9a` + `9b` + `9c` + `9d` baseline DONE on host/ESP32 build path; renderer lifecycle + rendered-state query baseline DONE; host loop closeout + cleanup complete; collision callback API finalized in `tiny-gfx.collision`)
+Follow-up (2026-03-05): API parity + Clojure docs hardening in `tiny-gfx.*` is now tracked under `9n`.
 
 Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Architecture"):
 
@@ -666,11 +667,11 @@ Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Arc
 - Timeline Records on fields for periodic animations (C-evaluated, no timers)
 - C reads snapshot via `atom_deref`, resolves Timelines, interpolates, renders
 
-Current gap:
+Final state:
 
 - Flat entity maps and Timeline decode are now in place, and collision response (triangle toggle) is already executed in Clojure callback code.
-- The collision callback target is still hardcoded by C expression string in host-viewer (`VIEWER_COLLISION_CALLBACK_EXPR`) instead of being configured from Clojure.
-- Keep per-frame collision detection in C (required); remove only demo-specific scene-mutation coupling from C.
+- Collision callback dispatch now routes through `tiny-gfx.collision/invoke-collision-callback!` without string-eval hardcoding in the host-viewer C loop; callback target selection stays Clojure-configurable.
+- Per-frame collision detection remains in C (required); demo-specific mutation coupling has been removed from C.
 
 ### 9a: Flat Entity Map (Clojure side)
 
@@ -1021,7 +1022,7 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
     - Runtime docs now define deterministic `nil` miss semantics for all three query APIs.
     - Added unit tests for non-Timeline fields returning `nil` and `loop=false` end-clamp semantics in queried timeline progress.
 
-- [ ] **PR-3: Host loop app-agnostic verification + cleanup**
+- [x] **PR-3: Host loop app-agnostic verification + cleanup**
   - Files:
     - `src/host_viewer_minifb.c`
     - `src/renderer_lifecycle.c`
@@ -1037,9 +1038,10 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
   - Status (2026-03-05):
     - Async host path no longer republishes `:game` every frame; it now only presents the latest render-thread buffer.
     - Obsolete per-frame render completion wait/condvar path removed from host loop.
-    - Remaining for PR-3 close: add explicit integration proof that scene motion is driven solely by slot updates, and re-run lifecycle integration gate.
+    - Lifecycle integration gate re-run completed (`test_vector_scene_graph/*renderer_lifecycle*`: 38 tests, 0 failures).
+    - Integration proof covered by regression tests: scene motion data remains Timeline-driven from Clojure slot snapshots (`test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven`) and collision response is callback-routed from Clojure (`test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_geometry_in_clojure`).
 
-- [ ] **PR-4: End-of-M9 cleanup + documentation freeze**
+- [x] **PR-4: End-of-M9 cleanup + documentation freeze**
   - Files:
     - `src/host_viewer_minifb.c`
     - `src/scene.c`
@@ -1054,11 +1056,15 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
   - Acceptance:
     - Full relevant test suite passes.
     - M9 `Status` changed to DONE with final notes.
+  - Done (2026-03-05):
+    - Removed remaining legacy async compatibility republish path from host-viewer loop.
+    - Finalized collision callback namespace split (`tiny-gfx.collision`) and removed collision callback API from `tiny-clj.runtime`.
+    - Re-ran M9 regression gates (`test_vector_scene_graph/*`, `test_vector_scene_graph/*renderer_lifecycle*`, host-viewer demo/collision subsets).
 
-- [ ] **PR-5: Clojure-configurable collision callback + collision-response extraction**
+- [x] **PR-5: Clojure-configurable collision callback + collision-response extraction**
   - Files:
     - `src/tiny-gfx.host-viewer-demo.clj`
-    - `src/tiny-clj.runtime.clj` (or dedicated demo runtime namespace API if preferred)
+    - `src/tiny-gfx.collision.clj`
     - `src/host_viewer_minifb.c`
     - `src/viewer_legacy_collision.c`
     - `src/viewer_legacy_collision.h`
@@ -1074,6 +1080,50 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
     - Callback target is configurable from Clojure at runtime.
     - Collision detection remains in C; collision response is routed via Clojure callback.
     - Regression tests cover callback reconfiguration + toggle behavior.
+  - Done (2026-03-05):
+    - Added collision callback API in `tiny-gfx.collision` (`set-collision-callback!`, `invoke-collision-callback!`) with deterministic nil/dispatch behavior.
+    - Host viewer collision callback invocation now resolves/calls runtime dispatcher directly (no hardcoded expression string eval path).
+    - Added regression coverage for callback reconfiguration and retained toggle behavior through C-driven collision detection.
+
+### 9n: `tiny-gfx` API parity + Clojure documentation hardening (NEW)
+
+Status: IN PROGRESS (started 2026-03-05; initial runtime exposure + scene-contract docs merged)
+
+Goal:
+
+- Expose the currently implemented vector-scene runtime capabilities through `tiny-gfx.*` namespaces.
+- Keep `tiny-clj.runtime/*` compatibility, but provide `tiny-gfx`-first API surface + docs.
+- Document Clojure-side API contracts where users author scene/collision/runtime code.
+
+Scope (first slice):
+
+- Add `tiny-gfx.runtime` namespace with documented direct aliases for:
+  - `vector-scene-bench`
+  - `start-renderer!` / `stop-renderer!`
+  - `renderer-state`
+  - `renderer-timeline-step`
+  - `renderer-timeline-progress`
+- Embed `/libs/tiny-gfx/runtime.clj` in `embedded_sources.c`.
+- Add regression tests proving alias parity against existing runtime semantics.
+
+Scope (second slice):
+
+- Expand `tiny-gfx.scene` Clojure docs for record contracts actually consumed by C:
+  - `Transform`, `Style`, node records, `Timeline`, `FrameScene`, `CollisionRule`, `CollisionEvent`
+  - field semantics for `clip-rect`, `guard-px`, `erase-color`, and collision rule defaults
+- Add contract notes for currently schema-only vs runtime-evaluated fields.
+
+Acceptance:
+
+- `require 'tiny-gfx.runtime` works in host/unit-test runtime.
+- Wrapper APIs return same values/errors as the underlying `tiny-clj.runtime` functions.
+- Clojure docs are present at API entry points used by scene authors.
+
+Checklist:
+
+- [x] Add embedded `tiny-gfx.runtime` namespace and aliases.
+- [x] Add tests for alias parity (`unsupported` lifecycle path + rendered-state query nil path).
+- [x] Add/extend Clojure API docs in `tiny-gfx.scene` for consumed record contracts.
 
 ### Done when
 
@@ -1090,7 +1140,7 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
 
 ## Milestone 10: Collision Contract + Scheduler Callback Bridge
 
-Status: TODO
+Status: NEXT UP (Step 1: generalized Clojure API contract freeze)
 
 Note:
 - This milestone is engine-level collision infrastructure.
@@ -1207,6 +1257,13 @@ Immediate next implementation slice:
   - add explicit callback-configuration contract docs and tests
   - add schema-focused tests (defaults, disabled rules, phase-mask normalization)
   - postpone all scheduler/C runtime changes until Gate 1 passes
+
+Step 1 checklist (next concrete tasks):
+
+- [ ] Add explicit API docs for `tiny-gfx.collision` callback configuration semantics (set/clear/invoke, nil behavior, expected return shape).
+- [ ] Add Clojure schema-level tests for collision-rule defaults and phase-mask normalization via `tiny-gfx.scene/normalize-collision-rule`.
+- [ ] Add Clojure schema-level tests for disabled-rule handling contract (`:enabled false`) without runtime engine coupling.
+- [ ] Keep renderer/scheduler runtime behavior unchanged while Gate 1 tests are established.
 
 Tasks:
 
@@ -1345,3 +1402,55 @@ Rule:
   - Mitigation: conservative `clip-rect` guard bands, explicit slot background policy, test coverage for edge clipping.
 - Risk: Float drift/non-determinism in long animations.
   - Mitigation: fixed-first decode/transform path aligned with `subjective-c` fractional bits (`CLJ_FIXED_FRAC_BITS = 13`), integer quantization only at raster boundaries.
+
+## Milestone 11: User Guide (Markdown)
+
+Status: TODO
+
+Goal:
+
+- Write a complete user-facing Markdown guide that documents the final engine API and workflows.
+- Target audience: developers building scenes/gameplay in Clojure on top of the renderer.
+
+Tasks:
+
+- Create guide file (proposed path): `docs/USER_GUIDE_VECTOR_SCENE.md`.
+- Document core model and lifecycle:
+  - slot atoms and snapshot publication
+  - renderer lifecycle (`start-renderer!`, `stop-renderer!`)
+  - thread model (Tiny-RTOS/Clojure main thread, render thread, macOS UI detail)
+- Document scene authoring:
+  - flat entity maps (`{id -> Record}`)
+  - root entity (`root` symbol)
+  - groups and child-id references
+  - changing grouping dynamically at runtime (re-parenting / child list updates)
+- Document animation features with examples:
+  - Timeline-based periodic animations
+  - per-keyframe durations (uneven step times)
+  - transform interpolation (AnimState-backed smooth motion)
+  - querying current visual state (`renderer-state`, `renderer-timeline-step`, `renderer-timeline-progress`)
+- Document shape and style updates:
+  - changing geometry (`:pts`, tri vertices, text)
+  - changing style/color/visibility
+  - dynamic shape replacement patterns
+- Document time-driven flows:
+  - scheduler-driven updates
+  - event/callback-driven updates
+  - static-slot optimization behavior (when rerender happens / does not happen)
+- Document collision features:
+  - declaring collision rules in Clojure
+  - callback configuration and payload contract
+  - distinction between C collision detection and Clojure collision response
+- Add end-to-end examples:
+  - minimal scene
+  - animated scene with mixed static/animated slots
+  - collision-driven gameplay mutation
+- Add troubleshooting section:
+  - common mistakes (wrong IDs, missing `root`, stale snapshot assumptions)
+  - debugging tips via rendered-state query APIs
+
+Done when:
+
+- `docs/USER_GUIDE_VECTOR_SCENE.md` exists and is linked from relevant docs/README entry points.
+- Guide covers all major feature areas: animations, collision detection, time-driven updates, object grouping/re-grouping, shape changes.
+- Guide examples are validated against current runtime API (no outdated symbols/contracts).
