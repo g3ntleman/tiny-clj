@@ -1,5 +1,7 @@
 (ns tiny-gfx.runtime
-  (:require [tiny-clj.runtime]))
+  (:require [tiny-clj.runtime]
+            [tiny-gfx.host-viewer-demo]
+            [tiny-gfx.collision]))
 
 ;; Direct var aliases to tiny-clj.runtime (no forwarding wrapper functions).
 ;; This keeps arity/error behavior identical to the native runtime entry points.
@@ -30,3 +32,14 @@ Usage: (renderer-timeline-step :game 3001 :t)."}
 Returns nil when the field has no captured timeline sample.
 Usage: (renderer-timeline-progress :game 3001 :t)."}
 (def renderer-timeline-progress tiny-clj.runtime/renderer-timeline-progress)
+
+^#^{:doc "Builds and returns host-viewer startup config map:
+{:bundle [deco-scene score-scene game-scene]
+ :collision-policy [...]
+ :collision-entity-ids [...]}
+Used by native host-viewer startup to avoid demo-specific C wiring."}
+(def host-viewer-config
+  (fn host-viewer-config []
+    {:bundle (tiny-gfx.host-viewer-demo/create-demo-bundle)
+     :collision-policy (tiny-gfx.collision/player-vs-obstacle-policy)
+     :collision-entity-ids (tiny-gfx.host-viewer-demo/collision-entity-ids)}))

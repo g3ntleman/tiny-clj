@@ -5,6 +5,16 @@
 #include "map.h"  // Must be included before namespace.h (map.h -> value.h -> symbol.h)
 #include "namespace.h"
 #include <stdbool.h>
+#include <stdint.h>
+
+typedef struct {
+    uint32_t accepted_count;
+    uint32_t rejected_count;
+    uint32_t drained_count;
+    uint32_t high_watermark;
+    uint32_t pending_count;
+    bool closed;
+} EventLoopIngressStats;
 
 // Initialize event loop (idempotent)
 void event_loop_init(void);
@@ -21,6 +31,15 @@ bool event_loop_enqueue_ingress(CljObject *fn_zero_arity);
 
 // Returns true when the ingress queue has pending tasks.
 bool event_loop_ingress_has_pending(void);
+
+// Close ingress queue for new producers. Already queued tasks remain drainable.
+void event_loop_ingress_close(void);
+
+// Returns true if ingress queue is closed for new producers.
+bool event_loop_ingress_is_closed(void);
+
+// Snapshot ingress counters and current queue state.
+bool event_loop_ingress_stats(EventLoopIngressStats *out_stats);
 
 // Run next enqueued task. Returns true if a task was executed, false if queue empty.
 bool event_loop_run_next(CljPersistentMap *env, EvalState *st);

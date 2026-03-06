@@ -182,6 +182,82 @@ TEST(test_runtime_stats_audio_counters_present) {
   TEST_ASSERT_TRUE(as_fixnum(v_audio_finished_drop_count) >= 0);
 }
 
+TEST(test_runtime_stats_event_loop_ingress_counters_present) {
+  event_loop_clear();
+
+  ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(stats);
+  TEST_ASSERT_TRUE(is_map(stats));
+
+  ID k_accepted = (ID)intern_symbol_global(":event-loop-ingress-accepted-count");
+  ID k_rejected = (ID)intern_symbol_global(":event-loop-ingress-rejected-count");
+  ID k_drained = (ID)intern_symbol_global(":event-loop-ingress-drained-count");
+  ID k_high_watermark = (ID)intern_symbol_global(":event-loop-ingress-high-watermark");
+  ID k_pending = (ID)intern_symbol_global(":event-loop-ingress-pending-count");
+  ID k_closed = (ID)intern_symbol_global(":event-loop-ingress-closed");
+
+  ID v_accepted = map_get_sentinel((CljPersistentMap *)stats, k_accepted, NOT_FOUND);
+  ID v_rejected = map_get_sentinel((CljPersistentMap *)stats, k_rejected, NOT_FOUND);
+  ID v_drained = map_get_sentinel((CljPersistentMap *)stats, k_drained, NOT_FOUND);
+  ID v_high_watermark = map_get_sentinel((CljPersistentMap *)stats, k_high_watermark, NOT_FOUND);
+  ID v_pending = map_get_sentinel((CljPersistentMap *)stats, k_pending, NOT_FOUND);
+  ID v_closed = map_get_sentinel((CljPersistentMap *)stats, k_closed, NOT_FOUND);
+
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_accepted);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_rejected);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_drained);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_high_watermark);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_pending);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_closed);
+
+  TEST_ASSERT_TRUE(is_fixnum(v_accepted));
+  TEST_ASSERT_TRUE(is_fixnum(v_rejected));
+  TEST_ASSERT_TRUE(is_fixnum(v_drained));
+  TEST_ASSERT_TRUE(is_fixnum(v_high_watermark));
+  TEST_ASSERT_TRUE(is_fixnum(v_pending));
+  TEST_ASSERT_TRUE(v_closed == clj_true || v_closed == clj_false);
+}
+
+TEST(test_runtime_stats_event_loop_ingress_counters_change_on_enqueue_and_drain) {
+  event_loop_clear();
+
+  ID fn = eval_string("(fn runtime-stats-ingress-task [] nil)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(fn);
+  TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+  TEST_ASSERT_TRUE(event_loop_enqueue_ingress(fn));
+
+  ID before_drain = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(before_drain);
+  TEST_ASSERT_TRUE(is_map(before_drain));
+
+  ID k_accepted = (ID)intern_symbol_global(":event-loop-ingress-accepted-count");
+  ID k_pending = (ID)intern_symbol_global(":event-loop-ingress-pending-count");
+  ID k_drained = (ID)intern_symbol_global(":event-loop-ingress-drained-count");
+
+  ID v_accepted_before = map_get_sentinel((CljPersistentMap *)before_drain, k_accepted, NOT_FOUND);
+  ID v_pending_before = map_get_sentinel((CljPersistentMap *)before_drain, k_pending, NOT_FOUND);
+  ID v_drained_before = map_get_sentinel((CljPersistentMap *)before_drain, k_drained, NOT_FOUND);
+  TEST_ASSERT_TRUE(is_fixnum(v_accepted_before));
+  TEST_ASSERT_TRUE(is_fixnum(v_pending_before));
+  TEST_ASSERT_TRUE(is_fixnum(v_drained_before));
+  TEST_ASSERT_TRUE(as_fixnum(v_accepted_before) >= 1);
+  TEST_ASSERT_TRUE(as_fixnum(v_pending_before) >= 1);
+
+  bool ran = event_loop_run_next(NULL, g_test_eval_state);
+  TEST_ASSERT_TRUE(ran);
+
+  ID after_drain = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(after_drain);
+  TEST_ASSERT_TRUE(is_map(after_drain));
+
+  ID v_pending_after = map_get_sentinel((CljPersistentMap *)after_drain, k_pending, NOT_FOUND);
+  ID v_drained_after = map_get_sentinel((CljPersistentMap *)after_drain, k_drained, NOT_FOUND);
+  TEST_ASSERT_TRUE(is_fixnum(v_pending_after));
+  TEST_ASSERT_TRUE(is_fixnum(v_drained_after));
+  TEST_ASSERT_TRUE(as_fixnum(v_pending_after) <= as_fixnum(v_pending_before));
+  TEST_ASSERT_TRUE(as_fixnum(v_drained_after) >= as_fixnum(v_drained_before));
+}
+
 #if defined(DEBUG)
 static bool debug_precore_mem_enabled(void) {
   const char *v = getenv("TINYCLJ_DEBUG_PRECORE_MEM");

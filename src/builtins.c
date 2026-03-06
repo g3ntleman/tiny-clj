@@ -7209,7 +7209,7 @@ static ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc)
     return NULL;
   }
 
-  if (!tiny_gfx_ensure_schema(st) || !require_namespace_by_name(st, "tiny-gfx.host-viewer-demo")) {
+  if (!tiny_gfx_ensure_schema(st) || !require_namespace_by_name(st, "tiny-gfx.runtime")) {
     throw_exception(EXCEPTION_RUNTIME,
                     "tiny-clj.runtime/vector-scene-bench failed to initialize tiny-gfx scene schema",
                     __FILE__,
@@ -7218,7 +7218,28 @@ static ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc)
     return NULL;
   }
 
-  ID bundle = eval_string("(tiny-gfx.host-viewer-demo/create-demo-bundle)", st);
+  ID cfg = eval_string("(tiny-gfx.runtime/host-viewer-config)", st);
+  if (!cfg || !is_map(cfg)) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "tiny-clj.runtime/vector-scene-bench failed to load host-viewer config",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+  static CljSymbol *k_bundle = NULL;
+  if (!k_bundle) {
+    k_bundle = intern_symbol_global(":bundle");
+  }
+  if (!k_bundle) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "tiny-clj.runtime/vector-scene-bench failed to intern :bundle key",
+                    __FILE__,
+                    __LINE__,
+                    0);
+    return NULL;
+  }
+  ID bundle = map_get_sentinel(cfg, k_bundle, NULL);
   if (!bundle || !is_vector(bundle)) {
     throw_exception(EXCEPTION_RUNTIME,
                     "tiny-clj.runtime/vector-scene-bench failed to build demo scene bundle",
@@ -7798,6 +7819,53 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
     }
     if (k_audio_finished_drop_count) {
       MAP_REASSIGN(m, map_assoc(m, k_audio_finished_drop_count, fixnum(finished_drops)));
+    }
+  }
+
+  {
+    CljSymbol *k_event_loop_ingress_accepted_count = intern_symbol_global(":event-loop-ingress-accepted-count");
+    CljSymbol *k_event_loop_ingress_rejected_count = intern_symbol_global(":event-loop-ingress-rejected-count");
+    CljSymbol *k_event_loop_ingress_drained_count = intern_symbol_global(":event-loop-ingress-drained-count");
+    CljSymbol *k_event_loop_ingress_high_watermark = intern_symbol_global(":event-loop-ingress-high-watermark");
+    CljSymbol *k_event_loop_ingress_pending_count = intern_symbol_global(":event-loop-ingress-pending-count");
+    CljSymbol *k_event_loop_ingress_closed = intern_symbol_global(":event-loop-ingress-closed");
+
+    EventLoopIngressStats ingress_stats = {0};
+    if (event_loop_ingress_stats(&ingress_stats)) {
+      int32_t accepted_count = (ingress_stats.accepted_count > (uint32_t)FIXNUM_MAX)
+                                   ? (int32_t)FIXNUM_MAX
+                                   : (int32_t)ingress_stats.accepted_count;
+      int32_t rejected_count = (ingress_stats.rejected_count > (uint32_t)FIXNUM_MAX)
+                                   ? (int32_t)FIXNUM_MAX
+                                   : (int32_t)ingress_stats.rejected_count;
+      int32_t drained_count = (ingress_stats.drained_count > (uint32_t)FIXNUM_MAX)
+                                  ? (int32_t)FIXNUM_MAX
+                                  : (int32_t)ingress_stats.drained_count;
+      int32_t high_watermark = (ingress_stats.high_watermark > (uint32_t)FIXNUM_MAX)
+                                   ? (int32_t)FIXNUM_MAX
+                                   : (int32_t)ingress_stats.high_watermark;
+      int32_t pending_count = (ingress_stats.pending_count > (uint32_t)FIXNUM_MAX)
+                                  ? (int32_t)FIXNUM_MAX
+                                  : (int32_t)ingress_stats.pending_count;
+
+      if (k_event_loop_ingress_accepted_count) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_accepted_count, fixnum(accepted_count)));
+      }
+      if (k_event_loop_ingress_rejected_count) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_rejected_count, fixnum(rejected_count)));
+      }
+      if (k_event_loop_ingress_drained_count) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_drained_count, fixnum(drained_count)));
+      }
+      if (k_event_loop_ingress_high_watermark) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_high_watermark, fixnum(high_watermark)));
+      }
+      if (k_event_loop_ingress_pending_count) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_pending_count, fixnum(pending_count)));
+      }
+      if (k_event_loop_ingress_closed) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_closed, ingress_stats.closed ? clj_true : clj_false));
+      }
     }
   }
 

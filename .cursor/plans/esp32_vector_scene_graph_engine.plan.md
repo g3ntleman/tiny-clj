@@ -17,7 +17,7 @@ Build a reduced SVG-like 2D graphics engine with a strict PoC-first delivery pat
 - Multiple independently updatable scene slots (`game`, `score`, `deco`) with clip rectangles
 - Deterministic rendering pipeline validated first on macOS host simulator
 - Fixed-first decode/transform path (Q19.13 aligned with `subjective-c`) for deterministic behavior and lower ESP32 CPU load
-- Deterministic immediate rendering on SPI displays (ST7789 class) after host PoC is stable
+- Deterministic immediate rendering on SPI displays (ST7789/ILI9341 class) or 8-bit parallel I80 displays after host PoC is stable
 - Thick-stroke primitives suitable for game, menu, and animated vector title screens
 - Solid fill color for area primitives (SVG-like paint model MVP)
 - Generalized Clojure collision API: rules and callback routing are declared/configured in Clojure, while per-frame collision detection remains in C
@@ -108,14 +108,17 @@ only on macOS as a platform quirk (Cocoa requires the OS main thread for UI).
 │  • Read-only on Clojure data – no ASSIGN, no RETAIN/RELEASE            │
 │                                                                         │
 │  On ESP32: writes framebuffer directly to SPI/DMA → display             │
-│  On macOS: fills RGB565 framebuffer, signals UI thread for presentation │
+│  On macOS: writes into RGB565 framebuffer (same as ESP32 GRAM)          │
 └────────────────────────┬────────────────────────────────────────────────┘
-                         │ (macOS only: framebuffer handoff)
+                         │ (macOS only: live framebuffer read — no copy)
                          ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  macOS only – Cocoa UI Thread  (platform requirement, not architectural)│
 │                                                                         │
-│  • Copies rendered framebuffer → window (mfb_update_ex)                 │
+│  • Reads live fb_pixels directly (lock-free, no copy buffer)            │
+│  • Expands RGB565 → XRGB8888 for window presentation (mfb_update_ex)   │
+│  • Simulates ESP32 SPI/I80 display: bus reads live GRAM, no double-buf  │
+│  • Tearing is possible and accepted — same as on real hardware          │
 │  • MiniFB event loop, input forwarding, frame pacing, metrics           │
 │  • No scene logic, no Record mutation                                   │
 │                                                                         │
@@ -128,7 +131,8 @@ only on macOS as a platform quirk (Cocoa requires the OS main thread for UI).
 
 **Key property:** The two threads are decoupled via immutable snapshots in Atoms.
 No mutex is needed for scene data exchange – `atom_deref` is a lock-free pointer read.
-On macOS, the only synchronization point is the framebuffer handoff to the Cocoa UI thread.
+On macOS, the Cocoa UI thread reads the live framebuffer directly (no mutex, no copy buffer).
+This faithfully simulates how ESP32 SPI/I80 displays read the live GRAM without double-buffering.
 
 ### Layer Separation
 
@@ -158,8 +162,8 @@ On macOS, the only synchronization point is the framebuffer handoff to the Cocoa
 │  • Composes inherited transforms                            │
 │  • Rasterizes primitives with resolved field values         │
 │  • Read-only on the Clojure snapshot                        │
-│  • ESP32: writes directly to SPI/DMA                        │
-│  • macOS: fills framebuffer, hands off to Cocoa UI thread   │
+│  • ESP32: writes directly to SPI/DMA → display GRAM         │
+│  • macOS: writes into shared fb_pixels (live GRAM simulation)│
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -172,7 +176,9 @@ On macOS, the only synchronization point is the framebuffer handoff to the Cocoa
 C resolves Timelines and interpolates every frame with fixed time budget.
 - **Snapshot-per-frame.** Render thread snapshots all slot Atoms once at frame start.
 The entire frame renders from this consistent state. Intermediate Clojure updates
-are picked up at the next frame start – no tearing, no partial state.
+are picked up at the next frame start – scene data is always consistent per frame.
+Note: the display itself has no double-buffer (SPI/I80 GRAM is single-buffered),
+so visual tearing at the display level is possible and accepted — same as real hardware.
 - **Static slots skip rendering.** If a slot has no Timelines and no active AnimState,
 its output is frame-identical. Render thread skips erase + re-render until
 Clojure publishes a new snapshot. If all slots are static, render thread sleeps.
@@ -193,11 +199,17 @@ map and Timeline are stable (see Optional Extension A for initial sketch).
 ## Constraints
 
 - MCU class: ESP32 (resource-constrained embedded target)
-- Display class: ST7789 320x240 over SPI
+- Display class: SPI (ST7789/ILI9341, 240×240 or 320×240) or 8-bit parallel I80 (faster, rarer)
+- Display has a single internal GRAM, no double-buffer — tearing is possible and accepted
 - macOS host simulator is mandatory before device bring-up
 - Shared render core between simulator and ESP32 (avoid logic forks)
 - Host emulation must happen at driver/backend level (not above primitive rasterization),
 so primitive generation/rasterization bugs are debuggable on host.
+- Host display simulation must faithfully match ESP32 display behavior:
+  - no double-buffer on the display side
+  - render thread writes directly into a single framebuffer (GRAM equivalent)
+  - main/UI thread reads the live framebuffer without mutex or copy
+  - tearing is possible and accepted — same as on real hardware
 - No required full framebuffer on device
 - tiny-clj should not do per-pixel rendering work
 - Engine must stay compact and record-friendly
@@ -220,7 +232,13 @@ so primitive generation/rasterization bugs are debuggable on host.
 - Backend-parity rule (host <-> ESP32):
   - define one shared backend submission interface (e.g. `begin_frame`, `submit_rect`, `end_frame`)
   - render thread owns backend submission on both targets
-  - macOS main/UI thread is presentation-only (`mfb_update_ex`), matching ESP32 where render thread drives SPI writes
+  - macOS main/UI thread is presentation-only (`mfb_update_ex`), matching ESP32 where render thread drives SPI/I80 writes
+- Display simulation rule (host):
+  - host viewer uses a single RGB565 framebuffer (no copy buffer, no double-buffer)
+  - render thread writes into the framebuffer; UI thread reads it live without synchronization
+  - this mirrors real SPI/I80 display behavior: the display bus reads from the live GRAM while the MCU writes into it
+  - tearing artifacts on the host are intentional and match what users see on real hardware
+  - dirty-rectangle tracking and static-slot skip remain the primary bandwidth optimization — same as on ESP32 SPI
 
 ## Definition Of Done (project-level)
 
@@ -486,19 +504,27 @@ Done when:
 
 - Animated vector text remains readable and stable under transform updates.
 
-## Milestone 7: ESP32 SPI Backend Integration (Post-PoC)
+## Milestone 7: ESP32 Display Backend Integration (Post-PoC)
 
 Status: TODO
 
+Supported display interfaces:
+
+- **SPI** (primary): ST7789, ILI9341 — serial bus, 40–80 MHz clock, bandwidth-limited
+- **8-bit parallel I80** (optional): faster bus, more pins, less common/more expensive
+- Both interfaces drive displays with a single internal GRAM and no double-buffer
+- Host viewer faithfully simulates this: single RGB565 framebuffer, no copy, no mutex in present path
+
 Tasks:
 
-- Integrate validated raster output with SPI transport model:
-  - set window + burst writes
+- Integrate validated raster output with SPI/I80 transport model:
+  - set window + burst writes (CASET/RASET/RAMWR for SPI; 8080 command sequence for I80)
+  - DMA transfer for bulk pixel data (SPI DMA or I80 DMA where available)
 - Introduce/consume shared backend submission interface used by both host and ESP32:
   - backend command surface (frame begin/end + dirty-rect submission)
   - keep renderer/backend boundary identical across targets
   - no host-only rendering branch above this interface
-- Map each render slot `clip-rect` to SPI address windows (one window per dirty slot in the simple path).
+- Map each render slot `clip-rect` to display address windows (one window per dirty slot in the simple path).
 - Keep backend boundary identical between host and ESP32 so host can emulate the device driver layer
 while still exercising the same primitive rasterization pipeline.
 - Keep full framebuffer optional (not mandatory).
@@ -522,8 +548,16 @@ while still exercising the same primitive rasterization pipeline.
   - same scene input should produce same primitive command sequence as simulator.
 - Define host-analogue execution model:
   - render thread performs backend submission stage on macOS too
-  - UI thread only presents completed front buffer/frame
-  - host backend path follows the same dirty-rect submission contract as ESP32 SPI path
+  - UI thread reads live framebuffer directly (no copy buffer, no mutex) — simulates SPI/I80 bus reading GRAM
+  - host backend path follows the same dirty-rect submission contract as ESP32 SPI/I80 path
+- SPI/I80 bandwidth optimization strategies (research-backed):
+  - **Dirty-rectangle tracking**: only transmit changed pixels — typical action games change 40–60% of pixels per frame (fbcp-ili9341: Quake averages 46%)
+  - **Static-slot skip**: HUD/score slots rarely change → 0 bytes transferred for static frames
+  - **Span merging**: merge adjacent dirty regions on same scanline to reduce CASET/RASET command overhead
+  - **DMA pipeline**: render thread prepares next frame while DMA transfers current dirty regions
+  - **Adaptive interlacing** (optional): if dirty pixel count exceeds bus capacity, alternate even/odd scanlines across frames
+  - **TE-pin synchronization** (optional): if display exposes TE signal, synchronize write start with display scan to reduce visible tearing
+  - **Write speed rule**: tearing-free operation requires write speed ≥ 50% of display read speed (Espressif docs)
 
 Proposed backend interface sketch (implementation target for this milestone):
 
@@ -553,10 +587,12 @@ Execution contract for this interface:
 - `submit_rect` receives clipped dirty regions only; no backend-side scene traversal.
 - Render thread owns all `VgBackendOps` calls on both targets.
 - macOS backend implementation:
-  - copies submitted RGB565 dirty regions into host present buffer (or staging buffer)
-  - UI/main thread performs presentation only (`mfb_update_ex`) and does not call render APIs
+  - writes submitted RGB565 dirty regions directly into the live framebuffer (GRAM simulation)
+  - UI/main thread reads the live framebuffer for presentation (`mfb_update_ex`) — no copy, no lock
+  - faithfully simulates ESP32 single-GRAM display without double-buffering
 - ESP32 backend implementation:
-  - maps each submitted rect to SPI window + burst write sequence
+  - maps each submitted rect to SPI window + burst write (CASET/RASET/RAMWR) or I80 command sequence
+  - uses DMA for bulk pixel transfer to keep CPU free for render-thread work
   - no full-frame requirement in the default path
 - Determinism/conformance:
   - for identical scene snapshots, host and ESP32 must observe equivalent rect submission order/data contract
@@ -566,6 +602,8 @@ Done when:
 
 - Scene renders on device without full-frame requirement and with pacing consistent with simulator logic.
 - Shared backend submission interface is used on both targets, and conformance checks pass for representative scenes.
+- Host viewer faithfully simulates target display behavior (single GRAM, no double-buffer, live framebuffer reads).
+- Dirty-rectangle tracking reduces SPI/I80 transfer volume for typical game scenes to <60% of full-frame.
 
 ## Milestone 8: Fixed-First Decode + Transform Path (Required for ESP32)
 
@@ -1048,7 +1086,7 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
     - Integration tests confirm scene moves via Clojure slot updates only.
     - Runtime lifecycle tests still pass (`start-renderer!` / `stop-renderer!`).
   - Status (2026-03-05):
-    - Async host path no longer republishes `:game` every frame; it now only presents the latest render-thread buffer.
+    - Host path reads live framebuffer directly (lock-free, no copy buffer) — faithful ESP32 SPI/I80 GRAM simulation.
     - Obsolete per-frame render completion wait/condvar path removed from host loop.
     - Lifecycle integration gate re-run completed (`test_vector_scene_graph/*renderer_lifecycle`*: 38 tests, 0 failures).
     - Integration proof covered by regression tests: scene motion data remains Timeline-driven from Clojure slot snapshots (`test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven`) and collision response is callback-routed from Clojure (`test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_geometry_in_clojure`).
@@ -1305,6 +1343,13 @@ Implementation notes (2026-03-06):
   - runloop drains ingress queue before normal timer/task processing
   - host-viewer collision bridge now uses ingress API for callback dispatch handoff
   - regression coverage: `test_event_loop_latency/event_loop_ingress_enqueue_executes_on_run_next`
+  - ingress close/reject semantics (`event_loop_ingress_close`, `event_loop_ingress_is_closed`) with drain-after-close behavior
+  - concurrent producer safety regression (`test_event_loop_latency/event_loop_ingress_concurrent_producers_fifo_drain`)
+  - bounded backpressure regression (`test_event_loop_latency/event_loop_ingress_backpressure_rejects_when_full_and_recovers_after_drain`)
+  - runtime stats now expose ingress backpressure counters:
+  `:event-loop-ingress-accepted-count`, `:event-loop-ingress-rejected-count`,
+  `:event-loop-ingress-drained-count`, `:event-loop-ingress-high-watermark`,
+  `:event-loop-ingress-pending-count`, `:event-loop-ingress-closed`
 
 Tasks:
 
@@ -1421,14 +1466,14 @@ Done when:
 8. M8b batched scene update API (`update-nodes` for efficient per-frame state changes)
 9. M5 snapshot slot update path (`FrameScene` + `clip-rect` + changed-slot-only render)
 10. M6 VText integration
-11. M7 SPI backend integration (slot windows on SPI)
+11. M7 ESP32 display backend integration (SPI/I80 slot windows)
 12. M9 game/menu/title integration
 13. M10 collision contract + C-dispatched closure callback
 14. Optional later: explicit patch path + pointer-identity subtree reuse
 
 Rule:
 
-- Do not start M7 (ESP32 SPI integration) before M5 snapshot-slot rendering passes in host simulator.
+- Do not start M7 (ESP32 display backend) before M5 snapshot-slot rendering passes in host simulator.
 
 ## Risk Register
 
@@ -1438,8 +1483,10 @@ Rule:
   - Mitigation: shared render core, backend conformance tests, deterministic frame traces.
 - Risk: Transform stack overhead in deep group trees.
   - Mitigation: shallow graph conventions, iterative traversal, compact matrix representation.
-- Risk: SPI bandwidth limits visible complexity.
-  - Mitigation: clipping/culling, dirty-region mode, avoid pathological tiny draw commands.
+- Risk: SPI/I80 bandwidth limits visible complexity.
+  - Mitigation: dirty-rectangle tracking (only changed pixels transferred), static-slot skip, span merging, DMA pipeline, adaptive interlacing fallback.
+  - Reference: 240×240@16bit full frame = 115.200 bytes; at 40 MHz SPI ~23 ms/frame (max ~43 fps). Dirty-rect tracking typically reduces transfer to 40–60% → effective 60+ fps for most game scenes.
+  - I80 parallel interface provides ~8× the bandwidth of SPI at same clock frequency, relaxing this constraint significantly.
 - Risk: tiny-clj allocation spikes during snapshot rebuilds.
   - Mitigation: persistent data sharing, coarse scene slots, changed-slot-only rendering, optional compiled caches later.
 - Risk: Slot rectangles appear non-overlapping logically but overlap in raster output due to stroke/text fringes.

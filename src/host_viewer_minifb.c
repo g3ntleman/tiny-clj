@@ -76,9 +76,7 @@ static bool viewer_should_exit_for_keys(const uint8_t *keys) {
 
 
 typedef struct {
-    bool sync_mode;
     bool use_mfb_waitsync;
-    bool s_key_was_down;
     bool w_key_was_down;
 } ViewerRuntimeFlags;
 
@@ -104,9 +102,6 @@ static void viewer_update_runtime_flags(const uint8_t *keys,
                                         uint64_t target_frame_ns) {
     if (!flags || !next_frame_deadline_ns) {
         return;
-    }
-    if (viewer_key_pressed_once(keys, KB_KEY_S, &flags->s_key_was_down)) {
-        flags->sync_mode = !flags->sync_mode;
     }
     if (viewer_key_pressed_once(keys, KB_KEY_W, &flags->w_key_was_down)) {
         flags->use_mfb_waitsync = !flags->use_mfb_waitsync;
@@ -136,8 +131,6 @@ typedef struct {
     double dirty_bytes_per_s;
     double full_bytes_per_s;
     double avg_changed_slots;
-    double avg_main_lock_wait_us;
-    double avg_main_lock_hold_us;
     double avg_render_lock_hold_us;
     double max_render_lock_hold_us;
     uint64_t skipped_generations;
@@ -322,13 +315,6 @@ static double timing_accumulator_avg_ms(const TimingAccumulator *acc) {
     return (double)acc->sum_ns / (double)acc->count / 1e6;
 }
 
-static double timing_accumulator_min_ms(const TimingAccumulator *acc) {
-    if (!acc || acc->min_ns == UINT64_MAX) {
-        return 0.0;
-    }
-    return (double)acc->min_ns / 1e6;
-}
-
 static double timing_accumulator_max_ms(const TimingAccumulator *acc) {
     if (!acc || acc->max_ns == 0u) {
         return 0.0;
@@ -387,7 +373,23 @@ static bool perf_window_take_snapshot_if_due(ViewerPerfWindow *perf,
 
 static CljAtom *g_scene_slot_atoms[VIEWER_SLOT_COUNT] = {0};
 static VgSlotChangeTracker g_slot_change_tracker;
-static uint16_t g_present_copy_rgb565[VIEW_W * VIEW_H];
+
+/*
+ * Two-buffer model matching ESP32 SPI/I80 hardware:
+ *
+ *   g_render_buffer  = MCU-local render target (private to render thread)
+ *   g_gram_pixels    = display GRAM (read by UI thread for presentation)
+ *
+ * The render thread erases + draws into g_render_buffer. After rendering is
+ * complete, the dirty region is copied to g_gram_pixels — simulating the
+ * SPI/DMA transfer from MCU RAM to the display's internal GRAM.
+ *
+ * The UI thread only reads g_gram_pixels, so it never sees the intermediate
+ * erased state of g_render_buffer. Each pixel in the GRAM transitions
+ * directly from old → new, matching real SPI display behavior.
+ */
+static uint16_t g_render_buffer[VIEW_W * VIEW_H];
+static uint16_t *g_gram_pixels = NULL;
 static const uint8_t g_slot_render_priority[VIEWER_SLOT_COUNT] = {
     VIEWER_SLOT_GAME,
     VIEWER_SLOT_SCORE,
@@ -401,12 +403,9 @@ typedef struct {
     VgRenderSlotState slot_states[VIEWER_SLOT_COUNT];
     uint32_t slot_seen_generations[VIEWER_SLOT_COUNT];
     atomic_uint_fast32_t rendered_frame_serial;
-    uint32_t last_dirty_pixels;
-    uint32_t last_changed_slots;
+    atomic_uint_fast32_t last_dirty_pixels;
+    atomic_uint_fast32_t last_changed_slots;
     uint32_t last_rendered_generation[VIEWER_SLOT_COUNT];
-    atomic_uint_fast64_t main_lock_wait_ns_total;
-    atomic_uint_fast64_t main_lock_hold_ns_total;
-    atomic_uint_fast64_t main_lock_samples;
     atomic_uint_fast64_t render_lock_hold_ns_total;
     atomic_uint_fast64_t render_lock_hold_ns_max;
     atomic_uint_fast64_t render_lock_samples;
@@ -468,19 +467,10 @@ static void viewer_set_realtime_thread_policy(void) {
 #endif
 }
 
-static void collect_thread_lock_metrics(ViewerPerfSnapshot *out_snapshot) {
+static void collect_render_thread_metrics(ViewerPerfSnapshot *out_snapshot) {
     if (!out_snapshot) {
         return;
     }
-    uint64_t main_samples = atomic_exchange_explicit(&g_render_thread.main_lock_samples,
-                                                     0u,
-                                                     memory_order_acq_rel);
-    uint64_t main_wait_ns = atomic_exchange_explicit(&g_render_thread.main_lock_wait_ns_total,
-                                                     0u,
-                                                     memory_order_acq_rel);
-    uint64_t main_hold_ns = atomic_exchange_explicit(&g_render_thread.main_lock_hold_ns_total,
-                                                     0u,
-                                                     memory_order_acq_rel);
     uint64_t render_samples = atomic_exchange_explicit(&g_render_thread.render_lock_samples,
                                                        0u,
                                                        memory_order_acq_rel);
@@ -496,10 +486,6 @@ static void collect_thread_lock_metrics(ViewerPerfSnapshot *out_snapshot) {
         atomic_exchange_explicit(&g_render_thread.skipped_max_frame, 0u, memory_order_acq_rel);
     out_snapshot->skipped_max_slot =
         atomic_exchange_explicit(&g_render_thread.skipped_max_slot, 0u, memory_order_acq_rel);
-    out_snapshot->avg_main_lock_wait_us =
-        main_samples ? ((double)main_wait_ns / (double)main_samples) / 1000.0 : 0.0;
-    out_snapshot->avg_main_lock_hold_us =
-        main_samples ? ((double)main_hold_ns / (double)main_samples) / 1000.0 : 0.0;
     out_snapshot->avg_render_lock_hold_us =
         render_samples ? ((double)render_hold_ns / (double)render_samples) / 1000.0 : 0.0;
     out_snapshot->max_render_lock_hold_us = (double)render_hold_max_ns / 1000.0;
@@ -624,8 +610,8 @@ static void *viewer_render_thread_main(void *arg) {
         atomic_store_explicit(&g_render_thread.animated_slots_mask,
                               viewer_compute_animated_slots_mask(g_render_thread.slot_states),
                               memory_order_release);
-        g_render_thread.last_dirty_pixels = frame_dirty_pixels;
-        g_render_thread.last_changed_slots = frame_changed_slots;
+        atomic_store_explicit(&g_render_thread.last_dirty_pixels, frame_dirty_pixels, memory_order_relaxed);
+        atomic_store_explicit(&g_render_thread.last_changed_slots, frame_changed_slots, memory_order_relaxed);
         uint64_t lock_release_ns = monotonic_now_ns();
         uint64_t hold_ns = (lock_release_ns > lock_acquired_ns)
                                ? (lock_release_ns - lock_acquired_ns)
@@ -641,6 +627,18 @@ static void *viewer_render_thread_main(void *arg) {
                                                       memory_order_relaxed)) {
         }
         (void)pthread_mutex_unlock(&g_render_thread.mutex);
+        /*
+         * Simulate SPI/DMA transfer: copy finished render result to GRAM.
+         * This runs outside the mutex — the render buffer is only written by
+         * this thread, and g_gram_pixels is the "display bus" target.
+         * The UI thread may read g_gram_pixels during this copy, seeing a mix
+         * of old + new pixels (tearing) — same as real SPI display behavior.
+         * Critically, it will NEVER see the intermediate erased (black) state,
+         * because each pixel goes directly old → new.
+         */
+        if (g_gram_pixels) {
+            memcpy(g_gram_pixels, g_render_buffer, sizeof(g_render_buffer));
+        }
         atomic_fetch_add_explicit(&g_render_thread.rendered_frame_serial, 1u, memory_order_release);
     }
     return NULL;
@@ -911,77 +909,17 @@ static bool viewer_wait_for_frame_pacing(struct mfb_window *window,
     return waitsync_ok;
 }
 
-static ViewerFrameRenderResult viewer_render_game_frame_sync(FrameScene *game_scene,
-                                                             VgRenderSlotState *sync_slot_states,
-                                                             uint32_t *sync_slot_generation,
-                                                             VgFrameBuffer *fb) {
+/*
+ * Lock-free frame polling: reads atomic counters from the render thread.
+ * The main thread reads fb_pixels directly (no copy), faithfully simulating
+ * ESP32 SPI/I80 displays where the bus reads the live GRAM with no double-buffer.
+ * Tearing is possible and accepted — same as on real hardware.
+ */
+static ViewerFrameRenderResult viewer_poll_render_frame(void) {
     ViewerFrameRenderResult result = {0};
-    if (!game_scene || !sync_slot_states || !sync_slot_generation || !fb) {
-        return result;
-    }
-    (*sync_slot_generation)++;
-    uint32_t now_ms = platform_current_time_ms();
-    uint32_t dirty_pixels = 0u;
-    vg_rendered_state_capture_begin(VIEWER_SLOT_GAME, *sync_slot_generation, now_ms);
-    if (vg_render_frame_slot_record_if_changed_at_ms(game_scene,
-                                                     &sync_slot_states[VIEWER_SLOT_GAME],
-                                                     fb,
-                                                     *sync_slot_generation,
-                                                     now_ms,
-                                                     &dirty_pixels)) {
-        vg_rendered_state_capture_commit();
-        result.dirty_pixels = dirty_pixels;
-        result.changed_slots = 1u;
-    } else {
-        vg_rendered_state_capture_discard();
-    }
-    result.frame_serial = *sync_slot_generation;
-    return result;
-}
-
-static ViewerFrameRenderResult viewer_render_game_frame_async(const uint16_t *fb_pixels) {
-    static uint_fast32_t cached_frame_serial = UINT_FAST32_MAX;
-    static uint32_t cached_dirty_pixels = 0u;
-    static uint32_t cached_changed_slots = 0u;
-
-    ViewerFrameRenderResult result = {0};
-    if (!fb_pixels) {
-        return result;
-    }
-
-    uint_fast32_t serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
-    if (serial == cached_frame_serial) {
-        result.frame_serial = serial;
-        result.dirty_pixels = cached_dirty_pixels;
-        result.changed_slots = cached_changed_slots;
-        return result;
-    }
-    uint64_t main_lock_begin_ns = monotonic_now_ns();
-    if (pthread_mutex_lock(&g_render_thread.mutex) == 0) {
-        uint64_t main_lock_acquired_ns = monotonic_now_ns();
-        result.frame_serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
-        result.dirty_pixels = g_render_thread.last_dirty_pixels;
-        result.changed_slots = g_render_thread.last_changed_slots;
-        memcpy(g_present_copy_rgb565, fb_pixels, sizeof(g_present_copy_rgb565));
-        uint64_t main_lock_release_ns = monotonic_now_ns();
-        (void)pthread_mutex_unlock(&g_render_thread.mutex);
-        uint64_t wait_ns = (main_lock_acquired_ns > main_lock_begin_ns)
-                               ? (main_lock_acquired_ns - main_lock_begin_ns)
-                               : 0u;
-        uint64_t hold_ns = (main_lock_release_ns > main_lock_acquired_ns)
-                               ? (main_lock_release_ns - main_lock_acquired_ns)
-                               : 0u;
-        atomic_fetch_add_explicit(&g_render_thread.main_lock_wait_ns_total, wait_ns, memory_order_relaxed);
-        atomic_fetch_add_explicit(&g_render_thread.main_lock_hold_ns_total, hold_ns, memory_order_relaxed);
-        atomic_fetch_add_explicit(&g_render_thread.main_lock_samples, 1u, memory_order_relaxed);
-        cached_frame_serial = result.frame_serial;
-        cached_dirty_pixels = result.dirty_pixels;
-        cached_changed_slots = result.changed_slots;
-    } else {
-        result.frame_serial = serial;
-        result.dirty_pixels = cached_dirty_pixels;
-        result.changed_slots = cached_changed_slots;
-    }
+    result.frame_serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
+    result.dirty_pixels = atomic_load_explicit(&g_render_thread.last_dirty_pixels, memory_order_relaxed);
+    result.changed_slots = atomic_load_explicit(&g_render_thread.last_changed_slots, memory_order_relaxed);
     return result;
 }
 
@@ -1014,8 +952,11 @@ int main(void) {
     int exit_code = 1;
     viewer_set_realtime_thread_policy();
 
+    g_gram_pixels = fb_pixels;
+    memset(g_render_buffer, 0, sizeof(g_render_buffer));
+    memset(fb_pixels, 0, sizeof(uint16_t) * VIEW_W * VIEW_H);
     VgFrameBuffer fb;
-    if (!vg_framebuffer_init(&fb, VIEW_W, VIEW_H, fb_pixels, VIEW_W * VIEW_H)) {
+    if (!vg_framebuffer_init(&fb, VIEW_W, VIEW_H, g_render_buffer, VIEW_W * VIEW_H)) {
         fprintf(stderr, "Failed to initialize framebuffer\n");
         return 1;
     }
@@ -1083,9 +1024,10 @@ int main(void) {
     demo_bundle_initialized = true;
 
     uint_fast32_t last_presented_frame_serial = 0u;
-    ViewerRuntimeFlags runtime_flags = {0};
-    VgRenderSlotState sync_slot_states[VIEWER_SLOT_COUNT] = {0};
-    uint32_t sync_slot_generation = 1u;
+    ViewerRuntimeFlags runtime_flags = {
+        .use_mfb_waitsync = true,
+        .w_key_was_down = false
+    };
     const uint64_t target_frame_ns = 1000000000ull / TARGET_FPS;
     uint64_t next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
     uint64_t last_present_ns = 0u;
@@ -1095,7 +1037,9 @@ int main(void) {
     timing_accumulator_reset(&frame_dt_stats);
     timing_accumulator_reset(&waitsync_stats);
     timing_accumulator_reset(&update_stats);
+    uint32_t long_frame_count = 0u;
     vg_framebuffer_clear(&fb, SCENE_ERASE_COLOR);
+    memcpy(fb_pixels, g_render_buffer, sizeof(g_render_buffer));
     publish_frame_scene_slot_record(VIEWER_SLOT_DECO, demo_bundle.deco_scene, NULL);
     publish_frame_scene_slot_record(VIEWER_SLOT_SCORE, demo_bundle.score_scene, NULL);
     publish_frame_scene_slot_record(VIEWER_SLOT_GAME, demo_bundle.game_scene, NULL);
@@ -1116,20 +1060,14 @@ int main(void) {
         }
         viewer_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
 
-        ViewerFrameRenderResult frame_result = runtime_flags.sync_mode
-                                                   ? viewer_render_game_frame_sync(demo_bundle.game_scene,
-                                                                                   sync_slot_states,
-                                                                                   &sync_slot_generation,
-                                                                                   &fb)
-                                                   : viewer_render_game_frame_async(fb_pixels);
+        ViewerFrameRenderResult frame_result = viewer_poll_render_frame();
         (void)viewer_apply_collision_step(&demo_bundle,
                                           &collision_state,
                                           &collision_policy,
                                           viewer_eval_state,
                                           platform_current_time_ms());
 
-        const uint16_t *src = runtime_flags.sync_mode ? fb_pixels : g_present_copy_rgb565;
-        viewer_expand_rgb565_to_window(src, window_pixels, (size_t)VIEW_W * (size_t)VIEW_H);
+        viewer_expand_rgb565_to_window(fb_pixels, window_pixels, (size_t)VIEW_W * (size_t)VIEW_H);
 
         if (frame_result.frame_serial != last_presented_frame_serial) {
             perf_window_record_frame(&perf_window, frame_result.dirty_pixels, frame_result.changed_slots);
@@ -1139,33 +1077,60 @@ int main(void) {
         ViewerPerfSnapshot perf_snapshot;
         bool perf_ready = perf_window_take_snapshot_if_due(&perf_window, (double)time_s, &perf_snapshot);
         if (perf_ready) {
-            collect_thread_lock_metrics(&perf_snapshot);
+            collect_render_thread_metrics(&perf_snapshot);
         }
 #if defined(__APPLE__)
         if (perf_ready) {
             double dt_avg_ms = timing_accumulator_avg_ms(&frame_dt_stats);
-            double dt_min_ms = timing_accumulator_min_ms(&frame_dt_stats);
             double dt_max_ms = timing_accumulator_max_ms(&frame_dt_stats);
             double ws_avg_ms = timing_accumulator_avg_ms(&waitsync_stats);
-            double ws_min_ms = timing_accumulator_min_ms(&waitsync_stats);
-            double ws_max_ms = timing_accumulator_max_ms(&waitsync_stats);
             double up_avg_ms = timing_accumulator_avg_ms(&update_stats);
-            double up_min_ms = timing_accumulator_min_ms(&update_stats);
-            double up_max_ms = timing_accumulator_max_ms(&update_stats);
             timing_accumulator_reset(&frame_dt_stats);
             timing_accumulator_reset(&waitsync_stats);
             timing_accumulator_reset(&update_stats);
-            char title[192];
+            /*
+             * Keep the title intentionally short: macOS truncates long titles,
+             * and skip diagnostics should stay visible even in narrow windows.
+             */
+            char title[160];
             (void)snprintf(title,
                            sizeof(title),
-                           "[%s|%s] | FPS %.1f | dt %.1f/%.1f/%.1fms | ws %.1f/%.1f/%.1fms | up %.1f/%.1f/%.1fms",
-                           runtime_flags.sync_mode ? "SYNC" : "ASYNC",
+                           "[%s] FPS %.1f sk %llu/%llu lf %u dmx %.1f lk %.0fus dt %.1f up %.1f",
                            runtime_flags.use_mfb_waitsync ? "WAITSYNC" : "CUSTOM",
                            perf_snapshot.fps,
-                           dt_min_ms, dt_avg_ms, dt_max_ms,
-                           ws_min_ms, ws_avg_ms, ws_max_ms,
-                           up_min_ms, up_avg_ms, up_max_ms);
+                           (unsigned long long)perf_snapshot.skipped_generations,
+                           (unsigned long long)perf_snapshot.skipped_max_frame,
+                           long_frame_count,
+                           dt_max_ms,
+                           perf_snapshot.max_render_lock_hold_us,
+                           dt_avg_ms,
+                           up_avg_ms);
             macos_viewer_set_window_title(title);
+            if (perf_snapshot.skipped_generations > 0u) {
+                fprintf(stderr,
+                        "[viewer] skip-diag: total=%llu frame-max=%llu slot-max=%llu "
+                        "lock-max=%.0fus fps=%.1f dt=%.1f ws=%.1f up=%.1f\n",
+                        (unsigned long long)perf_snapshot.skipped_generations,
+                        (unsigned long long)perf_snapshot.skipped_max_frame,
+                        (unsigned long long)perf_snapshot.skipped_max_slot,
+                        perf_snapshot.max_render_lock_hold_us,
+                        perf_snapshot.fps,
+                        dt_avg_ms,
+                        ws_avg_ms,
+                        up_avg_ms);
+            }
+            if (long_frame_count > 0u) {
+                fprintf(stderr,
+                        "[viewer] stutter-diag: long=%u dt-max=%.1fms "
+                        "fps=%.1f dt=%.1f ws=%.1f up=%.1f\n",
+                        long_frame_count,
+                        dt_max_ms,
+                        perf_snapshot.fps,
+                        dt_avg_ms,
+                        ws_avg_ms,
+                        up_avg_ms);
+            }
+            long_frame_count = 0u;
         }
 #else
         (void)perf_snapshot;
@@ -1176,6 +1141,9 @@ int main(void) {
         if (last_present_ns > 0u) {
             uint64_t dt = (now_ns > last_present_ns) ? (now_ns - last_present_ns) : 0u;
             timing_accumulator_add(&frame_dt_stats, dt);
+            if (dt > 20000000ull) {
+                long_frame_count++;
+            }
         }
         last_present_ns = now_ns;
 
@@ -1219,6 +1187,7 @@ cleanup:
     if (demo_bundle_initialized) {
         destroy_demo_bundle(&demo_bundle);
     }
+    g_gram_pixels = NULL;
     runtime_reset(&g_runtime);
     return exit_code;
 #endif

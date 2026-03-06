@@ -11,8 +11,10 @@
 #include "value.h"
 #include <stdbool.h>
 #include <stdatomic.h>
+#include <stdio.h>
 #include <string.h>
 #include <limits.h>
+#include <time.h>
 #include <sys/time.h>
 #if defined(ESP32_BUILD)
 #include "gpio_esp32.h"
@@ -50,7 +52,39 @@ static int        g_timer_count = 0;
 static ID g_event_loop_ingress_queue[EVENT_LOOP_INGRESS_CAP];
 static uint16_t g_event_loop_ingress_head = 0u;
 static uint16_t g_event_loop_ingress_count = 0u;
+static bool g_event_loop_ingress_closed = false;
+static uint32_t g_event_loop_ingress_accepted_count = 0u;
+static uint32_t g_event_loop_ingress_rejected_count = 0u;
+static uint32_t g_event_loop_ingress_drained_count = 0u;
+static uint32_t g_event_loop_ingress_high_watermark = 0u;
 static atomic_flag g_event_loop_ingress_lock = ATOMIC_FLAG_INIT;
+static uint64_t g_runloop_last_warn_ns = 0u;
+
+#define RUNLOOP_BLOCK_WARN_THRESHOLD_NS 1000000000ull
+
+static uint64_t event_loop_monotonic_now_ns(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0u;
+    }
+    return ((uint64_t)ts.tv_sec * 1000000000ull) + (uint64_t)ts.tv_nsec;
+}
+
+static void event_loop_warn_if_slow_tick(uint64_t elapsed_ns, uint64_t end_ns) {
+    if (elapsed_ns < RUNLOOP_BLOCK_WARN_THRESHOLD_NS || end_ns == 0u) {
+        return;
+    }
+    bool should_warn = (g_runloop_last_warn_ns == 0u) ||
+                       ((end_ns - g_runloop_last_warn_ns) >= RUNLOOP_BLOCK_WARN_THRESHOLD_NS);
+    if (!should_warn) {
+        return;
+    }
+    unsigned long long elapsed_ms = (unsigned long long)(elapsed_ns / 1000000ull);
+    fprintf(stderr,
+            "[runloop] warning: runloop tick took %llums (threshold: 1000ms)\n",
+            elapsed_ms);
+    g_runloop_last_warn_ns = end_ns;
+}
 
 static inline void event_loop_ingress_lock_acquire(void) {
     while (atomic_flag_test_and_set_explicit(&g_event_loop_ingress_lock, memory_order_acquire)) {
@@ -65,11 +99,17 @@ static bool event_loop_ingress_push(ID fn_zero_arity) {
     if (!fn_zero_arity) return false;
     event_loop_ingress_lock_acquire();
     bool ok = false;
-    if (g_event_loop_ingress_count < EVENT_LOOP_INGRESS_CAP) {
+    if (!g_event_loop_ingress_closed && g_event_loop_ingress_count < EVENT_LOOP_INGRESS_CAP) {
         uint16_t tail = (uint16_t)((g_event_loop_ingress_head + g_event_loop_ingress_count) % EVENT_LOOP_INGRESS_CAP);
         g_event_loop_ingress_queue[tail] = fn_zero_arity;
         g_event_loop_ingress_count++;
+        g_event_loop_ingress_accepted_count++;
+        if ((uint32_t)g_event_loop_ingress_count > g_event_loop_ingress_high_watermark) {
+            g_event_loop_ingress_high_watermark = (uint32_t)g_event_loop_ingress_count;
+        }
         ok = true;
+    } else {
+        g_event_loop_ingress_rejected_count++;
     }
     event_loop_ingress_lock_release();
     return ok;
@@ -83,6 +123,7 @@ static ID event_loop_ingress_pop(void) {
         g_event_loop_ingress_queue[g_event_loop_ingress_head] = NULL;
         g_event_loop_ingress_head = (uint16_t)((g_event_loop_ingress_head + 1u) % EVENT_LOOP_INGRESS_CAP);
         g_event_loop_ingress_count--;
+        g_event_loop_ingress_drained_count++;
     }
     event_loop_ingress_lock_release();
     return out;
@@ -306,6 +347,12 @@ static CljTransientVector* task_queue_get(void) {
 void event_loop_init(void) {
     KW_FN = intern_symbol_global(":fn");
     KW_RESULT_CHAN = intern_symbol_global(":result-chan");
+    g_event_loop_ingress_closed = false;
+    g_event_loop_ingress_accepted_count = 0u;
+    g_event_loop_ingress_rejected_count = 0u;
+    g_event_loop_ingress_drained_count = 0u;
+    g_event_loop_ingress_high_watermark = 0u;
+    g_runloop_last_warn_ns = 0u;
     task_queue_get();
 }
 
@@ -332,6 +379,12 @@ void event_loop_clear(void) {
         }
         RELEASE(fn);
     }
+    g_event_loop_ingress_closed = false;
+    g_event_loop_ingress_accepted_count = 0u;
+    g_event_loop_ingress_rejected_count = 0u;
+    g_event_loop_ingress_drained_count = 0u;
+    g_event_loop_ingress_high_watermark = 0u;
+    g_runloop_last_warn_ns = 0u;
 }
 
 void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channel) {
@@ -373,6 +426,32 @@ bool event_loop_ingress_has_pending(void) {
     return pending;
 }
 
+void event_loop_ingress_close(void) {
+    event_loop_ingress_lock_acquire();
+    g_event_loop_ingress_closed = true;
+    event_loop_ingress_lock_release();
+}
+
+bool event_loop_ingress_is_closed(void) {
+    event_loop_ingress_lock_acquire();
+    bool closed = g_event_loop_ingress_closed;
+    event_loop_ingress_lock_release();
+    return closed;
+}
+
+bool event_loop_ingress_stats(EventLoopIngressStats *out_stats) {
+    if (!out_stats) return false;
+    event_loop_ingress_lock_acquire();
+    out_stats->accepted_count = g_event_loop_ingress_accepted_count;
+    out_stats->rejected_count = g_event_loop_ingress_rejected_count;
+    out_stats->drained_count = g_event_loop_ingress_drained_count;
+    out_stats->high_watermark = g_event_loop_ingress_high_watermark;
+    out_stats->pending_count = (uint32_t)g_event_loop_ingress_count;
+    out_stats->closed = g_event_loop_ingress_closed;
+    event_loop_ingress_lock_release();
+    return true;
+}
+
 bool event_loop_has_pending_tasks(void) {
     if (event_loop_ingress_has_pending()) return true;
     CljTransientVector *task_vec = task_queue_get();
@@ -406,6 +485,7 @@ int event_loop_time_until_next_timer_ms(void) {
  * 4. Releases all task resources
  */
 bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
+    uint64_t tick_start_ns = event_loop_monotonic_now_ns();
     (void)env;
 
 #if defined(ESP32_BUILD)
@@ -480,6 +560,10 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
 
     if (!IS_IMMEDIATE(result)) RELEASE(result);
     RELEASE(fn);
+    uint64_t tick_end_ns = event_loop_monotonic_now_ns();
+    if (tick_start_ns != 0u && tick_end_ns > tick_start_ns) {
+        event_loop_warn_if_slow_tick(tick_end_ns - tick_start_ns, tick_end_ns);
+    }
     return true;
 }
 

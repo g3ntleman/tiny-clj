@@ -1,16 +1,5 @@
 #include "viewer_collision.h"
 
-enum {
-    PLAYER_MIN_X = 58,
-    PLAYER_MAX_X = 86,
-    PLAYER_MIN_Y_BASE = 124,
-    PLAYER_MAX_Y_BASE = 146,
-    OBSTACLE_MIN_X_BASE = 13,
-    OBSTACLE_MAX_X_BASE = 27,
-    OBSTACLE_MIN_Y = 106,
-    OBSTACLE_MAX_Y = 146
-};
-
 /**
  * @brief Checks whether a wrap-safe uint32 deadline has been reached.
  *
@@ -23,26 +12,25 @@ static inline bool collision_deadline_reached(uint32_t now_ms, uint32_t deadline
 }
 
 /**
- * @brief Performs a fixed AABB overlap test for player-vs-obstacle hitboxes.
+ * @brief Performs a fixed AABB overlap test.
  *
  * Uses integer SAT-style reject checks only. The implementation is O(1),
  * allocation-free, and uses no floating-point operations.
  *
- * @param player_jump_y Vertical player offset in pixels.
- * @param obstacle_x Horizontal obstacle offset in pixels.
+ * @param a First box.
+ * @param b Second box.
  * @return true when hitboxes overlap; otherwise false.
  */
-bool vg_collision_detect_player_vs_obstacle(int player_jump_y, int obstacle_x) {
-    const int player_min_y = PLAYER_MIN_Y_BASE + player_jump_y;
-    const int player_max_y = PLAYER_MAX_Y_BASE + player_jump_y;
-    const int obstacle_min_x = OBSTACLE_MIN_X_BASE + obstacle_x;
-    const int obstacle_max_x = OBSTACLE_MAX_X_BASE + obstacle_x;
-
-    /* Fast SAT-style reject: avoid extra comparisons on non-overlap frames. */
-    if (PLAYER_MAX_X < obstacle_min_x || PLAYER_MIN_X > obstacle_max_x) {
+bool vg_collision_detect_aabb_overlap(const VgAabb *a, const VgAabb *b) {
+    if (!a || !b) {
         return false;
     }
-    if (player_max_y < OBSTACLE_MIN_Y || player_min_y > OBSTACLE_MAX_Y) {
+
+    /* Fast SAT-style reject: avoid extra comparisons on non-overlap frames. */
+    if (a->max_x < b->min_x || a->min_x > b->max_x) {
+        return false;
+    }
+    if (a->max_y < b->min_y || a->min_y > b->max_y) {
         return false;
     }
     return true;
@@ -58,21 +46,17 @@ bool vg_collision_detect_player_vs_obstacle(int player_jump_y, int obstacle_x) {
  * @param state Caller-owned mutable collision state (must not be NULL).
  * @param now_ms Current monotonic time in milliseconds.
  * @param cooldown_ms Minimum delay before the next accepted enter edge.
- * @param player_jump_y Vertical player offset in pixels.
- * @param obstacle_x Horizontal obstacle offset in pixels.
+ * @param colliding Current overlap state from caller-provided geometry test.
  * @return true when a new collision-enter edge is accepted; otherwise false.
  * @note Not internally synchronized. Caller must serialize access to @p state.
  */
-bool vg_collision_step_player_vs_obstacle(VgCollisionState *state,
-                                          uint32_t now_ms,
-                                          uint32_t cooldown_ms,
-                                          int player_jump_y,
-                                          int obstacle_x) {
+bool vg_collision_step_latched_cooldown(VgCollisionState *state,
+                                        uint32_t now_ms,
+                                        uint32_t cooldown_ms,
+                                        bool colliding) {
     if (!state) {
         return false;
     }
-
-    const bool colliding = vg_collision_detect_player_vs_obstacle(player_jump_y, obstacle_x);
     if (!colliding) {
         state->collision_latched = false;
         return false;
