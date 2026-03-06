@@ -21,7 +21,7 @@ R"TINY_GFX_SCENE(
 ;; - FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]
 ;;   root may be flat entity map ({id -> Record}) or legacy nested root node.
 ;;   clip-rect is [x y w h], guard-px expands dirty area for slot rerender diffing.
-;;   collision-rules are schema-level contract data; runtime collision-engine binding is milestone-tracked.
+;;   collision-rules carries host/runtime spatial trigger declarations for the published snapshot.
 ;; - CollisionRule / CollisionEvent are legacy names kept for compatibility.
 ;; - SpatialRule [id slot kind a-id b-id radius channel]
 ;; - Aabb [min-x min-y max-x max-y]
@@ -120,7 +120,9 @@ Returns nil for invalid input."
             (color (+ (* r 65536) (* g 256) b))))
         nil))))
 
-;; Collision contract helpers (Step 1: contract freeze, no runtime wiring yet).
+;; Collision/spatial contract helpers.
+;; CollisionRule remains a legacy schema bridge.
+;; SpatialRule/SpatialEvent define the active host-side trigger contract.
 (def default-collision-slot :game)
 (def default-collision-phase-mask [:enter :exit])
 (def default-spatial-kind :collision)
@@ -153,7 +155,7 @@ Accepts vector/list/keyword/nil and returns a validated vector."
       normalized)))
 
 (defn normalize-collision-rule
-  "Applies collision-rule defaults and normalization (schema-level only)."
+  "Applies legacy collision-rule defaults and normalization."
   [rule]
   {:id (get rule :id)
    :slot (or (get rule :slot) default-collision-slot)
@@ -165,7 +167,8 @@ Accepts vector/list/keyword/nil and returns a validated vector."
                   (if (nil? v) 0 v))})
 
 (defn normalize-spatial-rule
-  "Applies spatial-rule defaults for proximity/collision event wiring."
+  "Applies spatial-rule defaults for `:collision` / `:proximity` trigger wiring.
+The runtime emits only edge transitions (`:enter` / `:exit`)."
   [rule]
   {:id (get rule :id)
    :slot (or (get rule :slot) default-collision-slot)

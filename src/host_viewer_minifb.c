@@ -533,7 +533,11 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
         return false;
     }
     ID rules = tiny_gfx_get_field((ID)game_scene, k_collision_rules, NULL);
-    if (!rules || !is_vector(rules)) {
+    if (!rules) {
+        destroy_spatial_rule_set(io_rule_set);
+        return true;
+    }
+    if (!is_vector(rules)) {
         destroy_spatial_rule_set(io_rule_set);
         return false;
     }

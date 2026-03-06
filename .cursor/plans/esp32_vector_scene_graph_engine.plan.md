@@ -1397,204 +1397,93 @@ Clojure `{id → Record}` in Atom → C resolves Timelines + interpolates → re
 - M9 cleanup pass (9k) is complete and obsolete code paths are removed.
 - One vertical slice runs the same scene model in simulator and on device.
 
-## Milestone 10: Collision Contract + Scheduler Callback Bridge
+## Milestone 10: Spatial Trigger Contract + Scheduler Callback Bridge
 
-Status: NEXT UP (Step 1: generalized Clojure API contract freeze)
+Status: DONE on host-viewer path (2026-03-06)
 
-Note:
+Goal:
 
-- This milestone is engine-level collision infrastructure.
-- Host demo gameplay remains Clojure-owned (including callback selection and scene mutation).
-- Milestone objective: generalized Clojure-facing collision API (rule declaration + callback configuration + deterministic event contract), with per-frame collision detection executed in C.
-- Callback execution model for this milestone: C dispatches configured closure callbacks through scheduler/runloop ingress; callback return values are ignored by C.
+- Generalize the old collision-only plan into a spatial trigger contract that supports both
+  `:collision` and `:proximity`, while keeping gameplay reactions in Clojure and per-frame
+  trigger evaluation in C.
 
-Collision spec (first-class contract):
+Final rule contract:
 
-- Collision rules are declared in Clojure and published with the scene snapshot.
-- Proposed rule shape (record or map-like equivalent):
-  - `:id` stable rule id (for debug/traceability)
-  - `:slot` optional slot selector (`:game`, `:score`, `:deco`), default `:game`
-  - `:a-id` stable object id
-  - `:b-id` stable object id
-  - `:phase-mask` set of phases to emit (`#{:enter :stay :exit}`), default `#{:enter :exit}`
-  - `:enabled` bool, default true
-  - optional `:cooldown-ms` (minimum delay between repeated `:stay` callbacks)
-- Determinism rules:
-  - pair identity is canonicalized in C (`min(id), max(id)`) for stable latch keys
-  - unchanged overlap state must not re-emit `:enter`
-  - disabling/removing a rule clears its latch state without synthetic events
+- Spatial rules are declared inside the published scene snapshot at
+  `FrameScene.collision-rules`.
+- Runtime rule shape:
+  - `SpatialRule [id slot kind a-id b-id radius channel]`
+  - `:kind` is `:collision` or `:proximity`
+  - `:slot` currently rolls out on `:game`
+  - `:a-id` / `:b-id` are stable entity ids from the flat scene map
+  - `:radius` is 0 for direct collision and inflates `a`'s AABB for proximity checks
+  - `:channel` is optional semantic context such as `:hearing`
+- Trigger phases are edge-only:
+  - emitted phases are `:enter` and `:exit`
+  - no `:stay` events
+- Rule removal/update semantics:
+  - unchanged rule identity keeps latch state
+  - removed rules drop their latch state without synthetic events
+  - missing entity ids are ignored safely during evaluation
 
-Collision callback event contract (C -> scheduler):
+Final event contract (C -> scheduler -> Clojure):
 
-- Event payload includes at least:
-  - `:rule-id`
-  - `:slot`
-  - `:a-id`
-  - `:b-id`
-  - `:phase` (`:enter`/`:stay`/`:exit`)
-  - `:snapshot-gen` (or equivalent monotonically increasing generation)
-  - `:ts-ms` host/device monotonic timestamp used by C
-- Callback invocation semantics:
-  - callback target is a configured Clojure closure
-  - callback is dispatched via scheduler/runloop ingress (never executed inline on render thread)
-  - C does not consume callback return values
-  - any scene mutation must be performed explicitly by Clojure callback code (`swap!`/`reset!`)
-- Ordering rules:
-  - events are emitted in deterministic rule iteration order per processed snapshot
-  - scheduler consumption order must match enqueue order (FIFO)
+- Runtime event shape:
+  - `SpatialEvent [source rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel]`
+- `:source` is always `:spatial`
+- Event payload carries the resolved entity records (`a`, `b`) plus evaluated runtime AABBs
+  (`a-aabb`, `b-aabb`) so Clojure callbacks do not need extra engine lookups just to inspect
+  the trigger context.
+- Callback dispatch contract:
+  - callback target is configured from Clojure via `tiny-gfx.collision/set-collision-callback!`
+  - C dispatches through the generic scheduler ingress (`event_loop_enqueue_ingress_call`)
+  - callback return values are ignored by C
+  - scene changes remain explicit Clojure mutations (`swap!` / `reset!`)
 
-Thread-safety integration boundary (required for scheduler callbacks):
+Implementation notes:
 
-- Keep scheduler logic single-threaded; only ingress is thread-safe.
-- C render/collision thread must never mutate scheduler internals directly.
-- Introduce thread-safe callback ingress queue (MPSC -> scheduler consumer):
-  - producer: C render/collision thread enqueues callback events
-  - consumer: scheduler thread drains queue at safe points
-  - wakeup: condition/event signal (no busy polling)
-  - shutdown: explicit close/drain semantics to avoid lost events
-- Memory/ownership rule for ingress payloads:
-  - producer writes immutable payload copies
-  - consumer owns processing + cleanup on scheduler thread
+- `tiny-gfx.scene` now defines the active spatial schema (`SpatialRule`, `SpatialEvent`, `Aabb`)
+  while keeping legacy `CollisionRule` / `CollisionEvent` records for compatibility.
+- `tiny-gfx.collision` owns the configurable callback surface
+  (`set-collision-callback!`, `invoke-collision-callback!`).
+- `event_loop` provides the thread-safe one-arg ingress that is also reused by GPIO and audio.
+- `host_viewer_minifb.c` now:
+  - loads spatial rules directly from the published `FrameScene`
+  - evaluates overlap/proximity from rendered entity state each frame
+  - emits deterministic `:enter` / `:exit` events in rule order
+  - refreshes the live game scene + rule set after Clojure-side callback mutations
+  - accepts scenes with no `collision-rules` as "no triggers" instead of treating them as a load failure
+- `tiny-gfx.runtime/host-viewer-config` supplies the bundle plus `:spatial-callback` and
+  `:game-scene-atom`, so the native host loop consumes runtime config only and does not resolve
+  demo namespaces directly.
 
-Stepwise delivery plan (implementation order):
+Verification:
 
-1. Generalized Clojure API contract freeze (no runtime behavior change yet)
-  - finalize collision-rule schema fields and defaults
-  - finalize callback-configuration API shape (closure registration/selection from Clojure)
-  - finalize callback-event payload fields and phase vocabulary
-  - freeze no-return callback contract (C ignores callback return values)
-  - document canonical pair-id behavior and latch semantics
-  - add schema-level tests for rule decoding/default handling
-2. Scheduler callback ingress (thread-safe boundary only)
-  - implement thread-safe ingress queue (MPSC + FIFO)
-  - add wakeup signaling and scheduler-thread drain API
-  - add close/drain shutdown semantics
-  - tests: FIFO ordering, concurrent producer safety, scheduler-thread-only closure execution
-3. C collision engine baseline (without callback wiring enabled by default)
-  - decode collision rules from snapshot
-  - resolve object ids to render objects and compute overlap
-  - maintain enter/stay/exit latch state per canonical pair key
-  - tests: deterministic overlap transitions from synthetic snapshots
-4. Bridge C collision events into scheduler ingress
-  - enqueue callback payloads from C collision pass
-  - drain and dispatch callback closures on scheduler thread (one-way dispatch, no return-value use)
-  - tests: deterministic event order, no duplicate `:enter` on unchanged overlap
-5. Slot/scenario integration and rollout in host viewer
-  - enable collision rules first for `:game` slot
-  - keep manual hitbox override path until auto-bounds contract is fully validated
-  - add feature flag for safe rollback during integration
-  - tests: host demo scenario coverage (`enter`/`exit`, moving obstacle, stable-id updates)
-6. Hardening and performance pass
-  - bounded queue/backpressure policy for event bursts
-  - watchdog/metrics hooks for dropped/queued callback counts
-  - soak tests with long-running host scene updates
-  - prepare ESP32 follow-up checklist (same contract, backend-specific limits)
-
-Execution gates per step (must pass before next step):
-
-- Gate 1 (after step 1):
-  - collision rule schema + defaults are fixed and documented
-  - callback payload schema is fixed and versioned in docs/tests
-  - no-return callback contract is fixed and documented (C ignores callback return values)
-  - no runtime behavior change in renderer/scheduler yet
-- Gate 2 (after step 2):
-  - scheduler ingress queue API is available and thread-safe
-  - callback closures still run exclusively on scheduler thread
-  - queue close/drain is covered by unit tests
-- Gate 3 (after step 3):
-  - C collision evaluation produces deterministic phase transitions from synthetic snapshots
-  - latch state behavior is stable across unchanged frames and rule removal
-  - callback bridge still disabled by default (feature-gated)
-- Gate 4 (after step 4):
-  - C collision events are enqueued and dispatched via scheduler ingress
-  - event ordering remains deterministic (rule order -> FIFO drain order)
-  - no duplicate `:enter` events on unchanged overlap
-- Gate 5 (after step 5):
-  - host viewer integrates `:game` collision rules end-to-end under feature flag
-  - fallback path (manual hitbox behavior) remains available
-  - demo scenarios validate `:enter`/`:exit` semantics with stable ids
-- Gate 6 (after step 6):
-  - burst behavior/backpressure policy is validated
-  - queue/dispatch metrics are available for diagnostics
-  - soak runs complete without callback loss, deadlock, or scheduler thread violations
-
-Immediate next implementation slice:
-
-- Start with Step 1 only (generalized Clojure API contract freeze):
-  - add explicit rule/event schema docs in code comments and plan references
-  - add explicit callback-configuration contract docs and tests
-  - add schema-focused tests (defaults, disabled rules, phase-mask normalization)
-  - postpone all scheduler/C runtime changes until Gate 1 passes
-
-Step 1 checklist (next concrete tasks):
-
-- Add explicit API docs for `tiny-gfx.collision` callback configuration semantics (set/clear/invoke, nil behavior, closure dispatch path, no-return contract).
-- Add Clojure schema-level tests for collision-rule defaults and phase-mask normalization via `tiny-gfx.scene/normalize-collision-rule`.
-- Add Clojure schema-level tests for disabled-rule handling contract (`:enabled false`) without runtime engine coupling.
-- Add contract tests that callback return values are ignored by C (one-way dispatch contract).
-- Keep renderer/scheduler runtime behavior unchanged while Gate 1 tests are established.
-
-Implementation notes (2026-03-06):
-
-- Added callback configuration contract docs in `tiny-gfx.collision` (set/clear/invoke semantics, closure dispatch path, no-return C contract).
-- Added schema-focused collision contract tests in `test_gfx_collision_contract`:
-  - defaults + phase-mask normalization
-  - disabled-rule (`:enabled false`) behavior
-  - callback set/clear/invoke shape + invalid non-fn rejection
-  - demo callback mutates Clojure scene state explicitly
-- Host-viewer callback bridge now dispatches via event-loop API (`event_loop_enqueue`/`event_loop_run_next`) and ignores callback return values in C.
-- Added dedicated bridge-level regression (`test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value`) proving runloop dispatch executes callback side effects while callback return values remain non-contractual to C.
-- Step-2 ingress foundation added in `event_loop`:
-  - thread-safe callback ingress API (`event_loop_enqueue_ingress`, `event_loop_ingress_has_pending`)
-  - runloop drains ingress queue before normal timer/task processing
-  - host-viewer collision bridge now uses ingress API for callback dispatch handoff
-  - regression coverage: `test_event_loop_latency/event_loop_ingress_enqueue_executes_on_run_next`
-  - ingress close/reject semantics (`event_loop_ingress_close`, `event_loop_ingress_is_closed`) with drain-after-close behavior
-  - concurrent producer safety regression (`test_event_loop_latency/event_loop_ingress_concurrent_producers_fifo_drain`)
-  - bounded backpressure regression (`test_event_loop_latency/event_loop_ingress_backpressure_rejects_when_full_and_recovers_after_drain`)
-  - runtime stats now expose ingress backpressure counters:
-  `:event-loop-ingress-accepted-count`, `:event-loop-ingress-rejected-count`,
-  `:event-loop-ingress-drained-count`, `:event-loop-ingress-high-watermark`,
-  `:event-loop-ingress-pending-count`, `:event-loop-ingress-closed`
-
-Tasks:
-
-- Define collision-spec records in tiny-clj with stable `:id` references:
-  - each collision rule explicitly lists `:a-id` and `:b-id` (stable object ids, no transient pointers)
-  - ids must be stable across snapshot updates to keep collision routing deterministic
-- Define how collision checks are attached to a scene/slot snapshot:
-  - collision rule vector is part of the published scene snapshot contract
-  - tiny-clj is the source of truth for which collision pairs are checked
-  - missing/unknown ids are ignored safely (no hard crash in render/update loop)
-- Implement collision evaluation in C as an automatic step for each relevant snapshot update:
-  - C resolves configured ids to objects, executes overlap tests, and detects state changes (enter/stay/exit)
-  - no per-pixel logic in tiny-clj; checks use decoded primitive bounds/shape semantics
-- Emit collision events back into the tiny-clj scheduler via callback bridge:
-  - callback payload includes at least `:a-id`, `:b-id`, `:phase` (`:enter`/`:stay`/`:exit`) and optional frame/slot metadata
-  - callback delivery is deterministic and ordered per scheduler callback dispatch
-  - callback dispatch is one-way (C does not consume callback return values)
-- Implement scheduler ingress thread-safety for collision callbacks:
-  - add thread-safe callback queue + wakeup signaling
-  - ensure scheduler-thread-only processing of queued callbacks
-  - add queue close/drain behavior for clean shutdown
-- Add host-side tests for collision determinism and callback behavior:
-  - stable ids across snapshots
-  - moved object triggers enter/exit transitions correctly
-  - unchanged frame does not duplicate `:enter` events
-  - enqueue/drain order remains FIFO under concurrent producer activity
-  - scheduler thread alone executes callback closures (no cross-thread callback execution)
-  - callback return values are ignored (no scene writeback contract to C)
-- Current host-demo state (intermediate step):
-  - obstacle world bounding box is already derived automatically from geometry + explicit transform application and cached across frames
-  - collision hitbox is intentionally still set manually for gameplay tuning/stability
-  - callback contract/events to tiny-clj scheduler remain part of this milestone TODO
+- Schema and callback contract:
+  - `test_gfx_collision_contract_registers_record_descriptors`
+  - `test_gfx_collision_contract_normalize_rule_defaults`
+  - `test_gfx_collision_contract_phase_mask_normalization_enter_exit_only`
+  - `test_gfx_collision_contract_disabled_rule_defaults_to_no_runtime_side_effects`
+  - `test_gfx_collision_contract_normalize_spatial_rule_preserves_proximity_fields`
+  - `test_gfx_collision_contract_callback_set_clear_and_invoke_shape`
+  - `test_gfx_collision_contract_callback_rejects_non_function_values`
+  - `test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value`
+  - `test_gfx_collision_contract_runloop_dispatch_preserves_spatial_envelope_fields`
+- Host-viewer integration:
+  - `test_vector_scene_graph_tiny_gfx_runtime_host_viewer_config_shape`
+  - `test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_geometry_in_clojure`
+  - `test_vector_scene_graph/*renderer_lifecycle*`
+- Generic ingress / event bridge foundation:
+  - `test_event_loop_latency/event_loop_ingress_enqueue_executes_on_run_next`
+  - `test_event_loop_latency/event_loop_ingress_concurrent_producers_fifo_drain`
+  - `test_event_loop_latency/event_loop_ingress_backpressure_rejects_when_full_and_recovers_after_drain`
 
 Done when:
 
-- Collision pairs are specified declaratively via stable ids in scene records.
-- Collision callbacks are configurable from Clojure through one generalized API surface (not demo-specific hardcoded symbols).
-- C collision checks run automatically from snapshot input using Clojure-declared pair specs and dispatch deterministic closure callbacks into the existing Clojure scheduler.
-- Callback return values are ignored by C; scene updates are explicit Clojure-side mutations.
+- Spatial triggers are declared declaratively in scene data and evaluated in C.
+- Clojure receives stable `SpatialEvent` payloads through the generic ingress path.
+- Callback return values are non-contractual to C.
+- Demo/gameplay reactions remain fully Clojure-owned.
 
 ## Optional Extension A: Render-Thread Interpolation Animations (Off-Main-Thread)
 
