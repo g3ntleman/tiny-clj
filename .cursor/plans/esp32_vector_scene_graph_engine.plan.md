@@ -1299,7 +1299,7 @@ Implementation notes (2026-03-06):
   - callback set/clear/invoke shape + invalid non-fn rejection
   - demo callback mutates Clojure scene state explicitly
 - Host-viewer callback bridge now dispatches via event-loop API (`event_loop_enqueue`/`event_loop_run_next`) and ignores callback return values in C.
-- Remaining Gate-1 gap: add dedicated bridge-level regression that asserts one-way no-return behavior without relying on demo callback shape.
+- Added dedicated bridge-level regression (`test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value`) proving runloop dispatch executes callback side effects while callback return values remain non-contractual to C.
 
 Tasks:
 

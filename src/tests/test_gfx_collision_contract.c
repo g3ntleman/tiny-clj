@@ -1,4 +1,5 @@
 #include "tests_common.h"
+#include "../event_loop.h"
 #include "../record.h"
 #include "../symbol.h"
 #include "../vector.h"
@@ -149,6 +150,44 @@ TEST(test_gfx_collision_contract_demo_callback_mutates_scene_state_explicitly) {
     TEST_ASSERT_EQUAL_INT(56, as_fixnum(vector_nth(v, 0)));
     TEST_ASSERT_EQUAL_INT(60, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 2));
+}
+
+TEST(test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    event_loop_clear();
+
+    ID dispatch_fn = eval_string(
+        "(do "
+        "  (require 'tiny-gfx.collision) "
+        "  (def collision-contract-runloop-marker (atom 0)) "
+        "  (tiny-gfx.collision/set-collision-callback! "
+        "    (fn collision-contract-runloop-cb [] "
+        "      (reset! collision-contract-runloop-marker 1) "
+        "      777)) "
+        "  tiny-gfx.collision/invoke-collision-callback!)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(dispatch_fn);
+    TEST_ASSERT_TRUE(TAG(dispatch_fn) == CLJ_FUNC || TAG(dispatch_fn) == CLJ_CLOSURE);
+
+    event_loop_enqueue(RETAIN(dispatch_fn), NULL);
+    TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
+    bool ran = event_loop_run_next(NULL, g_test_eval_state);
+    TEST_ASSERT_TRUE(ran);
+    TEST_ASSERT_FALSE(event_loop_has_pending_tasks());
+
+    ID marker = eval_string("@collision-contract-runloop-marker", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(marker);
+    TEST_ASSERT_TRUE(is_fixnum(marker));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(marker));
+
+    ID direct = eval_string("(tiny-gfx.collision/invoke-collision-callback!)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(direct);
+    TEST_ASSERT_TRUE(is_fixnum(direct));
+    TEST_ASSERT_EQUAL_INT(777, as_fixnum(direct));
+
+    ID clear_ok = eval_string("(tiny-gfx.collision/set-collision-callback! nil)", g_test_eval_state);
+    TEST_ASSERT_NULL(clear_ok);
+    event_loop_clear();
 }
 
 TEST(test_gfx_scene_update_nodes_applies_batched_changes) {
