@@ -9,6 +9,13 @@
 
 #include "audio_tick_scheduler.h"
 
+/**
+ * @brief Initialize the shared tick scheduler state.
+ *
+ * @param scheduler Destination scheduler state
+ * @param tick_period_ns Tick period in nanoseconds, defaults to 1 ms when zero
+ * @param max_catchup_ticks Maximum ticks to emit in one wakeup, defaults to 1
+ */
 void audio_tick_scheduler_init(AudioTickScheduler *scheduler, uint64_t tick_period_ns, uint32_t max_catchup_ticks) {
     if (!scheduler) {
         return;
@@ -19,6 +26,12 @@ void audio_tick_scheduler_init(AudioTickScheduler *scheduler, uint64_t tick_peri
     scheduler->running = false;
 }
 
+/**
+ * @brief Start scheduling from the next period after @p now_ns.
+ *
+ * @param scheduler Scheduler state
+ * @param now_ns Current monotonic time in nanoseconds
+ */
 void audio_tick_scheduler_start(AudioTickScheduler *scheduler, uint64_t now_ns) {
     if (!scheduler) {
         return;
@@ -27,6 +40,11 @@ void audio_tick_scheduler_start(AudioTickScheduler *scheduler, uint64_t now_ns) 
     scheduler->next_deadline_ns = now_ns + scheduler->tick_period_ns;
 }
 
+/**
+ * @brief Stop scheduling and clear the pending deadline.
+ *
+ * @param scheduler Scheduler state
+ */
 void audio_tick_scheduler_stop(AudioTickScheduler *scheduler) {
     if (!scheduler) {
         return;
@@ -35,6 +53,17 @@ void audio_tick_scheduler_stop(AudioTickScheduler *scheduler) {
     scheduler->next_deadline_ns = 0u;
 }
 
+/**
+ * @brief Return how many ticks are due at the current time.
+ *
+ * Late wakeups are clamped to `max_catchup_ticks`; additional missed ticks are
+ * reported through `out_skipped_ticks` so backends can update telemetry.
+ *
+ * @param scheduler Scheduler state
+ * @param now_ns Current monotonic time in nanoseconds
+ * @param out_skipped_ticks Optional overflow counter for missed ticks
+ * @return Number of ticks the caller should process now
+ */
 uint32_t audio_tick_scheduler_ticks_due(AudioTickScheduler *scheduler, uint64_t now_ns, uint32_t *out_skipped_ticks) {
     if (out_skipped_ticks) {
         *out_skipped_ticks = 0u;

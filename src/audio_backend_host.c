@@ -47,6 +47,16 @@ static float g_voice_phase[HOST_AUDIO_MAX_VOICES];
 static _Atomic uint32_t g_voice_freq[HOST_AUDIO_MAX_VOICES];
 static _Atomic uint32_t g_voice_volume[HOST_AUDIO_MAX_VOICES];
 
+static void host_audio_dispose_unit(void) {
+    if (!g_output_unit) {
+        return;
+    }
+    AudioOutputUnitStop(g_output_unit);
+    AudioUnitUninitialize(g_output_unit);
+    AudioComponentInstanceDispose(g_output_unit);
+    g_output_unit = NULL;
+}
+
 static uint64_t host_audio_monotonic_now_ns(void) {
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
@@ -231,10 +241,7 @@ void audio_backend_init(int voice_count) {
     audio_tick_scheduler_init(&g_tick_scheduler, HOST_AUDIO_TICK_NS, HOST_AUDIO_MAX_CATCHUP_TICKS);
 
     if (!host_audio_init_unit()) {
-        if (g_output_unit) {
-            AudioComponentInstanceDispose(g_output_unit);
-            g_output_unit = NULL;
-        }
+        host_audio_dispose_unit();
         return;
     }
 
@@ -244,6 +251,8 @@ void audio_backend_init(int voice_count) {
     atomic_store_explicit(&g_tick_thread_running, true, memory_order_release);
     if (pthread_create(&g_tick_thread, NULL, host_tick_thread_main, NULL) != 0) {
         atomic_store_explicit(&g_tick_thread_running, false, memory_order_release);
+        atomic_store_explicit(&g_audio_available, false, memory_order_release);
+        host_audio_dispose_unit();
     }
 #endif
 }
@@ -258,12 +267,7 @@ void audio_backend_shutdown(void) {
     }
 #endif
 
-    if (g_output_unit) {
-        AudioOutputUnitStop(g_output_unit);
-        AudioUnitUninitialize(g_output_unit);
-        AudioComponentInstanceDispose(g_output_unit);
-        g_output_unit = NULL;
-    }
+    host_audio_dispose_unit();
     atomic_store_explicit(&g_audio_available, false, memory_order_release);
 }
 

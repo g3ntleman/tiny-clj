@@ -137,6 +137,7 @@ static void event_loop_ingress_drain(void) {
             return;
         }
         event_loop_enqueue(fn, NULL);
+        RELEASE(fn);
     }
 }
 
@@ -304,7 +305,7 @@ static bool timer_schedule_with_id(CljObject *fn_zero_arity,
     if (periodic && period_ms <= 0) return false;
 
     if (delay_ms == 0 && !periodic) {
-        event_loop_enqueue(RETAIN(fn_zero_arity), NULL);
+        event_loop_enqueue(fn_zero_arity, NULL);
         return true;
     }
 
@@ -405,10 +406,8 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
         return;
     }
     
-    CljPersistentMap *task_map = task_to_map(RETAIN(fn_zero_arity), RETAIN(result_channel), NULL);
+    CljPersistentMap *task_map = task_to_map(fn_zero_arity, result_channel, NULL);
     if (!task_map) {
-        RELEASE(fn_zero_arity);
-        RELEASE(result_channel);
         return;
     }
     
@@ -428,10 +427,8 @@ bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
 
 bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
     if (!fn_one_arity) return false;
-    CljPersistentMap *task_map = task_to_map(RETAIN(fn_one_arity), NULL, RETAIN(arg));
+    CljPersistentMap *task_map = task_to_map(fn_one_arity, NULL, arg);
     if (!task_map) {
-        RELEASE(fn_one_arity);
-        RELEASE(arg);
         return false;
     }
     if (event_loop_ingress_push(task_map)) {
@@ -603,7 +600,6 @@ int timer_enqueue(CljObject *fn_zero_arity, int64_t delay_ms, bool periodic, int
 
     int timer_id = ++g_runtime.timer_id_counter;
     bool ok = timer_schedule_with_id(fn_zero_arity, delay_ms, periodic, period_ms, timer_id);
-    RELEASE(fn_zero_arity);
     return ok ? timer_id : 0;
 }
 
@@ -621,7 +617,6 @@ int timer_upsert_named(ID key,
     }
 
     bool ok = timer_schedule_with_id(fn_zero_arity, delay_ms, periodic, period_ms, timer_id);
-    RELEASE(fn_zero_arity);
     if (!ok) {
         (void)timer_named_take_by_key(key, NULL);
         return 0;

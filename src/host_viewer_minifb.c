@@ -15,7 +15,7 @@
 #if defined(TINYCLJ_WITH_MINIFB)
 #include "vector_scene_graph.h"
 #include "scene.h"
-#include "tiny_gfx.h"
+#include "tiny_fx_gfx.h"
 #include "tiny_clj.h"
 #include "builtins.h"
 #include "eval.h"
@@ -39,10 +39,7 @@
 #define VIEW_W 320
 #define VIEW_H 240
 #define VIEW_DEFAULT_WINDOW_SCALE 2u
-#define VIEWER_SLOT_COUNT 3
-#define VIEWER_SLOT_DECO  0u
-#define VIEWER_SLOT_SCORE 1u
-#define VIEWER_SLOT_GAME  2u
+#define VIEWER_MAX_SLOTS VG_RENDERED_STATE_MAX_SLOTS
 #define TARGET_FPS              60u
 #define SCENE_ERASE_COLOR       0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
@@ -51,6 +48,7 @@
 
 static uint64_t monotonic_now_ns(void);
 typedef struct ViewerSceneBundle ViewerSceneBundle;
+typedef struct ViewerConfiguredSlot ViewerConfiguredSlot;
 typedef struct ViewerCollisionPolicy ViewerCollisionPolicy;
 
 static inline uint32_t viewer_record_type_hash(ID obj) {
@@ -182,19 +180,20 @@ typedef struct {
     uint32_t count;
 } TimingAccumulator;
 
-enum {
-    DEMO_BUNDLE_DECO_SCENE = 0,
-    DEMO_BUNDLE_SCORE_SCENE = 1,
-    DEMO_BUNDLE_GAME_SCENE = 2,
-    DEMO_BUNDLE_COUNT = 3
+struct ViewerConfiguredSlot {
+    ID id;
+    CljAtom *scene_atom;
+    FrameScene *scene;
 };
 
 struct ViewerSceneBundle {
-    ID bundle_root;
+    ID slots_root;
+    ViewerConfiguredSlot *slots;
+    uint8_t slot_count;
+    uint8_t game_slot_index;
+    bool has_game_slot;
     ID spatial_callback;
     CljAtom *game_scene_atom;
-    FrameScene *deco_scene;
-    FrameScene *score_scene;
     FrameScene *game_scene;
 };
 
@@ -217,7 +216,8 @@ static void destroy_scene_bundle(ViewerSceneBundle *bundle) {
     if (!bundle) {
         return;
     }
-    RELEASE(bundle->bundle_root);
+    CLJ_FREE(bundle->slots);
+    RELEASE(bundle->slots_root);
     RELEASE(bundle->spatial_callback);
     RELEASE(bundle->game_scene_atom);
     memset(bundle, 0, sizeof(*bundle));
@@ -296,7 +296,7 @@ static bool viewer_record_world_aabb(ID record_obj, VgTransformFixed world_t, Vg
     if (!record_obj || !out_box || TAG(record_obj) != CLJ_RECORD) {
         return false;
     }
-    const VgRecordSchema *schema = tiny_gfx_schema();
+    const VgRecordSchema *schema = tiny_fx_gfx_schema();
     if (!schema) {
         return false;
     }
@@ -369,20 +369,88 @@ static bool viewer_record_world_aabb(ID record_obj, VgTransformFixed world_t, Vg
     return true;
 }
 
-static bool viewer_extract_scene_bundle(ID bundle, ViewerSceneBundle *out_bundle) {
-    if (!bundle || !out_bundle || !is_vector(bundle)) {
+static ID viewer_slot_desc_field(ID slot_desc, ID key) {
+    if (!slot_desc || !key) {
+        return NULL;
+    }
+    if (is_map(slot_desc)) {
+        return map_get_sentinel(slot_desc, key, NULL);
+    }
+    if (TAG(slot_desc) == CLJ_RECORD) {
+        return tiny_fx_gfx_get_field(slot_desc, key, NULL);
+    }
+    return NULL;
+}
+
+static FrameScene *viewer_frame_scene_from_atom(CljAtom *scene_atom) {
+    if (!scene_atom) {
+        return NULL;
+    }
+    ID scene = scene_atom->value;
+    if (!scene || TAG(scene) != CLJ_RECORD) {
+        return NULL;
+    }
+    const VgRecordSchema *schema = tiny_fx_gfx_schema();
+    if (!schema || viewer_record_type_hash(scene) != schema->h_frame_scene) {
+        return NULL;
+    }
+    return (FrameScene *)scene;
+}
+
+static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) {
+    if (!slots || !out_bundle || !is_vector(slots)) {
         return false;
     }
-    CljPersistentVector *vec = as_vector(bundle);
-    if (!vec || vector_count(vec) < DEMO_BUNDLE_COUNT) {
+    static ID k_id = NULL;
+    static ID k_atom = NULL;
+    if (!k_id) {
+        k_id = intern_symbol_global(":id");
+        k_atom = intern_symbol_global(":atom");
+    }
+    if (!k_id || !k_atom) {
         return false;
     }
-    RETAIN(bundle);
-    out_bundle->bundle_root = bundle;
-    out_bundle->deco_scene = (FrameScene *)vector_nth(vec, DEMO_BUNDLE_DECO_SCENE);
-    out_bundle->score_scene = (FrameScene *)vector_nth(vec, DEMO_BUNDLE_SCORE_SCENE);
-    out_bundle->game_scene = (FrameScene *)vector_nth(vec, DEMO_BUNDLE_GAME_SCENE);
-    return out_bundle->deco_scene && out_bundle->score_scene && out_bundle->game_scene;
+    CljPersistentVector *vec = as_vector(slots);
+    if (!vec) {
+        return false;
+    }
+    uint32_t raw_count = vector_count(vec);
+    if (raw_count == 0u || raw_count > VIEWER_MAX_SLOTS) {
+        return false;
+    }
+    ViewerConfiguredSlot *slot_items =
+        (ViewerConfiguredSlot *)CLJ_CALLOC((size_t)raw_count, sizeof(ViewerConfiguredSlot));
+    if (!slot_items) {
+        return false;
+    }
+    for (uint32_t i = 0; i < raw_count; i++) {
+        ID slot_desc = vector_nth(vec, i);
+        ID slot_id = viewer_slot_desc_field(slot_desc, k_id);
+        ID slot_atom = viewer_slot_desc_field(slot_desc, k_atom);
+        if (!slot_id || !is_symbol(slot_id) || !slot_atom || TAG(slot_atom) != CLJ_ATOM) {
+            CLJ_FREE(slot_items);
+            return false;
+        }
+        for (uint32_t j = 0; j < i; j++) {
+            if (slot_items[j].id == slot_id) {
+                CLJ_FREE(slot_items);
+                return false;
+            }
+        }
+        FrameScene *scene = viewer_frame_scene_from_atom((CljAtom *)slot_atom);
+        if (!scene) {
+            CLJ_FREE(slot_items);
+            return false;
+        }
+        slot_items[i].id = slot_id;
+        slot_items[i].scene_atom = (CljAtom *)slot_atom;
+        slot_items[i].scene = scene;
+    }
+    RETAIN(slots);
+    out_bundle->slots_root = slots;
+    out_bundle->slots = slot_items;
+    out_bundle->slot_count = (uint8_t)raw_count;
+    return true;
 }
 
 static ID viewer_make_aabb_record(const VgAabb *box) {
@@ -423,7 +491,8 @@ static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
                                     uint32_t snapshot_gen,
                                     const VgAabb *a_box,
                                     const VgAabb *b_box) {
-    if (!bundle || !policy || !bundle->game_scene || !phase || !a_box || !b_box) {
+    if (!bundle || !policy || !bundle->game_scene || !bundle->has_game_slot ||
+        bundle->game_slot_index >= bundle->slot_count || !phase || !a_box || !b_box) {
         return NULL;
     }
     static ID t_spatial_event = NULL;
@@ -440,7 +509,6 @@ static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
     static ID k_radius = NULL;
     static ID k_channel = NULL;
     static ID source_spatial = NULL;
-    static ID slot_game = NULL;
     if (!t_spatial_event) {
         t_spatial_event = intern_symbol_global("SpatialEvent");
         k_source = intern_symbol_global(":source");
@@ -456,11 +524,10 @@ static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
         k_radius = intern_symbol_global(":radius");
         k_channel = intern_symbol_global(":channel");
         source_spatial = intern_symbol_global(":spatial");
-        slot_game = intern_symbol_global(":game");
     }
     if (!t_spatial_event || !k_source || !k_rule_id || !k_slot || !k_kind || !k_phase ||
         !k_snapshot_gen || !k_a || !k_b || !k_a_aabb || !k_b_aabb ||
-        !k_radius || !k_channel || !source_spatial || !slot_game) {
+        !k_radius || !k_channel || !source_spatial) {
         return NULL;
     }
     ID root = bundle->game_scene->root;
@@ -489,7 +556,7 @@ static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
     if (policy->rule_id) {
         map_assoc_inplace(&m, k_rule_id, policy->rule_id);
     }
-    map_assoc_inplace(&m, k_slot, slot_game);
+    map_assoc_inplace(&m, k_slot, bundle->slots[bundle->game_slot_index].id);
     map_assoc_inplace(&m, k_kind, policy->kind);
     map_assoc_inplace(&m, k_phase, phase);
     map_assoc_inplace(&m, k_snapshot_gen, fixnum((int32_t)snapshot_gen));
@@ -532,7 +599,7 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
     if (!k_collision_rules || !k_id || !k_kind || !k_channel || !k_radius || !k_a_id || !k_b_id) {
         return false;
     }
-    ID rules = tiny_gfx_get_field((ID)game_scene, k_collision_rules, NULL);
+    ID rules = tiny_fx_gfx_get_field((ID)game_scene, k_collision_rules, NULL);
     if (!rules) {
         destroy_spatial_rule_set(io_rule_set);
         return true;
@@ -557,12 +624,12 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
             destroy_spatial_rule_set(&next_rule_set);
             return false;
         }
-        ID id_obj = tiny_gfx_get_field(rule, k_id, NULL);
-        ID kind_obj = tiny_gfx_get_field(rule, k_kind, intern_symbol_global(":collision"));
-        ID channel_obj = tiny_gfx_get_field(rule, k_channel, NULL);
-        ID radius_obj = tiny_gfx_get_field(rule, k_radius, fixnum(0));
-        ID a_id_obj = tiny_gfx_get_field(rule, k_a_id, NULL);
-        ID b_id_obj = tiny_gfx_get_field(rule, k_b_id, NULL);
+        ID id_obj = tiny_fx_gfx_get_field(rule, k_id, NULL);
+        ID kind_obj = tiny_fx_gfx_get_field(rule, k_kind, intern_symbol_global(":collision"));
+        ID channel_obj = tiny_fx_gfx_get_field(rule, k_channel, NULL);
+        ID radius_obj = tiny_fx_gfx_get_field(rule, k_radius, fixnum(0));
+        ID a_id_obj = tiny_fx_gfx_get_field(rule, k_a_id, NULL);
+        ID b_id_obj = tiny_fx_gfx_get_field(rule, k_b_id, NULL);
         if (!is_fixnum(radius_obj) || !is_fixnum(a_id_obj) || !is_fixnum(b_id_obj)) {
             destroy_spatial_rule_set(&next_rule_set);
             return false;
@@ -595,28 +662,28 @@ static bool viewer_load_host_viewer_config(EvalState *st,
     }
     memset(out_bundle, 0, sizeof(*out_bundle));
     memset(out_rule_set, 0, sizeof(*out_rule_set));
-    if (!require_namespace_by_name(st, "tiny-gfx.runtime")) {
+    if (!require_namespace_by_name(st, "tiny-fx.gfx")) {
         return false;
     }
-    ID cfg = eval_string("(tiny-gfx.runtime/host-viewer-config)", st);
+    ID cfg = eval_string("(tiny-fx.gfx/host-viewer-config)", st);
     if (!cfg || !is_map(cfg)) {
         return false;
     }
-    static CljSymbol *k_bundle = NULL;
+    static CljSymbol *k_slots = NULL;
     static CljSymbol *k_spatial_callback = NULL;
     static CljSymbol *k_game_scene_atom = NULL;
-    if (!k_bundle) {
-        k_bundle = intern_symbol_global(":bundle");
+    if (!k_slots) {
+        k_slots = intern_symbol_global(":slots");
         k_spatial_callback = intern_symbol_global(":spatial-callback");
         k_game_scene_atom = intern_symbol_global(":game-scene-atom");
     }
-    if (!k_bundle || !k_spatial_callback || !k_game_scene_atom) {
+    if (!k_slots || !k_spatial_callback || !k_game_scene_atom) {
         return false;
     }
-    ID bundle = map_get_sentinel(cfg, k_bundle, NULL);
+    ID slots = map_get_sentinel(cfg, k_slots, NULL);
     ID spatial_callback = map_get_sentinel(cfg, k_spatial_callback, NULL);
     ID game_scene_atom = map_get_sentinel(cfg, k_game_scene_atom, NULL);
-    if (!viewer_extract_scene_bundle(bundle, out_bundle)) {
+    if (!viewer_extract_scene_slots(slots, out_bundle)) {
         return false;
     }
     if (!spatial_callback || !game_scene_atom || TAG(game_scene_atom) != CLJ_ATOM) {
@@ -630,11 +697,23 @@ static bool viewer_load_host_viewer_config(EvalState *st,
     }
     out_bundle->spatial_callback = RETAIN(spatial_callback);
     out_bundle->game_scene_atom = (CljAtom *)RETAIN(game_scene_atom);
-    ID current_game_scene = out_bundle->game_scene_atom->value;
-    if (!current_game_scene || current_game_scene != out_bundle->game_scene) {
+    out_bundle->game_scene = viewer_frame_scene_from_atom(out_bundle->game_scene_atom);
+    if (!out_bundle->game_scene) {
         destroy_scene_bundle(out_bundle);
         return false;
     }
+    for (uint8_t i = 0; i < out_bundle->slot_count; i++) {
+        if (out_bundle->slots[i].scene_atom == out_bundle->game_scene_atom) {
+            out_bundle->game_slot_index = i;
+            out_bundle->has_game_slot = true;
+            break;
+        }
+    }
+    if (!out_bundle->has_game_slot) {
+        destroy_scene_bundle(out_bundle);
+        return false;
+    }
+    out_bundle->slots[out_bundle->game_slot_index].scene = out_bundle->game_scene;
     if (!viewer_load_spatial_rules_from_scene(out_bundle->game_scene, out_rule_set)) {
         destroy_scene_bundle(out_bundle);
         return false;
@@ -734,7 +813,9 @@ static bool perf_window_take_snapshot_if_due(ViewerPerfWindow *perf,
     return true;
 }
 
-static CljAtom *g_scene_slot_atoms[VIEWER_SLOT_COUNT] = {0};
+static CljAtom **g_scene_slot_atoms = NULL;
+static uint8_t *g_slot_render_priority = NULL;
+static uint8_t g_viewer_slot_count = 0u;
 static VgSlotChangeTracker g_slot_change_tracker;
 
 /*
@@ -753,22 +834,17 @@ static VgSlotChangeTracker g_slot_change_tracker;
  */
 static uint16_t g_render_buffer[VIEW_W * VIEW_H];
 static uint16_t *g_gram_pixels = NULL;
-static const uint8_t g_slot_render_priority[VIEWER_SLOT_COUNT] = {
-    VIEWER_SLOT_GAME,
-    VIEWER_SLOT_SCORE,
-    VIEWER_SLOT_DECO
-};
 typedef struct {
     pthread_t thread;
     pthread_mutex_t mutex;
     atomic_bool running;
     bool started;
-    VgRenderSlotState slot_states[VIEWER_SLOT_COUNT];
-    uint32_t slot_seen_generations[VIEWER_SLOT_COUNT];
+    VgRenderSlotState *slot_states;
+    uint32_t *slot_seen_generations;
     atomic_uint_fast32_t rendered_frame_serial;
     atomic_uint_fast32_t last_dirty_pixels;
     atomic_uint_fast32_t last_changed_slots;
-    uint32_t last_rendered_generation[VIEWER_SLOT_COUNT];
+    uint32_t *last_rendered_generation;
     atomic_uint_fast64_t render_lock_hold_ns_total;
     atomic_uint_fast64_t render_lock_hold_ns_max;
     atomic_uint_fast64_t render_lock_samples;
@@ -780,16 +856,56 @@ typedef struct {
 static ViewerRenderThread g_render_thread = {0};
 
 static uint32_t viewer_compute_animated_slots_mask(const VgRenderSlotState *slot_states) {
-    if (!slot_states) {
+    if (!slot_states || g_viewer_slot_count == 0u) {
         return 0u;
     }
     uint32_t mask = 0u;
-    for (uint8_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
+    for (uint8_t i = 0; i < g_viewer_slot_count; i++) {
         if (slot_states[i].initialized && slot_states[i].has_animation) {
             mask |= (1u << i);
         }
     }
     return mask;
+}
+
+static void viewer_destroy_slot_runtime_buffers(void) {
+    CLJ_FREE(g_render_thread.slot_states);
+    CLJ_FREE(g_render_thread.slot_seen_generations);
+    CLJ_FREE(g_render_thread.last_rendered_generation);
+    g_render_thread.slot_states = NULL;
+    g_render_thread.slot_seen_generations = NULL;
+    g_render_thread.last_rendered_generation = NULL;
+    CLJ_FREE(g_scene_slot_atoms);
+    CLJ_FREE(g_slot_render_priority);
+    g_scene_slot_atoms = NULL;
+    g_slot_render_priority = NULL;
+    g_viewer_slot_count = 0u;
+}
+
+static bool viewer_init_slot_runtime_buffers(const ViewerSceneBundle *bundle) {
+    if (!bundle || !bundle->slots || bundle->slot_count == 0u || bundle->slot_count > VIEWER_MAX_SLOTS) {
+        return false;
+    }
+    viewer_destroy_slot_runtime_buffers();
+    g_scene_slot_atoms = (CljAtom **)CLJ_CALLOC(bundle->slot_count, sizeof(CljAtom *));
+    g_slot_render_priority = (uint8_t *)CLJ_MALLOC(bundle->slot_count * sizeof(uint8_t));
+    g_render_thread.slot_states =
+        (VgRenderSlotState *)CLJ_CALLOC(bundle->slot_count, sizeof(VgRenderSlotState));
+    g_render_thread.slot_seen_generations =
+        (uint32_t *)CLJ_CALLOC(bundle->slot_count, sizeof(uint32_t));
+    g_render_thread.last_rendered_generation =
+        (uint32_t *)CLJ_CALLOC(bundle->slot_count, sizeof(uint32_t));
+    if (!g_scene_slot_atoms || !g_slot_render_priority || !g_render_thread.slot_states ||
+        !g_render_thread.slot_seen_generations || !g_render_thread.last_rendered_generation) {
+        viewer_destroy_slot_runtime_buffers();
+        return false;
+    }
+    g_viewer_slot_count = bundle->slot_count;
+    for (uint8_t i = 0; i < g_viewer_slot_count; i++) {
+        g_scene_slot_atoms[i] = bundle->slots[i].scene_atom;
+        g_slot_render_priority[i] = i;
+    }
+    return true;
 }
 
 static uint64_t monotonic_now_ns(void) {
@@ -854,33 +970,36 @@ static void collect_render_thread_metrics(ViewerPerfSnapshot *out_snapshot) {
     out_snapshot->max_render_lock_hold_us = (double)render_hold_max_ns / 1000.0;
 }
 
-/* Allocate one atom per slot used by the renderer. */
-static bool init_scene_slot_atoms(void) {
-    for (size_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
-        g_scene_slot_atoms[i] = make_atom(NULL);
-        if (!g_scene_slot_atoms[i]) {
-            for (size_t j = 0; j < i; j++) {
-                RELEASE(g_scene_slot_atoms[j]);
-                g_scene_slot_atoms[j] = NULL;
-            }
-            return false;
-        }
+static void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
+                                         ViewerSpatialRuleSet *rule_set,
+                                         bool publish_changes) {
+    if (!bundle || !bundle->slots) {
+        return;
     }
-    return true;
-}
-
-/* Release all slot atoms and clear globals. */
-static void destroy_scene_slot_atoms(void) {
-    for (size_t i = 0; i < VIEWER_SLOT_COUNT; i++) {
-        RELEASE(g_scene_slot_atoms[i]);
-        g_scene_slot_atoms[i] = NULL;
+    for (uint8_t i = 0; i < bundle->slot_count; i++) {
+        FrameScene *scene = viewer_frame_scene_from_atom(bundle->slots[i].scene_atom);
+        if (!scene || scene == bundle->slots[i].scene) {
+            continue;
+        }
+        bundle->slots[i].scene = scene;
+        if (bundle->has_game_slot && i == bundle->game_slot_index) {
+            bundle->game_scene = scene;
+            if (rule_set) {
+                (void)viewer_load_spatial_rules_from_scene(scene, rule_set);
+            }
+        }
+        if (publish_changes) {
+            (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, i, NULL);
+        }
     }
 }
 
 /* Render-thread loop: changed slots render immediately; animated slots tick continuously. */
 static void *viewer_render_thread_main(void *arg) {
     VgFrameBuffer *fb = (VgFrameBuffer *)arg;
-    if (!fb) {
+    if (!fb || !g_render_thread.slot_states || !g_render_thread.slot_seen_generations ||
+        !g_render_thread.last_rendered_generation || !g_scene_slot_atoms || !g_slot_render_priority ||
+        g_viewer_slot_count == 0u) {
         return NULL;
     }
     viewer_set_realtime_thread_policy();
@@ -888,7 +1007,7 @@ static void *viewer_render_thread_main(void *arg) {
         uint32_t animated_mask = (uint32_t)atomic_load_explicit(&g_render_thread.animated_slots_mask,
                                                                  memory_order_acquire);
         uint32_t wait_timeout_ms = (animated_mask == 0u) ? UINT32_MAX : VIEWER_ANIMATED_WAIT_TIMEOUT_MS;
-        uint32_t slot_generations[VIEWER_SLOT_COUNT] = {0};
+        uint32_t slot_generations[VIEWER_MAX_SLOTS] = {0};
         uint32_t changed_mask = vg_slot_change_tracker_wait_for_changes(&g_slot_change_tracker,
                                                                         g_render_thread.slot_seen_generations,
                                                                         slot_generations,
@@ -908,7 +1027,7 @@ static void *viewer_render_thread_main(void *arg) {
             continue;
         }
         uint64_t lock_acquired_ns = monotonic_now_ns();
-        for (size_t p = 0; p < VIEWER_SLOT_COUNT; p++) {
+        for (size_t p = 0; p < g_viewer_slot_count; p++) {
             uint8_t i = g_slot_render_priority[p];
             bool slot_changed = (changed_mask & (1u << i)) != 0u;
             bool slot_animated_tick = !slot_changed && ((animated_mask & (1u << i)) != 0u);
@@ -969,7 +1088,9 @@ static void *viewer_render_thread_main(void *arg) {
                                                           memory_order_relaxed)) {
             }
         }
-        memcpy(g_render_thread.slot_seen_generations, slot_generations, sizeof(slot_generations));
+        memcpy(g_render_thread.slot_seen_generations,
+               slot_generations,
+               (size_t)g_viewer_slot_count * sizeof(uint32_t));
         atomic_store_explicit(&g_render_thread.animated_slots_mask,
                               viewer_compute_animated_slots_mask(g_render_thread.slot_states),
                               memory_order_release);
@@ -1009,10 +1130,22 @@ static void *viewer_render_thread_main(void *arg) {
 
 /* Start dedicated render thread that owns slot rendering. */
 static bool start_render_thread(VgFrameBuffer *fb) {
-    if (!fb) {
+    if (!fb || !g_render_thread.slot_states || !g_render_thread.slot_seen_generations ||
+        !g_render_thread.last_rendered_generation) {
         return false;
     }
-    memset(&g_render_thread, 0, sizeof(g_render_thread));
+    memset(g_render_thread.slot_states, 0, (size_t)g_viewer_slot_count * sizeof(VgRenderSlotState));
+    memset(g_render_thread.slot_seen_generations, 0, (size_t)g_viewer_slot_count * sizeof(uint32_t));
+    memset(g_render_thread.last_rendered_generation, 0, (size_t)g_viewer_slot_count * sizeof(uint32_t));
+    atomic_store_explicit(&g_render_thread.rendered_frame_serial, 0u, memory_order_release);
+    atomic_store_explicit(&g_render_thread.last_dirty_pixels, 0u, memory_order_release);
+    atomic_store_explicit(&g_render_thread.last_changed_slots, 0u, memory_order_release);
+    atomic_store_explicit(&g_render_thread.render_lock_hold_ns_total, 0u, memory_order_release);
+    atomic_store_explicit(&g_render_thread.render_lock_hold_ns_max, 0u, memory_order_release);
+    atomic_store_explicit(&g_render_thread.render_lock_samples, 0u, memory_order_release);
+    atomic_store_explicit(&g_render_thread.skipped_generations_total, 0u, memory_order_release);
+    atomic_store_explicit(&g_render_thread.skipped_max_frame, 0u, memory_order_release);
+    atomic_store_explicit(&g_render_thread.skipped_max_slot, 0u, memory_order_release);
     atomic_store_explicit(&g_render_thread.animated_slots_mask, 0u, memory_order_release);
     if (pthread_mutex_init(&g_render_thread.mutex, NULL) != 0) {
         return false;
@@ -1037,7 +1170,7 @@ static void stop_render_thread(void) {
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, 0u, NULL);
     (void)pthread_join(g_render_thread.thread, NULL);
     (void)pthread_mutex_destroy(&g_render_thread.mutex);
-    memset(&g_render_thread, 0, sizeof(g_render_thread));
+    g_render_thread.started = false;
 }
 
 static bool viewer_renderer_start_callback(ID slot_atoms, void *user_data) {
@@ -1054,24 +1187,10 @@ static bool viewer_renderer_stop_callback(void *user_data) {
 
 /* Publish one already-built FrameScene record into one slot atom and mark it dirty. */
 static void publish_frame_scene_slot_record(size_t slot_index, ID scene, uint32_t *out_generation) {
-    if (slot_index >= VIEWER_SLOT_COUNT) {
+    (void)scene;
+    if (slot_index >= g_viewer_slot_count || !g_scene_slot_atoms || !g_scene_slot_atoms[slot_index]) {
         return;
     }
-    if (!scene) {
-        return;
-    }
-    if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
-        return;
-    }
-    CljAtom *slot_atom = g_scene_slot_atoms[slot_index];
-    if (slot_atom) {
-        /*
-         * Do not use atom_reset() here: its usable/pool-safe return value adds
-         * an extra RETAIN+AUTORELEASE that is unnecessary in this hot publish path.
-         */
-        ASSIGN(slot_atom->value, scene);
-    }
-    (void)pthread_mutex_unlock(&g_render_thread.mutex);
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, (uint8_t)slot_index, out_generation);
 }
 
@@ -1100,31 +1219,17 @@ static bool viewer_invoke_collision_callback(const ViewerSceneBundle *bundle,
     return success;
 }
 
-static FrameScene *viewer_current_game_scene_from_clojure(const ViewerSceneBundle *bundle) {
-    if (!bundle || !bundle->game_scene_atom) {
-        return NULL;
-    }
-    ID scene = bundle->game_scene_atom->value;
-    if (!scene || TAG(scene) != CLJ_RECORD) {
-        return NULL;
-    }
-    const VgRecordSchema *schema = tiny_gfx_schema();
-    if (!schema || viewer_record_type_hash(scene) != schema->h_frame_scene) {
-        return NULL;
-    }
-    return (FrameScene *)scene;
-}
-
 static bool viewer_apply_collision_step(ViewerSceneBundle *bundle,
                                         ViewerSpatialRuleSet *rule_set,
                                         EvalState *st,
                                         uint32_t now_ms) {
-    if (!bundle || !rule_set || !st || !bundle->game_scene) {
+    if (!bundle || !rule_set || !st || !bundle->game_scene || !bundle->has_game_slot) {
         return false;
     }
 
     (void)now_ms;
     bool any_triggered = false;
+    uint8_t game_slot = bundle->game_slot_index;
     static ID phase_enter = NULL;
     static ID phase_exit = NULL;
     if (!phase_enter) {
@@ -1136,10 +1241,10 @@ static bool viewer_apply_collision_step(ViewerSceneBundle *bundle,
         VgCollisionState *state = &rule_set->states[i];
         VgRenderedEntityState a_state;
         VgRenderedEntityState b_state;
-        bool have_a = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
+        bool have_a = vg_rendered_state_query_entity(game_slot,
                                                      (uintptr_t)fixnum(policy->a_entity_id),
                                                      &a_state);
-        bool have_b = vg_rendered_state_query_entity(VIEWER_SLOT_GAME,
+        bool have_b = vg_rendered_state_query_entity(game_slot,
                                                      (uintptr_t)fixnum(policy->b_entity_id),
                                                      &b_state);
         if (!have_a || !have_b) {
@@ -1186,22 +1291,7 @@ static bool viewer_apply_collision_step(ViewerSceneBundle *bundle,
         if (!invoked) {
             continue;
         }
-        FrameScene *updated_game_scene = viewer_current_game_scene_from_clojure(bundle);
-        if (!updated_game_scene) {
-            continue;
-        }
-        if (updated_game_scene != bundle->game_scene) {
-            bundle->game_scene = updated_game_scene;
-            (void)viewer_load_spatial_rules_from_scene(updated_game_scene, rule_set);
-            if (pthread_mutex_lock(&g_render_thread.mutex) == 0) {
-                CljAtom *slot_atom = g_scene_slot_atoms[VIEWER_SLOT_GAME];
-                if (slot_atom) {
-                    ASSIGN(slot_atom->value, updated_game_scene);
-                }
-                (void)pthread_mutex_unlock(&g_render_thread.mutex);
-                (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, VIEWER_SLOT_GAME, NULL);
-            }
-        }
+        viewer_sync_configured_slots(bundle, rule_set, true);
         any_triggered = true;
     }
     return any_triggered;
@@ -1285,7 +1375,7 @@ int main(void) {
     uint32_t window_pixels[VIEW_W * VIEW_H];
     struct mfb_window *window = NULL;
     struct mfb_timer *timer = NULL;
-    bool slot_atoms_initialized = false;
+    bool slot_runtime_initialized = false;
     bool slot_tracker_initialized = false;
     bool render_thread_started = false;
     bool demo_bundle_initialized = false;
@@ -1311,16 +1401,21 @@ int main(void) {
         goto cleanup;
     }
     evalstate_set_ns(viewer_eval_state, "user");
-    if (!tiny_gfx_ensure_schema(viewer_eval_state)) {
-        fprintf(stderr, "Failed to initialize vector scene record schema via tiny-gfx.scene\n");
+    if (!tiny_fx_gfx_ensure_schema(viewer_eval_state)) {
+        fprintf(stderr, "Failed to initialize vector scene record schema via tiny-fx.gfx\n");
         goto cleanup;
     }
-    if (!init_scene_slot_atoms()) {
-        fprintf(stderr, "Failed to initialize scene slot atoms\n");
+    if (!viewer_load_host_viewer_config(viewer_eval_state, &demo_bundle, &spatial_rules)) {
+        fprintf(stderr, "Failed to load host-viewer config from tiny-fx.gfx/host-viewer-config\n");
         goto cleanup;
     }
-    slot_atoms_initialized = true;
-    if (!vg_slot_change_tracker_init(&g_slot_change_tracker, VIEWER_SLOT_COUNT)) {
+    demo_bundle_initialized = true;
+    if (!viewer_init_slot_runtime_buffers(&demo_bundle)) {
+        fprintf(stderr, "Failed to initialize configured slot runtime\n");
+        goto cleanup;
+    }
+    slot_runtime_initialized = true;
+    if (!vg_slot_change_tracker_init(&g_slot_change_tracker, demo_bundle.slot_count)) {
         fprintf(stderr, "Failed to initialize slot change tracker\n");
         goto cleanup;
     }
@@ -1359,12 +1454,6 @@ int main(void) {
     ViewerPerfWindow perf_window;
     perf_window_init(&perf_window, mfb_timer_now(timer));
 
-    if (!viewer_load_host_viewer_config(viewer_eval_state, &demo_bundle, &spatial_rules)) {
-        fprintf(stderr, "Failed to load host-viewer config from tiny-gfx.runtime/host-viewer-config\n");
-        goto cleanup;
-    }
-    demo_bundle_initialized = true;
-
     uint_fast32_t last_presented_frame_serial = 0u;
     ViewerRuntimeFlags runtime_flags = {
         .use_mfb_waitsync = true,
@@ -1382,9 +1471,9 @@ int main(void) {
     uint32_t long_frame_count = 0u;
     vg_framebuffer_clear(&fb, SCENE_ERASE_COLOR);
     memcpy(fb_pixels, g_render_buffer, sizeof(g_render_buffer));
-    publish_frame_scene_slot_record(VIEWER_SLOT_DECO, demo_bundle.deco_scene, NULL);
-    publish_frame_scene_slot_record(VIEWER_SLOT_SCORE, demo_bundle.score_scene, NULL);
-    publish_frame_scene_slot_record(VIEWER_SLOT_GAME, demo_bundle.game_scene, NULL);
+    for (uint8_t i = 0; i < demo_bundle.slot_count; i++) {
+        publish_frame_scene_slot_record(i, (ID)demo_bundle.slots[i].scene, NULL);
+    }
 
     while (true) {
         float time_s = (float)mfb_timer_now(timer);
@@ -1402,6 +1491,7 @@ int main(void) {
         }
         viewer_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
         viewer_simulate_gpio_keys(keys, &runtime_flags, viewer_eval_state);
+        viewer_sync_configured_slots(&demo_bundle, &spatial_rules, true);
 
         ViewerFrameRenderResult frame_result = viewer_poll_render_frame();
         (void)viewer_apply_collision_step(&demo_bundle,
@@ -1524,8 +1614,8 @@ cleanup:
         (void)tiny_renderer_lifecycle_stop();
     }
     tiny_renderer_lifecycle_set_callbacks(NULL, NULL, NULL);
-    if (slot_atoms_initialized) {
-        destroy_scene_slot_atoms();
+    if (slot_runtime_initialized) {
+        viewer_destroy_slot_runtime_buffers();
     }
     if (slot_tracker_initialized) {
         vg_slot_change_tracker_destroy(&g_slot_change_tracker);

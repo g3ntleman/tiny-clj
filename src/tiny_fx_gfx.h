@@ -1,5 +1,5 @@
-#ifndef TINY_CLJ_TINY_GFX_H
-#define TINY_CLJ_TINY_GFX_H
+#ifndef TINY_CLJ_TINY_FX_GFX_H
+#define TINY_CLJ_TINY_FX_GFX_H
 
 #include <stdbool.h>
 
@@ -78,10 +78,10 @@ DEFRECORD(Timeline, keyframes, loop)
 DEFRECORD(FrameScene, root, clip_rect, z, visible, opaque, erase_color, guard_px)
 DEFRECORD(Scene, root, clip_rect, erase_color)
 
-bool tiny_gfx_ensure_schema(EvalState *st);
-const VgRecordSchema *tiny_gfx_schema(void);
-const VgRecordKeys *tiny_gfx_record_keys(void);
-ID tiny_gfx_get_field(ID record_obj, ID key, ID not_found);
-ID tiny_gfx_create_record_from_slots(ID type_symbol, unsigned int field_count, ID *slots);
+bool tiny_fx_gfx_ensure_schema(EvalState *st);
+const VgRecordSchema *tiny_fx_gfx_schema(void);
+const VgRecordKeys *tiny_fx_gfx_record_keys(void);
+ID tiny_fx_gfx_get_field(ID record_obj, ID key, ID not_found);
+ID tiny_fx_gfx_create_record_from_slots(ID type_symbol, unsigned int field_count, ID *slots);
 
-#endif // TINY_CLJ_TINY_GFX_H
+#endif // TINY_CLJ_TINY_FX_GFX_H

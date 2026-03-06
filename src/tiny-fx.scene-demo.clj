@@ -1,9 +1,9 @@
 R"TINY_GFX_HOST(
-(ns tiny-gfx.host-viewer-demo
-  (:require [tiny-gfx.scene :refer [->Transform ->Style ->Group ->Polyline
+(ns tiny-fx.scene-demo
+  (:require [tiny-fx.gfx-scene :refer [->Transform ->Style ->Group ->Polyline
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
-            [tiny-gfx.collision :as collision]
-            [tiny-snd.composer :as composer]))
+            [tiny-fx.gfx-collision :as collision]
+            [tiny-fx.sound :as sound]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
@@ -200,9 +200,19 @@ R"TINY_GFX_HOST(
    :gate-percent 78})
 
 (def player-small-state (atom false))
+(def deco-scene-state (atom nil))
+(def score-scene-state (atom nil))
 (def game-scene-state (atom nil))
 (def demo-melody-trigger-count* (atom 0))
 (def demo-input-watcher-id* (atom nil))
+
+(defn slot-descriptors
+  "Returns the canonical ordered slot descriptor vector for tiny-gfx runtime
+and host-viewer startup."
+  []
+  [{:id :deco :atom deco-scene-state}
+   {:id :score :atom score-scene-state}
+   {:id :game :atom game-scene-state}])
 
 (defn- apply-player-geometry
   [game-scene player-small?]
@@ -249,7 +259,7 @@ return values."
     (when (and (= pin melody-input-pin)
                (= value 1))
       (swap! demo-melody-trigger-count* inc)
-      (composer/play-steps! demo-melody-track-id demo-melody-steps demo-melody-opts))
+      (sound/play-steps! demo-melody-track-id demo-melody-steps demo-melody-opts))
     nil))
 
 (defn configure-demo-input-watchers!
@@ -324,6 +334,8 @@ Index layout:
                                      :z 2
                                      :collision-rules [collision-rule hearing-rule]})]
         (reset! player-small-state false)
+        (reset! deco-scene-state deco-scene)
+        (reset! score-scene-state score-scene)
         (reset! game-scene-state game-scene)
         (reset! demo-melody-trigger-count* 0)
         (configure-collision-toggle-callback!)

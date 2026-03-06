@@ -1,4 +1,4 @@
-#include "tiny_gfx.h"
+#include "tiny_fx_gfx.h"
 
 #include "builtins.h"
 #include "callbacks.h"
@@ -128,14 +128,14 @@ static void init_record_keys(void) {
     g_record_keys_initialized = true;
 }
 
-bool tiny_gfx_ensure_schema(EvalState *st) {
+bool tiny_fx_gfx_ensure_schema(EvalState *st) {
     if (g_record_schema_initialized) {
         return true;
     }
     if (!st) {
         return false;
     }
-    if (!require_namespace_by_name(st, "tiny-gfx.scene")) {
+    if (!require_namespace_by_name(st, "tiny-fx.gfx")) {
         return false;
     }
     if (g_record_schema_initialized) return true;
@@ -305,16 +305,16 @@ bool tiny_gfx_ensure_schema(EvalState *st) {
     return true;
 }
 
-const VgRecordSchema *tiny_gfx_schema(void) {
+const VgRecordSchema *tiny_fx_gfx_schema(void) {
     return &g_record_schema;
 }
 
-const VgRecordKeys *tiny_gfx_record_keys(void) {
+const VgRecordKeys *tiny_fx_gfx_record_keys(void) {
     init_record_keys();
     return &g_record_keys;
 }
 
-ID tiny_gfx_get_field(ID record_obj, ID key, ID not_found) {
+ID tiny_fx_gfx_get_field(ID record_obj, ID key, ID not_found) {
     if (!record_obj || !key) {
         return not_found;
     }
@@ -324,7 +324,7 @@ ID tiny_gfx_get_field(ID record_obj, ID key, ID not_found) {
     return not_found;
 }
 
-ID tiny_gfx_create_record_from_slots(ID type_symbol, unsigned int field_count, ID *slots) {
+ID tiny_fx_gfx_create_record_from_slots(ID type_symbol, unsigned int field_count, ID *slots) {
     CljPersistentVector *v = make_vector(field_count, STRONG);
     if (!v) {
         return NULL;

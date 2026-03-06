@@ -7,13 +7,18 @@
 get_filename_component(TINYCLJ_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 set(TINYCLJ_SRC_DIR "${TINYCLJ_REPO_ROOT}/src")
 
-set(TINYCLJ_SRCS
+if(NOT DEFINED TINYCLJ_WITH_TINY_FX)
+  set(TINYCLJ_WITH_TINY_FX ON)
+endif()
+
+set(TINYCLJ_CORE_SRCS
   "${TINYCLJ_SRC_DIR}/hash.c"
   "${TINYCLJ_SRC_DIR}/event_loop.c"
   "${TINYCLJ_SRC_DIR}/channel.c"
   "${TINYCLJ_SRC_DIR}/clojure_core.c"
   "${TINYCLJ_SRC_DIR}/object.c"
   "${TINYCLJ_SRC_DIR}/builtins.c"
+  "${TINYCLJ_SRC_DIR}/builtins_tiny_fx_gfx.c"
   "${TINYCLJ_SRC_DIR}/builtins_net.c"
   "${TINYCLJ_SRC_DIR}/builtins_mdns.c"
   "${TINYCLJ_SRC_DIR}/builtins_tiny_db.c"
@@ -21,7 +26,6 @@ set(TINYCLJ_SRCS
   "${TINYCLJ_SRC_DIR}/builtins_regex.c"
   "${TINYCLJ_SRC_DIR}/runtime.c"
   "${TINYCLJ_SRC_DIR}/namespace.c"
-  "${TINYCLJ_SRC_DIR}/audio_tick_scheduler.c"
   "${TINYCLJ_SRC_DIR}/symbol.c"
   "${TINYCLJ_SRC_DIR}/symbol_token.c"
   "${TINYCLJ_SRC_DIR}/parser.c"
@@ -53,21 +57,32 @@ set(TINYCLJ_SRCS
   "${TINYCLJ_SRC_DIR}/source_resolver.c"
   "${TINYCLJ_SRC_DIR}/embedded_sources.c"
   "${TINYCLJ_SRC_DIR}/fs_layer.c"
-  "${TINYCLJ_SRC_DIR}/gfx.c"
   "${TINYCLJ_SRC_DIR}/lockfree_spsc_queue.c"
-  "${TINYCLJ_SRC_DIR}/scene.c"
-  "${TINYCLJ_SRC_DIR}/tiny_gfx.c"
-  "${TINYCLJ_SRC_DIR}/vector_scene_graph.c"
   "${TINYCLJ_SRC_DIR}/gpio_esp32.c"
-  "${TINYCLJ_SRC_DIR}/audio_engine.c"
-  "${TINYCLJ_SRC_DIR}/builtins_audio.c"
-  "${TINYCLJ_SRC_DIR}/audio_backend_esp32.c"
   "${TINYCLJ_SRC_DIR}/line_editor.c"
   "${TINYCLJ_SRC_DIR}/repl.c"
   "${TINYCLJ_SRC_DIR}/repl_history_backend.c"
   "${TINYCLJ_SRC_DIR}/mdns_codec.c"
   "${TINYCLJ_SRC_DIR}/mdns_resolver.c"
 )
+
+set(TINYCLJ_FX_SRCS
+  "${TINYCLJ_SRC_DIR}/audio_tick_scheduler.c"
+  "${TINYCLJ_SRC_DIR}/gfx.c"
+  "${TINYCLJ_SRC_DIR}/scene.c"
+  "${TINYCLJ_SRC_DIR}/tiny_fx_gfx.c"
+  "${TINYCLJ_SRC_DIR}/vector_scene_graph.c"
+  "${TINYCLJ_SRC_DIR}/renderer_lifecycle.c"
+  "${TINYCLJ_SRC_DIR}/rendered_state_snapshot.c"
+  "${TINYCLJ_SRC_DIR}/audio_engine.c"
+  "${TINYCLJ_SRC_DIR}/builtins_tiny_fx_sound.c"
+  "${TINYCLJ_SRC_DIR}/audio_backend_esp32.c"
+)
+
+set(TINYCLJ_SRCS ${TINYCLJ_CORE_SRCS})
+if(TINYCLJ_WITH_TINY_FX)
+  list(APPEND TINYCLJ_SRCS ${TINYCLJ_FX_SRCS})
+endif()
 
 # Build time (UTC epoch seconds) for runtime stats :build-time
 string(TIMESTAMP BUILD_EPOCH_SECONDS "%s" UTC)
@@ -98,6 +113,7 @@ idf_component_register(
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC
   ESP32_BUILD=1
+  TINYCLJ_WITH_TINY_FX=$<BOOL:${TINYCLJ_WITH_TINY_FX}>
   TINYCLJ_RAM_BACKEND_ENABLED=0
   LINE_EDITING_ENABLED=1
   DEBUG=1

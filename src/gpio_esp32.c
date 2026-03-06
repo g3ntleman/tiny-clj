@@ -236,6 +236,7 @@ static void IRAM_ATTR gpio_isr_handler(void *arg) {
     gpio_request_drain_from_isr();
 }
 
+/** Drain all queued GPIO events from thread context. */
 /** Install ESP32 GPIO ISR service once; throw on failure. */
 static inline void gpio_ensure_isr_service(void) {
     if (g_gpio_isr_service_installed) return;

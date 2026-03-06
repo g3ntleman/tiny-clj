@@ -15,133 +15,93 @@
 /* Helper: build a minimal trk1 byte array                                   */
 /* ========================================================================= */
 
-/* Build a minimal valid trk1 with a single NOTE event + END.
- * channel_count channels, bpm=120, tpq=480.
- * Returns a retained CljByteArray. Caller must RELEASE. */
-static ID make_test_trk1(uint8_t note, uint32_t gate_ticks, uint8_t channel_count, uint8_t flags) {
-  /* Encode gate_ticks as varuint */
-  uint8_t gate_buf[4];
-  int gate_len = 0;
-  {
-    uint32_t v = gate_ticks;
-    do {
-      uint8_t byte = v & 0x7F;
-      v >>= 7;
-      if (v)
-        byte |= 0x80;
-      gate_buf[gate_len++] = byte;
-    } while (v);
+static int encode_test_varuint(uint32_t value, uint8_t *out, int cap) {
+  int len = 0;
+  if (!out || cap <= 0) {
+    return 0;
   }
+  do {
+    uint8_t byte = value & 0x7F;
+    value >>= 7;
+    if (value) {
+      byte |= 0x80;
+    }
+    if (len >= cap) {
+      return 0;
+    }
+    out[len++] = byte;
+  } while (value);
+  return len;
+}
 
-  /* Event stream: NOTE(ch0, has_delay=0) + note + gate + END(ch0, has_delay=0) */
-  int stream_len = 1 + 1 + gate_len + 1; /* control + note + gate_varuint + END control */
+static void write_test_trk1_header(uint8_t *data, uint8_t channel_count, uint8_t flags, int stream_len) {
+  TEST_ASSERT_NOT_NULL(data);
+  data[0] = 'T';
+  data[1] = 'R';
+  data[2] = 'K';
+  data[3] = '1';
+  data[4] = TRK1_VERSION;
+  data[5] = flags;
+  data[6] = channel_count;
+  data[7] = 0;
+  data[8] = 480 & 0xFF;
+  data[9] = (480 >> 8) & 0xFF;
+  data[10] = 120 & 0xFF;
+  data[11] = (120 >> 8) & 0xFF;
+  data[12] = stream_len & 0xFF;
+  data[13] = (stream_len >> 8) & 0xFF;
+  data[14] = (stream_len >> 16) & 0xFF;
+  data[15] = (stream_len >> 24) & 0xFF;
+  data[16] = 0;
+  data[17] = 0;
+  data[18] = 0;
+  data[19] = 0;
+}
+
+static ID make_test_trk1_common(uint8_t note,
+                                uint32_t gate_ticks,
+                                uint32_t delay_ticks,
+                                bool include_delay,
+                                uint8_t channel_count,
+                                uint8_t flags) {
+  uint8_t gate_buf[4];
+  uint8_t delay_buf[4];
+  int gate_len = encode_test_varuint(gate_ticks, gate_buf, (int)sizeof(gate_buf));
+  int delay_len = include_delay ? encode_test_varuint(delay_ticks, delay_buf, (int)sizeof(delay_buf)) : 0;
+  TEST_ASSERT_TRUE(gate_len > 0);
+  TEST_ASSERT_TRUE(!include_delay || delay_len > 0);
+
+  int stream_len = 1 + 1 + gate_len + delay_len + 1;
   int total_len = TRK1_HEADER_SIZE + stream_len;
 
   CljByteArray *ba = make_byte_array(total_len);
   uint8_t *d = ba->data;
+  write_test_trk1_header(d, channel_count, flags, stream_len);
 
-  /* Header */
-  d[0] = 'T';
-  d[1] = 'R';
-  d[2] = 'K';
-  d[3] = '1';
-  d[4] = TRK1_VERSION;
-  d[5] = flags;
-  d[6] = channel_count;
-  d[7] = 0; /* reserved */
-  d[8] = 480 & 0xFF;
-  d[9] = (480 >> 8) & 0xFF; /* tpq = 480 */
-  d[10] = 120 & 0xFF;
-  d[11] = (120 >> 8) & 0xFF; /* bpm = 120 */
-  d[12] = stream_len & 0xFF;
-  d[13] = (stream_len >> 8) & 0xFF;
-  d[14] = (stream_len >> 16) & 0xFF;
-  d[15] = (stream_len >> 24) & 0xFF;
-  d[16] = d[17] = d[18] = d[19] = 0; /* crc32 = 0 */
-
-  /* Event stream */
   int off = TRK1_HEADER_SIZE;
-
-  /* NOTE event: has_delay=0, type=NOTE(0), channel=0 */
-  d[off++] = (0 << 7) | (TRK1_EVT_NOTE << 4) | 0;
+  d[off++] = ((include_delay ? 1 : 0) << 7) | (TRK1_EVT_NOTE << 4);
   d[off++] = note;
-  for (int i = 0; i < gate_len; i++)
+  for (int i = 0; i < gate_len; i++) {
     d[off++] = gate_buf[i];
-
-  /* END event: has_delay=0, type=END(2), channel=0 */
-  d[off++] = (0 << 7) | (TRK1_EVT_END << 4) | 0;
-
+  }
+  for (int i = 0; i < delay_len; i++) {
+    d[off++] = delay_buf[i];
+  }
+  d[off++] = (TRK1_EVT_END << 4);
   return (ID)ba;
+}
+
+/* Build a minimal valid trk1 with a single NOTE event + END.
+ * channel_count channels, bpm=120, tpq=480.
+ * Returns a retained CljByteArray. Caller must RELEASE. */
+static ID make_test_trk1(uint8_t note, uint32_t gate_ticks, uint8_t channel_count, uint8_t flags) {
+  return make_test_trk1_common(note, gate_ticks, 0, false, channel_count, flags);
 }
 
 /* Build trk1 with NOTE + delay + END (for multi-tick streaming tests). */
 static ID make_test_trk1_with_delay(uint8_t note, uint32_t gate_ticks, uint32_t delay_ticks,
                                     uint8_t channel_count) {
-  /* Encode gate as varuint */
-  uint8_t gate_buf[4];
-  int gate_len = 0;
-  {
-    uint32_t v = gate_ticks;
-    do {
-      uint8_t byte = v & 0x7F;
-      v >>= 7;
-      if (v)
-        byte |= 0x80;
-      gate_buf[gate_len++] = byte;
-    } while (v);
-  }
-  /* Encode delay as varuint */
-  uint8_t delay_buf[4];
-  int delay_len = 0;
-  {
-    uint32_t v = delay_ticks;
-    do {
-      uint8_t byte = v & 0x7F;
-      v >>= 7;
-      if (v)
-        byte |= 0x80;
-      delay_buf[delay_len++] = byte;
-    } while (v);
-  }
-
-  int stream_len = 1 + 1 + gate_len + delay_len + 1; /* control+note+gate+delay + END */
-  int total_len = TRK1_HEADER_SIZE + stream_len;
-
-  CljByteArray *ba = make_byte_array(total_len);
-  uint8_t *d = ba->data;
-
-  d[0] = 'T';
-  d[1] = 'R';
-  d[2] = 'K';
-  d[3] = '1';
-  d[4] = TRK1_VERSION;
-  d[5] = 0;
-  d[6] = channel_count;
-  d[7] = 0;
-  d[8] = 480 & 0xFF;
-  d[9] = (480 >> 8) & 0xFF;
-  d[10] = 120 & 0xFF;
-  d[11] = (120 >> 8) & 0xFF;
-  d[12] = stream_len & 0xFF;
-  d[13] = (stream_len >> 8) & 0xFF;
-  d[14] = (stream_len >> 16) & 0xFF;
-  d[15] = (stream_len >> 24) & 0xFF;
-  d[16] = d[17] = d[18] = d[19] = 0;
-
-  int off = TRK1_HEADER_SIZE;
-
-  /* NOTE with has_delay=1 */
-  d[off++] = (1 << 7) | (TRK1_EVT_NOTE << 4) | 0;
-  d[off++] = note;
-  for (int i = 0; i < gate_len; i++)
-    d[off++] = gate_buf[i];
-  for (int i = 0; i < delay_len; i++)
-    d[off++] = delay_buf[i];
-
-  /* END */
-  d[off++] = (0 << 7) | (TRK1_EVT_END << 4) | 0;
-
-  return (ID)ba;
+  return make_test_trk1_common(note, gate_ticks, delay_ticks, true, channel_count, 0);
 }
 
 /* ========================================================================= */
@@ -621,7 +581,7 @@ TEST(test_audio_native_on_finished_callback_receives_event_map_shape) {
   ID setup = eval_string(
       "(do "
       "  (def audio-finished-shape (atom nil)) "
-      "  (tiny-snd.runtime/audio-on-finished! "
+      "  (tiny-fx.sound/audio-on-finished! "
       "    (fn [event] "
       "      (reset! audio-finished-shape "
       "              [(map? event) (:source event) (:kind event) (:track-id event)]) "
@@ -650,25 +610,25 @@ TEST(test_audio_native_on_finished_callback_receives_event_map_shape) {
 TEST(test_audio_native_lookup) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-  /* All audio builtins in tiny-snd.runtime should be resolvable */
+  /* All audio builtins in tiny-fx.sound should be resolvable */
   const char *names[] = {
-      "tiny-snd.runtime/audio-load-track!",
-      "tiny-snd.runtime/audio-unload-track!",
-      "tiny-snd.runtime/audio-play-music!",
-      "tiny-snd.runtime/audio-stop-track!",
-      "tiny-snd.runtime/audio-stop-music!",
-      "tiny-snd.runtime/audio-play-sfx!",
-      "tiny-snd.runtime/audio-stop-all!",
-      "tiny-snd.runtime/audio-set-track-volume!",
-      "tiny-snd.runtime/audio-set-music-volume!",
-      "tiny-snd.runtime/audio-on-finished!",
-      "tiny-snd.runtime/audio-play-test-tone!",
-      "tiny-snd.runtime/audio-host-status!",
+      "tiny-fx.sound/audio-load-track!",
+      "tiny-fx.sound/audio-unload-track!",
+      "tiny-fx.sound/audio-play-music!",
+      "tiny-fx.sound/audio-stop-track!",
+      "tiny-fx.sound/audio-stop-music!",
+      "tiny-fx.sound/audio-play-sfx!",
+      "tiny-fx.sound/audio-stop-all!",
+      "tiny-fx.sound/audio-set-track-volume!",
+      "tiny-fx.sound/audio-set-music-volume!",
+      "tiny-fx.sound/audio-on-finished!",
+      "tiny-fx.sound/audio-play-test-tone!",
+      "tiny-fx.sound/audio-host-status!",
   };
 
   for (int i = 0; i < 12; i++) {
     char buf[192];
-    test_snprintf(buf, sizeof(buf), "(fn? %s)", names[i]);
+    test_snprintf(buf, sizeof(buf), "(do (require 'tiny-fx.sound) (fn? %s))", names[i]);
     ID result = NULL;
     TRY {
       result = eval_string(buf, g_test_eval_state);
@@ -693,9 +653,9 @@ TEST(test_audio_native_play_music_initializes_engine_if_needed) {
   TRY {
     result = eval_string(
         "(do "
-        "  (require 'tiny-snd.composer) "
+        "  (require 'tiny-fx.sound) "
         "  (= :playing "
-        "     (tiny-snd.composer/play-steps! :lazy-init "
+        "     (tiny-fx.sound/play-steps! :lazy-init "
         "       [{:notes [:G5 :D5] :dur :s}] "
         "       {:channel-count 2 :volumes [220 180]})))",
         g_test_eval_state);
@@ -716,7 +676,7 @@ TEST(test_audio_native_play_test_tone_returns_bool) {
 
   ID result = NULL;
   TRY {
-    result = eval_string("(tiny-snd.runtime/audio-play-test-tone! 440 100)", g_test_eval_state);
+    result = eval_string("(tiny-fx.sound/audio-play-test-tone! 440 100)", g_test_eval_state);
   }
   CATCH(ex) {
     TEST_FAIL_MESSAGE("audio-play-test-tone! should not throw");
@@ -731,7 +691,7 @@ TEST(test_audio_native_play_test_tone_with_volume_returns_bool) {
 
   ID result = NULL;
   TRY {
-    result = eval_string("(tiny-snd.runtime/audio-play-test-tone! 523 120 64)", g_test_eval_state);
+    result = eval_string("(tiny-fx.sound/audio-play-test-tone! 523 120 64)", g_test_eval_state);
   }
   CATCH(ex) {
     TEST_FAIL_MESSAGE("audio-play-test-tone! with volume should not throw");
@@ -746,7 +706,7 @@ TEST(test_audio_native_host_status_returns_map) {
 
   ID result = NULL;
   TRY {
-    result = eval_string("(tiny-snd.runtime/audio-host-status!)", g_test_eval_state);
+    result = eval_string("(tiny-fx.sound/audio-host-status!)", g_test_eval_state);
   }
   CATCH(ex) {
     TEST_FAIL_MESSAGE("audio-host-status! should not throw");
@@ -757,7 +717,7 @@ TEST(test_audio_native_host_status_returns_map) {
   TEST_ASSERT_TRUE(is_map(result));
 }
 
-TEST(test_audio_tiny_snd_composer_namespace_compile_and_play) {
+TEST(test_audio_tiny_fx_sound_namespace_compile_and_play) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -766,22 +726,22 @@ TEST(test_audio_tiny_snd_composer_namespace_compile_and_play) {
   TRY {
     result = eval_string(
         "(do "
-        "  (require 'tiny-snd.composer) "
+        "  (require 'tiny-fx.sound) "
         "  (= :playing "
-        "     (tiny-snd.composer/play-steps! :dsl-test "
+        "     (tiny-fx.sound/play-steps! :dsl-test "
         "       [{:notes [:G5 :D5] :dur :s} {:notes [:Bb5 :F5] :dur :e}] "
         "       {:channel-count 2 :volumes [200 120]})))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-snd.composer namespace should compile and play steps");
+    TEST_FAIL_MESSAGE("tiny-fx.sound namespace should compile and play steps");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_snd_composer_play_starwars_title_returns_bool) {
+TEST(test_audio_tiny_fx_sound_play_starwars_title_returns_bool) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -789,18 +749,18 @@ TEST(test_audio_tiny_snd_composer_play_starwars_title_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-snd.composer) (= :playing (tiny-snd.composer/play-starwars-title!)))",
+        "(do (require 'tiny-fx.sound) (= :playing (tiny-fx.sound/play-starwars-title!)))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-snd.composer/play-starwars-title! should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound/play-starwars-title! should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_snd_composer_play_steps_one_voice_returns_bool) {
+TEST(test_audio_tiny_fx_sound_play_steps_one_voice_returns_bool) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -808,22 +768,22 @@ TEST(test_audio_tiny_snd_composer_play_steps_one_voice_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-snd.composer) "
+        "(do (require 'tiny-fx.sound) "
         "    (= :playing "
-        "       (tiny-snd.composer/play-steps! :one-voice "
+        "       (tiny-fx.sound/play-steps! :one-voice "
         "         [{:notes [:G5] :dur :s} {:notes [:D5] :dur :s}] "
         "         {:channel-count 1 :volumes [210]})))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! one-voice should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! one-voice should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_snd_composer_play_steps_musical_durations_returns_bool) {
+TEST(test_audio_tiny_fx_sound_play_steps_musical_durations_returns_bool) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -831,9 +791,9 @@ TEST(test_audio_tiny_snd_composer_play_steps_musical_durations_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-snd.composer) "
+        "(do (require 'tiny-fx.sound) "
         "    (= :playing "
-        "       (tiny-snd.composer/play-steps! :musical-dur "
+        "       (tiny-fx.sound/play-steps! :musical-dur "
         "         [{:notes [:G5 :D5] :dur :q} "
         "          {:notes [:Bb5 :F5] :dur :dq} "
         "          {:notes [:A5 :E5] :dur :et}] "
@@ -841,14 +801,14 @@ TEST(test_audio_tiny_snd_composer_play_steps_musical_durations_returns_bool) {
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! with musical durations should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! with musical durations should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_snd_composer_play_steps_rest_shorthand_returns_bool) {
+TEST(test_audio_tiny_fx_sound_play_steps_rest_shorthand_returns_bool) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -856,9 +816,9 @@ TEST(test_audio_tiny_snd_composer_play_steps_rest_shorthand_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-snd.composer) "
+        "(do (require 'tiny-fx.sound) "
         "    (= :playing "
-        "       (tiny-snd.composer/play-steps! :rest-shorthand "
+        "       (tiny-fx.sound/play-steps! :rest-shorthand "
         "         [{:notes [:G5 :D5] :dur :q} "
         "          {:rest :e} "
         "          {:notes [:Bb5 :F5] :dur :q}] "
@@ -866,14 +826,14 @@ TEST(test_audio_tiny_snd_composer_play_steps_rest_shorthand_returns_bool) {
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! with rest shorthand should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! with rest shorthand should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_snd_composer_numeric_duration_throws) {
+TEST(test_audio_tiny_fx_sound_numeric_duration_throws) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -881,8 +841,8 @@ TEST(test_audio_tiny_snd_composer_numeric_duration_throws) {
   bool threw = false;
   TRY {
     (void)eval_string(
-        "(do (require 'tiny-snd.composer) "
-        "    (tiny-snd.composer/play-steps! :numeric-dur "
+        "(do (require 'tiny-fx.sound) "
+        "    (tiny-fx.sound/play-steps! :numeric-dur "
         "      [{:notes [:G5 :D5] :dur 120}] "
         "      {:channel-count 2 :volumes [220 170]}))",
         g_test_eval_state);
@@ -895,7 +855,7 @@ TEST(test_audio_tiny_snd_composer_numeric_duration_throws) {
   TEST_ASSERT_TRUE(threw);
 }
 
-TEST(test_audio_tiny_snd_composer_rest_with_dur_throws) {
+TEST(test_audio_tiny_fx_sound_rest_with_dur_throws) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -903,8 +863,8 @@ TEST(test_audio_tiny_snd_composer_rest_with_dur_throws) {
   bool threw = false;
   TRY {
     (void)eval_string(
-        "(do (require 'tiny-snd.composer) "
-        "    (tiny-snd.composer/play-steps! :bad-rest "
+        "(do (require 'tiny-fx.sound) "
+        "    (tiny-fx.sound/play-steps! :bad-rest "
         "      [{:notes [:G5 :D5] :dur :q} "
         "       {:rest :e :dur :e}] "
         "      {:channel-count 2 :volumes [220 170]}))",
@@ -918,7 +878,7 @@ TEST(test_audio_tiny_snd_composer_rest_with_dur_throws) {
   TEST_ASSERT_TRUE(threw);
 }
 
-TEST(test_audio_tiny_snd_composer_play_steps_four_voices_returns_bool) {
+TEST(test_audio_tiny_fx_sound_play_steps_four_voices_returns_bool) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -926,22 +886,22 @@ TEST(test_audio_tiny_snd_composer_play_steps_four_voices_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-snd.composer) "
+        "(do (require 'tiny-fx.sound) "
         "    (= :playing "
-        "       (tiny-snd.composer/play-steps! :four-voice "
+        "       (tiny-fx.sound/play-steps! :four-voice "
         "         [{:notes [:G5 :D5 :Bb4 :F4] :dur :e} {:notes [:A5 :E5 :C5 :G4] :dur :q}] "
         "         {:channel-count 4 :volumes [220 170 130 100]})))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! four-voice should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! four-voice should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_snd_composer_play_steps_two_voices_activate_two_voices) {
+TEST(test_audio_tiny_fx_sound_play_steps_two_voices_activate_two_voices) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -949,15 +909,15 @@ TEST(test_audio_tiny_snd_composer_play_steps_two_voices_activate_two_voices) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-snd.composer) "
+        "(do (require 'tiny-fx.sound) "
         "    (= :playing "
-        "       (tiny-snd.composer/play-steps! :two-voice-activation "
+        "       (tiny-fx.sound/play-steps! :two-voice-activation "
         "         [{:notes [:G5 :D5] :dur :q}] "
         "         {:channel-count 2 :volumes [220 170]})))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! two-voice should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! two-voice should not throw");
   }
   END_TRY
 
@@ -970,7 +930,7 @@ TEST(test_audio_tiny_snd_composer_play_steps_two_voices_activate_two_voices) {
   TEST_ASSERT_TRUE(g_audio_engine.voices[0].freq_hz != g_audio_engine.voices[1].freq_hz);
 }
 
-TEST(test_audio_tiny_snd_composer_play_melody_backing_returns_bool) {
+TEST(test_audio_tiny_fx_sound_play_melody_backing_returns_bool) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -978,23 +938,23 @@ TEST(test_audio_tiny_snd_composer_play_melody_backing_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-snd.composer) "
+        "(do (require 'tiny-fx.sound) "
         "    (= :playing "
-        "       (tiny-snd.composer/play-steps! :mel-backing "
+        "       (tiny-fx.sound/play-steps! :mel-backing "
         "         [{:melody :G5 :backing [:D5 :Bb4] :dur :e} "
         "          {:melody :A5 :backing [:E5 :C5] :dur :e}] "
         "         {:channel-count 3 :melody-vol 220 :backing-volumes [160 130]})))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! with melody/backing should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! with melody/backing should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_snd_composer_play_melody_backing_auto_uses_available_channels) {
+TEST(test_audio_tiny_fx_sound_play_melody_backing_auto_uses_available_channels) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -1002,15 +962,15 @@ TEST(test_audio_tiny_snd_composer_play_melody_backing_auto_uses_available_channe
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-snd.composer) "
+        "(do (require 'tiny-fx.sound) "
         "    (= :playing "
-        "       (tiny-snd.composer/play-steps! :mel-backing-auto "
+        "       (tiny-fx.sound/play-steps! :mel-backing-auto "
         "         [{:melody :G5 :backing [:D5 :Bb4] :dur :q}] "
         "         {:channel-count 4 :melody-vol 220 :backing-volumes [170 150 130]})))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-snd.composer/play-steps! melody/backing should auto-fill available channels");
+    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! melody/backing should auto-fill available channels");
   }
   END_TRY
 

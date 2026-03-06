@@ -2,6 +2,7 @@
 
 #include "tests_common.h"
 #include "../event_loop.h"
+#include "../atom.h"
 
 int load_clojure_core(EvalState *st);
 
@@ -1249,5 +1250,41 @@ TEST(test_heap_plus_does_not_intern_user_plus_when_missing) {
   ID k_symbol = (ID)intern_symbol_global(":Symbol");
   ID v_symbol = map_get_sentinel((CljPersistentMap *)result, k_symbol, NOT_FOUND);
   TEST_ASSERT_EQUAL(NOT_FOUND, v_symbol);
+}
+
+TEST(test_runtime_stats_event_loop_ingress_call_has_no_heap_growth, 0) {
+  ID setup = eval_string(
+      "(let [a (atom nil)] "
+      "  [(fn [event] (reset! a 1)) a])",
+      g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(setup);
+  TEST_ASSERT_TRUE(is_vector(setup));
+
+  CljPersistentVector *setup_vec = as_vector(setup);
+  TEST_ASSERT_NOT_NULL(setup_vec);
+  TEST_ASSERT_EQUAL_UINT(2, vector_count(setup_vec));
+
+  ID dispatch_fn = vector_nth(setup_vec, 0);
+  ID marker_atom = vector_nth(setup_vec, 1);
+  TEST_ASSERT_NOT_NULL(dispatch_fn);
+  TEST_ASSERT_NOT_NULL(marker_atom);
+  TEST_ASSERT_TRUE(TAG(dispatch_fn) == CLJ_FUNC || TAG(dispatch_fn) == CLJ_CLOSURE);
+  TEST_ASSERT_TRUE(TAG(marker_atom) == CLJ_ATOM);
+
+  for (int i = 0; i < 32; i++) {
+    ID reset_result = atom_reset(as_atom(marker_atom), NULL);
+    TEST_ASSERT_NULL(reset_result);
+
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call(dispatch_fn, fixnum(7)));
+    TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+    TEST_ASSERT_FALSE(event_loop_has_pending_tasks());
+
+    ID marker = atom_deref(as_atom(marker_atom));
+    TEST_ASSERT_TRUE(is_fixnum(marker));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(marker));
+  }
+
+  event_loop_clear();
 }
 #endif

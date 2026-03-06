@@ -7,9 +7,15 @@
 
 #include "vector_scene_graph.h"
 
+#if defined(ESP32_BUILD)
+#define VG_RENDERED_STATE_MAX_SLOTS 3u
+#define VG_RENDERED_STATE_MAX_ENTITIES 64u
+#define VG_RENDERED_STATE_MAX_TIMELINES 128u
+#else
 #define VG_RENDERED_STATE_MAX_SLOTS 8u
 #define VG_RENDERED_STATE_MAX_ENTITIES 256u
 #define VG_RENDERED_STATE_MAX_TIMELINES 512u
+#endif
 
 typedef enum {
     VG_RENDERED_FIELD_NONE = 0,

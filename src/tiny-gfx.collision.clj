@@ -1,5 +1,5 @@
 R"TINY_GFX_COL(
-(ns tiny-gfx.collision)
+(ns tiny-fx.gfx-collision)
 
 ;; Spatial callback API (C detection + Clojure response routing)
 ;; Keep mutable callback state in an atom (never re-def inside functions),

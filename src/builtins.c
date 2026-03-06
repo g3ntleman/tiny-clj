@@ -51,27 +51,90 @@
 #include "hashmap.h"
 #include "datetime_utc.h"
 #include "platform.h"
-#include "tiny_gfx.h"
-#include "renderer_lifecycle.h"
-#include "rendered_state_snapshot.h"
-#include "scene.h"
+#include "tiny_fx_gfx.h"
+#include "builtins_tiny_fx_sound.h"
+#include "builtins_tiny_fx_gfx.h"
 #if defined(ESP32_BUILD)
 #include "gpio_esp32.h"
 #endif
 
-/* Audio builtins (defined in builtins_audio.c) */
-ID native_audio_load_track(ID *args, unsigned int argc);
-ID native_audio_unload_track(ID *args, unsigned int argc);
-ID native_audio_play_music(ID *args, unsigned int argc);
-ID native_audio_stop_track(ID *args, unsigned int argc);
-ID native_audio_stop_music(ID *args, unsigned int argc);
-ID native_audio_play_sfx(ID *args, unsigned int argc);
-ID native_audio_stop_all(ID *args, unsigned int argc);
-ID native_audio_set_track_volume(ID *args, unsigned int argc);
-ID native_audio_set_music_volume(ID *args, unsigned int argc);
-ID native_audio_on_finished(ID *args, unsigned int argc);
-ID native_audio_play_test_tone(ID *args, unsigned int argc);
-ID native_audio_host_status(ID *args, unsigned int argc);
+#ifndef TINYCLJ_WITH_TINY_FX
+#define TINYCLJ_WITH_TINY_FX 1
+#endif
+
+#if !TINYCLJ_WITH_TINY_FX
+static ID tinyclj_tiny_fx_disabled_error(const char *fn_name) {
+  throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                            "tiny-fx is disabled; %s is unavailable", fn_name ? fn_name : "feature");
+  return NULL;
+}
+
+ID native_audio_load_track(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  return tinyclj_tiny_fx_disabled_error("audio-load-track!");
+}
+ID native_audio_unload_track(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  return tinyclj_tiny_fx_disabled_error("audio-unload-track!");
+}
+ID native_audio_play_music(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  return tinyclj_tiny_fx_disabled_error("audio-play-music!");
+}
+ID native_audio_stop_track(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  return tinyclj_tiny_fx_disabled_error("audio-stop-track!");
+}
+ID native_audio_stop_music(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  return tinyclj_tiny_fx_disabled_error("audio-stop-music!");
+}
+ID native_audio_play_sfx(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  return tinyclj_tiny_fx_disabled_error("audio-play-sfx!");
+}
+ID native_audio_stop_all(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  return tinyclj_tiny_fx_disabled_error("audio-stop-all!");
+}
+ID native_audio_set_track_volume(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  return tinyclj_tiny_fx_disabled_error("audio-set-track-volume!");
+}
+ID native_audio_set_music_volume(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  return tinyclj_tiny_fx_disabled_error("audio-set-music-volume!");
+}
+ID native_audio_on_finished(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  return tinyclj_tiny_fx_disabled_error("audio-on-finished!");
+}
+ID native_audio_play_test_tone(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  return tinyclj_tiny_fx_disabled_error("audio-play-test-tone!");
+}
+ID native_audio_host_status(ID *args, unsigned int argc) {
+  (void)args;
+  (void)argc;
+  CljPersistentMap *m = make_map(1);
+  ID k_supported = intern_symbol_global(":supported");
+  if (m && k_supported) {
+    map_assoc_inplace(&m, k_supported, clj_false);
+  }
+  return AUTORELEASE(m);
+}
+#endif
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -115,6 +178,7 @@ void builtins_reset_cached_funcs(void) {
   g_map_thunk_fn_obj = NULL;
   g_mapcat_thunk_fn_obj = NULL;
   g_range_inf_thunk_fn_obj = NULL;
+  builtins_tiny_fx_gfx_reset_cached_state();
 }
 
 // tiny-clj.datetime native functions (used by :native stubs)
@@ -151,12 +215,6 @@ ID native_tinyclj_net_mdns_browse_bang(ID *args, unsigned int argc);
 ID native_tinyclj_net_mdns_close_bang(ID *args, unsigned int argc);
 
 static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc);
-static ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc);
-static ID native_tinyclj_runtime_start_renderer(ID *args, unsigned int argc);
-static ID native_tinyclj_runtime_stop_renderer(ID *args, unsigned int argc);
-static ID native_tinyclj_runtime_renderer_state(ID *args, unsigned int argc);
-static ID native_tinyclj_runtime_renderer_timeline_step(ID *args, unsigned int argc);
-static ID native_tinyclj_runtime_renderer_timeline_progress(ID *args, unsigned int argc);
 static ID native_clojure_pprint_pprint_str(ID *args, unsigned int argc);
 
 // clojure.core sequence functions (used by :native stubs)
@@ -748,7 +806,7 @@ ID native_subvec(ID *args, unsigned int argc) {
   return AUTORELEASE(new_vec);
 }
 
-static ID conj2(ID vec, ID val);
+ID conj2(ID vec, ID val);
 
 ID conj2_wrapper(ID *args, unsigned int argc) {
   if (!validate_builtin_args(argc, 2, "conj"))
@@ -3311,11 +3369,6 @@ ID native_schedule(ID *args, unsigned int argc) {
     return NULL;
   bool periodic = period_from_opts && period_ms > 0;
 
-  // CRITICAL: Retain the function before passing to timer_enqueue
-  // The function may be in an autorelease pool that will be popped when this function returns
-  // timer_enqueue will retain it again, but we need to ensure it survives until then
-  RETAIN(fn_obj);
-
   if (timer_key) {
     (void)timer_upsert_named(timer_key, fn_obj, (int64_t)delay_ms, periodic, (int64_t)period_ms);
   } else {
@@ -3377,11 +3430,6 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
                     __FILE__, __LINE__, 0);
     return NULL;
   }
-
-  // CRITICAL: Retain the function before passing to timer_enqueue
-  // The function may be in an autorelease pool that will be popped when this function returns
-  // timer_enqueue will retain it again, but we need to ensure it survives until then
-  RETAIN(fn_obj);
 
   int32_t timer_id = 0;
   if (timer_key) {
@@ -5062,8 +5110,6 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
     ns_invalidate_resolve_cache();
   }
 }
-
-typedef bool (*NsInitFn)(EvalState *st);
 
 #define NS_INIT_TABLE_MAX 8
 static struct { const char *ns_name; NsInitFn fn; } g_ns_init_table[NS_INIT_TABLE_MAX];
@@ -7109,609 +7155,6 @@ ID native_now(ID *args, unsigned int argc) {
 // libs support: tiny-clj.runtime/stats + clojure.pprint/pprint-str
 // -----------------------------------------------------------------------------
 
-static bool tinyclj_scene_bench_parse_u32_arg(ID v, uint32_t default_value, uint32_t *out_value) {
-  if (!out_value) {
-    return false;
-  }
-  *out_value = default_value;
-  if (!v) {
-    return true;
-  }
-  int32_t parsed = 0;
-  if (is_fixnum(v)) {
-    parsed = as_fixnum(v);
-  } else if (is_fixed(v)) {
-    parsed = (int32_t)as_fixed(v);
-  } else {
-    return false;
-  }
-  if (parsed <= 0) {
-    return false;
-  }
-  *out_value = (uint32_t)parsed;
-  return true;
-}
-
-static uint32_t tinyclj_scene_bench_elapsed_ms(uint32_t start_ms, uint32_t end_ms) {
-  if (end_ms >= start_ms) {
-    return end_ms - start_ms;
-  }
-  /* platform_current_time_ms is modulo 24h. */
-  return (86400000u - start_ms) + end_ms;
-}
-
-static bool tinyclj_scene_bench_run_scene(ID scene,
-                                          VgFrameBuffer *fb,
-                                          uint32_t warmup_iterations,
-                                          uint32_t measured_iterations,
-                                          uint32_t *out_total_ms) {
-  if (!scene || !fb || !out_total_ms || measured_iterations == 0u) {
-    return false;
-  }
-  for (uint32_t i = 0; i < warmup_iterations; i++) {
-    if (!vg_render_scene_record(scene, fb)) {
-      return false;
-    }
-  }
-  uint32_t start_ms = platform_current_time_ms();
-  for (uint32_t i = 0; i < measured_iterations; i++) {
-    if (!vg_render_scene_record(scene, fb)) {
-      return false;
-    }
-  }
-  uint32_t end_ms = platform_current_time_ms();
-  *out_total_ms = tinyclj_scene_bench_elapsed_ms(start_ms, end_ms);
-  return true;
-}
-
-static int32_t tinyclj_scene_bench_clamp_fixnum(uint64_t v) {
-  if (v > (uint64_t)FIXNUM_MAX) {
-    return (int32_t)FIXNUM_MAX;
-  }
-  return (int32_t)v;
-}
-
-static ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
-  if (argc > 2) {
-    throw_exception(EXCEPTION_ARITY,
-                    "tiny-clj.runtime/vector-scene-bench takes 0, 1, or 2 arguments",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  EvalState *st = g_current_eval_state;
-  if (!st) {
-    throw_exception(EXCEPTION_RUNTIME,
-                    "tiny-clj.runtime/vector-scene-bench: EvalState not available",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-
-  uint32_t iterations = 800u;
-  uint32_t warmup = 40u;
-  if (argc >= 1 && !tinyclj_scene_bench_parse_u32_arg(args[0], iterations, &iterations)) {
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                    "tiny-clj.runtime/vector-scene-bench iterations must be a positive integer",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  if (argc >= 2 && !tinyclj_scene_bench_parse_u32_arg(args[1], warmup, &warmup)) {
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                    "tiny-clj.runtime/vector-scene-bench warmup must be a positive integer",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-
-  if (!tiny_gfx_ensure_schema(st) || !require_namespace_by_name(st, "tiny-gfx.runtime")) {
-    throw_exception(EXCEPTION_RUNTIME,
-                    "tiny-clj.runtime/vector-scene-bench failed to initialize tiny-gfx scene schema",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-
-  ID cfg = eval_string("(tiny-gfx.runtime/host-viewer-config)", st);
-  if (!cfg || !is_map(cfg)) {
-    throw_exception(EXCEPTION_RUNTIME,
-                    "tiny-clj.runtime/vector-scene-bench failed to load host-viewer config",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  static CljSymbol *k_bundle = NULL;
-  if (!k_bundle) {
-    k_bundle = intern_symbol_global(":bundle");
-  }
-  if (!k_bundle) {
-    throw_exception(EXCEPTION_RUNTIME,
-                    "tiny-clj.runtime/vector-scene-bench failed to intern :bundle key",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  ID bundle = map_get_sentinel(cfg, k_bundle, NULL);
-  if (!bundle || !is_vector(bundle)) {
-    throw_exception(EXCEPTION_RUNTIME,
-                    "tiny-clj.runtime/vector-scene-bench failed to build demo scene bundle",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  CljPersistentVector *vec = as_vector(bundle);
-  if (!vec || vector_count(vec) < 3) {
-    throw_exception(EXCEPTION_RUNTIME,
-                    "tiny-clj.runtime/vector-scene-bench demo bundle shape mismatch",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-
-  ID deco_scene = vector_nth(vec, 0);
-  ID score_scene = vector_nth(vec, 1);
-  ID game_scene = vector_nth(vec, 2);
-  if (!deco_scene || !score_scene || !game_scene) {
-    throw_exception(EXCEPTION_RUNTIME,
-                    "tiny-clj.runtime/vector-scene-bench demo scenes are missing",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-
-  enum {
-    BENCH_W = 320,
-    BENCH_H = 240
-  };
-  size_t pixel_count = (size_t)BENCH_W * (size_t)BENCH_H;
-  uint16_t *pixels = (uint16_t *)CLJ_MALLOC(pixel_count * sizeof(uint16_t));
-  if (!pixels) {
-    throw_exception(EXCEPTION_RUNTIME,
-                    "tiny-clj.runtime/vector-scene-bench failed to allocate framebuffer",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-
-  VgFrameBuffer fb;
-  if (!vg_framebuffer_init(&fb, BENCH_W, BENCH_H, pixels, pixel_count)) {
-    CLJ_FREE(pixels);
-    throw_exception(EXCEPTION_RUNTIME,
-                    "tiny-clj.runtime/vector-scene-bench framebuffer init failed",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  vg_framebuffer_clear(&fb, 0x0000u);
-
-  uint32_t deco_total_ms = 0u;
-  uint32_t score_total_ms = 0u;
-  uint32_t game_total_ms = 0u;
-  bool ok = tinyclj_scene_bench_run_scene(deco_scene, &fb, warmup, iterations, &deco_total_ms) &&
-            tinyclj_scene_bench_run_scene(score_scene, &fb, warmup, iterations, &score_total_ms) &&
-            tinyclj_scene_bench_run_scene(game_scene, &fb, warmup, iterations, &game_total_ms);
-  CLJ_FREE(pixels);
-
-  if (!ok) {
-    throw_exception(EXCEPTION_RUNTIME,
-                    "tiny-clj.runtime/vector-scene-bench render failed",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-
-  uint64_t deco_us_per_frame = ((uint64_t)deco_total_ms * 1000ull) / (uint64_t)iterations;
-  uint64_t score_us_per_frame = ((uint64_t)score_total_ms * 1000ull) / (uint64_t)iterations;
-  uint64_t game_us_per_frame = ((uint64_t)game_total_ms * 1000ull) / (uint64_t)iterations;
-  uint64_t total_ms = (uint64_t)deco_total_ms + (uint64_t)score_total_ms + (uint64_t)game_total_ms;
-
-  CljPersistentMap *result = make_map(16);
-  if (!result) {
-    return NULL;
-  }
-  CljSymbol *k_platform = intern_symbol_global(":platform");
-  CljSymbol *k_iterations = intern_symbol_global(":iterations");
-  CljSymbol *k_warmup = intern_symbol_global(":warmup");
-  CljSymbol *k_deco_total_ms = intern_symbol_global(":deco-total-ms");
-  CljSymbol *k_score_total_ms = intern_symbol_global(":score-total-ms");
-  CljSymbol *k_game_total_ms = intern_symbol_global(":game-total-ms");
-  CljSymbol *k_deco_us_per_frame = intern_symbol_global(":deco-us-per-frame");
-  CljSymbol *k_score_us_per_frame = intern_symbol_global(":score-us-per-frame");
-  CljSymbol *k_game_us_per_frame = intern_symbol_global(":game-us-per-frame");
-  CljSymbol *k_total_ms = intern_symbol_global(":total-ms");
-
-  if (k_platform) {
-    ID platform_str = make_string(platform_name());
-    map_assoc_inplace(&result, k_platform, platform_str);
-    RELEASE(platform_str);
-  }
-  if (k_iterations) map_assoc_inplace(&result, k_iterations, fixnum((int32_t)iterations));
-  if (k_warmup) map_assoc_inplace(&result, k_warmup, fixnum((int32_t)warmup));
-  if (k_deco_total_ms) map_assoc_inplace(&result, k_deco_total_ms, fixnum((int32_t)deco_total_ms));
-  if (k_score_total_ms) map_assoc_inplace(&result, k_score_total_ms, fixnum((int32_t)score_total_ms));
-  if (k_game_total_ms) map_assoc_inplace(&result, k_game_total_ms, fixnum((int32_t)game_total_ms));
-  if (k_deco_us_per_frame) {
-    map_assoc_inplace(&result, k_deco_us_per_frame, fixnum(tinyclj_scene_bench_clamp_fixnum(deco_us_per_frame)));
-  }
-  if (k_score_us_per_frame) {
-    map_assoc_inplace(&result, k_score_us_per_frame, fixnum(tinyclj_scene_bench_clamp_fixnum(score_us_per_frame)));
-  }
-  if (k_game_us_per_frame) {
-    map_assoc_inplace(&result, k_game_us_per_frame, fixnum(tinyclj_scene_bench_clamp_fixnum(game_us_per_frame)));
-  }
-  if (k_total_ms) map_assoc_inplace(&result, k_total_ms, fixnum(tinyclj_scene_bench_clamp_fixnum(total_ms)));
-
-  return AUTORELEASE(result);
-}
-
-static ID native_tinyclj_runtime_start_renderer(ID *args, unsigned int argc) {
-  ID slot_atoms = NULL;
-  if (argc > 1) {
-    throw_exception(EXCEPTION_ARITY,
-                    "tiny-clj.runtime/start-renderer! takes 0 or 1 argument",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  if (argc == 1) {
-    slot_atoms = args[0];
-    if (slot_atoms && TAG(slot_atoms) != CLJ_VECTOR_PERSISTENT) {
-      throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                      "tiny-clj.runtime/start-renderer! expects nil or a vector of slot atoms",
-                      __FILE__,
-                      __LINE__,
-                      0);
-      return NULL;
-    }
-  }
-  return tiny_renderer_lifecycle_start(slot_atoms) ? clj_true : clj_false;
-}
-
-static ID native_tinyclj_runtime_stop_renderer(ID *args, unsigned int argc) {
-  (void)args;
-  if (argc != 0) {
-    throw_exception(EXCEPTION_ARITY,
-                    "tiny-clj.runtime/stop-renderer! takes no arguments",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  return tiny_renderer_lifecycle_stop() ? clj_true : clj_false;
-}
-
-static bool tinyclj_runtime_parse_renderer_slot(ID slot_obj, uint8_t *out_slot) {
-  if (!out_slot) {
-    return false;
-  }
-  if (is_fixnum(slot_obj)) {
-    int slot = as_fixnum(slot_obj);
-    if (slot >= 0 && slot < 3) {
-      *out_slot = (uint8_t)slot;
-      return true;
-    }
-    return false;
-  }
-  if (is_symbol(slot_obj)) {
-    CljSymbol *sym = as_symbol(slot_obj);
-    const char *name = sym ? sym->cname : NULL;
-    if (!name) {
-      return false;
-    }
-    if (strcmp(name, ":deco") == 0) {
-      *out_slot = 0u;
-      return true;
-    }
-    if (strcmp(name, ":score") == 0) {
-      *out_slot = 1u;
-      return true;
-    }
-    if (strcmp(name, ":game") == 0) {
-      *out_slot = 2u;
-      return true;
-    }
-  }
-  return false;
-}
-
-static bool tinyclj_runtime_parse_rendered_field(ID field_obj, VgRenderedField *out_field) {
-  if (!out_field || !is_symbol(field_obj)) {
-    return false;
-  }
-  CljSymbol *sym = as_symbol(field_obj);
-  const char *name = sym ? sym->cname : NULL;
-  if (!name) {
-    return false;
-  }
-  if (strcmp(name, ":t") == 0) {
-    *out_field = VG_RENDERED_FIELD_T;
-    return true;
-  }
-  if (strcmp(name, ":style") == 0) {
-    *out_field = VG_RENDERED_FIELD_STYLE;
-    return true;
-  }
-  if (strcmp(name, ":visible") == 0) {
-    *out_field = VG_RENDERED_FIELD_VISIBLE;
-    return true;
-  }
-  if (strcmp(name, ":children") == 0) {
-    *out_field = VG_RENDERED_FIELD_CHILDREN;
-    return true;
-  }
-  if (strcmp(name, ":pts") == 0) {
-    *out_field = VG_RENDERED_FIELD_PTS;
-    return true;
-  }
-  if (strcmp(name, ":closed") == 0) {
-    *out_field = VG_RENDERED_FIELD_CLOSED;
-    return true;
-  }
-  if (strcmp(name, ":x") == 0) {
-    *out_field = VG_RENDERED_FIELD_X;
-    return true;
-  }
-  if (strcmp(name, ":y") == 0) {
-    *out_field = VG_RENDERED_FIELD_Y;
-    return true;
-  }
-  if (strcmp(name, ":w") == 0) {
-    *out_field = VG_RENDERED_FIELD_W;
-    return true;
-  }
-  if (strcmp(name, ":h") == 0) {
-    *out_field = VG_RENDERED_FIELD_H;
-    return true;
-  }
-  if (strcmp(name, ":x1") == 0) {
-    *out_field = VG_RENDERED_FIELD_X1;
-    return true;
-  }
-  if (strcmp(name, ":y1") == 0) {
-    *out_field = VG_RENDERED_FIELD_Y1;
-    return true;
-  }
-  if (strcmp(name, ":x2") == 0) {
-    *out_field = VG_RENDERED_FIELD_X2;
-    return true;
-  }
-  if (strcmp(name, ":y2") == 0) {
-    *out_field = VG_RENDERED_FIELD_Y2;
-    return true;
-  }
-  if (strcmp(name, ":x3") == 0) {
-    *out_field = VG_RENDERED_FIELD_X3;
-    return true;
-  }
-  if (strcmp(name, ":y3") == 0) {
-    *out_field = VG_RENDERED_FIELD_Y3;
-    return true;
-  }
-  if (strcmp(name, ":scale") == 0) {
-    *out_field = VG_RENDERED_FIELD_SCALE;
-    return true;
-  }
-  if (strcmp(name, ":rot") == 0) {
-    *out_field = VG_RENDERED_FIELD_ROT;
-    return true;
-  }
-  if (strcmp(name, ":text") == 0) {
-    *out_field = VG_RENDERED_FIELD_TEXT;
-    return true;
-  }
-  return false;
-}
-
-static int32_t tinyclj_fixed_raw_to_int_trunc_zero(int32_t raw) {
-  if (raw >= 0) {
-    return raw >> CLJ_FIXED_FRAC_BITS;
-  }
-  return -(((-raw) >> CLJ_FIXED_FRAC_BITS));
-}
-
-static int32_t tinyclj_clamp_i64_to_fixnum(int64_t v) {
-  if (v > (int64_t)FIXNUM_MAX) {
-    return (int32_t)FIXNUM_MAX;
-  }
-  if (v < (int64_t)FIXNUM_MIN) {
-    return (int32_t)FIXNUM_MIN;
-  }
-  return (int32_t)v;
-}
-
-static ID native_tinyclj_runtime_renderer_state(ID *args, unsigned int argc) {
-  if (argc != 2) {
-    throw_exception(EXCEPTION_ARITY,
-                    "tiny-clj.runtime/renderer-state takes 2 arguments",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  uint8_t slot = 0u;
-  if (!tinyclj_runtime_parse_renderer_slot(args[0], &slot)) {
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                    "tiny-clj.runtime/renderer-state slot must be :deco, :score, :game or slot index",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  if (!args[1]) {
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                    "tiny-clj.runtime/renderer-state entity-id must not be nil",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  VgRenderedEntityState state;
-  if (!vg_rendered_state_query_entity(slot, (uintptr_t)args[1], &state)) {
-    return NULL;
-  }
-
-  int32_t tx = tinyclj_fixed_raw_to_int_trunc_zero(state.world_t.m02);
-  int32_t ty = tinyclj_fixed_raw_to_int_trunc_zero(state.world_t.m12);
-  CljPersistentMap *m = make_map(12);
-  if (!m) {
-    return NULL;
-  }
-
-  ID k_tx = intern_symbol_global(":tx");
-  ID k_ty = intern_symbol_global(":ty");
-  ID k_m00 = intern_symbol_global(":m00");
-  ID k_m01 = intern_symbol_global(":m01");
-  ID k_m02 = intern_symbol_global(":m02");
-  ID k_m10 = intern_symbol_global(":m10");
-  ID k_m11 = intern_symbol_global(":m11");
-  ID k_m12 = intern_symbol_global(":m12");
-  ID k_snapshot_gen = intern_symbol_global(":snapshot-gen");
-  ID k_ts_ms = intern_symbol_global(":ts-ms");
-
-  if (k_tx) map_assoc_inplace(&m, k_tx, fixnum(tinyclj_clamp_i64_to_fixnum(tx)));
-  if (k_ty) map_assoc_inplace(&m, k_ty, fixnum(tinyclj_clamp_i64_to_fixnum(ty)));
-  if (k_m00) map_assoc_inplace(&m, k_m00, fixnum(tinyclj_clamp_i64_to_fixnum(state.world_t.m00)));
-  if (k_m01) map_assoc_inplace(&m, k_m01, fixnum(tinyclj_clamp_i64_to_fixnum(state.world_t.m01)));
-  if (k_m02) map_assoc_inplace(&m, k_m02, fixnum(tinyclj_clamp_i64_to_fixnum(state.world_t.m02)));
-  if (k_m10) map_assoc_inplace(&m, k_m10, fixnum(tinyclj_clamp_i64_to_fixnum(state.world_t.m10)));
-  if (k_m11) map_assoc_inplace(&m, k_m11, fixnum(tinyclj_clamp_i64_to_fixnum(state.world_t.m11)));
-  if (k_m12) map_assoc_inplace(&m, k_m12, fixnum(tinyclj_clamp_i64_to_fixnum(state.world_t.m12)));
-  if (k_snapshot_gen) map_assoc_inplace(&m, k_snapshot_gen, fixnum((int32_t)state.snapshot_generation));
-  if (k_ts_ms) map_assoc_inplace(&m, k_ts_ms, fixnum((int32_t)state.frame_time_ms));
-
-  return AUTORELEASE(m);
-}
-
-static ID native_tinyclj_runtime_renderer_timeline_step(ID *args, unsigned int argc) {
-  if (argc != 3) {
-    throw_exception(EXCEPTION_ARITY,
-                    "tiny-clj.runtime/renderer-timeline-step takes 3 arguments",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  uint8_t slot = 0u;
-  if (!tinyclj_runtime_parse_renderer_slot(args[0], &slot)) {
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                    "tiny-clj.runtime/renderer-timeline-step slot must be :deco, :score, :game or slot index",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  if (!args[1]) {
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                    "tiny-clj.runtime/renderer-timeline-step entity-id must not be nil",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  VgRenderedField field = VG_RENDERED_FIELD_NONE;
-  if (!tinyclj_runtime_parse_rendered_field(args[2], &field)) {
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                    "tiny-clj.runtime/renderer-timeline-step field must be a supported keyword",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  VgRenderedTimelineState state;
-  if (!vg_rendered_state_query_timeline(slot, (uintptr_t)args[1], field, &state)) {
-    return NULL;
-  }
-  return fixnum((int32_t)state.sample.step_index);
-}
-
-static ID native_tinyclj_runtime_renderer_timeline_progress(ID *args, unsigned int argc) {
-  if (argc != 3) {
-    throw_exception(EXCEPTION_ARITY,
-                    "tiny-clj.runtime/renderer-timeline-progress takes 3 arguments",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  uint8_t slot = 0u;
-  if (!tinyclj_runtime_parse_renderer_slot(args[0], &slot)) {
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                    "tiny-clj.runtime/renderer-timeline-progress slot must be :deco, :score, :game or slot index",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  if (!args[1]) {
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                    "tiny-clj.runtime/renderer-timeline-progress entity-id must not be nil",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  VgRenderedField field = VG_RENDERED_FIELD_NONE;
-  if (!tinyclj_runtime_parse_rendered_field(args[2], &field)) {
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                    "tiny-clj.runtime/renderer-timeline-progress field must be a supported keyword",
-                    __FILE__,
-                    __LINE__,
-                    0);
-    return NULL;
-  }
-  VgRenderedTimelineState state;
-  if (!vg_rendered_state_query_timeline(slot, (uintptr_t)args[1], field, &state)) {
-    return NULL;
-  }
-
-  uint32_t period = state.sample.period_ms;
-  uint32_t phase = state.sample.phase_ms;
-  uint32_t permille = 0u;
-  if (period > 0u) {
-    uint64_t scaled = ((uint64_t)phase * 1000ull) / (uint64_t)period;
-    permille = (scaled > 1000ull) ? 1000u : (uint32_t)scaled;
-  }
-
-  CljPersistentMap *m = make_map(10);
-  if (!m) {
-    return NULL;
-  }
-  ID k_step = intern_symbol_global(":step");
-  ID k_count = intern_symbol_global(":count");
-  ID k_phase = intern_symbol_global(":phase-ms");
-  ID k_period = intern_symbol_global(":period-ms");
-  ID k_loop = intern_symbol_global(":loop");
-  ID k_permille = intern_symbol_global(":permille");
-  ID k_snapshot_gen = intern_symbol_global(":snapshot-gen");
-  ID k_ts_ms = intern_symbol_global(":ts-ms");
-
-  if (k_step) map_assoc_inplace(&m, k_step, fixnum((int32_t)state.sample.step_index));
-  if (k_count) map_assoc_inplace(&m, k_count, fixnum((int32_t)state.sample.keyframe_count));
-  if (k_phase) map_assoc_inplace(&m, k_phase, fixnum((int32_t)phase));
-  if (k_period) map_assoc_inplace(&m, k_period, fixnum((int32_t)period));
-  if (k_loop) map_assoc_inplace(&m, k_loop, state.sample.loop ? clj_true : clj_false);
-  if (k_permille) map_assoc_inplace(&m, k_permille, fixnum((int32_t)permille));
-  if (k_snapshot_gen) map_assoc_inplace(&m, k_snapshot_gen, fixnum((int32_t)state.snapshot_generation));
-  if (k_ts_ms) map_assoc_inplace(&m, k_ts_ms, fixnum((int32_t)state.frame_time_ms));
-
-  return AUTORELEASE(m);
-}
-
 static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   (void)args;
   if (argc != 0) {
@@ -7751,15 +7194,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   if (!m)
     return NULL;
 
-#define MAP_REASSIGN(var, expr)           \
-  do {                                    \
-    CljPersistentMap *_next_map = (expr); \
-    if (_next_map != (var)) {             \
-      RETAIN(_next_map);                  \
-      RELEASE(var);                       \
-      (var) = _next_map;                  \
-    }                                     \
-  } while (0)
+#define MAP_REASSIGN(var, expr)             do {                                        CljPersistentMap *_next_map = (expr);     if (_next_map != (var)) {                   RETAIN(_next_map);                        RELEASE(var);                             (var) = _next_map;                      }                                       } while (0)
 
   {
     const char *os_ver = platform_os_version();
@@ -7783,6 +7218,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   }
 
   {
+#if TINYCLJ_WITH_TINY_FX
     CljSymbol *k_audio_cmd_drop_count = intern_symbol_global(":audio-cmd-drop-count");
     CljSymbol *k_audio_tick_overrun_count = intern_symbol_global(":audio-tick-overrun-count");
     CljSymbol *k_audio_queue_high_watermark = intern_symbol_global(":audio-queue-high-watermark");
@@ -7820,6 +7256,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
     if (k_audio_finished_drop_count) {
       MAP_REASSIGN(m, map_assoc(m, k_audio_finished_drop_count, fixnum(finished_drops)));
     }
+#endif
   }
 
   {
@@ -8344,9 +7781,11 @@ static void register_builtin(const char *cname, BuiltinFn func) {
     // Qualified symbol: split into namespace and name
     size_t ns_len = slash - cname;
 
-    // Auto-register clojure.* and tiny-snd.runtime (audio API) namespaces.
+    // Auto-register clojure.* and tiny-fx.sound-native (audio API) namespaces.
     // Other namespaces must use (require 'ns) first, then (defn ... :native).
-    bool allow = (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0) || (ns_len >= 15 && strncmp(cname, "tiny-snd.runtime", 15) == 0);
+    bool allow = (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0) ||
+                 (ns_len == strlen("tiny-fx.sound-native") &&
+                  strncmp(cname, "tiny-fx.sound-native", strlen("tiny-fx.sound-native")) == 0);
     if (!allow)
       return;
 
@@ -8431,19 +7870,21 @@ void register_builtins() {
       register_builtin(entry->register_cname, entry->native_func);
     }
 
-    // Audio builtins (Runtime API in tiny-snd.runtime per plan)
-    register_builtin("tiny-snd.runtime/audio-load-track!", native_audio_load_track);
-    register_builtin("tiny-snd.runtime/audio-unload-track!", native_audio_unload_track);
-    register_builtin("tiny-snd.runtime/audio-play-music!", native_audio_play_music);
-    register_builtin("tiny-snd.runtime/audio-stop-track!", native_audio_stop_track);
-    register_builtin("tiny-snd.runtime/audio-stop-music!", native_audio_stop_music);
-    register_builtin("tiny-snd.runtime/audio-play-sfx!", native_audio_play_sfx);
-    register_builtin("tiny-snd.runtime/audio-stop-all!", native_audio_stop_all);
-    register_builtin("tiny-snd.runtime/audio-set-track-volume!", native_audio_set_track_volume);
-    register_builtin("tiny-snd.runtime/audio-set-music-volume!", native_audio_set_music_volume);
-    register_builtin("tiny-snd.runtime/audio-on-finished!", native_audio_on_finished);
-    register_builtin("tiny-snd.runtime/audio-play-test-tone!", native_audio_play_test_tone);
-    register_builtin("tiny-snd.runtime/audio-host-status!", native_audio_host_status);
+    // Audio builtins (Runtime API in tiny-fx.sound-native per plan)
+#if TINYCLJ_WITH_TINY_FX
+    register_builtin("tiny-fx.sound-native/audio-load-track!", native_audio_load_track);
+    register_builtin("tiny-fx.sound-native/audio-unload-track!", native_audio_unload_track);
+    register_builtin("tiny-fx.sound-native/audio-play-music!", native_audio_play_music);
+    register_builtin("tiny-fx.sound-native/audio-stop-track!", native_audio_stop_track);
+    register_builtin("tiny-fx.sound-native/audio-stop-music!", native_audio_stop_music);
+    register_builtin("tiny-fx.sound-native/audio-play-sfx!", native_audio_play_sfx);
+    register_builtin("tiny-fx.sound-native/audio-stop-all!", native_audio_stop_all);
+    register_builtin("tiny-fx.sound-native/audio-set-track-volume!", native_audio_set_track_volume);
+    register_builtin("tiny-fx.sound-native/audio-set-music-volume!", native_audio_set_music_volume);
+    register_builtin("tiny-fx.sound-native/audio-on-finished!", native_audio_on_finished);
+    register_builtin("tiny-fx.sound-native/audio-play-test-tone!", native_audio_play_test_tone);
+    register_builtin("tiny-fx.sound-native/audio-host-status!", native_audio_host_status);
+#endif
 
     // Prime cached thunk functions during setup so tests/runtime do not pay
     // one-time cached_named_func allocations inside per-call heap assertions.
@@ -8454,6 +7895,8 @@ void register_builtins() {
 
     ns_end_resolve_cache_batch();
 
-    ns_register_init("tiny-gfx.scene", tiny_gfx_ensure_schema);
+#if TINYCLJ_WITH_TINY_FX
+    ns_register_init("tiny-fx.gfx", tiny_fx_gfx_ensure_schema);
+#endif
   });
 }

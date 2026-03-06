@@ -8,7 +8,7 @@
  */
 
 #include "audio_engine.h"
-#include "builtins.h"
+#include "builtins_tiny_fx_sound.h"
 #include "validation.h"
 #include "value.h"
 #include "symbol.h"

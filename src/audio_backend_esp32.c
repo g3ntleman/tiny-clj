@@ -51,6 +51,24 @@ static AudioTickScheduler g_audio_tick_scheduler;
 #define AUDIO_TICK_PERIOD_NS ((uint64_t)VG_AUDIO_TICK_MS * 1000000ull)
 #define AUDIO_TICK_MAX_CATCHUP_TICKS 4u
 
+static void audio_backend_stop_ledc_voice(LedcVoice *voice, bool clear_initialized) {
+    if (!voice || !voice->initialized) {
+        return;
+    }
+    ledc_stop(LEDC_LOW_SPEED_MODE, voice->channel, 0);
+    voice->last_freq_hz = 0;
+    voice->last_duty = 0;
+    if (clear_initialized) {
+        voice->initialized = false;
+    }
+}
+
+static void audio_backend_silence_ledc_voices(bool clear_initialized) {
+    for (int i = 0; i < LEDC_VOICE_CAP; i++) {
+        audio_backend_stop_ledc_voice(&g_ledc_voices[i], clear_initialized);
+    }
+}
+
 static bool ledc_mapping_valid(int voice_count) {
     for (int i = 0; i < voice_count; i++) {
         for (int j = i + 1; j < voice_count; j++) {
@@ -141,14 +159,9 @@ void audio_backend_init(int voice_count) {
 }
 
 void audio_backend_shutdown(void) {
-    for (int i = 0; i < LEDC_VOICE_CAP; i++) {
-        if (g_ledc_voices[i].initialized) {
-            ledc_stop(LEDC_LOW_SPEED_MODE, g_ledc_voices[i].channel, 0);
-            g_ledc_voices[i].initialized = false;
-        }
-    }
+    audio_tick_stop();
+    audio_backend_silence_ledc_voices(true);
     if (g_audio_timer) {
-        esp_timer_stop(g_audio_timer);
         esp_timer_delete(g_audio_timer);
         g_audio_timer = NULL;
     }
@@ -209,15 +222,7 @@ void audio_tick_stop(void) {
     }
     audio_tick_scheduler_stop(&g_audio_tick_scheduler);
     g_audio_engine.tick_running = false;
-
-    /* Silence all voices on stop */
-    for (int i = 0; i < LEDC_VOICE_CAP; i++) {
-        if (g_ledc_voices[i].initialized) {
-            ledc_stop(LEDC_LOW_SPEED_MODE, g_ledc_voices[i].channel, 0);
-            g_ledc_voices[i].last_freq_hz = 0;
-            g_ledc_voices[i].last_duty = 0;
-        }
-    }
+    audio_backend_silence_ledc_voices(false);
 }
 
 bool audio_backend_host_get_status(AudioHostStatus *out) {

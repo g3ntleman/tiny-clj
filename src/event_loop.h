@@ -22,15 +22,15 @@ void event_loop_init(void);
 // Clear event loop queue (for test isolation)
 void event_loop_clear(void);
 
-// Enqueue go task for later execution. Takes ownership via RETAIN; releases after run.
+// Enqueue go task for later execution.
 void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channel);
 
 // Thread-safe ingress queue for cross-thread callback dispatch.
-// Takes ownership via RETAIN on success; returns false when queue is full or input invalid.
+// Returns false when queue is full or input invalid.
 bool event_loop_enqueue_ingress(CljObject *fn_zero_arity);
 
-// Thread-safe generic ingress queue for external fire-and-forget events with one payload argument.
-// Takes ownership via RETAIN on success for both fn and arg; returns false when queue is full or input invalid.
+// Thread-safe generic ingress queue for external fire-and-forget events with one
+// payload argument. Returns false when queue is full or input invalid.
 // Callback return values are ignored by the C event bridge.
 bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg);
 
@@ -58,7 +58,6 @@ int event_loop_time_until_next_timer_ms(void);
 // Timer API
 // Enqueue a timer task for execution after delay_ms milliseconds
 // If periodic is true, the task will be re-scheduled every period_ms milliseconds
-// Takes ownership via RETAIN; releases after run.
 // Returns unique timer ID (int) or 0 on error.
 int timer_enqueue(CljObject *fn_zero_arity, int64_t delay_ms, bool periodic, int64_t period_ms);
 // Cancel a timer by ID. Returns true if timer was found and cancelled, false otherwise.
@@ -69,6 +68,4 @@ int timer_upsert_named(ID key, CljObject *fn_zero_arity, int64_t delay_ms, bool 
 bool timer_cancel_named(ID key);
 
 #endif
-
-
 

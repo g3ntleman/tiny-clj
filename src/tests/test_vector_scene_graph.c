@@ -1,8 +1,11 @@
 #include "tests_common.h"
+#include "../atom.h"
+#include "../builtins_tiny_fx_gfx.h"
 #include "../vector_scene_graph.h"
 #include "../scene.h"
-#include "../tiny_gfx.h"
+#include "../tiny_fx_gfx.h"
 #include "../rendered_state_snapshot.h"
+#include "../renderer_lifecycle.h"
 #include "../viewer_collision.h"
 #include "callbacks.h"
 #include "record.h"
@@ -198,7 +201,7 @@ TEST(test_vector_scene_graph_group_visible_false_skips_children) {
 TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -224,7 +227,7 @@ TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
 TEST(test_vector_scene_graph_renders_line_from_flat_entity_map_records) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -249,7 +252,7 @@ TEST(test_vector_scene_graph_renders_line_from_flat_entity_map_records) {
 TEST(test_vector_scene_graph_flat_entity_map_nested_group_transform_inheritance) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -275,7 +278,7 @@ TEST(test_vector_scene_graph_flat_entity_map_nested_group_transform_inheritance)
 TEST(test_vector_scene_graph_flat_entity_map_missing_root_symbol_fails) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Group [id t style visible children]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (let [entities {100 (->Group 100 nil nil true [])}] "
@@ -294,7 +297,7 @@ TEST(test_vector_scene_graph_flat_entity_map_missing_root_symbol_fails) {
 TEST(test_vector_scene_graph_flat_entity_map_missing_child_id_fails) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Group [id t style visible children]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (let [entities {'root (->Group 'root nil nil true [999])}] "
@@ -314,8 +317,8 @@ TEST(test_vector_scene_graph_host_viewer_demo_bundle_uses_flat_entity_maps) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-gfx.host-viewer-demo) "
-        "  (let [bundle (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "  (require 'tiny-fx.scene-demo) "
+        "  (let [bundle (tiny-fx.scene-demo/create-demo-bundle) "
         "        root0 (:root (nth bundle 0)) "
         "        root1 (:root (nth bundle 1)) "
         "        root2 (:root (nth bundle 2))] "
@@ -331,8 +334,8 @@ TEST(test_vector_scene_graph_host_viewer_demo_score_text_is_timeline_driven) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-gfx.host-viewer-demo) "
-        "  (let [bundle (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "  (require 'tiny-fx.scene-demo) "
+        "  (let [bundle (tiny-fx.scene-demo/create-demo-bundle) "
         "        score-root (:root (nth bundle 1)) "
         "        score-text (get score-root 2001) "
         "        score-field (:text score-text)] "
@@ -346,8 +349,8 @@ TEST(test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-gfx.host-viewer-demo) "
-        "  (let [bundle (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "  (require 'tiny-fx.scene-demo) "
+        "  (let [bundle (tiny-fx.scene-demo/create-demo-bundle) "
         "        game-root (:root (nth bundle 2)) "
         "        terrain (get game-root 3001) "
         "        player (get game-root 3002) "
@@ -365,20 +368,27 @@ TEST(test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven) {
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
-TEST(test_vector_scene_graph_tiny_gfx_runtime_host_viewer_config_shape) {
+TEST(test_vector_scene_graph_tiny_fx_runtime_host_viewer_config_shape) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-gfx.runtime) "
-        "  (let [cfg (tiny-gfx.runtime/host-viewer-config) "
-        "        bundle (:bundle cfg) "
+        "  (require 'tiny-fx.gfx) "
+        "  (let [cfg (tiny-fx.gfx/host-viewer-config) "
+        "        slots (:slots cfg) "
+        "        slot-ids (mapv (fn [slot] (:id slot)) slots) "
+        "        slot-atoms (mapv (fn [slot] (:atom slot)) slots) "
         "        spatial-callback (:spatial-callback cfg) "
         "        game-scene-atom (:game-scene-atom cfg) "
-        "        game-scene (nth bundle 2) "
+        "        game-scene @game-scene-atom "
         "        rules (:collision-rules game-scene) "
         "        rule1 (first rules) "
         "        rule2 (second rules)] "
-        "    (and (= 3 (count bundle)) "
+        "    (and (= [:deco :score :game] slot-ids) "
+        "         (= 3 (count slots)) "
+        "         (= [tiny-fx.scene-demo/deco-scene-state "
+        "             tiny-fx.scene-demo/score-scene-state "
+        "             tiny-fx.scene-demo/game-scene-state] "
+        "            slot-atoms) "
         "         (fn? spatial-callback) "
         "         (= game-scene @game-scene-atom) "
         "         (= 2 (count rules)) "
@@ -401,8 +411,8 @@ TEST(test_vector_scene_graph_host_viewer_demo_player_entity_matches_tri_type_has
 
     ID bundle = eval_string(
         "(do "
-        "  (require 'tiny-gfx.host-viewer-demo) "
-        "  (tiny-gfx.host-viewer-demo/create-demo-bundle))",
+        "  (require 'tiny-fx.scene-demo) "
+        "  (tiny-fx.scene-demo/create-demo-bundle))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(bundle);
     TEST_ASSERT_TRUE(is_vector(bundle));
@@ -419,7 +429,7 @@ TEST(test_vector_scene_graph_host_viewer_demo_player_entity_matches_tri_type_has
     TEST_ASSERT_NOT_NULL(player);
     TEST_ASSERT_TRUE(is_record(player));
 
-    const VgRecordSchema *schema = tiny_gfx_schema();
+    const VgRecordSchema *schema = tiny_fx_gfx_schema();
     TEST_ASSERT_NOT_NULL(schema);
     TEST_ASSERT_TRUE(as_record(player)->descriptor != NULL);
     uint32_t player_type_hash = clj_hash(as_record(player)->descriptor->type_symbol);
@@ -430,18 +440,18 @@ TEST(test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-gfx.host-viewer-demo) "
-        "  (require 'tiny-gfx.collision) "
-        "  (let [bundle (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "  (require 'tiny-fx.scene-demo) "
+        "  (require 'tiny-fx.gfx) "
+        "  (let [bundle (tiny-fx.scene-demo/create-demo-bundle) "
         "        game0 (nth bundle 2) "
         "        p0 (get (:root game0) 3002) "
-        "        _ (tiny-gfx.collision/set-collision-callback! nil) "
-        "        disabled-ret (tiny-gfx.collision/invoke-collision-callback! nil) "
-        "        _ (tiny-gfx.host-viewer-demo/configure-collision-toggle-callback!) "
-        "        ret1 (tiny-gfx.collision/invoke-collision-callback! {:kind :collision :phase :enter}) "
-        "        p1 (get (:root @tiny-gfx.host-viewer-demo/game-scene-state) 3002) "
-        "        ret2 (tiny-gfx.collision/invoke-collision-callback! {:kind :collision :phase :exit}) "
-        "        p2 (get (:root @tiny-gfx.host-viewer-demo/game-scene-state) 3002)] "
+        "        _ (tiny-fx.gfx/set-collision-callback! nil) "
+        "        disabled-ret (tiny-fx.gfx/invoke-collision-callback! nil) "
+        "        _ (tiny-fx.scene-demo/configure-collision-toggle-callback!) "
+        "        ret1 (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :enter}) "
+        "        p1 (get (:root @tiny-fx.scene-demo/game-scene-state) 3002) "
+        "        ret2 (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :exit}) "
+        "        p2 (get (:root @tiny-fx.scene-demo/game-scene-state) 3002)] "
         "    (and (nil? disabled-ret) (nil? ret1) (nil? ret2) "
         "         (= 56 (:x1 p0)) (= 118 (:y2 p0)) "
         "         (= 60 (:x1 p1)) (= 126 (:y2 p1)) "
@@ -454,33 +464,33 @@ TEST(test_vector_scene_graph_host_viewer_demo_gpio_press_triggers_demo_melody_on
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-gfx.host-viewer-demo) "
-        "  (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "  (require 'tiny-fx.scene-demo) "
+        "  (tiny-fx.scene-demo/create-demo-bundle) "
         "  (gpio-simulate! 1 1) "
         "  (run-next-task) "
         "  (gpio-simulate! 1 0) "
         "  (run-next-task) "
-        "  (let [count @tiny-gfx.host-viewer-demo/demo-melody-trigger-count* "
-        "        status (tiny-snd.runtime/audio-host-status!)] "
+        "  (let [count @tiny-fx.scene-demo/demo-melody-trigger-count* "
+        "        status (tiny-fx.sound/audio-host-status!)] "
         "    (and (= 1 count) "
         "         (contains? status :tick-running))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
-TEST(test_vector_scene_graph_tiny_gfx_collision_callback_reconfiguration) {
+TEST(test_vector_scene_graph_tiny_fx_collision_callback_reconfiguration) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-gfx.collision) "
+        "  (require 'tiny-fx.gfx) "
         "  (def collision-test-cb-a (fn collision-test-cb-a [event] 11)) "
         "  (def collision-test-cb-b (fn collision-test-cb-b [event] 22)) "
-        "  (let [_ (tiny-gfx.collision/set-collision-callback! collision-test-cb-a) "
-        "        v1 (tiny-gfx.collision/invoke-collision-callback! {:phase :enter}) "
-        "        _ (tiny-gfx.collision/set-collision-callback! collision-test-cb-b) "
-        "        v2 (tiny-gfx.collision/invoke-collision-callback! {:phase :exit}) "
-        "        _ (tiny-gfx.collision/set-collision-callback! nil) "
-        "        v3 (tiny-gfx.collision/invoke-collision-callback! nil)] "
+        "  (let [_ (tiny-fx.gfx/set-collision-callback! collision-test-cb-a) "
+        "        v1 (tiny-fx.gfx/invoke-collision-callback! {:phase :enter}) "
+        "        _ (tiny-fx.gfx/set-collision-callback! collision-test-cb-b) "
+        "        v2 (tiny-fx.gfx/invoke-collision-callback! {:phase :exit}) "
+        "        _ (tiny-fx.gfx/set-collision-callback! nil) "
+        "        v3 (tiny-fx.gfx/invoke-collision-callback! nil)] "
         "    (and (= 11 v1) (= 22 v2) (nil? v3))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
@@ -490,8 +500,8 @@ TEST(test_vector_scene_graph_host_viewer_demo_contains_blinking_stars) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-gfx.host-viewer-demo) "
-        "  (let [bundle (tiny-gfx.host-viewer-demo/create-demo-bundle) "
+        "  (require 'tiny-fx.scene-demo) "
+        "  (let [bundle (tiny-fx.scene-demo/create-demo-bundle) "
         "        game-root (:root (nth bundle 2)) "
         "        terrain (get game-root 3001) "
         "        stars-group (get game-root 3020) "
@@ -544,11 +554,11 @@ TEST(test_vector_scene_graph_merge_nested_record_maps_regression) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-gfx.host-viewer-demo) "
-        "  (let [style (tiny-gfx.host-viewer-demo/style {:stroke-color 65535 :stroke-width 1}) "
-        "        root (tiny-gfx.host-viewer-demo/group {:id 'root :style style :children [3021 3022]}) "
-        "        star-a (tiny-gfx.host-viewer-demo/tri {:id 3021 :style style :x1 8 :y1 8 :x2 10 :y2 4 :x3 12 :y3 8}) "
-        "        star-b (tiny-gfx.host-viewer-demo/tri {:id 3022 :style style :x1 18 :y1 8 :x2 20 :y2 4 :x3 22 :y3 8}) "
+        "  (require 'tiny-fx.scene-demo) "
+        "  (let [style (tiny-fx.scene-demo/style {:stroke-color 65535 :stroke-width 1}) "
+        "        root (tiny-fx.scene-demo/group {:id 'root :style style :children [3021 3022]}) "
+        "        star-a (tiny-fx.scene-demo/tri {:id 3021 :style style :x1 8 :y1 8 :x2 10 :y2 4 :x3 12 :y3 8}) "
+        "        star-b (tiny-fx.scene-demo/tri {:id 3022 :style style :x1 18 :y1 8 :x2 20 :y2 4 :x3 22 :y3 8}) "
         "        base {'root root} "
         "        stars {3021 star-a 3022 star-b} "
         "        merged (merge base stars)] "
@@ -562,7 +572,7 @@ TEST(test_vector_scene_graph_merge_nested_record_maps_regression) {
 TEST(test_vector_scene_graph_timeline_numeric_interpolation_moves_line) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -589,7 +599,7 @@ TEST(test_vector_scene_graph_timeline_numeric_interpolation_moves_line) {
 TEST(test_vector_scene_graph_timeline_transform_interpolation_moves_line) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
@@ -617,7 +627,7 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_moves_line) {
 TEST(test_vector_scene_graph_timeline_loop_wraps_phase) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -643,7 +653,7 @@ TEST(test_vector_scene_graph_timeline_loop_wraps_phase) {
 TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -669,7 +679,7 @@ TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
 TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -695,7 +705,7 @@ TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
 TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -729,7 +739,7 @@ TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
 TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -758,7 +768,7 @@ TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
 TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -791,7 +801,7 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
 TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_when_slot_invisible) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -821,7 +831,7 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_tracks_has_animation
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID static_scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
@@ -833,7 +843,7 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_tracks_has_animation
     TEST_ASSERT_NOT_NULL(static_scene);
 
     ID animated_scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -865,7 +875,7 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_force_render_ticks_a
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -941,7 +951,7 @@ TEST(test_vector_scene_graph_slot_change_tracker_single_slot_publish_rerenders_o
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID scenes = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
@@ -2321,7 +2331,7 @@ TEST(test_vector_scene_graph_filled_rect_deterministic_checksum) {
 TEST(test_vector_scene_graph_filled_rect_from_clojure_records) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Rect [id t style visible x y w h]) "
@@ -2350,16 +2360,16 @@ TEST(test_vector_scene_graph_decode_render_host_micro_benchmark) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID deco_scene = eval_string(
-        "(do (require 'tiny-gfx.host-viewer-demo) "
-        "    (nth (tiny-gfx.host-viewer-demo/create-demo-bundle) 0))",
+        "(do (require 'tiny-fx.scene-demo) "
+        "    (nth (tiny-fx.scene-demo/create-demo-bundle) 0))",
         g_test_eval_state);
     ID score_scene = eval_string(
-        "(do (require 'tiny-gfx.host-viewer-demo) "
-        "    (nth (tiny-gfx.host-viewer-demo/create-demo-bundle) 1))",
+        "(do (require 'tiny-fx.scene-demo) "
+        "    (nth (tiny-fx.scene-demo/create-demo-bundle) 1))",
         g_test_eval_state);
     ID game_scene = eval_string(
-        "(do (require 'tiny-gfx.host-viewer-demo) "
-        "    (nth (tiny-gfx.host-viewer-demo/create-demo-bundle) 2))",
+        "(do (require 'tiny-fx.scene-demo) "
+        "    (nth (tiny-fx.scene-demo/create-demo-bundle) 2))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(deco_scene);
     TEST_ASSERT_NOT_NULL(score_scene);
@@ -2411,6 +2421,7 @@ TEST(test_vector_scene_graph_runtime_vector_scene_bench_returns_metrics_map) {
 
     ID v_iterations = map_get(result, (ID)intern_symbol_global(":iterations"));
     ID v_warmup = map_get(result, (ID)intern_symbol_global(":warmup"));
+    ID v_slot_count = map_get(result, (ID)intern_symbol_global(":slot-count"));
     ID v_deco_total_ms = map_get(result, (ID)intern_symbol_global(":deco-total-ms"));
     ID v_score_total_ms = map_get(result, (ID)intern_symbol_global(":score-total-ms"));
     ID v_game_total_ms = map_get(result, (ID)intern_symbol_global(":game-total-ms"));
@@ -2421,6 +2432,7 @@ TEST(test_vector_scene_graph_runtime_vector_scene_bench_returns_metrics_map) {
 
     TEST_ASSERT_TRUE(is_fixnum(v_iterations));
     TEST_ASSERT_TRUE(is_fixnum(v_warmup));
+    TEST_ASSERT_TRUE(is_fixnum(v_slot_count));
     TEST_ASSERT_TRUE(is_fixnum(v_deco_total_ms));
     TEST_ASSERT_TRUE(is_fixnum(v_score_total_ms));
     TEST_ASSERT_TRUE(is_fixnum(v_game_total_ms));
@@ -2431,6 +2443,7 @@ TEST(test_vector_scene_graph_runtime_vector_scene_bench_returns_metrics_map) {
 
     TEST_ASSERT_EQUAL_INT(120, as_fixnum(v_iterations));
     TEST_ASSERT_EQUAL_INT(8, as_fixnum(v_warmup));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(v_slot_count));
     TEST_ASSERT_TRUE(as_fixnum(v_deco_us_pf) >= 0);
     TEST_ASSERT_TRUE(as_fixnum(v_score_us_pf) >= 0);
     TEST_ASSERT_TRUE(as_fixnum(v_game_us_pf) >= 0);
@@ -2487,13 +2500,56 @@ TEST(test_vector_scene_graph_runtime_renderer_lifecycle_defaults_to_unsupported)
     TEST_ASSERT_TRUE(vector_nth(vec, 2) == clj_false);
 }
 
-TEST(test_vector_scene_graph_tiny_gfx_runtime_renderer_lifecycle_defaults_to_unsupported) {
+TEST(test_vector_scene_graph_native_runtime_renderer_builtins_link_and_defaults) {
+    tiny_renderer_lifecycle_set_callbacks(NULL, NULL, NULL);
+    vg_rendered_state_reset_all();
+    builtins_tiny_fx_gfx_reset_cached_state();
+
+    TEST_ASSERT_TRUE(native_tinyclj_runtime_start_renderer(NULL, 0) == clj_false);
+    TEST_ASSERT_TRUE(native_tinyclj_runtime_stop_renderer(NULL, 0) == clj_false);
+
+    ID slot = intern_symbol_global(":game");
+    ID entity_id = fixnum(3001);
+    ID field = intern_symbol_global(":t");
+
+    ID state_args[] = {slot, entity_id};
+    ID timeline_args[] = {slot, entity_id, field};
+
+    TEST_ASSERT_NIL(native_tinyclj_runtime_renderer_state(state_args, 2));
+    TEST_ASSERT_NIL(native_tinyclj_runtime_renderer_timeline_step(timeline_args, 3));
+    TEST_ASSERT_NIL(native_tinyclj_runtime_renderer_timeline_progress(timeline_args, 3));
+}
+
+TEST(test_vector_scene_graph_custom_renderer_slot_binding_accepts_transient_descriptor_inputs) {
+    tiny_renderer_lifecycle_set_callbacks(NULL, NULL, NULL);
+    vg_rendered_state_reset_all();
+    builtins_tiny_fx_gfx_reset_cached_state();
+
+    CljPersistentMap *slot_desc = AUTORELEASE(make_map(2));
+    CljPersistentVector *slot_descs = AUTORELEASE(make_vector(1, STRONG));
+    CljAtom *scene_atom = AUTORELEASE(make_atom(NULL));
+    ID kw_id = intern_symbol_global(":id");
+    ID kw_atom = intern_symbol_global(":atom");
+    ID slot_id = intern_symbol_global(":playfield");
+
+    map_assoc_inplace(&slot_desc, kw_id, slot_id);
+    map_assoc_inplace(&slot_desc, kw_atom, scene_atom);
+    vector_conj_inplace(&slot_descs, slot_desc);
+
+    ID start_args[] = {slot_descs};
+    TEST_ASSERT_TRUE(native_tinyclj_runtime_start_renderer(start_args, 1) == clj_false);
+
+    ID state_args[] = {slot_id, fixnum(9101)};
+    TEST_ASSERT_NIL(native_tinyclj_runtime_renderer_state(state_args, 2));
+}
+
+TEST(test_vector_scene_graph_tiny_fx_runtime_renderer_lifecycle_defaults_to_unsupported) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID result = eval_string(
-        "(do (require 'tiny-gfx.runtime) "
-        "    [(tiny-gfx.runtime/start-renderer!) "
-        "     (tiny-gfx.runtime/stop-renderer!) "
-        "     (tiny-gfx.runtime/start-renderer! [])])",
+        "(do (require 'tiny-fx.gfx) "
+        "    [(tiny-fx.gfx/start-renderer!) "
+        "     (tiny-fx.gfx/stop-renderer!) "
+        "     (tiny-fx.gfx/start-renderer! [])])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
@@ -2555,6 +2611,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_return_nil_without_c
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID result = eval_string(
         "(do (require 'tiny-clj.runtime) "
+        "    (require 'tiny-fx.gfx) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
         "    [(tiny-clj.runtime/renderer-state :game 3001) "
         "     (tiny-clj.runtime/renderer-timeline-step :game 3001 :t) "
         "     (tiny-clj.runtime/renderer-timeline-progress :game 3001 :t)])",
@@ -2569,13 +2627,14 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_return_nil_without_c
     TEST_ASSERT_TRUE(vector_nth(vec, 2) == NULL);
 }
 
-TEST(test_vector_scene_graph_tiny_gfx_runtime_rendered_state_queries_return_nil_without_captured_frames) {
+TEST(test_vector_scene_graph_tiny_fx_runtime_rendered_state_queries_return_nil_without_captured_frames) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID result = eval_string(
-        "(do (require 'tiny-gfx.runtime) "
-        "    [(tiny-gfx.runtime/renderer-state :game 3001) "
-        "     (tiny-gfx.runtime/renderer-timeline-step :game 3001 :t) "
-        "     (tiny-gfx.runtime/renderer-timeline-progress :game 3001 :t)])",
+        "(do (require 'tiny-fx.gfx) "
+        "    (tiny-fx.gfx/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
+        "    [(tiny-fx.gfx/renderer-state :game 3001) "
+        "     (tiny-fx.gfx/renderer-timeline-step :game 3001 :t) "
+        "     (tiny-fx.gfx/renderer-timeline-progress :game 3001 :t)])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
@@ -2614,6 +2673,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_return_captured_valu
 
     ID result = eval_string(
         "(do (require 'tiny-clj.runtime) "
+        "    (require 'tiny-fx.gfx) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
         "    [(tiny-clj.runtime/renderer-state :game 3001) "
         "     (tiny-clj.runtime/renderer-timeline-step :game 3001 :t) "
         "     (tiny-clj.runtime/renderer-timeline-progress :game 3001 :t)])",
@@ -2650,12 +2711,80 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_return_captured_valu
     vg_rendered_state_reset_all();
 }
 
+TEST(test_vector_scene_graph_runtime_rendered_state_queries_accept_registered_dynamic_slot_ids) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    vg_rendered_state_reset_all();
+
+    VgTransformFixed world_t = {
+        .m00 = VG_SCALE_ONE,
+        .m01 = 0,
+        .m02 = (5 << CLJ_FIXED_FRAC_BITS),
+        .m10 = 0,
+        .m11 = VG_SCALE_ONE,
+        .m12 = (9 << CLJ_FIXED_FRAC_BITS),
+    };
+    VgRenderedTimelineSample sample = {
+        .step_index = 1u,
+        .keyframe_count = 4u,
+        .phase_ms = 125u,
+        .period_ms = 500u,
+        .loop = false,
+    };
+
+    vg_rendered_state_capture_begin(0u, 23u, 777u);
+    vg_rendered_state_capture_record_entity((uintptr_t)fixnum(9101), world_t);
+    vg_rendered_state_capture_record_timeline((uintptr_t)fixnum(9101), VG_RENDERED_FIELD_T, sample);
+    vg_rendered_state_capture_commit();
+
+    ID result = eval_string(
+        "(do (require 'tiny-clj.runtime) "
+        "    (def dynamic-slot-scene* (atom nil)) "
+        "    (tiny-clj.runtime/start-renderer! [{:id :playfield :atom dynamic-slot-scene*}]) "
+        "    [(tiny-clj.runtime/renderer-state :playfield 9101) "
+        "     (tiny-clj.runtime/renderer-timeline-step :playfield 9101 :t) "
+        "     (tiny-clj.runtime/renderer-timeline-progress :playfield 9101 :t)])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
+    CljPersistentVector *vec = as_vector(result);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+
+    ID state_map = vector_nth(vec, 0);
+    TEST_ASSERT_NOT_NULL(state_map);
+    TEST_ASSERT_TRUE(is_map(state_map));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(map_get(state_map, (ID)intern_symbol_global(":tx"))));
+    TEST_ASSERT_EQUAL_INT(9, as_fixnum(map_get(state_map, (ID)intern_symbol_global(":ty"))));
+    TEST_ASSERT_EQUAL_INT(23, as_fixnum(map_get(state_map, (ID)intern_symbol_global(":snapshot-gen"))));
+
+    ID step = vector_nth(vec, 1);
+    TEST_ASSERT_NOT_NULL(step);
+    TEST_ASSERT_TRUE(is_fixnum(step));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(step));
+
+    ID progress_map = vector_nth(vec, 2);
+    TEST_ASSERT_NOT_NULL(progress_map);
+    TEST_ASSERT_TRUE(is_map(progress_map));
+    TEST_ASSERT_EQUAL_INT(125, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":phase-ms"))));
+    TEST_ASSERT_EQUAL_INT(500, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":period-ms"))));
+    TEST_ASSERT_EQUAL_INT(250, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":permille"))));
+
+    ID restore_result = eval_string(
+        "(do (require 'tiny-clj.runtime) "
+        "    (require 'tiny-fx.gfx) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(restore_result);
+
+    vg_rendered_state_reset_all();
+}
+
 TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_timeline_fields_return_nil) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     vg_rendered_state_reset_all();
 
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -2686,6 +2815,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_timeline_fields_
 
     ID result = eval_string(
         "(do (require 'tiny-clj.runtime) "
+        "    (require 'tiny-fx.gfx) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
         "    [(tiny-clj.runtime/renderer-timeline-step :game 7101 :x2) "
         "     (tiny-clj.runtime/renderer-timeline-progress :game 7101 :x2)])",
         g_test_eval_state);
@@ -2705,7 +2836,7 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_loop_timeline_cl
     vg_rendered_state_reset_all();
 
     ID scene = eval_string(
-        "(do (require 'tiny-gfx.scene) "
+        "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
         "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
@@ -2736,6 +2867,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_loop_timeline_cl
 
     ID result = eval_string(
         "(do (require 'tiny-clj.runtime) "
+        "    (require 'tiny-fx.gfx) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
         "    [(tiny-clj.runtime/renderer-timeline-step :game 7201 :x1) "
         "     (tiny-clj.runtime/renderer-timeline-progress :game 7201 :x1)])",
         g_test_eval_state);
@@ -2800,6 +2933,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_validate_arity_and_a
     TRY {
         (void)eval_string(
             "(do (require 'tiny-clj.runtime) "
+            "    (require 'tiny-fx.gfx) "
+            "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
             "    (tiny-clj.runtime/renderer-timeline-step :game 3001 :bogus-field))",
             g_test_eval_state);
         TEST_FAIL_MESSAGE("Expected argument exception for renderer-timeline-step field");

@@ -1,10 +1,10 @@
-(ns tiny-gfx.converter
+(ns tiny-fx.svg
   (:require [clojure.string :as str]
-            [tiny-gfx.scene :as scene :refer [->Group ->Line ->Rect ->Polyline ->Style]]))
+            [tiny-fx.gfx-scene :as scene :refer [->Group ->Line ->Rect ->Polyline ->Style]]))
 
-;; tiny-gfx.converter
+;; tiny-fx.svg
 ;;
-;; Consolidated conversion helpers for tiny-gfx:
+;; Consolidated conversion helpers for tiny-fx:
 ;; - SVG -> draw-record conversion
 
 ;; ---------------------------------------------------------------------------

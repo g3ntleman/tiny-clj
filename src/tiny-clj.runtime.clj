@@ -55,7 +55,7 @@ Missing values are omitted (the key will not be present)."}
 ;; renderer lifecycle API (M9/9j)
 ;; start-renderer! returns true on successful start (or already running),
 ;; false when no renderer backend is available in the current runtime.
-^#^{:doc "Starts the renderer thread. Usage: (start-renderer!) or (start-renderer! [game-slot score-slot deco-slot]). Returns true on success, false when unsupported."}
+^#^{:doc "Starts the renderer thread. Usage: (start-renderer!) or (start-renderer! [{:id :game :atom game-scene*} ...]). Returns true on success, false when unsupported."}
 (def start-renderer! (fn start-renderer! [& args] :native))
 
 ;; stop-renderer! returns true on successful stop (or already stopped),
@@ -64,13 +64,13 @@ Missing values are omitted (the key will not be present)."}
 (def stop-renderer! (fn stop-renderer! [] :native))
 
 ;; rendered-state query API (M9/9i baseline)
-^#^{:doc "Returns current rendered transform/matrix state for one entity in one slot. Returns nil when slot/entity has no captured render state. Usage: (renderer-state :game 3001)."}
+^#^{:doc "Returns current rendered transform/matrix state for one entity in one slot. Returns nil when slot/entity has no captured render state. Usage: (renderer-state :game 3001) where `:game` is a configured slot id."}
 (def renderer-state (fn renderer-state [slot entity-id] :native))
 
-^#^{:doc "Returns current active timeline keyframe index for one entity field. Returns nil when no timeline sample exists for this field (miss or non-Timeline field). Usage: (renderer-timeline-step :game 3001 :t)."}
+^#^{:doc "Returns current active timeline keyframe index for one entity field. Returns nil when no timeline sample exists for this field (miss or non-Timeline field). Usage: (renderer-timeline-step :game 3001 :t) where `:game` is a configured slot id."}
 (def renderer-timeline-step (fn renderer-timeline-step [slot entity-id field] :native))
 
-^#^{:doc "Returns timeline phase metadata map for one entity field. Returns nil when no timeline sample exists for this field (miss or non-Timeline field). Usage: (renderer-timeline-progress :game 3001 :pts)."}
+^#^{:doc "Returns timeline phase metadata map for one entity field. Returns nil when no timeline sample exists for this field (miss or non-Timeline field). Usage: (renderer-timeline-progress :game 3001 :pts) where `:game` is a configured slot id."}
 (def renderer-timeline-progress (fn renderer-timeline-progress [slot entity-id field] :native))
 
 ;; print-ast - Print AST structure with internals for debugging

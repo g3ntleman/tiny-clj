@@ -1,6 +1,6 @@
 #include "scene.h"
 #include "gfx.h"
-#include "tiny_gfx.h"
+#include "tiny_fx_gfx.h"
 #include "rendered_state_snapshot.h"
 #include "platform.h"
 
@@ -980,7 +980,7 @@ static bool render_record_node(ID node_obj,
     if (!node_obj || TAG(node_obj) != CLJ_RECORD || !fb) {
         return false;
     }
-    const VgRecordSchema *sc = tiny_gfx_schema();
+    const VgRecordSchema *sc = tiny_fx_gfx_schema();
     uint32_t h = record_type_hash(node_obj);
     ID entity_id = node_id_field(node_obj, h, sc);
 
@@ -1270,7 +1270,7 @@ static bool resolve_root_node(ID root_field, ID *out_root_node, ID *out_entity_m
 
 static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_clip, ID *out_erase) {
     if (!scene_record || TAG(scene_record) != CLJ_RECORD) return false;
-    const VgRecordSchema *sc = tiny_gfx_schema();
+    const VgRecordSchema *sc = tiny_fx_gfx_schema();
     uint32_t h = record_type_hash(scene_record);
     if (h == sc->h_frame_scene) {
         FrameScene *fs = scene_record;
@@ -1301,7 +1301,7 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
         return false;
     }
 
-    const VgRecordSchema *sc = tiny_gfx_schema();
+    const VgRecordSchema *sc = tiny_fx_gfx_schema();
     ID resolved_root = resolve_timeline_value(root, now_ms, sc, NULL);
     ID resolved_clip_source = resolve_timeline_value(clip_source, now_ms, sc, NULL);
     VgClipRect effective_rect = {0, 0, 0, 0};
@@ -1350,7 +1350,7 @@ static bool render_scene_record_clipped_at_ms_internal(ID scene_record,
         return false;
     }
 
-    const VgRecordSchema *sc = tiny_gfx_schema();
+    const VgRecordSchema *sc = tiny_fx_gfx_schema();
     ID resolved_root = resolve_timeline_value(root, now_ms, sc, out_has_animation);
     ID resolved_clip_source = resolve_timeline_value(clip_source, now_ms, sc, out_has_animation);
     VgClipRect effective_clip = clip_rect;
@@ -1391,7 +1391,7 @@ bool vg_decode_frame_slot_record(ID frame_scene_record, VgRenderSlot *out_slot) 
     if (!frame_scene_record || !out_slot || TAG(frame_scene_record) != CLJ_RECORD) {
         return false;
     }
-    const VgRecordSchema *sc = tiny_gfx_schema();
+    const VgRecordSchema *sc = tiny_fx_gfx_schema();
     if (record_type_hash(frame_scene_record) != sc->h_frame_scene) {
         return false;
     }

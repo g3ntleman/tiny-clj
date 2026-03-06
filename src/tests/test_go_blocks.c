@@ -571,11 +571,9 @@ TEST(test_event_loop_enqueue_updates_count) {
         // Don't run the task (to avoid memory issues), just verify count is correct
         // The count check above is the main test
         
-        // Cleanup - remove the task from the queue
-        if (g_runtime.task_queue) {
-            vector_remove_at(g_runtime.task_queue, 0);
-        }
-        RELEASE(fn);
+        // Cleanup through the real execution path so task/channel ownership is
+        // released the same way as in production.
+        TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
         RELEASE(chan);
     });
 }

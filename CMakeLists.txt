@@ -8,6 +8,7 @@ endif()
 
 option(TINYCLJ_HOST_VIEWER "Build optional MiniFB host viewer" OFF)
 option(TINYCLJ_MINIFB_METAL "Use MiniFB Metal backend on macOS" OFF)
+option(TINYCLJ_WITH_TINY_FX "Build optional tiny-fx audio/gfx feature set" ON)
 
 # Generate compile_commands.json for IDE (Go to Definition, IntelliSense)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -170,11 +171,12 @@ configure_file(
 # This prevents stale checked-in headers from shadowing configure_file outputs.
 include_directories(BEFORE ${CMAKE_BINARY_DIR})
 
-# Source files (without main.c - main is target-specific)
-list(APPEND SOURCES
+# Core sources stay in the always-on runtime.
+set(TINYCLJ_CORE_SOURCES
     src/clojure_core.c
     src/object.c
     src/builtins.c
+    src/builtins_tiny_fx_gfx.c
     src/builtins_net.c
     src/builtins_mdns.c
     src/mdns_codec.c
@@ -184,7 +186,6 @@ list(APPEND SOURCES
     src/builtins_regex.c
     src/runtime.c
     src/namespace.c
-    src/audio_tick_scheduler.c
     src/symbol.c
     src/symbol_token.c
     src/parser.c
@@ -226,16 +227,77 @@ list(APPEND SOURCES
     src/macro.c
     src/fs_layer.c
     src/gpio_host.c
-    src/audio_engine.c
-    src/builtins_audio.c
-    src/audio_backend_host.c
     src/repl_history_backend.c
+)
+
+# tiny-fx is an optional feature pack: audio + vector graphics.
+set(TINYCLJ_FX_COMMON_SOURCES
+    src/audio_tick_scheduler.c
+    src/audio_engine.c
+    src/builtins_tiny_fx_sound.c
     src/gfx.c
-    src/tiny_gfx.c
+    src/tiny_fx_gfx.c
     src/vector_scene_graph.c
     src/scene.c
-
 )
+
+set(TINYCLJ_FX_HOST_SOURCES
+    src/audio_backend_host.c
+)
+
+set(TINYCLJ_FX_ESP32_SOURCES
+    src/audio_backend_esp32.c
+)
+
+set(TINYCLJ_HOST_TINY_FX_SOURCES
+    ${TINYCLJ_FX_COMMON_SOURCES}
+    ${TINYCLJ_FX_HOST_SOURCES}
+)
+
+set(TINYCLJ_ESP32_TINY_FX_SOURCES
+    ${TINYCLJ_FX_COMMON_SOURCES}
+    ${TINYCLJ_FX_ESP32_SOURCES}
+)
+
+set(SOURCES ${TINYCLJ_CORE_SOURCES})
+
+function(tinyclj_link_apple_base target_name)
+    if(APPLE)
+        target_link_libraries(${target_name} PRIVATE "-framework CoreFoundation")
+        target_link_directories(${target_name} PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
+        target_link_libraries(${target_name} PRIVATE system_dnssd)
+    endif()
+endfunction()
+
+function(tinyclj_target_enable_tiny_fx target_name platform_name)
+    if(TINYCLJ_WITH_TINY_FX)
+        if("${platform_name}" STREQUAL "HOST")
+            target_sources(${target_name} PRIVATE ${TINYCLJ_HOST_TINY_FX_SOURCES})
+            if(APPLE)
+                target_link_libraries(${target_name} PRIVATE "-framework CoreAudio" "-framework AudioUnit")
+            endif()
+        elseif("${platform_name}" STREQUAL "ESP32")
+            target_sources(${target_name} PRIVATE ${TINYCLJ_ESP32_TINY_FX_SOURCES})
+        else()
+            message(FATAL_ERROR "Unknown tiny-fx platform: ${platform_name}")
+        endif()
+        target_compile_definitions(${target_name} PRIVATE TINYCLJ_WITH_TINY_FX=1)
+    else()
+        target_compile_definitions(${target_name} PRIVATE TINYCLJ_WITH_TINY_FX=0)
+    endif()
+endfunction()
+
+if(TINYCLJ_WITH_TINY_FX)
+    add_library(tiny-fx EXCLUDE_FROM_ALL STATIC ${TINYCLJ_HOST_TINY_FX_SOURCES})
+    target_include_directories(tiny-fx PUBLIC
+        ${CMAKE_SOURCE_DIR}/src
+        ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR}
+    )
+    target_link_libraries(tiny-fx PUBLIC subjective-c tiny-db)
+    if(APPLE)
+        target_link_libraries(tiny-fx PUBLIC "-framework CoreAudio" "-framework AudioUnit")
+    endif()
+endif()
 
 # Main executable (not built by default; use REPL)
 add_executable(tiny-clj EXCLUDE_FROM_ALL 
@@ -245,14 +307,8 @@ add_executable(tiny-clj EXCLUDE_FROM_ALL
 )
 target_link_libraries(tiny-clj PRIVATE subjective-c)
 target_link_libraries(tiny-clj PRIVATE tiny-db)
-if(APPLE)
-    target_link_libraries(tiny-clj PRIVATE "-framework CoreFoundation")
-    target_link_libraries(tiny-clj PRIVATE "-framework CoreAudio" "-framework AudioUnit")
-    # DNS-SD (Bonjour) symbols are provided by libsystem_dnssd on modern macOS toolchains.
-    # ld does not always search ${SDK}/usr/lib/system by default, so add it explicitly.
-    target_link_directories(tiny-clj PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
-    target_link_libraries(tiny-clj PRIVATE system_dnssd)
-endif()
+tinyclj_link_apple_base(tiny-clj)
+tinyclj_target_enable_tiny_fx(tiny-clj HOST)
 target_include_directories(tiny-clj PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -315,8 +371,8 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
 # ESP32-only sources (must not be part of host targets)
 target_sources(tiny-clj-esp32 PRIVATE
     src/gpio_esp32.c
-    src/audio_backend_esp32.c
 )
+tinyclj_target_enable_tiny_fx(tiny-clj-esp32 ESP32)
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
 target_link_libraries(tiny-clj-esp32 PRIVATE tiny-db)
 target_include_directories(tiny-clj-esp32 PRIVATE
@@ -353,8 +409,8 @@ add_executable(tiny-clj-esp32-repl EXCLUDE_FROM_ALL
 # ESP32-only sources (must not be part of host targets)
 target_sources(tiny-clj-esp32-repl PRIVATE
     src/gpio_esp32.c
-    src/audio_backend_esp32.c
 )
+tinyclj_target_enable_tiny_fx(tiny-clj-esp32-repl ESP32)
 target_link_libraries(tiny-clj-esp32-repl PRIVATE subjective-c)
 target_link_libraries(tiny-clj-esp32-repl PRIVATE tiny-db)
 target_include_directories(tiny-clj-esp32-repl PRIVATE
@@ -394,12 +450,8 @@ add_executable(tiny-clj-repl
 )
 target_link_libraries(tiny-clj-repl PRIVATE subjective-c)
 target_link_libraries(tiny-clj-repl PRIVATE tiny-db)
-if(APPLE)
-    target_link_libraries(tiny-clj-repl PRIVATE "-framework CoreFoundation")
-    target_link_libraries(tiny-clj-repl PRIVATE "-framework CoreAudio" "-framework AudioUnit")
-    target_link_directories(tiny-clj-repl PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
-    target_link_libraries(tiny-clj-repl PRIVATE system_dnssd)
-endif()
+tinyclj_link_apple_base(tiny-clj-repl)
+tinyclj_target_enable_tiny_fx(tiny-clj-repl HOST)
 target_include_directories(tiny-clj-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -430,10 +482,8 @@ add_executable(tiny-clj-profile
 )
 target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
 target_link_libraries(tiny-clj-profile PRIVATE tiny-db)
-if(APPLE)
-    target_link_libraries(tiny-clj-profile PRIVATE "-framework CoreFoundation")
-    target_link_libraries(tiny-clj-profile PRIVATE "-framework CoreAudio" "-framework AudioUnit")
-endif()
+tinyclj_link_apple_base(tiny-clj-profile)
+tinyclj_target_enable_tiny_fx(tiny-clj-profile HOST)
 target_include_directories(tiny-clj-profile PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
@@ -446,6 +496,16 @@ set_target_properties(tiny-clj-profile PROPERTIES
 # ============================================================================
 # CATEGORIZED TEST EXECUTABLES
 # ============================================================================
+
+set(TINYCLJ_FX_TEST_SOURCES)
+if(TINYCLJ_WITH_TINY_FX)
+    list(APPEND TINYCLJ_FX_TEST_SOURCES
+        src/tests/test_audio_engine.c
+        src/tests/test_vector_scene_graph.c
+        src/tests/test_gfx_svg.c
+        src/tests/test_gfx_collision_contract.c
+    )
+endif()
 
 # Unity Test Framework (central runner with separate test files)
 add_executable(unit-tests
@@ -533,7 +593,6 @@ add_executable(unit-tests
     src/tests/test_pprint.c
     src/tests/test_print.c
     src/tests/test_static_keywords.c
-    src/tests/test_audio_engine.c
     src/tests/test_lockfree_spsc_queue.c
     src/tests/test_byte_array.c
     src/tests/test_byte_array_view.c
@@ -542,9 +601,7 @@ add_executable(unit-tests
     src/tests/test_mdns_resolver.c
     src/tests/test_mdns_bindings.c
     src/tests/test_platform_mdns.c
-    src/tests/test_vector_scene_graph.c
-    src/tests/test_gfx_svg.c
-    src/tests/test_gfx_collision_contract.c
+    ${TINYCLJ_FX_TEST_SOURCES}
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
@@ -562,14 +619,10 @@ target_compile_definitions(unit-tests PRIVATE
     META_ENABLED=${META_ENABLED_VALUE}
     UNITY_INCLUDE_EXEC_TIME
 )
+tinyclj_target_enable_tiny_fx(unit-tests HOST)
 target_link_libraries(unit-tests PRIVATE subjective-c)
 target_link_libraries(unit-tests PRIVATE tiny-db)
-if(APPLE)
-    target_link_libraries(unit-tests PRIVATE "-framework CoreFoundation")
-    target_link_libraries(unit-tests PRIVATE "-framework CoreAudio" "-framework AudioUnit")
-    target_link_directories(unit-tests PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
-    target_link_libraries(unit-tests PRIVATE system_dnssd)
-endif()
+tinyclj_link_apple_base(unit-tests)
 target_include_directories(unit-tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/subjective-c/tests
@@ -878,6 +931,9 @@ add_test(NAME unit-tests COMMAND $<TARGET_FILE:unit-tests>)
 set_tests_properties(unit-tests PROPERTIES LABELS "unit")
 
 if(TINYCLJ_HOST_VIEWER)
+    if(NOT TINYCLJ_WITH_TINY_FX)
+        message(FATAL_ERROR "host-viewer requires TINYCLJ_WITH_TINY_FX=ON")
+    endif()
     include(FetchContent)
     # Select MiniFB macOS backend explicitly to keep runs reproducible.
     if(APPLE)
@@ -905,6 +961,7 @@ if(TINYCLJ_HOST_VIEWER)
         src/platform_macos.c
         ${SOURCES}
     )
+    tinyclj_target_enable_tiny_fx(host-viewer HOST)
     if(APPLE)
         target_sources(host-viewer PRIVATE src/host_viewer_macos_menu.m)
     endif()
@@ -913,12 +970,7 @@ if(TINYCLJ_HOST_VIEWER)
     )
     target_compile_definitions(host-viewer PRIVATE TINYCLJ_WITH_MINIFB=1)
     target_link_libraries(host-viewer PRIVATE minifb m subjective-c tiny-db)
-    if(APPLE)
-        target_link_libraries(host-viewer PRIVATE "-framework CoreFoundation")
-        target_link_libraries(host-viewer PRIVATE "-framework CoreAudio" "-framework AudioUnit")
-        target_link_directories(host-viewer PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
-        target_link_libraries(host-viewer PRIVATE system_dnssd)
-    endif()
+    tinyclj_link_apple_base(host-viewer)
 endif()
 
 # Seq Benchmark (REMOVED - File no longer exists)

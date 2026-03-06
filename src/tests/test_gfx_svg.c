@@ -3,8 +3,8 @@
 TEST(test_gfx_svg_group_from_line) {
   ID ok = eval_string(
       "(do "
-      "  (require 'tiny-gfx.converter) "
-      "  (def gsvg (tiny-gfx.converter/group-from-svg "
+      "  (require 'tiny-fx.svg) "
+      "  (def gsvg (tiny-fx.svg/group-from-svg "
       "             \"<svg><line x1='1' y1='2' x2='30' y2='40' stroke='#FF0000' stroke-width='2'/></svg>\")) "
       "  true)",
       g_test_eval_state);
@@ -30,8 +30,8 @@ TEST(test_gfx_svg_group_from_line) {
 TEST(test_gfx_svg_polygon_maps_to_closed_polyline) {
   ID ok = eval_string(
       "(do "
-      "  (require 'tiny-gfx.converter) "
-      "  (def gsvg_poly (tiny-gfx.converter/group-from-svg "
+      "  (require 'tiny-fx.svg) "
+      "  (def gsvg_poly (tiny-fx.svg/group-from-svg "
       "                  \"<svg><polygon points='0,0 10,0 10,10 0,10' fill='#00FF00'/></svg>\")) "
       "  true)",
       g_test_eval_state);
