@@ -605,6 +605,210 @@ Done when:
 - Host viewer faithfully simulates target display behavior (single GRAM, no double-buffer, live framebuffer reads).
 - Dirty-rectangle tracking reduces SPI/I80 transfer volume for typical game scenes to <60% of full-frame.
 
+## Milestone 7b: Bandwidth Optimization (Entity-Level Dirty Tracking)
+
+Status: TODO
+
+Motivation:
+
+- SPI displays are bandwidth-limited (240×240@16bit@40MHz ≈ 43fps full-frame).
+Every saved pixel directly increases achievable frame rate or frees bus time for other SPI devices.
+- The current renderer erases the **entire slot clip-rect** to background color before redrawing
+all entities — even entities that haven't changed (e.g. static text "Game Scene").
+- On ESP32, this wastes both CPU cycles (rasterizing unchanged geometry) and SPI bandwidth
+(transferring pixels that are identical to the previous frame).
+- Immutable persistent data structures provide **free entity-level change detection** via
+pointer identity: `old_entity == new_entity` means the entity is visually identical.
+
+### Core Mechanism: Pointer-Identity Change Detection
+
+```clojure
+;; Clojure: (swap! game-slot assoc-in [3002 :t] new-transform)
+;; → Entity 3002: NEW Record (different pointer)
+;; → All other entities: SAME Record (structural sharing)
+```
+
+```c
+// C: O(1) per entity — pointer comparison
+ID old_entity = map_get(prev_entity_map, entity_id);
+ID new_entity = map_get(curr_entity_map, entity_id);
+bool changed = (old_entity != new_entity);  // structural sharing → free diff
+```
+
+Two kinds of dirty detection:
+
+1. **Snapshot dirty**: Entity pointer changed → Clojure updated it via `swap!`/`assoc-in`.
+2. **Animation dirty**: Entity has Timeline fields → visual output changes every frame
+  even though the entity pointer stays the same. Detected via per-entity `has_animation` flag.
+
+### Entity Bounding Box Cache
+
+During `render_record_node`, compute and cache the axis-aligned bounding box (AABB)
+of each rendered entity in framebuffer coordinates:
+
+```c
+#define VG_MAX_CACHED_ENTITY_BBOXES 64
+
+typedef struct {
+    uintptr_t entity_id;
+    VgClipRect bbox;
+    bool has_animation;
+} VgEntityBBoxEntry;
+
+typedef struct {
+    VgEntityBBoxEntry entries[VG_MAX_CACHED_ENTITY_BBOXES];
+    uint32_t count;
+} VgEntityBBoxCache;
+```
+
+The bbox includes the full rendered extent (stroke width, text fringe, transform).
+
+### Render-Thread Frame Flow (with dirty tracking)
+
+All dirty-tracking logic runs **entirely in the render thread**. The main thread
+only reads `g_gram_pixels` for display — it never sees or needs dirty rect data.
+
+```
+viewer_render_thread_main (per frame, per slot):
+│
+├─ 1. SNAPSHOT: atom_deref(slot_atom) → curr_entity_map
+│
+├─ 2. DIFF (pointer identity):
+│     for each (id, entity) in curr_entity_map:
+│       old = lookup(prev_entity_map, id)
+│       if entity != old → mark dirty        // snapshot dirty
+│       else if bbox_cache[id].has_animation → mark dirty  // animation dirty
+│     for each id in prev but not in curr → mark dirty     // removed
+│
+├─ 3. COLLECT dirty rects:
+│     for each dirty entity:
+│       dirty_rect[i] = union(old_bbox[i], new_bbox[i])
+│
+├─ 4. MERGE overlapping rects → merged_rects[] (O(n²), n < 10)
+│
+├─ 5. ERASE + REDRAW in g_render_buffer:
+│     for each rect in merged_rects:
+│       clear(g_render_buffer, rect, clear_color)
+│       for each entity where bbox ∩ rect ≠ ∅:
+│         render(entity, clip=rect)
+│
+├─ 6. TRANSFER to GRAM (simulate SPI):
+│     for each rect in merged_rects:
+│       copy_rect(g_render_buffer → g_gram_pixels, rect)
+│       transferred_pixels += rect.area
+│
+├─ 7. DEBUG OVERLAY (if show_dirty_rects flag set):
+│     for each rect in merged_rects:
+│       draw_rect_outline(g_gram_pixels, rect, 0x07E0)   // green, GRAM only
+│
+├─ 8. UPDATE state:
+│     prev_entity_map = curr_entity_map
+│     bbox_cache = new bboxes from step 5
+│     atomic_store(last_dirty_pixels, transferred_pixels)
+│
+└─ 9. atomic_store(frame_serial++)  // main thread sees new frame
+```
+
+The `show_dirty_rects` flag is an `atomic_bool` set by the main thread on D-key press,
+read by the render thread — no synchronization beyond the atomic.
+
+### SPI Transfer Model
+
+SPI display controllers (ILI9341, ST7789, etc.) fill address windows sequentially —
+there is no skip or seek within a window. Every pixel position within
+`CASET/RASET` must be sent. Consequence:
+
+- A single union rect of all dirty areas wastes bandwidth on unchanged pixels
+between spatially separated dirty entities (worst case = full slot = no optimization).
+- **Separate address windows per merged dirty rect** minimize transfer volume.
+Command overhead per window is ~10 bytes (`CASET` + `RASET` + `RAMWR`),
+negligible vs. saved pixel data at 40 MHz SPI.
+
+```
+Example: player (40×30 @ top-left) + obstacle (20×60 @ bottom-right)
+
+Union rect:  280×200 = 56.000 px = 109 KB   ← almost full frame, no savings
+Separate:    40×30 + 20×60 = 2.400 px = 4,7 KB  ← 96% saved
+```
+
+### Expected Impact (Game Slot Example)
+
+
+| Entity       | Type     | Dirty?         | Action                   |
+| ------------ | -------- | -------------- | ------------------------ |
+| root         | Group    | —              | Traversal container      |
+| terrain      | Polyline | Yes (Timeline) | Erase old bbox → Redraw  |
+| player       | Tri      | Yes (Timeline) | Erase old bbox → Redraw  |
+| obstacle     | Polyline | Yes (Timeline) | Erase old bbox → Redraw  |
+| "Game Scene" | VText    | **No**         | **Skip** — pixels remain |
+
+
+Dirty pixels reduction: ~30–50% fewer pixels per frame for typical game scenes.
+CPU savings: static entities are neither erased nor rasterized.
+
+### Tasks
+
+1. **Entity BBox computation + cache** (`scene.c` / `vector_scene_graph.h`):
+  - Compute AABB during `render_record_node` for each primitive type.
+  - Store per-entity bbox in `VgEntityBBoxCache` (indexed by entity ID).
+  - Include stroke width and transform in bbox computation.
+  - Cache lives in `VgRenderSlotState` (per slot, persistent across frames).
+2. **Previous entity map retention** (`VgRenderSlotState`):
+  - Store pointer to previous flat entity map in slot state.
+  - On new frame: compare old vs new map entries by pointer identity.
+  - After rendering: update stored map pointer to current snapshot.
+3. **Dirty-rect collection + merge** (`scene.c` or utility):
+  - Per dirty entity: `dirty_rect = union(old_bbox, new_bbox)`.
+  - Merge overlapping rects into minimal disjoint set (O(n²), n < 10).
+  - Output: `VgClipRect merged_rects[]` + `uint32_t count`.
+4. **Per-rect erase + overlap-aware redraw** (`scene.c`):
+  - Replace full-slot `vg_framebuffer_clear_rect(dirty, clear_color)` with
+   per-merged-rect erase + redraw loop.
+  - For each merged rect: erase to clear color, then render all entities
+  whose bbox intersects the rect (dirty + clean overlapping entities),
+  clipped to the rect boundary.
+  - For `force_render` (animation tick, same snapshot): only process entities
+  with `has_animation=true`.
+  - For snapshot change: process entities whose pointer changed + removed entities.
+5. **Per-rect GRAM transfer** (`host_viewer_minifb.c` / ESP32 backend):
+  - Replace full-frame `memcpy` to GRAM with per-rect row-copy
+   from `g_render_buffer` to `g_gram_pixels` (render thread).
+  - On ESP32: each rect → `CASET` + `RASET` + `RAMWR` + DMA pixel stream.
+  - Accumulate `transferred_pixels` (sum of merged rect areas) for metrics.
+6. **Debug overlay** (`host_viewer_minifb.c`, render thread):
+  - `atomic_bool show_dirty_rects` — set by main thread on D-key, read by render thread.
+  - After per-rect GRAM copy, draw 1px green (0x07E0) outlines around each
+  merged dirty rect directly into `g_gram_pixels` (GRAM only — does not
+  persist into render buffer, disappears when overlay is toggled off).
+  - Title shows `[D]` indicator when active.
+7. **Tests + metrics**:
+  - Unit tests: entity-level dirty detection with synthetic snapshots.
+  - Unit tests: rect merge algorithm (overlapping, disjoint, nested cases).
+  - Regression tests: visual output unchanged for representative scenes.
+  - Metrics: `transferred_pixels` per frame (sum of merged rect areas).
+  - Host-viewer title: `bw` shows actual transfer volume, not full-frame size.
+
+### Complications
+
+- **Overlapping entities**: If entity A moves and its old bbox overlaps entity B,
+B must be redrawn even though B didn't change. The per-rect redraw loop
+includes all entities whose bbox intersects the merged dirty rect.
+- **Timeline entities**: Pointer is the same but visual output changes every frame.
+Per-entity `has_animation` flag (already tracked during rendering) identifies these.
+- **Entity addition/removal**: New entities have no old bbox (just draw).
+Removed entities have no new bbox (just erase old bbox).
+- **Slot property changes** (clip-rect, clear-color, visibility): Fall back to full-slot erase.
+
+Done when:
+
+- Static entities within animated slots are neither erased nor redrawn.
+- Each merged dirty rect is transferred as a separate SPI address window
+(simulated on host via per-rect memcpy in the render thread).
+- Transferred pixels per frame are measurably reduced for scenes with mixed static/animated content.
+- Visual output is identical to full-erase rendering (no ghost pixels, no missing redraws).
+- Debug overlay (D key) shows green outlines around dirty rects without affecting render state.
+- Host-viewer `bw` metric reflects actual per-rect transfer volume.
+
 ## Milestone 8: Fixed-First Decode + Transform Path (Required for ESP32)
 
 Status: DONE (core decode/transform/render pipeline is fixed-first; host documentation + micro benchmark captured; ESP32 build path validated; side-by-side device perf capture still optional/pending)
@@ -623,7 +827,7 @@ Tasks:
   - Keep typed defaults deterministic (`nil` => stable defaults).
 2. **Boundary-based quantization:**
   - Keep world/local transform math in fixed-point until raster boundary.
-  - Convert to integer only at explicit raster boundaries (`gfx_draw_`*, clip/window setup, framebuffer index math).
+  - Convert to integer only at explicit raster boundaries (`gfx_draw`_*, clip/window setup, framebuffer index math).
   - Avoid repeated fixed->int->fixed ping-pong across compose/apply stages.
 3. **Hot-path cleanup for ESP32 CPU:**
   - Remove/avoid float-based helper usage in decode/transform hot path.
@@ -1467,9 +1671,11 @@ Done when:
 9. M5 snapshot slot update path (`FrameScene` + `clip-rect` + changed-slot-only render)
 10. M6 VText integration
 11. M7 ESP32 display backend integration (SPI/I80 slot windows)
-12. M9 game/menu/title integration
-13. M10 collision contract + C-dispatched closure callback
-14. Optional later: explicit patch path + pointer-identity subtree reuse
+12. M7b bandwidth optimization (entity-level dirty tracking + selective erase/redraw)
+13. M9 game/menu/title integration
+14. M10 collision contract + C-dispatched closure callback
+15. M11 user guide (Markdown)
+16. Optional later: explicit patch path + pointer-identity subtree reuse
 
 Rule:
 

@@ -122,6 +122,7 @@ typedef struct {
     uint64_t window_frames;
     uint64_t window_dirty_pixels;
     uint64_t window_changed_slots;
+    uint32_t max_dirty_px_frame;
 } ViewerPerfWindow;
 
 typedef struct {
@@ -131,6 +132,7 @@ typedef struct {
     double dirty_bytes_per_s;
     double full_bytes_per_s;
     double avg_changed_slots;
+    double max_dirty_bytes_per_frame;
     double avg_render_lock_hold_us;
     double max_render_lock_hold_us;
     uint64_t skipped_generations;
@@ -339,6 +341,9 @@ static void perf_window_record_frame(ViewerPerfWindow *perf, uint32_t dirty_pixe
     perf->window_frames++;
     perf->window_dirty_pixels += dirty_pixels;
     perf->window_changed_slots += changed_slots;
+    if (dirty_pixels > perf->max_dirty_px_frame) {
+        perf->max_dirty_px_frame = dirty_pixels;
+    }
 }
 
 /* Emit one-second rolling perf snapshot and reset counters. */
@@ -363,11 +368,13 @@ static bool perf_window_take_snapshot_if_due(ViewerPerfWindow *perf,
             ((double)perf->window_dirty_pixels * (double)RGB565_BYTES_PER_PIXEL) / elapsed_s;
         out_snapshot->full_bytes_per_s = out_snapshot->fps * (double)(VIEW_W * VIEW_H * RGB565_BYTES_PER_PIXEL);
         out_snapshot->avg_changed_slots = (double)perf->window_changed_slots / (double)perf->window_frames;
+        out_snapshot->max_dirty_bytes_per_frame = (double)perf->max_dirty_px_frame * (double)RGB565_BYTES_PER_PIXEL;
     }
     perf->window_start_s = now_s;
     perf->window_frames = 0u;
     perf->window_dirty_pixels = 0u;
     perf->window_changed_slots = 0u;
+    perf->max_dirty_px_frame = 0u;
     return true;
 }
 
@@ -1092,12 +1099,16 @@ int main(void) {
              * Keep the title intentionally short: macOS truncates long titles,
              * and skip diagnostics should stay visible even in narrow windows.
              */
-            char title[160];
+            double full_frame_kb = (double)(VIEW_W * VIEW_H * RGB565_BYTES_PER_PIXEL) / 1024.0;
+            double max_bw_kb = perf_snapshot.max_dirty_bytes_per_frame / 1024.0;
+            char title[200];
             (void)snprintf(title,
                            sizeof(title),
-                           "[%s] FPS %.1f sk %llu/%llu lf %u dmx %.1f lk %.0fus dt %.1f up %.1f",
+                           "[%s] FPS %.1f bw %.1f/%.0fKB sk %llu/%llu lf %u dmx %.1f lk %.0fus dt %.1f up %.1f",
                            runtime_flags.use_mfb_waitsync ? "WAITSYNC" : "CUSTOM",
                            perf_snapshot.fps,
+                           max_bw_kb,
+                           full_frame_kb,
                            (unsigned long long)perf_snapshot.skipped_generations,
                            (unsigned long long)perf_snapshot.skipped_max_frame,
                            long_frame_count,
