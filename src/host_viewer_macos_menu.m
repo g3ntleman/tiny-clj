@@ -6,12 +6,20 @@ static NSString *const kMacosViewerWindowAutosaveName = @"macos_viewer.main_wind
 static NSString *const kMacosViewerScreenUUIDKey = @"macos_viewer.window.screen_uuid";
 static NSString *const kMacosViewerFrameXKey = @"macos_viewer.window.frame_x";
 static NSString *const kMacosViewerFrameYKey = @"macos_viewer.window.frame_y";
-static NSString *const kMacosViewerWidthKey = @"macos_viewer.window.width";
-static NSString *const kMacosViewerHeightKey = @"macos_viewer.window.height";
 static id g_macos_viewer_performance_activity = nil;
 static bool g_macos_viewer_window_autosave_bound = false;
 static bool g_macos_viewer_window_callbacks_registered = false;
 static bool g_macos_viewer_screen_restore_applied = false;
+
+static void macos_viewer_set_performance_activity(id token) {
+    id old_token = g_macos_viewer_performance_activity;
+    if (old_token == token) {
+        return;
+    }
+    [token retain];
+    [old_token release];
+    g_macos_viewer_performance_activity = token;
+}
 
 static NSNumber *macos_viewer_screen_number(NSScreen *screen) {
     if (!screen) {
@@ -77,8 +85,7 @@ static void macos_viewer_store_screen_position_for_window(NSWindow *window) {
     [defaults setObject:screen_uuid forKey:kMacosViewerScreenUUIDKey];
     [defaults setDouble:frame.origin.x forKey:kMacosViewerFrameXKey];
     [defaults setDouble:frame.origin.y forKey:kMacosViewerFrameYKey];
-    /* Flush immediately so move-driven placement survives crashes or force quit. */
-    [defaults synchronize];
+    (void)[window saveFrameUsingName:kMacosViewerWindowAutosaveName];
     /* Width/height intentionally not saved — host viewer uses fixed 2x scale. */
 }
 
@@ -126,6 +133,7 @@ static void macos_viewer_bind_window_autosave(NSWindow *window) {
         return;
     }
     macos_viewer_apply_saved_screen_placement(window);
+    [window setFrameAutosaveName:kMacosViewerWindowAutosaveName];
     g_macos_viewer_window_autosave_bound = true;
 }
 
@@ -282,9 +290,11 @@ void macos_viewer_begin_performance_activity(void) {
         }
         NSActivityOptions opts = NSActivityUserInitiatedAllowingIdleSystemSleep |
                                  NSActivityAutomaticTerminationDisabled;
-        g_macos_viewer_performance_activity =
+        id token =
             [proc beginActivityWithOptions:opts
                                     reason:@"tiny-clj host viewer render loop"];
+        macos_viewer_set_performance_activity(token);
+        [token release];
     }
 }
 
@@ -293,10 +303,13 @@ void macos_viewer_end_performance_activity(void) {
         if (g_macos_viewer_performance_activity == nil) {
             return;
         }
+        id token = g_macos_viewer_performance_activity;
+        [token retain];
+        macos_viewer_set_performance_activity(nil);
         NSProcessInfo *proc = [NSProcessInfo processInfo];
         if ([proc respondsToSelector:@selector(endActivity:)]) {
-            [proc endActivity:g_macos_viewer_performance_activity];
+            [proc endActivity:token];
         }
-        g_macos_viewer_performance_activity = nil;
+        [token release];
     }
 }
