@@ -51,12 +51,12 @@ static const char tiny_clj_fs_code[] =
     ;
 
 #if TINYCLJ_WITH_TINY_FX
-static const char tiny_fx_sound_code[] =
-#include "tiny-clj.audio.clj"
+static const char tiny_fx_audio_code[] =
+#include "tiny-fx.audio.clj"
     ;
 
-static const char tiny_fx_sound_native_code[] =
-#include "tiny_snd_runtime.clj"
+static const char tiny_fx_audio_native_code[] =
+#include "tiny_audio_runtime.clj"
     ;
 #endif
 
@@ -114,8 +114,8 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/runtime.clj", tiny_clj_runtime_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/fs.clj", tiny_clj_fs_code),
 #if TINYCLJ_WITH_TINY_FX
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound.clj", tiny_fx_sound_code),
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-native.clj", tiny_fx_sound_native_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/audio.clj", tiny_fx_audio_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/audio-native.clj", tiny_fx_audio_native_code),
 #endif
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net.clj", tiny_clj_net_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net/mdns.clj", tiny_clj_net_mdns_code),

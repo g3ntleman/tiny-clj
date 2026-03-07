@@ -3,7 +3,7 @@ R"TINY_GFX_HOST(
   (:require [tiny-fx.gfx-scene :refer [->Transform ->Style ->Group ->Polyline
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
             [tiny-fx.gfx-collision :as collision]
-            [tiny-fx.sound :as sound]))
+            [tiny-fx.audio :as sound]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]

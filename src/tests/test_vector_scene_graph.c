@@ -471,7 +471,7 @@ TEST(test_vector_scene_graph_host_viewer_demo_gpio_press_triggers_demo_melody_on
         "  (gpio-simulate! 1 0) "
         "  (run-next-task) "
         "  (let [count @tiny-fx.scene-demo/demo-melody-trigger-count* "
-        "        status (tiny-fx.sound/audio-host-status!)] "
+        "        status (tiny-fx.audio/audio-host-status!)] "
         "    (and (= 1 count) "
         "         (contains? status :tick-running))))",
         g_test_eval_state);

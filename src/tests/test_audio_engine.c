@@ -581,7 +581,7 @@ TEST(test_audio_native_on_finished_callback_receives_event_map_shape) {
   ID setup = eval_string(
       "(do "
       "  (def audio-finished-shape (atom nil)) "
-      "  (tiny-fx.sound/audio-on-finished! "
+      "  (tiny-fx.audio/audio-on-finished! "
       "    (fn [event] "
       "      (reset! audio-finished-shape "
       "              [(map? event) (:source event) (:kind event) (:track-id event)]) "
@@ -610,25 +610,25 @@ TEST(test_audio_native_on_finished_callback_receives_event_map_shape) {
 TEST(test_audio_native_lookup) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-  /* All audio builtins in tiny-fx.sound should be resolvable */
+  /* All audio builtins in tiny-fx.audio should be resolvable */
   const char *names[] = {
-      "tiny-fx.sound/audio-load-track!",
-      "tiny-fx.sound/audio-unload-track!",
-      "tiny-fx.sound/audio-play-music!",
-      "tiny-fx.sound/audio-stop-track!",
-      "tiny-fx.sound/audio-stop-music!",
-      "tiny-fx.sound/audio-play-sfx!",
-      "tiny-fx.sound/audio-stop-all!",
-      "tiny-fx.sound/audio-set-track-volume!",
-      "tiny-fx.sound/audio-set-music-volume!",
-      "tiny-fx.sound/audio-on-finished!",
-      "tiny-fx.sound/audio-play-test-tone!",
-      "tiny-fx.sound/audio-host-status!",
+      "tiny-fx.audio/audio-load-track!",
+      "tiny-fx.audio/audio-unload-track!",
+      "tiny-fx.audio/audio-play-music!",
+      "tiny-fx.audio/audio-stop-track!",
+      "tiny-fx.audio/audio-stop-music!",
+      "tiny-fx.audio/audio-play-sfx!",
+      "tiny-fx.audio/audio-stop-all!",
+      "tiny-fx.audio/audio-set-track-volume!",
+      "tiny-fx.audio/audio-set-music-volume!",
+      "tiny-fx.audio/audio-on-finished!",
+      "tiny-fx.audio/audio-play-test-tone!",
+      "tiny-fx.audio/audio-host-status!",
   };
 
   for (int i = 0; i < 12; i++) {
     char buf[192];
-    test_snprintf(buf, sizeof(buf), "(do (require 'tiny-fx.sound) (fn? %s))", names[i]);
+    test_snprintf(buf, sizeof(buf), "(do (require 'tiny-fx.audio) (fn? %s))", names[i]);
     ID result = NULL;
     TRY {
       result = eval_string(buf, g_test_eval_state);
@@ -653,11 +653,12 @@ TEST(test_audio_native_play_music_initializes_engine_if_needed) {
   TRY {
     result = eval_string(
         "(do "
-        "  (require 'tiny-fx.sound) "
-        "  (= :playing "
-        "     (tiny-fx.sound/play-steps! :lazy-init "
-        "       [{:notes [:G5 :D5] :dur :s}] "
-        "       {:channel-count 2 :volumes [220 180]})))",
+        "  (require 'tiny-fx.audio) "
+        "  (let [ret (tiny-fx.audio/play-steps! :lazy-init "
+        "              [{:notes [:G5 :D5] :dur :s}] "
+        "              {:channel-count 2 :volumes [220 180]})] "
+        "    (and (= :playing (:status ret)) "
+        "         (= 125 (:duration-ms ret)))))",
         g_test_eval_state);
   }
   CATCH(ex) {
@@ -676,7 +677,7 @@ TEST(test_audio_native_play_test_tone_returns_bool) {
 
   ID result = NULL;
   TRY {
-    result = eval_string("(tiny-fx.sound/audio-play-test-tone! 440 100)", g_test_eval_state);
+    result = eval_string("(tiny-fx.audio/audio-play-test-tone! 440 100)", g_test_eval_state);
   }
   CATCH(ex) {
     TEST_FAIL_MESSAGE("audio-play-test-tone! should not throw");
@@ -691,7 +692,7 @@ TEST(test_audio_native_play_test_tone_with_volume_returns_bool) {
 
   ID result = NULL;
   TRY {
-    result = eval_string("(tiny-fx.sound/audio-play-test-tone! 523 120 64)", g_test_eval_state);
+    result = eval_string("(tiny-fx.audio/audio-play-test-tone! 523 120 64)", g_test_eval_state);
   }
   CATCH(ex) {
     TEST_FAIL_MESSAGE("audio-play-test-tone! with volume should not throw");
@@ -706,7 +707,7 @@ TEST(test_audio_native_host_status_returns_map) {
 
   ID result = NULL;
   TRY {
-    result = eval_string("(tiny-fx.sound/audio-host-status!)", g_test_eval_state);
+    result = eval_string("(tiny-fx.audio/audio-host-status!)", g_test_eval_state);
   }
   CATCH(ex) {
     TEST_FAIL_MESSAGE("audio-host-status! should not throw");
@@ -717,7 +718,7 @@ TEST(test_audio_native_host_status_returns_map) {
   TEST_ASSERT_TRUE(is_map(result));
 }
 
-TEST(test_audio_tiny_fx_sound_namespace_compile_and_play) {
+TEST(test_audio_tiny_fx_audio_namespace_compile_and_play) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -726,22 +727,23 @@ TEST(test_audio_tiny_fx_sound_namespace_compile_and_play) {
   TRY {
     result = eval_string(
         "(do "
-        "  (require 'tiny-fx.sound) "
-        "  (= :playing "
-        "     (tiny-fx.sound/play-steps! :dsl-test "
-        "       [{:notes [:G5 :D5] :dur :s} {:notes [:Bb5 :F5] :dur :e}] "
-        "       {:channel-count 2 :volumes [200 120]})))",
+        "  (require 'tiny-fx.audio) "
+        "  (let [ret (tiny-fx.audio/play-steps! :dsl-test "
+        "              [{:notes [:G5 :D5] :dur :s} {:notes [:Bb5 :F5] :dur :e}] "
+        "              {:channel-count 2 :volumes [200 120]})] "
+        "    (and (= :playing (:status ret)) "
+        "         (= 375 (:duration-ms ret)))))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound namespace should compile and play steps");
+    TEST_FAIL_MESSAGE("tiny-fx.audio namespace should compile and play steps");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_fx_sound_play_starwars_title_returns_bool) {
+TEST(test_audio_tiny_fx_audio_play_starwars_title_returns_status_map) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -749,18 +751,21 @@ TEST(test_audio_tiny_fx_sound_play_starwars_title_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) (= :playing (tiny-fx.sound/play-starwars-title!)))",
+        "(do (require 'tiny-fx.audio) "
+        "    (let [ret (tiny-fx.audio/play-starwars-title!)] "
+        "      (and (= :playing (:status ret)) "
+        "           (> (:duration-ms ret) 0))))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/play-starwars-title! should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.audio/play-starwars-title! should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_fx_sound_play_steps_one_voice_returns_bool) {
+TEST(test_audio_tiny_fx_audio_play_steps_one_voice_returns_status_map) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -768,22 +773,23 @@ TEST(test_audio_tiny_fx_sound_play_steps_one_voice_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (= :playing "
-        "       (tiny-fx.sound/play-steps! :one-voice "
-        "         [{:notes [:G5] :dur :s} {:notes [:D5] :dur :s}] "
-        "         {:channel-count 1 :volumes [210]})))",
+        "(do (require 'tiny-fx.audio) "
+        "    (let [ret (tiny-fx.audio/play-steps! :one-voice "
+        "                [{:notes [:G5] :dur :s} {:notes [:D5] :dur :s}] "
+        "                {:channel-count 1 :volumes [210]})] "
+        "      (and (= :playing (:status ret)) "
+        "           (= 250 (:duration-ms ret)))))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! one-voice should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.audio/play-steps! one-voice should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_fx_sound_play_steps_musical_durations_returns_bool) {
+TEST(test_audio_tiny_fx_audio_play_steps_musical_durations_returns_status_map) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -791,24 +797,25 @@ TEST(test_audio_tiny_fx_sound_play_steps_musical_durations_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (= :playing "
-        "       (tiny-fx.sound/play-steps! :musical-dur "
-        "         [{:notes [:G5 :D5] :dur :q} "
-        "          {:notes [:Bb5 :F5] :dur :dq} "
-        "          {:notes [:A5 :E5] :dur :et}] "
-        "         {:channel-count 2 :volumes [220 170] :tempo-bpm 104})))",
+        "(do (require 'tiny-fx.audio) "
+        "    (let [ret (tiny-fx.audio/play-steps! :musical-dur "
+        "                [{:notes [:G5 :D5] :dur :q} "
+        "                 {:notes [:Bb5 :F5] :dur :dq} "
+        "                 {:notes [:A5 :E5] :dur :et}] "
+        "                {:channel-count 2 :volumes [220 170] :tempo-bpm 104})] "
+        "      (and (= :playing (:status ret)) "
+        "           (= 1632 (:duration-ms ret)))))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! with musical durations should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.audio/play-steps! with musical durations should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_fx_sound_play_steps_rest_shorthand_returns_bool) {
+TEST(test_audio_tiny_fx_audio_play_steps_rest_shorthand_returns_status_map) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -816,24 +823,25 @@ TEST(test_audio_tiny_fx_sound_play_steps_rest_shorthand_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (= :playing "
-        "       (tiny-fx.sound/play-steps! :rest-shorthand "
-        "         [{:notes [:G5 :D5] :dur :q} "
-        "          {:rest :e} "
-        "          {:notes [:Bb5 :F5] :dur :q}] "
-        "         {:channel-count 2 :volumes [220 170] :tempo-bpm 104})))",
+        "(do (require 'tiny-fx.audio) "
+        "    (let [ret (tiny-fx.audio/play-steps! :rest-shorthand "
+        "                [{:notes [:G5 :D5] :dur :q} "
+        "                 {:rest :e} "
+        "                 {:notes [:Bb5 :F5] :dur :q}] "
+        "                {:channel-count 2 :volumes [220 170] :tempo-bpm 104})] "
+        "      (and (= :playing (:status ret)) "
+        "           (= 1440 (:duration-ms ret)))))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! with rest shorthand should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.audio/play-steps! with rest shorthand should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_fx_sound_numeric_duration_throws) {
+TEST(test_audio_tiny_fx_audio_numeric_duration_throws) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -841,8 +849,8 @@ TEST(test_audio_tiny_fx_sound_numeric_duration_throws) {
   bool threw = false;
   TRY {
     (void)eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (tiny-fx.sound/play-steps! :numeric-dur "
+        "(do (require 'tiny-fx.audio) "
+        "    (tiny-fx.audio/play-steps! :numeric-dur "
         "      [{:notes [:G5 :D5] :dur 120}] "
         "      {:channel-count 2 :volumes [220 170]}))",
         g_test_eval_state);
@@ -855,7 +863,7 @@ TEST(test_audio_tiny_fx_sound_numeric_duration_throws) {
   TEST_ASSERT_TRUE(threw);
 }
 
-TEST(test_audio_tiny_fx_sound_rest_with_dur_throws) {
+TEST(test_audio_tiny_fx_audio_rest_with_dur_throws) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -863,8 +871,8 @@ TEST(test_audio_tiny_fx_sound_rest_with_dur_throws) {
   bool threw = false;
   TRY {
     (void)eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (tiny-fx.sound/play-steps! :bad-rest "
+        "(do (require 'tiny-fx.audio) "
+        "    (tiny-fx.audio/play-steps! :bad-rest "
         "      [{:notes [:G5 :D5] :dur :q} "
         "       {:rest :e :dur :e}] "
         "      {:channel-count 2 :volumes [220 170]}))",
@@ -878,7 +886,7 @@ TEST(test_audio_tiny_fx_sound_rest_with_dur_throws) {
   TEST_ASSERT_TRUE(threw);
 }
 
-TEST(test_audio_tiny_fx_sound_play_steps_four_voices_returns_bool) {
+TEST(test_audio_tiny_fx_audio_play_steps_four_voices_returns_status_map) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -886,22 +894,23 @@ TEST(test_audio_tiny_fx_sound_play_steps_four_voices_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (= :playing "
-        "       (tiny-fx.sound/play-steps! :four-voice "
-        "         [{:notes [:G5 :D5 :Bb4 :F4] :dur :e} {:notes [:A5 :E5 :C5 :G4] :dur :q}] "
-        "         {:channel-count 4 :volumes [220 170 130 100]})))",
+        "(do (require 'tiny-fx.audio) "
+        "    (let [ret (tiny-fx.audio/play-steps! :four-voice "
+        "                [{:notes [:G5 :D5 :Bb4 :F4] :dur :e} {:notes [:A5 :E5 :C5 :G4] :dur :q}] "
+        "                {:channel-count 4 :volumes [220 170 130 100]})] "
+        "      (and (= :playing (:status ret)) "
+        "           (= 750 (:duration-ms ret)))))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! four-voice should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.audio/play-steps! four-voice should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_fx_sound_play_steps_two_voices_activate_two_voices) {
+TEST(test_audio_tiny_fx_audio_play_steps_two_voices_activate_two_voices) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -909,15 +918,16 @@ TEST(test_audio_tiny_fx_sound_play_steps_two_voices_activate_two_voices) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (= :playing "
-        "       (tiny-fx.sound/play-steps! :two-voice-activation "
-        "         [{:notes [:G5 :D5] :dur :q}] "
-        "         {:channel-count 2 :volumes [220 170]})))",
+        "(do (require 'tiny-fx.audio) "
+        "    (let [ret (tiny-fx.audio/play-steps! :two-voice-activation "
+        "                [{:notes [:G5 :D5] :dur :q}] "
+        "                {:channel-count 2 :volumes [220 170]})] "
+        "      (and (= :playing (:status ret)) "
+        "           (= 500 (:duration-ms ret)))))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! two-voice should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.audio/play-steps! two-voice should not throw");
   }
   END_TRY
 
@@ -930,7 +940,7 @@ TEST(test_audio_tiny_fx_sound_play_steps_two_voices_activate_two_voices) {
   TEST_ASSERT_TRUE(g_audio_engine.voices[0].freq_hz != g_audio_engine.voices[1].freq_hz);
 }
 
-TEST(test_audio_tiny_fx_sound_play_melody_backing_returns_bool) {
+TEST(test_audio_tiny_fx_audio_play_melody_backing_returns_status_map) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -938,23 +948,24 @@ TEST(test_audio_tiny_fx_sound_play_melody_backing_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (= :playing "
-        "       (tiny-fx.sound/play-steps! :mel-backing "
-        "         [{:melody :G5 :backing [:D5 :Bb4] :dur :e} "
-        "          {:melody :A5 :backing [:E5 :C5] :dur :e}] "
-        "         {:channel-count 3 :melody-vol 220 :backing-volumes [160 130]})))",
+        "(do (require 'tiny-fx.audio) "
+        "    (let [ret (tiny-fx.audio/play-steps! :mel-backing "
+        "                [{:melody :G5 :backing [:D5 :Bb4] :dur :e} "
+        "                 {:melody :A5 :backing [:E5 :C5] :dur :e}] "
+        "                {:channel-count 3 :melody-vol 220 :backing-volumes [160 130]})] "
+        "      (and (= :playing (:status ret)) "
+        "           (= 500 (:duration-ms ret)))))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! with melody/backing should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.audio/play-steps! with melody/backing should not throw");
   }
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_fx_sound_play_melody_backing_auto_uses_available_channels) {
+TEST(test_audio_tiny_fx_audio_play_melody_backing_auto_uses_available_channels) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -962,15 +973,16 @@ TEST(test_audio_tiny_fx_sound_play_melody_backing_auto_uses_available_channels) 
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (= :playing "
-        "       (tiny-fx.sound/play-steps! :mel-backing-auto "
-        "         [{:melody :G5 :backing [:D5 :Bb4] :dur :q}] "
-        "         {:channel-count 4 :melody-vol 220 :backing-volumes [170 150 130]})))",
+        "(do (require 'tiny-fx.audio) "
+        "    (let [ret (tiny-fx.audio/play-steps! :mel-backing-auto "
+        "                [{:melody :G5 :backing [:D5 :Bb4] :dur :q}] "
+        "                {:channel-count 4 :melody-vol 220 :backing-volumes [170 150 130]})] "
+        "      (and (= :playing (:status ret)) "
+        "           (= 500 (:duration-ms ret)))))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound/play-steps! melody/backing should auto-fill available channels");
+    TEST_FAIL_MESSAGE("tiny-fx.audio/play-steps! melody/backing should auto-fill available channels");
   }
   END_TRY
 

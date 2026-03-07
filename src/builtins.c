@@ -6983,8 +6983,22 @@ DEFINE_UNARY_BOOL_PREDICATE(native_list_p, "list?", (arg && is_list_type(TAG(arg
 // -----------------------------------------------------------------------------
 // yield/current-time-ms hooks (override in tests if needed)
 // -----------------------------------------------------------------------------
+__attribute__((weak)) uint32_t tinyclj_current_time_ms_for_sleep(void);
+
 __attribute__((weak)) void tinyclj_runloop_once_for_yield(unsigned int timeout_ms) {
+  uint32_t start_ms = tinyclj_current_time_ms_for_sleep();
   platform_runloop_run_once(timeout_ms);
+
+  if (timeout_ms == 0u) {
+    return;
+  }
+
+  uint32_t end_ms = tinyclj_current_time_ms_for_sleep();
+  uint32_t elapsed_ms = (end_ms >= start_ms) ? (end_ms - start_ms)
+                                             : ((86400000u - start_ms) + end_ms);
+  if (elapsed_ms < timeout_ms) {
+    platform_sleep_ms(timeout_ms - elapsed_ms);
+  }
 }
 
 __attribute__((weak)) uint32_t tinyclj_current_time_ms_for_sleep(void) {
@@ -7781,11 +7795,11 @@ static void register_builtin(const char *cname, BuiltinFn func) {
     // Qualified symbol: split into namespace and name
     size_t ns_len = slash - cname;
 
-    // Auto-register clojure.* and tiny-fx.sound-native (audio API) namespaces.
+    // Auto-register clojure.* and tiny-fx.audio-native (audio API) namespaces.
     // Other namespaces must use (require 'ns) first, then (defn ... :native).
     bool allow = (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0) ||
-                 (ns_len == strlen("tiny-fx.sound-native") &&
-                  strncmp(cname, "tiny-fx.sound-native", strlen("tiny-fx.sound-native")) == 0);
+                 (ns_len == strlen("tiny-fx.audio-native") &&
+                  strncmp(cname, "tiny-fx.audio-native", strlen("tiny-fx.audio-native")) == 0);
     if (!allow)
       return;
 
@@ -7870,20 +7884,20 @@ void register_builtins() {
       register_builtin(entry->register_cname, entry->native_func);
     }
 
-    // Audio builtins (Runtime API in tiny-fx.sound-native per plan)
+    // Audio builtins (Runtime API in tiny-fx.audio-native per plan)
 #if TINYCLJ_WITH_TINY_FX
-    register_builtin("tiny-fx.sound-native/audio-load-track!", native_audio_load_track);
-    register_builtin("tiny-fx.sound-native/audio-unload-track!", native_audio_unload_track);
-    register_builtin("tiny-fx.sound-native/audio-play-music!", native_audio_play_music);
-    register_builtin("tiny-fx.sound-native/audio-stop-track!", native_audio_stop_track);
-    register_builtin("tiny-fx.sound-native/audio-stop-music!", native_audio_stop_music);
-    register_builtin("tiny-fx.sound-native/audio-play-sfx!", native_audio_play_sfx);
-    register_builtin("tiny-fx.sound-native/audio-stop-all!", native_audio_stop_all);
-    register_builtin("tiny-fx.sound-native/audio-set-track-volume!", native_audio_set_track_volume);
-    register_builtin("tiny-fx.sound-native/audio-set-music-volume!", native_audio_set_music_volume);
-    register_builtin("tiny-fx.sound-native/audio-on-finished!", native_audio_on_finished);
-    register_builtin("tiny-fx.sound-native/audio-play-test-tone!", native_audio_play_test_tone);
-    register_builtin("tiny-fx.sound-native/audio-host-status!", native_audio_host_status);
+    register_builtin("tiny-fx.audio-native/audio-load-track!", native_audio_load_track);
+    register_builtin("tiny-fx.audio-native/audio-unload-track!", native_audio_unload_track);
+    register_builtin("tiny-fx.audio-native/audio-play-music!", native_audio_play_music);
+    register_builtin("tiny-fx.audio-native/audio-stop-track!", native_audio_stop_track);
+    register_builtin("tiny-fx.audio-native/audio-stop-music!", native_audio_stop_music);
+    register_builtin("tiny-fx.audio-native/audio-play-sfx!", native_audio_play_sfx);
+    register_builtin("tiny-fx.audio-native/audio-stop-all!", native_audio_stop_all);
+    register_builtin("tiny-fx.audio-native/audio-set-track-volume!", native_audio_set_track_volume);
+    register_builtin("tiny-fx.audio-native/audio-set-music-volume!", native_audio_set_music_volume);
+    register_builtin("tiny-fx.audio-native/audio-on-finished!", native_audio_on_finished);
+    register_builtin("tiny-fx.audio-native/audio-play-test-tone!", native_audio_play_test_tone);
+    register_builtin("tiny-fx.audio-native/audio-host-status!", native_audio_host_status);
 #endif
 
     // Prime cached thunk functions during setup so tests/runtime do not pay

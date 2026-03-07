@@ -1,6 +1,6 @@
 R"TINY_SND_CMP(
-(ns tiny-fx.sound
-  (:require [tiny-fx.sound-native :refer :all]))
+(ns tiny-fx.audio
+  (:require [tiny-fx.audio-native :refer :all]))
 
 ;; -----------------------------------------------------------------------------
 ;; Note helpers
@@ -155,6 +155,44 @@ R"TINY_SND_CMP(
     (throw (ex-info "Step duration must be a musical keyword (:q, :e, :dq, ...)"
                     {:dur dur}))))
 
+(defn- normalize-playback-config [steps opts]
+  (let [has-melody-backing (loop [s steps]
+                             (if (empty? s)
+                               false
+                               (let [step (first s)]
+                                 (if (or (not (nil? (get step :melody)))
+                                         (not (nil? (get step :backing))))
+                                   true
+                                   (recur (rest s))))))
+        opts* (if has-melody-backing
+                (compile-opts-melody-backing steps opts)
+                opts)
+        steps* (if has-melody-backing
+                 (melody-backing->steps steps opts*)
+                 steps)]
+    {:steps steps*
+     :opts opts*}))
+
+(defn track-duration-ms
+  "Returns the total playback time in milliseconds for the given steps/options."
+  [steps opts]
+  (let [cfg (normalize-playback-config steps opts)
+        steps* (get cfg :steps)
+        opts* (get cfg :opts)
+        tempo-bpm (or (get opts* :tempo-bpm) 120)]
+    (loop [s steps* total 0]
+      (if (empty? s)
+        total
+        (let [step (first s)
+              rest-dur (get step :rest)
+              has-rest (not (nil? rest-dur))
+              _ (when (and has-rest (not (nil? (get step :dur))))
+                  (throw (ex-info "compile-track step must not use both :dur and :rest"
+                                  {:step step})))
+              dur-spec (if has-rest rest-dur (or (get step :dur) :q))
+              dur (duration->ms dur-spec tempo-bpm)]
+          (recur (rest s) (+ total dur)))))))
+
 (defn compile-track
   "Generic N-voice compiler (1..16 channels).
    Step format:
@@ -169,20 +207,9 @@ R"TINY_SND_CMP(
    Supported duration keywords:
    :w :h :q :e :s :t :dh :dq :de :ds :qt :et :st"
   [steps opts]
-  (let [has-melody-backing (loop [s steps]
-                             (if (empty? s)
-                               false
-                               (let [step (first s)]
-                                 (if (or (not (nil? (get step :melody)))
-                                         (not (nil? (get step :backing))))
-                                   true
-                                   (recur (rest s))))))
-        opts* (if has-melody-backing
-                (compile-opts-melody-backing steps opts)
-                opts)
-        steps* (if has-melody-backing
-                 (melody-backing->steps steps opts*)
-                 steps)
+  (let [cfg (normalize-playback-config steps opts)
+        opts* (get cfg :opts)
+        steps* (get cfg :steps)
         inferred (infer-channel-count steps*)
         channel-count (or (get opts* :channel-count) inferred)
         _ (when (or (< channel-count 1) (> channel-count 16))
@@ -228,10 +255,13 @@ R"TINY_SND_CMP(
 
 (defn play-steps!
   "Compiles, loads and plays steps once.
-   Options map is passed to compile-track."
+   Options map is passed to compile-track.
+   Returns {:status :playing|:stopped :duration-ms <int>}."
   [track-id steps opts]
-  (audio-load-track! track-id (compile-track steps opts))
-  (play-result->status (audio-play-music! track-id 1)))
+  (let [duration-ms (track-duration-ms steps opts)]
+    (audio-load-track! track-id (compile-track steps opts))
+    {:status (play-result->status (audio-play-music! track-id 1))
+     :duration-ms duration-ms}))
 
 ;; Melody + backing transformation helper.
 ;; Input step format:
@@ -372,15 +402,5 @@ R"TINY_SND_CMP(
           (do
             (yield 10)
             (recur (+ elapsed 10))))))))
-
-(defn play-starwars-title-blocking!
-  "Starts the Star Wars demo and waits until playback ends (or timeout).
-   Returns a map:
-   {:start :playing|:stopped
-    :wait :stopped|:timeout|:unknown}"
-  []
-  (let [start (play-starwars-title!)
-        wait (wait-until-audio-stopped! 10000)]
-    {:start start :wait wait}))
 
 )TINY_SND_CMP"
