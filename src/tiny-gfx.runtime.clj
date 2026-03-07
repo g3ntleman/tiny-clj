@@ -13,31 +13,73 @@ Usage: (vector-scene-bench) or (vector-scene-bench iterations warmup)."}
 (def vector-scene-bench tiny-clj.runtime/vector-scene-bench)
 
 ;; Re-export the compact scene/collision API from the internal helper namespaces.
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->Transform.
+Fields: [tx ty sx sy rot]."}
 (def ->Transform tiny-fx.gfx-scene/->Transform)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->Style.
+Fields: [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]."}
 (def ->Style tiny-fx.gfx-scene/->Style)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->Group.
+Fields: [id t style visible children]. Children are stable child ids in flat entity maps."}
 (def ->Group tiny-fx.gfx-scene/->Group)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->Line.
+Fields: [id t style visible x1 y1 x2 y2]."}
 (def ->Line tiny-fx.gfx-scene/->Line)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->Polyline.
+Fields: [id t style visible pts closed]."}
 (def ->Polyline tiny-fx.gfx-scene/->Polyline)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->Rect.
+Fields: [id t style visible x y w h]."}
 (def ->Rect tiny-fx.gfx-scene/->Rect)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->Tri.
+Fields: [id t style visible x1 y1 x2 y2 x3 y3]."}
 (def ->Tri tiny-fx.gfx-scene/->Tri)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->VText.
+Fields: [id t style visible x y scale rot text]."}
 (def ->VText tiny-fx.gfx-scene/->VText)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->Timeline.
+Fields: [keyframes loop]. Keyframes are [[time-ms value] ...]."}
 (def ->Timeline tiny-fx.gfx-scene/->Timeline)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->Scene.
+Fields: [root clip-rect erase-color collision-rules]."}
 (def ->Scene tiny-fx.gfx-scene/->Scene)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->FrameScene.
+Fields: [root clip-rect z visible opaque erase-color guard-px collision-rules]."}
 (def ->FrameScene tiny-fx.gfx-scene/->FrameScene)
+^#^{:doc "Legacy compatibility constructor alias for tiny-fx.gfx-scene/->CollisionRule."}
 (def ->CollisionRule tiny-fx.gfx-scene/->CollisionRule)
+^#^{:doc "Legacy compatibility constructor alias for tiny-fx.gfx-scene/->CollisionEvent."}
 (def ->CollisionEvent tiny-fx.gfx-scene/->CollisionEvent)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->SpatialRule.
+Fields: [id slot kind a-id b-id radius channel]."}
 (def ->SpatialRule tiny-fx.gfx-scene/->SpatialRule)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->Aabb.
+Fields: [min-x min-y max-x max-y]."}
 (def ->Aabb tiny-fx.gfx-scene/->Aabb)
+^#^{:doc "Record constructor alias for tiny-fx.gfx-scene/->SpatialEvent.
+Fields: [source rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel]."}
 (def ->SpatialEvent tiny-fx.gfx-scene/->SpatialEvent)
+^#^{:doc "Converts a 24-bit RGB888 integer (0xRRGGBB) to RGB565."}
 (def color tiny-fx.gfx-scene/color)
+^#^{:doc "Converts separate 8-bit RGB channels to RGB565."}
 (def rgb888->color tiny-fx.gfx-scene/rgb888->color)
+^#^{:doc "Converts a CSS-style #RRGGBB string to RGB565. Returns nil for invalid input."}
 (def web-hex->color tiny-fx.gfx-scene/web-hex->color)
+^#^{:doc "Normalizes collision phase masks to the supported [:enter :exit] vector subset."}
 (def normalize-collision-phase-mask tiny-fx.gfx-scene/normalize-collision-phase-mask)
+^#^{:doc "Applies defaults to the legacy collision-rule contract."}
 (def normalize-collision-rule tiny-fx.gfx-scene/normalize-collision-rule)
+^#^{:doc "Applies defaults to the active spatial-rule contract used by the runtime."}
 (def normalize-spatial-rule tiny-fx.gfx-scene/normalize-spatial-rule)
+^#^{:doc "Convenience tree-update helper kept for compatibility.
+Flat entity-map scenes should usually update nodes directly via assoc-in/swap!."}
 (def update-nodes tiny-fx.gfx-scene/update-nodes)
+^#^{:doc "Configures the Clojure collision/spatial callback closure used by native dispatch."}
 (def set-collision-callback! tiny-fx.gfx-collision/set-collision-callback!)
+^#^{:doc "Invokes the configured collision/spatial callback for one event map.
+Returns nil when no callback is configured."}
 (def invoke-collision-callback! tiny-fx.gfx-collision/invoke-collision-callback!)
+^#^{:doc "Returns the default player-vs-obstacle collision response policy function used by the demo."}
 (def player-vs-obstacle-policy tiny-fx.gfx-collision/player-vs-obstacle-policy)
 
 ^#^{:doc "Returns the canonical ordered slot descriptor vector used by the runtime

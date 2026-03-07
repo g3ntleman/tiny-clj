@@ -26,6 +26,7 @@
 #include "event_loop.h"
 #include "renderer_lifecycle.h"
 #include "rendered_state_snapshot.h"
+#include "render_backend.h"
 #include "viewer_collision.h"
 #include "platform.h"
 #include "atom.h"
@@ -834,6 +835,54 @@ static VgSlotChangeTracker g_slot_change_tracker;
  */
 static uint16_t g_render_buffer[VIEW_W * VIEW_H];
 static uint16_t *g_gram_pixels = NULL;
+
+typedef struct {
+    uint16_t *gram_pixels;
+    uint16_t width;
+    uint16_t height;
+} ViewerGramBackend;
+
+static ViewerGramBackend g_gram_backend = {0};
+
+static bool viewer_backend_begin_frame(void *ctx, uint32_t frame_id) {
+    (void)ctx;
+    (void)frame_id;
+    return true;
+}
+
+static bool viewer_backend_submit_rect(void *ctx,
+                                       VgBackendRect rect,
+                                       const uint16_t *rgb565_pixels,
+                                       uint16_t stride_px) {
+    ViewerGramBackend *backend = (ViewerGramBackend *)ctx;
+    if (!backend || !backend->gram_pixels || !rgb565_pixels || rect.w <= 0 || rect.h <= 0) {
+        return false;
+    }
+    if (rect.x < 0 || rect.y < 0) {
+        return false;
+    }
+    if ((uint16_t)(rect.x + rect.w) > backend->width || (uint16_t)(rect.y + rect.h) > backend->height) {
+        return false;
+    }
+    for (int16_t row = 0; row < rect.h; row++) {
+        size_t dst_off = (size_t)(rect.y + row) * (size_t)backend->width + (size_t)rect.x;
+        size_t src_off = (size_t)row * (size_t)stride_px;
+        memcpy(&backend->gram_pixels[dst_off], &rgb565_pixels[src_off], (size_t)rect.w * sizeof(uint16_t));
+    }
+    return true;
+}
+
+static bool viewer_backend_end_frame(void *ctx, uint32_t frame_id) {
+    (void)ctx;
+    (void)frame_id;
+    return true;
+}
+
+static const VgBackendOps g_viewer_backend_ops = {
+    .begin_frame = viewer_backend_begin_frame,
+    .submit_rect = viewer_backend_submit_rect,
+    .end_frame = viewer_backend_end_frame,
+};
 typedef struct {
     pthread_t thread;
     pthread_mutex_t mutex;
@@ -1023,6 +1072,8 @@ static void *viewer_render_thread_main(void *arg) {
         uint32_t frame_dirty_pixels = 0u;
         uint32_t frame_changed_slots = 0u;
         uint64_t frame_skipped_total = 0u;
+        VgClipRect frame_dirty_rects[VIEWER_MAX_SLOTS] = {0};
+        uint8_t frame_dirty_rect_count = 0u;
         if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
             continue;
         }
@@ -1041,15 +1092,15 @@ static void *viewer_render_thread_main(void *arg) {
             if (!snapshot) {
                 continue;
             }
-            uint32_t dirty_pixels = 0u;
+            VgRenderFrameSlotResult slot_result = {0};
             vg_rendered_state_capture_begin(i, slot_generations[i], frame_now_ms);
-            bool rendered = vg_render_frame_slot_record_at_ms(snapshot,
-                                                              &g_render_thread.slot_states[i],
-                                                              fb,
-                                                              slot_generations[i],
-                                                              frame_now_ms,
-                                                              slot_animated_tick,
-                                                              &dirty_pixels);
+            bool rendered = vg_render_frame_slot_record_result_at_ms(snapshot,
+                                                                     &g_render_thread.slot_states[i],
+                                                                     fb,
+                                                                     slot_generations[i],
+                                                                     frame_now_ms,
+                                                                     slot_animated_tick,
+                                                                     &slot_result);
             if (rendered) {
                 vg_rendered_state_capture_commit();
             } else {
@@ -1075,7 +1126,10 @@ static void *viewer_render_thread_main(void *arg) {
                 }
                 g_render_thread.last_rendered_generation[i] = curr_gen;
                 frame_changed_slots++;
-                frame_dirty_pixels += dirty_pixels;
+                frame_dirty_pixels += slot_result.dirty_pixels;
+                if (frame_dirty_rect_count < g_viewer_slot_count) {
+                    frame_dirty_rects[frame_dirty_rect_count++] = slot_result.dirty_rect;
+                }
             }
         }
         if (frame_skipped_total > 0u) {
@@ -1112,16 +1166,24 @@ static void *viewer_render_thread_main(void *arg) {
         }
         (void)pthread_mutex_unlock(&g_render_thread.mutex);
         /*
-         * Simulate SPI/DMA transfer: copy finished render result to GRAM.
-         * This runs outside the mutex — the render buffer is only written by
-         * this thread, and g_gram_pixels is the "display bus" target.
-         * The UI thread may read g_gram_pixels during this copy, seeing a mix
-         * of old + new pixels (tearing) — same as real SPI display behavior.
-         * Critically, it will NEVER see the intermediate erased (black) state,
-         * because each pixel goes directly old → new.
+         * Simulate SPI/I80 dirty-rect transfer into display GRAM.
+         * The render buffer remains private to the render thread; only the
+         * finished dirty rects are copied into the live GRAM after rendering.
          */
-        if (g_gram_pixels) {
-            memcpy(g_gram_pixels, g_render_buffer, sizeof(g_render_buffer));
+        if (g_gram_pixels && frame_dirty_rect_count > 0u) {
+            VgBackend backend = {
+                .ops = &g_viewer_backend_ops,
+                .ctx = &g_gram_backend,
+            };
+            uint32_t frame_id = (uint32_t)atomic_load_explicit(&g_render_thread.rendered_frame_serial,
+                                                               memory_order_relaxed) +
+                                1u;
+            if (vg_backend_begin_frame(&backend, frame_id)) {
+                for (uint8_t rect_i = 0; rect_i < frame_dirty_rect_count; rect_i++) {
+                    (void)vg_backend_submit_clip_rect(&backend, fb, frame_dirty_rects[rect_i]);
+                }
+                (void)vg_backend_end_frame(&backend, frame_id);
+            }
         }
         atomic_fetch_add_explicit(&g_render_thread.rendered_frame_serial, 1u, memory_order_release);
     }
@@ -1385,6 +1447,9 @@ int main(void) {
     viewer_set_realtime_thread_policy();
 
     g_gram_pixels = fb_pixels;
+    g_gram_backend.gram_pixels = fb_pixels;
+    g_gram_backend.width = VIEW_W;
+    g_gram_backend.height = VIEW_H;
     memset(g_render_buffer, 0, sizeof(g_render_buffer));
     memset(fb_pixels, 0, sizeof(uint16_t) * VIEW_W * VIEW_H);
     VgFrameBuffer fb;
@@ -1625,6 +1690,7 @@ cleanup:
     }
     destroy_spatial_rule_set(&spatial_rules);
     g_gram_pixels = NULL;
+    memset(&g_gram_backend, 0, sizeof(g_gram_backend));
     runtime_reset(&g_runtime);
     return exit_code;
 #endif

@@ -202,6 +202,7 @@ set(TINYCLJ_CORE_SOURCES
     src/event_loop.c
     src/renderer_lifecycle.c
     src/rendered_state_snapshot.c
+    src/render_backend.c
     src/viewer_collision.c
     src/channel.c
     src/lockfree_spsc_queue.c
@@ -327,6 +328,7 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/event_loop.c
     src/renderer_lifecycle.c
     src/rendered_state_snapshot.c
+    src/render_backend.c
     src/channel.c
     src/clojure_core.c
     src/object.c

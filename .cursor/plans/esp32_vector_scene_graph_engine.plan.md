@@ -305,7 +305,7 @@ Tasks:
   - `tiny-fx.gfx-scene` exists and registers the record descriptors used by the C renderer.
   - Runtime schema lookup/caching from C is implemented (descriptor-driven field indices).
   - C-side layout-compatible overlays are declared via `DEFRECORD(...)` in `tiny_gfx.h`.
-  - Host-only tooling namespace `tiny-fx.gfx.converter` under `libs/tiny-gfx/converter.clj` remains optional helper tooling (e.g. SVG subset conversion via `group-from-svg`), without any header-serialization helpers.
+  - Host-only tooling namespace `tiny-fx.gfx.converter` under `libs/tiny-fx/converter.clj` remains optional helper tooling (e.g. SVG subset conversion via `group-from-svg`), without any header-serialization helpers.
   - Slot-index contract enforcement stays in C via runtime descriptor lookup + `CLJ_ASSERT(...)` (no generated index tables).
 - Keep canonicalization/compiled C scene cache optional for later optimization.
 
@@ -507,7 +507,7 @@ Done when:
 
 ## Milestone 7: ESP32 Display Backend Integration (Post-PoC)
 
-Status: TODO
+Status: IN PROGRESS (2026-03-07; shared backend submission API + host dirty-rect backend path landed, ESP32 transport hooks still pending)
 
 Supported display interfaces:
 
@@ -605,6 +605,12 @@ Done when:
 - Shared backend submission interface is used on both targets, and conformance checks pass for representative scenes.
 - Host viewer faithfully simulates target display behavior (single GRAM, no double-buffer, live framebuffer reads).
 - Dirty-rectangle tracking reduces SPI/I80 transfer volume for typical game scenes to <60% of full-frame.
+
+Implementation notes (2026-03-07):
+
+- Added shared backend submission core (`render_backend`) with `begin_frame` / `submit_rect` / `end_frame`.
+- Host viewer now submits only finished dirty rects from the render buffer into simulated GRAM through the backend API instead of memcpy-ing the full framebuffer.
+- Slot render path now exposes deterministic dirty-rect metadata (`VgRenderFrameSlotResult`) so host and future ESP32 transport layers can consume the same rect contract.
 
 ## Milestone 7b: Bandwidth Optimization (Entity-Level Dirty Tracking)
 
@@ -1343,14 +1349,14 @@ After all M9 features are implemented, do a cleanup pass before declaring M9 don
     - Host viewer collision callback invocation now resolves/calls runtime dispatcher directly (no hardcoded expression string eval path).
     - Added regression coverage for callback reconfiguration and retained toggle behavior through C-driven collision detection.
 
-### 9n: `tiny-gfx` API parity + Clojure documentation hardening (NEW)
+### 9n: `tiny-fx.gfx` API parity + Clojure documentation hardening (NEW)
 
-Status: IN PROGRESS (started 2026-03-05; initial runtime exposure + scene-contract docs merged)
+Status: DONE (2026-03-07; `tiny-fx.gfx` frontend aliases + scene-contract docs + parity regressions complete)
 
 Goal:
 
 - Expose the currently implemented vector-scene runtime capabilities through `tiny-fx.gfx.`* namespaces.
-- Keep `tiny-clj.runtime/`* compatibility, but provide `tiny-gfx`-first API surface + docs.
+- Keep `tiny-clj.runtime/`* compatibility, but provide `tiny-fx.gfx`-first API surface + docs.
 - Document Clojure-side API contracts where users author scene/collision/runtime code.
 
 Scope (first slice):
@@ -1361,7 +1367,7 @@ Scope (first slice):
   - `renderer-state`
   - `renderer-timeline-step`
   - `renderer-timeline-progress`
-- Embed `/libs/tiny-gfx/runtime.clj` in `embedded_sources.c`.
+- Embed `/libs/tiny-fx/gfx.clj` in `embedded_sources.c`.
 - Add regression tests proving alias parity against existing runtime semantics.
 
 Scope (second slice):
@@ -1382,6 +1388,10 @@ Checklist:
 - Add embedded `tiny-fx.gfx` namespace and aliases.
 - Add tests for alias parity (`unsupported` lifecycle path + rendered-state query nil path).
 - Add/extend Clojure API docs in `tiny-fx.gfx-scene` for consumed record contracts.
+- Done (2026-03-07):
+  - Plan and naming updated to the public `tiny-fx.gfx` frontend instead of the old `tiny-gfx` wording.
+  - `tiny-fx.gfx` direct aliases now carry author-facing doc metadata for runtime, scene, and collision entry points.
+  - Regression coverage now verifies direct var alias identity for representative runtime/scene/collision APIs; source-level doc metadata is present on the public frontend surface.
 
 ### Done when
 
@@ -1671,4 +1681,3 @@ Done when:
 - `docs/USER_GUIDE_VECTOR_SCENE.md` exists and is linked from relevant docs/README entry points.
 - Guide covers all major feature areas: animations, collision detection, time-driven updates, object grouping/re-grouping, shape changes.
 - Guide examples are validated against current runtime API (no outdated symbols/contracts).
-

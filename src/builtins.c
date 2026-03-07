@@ -508,7 +508,7 @@ static CljPersistentMap *map_like_to_map_owned(ID obj) {
     return map;
   }
   if (tag == CLJ_RECORD) {
-    return record_to_map(obj);
+    return make_map_from_record(obj);
   }
   return NULL;
 }

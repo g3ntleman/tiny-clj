@@ -92,8 +92,12 @@ static CljPersistentRecord *record_alloc(CljRecordDescriptor *desc) {
 
 // Returns owned descriptor (rc=1).
 CljRecordDescriptor *record_descriptor_create(ID type_symbol, CljPersistentVector *field_keys) {
-    if (!type_symbol || !field_keys)
+    if (!type_symbol || TAG(type_symbol) != CLJ_SYMBOL || !field_keys) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "record descriptor type must be a symbol",
+                        __FILE__, __LINE__, 0);
         return NULL;
+    }
 
     CljRecordDescriptor *desc = alloc(sizeof(CljRecordDescriptor), 1, CLJ_RECORD_DESCRIPTOR);
     if (!desc)
@@ -102,14 +106,6 @@ CljRecordDescriptor *record_descriptor_create(ID type_symbol, CljPersistentVecto
     desc->type_symbol = RETAIN(type_symbol);
     desc->field_keys = RETAIN(field_keys);
     return desc;
-}
-
-// Return the type symbol for a record instance (borrowed), or NULL for non-records.
-ID record_type_symbol(ID record_obj) {
-    if (!is_record(record_obj))
-        return NULL;
-    CljPersistentRecord *record = as_record(record_obj);
-    return record->descriptor ? record->descriptor->type_symbol : NULL;
 }
 
 // Create a record instance from ordered field values.
@@ -239,7 +235,7 @@ int record_field_index(ID record_obj, ID key) {
     return descriptor_field_index(record->descriptor, key);
 }
 
-// Return the declared key at descriptor index (borrowed), or NULL on bounds/type mismatch.
+// Return the declared key at descriptor index, or NULL on bounds/type mismatch.
 ID record_key_at_index(ID record_obj, unsigned int index) {
     if (!is_record(record_obj))
         return NULL;
@@ -249,14 +245,14 @@ ID record_key_at_index(ID record_obj, unsigned int index) {
     return vector_nth(record->descriptor->field_keys, index);
 }
 
-// Return the value at descriptor index (borrowed), or NULL on bounds/type mismatch.
+// Return the value at descriptor index as a pool-safe alias, or NULL on bounds/type mismatch.
 ID record_get_by_index(ID record_obj, unsigned int index) {
     if (!is_record(record_obj))
         return NULL;
     CljPersistentRecord *record = as_record(record_obj);
     if (index >= record_declared_field_count(record))
         return NULL;
-    return record->values[index];
+    return AUTORELEASE(RETAIN(record->values[index]));
 }
 
 // Key lookup with caller-provided not-found sentinel.
@@ -267,7 +263,7 @@ ID record_get_sentinel(ID record_obj, ID key, ID not_found) {
     int index = descriptor_field_index(record->descriptor, key);
     if (index < 0)
         return not_found;
-    return record->values[(unsigned int)index];
+    return AUTORELEASE(RETAIN(record->values[(unsigned int)index]));
 }
 
 // Predicate: true when key is declared on the record descriptor.
@@ -281,7 +277,7 @@ ID record_keys(ID record_obj) {
     if (!is_record(record_obj))
         return NULL;
     CljPersistentRecord *record = as_record(record_obj);
-    return record->descriptor->field_keys;
+    return AUTORELEASE(RETAIN(record->descriptor->field_keys));
 }
 
 // Return a vector of non-nil record values in descriptor order.
@@ -308,26 +304,6 @@ ID record_vals(ID record_obj) {
     }
 
     return AUTORELEASE(vals_vec);
-}
-
-// Materialize a persistent map view of record fields.
-// Returns owned map (rc=1).
-CljPersistentMap *record_to_map(ID record_obj) {
-    if (!is_record(record_obj))
-        return NULL;
-    CljPersistentRecord *record = as_record(record_obj);
-    unsigned int field_count = record_declared_field_count(record);
-
-    CljPersistentMap *result = make_map((int)field_count);
-    if (!result)
-        return NULL;
-    for (unsigned int i = 0; i < field_count; i++) {
-        ID key = vector_nth(record->descriptor->field_keys, i);
-        ID val = record->values[i];
-        map_assoc_inplace(&result, key, val);
-    }
-
-    return result;
 }
 
 // Internal assoc helper with COW semantics:
@@ -357,7 +333,7 @@ static CljPersistentRecord *record_assoc_core(CljPersistentRecord *record, unsig
 // Associative update for closed records.
 // Known keys use COW semantics (rc==1 in-place, rc>1 copy);
 // unknown keys throw NotImplementedException.
-ID record_assoc(ID record_obj, ID key, ID value) {
+static ID record_assoc_owned(ID record_obj, ID key, ID value) {
     if (!is_record(record_obj))
         return NULL;
     CljPersistentRecord *record = as_record(record_obj);
@@ -370,6 +346,15 @@ ID record_assoc(ID record_obj, ID key, ID value) {
     (void)value;
     throw_record_extmap_not_implemented();
     return NULL;
+}
+
+ID record_assoc(ID record_obj, ID key, ID value) {
+    ID updated = record_assoc_owned(record_obj, key, value);
+    if (!updated)
+        return NULL;
+    if (updated == record_obj)
+        return AUTORELEASE(RETAIN(updated));
+    return AUTORELEASE(updated);
 }
 
 // Remove a known field by materializing a map without that field.
@@ -399,5 +384,5 @@ ID record_dissoc(ID record_obj, ID key) {
         map_assoc_inplace(&result, field_key, field_value);
     }
 
-    return result;
+    return AUTORELEASE(result);
 }

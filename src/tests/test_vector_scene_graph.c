@@ -4,6 +4,7 @@
 #include "../vector_scene_graph.h"
 #include "../scene.h"
 #include "../tiny_fx_gfx.h"
+#include "../render_backend.h"
 #include "../rendered_state_snapshot.h"
 #include "../renderer_lifecycle.h"
 #include "../viewer_collision.h"
@@ -906,6 +907,140 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_force_render_ticks_a
     TEST_ASSERT_TRUE(vg_render_frame_slot_record_at_ms(scene, &state, &fb, 1u, 50u, true, &dirty_pixels));
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)10 * TEST_W + 9]);
     TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 4]);
+}
+
+TEST(test_vector_scene_graph_render_frame_scene_slot_record_reports_dirty_rect_union) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID first_scene = eval_string(
+        "(do (require 'tiny-fx.gfx) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
+        "  (->FrameScene "
+        "    (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
+        "    [20 8 10 6] "
+        "    0 true true 0 1 nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first_scene);
+
+    ID moved_scene = eval_string(
+        "(do (require 'tiny-fx.gfx) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
+        "  (->FrameScene "
+        "    (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
+        "    [24 11 12 5] "
+        "    0 true true 0 2 nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(moved_scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x1234u);
+
+    VgRenderSlotState state = {0};
+    VgRenderFrameSlotResult result = {0};
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_result_at_ms(first_scene, &state, &fb, 1u, 0u, false, &result));
+    TEST_ASSERT_TRUE(result.rendered);
+    TEST_ASSERT_EQUAL_INT(19, result.dirty_rect.x);
+    TEST_ASSERT_EQUAL_INT(7, result.dirty_rect.y);
+    TEST_ASSERT_EQUAL_INT(12, result.dirty_rect.w);
+    TEST_ASSERT_EQUAL_INT(8, result.dirty_rect.h);
+
+    memset(&result, 0, sizeof(result));
+    TEST_ASSERT_TRUE(vg_render_frame_slot_record_result_at_ms(moved_scene, &state, &fb, 2u, 0u, false, &result));
+    TEST_ASSERT_TRUE(result.rendered);
+    TEST_ASSERT_EQUAL_INT(19, result.dirty_rect.x);
+    TEST_ASSERT_EQUAL_INT(7, result.dirty_rect.y);
+    TEST_ASSERT_EQUAL_INT(19, result.dirty_rect.w);
+    TEST_ASSERT_EQUAL_INT(11, result.dirty_rect.h);
+}
+
+typedef struct {
+    uint16_t pixels[TEST_W * TEST_H];
+    uint16_t width;
+    uint16_t height;
+    uint32_t begin_frame_calls;
+    uint32_t submit_rect_calls;
+    uint32_t end_frame_calls;
+    VgBackendRect last_rect;
+    uint32_t last_frame_id;
+} TestBackendCapture;
+
+static bool test_backend_begin_frame(void *ctx, uint32_t frame_id) {
+    TestBackendCapture *capture = (TestBackendCapture *)ctx;
+    TEST_ASSERT_NOT_NULL(capture);
+    capture->begin_frame_calls++;
+    capture->last_frame_id = frame_id;
+    return true;
+}
+
+static bool test_backend_submit_rect(void *ctx,
+                                     VgBackendRect rect,
+                                     const uint16_t *rgb565_pixels,
+                                     uint16_t stride_px) {
+    TestBackendCapture *capture = (TestBackendCapture *)ctx;
+    TEST_ASSERT_NOT_NULL(capture);
+    TEST_ASSERT_NOT_NULL(rgb565_pixels);
+    capture->submit_rect_calls++;
+    capture->last_rect = rect;
+    for (int16_t row = 0; row < rect.h; row++) {
+        size_t dst_off = (size_t)(rect.y + row) * capture->width + (size_t)rect.x;
+        size_t src_off = (size_t)row * (size_t)stride_px;
+        memcpy(&capture->pixels[dst_off], &rgb565_pixels[src_off], (size_t)rect.w * sizeof(uint16_t));
+    }
+    return true;
+}
+
+static bool test_backend_end_frame(void *ctx, uint32_t frame_id) {
+    TestBackendCapture *capture = (TestBackendCapture *)ctx;
+    TEST_ASSERT_NOT_NULL(capture);
+    capture->end_frame_calls++;
+    capture->last_frame_id = frame_id;
+    return true;
+}
+
+TEST(test_vector_scene_graph_render_backend_submit_clip_rect_clips_and_forwards_stride) {
+    uint16_t src_pixels[TEST_W * TEST_H];
+    for (size_t i = 0; i < TEST_W * TEST_H; i++) {
+        src_pixels[i] = (uint16_t)i;
+    }
+
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, src_pixels, TEST_W * TEST_H));
+
+    TestBackendCapture capture = {0};
+    capture.width = TEST_W;
+    capture.height = TEST_H;
+
+    const VgBackendOps ops = {
+        .begin_frame = test_backend_begin_frame,
+        .submit_rect = test_backend_submit_rect,
+        .end_frame = test_backend_end_frame,
+    };
+    VgBackend backend = {
+        .ops = &ops,
+        .ctx = &capture,
+    };
+
+    TEST_ASSERT_TRUE(vg_backend_begin_frame(&backend, 17u));
+    TEST_ASSERT_TRUE(vg_backend_submit_clip_rect(&backend, &fb, (VgClipRect){-2, 3, 5, 2}));
+    TEST_ASSERT_TRUE(vg_backend_end_frame(&backend, 17u));
+
+    TEST_ASSERT_EQUAL_UINT32(1u, capture.begin_frame_calls);
+    TEST_ASSERT_EQUAL_UINT32(1u, capture.submit_rect_calls);
+    TEST_ASSERT_EQUAL_UINT32(1u, capture.end_frame_calls);
+    TEST_ASSERT_EQUAL_UINT32(17u, capture.last_frame_id);
+    TEST_ASSERT_EQUAL_INT(0, capture.last_rect.x);
+    TEST_ASSERT_EQUAL_INT(3, capture.last_rect.y);
+    TEST_ASSERT_EQUAL_INT(3, capture.last_rect.w);
+    TEST_ASSERT_EQUAL_INT(2, capture.last_rect.h);
+    TEST_ASSERT_EQUAL_UINT16(src_pixels[(size_t)3 * TEST_W + 0], capture.pixels[(size_t)3 * TEST_W + 0]);
+    TEST_ASSERT_EQUAL_UINT16(src_pixels[(size_t)3 * TEST_W + 2], capture.pixels[(size_t)3 * TEST_W + 2]);
+    TEST_ASSERT_EQUAL_UINT16(src_pixels[(size_t)4 * TEST_W + 1], capture.pixels[(size_t)4 * TEST_W + 1]);
 }
 
 TEST(test_vector_scene_graph_slot_change_tracker_publish_and_wait_reports_changed_mask) {
@@ -2480,6 +2615,30 @@ TEST(test_vector_scene_graph_runtime_vector_scene_bench_arity_and_arg_validation
         TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
     } END_TRY
     TEST_ASSERT_TRUE(arg_exception_caught);
+}
+
+TEST(test_vector_scene_graph_tiny_fx_runtime_frontend_aliases_are_direct_vars) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID result = eval_string(
+        "(do (require 'tiny-clj.runtime) "
+        "    (require 'tiny-fx.gfx) "
+        "    (require 'tiny-fx.gfx-scene) "
+        "    (require 'tiny-fx.gfx-collision) "
+        "    [(identical? tiny-fx.gfx/vector-scene-bench tiny-clj.runtime/vector-scene-bench) "
+        "     (identical? tiny-fx.gfx/start-renderer! tiny-clj.runtime/start-renderer!) "
+        "     (identical? tiny-fx.gfx/renderer-state tiny-clj.runtime/renderer-state) "
+        "     (identical? tiny-fx.gfx/color tiny-fx.gfx-scene/color) "
+        "     (identical? tiny-fx.gfx/normalize-spatial-rule tiny-fx.gfx-scene/normalize-spatial-rule) "
+        "     (identical? tiny-fx.gfx/set-collision-callback! tiny-fx.gfx-collision/set-collision-callback!)])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
+    CljPersistentVector *vec = as_vector(result);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(6, vector_count(vec));
+    for (unsigned int i = 0; i < vector_count(vec); i++) {
+        TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(vec, i));
+    }
 }
 
 TEST(test_vector_scene_graph_runtime_renderer_lifecycle_defaults_to_unsupported) {

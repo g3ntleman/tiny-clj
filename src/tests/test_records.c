@@ -4,6 +4,20 @@
 #include "../record.h"
 #include <string.h>
 
+static CljSymbol *SYM_TEST_RECORD_TYPE_KEYS = NULL;
+static CljSymbol *SYM_TEST_RECORD_TYPE_VALUES = NULL;
+static CljSymbol *SYM_TEST_RECORD_TYPE_MAP = NULL;
+
+static CljSymbol *test_record_type_symbol(CljSymbol **slot, const char *name) {
+    TEST_ASSERT_NOT_NULL(slot);
+    TEST_ASSERT_NOT_NULL(name);
+    if (!*slot) {
+        *slot = intern_symbol_global(name);
+    }
+    TEST_ASSERT_NOT_NULL(*slot);
+    return *slot;
+}
+
 static void assert_vector_fixnum(ID vec_id, unsigned int index, int expected) {
     TEST_ASSERT_NOT_NULL(vec_id);
     TEST_ASSERT_TRUE(TAG(vec_id) == CLJ_VECTOR_PERSISTENT);
@@ -415,7 +429,7 @@ TEST(test_record_assoc_cow_rc_one_updates_in_place) {
     ID updated = record_assoc((ID)record, kw_a, fixnum(11));
     TEST_ASSERT_NOT_NULL(updated);
     TEST_ASSERT_EQUAL_PTR((ID)record, updated);
-    TEST_ASSERT_EQUAL_INT(1, retain_count((ID)record));
+    TEST_ASSERT_EQUAL_INT(2, retain_count((ID)record));
 
     ID a_val = record_get_sentinel(updated, kw_a, NOT_FOUND);
     ID b_val = record_get_sentinel(updated, kw_b, NOT_FOUND);
@@ -461,7 +475,191 @@ TEST(test_record_assoc_cow_rc_gt_one_returns_copy) {
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(new_b));
 
     RELEASE(record);
-    if (updated != (ID)record) {
-        AUTORELEASE(updated);
+}
+
+TEST(test_record_assoc_via_eval_does_not_leak_descriptor_retains) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID setup = eval_string(
+        "(do "
+        "  (defrecord AssocLeak [x1 y1 x2 y2 x3 y3]) "
+        "  (def assoc-leak-atom (atom (->AssocLeak 1 2 3 4 5 6))) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, setup);
+
+    ID type_symbol = intern_symbol_global("AssocLeak");
+    CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+    TEST_ASSERT_NOT_NULL(desc);
+
+    int baseline_rc = retain_count((ID)desc);
+    for (int i = 0; i < 128; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID updated = eval_string(
+                "(swap! assoc-leak-atom "
+                "  (fn [p] "
+                "    (assoc p "
+                "      :x1 11 :y1 12 "
+                "      :x2 13 :y2 14 "
+                "      :x3 15 :y3 16)))",
+                g_test_eval_state);
+            TEST_ASSERT_NOT_NULL(updated);
+            TEST_ASSERT_TRUE(TAG(updated) == CLJ_RECORD);
+        });
     }
+
+    ID final_value = eval_string("@assoc-leak-atom", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(final_value);
+    TEST_ASSERT_TRUE(TAG(final_value) == CLJ_RECORD);
+    TEST_ASSERT_EQUAL_INT(baseline_rc, retain_count((ID)desc));
+}
+
+TEST(test_record_descriptor_create_rejects_non_symbol_type_name) {
+    ID bad_type_name = make_string("NotASymbol");
+    TEST_ASSERT_NOT_NULL(bad_type_name);
+
+    CljPersistentVector *fields = make_vector(1, STRONG);
+    TEST_ASSERT_NOT_NULL(fields);
+    vector_conj_inplace(&fields, intern_symbol_global(":field-a"));
+
+    bool exception_caught = false;
+    TRY {
+        (void)record_descriptor_create(bad_type_name, fields);
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING(EXCEPTION_ILLEGAL_ARGUMENT, ex->type);
+    } END_TRY
+
+    RELEASE(fields);
+    RELEASE(bad_type_name);
+    TEST_ASSERT_TRUE(exception_caught);
+}
+
+TEST(test_record_keys_returns_pool_safe_alias_for_manual_descriptor) {
+    ID type_name = (ID)test_record_type_symbol(&SYM_TEST_RECORD_TYPE_KEYS, "ManualTypeKeys");
+    ID key_a = make_string("field-a");
+    ID key_b = make_string("field-b");
+
+    CljPersistentVector *fields = make_vector(2, STRONG);
+    TEST_ASSERT_NOT_NULL(fields);
+    vector_conj_inplace(&fields, key_a);
+    vector_conj_inplace(&fields, key_b);
+
+    CljRecordDescriptor *desc = record_descriptor_create(type_name, fields);
+    TEST_ASSERT_NOT_NULL(desc);
+
+    CljPersistentRecord *record = record_create_with_descriptor(desc, NULL);
+    TEST_ASSERT_NOT_NULL(record);
+
+    int fields_rc_before = retain_count((ID)fields);
+    ID keys = record_keys((ID)record);
+    TEST_ASSERT_NOT_NULL(keys);
+    TEST_ASSERT_EQUAL_PTR((ID)fields, keys);
+    TEST_ASSERT_EQUAL_INT(fields_rc_before + 1, retain_count((ID)fields));
+
+    RELEASE(record);
+    RELEASE(desc);
+    RELEASE(fields);
+    RELEASE(key_a);
+    RELEASE(key_b);
+
+    TEST_ASSERT_TRUE(TAG(keys) == CLJ_VECTOR_PERSISTENT);
+    TEST_ASSERT_EQUAL_UINT(2, vector_count(keys));
+
+    ID out_a = vector_nth(keys, 0);
+    ID out_b = vector_nth(keys, 1);
+    TEST_ASSERT_TRUE(TAG(out_a) == CLJ_STRING);
+    TEST_ASSERT_TRUE(TAG(out_b) == CLJ_STRING);
+    TEST_ASSERT_EQUAL_STRING("field-a", string_data(out_a));
+    TEST_ASSERT_EQUAL_STRING("field-b", string_data(out_b));
+}
+
+TEST(test_record_value_accessors_return_expected_aliases_for_manual_descriptor) {
+    ID type_name = (ID)test_record_type_symbol(&SYM_TEST_RECORD_TYPE_VALUES, "ManualTypeValues");
+    ID key_name = make_string("field-a");
+    ID value_name = make_string("value-a");
+
+    CljPersistentVector *fields = make_vector(1, STRONG);
+    TEST_ASSERT_NOT_NULL(fields);
+    vector_conj_inplace(&fields, key_name);
+
+    CljRecordDescriptor *desc = record_descriptor_create(type_name, fields);
+    TEST_ASSERT_NOT_NULL(desc);
+
+    CljPersistentVector *vals = make_vector(1, STRONG);
+    TEST_ASSERT_NOT_NULL(vals);
+    vector_conj_inplace(&vals, value_name);
+
+    CljPersistentRecord *record = record_create_with_descriptor(desc, vals);
+    TEST_ASSERT_NOT_NULL(record);
+
+    ID key_out = record_key_at_index((ID)record, 0);
+    ID value_out_index = record_get_by_index((ID)record, 0);
+    ID value_out_lookup = record_get_sentinel((ID)record, key_name, NOT_FOUND);
+
+    TEST_ASSERT_NOT_NULL(key_out);
+    TEST_ASSERT_NOT_NULL(value_out_index);
+    TEST_ASSERT_NOT_NULL(value_out_lookup);
+    TEST_ASSERT_EQUAL_PTR(type_name, record->descriptor->type_symbol);
+    TEST_ASSERT_EQUAL_PTR(key_name, key_out);
+    TEST_ASSERT_EQUAL_PTR(value_name, value_out_index);
+    TEST_ASSERT_EQUAL_PTR(value_name, value_out_lookup);
+
+    TEST_ASSERT_TRUE(TAG(key_out) == CLJ_STRING);
+    TEST_ASSERT_TRUE(TAG(value_out_index) == CLJ_STRING);
+    TEST_ASSERT_TRUE(TAG(value_out_lookup) == CLJ_STRING);
+    TEST_ASSERT_EQUAL_STRING("ManualTypeValues", as_symbol(record->descriptor->type_symbol)->cname);
+    TEST_ASSERT_EQUAL_STRING("field-a", string_data(key_out));
+
+    RELEASE(record);
+    RELEASE(vals);
+    RELEASE(desc);
+    RELEASE(fields);
+    RELEASE(key_name);
+    RELEASE(value_name);
+
+    TEST_ASSERT_EQUAL_STRING("value-a", string_data(value_out_index));
+    TEST_ASSERT_EQUAL_STRING("value-a", string_data(value_out_lookup));
+}
+
+TEST(test_make_map_from_record_returns_owned_map_without_leaking_when_released) {
+    ID type_name = (ID)test_record_type_symbol(&SYM_TEST_RECORD_TYPE_MAP, "ManualTypeMap");
+    ID key_name = make_string("field-a");
+    ID value_name = make_string("value-a");
+
+    CljPersistentVector *fields = make_vector(1, STRONG);
+    TEST_ASSERT_NOT_NULL(fields);
+    vector_conj_inplace(&fields, key_name);
+
+    CljRecordDescriptor *desc = record_descriptor_create(type_name, fields);
+    TEST_ASSERT_NOT_NULL(desc);
+
+    CljPersistentVector *vals = make_vector(1, STRONG);
+    TEST_ASSERT_NOT_NULL(vals);
+    vector_conj_inplace(&vals, value_name);
+
+    CljPersistentRecord *record = record_create_with_descriptor(desc, vals);
+    TEST_ASSERT_NOT_NULL(record);
+
+    int key_rc_before = retain_count(key_name);
+    int value_rc_before = retain_count(value_name);
+
+    for (int i = 0; i < 128; i++) {
+        ID map_obj = (ID)make_map_from_record((ID)record);
+        TEST_ASSERT_NOT_NULL(map_obj);
+        TEST_ASSERT_TRUE(TAG(map_obj) == CLJ_MAP_PERSISTENT);
+        TEST_ASSERT_EQUAL_PTR(value_name, map_get_sentinel(map_obj, key_name, NULL));
+        RELEASE(map_obj);
+    }
+
+    TEST_ASSERT_EQUAL_INT(key_rc_before, retain_count(key_name));
+    TEST_ASSERT_EQUAL_INT(value_rc_before, retain_count(value_name));
+
+    RELEASE(record);
+    RELEASE(vals);
+    RELEASE(desc);
+    RELEASE(fields);
+    RELEASE(key_name);
+    RELEASE(value_name);
 }

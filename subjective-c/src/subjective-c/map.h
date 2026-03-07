@@ -191,6 +191,12 @@ CljPersistentMap* make_map_kv(ID first_key, ...);
  */
 CljPersistentMap* make_map_from_stack(CljObject **pairs, int pair_count);
 
+/** @brief Materialize a persistent map from a record
+ * @param record_obj Source record
+ * @return New persistent map (rc=1)
+ */
+CljPersistentMap* make_map_from_record(ID record_obj);
+
 /** @brief Create map copy with additional entries
  * @param parent_map Base map
  * @param additions Array of alternating keys and values

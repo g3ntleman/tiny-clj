@@ -27,6 +27,13 @@ typedef struct {
 #endif
 } VgSlotChangeTracker;
 
+typedef struct {
+    bool rendered;
+    bool has_animation;
+    VgClipRect dirty_rect;
+    uint32_t dirty_pixels;
+} VgRenderFrameSlotResult;
+
 bool vg_slot_change_tracker_init(VgSlotChangeTracker *tracker, uint8_t slot_count);
 void vg_slot_change_tracker_destroy(VgSlotChangeTracker *tracker);
 bool vg_slot_change_tracker_publish(VgSlotChangeTracker *tracker, uint8_t slot_index, uint32_t *out_generation);
@@ -52,6 +59,13 @@ bool vg_render_frame_slot_record_at_ms(ID frame_scene_record,
                                        uint32_t now_ms,
                                        bool force_render,
                                        uint32_t *out_dirty_pixels);
+bool vg_render_frame_slot_record_result_at_ms(ID frame_scene_record,
+                                              VgRenderSlotState *state,
+                                              VgFrameBuffer *fb,
+                                              uint32_t snapshot_id,
+                                              uint32_t now_ms,
+                                              bool force_render,
+                                              VgRenderFrameSlotResult *out_result);
 bool vg_render_frame_slot_record_if_changed_at_ms(ID frame_scene_record,
                                                    VgRenderSlotState *state,
                                                    VgFrameBuffer *fb,

@@ -44,7 +44,7 @@ static inline unsigned int record_declared_field_count(const CljPersistentRecord
     return vector_count(record->descriptor->field_keys);
 }
 
-// Returns owned descriptor (rc=1).
+// Returns owned descriptor (rc=1). type_symbol must be a symbol.
 CljRecordDescriptor *record_descriptor_create(ID type_symbol, CljPersistentVector *field_keys);
 
 // Returns owned record (rc=1).
@@ -54,8 +54,11 @@ CljPersistentRecord *record_create_from_map_with_descriptor(CljRecordDescriptor 
 
 int record_count(ID record_obj);
 int record_field_index(ID record_obj, ID key);
+// Returns declared key alias, or NULL on bounds/type mismatch.
 ID record_key_at_index(ID record_obj, unsigned int index);
+// Returns pool-safe alias, or NULL on bounds/type mismatch.
 ID record_get_by_index(ID record_obj, unsigned int index);
+// Returns pool-safe alias for a found value, otherwise returns not_found.
 ID record_get_sentinel(ID record_obj, ID key, ID not_found);
 bool record_contains(ID record_obj, ID key);
 
@@ -64,18 +67,13 @@ ID record_keys(ID record_obj);
 // MEMORY_POLICY: usable/pool-safe return.
 ID record_vals(ID record_obj);
 
-// Returns owned map (rc=1). Caller owns and must release/autorelease it.
-CljPersistentMap *record_to_map(ID record_obj);
-
 // Closed-record behavior (no extmap support):
-// - assoc existing record field => record (COW: rc==1 in-place, rc>1 copied)
+// - assoc existing record field => pool-safe record alias (COW: rc==1 in-place, rc>1 copied)
 // - assoc unknown key => throws NotImplementedException
 ID record_assoc(ID record_obj, ID key, ID value);
-// - dissoc known record field => persistent map
+// - dissoc known record field => pool-safe persistent map
 // - dissoc unknown key => throws NotImplementedException
 ID record_dissoc(ID record_obj, ID key);
-
-ID record_type_symbol(ID record_obj);
 
 // -----------------------------------------------------------------------------
 // DEFRECORD macros (compile-time struct overlays, no runtime dependencies)

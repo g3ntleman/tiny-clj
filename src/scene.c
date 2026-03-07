@@ -1439,9 +1439,30 @@ bool vg_render_frame_slot_record_at_ms(ID frame_scene_record,
                                        uint32_t now_ms,
                                        bool force_render,
                                        uint32_t *out_dirty_pixels) {
-    VgRenderSlot slot;
+    VgRenderFrameSlotResult result = {0};
+    bool rendered = vg_render_frame_slot_record_result_at_ms(frame_scene_record,
+                                                             state,
+                                                             fb,
+                                                             snapshot_id,
+                                                             now_ms,
+                                                             force_render,
+                                                             &result);
     if (out_dirty_pixels) {
-        *out_dirty_pixels = 0u;
+        *out_dirty_pixels = result.dirty_pixels;
+    }
+    return rendered;
+}
+
+bool vg_render_frame_slot_record_result_at_ms(ID frame_scene_record,
+                                              VgRenderSlotState *state,
+                                              VgFrameBuffer *fb,
+                                              uint32_t snapshot_id,
+                                              uint32_t now_ms,
+                                              bool force_render,
+                                              VgRenderFrameSlotResult *out_result) {
+    VgRenderSlot slot;
+    if (out_result) {
+        memset(out_result, 0, sizeof(*out_result));
     }
     if (!state || !fb || !vg_decode_frame_slot_record(frame_scene_record, &slot)) {
         return false;
@@ -1463,9 +1484,7 @@ bool vg_render_frame_slot_record_at_ms(ID frame_scene_record,
         VgClipRect prev = vg_clip_rect_expand(state->last_clip_rect, state->last_guard_px);
         dirty = vg_clip_rect_union(prev, dirty);
     }
-    if (out_dirty_pixels) {
-        *out_dirty_pixels = clip_rect_area_on_framebuffer(dirty, fb);
-    }
+    uint32_t dirty_pixels = clip_rect_area_on_framebuffer(dirty, fb);
     vg_framebuffer_clear_rect(fb, dirty, slot.clear_color);
 
     bool slot_has_animation = false;
@@ -1485,6 +1504,12 @@ bool vg_render_frame_slot_record_at_ms(ID frame_scene_record,
     state->last_opaque = slot.opaque;
     state->last_clear_color = slot.clear_color;
     state->last_guard_px = slot.guard_px;
+    if (out_result) {
+        out_result->rendered = true;
+        out_result->has_animation = slot_has_animation;
+        out_result->dirty_rect = dirty;
+        out_result->dirty_pixels = dirty_pixels;
+    }
     return true;
 }
 
