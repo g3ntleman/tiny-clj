@@ -208,12 +208,12 @@ TEST(test_record_descriptor_keeps_field_order_once_per_type) {
     vector_conj_inplace(&fields, kw_a);
     vector_conj_inplace(&fields, kw_b);
 
-    CljRecordDescriptor *desc = record_register_descriptor(type_symbol, fields);
-    TEST_ASSERT_NOT_NULL(desc);
-    TEST_ASSERT_NOT_NULL(desc->field_keys);
-    TEST_ASSERT_EQUAL_UINT(2, vector_count(desc->field_keys));
-    TEST_ASSERT_EQUAL_PTR(kw_a, vector_nth(desc->field_keys, 0));
-    TEST_ASSERT_EQUAL_PTR(kw_b, vector_nth(desc->field_keys, 1));
+    CljRecordDescriptor *registered_desc = record_register_descriptor(type_symbol, fields);
+    TEST_ASSERT_NOT_NULL(registered_desc);
+    TEST_ASSERT_NOT_NULL(registered_desc->field_keys);
+    TEST_ASSERT_EQUAL_UINT(2, vector_count(registered_desc->field_keys));
+    TEST_ASSERT_EQUAL_PTR(kw_a, vector_nth(registered_desc->field_keys, 0));
+    TEST_ASSERT_EQUAL_PTR(kw_b, vector_nth(registered_desc->field_keys, 1));
 
     CljPersistentVector *vals1 = AUTORELEASE(make_vector(2, STRONG));
     CljPersistentVector *vals2 = AUTORELEASE(make_vector(2, STRONG));
@@ -224,8 +224,9 @@ TEST(test_record_descriptor_keeps_field_order_once_per_type) {
     vector_conj_inplace(&vals2, fixnum(30));
     vector_conj_inplace(&vals2, fixnum(40));
 
-    CljPersistentRecord *r1 = AUTORELEASE(record_create(type_symbol, vals1));
-    CljPersistentRecord *r2 = AUTORELEASE(record_create(type_symbol, vals2));
+    CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+    CljPersistentRecord *r1 = AUTORELEASE(make_record_with_descriptor(desc, vals1));
+    CljPersistentRecord *r2 = AUTORELEASE(make_record_with_descriptor(desc, vals2));
     TEST_ASSERT_NOT_NULL(r1);
     TEST_ASSERT_NOT_NULL(r2);
     TEST_ASSERT_EQUAL_PTR(r1->descriptor, r2->descriptor);
@@ -422,7 +423,8 @@ TEST(test_record_assoc_cow_rc_one_updates_in_place) {
     vector_conj_inplace(&vals, fixnum(1));
     vector_conj_inplace(&vals, fixnum(2));
 
-    CljPersistentRecord *record = AUTORELEASE(record_create(type_symbol, vals));
+    CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+    CljPersistentRecord *record = AUTORELEASE(make_record_with_descriptor(desc, vals));
     TEST_ASSERT_NOT_NULL(record);
     TEST_ASSERT_EQUAL_INT(1, retain_count((ID)record));
 
@@ -455,7 +457,8 @@ TEST(test_record_assoc_cow_rc_gt_one_returns_copy) {
     vector_conj_inplace(&vals, fixnum(1));
     vector_conj_inplace(&vals, fixnum(2));
 
-    CljPersistentRecord *record = AUTORELEASE(record_create(type_symbol, vals));
+    CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+    CljPersistentRecord *record = AUTORELEASE(make_record_with_descriptor(desc, vals));
     TEST_ASSERT_NOT_NULL(record);
     RETAIN(record);
     TEST_ASSERT_EQUAL_INT(2, retain_count((ID)record));
@@ -549,7 +552,7 @@ TEST(test_record_keys_returns_pool_safe_alias_for_manual_descriptor) {
     CljRecordDescriptor *desc = record_descriptor_create(type_name, fields);
     TEST_ASSERT_NOT_NULL(desc);
 
-    CljPersistentRecord *record = record_create_with_descriptor(desc, NULL);
+    CljPersistentRecord *record = make_record_with_descriptor(desc, NULL);
     TEST_ASSERT_NOT_NULL(record);
 
     int fields_rc_before = retain_count((ID)fields);
@@ -591,7 +594,7 @@ TEST(test_record_value_accessors_return_expected_aliases_for_manual_descriptor) 
     TEST_ASSERT_NOT_NULL(vals);
     vector_conj_inplace(&vals, value_name);
 
-    CljPersistentRecord *record = record_create_with_descriptor(desc, vals);
+    CljPersistentRecord *record = make_record_with_descriptor(desc, vals);
     TEST_ASSERT_NOT_NULL(record);
 
     ID key_out = record_key_at_index((ID)record, 0);
@@ -639,7 +642,7 @@ TEST(test_make_map_from_record_returns_owned_map_without_leaking_when_released) 
     TEST_ASSERT_NOT_NULL(vals);
     vector_conj_inplace(&vals, value_name);
 
-    CljPersistentRecord *record = record_create_with_descriptor(desc, vals);
+    CljPersistentRecord *record = make_record_with_descriptor(desc, vals);
     TEST_ASSERT_NOT_NULL(record);
 
     int key_rc_before = retain_count(key_name);

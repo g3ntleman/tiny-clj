@@ -150,15 +150,3 @@ CljRecordDescriptor *record_register_descriptor(ID type_symbol, ID fields) {
     RELEASE(desc);
     return record_descriptor_lookup(type_symbol);
 }
-
-// tiny-clj wrapper: resolve descriptor in runtime registry and delegate to subjective-c.
-CljPersistentRecord *record_create(ID type_symbol, CljPersistentVector *values) {
-    CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
-    return record_create_with_descriptor(desc, values);
-}
-
-// tiny-clj wrapper: resolve descriptor in runtime registry and delegate to subjective-c.
-CljPersistentRecord *record_create_from_map(ID type_symbol, ID source_map) {
-    CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
-    return record_create_from_map_with_descriptor(desc, source_map);
-}

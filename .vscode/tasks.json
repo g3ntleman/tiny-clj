@@ -140,11 +140,11 @@
       }
     },
     {
-      "label": "run-host-viewer",
+      "label": "run-game-demo",
       "type": "shell",
-      "command": "pkill -f 'host-viewer' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTINYCLJ_HOST_VIEWER=ON -B build-hostviewer && cmake --build build-hostviewer --target host-viewer && ./build/host-viewer",
+      "command": "pkill -f 'game-demo' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTINYCLJ_GAME_DEMO=ON -B build && cmake --build build --target game-demo && ./build/game-demo",
       "group": "none",
-      "detail": "Configure (with TINYCLJ_HOST_VIEWER=ON), build host-viewer, then run.",
+      "detail": "Configure the main build (with TINYCLJ_GAME_DEMO=ON), build the game demo viewer, then run.",
       "problemMatcher": [],
       "presentation": {
         "echo": true,

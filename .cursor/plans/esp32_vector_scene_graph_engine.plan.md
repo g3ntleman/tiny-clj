@@ -908,7 +908,10 @@ Done when:
 ## Milestone 9: Flat Entity Map + Timeline + Declarative Scene Architecture
 
 Status: DONE (`9a` + `9b` + `9c` + `9d` baseline DONE on host/ESP32 build path; renderer lifecycle + rendered-state query baseline DONE; host loop closeout + cleanup complete; collision callback API finalized in `tiny-fx.gfx-collision`)
-Follow-up (2026-03-05): API parity + Clojure docs hardening in `tiny-fx.gfx.`* is now tracked under `9n`.
+Follow-ups:
+
+- (2026-03-05) API parity + Clojure docs hardening in `tiny-fx.gfx.`* is tracked under `9n`.
+- (2026-03-09) Encapsulated hash-backed entity lookup for flat scene maps is tracked under `9o`.
 
 Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Architecture"):
 
@@ -1392,6 +1395,140 @@ Checklist:
   - Plan and naming updated to the public `tiny-fx.gfx` frontend instead of the old `tiny-gfx` wording.
   - `tiny-fx.gfx` direct aliases now carry author-facing doc metadata for runtime, scene, and collision entry points.
   - Regression coverage now verifies direct var alias identity for representative runtime/scene/collision APIs; source-level doc metadata is present on the public frontend surface.
+
+### 9o: Encapsulated hash-backed entity lookup for flat scene maps (NEW)
+
+Status: TODO
+
+Goal:
+
+- Keep the public flat scene contract from `9a` unchanged, but remove linear `scene-key -> Record`
+lookup from the hot render path.
+- Preserve vector-based `children` order for deterministic draw order.
+- Treat the hash-backed index as a renderer-owned implementation detail, not as part of the
+Clojure authoring contract.
+
+Key contract:
+
+- The private lookup keys are the flat scene-map keys themselves:
+  - the root symbol `root`
+  - stable child/entity IDs referenced from `Group.children`
+- The first implementation slice must not assume numeric-only IDs.
+- Lookup acceleration is therefore about flat scene keys, not only about integer entity IDs.
+
+Motivation:
+
+- The flat map architecture from `9a` made scene updates cheap, but current render traversal still
+does repeated map scans for root and child-ID dereference.
+- This is acceptable for the baseline PoC, but it is the wrong long-term lookup strategy for the
+vector-scene hot path and for ESP32 budget discipline.
+- The same pattern exists in rendered-state snapshots, where entity/timeline query paths are also
+currently linear.
+
+Scope:
+
+- Add a private hash-backed `scene-key -> Record` index at the decode/render boundary.
+- Use it for:
+  - root-node resolution from flat scene maps
+  - child-ID dereference during `Group.children` traversal
+- Keep out of scope for the first slice:
+  - changing the public scene shape
+  - replacing `children` vectors
+  - exposing raw hash-map semantics to Clojure scene authors
+  - replacing general `CljPersistentMap` semantics globally
+
+Constraints:
+
+- No change to visible scene semantics or ordering semantics.
+- Ownership of the index must remain local to the decode/render context and follow `MEMORY_POLICY.md`.
+- Respect the render-thread contract from this plan:
+  - no `RETAIN` / `RELEASE` / `ASSIGN` / autorelease-pool coupling in the lookup hot path
+  - prefer a C-owned scratch/open-addressed table that is reused per render context or per slot
+  - build the lookup once per published flat-scene snapshot, never per child traversal
+- The indexed path must be benchmarked on host and on ESP32 via `tiny-clj.runtime/vector-scene-bench`
+before it becomes the default everywhere.
+
+Acceptance:
+
+- `scene.c` no longer performs linear map scans for root-node resolution or child-ID lookup in the
+flat-scene render path.
+- Flat `{id -> Record}` authoring remains the public API.
+- `children` remains the ordering primitive.
+- Root lookup via symbol `root` remains semantically identical.
+- Legacy embedded-tree scenes continue to render through the existing non-indexed path.
+- Benchmarks show no host regression and document the indexed-path effect.
+- ESP32 memory cost is measured and recorded before rollout is treated as complete.
+
+Checklist:
+
+- Add a renderer-private hash-backed lookup structure for `scene-key -> Record`.
+- Switch flat-scene root and child lookup to the private index.
+- Keep legacy embedded-tree compatibility intact.
+- Evaluate whether rendered-state snapshot queries should adopt the same encapsulated-index pattern.
+- Add/update benchmark notes once host and ESP32 measurements exist.
+
+### 9oa: First implementation slice (execution order)
+
+1. **Lookup abstraction + key contract fixieren:**
+  - Introduce one private renderer-side lookup abstraction instead of open-coding hash logic in `scene.c`.
+  - Prefer a dedicated helper module (e.g. `vector_scene_lookup`) or an equivalent private `scene.c` helper block.
+  - Key the table by flat scene-map key (`root` symbol or child/entity ID), value = scene record pointer/ID.
+2. **Populate once per snapshot, not per node:**
+  - Build the lookup when the renderer detects a flat scene map.
+  - Reuse scratch storage across frames/slots where practical.
+  - Avoid per-child hash-table rebuilds or any lookup-path allocation coupled to autorelease pools.
+3. **Wire into render traversal:**
+  - Replace linear `map_get_sentinel(...)` in `resolve_root_node(...)` and flat-child dereference in `render_record_node(...)`.
+  - Keep legacy embedded-tree traversal unchanged when `Scene.root`/`FrameScene.root` is already a record.
+4. **Regression gate:**
+  - Prove flat-scene output is pixel-identical before/after the lookup change.
+  - Add explicit tests for:
+    - root symbol resolution
+    - child-ID dereference
+    - missing child failure behavior
+    - legacy embedded-tree compatibility
+5. **Bench + decide follow-up:**
+  - Capture host before/after numbers via `tiny-clj.runtime/vector-scene-bench`.
+  - Capture ESP32 memory impact and decide whether rendered-state snapshot queries need the same pattern next.
+
+### 9ob: Checkable PR task list (files + symbols)
+
+- **PR-1: Private flat-scene lookup abstraction**
+  - Files:
+    - `src/scene.c`
+    - `src/scene.h`
+    - optional private helper module for the encapsulated lookup
+    - `src/tests/test_vector_scene_graph.c`
+  - Symbols/paths:
+    - `resolve_root_node`
+    - `render_record_node`
+    - `vg_render_scene_record_at_ms`
+    - `vg_render_frame_slot_record_if_changed_at_ms`
+  - Acceptance:
+    - Flat-scene root and child lookup no longer rely on repeated linear map scans.
+    - Legacy tree scenes still pass existing render tests.
+- **PR-2: Regression + benchmark gate**
+  - Files:
+    - `src/tests/test_vector_scene_graph.c`
+    - `src/builtins_tiny_fx_gfx.c`
+    - `.cursor/plans/esp32_vector_scene_graph_engine.plan.md`
+  - Scope:
+    - Add regression tests for lookup semantics and unchanged render output.
+    - Record host benchmark deltas and note ESP32 capture/memory results.
+  - Acceptance:
+    - Tests isolate the lookup mechanism, not just end-to-end demo behavior.
+    - Plan notes contain before/after host data and recorded ESP32 follow-up status.
+- **PR-3: Optional rendered-state follow-up decision**
+  - Files:
+    - `src/rendered_state_snapshot.c`
+    - `src/rendered_state_snapshot.h`
+    - `src/tests/test_vector_scene_graph.c`
+    - `.cursor/plans/esp32_vector_scene_graph_engine.plan.md`
+  - Scope:
+    - Evaluate whether entity/timeline query tables need the same encapsulated hash/index pattern.
+    - Only proceed if measured lookup cost remains relevant after PR-1/PR-2.
+  - Acceptance:
+    - Either the snapshot path is upgraded with the same private-index discipline, or the plan records why it is deferred.
 
 ### Done when
 

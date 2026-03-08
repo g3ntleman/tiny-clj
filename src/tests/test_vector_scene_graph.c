@@ -314,12 +314,12 @@ TEST(test_vector_scene_graph_flat_entity_map_missing_child_id_fails) {
     TEST_ASSERT_FALSE(vg_render_scene_record(scene, &fb));
 }
 
-TEST(test_vector_scene_graph_host_viewer_demo_bundle_uses_flat_entity_maps) {
+TEST(test_vector_scene_graph_game_demo_bundle_uses_flat_entity_maps) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-fx.scene-demo) "
-        "  (let [bundle (tiny-fx.scene-demo/create-demo-bundle) "
+        "  (require 'tiny-fx.game-demo) "
+        "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        root0 (:root (nth bundle 0)) "
         "        root1 (:root (nth bundle 1)) "
         "        root2 (:root (nth bundle 2))] "
@@ -331,12 +331,54 @@ TEST(test_vector_scene_graph_host_viewer_demo_bundle_uses_flat_entity_maps) {
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
-TEST(test_vector_scene_graph_host_viewer_demo_score_text_is_timeline_driven) {
+TEST(test_vector_scene_graph_game_demo_create_demo_bundle_resets_fresh_game_scene) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID bundle0 = eval_string(
+        "(do "
+        "  (require 'tiny-fx.game-demo) "
+        "  (require 'tiny-fx.gfx) "
+        "  (tiny-fx.game-demo/create-demo-bundle))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(bundle0);
+    TEST_ASSERT_TRUE(is_vector(bundle0));
+    CljPersistentVector *vec0 = as_vector(bundle0);
+    TEST_ASSERT_NOT_NULL(vec0);
+    TEST_ASSERT_TRUE(vector_count(vec0) >= 3);
+    ID game0 = vector_nth(vec0, 2);
+    TEST_ASSERT_NOT_NULL(game0);
+
+    ID mutated_ok = eval_string(
+        "(do "
+        "  (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :enter}) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(mutated_ok && mutated_ok != clj_false);
+
+    ID bundle1 = eval_string("(tiny-fx.game-demo/create-demo-bundle)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(bundle1);
+    TEST_ASSERT_TRUE(is_vector(bundle1));
+    CljPersistentVector *vec1 = as_vector(bundle1);
+    TEST_ASSERT_NOT_NULL(vec1);
+    TEST_ASSERT_TRUE(vector_count(vec1) >= 3);
+    ID game1 = vector_nth(vec1, 2);
+    TEST_ASSERT_NOT_NULL(game1);
+    TEST_ASSERT_TRUE(game0 != game1);
+
+    ID reset_ok = eval_string(
+        "(let [player (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "      t0 (nth (nth (:keyframes (:t player)) 0) 1)] "
+        "  (= [1 1] [(:sx t0) (:sy t0)]))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(reset_ok && reset_ok != clj_false);
+}
+
+TEST(test_vector_scene_graph_game_demo_score_text_is_timeline_driven) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-fx.scene-demo) "
-        "  (let [bundle (tiny-fx.scene-demo/create-demo-bundle) "
+        "  (require 'tiny-fx.game-demo) "
+        "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        score-root (:root (nth bundle 1)) "
         "        score-text (get score-root 2001) "
         "        score-field (:text score-text)] "
@@ -346,12 +388,12 @@ TEST(test_vector_scene_graph_host_viewer_demo_score_text_is_timeline_driven) {
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
-TEST(test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven) {
+TEST(test_vector_scene_graph_game_demo_game_motion_is_timeline_driven) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-fx.scene-demo) "
-        "  (let [bundle (tiny-fx.scene-demo/create-demo-bundle) "
+        "  (require 'tiny-fx.game-demo) "
+        "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        game-root (:root (nth bundle 2)) "
         "        terrain (get game-root 3001) "
         "        player (get game-root 3002) "
@@ -369,12 +411,57 @@ TEST(test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven) {
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
-TEST(test_vector_scene_graph_tiny_fx_runtime_host_viewer_config_shape) {
+TEST(test_vector_scene_graph_game_demo_entities_use_local_foot_pivots) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-fx.game-demo) "
+        "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
+        "        game-root (:root (nth bundle 2)) "
+        "        player (get game-root 3002) "
+        "        proxy (get game-root 3006) "
+        "        player-kf0 (nth (:keyframes (:t player)) 0) "
+        "        player-kf1 (nth (:keyframes (:t player)) 1) "
+        "        player-t0 (nth player-kf0 1) "
+        "        player-t1 (nth player-kf1 1) "
+        "        rocket-body (get game-root 3003) "
+        "        rocket-kf0 (nth (:keyframes (:t rocket-body)) 0) "
+        "        rocket-t0 (nth rocket-kf0 1) "
+        "        rocket-nose (get game-root 3005)] "
+        "    [(= [-16 0 0 -28 16 0] "
+        "        [(:x1 player) (:y1 player) (:x2 player) (:y2 player) (:x3 player) (:y3 player)]) "
+        "     (= [-16 0 0 -28 16 0] "
+        "        [(:x1 proxy) (:y1 proxy) (:x2 proxy) (:y2 proxy) (:x3 proxy) (:y3 proxy)]) "
+        "     (= [72 146 72 136] "
+        "        [(:tx player-t0) (:ty player-t0) (:tx player-t1) (:ty player-t1)]) "
+        "     (= [1 1] [(:sx player-t0) (:sy player-t0)]) "
+        "     (= [[-12 -4] [8 -4] [8 -10] [-12 -10] "
+        "         [-16 -14] [-20 -14] [-20 -9] [-13 -9] "
+        "         [-13 -8] [-20 -8] [-20 -6] [-13 -6] "
+        "         [-13 -5] [-20 -5] [-20 0] [-16 0]] "
+        "        (:pts rocket-body)) "
+        "     (= [346 126] [(:tx rocket-t0) (:ty rocket-t0)]) "
+        "     (= [20 -7 10 -10 10 -4] "
+        "        [(:x1 rocket-nose) (:y1 rocket-nose) "
+        "         (:x2 rocket-nose) (:y2 rocket-nose) (:x3 rocket-nose) (:y3 rocket-nose)])"
+        "     ]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(7, vector_count(v));
+    for (uint32_t i = 0; i < 7; i++) {
+        TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, i));
+    }
+}
+
+TEST(test_vector_scene_graph_tiny_fx_runtime_game_demo_config_shape) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
-        "  (let [cfg (tiny-fx.gfx/host-viewer-config) "
+        "  (let [cfg (tiny-fx.gfx/game-demo-config) "
         "        slots (:slots cfg) "
         "        slot-ids (mapv (fn [slot] (:id slot)) slots) "
         "        slot-atoms (mapv (fn [slot] (:atom slot)) slots) "
@@ -386,9 +473,9 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_host_viewer_config_shape) {
         "        rule2 (second rules)] "
         "    (and (= [:deco :score :game] slot-ids) "
         "         (= 3 (count slots)) "
-        "         (= [tiny-fx.scene-demo/deco-scene-state "
-        "             tiny-fx.scene-demo/score-scene-state "
-        "             tiny-fx.scene-demo/game-scene-state] "
+        "         (= [tiny-fx.game-demo/deco-scene-state "
+        "             tiny-fx.game-demo/score-scene-state "
+        "             tiny-fx.game-demo/game-scene-state] "
         "            slot-atoms) "
         "         (fn? spatial-callback) "
         "         (= game-scene @game-scene-atom) "
@@ -400,20 +487,21 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_host_viewer_config_shape) {
         "         (= :hearing (:channel rule2)) "
         "         (= 24 (:radius rule2)) "
         "         (= 3003 (:a-id rule1)) "
-        "         (= 3002 (:b-id rule1)) "
+        "         (= 3006 (:b-id rule1)) "
         "         (= 3003 (:a-id rule2)) "
-        "         (= 3002 (:b-id rule2)))))",
+        "         (= 3006 (:b-id rule2)))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
-TEST(test_vector_scene_graph_host_viewer_demo_player_entity_matches_tri_type_hash) {
+TEST(test_vector_scene_graph_game_demo_player_entity_matches_tri_type_hash) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_TRUE(tiny_fx_gfx_ensure_schema(g_test_eval_state));
 
     ID bundle = eval_string(
         "(do "
-        "  (require 'tiny-fx.scene-demo) "
-        "  (tiny-fx.scene-demo/create-demo-bundle))",
+        "  (require 'tiny-fx.game-demo) "
+        "  (tiny-fx.game-demo/create-demo-bundle))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(bundle);
     TEST_ASSERT_TRUE(is_vector(bundle));
@@ -437,41 +525,110 @@ TEST(test_vector_scene_graph_host_viewer_demo_player_entity_matches_tri_type_has
     TEST_ASSERT_EQUAL_UINT32(schema->h_tri, player_type_hash);
 }
 
-TEST(test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_geometry_in_clojure) {
+TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_in_clojure) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    ID ok = eval_string(
+    ID out = eval_string(
         "(do "
-        "  (require 'tiny-fx.scene-demo) "
+        "  (require 'tiny-fx.game-demo) "
         "  (require 'tiny-fx.gfx) "
-        "  (let [bundle (tiny-fx.scene-demo/create-demo-bundle) "
+        "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        game0 (nth bundle 2) "
         "        p0 (get (:root game0) 3002) "
-        "        _ (tiny-fx.gfx/set-collision-callback! nil) "
-        "        disabled-ret (tiny-fx.gfx/invoke-collision-callback! nil) "
-        "        _ (tiny-fx.scene-demo/configure-collision-toggle-callback!) "
-        "        ret1 (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :enter}) "
-        "        p1 (get (:root @tiny-fx.scene-demo/game-scene-state) 3002) "
-        "        ret2 (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :exit}) "
-        "        p2 (get (:root @tiny-fx.scene-demo/game-scene-state) 3002)] "
-        "    (and (nil? disabled-ret) (nil? ret1) (nil? ret2) "
-        "         (= 56 (:x1 p0)) (= 118 (:y2 p0)) "
-        "         (= 60 (:x1 p1)) (= 126 (:y2 p1)) "
-        "         (= 56 (:x1 p2)) (= 118 (:y2 p2)))))",
+        "        h0 (get (:root game0) 3006)] "
+        "    (tiny-fx.gfx/set-collision-callback! nil) "
+        "    (let [disabled? (nil? (tiny-fx.gfx/invoke-collision-callback! nil)) "
+        "          _ (tiny-fx.game-demo/configure-collision-toggle-callback!) "
+        "          enter? (nil? (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :enter})) "
+        "          p1 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "          h1 (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
+        "          t1 (nth (nth (:keyframes (:t p1)) 0) 1) "
+        "          ht1 (nth (nth (:keyframes (:t h1)) 0) 1) "
+        "          exit? (nil? (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :exit})) "
+        "          p2 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "          h2 (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
+        "          t0 (nth (nth (:keyframes (:t p0)) 0) 1) "
+        "          t2 (nth (nth (:keyframes (:t p2)) 0) 1) "
+        "          ht2 (nth (nth (:keyframes (:t h2)) 0) 1)] "
+        "      [disabled? enter? exit? "
+        "       (= [-16 0 0 -28 16 0] "
+        "          [(:x1 p0) (:y1 p0) (:x2 p0) (:y2 p0) (:x3 p0) (:y3 p0)]) "
+        "       (= [(:x1 p0) (:y1 p0) (:x2 p0) (:y2 p0) (:x3 p0) (:y3 p0)] "
+        "          [(:x1 p1) (:y1 p1) (:x2 p1) (:y2 p1) (:x3 p1) (:y3 p1)]) "
+        "       (= [(:x1 p0) (:y1 p0) (:x2 p0) (:y2 p0) (:x3 p0) (:y3 p0)] "
+        "          [(:x1 p2) (:y1 p2) (:x2 p2) (:y2 p2) (:x3 p2) (:y3 p2)]) "
+        "       (= [1 1] [(:sx t0) (:sy t0)]) "
+        "       (= 0.75 (:sx t1)) "
+        "       (> (:sy t1) 0.70) "
+        "       (< (:sy t1) 0.72) "
+        "       (= [1 1] [(:sx t2) (:sy t2)]) "
+        "       (= [(:x1 h0) (:y1 h0) (:x2 h0) (:y2 h0) (:x3 h0) (:y3 h0)] "
+        "          [(:x1 h1) (:y1 h1) (:x2 h1) (:y2 h1) (:x3 h1) (:y3 h1)]) "
+        "       (= [(:x1 h0) (:y1 h0) (:x2 h0) (:y2 h0) (:x3 h0) (:y3 h0)] "
+        "          [(:x1 h2) (:y1 h2) (:x2 h2) (:y2 h2) (:x3 h2) (:y3 h2)]) "
+        "       (= [1 1] [(:sx ht1) (:sy ht1)]) "
+        "       (= [1 1] [(:sx ht2) (:sy ht2)])"
+        "       ])))",
         g_test_eval_state);
-    TEST_ASSERT_TRUE(ok && ok != clj_false);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(15, vector_count(v));
+    for (uint32_t i = 0; i < 15; i++) {
+        TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, i));
+    }
 }
 
-TEST(test_vector_scene_graph_host_viewer_demo_gpio_press_triggers_demo_melody_once) {
+TEST(test_vector_scene_graph_game_demo_hidden_collision_proxy_captures_rendered_aabb) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_TRUE(tiny_fx_gfx_ensure_schema(g_test_eval_state));
+    vg_rendered_state_reset_all();
+
+    ID game_scene = eval_string(
+        "(do "
+        "  (require 'tiny-fx.game-demo) "
+        "  (nth (tiny-fx.game-demo/create-demo-bundle) 2))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(game_scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgRenderSlotState slot_state = {0};
+    uint32_t dirty_pixels = 0u;
+    vg_rendered_state_capture_begin(2u, 77u, 0u);
+    bool rendered = vg_render_frame_slot_record_if_changed_at_ms(game_scene, &slot_state, &fb, 77u, 0u, &dirty_pixels);
+    if (rendered) {
+        vg_rendered_state_capture_commit();
+    } else {
+        vg_rendered_state_capture_discard();
+    }
+    TEST_ASSERT_TRUE(rendered);
+
+    VgRenderedEntityState proxy_state = {0};
+    TEST_ASSERT_TRUE(vg_rendered_state_query_entity(2u, (uintptr_t)fixnum(3006), &proxy_state));
+    TEST_ASSERT_TRUE(proxy_state.has_world_aabb);
+    TEST_ASSERT_EQUAL_INT(56, proxy_state.world_aabb.min_x);
+    TEST_ASSERT_EQUAL_INT(88, proxy_state.world_aabb.max_x);
+    TEST_ASSERT_EQUAL_INT(118, proxy_state.world_aabb.min_y);
+    TEST_ASSERT_EQUAL_INT(146, proxy_state.world_aabb.max_y);
+
+    vg_rendered_state_reset_all();
+}
+
+TEST(test_vector_scene_graph_game_demo_gpio_press_triggers_demo_melody_once) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-fx.scene-demo) "
-        "  (tiny-fx.scene-demo/create-demo-bundle) "
+        "  (require 'tiny-fx.game-demo) "
+        "  (tiny-fx.game-demo/create-demo-bundle) "
         "  (gpio-simulate! 1 1) "
         "  (run-next-task) "
         "  (gpio-simulate! 1 0) "
         "  (run-next-task) "
-        "  (let [count @tiny-fx.scene-demo/demo-melody-trigger-count* "
+        "  (let [count @tiny-fx.game-demo/demo-melody-trigger-count* "
         "        status (tiny-fx.audio/audio-host-status!)] "
         "    (and (= 1 count) "
         "         (contains? status :tick-running))))",
@@ -497,12 +654,12 @@ TEST(test_vector_scene_graph_tiny_fx_collision_callback_reconfiguration) {
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
-TEST(test_vector_scene_graph_host_viewer_demo_contains_blinking_stars) {
+TEST(test_vector_scene_graph_game_demo_contains_blinking_stars) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-fx.scene-demo) "
-        "  (let [bundle (tiny-fx.scene-demo/create-demo-bundle) "
+        "  (require 'tiny-fx.game-demo) "
+        "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        game-root (:root (nth bundle 2)) "
         "        terrain (get game-root 3001) "
         "        stars-group (get game-root 3020) "
@@ -555,11 +712,11 @@ TEST(test_vector_scene_graph_merge_nested_record_maps_regression) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-fx.scene-demo) "
-        "  (let [style (tiny-fx.scene-demo/style {:stroke-color 65535 :stroke-width 1}) "
-        "        root (tiny-fx.scene-demo/group {:id 'root :style style :children [3021 3022]}) "
-        "        star-a (tiny-fx.scene-demo/tri {:id 3021 :style style :x1 8 :y1 8 :x2 10 :y2 4 :x3 12 :y3 8}) "
-        "        star-b (tiny-fx.scene-demo/tri {:id 3022 :style style :x1 18 :y1 8 :x2 20 :y2 4 :x3 22 :y3 8}) "
+        "  (require 'tiny-fx.game-demo) "
+        "  (let [style (tiny-fx.game-demo/style {:stroke-color 65535 :stroke-width 1}) "
+        "        root (tiny-fx.game-demo/group {:id 'root :style style :children [3021 3022]}) "
+        "        star-a (tiny-fx.game-demo/tri {:id 3021 :style style :x1 8 :y1 8 :x2 10 :y2 4 :x3 12 :y3 8}) "
+        "        star-b (tiny-fx.game-demo/tri {:id 3022 :style style :x1 18 :y1 8 :x2 20 :y2 4 :x3 22 :y3 8}) "
         "        base {'root root} "
         "        stars {3021 star-a 3022 star-b} "
         "        merged (merge base stars)] "
@@ -2495,16 +2652,16 @@ TEST(test_vector_scene_graph_decode_render_host_micro_benchmark) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID deco_scene = eval_string(
-        "(do (require 'tiny-fx.scene-demo) "
-        "    (nth (tiny-fx.scene-demo/create-demo-bundle) 0))",
+        "(do (require 'tiny-fx.game-demo) "
+        "    (nth (tiny-fx.game-demo/create-demo-bundle) 0))",
         g_test_eval_state);
     ID score_scene = eval_string(
-        "(do (require 'tiny-fx.scene-demo) "
-        "    (nth (tiny-fx.scene-demo/create-demo-bundle) 1))",
+        "(do (require 'tiny-fx.game-demo) "
+        "    (nth (tiny-fx.game-demo/create-demo-bundle) 1))",
         g_test_eval_state);
     ID game_scene = eval_string(
-        "(do (require 'tiny-fx.scene-demo) "
-        "    (nth (tiny-fx.scene-demo/create-demo-bundle) 2))",
+        "(do (require 'tiny-fx.game-demo) "
+        "    (nth (tiny-fx.game-demo/create-demo-bundle) 2))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(deco_scene);
     TEST_ASSERT_NOT_NULL(score_scene);

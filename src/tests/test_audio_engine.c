@@ -743,7 +743,7 @@ TEST(test_audio_tiny_fx_audio_namespace_compile_and_play) {
   TEST_ASSERT_TRUE(result == clj_true);
 }
 
-TEST(test_audio_tiny_fx_audio_play_starwars_title_returns_status_map) {
+TEST(test_audio_tiny_fx_audio_play_sfx_returns_status_map) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
   audio_engine_shutdown();
   audio_engine_init(4);
@@ -751,14 +751,39 @@ TEST(test_audio_tiny_fx_audio_play_starwars_title_returns_status_map) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.audio) "
-        "    (let [ret (tiny-fx.audio/play-starwars-title!)] "
-        "      (and (= :playing (:status ret)) "
-        "           (> (:duration-ms ret) 0))))",
+        "(do "
+        "  (require 'tiny-fx.audio) "
+        "  (let [ret (tiny-fx.audio/play-sfx! :sfx-test "
+        "              [{:notes [:G6] :dur :s}] "
+        "              {:channel-count 1 :volumes [200]})] "
+        "    (and (= :playing (:status ret)) "
+        "         (= 125 (:duration-ms ret)))))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.audio/play-starwars-title! should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.audio/play-sfx! should not throw");
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST(test_audio_tiny_fx_game_demo_play_starwars_title_returns_status_map) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+  audio_engine_shutdown();
+  audio_engine_init(4);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.game-demo) "
+        "    (let [ret (tiny-fx.game-demo/play-starwars-title!)] "
+        "      (and (= :playing (:status ret)) "
+        "           (= 8925 (:duration-ms ret)))))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("tiny-fx.game-demo/play-starwars-title! should not throw");
   }
   END_TRY
 

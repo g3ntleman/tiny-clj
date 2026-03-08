@@ -264,6 +264,57 @@ static inline bool node_culled_tri(VgTransformFixed t,
     return aabb_outside_fb(mn_x - sw, mn_y - sw, mx_x + sw, mx_y + sw, fb_w, fb_h, use_clip, clip);
 }
 
+static bool world_aabb_from_points(VgTransformFixed t,
+                                   const VgPoint *points,
+                                   size_t point_count,
+                                   VgAabb *out_box) {
+    if (!points || point_count == 0u || !out_box) {
+        return false;
+    }
+    int wx = 0;
+    int wy = 0;
+    transform_point(t, points[0].x, points[0].y, &wx, &wy);
+    out_box->min_x = wx;
+    out_box->max_x = wx;
+    out_box->min_y = wy;
+    out_box->max_y = wy;
+    for (size_t i = 1; i < point_count; i++) {
+        transform_point(t, points[i].x, points[i].y, &wx, &wy);
+        if (wx < out_box->min_x) out_box->min_x = wx;
+        if (wx > out_box->max_x) out_box->max_x = wx;
+        if (wy < out_box->min_y) out_box->min_y = wy;
+        if (wy > out_box->max_y) out_box->max_y = wy;
+    }
+    return true;
+}
+
+static void capture_entity_world_aabb_points(ID entity_id,
+                                             VgTransformFixed world_t,
+                                             const VgPoint *points,
+                                             size_t point_count) {
+    if (!entity_id || !points || point_count == 0u) {
+        return;
+    }
+    VgAabb world_aabb = {0};
+    if (!world_aabb_from_points(world_t, points, point_count, &world_aabb)) {
+        return;
+    }
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)entity_id, world_aabb);
+}
+
+/*
+ * Collision proxies can be visually hidden, but they still need current world
+ * bounds in the rendered-state snapshot.
+ */
+static bool leaf_visible_after_aabb_capture(ID entity_id,
+                                            VgTransformFixed world_t,
+                                            const VgPoint *points,
+                                            size_t point_count,
+                                            bool visible) {
+    capture_entity_world_aabb_points(entity_id, world_t, points, point_count);
+    return visible;
+}
+
 static int32_t fixed_payload_raw(ID v) {
     return (int32_t)((intptr_t)v >> TAG_BITS);
 }
@@ -934,6 +985,10 @@ static bool render_polyline_record(ID node_obj,
         points[i].y = id_to_i16_default(vector_nth(xy, 1), 0);
     }
 
+    if (!leaf_visible_after_aabb_capture(entity_id, world_t, points, n, style.visible)) {
+        return true;
+    }
+
     int sw = style.stroke_width ? style.stroke_width : 1;
     {
         int mn_x = INT_MAX, mn_y = INT_MAX, mx_x = INT_MIN, mx_y = INT_MIN;
@@ -1006,11 +1061,11 @@ static bool render_record_node(ID node_obj,
         vg_rendered_state_capture_record_entity((uintptr_t)entity_id, world_t);
     }
     VgStyle style = decode_style(node_obj, entity_id, h, now_ms, sc, out_has_animation);
-    if (!style.visible) {
-        return true;
-    }
 
     if (h == sc->h_group) {
+        if (!style.visible) {
+            return true;
+        }
         Group *group = node_obj;
         ID children = resolve_entity_field_value(entity_id,
                                                  VG_RENDERED_FIELD_CHILDREN,
@@ -1094,6 +1149,15 @@ static bool render_record_node(ID node_obj,
                                                                          sc,
                                                                          out_has_animation),
                                               0);
+        {
+            VgPoint points[2] = {
+                {.x = temp.data.line.x1, .y = temp.data.line.y1},
+                {.x = temp.data.line.x2, .y = temp.data.line.y2},
+            };
+            if (!leaf_visible_after_aabb_capture(entity_id, world_t, points, 2u, style.visible)) {
+                return true;
+            }
+        }
         if (node_culled_line(world_t, temp.data.line.x1, temp.data.line.y1,
                              temp.data.line.x2, temp.data.line.y2, sw,
                              fb_w, fb_h, use_clip, clip_rect))
@@ -1131,6 +1195,17 @@ static bool render_record_node(ID node_obj,
                                                                         sc,
                                                                         out_has_animation),
                                              0);
+        {
+            VgPoint points[4] = {
+                {.x = temp.data.rect.x, .y = temp.data.rect.y},
+                {.x = (int16_t)(temp.data.rect.x + temp.data.rect.w), .y = temp.data.rect.y},
+                {.x = (int16_t)(temp.data.rect.x + temp.data.rect.w), .y = (int16_t)(temp.data.rect.y + temp.data.rect.h)},
+                {.x = temp.data.rect.x, .y = (int16_t)(temp.data.rect.y + temp.data.rect.h)},
+            };
+            if (!leaf_visible_after_aabb_capture(entity_id, world_t, points, 4u, style.visible)) {
+                return true;
+            }
+        }
         if (node_culled_rect(world_t, temp.data.rect.x, temp.data.rect.y,
                              temp.data.rect.w, temp.data.rect.h, sw,
                              fb_w, fb_h, use_clip, clip_rect))
@@ -1182,6 +1257,16 @@ static bool render_record_node(ID node_obj,
                                                                         sc,
                                                                         out_has_animation),
                                              0);
+        {
+            VgPoint points[3] = {
+                {.x = temp.data.tri.x1, .y = temp.data.tri.y1},
+                {.x = temp.data.tri.x2, .y = temp.data.tri.y2},
+                {.x = temp.data.tri.x3, .y = temp.data.tri.y3},
+            };
+            if (!leaf_visible_after_aabb_capture(entity_id, world_t, points, 3u, style.visible)) {
+                return true;
+            }
+        }
         if (node_culled_tri(world_t,
                             temp.data.tri.x1, temp.data.tri.y1,
                             temp.data.tri.x2, temp.data.tri.y2,
@@ -1227,6 +1312,9 @@ static bool render_record_node(ID node_obj,
                                                                          now_ms,
                                                                          sc,
                                                                          out_has_animation));
+        if (!style.visible) {
+            return true;
+        }
         return render_one_temp_node(&temp, world_t, fb, use_clip, clip_rect);
     }
     if (h == sc->h_polyline) {

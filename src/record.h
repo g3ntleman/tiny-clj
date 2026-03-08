@@ -8,10 +8,6 @@
 CljRecordDescriptor *record_descriptor_lookup(ID type_symbol);
 CljRecordDescriptor *record_register_descriptor(ID type_symbol, ID fields);
 
-// tiny-clj wrappers: lookup descriptor in runtime registry and delegate to subjective-c core.
-CljPersistentRecord *record_create(ID type_symbol, CljPersistentVector *values);
-CljPersistentRecord *record_create_from_map(ID type_symbol, ID source_map);
-
 // -----------------------------------------------------------------------------
 // DEFRECORD_REGISTER macros (tiny-clj runtime registration helpers)
 // -----------------------------------------------------------------------------

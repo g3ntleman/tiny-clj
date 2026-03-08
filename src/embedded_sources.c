@@ -81,8 +81,8 @@ static const char tiny_fx_gfx_code[] =
 #include "tiny-gfx.runtime.clj"
     ;
 
-static const char tiny_fx_scene_demo_code[] =
-#include "tiny-fx.scene-demo.clj"
+static const char tiny_fx_game_demo_code[] =
+#include "tiny-fx.game-demo.clj"
     ;
 #endif
 
@@ -123,7 +123,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-scene.clj", tiny_fx_gfx_scene_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-collision.clj", tiny_fx_gfx_collision_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx.clj", tiny_fx_gfx_code),
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/scene-demo.clj", tiny_fx_scene_demo_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/game-demo.clj", tiny_fx_game_demo_code),
 #endif
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/kv.clj", tiny_db_kv_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/rrd.clj", tiny_db_rrd_code),

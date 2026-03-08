@@ -25,8 +25,8 @@ Returns nil when no callback is configured."}
         (f event)
         nil))))
 
-^#^{:doc "Returns host-viewer demo spatial policy as a map.
-The native host viewer uses these bounds and radius values to emit deterministic
+^#^{:doc "Returns game-demo spatial policy as a map.
+The native game demo uses these bounds and radius values to emit deterministic
 `:collision`/`:proximity` events without hardcoded demo constants in C."}
 (def player-vs-obstacle-policy
   (fn player-vs-obstacle-policy []

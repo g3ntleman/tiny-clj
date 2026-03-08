@@ -493,7 +493,7 @@ void builtins_tiny_fx_gfx_reset_cached_state(void) {
 /**
  * @brief Benchmark decode plus render of the current Clojure demo scenes.
  *
- * Uses the current `tiny-fx.scene-demo/create-demo-bundle` output and a static
+ * Uses the current `tiny-fx.game-demo/create-demo-bundle` output and a static
  * framebuffer to avoid heap allocation in the hot path.
  *
  * @param args Optional `[iterations warmup]`
@@ -532,7 +532,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    if (!tiny_fx_gfx_ensure_schema(st) || !require_namespace_by_name(st, "tiny-fx.scene-demo")) {
+    if (!tiny_fx_gfx_ensure_schema(st) || !require_namespace_by_name(st, "tiny-fx.game-demo")) {
         throw_exception(EXCEPTION_RUNTIME,
                         "tiny-clj.runtime/vector-scene-bench failed to initialize tiny-fx scene schema",
                         __FILE__,
@@ -541,7 +541,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    ID bundle = eval_string("(tiny-fx.scene-demo/create-demo-bundle)", st);
+    ID bundle = eval_string("(tiny-fx.game-demo/create-demo-bundle)", st);
     if (!bundle || !is_vector(bundle)) {
         throw_exception(EXCEPTION_RUNTIME,
                         "tiny-clj.runtime/vector-scene-bench failed to build demo scene bundle",

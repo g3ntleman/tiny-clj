@@ -6,6 +6,8 @@
 typedef struct {
     uintptr_t entity_id_bits;
     VgTransformFixed world_t;
+    bool has_world_aabb;
+    VgAabb world_aabb;
 } RenderedEntityRow;
 
 typedef struct {
@@ -61,6 +63,23 @@ static int find_entity_row(RenderedSlotSnapshot *snapshot, uintptr_t entity_id_b
     return -1;
 }
 
+static RenderedEntityRow *ensure_entity_row(RenderedSlotSnapshot *snapshot, uintptr_t entity_id_bits) {
+    if (!snapshot || !entity_id_bits) {
+        return NULL;
+    }
+    int existing = find_entity_row(snapshot, entity_id_bits);
+    if (existing >= 0) {
+        return &snapshot->entities[existing];
+    }
+    if (snapshot->entity_count >= VG_RENDERED_STATE_MAX_ENTITIES) {
+        snapshot->dropped_entities++;
+        return NULL;
+    }
+    uint16_t idx = snapshot->entity_count++;
+    snapshot->entities[idx].entity_id_bits = entity_id_bits;
+    return &snapshot->entities[idx];
+}
+
 static int find_timeline_row(RenderedSlotSnapshot *snapshot, uintptr_t entity_id_bits, uint8_t field) {
     if (!snapshot) {
         return -1;
@@ -101,18 +120,27 @@ void vg_rendered_state_capture_record_entity(uintptr_t entity_id_bits, VgTransfo
     if (!snapshot) {
         return;
     }
-    int existing = find_entity_row(snapshot, entity_id_bits);
-    if (existing >= 0) {
-        snapshot->entities[existing].world_t = world_t;
+    RenderedEntityRow *row = ensure_entity_row(snapshot, entity_id_bits);
+    if (!row) {
         return;
     }
-    if (snapshot->entity_count >= VG_RENDERED_STATE_MAX_ENTITIES) {
-        snapshot->dropped_entities++;
+    row->world_t = world_t;
+}
+
+void vg_rendered_state_capture_record_entity_aabb(uintptr_t entity_id_bits, VgAabb world_aabb) {
+    if (!entity_id_bits) {
         return;
     }
-    uint16_t idx = snapshot->entity_count++;
-    snapshot->entities[idx].entity_id_bits = entity_id_bits;
-    snapshot->entities[idx].world_t = world_t;
+    RenderedSlotSnapshot *snapshot = capture_write_snapshot();
+    if (!snapshot) {
+        return;
+    }
+    RenderedEntityRow *row = ensure_entity_row(snapshot, entity_id_bits);
+    if (!row) {
+        return;
+    }
+    row->has_world_aabb = true;
+    row->world_aabb = world_aabb;
 }
 
 void vg_rendered_state_capture_record_timeline(uintptr_t entity_id_bits,
@@ -170,6 +198,8 @@ bool vg_rendered_state_query_entity(uint8_t slot_index, uintptr_t entity_id_bits
     out_state->snapshot_generation = snapshot->snapshot_generation;
     out_state->frame_time_ms = snapshot->frame_time_ms;
     out_state->world_t = snapshot->entities[idx].world_t;
+    out_state->has_world_aabb = snapshot->entities[idx].has_world_aabb;
+    out_state->world_aabb = snapshot->entities[idx].world_aabb;
     return true;
 }
 

@@ -48,9 +48,9 @@ static inline unsigned int record_declared_field_count(const CljPersistentRecord
 CljRecordDescriptor *record_descriptor_create(ID type_symbol, CljPersistentVector *field_keys);
 
 // Returns owned record (rc=1).
-CljPersistentRecord *record_create_with_descriptor(CljRecordDescriptor *desc, CljPersistentVector *values);
+CljPersistentRecord *make_record_with_descriptor(CljRecordDescriptor *desc, CljPersistentVector *values);
 // Returns owned record (rc=1).
-CljPersistentRecord *record_create_from_map_with_descriptor(CljRecordDescriptor *desc, ID source_map);
+CljPersistentRecord *make_record_from_map_with_descriptor(CljRecordDescriptor *desc, ID source_map);
 
 int record_count(ID record_obj);
 int record_field_index(ID record_obj, ID key);

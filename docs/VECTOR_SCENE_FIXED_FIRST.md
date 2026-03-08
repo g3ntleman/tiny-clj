@@ -50,7 +50,7 @@ BENCH vector_scene_record/game iterations=800 total_ms=57.608 per_frame_ms=0.072
 ```
 
 Interpretation:
-- Decode+render cost is stable and very low for representative host-viewer scenes.
+- Decode+render cost is stable and very low for representative game demo scenes.
 - The mixed game scene is the heaviest slice and remains well below 1 ms/frame on host.
 
 Runtime API (host + ESP32):

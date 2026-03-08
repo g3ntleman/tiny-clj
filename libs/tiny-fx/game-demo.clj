@@ -1,5 +1,5 @@
 R"TINY_GFX_HOST(
-(ns tiny-fx.scene-demo
+(ns tiny-fx.game-demo
   (:require [tiny-fx.gfx-scene :refer [->Transform ->Style ->Group ->Polyline
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
             [tiny-fx.gfx-collision :as collision]
@@ -70,6 +70,8 @@ R"TINY_GFX_HOST(
 (def style-score (style {:stroke-color color-white :stroke-width 1}))
 (def style-game-line (style {:stroke-color color-green :stroke-width 2}))
 (def style-game-player (style {:stroke-color color-magenta :stroke-width 3}))
+;; Hidden collision geometry stays in the rendered-state snapshot for host collision queries.
+(def style-player-collision-proxy (style {:visible false}))
 (def style-rocket-body (style {:stroke-color color-yellow :stroke-width 2 :has-fill true :fill-color color-yellow}))
 (def style-rocket-nose (style {:stroke-color color-red :stroke-width 2 :has-fill true :fill-color color-red}))
 (def style-hbar (style {:stroke-color color-white :stroke-width 1 :has-fill true :fill-color color-white}))
@@ -83,10 +85,19 @@ R"TINY_GFX_HOST(
    [162 202] [198 230] [238 192] [276 226] [319 204]])
 
 (def rocket-body-pts
-  [[-12 3] [8 3] [8 -3] [-12 -3]
-   [-16 -7] [-20 -7] [-20 -2] [-13 -2]
-   [-13 -1] [-20 -1] [-20 1] [-13 1]
-   [-13 2] [-20 2] [-20 7] [-16 7]])
+  [[-12 -4] [8 -4] [8 -10] [-12 -10]
+   [-16 -14] [-20 -14] [-20 -9] [-13 -9]
+   [-13 -8] [-20 -8] [-20 -6] [-13 -6]
+   [-13 -5] [-20 -5] [-20 0] [-16 0]])
+
+(def rocket-nose-geometry {:x1 20 :y1 -7 :x2 10 :y2 -10 :x3 10 :y3 -4})
+
+(def player-geometry {:x1 -16 :y1 0 :x2 0 :y2 -28 :x3 16 :y3 0})
+(def player-world-x 72)
+(def player-world-y 146)
+(def player-jump-height 10)
+(def player-small-scale-x 0.75)
+(def player-small-scale-y 0.7142857)
 
 (def terrain-timeline
   (timeline {:keyframes [[0 (transform {:tx 0 :ty 0 :rot 0})]
@@ -94,15 +105,60 @@ R"TINY_GFX_HOST(
              :loop true}))
 
 (def player-jump-timeline
-  (timeline {:keyframes [[0 (transform {:tx 0 :ty 0 :rot 0})]
-                         [133 (transform {:tx 0 :ty -10 :rot 0})]
-                         [266 (transform {:tx 0 :ty 0 :rot 0})]
-                         [800 (transform {:tx 0 :ty 0 :rot 0})]]
+  (timeline {:keyframes [[0 (transform {:tx player-world-x
+                                        :ty player-world-y
+                                        :sx 1
+                                        :sy 1
+                                        :rot 0})]
+                         [133 (transform {:tx player-world-x
+                                          :ty (- player-world-y player-jump-height)
+                                          :sx 1
+                                          :sy 1
+                                          :rot 0})]
+                         [266 (transform {:tx player-world-x
+                                          :ty player-world-y
+                                          :sx 1
+                                          :sy 1
+                                          :rot 0})]
+                         [800 (transform {:tx player-world-x
+                                          :ty player-world-y
+                                          :sx 1
+                                          :sy 1
+                                          :rot 0})]]
              :loop true}))
 
+(def player-small-jump-timeline
+  (timeline {:keyframes [[0 (transform {:tx player-world-x
+                                        :ty player-world-y
+                                        :sx player-small-scale-x
+                                        :sy player-small-scale-y
+                                        :rot 0})]
+                         [133 (transform {:tx player-world-x
+                                          :ty (- player-world-y player-jump-height)
+                                          :sx player-small-scale-x
+                                          :sy player-small-scale-y
+                                          :rot 0})]
+                         [266 (transform {:tx player-world-x
+                                          :ty player-world-y
+                                          :sx player-small-scale-x
+                                          :sy player-small-scale-y
+                                          :rot 0})]
+                         [800 (transform {:tx player-world-x
+                                          :ty player-world-y
+                                          :sx player-small-scale-x
+                                          :sy player-small-scale-y
+                                          :rot 0})]]
+             :loop true}))
+
+(defn- player-jump-timeline-for-state
+  [player-small?]
+  (if player-small?
+    player-small-jump-timeline
+    player-jump-timeline))
+
 (def rocket-timeline
-  (timeline {:keyframes [[0 (transform {:tx 339 :ty 126 :rot -90})]
-                         [3000 (transform {:tx -21 :ty 126 :rot -90})]]
+  (timeline {:keyframes [[0 (transform {:tx 346 :ty 126 :rot -90})]
+                         [3000 (transform {:tx -14 :ty 126 :rot -90})]]
              :loop true}))
 
 (def star-drift-timeline
@@ -182,12 +238,11 @@ R"TINY_GFX_HOST(
 (def star-5 (polyline {:id 3025 :style star-style-5 :pts [[239 105] [239 107] [239 106] [238 106] [240 106]]}))
 (def star-6 (polyline {:id 3026 :style star-style-6 :pts [[289 81] [289 83] [289 82] [288 82] [290 82]]}))
 
-(def player-geometry-large {:x1 56 :y1 146 :x2 72 :y2 118 :x3 88 :y3 146})
-(def player-geometry-small {:x1 60 :y1 146 :x2 72 :y2 126 :x3 84 :y3 146})
 (def player-entity-id 3002)
+(def player-collision-entity-id 3006)
 (def obstacle-entity-id 3003)
 (def melody-input-pin 1)
-(def demo-melody-track-id :host-viewer-demo-melody)
+(def demo-melody-track-id :game-demo-melody)
 (def demo-melody-steps
   [{:melody :G5 :backing [:D4] :dur :s}
    {:melody :Bb5 :backing [:F4] :dur :s}
@@ -205,52 +260,65 @@ R"TINY_GFX_HOST(
 (def game-scene-state (atom nil))
 (def demo-melody-trigger-count* (atom 0))
 (def demo-input-watcher-id* (atom nil))
-
-(defn slot-descriptors
-  "Returns the canonical ordered slot descriptor vector for tiny-gfx runtime
-and host-viewer startup."
-  []
+(def slot-descriptor-list
   [{:id :deco :atom deco-scene-state}
    {:id :score :atom score-scene-state}
    {:id :game :atom game-scene-state}])
+(def collision-entity-id-pair [player-collision-entity-id obstacle-entity-id])
 
-(defn- apply-player-geometry
+(defn slot-descriptors
+  "Returns the canonical ordered slot descriptor vector for tiny-gfx runtime
+and game-demo startup."
+  []
+  slot-descriptor-list)
+
+(defn- make-player-tri
+  [id style t]
+  (tri (assoc player-geometry
+         :id id
+         :t t
+         :style style)))
+
+(defn- apply-player-scale
   [game-scene player-small?]
   (let [root (:root game-scene)
         player (get root player-entity-id)
-        g (if player-small? player-geometry-small player-geometry-large)
-        player2 (assoc player
-                  :x1 (:x1 g) :y1 (:y1 g)
-                  :x2 (:x2 g) :y2 (:y2 g)
-                  :x3 (:x3 g) :y3 (:y3 g))
-        root2 (assoc root player-entity-id player2)]
-    (assoc game-scene :root root2)))
+        next-timeline (player-jump-timeline-for-state player-small?)]
+    (if (= (:t player) next-timeline)
+      game-scene
+      (assoc game-scene :root
+             (assoc root player-entity-id (assoc player :t next-timeline))))))
+
+(defn- event->player-small-state
+  [event]
+  (if (= (:kind event) :collision)
+    (cond
+      (= (:phase event) :enter) true
+      (= (:phase event) :exit) false
+      :else :ignore)
+    :ignore))
 
 (defn on-player-collision-toggle!
-  "Host-viewer spatial callback: reacts to `:collision` `:enter`/`:exit`
-by changing player geometry.
+  "Game-demo spatial callback: reacts to `:collision` `:enter`/`:exit`
+by changing player scale.
 Returns nil; host-side callback dispatch ignores return values."
   [event]
-  (let [phase (:phase event)
-        kind (:kind event)
-        player-small? (cond
-                        (not= kind :collision) @player-small-state
-                        (= phase :exit) false
-                        :else true)
-        game-scene @game-scene-state]
-    (reset! player-small-state player-small?)
-    (when game-scene
-      (let [updated-game-scene (apply-player-geometry game-scene player-small?)]
-        (reset! game-scene-state updated-game-scene)))
+  (let [next-state (event->player-small-state event)]
+    (when (and (not= next-state :ignore)
+               (not= next-state @player-small-state))
+      (reset! player-small-state next-state)
+      (let [game-scene @game-scene-state]
+        (when game-scene
+          (reset! game-scene-state (apply-player-scale game-scene next-state)))))
     nil))
 
 (defn configure-collision-toggle-callback!
-  "Configures the collision response callback used by the host viewer."
+  "Configures the collision response callback used by the game demo."
   []
   (collision/set-collision-callback! on-player-collision-toggle!))
 
 (defn on-demo-gpio-input!
-  "Host-viewer GPIO callback: a rising edge on the demo input pin triggers
+  "Game-demo GPIO callback: a rising edge on the demo input pin triggers
 a short melody from Clojure. Returns nil; host-side callback dispatch ignores
 return values."
   [event]
@@ -263,7 +331,7 @@ return values."
     nil))
 
 (defn configure-demo-input-watchers!
-  "Registers the demo GPIO watcher used by the host viewer input simulation."
+  "Registers the demo GPIO watcher used by the game demo input simulation."
   []
   (let [old-watcher-id @demo-input-watcher-id*]
     (when old-watcher-id
@@ -273,75 +341,93 @@ return values."
     nil))
 
 (defn collision-entity-ids
-  "Returns [player-entity-id obstacle-entity-id] for host collision state queries."
+  "Returns [player-collision-entity-id obstacle-entity-id] for game-demo collision state queries."
   []
-  [player-entity-id obstacle-entity-id])
+  collision-entity-id-pair)
+
+(def mountains (polyline {:id 1001 :style style-deco :pts mountain-pts}))
+(def deco-root (group {:id root-id :style style-deco :children [1001]}))
+(def deco-entities {root-id deco-root
+                    1001 mountains})
+(def deco-scene-template (frame-scene {:root deco-entities :clip-rect [0 184 320 56] :z 0}))
+
+(def score-t (transform {:tx 8 :ty 21}))
+(def score-text (vtext {:id 2001 :t score-t :style style-score :text score-text-timeline}))
+(def score-root (group {:id root-id :style style-score :children [2001]}))
+(def score-entities {root-id score-root
+                     2001 score-text})
+(def score-scene-template (frame-scene {:root score-entities :clip-rect [0 0 320 32] :z 1}))
+
+(def hbar-timeline
+  (timeline {:keyframes [[0 (transform {:tx -10 :ty 80 :rot 0})]
+                         [1700 (transform {:tx 330 :ty 80 :rot 0})]]
+             :loop true}))
+(def game-terrain
+  (polyline {:id 3001 :t terrain-timeline :style style-game-line
+             :pts [[0 156] [60 156] [100 144] [150 156] [220 156] [260 146] [319 156]
+                   [380 156] [420 146] [480 156] [560 156] [620 144]]}))
+(def game-player
+  (make-player-tri player-entity-id style-game-player player-jump-timeline))
+(def game-player-collision
+  (make-player-tri player-collision-entity-id style-player-collision-proxy player-jump-timeline))
+(def game-rocket-body
+  (polyline {:id obstacle-entity-id :t rocket-timeline :style style-rocket-body
+             :pts rocket-body-pts :closed true}))
+(def game-rocket-nose
+  (tri (assoc rocket-nose-geometry
+         :id 3005 :t rocket-timeline :style style-rocket-nose)))
+(def game-caption-t (transform {:tx 96 :ty 52}))
+(def game-caption (vtext {:id 3004 :t game-caption-t :style style-score :text "GAME SCENE"}))
+(def game-hbar (tri {:id 3010 :t hbar-timeline :style style-hbar
+                     :x1 0 :y1 -4 :x2 20 :y2 0 :x3 0 :y3 4}))
+(def game-root
+  (group {:id root-id :style style-score
+          :children [3020 3001 player-collision-entity-id player-entity-id obstacle-entity-id 3005 3004 3010]}))
+(def game-entities-static
+  {root-id game-root
+   3001 game-terrain
+   obstacle-entity-id game-rocket-body
+   3005 game-rocket-nose
+   3004 game-caption
+   3010 game-hbar
+   3020 game-stars-group
+   3021 star-1
+   3022 star-2
+   3023 star-3
+   3024 star-4
+   3025 star-5
+   3026 star-6})
+(def collision-rule
+  (->SpatialRule :player-vs-rocket :game :collision obstacle-entity-id player-collision-entity-id 0 nil))
+(def hearing-rule
+  (->SpatialRule :enemy-hearing :game :proximity obstacle-entity-id player-collision-entity-id 24 :hearing))
 
 (defn create-demo-bundle
-  "Returns a vector with the demo frame-scenes used by the host viewer.
+  "Returns a vector with the demo frame-scenes used by the game demo.
 Index layout:
 0 deco-scene
 1 score-scene
 2 game-scene"
   []
-  (let [mountains (polyline {:id 1001 :style style-deco :pts mountain-pts})
-        deco-root (group {:id root-id :style style-deco :children [1001]})
-        deco-entities {root-id deco-root
-                       1001 mountains}
-        deco-scene (frame-scene {:root deco-entities :clip-rect [0 184 320 56] :z 0})]
-    (let [score-t (transform {:tx 8 :ty 21})
-          score-text (vtext {:id 2001 :t score-t :style style-score :text score-text-timeline})
-          score-root (group {:id root-id :style style-score :children [2001]})
-          score-entities {root-id score-root
-                          2001 score-text}
-          score-scene (frame-scene {:root score-entities :clip-rect [0 0 320 32] :z 1})]
-      (let [hbar-timeline (timeline {:keyframes [[0 (transform {:tx -10 :ty 80 :rot 0})]
-                                                 [1700 (transform {:tx 330 :ty 80 :rot 0})]]
-                                     :loop true})
-            game-terrain (polyline {:id 3001 :t terrain-timeline :style style-game-line
-                                    :pts [[0 156] [60 156] [100 144] [150 156] [220 156] [260 146] [319 156]
-                                          [380 156] [420 146] [480 156] [560 156] [620 144]]})
-            game-player (tri {:id player-entity-id :t player-jump-timeline :style style-game-player
-                              :x1 56 :y1 146 :x2 72 :y2 118 :x3 88 :y3 146})
-            game-rocket-body (polyline {:id obstacle-entity-id :t rocket-timeline :style style-rocket-body
-                                        :pts rocket-body-pts :closed true})
-            game-rocket-nose (tri {:id 3005 :t rocket-timeline :style style-rocket-nose
-                                   :x1 20 :y1 0 :x2 10 :y2 -3 :x3 10 :y3 3})
-            game-caption-t (transform {:tx 96 :ty 52})
-            game-caption (vtext {:id 3004 :t game-caption-t :style style-score :text "GAME SCENE"})
-            game-hbar (tri {:id 3010 :t hbar-timeline :style style-hbar
-                            :x1 0 :y1 -4 :x2 20 :y2 0 :x3 0 :y3 4})
-            game-root (group {:id root-id :style style-score
-                              :children [3020 3001 player-entity-id obstacle-entity-id 3005 3004 3010]})
-            game-entities {root-id game-root
-                           3001 game-terrain
-                           player-entity-id game-player
-                           obstacle-entity-id game-rocket-body
-                           3005 game-rocket-nose
-                           3004 game-caption
-                           3010 game-hbar
-                           3020 game-stars-group
-                           3021 star-1
-                           3022 star-2
-                           3023 star-3
-                           3024 star-4
-                            3025 star-5
-                            3026 star-6}
-            collision-rule (->SpatialRule :player-vs-rocket :game :collision obstacle-entity-id player-entity-id 0 nil)
-            hearing-rule (->SpatialRule :enemy-hearing :game :proximity obstacle-entity-id player-entity-id 24 :hearing)
-            game-scene (frame-scene {:root game-entities
-                                     :clip-rect [0 40 320 136]
-                                     :z 2
-                                     :collision-rules [collision-rule hearing-rule]})]
-        (reset! player-small-state false)
-        (reset! deco-scene-state deco-scene)
-        (reset! score-scene-state score-scene)
-        (reset! game-scene-state game-scene)
-        (reset! demo-melody-trigger-count* 0)
-        (configure-collision-toggle-callback!)
-        (configure-demo-input-watchers!)
-        [deco-scene
-         score-scene
-         game-scene]))))
+  (let [game-player (make-player-tri player-entity-id style-game-player player-jump-timeline)
+        game-player-collision (make-player-tri player-collision-entity-id
+                                               style-player-collision-proxy
+                                               player-jump-timeline)
+        game-entities (assoc game-entities-static
+                        player-collision-entity-id game-player-collision
+                        player-entity-id game-player)
+        game-scene (frame-scene {:root game-entities
+                                 :clip-rect [0 40 320 136]
+                                 :z 2
+                                 :collision-rules [collision-rule hearing-rule]})
+        demo-bundle [deco-scene-template score-scene-template game-scene]]
+    (reset! player-small-state false)
+    (reset! deco-scene-state deco-scene-template)
+    (reset! score-scene-state score-scene-template)
+    (reset! game-scene-state game-scene)
+    (reset! demo-melody-trigger-count* 0)
+    (configure-collision-toggle-callback!)
+    (configure-demo-input-watchers!)
+    demo-bundle))
 
 )TINY_GFX_HOST"

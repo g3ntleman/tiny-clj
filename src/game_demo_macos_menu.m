@@ -1,6 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
-#include "host_viewer_macos_menu.h"
+#include "game_demo_macos_menu.h"
 
 static NSString *const kMacosViewerWindowAutosaveName = @"macos_viewer.main_window";
 static NSString *const kMacosViewerScreenUUIDKey = @"macos_viewer.window.screen_uuid";
@@ -86,7 +86,7 @@ static void macos_viewer_store_screen_position_for_window(NSWindow *window) {
     [defaults setDouble:frame.origin.x forKey:kMacosViewerFrameXKey];
     [defaults setDouble:frame.origin.y forKey:kMacosViewerFrameYKey];
     (void)[window saveFrameUsingName:kMacosViewerWindowAutosaveName];
-    /* Width/height intentionally not saved — host viewer uses fixed 2x scale. */
+    /* Width/height intentionally not saved - game demo uses fixed 2x scale. */
 }
 
 static void macos_viewer_apply_saved_screen_placement(NSWindow *window) {
@@ -122,7 +122,7 @@ static void macos_viewer_apply_saved_screen_placement(NSWindow *window) {
     if ([defaults objectForKey:kMacosViewerFrameYKey]) {
         frame.origin.y = [defaults doubleForKey:kMacosViewerFrameYKey];
     }
-    /* Size is intentionally NOT restored — the host viewer uses a fixed 2x scale. */
+    /* Size is intentionally NOT restored - the game demo uses a fixed 2x scale. */
 
     [window setFrame:frame display:NO];
     g_macos_viewer_screen_restore_applied = true;
@@ -292,7 +292,7 @@ void macos_viewer_begin_performance_activity(void) {
                                  NSActivityAutomaticTerminationDisabled;
         id token =
             [proc beginActivityWithOptions:opts
-                                    reason:@"tiny-clj host viewer render loop"];
+                                    reason:@"tiny-clj game demo render loop"];
         macos_viewer_set_performance_activity(token);
         [token release];
     }

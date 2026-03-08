@@ -2967,7 +2967,8 @@ ID native_record_create(ID *args, unsigned int argc) {
     return NULL;
   }
 
-  CljPersistentRecord *record = record_create(type_symbol, values);
+  CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+  CljPersistentRecord *record = make_record_with_descriptor(desc, values);
   RELEASE(values);
   if (!record)
     return NULL;
@@ -2996,7 +2997,8 @@ ID native_record_from_map(ID *args, unsigned int argc) {
     return NULL;
   }
 
-  CljPersistentRecord *record = record_create_from_map(type_symbol, source_map);
+  CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+  CljPersistentRecord *record = make_record_from_map_with_descriptor(desc, source_map);
   if (!record)
     return NULL;
 

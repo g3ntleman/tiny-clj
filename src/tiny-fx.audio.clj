@@ -253,6 +253,9 @@ R"TINY_SND_CMP(
 (defn- play-result->status [ok]
   (if ok :playing :stopped))
 
+(defn- play-sfx-result->status [ok]
+  (if ok :playing :dropped))
+
 (defn play-steps!
   "Compiles, loads and plays steps once.
    Options map is passed to compile-track.
@@ -261,6 +264,15 @@ R"TINY_SND_CMP(
   (let [duration-ms (track-duration-ms steps opts)]
     (audio-load-track! track-id (compile-track steps opts))
     {:status (play-result->status (audio-play-music! track-id 1))
+     :duration-ms duration-ms}))
+
+(defn play-sfx!
+  "Compiles, loads and triggers steps as a one-shot sound effect.
+   Returns {:status :playing|:dropped :duration-ms <int>}."
+  [track-id steps opts]
+  (let [duration-ms (track-duration-ms steps opts)]
+    (audio-load-track! track-id (compile-track steps opts))
+    {:status (play-sfx-result->status (audio-play-sfx! track-id))
      :duration-ms duration-ms}))
 
 ;; Melody + backing transformation helper.
@@ -340,67 +352,5 @@ R"TINY_SND_CMP(
                          notes (into [melody] backing)]
                      (recur (rest s) (conj out {:notes notes :dur dur})))))]
     steps2))
-
-;; -----------------------------------------------------------------------------
-;; Demo: piezo-friendly Star Wars title phrases
-;; -----------------------------------------------------------------------------
-
-(def starwars-title-steps
-  [{:rest :t}
-   {:melody :G5 :backing [:D4] :dur :q}
-   {:melody :G5 :backing [:D4] :dur :q}
-   {:melody :G5 :backing [:D4] :dur :q}
-   {:melody :Eb5 :backing [:C4] :dur :de}
-   {:melody :Bb5 :backing [:F4] :dur :s}
-   {:melody :G5 :backing [:D4] :dur :q}
-
-   {:melody :Eb5 :backing [:C4] :dur :de}
-   {:melody :Bb5 :backing [:F4] :dur :s}
-   {:melody :G5 :backing [:D4] :dur :q}
-   {:rest :e}
-
-   {:melody :D6 :backing [:A4] :dur :q}
-   {:melody :D6 :backing [:A4] :dur :q}
-   {:melody :D6 :backing [:A4] :dur :q}
-   {:melody :Eb6 :backing [:Bb4] :dur :de}
-   {:melody :Bb5 :backing [:F4] :dur :s}
-   {:melody :Gb5 :backing [:Db4] :dur :q}
-
-   {:melody :Eb5 :backing [:C4] :dur :de}
-   {:melody :Bb5 :backing [:F4] :dur :s}
-   {:melody :G5 :backing [:D4] :dur :q}
-   {:rest :s}])
-
-(defn play-starwars-title!
-  "Convenience demo for host/ESP playback."
-  []
-  (play-steps! :starwars-title-2v starwars-title-steps
-               {:channel-count 2
-                :melody-vol 220
-                :backing-volumes [195]
-                :tempo-bpm 104
-                :gate-percent 78}))
-
-(defn wait-until-audio-stopped!
-  "Blocks cooperatively until audio playback stops or timeout elapses.
-   Uses yield so host/event-loop can continue progressing.
-   Returns:
-   :stopped  -> tick is no longer running
-   :timeout  -> timeout reached while still running
-   :unknown  -> status API unsupported"
-  [timeout-ms]
-  (let [limit (if (or (nil? timeout-ms) (< timeout-ms 1)) 2000 timeout-ms)]
-    (loop [elapsed 0]
-      (let [st (audio-host-status!)
-            supported (get st :supported)
-            running (get st :tick-running)]
-        (cond
-          (not supported) :unknown
-          (not running) :stopped
-          (>= elapsed limit) :timeout
-          :else
-          (do
-            (yield 10)
-            (recur (+ elapsed 10))))))))
 
 )TINY_SND_CMP"

@@ -140,7 +140,7 @@ python -m esptool --chip esp32 -b 460800 --before default_reset --after hard_res
 
 ### Host Viewer Font
 
-The vector host viewer uses a monospace single-stroke "Star-Wars arcade" font
+The vector game demo uses a monospace single-stroke "Star-Wars arcade" font
 for uppercase letters and digits (`A-Z`, `0-9`). The glyph data is derived from
 the open-source `arcadefont` project (MIT license):
 

@@ -3,7 +3,7 @@ R"TINY_GFX_RUNTIME(
   (:require [tiny-clj.runtime]
             [tiny-fx.gfx-scene]
             [tiny-fx.gfx-collision]
-            [tiny-fx.scene-demo]))
+            [tiny-fx.game-demo]))
 
 ;; Direct var aliases to tiny-clj.runtime (no forwarding wrapper functions).
 ;; This keeps arity/error behavior identical to the native runtime entry points.
@@ -83,9 +83,9 @@ Returns nil when no callback is configured."}
 (def player-vs-obstacle-policy tiny-fx.gfx-collision/player-vs-obstacle-policy)
 
 ^#^{:doc "Returns the canonical ordered slot descriptor vector used by the runtime
-and host-viewer. Each slot descriptor contains at least `:id` and `:atom`.
+and game-demo. Each slot descriptor contains at least `:id` and `:atom`.
 Usage: (slot-descriptors)."}
-(def slot-descriptors tiny-fx.scene-demo/slot-descriptors)
+(def slot-descriptors tiny-fx.game-demo/slot-descriptors)
 
 ^#^{:doc "Starts the renderer thread. Usage: (start-renderer!) or (start-renderer! (slot-descriptors)).
 Returns true on success, false when unsupported in the active runtime backend."}
@@ -110,17 +110,17 @@ Returns nil when the field has no captured timeline sample.
 Usage: (renderer-timeline-progress :game 3001 :t) where `:game` is one configured slot id."}
 (def renderer-timeline-progress tiny-clj.runtime/renderer-timeline-progress)
 
-^#^{:doc "Builds and returns host-viewer startup config map:
+^#^{:doc "Builds and returns game-demo startup config map:
 {:slots [{:id :deco :atom ...} ...]
  :spatial-callback tiny-fx.gfx/invoke-collision-callback!
- :game-scene-atom tiny-fx.scene-demo/game-scene-state}
-Used by native host-viewer startup. The C host loop consumes only this config map,
+ :game-scene-atom tiny-fx.game-demo/game-scene-state}
+Used by native game-demo startup. The C host loop consumes only this config map,
 so callback dispatch and live game-scene updates stay app-defined on the Clojure side."}
-(def host-viewer-config
-  (fn host-viewer-config []
-    (tiny-fx.scene-demo/create-demo-bundle)
+(def game-demo-config
+  (fn game-demo-config []
+    (tiny-fx.game-demo/create-demo-bundle)
     {:slots (slot-descriptors)
      :spatial-callback tiny-fx.gfx/invoke-collision-callback!
-     :game-scene-atom tiny-fx.scene-demo/game-scene-state}))
+     :game-scene-atom tiny-fx.game-demo/game-scene-state}))
 
 )TINY_GFX_RUNTIME"

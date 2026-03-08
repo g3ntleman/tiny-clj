@@ -186,30 +186,31 @@ TEST(test_gfx_collision_contract_demo_callback_mutates_scene_state_explicitly) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
         "(do "
-        "  (require 'tiny-fx.scene-demo) "
+        "  (require 'tiny-fx.game-demo) "
         "  (require 'tiny-fx.gfx) "
-        "  (tiny-fx.scene-demo/create-demo-bundle) "
-        "  (tiny-fx.scene-demo/configure-collision-toggle-callback!) "
-        "  (let [before (:x1 (get (:root @tiny-fx.scene-demo/game-scene-state) 3002)) "
+        "  (tiny-fx.game-demo/create-demo-bundle) "
+        "  (tiny-fx.game-demo/configure-collision-toggle-callback!) "
+        "  (let [player0 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "        before-x1 (:x1 player0) "
+        "        before-sx (:sx (nth (nth (:keyframes (:t player0)) 0) 1)) "
         "        ret1 (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :enter}) "
-        "        after-enter (:x1 (get (:root @tiny-fx.scene-demo/game-scene-state) 3002)) "
+        "        player1 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "        after-enter-x1 (:x1 player1) "
+        "        after-enter-sx (:sx (nth (nth (:keyframes (:t player1)) 0) 1)) "
         "        ret2 (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :exit}) "
-        "        after-exit (:x1 (get (:root @tiny-fx.scene-demo/game-scene-state) 3002))] "
-        "    [before after-enter after-exit (nil? ret1) (nil? ret2)]))",
+        "        player2 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "        after-exit-x1 (:x1 player2) "
+        "        after-exit-sx (:sx (nth (nth (:keyframes (:t player2)) 0) 1))] "
+        "    (and (= -16 before-x1) "
+        "         (= -16 after-enter-x1) "
+        "         (= -16 after-exit-x1) "
+        "         (= 1 before-sx) "
+        "         (= 0.75 after-enter-sx) "
+        "         (= 1 after-exit-sx) "
+        "         (nil? ret1) "
+        "         (nil? ret2))))",
         g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(out);
-    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
-    CljPersistentVector *v = as_vector(out);
-    TEST_ASSERT_NOT_NULL(v);
-    TEST_ASSERT_EQUAL_UINT(5, vector_count(v));
-    TEST_ASSERT_TRUE(is_fixnum(vector_nth(v, 0)));
-    TEST_ASSERT_TRUE(is_fixnum(vector_nth(v, 1)));
-    TEST_ASSERT_TRUE(is_fixnum(vector_nth(v, 2)));
-    TEST_ASSERT_EQUAL_INT(56, as_fixnum(vector_nth(v, 0)));
-    TEST_ASSERT_EQUAL_INT(60, as_fixnum(vector_nth(v, 1)));
-    TEST_ASSERT_EQUAL_INT(56, as_fixnum(vector_nth(v, 2)));
-    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 3));
-    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 4));
+    TEST_ASSERT_TRUE(out && out != clj_false);
 }
 
 TEST(test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value) {

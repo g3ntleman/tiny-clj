@@ -6,6 +6,7 @@
 #include <stddef.h>
 
 #include "vector_scene_graph.h"
+#include "viewer_collision.h"
 
 #if defined(ESP32_BUILD)
 #define VG_RENDERED_STATE_MAX_SLOTS 3u
@@ -52,6 +53,8 @@ typedef struct {
     uint32_t snapshot_generation;
     uint32_t frame_time_ms;
     VgTransformFixed world_t;
+    bool has_world_aabb;
+    VgAabb world_aabb;
 } VgRenderedEntityState;
 
 typedef struct {
@@ -63,6 +66,7 @@ typedef struct {
 /* Writer-side API (render thread) */
 void vg_rendered_state_capture_begin(uint8_t slot_index, uint32_t snapshot_generation, uint32_t frame_time_ms);
 void vg_rendered_state_capture_record_entity(uintptr_t entity_id_bits, VgTransformFixed world_t);
+void vg_rendered_state_capture_record_entity_aabb(uintptr_t entity_id_bits, VgAabb world_aabb);
 void vg_rendered_state_capture_record_timeline(uintptr_t entity_id_bits,
                                                VgRenderedField field,
                                                VgRenderedTimelineSample sample);

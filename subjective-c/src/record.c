@@ -110,7 +110,7 @@ CljRecordDescriptor *record_descriptor_create(ID type_symbol, CljPersistentVecto
 
 // Create a record instance from ordered field values.
 // Missing values default to nil. Returns owned record (rc=1).
-CljPersistentRecord *record_create_with_descriptor(CljRecordDescriptor *desc, CljPersistentVector *values) {
+CljPersistentRecord *make_record_with_descriptor(CljRecordDescriptor *desc, CljPersistentVector *values) {
     if (!desc) {
         throw_exception(EXCEPTION_RUNTIME, "record type not registered", __FILE__, __LINE__, 0);
         return NULL;
@@ -138,7 +138,7 @@ CljPersistentRecord *record_create_with_descriptor(CljRecordDescriptor *desc, Cl
 
 // Create a record instance from a map/record source.
 // Unknown keys are rejected (NotImplementedException). Returns owned record (rc=1).
-CljPersistentRecord *record_create_from_map_with_descriptor(CljRecordDescriptor *desc, ID source_map) {
+CljPersistentRecord *make_record_from_map_with_descriptor(CljRecordDescriptor *desc, ID source_map) {
     if (!desc) {
         throw_exception(EXCEPTION_RUNTIME, "record type not registered", __FILE__, __LINE__, 0);
         return NULL;

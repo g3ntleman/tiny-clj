@@ -332,7 +332,8 @@ ID tiny_fx_gfx_create_record_from_slots(ID type_symbol, unsigned int field_count
     for (unsigned int i = 0; i < field_count; i++) {
         vector_conj_inplace(&v, slots[i]);
     }
-    ID rec = AUTORELEASE(record_create(type_symbol, v));
+    CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+    ID rec = AUTORELEASE(make_record_with_descriptor(desc, v));
     RELEASE(v);
     return rec;
 }

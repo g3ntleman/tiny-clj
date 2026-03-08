@@ -6,7 +6,7 @@ if(CMAKE_OBJC_COMPILER)
     enable_language(OBJC)
 endif()
 
-option(TINYCLJ_HOST_VIEWER "Build optional MiniFB host viewer" OFF)
+option(TINYCLJ_GAME_DEMO "Build optional MiniFB game demo" OFF)
 option(TINYCLJ_MINIFB_METAL "Use MiniFB Metal backend on macOS" OFF)
 option(TINYCLJ_WITH_TINY_FX "Build optional tiny-fx audio/gfx feature set" ON)
 
@@ -932,9 +932,9 @@ set_tests_properties(repl-history-multiple PROPERTIES
 add_test(NAME unit-tests COMMAND $<TARGET_FILE:unit-tests>)
 set_tests_properties(unit-tests PROPERTIES LABELS "unit")
 
-if(TINYCLJ_HOST_VIEWER)
+if(TINYCLJ_GAME_DEMO)
     if(NOT TINYCLJ_WITH_TINY_FX)
-        message(FATAL_ERROR "host-viewer requires TINYCLJ_WITH_TINY_FX=ON")
+        message(FATAL_ERROR "game-demo requires TINYCLJ_WITH_TINY_FX=ON")
     endif()
     include(FetchContent)
     # Select MiniFB macOS backend explicitly to keep runs reproducible.
@@ -958,21 +958,21 @@ if(TINYCLJ_HOST_VIEWER)
         message(FATAL_ERROR "MiniFB target 'minifb' was not created by dependency build.")
     endif()
 
-    add_executable(host-viewer
-        src/host_viewer_minifb.c
+    add_executable(game-demo
+        src/game_demo_minifb.c
         src/platform_macos.c
         ${SOURCES}
     )
-    tinyclj_target_enable_tiny_fx(host-viewer HOST)
+    tinyclj_target_enable_tiny_fx(game-demo HOST)
     if(APPLE)
-        target_sources(host-viewer PRIVATE src/host_viewer_macos_menu.m)
+        target_sources(game-demo PRIVATE src/game_demo_macos_menu.m)
     endif()
-    target_include_directories(host-viewer PRIVATE
+    target_include_directories(game-demo PRIVATE
         ${CMAKE_SOURCE_DIR}/src
     )
-    target_compile_definitions(host-viewer PRIVATE TINYCLJ_WITH_MINIFB=1)
-    target_link_libraries(host-viewer PRIVATE minifb m subjective-c tiny-db)
-    tinyclj_link_apple_base(host-viewer)
+    target_compile_definitions(game-demo PRIVATE TINYCLJ_WITH_MINIFB=1)
+    target_link_libraries(game-demo PRIVATE minifb m subjective-c tiny-db)
+    tinyclj_link_apple_base(game-demo)
 endif()
 
 # Seq Benchmark (REMOVED - File no longer exists)

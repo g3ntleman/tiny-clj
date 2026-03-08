@@ -34,7 +34,7 @@
 #include "vector.h"
 #include "MiniFB.h"
 #if defined(__APPLE__)
-#include "host_viewer_macos_menu.h"
+#include "game_demo_macos_menu.h"
 #endif
 
 #define VIEW_W 320
@@ -259,117 +259,6 @@ static bool viewer_collision_policy_same_identity(const ViewerCollisionPolicy *a
            a->channel == b->channel;
 }
 
-static bool viewer_fixnum_at(ID seq_obj, uint32_t idx, int *out_value) {
-    if (!seq_obj || !out_value || !is_vector(seq_obj)) {
-        return false;
-    }
-    CljPersistentVector *vec = as_vector(seq_obj);
-    if (!vec || vector_count(vec) <= idx) {
-        return false;
-    }
-    ID v = vector_nth(vec, idx);
-    if (!is_fixnum(v)) {
-        return false;
-    }
-    *out_value = AS_FIXNUM(v);
-    return true;
-}
-
-static void viewer_aabb_include_point(VgAabb *box, int x, int y, bool *initialized) {
-    if (!box || !initialized) {
-        return;
-    }
-    if (!*initialized) {
-        box->min_x = x;
-        box->max_x = x;
-        box->min_y = y;
-        box->max_y = y;
-        *initialized = true;
-        return;
-    }
-    if (x < box->min_x) box->min_x = x;
-    if (x > box->max_x) box->max_x = x;
-    if (y < box->min_y) box->min_y = y;
-    if (y > box->max_y) box->max_y = y;
-}
-
-static bool viewer_record_world_aabb(ID record_obj, VgTransformFixed world_t, VgAabb *out_box) {
-    if (!record_obj || !out_box || TAG(record_obj) != CLJ_RECORD) {
-        return false;
-    }
-    const VgRecordSchema *schema = tiny_fx_gfx_schema();
-    if (!schema) {
-        return false;
-    }
-    uint32_t h = viewer_record_type_hash(record_obj);
-    bool initialized = false;
-    VgAabb box = {0};
-    if (h == schema->h_tri) {
-        Tri *tri = (Tri *)record_obj;
-        int xs[3] = {AS_FIXNUM(tri->x1), AS_FIXNUM(tri->x2), AS_FIXNUM(tri->x3)};
-        int ys[3] = {AS_FIXNUM(tri->y1), AS_FIXNUM(tri->y2), AS_FIXNUM(tri->y3)};
-        for (int i = 0; i < 3; i++) {
-            int wx = 0;
-            int wy = 0;
-            vg_transform_fixed_apply_px(world_t, (int16_t)xs[i], (int16_t)ys[i], &wx, &wy);
-            viewer_aabb_include_point(&box, wx, wy, &initialized);
-        }
-    } else if (h == schema->h_line) {
-        Line *line = (Line *)record_obj;
-        int xs[2] = {AS_FIXNUM(line->x1), AS_FIXNUM(line->x2)};
-        int ys[2] = {AS_FIXNUM(line->y1), AS_FIXNUM(line->y2)};
-        for (int i = 0; i < 2; i++) {
-            int wx = 0;
-            int wy = 0;
-            vg_transform_fixed_apply_px(world_t, (int16_t)xs[i], (int16_t)ys[i], &wx, &wy);
-            viewer_aabb_include_point(&box, wx, wy, &initialized);
-        }
-    } else if (h == schema->h_rect) {
-        Rect *rect = (Rect *)record_obj;
-        int x = AS_FIXNUM(rect->x);
-        int y = AS_FIXNUM(rect->y);
-        int w = AS_FIXNUM(rect->w);
-        int hgt = AS_FIXNUM(rect->h);
-        int xs[4] = {x, x + w, x + w, x};
-        int ys[4] = {y, y, y + hgt, y + hgt};
-        for (int i = 0; i < 4; i++) {
-            int wx = 0;
-            int wy = 0;
-            vg_transform_fixed_apply_px(world_t, (int16_t)xs[i], (int16_t)ys[i], &wx, &wy);
-            viewer_aabb_include_point(&box, wx, wy, &initialized);
-        }
-    } else if (h == schema->h_polyline) {
-        Polyline *poly = (Polyline *)record_obj;
-        if (!poly->pts || !is_vector(poly->pts)) {
-            return false;
-        }
-        CljPersistentVector *pts = as_vector(poly->pts);
-        if (!pts) {
-            return false;
-        }
-        unsigned int point_count = vector_count(pts);
-        for (unsigned int i = 0; i < point_count; i++) {
-            ID pt = vector_nth(pts, i);
-            int px = 0;
-            int py = 0;
-            if (!viewer_fixnum_at(pt, 0u, &px) || !viewer_fixnum_at(pt, 1u, &py)) {
-                return false;
-            }
-            int wx = 0;
-            int wy = 0;
-            vg_transform_fixed_apply_px(world_t, (int16_t)px, (int16_t)py, &wx, &wy);
-            viewer_aabb_include_point(&box, wx, wy, &initialized);
-        }
-    } else {
-        return false;
-    }
-    if (!initialized) {
-        return false;
-    }
-    *out_box = box;
-    return true;
-}
-
 static ID viewer_slot_desc_field(ID slot_desc, ID key) {
     if (!slot_desc || !key) {
         return NULL;
@@ -458,31 +347,23 @@ static ID viewer_make_aabb_record(const VgAabb *box) {
     if (!box) {
         return NULL;
     }
-    static ID t_aabb = NULL;
-    static ID k_min_x = NULL;
-    static ID k_min_y = NULL;
-    static ID k_max_x = NULL;
-    static ID k_max_y = NULL;
-    if (!t_aabb) {
-        t_aabb = intern_symbol_global("Aabb");
-        k_min_x = intern_symbol_global(":min-x");
-        k_min_y = intern_symbol_global(":min-y");
-        k_max_x = intern_symbol_global(":max-x");
-        k_max_y = intern_symbol_global(":max-y");
+    static CljRecordDescriptor *desc = NULL;
+    if (!desc) {
+        desc = record_descriptor_lookup(intern_symbol_global("Aabb"));
     }
-    if (!t_aabb || !k_min_x || !k_min_y || !k_max_x || !k_max_y) {
+    if (!desc) {
         return NULL;
     }
-    CljPersistentMap *m = make_map(4, STRONG);
-    if (!m) {
+    CljPersistentVector *values = make_vector(4, STRONG);
+    if (!values) {
         return NULL;
     }
-    map_assoc_inplace(&m, k_min_x, fixnum(box->min_x));
-    map_assoc_inplace(&m, k_min_y, fixnum(box->min_y));
-    map_assoc_inplace(&m, k_max_x, fixnum(box->max_x));
-    map_assoc_inplace(&m, k_max_y, fixnum(box->max_y));
-    ID rec = (ID)record_create_from_map(t_aabb, (ID)m);
-    RELEASE(m);
+    vector_conj_inplace(&values, fixnum(box->min_x));
+    vector_conj_inplace(&values, fixnum(box->min_y));
+    vector_conj_inplace(&values, fixnum(box->max_x));
+    vector_conj_inplace(&values, fixnum(box->max_y));
+    ID rec = (ID)make_record_with_descriptor(desc, values);
+    RELEASE(values);
     return rec;
 }
 
@@ -496,39 +377,15 @@ static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
         bundle->game_slot_index >= bundle->slot_count || !phase || !a_box || !b_box) {
         return NULL;
     }
-    static ID t_spatial_event = NULL;
-    static ID k_source = NULL;
-    static ID k_rule_id = NULL;
-    static ID k_slot = NULL;
-    static ID k_kind = NULL;
-    static ID k_phase = NULL;
-    static ID k_snapshot_gen = NULL;
-    static ID k_a = NULL;
-    static ID k_b = NULL;
-    static ID k_a_aabb = NULL;
-    static ID k_b_aabb = NULL;
-    static ID k_radius = NULL;
-    static ID k_channel = NULL;
+    static CljRecordDescriptor *desc = NULL;
     static ID source_spatial = NULL;
-    if (!t_spatial_event) {
-        t_spatial_event = intern_symbol_global("SpatialEvent");
-        k_source = intern_symbol_global(":source");
-        k_rule_id = intern_symbol_global(":rule-id");
-        k_slot = intern_symbol_global(":slot");
-        k_kind = intern_symbol_global(":kind");
-        k_phase = intern_symbol_global(":phase");
-        k_snapshot_gen = intern_symbol_global(":snapshot-gen");
-        k_a = intern_symbol_global(":a");
-        k_b = intern_symbol_global(":b");
-        k_a_aabb = intern_symbol_global(":a-aabb");
-        k_b_aabb = intern_symbol_global(":b-aabb");
-        k_radius = intern_symbol_global(":radius");
-        k_channel = intern_symbol_global(":channel");
+    if (!desc) {
+        desc = record_descriptor_lookup(intern_symbol_global("SpatialEvent"));
+    }
+    if (!source_spatial) {
         source_spatial = intern_symbol_global(":spatial");
     }
-    if (!t_spatial_event || !k_source || !k_rule_id || !k_slot || !k_kind || !k_phase ||
-        !k_snapshot_gen || !k_a || !k_b || !k_a_aabb || !k_b_aabb ||
-        !k_radius || !k_channel || !source_spatial) {
+    if (!desc || !source_spatial) {
         return NULL;
     }
     ID root = bundle->game_scene->root;
@@ -547,30 +404,26 @@ static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
         RELEASE(b_aabb_rec);
         return NULL;
     }
-    CljPersistentMap *m = make_map(12, STRONG);
-    if (!m) {
+    CljPersistentVector *values = make_vector(12, STRONG);
+    if (!values) {
         RELEASE(a_aabb_rec);
         RELEASE(b_aabb_rec);
         return NULL;
     }
-    map_assoc_inplace(&m, k_source, source_spatial);
-    if (policy->rule_id) {
-        map_assoc_inplace(&m, k_rule_id, policy->rule_id);
-    }
-    map_assoc_inplace(&m, k_slot, bundle->slots[bundle->game_slot_index].id);
-    map_assoc_inplace(&m, k_kind, policy->kind);
-    map_assoc_inplace(&m, k_phase, phase);
-    map_assoc_inplace(&m, k_snapshot_gen, fixnum((int32_t)snapshot_gen));
-    map_assoc_inplace(&m, k_a, a_rec);
-    map_assoc_inplace(&m, k_b, b_rec);
-    map_assoc_inplace(&m, k_a_aabb, a_aabb_rec);
-    map_assoc_inplace(&m, k_b_aabb, b_aabb_rec);
-    map_assoc_inplace(&m, k_radius, fixnum(policy->radius_px));
-    if (policy->channel) {
-        map_assoc_inplace(&m, k_channel, policy->channel);
-    }
-    ID event_rec = (ID)record_create_from_map(t_spatial_event, (ID)m);
-    RELEASE(m);
+    vector_conj_inplace(&values, source_spatial);
+    vector_conj_inplace(&values, policy->rule_id);
+    vector_conj_inplace(&values, bundle->slots[bundle->game_slot_index].id);
+    vector_conj_inplace(&values, policy->kind);
+    vector_conj_inplace(&values, phase);
+    vector_conj_inplace(&values, fixnum((int32_t)snapshot_gen));
+    vector_conj_inplace(&values, a_rec);
+    vector_conj_inplace(&values, b_rec);
+    vector_conj_inplace(&values, a_aabb_rec);
+    vector_conj_inplace(&values, b_aabb_rec);
+    vector_conj_inplace(&values, fixnum(policy->radius_px));
+    vector_conj_inplace(&values, policy->channel);
+    ID event_rec = (ID)make_record_with_descriptor(desc, values);
+    RELEASE(values);
     RELEASE(a_aabb_rec);
     RELEASE(b_aabb_rec);
     return event_rec;
@@ -655,7 +508,7 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
     return true;
 }
 
-static bool viewer_load_host_viewer_config(EvalState *st,
+static bool viewer_load_game_demo_config(EvalState *st,
                                            ViewerSceneBundle *out_bundle,
                                            ViewerSpatialRuleSet *out_rule_set) {
     if (!st || !out_bundle || !out_rule_set) {
@@ -666,7 +519,7 @@ static bool viewer_load_host_viewer_config(EvalState *st,
     if (!require_namespace_by_name(st, "tiny-fx.gfx")) {
         return false;
     }
-    ID cfg = eval_string("(tiny-fx.gfx/host-viewer-config)", st);
+    ID cfg = eval_string("(tiny-fx.gfx/game-demo-config)", st);
     if (!cfg || !is_map(cfg)) {
         return false;
     }
@@ -1312,21 +1165,11 @@ static bool viewer_apply_collision_step(ViewerSceneBundle *bundle,
         if (!have_a || !have_b) {
             continue;
         }
-        ID root = bundle->game_scene->root;
-        if (!root || !is_map(root)) {
+        if (!a_state.has_world_aabb || !b_state.has_world_aabb) {
             continue;
         }
-        ID a_record = map_get_sentinel(root, fixnum(policy->a_entity_id), NULL);
-        ID b_record = map_get_sentinel(root, fixnum(policy->b_entity_id), NULL);
-        if (!a_record || !b_record) {
-            continue;
-        }
-        VgAabb a_box = {0};
-        VgAabb b_box = {0};
-        if (!viewer_record_world_aabb(a_record, a_state.world_t, &a_box) ||
-            !viewer_record_world_aabb(b_record, b_state.world_t, &b_box)) {
-            continue;
-        }
+        VgAabb a_box = a_state.world_aabb;
+        VgAabb b_box = b_state.world_aabb;
         VgAabb sense_box = a_box;
         sense_box.min_x -= policy->radius_px;
         sense_box.max_x += policy->radius_px;
@@ -1470,8 +1313,8 @@ int main(void) {
         fprintf(stderr, "Failed to initialize vector scene record schema via tiny-fx.gfx\n");
         goto cleanup;
     }
-    if (!viewer_load_host_viewer_config(viewer_eval_state, &demo_bundle, &spatial_rules)) {
-        fprintf(stderr, "Failed to load host-viewer config from tiny-fx.gfx/host-viewer-config\n");
+    if (!viewer_load_game_demo_config(viewer_eval_state, &demo_bundle, &spatial_rules)) {
+        fprintf(stderr, "Failed to load game-demo config from tiny-fx.gfx/game-demo-config\n");
         goto cleanup;
     }
     demo_bundle_initialized = true;
@@ -1500,7 +1343,7 @@ int main(void) {
 #endif
     const unsigned default_win_w = VIEW_W * VIEW_DEFAULT_WINDOW_SCALE;
     const unsigned default_win_h = VIEW_H * VIEW_DEFAULT_WINDOW_SCALE;
-    window = mfb_open_ex("tiny-clj host viewer", default_win_w, default_win_h, 0);
+    window = mfb_open_ex("tiny-clj game demo", default_win_w, default_win_h, 0);
     if (!window) {
         fprintf(stderr, "Failed to open MiniFB window\n");
         goto cleanup;
