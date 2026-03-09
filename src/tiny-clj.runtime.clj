@@ -17,11 +17,11 @@ Keys (always present):
 Optional:
 - :os-version (string, e.g. macOS \"14.2.1\", ESP-IDF \"v5.3.4\")
 - :gpio-event-drops (integer, count of dropped GPIO ISR events due to full ring buffer)
-- :audio-cmd-drop-count (integer, dropped audio commands due to full command queue)
-- :audio-tick-overrun-count (integer, ticks that hit bounded work limits)
-- :audio-queue-high-watermark (integer, max pending audio command queue depth)
-- :audio-sfx-drop-count (integer, dropped one-shot SFX triggers)
-- :audio-finished-drop-count (integer, dropped finished notifications due to full queue)
+- :sound-cmd-drop-count (integer, dropped sound commands due to full command queue)
+- :sound-tick-overrun-count (integer, ticks that hit bounded work limits)
+- :sound-queue-high-watermark (integer, max pending sound command queue depth)
+- :sound-sfx-drop-count (integer, dropped one-shot SFX triggers)
+- :sound-finished-drop-count (integer, dropped finished notifications due to full queue)
 
 Optional keys (only present when the platform provides the value):
 - :heap-bytes-free (integer, bytes)
@@ -45,12 +45,6 @@ Missing values are omitted (the key will not be present)."}
 (def print-stats
   (fn print-stats []
     (stats)))
-
-;; vector-scene-bench - Benchmark decode+render path for demo scenes.
-;; Returns a map with total-ms and us-per-frame metrics for deco/score/game scenes.
-;; Optional args: (vector-scene-bench iterations warmup)
-^#^{:doc "Benchmarks vector scene decode+render path and returns a metrics map. Usage: (vector-scene-bench) or (vector-scene-bench iterations warmup)."}
-(def vector-scene-bench (fn vector-scene-bench [& args] :native))
 
 ;; renderer lifecycle API (M9/9j)
 ;; start-renderer! returns true on successful start (or already running),

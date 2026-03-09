@@ -51,13 +51,19 @@ static const char tiny_clj_fs_code[] =
     ;
 
 #if TINYCLJ_WITH_TINY_FX
-static const char tiny_fx_audio_code[] =
-#include "tiny-fx.audio.clj"
+static const char tiny_fx_sound_code[] =
+#include "tiny-fx.sound.clj"
     ;
 
-static const char tiny_fx_audio_native_code[] =
-#include "tiny_audio_runtime.clj"
+static const char tiny_fx_sound_native_code[] =
+#include "tiny-fx.sound-native.clj"
     ;
+
+#ifdef DEBUG
+static const char tiny_fx_sound_debug_code[] =
+#include "tiny-fx.sound-debug.clj"
+    ;
+#endif
 #endif
 
 static const char tiny_clj_net_code[] =
@@ -73,9 +79,17 @@ static const char tiny_fx_gfx_scene_code[] =
 #include "tiny-gfx.scene.clj"
     ;
 
+#ifdef DEBUG
 static const char tiny_fx_gfx_collision_code[] =
 #include "tiny-gfx.collision.clj"
     ;
+#endif
+
+#ifdef DEBUG
+static const char tiny_fx_gfx_bench_code[] =
+#include "tiny-fx.gfx-bench.clj"
+    ;
+#endif
 
 static const char tiny_fx_gfx_code[] =
 #include "tiny-gfx.runtime.clj"
@@ -114,14 +128,22 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/runtime.clj", tiny_clj_runtime_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/fs.clj", tiny_clj_fs_code),
 #if TINYCLJ_WITH_TINY_FX
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/audio.clj", tiny_fx_audio_code),
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/audio-native.clj", tiny_fx_audio_native_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound.clj", tiny_fx_sound_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-native.clj", tiny_fx_sound_native_code),
+#ifdef DEBUG
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-debug.clj", tiny_fx_sound_debug_code),
+#endif
 #endif
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net.clj", tiny_clj_net_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net/mdns.clj", tiny_clj_net_mdns_code),
 #if TINYCLJ_WITH_TINY_FX
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-scene.clj", tiny_fx_gfx_scene_code),
+#ifdef DEBUG
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-collision.clj", tiny_fx_gfx_collision_code),
+#endif
+#ifdef DEBUG
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-bench.clj", tiny_fx_gfx_bench_code),
+#endif
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx.clj", tiny_fx_gfx_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/game-demo.clj", tiny_fx_game_demo_code),
 #endif

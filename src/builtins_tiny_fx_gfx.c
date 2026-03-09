@@ -490,6 +490,7 @@ void builtins_tiny_fx_gfx_reset_cached_state(void) {
     g_kw_permille = NULL;
 }
 
+#ifdef DEBUG
 /**
  * @brief Benchmark decode plus render of the current Clojure demo scenes.
  *
@@ -500,13 +501,13 @@ void builtins_tiny_fx_gfx_reset_cached_state(void) {
  * @param argc Number of arguments
  * @return Metrics map on success, or `NULL` after throwing an exception
  */
-ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
-    CHECK_ARITY_MAX(argc, 2, "tiny-clj.runtime/vector-scene-bench");
+ID native_tinyfx_gfx_bench_vector_scene_bench(ID *args, unsigned int argc) {
+    CHECK_ARITY_MAX(argc, 2, "tiny-fx.gfx-bench/vector-scene-bench");
 
     EvalState *st = builtin_get_eval_state();
     if (!st) {
         throw_exception(EXCEPTION_RUNTIME,
-                        "tiny-clj.runtime/vector-scene-bench: EvalState not available",
+                        "tiny-fx.gfx-bench/vector-scene-bench: EvalState not available",
                         __FILE__,
                         __LINE__,
                         0);
@@ -517,7 +518,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
     uint32_t warmup = 40u;
     if (argc >= 1 && !tinyclj_scene_bench_parse_u32_arg(args[0], iterations, &iterations)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "tiny-clj.runtime/vector-scene-bench iterations must be a positive integer",
+                        "tiny-fx.gfx-bench/vector-scene-bench iterations must be a positive integer",
                         __FILE__,
                         __LINE__,
                         0);
@@ -525,7 +526,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
     }
     if (argc >= 2 && !tinyclj_scene_bench_parse_u32_arg(args[1], warmup, &warmup)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                        "tiny-clj.runtime/vector-scene-bench warmup must be a positive integer",
+                        "tiny-fx.gfx-bench/vector-scene-bench warmup must be a positive integer",
                         __FILE__,
                         __LINE__,
                         0);
@@ -534,7 +535,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
 
     if (!tiny_fx_gfx_ensure_schema(st) || !require_namespace_by_name(st, "tiny-fx.game-demo")) {
         throw_exception(EXCEPTION_RUNTIME,
-                        "tiny-clj.runtime/vector-scene-bench failed to initialize tiny-fx scene schema",
+                        "tiny-fx.gfx-bench/vector-scene-bench failed to initialize tiny-fx scene schema",
                         __FILE__,
                         __LINE__,
                         0);
@@ -544,7 +545,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
     ID bundle = eval_string("(tiny-fx.game-demo/create-demo-bundle)", st);
     if (!bundle || !is_vector(bundle)) {
         throw_exception(EXCEPTION_RUNTIME,
-                        "tiny-clj.runtime/vector-scene-bench failed to build demo scene bundle",
+                        "tiny-fx.gfx-bench/vector-scene-bench failed to build demo scene bundle",
                         __FILE__,
                         __LINE__,
                         0);
@@ -554,7 +555,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
     CljPersistentVector *vec = as_vector(bundle);
     if (!vec || vector_count(vec) < 3) {
         throw_exception(EXCEPTION_RUNTIME,
-                        "tiny-clj.runtime/vector-scene-bench demo bundle shape mismatch",
+                        "tiny-fx.gfx-bench/vector-scene-bench demo bundle shape mismatch",
                         __FILE__,
                         __LINE__,
                         0);
@@ -566,7 +567,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
     ID game_scene = vector_nth(vec, 2);
     if (!deco_scene || !score_scene || !game_scene) {
         throw_exception(EXCEPTION_RUNTIME,
-                        "tiny-clj.runtime/vector-scene-bench demo scenes are missing",
+                        "tiny-fx.gfx-bench/vector-scene-bench demo scenes are missing",
                         __FILE__,
                         __LINE__,
                         0);
@@ -576,7 +577,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
     uint16_t *pixels = (uint16_t *)CLJ_MALLOC(TINYCLJ_SCENE_BENCH_PIXEL_COUNT * sizeof(uint16_t));
     if (!pixels) {
         throw_exception(EXCEPTION_RUNTIME,
-                        "tiny-clj.runtime/vector-scene-bench failed to allocate framebuffer",
+                        "tiny-fx.gfx-bench/vector-scene-bench failed to allocate framebuffer",
                         __FILE__,
                         __LINE__,
                         0);
@@ -591,7 +592,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
                              TINYCLJ_SCENE_BENCH_PIXEL_COUNT)) {
         CLJ_FREE(pixels);
         throw_exception(EXCEPTION_RUNTIME,
-                        "tiny-clj.runtime/vector-scene-bench framebuffer init failed",
+                        "tiny-fx.gfx-bench/vector-scene-bench framebuffer init failed",
                         __FILE__,
                         __LINE__,
                         0);
@@ -608,7 +609,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
     CLJ_FREE(pixels);
     if (!ok) {
         throw_exception(EXCEPTION_RUNTIME,
-                        "tiny-clj.runtime/vector-scene-bench render failed",
+                        "tiny-fx.gfx-bench/vector-scene-bench render failed",
                         __FILE__,
                         __LINE__,
                         0);
@@ -623,7 +624,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
 
     if (!tinyclj_runtime_intern_common_keywords()) {
         throw_exception(EXCEPTION_RUNTIME,
-                        "tiny-clj.runtime/vector-scene-bench failed to intern keyword cache",
+                        "tiny-fx.gfx-bench/vector-scene-bench failed to intern keyword cache",
                         __FILE__,
                         __LINE__,
                         0);
@@ -651,6 +652,7 @@ ID native_tinyclj_runtime_vector_scene_bench(ID *args, unsigned int argc) {
     RELEASE(platform_str);
     return AUTORELEASE(result);
 }
+#endif
 
 /**
  * @brief Register current renderer slot descriptors and start the host renderer.

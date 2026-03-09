@@ -408,16 +408,16 @@ extern StaticSymbolData sym_slurp_data;
 extern StaticSymbolData sym_spit_data;
 
 // Audio symbols
-extern StaticSymbolData sym_audio_load_track_data;
-extern StaticSymbolData sym_audio_unload_track_data;
-extern StaticSymbolData sym_audio_play_music_data;
-extern StaticSymbolData sym_audio_stop_track_data;
-extern StaticSymbolData sym_audio_stop_music_data;
-extern StaticSymbolData sym_audio_play_sfx_data;
-extern StaticSymbolData sym_audio_stop_all_data;
-extern StaticSymbolData sym_audio_set_track_volume_data;
-extern StaticSymbolData sym_audio_set_music_volume_data;
-extern StaticSymbolData sym_audio_on_finished_data;
+extern StaticSymbolData sym_sound_load_track_data;
+extern StaticSymbolData sym_sound_unload_track_data;
+extern StaticSymbolData sym_sound_play_music_data;
+extern StaticSymbolData sym_sound_stop_track_data;
+extern StaticSymbolData sym_sound_stop_music_data;
+extern StaticSymbolData sym_sound_play_sfx_data;
+extern StaticSymbolData sym_sound_stop_all_data;
+extern StaticSymbolData sym_sound_set_track_volume_data;
+extern StaticSymbolData sym_sound_set_music_volume_data;
+extern StaticSymbolData sym_sound_on_finished_data;
 
 // Extended Symbol for Special Forms with embedded evaluation function
 typedef struct CljSpecialSymbol {

@@ -36,7 +36,7 @@
 #include "file_utils.h"
 #include "to_string.h"
 #include "event_loop.h"
-#include "audio_engine.h"
+#include "sound_engine.h"
 #include "reader.h"
 #include "parser.h"
 #include "ast.h"
@@ -52,7 +52,7 @@
 #include "datetime_utc.h"
 #include "platform.h"
 #include "tiny_fx_gfx.h"
-#include "builtins_tiny_fx_sound.h"
+#include "builtins_sound.h"
 #include "builtins_tiny_fx_gfx.h"
 #if defined(ESP32_BUILD)
 #include "gpio_esp32.h"
@@ -62,79 +62,6 @@
 #define TINYCLJ_WITH_TINY_FX 1
 #endif
 
-#if !TINYCLJ_WITH_TINY_FX
-static ID tinyclj_tiny_fx_disabled_error(const char *fn_name) {
-  throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                            "tiny-fx is disabled; %s is unavailable", fn_name ? fn_name : "feature");
-  return NULL;
-}
-
-ID native_audio_load_track(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  return tinyclj_tiny_fx_disabled_error("audio-load-track!");
-}
-ID native_audio_unload_track(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  return tinyclj_tiny_fx_disabled_error("audio-unload-track!");
-}
-ID native_audio_play_music(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  return tinyclj_tiny_fx_disabled_error("audio-play-music!");
-}
-ID native_audio_stop_track(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  return tinyclj_tiny_fx_disabled_error("audio-stop-track!");
-}
-ID native_audio_stop_music(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  return tinyclj_tiny_fx_disabled_error("audio-stop-music!");
-}
-ID native_audio_play_sfx(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  return tinyclj_tiny_fx_disabled_error("audio-play-sfx!");
-}
-ID native_audio_stop_all(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  return tinyclj_tiny_fx_disabled_error("audio-stop-all!");
-}
-ID native_audio_set_track_volume(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  return tinyclj_tiny_fx_disabled_error("audio-set-track-volume!");
-}
-ID native_audio_set_music_volume(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  return tinyclj_tiny_fx_disabled_error("audio-set-music-volume!");
-}
-ID native_audio_on_finished(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  return tinyclj_tiny_fx_disabled_error("audio-on-finished!");
-}
-ID native_audio_play_test_tone(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  return tinyclj_tiny_fx_disabled_error("audio-play-test-tone!");
-}
-ID native_audio_host_status(ID *args, unsigned int argc) {
-  (void)args;
-  (void)argc;
-  CljPersistentMap *m = make_map(1);
-  ID k_supported = intern_symbol_global(":supported");
-  if (m && k_supported) {
-    map_assoc_inplace(&m, k_supported, clj_false);
-  }
-  return AUTORELEASE(m);
-}
-#endif
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -4107,11 +4034,13 @@ static StaticSymbolData sym_tinyclj_runtime_stats_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-clj.runtime/stats"}};
-static StaticSymbolData sym_tinyclj_runtime_vector_scene_bench_qualified_data = {
+#ifdef DEBUG
+static StaticSymbolData sym_tinyfx_gfx_bench_vector_scene_bench_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
             .unqualified = NULL,
-            .cname = "tiny-clj.runtime/vector-scene-bench"}};
+            .cname = "tiny-fx.gfx-bench/vector-scene-bench"}};
+#endif
 static StaticSymbolData sym_tinyclj_runtime_start_renderer_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -4308,9 +4237,11 @@ static const NativeFunctionEntry native_function_table[] = {
     // libs' :native stubs (pseudo-qualified cname entries)
     NATIVE_ENTRY(&sym_clojure_pprint_pprint_str_qualified_data.sym, native_clojure_pprint_pprint_str),
     NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_stats_qualified_data.sym, native_tinyclj_runtime_stats, "tiny-clj.runtime/stats"),
-    NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_vector_scene_bench_qualified_data.sym,
-                      native_tinyclj_runtime_vector_scene_bench,
-                      "tiny-clj.runtime/vector-scene-bench"),
+#ifdef DEBUG
+    NATIVE_ENTRY_BOOT(&sym_tinyfx_gfx_bench_vector_scene_bench_qualified_data.sym,
+                      native_tinyfx_gfx_bench_vector_scene_bench,
+                      "tiny-fx.gfx-bench/vector-scene-bench"),
+#endif
     NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_start_renderer_qualified_data.sym,
                       native_tinyclj_runtime_start_renderer,
                       "tiny-clj.runtime/start-renderer!"),
@@ -4483,16 +4414,16 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_slurp_data.sym, native_slurp),
     NATIVE_ENTRY(&sym_spit_data.sym, native_spit),
     // Audio builtins
-    NATIVE_ENTRY(&sym_audio_load_track_data.sym, native_audio_load_track),
-    NATIVE_ENTRY(&sym_audio_unload_track_data.sym, native_audio_unload_track),
-    NATIVE_ENTRY(&sym_audio_play_music_data.sym, native_audio_play_music),
-    NATIVE_ENTRY(&sym_audio_stop_track_data.sym, native_audio_stop_track),
-    NATIVE_ENTRY(&sym_audio_stop_music_data.sym, native_audio_stop_music),
-    NATIVE_ENTRY(&sym_audio_play_sfx_data.sym, native_audio_play_sfx),
-    NATIVE_ENTRY(&sym_audio_stop_all_data.sym, native_audio_stop_all),
-    NATIVE_ENTRY(&sym_audio_set_track_volume_data.sym, native_audio_set_track_volume),
-    NATIVE_ENTRY(&sym_audio_set_music_volume_data.sym, native_audio_set_music_volume),
-    NATIVE_ENTRY(&sym_audio_on_finished_data.sym, native_audio_on_finished),
+    NATIVE_ENTRY(&sym_sound_load_track_data.sym, native_sound_load_track),
+    NATIVE_ENTRY(&sym_sound_unload_track_data.sym, native_sound_unload_track),
+    NATIVE_ENTRY(&sym_sound_play_music_data.sym, native_sound_play_music),
+    NATIVE_ENTRY(&sym_sound_stop_track_data.sym, native_sound_stop_track),
+    NATIVE_ENTRY(&sym_sound_stop_music_data.sym, native_sound_stop_music),
+    NATIVE_ENTRY(&sym_sound_play_sfx_data.sym, native_sound_play_sfx),
+    NATIVE_ENTRY(&sym_sound_stop_all_data.sym, native_sound_stop_all),
+    NATIVE_ENTRY(&sym_sound_set_track_volume_data.sym, native_sound_set_track_volume),
+    NATIVE_ENTRY(&sym_sound_set_music_volume_data.sym, native_sound_set_music_volume),
+    NATIVE_ENTRY(&sym_sound_on_finished_data.sym, native_sound_on_finished),
 #ifdef DEBUG
     NATIVE_ENTRY_BOOT(&sym_ast_string_data.sym, native_ast_string, "tiny-clj.runtime/ast-string"),
 #endif
@@ -6347,7 +6278,9 @@ bool builtin_native_fn_needs_eval_state(BuiltinFn fn) {
          fn == native_require ||
          fn == native_eval ||
          fn == native_read_string ||
-         fn == native_tinyclj_runtime_vector_scene_bench ||
+#ifdef DEBUG
+         fn == native_tinyfx_gfx_bench_vector_scene_bench ||
+#endif
          fn == native_keyword;
 }
 
@@ -7235,42 +7168,42 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
 
   {
 #if TINYCLJ_WITH_TINY_FX
-    CljSymbol *k_audio_cmd_drop_count = intern_symbol_global(":audio-cmd-drop-count");
-    CljSymbol *k_audio_tick_overrun_count = intern_symbol_global(":audio-tick-overrun-count");
-    CljSymbol *k_audio_queue_high_watermark = intern_symbol_global(":audio-queue-high-watermark");
-    CljSymbol *k_audio_sfx_drop_count = intern_symbol_global(":audio-sfx-drop-count");
-    CljSymbol *k_audio_finished_drop_count = intern_symbol_global(":audio-finished-drop-count");
+    CljSymbol *k_sound_cmd_drop_count = intern_symbol_global(":sound-cmd-drop-count");
+    CljSymbol *k_sound_tick_overrun_count = intern_symbol_global(":sound-tick-overrun-count");
+    CljSymbol *k_sound_queue_high_watermark = intern_symbol_global(":sound-queue-high-watermark");
+    CljSymbol *k_sound_sfx_drop_count = intern_symbol_global(":sound-sfx-drop-count");
+    CljSymbol *k_sound_finished_drop_count = intern_symbol_global(":sound-finished-drop-count");
 
-    int32_t cmd_drops = (g_audio_engine.telemetry.cmd_drop_count > (uint32_t)FIXNUM_MAX)
+    int32_t cmd_drops = (g_sound_engine.telemetry.cmd_drop_count > (uint32_t)FIXNUM_MAX)
                             ? (int32_t)FIXNUM_MAX
-                            : (int32_t)g_audio_engine.telemetry.cmd_drop_count;
-    int32_t overruns = (g_audio_engine.telemetry.tick_overrun_count > (uint32_t)FIXNUM_MAX)
+                            : (int32_t)g_sound_engine.telemetry.cmd_drop_count;
+    int32_t overruns = (g_sound_engine.telemetry.tick_overrun_count > (uint32_t)FIXNUM_MAX)
                            ? (int32_t)FIXNUM_MAX
-                           : (int32_t)g_audio_engine.telemetry.tick_overrun_count;
-    int32_t queue_high_watermark = (g_audio_engine.telemetry.queue_high_watermark > (uint32_t)FIXNUM_MAX)
+                           : (int32_t)g_sound_engine.telemetry.tick_overrun_count;
+    int32_t queue_high_watermark = (g_sound_engine.telemetry.queue_high_watermark > (uint32_t)FIXNUM_MAX)
                                        ? (int32_t)FIXNUM_MAX
-                                       : (int32_t)g_audio_engine.telemetry.queue_high_watermark;
-    int32_t sfx_drops = (g_audio_engine.telemetry.sfx_drop_count > (uint32_t)FIXNUM_MAX)
+                                       : (int32_t)g_sound_engine.telemetry.queue_high_watermark;
+    int32_t sfx_drops = (g_sound_engine.telemetry.sfx_drop_count > (uint32_t)FIXNUM_MAX)
                             ? (int32_t)FIXNUM_MAX
-                            : (int32_t)g_audio_engine.telemetry.sfx_drop_count;
-    int32_t finished_drops = (g_audio_engine.telemetry.finished_drop_count > (uint32_t)FIXNUM_MAX)
+                            : (int32_t)g_sound_engine.telemetry.sfx_drop_count;
+    int32_t finished_drops = (g_sound_engine.telemetry.finished_drop_count > (uint32_t)FIXNUM_MAX)
                                  ? (int32_t)FIXNUM_MAX
-                                 : (int32_t)g_audio_engine.telemetry.finished_drop_count;
+                                 : (int32_t)g_sound_engine.telemetry.finished_drop_count;
 
-    if (k_audio_cmd_drop_count) {
-      MAP_REASSIGN(m, map_assoc(m, k_audio_cmd_drop_count, fixnum(cmd_drops)));
+    if (k_sound_cmd_drop_count) {
+      MAP_REASSIGN(m, map_assoc(m, k_sound_cmd_drop_count, fixnum(cmd_drops)));
     }
-    if (k_audio_tick_overrun_count) {
-      MAP_REASSIGN(m, map_assoc(m, k_audio_tick_overrun_count, fixnum(overruns)));
+    if (k_sound_tick_overrun_count) {
+      MAP_REASSIGN(m, map_assoc(m, k_sound_tick_overrun_count, fixnum(overruns)));
     }
-    if (k_audio_queue_high_watermark) {
-      MAP_REASSIGN(m, map_assoc(m, k_audio_queue_high_watermark, fixnum(queue_high_watermark)));
+    if (k_sound_queue_high_watermark) {
+      MAP_REASSIGN(m, map_assoc(m, k_sound_queue_high_watermark, fixnum(queue_high_watermark)));
     }
-    if (k_audio_sfx_drop_count) {
-      MAP_REASSIGN(m, map_assoc(m, k_audio_sfx_drop_count, fixnum(sfx_drops)));
+    if (k_sound_sfx_drop_count) {
+      MAP_REASSIGN(m, map_assoc(m, k_sound_sfx_drop_count, fixnum(sfx_drops)));
     }
-    if (k_audio_finished_drop_count) {
-      MAP_REASSIGN(m, map_assoc(m, k_audio_finished_drop_count, fixnum(finished_drops)));
+    if (k_sound_finished_drop_count) {
+      MAP_REASSIGN(m, map_assoc(m, k_sound_finished_drop_count, fixnum(finished_drops)));
     }
 #endif
   }
@@ -7781,9 +7714,30 @@ ID native_do(ID *args, unsigned int argc) {
 // REGEX FUNCTIONS - moved to builtins_regex.c
 // ============================================================================
 
+static bool register_builtin_namespace_allowed(const char *cname, size_t ns_len) {
+  if (!cname) {
+    return false;
+  }
+  if (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0) {
+    return true;
+  }
+  if (builtins_sound_namespace_allowed(cname, ns_len)) {
+    return true;
+  }
+#ifdef DEBUG
+  if (ns_len == strlen("tiny-fx.gfx-bench") &&
+      strncmp(cname, "tiny-fx.gfx-bench", strlen("tiny-fx.gfx-bench")) == 0) {
+    return true;
+  }
+#endif
+  return false;
+}
+
 // Register a native builtin function.
 // - Unqualified symbols (e.g. "count") → registered in clojure.core
 // - Qualified clojure.* symbols (e.g. "clojure.repl/source") → registered in their namespace
+// - Curated tiny-fx native namespaces (`tiny-fx.sound-native` plus DEBUG-only
+//   `tiny-fx.sound-debug` / `tiny-fx.gfx-bench`) are also registered directly.
 // - Other qualified symbols (e.g. "tiny-clj.runtime/stats") → NOT registered here;
 //   they remain in native_function_table only and require explicit (require 'ns)
 //   followed by (defn ... :native) to become available (Clojure-compatible behavior).
@@ -7797,11 +7751,9 @@ static void register_builtin(const char *cname, BuiltinFn func) {
     // Qualified symbol: split into namespace and name
     size_t ns_len = slash - cname;
 
-    // Auto-register clojure.* and tiny-fx.audio-native (audio API) namespaces.
+    // Auto-register curated native namespaces only.
     // Other namespaces must use (require 'ns) first, then (defn ... :native).
-    bool allow = (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0) ||
-                 (ns_len == strlen("tiny-fx.audio-native") &&
-                  strncmp(cname, "tiny-fx.audio-native", strlen("tiny-fx.audio-native")) == 0);
+    bool allow = register_builtin_namespace_allowed(cname, ns_len);
     if (!allow)
       return;
 
@@ -7886,21 +7838,7 @@ void register_builtins() {
       register_builtin(entry->register_cname, entry->native_func);
     }
 
-    // Audio builtins (Runtime API in tiny-fx.audio-native per plan)
-#if TINYCLJ_WITH_TINY_FX
-    register_builtin("tiny-fx.audio-native/audio-load-track!", native_audio_load_track);
-    register_builtin("tiny-fx.audio-native/audio-unload-track!", native_audio_unload_track);
-    register_builtin("tiny-fx.audio-native/audio-play-music!", native_audio_play_music);
-    register_builtin("tiny-fx.audio-native/audio-stop-track!", native_audio_stop_track);
-    register_builtin("tiny-fx.audio-native/audio-stop-music!", native_audio_stop_music);
-    register_builtin("tiny-fx.audio-native/audio-play-sfx!", native_audio_play_sfx);
-    register_builtin("tiny-fx.audio-native/audio-stop-all!", native_audio_stop_all);
-    register_builtin("tiny-fx.audio-native/audio-set-track-volume!", native_audio_set_track_volume);
-    register_builtin("tiny-fx.audio-native/audio-set-music-volume!", native_audio_set_music_volume);
-    register_builtin("tiny-fx.audio-native/audio-on-finished!", native_audio_on_finished);
-    register_builtin("tiny-fx.audio-native/audio-play-test-tone!", native_audio_play_test_tone);
-    register_builtin("tiny-fx.audio-native/audio-host-status!", native_audio_host_status);
-#endif
+    builtins_sound_register(register_builtin);
 
     // Prime cached thunk functions during setup so tests/runtime do not pay
     // one-time cached_named_func allocations inside per-call heap assertions.

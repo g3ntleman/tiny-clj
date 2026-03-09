@@ -1,5 +1,5 @@
 /**
- * @brief Generic deadline-based scheduler for audio engine ticks.
+ * @brief Generic deadline-based scheduler for sound engine ticks.
  *
  * The scheduler is platform-neutral: callers provide the current monotonic
  * time in nanoseconds and the backend decides how to sleep or wake. When the
@@ -7,7 +7,7 @@
  * and reports how many overdue ticks were skipped beyond the catch-up limit.
  */
 
-#include "audio_tick_scheduler.h"
+#include "sound_tick_scheduler.h"
 
 /**
  * @brief Initialize the shared tick scheduler state.
@@ -16,7 +16,7 @@
  * @param tick_period_ns Tick period in nanoseconds, defaults to 1 ms when zero
  * @param max_catchup_ticks Maximum ticks to emit in one wakeup, defaults to 1
  */
-void audio_tick_scheduler_init(AudioTickScheduler *scheduler, uint64_t tick_period_ns, uint32_t max_catchup_ticks) {
+void sound_tick_scheduler_init(SoundTickScheduler *scheduler, uint64_t tick_period_ns, uint32_t max_catchup_ticks) {
     if (!scheduler) {
         return;
     }
@@ -32,7 +32,7 @@ void audio_tick_scheduler_init(AudioTickScheduler *scheduler, uint64_t tick_peri
  * @param scheduler Scheduler state
  * @param now_ns Current monotonic time in nanoseconds
  */
-void audio_tick_scheduler_start(AudioTickScheduler *scheduler, uint64_t now_ns) {
+void sound_tick_scheduler_start(SoundTickScheduler *scheduler, uint64_t now_ns) {
     if (!scheduler) {
         return;
     }
@@ -45,7 +45,7 @@ void audio_tick_scheduler_start(AudioTickScheduler *scheduler, uint64_t now_ns) 
  *
  * @param scheduler Scheduler state
  */
-void audio_tick_scheduler_stop(AudioTickScheduler *scheduler) {
+void sound_tick_scheduler_stop(SoundTickScheduler *scheduler) {
     if (!scheduler) {
         return;
     }
@@ -64,7 +64,7 @@ void audio_tick_scheduler_stop(AudioTickScheduler *scheduler) {
  * @param out_skipped_ticks Optional overflow counter for missed ticks
  * @return Number of ticks the caller should process now
  */
-uint32_t audio_tick_scheduler_ticks_due(AudioTickScheduler *scheduler, uint64_t now_ns, uint32_t *out_skipped_ticks) {
+uint32_t sound_tick_scheduler_ticks_due(SoundTickScheduler *scheduler, uint64_t now_ns, uint32_t *out_skipped_ticks) {
     if (out_skipped_ticks) {
         *out_skipped_ticks = 0u;
     }

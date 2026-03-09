@@ -135,7 +135,7 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
     if (!st) {
         return false;
     }
-    if (!require_namespace_by_name(st, "tiny-fx.gfx")) {
+    if (!require_namespace_by_name(st, "tiny-fx.gfx-scene")) {
         return false;
     }
     if (g_record_schema_initialized) return true;

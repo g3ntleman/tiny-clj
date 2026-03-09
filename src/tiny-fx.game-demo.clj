@@ -2,8 +2,7 @@ R"TINY_GFX_HOST(
 (ns tiny-fx.game-demo
   (:require [tiny-fx.gfx-scene :refer [->Transform ->Style ->Group ->Polyline
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
-            [tiny-fx.gfx-collision :as collision]
-            [tiny-fx.audio :as sound]))
+            [tiny-fx.sound :as sound]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
@@ -244,41 +243,40 @@ R"TINY_GFX_HOST(
 (def melody-input-pin 1)
 (def demo-melody-track-id :game-demo-melody)
 (def demo-melody-steps
-  [{:melody :G5 :backing [:D4] :dur :s}
-   {:melody :Bb5 :backing [:F4] :dur :s}
-   {:melody :D6 :backing [:G4] :dur :e}])
+  [{:melody :G5 :backing [:D4] :duration :s}
+   {:melody :Bb5 :backing [:F4] :duration :s}
+   {:melody :D6 :backing [:G4] :duration :e}])
 (def demo-melody-opts
-  {:channel-count 2
-   :melody-vol 220
-   :backing-volumes [132]
+  {:melody {:volume 220}
+   :backing {:volume 132}
    :tempo-bpm 168
    :gate-percent 78})
 
 ;; Piezo-friendly Star Wars title phrases used by the host/ESP demo.
 (def starwars-title-steps
   [{:rest :t}
-   {:melody :G5 :backing [:D4] :dur :q}
-   {:melody :G5 :backing [:D4] :dur :q}
-   {:melody :G5 :backing [:D4] :dur :q}
-   {:melody :Eb5 :backing [:C4] :dur :de}
-   {:melody :Bb5 :backing [:F4] :dur :s}
-   {:melody :G5 :backing [:D4] :dur :q}
+   {:melody :G5 :backing [:D4] :duration :q}
+   {:melody :G5 :backing [:D4] :duration :q}
+   {:melody :G5 :backing [:D4] :duration :q}
+   {:melody :Eb5 :backing [:C4] :duration :de}
+   {:melody :Bb5 :backing [:F4] :duration :s}
+   {:melody :G5 :backing [:D4] :duration :q}
 
-   {:melody :Eb5 :backing [:C4] :dur :de}
-   {:melody :Bb5 :backing [:F4] :dur :s}
-   {:melody :G5 :backing [:D4] :dur :q}
+   {:melody :Eb5 :backing [:C4] :duration :de}
+   {:melody :Bb5 :backing [:F4] :duration :s}
+   {:melody :G5 :backing [:D4] :duration :q}
    {:rest :e}
 
-   {:melody :D6 :backing [:A4] :dur :q}
-   {:melody :D6 :backing [:A4] :dur :q}
-   {:melody :D6 :backing [:A4] :dur :q}
-   {:melody :Eb6 :backing [:Bb4] :dur :de}
-   {:melody :Bb5 :backing [:F4] :dur :s}
-   {:melody :Gb5 :backing [:Db4] :dur :q}
+   {:melody :D6 :backing [:A4] :duration :q}
+   {:melody :D6 :backing [:A4] :duration :q}
+   {:melody :D6 :backing [:A4] :duration :q}
+   {:melody :Eb6 :backing [:Bb4] :duration :de}
+   {:melody :Bb5 :backing [:F4] :duration :s}
+   {:melody :Gb5 :backing [:Db4] :duration :q}
 
-   {:melody :Eb5 :backing [:C4] :dur :de}
-   {:melody :Bb5 :backing [:F4] :dur :s}
-   {:melody :G5 :backing [:D4] :dur :q}
+   {:melody :Eb5 :backing [:C4] :duration :de}
+   {:melody :Bb5 :backing [:F4] :duration :s}
+   {:melody :G5 :backing [:D4] :duration :q}
    {:rest :s}])
 
 (def player-small-state (atom false))
@@ -297,9 +295,8 @@ R"TINY_GFX_HOST(
   "Convenience demo for host/ESP playback."
   []
   (sound/play-steps! :starwars-title-2v starwars-title-steps
-                     {:channel-count 2
-                      :melody-vol 220
-                      :backing-volumes [195]
+                     {:melody {:volume 220}
+                      :backing {:volume 195}
                       :tempo-bpm 100
                       :gate-percent 78}))
 
@@ -308,6 +305,14 @@ R"TINY_GFX_HOST(
 and game-demo startup."
   []
   slot-descriptor-list)
+
+(defn game-demo-config
+  "Builds and returns native startup config for the game demo."
+  []
+  (create-demo-bundle)
+  {:slots (slot-descriptors)
+   :spatial-callback on-player-collision-toggle!
+   :game-scene-atom game-scene-state})
 
 (defn- make-player-tri
   [id style t]
@@ -348,11 +353,6 @@ Returns nil; host-side callback dispatch ignores return values."
         (when game-scene
           (reset! game-scene-state (apply-player-scale game-scene next-state)))))
     nil))
-
-(defn configure-collision-toggle-callback!
-  "Configures the collision response callback used by the game demo."
-  []
-  (collision/set-collision-callback! on-player-collision-toggle!))
 
 (defn on-demo-gpio-input!
   "Game-demo GPIO callback: a rising edge on the demo input pin triggers
@@ -463,7 +463,6 @@ Index layout:
     (reset! score-scene-state score-scene-template)
     (reset! game-scene-state game-scene)
     (reset! demo-melody-trigger-count* 0)
-    (configure-collision-toggle-callback!)
     (configure-demo-input-watchers!)
     demo-bundle))
 

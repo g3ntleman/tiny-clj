@@ -522,16 +522,16 @@ DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
 DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
 
 // Audio symbols
-DEFINE_EXTERN_SYMBOL(sym_audio_load_track_data, "audio-load-track!");
-DEFINE_EXTERN_SYMBOL(sym_audio_unload_track_data, "audio-unload-track!");
-DEFINE_EXTERN_SYMBOL(sym_audio_play_music_data, "audio-play-music!");
-DEFINE_EXTERN_SYMBOL(sym_audio_stop_track_data, "audio-stop-track!");
-DEFINE_EXTERN_SYMBOL(sym_audio_stop_music_data, "audio-stop-music!");
-DEFINE_EXTERN_SYMBOL(sym_audio_play_sfx_data, "audio-play-sfx!");
-DEFINE_EXTERN_SYMBOL(sym_audio_stop_all_data, "audio-stop-all!");
-DEFINE_EXTERN_SYMBOL(sym_audio_set_track_volume_data, "audio-set-track-volume!");
-DEFINE_EXTERN_SYMBOL(sym_audio_set_music_volume_data, "audio-set-music-volume!");
-DEFINE_EXTERN_SYMBOL(sym_audio_on_finished_data, "audio-on-finished!");
+DEFINE_EXTERN_SYMBOL(sym_sound_load_track_data, "sound-load-track!");
+DEFINE_EXTERN_SYMBOL(sym_sound_unload_track_data, "sound-unload-track!");
+DEFINE_EXTERN_SYMBOL(sym_sound_play_music_data, "sound-play-music!");
+DEFINE_EXTERN_SYMBOL(sym_sound_stop_track_data, "sound-stop-track!");
+DEFINE_EXTERN_SYMBOL(sym_sound_stop_music_data, "sound-stop-music!");
+DEFINE_EXTERN_SYMBOL(sym_sound_play_sfx_data, "sound-play-sfx!");
+DEFINE_EXTERN_SYMBOL(sym_sound_stop_all_data, "sound-stop-all!");
+DEFINE_EXTERN_SYMBOL(sym_sound_set_track_volume_data, "sound-set-track-volume!");
+DEFINE_EXTERN_SYMBOL(sym_sound_set_music_volume_data, "sound-set-music-volume!");
+DEFINE_EXTERN_SYMBOL(sym_sound_on_finished_data, "sound-on-finished!");
 
 // Static symbol structs for keywords (compile-time initialization)
 DEFINE_STATIC_SYMBOL(sym_kw_line_data, ":line");

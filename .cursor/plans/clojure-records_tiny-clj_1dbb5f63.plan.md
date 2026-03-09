@@ -14,7 +14,7 @@ todos:
   - id: hot-path-pilot
     content: Pilotmigration eines echten Hot-Path-Datentyps (zuerst Task/Timer-nah), danach Vergleich zu bestehender Map-Variante.
     status: pending
-  - id: audio-note-assessment
+  - id: sound-note-assessment
     content: Notenformat API map-basiert lassen, optional interne Step-Normalisierung auf kompaktes internes Format im compile-track-Pfad prototypen.
     status: pending
   - id: tests-bench-memory
@@ -36,7 +36,7 @@ isProject: false
 - Lineare Map-Lookups passieren über `map_get_sentinel` in [subjective-c/src/map.c](/Users/theisen/Projects/tiny-clj/subjective-c/src/map.c).
 - Ein vorhandenes O(1)-Muster (Indexzugriff auf definierte Felder) existiert bereits in [src/event_loop.c](/Users/theisen/Projects/tiny-clj/src/event_loop.c) (`TIMER_TASK_IDX`_* + `KV_VALUE(...)`).
 - Parser kennt Tagged Literals nur für `#uuid`/`#inst` in [src/parser.c](/Users/theisen/Projects/tiny-clj/src/parser.c) – Record-Literals fehlen.
-- Noten/Track-Format nutzt aktuell kleine Step-Maps in [src/tiny-clj.audio.clj](/Users/theisen/Projects/tiny-clj/src/tiny-clj.audio.clj) (`:notes`, `:dur`, `:melody`, `:backing`).
+- Noten/Track-Format nutzt aktuell kleine Step-Maps in [src/tiny-fx.sound.clj](/Users/theisen/Projects/tiny-clj/src/tiny-fx.sound.clj) (`:notes`, `:duration`, `:melody`, `:backing`).
 
 ## Architekturentscheidung
 
@@ -82,7 +82,7 @@ isProject: false
 
 ## Noten-Format: Nutzenbewertung
 
-- Für aktuelle `compile-track`-Steps in [src/tiny-clj.audio.clj](/Users/theisen/Projects/tiny-clj/src/tiny-clj.audio.clj) (typisch 2-4 Felder) ist der Gewinn durch Records **moderat**.
+- Für aktuelle `compile-track`-Steps in [src/tiny-fx.sound.clj](/Users/theisen/Projects/tiny-clj/src/tiny-fx.sound.clj) (typisch 2-4 Felder) ist der Gewinn durch Records **moderat**.
 - **Empfehlung:**
   - Externe API vorerst map-basiert lassen (lesbar, flexibel).
   - Intern im Compile-Pfad optional in kompaktes internes Step-Record/Vector normalisieren (einmal pro Step), danach nur indexbasiert arbeiten.
@@ -126,4 +126,3 @@ flowchart TD
 - Eval/Builtins map-kompatibel für Records.
 - Pilotmigration Hot-Path.
 - Benchmarks/Memory-Messung, danach optional Reader-Literal/extmap.
-

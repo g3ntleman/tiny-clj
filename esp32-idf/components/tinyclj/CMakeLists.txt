@@ -67,7 +67,7 @@ set(TINYCLJ_CORE_SRCS
 )
 
 set(TINYCLJ_FX_SRCS
-  "${TINYCLJ_SRC_DIR}/audio_tick_scheduler.c"
+  "${TINYCLJ_SRC_DIR}/sound_tick_scheduler.c"
   "${TINYCLJ_SRC_DIR}/gfx.c"
   "${TINYCLJ_SRC_DIR}/scene.c"
   "${TINYCLJ_SRC_DIR}/tiny_fx_gfx.c"
@@ -75,9 +75,9 @@ set(TINYCLJ_FX_SRCS
   "${TINYCLJ_SRC_DIR}/renderer_lifecycle.c"
   "${TINYCLJ_SRC_DIR}/rendered_state_snapshot.c"
   "${TINYCLJ_SRC_DIR}/render_backend.c"
-  "${TINYCLJ_SRC_DIR}/audio_engine.c"
-  "${TINYCLJ_SRC_DIR}/builtins_tiny_fx_sound.c"
-  "${TINYCLJ_SRC_DIR}/audio_backend_esp32.c"
+  "${TINYCLJ_SRC_DIR}/sound_engine.c"
+  "${TINYCLJ_SRC_DIR}/builtins_sound.c"
+  "${TINYCLJ_SRC_DIR}/sound_backend_esp32.c"
 )
 
 set(TINYCLJ_SRCS ${TINYCLJ_CORE_SRCS})

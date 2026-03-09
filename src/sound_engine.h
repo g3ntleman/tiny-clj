@@ -1,5 +1,5 @@
 /*
- * Audio Engine for ESP32 Piezo Sound (trk1 / MUS-lite)
+ * Sound Engine for ESP32 piezo output (trk1 / MUS-lite)
  *
  * Streams trk1 byte arrays directly (no full-decode). Supports N voices,
  * SPSC command queue (Clojure -> Tick), and finished notification via
@@ -8,8 +8,8 @@
  * Host builds use stub backends; ESP32 builds drive LEDC PWM.
  */
 
-#ifndef TINY_CLJ_AUDIO_ENGINE_H
-#define TINY_CLJ_AUDIO_ENGINE_H
+#ifndef TINY_CLJ_SOUND_ENGINE_H
+#define TINY_CLJ_SOUND_ENGINE_H
 
 #include "object.h"
 #include "lockfree_spsc_queue.h"
@@ -66,35 +66,35 @@ bool trk1_decode_varuint(const uint8_t **cursor, const uint8_t *end, uint32_t *o
 /* SPSC command queue (lock-free, bounded)                                   */
 /* ========================================================================= */
 
-#define AUDIO_CMD_QUEUE_CAP 8
-#define AUDIO_FINISHED_QUEUE_CAP 8
+#define SOUND_CMD_QUEUE_CAP 8
+#define SOUND_FINISHED_QUEUE_CAP 8
 
 typedef enum {
-    AUDIO_CMD_PLAY_TRACK,
-    AUDIO_CMD_STOP_TRACK,
-    AUDIO_CMD_STOP_MUSIC,
-    AUDIO_CMD_PLAY_SFX,
-    AUDIO_CMD_SET_TRACK_VOL,
-    AUDIO_CMD_SET_MUSIC_VOL,
-    AUDIO_CMD_STOP_ALL,
-} AudioCmdType;
+    SOUND_CMD_PLAY_TRACK,
+    SOUND_CMD_STOP_TRACK,
+    SOUND_CMD_STOP_MUSIC,
+    SOUND_CMD_PLAY_SFX,
+    SOUND_CMD_SET_TRACK_VOL,
+    SOUND_CMD_SET_MUSIC_VOL,
+    SOUND_CMD_STOP_ALL,
+} SoundCmdType;
 
 typedef struct {
-    AudioCmdType type;
+    SoundCmdType type;
     ID           track_id;       /* interned symbol/keyword (not retained in queue) */
     int32_t      int_param;      /* repeat count or volume */
-} AudioCmd;
+} SoundCmd;
 
 typedef struct {
-    AudioCmd           slots[AUDIO_CMD_QUEUE_CAP];
+    SoundCmd           slots[SOUND_CMD_QUEUE_CAP];
     LockFreeSpscQueue  spsc;
-} AudioCmdQueue;
+} SoundCmdQueue;
 
 /* ========================================================================= */
 /* Track registry                                                            */
 /* ========================================================================= */
 
-#define AUDIO_MAX_TRACKS 8
+#define SOUND_MAX_TRACKS 8
 
 typedef struct {
     ID       track_id;       /* interned symbol/keyword; pointer comparison */
@@ -102,7 +102,7 @@ typedef struct {
     const uint8_t *data_ptr;
     int      len;
     Trk1Header header;
-} AudioTrackEntry;
+} SoundTrackEntry;
 
 /* ========================================================================= */
 /* Stream cursor (active playback)                                           */
@@ -119,32 +119,32 @@ typedef struct {
     ID       track_id;          /* for finished notification */
     const uint8_t *stream_start; /* for repeat/loop rewind */
     uint8_t  channel_count;
-} AudioStream;
+} SoundStream;
 
 /* ========================================================================= */
 /* Voice state                                                               */
 /* ========================================================================= */
 
-#define AUDIO_MAX_VOICES 4
+#define SOUND_MAX_VOICES 4
 
 typedef struct {
     uint16_t freq_hz;
     uint32_t gate_remaining_ticks;
     uint8_t  volume;             /* per-voice volume 0..255 */
     bool     active;
-} AudioVoice;
+} SoundVoice;
 
 /* ========================================================================= */
 /* SFX instance                                                              */
 /* ========================================================================= */
 
-#define AUDIO_MAX_SFX 2
+#define SOUND_MAX_SFX 2
 
 typedef struct {
-    AudioStream stream;
+    SoundStream stream;
     uint8_t     priority;
     int         voice_index;    /* assigned voice, -1 if none */
-} AudioSfxInstance;
+} SoundSfxInstance;
 
 /* ========================================================================= */
 /* Telemetry counters                                                        */
@@ -156,7 +156,7 @@ typedef struct {
     uint32_t queue_high_watermark;
     uint32_t sfx_drop_count;
     uint32_t finished_drop_count;
-} AudioTelemetry;
+} SoundTelemetry;
 
 /* ========================================================================= */
 /* Audio engine state                                                        */
@@ -164,24 +164,24 @@ typedef struct {
 
 typedef struct {
     /* Track registry */
-    AudioTrackEntry tracks[AUDIO_MAX_TRACKS];
+    SoundTrackEntry tracks[SOUND_MAX_TRACKS];
     int             track_count;
 
     /* Active music stream (one at a time for MVP) */
-    AudioStream     music_stream;
+    SoundStream     music_stream;
 
     /* SFX instances */
-    AudioSfxInstance sfx[AUDIO_MAX_SFX];
+    SoundSfxInstance sfx[SOUND_MAX_SFX];
 
     /* Voices (physical outputs) */
-    AudioVoice      voices[AUDIO_MAX_VOICES];
+    SoundVoice      voices[SOUND_MAX_VOICES];
     int             voice_count;  /* configured output count */
 
     /* Global state */
     uint8_t         music_volume; /* master music volume 0..255 */
 
     /* Command queue */
-    AudioCmdQueue   cmd_queue;
+    SoundCmdQueue   cmd_queue;
 
     /* Finished callback (Clojure function, retained) */
     ID              on_finished_fn;
@@ -190,66 +190,66 @@ typedef struct {
     bool            tick_running;
 
     /* Telemetry */
-    AudioTelemetry  telemetry;
+    SoundTelemetry  telemetry;
 
     /* Microseconds per tick (derived from BPM/TPQ or default 1000 = 1ms) */
     uint32_t        us_per_tick;
-} AudioEngine;
+} SoundEngine;
 
 typedef struct {
     bool backend_available;
-    bool audio_running;
+    bool sound_running;
     bool tick_enabled;
     bool tick_thread_running;
     int voice_count;
-} AudioHostStatus;
+} SoundHostStatus;
 
 /* Global engine instance */
-extern AudioEngine g_audio_engine;
+extern SoundEngine g_sound_engine;
 
 /* ========================================================================= */
 /* Public API (called from Clojure native functions)                         */
 /* ========================================================================= */
 
-/* Initialize audio engine with given voice/output count. */
-void audio_engine_init(int voice_count);
+/* Initialize sound engine with given voice/output count. */
+void sound_engine_init(int voice_count);
 
 /* Shutdown and release all resources. */
-void audio_engine_shutdown(void);
+void sound_engine_shutdown(void);
 
 /* Load a track into the registry. Validates header, retains byte array.
  * Returns true on success. */
-bool audio_engine_load_track(ID track_id, ID byte_array_obj);
+bool sound_engine_load_track(ID track_id, ID byte_array_obj);
 
 /* Unload a track. Stops if playing, releases byte array.
  * Returns true if track was found and unloaded. */
-bool audio_engine_unload_track(ID track_id);
+bool sound_engine_unload_track(ID track_id);
 
 /* Enqueue play command.
  * repeat: 0 = infinite, 1 = once, 2 = twice, etc. */
-bool audio_engine_play_music(ID track_id, int32_t repeat);
+bool sound_engine_play_music(ID track_id, int32_t repeat);
 
 /* Enqueue stop command for a specific track (no finished callback). */
-bool audio_engine_stop_track(ID track_id);
+bool sound_engine_stop_track(ID track_id);
 
 /* Enqueue stop-all-music command. */
-void audio_engine_stop_music(void);
+void sound_engine_stop_music(void);
 
 /* Enqueue SFX play command. Returns false if queue full. */
-bool audio_engine_play_sfx(ID sfx_id);
+bool sound_engine_play_sfx(ID sfx_id);
 
 /* Enqueue stop-all command. */
-void audio_engine_stop_all(void);
+void sound_engine_stop_all(void);
 
 /* Set per-track volume (immediate if playing). */
-bool audio_engine_set_track_volume(ID track_id, int32_t vol);
+bool sound_engine_set_track_volume(ID track_id, int32_t vol);
 
 /* Set global music volume. */
-void audio_engine_set_music_volume(int32_t vol);
+void sound_engine_set_music_volume(int32_t vol);
 
 /* Register on-finished callback. Retains fn, releases previous.
- * Callback receives {:source :audio :kind :finished :track-id ...}. */
-void audio_engine_on_finished(ID callback_fn);
+ * Callback receives {:source :sound :kind :finished :track-id ...}. */
+void sound_engine_on_finished(ID callback_fn);
 
 /* ========================================================================= */
 /* Tick (called from timer ISR or host test harness)                         */
@@ -257,31 +257,31 @@ void audio_engine_on_finished(ID callback_fn);
 
 /* Process one tick. Drains command queue, advances streams, updates voices.
  * voice_output is filled with freq_hz values for each voice (0 = silent). */
-void audio_engine_tick(void);
+void sound_engine_tick(void);
 
 /* ========================================================================= */
 /* Voice backend (platform-specific)                                         */
 /* ========================================================================= */
 
 /* Called by tick when voice state changes. Platform implements this. */
-void audio_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume);
+void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume);
 
 /* Called on init to set up hardware. */
-void audio_backend_init(int voice_count);
+void sound_backend_init(int voice_count);
 
 /* Called on shutdown. */
-void audio_backend_shutdown(void);
+void sound_backend_shutdown(void);
 
 /* ========================================================================= */
 /* Tick lifecycle (platform-specific)                                         */
 /* ========================================================================= */
 
-void audio_tick_start(void);
-void audio_tick_stop(void);
+void sound_tick_start(void);
+void sound_tick_stop(void);
 
 /* Host backend status helper (debug).
  * On unsupported platforms returns false. */
-bool audio_backend_host_get_status(AudioHostStatus *out);
+bool sound_backend_host_get_status(SoundHostStatus *out);
 
 /* ========================================================================= */
 /* MIDI note to frequency conversion                                         */
@@ -290,4 +290,4 @@ bool audio_backend_host_get_status(AudioHostStatus *out);
 /* Convert MIDI note number (0..127) to frequency in Hz. Note 0 = rest. */
 uint16_t midi_note_to_freq(uint8_t note);
 
-#endif /* TINY_CLJ_AUDIO_ENGINE_H */
+#endif /* TINY_CLJ_SOUND_ENGINE_H */

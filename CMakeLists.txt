@@ -8,7 +8,7 @@ endif()
 
 option(TINYCLJ_GAME_DEMO "Build optional MiniFB game demo" OFF)
 option(TINYCLJ_MINIFB_METAL "Use MiniFB Metal backend on macOS" OFF)
-option(TINYCLJ_WITH_TINY_FX "Build optional tiny-fx audio/gfx feature set" ON)
+option(TINYCLJ_WITH_TINY_FX "Build optional tiny-fx sound/gfx feature set" ON)
 
 # Generate compile_commands.json for IDE (Go to Definition, IntelliSense)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -231,11 +231,11 @@ set(TINYCLJ_CORE_SOURCES
     src/repl_history_backend.c
 )
 
-# tiny-fx is an optional feature pack: audio + vector graphics.
+# tiny-fx is an optional feature pack: sound + vector graphics.
 set(TINYCLJ_FX_COMMON_SOURCES
-    src/audio_tick_scheduler.c
-    src/audio_engine.c
-    src/builtins_tiny_fx_sound.c
+    src/sound_tick_scheduler.c
+    src/sound_engine.c
+    src/builtins_sound.c
     src/gfx.c
     src/tiny_fx_gfx.c
     src/vector_scene_graph.c
@@ -243,11 +243,11 @@ set(TINYCLJ_FX_COMMON_SOURCES
 )
 
 set(TINYCLJ_FX_HOST_SOURCES
-    src/audio_backend_host.c
+    src/sound_backend_host.c
 )
 
 set(TINYCLJ_FX_ESP32_SOURCES
-    src/audio_backend_esp32.c
+    src/sound_backend_esp32.c
 )
 
 set(TINYCLJ_HOST_TINY_FX_SOURCES
@@ -502,7 +502,7 @@ set_target_properties(tiny-clj-profile PROPERTIES
 set(TINYCLJ_FX_TEST_SOURCES)
 if(TINYCLJ_WITH_TINY_FX)
     list(APPEND TINYCLJ_FX_TEST_SOURCES
-        src/tests/test_audio_engine.c
+        src/tests/test_sound_engine.c
         src/tests/test_vector_scene_graph.c
         src/tests/test_gfx_svg.c
         src/tests/test_gfx_collision_contract.c
@@ -939,12 +939,11 @@ if(TINYCLJ_GAME_DEMO)
     include(FetchContent)
     # Select MiniFB macOS backend explicitly to keep runs reproducible.
     if(APPLE)
+        unset(USE_METAL_API CACHE)
         if(TINYCLJ_MINIFB_METAL)
             set(MINIFB_USE_METAL_API ON CACHE BOOL "" FORCE)
-            set(USE_METAL_API ON CACHE BOOL "" FORCE)
         else()
             set(MINIFB_USE_METAL_API OFF CACHE BOOL "" FORCE)
-            set(USE_METAL_API OFF CACHE BOOL "" FORCE)
         endif()
     endif()
     FetchContent_Declare(

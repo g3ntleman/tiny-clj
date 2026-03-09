@@ -25,18 +25,4 @@ Returns nil when no callback is configured."}
         (f event)
         nil))))
 
-^#^{:doc "Returns game-demo spatial policy as a map.
-The native game demo uses these bounds and radius values to emit deterministic
-`:collision`/`:proximity` events without hardcoded demo constants in C."}
-(def player-vs-obstacle-policy
-  (fn player-vs-obstacle-policy []
-    {:kind :proximity
-     :channel :hearing
-     :radius 24
-     :a-id 3003
-     :b-id 3002
-     :a-bounds [13 27 106 146]
-     :a-anchor-x 20
-     :b-bounds [58 86 124 146]}))
-
 )TINY_GFX_COL"

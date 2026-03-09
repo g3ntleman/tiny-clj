@@ -857,7 +857,7 @@ Implementation notes (2026-03-04):
 - Fixed-first contract + quantization boundaries documented in `docs/VECTOR_SCENE_FIXED_FIRST.md`.
 - Host decode+render micro benchmark added in `test_vector_scene_graph_decode_render_host_micro_benchmark`.
 - Host sample timings recorded for `deco`, `score`, and `game` frame scenes (Debug build).
-- Cross-target runtime benchmark function added: `tiny-clj.runtime/vector-scene-bench` (host + ESP32 UART REPL).
+- Cross-target benchmark function added: `tiny-fx.gfx-bench/vector-scene-bench` (host + ESP32 UART REPL, debug/profiling builds only).
 - ESP32 IDF component source lists were aligned with host build sources for this path (`subjective-c/record.c`, `gfx.c`, `vector_scene_graph.c`, `scene.c`, `tiny_gfx.c`, `lockfree_spsc_queue.c`), and `./build_idf.sh --no-move` now completes successfully.
 - ESP32 side-by-side CPU comparison remains an optional follow-up, pending device run/capture on hardware.
 
@@ -912,6 +912,7 @@ Follow-ups:
 
 - (2026-03-05) API parity + Clojure docs hardening in `tiny-fx.gfx.`* is tracked under `9n`.
 - (2026-03-09) Encapsulated hash-backed entity lookup for flat scene maps is tracked under `9o`.
+- (2026-03-09) Public scene API generalization + minimization audit is tracked under `9p`.
 
 Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Architecture"):
 
@@ -1365,12 +1366,14 @@ Goal:
 Scope (first slice):
 
 - Add `tiny-fx.gfx` namespace with documented direct aliases for:
-  - `vector-scene-bench`
   - `start-renderer!` / `stop-renderer!`
   - `renderer-state`
   - `renderer-timeline-step`
   - `renderer-timeline-progress`
+- Add `tiny-fx.gfx-bench` namespace for:
+  - `vector-scene-bench`
 - Embed `/libs/tiny-fx/gfx.clj` in `embedded_sources.c`.
+- Embed `/libs/tiny-fx/gfx-bench.clj` in `embedded_sources.c`.
 - Add regression tests proving alias parity against existing runtime semantics.
 
 Scope (second slice):
@@ -1398,7 +1401,7 @@ Checklist:
 
 ### 9o: Encapsulated hash-backed entity lookup for flat scene maps (NEW)
 
-Status: TODO
+Status: IN PROGRESS (2026-03-09; renderer-private subjective-c `CljHashMap` scratch lookup is wired into `scene.c` for flat-scene root/child resolution; borrowed-key/value population path avoids `RETAIN` / `RELEASE` / `AUTORELEASE` in the lookup build/use path; regression tests are green, benchmark capture still pending)
 
 Goal:
 
@@ -1443,9 +1446,9 @@ Constraints:
 - Ownership of the index must remain local to the decode/render context and follow `MEMORY_POLICY.md`.
 - Respect the render-thread contract from this plan:
   - no `RETAIN` / `RELEASE` / `ASSIGN` / autorelease-pool coupling in the lookup hot path
-  - prefer a C-owned scratch/open-addressed table that is reused per render context or per slot
+  - use a renderer-private subjective-c `CljHashMap` scratch index with borrowed keys/values
   - build the lookup once per published flat-scene snapshot, never per child traversal
-- The indexed path must be benchmarked on host and on ESP32 via `tiny-clj.runtime/vector-scene-bench`
+- The indexed path must be benchmarked on host and on ESP32 via `tiny-fx.gfx-bench/vector-scene-bench`
 before it becomes the default everywhere.
 
 Acceptance:
@@ -1471,7 +1474,7 @@ Checklist:
 
 1. **Lookup abstraction + key contract fixieren:**
   - Introduce one private renderer-side lookup abstraction instead of open-coding hash logic in `scene.c`.
-  - Prefer a dedicated helper module (e.g. `vector_scene_lookup`) or an equivalent private `scene.c` helper block.
+  - Prefer an equivalent private `scene.c` helper block backed by the subjective-c hash-map abstraction.
   - Key the table by flat scene-map key (`root` symbol or child/entity ID), value = scene record pointer/ID.
 2. **Populate once per snapshot, not per node:**
   - Build the lookup when the renderer detects a flat scene map.
@@ -1488,7 +1491,7 @@ Checklist:
     - missing child failure behavior
     - legacy embedded-tree compatibility
 5. **Bench + decide follow-up:**
-  - Capture host before/after numbers via `tiny-clj.runtime/vector-scene-bench`.
+  - Capture host before/after numbers via `tiny-fx.gfx-bench/vector-scene-bench`.
   - Capture ESP32 memory impact and decide whether rendered-state snapshot queries need the same pattern next.
 
 ### 9ob: Checkable PR task list (files + symbols)
@@ -1507,6 +1510,10 @@ Checklist:
   - Acceptance:
     - Flat-scene root and child lookup no longer rely on repeated linear map scans.
     - Legacy tree scenes still pass existing render tests.
+  - Done (2026-03-09):
+    - `scene.c` now builds one renderer-private subjective-c `CljHashMap` scratch index per flat-scene snapshot and reuses it for both `resolve_root_node(...)` and child dereference in `render_record_node(...)`.
+    - Scratch population is borrow-only: no `hashmap_assoc`, no `RETAIN`, no `AUTORELEASE`, no per-child rebuild.
+    - Added regression coverage for symbol-keyed flat-scene children and re-ran the full `test_vector_scene_graph`* suite successfully.
 - **PR-2: Regression + benchmark gate**
   - Files:
     - `src/tests/test_vector_scene_graph.c`
@@ -1529,6 +1536,160 @@ Checklist:
     - Only proceed if measured lookup cost remains relevant after PR-1/PR-2.
   - Acceptance:
     - Either the snapshot path is upgraded with the same private-index discipline, or the plan records why it is deferred.
+
+### 9p: Public scene API generalization + minimization audit (NEW)
+
+Status: IN PROGRESS
+
+Goal:
+
+- Audit the current public scene-facing API and reduce it to the minimal stable surface needed for:
+  - scene data authoring
+  - renderer lifecycle/query access
+  - spatial callback configuration
+- Remove or relocate public symbols that are demo-specific, compatibility-only, or layer-violating.
+
+Current findings:
+
+- `tiny-fx.gfx` currently mixes four concerns in one public namespace:
+  - scene/data-model constructors and helpers
+  - runtime lifecycle/query API
+  - collision callback wiring
+  - game-demo startup/config glue
+- `tiny-fx.gfx` currently re-exports demo-coupled vars that are not core scene API:
+  - `slot-descriptors`
+  - `game-demo-config`
+  - `player-vs-obstacle-policy`
+- Legacy compatibility symbols are still public even though the active runtime contract is spatial:
+  - `->CollisionRule`
+  - `->CollisionEvent`
+  - `normalize-collision-rule`
+  - `normalize-collision-phase-mask`
+- `update-nodes` remains public although flat entity-map scenes make it compatibility-only rather than a primary authoring primitive.
+- The constructor alias surface in `tiny-fx.gfx` duplicates `tiny-fx.gfx-scene`, which increases API size without adding a new abstraction.
+
+Proposed direction:
+
+- Keep `tiny-fx.gfx-scene` as the canonical public scene/data-model namespace:
+  - record constructors
+  - color helpers
+  - active spatial-rule normalizers
+- Keep `tiny-fx.gfx` minimal and runtime-oriented:
+  - `start-renderer!` / `stop-renderer!`
+  - `renderer-state`
+  - `renderer-timeline-step`
+  - `renderer-timeline-progress`
+- Keep `tiny-fx.gfx-bench` as the benchmark/profiling namespace (debug/profiling builds only).
+- Keep `tiny-fx.gfx-collision` as the callback/configuration namespace.
+- Keep `tiny-fx.game-demo` as the owner of all demo wiring/config data.
+
+Implementation notes (2026-03-09):
+
+- First reduction slice is now landed:
+  - `tiny-fx.gfx` only publishes the runtime/query vars
+    - `start-renderer!`
+    - `stop-renderer!`
+    - `renderer-state`
+    - `renderer-timeline-step`
+    - `renderer-timeline-progress`
+  - `tiny-fx.gfx-bench` now owns `vector-scene-bench`
+  - `tiny-fx.gfx-bench` is not part of the intended production surface and is compiled/embedded only for debug-style builds
+  - `game-demo-config` moved out of `tiny-fx.gfx` and into `tiny-fx.game-demo`
+  - `slot-descriptors` is now owned by `tiny-fx.game-demo`
+  - the native `game-demo` startup path now loads config from
+  `tiny-fx.game-demo/game-demo-config`
+  - alias-parity/runtime tests were updated to the reduced surface
+- Follow-up minimization slice is now landed:
+  - `tiny-fx.gfx` no longer implicitly requires `tiny-fx.gfx-scene` or
+  `tiny-fx.gfx-collision`; callers/tests now use explicit `require`s
+  - `tiny-fx.game-demo` now exports the direct `:spatial-callback` and no longer
+  performs collision callback wiring during demo reset/setup
+  - `tiny-fx.sound` is now a curated high-level namespace only
+    - `play-steps!`
+    - `play-sfx!`
+    - track/note compilation helpers
+  - public sound API is consolidated on `tiny-fx.sound`
+  - no legacy public namespace remains in the intended
+  surface
+  - low-level sound control stays opt-in in `tiny-fx.sound-native`
+  - debug/profiling-only sound helpers live in `tiny-fx.sound-debug`
+  - the native low-level sound path is consolidated in `src/builtins_sound.c`
+    / `src/builtins_sound.h`
+  - `src/builtins.c` no longer owns sound-disabled stubs or per-symbol sound
+    registrations; it delegates curated sound namespace checks and registration
+    to the sound builtin unit
+  - repo-owned runtime/test file paths now use `sound_*` consistently
+    (`sound_engine.*`, `sound_backend_*`, `sound_tick_scheduler.*`,
+    `test_sound_engine.c`)
+  - debug/profiling-only namespaces (`tiny-fx.sound-debug`,
+  `tiny-fx.gfx-bench`) are compiled/embedded only for debug builds and are not
+  present in the checked release binary
+- Remaining compatibility cleanup is now narrower:
+  - collision compatibility helpers are still being evaluated for long-term
+  support vs. compatibility-only status
+  - `tiny-fx.gfx-collision` remains intentionally separate from the production
+  runtime surface
+
+Candidate removals or relocations:
+
+- Remove demo glue from `tiny-fx.gfx`:
+  - `slot-descriptors`
+  - `game-demo-config`
+  - `player-vs-obstacle-policy`
+- De-emphasize or remove legacy compatibility exports from the primary public surface:
+  - `->CollisionRule`
+  - `->CollisionEvent`
+  - `normalize-collision-rule`
+  - `normalize-collision-phase-mask`
+- De-emphasize or remove `update-nodes` from the primary public surface unless a concrete non-demo use remains.
+- Re-evaluate whether `invoke-collision-callback!` should stay public or become runtime/debug-only.
+
+Acceptance:
+
+- `tiny-fx.gfx` no longer exposes demo-specific config or scene-authoring constructors by default.
+- `tiny-fx.gfx-scene` contains the canonical scene/data-model authoring surface.
+- Public API has one canonical namespace per concern instead of umbrella re-exports.
+- Compatibility-only symbols are either removed from the primary public surface or explicitly documented as transitional.
+
+Checklist:
+
+- Classify all current public vars in `tiny-fx.gfx`, `tiny-fx.gfx-scene`, and `tiny-fx.gfx-collision` by concern. DONE
+- Decide the canonical public namespace for each concern and mark non-canonical re-exports for removal. DONE for the first reduction slice
+- Remove demo-coupled exports from the primary public namespace. DONE for `game-demo-config` / `slot-descriptors`
+- Decide which legacy collision/update helpers remain supported and which move to compatibility-only status.
+- Update docs/tests to reflect the reduced public surface. DONE for runtime/audio/debug namespace separation; compatibility policy docs still pending
+
+### 9pa: Suggested implementation slices
+
+1. **API classification pass:**
+  - Tag each current public var as one of:
+    - scene authoring
+    - runtime lifecycle/query
+    - spatial callback config
+    - demo-only
+    - compatibility-only
+2. **Primary-surface reduction:**
+  - Shrink `tiny-fx.gfx` to runtime-oriented entry points.
+  - Stop re-exporting demo glue and non-essential compatibility helpers there.
+  - Status (2026-03-09): first slice DONE; runtime-only alias surface is in place and demo config moved to `tiny-fx.game-demo`.
+3. **Compatibility decision pass:**
+  - Either remove legacy collision/update exports from the primary public surface or keep them with explicit compatibility docs/tests.
+4. **Doc/test freeze:**
+  - Align public docs and alias-parity tests with the reduced surface.
+  - Status (2026-03-09): alias/runtime tests updated; explicit `require` cleanup is done; remaining work is compatibility policy docs.
+
+### 9pb: Concrete proposals to validate
+
+- Preferred steady-state namespace split:
+  - `tiny-fx.gfx-scene`: scene/data-model authoring
+  - `tiny-fx.gfx`: runtime access only
+  - `tiny-fx.gfx-collision`: callback config
+  - `tiny-fx.game-demo`: demo config and demo policies
+- If `tiny-fx.gfx` remains as umbrella namespace, it should still exclude:
+  - demo config maps
+  - slot descriptors
+  - demo collision policies
+  - compatibility-only constructors that duplicate `tiny-fx.gfx-scene`
 
 ### Done when
 
@@ -1553,13 +1714,13 @@ Status: DONE on host-viewer path (2026-03-06)
 Goal:
 
 - Generalize the old collision-only plan into a spatial trigger contract that supports both
-  `:collision` and `:proximity`, while keeping gameplay reactions in Clojure and per-frame
-  trigger evaluation in C.
+`:collision` and `:proximity`, while keeping gameplay reactions in Clojure and per-frame
+trigger evaluation in C.
 
 Final rule contract:
 
 - Spatial rules are declared inside the published scene snapshot at
-  `FrameScene.collision-rules`.
+`FrameScene.collision-rules`.
 - Runtime rule shape:
   - `SpatialRule [id slot kind a-id b-id radius channel]`
   - `:kind` is `:collision` or `:proximity`
@@ -1581,8 +1742,8 @@ Final event contract (C -> scheduler -> Clojure):
   - `SpatialEvent [source rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel]`
 - `:source` is always `:spatial`
 - Event payload carries the resolved entity records (`a`, `b`) plus evaluated runtime AABBs
-  (`a-aabb`, `b-aabb`) so Clojure callbacks do not need extra engine lookups just to inspect
-  the trigger context.
+(`a-aabb`, `b-aabb`) so Clojure callbacks do not need extra engine lookups just to inspect
+the trigger context.
 - Callback dispatch contract:
   - callback target is configured from Clojure via `tiny-fx.gfx-collision/set-collision-callback!`
   - C dispatches through the generic scheduler ingress (`event_loop_enqueue_ingress_call`)
@@ -1592,9 +1753,9 @@ Final event contract (C -> scheduler -> Clojure):
 Implementation notes:
 
 - `tiny-fx.gfx-scene` now defines the active spatial schema (`SpatialRule`, `SpatialEvent`, `Aabb`)
-  while keeping legacy `CollisionRule` / `CollisionEvent` records for compatibility.
+while keeping legacy `CollisionRule` / `CollisionEvent` records for compatibility.
 - `tiny-fx.gfx-collision` owns the configurable callback surface
-  (`set-collision-callback!`, `invoke-collision-callback!`).
+(`set-collision-callback!`, `invoke-collision-callback!`).
 - `event_loop` provides the thread-safe one-arg ingress that is also reused by GPIO and audio.
 - `host_viewer_minifb.c` now:
   - loads spatial rules directly from the published `FrameScene`
@@ -1603,10 +1764,10 @@ Implementation notes:
   - refreshes the live game scene + rule set after Clojure-side callback mutations
   - accepts scenes with no `collision-rules` as "no triggers" instead of treating them as a load failure
 - `tiny-fx.gfx/host-viewer-config` supplies the ordered `:slots` list plus
-  `:spatial-callback` and `:game-scene-atom`, so the native host loop consumes runtime config
-  only and does not resolve demo namespaces directly.
+`:spatial-callback` and `:game-scene-atom`, so the native host loop consumes runtime config
+only and does not resolve demo namespaces directly.
 - Slot count, slot IDs, and slot order are defined in Clojure; C only validates and consumes the
-  configured slot list, while slot placement/orientation remains `clip-rect`-driven.
+configured slot list, while slot placement/orientation remains `clip-rect`-driven.
 
 Verification:
 
@@ -1623,7 +1784,7 @@ Verification:
 - Host-viewer integration:
   - `test_vector_scene_graph_tiny_gfx_runtime_host_viewer_config_shape`
   - `test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_geometry_in_clojure`
-  - `test_vector_scene_graph/*renderer_lifecycle*`
+  - `test_vector_scene_graph/*renderer_lifecycle`*
 - Generic ingress / event bridge foundation:
   - `test_event_loop_latency/event_loop_ingress_enqueue_executes_on_run_next`
   - `test_event_loop_latency/event_loop_ingress_concurrent_producers_fifo_drain`

@@ -9,11 +9,14 @@ todos:
     content: trk1 bytegenau finalisieren (Header, Event-Bitfelder, Varint-Delay, Validierungsregeln).
     status: completed
   - id: ownership-contract
-    content: "Ownership-Vertrag umsetzen: audio-load-track! macht RETAIN, unload/shutdown macht RELEASE, kein RC im Tick."
+    content: "Ownership-Vertrag umsetzen: sound-load-track! macht RETAIN, unload/shutdown macht RELEASE, kein RC im Tick."
     status: completed
   - id: native-api-wiring
-    content: "Native API verdrahten: audio-load-track!, audio-unload-track!, audio-play-music!, audio-stop-track!, audio-stop-music!, audio-play-sfx!, audio-stop-all!, audio-set-track-volume!, audio-set-music-volume!, audio-on-finished!."
+    content: "Native API verdrahten: sound-load-track!, sound-unload-track!, sound-play-music!, sound-stop-track!, sound-stop-music!, sound-play-sfx!, sound-stop-all!, sound-set-track-volume!, sound-set-music-volume!, sound-on-finished!."
     status: completed
+  - id: english-sound-dsl-docs
+    content: "Write an English `docs/SOUND_DSL.md` reference for `tiny-fx.sound`: note symbols, duration keywords, step shapes, option maps, and short authoring examples."
+    status: pending
   - id: ledc-multichannel
     content: LEDC fuer N Kanaele konfigurieren (Timer/Channel Mapping validieren, Board-Default 2 Outputs).
     status: pending
@@ -50,14 +53,14 @@ isProject: false
 
 1. **Format:** `trk1` als eigenes kompaktes Binärformat (MUS-inspiriert).
 2. **Streaming:** direkter Parser auf ByteArray-Cursor, kein Expandieren auf Heap.
-3. **Ownership:** `RETAIN + owned by audio` (keine Kopie im MVP).
+3. **Ownership:** `RETAIN + owned by sound` (keine Kopie im MVP).
 4. **API-Schnitt:** Clojure lädt/steuert Tracks über Native Calls, C verwaltet Playback.
 5. **Threading:** keine VM-/RC-Aufrufe im Tick-Kontext.
-6. **SFX-Modell:** `tiny-snd.runtime/audio-play-sfx!` startet einen einmaligen Effekt (kein Loop), der Musik ueberlagern darf.
+6. **SFX-Modell:** `tiny-snd.runtime/sound-play-sfx!` startet einen einmaligen Effekt (kein Loop), der Musik ueberlagern darf.
 7. **Format-Policy:** **kein separates SFX-Format**; Musik und SFX verwenden beide `trk1`.
 8. **Storage:** FS-Emulation als Persistenz; Composer mappt `track-sym <-> filename`.
 9. **Namespaces:** Runtime-API in `tiny-snd.runtime`, Compiler/Authoring in `tiny-snd.composer`.
-10. **Boot-Strategie:** kein Auto-Compile im Startup; nur `slurp-bytes` + `tiny-snd.runtime/audio-load-track!`, Cache-Erzeugung explizit.
+10. **Boot-Strategie:** kein Auto-Compile im Startup; nur `slurp-bytes` + `tiny-snd.runtime/sound-load-track!`, Cache-Erzeugung explizit.
 
 ## 3) Architektur
 
@@ -78,13 +81,13 @@ isProject: false
 ### Datenfluss
 
 1. `compile-track` in Clojure erzeugt `trk1` ByteArray.
-2. Composer speichert Datei, z.B. `audio/menu-theme.trk1`.
+2. Composer speichert Datei, z.B. `sound/menu-theme.trk1`.
 3. Beim Laden: `slurp-bytes` liest Datei.
-4. `audio-load-track!` validiert + `RETAIN` (track-id = interniertes Symbol/Keyword).
-5. `audio-play-music!` startet Stream-Cursor auf Track.
+4. `sound-load-track!` validiert + `RETAIN` (track-id = interniertes Symbol/Keyword).
+5. `sound-play-music!` startet Stream-Cursor auf Track.
 6. Tick parst fällige Events und aktualisiert Voices/LEDC.
 7. Bei `END` (+ Repeat verbraucht) -> Tick schiebt Scheduler-Task in tiny Event-Loop (mutex-geschuetzt).
-8. `audio-play-sfx!` startet One-Shot-SFX parallel zur Musik.
+8. `sound-play-sfx!` startet One-Shot-SFX parallel zur Musik.
 9. Scheduler-Task ruft registrierten `on-finished`-Callback im Clojure-Thread; Game-Loop startet Folge-Part.
 
 ## 4) `trk1` Spezifikation (bytegenau)
@@ -132,7 +135,7 @@ bit3..0  channel (0..15)
 ### Semantik
 
 - Mehrere Events im selben Tick erlaubt.
-- `END` beendet Stream. Loop/Repeat: Header-Flag `default_loop` ist Voreinstellung; `audio-play-music! [track-id repeat]` ueberschreibt fuer diesen Lauf (1x, 2x, infinite).
+- `END` beendet Stream. Loop/Repeat: Header-Flag `default_loop` ist Voreinstellung; `sound-play-music! [track-id repeat]` ueberschreibt fuer diesen Lauf (1x, 2x, infinite).
 - Gilt fuer Musik **und** SFX; SFX werden nur ueber API als One-Shot getriggert.
 
 ## 5) API-Vertrag
@@ -148,7 +151,7 @@ Der Composer wird **explizit** aufgerufen (manuell/build-task), nicht automatisc
   - kompiliert Song und speichert per `tiny-clj.fs/spit-bytes`
 - `tiny-snd.composer/load-track! [track-sym filename]`:
   - liest via `tiny-clj.fs/slurp-bytes`
-  - ruft `tiny-snd.runtime/audio-load-track!` mit `track-id = track-sym` auf
+  - ruft `tiny-snd.runtime/sound-load-track!` mit `track-id = track-sym` auf
 - `tiny-snd.composer/cache-track! [track-sym filename song]`:
   - kompiliert immer explizit und ueberschreibt die `.trk1` Datei
 - `tiny-snd.composer/register-track! [track-sym filename]` (optional Helper):
@@ -164,33 +167,79 @@ Cache-Policy (MVP):
 
 Namenskonvention (MVP):
 
-- Dateien unter `audio/*.trk1`
+- Dateien unter `sound/*.trk1`
 - `track-sym` als Runtime-ID, z.B. `:menu-theme`
-- Dateiname als Persistenz-Ort, z.B. `\"audio/menu-theme.trk1\"`
+- Dateiname als Persistenz-Ort, z.B. `\"sound/menu-theme.trk1\"`
 
 ### Runtime API (`tiny-snd.runtime`)
 
-- `tiny-snd.runtime/audio-load-track! [track-id trk1-bytes]` -> `true|false`
-- `tiny-snd.runtime/audio-unload-track! [track-id]` -> `true|false`
-- `tiny-snd.runtime/audio-play-music! [track-id repeat]` -> `true|false`
+- `tiny-snd.runtime/sound-load-track! [track-id trk1-bytes]` -> `true|false`
+- `tiny-snd.runtime/sound-unload-track! [track-id]` -> `true|false`
+- `tiny-snd.runtime/sound-play-music! [track-id repeat]` -> `true|false`
   - `repeat`: `1|:1x`, `2|:2x`, `0|:infinite|:unendlich`
-- `audio-stop-track! [track-id]` -> `true|false` (stoppt den aktiven Stream dieses Tracks sofort, Track bleibt geladen)
+- `sound-stop-track! [track-id]` -> `true|false` (stoppt den aktiven Stream dieses Tracks sofort, Track bleibt geladen)
   - Semantik: erzeugt **keinen** `on-finished` Callback fuer diesen Abbruch.
-- `audio-stop-music! []` -> `nil`
-- `audio-play-sfx! [sfx-id]` -> `true|false`
+- `sound-stop-music! []` -> `nil`
+- `sound-play-sfx! [sfx-id]` -> `true|false`
   - Semantik: startet einen **einmaligen** SFX-Run (One-Shot), auch wenn Musik laeuft.
   - Rueckgabe `false`, wenn SFX wegen voller Voice-Kapazitaet/Policy gedroppt wurde.
-- `tiny-snd.runtime/audio-stop-all! []` -> `nil`
-- `tiny-snd.runtime/audio-set-track-volume! [track-id vol-0-255]` -> `true|false`
+- `tiny-snd.runtime/sound-stop-all! []` -> `nil`
+- `tiny-snd.runtime/sound-set-track-volume! [track-id vol-0-255]` -> `true|false`
   - Semantik: wenn Track aktiv laeuft, wirkt die Lautstaerke **sofort** (ohne Stop/Restart).
-  - Wenn Track geladen aber inaktiv: Volume als Startwert fuer naechstes `audio-play-music!`.
-- `audio-set-music-volume! [0-255]` -> `nil`
+  - Wenn Track geladen aber inaktiv: Volume als Startwert fuer naechstes `sound-play-music!`.
+- `sound-set-music-volume! [0-255]` -> `nil`
   - Semantik: globaler Master-Volume fuer Musik (skaliert alle Musik-Streams); wirkt zusaetzlich zu per-Track-Volume.
-- `audio-on-finished! [callback-fn]` -> `nil`
+- `sound-on-finished! [callback-fn]` -> `nil`
   - Registriert eine Clojure-Funktion `(fn [track-id] ...)`, die aufgerufen wird, wenn ein Track endet.
   - Callback laeuft im Clojure-Thread (via tiny Scheduler-Task, nicht im Tick).
 
 Hinweis: `track-id` ist als **interniertes Symbol/Keyword** gedacht (Pointervergleich im C-Core).
+
+### Planned documentation deliverable: English Sound DSL reference
+
+Current gap:
+
+- Inline examples and tests exist, but there is no single English reference that explains which sound symbols mean what for authors of `tiny-fx.sound` tracks.
+
+Planned deliverable:
+
+- Add `docs/SOUND_DSL.md` as the canonical English reference for the public `tiny-fx.sound` authoring surface.
+
+Minimum scope:
+
+- Note-symbol syntax and examples:
+  - `:G5`
+  - `:Cs4`
+  - `:Db4`
+  - `:Bb3`
+  - `:REST`
+- Duration keywords and meaning:
+  - `:w :h :q :e :s :t :dh :dq :de :ds :qt :et :st`
+- Abbreviation glossary with long forms and memory aids:
+  - note accidentals such as `s = sharp`, `b = flat`
+  - duration abbreviations such as `w = whole`, `h = half`, `q = quarter`
+  - dotted/triplet forms explained instead of only listed
+  - short mnemonic wording so authors can remember the symbols without reopening the implementation
+- Supported step shapes:
+  - `{:notes [...] :duration ...}`
+  - `{:melody ... :backing [...] :duration ...}`
+  - `{:rest ...}`
+- Supported option maps:
+  - `:channel-count`
+  - `:volumes`
+  - `:gate-percent`
+  - `:tempo-bpm`
+  - `:melody {:volume-levels [...]}`
+  - `:backing {:volume-levels [...]}`
+- One short music example and one short SFX example.
+- One short section that explains automatic melody/backing expansion.
+- One short section that explains why the chosen abbreviations exist and how to read them quickly.
+
+Acceptance:
+
+- A user can author a small `tiny-fx.sound/play-steps!` example without reading implementation code or unit tests.
+- The reference is written in English and uses the current public namespace names.
+- Abbreviations are expanded in plain English, not only shown as symbol tables.
 
 ### Interne C-Struktur (MVP)
 
@@ -212,10 +261,10 @@ Hinweis: `track-id` ist als **interniertes Symbol/Keyword** gedacht (Pointerverg
 
 ## 6) Ownership- und Threading-Vertrag
 
-### Ownership (`RETAIN + owned by audio`)
+### Ownership (`RETAIN + owned by sound`)
 
-1. `tiny-snd.runtime/audio-load-track!` validiert Header/Bounds und macht **genau ein** `RETAIN`.
-2. `tiny-snd.runtime/audio-unload-track!`/Shutdown macht **genau ein** `RELEASE`.
+1. `tiny-snd.runtime/sound-load-track!` validiert Header/Bounds und macht **genau ein** `RETAIN`.
+2. `tiny-snd.runtime/sound-unload-track!`/Shutdown macht **genau ein** `RELEASE`.
 3. Tick greift nur read-only auf `data_ptr/len` zu.
 4. Geladene Tracks gelten als **frozen** (kein `aset` auf Inhalt).
 
@@ -231,16 +280,16 @@ Hinweis: `track-id` ist als **interniertes Symbol/Keyword** gedacht (Pointerverg
 
 Der 1ms-Tick laeuft in einem separaten Kontext (`esp_timer`-Callback), die Clojure-Loop kann keine 1ms garantieren → zwei verschiedene Kontexte teilen sich Daten.
 
-- **Clojure → Tick (Command-Queue):** SPSC-Ringpuffer (Clojure = Producer, Tick = Consumer). Lock-frei moeglich, da genau ein Schreiber und ein Leser. Bounded (z. B. 8 Eintraege); bei Voll: Command verwerfen + Drop-Counter. **Tick-Start:** Nach dem Push prueft der Producer, ob der Tick laeuft; falls nicht, ruft er `audio_tick_start()` auf (idempotent). So wird der Timer bei Bedarf geweckt.
-- **Tick → Clojure (Finished-Notification):** Tick schiebt bei Track-Ende einen Scheduler-Task in tinys Event-Loop (`event_loop_enqueue_from_tick()`). Dieser Enqueue-Pfad bekommt **einen Mutex** (`g_audio_scheduler_mutex`), den der Tick nur kurz haelt (kein RC, kein VM, nur Pointer + Counter schreiben). Die Clojure-Loop nimmt denselben Mutex beim regulaeren Queue-Drain. → Tick blockiert nicht auf Clojure-Callback; der Callback laeuft im Clojure-Thread, wenn die Event-Loop ihn abholt.
-- **Kein Finished-Queue noetig:** Polling (`audio-take-finished!`) entfaellt; stattdessen callback-basiert via `audio-on-finished!`.
+- **Clojure → Tick (Command-Queue):** SPSC-Ringpuffer (Clojure = Producer, Tick = Consumer). Lock-frei moeglich, da genau ein Schreiber und ein Leser. Bounded (z. B. 8 Eintraege); bei Voll: Command verwerfen + Drop-Counter. **Tick-Start:** Nach dem Push prueft der Producer, ob der Tick laeuft; falls nicht, ruft er `sound_tick_start()` auf (idempotent). So wird der Timer bei Bedarf geweckt.
+- **Tick → Clojure (Finished-Notification):** Tick schiebt bei Track-Ende einen Scheduler-Task in tinys Event-Loop (`event_loop_enqueue_from_tick()`). Dieser Enqueue-Pfad bekommt **einen Mutex** (`g_sound_scheduler_mutex`), den der Tick nur kurz haelt (kein RC, kein VM, nur Pointer + Counter schreiben). Die Clojure-Loop nimmt denselben Mutex beim regulaeren Queue-Drain. → Tick blockiert nicht auf Clojure-Callback; der Callback laeuft im Clojure-Thread, wenn die Event-Loop ihn abholt.
+- **Kein Finished-Queue noetig:** Polling (`sound-take-finished!`) entfaellt; stattdessen callback-basiert via `sound-on-finished!`.
 
 ## 7) Tick-Verhalten (1ms, on-demand)
 
 **Tick-Lifecycle:** Der `esp_timer` laeuft **nur, wenn Audio aktiv ist** (mindestens ein Stream oder SFX spielt). Das schont die CPU im Idle.
 
-- **Start:** Erster `PLAY_TRACK` oder `PLAY_SFX_ONESHOT` Command startet den Timer, falls er nicht laeuft (`audio_tick_start()`).
-- **Stop:** Wenn nach Schritt 7/8 **kein** aktiver Stream und **kein** aktiver SFX uebrig ist und die Command-Queue leer ist → Timer stoppen (`audio_tick_stop()`).
+- **Start:** Erster `PLAY_TRACK` oder `PLAY_SFX_ONESHOT` Command startet den Timer, falls er nicht laeuft (`sound_tick_start()`).
+- **Stop:** Wenn nach Schritt 7/8 **kein** aktiver Stream und **kein** aktiver SFX uebrig ist und die Command-Queue leer ist → Timer stoppen (`sound_tick_stop()`).
 - **Idempotent:** Start/Stop sind idempotent; doppelter Start/Stop ist ein No-Op.
 
 **Tick-Schritte (wenn aktiv):**
@@ -253,9 +302,9 @@ Der 1ms-Tick laeuft in einem separaten Kontext (`esp_timer`-Callback), die Cloju
 6. LEDC nur bei Frequenz-/Duty-Aenderung updaten.
 7. Bei Track-Ende: `event_loop_enqueue_from_tick()` (mutex-geschuetzt) schiebt Scheduler-Task mit `track_id` in tiny Event-Loop.
 8. SFX-Ende setzt Voice in vorherigen Musikzustand zurueck (oder laesst Music-Stream normal weiterlaufen).
-9. Wenn keine aktiven Streams/SFX mehr und Command-Queue leer → `audio_tick_stop()`.
+9. Wenn keine aktiven Streams/SFX mehr und Command-Queue leer → `sound_tick_stop()`.
 
-**SFX Voice-Policy bei Engpass:** Zuerst freie Voice belegen; wenn alle belegt: **Steal** (z. B. niedrigste Prioritaet oder aeltester SFX unterbrechen, konfigurierbar) oder **Drop** (neuen SFX verwerfen, `audio-play-sfx!` gibt `false` zurueck).
+**SFX Voice-Policy bei Engpass:** Zuerst freie Voice belegen; wenn alle belegt: **Steal** (z. B. niedrigste Prioritaet oder aeltester SFX unterbrechen, konfigurierbar) oder **Drop** (neuen SFX verwerfen, `sound-play-sfx!` gibt `false` zurueck).
 
 ## 8) LEDC Mehrkanal-Setup
 
@@ -263,19 +312,19 @@ Der 1ms-Tick laeuft in einem separaten Kontext (`esp_timer`-Callback), die Cloju
 
 - **LEDC-Timer** (hier): Hardware-PWM, bestimmt die **Frequenz** pro Kanal. Zwei Kanaele = zwei Töne gleichzeitig → zwei LEDC-Timer (Timer 0, Timer 1).
 - **tiny Scheduler-Timer**: Software (event_loop), `schedule` / `schedule-periodic` / `cancel-timer` – Clojure-Callbacks zu geplanten Zeiten; Zeit via gettimeofday, kein Hardware-Tick.
-- **Audio-Tick-Timer**: geplant `esp_timer` 1ms – periodischer Hardware-Tick, der nur den C Audio-Core (Stream-Parser, Voices, LEDC-Duty) aufruft; **kein** Clojure, **kein** RC im Tick.
-- Kanalanzahl aus Konfiguration (`audio_output_count`), nicht hardcoded.
+- **Sound-Tick-Timer**: geplant `esp_timer` 1ms – periodischer Hardware-Tick, der nur den C Sound-Core (Stream-Parser, Voices, LEDC-Duty) aufruft; **kein** Clojure, **kein** RC im Tick.
+- Kanalanzahl aus Konfiguration (`sound_output_count`), nicht hardcoded.
 - Board-Default aktuell (vgl. `vector_handheld_config.h`):
   - `VG_PIN_PIEZO_1` -> LEDC Channel 0, **Timer 0**
   - `VG_PIN_PIEZO_2` -> LEDC Channel 1, **Timer 1**
 - Fuer zwei unabhaengige Frequenzen muessen zwei Timer verwendet werden (ein Timer = gleiche Frequenz fuer alle zugeordneten Kanaele). Mapping: CH1=Timer0, CH2=Timer1.
 - Validierung beim Init:
-  - `audio_output_count <= hw_cap`
+  - `sound_output_count <= hw_cap`
   - Channel/Timer-Mapping konfliktfrei (kein Timer doppelt fuer unterschiedliche Frequenzen)
 
 ## 9) Umsetzungsschritte (TDD)
 
-Reihenfolge: 0 (Baseline) → 1 (Native API) → 2 (trk1 Parser/Engine auf Host, ohne LEDC) → 3 (LEDC ESP32) → 4 (Scheduler/Telemetrie) → 5 (SFX/Integration) → 6 (Soak). Schritte 1 und 2 liefern gemeinsame Contract-Tests fuer Host und ESP32.
+Reihenfolge: 0 (Baseline) → 1 (Native API) → 2 (trk1 Parser/Engine auf Host, ohne LEDC) → 3 (LEDC ESP32) → 4 (Scheduler/Telemetrie) → 5 (SFX/Integration) → 5b (English DSL docs) → 6 (Soak). Schritte 1 und 2 liefern gemeinsame Contract-Tests fuer Host und ESP32.
 
 ### Schritt 0: Baseline
 
@@ -289,17 +338,17 @@ DoD:
 ### Schritt 1: Native API Wiring
 
 - Symbol-/Lookup-/Arity-Tests:
-  - `test_audio_native_lookup_*`
-  - `test_audio_native_arity_*`
-  - `test_audio_load_unload_contract_*`
-  - `test_audio_stop_track_contract_*`
-  - `test_audio_set_track_volume_contract_*`
-  - `test_audio_play_sfx_oneshot_contract_*`
-  - `test_audio_track_id_symbol_contract_*`
+  - `test_sound_native_lookup_*`
+  - `test_sound_native_arity_*`
+  - `test_sound_load_unload_contract_*`
+  - `test_sound_stop_track_contract_*`
+  - `test_sound_set_track_volume_contract_*`
+  - `test_sound_play_sfx_oneshot_contract_*`
+  - `test_sound_track_id_symbol_contract_*`
 
 DoD:
 
-- Alle Audio-Natives aus `user` aufloesbar/callable.
+- Alle Sound-Natives aus `user` aufloesbar/callable.
 
 ### Schritt 2: `trk1` Parser + Streaming-Engine (Host)
 
@@ -308,15 +357,15 @@ DoD:
   - Varint-Decoder inkl. Overflow-Schutz
   - Direkt-Streaming (kein Full-Decode)
   - Repeat-Verhalten (1x/2x/infinite)
-  - Track-Stop-Verhalten (`tiny-snd.runtime/audio-stop-track!` stoppt sofort, ohne unload)
-  - Track-Volume-Verhalten (`tiny-snd.runtime/audio-set-track-volume!` wirkt waehrend Playback ohne Neustart)
+  - Track-Stop-Verhalten (`tiny-snd.runtime/sound-stop-track!` stoppt sofort, ohne unload)
+  - Track-Volume-Verhalten (`tiny-snd.runtime/sound-set-track-volume!` wirkt waehrend Playback ohne Neustart)
   - SFX-One-Shot-Verhalten (einmalig, kein Loop, parallel zu Musik)
   - Voice-Policy bei Engpass (free->steal->drop gemaess Konfiguration)
   - Finished-Notification (Tick → Scheduler-Task → `on-finished` Callback im Clojure-Thread)
   - RETAIN-Vertrag (`load->retain`, `unload->release`)
   - Composer-FS-Workflow (`compile -> spit-bytes -> slurp-bytes -> load`)
   - Expliziter Cache-Workflow (`cache-track!` erzeugt/aktualisiert Datei deterministisch)
-  - Startup ohne Composer (nur `slurp-bytes` + `tiny-snd.runtime/audio-load-track!`)
+  - Startup ohne Composer (nur `slurp-bytes` + `tiny-snd.runtime/sound-load-track!`)
   - Fehlende Cache-Datei fuehrt zu klarem Ladefehler (kein stilles Auto-Compile)
   - Symbol-ID + Mapping (`track_id = symbol`, `symbol -> filename`)
 
@@ -326,7 +375,7 @@ DoD:
 
 ### Schritt 3: LEDC Bring-up (ESP32)
 
-- Init fuer `audio_output_count` Ausgaenge.
+- Init fuer `sound_output_count` Ausgaenge.
 - Smoke:
   - `N=1`: ein stabiler Ton
   - `N=2`: zwei unterschiedliche Frequenzen gleichzeitig
@@ -338,11 +387,11 @@ DoD:
 
 ### Schritt 4: Scheduler + Telemetrie
 
-- `esp_timer` 1ms on-demand start/stop (nur aktiv wenn Audio spielt).
+- `esp_timer` 1ms on-demand start/stop (nur aktiv wenn Sound spielt).
 - Counter:
-  - `audio_cmd_drop_count`
-  - `audio_tick_overrun_count`
-  - `audio_queue_high_watermark`
+  - `sound_cmd_drop_count`
+  - `sound_tick_overrun_count`
+  - `sound_queue_high_watermark`
 
 DoD:
 
@@ -352,11 +401,24 @@ DoD:
 
 - SFX-Programme (Laser/Explosion/Hit/Menu/R2D2).
 - Game-Loop nutzt finished-Events fuer Folge-Parts.
-- SFX werden waehrend laufender Musik als One-Shots getriggert (`tiny-snd.runtime/audio-play-sfx!`).
+- SFX werden waehrend laufender Musik als One-Shots getriggert (`tiny-snd.runtime/sound-play-sfx!`).
 
 DoD:
 
 - Kontinuierliche Musik + SFX ohne Frame-Hitches.
+
+### Schritt 5b: English DSL docs
+
+- Add `docs/SOUND_DSL.md`.
+- Document the public `tiny-fx.sound` authoring surface in English.
+- Cover note symbols, duration keywords, step shapes, option maps, melody/backing expansion, and two minimal examples.
+- Add a small glossary that expands abbreviations and explains them in memorable wording.
+- Link the document from the relevant README/docs entry point when one exists.
+
+DoD:
+
+- A reader can write a valid sound snippet without opening `src/tiny-fx.sound.clj` or `src/tests/test_sound_engine.c`.
+- A reader can tell what abbreviations like `:Cs4`, `:dq`, and `:et` stand for without guessing.
 
 ### Schritt 6: Soak
 
@@ -372,13 +434,13 @@ DoD:
 - **Mutable Trackdaten (`aset`) nach load**
   - Mitigation: frozen contract + optionale Debug-Fingerprint-Pruefung.
 - **unload waehrend Track noch aktiv**
-  - Mitigation: vor `audio-unload-track!` stets `audio-stop-track!` oder sicherstellen, dass Track nicht laeuft; optional C-Seite erzwingt Stop-before-Release.
+  - Mitigation: vor `sound-unload-track!` stets `sound-stop-track!` oder sicherstellen, dass Track nicht laeuft; optional C-Seite erzwingt Stop-before-Release.
 - **Harte Lautstaerke-Spruenge waehrend Playback**
   - Mitigation: optional kleine Volume-Rampe (z.B. 2-8 Ticks) statt sofortigem Sprung.
 - **SFX-Sturm bei engem Voice-Budget**
   - Mitigation: klare One-Shot-Policy (Prioritaet/Steal/Drop) + Drop-Counter.
 - **Defekte/inkompatible `.trk1`-Datei in FS-Emulation**
-  - Mitigation: strikte Header/Bounds-Validierung bei `tiny-snd.runtime/audio-load-track!`, bei Fehler sauber ablehnen.
+  - Mitigation: strikte Header/Bounds-Validierung bei `tiny-snd.runtime/sound-load-track!`, bei Fehler sauber ablehnen.
 - **Track-Symbol zeigt auf falschen Dateinamen (Mapping-Fehler)**
   - Mitigation: zentrale Composer-Registry + Validierungscheck beim Laden.
 - **Veralteter Cache nach Song-Aenderung**
@@ -411,7 +473,7 @@ Diese Datei konkretisiert Milestone 3/4 aus dem Vector-Handheld-Plan im gleichen
   - `./build/unit-tests --test 'test_runtime_stats*'` -> 6 Tests, 0 Failures
 - **Schritt 1 Native API Wiring:** umgesetzt (Audio-Builtins registriert und aufloesbar).
 - **Schritt 2 trk1 Parser + Streaming-Engine (Host):** umgesetzt inkl. Header/Varuint, Tick-Streaming, Repeat, Stop-Track, Track-Volume, SFX-One-Shot, Queue-Bounds und Ownership-Basis.
-- **Host-Testlauf Audio:** `./build/unit-tests --test 'test_audio_*'` -> 31 Tests, 0 Failures
+- **Host-Testlauf Audio:** `./build/unit-tests --test 'test_sound_*'` -> 31 Tests, 0 Failures
 - **Runtime-Stats Testlauf:** `./build/unit-tests --test 'test_runtime_stats*'` -> 7 Tests, 0 Failures
 
 ### Teilweise erledigt / ohne Hardware nicht final verifizierbar
@@ -434,4 +496,3 @@ Diese Datei konkretisiert Milestone 3/4 aus dem Vector-Handheld-Plan im gleichen
 - LEDC-Mapping und Frequenzunabhaengigkeit auf dem Board messen und bestaetigen.
 - Tick-Overrun-Telemetrie auf realem Timing pruefen.
 - 30min Soak mit Auswertung von Jitter, Drops, Overruns.
-

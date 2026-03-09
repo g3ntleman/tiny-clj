@@ -516,10 +516,10 @@ static bool viewer_load_game_demo_config(EvalState *st,
     }
     memset(out_bundle, 0, sizeof(*out_bundle));
     memset(out_rule_set, 0, sizeof(*out_rule_set));
-    if (!require_namespace_by_name(st, "tiny-fx.gfx")) {
+    if (!require_namespace_by_name(st, "tiny-fx.game-demo")) {
         return false;
     }
-    ID cfg = eval_string("(tiny-fx.gfx/game-demo-config)", st);
+    ID cfg = eval_string("(tiny-fx.game-demo/game-demo-config)", st);
     if (!cfg || !is_map(cfg)) {
         return false;
     }
@@ -1314,7 +1314,7 @@ int main(void) {
         goto cleanup;
     }
     if (!viewer_load_game_demo_config(viewer_eval_state, &demo_bundle, &spatial_rules)) {
-        fprintf(stderr, "Failed to load game-demo config from tiny-fx.gfx/game-demo-config\n");
+        fprintf(stderr, "Failed to load game-demo config from tiny-fx.game-demo/game-demo-config\n");
         goto cleanup;
     }
     demo_bundle_initialized = true;

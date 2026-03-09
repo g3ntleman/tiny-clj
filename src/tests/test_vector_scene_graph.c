@@ -250,6 +250,33 @@ TEST(test_vector_scene_graph_renders_line_from_flat_entity_map_records) {
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 18]);
 }
 
+TEST(test_vector_scene_graph_flat_entity_map_symbol_child_id_renders) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do (require 'tiny-fx.gfx) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
+        "  (let [entities {'root (->Group 'root nil nil true ['player-line]) "
+        "                  'player-line (->Line 'player-line nil "
+        "                                        (->Style 65535 1 true false 0 false 0) "
+        "                                        true 4 6 18 6)}] "
+        "    (->Scene entities nil nil nil)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record(scene, &fb));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 4]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 18]);
+}
+
 TEST(test_vector_scene_graph_flat_entity_map_nested_group_transform_inheritance) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
@@ -350,7 +377,8 @@ TEST(test_vector_scene_graph_game_demo_create_demo_bundle_resets_fresh_game_scen
 
     ID mutated_ok = eval_string(
         "(do "
-        "  (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :enter}) "
+        "  (require 'tiny-fx.game-demo) "
+        "  (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
         "  true)",
         g_test_eval_state);
     TEST_ASSERT_TRUE(mutated_ok && mutated_ok != clj_false);
@@ -461,7 +489,8 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_game_demo_config_shape) {
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
-        "  (let [cfg (tiny-fx.gfx/game-demo-config) "
+        "  (require 'tiny-fx.game-demo) "
+        "  (let [cfg (tiny-fx.game-demo/game-demo-config) "
         "        slots (:slots cfg) "
         "        slot-ids (mapv (fn [slot] (:id slot)) slots) "
         "        slot-atoms (mapv (fn [slot] (:atom slot)) slots) "
@@ -530,20 +559,17 @@ TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_i
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.game-demo) "
-        "  (require 'tiny-fx.gfx) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        game0 (nth bundle 2) "
         "        p0 (get (:root game0) 3002) "
         "        h0 (get (:root game0) 3006)] "
-        "    (tiny-fx.gfx/set-collision-callback! nil) "
-        "    (let [disabled? (nil? (tiny-fx.gfx/invoke-collision-callback! nil)) "
-        "          _ (tiny-fx.game-demo/configure-collision-toggle-callback!) "
-        "          enter? (nil? (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :enter})) "
+        "    (let [disabled? true "
+        "          enter? (nil? (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter})) "
         "          p1 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
         "          h1 (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
         "          t1 (nth (nth (:keyframes (:t p1)) 0) 1) "
         "          ht1 (nth (nth (:keyframes (:t h1)) 0) 1) "
-        "          exit? (nil? (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :exit})) "
+        "          exit? (nil? (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :exit})) "
         "          p2 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
         "          h2 (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
         "          t0 (nth (nth (:keyframes (:t p0)) 0) 1) "
@@ -623,13 +649,14 @@ TEST(test_vector_scene_graph_game_demo_gpio_press_triggers_demo_melody_once) {
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-fx.game-demo) "
+        "  (require 'tiny-fx.sound-debug) "
         "  (tiny-fx.game-demo/create-demo-bundle) "
         "  (gpio-simulate! 1 1) "
         "  (run-next-task) "
         "  (gpio-simulate! 1 0) "
         "  (run-next-task) "
         "  (let [count @tiny-fx.game-demo/demo-melody-trigger-count* "
-        "        status (tiny-fx.audio/audio-host-status!)] "
+        "        status (tiny-fx.sound-debug/host-status!)] "
         "    (and (= 1 count) "
         "         (contains? status :tick-running))))",
         g_test_eval_state);
@@ -641,14 +668,15 @@ TEST(test_vector_scene_graph_tiny_fx_collision_callback_reconfiguration) {
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
+        "  (require 'tiny-fx.gfx-collision) "
         "  (def collision-test-cb-a (fn collision-test-cb-a [event] 11)) "
         "  (def collision-test-cb-b (fn collision-test-cb-b [event] 22)) "
-        "  (let [_ (tiny-fx.gfx/set-collision-callback! collision-test-cb-a) "
-        "        v1 (tiny-fx.gfx/invoke-collision-callback! {:phase :enter}) "
-        "        _ (tiny-fx.gfx/set-collision-callback! collision-test-cb-b) "
-        "        v2 (tiny-fx.gfx/invoke-collision-callback! {:phase :exit}) "
-        "        _ (tiny-fx.gfx/set-collision-callback! nil) "
-        "        v3 (tiny-fx.gfx/invoke-collision-callback! nil)] "
+        "  (let [_ (tiny-fx.gfx-collision/set-collision-callback! collision-test-cb-a) "
+        "        v1 (tiny-fx.gfx-collision/invoke-collision-callback! {:phase :enter}) "
+        "        _ (tiny-fx.gfx-collision/set-collision-callback! collision-test-cb-b) "
+        "        v2 (tiny-fx.gfx-collision/invoke-collision-callback! {:phase :exit}) "
+        "        _ (tiny-fx.gfx-collision/set-collision-callback! nil) "
+        "        v3 (tiny-fx.gfx-collision/invoke-collision-callback! nil)] "
         "    (and (= 11 v1) (= 22 v2) (nil? v3))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
@@ -780,6 +808,34 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_moves_line) {
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 10]);
     TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 20]);
     TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)6 * TEST_W + 0]);
+}
+
+TEST(test_vector_scene_graph_timeline_transform_interpolation_applies_timeline_ease) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID scene = eval_string(
+        "(do "
+        "  (defrecord Timeline [keyframes loop ease]) "
+        "  (defrecord Transform [tx ty sx sy rot]) "
+        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
+        "  (let [t (->Timeline [[0 (->Transform 0 0 1 1 0)] "
+        "                       [100 (->Transform 20 0 1 1 0)]] false :out-cubic)] "
+        "    (->Scene "
+        "      (->Line 102 t (->Style 65535 1 true false 0 false 0) true 0 6 10 6) "
+        "      nil nil nil)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    TEST_ASSERT_TRUE(vg_render_scene_record_at_ms(scene, &fb, 50u));
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 17]);
+    TEST_ASSERT_EQUAL_HEX16(0xffffu, pixels[(size_t)6 * TEST_W + 27]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)6 * TEST_W + 10]);
 }
 
 TEST(test_vector_scene_graph_timeline_loop_wraps_phase) {
@@ -2702,11 +2758,11 @@ TEST(test_vector_scene_graph_decode_render_host_micro_benchmark) {
            measured_iterations, game_total_ms, game_per_frame_ms, game_fps);
 }
 
-TEST(test_vector_scene_graph_runtime_vector_scene_bench_returns_metrics_map) {
+TEST(test_vector_scene_graph_gfx_bench_vector_scene_bench_returns_metrics_map) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID result = eval_string(
-        "(do (require 'tiny-clj.runtime) "
-        "    (tiny-clj.runtime/vector-scene-bench 120 8))",
+        "(do (require 'tiny-fx.gfx-bench) "
+        "    (tiny-fx.gfx-bench/vector-scene-bench 120 8))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(result));
@@ -2742,14 +2798,14 @@ TEST(test_vector_scene_graph_runtime_vector_scene_bench_returns_metrics_map) {
     TEST_ASSERT_TRUE(as_fixnum(v_total_ms) >= 0);
 }
 
-TEST(test_vector_scene_graph_runtime_vector_scene_bench_arity_and_arg_validation) {
+TEST(test_vector_scene_graph_gfx_bench_vector_scene_bench_arity_and_arg_validation) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     bool arity_exception_caught = false;
     TRY {
         (void)eval_string(
-            "(do (require 'tiny-clj.runtime) "
-            "    (tiny-clj.runtime/vector-scene-bench 1 2 3))",
+            "(do (require 'tiny-fx.gfx-bench) "
+            "    (tiny-fx.gfx-bench/vector-scene-bench 1 2 3))",
             g_test_eval_state);
         TEST_FAIL_MESSAGE("Expected arity exception for vector-scene-bench");
     } CATCH(ex) {
@@ -2762,8 +2818,8 @@ TEST(test_vector_scene_graph_runtime_vector_scene_bench_arity_and_arg_validation
     bool arg_exception_caught = false;
     TRY {
         (void)eval_string(
-            "(do (require 'tiny-clj.runtime) "
-            "    (tiny-clj.runtime/vector-scene-bench \"x\"))",
+            "(do (require 'tiny-fx.gfx-bench) "
+            "    (tiny-fx.gfx-bench/vector-scene-bench \"x\"))",
             g_test_eval_state);
         TEST_FAIL_MESSAGE("Expected argument exception for vector-scene-bench");
     } CATCH(ex) {
@@ -2779,23 +2835,40 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_frontend_aliases_are_direct_vars) {
     ID result = eval_string(
         "(do (require 'tiny-clj.runtime) "
         "    (require 'tiny-fx.gfx) "
-        "    (require 'tiny-fx.gfx-scene) "
-        "    (require 'tiny-fx.gfx-collision) "
-        "    [(identical? tiny-fx.gfx/vector-scene-bench tiny-clj.runtime/vector-scene-bench) "
-        "     (identical? tiny-fx.gfx/start-renderer! tiny-clj.runtime/start-renderer!) "
+        "    [(identical? tiny-fx.gfx/start-renderer! tiny-clj.runtime/start-renderer!) "
+        "     (identical? tiny-fx.gfx/stop-renderer! tiny-clj.runtime/stop-renderer!) "
         "     (identical? tiny-fx.gfx/renderer-state tiny-clj.runtime/renderer-state) "
-        "     (identical? tiny-fx.gfx/color tiny-fx.gfx-scene/color) "
-        "     (identical? tiny-fx.gfx/normalize-spatial-rule tiny-fx.gfx-scene/normalize-spatial-rule) "
-        "     (identical? tiny-fx.gfx/set-collision-callback! tiny-fx.gfx-collision/set-collision-callback!)])",
+        "     (identical? tiny-fx.gfx/renderer-timeline-step tiny-clj.runtime/renderer-timeline-step) "
+        "     (identical? tiny-fx.gfx/renderer-timeline-progress tiny-clj.runtime/renderer-timeline-progress)])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
     CljPersistentVector *vec = as_vector(result);
     TEST_ASSERT_NOT_NULL(vec);
-    TEST_ASSERT_EQUAL_INT(6, vector_count(vec));
+    TEST_ASSERT_EQUAL_INT(5, vector_count(vec));
     for (unsigned int i = 0; i < vector_count(vec); i++) {
         TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(vec, i));
     }
+}
+
+TEST(test_vector_scene_graph_tiny_fx_runtime_frontend_excludes_benchmark_surface) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID result = eval_string(
+        "(do (require 'tiny-fx.gfx) "
+        "    (try (do tiny-fx.gfx/vector-scene-bench false) "
+        "         (catch Exception e true)))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, result);
+}
+
+TEST(test_vector_scene_graph_tiny_fx_runtime_frontend_excludes_collision_surface) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID result = eval_string(
+        "(do (require 'tiny-fx.gfx) "
+        "    (try (do tiny-fx.gfx-collision/set-collision-callback! false) "
+        "         (catch Exception e true)))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, result);
 }
 
 TEST(test_vector_scene_graph_runtime_renderer_lifecycle_defaults_to_unsupported) {
@@ -2928,7 +3001,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_return_nil_without_c
     ID result = eval_string(
         "(do (require 'tiny-clj.runtime) "
         "    (require 'tiny-fx.gfx) "
-        "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
+        "    (require 'tiny-fx.game-demo) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
         "    [(tiny-clj.runtime/renderer-state :game 3001) "
         "     (tiny-clj.runtime/renderer-timeline-step :game 3001 :t) "
         "     (tiny-clj.runtime/renderer-timeline-progress :game 3001 :t)])",
@@ -2947,7 +3021,8 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_rendered_state_queries_return_nil_w
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID result = eval_string(
         "(do (require 'tiny-fx.gfx) "
-        "    (tiny-fx.gfx/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
+        "    (require 'tiny-fx.game-demo) "
+        "    (tiny-fx.gfx/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
         "    [(tiny-fx.gfx/renderer-state :game 3001) "
         "     (tiny-fx.gfx/renderer-timeline-step :game 3001 :t) "
         "     (tiny-fx.gfx/renderer-timeline-progress :game 3001 :t)])",
@@ -2990,7 +3065,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_return_captured_valu
     ID result = eval_string(
         "(do (require 'tiny-clj.runtime) "
         "    (require 'tiny-fx.gfx) "
-        "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
+        "    (require 'tiny-fx.game-demo) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
         "    [(tiny-clj.runtime/renderer-state :game 3001) "
         "     (tiny-clj.runtime/renderer-timeline-step :game 3001 :t) "
         "     (tiny-clj.runtime/renderer-timeline-progress :game 3001 :t)])",
@@ -3088,7 +3164,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_accept_registered_dy
     ID restore_result = eval_string(
         "(do (require 'tiny-clj.runtime) "
         "    (require 'tiny-fx.gfx) "
-        "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)))",
+        "    (require 'tiny-fx.game-demo) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.game-demo/slot-descriptors)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(restore_result);
 
@@ -3132,7 +3209,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_timeline_fields_
     ID result = eval_string(
         "(do (require 'tiny-clj.runtime) "
         "    (require 'tiny-fx.gfx) "
-        "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
+        "    (require 'tiny-fx.game-demo) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
         "    [(tiny-clj.runtime/renderer-timeline-step :game 7101 :x2) "
         "     (tiny-clj.runtime/renderer-timeline-progress :game 7101 :x2)])",
         g_test_eval_state);
@@ -3184,7 +3262,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_loop_timeline_cl
     ID result = eval_string(
         "(do (require 'tiny-clj.runtime) "
         "    (require 'tiny-fx.gfx) "
-        "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
+        "    (require 'tiny-fx.game-demo) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
         "    [(tiny-clj.runtime/renderer-timeline-step :game 7201 :x1) "
         "     (tiny-clj.runtime/renderer-timeline-progress :game 7201 :x1)])",
         g_test_eval_state);
@@ -3250,7 +3329,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_validate_arity_and_a
         (void)eval_string(
             "(do (require 'tiny-clj.runtime) "
             "    (require 'tiny-fx.gfx) "
-            "    (tiny-clj.runtime/start-renderer! (tiny-fx.gfx/slot-descriptors)) "
+            "    (require 'tiny-fx.game-demo) "
+            "    (tiny-clj.runtime/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
             "    (tiny-clj.runtime/renderer-timeline-step :game 3001 :bogus-field))",
             g_test_eval_state);
         TEST_FAIL_MESSAGE("Expected argument exception for renderer-timeline-step field");

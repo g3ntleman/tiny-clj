@@ -6,7 +6,11 @@
 
 TEST(test_gfx_collision_contract_registers_record_descriptors) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    ID ok = eval_string("(do (require 'tiny-fx.gfx) true)", g_test_eval_state);
+    ID ok = eval_string("(do (require 'tiny-fx.gfx) "
+                        "    (require 'tiny-fx.gfx-scene) "
+                        "    (require 'tiny-fx.gfx-collision) "
+                        "    true)",
+                        g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 
     ID t_rule = intern_symbol_global("CollisionRule");
@@ -47,7 +51,9 @@ TEST(test_gfx_collision_contract_normalize_rule_defaults) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
-        "  (let [r (tiny-fx.gfx/normalize-spatial-rule {:id :r1 :a-id 1 :b-id 2})] "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  (let [r (tiny-fx.gfx-scene/normalize-spatial-rule {:id :r1 :a-id 1 :b-id 2})] "
         "    [(:slot r) (:kind r) (:radius r) (:channel r)]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
@@ -68,9 +74,11 @@ TEST(test_gfx_collision_contract_phase_mask_normalization_enter_exit_only) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
-        "  (let [r1 (tiny-fx.gfx/normalize-collision-rule "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  (let [r1 (tiny-fx.gfx-scene/normalize-collision-rule "
         "             {:id :r1 :a-id 1 :b-id 2 :phase-mask [:enter :foo]}) "
-        "        r2 (tiny-fx.gfx/normalize-collision-rule "
+        "        r2 (tiny-fx.gfx-scene/normalize-collision-rule "
         "             {:id :r2 :a-id 1 :b-id 2 :phase-mask []})] "
         "    [(:phase-mask r1) (:phase-mask r2)]))",
         g_test_eval_state);
@@ -101,7 +109,9 @@ TEST(test_gfx_collision_contract_disabled_rule_defaults_to_no_runtime_side_effec
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
-        "  (let [r (tiny-fx.gfx/normalize-collision-rule "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  (let [r (tiny-fx.gfx-scene/normalize-collision-rule "
         "            {:id :r-disabled :a-id 7 :b-id 9 :enabled false})] "
         "    [(:slot r) (:enabled r) (:cooldown-ms r) (:phase-mask r)]))",
         g_test_eval_state);
@@ -129,7 +139,9 @@ TEST(test_gfx_collision_contract_normalize_spatial_rule_preserves_proximity_fiel
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
-        "  (let [r (tiny-fx.gfx/normalize-spatial-rule "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  (let [r (tiny-fx.gfx-scene/normalize-spatial-rule "
         "            {:id :hear :slot :game :kind :proximity :a-id 10 :b-id 20 :radius 24 :channel :hearing})] "
         "    [(:slot r) (:kind r) (:a-id r) (:b-id r) (:radius r) (:channel r)]))",
         g_test_eval_state);
@@ -151,11 +163,13 @@ TEST(test_gfx_collision_contract_callback_set_clear_and_invoke_shape) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
         "  (def collision-contract-cb (fn collision-contract-cb [event] (:phase event))) "
-        "  (let [assigned (tiny-fx.gfx/set-collision-callback! collision-contract-cb) "
-        "        v1 (tiny-fx.gfx/invoke-collision-callback! {:phase :enter}) "
-        "        _ (tiny-fx.gfx/set-collision-callback! nil) "
-        "        v2 (tiny-fx.gfx/invoke-collision-callback! nil)] "
+        "  (let [assigned (tiny-fx.gfx-collision/set-collision-callback! collision-contract-cb) "
+        "        v1 (tiny-fx.gfx-collision/invoke-collision-callback! {:phase :enter}) "
+        "        _ (tiny-fx.gfx-collision/set-collision-callback! nil) "
+        "        v2 (tiny-fx.gfx-collision/invoke-collision-callback! nil)] "
         "    [(fn? assigned) v1 (nil? v2)]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
@@ -173,10 +187,12 @@ TEST(test_gfx_collision_contract_callback_rejects_non_function_values) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
-        "  (let [_ (tiny-fx.gfx/set-collision-callback! nil) "
-        "        rejected? (try (do (tiny-fx.gfx/set-collision-callback! 7) false) "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  (let [_ (tiny-fx.gfx-collision/set-collision-callback! nil) "
+        "        rejected? (try (do (tiny-fx.gfx-collision/set-collision-callback! 7) false) "
         "                       (catch Exception e true)) "
-        "        v (tiny-fx.gfx/invoke-collision-callback! nil)] "
+        "        v (tiny-fx.gfx-collision/invoke-collision-callback! nil)] "
         "    (and rejected? (nil? v))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(out && out != clj_false);
@@ -187,17 +203,16 @@ TEST(test_gfx_collision_contract_demo_callback_mutates_scene_state_explicitly) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.game-demo) "
-        "  (require 'tiny-fx.gfx) "
+        "  (require 'tiny-fx.gfx-scene) "
         "  (tiny-fx.game-demo/create-demo-bundle) "
-        "  (tiny-fx.game-demo/configure-collision-toggle-callback!) "
         "  (let [player0 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
         "        before-x1 (:x1 player0) "
         "        before-sx (:sx (nth (nth (:keyframes (:t player0)) 0) 1)) "
-        "        ret1 (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :enter}) "
+        "        ret1 (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
         "        player1 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
         "        after-enter-x1 (:x1 player1) "
         "        after-enter-sx (:sx (nth (nth (:keyframes (:t player1)) 0) 1)) "
-        "        ret2 (tiny-fx.gfx/invoke-collision-callback! {:kind :collision :phase :exit}) "
+        "        ret2 (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :exit}) "
         "        player2 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
         "        after-exit-x1 (:x1 player2) "
         "        after-exit-sx (:sx (nth (nth (:keyframes (:t player2)) 0) 1))] "
@@ -220,12 +235,13 @@ TEST(test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value)
     ID dispatch_fn = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
+        "  (require 'tiny-fx.gfx-collision) "
         "  (def collision-contract-runloop-marker (atom nil)) "
-        "  (tiny-fx.gfx/set-collision-callback! "
+        "  (tiny-fx.gfx-collision/set-collision-callback! "
         "    (fn collision-contract-runloop-cb [event] "
         "      (reset! collision-contract-runloop-marker (:phase event)) "
         "      777)) "
-        "  tiny-fx.gfx/invoke-collision-callback!)",
+        "  tiny-fx.gfx-collision/invoke-collision-callback!)",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(dispatch_fn);
     TEST_ASSERT_TRUE(TAG(dispatch_fn) == CLJ_FUNC || TAG(dispatch_fn) == CLJ_CLOSURE);
@@ -242,12 +258,16 @@ TEST(test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value)
     TEST_ASSERT_NOT_NULL(marker);
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enter"), marker);
 
-    ID direct = eval_string("(tiny-fx.gfx/invoke-collision-callback! {:phase :exit})", g_test_eval_state);
+    ID direct = eval_string("(do (require 'tiny-fx.gfx-collision) "
+                            "    (tiny-fx.gfx-collision/invoke-collision-callback! {:phase :exit}))",
+                            g_test_eval_state);
     TEST_ASSERT_NOT_NULL(direct);
     TEST_ASSERT_TRUE(is_fixnum(direct));
     TEST_ASSERT_EQUAL_INT(777, as_fixnum(direct));
 
-    ID clear_ok = eval_string("(tiny-fx.gfx/set-collision-callback! nil)", g_test_eval_state);
+    ID clear_ok = eval_string("(do (require 'tiny-fx.gfx-collision) "
+                              "    (tiny-fx.gfx-collision/set-collision-callback! nil))",
+                              g_test_eval_state);
     TEST_ASSERT_NULL(clear_ok);
     event_loop_clear();
 }
@@ -259,13 +279,14 @@ TEST(test_gfx_collision_contract_runloop_dispatch_preserves_spatial_envelope_fie
     ID dispatch_fn = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
+        "  (require 'tiny-fx.gfx-collision) "
         "  (def collision-envelope-marker (atom nil)) "
-        "  (tiny-fx.gfx/set-collision-callback! "
+        "  (tiny-fx.gfx-collision/set-collision-callback! "
         "    (fn collision-envelope-cb [event] "
         "      (reset! collision-envelope-marker "
         "              [(:source event) (:kind event) (:phase event) (:channel event)]) "
         "      :ignored)) "
-        "  tiny-fx.gfx/invoke-collision-callback!)",
+        "  tiny-fx.gfx-collision/invoke-collision-callback!)",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(dispatch_fn);
     TEST_ASSERT_TRUE(TAG(dispatch_fn) == CLJ_FUNC || TAG(dispatch_fn) == CLJ_CLOSURE);
@@ -281,7 +302,9 @@ TEST(test_gfx_collision_contract_runloop_dispatch_preserves_spatial_envelope_fie
                             g_test_eval_state);
     TEST_ASSERT_EQUAL(clj_true, marker);
 
-    ID clear_ok = eval_string("(tiny-fx.gfx/set-collision-callback! nil)", g_test_eval_state);
+    ID clear_ok = eval_string("(do (require 'tiny-fx.gfx-collision) "
+                              "    (tiny-fx.gfx-collision/set-collision-callback! nil))",
+                              g_test_eval_state);
     TEST_ASSERT_NULL(clear_ok);
     event_loop_clear();
 }
@@ -291,11 +314,13 @@ TEST(test_gfx_scene_update_nodes_applies_batched_changes) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
         "  (let [tree {:id :root :children "
         "              [{:id :a :x 10 :y 20} "
         "               {:id :b :x 30 :y 40} "
         "               {:id :c :x 50 :y 60}]} "
-        "        t2 (tiny-fx.gfx/update-nodes tree "
+        "        t2 (tiny-fx.gfx-scene/update-nodes tree "
         "             {:a (fn [n] (assoc n :x 99)) "
         "              :c (fn [n] (assoc n :y 0))})] "
         "    [(:x (nth (:children t2) 0)) "
@@ -322,8 +347,10 @@ TEST(test_gfx_scene_update_nodes_empty_updates_returns_unchanged) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
         "  (let [tree {:id :root :x 5} "
-        "        t2 (tiny-fx.gfx/update-nodes tree {})] "
+        "        t2 (tiny-fx.gfx-scene/update-nodes tree {})] "
         "    (:x t2)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
@@ -336,11 +363,13 @@ TEST(test_gfx_scene_update_nodes_nested_groups) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
         "  (let [tree {:id :root :children "
         "              [{:id :g1 :children "
         "                [{:id :deep :val 1}]} "
         "               {:id :leaf :val 2}]} "
-        "        t2 (tiny-fx.gfx/update-nodes tree "
+        "        t2 (tiny-fx.gfx-scene/update-nodes tree "
         "             {:deep (fn [n] (assoc n :val 100)) "
         "              :leaf (fn [n] (assoc n :val 200))})] "
         "    [(:val (first (:children (first (:children t2))))) "
@@ -359,10 +388,12 @@ TEST(test_gfx_scene_web_hex_color_conversion) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
-        "  [(tiny-fx.gfx/web-hex->color \"#00FFFF\") "
-        "   (tiny-fx.gfx/web-hex->color \"#FFFFFF\") "
-        "   (tiny-fx.gfx/web-hex->color \"#FF00FF\") "
-        "   (tiny-fx.gfx/web-hex->color \"#FF0000\")])",
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  [(tiny-fx.gfx-scene/web-hex->color \"#00FFFF\") "
+        "   (tiny-fx.gfx-scene/web-hex->color \"#FFFFFF\") "
+        "   (tiny-fx.gfx-scene/web-hex->color \"#FF00FF\") "
+        "   (tiny-fx.gfx-scene/web-hex->color \"#FF0000\")])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -380,10 +411,12 @@ TEST(test_gfx_scene_rgb888_int_color_conversion) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
-        "  [(tiny-fx.gfx/color 0x00FFFF) "
-        "   (tiny-fx.gfx/color 0xFFFFFF) "
-        "   (tiny-fx.gfx/color 0xFF00FF) "
-        "   (tiny-fx.gfx/color 0xFF0000)])",
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  [(tiny-fx.gfx-scene/color 0x00FFFF) "
+        "   (tiny-fx.gfx-scene/color 0xFFFFFF) "
+        "   (tiny-fx.gfx-scene/color 0xFF00FF) "
+        "   (tiny-fx.gfx-scene/color 0xFF0000)])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -401,10 +434,12 @@ TEST(test_gfx_scene_rgb888_int_color_invalid_input) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
-        "  [(tiny-fx.gfx/color nil) "
-        "   (tiny-fx.gfx/color -1) "
-        "   (tiny-fx.gfx/color 16777216) "
-        "   (tiny-fx.gfx/color 3.14)])",
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  [(tiny-fx.gfx-scene/color nil) "
+        "   (tiny-fx.gfx-scene/color -1) "
+        "   (tiny-fx.gfx-scene/color 16777216) "
+        "   (tiny-fx.gfx-scene/color 3.14)])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -422,10 +457,12 @@ TEST(test_gfx_scene_web_hex_color_invalid_input) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
-        "  [(tiny-fx.gfx/web-hex->color nil) "
-        "   (tiny-fx.gfx/web-hex->color \"\") "
-        "   (tiny-fx.gfx/web-hex->color \"#FFF\") "
-        "   (tiny-fx.gfx/web-hex->color \"#GG00FF\")])",
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  [(tiny-fx.gfx-scene/web-hex->color nil) "
+        "   (tiny-fx.gfx-scene/web-hex->color \"\") "
+        "   (tiny-fx.gfx-scene/web-hex->color \"#FFF\") "
+        "   (tiny-fx.gfx-scene/web-hex->color \"#GG00FF\")])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);

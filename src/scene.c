@@ -9,10 +9,12 @@
 #include <string.h>
 #include <time.h>
 #include "callbacks.h"
+#include "hashmap.h"
 #include "map.h"
 #include "record.h"
 #include "strings.h"
 #include "symbol.h"
+#include "thread_local.h"
 #include "value.h"
 #include "vector.h"
 
@@ -29,6 +31,121 @@
 STATIC_SYMBOL_DATA(sym_entity_root_data, "root");
 
 #undef STATIC_SYMBOL_DATA
+
+typedef struct {
+    ID entity_map;
+    CljHashMap *index;
+} VgFlatSceneLookup;
+
+static THREAD_LOCAL CljHashMap *g_flat_scene_lookup_scratch = NULL;
+
+static void vg_flat_scene_lookup_reset_borrowed(CljHashMap *index) {
+    if (!index) {
+        return;
+    }
+    for (unsigned int i = 0; i < index->capacity; i++) {
+        KV_SET_KEY(index->data, i, HASHMAP_EMPTY);
+        KV_SET_VALUE(index->data, i, NULL);
+    }
+    index->count = 0u;
+    index->tombstones = 0u;
+}
+
+static bool vg_flat_scene_lookup_reserve(unsigned int entry_count) {
+    unsigned int required = entry_count > 0u ? (entry_count * 2u) : 8u;
+    if (g_flat_scene_lookup_scratch && g_flat_scene_lookup_scratch->capacity >= required) {
+        vg_flat_scene_lookup_reset_borrowed(g_flat_scene_lookup_scratch);
+        return true;
+    }
+
+    CljHashMap *replacement = make_hashmap(required);
+    if (!replacement) {
+        return false;
+    }
+
+    if (g_flat_scene_lookup_scratch) {
+        vg_flat_scene_lookup_reset_borrowed(g_flat_scene_lookup_scratch);
+        RELEASE(g_flat_scene_lookup_scratch);
+    }
+    g_flat_scene_lookup_scratch = replacement;
+    return true;
+}
+
+static unsigned int vg_flat_scene_lookup_find_slot(CljHashMap *index, ID key) {
+    CLJ_ASSERT(index && index->capacity > 0u);
+    unsigned int mask = index->capacity - 1u;
+    unsigned int start_idx = clj_hash(key) & mask;
+    unsigned int idx = start_idx;
+
+    do {
+        ID stored_key = KV_KEY(index->data, idx);
+        if (stored_key == HASHMAP_EMPTY) {
+            return idx;
+        }
+        if (clj_equal(stored_key, key)) {
+            return idx;
+        }
+        idx = (idx + 1u) & mask;
+    } while (idx != start_idx);
+
+    return UINT_MAX;
+}
+
+static bool vg_flat_scene_lookup_insert_borrowed(CljHashMap *index, ID key, ID value) {
+    if (!index) {
+        return false;
+    }
+    unsigned int idx = vg_flat_scene_lookup_find_slot(index, key);
+    if (idx == UINT_MAX) {
+        return false;
+    }
+    if (KV_KEY(index->data, idx) == HASHMAP_EMPTY) {
+        KV_SET_KEY(index->data, idx, key);
+        KV_SET_VALUE(index->data, idx, value);
+        index->count++;
+        return true;
+    }
+    KV_SET_VALUE(index->data, idx, value);
+    return true;
+}
+
+static bool vg_flat_scene_lookup_build(ID entity_map, VgFlatSceneLookup *out_lookup) {
+    if (!out_lookup) {
+        return false;
+    }
+    out_lookup->entity_map = entity_map;
+    out_lookup->index = NULL;
+
+    CljPersistentMap *backing = map_backing(entity_map);
+    if (!backing) {
+        return true;
+    }
+    unsigned int entry_count = (unsigned int)((backing->count > 0) ? backing->count : 0);
+    if (!vg_flat_scene_lookup_reserve(entry_count)) {
+        return false;
+    }
+
+    out_lookup->index = g_flat_scene_lookup_scratch;
+    if (entry_count == 0u) {
+        return true;
+    }
+
+    MAP_FOR_EACH(entity_map, key, value) {
+        if (!vg_flat_scene_lookup_insert_borrowed(out_lookup->index, key, value)) {
+            vg_flat_scene_lookup_reset_borrowed(out_lookup->index);
+            out_lookup->index = NULL;
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline ID vg_flat_scene_lookup_get(const VgFlatSceneLookup *lookup, ID entity_map, ID key) {
+    if (lookup && lookup->index && lookup->entity_map == entity_map) {
+        return hashmap_get_sentinel(lookup->index, key, NULL);
+    }
+    return map_get_sentinel(entity_map, key, NULL);
+}
 
 static inline uint32_t record_type_hash(ID obj) {
     CljPersistentRecord *r = (CljPersistentRecord *)obj;
@@ -640,17 +757,47 @@ static bool timeline_transform_keyframe_at(ID keyframes_obj,
     return true;
 }
 
+static VgAnimEase timeline_ease_kind(ID timeline_obj) {
+    ID ease_obj = tiny_fx_gfx_get_field(timeline_obj, intern_symbol_global(":ease"), NULL);
+    if (!ease_obj) {
+        ease_obj = tiny_fx_gfx_get_field(timeline_obj, intern_symbol_global(":easing"), NULL);
+    }
+    if (!ease_obj) {
+        return VG_ANIM_EASE_LINEAR;
+    }
+
+    const char *name = NULL;
+    if (TAG(ease_obj) == CLJ_SYMBOL) {
+        CljSymbol *sym = as_symbol(ease_obj);
+        name = sym ? sym->cname : NULL;
+    } else if (TAG(ease_obj) == CLJ_STRING) {
+        name = string_data(ease_obj);
+    }
+    if (!name) {
+        return VG_ANIM_EASE_LINEAR;
+    }
+    while (*name == ':') {
+        name++;
+    }
+    if (strcmp(name, "in-quad") == 0) return VG_ANIM_EASE_IN_QUAD;
+    if (strcmp(name, "out-quad") == 0) return VG_ANIM_EASE_OUT_QUAD;
+    if (strcmp(name, "in-out-quad") == 0) return VG_ANIM_EASE_IN_OUT_QUAD;
+    if (strcmp(name, "out-cubic") == 0) return VG_ANIM_EASE_OUT_CUBIC;
+    return VG_ANIM_EASE_LINEAR;
+}
+
 static VgTransformFixed interpolate_transform_keyframes(Transform *from,
                                                         Transform *to,
                                                         uint32_t from_ms,
                                                         uint32_t to_ms,
-                                                        uint32_t phase_ms) {
+                                                        uint32_t phase_ms,
+                                                        VgAnimEase ease) {
     if (!from || !to || to_ms <= from_ms) {
         return vg_transform_fixed_identity();
     }
     uint32_t elapsed = phase_ms - from_ms;
     uint32_t duration = to_ms - from_ms;
-    int32_t progress = vg_anim_progress_q13(elapsed, duration);
+    int32_t progress = vg_anim_ease_q13(ease, vg_anim_progress_q13(elapsed, duration));
 
     int32_t from_tx = id_to_fixed_raw_default(from->tx, 0);
     int32_t from_ty = id_to_fixed_raw_default(from->ty, 0);
@@ -699,6 +846,7 @@ static VgTransformFixed decode_transform_fixed_with_info(ID obj,
     if (TAG(obj) == CLJ_RECORD && record_type_hash(obj) == s->h_timeline) {
         Timeline *timeline = (Timeline *)obj;
         ID keyframes_obj = timeline->keyframes;
+        VgAnimEase ease = timeline_ease_kind(obj);
         if (!id_is_vector(keyframes_obj)) {
             return vg_transform_fixed_identity();
         }
@@ -778,7 +926,8 @@ static VgTransformFixed decode_transform_fixed_with_info(ID obj,
                                                        curr_transform,
                                                        prev_ms,
                                                        curr_ms,
-                                                       phase_ms);
+                                                       phase_ms,
+                                                       ease);
             }
             prev_ms = curr_ms;
             prev_transform = curr_transform;
@@ -900,6 +1049,7 @@ static VgStyle decode_style(ID node_obj,
 
 static bool render_record_node(ID node_obj,
                                ID entity_map,
+                               const VgFlatSceneLookup *lookup,
                                VgTransformFixed parent_t,
                                VgFrameBuffer *fb,
                                bool use_clip,
@@ -1026,6 +1176,7 @@ static bool render_polyline_record(ID node_obj,
 
 static bool render_record_node(ID node_obj,
                                ID entity_map,
+                               const VgFlatSceneLookup *lookup,
                                VgTransformFixed parent_t,
                                VgFrameBuffer *fb,
                                bool use_clip,
@@ -1088,7 +1239,7 @@ static bool render_record_node(ID node_obj,
                 if (!entity_map || !is_map(entity_map)) {
                     return false;
                 }
-                child_node = map_get_sentinel(entity_map, child_ref, NULL);
+                child_node = vg_flat_scene_lookup_get(lookup, entity_map, child_ref);
                 if (!child_node) {
                     return false;
                 }
@@ -1098,6 +1249,7 @@ static bool render_record_node(ID node_obj,
             }
             if (!render_record_node(child_node,
                                     entity_map,
+                                    lookup,
                                     world_t,
                                     fb,
                                     use_clip,
@@ -1332,7 +1484,10 @@ static bool render_record_node(ID node_obj,
     return false;
 }
 
-static bool resolve_root_node(ID root_field, ID *out_root_node, ID *out_entity_map) {
+static bool resolve_root_node(ID root_field,
+                              const VgFlatSceneLookup *lookup,
+                              ID *out_root_node,
+                              ID *out_entity_map) {
     if (out_root_node) {
         *out_root_node = NULL;
     }
@@ -1352,7 +1507,7 @@ static bool resolve_root_node(ID root_field, ID *out_root_node, ID *out_entity_m
     if (out_entity_map) {
         *out_entity_map = root_field;
     }
-    *out_root_node = map_get_sentinel(root_field, (ID)&sym_entity_root_data.sym, NULL);
+    *out_root_node = vg_flat_scene_lookup_get(lookup, root_field, (ID)&sym_entity_root_data.sym);
     return *out_root_node != NULL;
 }
 
@@ -1396,7 +1551,11 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
     bool has_effective_rect = decode_rect(resolved_clip_source, &effective_rect, sc);
     ID entity_map = NULL;
     ID root_node = NULL;
-    if (!resolve_root_node(resolved_root, &root_node, &entity_map)) {
+    VgFlatSceneLookup lookup = {0};
+    if (is_map(resolved_root) && !vg_flat_scene_lookup_build(resolved_root, &lookup)) {
+        return false;
+    }
+    if (!resolve_root_node(resolved_root, &lookup, &root_node, &entity_map)) {
         return false;
     }
 
@@ -1411,6 +1570,7 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
     }
     return render_record_node(root_node,
                               entity_map,
+                              &lookup,
                               vg_transform_fixed_identity(),
                               fb,
                               has_effective_rect,
@@ -1451,7 +1611,11 @@ static bool render_scene_record_clipped_at_ms_internal(ID scene_record,
     }
     ID entity_map = NULL;
     ID root_node = NULL;
-    if (!resolve_root_node(resolved_root, &root_node, &entity_map)) {
+    VgFlatSceneLookup lookup = {0};
+    if (is_map(resolved_root) && !vg_flat_scene_lookup_build(resolved_root, &lookup)) {
+        return false;
+    }
+    if (!resolve_root_node(resolved_root, &lookup, &root_node, &entity_map)) {
         return false;
     }
     if (!root_node) {
@@ -1459,6 +1623,7 @@ static bool render_scene_record_clipped_at_ms_internal(ID scene_record,
     }
     return render_record_node(root_node,
                               entity_map,
+                              &lookup,
                               vg_transform_fixed_identity(),
                               fb,
                               true,

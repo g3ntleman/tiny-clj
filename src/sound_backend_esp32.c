@@ -1,5 +1,5 @@
 /*
- * Audio backend for ESP32: LEDC PWM output + esp_timer 1ms tick.
+ * Sound backend for ESP32: LEDC PWM output + esp_timer 1ms tick.
  *
  * Each voice gets its own LEDC timer (for independent frequency) and channel.
  * The 1ms tick is driven by esp_timer and runs on-demand (start/stop).
@@ -7,8 +7,8 @@
 
 #ifdef ESP32_BUILD
 
-#include "audio_engine.h"
-#include "audio_tick_scheduler.h"
+#include "sound_engine.h"
+#include "sound_tick_scheduler.h"
 #include "esp32-idf/main/vector_handheld_config.h"
 
 #include "driver/ledc.h"
@@ -42,16 +42,16 @@ static LedcVoice g_ledc_voices[] = {
 /* esp_timer handle                                                          */
 /* ========================================================================= */
 
-static esp_timer_handle_t g_audio_timer = NULL;
-static _Atomic bool g_audio_tick_in_callback = false;
-static AudioTickScheduler g_audio_tick_scheduler;
+static esp_timer_handle_t g_sound_timer = NULL;
+static _Atomic bool g_sound_tick_in_callback = false;
+static SoundTickScheduler g_sound_tick_scheduler;
 
 /* Keep callback work within one tick budget. */
-#define AUDIO_TICK_BUDGET_US (VG_AUDIO_TICK_MS * 1000)
-#define AUDIO_TICK_PERIOD_NS ((uint64_t)VG_AUDIO_TICK_MS * 1000000ull)
-#define AUDIO_TICK_MAX_CATCHUP_TICKS 4u
+#define SOUND_TICK_BUDGET_US (VG_SOUND_TICK_MS * 1000)
+#define SOUND_TICK_PERIOD_NS ((uint64_t)VG_SOUND_TICK_MS * 1000000ull)
+#define SOUND_TICK_MAX_CATCHUP_TICKS 4u
 
-static void audio_backend_stop_ledc_voice(LedcVoice *voice, bool clear_initialized) {
+static void sound_backend_stop_ledc_voice(LedcVoice *voice, bool clear_initialized) {
     if (!voice || !voice->initialized) {
         return;
     }
@@ -63,9 +63,9 @@ static void audio_backend_stop_ledc_voice(LedcVoice *voice, bool clear_initializ
     }
 }
 
-static void audio_backend_silence_ledc_voices(bool clear_initialized) {
+static void sound_backend_silence_ledc_voices(bool clear_initialized) {
     for (int i = 0; i < LEDC_VOICE_CAP; i++) {
-        audio_backend_stop_ledc_voice(&g_ledc_voices[i], clear_initialized);
+        sound_backend_stop_ledc_voice(&g_ledc_voices[i], clear_initialized);
     }
 }
 
@@ -84,7 +84,7 @@ static bool ledc_mapping_valid(int voice_count) {
     return true;
 }
 
-static void audio_timer_callback(void *arg) {
+static void sound_timer_callback(void *arg) {
     (void)arg;
 
     /* Real-time callback rules:
@@ -93,42 +93,42 @@ static void audio_timer_callback(void *arg) {
      * - no I/O/logging
      * - no VM/eval calls
      */
-    if (atomic_exchange_explicit(&g_audio_tick_in_callback, true, memory_order_acq_rel)) {
-        g_audio_engine.telemetry.tick_overrun_count++;
+    if (atomic_exchange_explicit(&g_sound_tick_in_callback, true, memory_order_acq_rel)) {
+        g_sound_engine.telemetry.tick_overrun_count++;
         return;
     }
 
     int64_t start_us = esp_timer_get_time();
     uint32_t skipped_ticks = 0u;
-    uint32_t due = audio_tick_scheduler_ticks_due(&g_audio_tick_scheduler,
+    uint32_t due = sound_tick_scheduler_ticks_due(&g_sound_tick_scheduler,
                                                   (uint64_t)start_us * 1000ull,
                                                   &skipped_ticks);
     if (skipped_ticks > 0u) {
-        g_audio_engine.telemetry.tick_overrun_count += skipped_ticks;
+        g_sound_engine.telemetry.tick_overrun_count += skipped_ticks;
     }
     for (uint32_t i = 0; i < due; i++) {
-        audio_engine_tick();
+        sound_engine_tick();
     }
     int64_t elapsed_us = esp_timer_get_time() - start_us;
-    int64_t budget_us = (int64_t)AUDIO_TICK_BUDGET_US * (due > 0u ? (int64_t)due : 1ll);
+    int64_t budget_us = (int64_t)SOUND_TICK_BUDGET_US * (due > 0u ? (int64_t)due : 1ll);
     if (elapsed_us > budget_us) {
-        g_audio_engine.telemetry.tick_overrun_count++;
+        g_sound_engine.telemetry.tick_overrun_count++;
     }
-    atomic_store_explicit(&g_audio_tick_in_callback, false, memory_order_release);
+    atomic_store_explicit(&g_sound_tick_in_callback, false, memory_order_release);
 }
 
 /* ========================================================================= */
 /* Backend API                                                               */
 /* ========================================================================= */
 
-void audio_backend_init(int voice_count) {
+void sound_backend_init(int voice_count) {
     if (voice_count > LEDC_VOICE_CAP) voice_count = LEDC_VOICE_CAP;
     if (voice_count < 0) voice_count = 0;
 
     if (!ledc_mapping_valid(voice_count)) {
         return;
     }
-    audio_tick_scheduler_init(&g_audio_tick_scheduler, AUDIO_TICK_PERIOD_NS, AUDIO_TICK_MAX_CATCHUP_TICKS);
+    sound_tick_scheduler_init(&g_sound_tick_scheduler, SOUND_TICK_PERIOD_NS, SOUND_TICK_MAX_CATCHUP_TICKS);
 
     for (int i = 0; i < voice_count; i++) {
         LedcVoice *v = &g_ledc_voices[i];
@@ -158,16 +158,16 @@ void audio_backend_init(int voice_count) {
     }
 }
 
-void audio_backend_shutdown(void) {
-    audio_tick_stop();
-    audio_backend_silence_ledc_voices(true);
-    if (g_audio_timer) {
-        esp_timer_delete(g_audio_timer);
-        g_audio_timer = NULL;
+void sound_backend_shutdown(void) {
+    sound_tick_stop();
+    sound_backend_silence_ledc_voices(true);
+    if (g_sound_timer) {
+        esp_timer_delete(g_sound_timer);
+        g_sound_timer = NULL;
     }
 }
 
-void audio_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume) {
+void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume) {
     if (voice_index < 0 || voice_index >= LEDC_VOICE_CAP) return;
     LedcVoice *v = &g_ledc_voices[voice_index];
     if (!v->initialized) return;
@@ -192,47 +192,47 @@ void audio_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume) 
 /* Tick lifecycle (on-demand)                                                */
 /* ========================================================================= */
 
-void audio_tick_start(void) {
-    if (g_audio_engine.tick_running) return;
+void sound_tick_start(void) {
+    if (g_sound_engine.tick_running) return;
 
-    if (!g_audio_timer) {
+    if (!g_sound_timer) {
         esp_timer_create_args_t args = {
-            .callback = audio_timer_callback,
+            .callback = sound_timer_callback,
             .arg = NULL,
             .dispatch_method = ESP_TIMER_TASK,
-            .name = "audio_tick",
+            .name = "sound_tick",
         };
-        if (esp_timer_create(&args, &g_audio_timer) != ESP_OK) {
+        if (esp_timer_create(&args, &g_sound_timer) != ESP_OK) {
             return;
         }
     }
 
-    audio_tick_scheduler_start(&g_audio_tick_scheduler, (uint64_t)esp_timer_get_time() * 1000ull);
-    if (esp_timer_start_periodic(g_audio_timer, VG_AUDIO_TICK_MS * 1000) != ESP_OK) { /* us */
-        audio_tick_scheduler_stop(&g_audio_tick_scheduler);
+    sound_tick_scheduler_start(&g_sound_tick_scheduler, (uint64_t)esp_timer_get_time() * 1000ull);
+    if (esp_timer_start_periodic(g_sound_timer, VG_SOUND_TICK_MS * 1000) != ESP_OK) { /* us */
+        sound_tick_scheduler_stop(&g_sound_tick_scheduler);
         return;
     }
-    g_audio_engine.tick_running = true;
+    g_sound_engine.tick_running = true;
 }
 
-void audio_tick_stop(void) {
-    if (!g_audio_engine.tick_running) return;
-    if (g_audio_timer) {
-        esp_timer_stop(g_audio_timer);
+void sound_tick_stop(void) {
+    if (!g_sound_engine.tick_running) return;
+    if (g_sound_timer) {
+        esp_timer_stop(g_sound_timer);
     }
-    audio_tick_scheduler_stop(&g_audio_tick_scheduler);
-    g_audio_engine.tick_running = false;
-    audio_backend_silence_ledc_voices(false);
+    sound_tick_scheduler_stop(&g_sound_tick_scheduler);
+    g_sound_engine.tick_running = false;
+    sound_backend_silence_ledc_voices(false);
 }
 
-bool audio_backend_host_get_status(AudioHostStatus *out) {
+bool sound_backend_host_get_status(SoundHostStatus *out) {
     if (!out) return false;
 
     out->backend_available = true;
-    out->audio_running = g_audio_engine.tick_running;
-    out->tick_enabled = g_audio_engine.tick_running;
+    out->sound_running = g_sound_engine.tick_running;
+    out->tick_enabled = g_sound_engine.tick_running;
     out->tick_thread_running = false;
-    out->voice_count = g_audio_engine.voice_count;
+    out->voice_count = g_sound_engine.voice_count;
     return true;
 }
 

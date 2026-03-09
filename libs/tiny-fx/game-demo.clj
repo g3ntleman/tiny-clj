@@ -2,7 +2,6 @@ R"TINY_GFX_HOST(
 (ns tiny-fx.game-demo
   (:require [tiny-fx.gfx-scene :refer [->Transform ->Style ->Group ->Polyline
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
-            [tiny-fx.gfx-collision :as collision]
             [tiny-fx.sound :as sound]))
 
 (defn style
@@ -244,13 +243,12 @@ R"TINY_GFX_HOST(
 (def melody-input-pin 1)
 (def demo-melody-track-id :game-demo-melody)
 (def demo-melody-steps
-  [{:melody :G5 :backing [:D4] :dur :s}
-   {:melody :Bb5 :backing [:F4] :dur :s}
-   {:melody :D6 :backing [:G4] :dur :e}])
+  [{:melody :G5 :backing [:D4] :duration :s}
+   {:melody :Bb5 :backing [:F4] :duration :s}
+   {:melody :D6 :backing [:G4] :duration :e}])
 (def demo-melody-opts
-  {:channel-count 2
-   :melody-vol 220
-   :backing-volumes [132]
+  {:melody {:volume 220}
+   :backing {:volume 132}
    :tempo-bpm 168
    :gate-percent 78})
 
@@ -271,6 +269,14 @@ R"TINY_GFX_HOST(
 and game-demo startup."
   []
   slot-descriptor-list)
+
+(defn game-demo-config
+  "Builds and returns native startup config for the game demo."
+  []
+  (create-demo-bundle)
+  {:slots (slot-descriptors)
+   :spatial-callback on-player-collision-toggle!
+   :game-scene-atom game-scene-state})
 
 (defn- make-player-tri
   [id style t]
@@ -311,11 +317,6 @@ Returns nil; host-side callback dispatch ignores return values."
         (when game-scene
           (reset! game-scene-state (apply-player-scale game-scene next-state)))))
     nil))
-
-(defn configure-collision-toggle-callback!
-  "Configures the collision response callback used by the game demo."
-  []
-  (collision/set-collision-callback! on-player-collision-toggle!))
 
 (defn on-demo-gpio-input!
   "Game-demo GPIO callback: a rising edge on the demo input pin triggers
@@ -426,7 +427,6 @@ Index layout:
     (reset! score-scene-state score-scene-template)
     (reset! game-scene-state game-scene)
     (reset! demo-melody-trigger-count* 0)
-    (configure-collision-toggle-callback!)
     (configure-demo-input-watchers!)
     demo-bundle))
 
