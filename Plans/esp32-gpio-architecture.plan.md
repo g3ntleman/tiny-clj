@@ -32,13 +32,13 @@ todos:
     status: pending
   - id: gpio-watch-eval-map-regression
     content: "Fix evaluator handling for map/set literals passed as function arguments so local symbols are resolved correctly in analog watch event maps."
-    status: pending
+    status: completed
   - id: gpio-watch-regression-tests
     content: "Keep focused regression coverage for map-literal callback arguments, watch analog callback delivery, and timer-driven event maps without def-based workarounds."
-    status: in_progress
+    status: completed
   - id: gpio-watch-remove-def-hacks
     content: "Remove temporary def-based watch-analog test workarounds after the evaluator bug is fixed."
-    status: pending
+    status: completed
   - id: gpio-builtins-split
     content: "Optionally move GPIO native registration out of src/builtins.c into a dedicated src/builtins_gpio.c for consistency with other builtin groups."
     status: completed
@@ -203,10 +203,10 @@ todos:
 - Filtering semantics are explicit: emit only when `abs(current - last-emitted) >= :threshold`.
 - Polling cadence is caller-controlled through `:period-ms`.
 
-### Known evaluator blocker for analog watch
+### Resolved evaluator issue behind analog watch
 
-- New investigation result: the current analog-watch failure is not a general closure-capture bug.
-- The smaller reproducible issue is evaluation of map/set literals when they are passed as function arguments.
+- The analog-watch callback failure was traced to evaluator handling for map/set literals passed as function arguments.
+- It was not a general closure-capture bug.
 - Minimal REPL repro:
 
 ```clojure
@@ -216,24 +216,29 @@ todos:
  35)
 ```
 
-- Current result:
-  - throws `RuntimeException: Unable to resolve symbol: pin in this context`
+- Historical failing result:
+  - threw `RuntimeException: Unable to resolve symbol: pin in this context`
 - Important counterexamples:
   - direct map return works: `((fn [pin] (let [value 0] {:pin pin :value value})) 35)`
   - vector argument works: `((fn [pin] (let [value 0] (identity [pin value]))) 35)`
   - simple timer/closure capture without event-map literal works
-- Working hypothesis:
-  - the bug sits in evaluator argument handling for map/set literals, not in closure capture in general
-  - likely path: `eval_function_call` / `eval_arg_from_expr_with_context` loses or inconsistently applies lexical context when evaluating map/set entries
+- Root cause:
+  - `eval_arg_from_expr_with_context` evaluated map-literal keys and values with `eval_body(..., NULL)` instead of forwarding the active `ctx`
+  - that dropped the lexical frame/environment when a map literal was evaluated in function-argument position
+- Fix:
+  - the map-literal path now evaluates keys and values with `eval_body(..., ctx)`
+  - this preserves lexical locals for callback/event-map construction
 - Why this matters for GPIO:
   - `watch-analog` invokes the user callback with an event map literal
-  - that event shape matches the failing evaluator pattern, so GPIO currently exposes the evaluator bug instead of owning it
-- Required cleanup after the fix:
-  - remove temporary `(def ...)`-based test workarounds that were only used to probe callback scope loss
-- New regression coverage:
+  - that event shape matched the failing evaluator pattern, so GPIO exposed the evaluator bug instead of owning it
+- Cleanup completed after the fix:
+  - temporary `(def ...)`-based watch-analog test workarounds were removed
+- Regression coverage now in place:
   - `src/tests/test_let.c:test_let_map_literal_argument_resolves_local_symbol`
-  - exact expression under test: `(let [pin 35] (identity {:pin pin}))`
-  - current status: fails as expected and reproduces the bug inside `unit-tests`
+  - `src/tests/test_let.c:test_let_map_literal_argument_preserves_param_and_inner_local`
+  - `src/tests/test_gpio_write.c:test_gpio_watch_analog_signal_delivers_initial_event_with_local_atom`
+  - `src/tests/test_gpio_write.c:test_gpio_watch_analog_threshold_filters_small_changes_with_local_atom`
+  - current status: all targeted regressions pass again
 
 ### Builtin split
 
@@ -713,17 +718,22 @@ Recommendation:
 - Verified new evaluator/REPL reproduction steps for the analog-watch investigation:
   - REPL repro for direct timer/closure capture still works:
     - `(do (let [x 42 out (atom nil) timer-id (schedule-periodic 0 1 (fn [] (reset! out x) nil))] (run-next-task) (cancel-timer timer-id) @out))`
-  - REPL repro for map-literal argument evaluation fails:
+  - REPL repro for map-literal argument evaluation now succeeds:
     - `(let [pin 35] (identity {:pin pin}))`
-  - targeted unit regression currently fails as expected:
+  - mixed param + inner-`let` map-literal argument also succeeds:
+    - `((fn [pin] (let [value 0] (identity {:pin pin :value value}))) 35)`
+  - analog watch with local lexical callback state now succeeds again:
+    - `(do (require 'tiny-clj.gpio) (let [events (atom []) w (tiny-clj.gpio/watch 35 (fn [ev] (swap! events conj ev) nil) {:signal :analog :period-ms 1 :threshold 0 :emit-initial? true})] (run-next-task) ((get w :close!)) @events))`
+  - targeted evaluator and analog-watch regressions now pass:
     - `cmake --build build --target unit-tests -j4`
     - `./build/unit-tests -test test_let_map_literal_argument_resolves_local_symbol`
+    - `./build/unit-tests -test test_let_map_literal_argument_preserves_param_and_inner_local`
+    - `./build/unit-tests -test test_gpio_watch_analog_signal_returns_handle_and_close`
+    - `./build/unit-tests -test test_gpio_watch_analog_signal_delivers_initial_event_with_local_atom`
+    - `./build/unit-tests -test test_gpio_watch_analog_threshold_filters_small_changes_with_local_atom`
 - Plan closure summary:
-  - the GPIO architecture and consolidation work is complete, but analog-watch callback delivery is still blocked by an evaluator bug outside the GPIO runtime layer
-  - unified analog/digital `watch` is implemented; the remaining blocker is correct evaluation of event-map literals passed into callbacks
+  - the GPIO architecture and consolidation work is complete
+  - unified analog/digital `watch` is implemented and its analog callback delivery works again with lexical locals
   - real-device ESP32 board validation remains open
   - mode-sensitive `pin-write` via `:dac` is implemented in the shared GPIO core
-  - next implementation steps are:
-    - inspect `eval_function_call` / `eval_arg_from_expr_with_context` for map/set argument evaluation with lexical locals
-    - add one more focused regression for mixed outer-param plus inner-`let` map arguments
-    - fix the evaluator path, then remove temporary `(def)`-based watch-analog test hacks and restore stronger analog callback assertions
+  - remaining follow-up here is limited to real-device ESP32 validation, not a known software blocker in the host/runtime path
