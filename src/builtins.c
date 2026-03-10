@@ -3709,6 +3709,10 @@ ID native_ns_unload(ID *args, unsigned int argc) {
     RELEASE(ns->mappings);
     ns->mappings = make_map(0);
   }
+  if (ns->private_mappings) {
+    RELEASE(ns->private_mappings);
+    ns->private_mappings = NULL;
+  }
   if (ns->aliases) {
     RELEASE(ns->aliases);
     ns->aliases = make_map(0);
@@ -3725,6 +3729,30 @@ ID native_ns_unload(ID *args, unsigned int argc) {
   ns_invalidate_resolve_cache();
 
   return clj_true;
+}
+
+ID native_mark_private_bang(ID *args, unsigned int argc) {
+  if (!validate_builtin_args(argc, 1, "mark-private!"))
+    return NULL;
+
+  EvalState *st = g_current_eval_state;
+  if (!st || !st->current_ns) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "mark-private! requires a current namespace",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  ID sym_obj = args[0];
+  if (!sym_obj || TAG(sym_obj) != CLJ_SYMBOL) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                    "mark-private! expects a symbol",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  ns_mark_private(st->current_ns, sym_obj);
+  return sym_obj;
 }
 
 // Helper for dir: convert argument to namespace
@@ -4213,6 +4241,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT_CNAME(native_eval, "eval"),
     NATIVE_ENTRY_BOOT_CNAME(native_read_string, "read-string"),
     NATIVE_ENTRY_BOOT_CNAME(native_require, "require"),
+    NATIVE_ENTRY_BOOT_CNAME(native_mark_private_bang, "mark-private!"),
     NATIVE_ENTRY_BOOT_CNAME(native_load_file, "load-file"),
     NATIVE_ENTRY_BOOT_CNAME(native_regex_p, "regex?"),
     NATIVE_ENTRY_BOOT_CNAME(native_re_pattern, "re-pattern"),
@@ -4979,6 +5008,9 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     // Look up symbol in source namespace (missing -> NOT_FOUND, nil is a valid value)
     CljObject *val = map_get(source_ns->mappings, lookup_sym);
     if (val != NOT_FOUND) {
+      if (ns_is_private(source_ns, lookup_sym)) {
+        continue;
+      }
       // Batch refer updates into target mappings and invalidate resolve cache once.
       if (refer_assoc_into_namespace(target_ns, sym_obj, val)) {
         changed = true;
@@ -5015,6 +5047,9 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
     if (key && val && TAG(key) == CLJ_SYMBOL) {
       CljSymbol *key_sym = as_symbol(key);
       if (key_sym && key_sym->cname) {
+        if (ns_is_private(source_ns, key_sym)) {
+          continue;
+        }
         const char *unqualified_name = NULL;
 
         if (source_ns->name == SYM_CLOJURE_CORE) {
@@ -6276,6 +6311,7 @@ bool builtin_native_fn_needs_eval_state(BuiltinFn fn) {
          fn == native_apply ||
          fn == native_load_file ||
          fn == native_require ||
+         fn == native_mark_private_bang ||
          fn == native_eval ||
          fn == native_read_string ||
 #ifdef DEBUG

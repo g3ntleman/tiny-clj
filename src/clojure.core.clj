@@ -213,9 +213,9 @@ R"CLOJURE(
 ; ============================================================================
 ; Macros (sorted by dependencies on other macros)
 ; ============================================================================
-^#^{:doc "Same as defn (private functions not yet distinguished)."}
-(defmacro defn- [name params & body]
-  (list 'def name (cons 'fn (cons name (cons params body)))))
+^#^{:doc "Like defn, but marks the resulting var as private to the current namespace."}
+(defmacro defn- [name & args]
+  (list 'mark-private! (cons 'defn (cons name args))))
 
 ^#^{:doc "Returns a vector of the results of calling (map f colls...)."}
 (defmacro mapv [f & colls]

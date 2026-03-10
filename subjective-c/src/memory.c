@@ -936,6 +936,7 @@ static void release_object_default(CljObject *v) {
   case CLJ_NAMESPACE: {
     CljNamespace *ns = (CljNamespace *)v;
     RELEASE(ns->mappings);
+    RELEASE(ns->private_mappings);
     RELEASE(ns->aliases);
 #ifndef ZOMBIE_ENABLED
     if (ns->filename)

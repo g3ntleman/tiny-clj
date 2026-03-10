@@ -2580,24 +2580,11 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         sym_buf[sym_len] = '\0';
 
         CljSymbol *ns_sym = intern_symbol_global(ns_buf);
-        CljNamespace *target_ns = ns_sym ? ns_find_by_symbol(ns_sym) : NULL;
-        if (!target_ns && ns_buf[0] != '\0') {
-          target_ns = ns_find(ns_buf);
-        }
-        if (target_ns && target_ns->mappings) {
-          CljSymbol *qualified = ns_sym ? intern_symbol(ns_sym, sym_buf) : NULL;
-          if (qualified) {
-            ID resolved = map_get(target_ns->mappings, qualified);
-            if (resolved != NOT_FOUND) {
-              return resolved;
-            }
-          }
-          CljSymbol *unqualified = intern_symbol_global(sym_buf);
-          if (unqualified) {
-            ID resolved = map_get(target_ns->mappings, unqualified);
-            if (resolved != NOT_FOUND) {
-              return resolved;
-            }
+        CljSymbol *qualified = ns_sym ? intern_symbol(ns_sym, sym_buf) : NULL;
+        if (qualified) {
+          ID resolved = ns_resolve(st, qualified);
+          if (resolved != NOT_FOUND) {
+            return resolved;
           }
         }
       }

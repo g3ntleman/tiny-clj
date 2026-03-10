@@ -18,6 +18,7 @@ struct CljNamespace {
     bool loaded;              // true once namespace source has been loaded/evaluated
     CljSymbol *name;          // z.B. 'user', 'math'
     CljPersistentMap *mappings;         // Map: Symbol → CljObject (def, defn, vars)
+    CljPersistentMap *private_mappings; // Set-like map: private Symbol → true
     CljPersistentMap *macro_mappings;   // Map: Symbol → CljFunction (Macro-Registry)
     CljPersistentMap *aliases;          // Map: Symbol → Symbol (Alias → full namespace name)
     const char *filename;     // optional: associated file
@@ -53,6 +54,8 @@ CljNamespace* ns_find_by_symbol(CljSymbol *name_symbol);  // Fast lookup with sy
 CljNamespace* ns_find_for_object(CljObject *obj);  // Find namespace containing object
 void ns_define(CljNamespace *ns, ID symbol, ID value);
 void ns_define_refer(CljNamespace *ns, ID symbol, ID value);  // For :refer - stores unqualified symbol
+void ns_mark_private(CljNamespace *ns, ID symbol);
+bool ns_is_private(CljNamespace *ns, CljSymbol *symbol);
 void ns_invalidate_resolve_cache(void);  // Invalidate resolve cache (sets to NULL)
 void ns_begin_resolve_cache_batch(void); // Coalesce repeated invalidations into one epoch bump
 void ns_end_resolve_cache_batch(void);
