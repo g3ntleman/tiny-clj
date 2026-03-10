@@ -62,6 +62,17 @@ TEST_SHARED(test_sleep_wraps_over_24h_boundary) {
   test_yield_sleep_hooks_disable();
 }
 
+TEST_SHARED(test_thread_sleep_namespace_advances_time_and_returns_nil) {
+  test_yield_sleep_hooks_enable(100);
+
+  CljValue result = eval_string("(Thread/sleep 25)", g_test_eval_state);
+  TEST_ASSERT_NIL(result);
+  TEST_ASSERT_GREATER_OR_EQUAL_UINT(1u, test_yield_sleep_yield_calls());
+  TEST_ASSERT_EQUAL_UINT32(125u, test_yield_sleep_now_ms());
+
+  test_yield_sleep_hooks_disable();
+}
+
 TEST_SHARED(test_sleep_real_runtime_blocks_for_requested_duration) {
   test_yield_sleep_hooks_disable();
   platform_init();

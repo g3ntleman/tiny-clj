@@ -90,6 +90,44 @@ TEST(test_embedded_sources_tiny_clj_datetime)
     TEST_ASSERT_TRUE(found);
 }
 
+TEST(test_embedded_sources_tiny_clj_gpio)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+    ID bytes = resolve_path_to_bytes("/libs/tiny-clj/gpio.clj");
+    TEST_ASSERT_NOT_NULL(bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(bytes));
+    CljByteArray *ba = as_byte_array(bytes);
+    TEST_ASSERT_TRUE(ba->length > 0);
+    const char *needle = "(ns tiny-clj.gpio)";
+    size_t n = strlen(needle);
+    TEST_ASSERT_TRUE(ba->length >= (int)n);
+    int found = 0;
+    for (int i = 0; i <= ba->length - (int)n && !found; i++) {
+        if (memcmp(ba->data + i, needle, n) == 0) found = 1;
+    }
+    TEST_ASSERT_TRUE(found);
+}
+
+TEST(test_embedded_sources_tiny_fx_startup)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+    ID bytes = resolve_path_to_bytes("/libs/tiny-fx/startup.clj");
+    TEST_ASSERT_NOT_NULL(bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(bytes));
+    CljByteArray *ba = as_byte_array(bytes);
+    TEST_ASSERT_TRUE(ba->length > 0);
+    const char *needle = "(ns tiny-fx.startup";
+    size_t n = strlen(needle);
+    TEST_ASSERT_TRUE(ba->length >= (int)n);
+    int found = 0;
+    for (int i = 0; i <= ba->length - (int)n && !found; i++) {
+        if (memcmp(ba->data + i, needle, n) == 0) found = 1;
+    }
+    TEST_ASSERT_TRUE(found);
+}
+
 TEST(test_slurp_returns_string_view)
 {
     embedded_source_map_init();

@@ -1,3 +1,4 @@
+R"TINY_CLJ_GPIO(
 (ns tiny-clj.gpio)
 
 ;; GPIO API for tiny-clj.
@@ -250,3 +251,5 @@ Throws if no mode was configured first. Digital writes prefer HIGH/LOW."}
 
 Equivalent to the low-level PWM primitive with the public naming scheme."}
 (defn pin-pwm! [pin freq-hz duty] :native)
+
+)TINY_CLJ_GPIO"

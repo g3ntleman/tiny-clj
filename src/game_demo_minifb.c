@@ -29,8 +29,8 @@
 #include "render_backend.h"
 #include "viewer_collision.h"
 #include "platform.h"
+#include "gpio.h"
 #include "atom.h"
-#include "gpio_host.h"
 #include "vector.h"
 #include "MiniFB.h"
 #if defined(__APPLE__)
@@ -137,7 +137,7 @@ static void viewer_simulate_gpio_keys(const uint8_t *keys, ViewerRuntimeFlags *f
             continue;
         }
         flags->gpio_key_was_down[i] = down;
-        if (gpio_host_simulate_pin_change(gpio_key_map[i].pin, down ? 1 : 0)) {
+        if (gpio_simulate_digital(gpio_key_map[i].pin, down ? 1 : 0)) {
             (void)viewer_drain_one_runloop_task(st);
         }
     }
@@ -222,6 +222,14 @@ static void destroy_scene_bundle(ViewerSceneBundle *bundle) {
     RELEASE(bundle->spatial_callback);
     RELEASE(bundle->game_scene_atom);
     memset(bundle, 0, sizeof(*bundle));
+}
+
+static bool viewer_fail_game_demo_config(ViewerSceneBundle *bundle, const char *message) {
+    if (bundle) {
+        destroy_scene_bundle(bundle);
+    }
+    throw_exception(EXCEPTION_RUNTIME, message, __FILE__, __LINE__, 0);
+    return false;
 }
 
 static void destroy_collision_policy(ViewerCollisionPolicy *policy) {
@@ -512,6 +520,11 @@ static bool viewer_load_game_demo_config(EvalState *st,
                                            ViewerSceneBundle *out_bundle,
                                            ViewerSpatialRuleSet *out_rule_set) {
     if (!st || !out_bundle || !out_rule_set) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "viewer_load_game_demo_config requires eval state and output buffers",
+                        __FILE__,
+                        __LINE__,
+                        0);
         return false;
     }
     memset(out_bundle, 0, sizeof(*out_bundle));
@@ -520,8 +533,9 @@ static bool viewer_load_game_demo_config(EvalState *st,
         return false;
     }
     ID cfg = eval_string("(tiny-fx.game-demo/game-demo-config)", st);
-    if (!cfg || !is_map(cfg)) {
-        return false;
+    if (!is_map(cfg)) {
+        return viewer_fail_game_demo_config(NULL,
+                                            "tiny-fx.game-demo/game-demo-config must return a map");
     }
     static CljSymbol *k_slots = NULL;
     static CljSymbol *k_spatial_callback = NULL;
@@ -532,29 +546,34 @@ static bool viewer_load_game_demo_config(EvalState *st,
         k_game_scene_atom = intern_symbol_global(":game-scene-atom");
     }
     if (!k_slots || !k_spatial_callback || !k_game_scene_atom) {
-        return false;
+        return viewer_fail_game_demo_config(NULL,
+                                            "viewer failed to intern required tiny-fx.game-demo config keys");
     }
     ID slots = map_get_sentinel(cfg, k_slots, NULL);
     ID spatial_callback = map_get_sentinel(cfg, k_spatial_callback, NULL);
     ID game_scene_atom = map_get_sentinel(cfg, k_game_scene_atom, NULL);
     if (!viewer_extract_scene_slots(slots, out_bundle)) {
-        return false;
+        return viewer_fail_game_demo_config(NULL,
+                                            "tiny-fx.game-demo/game-demo-config contains invalid :slots data");
     }
     if (!spatial_callback || !game_scene_atom || TAG(game_scene_atom) != CLJ_ATOM) {
-        destroy_scene_bundle(out_bundle);
-        return false;
+        return viewer_fail_game_demo_config(
+            out_bundle,
+            "tiny-fx.game-demo/game-demo-config must provide function :spatial-callback and atom :game-scene-atom");
     }
     unsigned char fn_tag = TAG(spatial_callback);
     if ((fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE)) {
-        destroy_scene_bundle(out_bundle);
-        return false;
+        return viewer_fail_game_demo_config(
+            out_bundle,
+            "tiny-fx.game-demo/game-demo-config :spatial-callback must be callable");
     }
     out_bundle->spatial_callback = RETAIN(spatial_callback);
     out_bundle->game_scene_atom = (CljAtom *)RETAIN(game_scene_atom);
     out_bundle->game_scene = viewer_frame_scene_from_atom(out_bundle->game_scene_atom);
     if (!out_bundle->game_scene) {
-        destroy_scene_bundle(out_bundle);
-        return false;
+        return viewer_fail_game_demo_config(
+            out_bundle,
+            "tiny-fx.game-demo/game-demo-config :game-scene-atom must deref to a frame-scene");
     }
     for (uint8_t i = 0; i < out_bundle->slot_count; i++) {
         if (out_bundle->slots[i].scene_atom == out_bundle->game_scene_atom) {
@@ -564,13 +583,15 @@ static bool viewer_load_game_demo_config(EvalState *st,
         }
     }
     if (!out_bundle->has_game_slot) {
-        destroy_scene_bundle(out_bundle);
-        return false;
+        return viewer_fail_game_demo_config(
+            out_bundle,
+            "tiny-fx.game-demo/game-demo-config must include :game-scene-atom in :slots");
     }
     out_bundle->slots[out_bundle->game_slot_index].scene = out_bundle->game_scene;
     if (!viewer_load_spatial_rules_from_scene(out_bundle->game_scene, out_rule_set)) {
-        destroy_scene_bundle(out_bundle);
-        return false;
+        return viewer_fail_game_demo_config(
+            out_bundle,
+            "tiny-fx.game-demo/game-demo-config game scene contains invalid spatial rules");
     }
     return true;
 }
@@ -1313,10 +1334,18 @@ int main(void) {
         fprintf(stderr, "Failed to initialize vector scene record schema via tiny-fx.gfx\n");
         goto cleanup;
     }
-    if (!viewer_load_game_demo_config(viewer_eval_state, &demo_bundle, &spatial_rules)) {
+    TRY {
+        if (!viewer_load_game_demo_config(viewer_eval_state, &demo_bundle, &spatial_rules)) {
+            fprintf(stderr, "Failed to load game-demo config from tiny-fx.game-demo/game-demo-config\n");
+            goto cleanup;
+        }
+    } CATCH(ex) {
         fprintf(stderr, "Failed to load game-demo config from tiny-fx.game-demo/game-demo-config\n");
+        if (ex) {
+            print_exception(ex);
+        }
         goto cleanup;
-    }
+    } END_TRY
     demo_bundle_initialized = true;
     if (!viewer_init_slot_runtime_buffers(&demo_bundle)) {
         fprintf(stderr, "Failed to initialize configured slot runtime\n");

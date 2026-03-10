@@ -7,36 +7,33 @@
 
 #ifdef ESP32_BUILD
 
+#include "gpio.h"
 #include "sound_engine.h"
 #include "sound_tick_scheduler.h"
 #include "esp32-idf/main/vector_handheld_config.h"
 
-#include "driver/ledc.h"
 #include "esp_timer.h"
 #include <stdatomic.h>
 #include <string.h>
 
 /* ========================================================================= */
-/* LEDC voice mapping                                                        */
+/* PWM voice mapping                                                         */
 /* ========================================================================= */
 
 typedef struct {
     int           pin;
-    ledc_timer_t  timer;
-    ledc_channel_t channel;
-    bool          initialized;
     uint16_t      last_freq_hz;
     uint8_t       last_duty;
-} LedcVoice;
+} PwmVoice;
 
 /* Board-default mapping (from vector_handheld_config.h).
  * Extensible to N voices if more pins/timers are configured. */
-static LedcVoice g_ledc_voices[] = {
-    { .pin = VG_PIN_PIEZO_1, .timer = LEDC_TIMER_0, .channel = LEDC_CHANNEL_0 },
-    { .pin = VG_PIN_PIEZO_2, .timer = LEDC_TIMER_1, .channel = LEDC_CHANNEL_1 },
+static PwmVoice g_pwm_voices[] = {
+    { .pin = VG_PIN_PIEZO_1 },
+    { .pin = VG_PIN_PIEZO_2 },
 };
 
-#define LEDC_VOICE_CAP (int)(sizeof(g_ledc_voices) / sizeof(g_ledc_voices[0]))
+#define PWM_VOICE_CAP (int)(sizeof(g_pwm_voices) / sizeof(g_pwm_voices[0]))
 
 /* ========================================================================= */
 /* esp_timer handle                                                          */
@@ -51,37 +48,34 @@ static SoundTickScheduler g_sound_tick_scheduler;
 #define SOUND_TICK_PERIOD_NS ((uint64_t)VG_SOUND_TICK_MS * 1000000ull)
 #define SOUND_TICK_MAX_CATCHUP_TICKS 4u
 
-static void sound_backend_stop_ledc_voice(LedcVoice *voice, bool clear_initialized) {
-    if (!voice || !voice->initialized) {
+static int sound_backend_active_voice_count(void) {
+    int voice_count = g_sound_engine.voice_count;
+    if (voice_count < 0) voice_count = 0;
+    if (voice_count > PWM_VOICE_CAP) voice_count = PWM_VOICE_CAP;
+    return voice_count;
+}
+
+static void sound_backend_reset_voice_cache(PwmVoice *voice) {
+    if (!voice) {
         return;
     }
-    ledc_stop(LEDC_LOW_SPEED_MODE, voice->channel, 0);
     voice->last_freq_hz = 0;
     voice->last_duty = 0;
-    if (clear_initialized) {
-        voice->initialized = false;
-    }
 }
 
-static void sound_backend_silence_ledc_voices(bool clear_initialized) {
-    for (int i = 0; i < LEDC_VOICE_CAP; i++) {
-        sound_backend_stop_ledc_voice(&g_ledc_voices[i], clear_initialized);
+static void sound_backend_stop_pwm_voice(PwmVoice *voice) {
+    if (!voice) {
+        return;
     }
+    (void)gpio_pwm_stop(voice->pin);
+    sound_backend_reset_voice_cache(voice);
 }
 
-static bool ledc_mapping_valid(int voice_count) {
+static void sound_backend_silence_pwm_voices(void) {
+    int voice_count = sound_backend_active_voice_count();
     for (int i = 0; i < voice_count; i++) {
-        for (int j = i + 1; j < voice_count; j++) {
-            if (g_ledc_voices[i].channel == g_ledc_voices[j].channel) {
-                return false;
-            }
-            if (g_ledc_voices[i].timer == g_ledc_voices[j].timer) {
-                /* Same timer would couple frequencies across voices. */
-                return false;
-            }
-        }
+        sound_backend_stop_pwm_voice(&g_pwm_voices[i]);
     }
-    return true;
 }
 
 static void sound_timer_callback(void *arg) {
@@ -122,45 +116,18 @@ static void sound_timer_callback(void *arg) {
 /* ========================================================================= */
 
 void sound_backend_init(int voice_count) {
-    if (voice_count > LEDC_VOICE_CAP) voice_count = LEDC_VOICE_CAP;
+    if (voice_count > PWM_VOICE_CAP) voice_count = PWM_VOICE_CAP;
     if (voice_count < 0) voice_count = 0;
-
-    if (!ledc_mapping_valid(voice_count)) {
-        return;
-    }
     sound_tick_scheduler_init(&g_sound_tick_scheduler, SOUND_TICK_PERIOD_NS, SOUND_TICK_MAX_CATCHUP_TICKS);
 
-    for (int i = 0; i < voice_count; i++) {
-        LedcVoice *v = &g_ledc_voices[i];
-
-        ledc_timer_config_t timer_cfg = {
-            .speed_mode      = LEDC_LOW_SPEED_MODE,
-            .duty_resolution = LEDC_TIMER_10_BIT,
-            .timer_num       = v->timer,
-            .freq_hz         = 440,
-            .clk_cfg         = LEDC_AUTO_CLK,
-        };
-        ledc_timer_config(&timer_cfg);
-
-        ledc_channel_config_t ch_cfg = {
-            .speed_mode = LEDC_LOW_SPEED_MODE,
-            .channel    = v->channel,
-            .timer_sel  = v->timer,
-            .intr_type  = LEDC_INTR_DISABLE,
-            .gpio_num   = v->pin,
-            .duty       = 0,
-            .hpoint     = 0,
-        };
-        ledc_channel_config(&ch_cfg);
-        v->initialized = true;
-        v->last_freq_hz = 0;
-        v->last_duty = 0;
+    for (int i = 0; i < PWM_VOICE_CAP; i++) {
+        sound_backend_reset_voice_cache(&g_pwm_voices[i]);
     }
 }
 
 void sound_backend_shutdown(void) {
     sound_tick_stop();
-    sound_backend_silence_ledc_voices(true);
+    sound_backend_silence_pwm_voices();
     if (g_sound_timer) {
         esp_timer_delete(g_sound_timer);
         g_sound_timer = NULL;
@@ -168,21 +135,18 @@ void sound_backend_shutdown(void) {
 }
 
 void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume) {
-    if (voice_index < 0 || voice_index >= LEDC_VOICE_CAP) return;
-    LedcVoice *v = &g_ledc_voices[voice_index];
-    if (!v->initialized) return;
+    if (voice_index < 0 || voice_index >= sound_backend_active_voice_count()) return;
+    PwmVoice *v = &g_pwm_voices[voice_index];
 
     /* Only update hardware on actual change */
     uint8_t duty8 = (freq_hz > 0) ? (volume >> 1) : 0; /* scale 0..255 -> 0..127 for 50% max duty */
     if (freq_hz == v->last_freq_hz && duty8 == v->last_duty) return;
 
     if (freq_hz == 0 || duty8 == 0) {
-        ledc_stop(LEDC_LOW_SPEED_MODE, v->channel, 0);
+        (void)gpio_pwm_stop(v->pin);
     } else {
-        ledc_set_freq(LEDC_LOW_SPEED_MODE, v->timer, freq_hz);
-        uint32_t duty10 = ((uint32_t)duty8 * 1023) / 127;
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, v->channel, duty10);
-        ledc_update_duty(LEDC_LOW_SPEED_MODE, v->channel);
+        int32_t gpio_duty = ((int32_t)duty8 * 255 + 63) / 127;
+        (void)gpio_pwm_start_or_update(v->pin, freq_hz, gpio_duty);
     }
     v->last_freq_hz = freq_hz;
     v->last_duty = duty8;
@@ -222,7 +186,7 @@ void sound_tick_stop(void) {
     }
     sound_tick_scheduler_stop(&g_sound_tick_scheduler);
     g_sound_engine.tick_running = false;
-    sound_backend_silence_ledc_voices(false);
+    sound_backend_silence_pwm_voices();
 }
 
 bool sound_backend_host_get_status(SoundHostStatus *out) {

@@ -52,11 +52,10 @@
 #include "datetime_utc.h"
 #include "platform.h"
 #include "tiny_fx_gfx.h"
+#include "gpio.h"
+#include "builtins_gpio.h"
 #include "builtins_sound.h"
 #include "builtins_tiny_fx_gfx.h"
-#if defined(ESP32_BUILD)
-#include "gpio_esp32.h"
-#endif
 
 #ifndef TINYCLJ_WITH_TINY_FX
 #define TINYCLJ_WITH_TINY_FX 1
@@ -122,6 +121,8 @@ ID native_tinyclj_fs_stat(ID *args, unsigned int argc);
 ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc);
 ID native_tinyclj_fs_delete(ID *args, unsigned int argc);
 ID native_tinyclj_fs_set_size(ID *args, unsigned int argc);
+ID builtin_fs_write_bytes_or_throw(const char *fn_name, const char *path,
+                                   const uint8_t *data, size_t len);
 
 ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc);
@@ -152,15 +153,7 @@ ID native_last(ID *args, unsigned int argc);
 
 // clojure.core namespace management (used by :native stubs)
 ID native_ns_unload(ID *args, unsigned int argc);
-
-// GPIO functions
-ID native_gpio_watch(ID *args, unsigned int argc);
-ID native_gpio_unwatch(ID *args, unsigned int argc);
-ID native_gpio_simulate(ID *args, unsigned int argc);
-ID native_gpio_write(ID *args, unsigned int argc);
-ID native_gpio_read(ID *args, unsigned int argc);
-ID native_gpio_pwm(ID *args, unsigned int argc);
-ID native_gpio_pwm_stop(ID *args, unsigned int argc);
+ID native_mark_private_bang(ID *args, unsigned int argc);
 
 ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
@@ -4320,13 +4313,6 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_filter_data.sym, native_filter),
     NATIVE_ENTRY(&sym_group_by_data.sym, native_group_by),
     NATIVE_ENTRY(&sym_last_data.sym, native_last),
-    NATIVE_ENTRY(&sym_gpio_watch_data.sym, native_gpio_watch),
-    NATIVE_ENTRY(&sym_gpio_unwatch_data.sym, native_gpio_unwatch),
-    NATIVE_ENTRY(&sym_gpio_simulate_data.sym, native_gpio_simulate),
-    NATIVE_ENTRY(&sym_gpio_write_data.sym, native_gpio_write),
-    NATIVE_ENTRY(&sym_gpio_read_data.sym, native_gpio_read),
-    NATIVE_ENTRY(&sym_gpio_pwm_data.sym, native_gpio_pwm),
-    NATIVE_ENTRY(&sym_gpio_pwm_stop_data.sym, native_gpio_pwm_stop),
     NATIVE_ENTRY(&sym_ns_unload_data.sym, native_ns_unload),
     NATIVE_ENTRY_BOOT(&sym_plus_data.sym, native_add_variadic, "+"),
     NATIVE_ENTRY_BOOT(&sym_minus_data.sym, native_sub_variadic, "-"),
@@ -4545,6 +4531,10 @@ BuiltinFn native_function_lookup(CljSymbol *symbol) {
   if (string_fn)
     return string_fn;
 
+  BuiltinFn gpio_fn = builtins_gpio_native_function_lookup(symbol);
+  if (gpio_fn)
+    return gpio_fn;
+
   return NULL;
 }
 
@@ -4744,6 +4734,8 @@ ID native_symbol(ID *args, unsigned int argc) {
 }
 
 // File I/O: slurp - read entire file as string (KV + embedded resolver)
+static CljString *copy_string_from_bytes(ID bytes);
+
 ID native_slurp(ID *args, unsigned int argc) {
   if (!validate_builtin_args(argc, 1, "slurp"))
     return NULL;
@@ -4761,7 +4753,7 @@ ID native_slurp(ID *args, unsigned int argc) {
   ID bytes = resolve_path_to_bytes(filename_str);
   CljString *result = NULL;
   if (bytes) {
-    result = string_view_from_byte_array(bytes);
+    result = copy_string_from_bytes(bytes);
   } else {
     // Fallback to host filesystem (non-embedded paths).
     result = file_slurp(filename_str);
@@ -4773,6 +4765,29 @@ ID native_slurp(ID *args, unsigned int argc) {
 }
 
 static bool eval_source_in_current_state(CljString *src, const char *src_name, EvalState *st);
+
+static CljString *copy_string_from_bytes(ID bytes) {
+  if (!bytes || TAG(bytes) != CLJ_BYTE_ARRAY) {
+    return NULL;
+  }
+
+  CljByteArray *ba = as_byte_array(bytes);
+  if (!ba) {
+    return NULL;
+  }
+
+  CljString *copy = make_string_buffer((size_t)ba->length);
+  if (!copy) {
+    return NULL;
+  }
+
+  if (ba->length > 0 && ba->data) {
+    memcpy(copy->data, ba->data, (size_t)ba->length);
+    copy->data[ba->length] = '\0';
+  }
+
+  return copy;
+}
 
 // load-file: read and evaluate all forms in a file (Clojure standard function)
 // DRY: Uses eval_source_in_current_state for the actual evaluation
@@ -4845,7 +4860,6 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
     const char *v = getenv("TINYCLJ_DEBUG_REQUIRE_ERRORS");
     debug_require_errors = (v && v[0] && strcmp(v, "0") != 0) ? 1 : 0;
   }
-  int success_count = 0;
   Reader reader;
   reader_init_with_length(&reader, string_data(src), (size_t)string_length(src));
   if (src_name && src_name[0]) {
@@ -4867,6 +4881,7 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
     // Save reader position before parsing to detect if we're stuck
     size_t pos_before = reader_offset(&reader);
 
+    CLJException *pending_ex = NULL;
     WITH_AUTORELEASE_POOL({
       CljValue form = NULL;
       TRY {
@@ -4885,8 +4900,6 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
         }
 
         (void)eval_parsed(form, st, NULL);
-        success_count++;
-
         size_t pos_after = reader_offset(&reader);
         if (pos_after == pos_before && !reader_is_eof(&reader))
           reader_next(&reader);
@@ -4900,16 +4913,17 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
           const char *label = (src_name && src_name[0]) ? src_name : "<namespace>";
           fprintf(stderr, "[require] %s: %s (%s:%d) [%s]\n", label, emsg, efile, eline, etype);
         }
-        while (!reader_is_eof(&reader) && reader_current(&reader) != '\n')
-          reader_next(&reader);
-        if (!reader_is_eof(&reader))
-          reader_next(&reader);
+        pending_ex = ex;
+        RETAIN(pending_ex);
       }
       END_TRY
     });
+    pending_ex = AUTORELEASE(pending_ex);
+    if (pending_ex) {
+      THROW(pending_ex);
+    }
   }
-  // Return true if at least some expressions succeeded (partial loading is OK)
-  return success_count > 0;
+  return true;
 }
 
 /**
@@ -5118,16 +5132,30 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
   // Namespace source loading performs many def/defn operations; coalesce invalidate
   // calls into one epoch bump at the end of the load.
   ns_begin_resolve_cache_batch();
-  bool ok = eval_source_in_current_state(source_str, source_path, st);
-  ns_end_resolve_cache_batch();
-  target_ns->loaded = true;
-  if (ok) {
-    NsInitFn init_fn = ns_lookup_init(ns_name);
-    if (init_fn) ok = init_fn(st);
+  bool ok = false;
+  CLJException *pending_ex = NULL;
+  TRY {
+    ok = eval_source_in_current_state(source_str, source_path, st);
+    if (ok) {
+      NsInitFn init_fn = ns_lookup_init(ns_name);
+      if (init_fn) ok = init_fn(st);
+    }
+    if (ok) {
+      target_ns->loaded = true;
+    }
+  } CATCH(ex) {
+    pending_ex = ex;
+    RETAIN(pending_ex);
   }
+  END_TRY
+  ns_end_resolve_cache_batch();
   st->current_ns = orig_ns;
   st->resolve_ns = orig_resolve_ns;
   RELEASE(source_str);
+  pending_ex = AUTORELEASE(pending_ex);
+  if (pending_ex) {
+    THROW(pending_ex);
+  }
   return ok;
 }
 
@@ -5314,21 +5342,8 @@ static bool process_require_spec(ID spec, EvalState *st) {
   }
   bool ok = load_namespace_from_bytes(st, ns_name, bytes, source_path);
   CLJ_FREE(rel);
-
-  // CRITICAL: Don't fail completely if some expressions failed to load
-  // Some functions may have been successfully defined even if others failed
-  // This allows partial loading (e.g., if one function has an error, others still work)
-  // We only return false if the namespace itself couldn't be created
   if (!ok) {
-    // Check if namespace was at least created (even if loading had errors)
-    CljNamespace *loaded_ns = ns_find(ns_name);
-    if (!loaded_ns) {
-      // Namespace wasn't even created - this is a real failure
-      // ns_name is from autoreleased CljString - no free needed
-      return false;
-    }
-    // Namespace exists but some expressions failed - continue anyway
-    // This allows partial success (some functions loaded, others didn't)
+    return false;
   }
 
   // Now that namespace is loaded, set alias/refer if needed
@@ -5484,16 +5499,6 @@ ID native_require(ID *args, unsigned int argc) {
   return NULL; // Clojure-compatible: require returns nil
 }
 
-// File I/O: spit - write string to file
-#ifdef ESP32_BUILD
-ID native_spit(ID *args, unsigned int argc) {
-  if (!validate_builtin_args(argc, 2, "spit"))
-    return NULL;
-  (void)args;
-  // No-op on ESP32 (filesystem may be unavailable).
-  return NULL;
-}
-#else
 ID native_spit(ID *args, unsigned int argc) {
   if (!validate_builtin_args(argc, 2, "spit"))
     return NULL;
@@ -5516,67 +5521,10 @@ ID native_spit(ID *args, unsigned int argc) {
                     __FILE__, __LINE__, 0);
     return NULL;
   }
-  const char *content_str = string_data(content_str_obj);
-
-  // Open file for writing (overwrites if exists)
-  FILE *fp = fopen(filename_str, "w");
-  if (!fp) {
-    char error_msg[256];
-    const char *err = strerror(errno);
-    size_t pos = 0;
-    pos = format_append(error_msg, pos, sizeof(error_msg),
-                        "Cannot open file '");
-    pos = format_append(error_msg, pos, sizeof(error_msg), filename_str);
-    pos = format_append(error_msg, pos, sizeof(error_msg), "' for writing: ");
-    format_append(error_msg, pos, sizeof(error_msg), err);
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
-                    __FILE__, __LINE__, 0);
-    return NULL;
-  }
-
-  // Write content to file
-  size_t content_len = string_length(content_str_obj);
-  size_t bytes_written = fwrite(content_str, 1, content_len, fp);
-
-  // Check for write errors
-  if (bytes_written != content_len) {
-    char error_msg[256];
-    const char *err = strerror(errno);
-    size_t pos = 0;
-    pos = format_append(error_msg, pos, sizeof(error_msg),
-                        "Error writing to file '");
-    pos = format_append(error_msg, pos, sizeof(error_msg), filename_str);
-    pos = format_append(error_msg, pos, sizeof(error_msg), "': ");
-    format_append(error_msg, pos, sizeof(error_msg), err);
-    fclose(fp);
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
-                    __FILE__, __LINE__, 0);
-    return NULL;
-  }
-
-  // Ensure file is flushed
-  if (fflush(fp) != 0) {
-    char error_msg[256];
-    const char *err = strerror(errno);
-    size_t pos = 0;
-    pos = format_append(error_msg, pos, sizeof(error_msg),
-                        "Error flushing file '");
-    pos = format_append(error_msg, pos, sizeof(error_msg), filename_str);
-    pos = format_append(error_msg, pos, sizeof(error_msg), "': ");
-    format_append(error_msg, pos, sizeof(error_msg), err);
-    fclose(fp);
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
-                    __FILE__, __LINE__, 0);
-    return NULL;
-  }
-
-  // Cleanup
-  fclose(fp);
-
-  // spit returns nil
-  return NULL;
+  return builtin_fs_write_bytes_or_throw("spit", filename_str,
+                                         (const uint8_t *)string_data(content_str_obj),
+                                         (size_t)string_length(content_str_obj));
 }
-#endif // ESP32_BUILD
 
 // Binary operations (inline for performance)
 // Variadische Number-Reducer mit Single-Pass und Float-Promotion
@@ -7193,10 +7141,8 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   {
     CljSymbol *k_gpio_event_drops = intern_symbol_global(":gpio-event-drops");
     int32_t drops = 0;
-#if defined(ESP32_BUILD)
-    uint32_t raw_drops = gpio_esp32_get_event_drop_count();
+    uint32_t raw_drops = gpio_get_event_drop_count();
     drops = (raw_drops > (uint32_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_drops;
-#endif
     if (k_gpio_event_drops) {
       MAP_REASSIGN(m, map_assoc(m, k_gpio_event_drops, fixnum(drops)));
     }

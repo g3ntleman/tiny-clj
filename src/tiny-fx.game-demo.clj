@@ -2,7 +2,8 @@ R"TINY_GFX_HOST(
 (ns tiny-fx.game-demo
   (:require [tiny-fx.gfx-scene :refer [->Transform ->Style ->Group ->Polyline
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
-            [tiny-fx.sound :as sound]))
+            [tiny-fx.sound :as sound]
+            [tiny-clj.gpio :as gpio]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
@@ -372,9 +373,9 @@ return values."
   []
   (let [old-watcher-id @demo-input-watcher-id*]
     (when old-watcher-id
-      (clojure.core/gpio-unwatch old-watcher-id))
+      (gpio/watch melody-input-pin nil))
     (reset! demo-input-watcher-id*
-            (clojure.core/gpio-watch melody-input-pin on-demo-gpio-input!))
+            (gpio/watch melody-input-pin on-demo-gpio-input!))
     nil))
 
 (defn collision-entity-ids

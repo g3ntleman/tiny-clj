@@ -9,6 +9,7 @@
 #include "vector.h"
 #include "map.h"
 #include "value.h"
+#include "gpio.h"
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -17,14 +18,12 @@
 #include <limits.h>
 #include <time.h>
 #include <sys/time.h>
-#if defined(ESP32_BUILD)
-#include "gpio_esp32.h"
-#endif
 
 // Task Map keys (go-block tasks only)
 static CljSymbol *KW_FN;
 static CljSymbol *KW_RESULT_CHAN;
 static CljSymbol *KW_ARG;
+static CljSymbol *KW_HAS_ARG;
 
 typedef struct NamedTimerEntry {
     ID key;
@@ -153,8 +152,8 @@ static void event_loop_ingress_drain(void) {
 }
 
 // Go-block task map helpers (tasks WITH result channel)
-static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan, ID arg) {
-    CljPersistentMap *task_map = make_map(3, STRONG);
+static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan, ID arg, bool has_arg) {
+    CljPersistentMap *task_map = make_map(4, STRONG);
     if (!task_map) return NULL;
     
     CljTransientMap *tmap = map_transient(task_map);
@@ -164,6 +163,9 @@ static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan
     map_conj(tmap, KW_FN, fn);
     if (result_chan) {
         map_conj(tmap, KW_RESULT_CHAN, result_chan);
+    }
+    if (has_arg) {
+        map_conj(tmap, KW_HAS_ARG, clj_true);
     }
     if (arg) {
         map_conj(tmap, KW_ARG, arg);
@@ -175,18 +177,20 @@ static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan
     return pmap;
 }
 
-static bool task_from_map(CljPersistentMap *task_map, CljObject **fn, CljTransientMap **result_chan, ID *arg) {
+static bool task_from_map(CljPersistentMap *task_map, CljObject **fn, CljTransientMap **result_chan, ID *arg, bool *has_arg) {
     if (!task_map) return false;
     
     ID fn_val = map_get_sentinel(task_map, KW_FN, NULL);
     ID result_chan_val = map_get_sentinel(task_map, KW_RESULT_CHAN, NULL);
-    ID arg_val = map_get_sentinel(task_map, KW_ARG, NULL);
+    ID has_arg_val = map_get_sentinel(task_map, KW_HAS_ARG, NULL);
+    ID arg_val = map_get_sentinel(task_map, KW_ARG, NOT_FOUND);
     
     if (!fn_val) return false;
     
     if (fn) *fn = fn_val;
     if (result_chan) *result_chan = result_chan_val ? result_chan_val : NULL;
-    if (arg) *arg = arg_val;
+    if (arg) *arg = (arg_val == NOT_FOUND) ? NULL : arg_val;
+    if (has_arg) *has_arg = (has_arg_val != NULL);
     
     return true;
 }
@@ -366,6 +370,7 @@ void event_loop_init(void) {
     KW_FN = intern_symbol_global(":fn");
     KW_RESULT_CHAN = intern_symbol_global(":result-chan");
     KW_ARG = intern_symbol_global(":arg");
+    KW_HAS_ARG = intern_symbol_global(":has-arg");
     g_event_loop_ingress_closed = false;
     g_event_loop_ingress_accepted_count = 0u;
     g_event_loop_ingress_rejected_count = 0u;
@@ -417,7 +422,7 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
         return;
     }
     
-    CljPersistentMap *task_map = task_to_map(fn_zero_arity, result_channel, NULL);
+    CljPersistentMap *task_map = task_to_map(fn_zero_arity, result_channel, NULL, false);
     if (!task_map) {
         return;
     }
@@ -438,7 +443,7 @@ bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
 
 bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
     if (!fn_one_arity) return false;
-    CljPersistentMap *task_map = task_to_map(fn_one_arity, NULL, arg);
+    CljPersistentMap *task_map = task_to_map(fn_one_arity, NULL, arg, true);
     if (!task_map) {
         return false;
     }
@@ -518,10 +523,8 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     uint64_t tick_start_ns = event_loop_monotonic_now_ns();
     (void)env;
 
-#if defined(ESP32_BUILD)
     // Promote ISR-raised drain requests into regular event-loop tasks.
-    gpio_esp32_poll_drain();
-#endif
+    gpio_poll_drain();
 
     // Consume cross-thread callback ingress before timer/task processing.
     event_loop_ingress_drain();
@@ -544,10 +547,11 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     CljObject *fn = NULL;
     CljTransientMap *result_chan = NULL;
     ID arg = NULL;
+    bool has_arg = false;
 
     if (TAG(entry) == CLJ_MAP_PERSISTENT) {
         CljPersistentMap *task_map = entry;
-        if (!task_from_map(task_map, &fn, &result_chan, &arg)) {
+        if (!task_from_map(task_map, &fn, &result_chan, &arg, &has_arg)) {
             RELEASE(task_map);
             return false;
         }
@@ -576,7 +580,7 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     bool ok = true;
     TRY {
         WITH_AUTORELEASE_POOL({
-            if (arg) {
+            if (has_arg) {
                 ID call_args[1] = {arg};
                 result = eval_function_call(fn, call_args, 1, env, st);
             } else {

@@ -416,6 +416,75 @@ TEST(test_vector_scene_graph_game_demo_score_text_is_timeline_driven) {
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
 
+TEST(test_vector_scene_graph_tiny_fx_startup_bundle_has_animated_title_and_stars) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-fx.startup) "
+        "  (tiny-fx.startup/create-startup-bundle) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(ok && ok != clj_false);
+
+    ID layout_ok = eval_string(
+        "(let [bundle (tiny-fx.startup/create-startup-bundle) "
+        "      deco-root (:root (nth bundle 0)) "
+        "      score-root (:root (nth bundle 1)) "
+        "      deco-group (get deco-root 'root) "
+        "      display-frame (get score-root 1100) "
+        "      display-screen (get score-root 1101)] "
+        "  (and (= [:deco :score] (mapv (fn [slot] (:id slot)) tiny-fx.startup/slot-descriptors)) "
+        "       (= 2 (count (:children deco-group))) "
+        "       (= [1100 1101 2001 2002] (:children (get score-root 'root))) "
+        "       (= [58 54 204 112] [(:x display-frame) (:y display-frame) (:w display-frame) (:h display-frame)]) "
+        "       (= [70 66 180 88] [(:x display-screen) (:y display-screen) (:w display-screen) (:h display-screen)])))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(layout_ok && layout_ok != clj_false);
+
+    ID style_ok = eval_string(
+        "(let [bundle (tiny-fx.startup/create-startup-bundle) "
+        "      score-root (:root (nth bundle 1)) "
+        "      title (get score-root 2001) "
+        "      subtitle (get score-root 2002) "
+        "      display-screen (get score-root 1101)] "
+        "  (and (= tiny-fx.startup/color-screen-green (get (:style title) :stroke_color)) "
+        "       (= tiny-fx.startup/color-screen-green (get (:style subtitle) :stroke_color)) "
+        "       (= true (get (:style display-screen) :has_fill)) "
+        "       (= tiny-fx.startup/color-black (get (:style display-screen) :fill_color))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(style_ok && style_ok != clj_false);
+
+    ID motion_ok = eval_string(
+        "(let [bundle (tiny-fx.startup/create-startup-bundle) "
+        "      deco-root (:root (nth bundle 0)) "
+        "      score-root (:root (nth bundle 1)) "
+        "      star-layer (get deco-root 1010) "
+        "      star-layer-front (get deco-root 1020) "
+        "      title (get score-root 2001) "
+        "      subtitle (get score-root 2002) "
+        "      stars-back (:children star-layer) "
+        "      stars-front (:children star-layer-front) "
+        "      stars-kf0 (nth (nth (:keyframes (:t star-layer)) 0) 1) "
+        "      stars-kf1 (nth (nth (:keyframes (:t star-layer)) 1) 1) "
+        "      t0 (nth (nth (:keyframes (:t title)) 0) 1) "
+        "      t4 (nth (nth (:keyframes (:t title)) 4) 1)] "
+        "  (and (= 16 (count stars-back)) "
+        "       (= 16 (count stars-front)) "
+        "       (= 32 (+ (count stars-back) (count stars-front))) "
+        "       (contains? (:t star-layer) :keyframes) "
+        "       (contains? (:t star-layer) :loop) "
+        "       (< (:ty stars-kf0) (:ty stars-kf1)) "
+        "       (contains? (:t title) :keyframes) "
+        "       (contains? (:text title) :keyframes) "
+        "       (contains? (:text subtitle) :keyframes) "
+        "       (> (:sx t0) (:sx t4)) "
+        "       (> (:sy t0) (:sy t4)) "
+        "       (< (:tx t0) (:tx t4)) "
+        "       (< (:ty t0) (:ty t4))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(motion_ok && motion_ok != clj_false);
+}
+
 TEST(test_vector_scene_graph_game_demo_game_motion_is_timeline_driven) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
@@ -648,12 +717,13 @@ TEST(test_vector_scene_graph_game_demo_gpio_press_triggers_demo_melody_once) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
+        "  (require 'tiny-clj.gpio) "
         "  (require 'tiny-fx.game-demo) "
         "  (require 'tiny-fx.sound-debug) "
         "  (tiny-fx.game-demo/create-demo-bundle) "
-        "  (gpio-simulate! 1 1) "
+        "  (tiny-clj.gpio/simulate! 1 1) "
         "  (run-next-task) "
-        "  (gpio-simulate! 1 0) "
+        "  (tiny-clj.gpio/simulate! 1 0) "
         "  (run-next-task) "
         "  (let [count @tiny-fx.game-demo/demo-melody-trigger-count* "
         "        status (tiny-fx.sound-debug/host-status!)] "

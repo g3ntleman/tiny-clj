@@ -176,6 +176,7 @@ set(TINYCLJ_CORE_SOURCES
     src/clojure_core.c
     src/object.c
     src/builtins.c
+    src/builtins_gpio.c
     src/builtins_tiny_fx_gfx.c
     src/builtins_net.c
     src/builtins_mdns.c
@@ -227,6 +228,7 @@ set(TINYCLJ_CORE_SOURCES
     src/to_string.c
     src/macro.c
     src/fs_layer.c
+    src/gpio.c
     src/gpio_host.c
     src/repl_history_backend.c
 )

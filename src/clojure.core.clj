@@ -633,24 +633,6 @@ R"CLOJURE(
 (defn cancel-timer [timer-id] :native)
 
 ; ============================================================================
-; GPIO Functions (Native)
-; ============================================================================
-^#^{:doc "Registers a callback f for a GPIO pin. Returns a watcher-id."}
-(defn gpio-watch [pin f] :native)
-^#^{:doc "Unregisters a GPIO watcher by id. Returns true if removed."}
-(defn gpio-unwatch [watcher-id] :native)
-^#^{:doc "macOS/test helper: simulate a GPIO event (pin, value). Returns nil."}
-(defn gpio-simulate! [pin value] :native)
-^#^{:doc "Writes a digital level to GPIO pin. level 0 = low, non-zero = high. Returns nil."}
-(defn gpio-write! [pin level] :native)
-^#^{:doc "Reads a digital GPIO pin level. Returns 0 (low) or 1 (high)."}
-(defn gpio-read [pin] :native)
-^#^{:doc "Configures PWM output on pin. (gpio-pwm! pin freq-hz duty), duty in 0..255. Returns nil."}
-(defn gpio-pwm! [pin freq-hz duty] :native)
-^#^{:doc "Stops PWM output on pin and drives it low. Returns nil."}
-(defn gpio-pwm-stop! [pin] :native)
-
-; ============================================================================
 ; Atom Functions (Native)
 ; ============================================================================
 ^#^{:doc "Creates an atom with an initial value val and returns it."}
@@ -665,7 +647,7 @@ R"CLOJURE(
 ; ============================================================================
 ; File I/O Functions (Native)
 ; ============================================================================
-; Note: slurp resolves embedded sources on ESP32. spit is a no-op on ESP32.
+; Note: slurp resolves embedded sources on ESP32. spit writes via the KV-backed FS layer.
 ^#^{:doc "Reads the entire contents of filename and returns it as a string."}
 (defn slurp [filename] :native)
 ^#^{:doc "Writes content (and optional more strings) to filename, overwriting existing data."}
@@ -1099,9 +1081,13 @@ This is called synchronously from atom operations (reset!/swap!)."}
 ; ============================================================================
 ; JVM compatibility shims
 ; ============================================================================
-; Some tests and snippets use (Thread/sleep ...). Provide a minimal namespace
-; shim that forwards to clojure.core/sleep.
 (ns Thread)
-(defn sleep [ms] (clojure.core/sleep ms))
+(defn sleep [ms]
+  (let [end-ms (+ (current-time-ms) ms)]
+    (loop []
+      (let [remaining (- end-ms (current-time-ms))]
+        (when (pos? remaining)
+          (yield remaining)
+          (recur))))))
 (ns clojure.core)
 )CLOJURE"

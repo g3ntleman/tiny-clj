@@ -7,10 +7,6 @@
 #include "tests_common.h"
 #include "../meta.h"
 #include "map.h"
-#include "kv_macros.h"
-
-// Forward declaration
-int load_clojure_core(EvalState *st);
 
 // ============================================================================
 // REQUIRE TESTS
@@ -417,5 +413,47 @@ TEST(test_require_trim_meta_function) {
     }
 #endif // META_ENABLED
 #endif // DEBUG
+}
+
+static void assert_registered_source_eval_throws(const char *path,
+                                                 const char *source,
+                                                 const char *expr,
+                                                 const char *failure_message) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(path);
+    TEST_ASSERT_NOT_NULL(source);
+    TEST_ASSERT_NOT_NULL(expr);
+    TEST_ASSERT_NOT_NULL(failure_message);
+
+    register_resolver_source(path, source);
+
+    TRY {
+        (void)eval_string(expr, g_test_eval_state);
+        TEST_FAIL_MESSAGE(failure_message);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+}
+
+TEST(test_require_throws_when_namespace_has_failing_top_level_form) {
+    assert_registered_source_eval_throws(
+        "/libs/test/bad_require.clj",
+        "(ns test.bad-require)\n"
+        "(def before 1)\n"
+        "(missing-top-level-symbol)\n"
+        "(def after 2)\n",
+        "(require 'test.bad-require)",
+        "require should throw when a namespace top-level form fails");
+}
+
+TEST(test_load_file_throws_when_top_level_form_fails) {
+    assert_registered_source_eval_throws(
+        "/libs/test/bad-load-file.clj",
+        "(ns test.bad-load-file)\n"
+        "(def before 1)\n"
+        "(missing-top-level-symbol)\n"
+        "(def after 2)\n",
+        "(load-file \"/libs/test/bad-load-file.clj\")",
+        "load-file should throw when a top-level form fails");
 }
 

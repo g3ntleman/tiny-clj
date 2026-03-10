@@ -36,33 +36,33 @@
 
 (def the-entertainer-track-id :sound-demos-the-entertainer)
 (def the-entertainer-steps
-  [{:melody :D5 :duration :s}
-   {:melody :E5 :duration :s}
-   {:melody :C5 :duration :s}
-   {:melody :A4 :duration :e}
-   {:melody :B4 :duration :s}
+  [{:melody :D5 :backing [:G3] :duration :s}
+   {:melody :E5 :backing [:D4] :duration :s}
+   {:melody :C5 :backing [:G3] :duration :s}
+   {:melody :A4 :backing [:D4] :duration :e}
+   {:melody :B4 :backing [:G3] :duration :s}
    {:melody :G4 :backing [:G3] :duration :e}
-   {:melody :D5 :duration :s}
-   {:melody :E5 :duration :s}
-   {:melody :C5 :duration :s}
-   {:melody :A4 :duration :e}
-   {:melody :B4 :duration :s}
+   {:melody :D5 :backing [:G3] :duration :s}
+   {:melody :E5 :backing [:D4] :duration :s}
+   {:melody :C5 :backing [:G3] :duration :s}
+   {:melody :A4 :backing [:D4] :duration :e}
+   {:melody :B4 :backing [:G3] :duration :s}
    {:melody :G4 :backing [:G3] :duration :e}
    {:melody :E4 :backing [:C3] :duration :s}
-   {:melody :C5 :duration :e}
+   {:melody :C5 :backing [:G3] :duration :e}
    {:melody :E4 :backing [:E3] :duration :s}
    {:melody :C5 :backing [:G2] :duration :e}
-   {:melody :E4 :duration :s}
+   {:melody :E4 :backing [:C3] :duration :s}
    {:melody :C5 :backing [:C3] :duration :dq}
    {:melody :C6 :backing [:C4] :duration :s}
-   {:melody :D6 :duration :s}
-   {:melody :Ds6 :duration :s}
+   {:melody :D6 :backing [:A3] :duration :s}
+   {:melody :Ds6 :backing [:B3] :duration :s}
    {:melody :E6 :backing [:G2] :duration :s}
-   {:melody :C6 :duration :s}
-   {:melody :D6 :duration :s}
+   {:melody :C6 :backing [:A3] :duration :s}
+   {:melody :D6 :backing [:B3] :duration :s}
    {:melody :E6 :backing [:C3] :duration :e}
    {:melody :B5 :backing [:G2] :duration :s}
-   {:melody :D6 :duration :e}
+   {:melody :D6 :backing [:G3] :duration :e}
    {:melody :C6 :backing [:C3] :duration :dq}])
 (def the-entertainer-opts
   {:melody {:volume 220}

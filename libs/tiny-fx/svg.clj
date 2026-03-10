@@ -1,6 +1,6 @@
 (ns tiny-fx.svg
   (:require [clojure.string :as str]
-            [tiny-fx.gfx-scene :as scene :refer [->Group ->Line ->Rect ->Polyline ->Style]]))
+            [tiny-fx.gfx-scene :as scene :refer [->Group ->Line ->Rect ->Polyline ->Style ->VText]]))
 
 ;; tiny-fx.svg
 ;;
@@ -85,11 +85,54 @@
         dot (str/index-of t "." 0)]
     (if (nil? dot) t (subs t 0 dot))))
 
+(defn- digit-char?
+  [ch]
+  (or (= ch \0) (= ch 48)
+      (= ch \1) (= ch 49)
+      (= ch \2) (= ch 50)
+      (= ch \3) (= ch 51)
+      (= ch \4) (= ch 52)
+      (= ch \5) (= ch 53)
+      (= ch \6) (= ch 54)
+      (= ch \7) (= ch 55)
+      (= ch \8) (= ch 56)
+      (= ch \9) (= ch 57)))
+
+(defn- numeric-prefix
+  [s]
+  (let [t (str/trim (or s ""))]
+    (loop [i 0
+           seen-digit false
+           seen-dot false]
+      (if (>= i (count t))
+        (if seen-digit (subs t 0 i) nil)
+        (let [ch (nth t i)]
+          (cond
+            (and (= i 0) (or (= ch \+) (= ch 43)
+                             (= ch \-) (= ch 45)))
+            (recur (+ i 1) seen-digit seen-dot)
+
+            (digit-char? ch)
+            (recur (+ i 1) true seen-dot)
+
+            (and (or (= ch \.) (= ch 46)) (not seen-dot))
+            (recur (+ i 1) seen-digit true)
+
+            :else
+            (if seen-digit (subs t 0 i) nil)))))))
+
+(defn- parse-number-default
+  [s default-value]
+  (let [token (numeric-prefix s)]
+    (if (or (nil? token) (= token "") (= token "-") (= token "+") (= token "."))
+      default-value
+      (read-string token))))
+
 (defn- parse-int-default
   [s default-value]
   (if (or (nil? s) (= (str/trim s) ""))
     default-value
-    (let [token (truncate-decimal-str s)]
+    (let [token (truncate-decimal-str (or (numeric-prefix s) ""))]
       (if (or (= token "") (= token "-") (= token "+"))
         default-value
         (read-string token)))))
@@ -165,6 +208,52 @@
         visible (not (or (= display "none") (= visibility "hidden")))]
     (->Style stroke-rgb565 stroke-width visible has-fill fill-rgb565 false 0)))
 
+(defn- style-for-text-from-svg
+  [attrs style-map]
+  (let [base-style (style-from-svg attrs style-map)
+        fill (parse-color-rgb565 (attr-get attrs style-map "fill"))
+        stroke (parse-color-rgb565 (attr-get attrs style-map "stroke"))
+        text-color (if (nil? fill)
+                     (if (nil? stroke) (get base-style :stroke_color) stroke)
+                     fill)]
+    (->Style text-color
+             (get base-style :stroke_width)
+             (get base-style :visible)
+             false
+             0
+             false
+             0)))
+
+(defn- decode-xml-entities
+  [s]
+  (if (nil? s)
+    ""
+    (-> s
+        (str/replace "&lt;" "<")
+        (str/replace "&gt;" ">")
+        (str/replace "&quot;" "\"")
+        (str/replace "&apos;" "'")
+        (str/replace "&amp;" "&"))))
+
+(defn- normalize-text-content
+  [s]
+  (let [decoded (decode-xml-entities s)]
+    (loop [current decoded]
+      (let [next (-> current
+                     (str/replace "\n" " ")
+                     (str/replace "\t" " ")
+                     (str/replace "  " " "))]
+        (if (= next current)
+          (str/trim next)
+          (recur next))))))
+
+(defn- parse-text-scale
+  [attrs style-map]
+  (let [font-size (attr-get attrs style-map "font-size")]
+    (if (or (nil? font-size) (= (str/trim font-size) ""))
+      1
+      (/ (parse-number-default font-size 8) 8))))
+
 (defn- parse-points
   [points-str]
   (let [normalized (-> points-str
@@ -187,8 +276,33 @@
                        (conj out [(parse-int-default (first xy) 0)
                                   (parse-int-default (nth xy 1) 0)]))))))))))
 
+(defn- circle->polygon-points
+  [attrs]
+  (let [cx (parse-int-default (get attrs "cx") 0)
+        cy (parse-int-default (get attrs "cy") 0)
+        r (max 0 (parse-int-default (get attrs "r") 0))
+        d (quot (* r 181) 256)
+        outer (quot (* r 237) 256)
+        inner (quot (* r 98) 256)]
+    [[cx (- cy r)]
+     [(+ cx inner) (- cy outer)]
+     [(+ cx d) (- cy d)]
+     [(+ cx outer) (- cy inner)]
+     [(+ cx r) cy]
+     [(+ cx outer) (+ cy inner)]
+     [(+ cx d) (+ cy d)]
+     [(+ cx inner) (+ cy outer)]
+     [cx (+ cy r)]
+     [(- cx inner) (+ cy outer)]
+     [(- cx d) (+ cy d)]
+     [(- cx outer) (+ cy inner)]
+     [(- cx r) cy]
+     [(- cx outer) (- cy inner)]
+     [(- cx d) (- cy d)]
+     [(- cx inner) (- cy outer)]]))
+
 (defn- node-from-tag
-  [tag-name attrs style-map node-id]
+  [tag-name attrs style-map node-id text-content]
   (let [style (style-from-svg attrs style-map)
         visible (get style :visible)]
     (cond
@@ -228,10 +342,29 @@
                   (parse-points (or (get attrs "points") ""))
                   true)
 
+      (= tag-name "circle")
+      (->Polyline node-id
+                  nil
+                  style
+                  visible
+                  (circle->polygon-points attrs)
+                  true)
+
+      (= tag-name "text")
+      (->VText node-id
+               nil
+               (style-for-text-from-svg attrs style-map)
+               visible
+               (parse-int-default (get attrs "x") 0)
+               (parse-int-default (get attrs "y") 0)
+               (parse-text-scale attrs style-map)
+               0
+               (normalize-text-content text-content))
+
       :else nil)))
 
 (defn- parse-tag-body
-  [raw-tag node-id]
+  [raw-tag node-id text-content]
   (let [trimmed0 (str/trim raw-tag)
         trimmed (if (str/ends-with? trimmed0 "/")
                   (str/trim (subs trimmed0 0 (- (count trimmed0) 1)))
@@ -243,7 +376,7 @@
             attrs-str (if (nil? split-pos) "" (subs trimmed (+ split-pos 1)))
             attrs (parse-attrs attrs-str)
             style-map (parse-style-inline (get attrs "style"))
-            node (node-from-tag tag-name attrs style-map node-id)]
+            node (node-from-tag tag-name attrs style-map node-id text-content)]
         (if (nil? node)
           [nil node-id]
           [node (+ node-id 1)])))))
@@ -251,7 +384,7 @@
 ^#^{:doc "Parses an SVG string into a Group record for tiny-clj vector rendering.
 
 MVP behavior:
-- Supports line/rect/polyline/polygon tags.
+- Supports line/rect/polyline/polygon/circle/text tags.
 - Produces Group/Line/Rect/Polyline/Style records with keyword fields used by C renderer.
 - Coordinates are integer-based (decimal values are truncated)."}
 (defn group-from-svg
@@ -268,9 +401,22 @@ MVP behavior:
             (if (nil? gt)
               (->Group 1 nil nil true nodes)
               (let [tag (subs svg-str (+ lt 1) gt)
-                    parsed (parse-tag-body tag next-id)
+                    trimmed-tag (str/trim tag)
+                    closing-tag? (str/starts-with? trimmed-tag "/")
+                    text-tag? (and (not closing-tag?)
+                                   (or (= trimmed-tag "text")
+                                       (str/starts-with? trimmed-tag "text ")))
+                    self-closing-text? (and text-tag? (str/ends-with? trimmed-tag "/"))
+                    text-close (if (and text-tag? (not self-closing-text?))
+                                 (str/index-of svg-str "</text>" (+ gt 1))
+                                 nil)
+                    text-content (if (nil? text-close)
+                                   nil
+                                   (subs svg-str (+ gt 1) text-close))
+                    parsed (parse-tag-body tag next-id text-content)
                     node (first parsed)
-                    id2 (nth parsed 1)]
+                    id2 (nth parsed 1)
+                    next-idx (if (nil? text-close) (+ gt 1) (+ text-close 7))]
                 (if (nil? node)
-                  (recur (+ gt 1) next-id nodes)
-                  (recur (+ gt 1) id2 (conj nodes node)))))))))))
+                  (recur next-idx next-id nodes)
+                  (recur next-idx id2 (conj nodes node)))))))))))

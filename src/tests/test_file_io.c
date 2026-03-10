@@ -308,6 +308,10 @@ static char *create_test_file(const char *content) {
 // Helper function to delete test file
 static void cleanup_test_file(const char *path) {
   if (path) {
+    FsKvStore *st = fs_global_store_if_initialized();
+    if (st) {
+      (void)fs_delete(st, path);
+    }
     unlink(path);
     CLJ_FREE((void *)path);
   }

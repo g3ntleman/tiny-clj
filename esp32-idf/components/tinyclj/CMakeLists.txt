@@ -18,6 +18,7 @@ set(TINYCLJ_CORE_SRCS
   "${TINYCLJ_SRC_DIR}/clojure_core.c"
   "${TINYCLJ_SRC_DIR}/object.c"
   "${TINYCLJ_SRC_DIR}/builtins.c"
+  "${TINYCLJ_SRC_DIR}/builtins_gpio.c"
   "${TINYCLJ_SRC_DIR}/builtins_tiny_fx_gfx.c"
   "${TINYCLJ_SRC_DIR}/builtins_net.c"
   "${TINYCLJ_SRC_DIR}/builtins_mdns.c"
@@ -58,6 +59,7 @@ set(TINYCLJ_CORE_SRCS
   "${TINYCLJ_SRC_DIR}/embedded_sources.c"
   "${TINYCLJ_SRC_DIR}/fs_layer.c"
   "${TINYCLJ_SRC_DIR}/lockfree_spsc_queue.c"
+  "${TINYCLJ_SRC_DIR}/gpio.c"
   "${TINYCLJ_SRC_DIR}/gpio_esp32.c"
   "${TINYCLJ_SRC_DIR}/line_editor.c"
   "${TINYCLJ_SRC_DIR}/repl.c"
@@ -108,6 +110,7 @@ idf_component_register(
     subjective-c
     tiny-db
     driver
+    esp_adc
     esp_timer
     esp_partition
 )

@@ -293,7 +293,6 @@ void sound_engine_init(int voice_count) {
     sound_ensure_finished_event_keywords();
     if (voice_count < 1) voice_count = 1;
     if (voice_count > SOUND_MAX_VOICES) voice_count = SOUND_MAX_VOICES;
-    g_sound_engine.voice_count = voice_count;
     g_sound_engine.music_volume = 255;
     g_sound_engine.us_per_tick = 1000; /* 1ms default */
     memset(g_sound_engine.cmd_queue.slots, 0, sizeof(g_sound_engine.cmd_queue.slots));
@@ -306,6 +305,7 @@ void sound_engine_init(int voice_count) {
         if (!ok) return;
     }
     sound_backend_init(voice_count);
+    g_sound_engine.voice_count = voice_count;
 }
 
 void sound_engine_shutdown(void) {

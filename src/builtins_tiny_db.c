@@ -41,6 +41,20 @@ static const char *require_c_string_arg(ID arg, const char *fn_name, const char 
 // tiny-clj.fs native functions
 // -----------------------------------------------------------------------------
 
+ID builtin_fs_write_bytes_or_throw(const char *fn_name, const char *path,
+                                   const uint8_t *data, size_t len) {
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+
+    fs_err_t e = fs_write_bytes(st, path, data, len);
+    if (e != FS_NO_ERR) {
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                  "%s failed (err=%d)", fn_name, (int)e);
+        return NULL;
+    }
+    return NULL;
+}
+
 ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
 {
     CHECK_ARITY(argc, 2, "tiny-clj.fs/spit-bytes");
@@ -59,12 +73,8 @@ ID native_tinyclj_fs_spit_bytes(ID *args, unsigned int argc)
                                          "tiny-clj.fs/spit-bytes expects a byte-array or nil"); return NULL;
     }
     CljByteArray *ba = as_byte_array(args[1]);
-    fs_err_t e = fs_write_bytes(st, path, ba->data, (size_t)ba->length);
-    if (e != FS_NO_ERR) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "tiny-clj.fs/spit-bytes failed (err=%d)", (int)e); return NULL;
-    }
-    return NULL;
+    return builtin_fs_write_bytes_or_throw("tiny-clj.fs/spit-bytes", path,
+                                           ba->data, (size_t)ba->length);
 }
 
 ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc)

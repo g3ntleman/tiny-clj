@@ -66,6 +66,10 @@ static const char tiny_fx_sound_debug_code[] =
 #endif
 #endif
 
+static const char tiny_clj_gpio_code[] =
+#include "tiny-clj.gpio.clj"
+    ;
+
 static const char tiny_clj_net_code[] =
 #include "tiny-clj.net.clj"
     ;
@@ -93,6 +97,10 @@ static const char tiny_fx_gfx_bench_code[] =
 
 static const char tiny_fx_gfx_code[] =
 #include "tiny-gfx.runtime.clj"
+    ;
+
+static const char tiny_fx_startup_code[] =
+#include "tiny-fx.startup.clj"
     ;
 
 static const char tiny_fx_game_demo_code[] =
@@ -134,6 +142,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-debug.clj", tiny_fx_sound_debug_code),
 #endif
 #endif
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/gpio.clj", tiny_clj_gpio_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net.clj", tiny_clj_net_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net/mdns.clj", tiny_clj_net_mdns_code),
 #if TINYCLJ_WITH_TINY_FX
@@ -145,6 +154,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-bench.clj", tiny_fx_gfx_bench_code),
 #endif
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx.clj", tiny_fx_gfx_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/startup.clj", tiny_fx_startup_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/game-demo.clj", tiny_fx_game_demo_code),
 #endif
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/kv.clj", tiny_db_kv_code),

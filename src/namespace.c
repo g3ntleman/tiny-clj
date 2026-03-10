@@ -10,6 +10,8 @@
 #include "runtime.h"
 #include "tiny_clj.h"
 #include "memory.h"
+#include "meta.h"
+#include "builtins.h"
 #include "parser.h"  // For eval_parsed
 #include "vector.h"
 
@@ -570,12 +572,23 @@ void reset_eval_state_current_ns(void) {
 
 // EvalState functions
 // OPTIMIZATION: Now returns global thread-local state instead of heap allocation
+static void evalstate_ensure_core_bootstrap_ready(void) {
+    if (g_runtime.builtins_registered) {
+        return;
+    }
+
+    meta_registry_init();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+}
+
 EvalState* evalstate_new(bool load_core) {
     EvalState *st = get_global_eval_state();
     if (!st) return NULL;
 
     // Load clojure.core automatically if requested (functions available via ns_resolve)
     if (load_core) {
+        evalstate_ensure_core_bootstrap_ready();
         WITH_AUTORELEASE_POOL({
             load_clojure_core(st);
         });
@@ -626,6 +639,7 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
 
     // Always load clojure.core if requested (for test isolation)
     if (load_core) {
+        evalstate_ensure_core_bootstrap_ready();
         evalstate_set_ns(st, "clojure.core");
         load_clojure_core(st);
     }

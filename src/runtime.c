@@ -18,7 +18,7 @@
 #include "eval_special_forms.h" // For eval_special_forms_reset_caches()
 #include "embedded_sources.h"
 #ifndef ESP32_BUILD
-#include "gpio_host.h"
+#include "gpio.h"
 #endif
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
@@ -191,6 +191,6 @@ void runtime_reset(TinyClJRuntime *runtime) {
     runtime->timer_id_counter = 0;
     event_loop_clear();
 #ifndef ESP32_BUILD
-    gpio_host_reset_state();
+    gpio_runtime_reset_state();
 #endif
 }

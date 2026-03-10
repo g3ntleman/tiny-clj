@@ -12,11 +12,14 @@
 
 #ifndef ESP32_BUILD
 
+#include "exception.h"
 #include "sound_engine.h"
 #include "sound_tick_scheduler.h"
 #include <stdatomic.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <time.h>
 
 #if defined(__APPLE__)
@@ -46,6 +49,23 @@ static int g_host_voice_count = 0;
 static float g_voice_phase[HOST_SOUND_MAX_VOICES];
 static _Atomic uint32_t g_voice_freq[HOST_SOUND_MAX_VOICES];
 static _Atomic uint32_t g_voice_volume[HOST_SOUND_MAX_VOICES];
+
+static void host_sound_dispose_unit(void);
+
+static bool host_sound_init_failpoint_enabled(const char *step) {
+    const char *env = getenv("TINYCLJ_SOUND_HOST_INIT_FAIL");
+    if (!env || env[0] == '\0') {
+        return false;
+    }
+    return (strcmp(env, "1") == 0) || (step && strcmp(env, step) == 0);
+}
+
+static void host_sound_throw_init_failure(const char *step, int status_code) {
+    host_sound_dispose_unit();
+    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                              "host sound init failed at %s (status=%d)",
+                              step ? step : "unknown", status_code);
+}
 
 static void host_sound_dispose_unit(void) {
     if (!g_output_unit) {
@@ -150,6 +170,11 @@ static OSStatus host_sound_render(void *in_ref_con,
 }
 
 static bool host_sound_init_unit(void) {
+    if (host_sound_init_failpoint_enabled("component-find")) {
+        host_sound_throw_init_failure("component-find", -1);
+        return false;
+    }
+
     AudioComponentDescription desc;
     desc.componentType = kAudioUnitType_Output;
     desc.componentSubType = kAudioUnitSubType_DefaultOutput;
@@ -158,8 +183,21 @@ static bool host_sound_init_unit(void) {
     desc.componentFlagsMask = 0;
 
     AudioComponent comp = AudioComponentFindNext(NULL, &desc);
-    if (!comp) return false;
-    if (AudioComponentInstanceNew(comp, &g_output_unit) != noErr || !g_output_unit) return false;
+    if (!comp) {
+        host_sound_throw_init_failure("component-find", -1);
+        return false;
+    }
+
+    if (host_sound_init_failpoint_enabled("instance-new")) {
+        host_sound_throw_init_failure("instance-new", -1);
+        return false;
+    }
+
+    OSStatus status = AudioComponentInstanceNew(comp, &g_output_unit);
+    if (status != noErr || !g_output_unit) {
+        host_sound_throw_init_failure("instance-new", (int)status);
+        return false;
+    }
 
     AudioStreamBasicDescription asbd;
     asbd.mSampleRate = HOST_SOUND_SAMPLE_RATE;
@@ -172,28 +210,51 @@ static bool host_sound_init_unit(void) {
     asbd.mBitsPerChannel = 8 * sizeof(float);
     asbd.mReserved = 0;
 
-    if (AudioUnitSetProperty(g_output_unit,
-                             kAudioUnitProperty_StreamFormat,
-                             kAudioUnitScope_Input,
-                             0,
-                             &asbd,
-                             sizeof(asbd)) != noErr) {
+    if (host_sound_init_failpoint_enabled("stream-format")) {
+        host_sound_throw_init_failure("stream-format", -1);
+        return false;
+    }
+
+    status = AudioUnitSetProperty(g_output_unit,
+                                  kAudioUnitProperty_StreamFormat,
+                                  kAudioUnitScope_Input,
+                                  0,
+                                  &asbd,
+                                  sizeof(asbd));
+    if (status != noErr) {
+        host_sound_throw_init_failure("stream-format", (int)status);
         return false;
     }
 
     AURenderCallbackStruct cb;
     cb.inputProc = host_sound_render;
     cb.inputProcRefCon = NULL;
-    if (AudioUnitSetProperty(g_output_unit,
-                             kAudioUnitProperty_SetRenderCallback,
-                             kAudioUnitScope_Input,
-                             0,
-                             &cb,
-                             sizeof(cb)) != noErr) {
+    if (host_sound_init_failpoint_enabled("render-callback")) {
+        host_sound_throw_init_failure("render-callback", -1);
         return false;
     }
 
-    if (AudioUnitInitialize(g_output_unit) != noErr) return false;
+    status = AudioUnitSetProperty(g_output_unit,
+                                  kAudioUnitProperty_SetRenderCallback,
+                                  kAudioUnitScope_Input,
+                                  0,
+                                  &cb,
+                                  sizeof(cb));
+    if (status != noErr) {
+        host_sound_throw_init_failure("render-callback", (int)status);
+        return false;
+    }
+
+    if (host_sound_init_failpoint_enabled("unit-initialize")) {
+        host_sound_throw_init_failure("unit-initialize", -1);
+        return false;
+    }
+
+    status = AudioUnitInitialize(g_output_unit);
+    if (status != noErr) {
+        host_sound_throw_init_failure("unit-initialize", (int)status);
+        return false;
+    }
     return true;
 }
 
@@ -232,6 +293,9 @@ static void *host_tick_thread_main(void *arg) {
 void sound_backend_init(int voice_count) {
     if (voice_count < 1) voice_count = 1;
     if (voice_count > HOST_SOUND_MAX_VOICES) voice_count = HOST_SOUND_MAX_VOICES;
+    atomic_store_explicit(&g_sound_available, false, memory_order_release);
+    atomic_store_explicit(&g_sound_running, false, memory_order_release);
+    atomic_store_explicit(&g_tick_enabled, false, memory_order_release);
     g_host_voice_count = voice_count;
     for (int i = 0; i < HOST_SOUND_MAX_VOICES; i++) {
         g_voice_phase[i] = 0.0f;
@@ -241,18 +305,23 @@ void sound_backend_init(int voice_count) {
     sound_tick_scheduler_init(&g_tick_scheduler, HOST_SOUND_TICK_NS, HOST_SOUND_MAX_CATCHUP_TICKS);
 
     if (!host_sound_init_unit()) {
-        host_sound_dispose_unit();
         return;
     }
 
     atomic_store_explicit(&g_sound_available, true, memory_order_release);
 
 #ifndef TINY_CLJ_TEST_RUNNER
+    if (host_sound_init_failpoint_enabled("tick-thread")) {
+        atomic_store_explicit(&g_sound_available, false, memory_order_release);
+        host_sound_throw_init_failure("tick-thread", -1);
+        return;
+    }
+
     atomic_store_explicit(&g_tick_thread_running, true, memory_order_release);
     if (pthread_create(&g_tick_thread, NULL, host_tick_thread_main, NULL) != 0) {
         atomic_store_explicit(&g_tick_thread_running, false, memory_order_release);
         atomic_store_explicit(&g_sound_available, false, memory_order_release);
-        host_sound_dispose_unit();
+        host_sound_throw_init_failure("tick-thread", -1);
     }
 #endif
 }

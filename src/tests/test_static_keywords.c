@@ -22,6 +22,17 @@ TEST(test_static_keywords_are_interned_singletons)
     TEST_ASSERT_NOT_NULL(SYM_KW_PATH);
     TEST_ASSERT_NOT_NULL(SYM_KW_HOST_OS);
     TEST_ASSERT_NOT_NULL(SYM_KW_MACRO);
+    TEST_ASSERT_NOT_NULL(SYM_KW_SIGNAL);
+    TEST_ASSERT_NOT_NULL(SYM_KW_MODE);
+    TEST_ASSERT_NOT_NULL(SYM_KW_FREQ);
+    TEST_ASSERT_NOT_NULL(SYM_KW_DUTY);
+    TEST_ASSERT_NOT_NULL(SYM_KW_DIGITAL);
+    TEST_ASSERT_NOT_NULL(SYM_KW_ANALOG);
+    TEST_ASSERT_NOT_NULL(SYM_KW_INPUT);
+    TEST_ASSERT_NOT_NULL(SYM_KW_OUTPUT);
+    TEST_ASSERT_NOT_NULL(SYM_KW_ADC);
+    TEST_ASSERT_NOT_NULL(SYM_KW_DAC);
+    TEST_ASSERT_NOT_NULL(SYM_KW_PWM);
 
     TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_VALUE));
     TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_CLOSED));
@@ -35,6 +46,17 @@ TEST(test_static_keywords_are_interned_singletons)
     TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_PATH));
     TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_HOST_OS));
     TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_MACRO));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_SIGNAL));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_MODE));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_FREQ));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_DUTY));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_DIGITAL));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_ANALOG));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_INPUT));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_OUTPUT));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_ADC));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_DAC));
+    TEST_ASSERT_TRUE(IS_KEYWORD((ID)SYM_KW_PWM));
 
     // Pointer identity: calling intern_symbol_global should return the same singleton.
     TEST_ASSERT_EQUAL_PTR(SYM_KW_VALUE, intern_symbol_global(":value"));
@@ -49,6 +71,17 @@ TEST(test_static_keywords_are_interned_singletons)
     TEST_ASSERT_EQUAL_PTR(SYM_KW_PATH, intern_symbol_global(":path"));
     TEST_ASSERT_EQUAL_PTR(SYM_KW_HOST_OS, intern_symbol_global(":host-os"));
     TEST_ASSERT_EQUAL_PTR(SYM_KW_MACRO, intern_symbol_global(":macro"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_SIGNAL, intern_symbol_global(":signal"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_MODE, intern_symbol_global(":mode"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_FREQ, intern_symbol_global(":freq"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_DUTY, intern_symbol_global(":duty"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_DIGITAL, intern_symbol_global(":digital"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_ANALOG, intern_symbol_global(":analog"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_INPUT, intern_symbol_global(":input"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_OUTPUT, intern_symbol_global(":output"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_ADC, intern_symbol_global(":adc"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_DAC, intern_symbol_global(":dac"));
+    TEST_ASSERT_EQUAL_PTR(SYM_KW_PWM, intern_symbol_global(":pwm"));
 
     // Sanity: names match expected values.
     TEST_ASSERT_EQUAL_STRING(":value", as_symbol((ID)SYM_KW_VALUE)->cname);
@@ -63,6 +96,17 @@ TEST(test_static_keywords_are_interned_singletons)
     TEST_ASSERT_EQUAL_STRING(":path", as_symbol((ID)SYM_KW_PATH)->cname);
     TEST_ASSERT_EQUAL_STRING(":host-os", as_symbol((ID)SYM_KW_HOST_OS)->cname);
     TEST_ASSERT_EQUAL_STRING(":macro", as_symbol((ID)SYM_KW_MACRO)->cname);
+    TEST_ASSERT_EQUAL_STRING(":signal", as_symbol((ID)SYM_KW_SIGNAL)->cname);
+    TEST_ASSERT_EQUAL_STRING(":mode", as_symbol((ID)SYM_KW_MODE)->cname);
+    TEST_ASSERT_EQUAL_STRING(":freq", as_symbol((ID)SYM_KW_FREQ)->cname);
+    TEST_ASSERT_EQUAL_STRING(":duty", as_symbol((ID)SYM_KW_DUTY)->cname);
+    TEST_ASSERT_EQUAL_STRING(":digital", as_symbol((ID)SYM_KW_DIGITAL)->cname);
+    TEST_ASSERT_EQUAL_STRING(":analog", as_symbol((ID)SYM_KW_ANALOG)->cname);
+    TEST_ASSERT_EQUAL_STRING(":input", as_symbol((ID)SYM_KW_INPUT)->cname);
+    TEST_ASSERT_EQUAL_STRING(":output", as_symbol((ID)SYM_KW_OUTPUT)->cname);
+    TEST_ASSERT_EQUAL_STRING(":adc", as_symbol((ID)SYM_KW_ADC)->cname);
+    TEST_ASSERT_EQUAL_STRING(":dac", as_symbol((ID)SYM_KW_DAC)->cname);
+    TEST_ASSERT_EQUAL_STRING(":pwm", as_symbol((ID)SYM_KW_PWM)->cname);
 }
 
 TEST(test_static_symbols_are_interned_singletons)

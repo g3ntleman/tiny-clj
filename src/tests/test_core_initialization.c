@@ -119,6 +119,37 @@ TEST(test_core_initialization_plus_available) {
                                  "+ should be in clojure.core mappings (registered by register_builtins)");
 }
 
+TEST(test_evalstate_new_load_core_bootstraps_builtins) {
+    runtime_reset(&g_runtime);
+    WITH_AUTORELEASE_POOL({
+        runtime_init(&g_runtime);
+    });
+
+    TEST_ASSERT_FALSE_MESSAGE(g_runtime.builtins_registered,
+                              "runtime_init should not pre-register builtins");
+
+    EvalState *st = NULL;
+    TRY {
+        st = evalstate_new(true);
+    } CATCH(ex) {
+        char msg[256];
+        test_snprintf(msg, sizeof(msg),
+                      "evalstate_new(true) should bootstrap builtins before core load, but threw: %s - %s",
+                      ex ? ex->type : "unknown",
+                      ex ? ex->message : "no message");
+        TEST_FAIL_MESSAGE(msg);
+    } END_TRY
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(st, "evalstate_new(true) should return an eval state");
+    TEST_ASSERT_TRUE_MESSAGE(g_runtime.builtins_registered,
+                             "evalstate_new(true) should mark builtins as registered");
+
+    evalstate_set_ns(st, "user");
+    ID result = eval_string("(inc 1)", st);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result), "(inc 1) should return a number after bootstrap");
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
+}
+
 // ============================================================================
 // Tests for clojure.core loading
 // ============================================================================

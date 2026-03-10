@@ -822,6 +822,58 @@ TEST(test_sound_native_host_status_returns_map) {
 
   TEST_ASSERT_NOT_NULL(result);
   TEST_ASSERT_TRUE(is_map(result));
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":backend-available")) != NOT_FOUND);
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":sound-running")) != NOT_FOUND);
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":voice-count")) != NOT_FOUND);
+}
+
+TEST(test_sound_host_init_failure_throws_and_allows_retry) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  const char *saved = getenv("TINYCLJ_SOUND_HOST_INIT_FAIL");
+  char saved_buf[64] = {0};
+  if (saved && saved[0] != '\0') {
+    test_snprintf(saved_buf, sizeof(saved_buf), "%s", saved);
+  }
+
+  sound_engine_shutdown();
+  setenv("TINYCLJ_SOUND_HOST_INIT_FAIL", "unit-initialize", 1);
+
+  bool threw = false;
+  ID result = NULL;
+  TRY {
+    result = eval_string("(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/host-status!))",
+                         g_test_eval_state);
+  }
+  CATCH(ex) {
+    threw = true;
+    TEST_ASSERT_NOT_NULL(ex);
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(threw);
+  TEST_ASSERT_NIL(result);
+  TEST_ASSERT_EQUAL_INT(0, g_sound_engine.voice_count);
+
+  if (saved_buf[0] != '\0') {
+    setenv("TINYCLJ_SOUND_HOST_INIT_FAIL", saved_buf, 1);
+  } else {
+    unsetenv("TINYCLJ_SOUND_HOST_INIT_FAIL");
+  }
+
+  sound_engine_shutdown();
+  result = NULL;
+  TRY {
+    result = eval_string("(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/host-status!))",
+                         g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("host-status! should recover after forced host init failure is removed");
+  }
+  END_TRY
+
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(is_map(result));
 }
 
 TEST(test_sound_tiny_fx_sound_namespace_compile_and_play) {
@@ -959,7 +1011,7 @@ TEST(test_sound_tiny_fx_sound_demos_phase_two_batch_returns_status_maps) {
         "(do (require 'tiny-fx.sound-demos) "
         "    [(let [ret (tiny-fx.sound-demos/play-the-entertainer!)] "
         "       (and (= :playing (:status ret)) "
-        "            (= 8636 (:duration-ms ret)) "
+        "            (= 8634 (:duration-ms ret)) "
         "            (= tiny-fx.sound-demos/the-entertainer-duration-ms (:duration-ms ret)))) "
         "     (let [ret (tiny-fx.sound-demos/play-gymnopedie-no-1!)] "
         "       (and (= :playing (:status ret)) "

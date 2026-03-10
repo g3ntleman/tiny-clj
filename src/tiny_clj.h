@@ -23,7 +23,8 @@ void cleanup_clojure_core(void);
  * @brief Evaluate a Clojure expression from a string
  * @param expr_str The Clojure expression as a string
  * @param eval_state The evaluation state
- * @return The evaluated result (autoreleased) or NULL on error
+ * @return The evaluated result (autoreleased). NULL is also a valid successful
+ * result for Clojure nil; errors are reported via exceptions.
  */
 ID eval_string(const char* expr_str, EvalState *eval_state);
 

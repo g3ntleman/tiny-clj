@@ -19,6 +19,15 @@ Load the namespace and call any demo function directly:
 (tiny-fx.sound-demos/play-can-can!)
 ```
 
+If you want to wait until a phrase has finished, use the returned `:duration-ms`
+instead of a fixed sleep:
+
+```clojure
+(let [ret (tiny-fx.sound-demos/play-the-entertainer!)]
+  (Thread/sleep (:duration-ms ret))
+  ret)
+```
+
 Each function returns a map like:
 
 ```clojure

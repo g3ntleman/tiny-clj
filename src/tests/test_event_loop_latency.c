@@ -246,3 +246,30 @@ TEST(test_event_loop_ingress_backpressure_rejects_when_full_and_recovers_after_d
     bool ran = event_loop_run_next(NULL, g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(ran, "run_next should execute recovered enqueue");
 }
+
+TEST(test_event_loop_ingress_call_preserves_nil_payload_as_argument) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID fn = eval_string(
+        "(do "
+        "  (def event-loop-ingress-nil-arg-marker (atom false)) "
+        "  (fn event-loop-ingress-nil-arg-task [x] "
+        "    (reset! event-loop-ingress-nil-arg-marker (nil? x)) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(fn);
+    TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(fn, NULL),
+                             "ingress call enqueue with nil payload should succeed");
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_ingress_has_pending(),
+                             "ingress queue should report pending call task");
+
+    bool ran = event_loop_run_next(NULL, g_test_eval_state);
+    TEST_ASSERT_TRUE_MESSAGE(ran, "run_next should execute queued ingress call");
+
+    ID marker = eval_string("@event-loop-ingress-nil-arg-marker", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(clj_true, marker,
+                                  "ingress callback should receive nil payload as one argument");
+}
