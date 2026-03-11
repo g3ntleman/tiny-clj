@@ -3,7 +3,7 @@ R"TINY_GFX_HOST(
   (:require [tiny-fx.gfx-scene :refer [->Transform ->Style ->Group ->Polyline
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
             [tiny-fx.sound :as sound]
-            [tiny-clj.gpio :as gpio]))
+            [tiny-clj.event :as event]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
@@ -241,7 +241,6 @@ R"TINY_GFX_HOST(
 (def player-entity-id 3002)
 (def player-collision-entity-id 3006)
 (def obstacle-entity-id 3003)
-(def melody-input-pin 1)
 (def demo-melody-track-id :game-demo-melody)
 (def demo-melody-steps
   [{:melody :G5 :backing [:D4] :duration :s}
@@ -258,7 +257,7 @@ R"TINY_GFX_HOST(
 (def score-scene-state (atom nil))
 (def game-scene-state (atom nil))
 (def demo-melody-trigger-count* (atom 0))
-(def demo-input-watcher-id* (atom nil))
+(def demo-input-watcher-active* (atom false))
 (def slot-descriptor-list
   [{:id :deco :atom deco-scene-state}
    {:id :score :atom score-scene-state}
@@ -319,28 +318,24 @@ Returns nil; host-side callback dispatch ignores return values."
           (reset! game-scene-state (apply-player-scale game-scene next-state)))))
     nil))
 
-(defn on-demo-gpio-input!
-  "Game-demo GPIO callback: a rising edge on the demo input pin triggers
+(defn on-demo-input-event!
+  "Game-demo input callback: a :button/down on :demo/launch triggers
 a short melody from Clojure. Returns nil; host-side callback dispatch ignores
 return values."
   [event]
-  (let [pin (:pin event)
-        value (:value event)]
-    (when (and (= pin melody-input-pin)
-               (= value 1))
-      (swap! demo-melody-trigger-count* inc)
-      (sound/play-steps! demo-melody-track-id demo-melody-steps demo-melody-opts))
-    nil))
+  (when (= (:kind event) :button/down)
+    (swap! demo-melody-trigger-count* inc)
+    (sound/play-steps! demo-melody-track-id demo-melody-steps demo-melody-opts))
+  nil)
 
 (defn configure-demo-input-watchers!
-  "Registers the demo GPIO watcher used by the game demo input simulation."
+  "Registers the demo event subscription used by the game demo input simulation."
   []
-  (let [old-watcher-id @demo-input-watcher-id*]
-    (when old-watcher-id
-      (gpio/watch melody-input-pin nil))
-    (reset! demo-input-watcher-id*
-            (gpio/watch melody-input-pin on-demo-gpio-input!))
-    nil))
+  (when @demo-input-watcher-active*
+    (event/on {:source :button :id :demo/launch} nil))
+  (event/on {:source :button :id :demo/launch} on-demo-input-event!)
+  (reset! demo-input-watcher-active* true)
+  nil))
 
 (defn collision-entity-ids
   "Returns [player-collision-entity-id obstacle-entity-id] for game-demo collision state queries."

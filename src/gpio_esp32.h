@@ -17,6 +17,8 @@ typedef struct {
     ID watcher_callback;
     bool output_mode_configured;
     bool watch_input_irq_configured;
+    bool input_irq_handler_installed;
+    uint8_t input_irq_consumer_count;
     int16_t pwm_binding_index;
 } GpioEsp32PinState;
 
@@ -28,6 +30,8 @@ static inline bool gpio_esp32_pin_state_valid(int32_t pin) {
 
 bool gpio_esp32_watch_set(int32_t pin, ID callback);
 bool gpio_esp32_watch_clear(int32_t pin);
+bool gpio_esp32_input_irq_consumer_acquire(int32_t pin);
+bool gpio_esp32_input_irq_consumer_release(int32_t pin);
 bool gpio_esp32_write_digital(int32_t pin, int32_t level);
 bool gpio_esp32_write_analog(int32_t pin, int32_t value);
 bool gpio_esp32_release_analog(int32_t pin);

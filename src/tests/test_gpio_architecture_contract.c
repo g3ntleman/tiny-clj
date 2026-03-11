@@ -180,6 +180,23 @@ TEST(test_gpio_architecture_isr_section_has_no_direct_enqueue) {
     CLJ_FREE(src);
 }
 
+TEST(test_gpio_architecture_esp32_irq_consumers_cover_c_callbacks_and_watchers) {
+    size_t len = 0;
+    char *src = read_gpio_esp32_source(&len);
+    TEST_ASSERT_TRUE(len > 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "gpio_esp32_input_irq_consumer_acquire"),
+                                 "expected shared ESP32 IRQ consumer acquire helper");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "gpio_esp32_input_irq_consumer_release"),
+                                 "expected shared ESP32 IRQ consumer release helper");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "gpio_runtime_pin_has_c_callbacks("),
+                                 "expected ISR path to consider raw C callbacks");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "gpio_runtime_pin_has_watcher("),
+                                 "expected ISR/drain path to consider Clojure watchers");
+
+    CLJ_FREE(src);
+}
+
 TEST(test_gpio_architecture_native_builtins_live_in_shared_core) {
     size_t core_len = 0;
     size_t host_len = 0;

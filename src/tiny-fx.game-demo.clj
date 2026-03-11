@@ -4,7 +4,7 @@ R"TINY_GFX_HOST(
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
             [tiny-fx.sound :as sound]
             [tiny-fx.sound-demos :as sound-demos]
-            [tiny-clj.gpio :as gpio]))
+            [tiny-clj.event :as event]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
@@ -243,8 +243,6 @@ R"TINY_GFX_HOST(
 (def player-collision-entity-id 3006)
 (def obstacle-entity-id 3003)
 (def rocket-nose-entity-id 3005)
-(def melody-input-pin 1)
-
 ;; Piezo-friendly Star Wars title phrases used by the host/ESP demo.
 (def starwars-title-steps
   [{:rest :t}
@@ -276,7 +274,7 @@ R"TINY_GFX_HOST(
 (def deco-scene-state (atom nil))
 (def score-scene-state (atom nil))
 (def game-scene-state (atom nil))
-(def demo-input-watcher-id* (atom nil))
+(def demo-input-watcher-active* (atom false))
 (def rocket-launch-state* (atom :flying))
 (def rocket-timeline-start-ms* (atom 0))
 (def slot-descriptor-list
@@ -380,37 +378,34 @@ Returns nil; host-side callback dispatch ignores return values."
           (reset! game-scene-state (apply-player-scale game-scene next-state)))))
     nil))
 
-(defn on-demo-gpio-input!
-  "Game-demo GPIO callback: a rising edge on the demo input pin triggers
+(defn on-demo-input-event!
+  "Game-demo input callback: a :button/down on :demo/launch triggers
 the rocket launch sound and animation. A second press while launched
 resets the rocket to its normal right-to-left flight.
 Returns nil; host-side callback dispatch ignores return values."
   [event]
-  (let [pin   (:pin event)
-        value (:value event)]
-    (when (and (= pin melody-input-pin) (= value 1))
-      (cond
-        (= @rocket-launch-state* :flying)
-        (do (reset! rocket-launch-state* :launched)
-            (sound-demos/play-rocket-launch-sfx!)
-            (swap! game-scene-state update-rocket-timeline
-                   (make-rocket-launch-timeline (rocket-approx-x))))
-        (= @rocket-launch-state* :launched)
-        (do (reset! rocket-launch-state*      :flying)
-            (reset! rocket-timeline-start-ms* (current-time-ms))
-            (swap! game-scene-state update-rocket-timeline rocket-timeline))
-        :else nil))
-    nil))
+  (when (= (:kind event) :button/down)
+    (cond
+      (= @rocket-launch-state* :flying)
+      (do (reset! rocket-launch-state* :launched)
+          (sound-demos/play-rocket-launch-sfx!)
+          (swap! game-scene-state update-rocket-timeline
+                 (make-rocket-launch-timeline (rocket-approx-x))))
+      (= @rocket-launch-state* :launched)
+      (do (reset! rocket-launch-state*      :flying)
+          (reset! rocket-timeline-start-ms* (current-time-ms))
+          (swap! game-scene-state update-rocket-timeline rocket-timeline))
+      :else nil))
+  nil)
 
 (defn configure-demo-input-watchers!
-  "Registers the demo GPIO watcher used by the game demo input simulation."
+  "Registers the demo event subscription used by the game demo input simulation."
   []
-  (let [old-watcher-id @demo-input-watcher-id*]
-    (when old-watcher-id
-      (gpio/watch melody-input-pin nil))
-    (reset! demo-input-watcher-id*
-            (gpio/watch melody-input-pin on-demo-gpio-input!))
-    nil))
+  (when @demo-input-watcher-active*
+    (event/on {:source :button :id :demo/launch} nil))
+  (event/on {:source :button :id :demo/launch} on-demo-input-event!)
+  (reset! demo-input-watcher-active* true)
+  nil))
 
 (defn collision-entity-ids
   "Returns [player-collision-entity-id obstacle-entity-id] for game-demo collision state queries."

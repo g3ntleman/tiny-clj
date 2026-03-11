@@ -17,6 +17,7 @@
 
 #ifdef ESP32_BUILD
 
+#include "gpio.h"
 #include "gpio_esp32.h"
 
 #include "exception.h"
@@ -36,24 +37,14 @@
 
 GpioEsp32PinState g_gpio_pin_state[GPIO_NUM_MAX];
 
-// Watcher map keys (interned keywords; singletons)
-static CljSymbol *KW_SOURCE = NULL;
-static CljSymbol *KW_KIND = NULL;
-static CljSymbol *KW_SIGNAL = NULL;
-static CljSymbol *KW_PIN = NULL;
-static CljSymbol *KW_VALUE = NULL;
-static CljSymbol *KW_GPIO = NULL;
-static CljSymbol *KW_EDGE = NULL;
-
 // ISR service installed once.
 static bool g_gpio_isr_service_installed = false;
 
-// Event ring buffer (ISR -> event-loop).
+// Event ring buffer (ISR -> thread-context input dispatch).
 // Fixed-size to avoid heap allocations in ISR.
 typedef struct {
     int32_t pin;
     int32_t value;
-    ID callback_fn; // retained in ISR; released in drain
 } GpioEvent;
 
 enum { GPIO_EVENT_RING_CAP = 32 };
@@ -102,18 +93,6 @@ static inline GpioEsp32PinState *gpio_pin_state_slot(int32_t pin) {
     return &g_gpio_pin_state[pin];
 }
 
-/** Ensure watcher storage and keywords are initialized (once). */
-static inline void gpio_ensure_initialized(void) {
-    if (KW_SOURCE) return;
-    KW_SOURCE = intern_symbol_global(":source");
-    KW_KIND = intern_symbol_global(":kind");
-    KW_SIGNAL = SYM_KW_SIGNAL;
-    KW_PIN = intern_symbol_global(":pin");
-    KW_VALUE = intern_symbol_global(":value");
-    KW_GPIO = intern_symbol_global(":gpio");
-    KW_EDGE = intern_symbol_global(":edge");
-}
-
 static inline void gpio_pwm_bindings_init(void) {
     if (g_pwm_bindings_initialized) return;
     for (int pin = 0; pin < GPIO_NUM_MAX; pin++) {
@@ -155,6 +134,17 @@ static inline void gpio_mark_watch_input_irq_configured(int32_t pin) {
     if (!slot) return;
     slot->watch_input_irq_configured = true;
     slot->output_mode_configured = false;
+}
+
+static inline bool gpio_input_irq_handler_installed(int32_t pin) {
+    GpioEsp32PinState *slot = gpio_pin_state_slot(pin);
+    return slot ? slot->input_irq_handler_installed : false;
+}
+
+static inline void gpio_mark_input_irq_handler_installed(int32_t pin, bool installed) {
+    GpioEsp32PinState *slot = gpio_pin_state_slot(pin);
+    if (!slot) return;
+    slot->input_irq_handler_installed = installed;
 }
 
 static inline GpioPwmBinding *gpio_pwm_binding_find_by_pin(int32_t pin) {
@@ -355,8 +345,8 @@ static bool gpio_adc_ensure_channel_configured(adc_oneshot_unit_handle_t handle,
     return true;
 }
 
-/** Push one event from ISR into ring; callback_fn_retained is consumed. Returns false if ring full. */
-static inline bool gpio_event_ring_push_from_isr(int32_t pin, int32_t value, ID callback_fn_retained) {
+/** Push one raw edge event from ISR into ring. Returns false if ring full. */
+static inline bool gpio_event_ring_push_from_isr(int32_t pin, int32_t value) {
     uint32_t w = atomic_load_explicit(&g_gpio_event_w, memory_order_relaxed);
     uint32_t r = atomic_load_explicit(&g_gpio_event_r, memory_order_acquire);
     uint32_t next_w = (w + 1u) % GPIO_EVENT_RING_CAP;
@@ -364,7 +354,6 @@ static inline bool gpio_event_ring_push_from_isr(int32_t pin, int32_t value, ID 
 
     g_gpio_events[w].pin = pin;
     g_gpio_events[w].value = value;
-    g_gpio_events[w].callback_fn = callback_fn_retained;
     atomic_store_explicit(&g_gpio_event_w, next_w, memory_order_release);
     return true;
 }
@@ -385,20 +374,8 @@ static inline void gpio_request_drain_from_isr(void) {
     atomic_store_explicit(&g_gpio_drain_requested, true, memory_order_release);
 }
 
-static ID gpio_make_watch_event(int32_t pin, int32_t value) {
-    gpio_ensure_initialized();
-    return make_map_from_kv(5,
-                            KW_SOURCE, KW_GPIO,
-                            KW_SIGNAL, SYM_KW_DIGITAL,
-                            KW_KIND, KW_EDGE,
-                            KW_PIN, fixnum(pin),
-                            KW_VALUE, fixnum(value == 0 ? 0 : 1));
-}
-
-/** Promote pending ISR events into generic event-loop ingress calls. */
+/** Promote pending ISR events into C callbacks and Clojure watches. */
 void gpio_esp32_poll_drain(void) {
-    gpio_ensure_initialized();
-
     bool requested = atomic_load_explicit(&g_gpio_drain_requested, memory_order_acquire);
     uint32_t r = atomic_load_explicit(&g_gpio_event_r, memory_order_relaxed);
     uint32_t w = atomic_load_explicit(&g_gpio_event_w, memory_order_acquire);
@@ -410,16 +387,11 @@ void gpio_esp32_poll_drain(void) {
 
     GpioEvent ev;
     while (gpio_event_ring_pop(&ev)) {
-        ID event_map = gpio_make_watch_event(ev.pin, ev.value);
-        bool enqueued = false;
-        if (event_map) {
-            enqueued = event_loop_enqueue_ingress_call(ev.callback_fn, event_map);
-            RELEASE(event_map);
-        }
-        if (!enqueued) {
+        gpio_runtime_dispatch_c_callbacks(ev.pin, ev.value);
+        if (gpio_runtime_pin_has_watcher(ev.pin) &&
+            !gpio_runtime_enqueue_watch_event(ev.pin, ev.value)) {
             atomic_fetch_add_explicit(&g_gpio_event_drop_count, 1u, memory_order_relaxed);
         }
-        RELEASE(ev.callback_fn);
     }
 
     if (atomic_load_explicit(&g_gpio_event_r, memory_order_relaxed) !=
@@ -434,10 +406,15 @@ uint32_t gpio_esp32_get_event_drop_count(void) {
 
 void gpio_esp32_runtime_reset_state(void) {
     for (int pin = 0; pin < GPIO_NUM_MAX; pin++) {
+        if (g_gpio_pin_state[pin].input_irq_handler_installed) {
+            (void)gpio_isr_handler_remove((gpio_num_t)pin);
+        }
         ASSIGN(g_gpio_pin_state[pin].mode_entry, NULL);
         ASSIGN(g_gpio_pin_state[pin].watcher_callback, NULL);
         g_gpio_pin_state[pin].output_mode_configured = false;
         g_gpio_pin_state[pin].watch_input_irq_configured = false;
+        g_gpio_pin_state[pin].input_irq_handler_installed = false;
+        g_gpio_pin_state[pin].input_irq_consumer_count = 0u;
         g_gpio_pin_state[pin].pwm_binding_index = -1;
     }
 
@@ -463,21 +440,20 @@ void gpio_esp32_runtime_reset_state(void) {
     atomic_store_explicit(&g_gpio_event_drop_count, 0u, memory_order_relaxed);
 }
 
-/** ISR: read pin level, retain callback, push event, schedule drain. */
+/** ISR: read pin level, push raw edge event, schedule drain. */
 static void IRAM_ATTR gpio_isr_handler(void *arg) {
     int32_t pin = (int32_t)(intptr_t)arg;
     if (!gpio_pin_cache_index_valid(pin)) return;
     int32_t value = gpio_get_level((gpio_num_t)pin);
 
     ID callback_fn = gpio_watcher_callback_get(pin);
-    if (!callback_fn || IS_IMMEDIATE(callback_fn)) return;
+    if ((!callback_fn || IS_IMMEDIATE(callback_fn)) &&
+        !gpio_runtime_pin_has_c_callbacks(pin)) {
+        return;
+    }
 
-    // Retain callback_fn so unwatch can't free it while event is pending.
-    ID retained_cb = RETAIN(callback_fn);
-    if (!gpio_event_ring_push_from_isr(pin, value, retained_cb)) {
-        // Ring full: drop event, but balance RETAIN.
+    if (!gpio_event_ring_push_from_isr(pin, value)) {
         atomic_fetch_add_explicit(&g_gpio_event_drop_count, 1u, memory_order_relaxed);
-        RELEASE(retained_cb);
         return;
     }
     gpio_request_drain_from_isr();
@@ -495,6 +471,56 @@ static inline void gpio_ensure_isr_service(void) {
     throw_exception(EXCEPTION_RUNTIME, "gpio_install_isr_service failed", __FILE__, __LINE__, 0);
 }
 
+static bool gpio_ensure_input_irq_handler_installed(int32_t pin) {
+    if (gpio_input_irq_handler_installed(pin)) {
+        return true;
+    }
+    if (!gpio_ensure_watch_input_irq_configured(pin)) {
+        return false;
+    }
+    gpio_ensure_isr_service();
+    esp_err_t err = gpio_isr_handler_add((gpio_num_t)pin, gpio_isr_handler, (void*)(intptr_t)pin);
+    if (err != ESP_OK) {
+        return false;
+    }
+    gpio_mark_input_irq_handler_installed(pin, true);
+    return true;
+}
+
+bool gpio_esp32_input_irq_consumer_acquire(int32_t pin) {
+    if (!gpio_pin_cache_index_valid(pin) || !GPIO_IS_VALID_GPIO((gpio_num_t)pin)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "watch: invalid pin", __FILE__, __LINE__, 0);
+        return false;
+    }
+    GpioEsp32PinState *slot = gpio_pin_state_slot(pin);
+    if (!slot) {
+        return false;
+    }
+    if (!gpio_ensure_input_irq_handler_installed(pin)) {
+        throw_exception(EXCEPTION_RUNTIME, "watch: gpio input irq setup failed", __FILE__, __LINE__, 0);
+        return false;
+    }
+    if (slot->input_irq_consumer_count < UINT8_MAX) {
+        slot->input_irq_consumer_count++;
+    }
+    return true;
+}
+
+bool gpio_esp32_input_irq_consumer_release(int32_t pin) {
+    GpioEsp32PinState *slot = gpio_pin_state_slot(pin);
+    if (!slot) {
+        return false;
+    }
+    if (slot->input_irq_consumer_count > 0) {
+        slot->input_irq_consumer_count--;
+    }
+    if (slot->input_irq_consumer_count == 0 && slot->input_irq_handler_installed) {
+        (void)gpio_isr_handler_remove((gpio_num_t)pin);
+        gpio_mark_input_irq_handler_installed(pin, false);
+    }
+    return true;
+}
+
 /**
  * @brief Remove a GPIO edge-interrupt watcher and ISR handler for one pin.
  *
@@ -504,11 +530,10 @@ static inline void gpio_ensure_isr_service(void) {
  * No-op if the pin currently has no watcher.
  */
 bool gpio_esp32_watch_clear(int32_t pin) {
-    gpio_ensure_initialized();
     ID callback = gpio_watcher_callback_get(pin);
     if (callback) {
-        (void)gpio_isr_handler_remove((gpio_num_t)pin);
         gpio_watcher_callback_set(pin, NULL);
+        (void)gpio_esp32_input_irq_consumer_release(pin);
     }
     return true;
 }
@@ -525,29 +550,19 @@ bool gpio_esp32_watch_clear(int32_t pin) {
  * for the same pin.
  */
 bool gpio_esp32_watch_set(int32_t pin, ID callback) {
-    gpio_ensure_initialized();
     if (!gpio_pin_cache_index_valid(pin) || !GPIO_IS_VALID_GPIO((gpio_num_t)pin)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "watch: invalid pin", __FILE__, __LINE__, 0);
         return false;
     }
 
     if (gpio_watcher_callback_get(pin)) {
-        (void)gpio_isr_handler_remove((gpio_num_t)pin);
         gpio_watcher_callback_set(pin, NULL);
+        (void)gpio_esp32_input_irq_consumer_release(pin);
     }
     gpio_watcher_callback_set(pin, callback);
 
-    if (!gpio_ensure_watch_input_irq_configured(pin)) {
+    if (!gpio_esp32_input_irq_consumer_acquire(pin)) {
         gpio_watcher_callback_set(pin, NULL);
-        throw_exception(EXCEPTION_RUNTIME, "watch: gpio_config failed", __FILE__, __LINE__, 0);
-        return false;
-    }
-
-    gpio_ensure_isr_service();
-    esp_err_t err = gpio_isr_handler_add((gpio_num_t)pin, gpio_isr_handler, (void*)(intptr_t)pin);
-    if (err != ESP_OK) {
-        gpio_watcher_callback_set(pin, NULL);
-        throw_exception(EXCEPTION_RUNTIME, "watch: gpio_isr_handler_add failed", __FILE__, __LINE__, 0);
         return false;
     }
 

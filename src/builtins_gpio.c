@@ -85,6 +85,16 @@ static StaticSymbolData sym_gpio_simulate_analog_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-clj.gpio/simulate-analog!"}};
+static StaticSymbolData sym_button_watch_native_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.button/watch-native"}};
+static StaticSymbolData sym_sensor_watch_native_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.sensor/watch-native"}};
 
 static const BuiltinsGpioNativeFunctionEntry builtins_gpio_native_function_table[] = {
     {&sym_gpio_watch_qualified_data.sym, native_gpio_watch},
@@ -101,6 +111,8 @@ static const BuiltinsGpioNativeFunctionEntry builtins_gpio_native_function_table
     {&sym_gpio_pwm_qualified_data.sym, native_gpio_pwm},
     {&sym_gpio_pwm_stop_qualified_data.sym, native_gpio_pwm_stop},
     {&sym_gpio_simulate_analog_qualified_data.sym, native_gpio_simulate_analog},
+    {&sym_button_watch_native_qualified_data.sym, native_button_watch},
+    {&sym_sensor_watch_native_qualified_data.sym, native_sensor_watch},
     {NULL, NULL}};
 
 BuiltinFn builtins_gpio_native_function_lookup(CljSymbol *symbol) {

@@ -109,6 +109,82 @@ TEST(test_embedded_sources_tiny_clj_gpio)
     TEST_ASSERT_TRUE(found);
 }
 
+TEST(test_embedded_sources_tiny_clj_board)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+    ID bytes = resolve_path_to_bytes("/libs/tiny-clj/board.clj");
+    TEST_ASSERT_NOT_NULL(bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(bytes));
+    CljByteArray *ba = as_byte_array(bytes);
+    TEST_ASSERT_TRUE(ba->length > 0);
+    const char *needle = "(ns tiny-clj.board)";
+    size_t n = strlen(needle);
+    TEST_ASSERT_TRUE(ba->length >= (int)n);
+    int found = 0;
+    for (int i = 0; i <= ba->length - (int)n && !found; i++) {
+        if (memcmp(ba->data + i, needle, n) == 0) found = 1;
+    }
+    TEST_ASSERT_TRUE(found);
+}
+
+TEST(test_embedded_sources_tiny_clj_button)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+    ID bytes = resolve_path_to_bytes("/libs/tiny-clj/button.clj");
+    TEST_ASSERT_NOT_NULL(bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(bytes));
+    CljByteArray *ba = as_byte_array(bytes);
+    TEST_ASSERT_TRUE(ba->length > 0);
+    const char *needle = "(ns tiny-clj.button";
+    size_t n = strlen(needle);
+    TEST_ASSERT_TRUE(ba->length >= (int)n);
+    int found = 0;
+    for (int i = 0; i <= ba->length - (int)n && !found; i++) {
+        if (memcmp(ba->data + i, needle, n) == 0) found = 1;
+    }
+    TEST_ASSERT_TRUE(found);
+}
+
+TEST(test_embedded_sources_tiny_clj_event)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+    ID bytes = resolve_path_to_bytes("/libs/tiny-clj/event.clj");
+    TEST_ASSERT_NOT_NULL(bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(bytes));
+    CljByteArray *ba = as_byte_array(bytes);
+    TEST_ASSERT_TRUE(ba->length > 0);
+    const char *needle = "(ns tiny-clj.event";
+    size_t n = strlen(needle);
+    TEST_ASSERT_TRUE(ba->length >= (int)n);
+    int found = 0;
+    for (int i = 0; i <= ba->length - (int)n && !found; i++) {
+        if (memcmp(ba->data + i, needle, n) == 0) found = 1;
+    }
+    TEST_ASSERT_TRUE(found);
+}
+
+TEST(test_embedded_sources_tiny_clj_sensor)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+    ID bytes = resolve_path_to_bytes("/libs/tiny-clj/sensor.clj");
+    TEST_ASSERT_NOT_NULL(bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(bytes));
+    CljByteArray *ba = as_byte_array(bytes);
+    TEST_ASSERT_TRUE(ba->length > 0);
+    const char *needle = "(ns tiny-clj.sensor";
+    size_t n = strlen(needle);
+    TEST_ASSERT_TRUE(ba->length >= (int)n);
+    int found = 0;
+    for (int i = 0; i <= ba->length - (int)n && !found; i++) {
+        if (memcmp(ba->data + i, needle, n) == 0) found = 1;
+    }
+    TEST_ASSERT_TRUE(found);
+}
+
 TEST(test_embedded_sources_tiny_fx_startup)
 {
     embedded_source_map_init();

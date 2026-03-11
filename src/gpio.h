@@ -6,11 +6,18 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+typedef void (*GpioCRawCallback)(int32_t pin, int32_t level, void *ctx);
+
 void gpio_runtime_reset_state(void);
 
 bool gpio_runtime_watch_set(int32_t pin, ID callback);
 bool gpio_runtime_watch_clear(int32_t pin);
 bool gpio_runtime_enqueue_watch_event(int32_t pin, int32_t level);
+bool gpio_runtime_pin_has_watcher(int32_t pin);
+bool gpio_runtime_pin_has_c_callbacks(int32_t pin);
+bool gpio_runtime_c_callback_add(int32_t pin, GpioCRawCallback callback, void *ctx);
+bool gpio_runtime_c_callback_remove(int32_t pin, GpioCRawCallback callback, void *ctx);
+void gpio_runtime_dispatch_c_callbacks(int32_t pin, int32_t level);
 
 void gpio_runtime_store_digital_level(int32_t pin, int32_t level);
 void gpio_runtime_store_analog_level(int32_t pin, int32_t value);

@@ -16,6 +16,8 @@ ID native_gpio_pin_write(ID *args, unsigned int argc);
 ID native_gpio_pwm(ID *args, unsigned int argc);
 ID native_gpio_pwm_stop(ID *args, unsigned int argc);
 ID native_gpio_simulate_analog(ID *args, unsigned int argc);
+ID native_button_watch(ID *args, unsigned int argc);
+ID native_sensor_watch(ID *args, unsigned int argc);
 
 BuiltinFn builtins_gpio_native_function_lookup(CljSymbol *symbol);
 

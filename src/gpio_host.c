@@ -13,6 +13,7 @@
 bool gpio_host_simulate_pin_change(int32_t pin, int32_t level)
 {
     gpio_runtime_store_digital_level(pin, level);
+    gpio_runtime_dispatch_c_callbacks(pin, level);
     return gpio_runtime_enqueue_watch_event(pin, level);
 }
 
