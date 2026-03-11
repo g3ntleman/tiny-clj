@@ -49,8 +49,24 @@ static int g_host_voice_count = 0;
 static float g_voice_phase[HOST_SOUND_MAX_VOICES];
 static _Atomic uint32_t g_voice_freq[HOST_SOUND_MAX_VOICES];
 static _Atomic uint32_t g_voice_volume[HOST_SOUND_MAX_VOICES];
+static atomic_bool g_debug_noise_enabled = false;
+static _Atomic uint32_t g_debug_noise_min_freq = 0;
+static _Atomic uint32_t g_debug_noise_max_freq = 0;
+static _Atomic uint32_t g_debug_noise_volume = 0;
+static _Atomic uint32_t g_debug_noise_hold_samples = 0;
+static _Atomic uint32_t g_debug_noise_remaining_samples = 0;
+static _Atomic uint32_t g_debug_noise_samples_until_hop = 0;
+static _Atomic uint32_t g_debug_noise_current_freq = 0;
+static _Atomic uint32_t g_debug_noise_lfsr = 0x13579BDFu;
+static float g_debug_noise_phase = 0.0f;
 
 static void host_sound_dispose_unit(void);
+
+static uint32_t host_debug_noise_next_lfsr(uint32_t state) {
+    uint32_t lfsr = state ? state : 0x13579BDFu;
+    uint32_t bit = ((lfsr >> 0) ^ (lfsr >> 2) ^ (lfsr >> 3) ^ (lfsr >> 5)) & 1u;
+    return (lfsr >> 1) | (bit << 31);
+}
 
 static bool host_sound_init_failpoint_enabled(const char *step) {
     const char *env = getenv("TINYCLJ_SOUND_HOST_INIT_FAIL");
@@ -157,6 +173,41 @@ static OSStatus host_sound_render(void *in_ref_con,
                 phase += ((float)freq / (float)HOST_SOUND_SAMPLE_RATE);
                 if (phase >= 1.0f) phase -= 1.0f;
                 g_voice_phase[v] = phase;
+            }
+        }
+
+        if (atomic_load_explicit(&g_debug_noise_enabled, memory_order_relaxed)) {
+            uint32_t remaining = atomic_load_explicit(&g_debug_noise_remaining_samples, memory_order_relaxed);
+            if (remaining == 0u) {
+                atomic_store_explicit(&g_debug_noise_enabled, false, memory_order_relaxed);
+            } else {
+                uint32_t samples_until_hop = atomic_load_explicit(&g_debug_noise_samples_until_hop, memory_order_relaxed);
+                if (samples_until_hop == 0u) {
+                    uint32_t lfsr = host_debug_noise_next_lfsr(
+                        atomic_load_explicit(&g_debug_noise_lfsr, memory_order_relaxed));
+                    uint32_t min_freq = atomic_load_explicit(&g_debug_noise_min_freq, memory_order_relaxed);
+                    uint32_t max_freq = atomic_load_explicit(&g_debug_noise_max_freq, memory_order_relaxed);
+                    uint32_t span = (max_freq >= min_freq) ? (max_freq - min_freq + 1u) : 1u;
+                    uint32_t next_freq = min_freq + (lfsr % span);
+                    uint32_t hold_samples = atomic_load_explicit(&g_debug_noise_hold_samples, memory_order_relaxed);
+                    atomic_store_explicit(&g_debug_noise_lfsr, lfsr, memory_order_relaxed);
+                    atomic_store_explicit(&g_debug_noise_current_freq, next_freq, memory_order_relaxed);
+                    atomic_store_explicit(&g_debug_noise_samples_until_hop, hold_samples > 0u ? hold_samples : 1u,
+                                          memory_order_relaxed);
+                    samples_until_hop = hold_samples > 0u ? hold_samples : 1u;
+                }
+
+                uint32_t freq = atomic_load_explicit(&g_debug_noise_current_freq, memory_order_relaxed);
+                uint32_t vol = atomic_load_explicit(&g_debug_noise_volume, memory_order_relaxed);
+                float amp = ((float)vol / 255.0f) * 0.20f;
+                float phase = g_debug_noise_phase;
+                sample += (phase < 0.5f ? 1.0f : -1.0f) * amp;
+                phase += ((float)freq / (float)HOST_SOUND_SAMPLE_RATE);
+                if (phase >= 1.0f) phase -= 1.0f;
+                g_debug_noise_phase = phase;
+
+                atomic_store_explicit(&g_debug_noise_samples_until_hop, samples_until_hop - 1u, memory_order_relaxed);
+                atomic_store_explicit(&g_debug_noise_remaining_samples, remaining - 1u, memory_order_relaxed);
             }
         }
 
@@ -380,6 +431,37 @@ bool sound_backend_host_get_status(SoundHostStatus *out) {
     return true;
 }
 
+bool sound_backend_host_play_debug_noise(uint16_t min_freq_hz,
+                                         uint16_t max_freq_hz,
+                                         uint32_t duration_ms,
+                                         uint32_t hop_ms,
+                                         uint8_t volume) {
+    if (min_freq_hz < 20 || max_freq_hz < min_freq_hz || duration_ms == 0u || hop_ms == 0u) {
+        return false;
+    }
+    uint32_t hold_samples = (uint32_t)((HOST_SOUND_SAMPLE_RATE * (double)hop_ms) / 1000.0);
+    uint32_t remaining_samples = (uint32_t)((HOST_SOUND_SAMPLE_RATE * (double)duration_ms) / 1000.0);
+    if (hold_samples == 0u) hold_samples = 1u;
+    if (remaining_samples == 0u) remaining_samples = 1u;
+
+    atomic_store_explicit(&g_debug_noise_min_freq, min_freq_hz, memory_order_release);
+    atomic_store_explicit(&g_debug_noise_max_freq, max_freq_hz, memory_order_release);
+    atomic_store_explicit(&g_debug_noise_volume, volume, memory_order_release);
+    atomic_store_explicit(&g_debug_noise_hold_samples, hold_samples, memory_order_release);
+    atomic_store_explicit(&g_debug_noise_remaining_samples, remaining_samples, memory_order_release);
+    atomic_store_explicit(&g_debug_noise_samples_until_hop, 0u, memory_order_release);
+    atomic_store_explicit(&g_debug_noise_current_freq, min_freq_hz, memory_order_release);
+    g_debug_noise_phase = 0.0f;
+    atomic_store_explicit(&g_debug_noise_enabled, true, memory_order_release);
+
+    sound_tick_start();
+    return true;
+}
+
+bool sound_backend_host_debug_noise_active(void) {
+    return atomic_load_explicit(&g_debug_noise_enabled, memory_order_acquire);
+}
+
 #else
 
 void sound_backend_init(int voice_count) {
@@ -410,6 +492,23 @@ bool sound_backend_host_get_status(SoundHostStatus *out) {
     out->tick_enabled = false;
     out->tick_thread_running = false;
     out->voice_count = 0;
+    return false;
+}
+
+bool sound_backend_host_play_debug_noise(uint16_t min_freq_hz,
+                                         uint16_t max_freq_hz,
+                                         uint32_t duration_ms,
+                                         uint32_t hop_ms,
+                                         uint8_t volume) {
+    (void)min_freq_hz;
+    (void)max_freq_hz;
+    (void)duration_ms;
+    (void)hop_ms;
+    (void)volume;
+    return false;
+}
+
+bool sound_backend_host_debug_noise_active(void) {
     return false;
 }
 

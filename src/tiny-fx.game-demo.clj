@@ -3,6 +3,7 @@ R"TINY_GFX_HOST(
   (:require [tiny-fx.gfx-scene :refer [->Transform ->Style ->Group ->Polyline
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
             [tiny-fx.sound :as sound]
+            [tiny-fx.sound-demos :as sound-demos]
             [tiny-clj.gpio :as gpio]))
 
 (defn style
@@ -241,17 +242,8 @@ R"TINY_GFX_HOST(
 (def player-entity-id 3002)
 (def player-collision-entity-id 3006)
 (def obstacle-entity-id 3003)
+(def rocket-nose-entity-id 3005)
 (def melody-input-pin 1)
-(def demo-melody-track-id :game-demo-melody)
-(def demo-melody-steps
-  [{:melody :G5 :backing [:D4] :duration :s}
-   {:melody :Bb5 :backing [:F4] :duration :s}
-   {:melody :D6 :backing [:G4] :duration :e}])
-(def demo-melody-opts
-  {:melody {:volume 220}
-   :backing {:volume 132}
-   :tempo-bpm 168
-   :gate-percent 78})
 
 ;; Piezo-friendly Star Wars title phrases used by the host/ESP demo.
 (def starwars-title-steps
@@ -284,8 +276,9 @@ R"TINY_GFX_HOST(
 (def deco-scene-state (atom nil))
 (def score-scene-state (atom nil))
 (def game-scene-state (atom nil))
-(def demo-melody-trigger-count* (atom 0))
 (def demo-input-watcher-id* (atom nil))
+(def rocket-launch-state* (atom :flying))
+(def rocket-timeline-start-ms* (atom 0))
 (def slot-descriptor-list
   [{:id :deco :atom deco-scene-state}
    {:id :score :atom score-scene-state}
@@ -300,6 +293,38 @@ R"TINY_GFX_HOST(
                       :backing {:volume 195}
                       :tempo-bpm 100
                       :gate-percent 78}))
+
+(defn- rocket-approx-x
+  "Estimates the rocket's current x position based on elapsed time
+since the last rocket-timeline reset. Uses linear interpolation over
+the 3000 ms left-to-right flight window."
+  []
+  (let [elapsed (mod (- (current-time-ms) @rocket-timeline-start-ms*) 86400000)
+        t       (mod elapsed 3000)]
+    (- 346 (quot (* t 360) 3000))))
+
+(defn- make-rocket-launch-timeline
+  "Builds a one-shot launch timeline starting at start-x.
+The rocket flies off the top of the screen (350 ms), snaps back to
+the right edge (instant), then completes a normal left pass (3000 ms)."
+  [start-x]
+  (timeline {:keyframes
+             [[0    (transform {:tx start-x :ty 126  :rot -90})]
+              [350  (transform {:tx start-x :ty -30  :rot -75})]
+              [351  (transform {:tx 346     :ty 126  :rot -90})]
+              [3351 (transform {:tx -14     :ty 126  :rot -90})]]
+             :loop false}))
+
+(defn- update-rocket-timeline
+  "Replaces the :t timeline on both the rocket body and nose entities."
+  [game-scene new-tl]
+  (let [root (get game-scene :root)
+        body (get root obstacle-entity-id)
+        nose (get root rocket-nose-entity-id)]
+    (assoc game-scene :root
+           (-> root
+               (assoc obstacle-entity-id   (assoc body :t new-tl))
+               (assoc rocket-nose-entity-id (assoc nose :t new-tl))))))
 
 (defn slot-descriptors
   "Returns the canonical ordered slot descriptor vector for tiny-gfx runtime
@@ -357,15 +382,24 @@ Returns nil; host-side callback dispatch ignores return values."
 
 (defn on-demo-gpio-input!
   "Game-demo GPIO callback: a rising edge on the demo input pin triggers
-a short melody from Clojure. Returns nil; host-side callback dispatch ignores
-return values."
+the rocket launch sound and animation. A second press while launched
+resets the rocket to its normal right-to-left flight.
+Returns nil; host-side callback dispatch ignores return values."
   [event]
-  (let [pin (:pin event)
+  (let [pin   (:pin event)
         value (:value event)]
-    (when (and (= pin melody-input-pin)
-               (= value 1))
-      (swap! demo-melody-trigger-count* inc)
-      (sound/play-steps! demo-melody-track-id demo-melody-steps demo-melody-opts))
+    (when (and (= pin melody-input-pin) (= value 1))
+      (cond
+        (= @rocket-launch-state* :flying)
+        (do (reset! rocket-launch-state* :launched)
+            (sound-demos/play-rocket-launch-sfx!)
+            (swap! game-scene-state update-rocket-timeline
+                   (make-rocket-launch-timeline (rocket-approx-x))))
+        (= @rocket-launch-state* :launched)
+        (do (reset! rocket-launch-state*      :flying)
+            (reset! rocket-timeline-start-ms* (current-time-ms))
+            (swap! game-scene-state update-rocket-timeline rocket-timeline))
+        :else nil))
     nil))
 
 (defn configure-demo-input-watchers!
@@ -463,7 +497,8 @@ Index layout:
     (reset! deco-scene-state deco-scene-template)
     (reset! score-scene-state score-scene-template)
     (reset! game-scene-state game-scene)
-    (reset! demo-melody-trigger-count* 0)
+    (reset! rocket-launch-state*      :flying)
+    (reset! rocket-timeline-start-ms* (current-time-ms))
     (configure-demo-input-watchers!)
     demo-bundle))
 

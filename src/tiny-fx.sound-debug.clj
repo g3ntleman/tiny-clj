@@ -7,4 +7,7 @@ R"TINY_SND_DEBUG(
 ^#^{:doc "DEBUG-only one-shot test tone helper. Not part of the production sound API."}
 (def play-test-tone! (fn play-test-tone! [& args] :native))
 
+^#^{:doc "DEBUG-only host pseudo-noise helper. Not part of the production sound API."}
+(def play-test-noise! (fn play-test-noise! [& args] :native))
+
 )TINY_SND_DEBUG"

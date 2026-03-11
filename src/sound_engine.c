@@ -685,7 +685,9 @@ void sound_engine_tick(void) {
     tick_update_voices();
 
     /* On-demand tick lifecycle: stop if nothing active and queue empty */
-    if (!tick_has_active_audio() && lockfree_spsc_queue_empty(&g_sound_engine.cmd_queue.spsc)) {
+    if (!tick_has_active_audio() &&
+        lockfree_spsc_queue_empty(&g_sound_engine.cmd_queue.spsc) &&
+        !sound_backend_host_debug_noise_active()) {
         if (g_sound_engine.tick_running) {
             sound_tick_stop();
             g_sound_engine.tick_running = false;

@@ -354,6 +354,53 @@ ID native_sound_play_test_tone(ID *args, unsigned int argc) {
     bool played = sound_engine_play_music(track_id, 1);
     return played ? clj_true : clj_false;
 }
+
+ID native_sound_play_test_noise(ID *args, unsigned int argc) {
+    if (argc != 5) {
+        throw_exception(EXCEPTION_ARITY,
+                        "play-test-noise! expects [min-freq-hz max-freq-hz duration-ms hop-ms volume]",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ID min_freq_arg = args[0];
+    ID max_freq_arg = args[1];
+    ID duration_arg = args[2];
+    ID hop_arg = args[3];
+    ID volume_arg = args[4];
+    if (!min_freq_arg || !is_fixnum((CljValue)min_freq_arg) ||
+        !max_freq_arg || !is_fixnum((CljValue)max_freq_arg) ||
+        !duration_arg || !is_fixnum((CljValue)duration_arg) ||
+        !hop_arg || !is_fixnum((CljValue)hop_arg) ||
+        !volume_arg || !is_fixnum((CljValue)volume_arg)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "play-test-noise! expects five integers",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    int32_t min_freq_hz = (int32_t)as_fixnum((CljValue)min_freq_arg);
+    int32_t max_freq_hz = (int32_t)as_fixnum((CljValue)max_freq_arg);
+    int32_t duration_ms = (int32_t)as_fixnum((CljValue)duration_arg);
+    int32_t hop_ms = (int32_t)as_fixnum((CljValue)hop_arg);
+    int32_t volume = (int32_t)as_fixnum((CljValue)volume_arg);
+    if (min_freq_hz < 20 || max_freq_hz > 20000 || min_freq_hz > max_freq_hz ||
+        duration_ms < 1 || duration_ms > 60000 || hop_ms < 1 || hop_ms > 1000 ||
+        volume < 0 || volume > 255) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "play-test-noise! valid ranges: min/max freq 20..20000 Hz, duration 1..60000 ms, hop 1..1000 ms, volume 0..255",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ensure_sound_engine_initialized();
+    bool ok = sound_backend_host_play_debug_noise((uint16_t)min_freq_hz,
+                                                  (uint16_t)max_freq_hz,
+                                                  (uint32_t)duration_ms,
+                                                  (uint32_t)hop_ms,
+                                                  (uint8_t)volume);
+    return ok ? clj_true : clj_false;
+}
 #endif
 #else
 static ID tinyclj_tiny_fx_disabled_error(const char *fn_name) {
@@ -383,6 +430,7 @@ TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_on_finished, "sound-on-finished!
 
 #ifdef DEBUG
 TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_play_test_tone, "play-test-tone!")
+TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_play_test_noise, "play-test-noise!")
 
 ID native_sound_host_status(ID *args, unsigned int argc) {
     (void)args;
@@ -436,6 +484,7 @@ void builtins_sound_register(BuiltinsSoundRegisterFn registrar) {
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-on-finished!", native_sound_on_finished);
 #ifdef DEBUG
     registrar(TINYCLJ_SOUND_DEBUG_NS "/play-test-tone!", native_sound_play_test_tone);
+    registrar(TINYCLJ_SOUND_DEBUG_NS "/play-test-noise!", native_sound_play_test_noise);
     registrar(TINYCLJ_SOUND_DEBUG_NS "/host-status!", native_sound_host_status);
 #endif
 #endif

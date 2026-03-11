@@ -189,3 +189,27 @@
   []
   (sound/play-steps! can-can-track-id can-can-steps can-can-opts))
 
+(def rocket-launch-sfx-track-id :sound-demos-rocket-launch-sfx)
+(def rocket-launch-sfx-steps
+  [{:notes [:E1] :duration :s}
+   {:notes [:E1] :duration :s}
+   {:notes [:F1] :duration :s}
+   {:notes [:F1] :duration :s}
+   {:notes [:G1] :duration :s}
+   {:notes [:G1] :duration :s}
+   {:notes [:A1] :duration :s}
+   {:notes [:A1] :duration :s}
+   {:notes [:C2] :duration :s}
+   {:notes [:E2] :duration :s}
+   {:notes [:G2] :duration :s}
+   {:notes [:B2] :duration :s}])
+(def rocket-launch-sfx-opts
+  {:volumes [240] :tempo-bpm 60 :gate-percent 100})
+(def rocket-launch-sfx-duration-ms
+  (sound/track-duration-ms rocket-launch-sfx-steps rocket-launch-sfx-opts))
+(defn play-rocket-launch-sfx!
+  "Plays a one-shot ascending frequency sweep simulating a rocket launch.
+  Uses play-sfx! for fire-and-forget playback without interrupting background music."
+  []
+  (sound/play-sfx! rocket-launch-sfx-track-id rocket-launch-sfx-steps rocket-launch-sfx-opts))
+

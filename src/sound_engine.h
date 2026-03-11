@@ -283,6 +283,15 @@ void sound_tick_stop(void);
  * On unsupported platforms returns false. */
 bool sound_backend_host_get_status(SoundHostStatus *out);
 
+/* Host DEBUG-only pseudo-noise helper.
+ * Returns false on unsupported platforms or invalid arguments. */
+bool sound_backend_host_play_debug_noise(uint16_t min_freq_hz,
+                                         uint16_t max_freq_hz,
+                                         uint32_t duration_ms,
+                                         uint32_t hop_ms,
+                                         uint8_t volume);
+bool sound_backend_host_debug_noise_active(void);
+
 /* ========================================================================= */
 /* MIDI note to frequency conversion                                         */
 /* ========================================================================= */

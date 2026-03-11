@@ -28,7 +28,7 @@ todos:
     content: "Consolidate the native GPIO/LEDC API in src/gpio.c so GPIO builtins and the sound backend share one C core instead of owning separate LEDC logic."
     status: completed
   - id: gpio-board-validation
-    content: "Run ESP32 board validation for edge callbacks, PWM output, and runtime drop counters."
+    content: "Run ESP32 board validation for edge callbacks, PWM output, runtime drop counters, and a real two-passive-buzzer playback check using The Entertainer."
     status: pending
   - id: gpio-watch-eval-map-regression
     content: "Fix evaluator handling for map/set literals passed as function arguments so local symbols are resolved correctly in analog watch event maps."
@@ -320,10 +320,38 @@ todos:
 - Real-device ESP32 validation is still outstanding:
   - edge callback delivery
   - PWM output start/stop
+  - two passive buzzer playback through the shared sound/GPIO PWM path
   - analog reads on board wiring
   - event-drop counters under burst input
 
 This is the only significant remaining step outside the host-side software implementation.
+
+### Planned two-buzzer sound validation
+
+- Hardware goal:
+  - validate that two passive buzzers can be driven on real ESP32 hardware through the consolidated shared GPIO/LEDC path used by the sound backend
+- Example scenario:
+  - play `tiny-fx.sound-demos/play-the-entertainer!` on the target board
+  - wait for the returned `:duration-ms`
+  - verify that both passive buzzers produce the expected phrase without dropouts, stuck tones, or channel conflicts
+- What this should prove:
+  - `src/sound_backend_esp32.c` is correctly using the shared GPIO PWM backend
+  - the shared LEDC ownership model works with two simultaneous buzzer voices
+  - buzzer playback does not regress after the GPIO consolidation
+- Recommended board-level checks:
+  - start playback twice in a row and confirm the second run still acquires/releases PWM resources cleanly
+  - confirm both buzzers go silent after playback ends
+  - inspect runtime stats/drop counters during or immediately after playback
+  - if available, repeat once while GPIO input watches are active to catch cross-subsystem interference
+- Suggested REPL-style validation command:
+
+```clojure
+(do
+  (require 'tiny-fx.sound-demos)
+  (let [ret (tiny-fx.sound-demos/play-the-entertainer!)]
+    (Thread/sleep (:duration-ms ret))
+    ret))
+```
 
 ## DAC Write Support
 

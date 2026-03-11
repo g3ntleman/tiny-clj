@@ -807,6 +807,23 @@ TEST(test_sound_native_play_test_tone_with_volume_returns_bool) {
   TEST_ASSERT_TRUE(result == clj_true || result == clj_false);
 }
 
+TEST(test_sound_native_play_test_noise_returns_bool) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (tiny-fx.sound-debug/play-test-noise! 180 320 80 2 180))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("play-test-noise! should not throw");
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(result == clj_true || result == clj_false);
+}
+
 TEST(test_sound_native_host_status_returns_map) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
