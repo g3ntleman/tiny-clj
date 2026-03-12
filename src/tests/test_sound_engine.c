@@ -675,10 +675,15 @@ TEST(test_sound_debug_lookup) {
 
   const char *names[] = {
       "tiny-fx.sound-debug/play-test-tone!",
+      "tiny-fx.sound-debug/play-test-ramp!",
+      "tiny-fx.sound-debug/play-test-ramp-noise!",
       "tiny-fx.sound-debug/host-status!",
+      "tiny-fx.sound-debug/play-portamento-reference!",
+      "tiny-fx.sound-debug/play-rocket-thruster-reference!",
+      "tiny-fx.sound-debug/play-thrust-demo!",
   };
 
-  for (int i = 0; i < 2; i++) {
+  for (int i = 0; i < 7; i++) {
     char buf[192];
     test_snprintf(buf, sizeof(buf), "(do (require 'tiny-fx.sound-debug) (fn? %s))", names[i]);
     ID result = NULL;
@@ -824,6 +829,74 @@ TEST(test_sound_native_play_test_noise_returns_bool) {
   TEST_ASSERT_TRUE(result == clj_true || result == clj_false);
 }
 
+TEST(test_sound_native_play_test_ramp_returns_bool) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-test-ramp! 220 320 120 180))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("play-test-ramp! should not throw");
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(result == clj_true || result == clj_false);
+}
+
+TEST(test_sound_native_play_test_ramp_noise_returns_bool) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-test-ramp-noise! 180 320 80 3 180))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("play-test-ramp-noise! should not throw");
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(result == clj_true || result == clj_false);
+}
+
+TEST(test_sound_debug_portamento_reference_returns_bool) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-portamento-reference!))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("play-portamento-reference! should not throw");
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(result == clj_true || result == clj_false);
+}
+
+TEST(test_sound_debug_rocket_thruster_reference_returns_bool) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-rocket-thruster-reference!))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("play-rocket-thruster-reference! should not throw");
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(result == clj_true || result == clj_false);
+}
+
 TEST(test_sound_native_host_status_returns_map) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -842,6 +915,9 @@ TEST(test_sound_native_host_status_returns_map) {
   TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":backend-available")) != NOT_FOUND);
   TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":sound-running")) != NOT_FOUND);
   TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":voice-count")) != NOT_FOUND);
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":debug-noise-active")) != NOT_FOUND);
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":debug-ramp-active")) != NOT_FOUND);
+  TEST_ASSERT_TRUE(map_get(result, intern_symbol_global(":debug-ramp-noise-active")) != NOT_FOUND);
 }
 
 TEST(test_sound_host_init_failure_throws_and_allows_retry) {

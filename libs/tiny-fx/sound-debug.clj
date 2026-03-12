@@ -24,4 +24,12 @@ R"TINY_SND_DEBUG(
 (defn play-rocket-thruster-reference! []
   (play-test-ramp-noise! 180 360 2200 35 220))
 
+^#^{:doc "DEBUG-only thrust demo: best compromise so far. Two-segment pseudo-noise, lower bands, 4 ms hops. Not for production."}
+(defn play-thrust-demo! []
+  (play-test-noise! 90 285 1400 4 228)
+  (Thread/sleep 1370)
+  (play-test-noise! 50 345 1400 4 232)
+  (Thread/sleep 1700)
+  nil)
+
 )TINY_SND_DEBUG"

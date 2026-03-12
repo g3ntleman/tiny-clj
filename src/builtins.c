@@ -4158,6 +4158,16 @@ static StaticSymbolData sym_tinyfx_sound_debug_play_test_noise_qualified_data = 
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-fx.sound-debug/play-test-noise!"}};
+static StaticSymbolData sym_tinyfx_sound_debug_play_test_ramp_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/play-test-ramp!"}};
+static StaticSymbolData sym_tinyfx_sound_debug_play_test_ramp_noise_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/play-test-ramp-noise!"}};
 static StaticSymbolData sym_tinyfx_sound_debug_host_status_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -4323,6 +4333,9 @@ static const NativeFunctionEntry native_function_table[] = {
 #ifdef DEBUG
     NATIVE_ENTRY(&sym_tinyfx_sound_debug_play_test_tone_qualified_data.sym, native_sound_play_test_tone),
     NATIVE_ENTRY(&sym_tinyfx_sound_debug_play_test_noise_qualified_data.sym, native_sound_play_test_noise),
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_play_test_ramp_qualified_data.sym, native_sound_play_test_ramp),
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_play_test_ramp_noise_qualified_data.sym,
+                 native_sound_play_test_ramp_noise),
     NATIVE_ENTRY(&sym_tinyfx_sound_debug_host_status_qualified_data.sym, native_sound_host_status),
 #endif
     NATIVE_ENTRY(&sym_tinyclj_net_udp_socket_qualified_data.sym, native_tinyclj_net_udp_socket),
