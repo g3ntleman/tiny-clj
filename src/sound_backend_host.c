@@ -119,6 +119,35 @@ static void host_sound_ensure_output_running(void) {
     }
 }
 
+static float host_sound_amp_from_volume(uint32_t volume) {
+    return ((float)volume / 255.0f) * 0.20f;
+}
+
+static float host_sound_phase_inc_from_freq(float freq_hz) {
+    return freq_hz / (float)HOST_SOUND_SAMPLE_RATE;
+}
+
+static float host_sound_linear_ramp_freq_at(uint32_t start_freq_hz,
+                                            uint32_t end_freq_hz,
+                                            uint32_t total_samples,
+                                            uint32_t remaining_samples) {
+    if (total_samples <= 1u) {
+        return (float)end_freq_hz;
+    }
+    uint32_t elapsed = (total_samples > remaining_samples) ? (total_samples - remaining_samples) : 0u;
+    float t = (float)elapsed / (float)(total_samples - 1u);
+    return (float)start_freq_hz + (((float)end_freq_hz - (float)start_freq_hz) * t);
+}
+
+static float host_sound_linear_ramp_freq_step(uint32_t start_freq_hz,
+                                              uint32_t end_freq_hz,
+                                              uint32_t total_samples) {
+    if (total_samples <= 1u) {
+        return 0.0f;
+    }
+    return ((float)end_freq_hz - (float)start_freq_hz) / (float)(total_samples - 1u);
+}
+
 static void host_sound_dispose_unit(void) {
     if (!g_output_unit) {
         return;
@@ -195,10 +224,14 @@ static OSStatus host_sound_render(void *in_ref_con,
     bool running = atomic_load_explicit(&g_sound_running, memory_order_relaxed);
     uint32_t voice_freq[HOST_SOUND_MAX_VOICES] = {0};
     uint32_t voice_vol[HOST_SOUND_MAX_VOICES] = {0};
+    float voice_phase_inc[HOST_SOUND_MAX_VOICES] = {0.0f};
+    float voice_amp[HOST_SOUND_MAX_VOICES] = {0.0f};
     if (running) {
         for (int v = 0; v < g_host_voice_count; v++) {
             voice_freq[v] = atomic_load_explicit(&g_voice_freq[v], memory_order_relaxed);
             voice_vol[v] = atomic_load_explicit(&g_voice_volume[v], memory_order_relaxed);
+            voice_phase_inc[v] = host_sound_phase_inc_from_freq((float)voice_freq[v]);
+            voice_amp[v] = host_sound_amp_from_volume(voice_vol[v]);
         }
     }
 
@@ -212,6 +245,8 @@ static OSStatus host_sound_render(void *in_ref_con,
     uint32_t debug_noise_current_freq = 0u;
     uint32_t debug_noise_lfsr = 0u;
     float debug_noise_phase = 0.0f;
+    float debug_noise_amp = 0.0f;
+    float debug_noise_phase_inc = 0.0f;
     if (debug_noise_enabled) {
         debug_noise_min_freq = atomic_load_explicit(&g_debug_noise_min_freq, memory_order_relaxed);
         debug_noise_max_freq = atomic_load_explicit(&g_debug_noise_max_freq, memory_order_relaxed);
@@ -223,6 +258,8 @@ static OSStatus host_sound_render(void *in_ref_con,
         debug_noise_current_freq = atomic_load_explicit(&g_debug_noise_current_freq, memory_order_relaxed);
         debug_noise_lfsr = atomic_load_explicit(&g_debug_noise_lfsr, memory_order_relaxed);
         debug_noise_phase = g_debug_noise_phase;
+        debug_noise_amp = host_sound_amp_from_volume(debug_noise_volume);
+        debug_noise_phase_inc = host_sound_phase_inc_from_freq((float)debug_noise_current_freq);
     }
 
     bool debug_ramp_enabled = atomic_load_explicit(&g_debug_ramp_enabled, memory_order_relaxed);
@@ -232,6 +269,11 @@ static OSStatus host_sound_render(void *in_ref_con,
     uint32_t debug_ramp_total_samples = 0u;
     uint32_t debug_ramp_remaining = 0u;
     float debug_ramp_phase = 0.0f;
+    float debug_ramp_amp = 0.0f;
+    float debug_ramp_freq = 0.0f;
+    float debug_ramp_freq_step = 0.0f;
+    float debug_ramp_phase_inc = 0.0f;
+    float debug_ramp_phase_inc_step = 0.0f;
     if (debug_ramp_enabled) {
         debug_ramp_start_freq = atomic_load_explicit(&g_debug_ramp_start_freq, memory_order_relaxed);
         debug_ramp_end_freq = atomic_load_explicit(&g_debug_ramp_end_freq, memory_order_relaxed);
@@ -239,6 +281,15 @@ static OSStatus host_sound_render(void *in_ref_con,
         debug_ramp_total_samples = atomic_load_explicit(&g_debug_ramp_total_samples, memory_order_relaxed);
         debug_ramp_remaining = atomic_load_explicit(&g_debug_ramp_remaining_samples, memory_order_relaxed);
         debug_ramp_phase = g_debug_ramp_phase;
+        debug_ramp_amp = host_sound_amp_from_volume(debug_ramp_volume);
+        debug_ramp_freq = host_sound_linear_ramp_freq_at(debug_ramp_start_freq,
+                                                         debug_ramp_end_freq,
+                                                         debug_ramp_total_samples,
+                                                         debug_ramp_remaining);
+        debug_ramp_freq_step =
+            host_sound_linear_ramp_freq_step(debug_ramp_start_freq, debug_ramp_end_freq, debug_ramp_total_samples);
+        debug_ramp_phase_inc = host_sound_phase_inc_from_freq(debug_ramp_freq);
+        debug_ramp_phase_inc_step = host_sound_phase_inc_from_freq(debug_ramp_freq_step);
     }
 
     bool debug_ramp_noise_enabled =
@@ -253,6 +304,11 @@ static OSStatus host_sound_render(void *in_ref_con,
     uint32_t debug_ramp_noise_segment_target_freq = 0u;
     uint32_t debug_ramp_noise_lfsr = 0u;
     float debug_ramp_noise_phase = 0.0f;
+    float debug_ramp_noise_amp = 0.0f;
+    float debug_ramp_noise_freq = 0.0f;
+    float debug_ramp_noise_freq_step = 0.0f;
+    float debug_ramp_noise_phase_inc = 0.0f;
+    float debug_ramp_noise_phase_inc_step = 0.0f;
     if (debug_ramp_noise_enabled) {
         debug_ramp_noise_min_freq =
             atomic_load_explicit(&g_debug_ramp_noise_min_freq, memory_order_relaxed);
@@ -272,6 +328,17 @@ static OSStatus host_sound_render(void *in_ref_con,
             atomic_load_explicit(&g_debug_ramp_noise_segment_target_freq, memory_order_relaxed);
         debug_ramp_noise_lfsr = atomic_load_explicit(&g_debug_ramp_noise_lfsr, memory_order_relaxed);
         debug_ramp_noise_phase = g_debug_ramp_noise_phase;
+        debug_ramp_noise_amp = host_sound_amp_from_volume(debug_ramp_noise_volume);
+        debug_ramp_noise_freq = host_sound_linear_ramp_freq_at(debug_ramp_noise_segment_start_freq,
+                                                               debug_ramp_noise_segment_target_freq,
+                                                               debug_ramp_noise_segment_total,
+                                                               debug_ramp_noise_segment_remaining);
+        debug_ramp_noise_freq_step =
+            host_sound_linear_ramp_freq_step(debug_ramp_noise_segment_start_freq,
+                                             debug_ramp_noise_segment_target_freq,
+                                             debug_ramp_noise_segment_total);
+        debug_ramp_noise_phase_inc = host_sound_phase_inc_from_freq(debug_ramp_noise_freq);
+        debug_ramp_noise_phase_inc_step = host_sound_phase_inc_from_freq(debug_ramp_noise_freq_step);
     }
 
     for (UInt32 i = 0; i < in_number_frames; i++) {
@@ -282,12 +349,11 @@ static OSStatus host_sound_render(void *in_ref_con,
                 uint32_t vol = voice_vol[v];
                 if (freq == 0 || vol == 0) continue;
 
-                float amp = ((float)vol / 255.0f) * 0.20f;
                 float phase = g_voice_phase[v];
-                float voice_sample = (phase < 0.5f ? 1.0f : -1.0f) * amp;
+                float voice_sample = (phase < 0.5f ? 1.0f : -1.0f) * voice_amp[v];
                 sample += voice_sample;
 
-                phase += ((float)freq / (float)HOST_SOUND_SAMPLE_RATE);
+                phase += voice_phase_inc[v];
                 if (phase >= 1.0f) phase -= 1.0f;
                 g_voice_phase[v] = phase;
             }
@@ -305,11 +371,12 @@ static OSStatus host_sound_render(void *in_ref_con,
                     debug_noise_current_freq = debug_noise_min_freq + (debug_noise_lfsr % span);
                     debug_noise_samples_until_hop =
                         debug_noise_hold_samples > 0u ? debug_noise_hold_samples : 1u;
+                    debug_noise_phase_inc =
+                        host_sound_phase_inc_from_freq((float)debug_noise_current_freq);
                 }
 
-                float amp = ((float)debug_noise_volume / 255.0f) * 0.20f;
-                sample += (debug_noise_phase < 0.5f ? 1.0f : -1.0f) * amp;
-                debug_noise_phase += ((float)debug_noise_current_freq / (float)HOST_SOUND_SAMPLE_RATE);
+                sample += (debug_noise_phase < 0.5f ? 1.0f : -1.0f) * debug_noise_amp;
+                debug_noise_phase += debug_noise_phase_inc;
                 if (debug_noise_phase >= 1.0f) debug_noise_phase -= 1.0f;
 
                 debug_noise_samples_until_hop -= 1u;
@@ -321,18 +388,11 @@ static OSStatus host_sound_render(void *in_ref_con,
             if (debug_ramp_remaining == 0u) {
                 debug_ramp_enabled = false;
             } else {
-                uint32_t elapsed = (debug_ramp_total_samples > debug_ramp_remaining)
-                                       ? (debug_ramp_total_samples - debug_ramp_remaining)
-                                       : 0u;
-                float amp = ((float)debug_ramp_volume / 255.0f) * 0.20f;
-                float t = (debug_ramp_total_samples > 1u)
-                              ? ((float)elapsed / (float)(debug_ramp_total_samples - 1u))
-                              : 1.0f;
-                float freq = (float)debug_ramp_start_freq +
-                             (((float)debug_ramp_end_freq - (float)debug_ramp_start_freq) * t);
-                sample += (debug_ramp_phase < 0.5f ? 1.0f : -1.0f) * amp;
-                debug_ramp_phase += (freq / (float)HOST_SOUND_SAMPLE_RATE);
+                sample += (debug_ramp_phase < 0.5f ? 1.0f : -1.0f) * debug_ramp_amp;
+                debug_ramp_phase += debug_ramp_phase_inc;
                 if (debug_ramp_phase >= 1.0f) debug_ramp_phase -= 1.0f;
+                debug_ramp_freq += debug_ramp_freq_step;
+                debug_ramp_phase_inc += debug_ramp_phase_inc_step;
                 debug_ramp_remaining -= 1u;
             }
         }
@@ -354,22 +414,26 @@ static OSStatus host_sound_render(void *in_ref_con,
                     debug_ramp_noise_segment_target_freq = next_target;
                     debug_ramp_noise_segment_remaining =
                         debug_ramp_noise_segment_total > 0u ? debug_ramp_noise_segment_total : 1u;
+                    debug_ramp_noise_freq = host_sound_linear_ramp_freq_at(
+                        debug_ramp_noise_segment_start_freq,
+                        debug_ramp_noise_segment_target_freq,
+                        debug_ramp_noise_segment_total,
+                        debug_ramp_noise_segment_remaining);
+                    debug_ramp_noise_freq_step = host_sound_linear_ramp_freq_step(
+                        debug_ramp_noise_segment_start_freq,
+                        debug_ramp_noise_segment_target_freq,
+                        debug_ramp_noise_segment_total);
+                    debug_ramp_noise_phase_inc = host_sound_phase_inc_from_freq(debug_ramp_noise_freq);
+                    debug_ramp_noise_phase_inc_step =
+                        host_sound_phase_inc_from_freq(debug_ramp_noise_freq_step);
                 }
 
-                uint32_t elapsed = (debug_ramp_noise_segment_total > debug_ramp_noise_segment_remaining)
-                                       ? (debug_ramp_noise_segment_total - debug_ramp_noise_segment_remaining)
-                                       : 0u;
-                float amp = ((float)debug_ramp_noise_volume / 255.0f) * 0.20f;
-                float t = (debug_ramp_noise_segment_total > 1u)
-                              ? ((float)elapsed / (float)(debug_ramp_noise_segment_total - 1u))
-                              : 1.0f;
-                float freq = (float)debug_ramp_noise_segment_start_freq +
-                             (((float)debug_ramp_noise_segment_target_freq -
-                               (float)debug_ramp_noise_segment_start_freq) * t);
-                sample += (debug_ramp_noise_phase < 0.5f ? 1.0f : -1.0f) * amp;
-                debug_ramp_noise_phase += (freq / (float)HOST_SOUND_SAMPLE_RATE);
+                sample += (debug_ramp_noise_phase < 0.5f ? 1.0f : -1.0f) * debug_ramp_noise_amp;
+                debug_ramp_noise_phase += debug_ramp_noise_phase_inc;
                 if (debug_ramp_noise_phase >= 1.0f) debug_ramp_noise_phase -= 1.0f;
 
+                debug_ramp_noise_freq += debug_ramp_noise_freq_step;
+                debug_ramp_noise_phase_inc += debug_ramp_noise_phase_inc_step;
                 debug_ramp_noise_segment_remaining -= 1u;
                 debug_ramp_noise_total_remaining -= 1u;
             }
