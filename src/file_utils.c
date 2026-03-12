@@ -93,3 +93,24 @@ CljString* file_slurp(const char *path) {
     return result;
 }
 
+bool file_spit_bytes(const char *path, const uint8_t *data, size_t len) {
+    if (!path || (!data && len != 0)) {
+        return false;
+    }
+
+    FILE *fp = fopen(path, "wb");
+    if (!fp) {
+        return false;
+    }
+
+    size_t written = 0;
+    if (len > 0) {
+        written = fwrite(data, 1, len, fp);
+    }
+    bool ok = (len == 0) || (written == len);
+    if (fclose(fp) != 0) {
+        ok = false;
+    }
+    return ok;
+}
+

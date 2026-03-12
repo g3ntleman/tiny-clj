@@ -70,6 +70,10 @@ void vg_rendered_state_capture_record_entity_aabb(uintptr_t entity_id_bits, VgAa
 void vg_rendered_state_capture_record_timeline(uintptr_t entity_id_bits,
                                                VgRenderedField field,
                                                VgRenderedTimelineSample sample);
+bool vg_rendered_state_capture_compute_dirty_rect(uint8_t slot_index,
+                                                  VgClipRect clip_rect,
+                                                  uint8_t padding_px,
+                                                  VgClipRect *out_dirty_rect);
 void vg_rendered_state_capture_commit(void);
 void vg_rendered_state_capture_discard(void);
 

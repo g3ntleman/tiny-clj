@@ -59,6 +59,24 @@ static _Atomic uint32_t g_debug_noise_samples_until_hop = 0;
 static _Atomic uint32_t g_debug_noise_current_freq = 0;
 static _Atomic uint32_t g_debug_noise_lfsr = 0x13579BDFu;
 static float g_debug_noise_phase = 0.0f;
+static atomic_bool g_debug_ramp_enabled = false;
+static _Atomic uint32_t g_debug_ramp_start_freq = 0;
+static _Atomic uint32_t g_debug_ramp_end_freq = 0;
+static _Atomic uint32_t g_debug_ramp_volume = 0;
+static _Atomic uint32_t g_debug_ramp_total_samples = 0;
+static _Atomic uint32_t g_debug_ramp_remaining_samples = 0;
+static float g_debug_ramp_phase = 0.0f;
+static atomic_bool g_debug_ramp_noise_enabled = false;
+static _Atomic uint32_t g_debug_ramp_noise_min_freq = 0;
+static _Atomic uint32_t g_debug_ramp_noise_max_freq = 0;
+static _Atomic uint32_t g_debug_ramp_noise_volume = 0;
+static _Atomic uint32_t g_debug_ramp_noise_total_samples = 0;
+static _Atomic uint32_t g_debug_ramp_noise_segment_total = 0;
+static _Atomic uint32_t g_debug_ramp_noise_segment_remaining = 0;
+static _Atomic uint32_t g_debug_ramp_noise_segment_start_freq = 0;
+static _Atomic uint32_t g_debug_ramp_noise_segment_target_freq = 0;
+static _Atomic uint32_t g_debug_ramp_noise_lfsr = 0x2468ACE1u;
+static float g_debug_ramp_noise_phase = 0.0f;
 
 static void host_sound_dispose_unit(void);
 
@@ -81,6 +99,24 @@ static void host_sound_throw_init_failure(const char *step, int status_code) {
     throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                               "host sound init failed at %s (status=%d)",
                               step ? step : "unknown", status_code);
+}
+
+static void host_sound_stop_debug_helpers(void) {
+    atomic_store_explicit(&g_debug_noise_enabled, false, memory_order_release);
+    atomic_store_explicit(&g_debug_noise_remaining_samples, 0u, memory_order_release);
+    atomic_store_explicit(&g_debug_noise_samples_until_hop, 0u, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_enabled, false, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_remaining_samples, 0u, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_noise_enabled, false, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_noise_total_samples, 0u, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_noise_segment_remaining, 0u, memory_order_release);
+}
+
+static void host_sound_ensure_output_running(void) {
+    atomic_store_explicit(&g_sound_running, true, memory_order_release);
+    if (atomic_load_explicit(&g_sound_available, memory_order_acquire) && g_output_unit) {
+        (void)AudioOutputUnitStart(g_output_unit);
+    }
 }
 
 static void host_sound_dispose_unit(void) {
@@ -208,6 +244,86 @@ static OSStatus host_sound_render(void *in_ref_con,
 
                 atomic_store_explicit(&g_debug_noise_samples_until_hop, samples_until_hop - 1u, memory_order_relaxed);
                 atomic_store_explicit(&g_debug_noise_remaining_samples, remaining - 1u, memory_order_relaxed);
+            }
+        }
+
+        if (atomic_load_explicit(&g_debug_ramp_enabled, memory_order_relaxed)) {
+            uint32_t remaining = atomic_load_explicit(&g_debug_ramp_remaining_samples, memory_order_relaxed);
+            if (remaining == 0u) {
+                atomic_store_explicit(&g_debug_ramp_enabled, false, memory_order_relaxed);
+            } else {
+                uint32_t total = atomic_load_explicit(&g_debug_ramp_total_samples, memory_order_relaxed);
+                uint32_t start_freq = atomic_load_explicit(&g_debug_ramp_start_freq, memory_order_relaxed);
+                uint32_t end_freq = atomic_load_explicit(&g_debug_ramp_end_freq, memory_order_relaxed);
+                uint32_t vol = atomic_load_explicit(&g_debug_ramp_volume, memory_order_relaxed);
+                uint32_t elapsed = (total > remaining) ? (total - remaining) : 0u;
+                float amp = ((float)vol / 255.0f) * 0.20f;
+                float phase = g_debug_ramp_phase;
+                float t = (total > 1u) ? ((float)elapsed / (float)(total - 1u)) : 1.0f;
+                float freq = (float)start_freq + (((float)end_freq - (float)start_freq) * t);
+                sample += (phase < 0.5f ? 1.0f : -1.0f) * amp;
+                phase += (freq / (float)HOST_SOUND_SAMPLE_RATE);
+                if (phase >= 1.0f) phase -= 1.0f;
+                g_debug_ramp_phase = phase;
+                atomic_store_explicit(&g_debug_ramp_remaining_samples, remaining - 1u, memory_order_relaxed);
+            }
+        }
+
+        if (atomic_load_explicit(&g_debug_ramp_noise_enabled, memory_order_relaxed)) {
+            uint32_t total_remaining =
+                atomic_load_explicit(&g_debug_ramp_noise_total_samples, memory_order_relaxed);
+            if (total_remaining == 0u) {
+                atomic_store_explicit(&g_debug_ramp_noise_enabled, false, memory_order_relaxed);
+            } else {
+                uint32_t segment_remaining =
+                    atomic_load_explicit(&g_debug_ramp_noise_segment_remaining, memory_order_relaxed);
+                uint32_t segment_total =
+                    atomic_load_explicit(&g_debug_ramp_noise_segment_total, memory_order_relaxed);
+                if (segment_remaining == 0u) {
+                    uint32_t lfsr = host_debug_noise_next_lfsr(
+                        atomic_load_explicit(&g_debug_ramp_noise_lfsr, memory_order_relaxed));
+                    uint32_t min_freq =
+                        atomic_load_explicit(&g_debug_ramp_noise_min_freq, memory_order_relaxed);
+                    uint32_t max_freq =
+                        atomic_load_explicit(&g_debug_ramp_noise_max_freq, memory_order_relaxed);
+                    uint32_t span = (max_freq >= min_freq) ? (max_freq - min_freq + 1u) : 1u;
+                    uint32_t next_target = min_freq + (lfsr % span);
+                    uint32_t prev_target =
+                        atomic_load_explicit(&g_debug_ramp_noise_segment_target_freq, memory_order_relaxed);
+                    atomic_store_explicit(&g_debug_ramp_noise_lfsr, lfsr, memory_order_relaxed);
+                    atomic_store_explicit(&g_debug_ramp_noise_segment_start_freq,
+                                          prev_target > 0u ? prev_target : min_freq,
+                                          memory_order_relaxed);
+                    atomic_store_explicit(&g_debug_ramp_noise_segment_target_freq,
+                                          next_target,
+                                          memory_order_relaxed);
+                    atomic_store_explicit(&g_debug_ramp_noise_segment_remaining,
+                                          segment_total > 0u ? segment_total : 1u,
+                                          memory_order_relaxed);
+                    segment_remaining = segment_total > 0u ? segment_total : 1u;
+                }
+
+                uint32_t start_freq =
+                    atomic_load_explicit(&g_debug_ramp_noise_segment_start_freq, memory_order_relaxed);
+                uint32_t target_freq =
+                    atomic_load_explicit(&g_debug_ramp_noise_segment_target_freq, memory_order_relaxed);
+                uint32_t vol = atomic_load_explicit(&g_debug_ramp_noise_volume, memory_order_relaxed);
+                uint32_t elapsed = (segment_total > segment_remaining) ? (segment_total - segment_remaining) : 0u;
+                float amp = ((float)vol / 255.0f) * 0.20f;
+                float phase = g_debug_ramp_noise_phase;
+                float t = (segment_total > 1u) ? ((float)elapsed / (float)(segment_total - 1u)) : 1.0f;
+                float freq = (float)start_freq + (((float)target_freq - (float)start_freq) * t);
+                sample += (phase < 0.5f ? 1.0f : -1.0f) * amp;
+                phase += (freq / (float)HOST_SOUND_SAMPLE_RATE);
+                if (phase >= 1.0f) phase -= 1.0f;
+                g_debug_ramp_noise_phase = phase;
+
+                atomic_store_explicit(&g_debug_ramp_noise_segment_remaining,
+                                      segment_remaining - 1u,
+                                      memory_order_relaxed);
+                atomic_store_explicit(&g_debug_ramp_noise_total_samples,
+                                      total_remaining - 1u,
+                                      memory_order_relaxed);
             }
         }
 
@@ -353,6 +469,7 @@ void sound_backend_init(int voice_count) {
         atomic_store_explicit(&g_voice_freq[i], 0, memory_order_relaxed);
         atomic_store_explicit(&g_voice_volume[i], 0, memory_order_relaxed);
     }
+    host_sound_stop_debug_helpers();
     sound_tick_scheduler_init(&g_tick_scheduler, HOST_SOUND_TICK_NS, HOST_SOUND_MAX_CATCHUP_TICKS);
 
     if (!host_sound_init_unit()) {
@@ -379,6 +496,7 @@ void sound_backend_init(int voice_count) {
 
 void sound_backend_shutdown(void) {
     sound_tick_stop();
+    host_sound_stop_debug_helpers();
 
 #ifndef TINY_CLJ_TEST_RUNNER
     if (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire)) {
@@ -428,6 +546,10 @@ bool sound_backend_host_get_status(SoundHostStatus *out) {
     out->tick_thread_running = false;
 #endif
     out->voice_count = g_host_voice_count;
+    out->debug_noise_active = atomic_load_explicit(&g_debug_noise_enabled, memory_order_acquire);
+    out->debug_ramp_active = atomic_load_explicit(&g_debug_ramp_enabled, memory_order_acquire);
+    out->debug_ramp_noise_active =
+        atomic_load_explicit(&g_debug_ramp_noise_enabled, memory_order_acquire);
     return true;
 }
 
@@ -454,12 +576,74 @@ bool sound_backend_host_play_debug_noise(uint16_t min_freq_hz,
     g_debug_noise_phase = 0.0f;
     atomic_store_explicit(&g_debug_noise_enabled, true, memory_order_release);
 
-    sound_tick_start();
+    host_sound_ensure_output_running();
     return true;
 }
 
 bool sound_backend_host_debug_noise_active(void) {
     return atomic_load_explicit(&g_debug_noise_enabled, memory_order_acquire);
+}
+
+bool sound_backend_host_play_debug_ramp(uint16_t start_freq_hz,
+                                        uint16_t end_freq_hz,
+                                        uint32_t duration_ms,
+                                        uint8_t volume) {
+    if (start_freq_hz < 20 || start_freq_hz > 20000 || end_freq_hz < 20 || end_freq_hz > 20000 ||
+        duration_ms == 0u) {
+        return false;
+    }
+    uint32_t total_samples = (uint32_t)((HOST_SOUND_SAMPLE_RATE * (double)duration_ms) / 1000.0);
+    if (total_samples == 0u) total_samples = 1u;
+
+    host_sound_stop_debug_helpers();
+    atomic_store_explicit(&g_debug_ramp_start_freq, start_freq_hz, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_end_freq, end_freq_hz, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_volume, volume, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_total_samples, total_samples, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_remaining_samples, total_samples, memory_order_release);
+    g_debug_ramp_phase = 0.0f;
+    atomic_store_explicit(&g_debug_ramp_enabled, true, memory_order_release);
+
+    host_sound_ensure_output_running();
+    return true;
+}
+
+bool sound_backend_host_debug_ramp_active(void) {
+    return atomic_load_explicit(&g_debug_ramp_enabled, memory_order_acquire);
+}
+
+bool sound_backend_host_play_debug_ramp_noise(uint16_t min_freq_hz,
+                                              uint16_t max_freq_hz,
+                                              uint32_t duration_ms,
+                                              uint32_t hop_ms,
+                                              uint8_t volume) {
+    if (min_freq_hz < 20 || max_freq_hz > 20000 || max_freq_hz < min_freq_hz ||
+        duration_ms == 0u || hop_ms == 0u) {
+        return false;
+    }
+    uint32_t total_samples = (uint32_t)((HOST_SOUND_SAMPLE_RATE * (double)duration_ms) / 1000.0);
+    uint32_t segment_total = (uint32_t)((HOST_SOUND_SAMPLE_RATE * (double)hop_ms) / 1000.0);
+    if (total_samples == 0u) total_samples = 1u;
+    if (segment_total == 0u) segment_total = 1u;
+
+    host_sound_stop_debug_helpers();
+    atomic_store_explicit(&g_debug_ramp_noise_min_freq, min_freq_hz, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_noise_max_freq, max_freq_hz, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_noise_volume, volume, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_noise_total_samples, total_samples, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_noise_segment_total, segment_total, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_noise_segment_remaining, 0u, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_noise_segment_start_freq, min_freq_hz, memory_order_release);
+    atomic_store_explicit(&g_debug_ramp_noise_segment_target_freq, min_freq_hz, memory_order_release);
+    g_debug_ramp_noise_phase = 0.0f;
+    atomic_store_explicit(&g_debug_ramp_noise_enabled, true, memory_order_release);
+
+    host_sound_ensure_output_running();
+    return true;
+}
+
+bool sound_backend_host_debug_ramp_noise_active(void) {
+    return atomic_load_explicit(&g_debug_ramp_noise_enabled, memory_order_acquire);
 }
 
 #else
@@ -492,6 +676,9 @@ bool sound_backend_host_get_status(SoundHostStatus *out) {
     out->tick_enabled = false;
     out->tick_thread_running = false;
     out->voice_count = 0;
+    out->debug_noise_active = false;
+    out->debug_ramp_active = false;
+    out->debug_ramp_noise_active = false;
     return false;
 }
 
@@ -509,6 +696,38 @@ bool sound_backend_host_play_debug_noise(uint16_t min_freq_hz,
 }
 
 bool sound_backend_host_debug_noise_active(void) {
+    return false;
+}
+
+bool sound_backend_host_play_debug_ramp(uint16_t start_freq_hz,
+                                        uint16_t end_freq_hz,
+                                        uint32_t duration_ms,
+                                        uint8_t volume) {
+    (void)start_freq_hz;
+    (void)end_freq_hz;
+    (void)duration_ms;
+    (void)volume;
+    return false;
+}
+
+bool sound_backend_host_debug_ramp_active(void) {
+    return false;
+}
+
+bool sound_backend_host_play_debug_ramp_noise(uint16_t min_freq_hz,
+                                              uint16_t max_freq_hz,
+                                              uint32_t duration_ms,
+                                              uint32_t hop_ms,
+                                              uint8_t volume) {
+    (void)min_freq_hz;
+    (void)max_freq_hz;
+    (void)duration_ms;
+    (void)hop_ms;
+    (void)volume;
+    return false;
+}
+
+bool sound_backend_host_debug_ramp_noise_active(void) {
     return false;
 }
 

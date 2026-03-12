@@ -5,7 +5,8 @@ R"TINY_GFX_HOST(
             [tiny-fx.gfx-collision :as collision]
             [tiny-fx.sound :as sound]
             [tiny-fx.sound-demos :as sound-demos]
-            [tiny-clj.event :as event]))
+            [tiny-clj.event :as event]
+            [tiny-clj.gpio :as gpio]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
@@ -274,6 +275,9 @@ R"TINY_GFX_HOST(
 (def deco-scene-state (atom nil))
 (def score-scene-state (atom nil))
 (def game-scene-state (atom nil))
+(def demo-melody-trigger-count* (atom 0))
+(def demo-launch-pin 1)
+(def demo-launch-pressed* (atom false))
 (def demo-input-watcher-active* (atom false))
 (def demo-spatial-watcher-active* (atom false))
 (def rocket-launch-state* (atom :flying))
@@ -374,11 +378,12 @@ and game-demo startup."
 by changing player scale.
 Returns nil; host-side callback dispatch ignores return values."
   [event]
-  (let [next-state (event->player-small-state event)]
+  (let [next-state (tiny-fx.game-demo/event->player-small-state event)]
     (when (not= next-state :ignore)
-      (let [game-scene @game-scene-state]
+      (let [game-scene @tiny-fx.game-demo/game-scene-state]
         (when game-scene
-          (reset! game-scene-state (apply-player-scale game-scene next-state)))))
+          (reset! tiny-fx.game-demo/game-scene-state
+                  (tiny-fx.game-demo/apply-player-scale game-scene next-state)))))
     nil))
 
 (defn on-demo-input-event!
@@ -387,17 +392,29 @@ the rocket launch sound and animation. A second press while launched
 resets the rocket to its normal right-to-left flight.
 Returns nil; host-side callback dispatch ignores return values."
   [event]
-  (when (= (:kind event) :button/down)
+  (let [pressed? (= 1 (gpio/read tiny-fx.game-demo/demo-launch-pin))]
     (cond
-      (= @rocket-launch-state* :flying)
-      (do (reset! rocket-launch-state* :launched)
-          (sound-demos/play-rocket-launch-sfx!)
-          (swap! game-scene-state update-rocket-timeline
-                 (make-rocket-launch-timeline (rocket-approx-x))))
-      (= @rocket-launch-state* :launched)
-      (do (reset! rocket-launch-state*      :flying)
-          (reset! rocket-timeline-start-ms* (current-time-ms))
-          (swap! game-scene-state update-rocket-timeline rocket-timeline))
+      (and pressed? (not @tiny-fx.game-demo/demo-launch-pressed*))
+      (do
+        (reset! tiny-fx.game-demo/demo-launch-pressed* true)
+        (swap! tiny-fx.game-demo/demo-melody-trigger-count* inc)
+        (cond
+          (= @tiny-fx.game-demo/rocket-launch-state* :flying)
+          (do (reset! tiny-fx.game-demo/rocket-launch-state* :launched)
+              (sound-demos/play-rocket-launch-sfx!)
+              (swap! tiny-fx.game-demo/game-scene-state
+                     tiny-fx.game-demo/update-rocket-timeline
+                     (tiny-fx.game-demo/make-rocket-launch-timeline
+                      (tiny-fx.game-demo/rocket-approx-x))))
+          (= @tiny-fx.game-demo/rocket-launch-state* :launched)
+          (do (reset! tiny-fx.game-demo/rocket-launch-state* :flying)
+              (reset! tiny-fx.game-demo/rocket-timeline-start-ms* (current-time-ms))
+              (swap! tiny-fx.game-demo/game-scene-state
+                     tiny-fx.game-demo/update-rocket-timeline
+                     tiny-fx.game-demo/rocket-timeline))
+          :else nil))
+      (not pressed?)
+      (reset! tiny-fx.game-demo/demo-launch-pressed* false)
       :else nil))
   nil)
 
@@ -406,7 +423,7 @@ Returns nil; host-side callback dispatch ignores return values."
   []
   (when @demo-input-watcher-active*
     (event/on {:source :button :id :demo/launch} nil))
-  (event/on {:source :button :id :demo/launch} on-demo-input-event!)
+  (event/on {:source :button :id :demo/launch} on-demo-input-event! {:debounce-ms 0})
   (reset! demo-input-watcher-active* true)
   nil)
 
@@ -517,6 +534,8 @@ Index layout:
     (reset! deco-scene-state deco-scene-template)
     (reset! score-scene-state score-scene-template)
     (reset! game-scene-state game-scene)
+    (reset! demo-melody-trigger-count* 0)
+    (reset! demo-launch-pressed* false)
     (reset! rocket-launch-state*      :flying)
     (reset! rocket-timeline-start-ms* (current-time-ms))
     (configure-demo-input-watchers!)

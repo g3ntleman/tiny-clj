@@ -4,7 +4,8 @@ R"TINY_GFX_HOST(
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
             [tiny-fx.gfx-collision :as collision]
             [tiny-fx.sound :as sound]
-            [tiny-clj.event :as event]))
+            [tiny-clj.event :as event]
+            [tiny-clj.gpio :as gpio]))
 
 (defn style
   [{:keys [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
@@ -257,6 +258,8 @@ R"TINY_GFX_HOST(
 (def score-scene-state (atom nil))
 (def game-scene-state (atom nil))
 (def demo-melody-trigger-count* (atom 0))
+(def demo-launch-pin 1)
+(def demo-launch-pressed* (atom false))
 (def demo-input-watcher-active* (atom false))
 (def demo-spatial-watcher-active* (atom false))
 (def slot-descriptor-list
@@ -314,11 +317,12 @@ and game-demo startup."
 by changing player scale.
 Returns nil; host-side callback dispatch ignores return values."
   [event]
-  (let [next-state (event->player-small-state event)]
+  (let [next-state (tiny-fx.game-demo/event->player-small-state event)]
     (when (not= next-state :ignore)
-      (let [game-scene @game-scene-state]
+      (let [game-scene @tiny-fx.game-demo/game-scene-state]
         (when game-scene
-          (reset! game-scene-state (apply-player-scale game-scene next-state)))))
+          (reset! tiny-fx.game-demo/game-scene-state
+                  (tiny-fx.game-demo/apply-player-scale game-scene next-state)))))
     nil))
 
 (defn on-demo-input-event!
@@ -326,17 +330,34 @@ Returns nil; host-side callback dispatch ignores return values."
 a short melody from Clojure. Returns nil; host-side callback dispatch ignores
 return values."
   [event]
-  (when (= (:kind event) :button/down)
-    (swap! demo-melody-trigger-count* inc)
-    (sound/play-steps! demo-melody-track-id demo-melody-steps demo-melody-opts))
+  (let [pressed? (= 1 (gpio/read tiny-fx.game-demo/demo-launch-pin))]
+    (cond
+      (and pressed? (not @tiny-fx.game-demo/demo-launch-pressed*))
+      (do
+        (reset! tiny-fx.game-demo/demo-launch-pressed* true)
+        (swap! tiny-fx.game-demo/demo-melody-trigger-count* inc)
+        (sound/play-steps! demo-melody-track-id demo-melody-steps demo-melody-opts))
+      (not pressed?)
+      (reset! tiny-fx.game-demo/demo-launch-pressed* false)
+      :else nil))
   nil)
 
 (defn configure-demo-input-watchers!
   "Registers the demo event subscription used by the game demo input simulation."
   []
   (when @demo-input-watcher-active*
-    (event/on {:source :button :id :demo/launch} nil))
-  (event/on {:source :button :id :demo/launch} on-demo-input-event!)
+    (binding [*ns* (find-ns 'user)]
+      (eval '(tiny-clj.event/on {:source :button :id :demo/launch} nil))))
+  (binding [*ns* (find-ns 'user)]
+    (eval
+      '(tiny-clj.event/on
+         {:source :button :id :demo/launch}
+         (fn [event]
+           (when (= (:kind event) :button/down)
+             (swap! tiny-fx.game-demo/demo-melody-trigger-count* inc)
+             (sound/play-steps! demo-melody-track-id demo-melody-steps demo-melody-opts))
+           nil)
+         {:debounce-ms 0})))
   (reset! demo-input-watcher-active* true)
   nil)
 
@@ -344,8 +365,20 @@ return values."
   "Registers the demo spatial subscription through the generic event API."
   []
   (when @demo-spatial-watcher-active*
-    (event/on {:source :spatial :id :player-vs-rocket} nil))
-  (event/on {:source :spatial :id :player-vs-rocket} on-player-collision-toggle!)
+    (binding [*ns* (find-ns 'user)]
+      (eval '(tiny-clj.event/on {:source :spatial :id :player-vs-rocket} nil))))
+  (binding [*ns* (find-ns 'user)]
+    (eval
+      '(tiny-clj.event/on
+         {:source :spatial :id :player-vs-rocket}
+         (fn [event]
+           (let [next-state (tiny-fx.game-demo/event->player-small-state event)]
+             (when (not= next-state :ignore)
+               (let [game-scene @tiny-fx.game-demo/game-scene-state]
+                 (when game-scene
+                   (reset! tiny-fx.game-demo/game-scene-state
+                           (tiny-fx.game-demo/apply-player-scale game-scene next-state)))))
+             nil)))))
   (reset! demo-spatial-watcher-active* true)
   nil)
 
@@ -448,6 +481,7 @@ Index layout:
     (reset! score-scene-state score-scene-template)
     (reset! game-scene-state game-scene)
     (reset! demo-melody-trigger-count* 0)
+    (reset! demo-launch-pressed* false)
     (configure-demo-input-watchers!)
     (configure-demo-spatial-watchers!)
     demo-bundle))

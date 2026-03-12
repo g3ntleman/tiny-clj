@@ -2,6 +2,9 @@
 #define TINY_CLJ_FILE_UTILS_H
 
 #include "strings.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /**
  * @brief Read entire file content as CljString
@@ -13,6 +16,15 @@
  *          that fit in RAM. For large files, use a streaming approach instead.
  */
 CljString* file_slurp(const char *path);
+
+/**
+ * @brief Write bytes to a host file path.
+ * @param path File path to write.
+ * @param data Byte buffer to write.
+ * @param len Number of bytes to write.
+ * @return true on success, false when the host file path cannot be written.
+ */
+bool file_spit_bytes(const char *path, const uint8_t *data, size_t len);
 
 #endif // TINY_CLJ_FILE_UTILS_H
 

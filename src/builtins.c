@@ -120,6 +120,8 @@ ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_fs_stat(ID *args, unsigned int argc);
 ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc);
 ID native_tinyclj_fs_delete(ID *args, unsigned int argc);
+ID native_tinyclj_fs_read_block(ID *args, unsigned int argc);
+ID native_tinyclj_fs_write_block(ID *args, unsigned int argc);
 ID native_tinyclj_fs_set_size(ID *args, unsigned int argc);
 ID builtin_fs_write_bytes_or_throw(const char *fn_name, const char *path,
                                    const uint8_t *data, size_t len);
@@ -4108,6 +4110,16 @@ static StaticSymbolData sym_tinyclj_fs_list_batch_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-clj.fs/list-batch"}};
+static StaticSymbolData sym_tinyclj_fs_read_block_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.fs/read-block"}};
+static StaticSymbolData sym_tinyclj_fs_write_block_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.fs/write-block"}};
 static StaticSymbolData sym_tinyclj_fs_delete_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -4134,6 +4146,24 @@ static StaticSymbolData sym_tinyclj_kv_delete_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-db.kv/delete!"}};
+
+#ifdef DEBUG
+static StaticSymbolData sym_tinyfx_sound_debug_play_test_tone_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/play-test-tone!"}};
+static StaticSymbolData sym_tinyfx_sound_debug_play_test_noise_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/play-test-noise!"}};
+static StaticSymbolData sym_tinyfx_sound_debug_host_status_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/host-status!"}};
+#endif
 
 static StaticSymbolData sym_tinyclj_net_udp_socket_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
@@ -4283,11 +4313,18 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat),
     NATIVE_ENTRY(&sym_tinyclj_fs_list_batch_qualified_data.sym, native_tinyclj_fs_list_batch),
+    NATIVE_ENTRY(&sym_tinyclj_fs_read_block_qualified_data.sym, native_tinyclj_fs_read_block),
+    NATIVE_ENTRY(&sym_tinyclj_fs_write_block_qualified_data.sym, native_tinyclj_fs_write_block),
     NATIVE_ENTRY(&sym_tinyclj_fs_set_size_qualified_data.sym, native_tinyclj_fs_set_size),
     NATIVE_ENTRY(&sym_tinyclj_fs_delete_qualified_data.sym, native_tinyclj_fs_delete),
     NATIVE_ENTRY(&sym_tinyclj_kv_put_bytes_qualified_data.sym, native_tinyclj_kv_put_bytes),
     NATIVE_ENTRY(&sym_tinyclj_kv_get_bytes_qualified_data.sym, native_tinyclj_kv_get_bytes),
     NATIVE_ENTRY(&sym_tinyclj_kv_delete_qualified_data.sym, native_tinyclj_kv_delete),
+#ifdef DEBUG
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_play_test_tone_qualified_data.sym, native_sound_play_test_tone),
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_play_test_noise_qualified_data.sym, native_sound_play_test_noise),
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_host_status_qualified_data.sym, native_sound_host_status),
+#endif
     NATIVE_ENTRY(&sym_tinyclj_net_udp_socket_qualified_data.sym, native_tinyclj_net_udp_socket),
     NATIVE_ENTRY(&sym_tinyclj_net_on_receive_qualified_data.sym, native_tinyclj_net_on_receive),
     NATIVE_ENTRY(&sym_tinyclj_net_send_bang_qualified_data.sym, native_tinyclj_net_send_bang),
@@ -4734,8 +4771,6 @@ ID native_symbol(ID *args, unsigned int argc) {
 }
 
 // File I/O: slurp - read entire file as string (KV + embedded resolver)
-static CljString *copy_string_from_bytes(ID bytes);
-
 ID native_slurp(ID *args, unsigned int argc) {
   if (!validate_builtin_args(argc, 1, "slurp"))
     return NULL;
@@ -4753,7 +4788,7 @@ ID native_slurp(ID *args, unsigned int argc) {
   ID bytes = resolve_path_to_bytes(filename_str);
   CljString *result = NULL;
   if (bytes) {
-    result = copy_string_from_bytes(bytes);
+    result = string_view_from_byte_array(bytes);
   } else {
     // Fallback to host filesystem (non-embedded paths).
     result = file_slurp(filename_str);
@@ -4765,29 +4800,6 @@ ID native_slurp(ID *args, unsigned int argc) {
 }
 
 static bool eval_source_in_current_state(CljString *src, const char *src_name, EvalState *st);
-
-static CljString *copy_string_from_bytes(ID bytes) {
-  if (!bytes || TAG(bytes) != CLJ_BYTE_ARRAY) {
-    return NULL;
-  }
-
-  CljByteArray *ba = as_byte_array(bytes);
-  if (!ba) {
-    return NULL;
-  }
-
-  CljString *copy = make_string_buffer((size_t)ba->length);
-  if (!copy) {
-    return NULL;
-  }
-
-  if (ba->length > 0 && ba->data) {
-    memcpy(copy->data, ba->data, (size_t)ba->length);
-    copy->data[ba->length] = '\0';
-  }
-
-  return copy;
-}
 
 // load-file: read and evaluate all forms in a file (Clojure standard function)
 // DRY: Uses eval_source_in_current_state for the actual evaluation
@@ -5521,9 +5533,14 @@ ID native_spit(ID *args, unsigned int argc) {
                     __FILE__, __LINE__, 0);
     return NULL;
   }
+  const uint8_t *content_bytes = (const uint8_t *)string_data(content_str_obj);
+  size_t content_len = (size_t)string_length(content_str_obj);
+  if (file_spit_bytes(filename_str, content_bytes, content_len)) {
+    return NULL;
+  }
   return builtin_fs_write_bytes_or_throw("spit", filename_str,
-                                         (const uint8_t *)string_data(content_str_obj),
-                                         (size_t)string_length(content_str_obj));
+                                         content_bytes,
+                                         content_len);
 }
 
 // Binary operations (inline for performance)

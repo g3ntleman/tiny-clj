@@ -151,6 +151,26 @@ static uint32_t rgb565_to_xrgb8888(uint16_t c) {
     return 0xff000000u | (r << 16) | (g << 8) | b;
 }
 
+static uint32_t viewer_clip_rect_area_on_framebuffer(VgClipRect rect, int fb_w, int fb_h) {
+    if (vg_clip_rect_is_empty(rect) || fb_w <= 0 || fb_h <= 0) {
+        return 0u;
+    }
+    int x0 = (rect.x < 0) ? 0 : rect.x;
+    int y0 = (rect.y < 0) ? 0 : rect.y;
+    int x1 = rect.x + rect.w;
+    int y1 = rect.y + rect.h;
+    if (x1 > fb_w) {
+        x1 = fb_w;
+    }
+    if (y1 > fb_h) {
+        y1 = fb_h;
+    }
+    if (x1 <= x0 || y1 <= y0) {
+        return 0u;
+    }
+    return (uint32_t)((x1 - x0) * (y1 - y0));
+}
+
 typedef struct {
     double window_start_s;
     uint64_t window_frames;
@@ -809,7 +829,7 @@ static VgSlotChangeTracker g_slot_change_tracker;
  *
  * The UI thread only reads g_gram_pixels, so it never sees the intermediate
  * erased state of g_render_buffer. Each pixel in the GRAM transitions
- * directly from old → new, matching real SPI display behavior.
+ * directly from old -> new, matching real SPI display behavior.
  */
 static uint16_t g_render_buffer[VIEW_W * VIEW_H];
 static uint16_t *g_gram_pixels = NULL;
@@ -1070,6 +1090,12 @@ static void *viewer_render_thread_main(void *arg) {
             if (!snapshot) {
                 continue;
             }
+            bool had_prior_frame = g_render_thread.slot_states[i].initialized;
+            VgClipRect prev_clip_rect = g_render_thread.slot_states[i].last_clip_rect;
+            bool prev_visible = g_render_thread.slot_states[i].last_visible;
+            bool prev_opaque = g_render_thread.slot_states[i].last_opaque;
+            uint16_t prev_clear_color = g_render_thread.slot_states[i].last_clear_color;
+            uint8_t prev_guard_px = g_render_thread.slot_states[i].last_guard_px;
             VgRenderFrameSlotResult slot_result = {0};
             vg_rendered_state_capture_begin(i, slot_generations[i], frame_now_ms);
             bool rendered = vg_render_frame_slot_record_result_at_ms(snapshot,
@@ -1079,6 +1105,27 @@ static void *viewer_render_thread_main(void *arg) {
                                                                      frame_now_ms,
                                                                      slot_animated_tick,
                                                                      &slot_result);
+            bool slot_props_unchanged = had_prior_frame &&
+                                        vg_clip_rect_equal(prev_clip_rect,
+                                                           g_render_thread.slot_states[i].last_clip_rect) &&
+                                        prev_visible == g_render_thread.slot_states[i].last_visible &&
+                                        prev_opaque == g_render_thread.slot_states[i].last_opaque &&
+                                        prev_clear_color == g_render_thread.slot_states[i].last_clear_color &&
+                                        prev_guard_px == g_render_thread.slot_states[i].last_guard_px;
+            if (rendered && slot_animated_tick && slot_props_unchanged) {
+                VgClipRect refined_dirty = {0};
+                uint8_t dirty_padding = (g_render_thread.slot_states[i].last_guard_px <= 253u)
+                                            ? (uint8_t)(g_render_thread.slot_states[i].last_guard_px + 2u)
+                                            : UINT8_MAX;
+                if (vg_rendered_state_capture_compute_dirty_rect(i,
+                                                                 g_render_thread.slot_states[i].last_clip_rect,
+                                                                 dirty_padding,
+                                                                 &refined_dirty)) {
+                    slot_result.dirty_rect = refined_dirty;
+                    slot_result.dirty_pixels =
+                        viewer_clip_rect_area_on_framebuffer(refined_dirty, fb->width, fb->height);
+                }
+            }
             if (rendered) {
                 vg_rendered_state_capture_commit();
             } else {

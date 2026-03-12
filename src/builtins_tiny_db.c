@@ -41,6 +41,18 @@ static const char *require_c_string_arg(ID arg, const char *fn_name, const char 
 // tiny-clj.fs native functions
 // -----------------------------------------------------------------------------
 
+static ID tinyclj_fs_make_stat_map(const char *path, int64_t size) {
+    if (!path || size < 0) {
+        return NULL;
+    }
+
+    CljPersistentMap *m = make_map(4, STRONG);
+    ASSIGN(m, map_assoc(m, (ID)SYM_KW_PATH, (ID)make_string(path)));
+    ASSIGN(m, map_assoc(m, (ID)SYM_KW_SIZE, fixnum((int32_t)size)));
+    ASSIGN(m, map_assoc(m, (ID)SYM_KW_TYPE, (ID)SYM_KW_FILE));
+    return AUTORELEASE(m);
+}
+
 ID builtin_fs_write_bytes_or_throw(const char *fn_name, const char *path,
                                    const uint8_t *data, size_t len) {
     FsKvStore *st = fs_global_store();
@@ -102,12 +114,7 @@ ID native_tinyclj_fs_stat(ID *args, unsigned int argc)
     int64_t size = fs_stat_size(st, path);
     if (size < 0) return NULL;
 
-    // Build result map: {:path "..." :size N :type :file}
-    CljPersistentMap *m = make_map(4, STRONG);
-    ASSIGN(m, map_assoc(m, (ID)SYM_KW_PATH, (ID)make_string(path)));
-    ASSIGN(m, map_assoc(m, (ID)SYM_KW_SIZE, fixnum((int32_t)size)));
-    ASSIGN(m, map_assoc(m, (ID)SYM_KW_TYPE, (ID)SYM_KW_FILE));
-    return AUTORELEASE(m);
+    return tinyclj_fs_make_stat_map(path, size);
 }
 
 ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc)
@@ -159,6 +166,117 @@ ID native_tinyclj_fs_delete(ID *args, unsigned int argc)
     return fs_delete(st, path) ? (ID)clj_true : (ID)clj_false;
 }
 
+ID native_tinyclj_fs_read_block(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 3, "tiny-clj.fs/read-block");
+    const char *path = require_c_string_arg(args[0], "tiny-clj.fs/read-block", "a path string");
+    if (!path) return NULL;
+    if (!is_fixnum(args[1]) || !is_fixnum(args[2])) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "tiny-clj.fs/read-block expects fixnum offset and length");
+        return NULL;
+    }
+
+    int32_t offset = as_fixnum(args[1]);
+    int32_t length = as_fixnum(args[2]);
+    if (offset < 0 || length < 0) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "tiny-clj.fs/read-block offset and length must be >= 0");
+        return NULL;
+    }
+
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+
+    ID full = fs_read_bytes(st, path);
+    if (!full) {
+        throw_exception_formatted(EXCEPTION_FILE_NOT_FOUND, __FILE__, __LINE__, 0,
+                                  "Resource not found: %s", path);
+        return NULL;
+    }
+
+    CljByteArray *src = as_byte_array(full);
+    int available = src ? src->length : 0;
+    if (offset >= available || length == 0) {
+        return AUTORELEASE(make_byte_array(0));
+    }
+
+    int slice_len = available - offset;
+    if (slice_len > length) {
+        slice_len = length;
+    }
+
+    CljByteArray *slice = make_byte_array(slice_len);
+    if (!slice) {
+        return NULL;
+    }
+    if (slice_len > 0) {
+        memcpy(slice->data, src->data + offset, (size_t)slice_len);
+    }
+    return AUTORELEASE(slice);
+}
+
+ID native_tinyclj_fs_write_block(ID *args, unsigned int argc)
+{
+    CHECK_ARITY(argc, 3, "tiny-clj.fs/write-block");
+    const char *path = require_c_string_arg(args[0], "tiny-clj.fs/write-block", "a path string");
+    if (!path) return NULL;
+    if (!is_fixnum(args[1])) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "tiny-clj.fs/write-block expects a fixnum offset");
+        return NULL;
+    }
+    if (!args[2] || TAG(args[2]) != CLJ_BYTE_ARRAY) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "tiny-clj.fs/write-block expects a byte-array");
+        return NULL;
+    }
+
+    int32_t offset = as_fixnum(args[1]);
+    if (offset < 0) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "tiny-clj.fs/write-block offset must be >= 0");
+        return NULL;
+    }
+
+    FsKvStore *st = fs_global_store();
+    if (!st) return NULL;
+
+    CljByteArray *patch = as_byte_array(args[2]);
+    int64_t old_size = fs_stat_size(st, path);
+    ID existing = old_size >= 0 ? fs_read_bytes(st, path) : NULL;
+    CljByteArray *existing_ba = existing ? as_byte_array(existing) : NULL;
+    size_t old_len = existing_ba ? (size_t)existing_ba->length : 0u;
+    size_t patch_len = patch ? (size_t)patch->length : 0u;
+    size_t new_len = old_len;
+    size_t write_end = (size_t)offset + patch_len;
+    if (write_end > new_len) {
+        new_len = write_end;
+    }
+
+    uint8_t *buf = (uint8_t *)CLJ_CALLOC(new_len > 0u ? new_len : 1u, sizeof(uint8_t));
+    if (!buf) {
+        throw_oom();
+        return NULL;
+    }
+    if (old_len > 0u && existing_ba && existing_ba->data) {
+        memcpy(buf, existing_ba->data, old_len);
+    }
+    if (patch_len > 0u && patch && patch->data) {
+        memcpy(buf + offset, patch->data, patch_len);
+    }
+
+    fs_err_t e = fs_write_bytes(st, path, buf, new_len);
+    CLJ_FREE(buf);
+    if (e != FS_NO_ERR) {
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                  "tiny-clj.fs/write-block failed (err=%d)", (int)e);
+        return NULL;
+    }
+
+    return tinyclj_fs_make_stat_map(path, (int64_t)new_len);
+}
+
 ID native_tinyclj_fs_set_size(ID *args, unsigned int argc)
 {
     CHECK_ARITY(argc, 2, "tiny-clj.fs/set-size!");
@@ -185,11 +303,7 @@ ID native_tinyclj_fs_set_size(ID *args, unsigned int argc)
     int64_t size = fs_stat_size(st, path);
     if (size < 0) return NULL;
 
-    CljPersistentMap *m = make_map(4, STRONG);
-    ASSIGN(m, map_assoc(m, (ID)SYM_KW_PATH, (ID)make_string(path)));
-    ASSIGN(m, map_assoc(m, (ID)SYM_KW_SIZE, fixnum((int32_t)size)));
-    ASSIGN(m, map_assoc(m, (ID)SYM_KW_TYPE, (ID)SYM_KW_FILE));
-    return AUTORELEASE(m);
+    return tinyclj_fs_make_stat_map(path, size);
 }
 
 // -----------------------------------------------------------------------------

@@ -86,6 +86,11 @@ static void macos_viewer_store_screen_position_for_window(NSWindow *window) {
     [defaults setDouble:frame.origin.x forKey:kMacosViewerFrameXKey];
     [defaults setDouble:frame.origin.y forKey:kMacosViewerFrameYKey];
     (void)[window saveFrameUsingName:kMacosViewerWindowAutosaveName];
+    /*
+     * Persist eagerly after every move. We keep NSUserDefaults as the storage backend,
+     * but use the underlying CFPreferences sync point instead of -synchronize.
+     */
+    CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication);
     /* Width/height intentionally not saved - game demo uses fixed 2x scale. */
 }
 

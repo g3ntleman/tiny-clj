@@ -204,6 +204,9 @@ typedef struct {
     bool tick_enabled;
     bool tick_thread_running;
     int voice_count;
+    bool debug_noise_active;
+    bool debug_ramp_active;
+    bool debug_ramp_noise_active;
 } SoundHostStatus;
 
 /* Global engine instance */
@@ -293,6 +296,17 @@ bool sound_backend_host_play_debug_noise(uint16_t min_freq_hz,
                                          uint32_t hop_ms,
                                          uint8_t volume);
 bool sound_backend_host_debug_noise_active(void);
+bool sound_backend_host_play_debug_ramp(uint16_t start_freq_hz,
+                                        uint16_t end_freq_hz,
+                                        uint32_t duration_ms,
+                                        uint8_t volume);
+bool sound_backend_host_debug_ramp_active(void);
+bool sound_backend_host_play_debug_ramp_noise(uint16_t min_freq_hz,
+                                              uint16_t max_freq_hz,
+                                              uint32_t duration_ms,
+                                              uint32_t hop_ms,
+                                              uint8_t volume);
+bool sound_backend_host_debug_ramp_noise_active(void);
 
 /* ========================================================================= */
 /* MIDI note to frequency conversion                                         */

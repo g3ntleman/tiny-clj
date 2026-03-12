@@ -7,7 +7,7 @@
  * sound-on-finished!
  *
  * DEBUG-only helpers:
- * play-test-tone!, host-status!
+ * play-test-tone!, play-test-ramp!, play-test-ramp-noise!, host-status!
  */
 
 #include <string.h>
@@ -215,6 +215,9 @@ ID native_sound_host_status(ID *args, unsigned int argc) {
     ID k_tick_thread_running = intern_symbol_global(":tick-thread-running");
     ID k_tick_running = intern_symbol_global(":tick-running");
     ID k_voice_count = intern_symbol_global(":voice-count");
+    ID k_debug_noise_active = intern_symbol_global(":debug-noise-active");
+    ID k_debug_ramp_active = intern_symbol_global(":debug-ramp-active");
+    ID k_debug_ramp_noise_active = intern_symbol_global(":debug-ramp-noise-active");
     ID k_engine_voice_freqs = intern_symbol_global(":engine-voice-freqs");
     ID k_engine_voice_gates = intern_symbol_global(":engine-voice-gates");
     ID k_engine_voice_active = intern_symbol_global(":engine-voice-active");
@@ -226,6 +229,9 @@ ID native_sound_host_status(ID *args, unsigned int argc) {
     ID v_tick_thread_running = st.tick_thread_running ? clj_true : clj_false;
     ID v_tick_running = g_sound_engine.tick_running ? clj_true : clj_false;
     ID v_voice_count = fixnum(st.voice_count);
+    ID v_debug_noise_active = st.debug_noise_active ? clj_true : clj_false;
+    ID v_debug_ramp_active = st.debug_ramp_active ? clj_true : clj_false;
+    ID v_debug_ramp_noise_active = st.debug_ramp_noise_active ? clj_true : clj_false;
     ID v_supported = ok ? clj_true : clj_false;
     CljPersistentVector *engine_voice_freqs = make_vector(g_sound_engine.voice_count, STRONG);
     CljPersistentVector *engine_voice_gates = make_vector(g_sound_engine.voice_count, STRONG);
@@ -237,7 +243,7 @@ ID native_sound_host_status(ID *args, unsigned int argc) {
         engine_voice_active = vector_conj(engine_voice_active, v->active ? clj_true : clj_false);
     }
 
-    return make_map_from_kv(10,
+    return make_map_from_kv(13,
                             k_supported, v_supported,
                             k_backend_available, v_backend_available,
                             k_sound_running, v_sound_running,
@@ -245,6 +251,9 @@ ID native_sound_host_status(ID *args, unsigned int argc) {
                             k_tick_thread_running, v_tick_thread_running,
                             k_tick_running, v_tick_running,
                             k_voice_count, v_voice_count,
+                            k_debug_noise_active, v_debug_noise_active,
+                            k_debug_ramp_active, v_debug_ramp_active,
+                            k_debug_ramp_noise_active, v_debug_ramp_noise_active,
                             k_engine_voice_freqs, engine_voice_freqs,
                             k_engine_voice_gates, engine_voice_gates,
                             k_engine_voice_active, engine_voice_active);
@@ -401,6 +410,95 @@ ID native_sound_play_test_noise(ID *args, unsigned int argc) {
                                                   (uint8_t)volume);
     return ok ? clj_true : clj_false;
 }
+
+ID native_sound_play_test_ramp(ID *args, unsigned int argc) {
+    if (argc != 4) {
+        throw_exception(EXCEPTION_ARITY,
+                        "play-test-ramp! expects [start-freq-hz end-freq-hz duration-ms volume]",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ID start_arg = args[0];
+    ID end_arg = args[1];
+    ID duration_arg = args[2];
+    ID volume_arg = args[3];
+    if (!start_arg || !is_fixnum((CljValue)start_arg) ||
+        !end_arg || !is_fixnum((CljValue)end_arg) ||
+        !duration_arg || !is_fixnum((CljValue)duration_arg) ||
+        !volume_arg || !is_fixnum((CljValue)volume_arg)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "play-test-ramp! expects four integers",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    int32_t start_freq_hz = (int32_t)as_fixnum((CljValue)start_arg);
+    int32_t end_freq_hz = (int32_t)as_fixnum((CljValue)end_arg);
+    int32_t duration_ms = (int32_t)as_fixnum((CljValue)duration_arg);
+    int32_t volume = (int32_t)as_fixnum((CljValue)volume_arg);
+    if (start_freq_hz < 20 || start_freq_hz > 20000 || end_freq_hz < 20 || end_freq_hz > 20000 ||
+        duration_ms < 1 || duration_ms > 60000 || volume < 0 || volume > 255) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "play-test-ramp! valid ranges: start/end freq 20..20000 Hz, duration 1..60000 ms, volume 0..255",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ensure_sound_engine_initialized();
+    bool ok = sound_backend_host_play_debug_ramp((uint16_t)start_freq_hz,
+                                                 (uint16_t)end_freq_hz,
+                                                 (uint32_t)duration_ms,
+                                                 (uint8_t)volume);
+    return ok ? clj_true : clj_false;
+}
+
+ID native_sound_play_test_ramp_noise(ID *args, unsigned int argc) {
+    if (argc != 5) {
+        throw_exception(EXCEPTION_ARITY,
+                        "play-test-ramp-noise! expects [min-freq-hz max-freq-hz duration-ms hop-ms volume]",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ID min_freq_arg = args[0];
+    ID max_freq_arg = args[1];
+    ID duration_arg = args[2];
+    ID hop_arg = args[3];
+    ID volume_arg = args[4];
+    if (!min_freq_arg || !is_fixnum((CljValue)min_freq_arg) ||
+        !max_freq_arg || !is_fixnum((CljValue)max_freq_arg) ||
+        !duration_arg || !is_fixnum((CljValue)duration_arg) ||
+        !hop_arg || !is_fixnum((CljValue)hop_arg) ||
+        !volume_arg || !is_fixnum((CljValue)volume_arg)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "play-test-ramp-noise! expects five integers",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    int32_t min_freq_hz = (int32_t)as_fixnum((CljValue)min_freq_arg);
+    int32_t max_freq_hz = (int32_t)as_fixnum((CljValue)max_freq_arg);
+    int32_t duration_ms = (int32_t)as_fixnum((CljValue)duration_arg);
+    int32_t hop_ms = (int32_t)as_fixnum((CljValue)hop_arg);
+    int32_t volume = (int32_t)as_fixnum((CljValue)volume_arg);
+    if (min_freq_hz < 20 || max_freq_hz > 20000 || min_freq_hz > max_freq_hz ||
+        duration_ms < 1 || duration_ms > 60000 || hop_ms < 1 || hop_ms > 1000 ||
+        volume < 0 || volume > 255) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "play-test-ramp-noise! valid ranges: min/max freq 20..20000 Hz, duration 1..60000 ms, hop 1..1000 ms, volume 0..255",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ensure_sound_engine_initialized();
+    bool ok = sound_backend_host_play_debug_ramp_noise((uint16_t)min_freq_hz,
+                                                       (uint16_t)max_freq_hz,
+                                                       (uint32_t)duration_ms,
+                                                       (uint32_t)hop_ms,
+                                                       (uint8_t)volume);
+    return ok ? clj_true : clj_false;
+}
 #endif
 #else
 static ID tinyclj_tiny_fx_disabled_error(const char *fn_name) {
@@ -431,6 +529,8 @@ TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_on_finished, "sound-on-finished!
 #ifdef DEBUG
 TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_play_test_tone, "play-test-tone!")
 TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_play_test_noise, "play-test-noise!")
+TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_play_test_ramp, "play-test-ramp!")
+TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_play_test_ramp_noise, "play-test-ramp-noise!")
 
 ID native_sound_host_status(ID *args, unsigned int argc) {
     (void)args;
@@ -485,6 +585,8 @@ void builtins_sound_register(BuiltinsSoundRegisterFn registrar) {
 #ifdef DEBUG
     registrar(TINYCLJ_SOUND_DEBUG_NS "/play-test-tone!", native_sound_play_test_tone);
     registrar(TINYCLJ_SOUND_DEBUG_NS "/play-test-noise!", native_sound_play_test_noise);
+    registrar(TINYCLJ_SOUND_DEBUG_NS "/play-test-ramp!", native_sound_play_test_ramp);
+    registrar(TINYCLJ_SOUND_DEBUG_NS "/play-test-ramp-noise!", native_sound_play_test_ramp_noise);
     registrar(TINYCLJ_SOUND_DEBUG_NS "/host-status!", native_sound_host_status);
 #endif
 #endif

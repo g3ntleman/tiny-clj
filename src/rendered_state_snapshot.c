@@ -93,6 +93,44 @@ static int find_timeline_row(RenderedSlotSnapshot *snapshot, uintptr_t entity_id
     return -1;
 }
 
+static bool aabb_equal(VgAabb a, VgAabb b) {
+    return a.min_x == b.min_x && a.min_y == b.min_y && a.max_x == b.max_x && a.max_y == b.max_y;
+}
+
+static VgClipRect clip_rect_from_aabb(VgAabb box, uint8_t padding_px) {
+    int pad = (int)padding_px;
+    int x0 = box.min_x - pad;
+    int y0 = box.min_y - pad;
+    int x1 = box.max_x + pad + 1;
+    int y1 = box.max_y + pad + 1;
+    VgClipRect rect = {
+        .x = (int16_t)x0,
+        .y = (int16_t)y0,
+        .w = (int16_t)(x1 - x0),
+        .h = (int16_t)(y1 - y0),
+    };
+    return rect;
+}
+
+static bool append_dirty_aabb_rect(VgClipRect *io_dirty_rect,
+                                   bool *io_have_dirty_rect,
+                                   VgAabb box,
+                                   uint8_t padding_px,
+                                   VgClipRect clip_rect) {
+    VgClipRect rect = clip_rect_from_aabb(box, padding_px);
+    VgClipRect clipped = {0};
+    if (!vg_clip_rect_intersect(rect, clip_rect, &clipped)) {
+        return false;
+    }
+    if (*io_have_dirty_rect) {
+        *io_dirty_rect = vg_clip_rect_union(*io_dirty_rect, clipped);
+    } else {
+        *io_dirty_rect = clipped;
+        *io_have_dirty_rect = true;
+    }
+    return true;
+}
+
 void vg_rendered_state_capture_begin(uint8_t slot_index, uint32_t snapshot_generation, uint32_t frame_time_ms) {
     g_capture_ctx.active = false;
     g_capture_ctx.slot_index = 0u;
@@ -166,6 +204,82 @@ void vg_rendered_state_capture_record_timeline(uintptr_t entity_id_bits,
     snapshot->timelines[idx].entity_id_bits = entity_id_bits;
     snapshot->timelines[idx].field = (uint8_t)field;
     snapshot->timelines[idx].sample = sample;
+}
+
+bool vg_rendered_state_capture_compute_dirty_rect(uint8_t slot_index,
+                                                  VgClipRect clip_rect,
+                                                  uint8_t padding_px,
+                                                  VgClipRect *out_dirty_rect) {
+    if (!out_dirty_rect || slot_index >= VG_RENDERED_STATE_MAX_SLOTS || !g_capture_ctx.active ||
+        g_capture_ctx.slot_index != slot_index || vg_clip_rect_is_empty(clip_rect)) {
+        return false;
+    }
+
+    RenderedSlotStore *store = &g_rendered_slots[slot_index];
+    unsigned int active = atomic_load_explicit(&store->active_buffer_index, memory_order_acquire);
+    if (active > 1u) {
+        return false;
+    }
+
+    RenderedSlotSnapshot *prev = &store->buffers[active];
+    RenderedSlotSnapshot *curr = &store->buffers[g_capture_ctx.write_buffer_index];
+    bool have_dirty_rect = false;
+    VgClipRect dirty_rect = {0};
+
+    for (uint16_t i = 0; i < curr->entity_count; i++) {
+        RenderedEntityRow *curr_row = &curr->entities[i];
+        int prev_idx = find_entity_row(prev, curr_row->entity_id_bits);
+        RenderedEntityRow *prev_row = (prev_idx >= 0) ? &prev->entities[prev_idx] : NULL;
+        bool changed = !prev_row ||
+                       memcmp(&curr_row->world_t, &prev_row->world_t, sizeof(curr_row->world_t)) != 0 ||
+                       curr_row->has_world_aabb != prev_row->has_world_aabb ||
+                       (curr_row->has_world_aabb && prev_row->has_world_aabb &&
+                        !aabb_equal(curr_row->world_aabb, prev_row->world_aabb));
+        if (!changed) {
+            continue;
+        }
+
+        bool contributed = false;
+        if (prev_row && prev_row->has_world_aabb) {
+            contributed |= append_dirty_aabb_rect(&dirty_rect,
+                                                  &have_dirty_rect,
+                                                  prev_row->world_aabb,
+                                                  padding_px,
+                                                  clip_rect);
+        }
+        if (curr_row->has_world_aabb) {
+            contributed |= append_dirty_aabb_rect(&dirty_rect,
+                                                  &have_dirty_rect,
+                                                  curr_row->world_aabb,
+                                                  padding_px,
+                                                  clip_rect);
+        }
+        if (!contributed) {
+            return false;
+        }
+    }
+
+    for (uint16_t i = 0; i < prev->entity_count; i++) {
+        RenderedEntityRow *prev_row = &prev->entities[i];
+        if (find_entity_row(curr, prev_row->entity_id_bits) >= 0) {
+            continue;
+        }
+        if (!prev_row->has_world_aabb) {
+            return false;
+        }
+        (void)append_dirty_aabb_rect(&dirty_rect,
+                                     &have_dirty_rect,
+                                     prev_row->world_aabb,
+                                     padding_px,
+                                     clip_rect);
+    }
+
+    if (!have_dirty_rect) {
+        return false;
+    }
+
+    *out_dirty_rect = dirty_rect;
+    return true;
 }
 
 void vg_rendered_state_capture_commit(void) {

@@ -904,6 +904,7 @@ bool gpio_simulate_analog(int32_t pin, int32_t value) {
 }
 
 void gpio_poll_drain(void) {
+    (void)gpio_runtime_process_input_tick();
 #ifdef ESP32_BUILD
     gpio_esp32_poll_drain();
 #endif
