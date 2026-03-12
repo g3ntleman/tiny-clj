@@ -2,6 +2,7 @@
 #include "../event_loop.h"
 #include "../record.h"
 #include "../symbol.h"
+#include "../tiny_fx_gfx.h"
 #include "../vector.h"
 
 TEST(test_gfx_collision_contract_registers_record_descriptors) {
@@ -206,6 +207,33 @@ TEST(test_gfx_collision_contract_callback_rejects_non_function_values) {
         "    (and rejected? (nil? v))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(out && out != clj_false);
+}
+
+TEST(test_gfx_collision_contract_field_alias_hot_loop_does_not_retain) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID rule = eval_string(
+        "(do "
+        "  (require 'tiny-fx.game-demo) "
+        "  (tiny-fx.game-demo/create-demo-bundle) "
+        "  (nth (:collision-rules @tiny-fx.game-demo/game-scene-state) 0))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(rule);
+    TEST_ASSERT_TRUE(TAG(rule) == CLJ_RECORD);
+
+    ID kw_self = intern_symbol_global(":self");
+    TEST_ASSERT_NOT_NULL(kw_self);
+
+    ID stable = RETAIN(tiny_fx_gfx_get_field(rule, kw_self, NULL));
+    TEST_ASSERT_NOT_NULL(stable);
+    TEST_ASSERT_FALSE(IS_IMMEDIATE(stable));
+
+    int baseline_rc = ((CljObject *)stable)->rc;
+    for (int i = 0; i < 512; i++) {
+        ID alias = tiny_fx_gfx_get_field(rule, kw_self, NULL);
+        TEST_ASSERT_EQUAL_PTR(stable, alias);
+    }
+    TEST_ASSERT_EQUAL_INT(baseline_rc, ((CljObject *)stable)->rc);
+    RELEASE(stable);
 }
 
 TEST(test_gfx_collision_contract_spatial_watch_supports_two_and_three_arity_calls, 0) {

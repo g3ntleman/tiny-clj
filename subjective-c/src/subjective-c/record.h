@@ -60,9 +60,9 @@ int record_count(ID record_obj);
 int record_field_index(ID record_obj, ID key);
 // Returns declared key alias, or NULL on bounds/type mismatch.
 ID record_key_at_index(ID record_obj, unsigned int index);
-// Returns pool-safe alias, or NULL on bounds/type mismatch.
+// Returns borrowed value alias, or NULL on bounds/type mismatch.
 ID record_get_by_index(ID record_obj, unsigned int index);
-// Returns pool-safe alias for a found value, otherwise returns not_found.
+// Returns borrowed value alias for a found value, otherwise returns not_found.
 ID record_get_sentinel(ID record_obj, ID key, ID not_found);
 bool record_contains(ID record_obj, ID key);
 

@@ -2,6 +2,7 @@
 #define SUBJECTIVE_C_MEMORY_H
 
 #include "object.h"
+#include "value.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>

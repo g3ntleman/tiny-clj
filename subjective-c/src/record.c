@@ -2,7 +2,7 @@
 
 #include "callbacks.h"
 #include "exception.h"
-#include "value.h"
+#include "memory.h"
 
 // Closed-records currently do not support extmap behavior.
 static void throw_record_extmap_not_implemented(void) {
@@ -274,14 +274,14 @@ ID record_key_at_index(ID record_obj, unsigned int index) {
     return vector_nth(record->descriptor->field_keys, index);
 }
 
-// Return the value at descriptor index as a pool-safe alias, or NULL on bounds/type mismatch.
+// Return the value at descriptor index as a borrowed alias, or NULL on bounds/type mismatch.
 ID record_get_by_index(ID record_obj, unsigned int index) {
     if (!is_record(record_obj))
         return NULL;
     CljPersistentRecord *record = as_record(record_obj);
     if (index >= record_declared_field_count(record))
         return NULL;
-    return AUTORELEASE(RETAIN(record->values[index]));
+    return record->values[index];
 }
 
 // Key lookup with caller-provided not-found sentinel.
@@ -292,7 +292,7 @@ ID record_get_sentinel(ID record_obj, ID key, ID not_found) {
     int index = descriptor_field_index(record->descriptor, key);
     if (index < 0)
         return not_found;
-    return AUTORELEASE(RETAIN(record->values[(unsigned int)index]));
+    return record->values[(unsigned int)index];
 }
 
 // Predicate: true when key is declared on the record descriptor.

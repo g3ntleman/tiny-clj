@@ -525,6 +525,7 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
         !k_self || !k_other || !k_a_id || !k_b_id) {
         return false;
     }
+    bool ok = true;
     ID rules = tiny_fx_gfx_get_field((ID)game_scene, k_collision_rules, NULL);
     if (!rules) {
         destroy_spatial_rule_set(io_rule_set);
@@ -544,11 +545,12 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
     if (rule_count > VIEWER_MAX_SPATIAL_RULES) {
         rule_count = VIEWER_MAX_SPATIAL_RULES;
     }
-    for (uint32_t i = 0; i < rule_count; i++) {
+    for (uint32_t i = 0; i < rule_count && ok; i++) {
         ID rule = vector_nth(rules_vec, i);
         if (!rule || TAG(rule) != CLJ_RECORD) {
             destroy_spatial_rule_set(&next_rule_set);
-            return false;
+            ok = false;
+            break;
         }
         ID slot_obj = tiny_fx_gfx_get_field(rule, k_slot, NULL);
         ID id_obj = tiny_fx_gfx_get_field(rule, k_id, NULL);
@@ -565,7 +567,8 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
         }
         if (!is_fixnum(radius_obj) || !self_selector || !other_selector) {
             destroy_spatial_rule_set(&next_rule_set);
-            return false;
+            ok = false;
+            break;
         }
         ID root = game_scene->root;
         ID self_ids[VIEWER_MAX_SPATIAL_RULES] = {0};
@@ -578,7 +581,9 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
                                                                   other_selector,
                                                                   other_ids,
                                                                   VIEWER_MAX_SPATIAL_RULES);
-        for (uint32_t self_i = 0; self_i < self_count && next_rule_set.count < VIEWER_MAX_SPATIAL_RULES; self_i++) {
+        for (uint32_t self_i = 0;
+             self_i < self_count && next_rule_set.count < VIEWER_MAX_SPATIAL_RULES && ok;
+             self_i++) {
             for (uint32_t other_i = 0;
                  other_i < other_count && next_rule_set.count < VIEWER_MAX_SPATIAL_RULES;
                  other_i++) {
@@ -608,9 +613,11 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
             }
         }
     }
-    destroy_spatial_rule_set(io_rule_set);
-    *io_rule_set = next_rule_set;
-    return true;
+    if (ok) {
+        destroy_spatial_rule_set(io_rule_set);
+        *io_rule_set = next_rule_set;
+    }
+    return ok;
 }
 
 static bool viewer_load_game_demo_config(EvalState *st,

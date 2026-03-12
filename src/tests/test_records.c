@@ -651,7 +651,7 @@ TEST(test_record_keys_returns_pool_safe_alias_for_manual_descriptor) {
     TEST_ASSERT_EQUAL_STRING("field-b", string_data(out_b));
 }
 
-TEST(test_record_value_accessors_return_expected_aliases_for_manual_descriptor) {
+TEST(test_record_value_accessors_return_borrowed_aliases_for_manual_descriptor) {
     ID type_name = (ID)test_record_type_symbol(&SYM_TEST_RECORD_TYPE_VALUES, "ManualTypeValues");
     ID key_name = make_string("field-a");
     ID value_name = make_string("value-a");
@@ -670,6 +670,9 @@ TEST(test_record_value_accessors_return_expected_aliases_for_manual_descriptor) 
     CljPersistentRecord *record = make_record_with_descriptor(desc, vals);
     TEST_ASSERT_NOT_NULL(record);
 
+    int key_rc_before = retain_count(key_name);
+    int value_rc_before = retain_count(value_name);
+
     ID key_out = record_key_at_index((ID)record, 0);
     ID value_out_index = record_get_by_index((ID)record, 0);
     ID value_out_lookup = record_get_sentinel((ID)record, key_name, NOT_FOUND);
@@ -687,6 +690,8 @@ TEST(test_record_value_accessors_return_expected_aliases_for_manual_descriptor) 
     TEST_ASSERT_TRUE(TAG(value_out_lookup) == CLJ_STRING);
     TEST_ASSERT_EQUAL_STRING("ManualTypeValues", as_symbol(record->descriptor->type_symbol)->cname);
     TEST_ASSERT_EQUAL_STRING("field-a", string_data(key_out));
+    TEST_ASSERT_EQUAL_INT(key_rc_before, retain_count(key_name));
+    TEST_ASSERT_EQUAL_INT(value_rc_before, retain_count(value_name));
 
     RELEASE(record);
     RELEASE(vals);

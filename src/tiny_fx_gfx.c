@@ -2,8 +2,8 @@
 
 #include "builtins.h"
 #include "callbacks.h"
+#include "memory.h"
 #include "symbol.h"
-#include "value.h"
 #include "vector.h"
 
 static VgRecordSchema g_record_schema = {0};
@@ -333,7 +333,7 @@ ID tiny_fx_gfx_create_record_from_slots(ID type_symbol, unsigned int field_count
         vector_conj_inplace(&v, slots[i]);
     }
     CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
-    ID rec = AUTORELEASE(make_record_with_descriptor(desc, v));
+    ID rec = make_record_with_descriptor(desc, v);
     RELEASE(v);
     return rec;
 }
