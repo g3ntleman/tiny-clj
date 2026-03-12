@@ -7,7 +7,7 @@
  * sound-on-finished!
  *
  * DEBUG-only helpers:
- * play-test-tone!, play-test-ramp!, play-test-ramp-noise!, host-status!
+ * play-test-tone!, play-test-ramp!, play-test-ramp-noise! (DEBUG only), host-status!
  */
 
 #include <string.h>

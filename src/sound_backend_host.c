@@ -669,7 +669,18 @@ void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume) 
     atomic_store_explicit(&g_voice_volume[voice_index], (uint32_t)volume, memory_order_relaxed);
 }
 
+bool sound_backend_keepalive_active(void) {
+    return atomic_load_explicit(&g_debug_noise_enabled, memory_order_acquire) ||
+           atomic_load_explicit(&g_debug_ramp_enabled, memory_order_acquire) ||
+           atomic_load_explicit(&g_debug_ramp_noise_enabled, memory_order_acquire);
+}
+
 void sound_tick_start(void) {
+    if (g_sound_engine.tick_running) {
+        atomic_store_explicit(&g_tick_enabled, true, memory_order_release);
+        atomic_store_explicit(&g_sound_running, true, memory_order_release);
+        return;
+    }
     g_sound_engine.tick_running = true;
     sound_tick_scheduler_start(&g_tick_scheduler, host_sound_monotonic_now_ns());
     atomic_store_explicit(&g_tick_enabled, true, memory_order_release);
@@ -686,6 +697,12 @@ void sound_tick_stop(void) {
     atomic_store_explicit(&g_sound_running, false, memory_order_release);
     if (g_output_unit) {
         (void)AudioOutputUnitStop(g_output_unit);
+    }
+}
+
+void sound_tick_kick(void) {
+    if (!g_sound_engine.tick_running) {
+        sound_tick_start();
     }
 }
 
@@ -816,12 +833,22 @@ void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume) 
     (void)volume;
 }
 
+bool sound_backend_keepalive_active(void) {
+    return false;
+}
+
 void sound_tick_start(void) {
     g_sound_engine.tick_running = true;
 }
 
 void sound_tick_stop(void) {
     g_sound_engine.tick_running = false;
+}
+
+void sound_tick_kick(void) {
+    if (!g_sound_engine.tick_running) {
+        sound_tick_start();
+    }
 }
 
 bool sound_backend_host_get_status(SoundHostStatus *out) {

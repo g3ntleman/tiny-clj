@@ -168,7 +168,6 @@ static void stream_init(SoundStream *s, SoundTrackEntry *t, int32_t repeat) {
     s->track_volume = 255;
     s->active = true;
     s->track_id = t->track_id;
-    s->channel_count = t->header.channel_count;
 }
 
 static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_count) {
@@ -203,6 +202,38 @@ static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_cou
                         vi,
                         note,
                         (unsigned int)voices[vi].freq_hz,
+                        (unsigned int)gate_ticks,
+                        (unsigned int)voices[vi].volume);
+            }
+        }
+        break;
+    }
+    case TRK1_EVT_NOTE_HZ: {
+        /* Payload: uint16 LE frequency Hz (0 = rest), then varuint gate_ticks */
+        if (s->cursor + 2 > s->stream_end) {
+            s->active = false;
+            return false;
+        }
+        uint16_t freq_hz = (uint16_t)(s->cursor[0] | (s->cursor[1] << 8));
+        s->cursor += 2;
+        uint32_t gate_ticks = 0;
+        if (!trk1_decode_varuint(&s->cursor, s->stream_end, &gate_ticks)) {
+            s->active = false;
+            return false;
+        }
+        if (voice_count > 0) {
+            int vi = channel % voice_count;
+            voices[vi].freq_hz = freq_hz;
+            voices[vi].gate_remaining_ticks = gate_ticks;
+            voices[vi].volume = s->track_volume;
+            voices[vi].active = true;
+            if (sound_interp_debug_enabled()) {
+                fprintf(stderr,
+                        "[sound-interp] NOTE_HZ tick=%" PRIu32 " ch=%u->v=%d freq_hz=%u gate=%u vol=%u\n",
+                        s->current_tick,
+                        channel,
+                        vi,
+                        (unsigned int)freq_hz,
                         (unsigned int)gate_ticks,
                         (unsigned int)voices[vi].volume);
             }
@@ -294,7 +325,6 @@ void sound_engine_init(int voice_count) {
     if (voice_count < 1) voice_count = 1;
     if (voice_count > SOUND_MAX_VOICES) voice_count = SOUND_MAX_VOICES;
     g_sound_engine.music_volume = 255;
-    g_sound_engine.us_per_tick = 1000; /* 1ms default */
     memset(g_sound_engine.cmd_queue.slots, 0, sizeof(g_sound_engine.cmd_queue.slots));
     {
         bool ok = lockfree_spsc_queue_init(&g_sound_engine.cmd_queue.spsc,
@@ -342,8 +372,6 @@ bool sound_engine_load_track(ID track_id, ID byte_array_obj) {
     if (existing) {
         RELEASE(existing->retained_obj);
         existing->retained_obj = RETAIN(byte_array_obj);
-        existing->data_ptr = data;
-        existing->len = len;
         existing->header = header;
         return true;
     }
@@ -354,8 +382,6 @@ bool sound_engine_load_track(ID track_id, ID byte_array_obj) {
     SoundTrackEntry *entry = &g_sound_engine.tracks[g_sound_engine.track_count++];
     entry->track_id = track_id;
     entry->retained_obj = RETAIN(byte_array_obj);
-    entry->data_ptr = data;
-    entry->len = len;
     entry->header = header;
     return true;
 }
@@ -388,8 +414,8 @@ bool sound_engine_play_music(ID track_id, int32_t repeat) {
     SoundCmd cmd = { .type = SOUND_CMD_PLAY_TRACK, .track_id = track_id, .int_param = repeat };
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
     if (!ok) g_sound_engine.telemetry.cmd_drop_count++;
-    if (ok && !g_sound_engine.tick_running) {
-        sound_tick_start();
+    if (ok) {
+        sound_tick_kick();
     }
     return ok;
 }
@@ -398,6 +424,9 @@ bool sound_engine_stop_track(ID track_id) {
     SoundCmd cmd = { .type = SOUND_CMD_STOP_TRACK, .track_id = track_id };
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
     if (!ok) g_sound_engine.telemetry.cmd_drop_count++;
+    if (ok) {
+        sound_tick_kick();
+    }
     return ok;
 }
 
@@ -405,6 +434,8 @@ void sound_engine_stop_music(void) {
     SoundCmd cmd = { .type = SOUND_CMD_STOP_MUSIC };
     if (!lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd)) {
         g_sound_engine.telemetry.cmd_drop_count++;
+    } else {
+        sound_tick_kick();
     }
 }
 
@@ -427,8 +458,8 @@ bool sound_engine_play_sfx(ID sfx_id) {
     SoundCmd cmd = { .type = SOUND_CMD_PLAY_SFX, .track_id = sfx_id };
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
     if (!ok) g_sound_engine.telemetry.cmd_drop_count++;
-    if (ok && !g_sound_engine.tick_running) {
-        sound_tick_start();
+    if (ok) {
+        sound_tick_kick();
     }
     return ok;
 }
@@ -437,6 +468,8 @@ void sound_engine_stop_all(void) {
     SoundCmd cmd = { .type = SOUND_CMD_STOP_ALL };
     if (!lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd)) {
         g_sound_engine.telemetry.cmd_drop_count++;
+    } else {
+        sound_tick_kick();
     }
 }
 
@@ -446,6 +479,9 @@ bool sound_engine_set_track_volume(ID track_id, int32_t vol) {
     SoundCmd cmd = { .type = SOUND_CMD_SET_TRACK_VOL, .track_id = track_id, .int_param = vol };
     bool ok = lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd);
     if (!ok) g_sound_engine.telemetry.cmd_drop_count++;
+    if (ok) {
+        sound_tick_kick();
+    }
     return ok;
 }
 
@@ -455,6 +491,8 @@ void sound_engine_set_music_volume(int32_t vol) {
     SoundCmd cmd = { .type = SOUND_CMD_SET_MUSIC_VOL, .int_param = vol };
     if (!lockfree_spsc_queue_push(&g_sound_engine.cmd_queue.spsc, &cmd)) {
         g_sound_engine.telemetry.cmd_drop_count++;
+    } else {
+        sound_tick_kick();
     }
 }
 
@@ -499,6 +537,7 @@ static void tick_drain_commands(void) {
                     if (g_sound_engine.sfx[i].voice_index >= 0) {
                         g_sound_engine.voices[g_sound_engine.sfx[i].voice_index].active = false;
                     }
+                    g_sound_engine.sfx[i].voice_index = -1;
                 }
             }
             break;
@@ -543,7 +582,6 @@ static void tick_drain_commands(void) {
             if (vi < 0) break;
             stream_init(&g_sound_engine.sfx[slot].stream, t, 1); /* one-shot */
             g_sound_engine.sfx[slot].voice_index = vi;
-            g_sound_engine.sfx[slot].priority = 128; /* default priority */
             break;
         }
 
@@ -562,6 +600,7 @@ static void tick_drain_commands(void) {
             g_sound_engine.music_stream.active = false;
             for (int i = 0; i < SOUND_MAX_SFX; i++) {
                 g_sound_engine.sfx[i].stream.active = false;
+                g_sound_engine.sfx[i].voice_index = -1;
             }
             for (int i = 0; i < g_sound_engine.voice_count; i++) {
                 g_sound_engine.voices[i].active = false;
@@ -589,15 +628,43 @@ static void tick_drain_commands(void) {
 /* Maximum events per tick to prevent infinite loops (e.g. NOTE+END with no delay in infinite loop) */
 #define MAX_EVENTS_PER_TICK 64
 
-static void tick_advance_stream(SoundStream *s) {
-    if (!s->active) return;
+static inline void tick_apply_voice_output(int voice_index, SoundVoice *voice) {
+    uint16_t target_freq = 0;
+    uint8_t target_vol = 0;
+    if (voice->active && voice->gate_remaining_ticks > 0 && voice->freq_hz > 0) {
+        target_freq = voice->freq_hz;
+        target_vol = (uint8_t)(((uint16_t)voice->volume * g_sound_engine.music_volume) >> 8);
+    }
+    if (voice->applied_freq_hz == target_freq && voice->applied_volume == target_vol) {
+        return;
+    }
+    sound_backend_set_voice(voice_index, target_freq, target_vol);
+    voice->applied_freq_hz = target_freq;
+    voice->applied_volume = target_vol;
+}
+
+static void tick_release_sfx_voice(SoundSfxInstance *sfx) {
+    if (!sfx) {
+        return;
+    }
+    int vi = sfx->voice_index;
+    if (vi >= 0 && vi < g_sound_engine.voice_count) {
+        g_sound_engine.voices[vi].active = false;
+        g_sound_engine.voices[vi].freq_hz = 0;
+    }
+    sfx->voice_index = -1;
+}
+
+static void tick_process_due_stream(SoundStream *s) {
+    if (!s || !s->active) {
+        return;
+    }
 
     int events_this_tick = 0;
     while (s->active && s->current_tick >= s->next_event_tick && events_this_tick < MAX_EVENTS_PER_TICK) {
         events_this_tick++;
         bool had_more = stream_parse_event(s, g_sound_engine.voices, g_sound_engine.voice_count);
         if (!had_more && !s->active) {
-            /* Stream ended naturally */
             notify_finished(s->track_id);
             break;
         }
@@ -605,71 +672,93 @@ static void tick_advance_stream(SoundStream *s) {
     if (s->active && s->current_tick >= s->next_event_tick && events_this_tick >= MAX_EVENTS_PER_TICK) {
         g_sound_engine.telemetry.tick_overrun_count++;
     }
-    s->current_tick++;
 }
 
-static void tick_advance_sfx(void) {
+static void tick_process_due_sfx(void) {
     for (int i = 0; i < SOUND_MAX_SFX; i++) {
         SoundSfxInstance *sfx = &g_sound_engine.sfx[i];
-        if (!sfx->stream.active) continue;
+        if (!sfx->stream.active) {
+            continue;
+        }
 
         int vi = sfx->voice_index;
-        if (vi < 0) continue;
+        if (vi < 0) {
+            continue;
+        }
 
         int events_this_tick = 0;
-        while (sfx->stream.active && sfx->stream.current_tick >= sfx->stream.next_event_tick
-               && events_this_tick < MAX_EVENTS_PER_TICK) {
+        while (sfx->stream.active && sfx->stream.current_tick >= sfx->stream.next_event_tick &&
+               events_this_tick < MAX_EVENTS_PER_TICK) {
             events_this_tick++;
             bool had_more = stream_parse_event(&sfx->stream, &g_sound_engine.voices[vi], 1);
             if (!had_more && !sfx->stream.active) {
                 break;
             }
         }
-        if (sfx->stream.active && sfx->stream.current_tick >= sfx->stream.next_event_tick
-            && events_this_tick >= MAX_EVENTS_PER_TICK) {
+        if (sfx->stream.active && sfx->stream.current_tick >= sfx->stream.next_event_tick &&
+            events_this_tick >= MAX_EVENTS_PER_TICK) {
             g_sound_engine.telemetry.tick_overrun_count++;
         }
-        sfx->stream.current_tick++;
 
         if (!sfx->stream.active) {
-            /* Release voice */
-            g_sound_engine.voices[vi].active = false;
-            g_sound_engine.voices[vi].freq_hz = 0;
-            sfx->voice_index = -1;
+            tick_release_sfx_voice(sfx);
         }
     }
 }
 
-static inline void tick_apply_voice_output(int voice_index, SoundVoice *voice) {
-    uint16_t target_freq = 0;
-    uint8_t target_vol = 0;
-    if (voice && voice->active && voice->gate_remaining_ticks > 0 && voice->freq_hz > 0) {
-        target_freq = voice->freq_hz;
-        target_vol = (uint8_t)(((uint16_t)voice->volume * g_sound_engine.music_volume) >> 8);
+static uint32_t tick_ticks_until_stream_deadline(const SoundStream *s) {
+    if (!s || !s->active) {
+        return UINT32_MAX;
     }
-    if (voice && voice->applied_freq_hz == target_freq && voice->applied_volume == target_vol) {
-        return;
+    if (s->current_tick >= s->next_event_tick) {
+        return 0u;
     }
-    sound_backend_set_voice(voice_index, target_freq, target_vol);
-    if (voice) {
-        voice->applied_freq_hz = target_freq;
-        voice->applied_volume = target_vol;
-    }
+    return s->next_event_tick - s->current_tick;
 }
 
-static void tick_update_voices(void) {
+static uint32_t tick_ticks_until_next_boundary(void) {
+    uint32_t best = tick_ticks_until_stream_deadline(&g_sound_engine.music_stream);
+    for (int i = 0; i < SOUND_MAX_SFX; i++) {
+        uint32_t sfx_ticks = tick_ticks_until_stream_deadline(&g_sound_engine.sfx[i].stream);
+        if (sfx_ticks < best) {
+            best = sfx_ticks;
+        }
+    }
+    for (int i = 0; i < g_sound_engine.voice_count; i++) {
+        SoundVoice *v = &g_sound_engine.voices[i];
+        if (v->active && v->gate_remaining_ticks > 0 && v->gate_remaining_ticks < best) {
+            best = v->gate_remaining_ticks;
+        }
+    }
+    return best;
+}
+
+static void tick_fast_forward(uint32_t ticks) {
+    if (ticks == 0u) {
+        return;
+    }
+
+    if (g_sound_engine.music_stream.active) {
+        g_sound_engine.music_stream.current_tick += ticks;
+    }
+    for (int i = 0; i < SOUND_MAX_SFX; i++) {
+        if (g_sound_engine.sfx[i].stream.active) {
+            g_sound_engine.sfx[i].stream.current_tick += ticks;
+        }
+    }
     for (int i = 0; i < g_sound_engine.voice_count; i++) {
         SoundVoice *v = &g_sound_engine.voices[i];
         if (v->active && v->gate_remaining_ticks > 0) {
-            v->gate_remaining_ticks--;
-            if (v->gate_remaining_ticks == 0) {
-                /* Note off */
+            if (v->gate_remaining_ticks <= ticks) {
+                v->gate_remaining_ticks = 0;
                 v->freq_hz = 0;
                 if (sound_interp_debug_enabled()) {
                     fprintf(stderr,
                             "[sound-interp] NOTE_OFF voice=%d tick_done gate=0\n",
                             i);
                 }
+            } else {
+                v->gate_remaining_ticks -= ticks;
             }
         }
         tick_apply_voice_output(i, v);
@@ -691,19 +780,59 @@ static bool tick_has_active_audio(void) {
     return false;
 }
 
-void sound_engine_tick(void) {
-    tick_drain_commands();
-    tick_advance_stream(&g_sound_engine.music_stream);
-    tick_advance_sfx();
-    tick_update_voices();
-
-    /* On-demand tick lifecycle: stop if nothing active and queue empty */
+static void tick_maybe_stop_when_idle(void) {
     if (!tick_has_active_audio() &&
         lockfree_spsc_queue_empty(&g_sound_engine.cmd_queue.spsc) &&
-        !sound_backend_host_debug_noise_active()) {
+        !sound_backend_keepalive_active()) {
         if (g_sound_engine.tick_running) {
             sound_tick_stop();
-            g_sound_engine.tick_running = false;
         }
     }
+}
+
+uint32_t sound_engine_ticks_until_deadline(void) {
+    if (!lockfree_spsc_queue_empty(&g_sound_engine.cmd_queue.spsc)) {
+        return 0u;
+    }
+    uint32_t ticks = tick_ticks_until_next_boundary();
+    return ticks == UINT32_MAX ? 0u : ticks;
+}
+
+void sound_engine_advance_ticks(uint32_t ticks) {
+    uint32_t remaining = ticks;
+
+    while (true) {
+        tick_drain_commands();
+        tick_process_due_stream(&g_sound_engine.music_stream);
+        tick_process_due_sfx();
+
+        if (remaining == 0u) {
+            break;
+        }
+
+        uint32_t step = tick_ticks_until_next_boundary();
+        if (step == UINT32_MAX) {
+            tick_fast_forward(remaining);
+            remaining = 0u;
+            continue;
+        }
+        if (step == 0u) {
+            step = 1u;
+        }
+        if (step > remaining) {
+            step = remaining;
+        }
+        tick_fast_forward(step);
+        remaining -= step;
+    }
+
+    tick_maybe_stop_when_idle();
+}
+
+void sound_engine_tick(void) {
+    tick_drain_commands();
+    tick_process_due_stream(&g_sound_engine.music_stream);
+    tick_process_due_sfx();
+    tick_fast_forward(1u);
+    tick_maybe_stop_when_idle();
 }

@@ -33,6 +33,8 @@
 #define TRK1_EVT_NOTE    0
 #define TRK1_EVT_SET_VOL 1
 #define TRK1_EVT_END     2
+/* NOTE payload is uint16 LE frequency Hz (0 = rest); same gate/delay as NOTE */
+#define TRK1_EVT_NOTE_HZ 3
 
 #define TRK1_MAX_CHANNELS 16
 
@@ -99,8 +101,6 @@ typedef struct {
 typedef struct {
     ID       track_id;       /* interned symbol/keyword; pointer comparison */
     ID       retained_obj;   /* retained CljByteArray */
-    const uint8_t *data_ptr;
-    int      len;
     Trk1Header header;
 } SoundTrackEntry;
 
@@ -118,7 +118,6 @@ typedef struct {
     bool     active;
     ID       track_id;          /* for finished notification */
     const uint8_t *stream_start; /* for repeat/loop rewind */
-    uint8_t  channel_count;
 } SoundStream;
 
 /* ========================================================================= */
@@ -144,7 +143,6 @@ typedef struct {
 
 typedef struct {
     SoundStream stream;
-    uint8_t     priority;
     int         voice_index;    /* assigned voice, -1 if none */
 } SoundSfxInstance;
 
@@ -193,9 +191,6 @@ typedef struct {
 
     /* Telemetry */
     SoundTelemetry  telemetry;
-
-    /* Microseconds per tick (derived from BPM/TPQ or default 1000 = 1ms) */
-    uint32_t        us_per_tick;
 } SoundEngine;
 
 typedef struct {
@@ -264,12 +259,23 @@ void sound_engine_on_finished(ID callback_fn);
  * voice_output is filled with freq_hz values for each voice (0 = silent). */
 void sound_engine_tick(void);
 
+/* Advance engine state by N ticks. Zero ticks still drains pending commands and
+ * processes events that are already due at the current tick. */
+void sound_engine_advance_ticks(uint32_t ticks);
+
+/* Return how many ticks remain until the next meaningful engine deadline.
+ * Returns 0 when work is due immediately or no audio/tick work is pending. */
+uint32_t sound_engine_ticks_until_deadline(void);
+
 /* ========================================================================= */
 /* Voice backend (platform-specific)                                         */
 /* ========================================================================= */
 
 /* Called by tick when voice state changes. Platform implements this. */
 void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume);
+
+/* Returns true when backend-local debug audio should keep the tick alive. */
+bool sound_backend_keepalive_active(void);
 
 /* Called on init to set up hardware. */
 void sound_backend_init(int voice_count);
@@ -283,6 +289,7 @@ void sound_backend_shutdown(void);
 
 void sound_tick_start(void);
 void sound_tick_stop(void);
+void sound_tick_kick(void);
 
 /* Host backend status helper (debug).
  * On unsupported platforms returns false. */

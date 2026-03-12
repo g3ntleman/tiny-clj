@@ -27,8 +27,6 @@
    :backing {:volume 150}
    :tempo-bpm 140
    :gate-percent 78})
-(def minuet-in-g-duration-ms
-  (sound/track-duration-ms minuet-in-g-steps minuet-in-g-opts))
 (defn play-minuet-in-g!
   "Plays the two-buzzer Minuet in G demo phrase once."
   []
@@ -69,8 +67,6 @@
    :backing {:volume 128}
    :tempo-bpm 80
    :gate-percent 78})
-(def the-entertainer-duration-ms
-  (sound/track-duration-ms the-entertainer-steps the-entertainer-opts))
 (defn play-the-entertainer!
   "Plays a longer Mutopia-derived two-buzzer Entertainer phrase once."
   []
@@ -89,14 +85,395 @@
 (def gymnopedie-no-1-opts
   {:melody {:volume 210}
    :backing {:volume 120}
-   :tempo-bpm 60
+   :tempo-bpm 76
    :gate-percent 88})
-(def gymnopedie-no-1-duration-ms
-  (sound/track-duration-ms gymnopedie-no-1-steps gymnopedie-no-1-opts))
 (defn play-gymnopedie-no-1!
   "Plays a slow two-buzzer Gymnopedie No. 1 phrase once."
   []
   (sound/play-steps! gymnopedie-no-1-track-id gymnopedie-no-1-steps gymnopedie-no-1-opts))
+
+(def william-tell-finale-track-id :sound-demos-william-tell-finale)
+;; Full two-buzzer reduction of the fast William Tell finale.
+;; Rebuilt from ABC/MusicXML notation (no slow overture intro) so the full
+;; galloping tune is present instead of the truncated demo MIDI.
+(def william-tell-finale-steps
+  [{:melody :G4 :duration :e}
+   {:melody :G4 :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :B4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :E5 :backing [:C3] :duration :e}
+   {:melody :G5 :backing [:G2] :duration :h}
+   {:melody :G5 :backing [:G2] :duration :e}
+   {:melody :F5 :backing [:G2] :duration :e}
+   {:melody :E5 :backing [:G2] :duration :e}
+   {:melody :D5 :backing [:G2] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :B4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :E5 :backing [:C3] :duration :e}
+   {:melody :G5 :backing [:G2] :duration :h}
+   {:melody :G5 :backing [:G2] :duration :e}
+   {:melody :F5 :backing [:G2] :duration :e}
+   {:melody :E5 :backing [:G2] :duration :e}
+   {:melody :D5 :backing [:G2] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :e}
+   {:melody :E5 :backing [:C3] :duration :e}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :e}
+   {:melody :E5 :backing [:A2] :duration :e}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :A5 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :A5 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :A5 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :D5 :backing [:A2] :duration :q}
+   {:melody :C5 :backing [:A2] :duration :q}
+   {:melody :B4 :backing [:A2] :duration :q}
+   {:melody :A4 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :e}
+   {:melody :E5 :backing [:A2] :duration :e}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :e}
+   {:melody :E5 :backing [:A2] :duration :e}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :A5 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :A5 :backing [:A2] :duration :q}
+   {:melody :E5 :backing [:A2] :duration :q}
+   {:melody :A5 :backing [:A2] :duration :q}
+   {:melody :G5 :backing [:D3] :duration :q}
+   {:melody :Fs5 :backing [:D3] :duration :q}
+   {:melody :G5 :backing [:G2] :duration :dh}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :e}
+   {:melody :D5 :backing [:G2] :duration :e}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :E5 :backing [:G2] :duration :q}
+   {:melody :F5 :backing [:G2] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :h}
+   {:melody :F5 :backing [:G2] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :h}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :h}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :e}
+   {:melody :D5 :backing [:G2] :duration :e}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :E5 :backing [:G2] :duration :q}
+   {:melody :F5 :backing [:G2] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :h}
+   {:melody :F5 :backing [:G2] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :h}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :B4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :E5 :backing [:C3] :duration :e}
+   {:melody :G5 :backing [:G2] :duration :h}
+   {:melody :G5 :backing [:G2] :duration :e}
+   {:melody :F5 :backing [:G2] :duration :e}
+   {:melody :E5 :backing [:G2] :duration :e}
+   {:melody :D5 :backing [:G2] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:G2] :duration :q}
+   {:melody :B4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :E5 :backing [:C3] :duration :e}
+   {:melody :G5 :backing [:G2] :duration :h}
+   {:melody :G5 :backing [:G2] :duration :e}
+   {:melody :F5 :backing [:G2] :duration :e}
+   {:melody :E5 :backing [:G2] :duration :e}
+   {:melody :D5 :backing [:G2] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :h}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:E3] :duration :dh}
+   {:melody :D5 :backing [:E3] :duration :q}
+   {:melody :C5 :backing [:F3] :duration :q}
+   {:melody :B4 :backing [:F3] :duration :q}
+   {:melody :C5 :backing [:F3] :duration :q}
+   {:melody :A4 :backing [:F3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :A4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :A4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :A4 :backing [:C3] :duration :e}
+   {:melody :B4 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :F4 :backing [:D3] :duration :e}
+   {:melody :G4 :backing [:D3] :duration :e}
+   {:melody :F4 :backing [:D3] :duration :e}
+   {:melody :G4 :backing [:D3] :duration :e}
+   {:melody :F4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :A4 :backing [:G2] :duration :e}
+   {:melody :B4 :backing [:G2] :duration :e}
+   {:melody :E4 :backing [:C3] :duration :e}
+   {:melody :F4 :backing [:C3] :duration :e}
+   {:melody :E4 :backing [:C3] :duration :e}
+   {:melody :F4 :backing [:C3] :duration :e}
+   {:melody :E4 :backing [:C3] :duration :e}
+   {:melody :F4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :A4 :backing [:C3] :duration :e}
+   {:melody :D4 :backing [:D3] :duration :e}
+   {:melody :E4 :backing [:D3] :duration :e}
+   {:melody :D4 :backing [:D3] :duration :e}
+   {:melody :E4 :backing [:D3] :duration :e}
+   {:melody :D4 :backing [:D3] :duration :e}
+   {:melody :E4 :backing [:D3] :duration :e}
+   {:melody :D4 :backing [:D3] :duration :e}
+   {:melody :E4 :backing [:D3] :duration :e}
+   {:melody :D4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:E3] :duration :dh}
+   {:melody :D5 :backing [:E3] :duration :q}
+   {:melody :C5 :backing [:F3] :duration :q}
+   {:melody :B4 :backing [:F3] :duration :q}
+   {:melody :C5 :backing [:F3] :duration :q}
+   {:melody :A4 :backing [:F3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :A4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :A4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :A4 :backing [:C3] :duration :e}
+   {:melody :B4 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :F4 :backing [:D3] :duration :e}
+   {:melody :G4 :backing [:D3] :duration :e}
+   {:melody :F4 :backing [:D3] :duration :e}
+   {:melody :G4 :backing [:D3] :duration :e}
+   {:melody :F4 :backing [:G2] :duration :e}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :A4 :backing [:G2] :duration :e}
+   {:melody :B4 :backing [:G2] :duration :e}
+   {:melody :E4 :backing [:C3] :duration :e}
+   {:melody :F4 :backing [:C3] :duration :e}
+   {:melody :E4 :backing [:C3] :duration :e}
+   {:melody :F4 :backing [:C3] :duration :e}
+   {:melody :E4 :backing [:C3] :duration :e}
+   {:melody :F4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :A4 :backing [:C3] :duration :e}
+   {:melody :D4 :backing [:D3] :duration :q}
+   {:melody :E4 :backing [:D3] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :e}
+   {:melody :F4 :backing [:G2] :duration :e}
+   {:melody :E4 :backing [:G2] :duration :e}
+   {:melody :D4 :backing [:G2] :duration :e}
+   {:melody :C4 :backing [:C3] :duration :dh}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :e}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :G4 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:melody :F5 :backing [:C3] :duration :q}
+   {:melody :G5 :backing [:C3] :duration :q}
+   {:rest :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :D5 :backing [:C3] :duration :q}
+   {:melody :E5 :backing [:C3] :duration :q}
+   {:rest :q}
+   {:melody :E4 :backing [:G2] :duration :q}
+   {:melody :F4 :backing [:G2] :duration :q}
+   {:melody :G4 :backing [:G2] :duration :q}
+   {:rest :q}
+   {:rest :h}
+   {:melody :B4 :backing [:G2] :duration :h}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :B4 :backing [:G2] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :B4 :backing [:G2] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :B4 :backing [:G2] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:melody :B4 :backing [:G2] :duration :q}
+   {:melody :C5 :backing [:C3] :duration :h}
+   {:rest :q}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:rest :q}
+   {:melody :C5 :backing [:C3] :duration :q}
+   {:rest :q}
+   {:melody :C5 :backing [:C3] :duration :h}
+   {:rest :q}
+   {:rest :e}
+   {:melody :E5 :backing [:C3] :duration :e}
+   {:melody :E5 :backing [:C3] :duration :h}
+   {:rest :q}
+   {:rest :e}
+   {:melody :C5 :backing [:C3] :duration :e}
+   {:melody :C5 :backing [:C3] :duration :w}])
+(def william-tell-finale-opts
+  {:melody {:volume 220}
+   :backing {:volume 138}
+   :tempo-bpm 152
+   :gate-percent 84})
+(defn play-william-tell-finale!
+  "Plays the full fast William Tell finale once, based on notation instead of the truncated demo MIDI."
+  []
+  (sound/play-steps! william-tell-finale-track-id william-tell-finale-steps william-tell-finale-opts))
 
 (def rondo-alla-turca-track-id :sound-demos-rondo-alla-turca)
 (def rondo-alla-turca-steps
@@ -126,8 +503,6 @@
    :backing {:volume 142}
    :tempo-bpm 120
    :gate-percent 72})
-(def rondo-alla-turca-duration-ms
-  (sound/track-duration-ms rondo-alla-turca-steps rondo-alla-turca-opts))
 (defn play-rondo-alla-turca!
   "Plays a compact two-buzzer Rondo alla Turca phrase once."
   []
@@ -152,8 +527,6 @@
    :backing {:volume 138}
    :tempo-bpm 60
    :gate-percent 80})
-(def hall-of-the-mountain-king-duration-ms
-  (sound/track-duration-ms hall-of-the-mountain-king-steps hall-of-the-mountain-king-opts))
 (defn play-hall-of-the-mountain-king!
   "Plays a compact two-buzzer Hall of the Mountain King phrase once."
   []
@@ -182,34 +555,44 @@
    :backing {:volume 152}
    :tempo-bpm 120
    :gate-percent 76})
-(def can-can-duration-ms
-  (sound/track-duration-ms can-can-steps can-can-opts))
 (defn play-can-can!
   "Plays a compact two-buzzer Can Can phrase once."
   []
   (sound/play-steps! can-can-track-id can-can-steps can-can-opts))
 
 (def rocket-launch-sfx-track-id :sound-demos-rocket-launch-sfx)
+;; Rocket/thruster SFX tuned closer to the host reference:
+;; two long noisy rise phases plus a short bright exhaust tail.
 (def rocket-launch-sfx-steps
-  [{:notes [:E1] :duration :s}
-   {:notes [:E1] :duration :s}
-   {:notes [:F1] :duration :s}
-   {:notes [:F1] :duration :s}
-   {:notes [:G1] :duration :s}
-   {:notes [:G1] :duration :s}
-   {:notes [:A1] :duration :s}
-   {:notes [:A1] :duration :s}
-   {:notes [:C2] :duration :s}
-   {:notes [:E2] :duration :s}
-   {:notes [:G2] :duration :s}
-   {:notes [:B2] :duration :s}])
+  [{:notes [180] :bend [285] :noise true :duration 1100}
+   {:notes [220] :bend [345] :noise true :duration 1100}
+   {:notes [560] :duration 80}])
 (def rocket-launch-sfx-opts
-  {:volumes [240] :tempo-bpm 60 :gate-percent 100})
-(def rocket-launch-sfx-duration-ms
-  (sound/track-duration-ms rocket-launch-sfx-steps rocket-launch-sfx-opts))
+  {:channel-count 1
+   :volumes [240]
+   :gate-percent 100})
 (defn play-rocket-launch-sfx!
-  "Plays a one-shot ascending frequency sweep simulating a rocket launch.
-  Uses play-sfx! for fire-and-forget playback without interrupting background music."
+  "Plays a one-shot rocket launch SFX using tuned compile-time bend+noise expansion."
   []
   (sound/play-sfx! rocket-launch-sfx-track-id rocket-launch-sfx-steps rocket-launch-sfx-opts))
+
+;; -----------------------------------------------------------------------------
+;; Laser SFX: DSL-only downward chirp via bounded compile-time bend expansion.
+;; -----------------------------------------------------------------------------
+
+(def laser-sfx-track-id :sound-demos-laser)
+
+;; One bounded bend step plus a short tail for a compact downward chirp.
+(def laser-sfx-steps
+  [{:notes [5200] :bend [1200] :duration 160}
+   {:notes [550] :duration 56}])
+
+(def laser-sfx-opts
+  {:channel-count 1
+   :volumes [228]
+   :gate-percent 88})
+(defn play-laser-sfx!
+  "One-shot laser pew via compile-time bend expansion."
+  []
+  (sound/play-sfx! laser-sfx-track-id laser-sfx-steps laser-sfx-opts))
 

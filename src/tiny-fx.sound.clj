@@ -22,13 +22,16 @@ R"TINY_SND_CMP(
   (throw message))
 
 (defn note->midi
-  "Converts a note keyword to a MIDI note number.
+  "Converts a note keyword to a MIDI note number (0..127).
 
    Supported note syntax:
    - :C4, :D5, :A3
    - sharps: :Cs4 or :C#4
    - flats: :Db4, :Bb3
    - rest: :REST
+
+   For explicit Hz use an integer in :notes (see compile-track); integers are
+   Hz, not MIDI.
 
    Pitch letters must be uppercase. Octaves are single-digit."
   [note-kw]
@@ -79,14 +82,32 @@ R"TINY_SND_CMP(
   ;; has_delay=0, event_type=1 (SET_VOL)
   [(+ (* 1 16) ch) vol])
 
-(defn- evt-note [ch note-kw gate-ms has-delay delay-ms]
-  ;; has_delay bit in bit7, event_type=0 (NOTE)
+(defn- evt-note-midi [ch note-kw gate-ms has-delay delay-ms]
+  ;; has_delay bit in bit7, event_type=0 (NOTE), payload = MIDI 0..127
   (let [ctrl (+ (if has-delay 128 0) (* 0 16) ch)
         base [ctrl (note->midi note-kw)]
         base2 (reduce conj base (varuint gate-ms))]
     (if has-delay
       (reduce conj base2 (varuint delay-ms))
       base2)))
+
+(defn- evt-note-hz [ch freq-hz gate-ms has-delay delay-ms]
+  ;; has_delay bit in bit7, event_type=3 (NOTE_HZ), payload = uint16 LE Hz (0 = rest)
+  (when (or (not (integer? freq-hz)) (< freq-hz 0) (> freq-hz 20000))
+    (fail "compile-track: frequency Hz must be integer 0..20000"))
+  (let [ctrl (+ (if has-delay 128 0) (* 3 16) ch)
+        lo (mod freq-hz 256)
+        hi (mod (quot freq-hz 256) 256)
+        base [ctrl lo hi]
+        base2 (reduce conj base (varuint gate-ms))]
+    (if has-delay
+      (reduce conj base2 (varuint delay-ms))
+      base2)))
+
+(defn- evt-note [ch note-val gate-ms has-delay delay-ms]
+  (if (integer? note-val)
+    (evt-note-hz ch note-val gate-ms has-delay delay-ms)
+    (evt-note-midi ch note-val gate-ms has-delay delay-ms)))
 
 (defn- evt-end []
   ;; has_delay=0, event_type=2 (END), channel=0
@@ -151,8 +172,18 @@ R"TINY_SND_CMP(
    :et [1 3]
    :st [1 6]})
 
+(def ^:private bend-default-segment-ms 15)
+(def ^:private bend-max-segments 16)
+(def ^:private noise-default-segment-ms 12)
+(def ^:private noise-max-segments 24)
+
 (defn- duration->ms [dur tempo-bpm]
-  (if (keyword? dur)
+  (cond
+    (integer? dur)
+    (if (>= dur 1)
+      dur
+      (fail "Step duration integer must be >= 1 ms"))
+    (keyword? dur)
     (let [frac (get duration-fraction-map dur)]
       (if (nil? frac)
         (fail "Unknown musical duration keyword")
@@ -161,11 +192,8 @@ R"TINY_SND_CMP(
               den (nth frac 1)]
           ;; Round to nearest integer ms: (x + den/2) / den
           (max 1 (quot (+ (* quarter-ms num) (quot den 2)) den)))))
-    (fail "Step duration must be a musical keyword (:q, :e, :dq, ...)")))
-
-(defn- step-has-melody-backing? [step]
-  (or (not (nil? (get step :melody)))
-      (not (nil? (get step :backing)))))
+    :else
+    (fail "Step duration must be a musical keyword (:q, :e, :dq, ...) or integer milliseconds")))
 
 (defn- step-duration-spec [step ex-prefix]
   (let [rest-dur (get step :rest)
@@ -177,52 +205,264 @@ R"TINY_SND_CMP(
       (fail (str ex-prefix " step must not use both :duration and :rest")))
     (if has-rest rest-dur (or duration :q))))
 
-(defn- normalize-playback-config [steps opts]
+(defn- resolve-tempo-bpm [steps opts ex-prefix]
+  (let [opts* (or opts {})
+        tempo-provided (contains? opts* :tempo-bpm)
+        tempo-bpm (get opts* :tempo-bpm)
+        tempo-required (loop [s steps]
+                         (if (empty? s)
+                           false
+                           (if (keyword? (step-duration-spec (first s) ex-prefix))
+                             true
+                             (recur (rest s)))))]
+    (when (and (not tempo-provided) tempo-required)
+      (fail (str ex-prefix ": :tempo-bpm is required when using musical duration keywords")))
+    (when tempo-provided
+      (when (or (not (integer? tempo-bpm)) (< tempo-bpm 20) (> tempo-bpm 400))
+        (fail (str ex-prefix " :tempo-bpm must be in 20..400"))))
+    tempo-bpm))
+
+(defn- note-value->hz [note-val ex-prefix]
+  (if (integer? note-val)
+    (do
+      (when (or (< note-val 0) (> note-val 20000))
+        (fail (str ex-prefix " modulated channel frequency must be integer 0..20000")))
+      note-val)
+    (fail (str ex-prefix " modulated channels currently require integer Hz values"))))
+
+(defn- bounded-segment-count [duration-ms default-segment-ms max-segments]
+  (let [approx (quot (+ duration-ms (- default-segment-ms 1)) default-segment-ms)
+        capped (min max-segments (max 1 approx))]
+    (min duration-ms capped)))
+
+(defn- split-duration-evenly [duration-ms segment-count]
+  (let [base (quot duration-ms segment-count)
+        extra (mod duration-ms segment-count)]
+    (loop [i 0 out []]
+      (if (< i segment-count)
+        (recur (+ i 1)
+               (conj out (+ base (if (< i extra) 1 0))))
+        out))))
+
+(defn- bend-interpolate-hz [start-hz end-hz segment-index segment-count]
+  (if (<= segment-count 1)
+    end-hz
+    (let [den (- segment-count 1)
+          num (+ (* start-hz (- den segment-index))
+                 (* end-hz segment-index))]
+      (quot (+ num (quot den 2)) den))))
+
+(defn- bend-targets-for-step [step channel-count ex-prefix]
+  (let [bend (get step :bend)
+        has-rest (not (nil? (get step :rest)))]
+    (if (nil? bend)
+      nil
+      (do
+        (when has-rest
+          (fail (str ex-prefix " step must not use :bend with :rest")))
+        (when (not (vector? bend))
+          (fail (str ex-prefix " :bend must be a vector matching :notes channels")))
+        (when (> (count bend) channel-count)
+          (fail (str ex-prefix " :bend must not be wider than the resolved channel count")))
+        (loop [i 0 out []]
+          (if (< i channel-count)
+            (recur (+ i 1) (conj out (nth bend i nil)))
+            out))))))
+
+(defn- any-non-nil? [xs]
+  (loop [i 0]
+    (if (< i (count xs))
+      (if (nil? (nth xs i))
+        (recur (+ i 1))
+        true)
+      false)))
+
+(defn- any-true? [xs]
+  (if (nil? xs)
+    false
+    (loop [i 0]
+      (if (< i (count xs))
+        (if (= true (nth xs i))
+          true
+          (recur (+ i 1)))
+        false))))
+
+(defn- validate-noise-flag [step ex-prefix]
+  (let [noise (get step :noise)]
+    (when (and (not (nil? noise))
+               (not (= noise true))
+               (not (= noise false)))
+      (fail (str ex-prefix " :noise must be boolean")))
+    noise))
+
+(defn- generic-noise-mask-for-step [step channel-count ex-prefix]
+  (let [noise (validate-noise-flag step ex-prefix)]
+    (if (= noise true)
+      (do
+        (when (not (= channel-count 1))
+          (fail (str ex-prefix " :noise in generic :notes mode currently requires exactly 1 channel")))
+        [true])
+      nil)))
+
+(defn- noise-mask-for-step [step channel-count ex-prefix]
+  (let [mask (get step :noise-channels)]
+    (if (nil? mask)
+      (generic-noise-mask-for-step step channel-count ex-prefix)
+      (do
+        (when (not (vector? mask))
+          (fail (str ex-prefix " internal :noise-channels marker must be a vector")))
+        (when (not (= (count mask) channel-count))
+          (fail (str ex-prefix " internal :noise-channels marker must match channel count")))
+        mask))))
+
+(defn- modulation-segment-count [duration-ms bend-targets noise-mask]
+  (if (any-true? noise-mask)
+    (bounded-segment-count duration-ms noise-default-segment-ms noise-max-segments)
+    (if (any-non-nil? bend-targets)
+      (bounded-segment-count duration-ms bend-default-segment-ms bend-max-segments)
+      1)))
+
+(defn- noise-radius-hz [center-hz]
+  (if (<= center-hz 0)
+    0
+    (max 6 (min 48 (quot center-hz 10)))))
+
+(defn- perturb-hz-for-noise [center-hz segment-index channel-index]
+  (if (<= center-hz 0)
+    0
+    (let [radius (noise-radius-hz center-hz)
+          raw (mod (+ (* (+ segment-index 1) 73)
+                      (* (+ channel-index 1) 19)
+                      (* center-hz 7))
+                   9)
+          centered (- raw 4)
+          offset (quot (* centered radius) 4)
+          hz (+ center-hz offset)]
+      (max 1 (min 20000 hz)))))
+
+(defn- prepare-modulation-frequencies [notes bend-targets noise-mask channel-count]
+  (loop [ch 0 start-hzs [] end-hzs []]
+    (if (< ch channel-count)
+      (let [note-val (nth notes ch)
+            target-val (if (nil? bend-targets) nil (nth bend-targets ch nil))
+            noisy? (if (nil? noise-mask) false (= true (nth noise-mask ch false)))]
+        (if (or noisy? (not (nil? target-val)))
+          (let [start-hz (note-value->hz note-val "compile-track")
+                end-hz (if (nil? target-val)
+                         nil
+                         (note-value->hz target-val "compile-track"))]
+            (recur (+ ch 1)
+                   (conj start-hzs start-hz)
+                   (conj end-hzs end-hz)))
+          (recur (+ ch 1)
+                 (conj start-hzs nil)
+                 (conj end-hzs nil))))
+      {:start-hzs start-hzs
+       :end-hzs end-hzs})))
+
+(defn- expand-modulated-step [step channel-count tempo-bpm]
+  (let [bend-targets (bend-targets-for-step step channel-count "compile-track")
+        noise-mask (noise-mask-for-step step channel-count "compile-track")
+        has-modulation (or (any-non-nil? bend-targets) (any-true? noise-mask))]
+    (if (not has-modulation)
+      [step]
+      (let [duration-ms (duration->ms (step-duration-spec step "compile-track") tempo-bpm)
+            notes (normalize-notes (or (get step :notes) []) channel-count)
+            segment-count (modulation-segment-count duration-ms bend-targets noise-mask)
+            segment-durations (split-duration-evenly duration-ms segment-count)
+            prepared (prepare-modulation-frequencies notes bend-targets noise-mask channel-count)
+            start-hzs (get prepared :start-hzs)
+            end-hzs (get prepared :end-hzs)]
+        (loop [seg 0 out []]
+          (if (< seg segment-count)
+            (let [segment-notes (loop [ch 0 acc []]
+                                  (if (< ch channel-count)
+                                    (let [note-val (nth notes ch)
+                                          start-hz (nth start-hzs ch nil)
+                                          end-hz (nth end-hzs ch nil)
+                                          noisy? (if (nil? noise-mask) false (= true (nth noise-mask ch false)))]
+                                      (if (nil? start-hz)
+                                        (recur (+ ch 1) (conj acc note-val))
+                                        (let [center-hz (if (nil? end-hz)
+                                                          start-hz
+                                                          (bend-interpolate-hz start-hz end-hz seg segment-count))
+                                              out-hz (if noisy?
+                                                       (perturb-hz-for-noise center-hz seg ch)
+                                                       center-hz)]
+                                          (recur (+ ch 1) (conj acc out-hz)))))
+                                    acc))
+                  segment-step (assoc step
+                                      :notes segment-notes
+                                      :duration (nth segment-durations seg))]
+              (recur (+ seg 1) (conj out segment-step)))
+            out))))))
+
+(defn- expand-modulated-steps [steps opts tempo-bpm]
+  (let [channel-count (or (get opts :channel-count) (infer-channel-count steps))]
+    (loop [s steps out []]
+      (if (empty? s)
+        out
+        (recur (rest s) (into out (expand-modulated-step (first s) channel-count tempo-bpm)))))))
+
+(defn- ensure-no-melody-backing-bend [steps]
+  (loop [s steps]
+    (when (not (empty? s))
+      (let [step (first s)]
+        (when (and (or (not (nil? (get step :melody)))
+                       (not (nil? (get step :backing))))
+                   (contains? step :bend))
+          (fail "compile-track: :bend is not yet supported in melody/backing mode"))
+        (recur (rest s))))))
+
+(defn- normalize-playback-config [steps opts ex-prefix]
   (let [has-melody-backing (loop [s steps]
                              (if (empty? s)
                                false
                                (let [step (first s)]
-                                 (if (step-has-melody-backing? step)
+                                 (if (or (not (nil? (get step :melody)))
+                                         (not (nil? (get step :backing))))
                                    true
                                    (recur (rest s))))))
+        _ (when has-melody-backing
+            (ensure-no-melody-backing-bend steps))
         opts* (if has-melody-backing
                 (compile-opts-melody-backing steps opts)
                 opts)
         steps* (if has-melody-backing
                  (melody-backing->steps steps opts)
-                 steps)]
-    {:steps steps*
-     :opts opts*}))
+                 steps)
+        tempo-bpm (resolve-tempo-bpm steps* opts* ex-prefix)
+        steps** (expand-modulated-steps steps* opts* tempo-bpm)]
+    {:steps steps**
+     :opts opts*
+     :tempo-bpm tempo-bpm}))
 
-(defn- track-duration-ms* [steps opts]
-  (let [tempo-bpm (or (get opts :tempo-bpm) 120)]
-    (loop [s steps total 0]
-      (if (empty? s)
-        total
-        (let [step (first s)
-              dur (duration->ms (step-duration-spec step "compile-track") tempo-bpm)]
-          (recur (rest s) (+ total dur)))))))
+(defn- track-duration-ms* [steps tempo-bpm]
+  (loop [s steps total 0]
+    (if (empty? s)
+      total
+      (let [step (first s)
+            dur (duration->ms (step-duration-spec step "compile-track") tempo-bpm)]
+        (recur (rest s) (+ total dur))))))
 
 (defn track-duration-ms
   "Returns the total playback time in milliseconds for the given step sequence.
 
    Accepts the same DSL and options as compile-track, including melody/backing
-   shorthand. A missing :duration defaults to :q."
+   shorthand. A missing :duration defaults to :q. :tempo-bpm is required when
+   any step uses a musical duration keyword."
   [steps opts]
-  (let [cfg (normalize-playback-config steps opts)
+  (let [cfg (normalize-playback-config steps opts "track-duration-ms")
         steps* (get cfg :steps)
-        opts* (get cfg :opts)]
-    (track-duration-ms* steps* opts*)))
+        tempo-bpm (get cfg :tempo-bpm)]
+    (track-duration-ms* steps* tempo-bpm)))
 
 (defn- compile-track*
-  [steps opts]
+  [steps opts tempo-bpm]
   (let [inferred (infer-channel-count steps)
         channel-count (or (get opts :channel-count) inferred)
         _ (when (or (< channel-count 1) (> channel-count 16))
             (fail "compile-track: :channel-count must be in 1..16"))
-        tempo-bpm (or (get opts :tempo-bpm) 120)
-        _ (when (or (< tempo-bpm 20) (> tempo-bpm 400))
-            (fail "compile-track: :tempo-bpm must be in 20..400"))
         gate-percent (or (get opts :gate-percent) 82)
         volumes (or (get opts :volumes) [200 180 160 140])
         events0 (build-initial-vol-events channel-count volumes)
@@ -252,7 +492,9 @@ R"TINY_SND_CMP(
 (defn compile-track
   "Generic N-voice compiler (1..16 channels).
    Step format:
-   {:notes [:G5 :D5 ...] :duration :q}
+   {:notes [:G5 :D5 ...] :duration :q}   ;; keywords = MIDI
+   {:notes [440 880] :duration :q}       ;; integers = Hz (TRK1 NOTE_HZ)
+   {:notes [220] :bend [440] :duration 120} ;; compile-time bend expansion (integer Hz only)
    {:melody :G5 :backing [:D5 :Bb4 ...] :duration :q} ;; backing auto-fills channels
    {:rest :e}                     ;; full rest for all channels
    {:notes [:G5]}                 ;; :duration defaults to :q
@@ -271,33 +513,34 @@ R"TINY_SND_CMP(
    - :duration and :rest are mutually exclusive on the same step
    - missing notes are padded with :REST up to :channel-count
    - if :channel-count is omitted it is inferred from the widest step
-   - if any step uses :melody or :backing, the sequence is normalized through
-     melody-backing->steps
+   - if any step uses :melody or :backing, the sequence is normalized internally
+     before compilation
+   - :bend currently works only in generic :notes mode, not melody/backing mode
+   - bent channels currently require integer Hz values in both :notes and :bend
    - in melody/backing mode, role options own the channel layout; do not pass
      top-level :channel-count or :volumes there
    - melody defaults to 1 channel with volume 220
    - backing channel count is inferred from the widest backing step, defaulting
      to 1 when backing role options are present without wider backing data
+   - :tempo-bpm is required when any step uses a musical duration keyword;
+     integer-only durations/rests do not need it
    Supported duration keywords:
-   :w :h :q :e :s :t :dh :dq :de :ds :qt :et :st"
+   :w :h :q :e :s :t :dh :dq :de :ds :qt :et :st
+   Integer durations are interpreted as milliseconds."
   [steps opts]
-  (let [cfg (normalize-playback-config steps opts)
+  (let [cfg (normalize-playback-config steps opts "compile-track")
         steps* (get cfg :steps)
-        opts* (get cfg :opts)]
-    (compile-track* steps* opts*)))
-
-(defn- play-result->status [ok]
-  (if ok :playing :stopped))
-
-(defn- play-sfx-result->status [ok]
-  (if ok :playing :dropped))
+        opts* (get cfg :opts)
+        tempo-bpm (get cfg :tempo-bpm)]
+    (compile-track* steps* opts* tempo-bpm)))
 
 (defn- prepare-track-playback [steps opts]
-  (let [cfg (normalize-playback-config steps opts)
+  (let [cfg (normalize-playback-config steps opts "compile-track")
         steps* (get cfg :steps)
-        opts* (get cfg :opts)]
-    {:track-bytes (compile-track* steps* opts*)
-     :duration-ms (track-duration-ms* steps* opts*)}))
+        opts* (get cfg :opts)
+        tempo-bpm (get cfg :tempo-bpm)]
+    {:track-bytes (compile-track* steps* opts* tempo-bpm)
+     :duration-ms (track-duration-ms* steps* tempo-bpm)}))
 
 (defn play-steps!
   "Compiles, loads and plays steps once.
@@ -309,7 +552,7 @@ R"TINY_SND_CMP(
         track-bytes (get prepared :track-bytes)
         duration-ms (get prepared :duration-ms)]
     (native/sound-load-track! track-id track-bytes)
-    {:status (play-result->status (native/sound-play-music! track-id 1))
+    {:status (if (native/sound-play-music! track-id 1) :playing :stopped)
      :duration-ms duration-ms}))
 
 (defn play-sfx!
@@ -321,7 +564,7 @@ R"TINY_SND_CMP(
         track-bytes (get prepared :track-bytes)
         duration-ms (get prepared :duration-ms)]
     (native/sound-load-track! track-id track-bytes)
-    {:status (play-sfx-result->status (native/sound-play-sfx! track-id))
+    {:status (if (native/sound-play-sfx! track-id) :playing :dropped)
      :duration-ms duration-ms}))
 
 ;; Melody + backing transformation helper.
@@ -356,14 +599,11 @@ R"TINY_SND_CMP(
     (fail "Role :channels must be an integer in 1..16"))
   channels)
 
-(defn- step-has-backing? [step]
-  (not (nil? (get step :backing))))
-
 (defn- any-step-has-backing? [steps]
   (loop [s steps]
     (if (empty? s)
       false
-      (if (step-has-backing? (first s))
+      (if (not (nil? (get (first s) :backing)))
         true
         (recur (rest s))))))
 
@@ -462,7 +702,7 @@ R"TINY_SND_CMP(
           (recur (+ i 1) (conj out (nth backing (mod i (count backing)))))
           out)))))
 
-(defn melody-backing->steps
+(defn- melody-backing->steps
   "Normalizes melody+backing steps into generic {:notes [...] :duration ...} steps.
    Backing is automatically expanded to all available backing channels.
    Melody always uses 1 channel.
@@ -481,12 +721,25 @@ R"TINY_SND_CMP(
                    (let [step (first s)
                          rest-dur (get step :rest)
                          has-rest (not (nil? rest-dur))
+                         noise (validate-noise-flag step "compile-track-melody-backing")
                          melody (if has-rest :REST (or (get step :melody) :REST))
                          dur (step-duration-spec step "compile-track-melody-backing")
                          backing-src (if has-rest [] (or (get step :backing) []))
                          backing (expand-backing-auto backing-src backing-count)
-                         notes (into [melody] backing)]
-                    (recur (rest s) (conj out {:notes notes :duration dur})))))]
+                         notes (into [melody] backing)
+                         noise-channels (if (= noise true)
+                                          (do
+                                            (when (<= backing-count 0)
+                                              (fail "compile-track-melody-backing: :noise requires at least one backing channel"))
+                                            (loop [i 0 mask [false]]
+                                              (if (< i backing-count)
+                                                (recur (+ i 1) (conj mask true))
+                                                mask)))
+                                          nil)
+                         step2 (if (nil? noise-channels)
+                                 {:notes notes :duration dur}
+                                 {:notes notes :duration dur :noise-channels noise-channels})]
+                    (recur (rest s) (conj out step2)))))]
     steps2))
 
 )TINY_SND_CMP"
