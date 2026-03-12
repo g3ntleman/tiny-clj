@@ -6,7 +6,9 @@
 
 static CljSymbol *SYM_TEST_RECORD_TYPE_KEYS = NULL;
 static CljSymbol *SYM_TEST_RECORD_TYPE_VALUES = NULL;
+static CljSymbol *SYM_TEST_RECORD_TYPE_VALUES_ARRAY = NULL;
 static CljSymbol *SYM_TEST_RECORD_TYPE_MAP = NULL;
+static CljSymbol *SYM_TEST_RECORD_TYPE_CONFLICT = NULL;
 
 static CljSymbol *test_record_type_symbol(CljSymbol **slot, const char *name) {
     TEST_ASSERT_NOT_NULL(slot);
@@ -517,6 +519,37 @@ TEST(test_record_assoc_via_eval_does_not_leak_descriptor_retains) {
     TEST_ASSERT_EQUAL_INT(baseline_rc, retain_count((ID)desc));
 }
 
+TEST(test_make_record_with_descriptor_values_retains_and_nil_pads, 0) {
+    ID type_name = (ID)test_record_type_symbol(&SYM_TEST_RECORD_TYPE_VALUES_ARRAY, "ManualTypeValuesArray");
+    ID key_a = make_string("field-a");
+    ID key_b = make_string("field-b");
+    ID value_a = make_string("value-a");
+
+    CljPersistentVector *fields = make_vector(2, STRONG);
+    TEST_ASSERT_NOT_NULL(fields);
+    vector_conj_inplace(&fields, key_a);
+    vector_conj_inplace(&fields, key_b);
+
+    CljRecordDescriptor *desc = record_descriptor_create(type_name, fields);
+    TEST_ASSERT_NOT_NULL(desc);
+
+    int value_rc_before = retain_count(value_a);
+    ID values[1] = { value_a };
+    CljPersistentRecord *record = make_record_with_descriptor_values(desc, values, 1u);
+    TEST_ASSERT_NOT_NULL(record);
+    TEST_ASSERT_EQUAL_INT(value_rc_before + 1, retain_count(value_a));
+    TEST_ASSERT_EQUAL_PTR(value_a, record->values[0]);
+    TEST_ASSERT_NULL(record->values[1]);
+
+    RELEASE(record);
+    TEST_ASSERT_EQUAL_INT(value_rc_before, retain_count(value_a));
+    RELEASE(desc);
+    RELEASE(fields);
+    RELEASE(key_a);
+    RELEASE(key_b);
+    RELEASE(value_a);
+}
+
 TEST(test_record_descriptor_create_rejects_non_symbol_type_name) {
     ID bad_type_name = make_string("NotASymbol");
     TEST_ASSERT_NOT_NULL(bad_type_name);
@@ -536,6 +569,46 @@ TEST(test_record_descriptor_create_rejects_non_symbol_type_name) {
 
     RELEASE(fields);
     RELEASE(bad_type_name);
+    TEST_ASSERT_TRUE(exception_caught);
+}
+
+TEST(test_record_register_reports_conflicting_field_sets_in_message, 0) {
+    ID type_symbol = (ID)test_record_type_symbol(&SYM_TEST_RECORD_TYPE_CONFLICT, "ConflictRecordDiag");
+    ID kw_a = intern_symbol_global(":a");
+    ID kw_b = intern_symbol_global(":b");
+    ID kw_c = intern_symbol_global(":c");
+
+    CljPersistentVector *fields_ab = make_vector(2, STRONG);
+    TEST_ASSERT_NOT_NULL(fields_ab);
+    vector_conj_inplace(&fields_ab, kw_a);
+    vector_conj_inplace(&fields_ab, kw_b);
+
+    CljPersistentVector *fields_ac = make_vector(2, STRONG);
+    TEST_ASSERT_NOT_NULL(fields_ac);
+    vector_conj_inplace(&fields_ac, kw_a);
+    vector_conj_inplace(&fields_ac, kw_c);
+
+    TEST_ASSERT_NOT_NULL(record_register_descriptor(type_symbol, fields_ab));
+
+    bool exception_caught = false;
+    TRY {
+        (void)record_register_descriptor(type_symbol, fields_ac);
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING(EXCEPTION_ILLEGAL_ARGUMENT, ex->type);
+        TEST_ASSERT_NOT_NULL_MESSAGE(strstr(ex->message, "ConflictRecordDiag"),
+                                     "message should include conflicting type name");
+        TEST_ASSERT_NOT_NULL_MESSAGE(strstr(ex->message, ":a"),
+                                     "message should include shared field names");
+        TEST_ASSERT_NOT_NULL_MESSAGE(strstr(ex->message, ":b"),
+                                     "message should include existing field set");
+        TEST_ASSERT_NOT_NULL_MESSAGE(strstr(ex->message, ":c"),
+                                     "message should include incoming field set");
+    } END_TRY
+
+    RELEASE(fields_ab);
+    RELEASE(fields_ac);
     TEST_ASSERT_TRUE(exception_caught);
 }
 

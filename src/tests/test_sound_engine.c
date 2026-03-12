@@ -561,7 +561,7 @@ TEST(test_sound_finished_callback_runs_via_event_loop) {
   TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
   TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
 
-  ID done = eval_string("(= @sound-finished-track [:sound :finished :finish-test])", g_test_eval_state);
+  ID done = eval_string("(= @sound-finished-track [:audio :finished :finish-test])", g_test_eval_state);
   TEST_ASSERT_EQUAL(clj_true, done);
 
   RELEASE(ba);
@@ -596,7 +596,7 @@ TEST(test_sound_native_on_finished_callback_receives_event_map_shape) {
   TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
   TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
 
-  ID done = eval_string("(= @sound-finished-shape [true :sound :finished :finish-shape-test])",
+  ID done = eval_string("(= @sound-finished-shape [true :audio :finished :finish-shape-test])",
                         g_test_eval_state);
   TEST_ASSERT_EQUAL(clj_true, done);
 

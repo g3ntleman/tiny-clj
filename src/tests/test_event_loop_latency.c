@@ -273,3 +273,46 @@ TEST(test_event_loop_ingress_call_preserves_nil_payload_as_argument) {
     TEST_ASSERT_EQUAL_PTR_MESSAGE(clj_true, marker,
                                   "ingress callback should receive nil payload as one argument");
 }
+
+TEST(test_event_loop_run_next_prioritizes_older_task_queue_entries_before_new_ingress_calls, 0) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
+    event_loop_clear();
+
+    ID regular_fn = eval_string(
+        "(do "
+        "  (def event-loop-regular-marker (atom nil)) "
+        "  (fn event-loop-regular-task [] "
+        "    (reset! event-loop-regular-marker :regular) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(regular_fn);
+    TEST_ASSERT_TRUE(TAG(regular_fn) == CLJ_FUNC || TAG(regular_fn) == CLJ_CLOSURE);
+
+    ID ingress_fn = eval_string(
+        "(do "
+        "  (def event-loop-ingress-order-marker (atom nil)) "
+        "  (fn event-loop-ingress-order-task [phase] "
+        "    (reset! event-loop-ingress-order-marker phase) "
+        "    nil))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(ingress_fn);
+    TEST_ASSERT_TRUE(TAG(ingress_fn) == CLJ_FUNC || TAG(ingress_fn) == CLJ_CLOSURE);
+
+    event_loop_enqueue(regular_fn, NULL);
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(ingress_fn, intern_symbol_global(":enter")),
+                             "ingress call enqueue should succeed");
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "first run_next should execute some queued task");
+    ID regular_marker = eval_string("@event-loop-regular-marker", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":regular"), regular_marker);
+    ID ingress_marker = eval_string("@event-loop-ingress-order-marker", g_test_eval_state);
+    TEST_ASSERT_NULL_MESSAGE(ingress_marker,
+                             "new ingress callback should still be pending while older task queue entry runs first");
+
+    TEST_ASSERT_TRUE_MESSAGE(event_loop_run_next(NULL, g_test_eval_state),
+                             "second run_next should execute the deferred ingress callback");
+    ingress_marker = eval_string("@event-loop-ingress-order-marker", g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enter"), ingress_marker);
+    TEST_ASSERT_FALSE_MESSAGE(event_loop_has_pending_tasks(), "queue should be empty after both tasks run");
+}

@@ -44,7 +44,7 @@ brew install cmake
 - **Embedded Target:** ESP32 microcontrollers
 - **Pure C99/C11:** No POSIX-only features for embedded compatibility
 - **Manual Reference Counting:** Predictable memory behavior on embedded systems
-- **Small Binary:** Target <150KB for embedded deployment
+- **Small Binary:** Optimized for embedded deployment
 
 ## Quick Start
 
@@ -61,7 +61,7 @@ cmake --build build
 cmake -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build
 
-# Embedded Build (ultra-compact for <150KB target)
+# Embedded Build (ultra-compact embedded configuration)
 cmake -DCMAKE_BUILD_TYPE=Embedded -B build
 cmake --build build
 ```

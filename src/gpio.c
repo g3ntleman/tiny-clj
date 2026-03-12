@@ -247,6 +247,11 @@ bool gpio_runtime_watch_set(int32_t pin, ID callback) {
                                                      (ID)SYM_KW_WATCHER_ID, fixnum(g_next_watcher_id++));
     map_assoc_inplace(&g_gpio_watchers, fixnum(pin), watcher_map);
     RELEASE(watcher_map);
+#ifdef ESP32_BUILD
+    if (gpio_runtime_pin_slot_valid(pin)) {
+        g_gpio_pin_state[pin].watcher_registered = true;
+    }
+#endif
     return true;
 }
 
@@ -256,15 +261,30 @@ bool gpio_runtime_watch_clear(int32_t pin) {
         return false;
     }
     map_remove_inplace(&g_gpio_watchers, fixnum(pin));
+#ifdef ESP32_BUILD
+    if (gpio_runtime_pin_slot_valid(pin)) {
+        g_gpio_pin_state[pin].watcher_registered = false;
+    }
+#endif
     return true;
 }
 
 bool gpio_runtime_pin_has_watcher(int32_t pin) {
     gpio_runtime_ensure_initialized();
+#ifdef ESP32_BUILD
+    if (gpio_runtime_pin_slot_valid(pin)) {
+        return g_gpio_pin_state[pin].watcher_registered;
+    }
+#endif
     return map_get((ID)g_gpio_watchers, fixnum(pin)) != NOT_FOUND;
 }
 
 bool gpio_runtime_pin_has_c_callbacks(int32_t pin) {
+#ifdef ESP32_BUILD
+    if (gpio_runtime_pin_slot_valid(pin)) {
+        return g_gpio_pin_state[pin].c_callback_count > 0u;
+    }
+#endif
     for (int i = 0; i < GPIO_C_CALLBACK_CAP; i++) {
         GpioCRawCallbackEntry *entry = &g_gpio_c_callbacks[i];
         if (entry->active && entry->pin == pin && entry->callback) {
@@ -276,15 +296,21 @@ bool gpio_runtime_pin_has_c_callbacks(int32_t pin) {
 
 bool gpio_runtime_enqueue_watch_event(int32_t pin, int32_t level) {
     gpio_runtime_ensure_initialized();
-
-    ID watcher_map = map_get((ID)g_gpio_watchers, fixnum(pin));
-    if (!watcher_map || watcher_map == NOT_FOUND) {
-        return false;
+    ID callback = NULL;
+#ifdef ESP32_BUILD
+    if (gpio_runtime_pin_slot_valid(pin)) {
+        callback = g_gpio_pin_state[pin].watcher_callback;
     }
-
-    ID callback = map_get_sentinel(watcher_map, (ID)SYM_KW_CALLBACK_FN, NULL);
-    if (!callback || callback == NOT_FOUND) {
-        return false;
+#endif
+    if (!callback) {
+        ID watcher_map = map_get((ID)g_gpio_watchers, fixnum(pin));
+        if (!watcher_map || watcher_map == NOT_FOUND) {
+            return false;
+        }
+        callback = map_get_sentinel(watcher_map, (ID)SYM_KW_CALLBACK_FN, NULL);
+        if (!callback || callback == NOT_FOUND) {
+            return false;
+        }
     }
 
     ID event_map = gpio_runtime_make_watch_event(pin, level);
@@ -319,7 +345,17 @@ bool gpio_runtime_c_callback_add(int32_t pin, GpioCRawCallback callback, void *c
             entry->callback = callback;
             entry->ctx = ctx;
 #ifdef ESP32_BUILD
+            if (gpio_runtime_pin_slot_valid(pin) &&
+                g_gpio_pin_state[pin].c_callback_count < UINT8_MAX) {
+                g_gpio_pin_state[pin].c_callback_count++;
+            }
             if (!gpio_esp32_input_irq_consumer_acquire(pin)) {
+#ifdef ESP32_BUILD
+                if (gpio_runtime_pin_slot_valid(pin) &&
+                    g_gpio_pin_state[pin].c_callback_count > 0u) {
+                    g_gpio_pin_state[pin].c_callback_count--;
+                }
+#endif
                 entry->active = false;
                 entry->pin = -1;
                 entry->callback = NULL;
@@ -342,6 +378,10 @@ bool gpio_runtime_c_callback_remove(int32_t pin, GpioCRawCallback callback, void
             entry->callback == callback &&
             entry->ctx == ctx) {
 #ifdef ESP32_BUILD
+            if (gpio_runtime_pin_slot_valid(pin) &&
+                g_gpio_pin_state[pin].c_callback_count > 0u) {
+                g_gpio_pin_state[pin].c_callback_count--;
+            }
             (void)gpio_esp32_input_irq_consumer_release(pin);
 #endif
             entry->active = false;

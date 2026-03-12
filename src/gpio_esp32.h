@@ -18,7 +18,9 @@ typedef struct {
     bool output_mode_configured;
     bool watch_input_irq_configured;
     bool input_irq_handler_installed;
+    bool watcher_registered;
     uint8_t input_irq_consumer_count;
+    uint8_t c_callback_count;
     int16_t pwm_binding_index;
 } GpioEsp32PinState;
 

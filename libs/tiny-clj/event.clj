@@ -1,6 +1,7 @@
 (ns tiny-clj.event
   (:require [tiny-clj.button :as button]
-            [tiny-clj.sensor :as sensor]))
+            [tiny-clj.sensor :as sensor]
+            [tiny-fx.gfx-collision :as collision]))
 
 (defn- subscribe [descriptor callback opts]
   (let [source (get descriptor :source)
@@ -12,6 +13,7 @@
     (cond
       (= source :button) (button/watch id callback opts)
       (= source :sensor) (sensor/watch id callback opts)
+      (= source :spatial) (collision/watch id callback opts)
       :else (throw (str "event/on: unsupported :source " source)))))
 
 (defn on
@@ -25,6 +27,7 @@
 Supported sources:
   :button  -> semantic button events
   :sensor  -> semantic sensor events
+  :spatial -> semantic spatial/collision events
 
 Options are forwarded to the underlying source-specific runtime."
   [& args]

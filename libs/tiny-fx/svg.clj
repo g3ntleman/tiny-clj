@@ -314,7 +314,8 @@
               (parse-int-default (get attrs "x1") 0)
               (parse-int-default (get attrs "y1") 0)
               (parse-int-default (get attrs "x2") 0)
-              (parse-int-default (get attrs "y2") 0))
+              (parse-int-default (get attrs "y2") 0)
+              nil)
 
       (= tag-name "rect")
       (->Rect node-id
@@ -324,7 +325,8 @@
               (parse-int-default (get attrs "x") 0)
               (parse-int-default (get attrs "y") 0)
               (parse-int-default (get attrs "width") (parse-int-default (get attrs "w") 0))
-              (parse-int-default (get attrs "height") (parse-int-default (get attrs "h") 0)))
+              (parse-int-default (get attrs "height") (parse-int-default (get attrs "h") 0))
+              nil)
 
       (= tag-name "polyline")
       (->Polyline node-id
@@ -332,7 +334,8 @@
                   style
                   visible
                   (parse-points (or (get attrs "points") ""))
-                  false)
+                  false
+                  nil)
 
       (= tag-name "polygon")
       (->Polyline node-id
@@ -340,7 +343,8 @@
                   style
                   visible
                   (parse-points (or (get attrs "points") ""))
-                  true)
+                  true
+                  nil)
 
       (= tag-name "circle")
       (->Polyline node-id
@@ -348,7 +352,8 @@
                   style
                   visible
                   (circle->polygon-points attrs)
-                  true)
+                  true
+                  nil)
 
       (= tag-name "text")
       (->VText node-id
@@ -359,7 +364,8 @@
                (parse-int-default (get attrs "y") 0)
                (parse-text-scale attrs style-map)
                0
-               (normalize-text-content text-content))
+               (normalize-text-content text-content)
+               nil)
 
       :else nil)))
 
@@ -390,16 +396,16 @@ MVP behavior:
 (defn group-from-svg
   [svg-str]
   (if (or (nil? svg-str) (= (str/trim svg-str) ""))
-    (->Group 1 nil nil true [])
+    (->Group 1 nil nil true [] nil)
     (loop [idx 0
            next-id 100
            nodes []]
       (let [lt (str/index-of svg-str "<" idx)]
         (if (nil? lt)
-          (->Group 1 nil nil true nodes)
+          (->Group 1 nil nil true nodes nil)
           (let [gt (str/index-of svg-str ">" (+ lt 1))]
             (if (nil? gt)
-              (->Group 1 nil nil true nodes)
+              (->Group 1 nil nil true nodes nil)
               (let [tag (subs svg-str (+ lt 1) gt)
                     trimmed-tag (str/trim tag)
                     closing-tag? (str/starts-with? trimmed-tag "/")

@@ -136,6 +136,35 @@ CljPersistentRecord *make_record_with_descriptor(CljRecordDescriptor *desc, CljP
     return record;
 }
 
+// Create a record instance from ordered field values stored in a flat ID array.
+// Missing values default to nil. Returns owned record (rc=1).
+CljPersistentRecord *make_record_with_descriptor_values(CljRecordDescriptor *desc,
+                                                        const ID *values,
+                                                        unsigned int value_count) {
+    if (!desc) {
+        throw_exception(EXCEPTION_RUNTIME, "record type not registered", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    CljPersistentRecord *record = record_alloc(desc);
+    if (!record)
+        return NULL;
+
+    if (!values || value_count == 0u)
+        return record;
+
+    unsigned int field_count = record_declared_field_count(record);
+    unsigned int limit = value_count < field_count ? value_count : field_count;
+    for (unsigned int i = 0; i < limit; i++) {
+        ID value = values[i];
+        if (value) {
+            record->values[i] = RETAIN(value);
+        }
+    }
+
+    return record;
+}
+
 // Create a record instance from a map/record source.
 // Unknown keys are rejected (NotImplementedException). Returns owned record (rc=1).
 CljPersistentRecord *make_record_from_map_with_descriptor(CljRecordDescriptor *desc, ID source_map) {

@@ -70,7 +70,7 @@ else()
   set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,--gc-sections -Wl,--strip-all -Wl,-S")
 endif()
 
-# Ultra-compact build for <150KB target (embedded deployment)
+# Ultra-compact build for embedded deployment
 # Target: size-focused embedded build settings (ESP32)
 set(CMAKE_C_FLAGS_EMBEDDED "${CMAKE_C_FLAGS_EMBEDDED} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common")
 if(APPLE)
@@ -384,7 +384,7 @@ target_include_directories(tiny-clj-esp32 PRIVATE
 )
 
 
-# ESP32 Ultra-Minimal Build (only core features for <150KB) - DISABLED
+# ESP32 Ultra-Minimal Build (only core features) - DISABLED
 # This target has linker issues on macOS and is not needed for development
 
 # ESP32 Production Build - No Meta, Optimized
@@ -442,7 +442,7 @@ if(CMAKE_TOOLCHAIN_FILE MATCHES "esp32.cmake")
     message(STATUS "🔧 Using ESP32 cross-compilation toolchain")
     message(STATUS "📱 Target: ESP32 (Xtensa LX6)")
     message(STATUS "💾 Flash: 4MB, RAM: 520KB")
-    message(STATUS "🎯 Binary Size Target: <150KB")
+    message(STATUS "🎯 Binary Size Target: minimized")
 endif()
 
 # REPL executable (with line editing support)

@@ -23,26 +23,28 @@ R"TINY_GFX_SCENE(
 ;;   clip-rect is [x y w h], guard-px expands dirty area for slot rerender diffing.
 ;;   collision-rules carries host/runtime spatial trigger declarations for the published snapshot.
 ;; - CollisionRule / CollisionEvent are legacy names kept for compatibility.
-;; - SpatialRule [id slot kind a-id b-id radius channel]
+;; - SpatialRule [id slot kind self other radius channel]
 ;; - Aabb [min-x min-y max-x max-y]
-;; - SpatialEvent [source rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel]
+;; - SpatialEvent [source id slot-id kind phase self other rule snapshot-gen
+;;                 self-aabb other-aabb self-prototype other-prototype radius channel]
 
 (defrecord Transform [tx ty sx sy rot])
 (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color])
-(defrecord Group [id t style visible children])
-(defrecord Line [id t style visible x1 y1 x2 y2])
-(defrecord Polyline [id t style visible pts closed])
-(defrecord Rect [id t style visible x y w h])
-(defrecord Tri [id t style visible x1 y1 x2 y2 x3 y3])
-(defrecord VText [id t style visible x y scale rot text])
+(defrecord Group [id t style visible children prototype])
+(defrecord Line [id t style visible x1 y1 x2 y2 prototype])
+(defrecord Polyline [id t style visible pts closed prototype])
+(defrecord Rect [id t style visible x y w h prototype])
+(defrecord Tri [id t style visible x1 y1 x2 y2 x3 y3 prototype])
+(defrecord VText [id t style visible x y scale rot text prototype])
 (defrecord Timeline [keyframes loop])
 (defrecord Scene [root clip-rect erase-color collision-rules])
 (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules])
 (defrecord CollisionRule [id slot a-id b-id phase-mask enabled cooldown-ms])
 (defrecord CollisionEvent [rule-id slot a-id b-id phase snapshot-gen ts-ms])
-(defrecord SpatialRule [id slot kind a-id b-id radius channel])
+(defrecord SpatialRule [id slot kind self other radius channel])
 (defrecord Aabb [min-x min-y max-x max-y])
-(defrecord SpatialEvent [source rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel])
+(defrecord SpatialEvent [source id slot-id kind phase self other rule snapshot-gen
+                         self-aabb other-aabb self-prototype other-prototype radius channel])
 
 ;; Color helpers
 ;;
@@ -173,8 +175,10 @@ The runtime emits only edge transitions (`:enter` / `:exit`)."
   {:id (get rule :id)
    :slot (or (get rule :slot) default-collision-slot)
    :kind (or (get rule :kind) default-spatial-kind)
-   :a-id (get rule :a-id)
-   :b-id (get rule :b-id)
+   :self (let [v (get rule :self)]
+           (if (nil? v) (get rule :a-id) v))
+   :other (let [v (get rule :other)]
+            (if (nil? v) (get rule :b-id) v))
    :radius (let [v (get rule :radius)]
              (if (nil? v) 0 v))
    :channel (get rule :channel)})

@@ -332,6 +332,10 @@ TEST(test_gpio_architecture_esp32_watcher_runtime_uses_shared_pin_state) {
                                  "esp32 output-mode cache should live in the shared pin-state slot");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "slot->watch_input_irq_configured"),
                                  "esp32 watch-input cache should live in the shared pin-state slot");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "gpio_runtime_watch_set(pin, callback)"),
+                                 "esp32 digital watchers should register in the shared runtime watcher map");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "gpio_runtime_watch_clear(pin)"),
+                                 "esp32 digital watchers should clear the shared runtime watcher map");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "gpio_isr_handler_add((gpio_num_t)pin, gpio_isr_handler, (void*)(intptr_t)pin)"),
                                  "esp32 watcher ISR should pass the pin directly into the shared pin-state lookup");
 

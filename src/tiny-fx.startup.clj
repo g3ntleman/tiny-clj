@@ -28,22 +28,22 @@ R"TINY_FX_STARTUP(
 (defn polyline
   [{:keys [id t style visible pts closed]
     :or   {t nil visible true closed false}}]
-  (->Polyline id t style visible pts closed))
+  (->Polyline id t style visible pts closed nil))
 
 (defn rect
   [{:keys [id t style visible x y w h]
     :or   {t nil visible true x 0 y 0 w 0 h 0}}]
-  (->Rect id t style visible x y w h))
+  (->Rect id t style visible x y w h nil))
 
 (defn vtext
   [{:keys [id t style visible x y scale rot text]
     :or   {t nil visible true x 0 y 0 scale 1 rot 0 text ""}}]
-  (->VText id t style visible x y scale rot text))
+  (->VText id t style visible x y scale rot text nil))
 
 (defn group
   [{:keys [id t style visible children]
     :or   {t nil visible true children []}}]
-  (->Group id t style visible children))
+  (->Group id t style visible children nil))
 
 (defn frame-scene
   [{:keys [root clip-rect z visible opaque erase-color guard-px collision-rules]

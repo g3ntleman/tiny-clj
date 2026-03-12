@@ -199,9 +199,13 @@ struct ViewerSceneBundle {
 };
 
 struct ViewerCollisionPolicy {
-    int a_entity_id;
-    int b_entity_id;
+    ID self_entity_id;
+    ID other_entity_id;
+    ID self_prototype;
+    ID other_prototype;
     int radius_px;
+    ID slot_id;
+    ID rule;
     ID rule_id;
     ID kind;
     ID channel;
@@ -212,6 +216,13 @@ typedef struct {
     VgCollisionState states[VIEWER_MAX_SPATIAL_RULES];
     uint32_t count;
 } ViewerSpatialRuleSet;
+
+typedef struct {
+    ID entity_id;
+    bool resolved;
+    bool present;
+    VgRenderedEntityState state;
+} ViewerEntityStateCacheEntry;
 
 static void destroy_scene_bundle(ViewerSceneBundle *bundle) {
     if (!bundle) {
@@ -236,6 +247,12 @@ static void destroy_collision_policy(ViewerCollisionPolicy *policy) {
     if (!policy) {
         return;
     }
+    RELEASE(policy->self_entity_id);
+    RELEASE(policy->other_entity_id);
+    RELEASE(policy->self_prototype);
+    RELEASE(policy->other_prototype);
+    RELEASE(policy->slot_id);
+    RELEASE(policy->rule);
     RELEASE(policy->rule_id);
     RELEASE(policy->kind);
     RELEASE(policy->channel);
@@ -257,14 +274,68 @@ static bool viewer_collision_policy_same_identity(const ViewerCollisionPolicy *a
     if (!a || !b) {
         return false;
     }
-    if (a->rule_id && b->rule_id) {
-        return a->rule_id == b->rule_id;
+    if (a->rule && b->rule) {
+        return a->rule == b->rule &&
+               a->self_entity_id == b->self_entity_id &&
+               a->other_entity_id == b->other_entity_id;
     }
-    return a->a_entity_id == b->a_entity_id &&
-           a->b_entity_id == b->b_entity_id &&
+    if (a->rule_id && b->rule_id) {
+        return a->rule_id == b->rule_id &&
+               a->self_entity_id == b->self_entity_id &&
+               a->other_entity_id == b->other_entity_id;
+    }
+    return a->self_entity_id == b->self_entity_id &&
+           a->other_entity_id == b->other_entity_id &&
            a->radius_px == b->radius_px &&
            a->kind == b->kind &&
            a->channel == b->channel;
+}
+
+static ID viewer_entity_prototype(ID entity_rec) {
+    static CljSymbol *k_prototype = NULL;
+    if (!k_prototype) {
+        k_prototype = intern_symbol_global(":prototype");
+    }
+    if (!entity_rec || TAG(entity_rec) != CLJ_RECORD || !k_prototype) {
+        return NULL;
+    }
+    return tiny_fx_gfx_get_field(entity_rec, k_prototype, NULL);
+}
+
+static bool viewer_selector_is_prototype(ID selector) {
+    return selector && TAG(selector) == CLJ_RECORD;
+}
+
+static uint32_t viewer_collect_selector_entity_ids(ID root,
+                                                   ID selector,
+                                                   ID *out_ids,
+                                                   uint32_t max_ids) {
+    if (!root || !is_map(root) || !selector || !out_ids || max_ids == 0u) {
+        return 0u;
+    }
+    if (!viewer_selector_is_prototype(selector)) {
+        ID entity = map_get_sentinel(root, selector, NULL);
+        if (!entity) {
+            return 0u;
+        }
+        out_ids[0] = selector;
+        return 1u;
+    }
+
+    CljPersistentMap *root_map = as_map(root);
+    if (!root_map) {
+        return 0u;
+    }
+    uint32_t count = 0u;
+    MAP_FOR_EACH(root_map, entity_id, entity_rec) {
+        if (count >= max_ids) {
+            break;
+        }
+        if (viewer_entity_prototype(entity_rec) == selector) {
+            out_ids[count++] = entity_id;
+        }
+    }
+    return count;
 }
 
 static ID viewer_slot_desc_field(ID slot_desc, ID key) {
@@ -362,27 +433,23 @@ static ID viewer_make_aabb_record(const VgAabb *box) {
     if (!desc) {
         return NULL;
     }
-    CljPersistentVector *values = make_vector(4, STRONG);
-    if (!values) {
-        return NULL;
-    }
-    vector_conj_inplace(&values, fixnum(box->min_x));
-    vector_conj_inplace(&values, fixnum(box->min_y));
-    vector_conj_inplace(&values, fixnum(box->max_x));
-    vector_conj_inplace(&values, fixnum(box->max_y));
-    ID rec = (ID)make_record_with_descriptor(desc, values);
-    RELEASE(values);
-    return rec;
+    ID values[4] = {
+        fixnum(box->min_x),
+        fixnum(box->min_y),
+        fixnum(box->max_x),
+        fixnum(box->max_y),
+    };
+    return (ID)make_record_with_descriptor_values(desc, values, 4u);
 }
 
 static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
                                     const ViewerCollisionPolicy *policy,
                                     ID phase,
                                     uint32_t snapshot_gen,
-                                    const VgAabb *a_box,
-                                    const VgAabb *b_box) {
+                                    const VgAabb *self_box,
+                                    const VgAabb *other_box) {
     if (!bundle || !policy || !bundle->game_scene || !bundle->has_game_slot ||
-        bundle->game_slot_index >= bundle->slot_count || !phase || !a_box || !b_box) {
+        bundle->game_slot_index >= bundle->slot_count || !phase || !self_box || !other_box) {
         return NULL;
     }
     static CljRecordDescriptor *desc = NULL;
@@ -396,44 +463,34 @@ static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
     if (!desc || !source_spatial) {
         return NULL;
     }
-    ID root = bundle->game_scene->root;
-    if (!root || !is_map(root)) {
+    ID self_aabb_rec = viewer_make_aabb_record(self_box);
+    ID other_aabb_rec = viewer_make_aabb_record(other_box);
+    if (!self_aabb_rec || !other_aabb_rec) {
+        RELEASE(self_aabb_rec);
+        RELEASE(other_aabb_rec);
         return NULL;
     }
-    ID a_rec = map_get_sentinel(root, fixnum(policy->a_entity_id), NULL);
-    ID b_rec = map_get_sentinel(root, fixnum(policy->b_entity_id), NULL);
-    if (!a_rec || !b_rec) {
-        return NULL;
-    }
-    ID a_aabb_rec = viewer_make_aabb_record(a_box);
-    ID b_aabb_rec = viewer_make_aabb_record(b_box);
-    if (!a_aabb_rec || !b_aabb_rec) {
-        RELEASE(a_aabb_rec);
-        RELEASE(b_aabb_rec);
-        return NULL;
-    }
-    CljPersistentVector *values = make_vector(12, STRONG);
-    if (!values) {
-        RELEASE(a_aabb_rec);
-        RELEASE(b_aabb_rec);
-        return NULL;
-    }
-    vector_conj_inplace(&values, source_spatial);
-    vector_conj_inplace(&values, policy->rule_id);
-    vector_conj_inplace(&values, bundle->slots[bundle->game_slot_index].id);
-    vector_conj_inplace(&values, policy->kind);
-    vector_conj_inplace(&values, phase);
-    vector_conj_inplace(&values, fixnum((int32_t)snapshot_gen));
-    vector_conj_inplace(&values, a_rec);
-    vector_conj_inplace(&values, b_rec);
-    vector_conj_inplace(&values, a_aabb_rec);
-    vector_conj_inplace(&values, b_aabb_rec);
-    vector_conj_inplace(&values, fixnum(policy->radius_px));
-    vector_conj_inplace(&values, policy->channel);
-    ID event_rec = (ID)make_record_with_descriptor(desc, values);
-    RELEASE(values);
-    RELEASE(a_aabb_rec);
-    RELEASE(b_aabb_rec);
+    ID slot_id = policy->slot_id ? policy->slot_id : bundle->slots[bundle->game_slot_index].id;
+    ID values[15] = {
+        source_spatial,
+        policy->rule_id,
+        slot_id,
+        policy->kind,
+        phase,
+        policy->self_entity_id,
+        policy->other_entity_id,
+        policy->rule,
+        fixnum((int32_t)snapshot_gen),
+        self_aabb_rec,
+        other_aabb_rec,
+        policy->self_prototype,
+        policy->other_prototype,
+        fixnum(policy->radius_px),
+        policy->channel,
+    };
+    ID event_rec = (ID)make_record_with_descriptor_values(desc, values, 15u);
+    RELEASE(self_aabb_rec);
+    RELEASE(other_aabb_rec);
     return event_rec;
 }
 
@@ -444,21 +501,28 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
     }
     static CljSymbol *k_collision_rules = NULL;
     static CljSymbol *k_id = NULL;
+    static CljSymbol *k_slot = NULL;
     static CljSymbol *k_kind = NULL;
     static CljSymbol *k_channel = NULL;
     static CljSymbol *k_radius = NULL;
+    static CljSymbol *k_self = NULL;
+    static CljSymbol *k_other = NULL;
     static CljSymbol *k_a_id = NULL;
     static CljSymbol *k_b_id = NULL;
     if (!k_collision_rules) {
         k_collision_rules = intern_symbol_global(":collision-rules");
         k_id = intern_symbol_global(":id");
+        k_slot = intern_symbol_global(":slot");
         k_kind = intern_symbol_global(":kind");
         k_channel = intern_symbol_global(":channel");
         k_radius = intern_symbol_global(":radius");
+        k_self = intern_symbol_global(":self");
+        k_other = intern_symbol_global(":other");
         k_a_id = intern_symbol_global(":a-id");
         k_b_id = intern_symbol_global(":b-id");
     }
-    if (!k_collision_rules || !k_id || !k_kind || !k_channel || !k_radius || !k_a_id || !k_b_id) {
+    if (!k_collision_rules || !k_id || !k_slot || !k_kind || !k_channel || !k_radius ||
+        !k_self || !k_other || !k_a_id || !k_b_id) {
         return false;
     }
     ID rules = tiny_fx_gfx_get_field((ID)game_scene, k_collision_rules, NULL);
@@ -486,30 +550,63 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
             destroy_spatial_rule_set(&next_rule_set);
             return false;
         }
+        ID slot_obj = tiny_fx_gfx_get_field(rule, k_slot, NULL);
         ID id_obj = tiny_fx_gfx_get_field(rule, k_id, NULL);
         ID kind_obj = tiny_fx_gfx_get_field(rule, k_kind, intern_symbol_global(":collision"));
         ID channel_obj = tiny_fx_gfx_get_field(rule, k_channel, NULL);
         ID radius_obj = tiny_fx_gfx_get_field(rule, k_radius, fixnum(0));
-        ID a_id_obj = tiny_fx_gfx_get_field(rule, k_a_id, NULL);
-        ID b_id_obj = tiny_fx_gfx_get_field(rule, k_b_id, NULL);
-        if (!is_fixnum(radius_obj) || !is_fixnum(a_id_obj) || !is_fixnum(b_id_obj)) {
+        ID self_selector = tiny_fx_gfx_get_field(rule, k_self, NULL);
+        ID other_selector = tiny_fx_gfx_get_field(rule, k_other, NULL);
+        if (!self_selector) {
+            self_selector = tiny_fx_gfx_get_field(rule, k_a_id, NULL);
+        }
+        if (!other_selector) {
+            other_selector = tiny_fx_gfx_get_field(rule, k_b_id, NULL);
+        }
+        if (!is_fixnum(radius_obj) || !self_selector || !other_selector) {
             destroy_spatial_rule_set(&next_rule_set);
             return false;
         }
-        ViewerCollisionPolicy *dst = &next_rule_set.items[next_rule_set.count];
-        dst->a_entity_id = AS_FIXNUM(a_id_obj);
-        dst->b_entity_id = AS_FIXNUM(b_id_obj);
-        dst->radius_px = AS_FIXNUM(radius_obj);
-        dst->rule_id = RETAIN(id_obj);
-        dst->kind = RETAIN(kind_obj);
-        dst->channel = RETAIN(channel_obj);
-        for (uint32_t j = 0; j < io_rule_set->count; j++) {
-            if (viewer_collision_policy_same_identity(dst, &io_rule_set->items[j])) {
-                next_rule_set.states[next_rule_set.count] = io_rule_set->states[j];
-                break;
+        ID root = game_scene->root;
+        ID self_ids[VIEWER_MAX_SPATIAL_RULES] = {0};
+        ID other_ids[VIEWER_MAX_SPATIAL_RULES] = {0};
+        uint32_t self_count = viewer_collect_selector_entity_ids(root,
+                                                                 self_selector,
+                                                                 self_ids,
+                                                                 VIEWER_MAX_SPATIAL_RULES);
+        uint32_t other_count = viewer_collect_selector_entity_ids(root,
+                                                                  other_selector,
+                                                                  other_ids,
+                                                                  VIEWER_MAX_SPATIAL_RULES);
+        for (uint32_t self_i = 0; self_i < self_count && next_rule_set.count < VIEWER_MAX_SPATIAL_RULES; self_i++) {
+            for (uint32_t other_i = 0;
+                 other_i < other_count && next_rule_set.count < VIEWER_MAX_SPATIAL_RULES;
+                 other_i++) {
+                ViewerCollisionPolicy *dst = &next_rule_set.items[next_rule_set.count];
+                ID self_rec = map_get_sentinel(root, self_ids[self_i], NULL);
+                ID other_rec = map_get_sentinel(root, other_ids[other_i], NULL);
+                if (!self_rec || !other_rec) {
+                    continue;
+                }
+                dst->self_entity_id = RETAIN(self_ids[self_i]);
+                dst->other_entity_id = RETAIN(other_ids[other_i]);
+                dst->self_prototype = RETAIN(viewer_entity_prototype(self_rec));
+                dst->other_prototype = RETAIN(viewer_entity_prototype(other_rec));
+                dst->radius_px = AS_FIXNUM(radius_obj);
+                dst->slot_id = RETAIN(slot_obj);
+                dst->rule = RETAIN(rule);
+                dst->rule_id = RETAIN(id_obj);
+                dst->kind = RETAIN(kind_obj);
+                dst->channel = RETAIN(channel_obj);
+                for (uint32_t j = 0; j < io_rule_set->count; j++) {
+                    if (viewer_collision_policy_same_identity(dst, &io_rule_set->items[j])) {
+                        next_rule_set.states[next_rule_set.count] = io_rule_set->states[j];
+                        break;
+                    }
+                }
+                next_rule_set.count++;
             }
         }
-        next_rule_set.count++;
     }
     destroy_spatial_rule_set(io_rule_set);
     *io_rule_set = next_rule_set;
@@ -1145,8 +1242,18 @@ static bool viewer_invoke_collision_callback(const ViewerSceneBundle *bundle,
              * Dispatch callback through the event-loop API so execution happens
              * on the Clojure runloop path. Callback return values are intentionally
              * ignored by the C host bridge.
+             *
+             * A single run_next() is not enough here: older queued tasks can run
+             * before the freshly enqueued spatial callback, which makes collision
+             * enter/exit phases appear one step late and desynchronizes the latch
+             * from scene mutations triggered by the callback.
              */
-            success = event_loop_run_next(NULL, st);
+            while (event_loop_has_pending_tasks()) {
+                if (!event_loop_run_next(NULL, st)) {
+                    break;
+                }
+                success = true;
+            }
         }
     } CATCH(ex) {
         (void)ex;
@@ -1166,6 +1273,8 @@ static bool viewer_apply_collision_step(ViewerSceneBundle *bundle,
     (void)now_ms;
     bool any_triggered = false;
     uint8_t game_slot = bundle->game_slot_index;
+    ViewerEntityStateCacheEntry state_cache[VIEWER_MAX_SPATIAL_RULES * 2u] = {0};
+    uint32_t state_cache_count = 0u;
     static ID phase_enter = NULL;
     static ID phase_exit = NULL;
     if (!phase_enter) {
@@ -1175,28 +1284,76 @@ static bool viewer_apply_collision_step(ViewerSceneBundle *bundle,
     for (uint32_t i = 0; i < rule_set->count; i++) {
         ViewerCollisionPolicy *policy = &rule_set->items[i];
         VgCollisionState *state = &rule_set->states[i];
-        VgRenderedEntityState a_state;
-        VgRenderedEntityState b_state;
-        bool have_a = vg_rendered_state_query_entity(game_slot,
-                                                     (uintptr_t)fixnum(policy->a_entity_id),
-                                                     &a_state);
-        bool have_b = vg_rendered_state_query_entity(game_slot,
-                                                     (uintptr_t)fixnum(policy->b_entity_id),
-                                                     &b_state);
-        if (!have_a || !have_b) {
+        VgRenderedEntityState self_state;
+        VgRenderedEntityState other_state;
+        bool found_self = false;
+        bool found_other = false;
+        bool have_self = false;
+        bool have_other = false;
+        for (uint32_t cache_i = 0; cache_i < state_cache_count; cache_i++) {
+            ViewerEntityStateCacheEntry *entry = &state_cache[cache_i];
+            if (entry->resolved && entry->entity_id == policy->self_entity_id) {
+                found_self = true;
+                have_self = entry->present;
+                if (have_self) {
+                    self_state = entry->state;
+                }
+                break;
+            }
+        }
+        if (!found_self) {
+            have_self = vg_rendered_state_query_entity(game_slot,
+                                                       (uintptr_t)policy->self_entity_id,
+                                                       &self_state);
+            if (state_cache_count < (VIEWER_MAX_SPATIAL_RULES * 2u)) {
+                ViewerEntityStateCacheEntry *entry = &state_cache[state_cache_count++];
+                entry->entity_id = policy->self_entity_id;
+                entry->resolved = true;
+                entry->present = have_self;
+                if (have_self) {
+                    entry->state = self_state;
+                }
+            }
+        }
+        for (uint32_t cache_i = 0; cache_i < state_cache_count; cache_i++) {
+            ViewerEntityStateCacheEntry *entry = &state_cache[cache_i];
+            if (entry->resolved && entry->entity_id == policy->other_entity_id) {
+                found_other = true;
+                have_other = entry->present;
+                if (have_other) {
+                    other_state = entry->state;
+                }
+                break;
+            }
+        }
+        if (!found_other) {
+            have_other = vg_rendered_state_query_entity(game_slot,
+                                                        (uintptr_t)policy->other_entity_id,
+                                                        &other_state);
+            if (state_cache_count < (VIEWER_MAX_SPATIAL_RULES * 2u)) {
+                ViewerEntityStateCacheEntry *entry = &state_cache[state_cache_count++];
+                entry->entity_id = policy->other_entity_id;
+                entry->resolved = true;
+                entry->present = have_other;
+                if (have_other) {
+                    entry->state = other_state;
+                }
+            }
+        }
+        if (!have_self || !have_other) {
             continue;
         }
-        if (!a_state.has_world_aabb || !b_state.has_world_aabb) {
+        if (!self_state.has_world_aabb || !other_state.has_world_aabb) {
             continue;
         }
-        VgAabb a_box = a_state.world_aabb;
-        VgAabb b_box = b_state.world_aabb;
-        VgAabb sense_box = a_box;
+        VgAabb self_box = self_state.world_aabb;
+        VgAabb other_box = other_state.world_aabb;
+        VgAabb sense_box = self_box;
         sense_box.min_x -= policy->radius_px;
         sense_box.max_x += policy->radius_px;
         sense_box.min_y -= policy->radius_px;
         sense_box.max_y += policy->radius_px;
-        bool inside = vg_collision_detect_aabb_overlap(&sense_box, &b_box);
+        bool inside = vg_collision_detect_aabb_overlap(&sense_box, &other_box);
         bool was_inside = state->collision_latched;
         if (inside == was_inside) {
             continue;
@@ -1206,9 +1363,9 @@ static bool viewer_apply_collision_step(ViewerSceneBundle *bundle,
         ID event_payload = viewer_make_spatial_event(bundle,
                                                      policy,
                                                      phase,
-                                                     b_state.snapshot_generation,
-                                                     &a_box,
-                                                     &b_box);
+                                                     other_state.snapshot_generation,
+                                                     &self_box,
+                                                     &other_box);
         if (!event_payload) {
             continue;
         }

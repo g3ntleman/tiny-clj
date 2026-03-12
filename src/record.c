@@ -1,11 +1,11 @@
 #include "record.h"
 
 #include "runtime.h"
-#include "value.h"
 #include "symbol.h"
 #include "symbol_token.h"
 #include "seq.h"
 #include "strings.h"
+#include "value.h"
 #include "exception.h"
 #include "mini_format.h"
 
@@ -88,6 +88,45 @@ static CljPersistentVector *coerce_fields_to_vector(ID fields) {
     return out;
 }
 
+static size_t append_field_debug_name(char *buf, size_t pos, size_t cap, ID field) {
+    if (!buf || cap == 0u) {
+        return pos;
+    }
+    if (!field) {
+        return format_append(buf, pos, cap, "nil");
+    }
+    if (TAG(field) == CLJ_SYMBOL) {
+        CljSymbol *sym = as_symbol(field);
+        return format_append(buf, pos, cap, (sym && sym->cname) ? sym->cname : "<symbol>");
+    }
+    if (TAG(field) == CLJ_STRING) {
+        return format_append(buf, pos, cap, string_data(field));
+    }
+    return format_append(buf, pos, cap, "<field>");
+}
+
+static void format_field_vector_debug(char *buf, size_t cap, ID fields) {
+    if (!buf || cap == 0u) {
+        return;
+    }
+    buf[0] = '\0';
+    size_t pos = format_append_char(buf, 0u, cap, '[');
+    CljPersistentVector *vec = as_vector(fields);
+    if (!vec) {
+        pos = format_append(buf, pos, cap, "<non-vector>");
+        (void)format_append_char(buf, pos, cap, ']');
+        return;
+    }
+    unsigned int count = vector_count(vec);
+    for (unsigned int i = 0; i < count; i++) {
+        if (i > 0u) {
+            pos = format_append_char(buf, pos, cap, ' ');
+        }
+        pos = append_field_debug_name(buf, pos, cap, vector_nth(vec, i));
+    }
+    (void)format_append_char(buf, pos, cap, ']');
+}
+
 // Look up a record descriptor by type symbol in the runtime registry.
 // Returns borrowed descriptor pointer, or NULL if not found.
 CljRecordDescriptor *record_descriptor_lookup(ID type_symbol) {
@@ -123,9 +162,26 @@ CljRecordDescriptor *record_register_descriptor(ID type_symbol, ID fields) {
     CljRecordDescriptor *existing = record_descriptor_lookup(type_symbol);
     if (existing) {
         if (!clj_equal(existing->field_keys, field_keys)) {
+            const char *type_name = NULL;
+            if (TAG(type_symbol) == CLJ_SYMBOL) {
+                CljSymbol *sym = as_symbol(type_symbol);
+                type_name = (sym && sym->cname) ? sym->cname : NULL;
+            }
+            char existing_repr[96];
+            char incoming_repr[96];
+            char msg[256];
+            format_field_vector_debug(existing_repr, sizeof(existing_repr), existing->field_keys);
+            format_field_vector_debug(incoming_repr, sizeof(incoming_repr), (ID)field_keys);
+            size_t msg_pos = format_append(msg, 0u, sizeof(msg), "record type ");
+            msg_pos = format_append(msg, msg_pos, sizeof(msg), type_name ? type_name : "<unknown>");
+            msg_pos = format_append(msg, msg_pos, sizeof(msg), " already registered with different fields (existing=");
+            msg_pos = format_append(msg, msg_pos, sizeof(msg), existing_repr);
+            msg_pos = format_append(msg, msg_pos, sizeof(msg), ", new=");
+            msg_pos = format_append(msg, msg_pos, sizeof(msg), incoming_repr);
+            (void)format_append_char(msg, msg_pos, sizeof(msg), ')');
             RELEASE(field_keys);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                            "record type already registered with different fields",
+                            msg,
                             __FILE__, __LINE__, 0);
             return NULL;
         }

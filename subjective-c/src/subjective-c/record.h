@@ -50,6 +50,10 @@ CljRecordDescriptor *record_descriptor_create(ID type_symbol, CljPersistentVecto
 // Returns owned record (rc=1).
 CljPersistentRecord *make_record_with_descriptor(CljRecordDescriptor *desc, CljPersistentVector *values);
 // Returns owned record (rc=1).
+CljPersistentRecord *make_record_with_descriptor_values(CljRecordDescriptor *desc,
+                                                        const ID *values,
+                                                        unsigned int value_count);
+// Returns owned record (rc=1).
 CljPersistentRecord *make_record_from_map_with_descriptor(CljRecordDescriptor *desc, ID source_map);
 
 int record_count(ID record_obj);

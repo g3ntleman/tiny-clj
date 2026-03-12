@@ -48,6 +48,7 @@ typedef struct {
 } GpioEvent;
 
 enum { GPIO_EVENT_RING_CAP = 32 };
+enum { GPIO_EVENT_RING_MASK = GPIO_EVENT_RING_CAP - 1 };
 static GpioEvent g_gpio_events[GPIO_EVENT_RING_CAP];
 static _Atomic uint32_t g_gpio_event_w = 0;
 static _Atomic uint32_t g_gpio_event_r = 0;
@@ -120,6 +121,16 @@ static inline void gpio_watcher_callback_set(int32_t pin, ID callback) {
     GpioEsp32PinState *slot = gpio_pin_state_slot(pin);
     if (!slot) return;
     ASSIGN(slot->watcher_callback, callback);
+}
+
+static inline bool gpio_pin_has_runtime_watcher(int32_t pin, GpioEsp32PinState *slot) {
+    if (slot) return slot->watcher_registered;
+    return gpio_runtime_pin_has_watcher(pin);
+}
+
+static inline bool gpio_pin_has_runtime_c_callbacks(int32_t pin, GpioEsp32PinState *slot) {
+    if (slot) return slot->c_callback_count > 0u;
+    return gpio_runtime_pin_has_c_callbacks(pin);
 }
 
 static inline void gpio_mark_output_mode_configured(int32_t pin) {
@@ -349,7 +360,7 @@ static bool gpio_adc_ensure_channel_configured(adc_oneshot_unit_handle_t handle,
 static inline bool gpio_event_ring_push_from_isr(int32_t pin, int32_t value) {
     uint32_t w = atomic_load_explicit(&g_gpio_event_w, memory_order_relaxed);
     uint32_t r = atomic_load_explicit(&g_gpio_event_r, memory_order_acquire);
-    uint32_t next_w = (w + 1u) % GPIO_EVENT_RING_CAP;
+    uint32_t next_w = (w + 1u) & GPIO_EVENT_RING_MASK;
     if (next_w == r) return false; // full
 
     g_gpio_events[w].pin = pin;
@@ -365,7 +376,7 @@ static inline bool gpio_event_ring_pop(GpioEvent *out) {
     if (r == w) return false;
 
     *out = g_gpio_events[r];
-    atomic_store_explicit(&g_gpio_event_r, (r + 1u) % GPIO_EVENT_RING_CAP, memory_order_release);
+    atomic_store_explicit(&g_gpio_event_r, (r + 1u) & GPIO_EVENT_RING_MASK, memory_order_release);
     return true;
 }
 
@@ -387,8 +398,9 @@ void gpio_esp32_poll_drain(void) {
 
     GpioEvent ev;
     while (gpio_event_ring_pop(&ev)) {
+        GpioEsp32PinState *slot = gpio_pin_state_slot(ev.pin);
         gpio_runtime_dispatch_c_callbacks(ev.pin, ev.value);
-        if (gpio_runtime_pin_has_watcher(ev.pin) &&
+        if (gpio_pin_has_runtime_watcher(ev.pin, slot) &&
             !gpio_runtime_enqueue_watch_event(ev.pin, ev.value)) {
             atomic_fetch_add_explicit(&g_gpio_event_drop_count, 1u, memory_order_relaxed);
         }
@@ -414,7 +426,9 @@ void gpio_esp32_runtime_reset_state(void) {
         g_gpio_pin_state[pin].output_mode_configured = false;
         g_gpio_pin_state[pin].watch_input_irq_configured = false;
         g_gpio_pin_state[pin].input_irq_handler_installed = false;
+        g_gpio_pin_state[pin].watcher_registered = false;
         g_gpio_pin_state[pin].input_irq_consumer_count = 0u;
+        g_gpio_pin_state[pin].c_callback_count = 0u;
         g_gpio_pin_state[pin].pwm_binding_index = -1;
     }
 
@@ -444,11 +458,12 @@ void gpio_esp32_runtime_reset_state(void) {
 static void IRAM_ATTR gpio_isr_handler(void *arg) {
     int32_t pin = (int32_t)(intptr_t)arg;
     if (!gpio_pin_cache_index_valid(pin)) return;
+    GpioEsp32PinState *slot = gpio_pin_state_slot(pin);
     int32_t value = gpio_get_level((gpio_num_t)pin);
 
-    ID callback_fn = gpio_watcher_callback_get(pin);
+    ID callback_fn = slot ? slot->watcher_callback : gpio_watcher_callback_get(pin);
     if ((!callback_fn || IS_IMMEDIATE(callback_fn)) &&
-        !gpio_runtime_pin_has_c_callbacks(pin)) {
+        !gpio_pin_has_runtime_c_callbacks(pin, slot)) {
         return;
     }
 
@@ -533,6 +548,7 @@ bool gpio_esp32_watch_clear(int32_t pin) {
     ID callback = gpio_watcher_callback_get(pin);
     if (callback) {
         gpio_watcher_callback_set(pin, NULL);
+        (void)gpio_runtime_watch_clear(pin);
         (void)gpio_esp32_input_irq_consumer_release(pin);
     }
     return true;
@@ -557,12 +573,18 @@ bool gpio_esp32_watch_set(int32_t pin, ID callback) {
 
     if (gpio_watcher_callback_get(pin)) {
         gpio_watcher_callback_set(pin, NULL);
+        (void)gpio_runtime_watch_clear(pin);
         (void)gpio_esp32_input_irq_consumer_release(pin);
     }
     gpio_watcher_callback_set(pin, callback);
+    if (!gpio_runtime_watch_set(pin, callback)) {
+        gpio_watcher_callback_set(pin, NULL);
+        return false;
+    }
 
     if (!gpio_esp32_input_irq_consumer_acquire(pin)) {
         gpio_watcher_callback_set(pin, NULL);
+        (void)gpio_runtime_watch_clear(pin);
         return false;
     }
 

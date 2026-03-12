@@ -195,7 +195,7 @@
 ### Wann Option 1 (Macro-Expander) sinnvoll ist:
 - Wenn User-Macro-Definitionen benötigt werden
 - Wenn maximale Clojure-Kompatibilität erforderlich ist
-- Wenn genug Code-Space verfügbar ist (>150KB)
+- Wenn genug Code-Space verfügbar ist
 
 ## Implementierungs-Strategie
 

@@ -19,7 +19,7 @@ SoundEngine g_sound_engine;
 static ID KW_SOURCE = NULL;
 static ID KW_KIND = NULL;
 static ID KW_TRACK_ID = NULL;
-static ID KW_SOUND = NULL;
+static ID KW_AUDIO = NULL;
 static ID KW_FINISHED = NULL;
 
 static bool sound_interp_debug_enabled(void) {
@@ -142,14 +142,14 @@ static void sound_ensure_finished_event_keywords(void) {
     KW_SOURCE = intern_symbol_global(":source");
     KW_KIND = intern_symbol_global(":kind");
     KW_TRACK_ID = intern_symbol_global(":track-id");
-    KW_SOUND = intern_symbol_global(":sound");
+    KW_AUDIO = intern_symbol_global(":audio");
     KW_FINISHED = intern_symbol_global(":finished");
 }
 
 static ID sound_make_finished_event(ID track_id) {
     sound_ensure_finished_event_keywords();
     return make_map_from_kv(3,
-                            KW_SOURCE, KW_SOUND,
+                            KW_SOURCE, KW_AUDIO,
                             KW_KIND, KW_FINISHED,
                             KW_TRACK_ID, track_id);
 }
@@ -565,7 +565,11 @@ static void tick_drain_commands(void) {
             }
             for (int i = 0; i < g_sound_engine.voice_count; i++) {
                 g_sound_engine.voices[i].active = false;
+                g_sound_engine.voices[i].freq_hz = 0;
+                g_sound_engine.voices[i].gate_remaining_ticks = 0;
                 sound_backend_set_voice(i, 0, 0);
+                g_sound_engine.voices[i].applied_freq_hz = 0;
+                g_sound_engine.voices[i].applied_volume = 0;
             }
             break;
         }
@@ -616,9 +620,7 @@ static void tick_advance_sfx(void) {
         while (sfx->stream.active && sfx->stream.current_tick >= sfx->stream.next_event_tick
                && events_this_tick < MAX_EVENTS_PER_TICK) {
             events_this_tick++;
-            SoundVoice temp_voice = g_sound_engine.voices[vi];
-            bool had_more = stream_parse_event(&sfx->stream, &temp_voice, 1);
-            g_sound_engine.voices[vi] = temp_voice;
+            bool had_more = stream_parse_event(&sfx->stream, &g_sound_engine.voices[vi], 1);
             if (!had_more && !sfx->stream.active) {
                 break;
             }
@@ -638,6 +640,23 @@ static void tick_advance_sfx(void) {
     }
 }
 
+static inline void tick_apply_voice_output(int voice_index, SoundVoice *voice) {
+    uint16_t target_freq = 0;
+    uint8_t target_vol = 0;
+    if (voice && voice->active && voice->gate_remaining_ticks > 0 && voice->freq_hz > 0) {
+        target_freq = voice->freq_hz;
+        target_vol = (uint8_t)(((uint16_t)voice->volume * g_sound_engine.music_volume) >> 8);
+    }
+    if (voice && voice->applied_freq_hz == target_freq && voice->applied_volume == target_vol) {
+        return;
+    }
+    sound_backend_set_voice(voice_index, target_freq, target_vol);
+    if (voice) {
+        voice->applied_freq_hz = target_freq;
+        voice->applied_volume = target_vol;
+    }
+}
+
 static void tick_update_voices(void) {
     for (int i = 0; i < g_sound_engine.voice_count; i++) {
         SoundVoice *v = &g_sound_engine.voices[i];
@@ -645,21 +664,15 @@ static void tick_update_voices(void) {
             v->gate_remaining_ticks--;
             if (v->gate_remaining_ticks == 0) {
                 /* Note off */
-                sound_backend_set_voice(i, 0, 0);
                 v->freq_hz = 0;
                 if (sound_interp_debug_enabled()) {
                     fprintf(stderr,
                             "[sound-interp] NOTE_OFF voice=%d tick_done gate=0\n",
                             i);
                 }
-            } else {
-                /* Apply global music volume scaling */
-                uint8_t effective_vol = (uint8_t)(((uint16_t)v->volume * g_sound_engine.music_volume) >> 8);
-                sound_backend_set_voice(i, v->freq_hz, effective_vol);
             }
-        } else if (!v->active) {
-            sound_backend_set_voice(i, 0, 0);
         }
+        tick_apply_voice_output(i, v);
     }
 }
 

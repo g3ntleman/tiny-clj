@@ -1707,76 +1707,147 @@ Clojure `{id → Record}` in Atom → C resolves Timelines + interpolates → re
 - M9 cleanup pass (9k) is complete and obsolete code paths are removed.
 - One vertical slice runs the same scene model in simulator and on device.
 
-## Milestone 10: Spatial Trigger Contract + Scheduler Callback Bridge
+## Milestone 10: Spatial Trigger Contract + Generic Event Bridge
 
-Status: DONE on host-viewer path (2026-03-06)
+Status: PLANNED-REVISION
 
 Goal:
 
-- Generalize the old collision-only plan into a spatial trigger contract that supports both
-`:collision` and `:proximity`, while keeping gameplay reactions in Clojure and per-frame
-trigger evaluation in C.
+- Replace the old collision-first milestone with a general spatial trigger contract.
+- Support both `:collision` and `:proximity` as first-class trigger kinds.
+- Keep spatial evaluation deterministic in C while all higher-level reactions remain explicit in Clojure.
+- Route spatial events through the same generic event ingress used by other runtime subsystems.
 
-Final rule contract:
+Final scene / rule contract:
 
-- Spatial rules are declared inside the published scene snapshot at
-`FrameScene.collision-rules`.
+- Spatial rules are declared in published scene data.
+  - Short term compatibility path: continue accepting `FrameScene.collision-rules`
+  - Preferred naming direction: move toward neutral `spatial-rules`
 - Runtime rule shape:
-  - `SpatialRule [id slot kind a-id b-id radius channel]`
+  - `SpatialRule [id slot kind self other radius channel]`
+  - `:id` is the stable semantic rule identifier
+  - `:slot` defaults to `:game`
   - `:kind` is `:collision` or `:proximity`
-  - `:slot` currently rolls out on `:game`
-  - `:a-id` / `:b-id` are stable entity ids from the flat scene map
-  - `:radius` is 0 for direct collision and inflates `a`'s AABB for proximity checks
+  - `:self` / `:other` are role-bearing selectors
+  - `:radius` is required for `:proximity`, ignored for direct collision
   - `:channel` is optional semantic context such as `:hearing`
+- Selector contract:
+  - scalar `:self` / `:other` values mean exact instance ids
+  - prototype-based matching uses the direct immutable prototype object
+  - no separate prototype registry is required
+  - rules may therefore express instance-vs-instance, instance-vs-prototype, or prototype-vs-prototype
+- Prototype contract:
+  - a prototype is just an immutable scene record used as a template
+  - the prototype object itself may carry a stable semantic `:id`
+  - a prototype does not carry a `:prototype` field
+  - instances may later store a direct `:prototype` reference to that object
+  - short term, `:prototype` remains supported on `Group`, `Polyline`, `Rect`, and `Tri`
+  - `Line` and `VText` are not expected to participate in spatial/prototype matching and are candidates for later removal from the prototype-capable set
+  - for multi-color sprites, `Group` is the preferred long-term prototype carrier
 - Trigger phases are edge-only:
   - emitted phases are `:enter` and `:exit`
   - no `:stay` events
-- Rule removal/update semantics:
+- Rule removal semantics:
   - unchanged rule identity keeps latch state
   - removed rules drop their latch state without synthetic events
-  - missing entity ids are ignored safely during evaluation
+  - missing instance ids are ignored safely during evaluation
 
-Final event contract (C -> scheduler -> Clojure):
+Final event contract (C -> event ingress -> Clojure):
 
-- Runtime event shape:
-  - `SpatialEvent [source rule-id slot kind phase snapshot-gen a b a-aabb b-aabb radius channel]`
+- Public runtime event shape:
+  - `{:source :spatial`
+  - ` :id <rule-id>`
+  - ` :slot-id <slot-id>`
+  - ` :kind :collision|:proximity`
+  - ` :phase :enter|:exit`
+  - ` :self <instance-id>`
+  - ` :other <instance-id>`
+  - ` :rule <immutable-rule-object>`
+  - ` :snapshot-gen <fixnum>`
+  - optional `:self-prototype`
+  - optional `:other-prototype`
+  - optional `:self-aabb`
+  - optional `:other-aabb`
+  - optional `:radius`
+  - optional `:channel` `}`
 - `:source` is always `:spatial`
-- Event payload carries the resolved entity records (`a`, `b`) plus evaluated runtime AABBs
-(`a-aabb`, `b-aabb`) so Clojure callbacks do not need extra engine lookups just to inspect
-the trigger context.
-- Callback dispatch contract:
-  - callback target is configured from Clojure via `tiny-fx.gfx-collision/set-collision-callback!`
-  - C dispatches through the generic scheduler ingress (`event_loop_enqueue_ingress_call`)
-  - callback return values are ignored by C
-  - scene changes remain explicit Clojure mutations (`swap!` / `reset!`)
+- `:rule` is mandatory; callback code should not be forced to re-resolve rule identity from a separate table
+- `:phase` is mandatory because the runtime emits edge transitions, not level-state notifications
+- `:slot-id` is mandatory and preferred over ambiguous `:slot`
+- optional prototype fields carry the full immutable prototype objects, not just prototype ids
+- optional AABB fields avoid extra engine lookups when Clojure needs the evaluated runtime geometry
+
+Runtime delivery / ownership contract:
+
+- Spatial events are dispatched through the generic one-arg event ingress (`event_loop_enqueue_ingress_call`)
+- callback targets are configured from Clojure
+- callback return values are ignored by C
+- scene mutations remain explicit Clojure actions (`swap!`, `reset!`, etc.)
+- line-of-sight checks, hearing interpretation, and AI mode transitions happen after the event in Clojure
+
+Prototype-based rule execution model:
+
+- Prototype-based selectors must not be resolved dynamically in the inner collision loop.
+- Before the hot path runs, prototype selectors are expanded to concrete instance pairs.
+- The hot path then works only on concrete pairs and the already resolved per-pair latch state.
+- `Group` must become a first-class spatial carrier, because future multi-part sprites (for example the rocket) are expected to be authored as groups rather than as one primitive per color region.
+- Therefore group-level spatial evaluation needs an aggregated runtime AABB derived from relevant child geometry before prototype-based group rules can be considered complete.
+- Leaf prototype support (`Polyline` / `Rect` / `Tri`) stays in place initially so existing proxy/hitbox patterns continue to work during the transition to group-centric sprite prototypes.
+- Auto-generated instance ids are global fixnums.
+- Explicitly named special-case instances may still use explicit ids.
+- A future `copy-from-prototype` helper should:
+  - accept a prototype object directly
+  - optionally accept an explicit instance id
+  - otherwise assign a fresh global fixnum instance id
+  - attach the prototype object directly on the spawned instance
+
+Runtime optimization policy (first cut):
+
+- Do not maintain a separate last-AABB cache per rule in the first implementation.
+- Use `is_animating` as the simple conservative hint for skipping stable concrete pairs.
+- Keep the first optimization intentionally simple and conservative rather than maximally precise.
+- Treat "prototype field footprint on leaf records" as a later memory-optimization pass, not as part of the first functional rollout.
+- That later pass should re-evaluate whether `:prototype` can be removed from some leaf-only record types once group-based sprite collisions are proven out.
 
 Implementation notes:
 
-- `tiny-fx.gfx-scene` now defines the active spatial schema (`SpatialRule`, `SpatialEvent`, `Aabb`)
-while keeping legacy `CollisionRule` / `CollisionEvent` records for compatibility.
-- `tiny-fx.gfx-collision` owns the configurable callback surface
-(`set-collision-callback!`, `invoke-collision-callback!`).
-- `event_loop` provides the thread-safe one-arg ingress that is also reused by GPIO and audio.
-- `host_viewer_minifb.c` now:
-  - loads spatial rules directly from the published `FrameScene`
-  - evaluates overlap/proximity from rendered entity state each frame
-  - emits deterministic `:enter` / `:exit` events in rule order
-  - refreshes the live game scene + rule set after Clojure-side callback mutations
-  - accepts scenes with no `collision-rules` as "no triggers" instead of treating them as a load failure
-- `tiny-fx.gfx/host-viewer-config` supplies the ordered `:slots` list plus
-`:spatial-callback` and `:game-scene-atom`, so the native host loop consumes runtime config
-only and does not resolve demo namespaces directly.
-- Slot count, slot IDs, and slot order are defined in Clojure; C only validates and consumes the
-configured slot list, while slot placement/orientation remains `clip-rect`-driven.
+- `tiny-fx.gfx-scene` defines the active spatial schema and may keep legacy `CollisionRule` / `CollisionEvent` records only as compatibility shims.
+- `tiny-fx.gfx-collision` should stop being a collision-special callback surface over time and instead align with the generic event API direction.
+- `event_loop` remains the shared thread-safe ingress for GPIO/input, spatial, and audio events.
+- Scene/schema follow-up:
+  - keep `Group` in the prototype-capable set
+  - keep `Polyline`, `Rect`, and `Tri` prototype-capable for now
+  - revisit `Line` / `VText` and possibly some leaf prototype fields only as an explicit memory optimization step
+- Host/runtime code should:
+  - load spatial rules directly from published scene data
+  - evaluate overlap/proximity from rendered entity state
+  - support prototype-based rules that target `Group` records, not only primitive leaves
+  - compute/refresh aggregated group AABBs where group-level spatial matching is enabled
+  - emit deterministic `:enter` / `:exit` events in rule order
+  - refresh the live game scene + rule set after Clojure-side callback mutations
+  - treat missing spatial rules as "no triggers", not as a load failure
+- Runtime configuration should continue to flow from Clojure into native host/device code rather than resolving demo namespaces directly in C.
+
+Rollout scenario:
+
+- Demo rollout should include at least one `:collision` rule and one `:proximity` rule.
+- The demo should explicitly exercise at least one prototype-based spatial rule.
+- The preferred demo direction is a `Group`-based rocket sprite with a rule that targets the rocket prototype object directly, so the path used by real multi-color sprites is exercised early.
+- Example proximity slice:
+  - enemy enters hearing radius of player -> emit `{:source :spatial :kind :proximity :phase :enter ...}`
+  - Clojure receives the event
+  - Clojure decides whether to do hearing/visibility follow-up and whether to switch enemy AI mode
+  - when the player leaves range, the matching `:exit` event is emitted
 
 Verification:
 
-- Schema and callback contract:
+- Schema and contract:
   - `test_gfx_collision_contract_registers_record_descriptors`
   - `test_gfx_collision_contract_normalize_rule_defaults`
   - `test_gfx_collision_contract_phase_mask_normalization_enter_exit_only`
   - `test_gfx_collision_contract_disabled_rule_defaults_to_no_runtime_side_effects`
   - `test_gfx_collision_contract_normalize_spatial_rule_preserves_proximity_fields`
+- Event-bridge behavior:
   - `test_gfx_collision_contract_callback_set_clear_and_invoke_shape`
   - `test_gfx_collision_contract_callback_rejects_non_function_values`
   - `test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value`
@@ -1793,9 +1864,14 @@ Verification:
 Done when:
 
 - Spatial triggers are declared declaratively in scene data and evaluated in C.
-- Clojure receives stable `SpatialEvent` payloads through the generic ingress path.
+- `:collision` and `:proximity` are both part of the frozen contract.
+- Public events use `:source :spatial` and carry `:kind`, `:phase`, `:slot-id`, `:self`, `:other`, and `:rule`.
+- `:stay` is explicitly excluded from the contract.
+- Prototype-based selectors are supported in the contract without requiring a prototype registry.
+- Auto-generated instance ids are global fixnums.
+- Clojure receives stable spatial event payloads through the generic ingress path.
 - Callback return values are non-contractual to C.
-- Demo/gameplay reactions remain fully Clojure-owned.
+- Gameplay reactions, line-of-sight checks, hearing logic, and AI mode changes remain fully Clojure-owned.
 
 ## Optional Extension A: Render-Thread Interpolation Animations (Off-Main-Thread)
 

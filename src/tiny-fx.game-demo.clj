@@ -2,6 +2,7 @@ R"TINY_GFX_HOST(
 (ns tiny-fx.game-demo
   (:require [tiny-fx.gfx-scene :refer [->Transform ->Style ->Group ->Polyline
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
+            [tiny-fx.gfx-collision :as collision]
             [tiny-fx.sound :as sound]
             [tiny-fx.sound-demos :as sound-demos]
             [tiny-clj.event :as event]))
@@ -30,22 +31,22 @@ R"TINY_GFX_HOST(
 (defn polyline
   [{:keys [id t style visible pts closed]
     :or   {t nil visible true closed false}}]
-  (->Polyline id t style visible pts closed))
+  (->Polyline id t style visible pts closed nil))
 
 (defn tri
   [{:keys [id t style visible x1 y1 x2 y2 x3 y3]
     :or   {t nil visible true}}]
-  (->Tri id t style visible x1 y1 x2 y2 x3 y3))
+  (->Tri id t style visible x1 y1 x2 y2 x3 y3 nil))
 
 (defn vtext
   [{:keys [id t style visible x y scale rot text]
     :or   {t nil visible true x 0 y 0 scale 1 rot 0 text ""}}]
-  (->VText id t style visible x y scale rot text))
+  (->VText id t style visible x y scale rot text nil))
 
 (defn group
   [{:keys [id t style visible children]
     :or   {t nil visible true children []}}]
-  (->Group id t style visible children))
+  (->Group id t style visible children nil))
 
 (defn frame-scene
   [{:keys [root clip-rect z visible opaque erase-color guard-px collision-rules]
@@ -270,11 +271,11 @@ R"TINY_GFX_HOST(
    {:melody :G5 :backing [:D4] :duration :q}
    {:rest :s}])
 
-(def player-small-state (atom false))
 (def deco-scene-state (atom nil))
 (def score-scene-state (atom nil))
 (def game-scene-state (atom nil))
 (def demo-input-watcher-active* (atom false))
+(def demo-spatial-watcher-active* (atom false))
 (def rocket-launch-state* (atom :flying))
 (def rocket-timeline-start-ms* (atom 0))
 (def slot-descriptor-list
@@ -335,7 +336,7 @@ and game-demo startup."
   []
   (create-demo-bundle)
   {:slots (slot-descriptors)
-   :spatial-callback on-player-collision-toggle!
+   :spatial-callback collision/invoke-collision-callback!
    :game-scene-atom game-scene-state})
 
 (defn- make-player-tri
@@ -349,11 +350,15 @@ and game-demo startup."
   [game-scene player-small?]
   (let [root (:root game-scene)
         player (get root player-entity-id)
+        proxy (get root player-collision-entity-id)
         next-timeline (player-jump-timeline-for-state player-small?)]
-    (if (= (:t player) next-timeline)
+    (if (and (= (:t player) next-timeline)
+             (= (:t proxy) next-timeline))
       game-scene
       (assoc game-scene :root
-             (assoc root player-entity-id (assoc player :t next-timeline))))))
+             (-> root
+                 (assoc player-entity-id (assoc player :t next-timeline))
+                 (assoc player-collision-entity-id (assoc proxy :t next-timeline)))))))
 
 (defn- event->player-small-state
   [event]
@@ -370,9 +375,7 @@ by changing player scale.
 Returns nil; host-side callback dispatch ignores return values."
   [event]
   (let [next-state (event->player-small-state event)]
-    (when (and (not= next-state :ignore)
-               (not= next-state @player-small-state))
-      (reset! player-small-state next-state)
+    (when (not= next-state :ignore)
       (let [game-scene @game-scene-state]
         (when game-scene
           (reset! game-scene-state (apply-player-scale game-scene next-state)))))
@@ -405,7 +408,16 @@ Returns nil; host-side callback dispatch ignores return values."
     (event/on {:source :button :id :demo/launch} nil))
   (event/on {:source :button :id :demo/launch} on-demo-input-event!)
   (reset! demo-input-watcher-active* true)
-  nil))
+  nil)
+
+(defn configure-demo-spatial-watchers!
+  "Registers the demo spatial subscription through the generic event API."
+  []
+  (when @demo-spatial-watcher-active*
+    (event/on {:source :spatial :id :player-vs-rocket} nil))
+  (event/on {:source :spatial :id :player-vs-rocket} on-player-collision-toggle!)
+  (reset! demo-spatial-watcher-active* true)
+  nil)
 
 (defn collision-entity-ids
   "Returns [player-collision-entity-id obstacle-entity-id] for game-demo collision state queries."
@@ -437,12 +449,24 @@ Returns nil; host-side callback dispatch ignores return values."
   (make-player-tri player-entity-id style-game-player player-jump-timeline))
 (def game-player-collision
   (make-player-tri player-collision-entity-id style-player-collision-proxy player-jump-timeline))
-(def game-rocket-body
-  (polyline {:id obstacle-entity-id :t rocket-timeline :style style-rocket-body
+(def rocket-body-prototype
+  (polyline {:id :rocket/body :t rocket-timeline :style style-rocket-body
              :pts rocket-body-pts :closed true}))
-(def game-rocket-nose
+(def rocket-nose-prototype
   (tri (assoc rocket-nose-geometry
-         :id 3005 :t rocket-timeline :style style-rocket-nose)))
+         :id :rocket/nose :t rocket-timeline :style style-rocket-nose)))
+
+(defn make-rocket-body-instance
+  []
+  (assoc rocket-body-prototype
+         :id obstacle-entity-id
+         :prototype rocket-body-prototype))
+
+(defn make-rocket-nose-instance
+  []
+  (assoc rocket-nose-prototype
+         :id 3005
+         :prototype rocket-nose-prototype))
 (def game-caption-t (transform {:tx 96 :ty 52}))
 (def game-caption (vtext {:id 3004 :t game-caption-t :style style-score :text "GAME SCENE"}))
 (def game-hbar (tri {:id 3010 :t hbar-timeline :style style-hbar
@@ -453,8 +477,8 @@ Returns nil; host-side callback dispatch ignores return values."
 (def game-entities-static
   {root-id game-root
    3001 game-terrain
-   obstacle-entity-id game-rocket-body
-   3005 game-rocket-nose
+   obstacle-entity-id (make-rocket-body-instance)
+   3005 (make-rocket-nose-instance)
    3004 game-caption
    3010 game-hbar
    3020 game-stars-group
@@ -465,9 +489,9 @@ Returns nil; host-side callback dispatch ignores return values."
    3025 star-5
    3026 star-6})
 (def collision-rule
-  (->SpatialRule :player-vs-rocket :game :collision obstacle-entity-id player-collision-entity-id 0 nil))
+  (->SpatialRule :player-vs-rocket :game :collision rocket-body-prototype player-collision-entity-id 0 nil))
 (def hearing-rule
-  (->SpatialRule :enemy-hearing :game :proximity obstacle-entity-id player-collision-entity-id 24 :hearing))
+  (->SpatialRule :enemy-hearing :game :proximity rocket-body-prototype player-collision-entity-id 24 :hearing))
 
 (defn create-demo-bundle
   "Returns a vector with the demo frame-scenes used by the game demo.
@@ -481,6 +505,8 @@ Index layout:
                                                style-player-collision-proxy
                                                player-jump-timeline)
         game-entities (assoc game-entities-static
+                        obstacle-entity-id (make-rocket-body-instance)
+                        3005 (make-rocket-nose-instance)
                         player-collision-entity-id game-player-collision
                         player-entity-id game-player)
         game-scene (frame-scene {:root game-entities
@@ -488,13 +514,13 @@ Index layout:
                                  :z 2
                                  :collision-rules [collision-rule hearing-rule]})
         demo-bundle [deco-scene-template score-scene-template game-scene]]
-    (reset! player-small-state false)
     (reset! deco-scene-state deco-scene-template)
     (reset! score-scene-state score-scene-template)
     (reset! game-scene-state game-scene)
     (reset! rocket-launch-state*      :flying)
     (reset! rocket-timeline-start-ms* (current-time-ms))
     (configure-demo-input-watchers!)
+    (configure-demo-spatial-watchers!)
     demo-bundle))
 
 )TINY_GFX_HOST"

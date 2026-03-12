@@ -129,8 +129,10 @@ typedef struct {
 
 typedef struct {
     uint16_t freq_hz;
+    uint16_t applied_freq_hz;
     uint32_t gate_remaining_ticks;
     uint8_t  volume;             /* per-voice volume 0..255 */
+    uint8_t  applied_volume;
     bool     active;
 } SoundVoice;
 
@@ -248,7 +250,7 @@ bool sound_engine_set_track_volume(ID track_id, int32_t vol);
 void sound_engine_set_music_volume(int32_t vol);
 
 /* Register on-finished callback. Retains fn, releases previous.
- * Callback receives {:source :sound :kind :finished :track-id ...}. */
+ * Callback receives {:source :audio :kind :finished :track-id ...}. */
 void sound_engine_on_finished(ID callback_fn);
 
 /* ========================================================================= */

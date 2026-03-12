@@ -41,9 +41,17 @@ TEST(test_gfx_collision_contract_registers_record_descriptors) {
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enabled"), vector_nth(d_rule->field_keys, 5));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":cooldown-ms"), vector_nth(d_rule->field_keys, 6));
     TEST_ASSERT_EQUAL_UINT(7, vector_count(d_spatial_rule->field_keys));
-    TEST_ASSERT_EQUAL_UINT(12, vector_count(d_spatial_event->field_keys));
+    TEST_ASSERT_EQUAL_UINT(15, vector_count(d_spatial_event->field_keys));
     TEST_ASSERT_EQUAL_UINT(4, vector_count(d_aabb->field_keys));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":id"), vector_nth(d_spatial_rule->field_keys, 0));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":slot"), vector_nth(d_spatial_rule->field_keys, 1));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":kind"), vector_nth(d_spatial_rule->field_keys, 2));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":self"), vector_nth(d_spatial_rule->field_keys, 3));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":other"), vector_nth(d_spatial_rule->field_keys, 4));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":source"), vector_nth(d_spatial_event->field_keys, 0));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":id"), vector_nth(d_spatial_event->field_keys, 1));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":slot-id"), vector_nth(d_spatial_event->field_keys, 2));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":rule"), vector_nth(d_spatial_event->field_keys, 7));
 }
 
 TEST(test_gfx_collision_contract_normalize_rule_defaults) {
@@ -54,19 +62,21 @@ TEST(test_gfx_collision_contract_normalize_rule_defaults) {
         "  (require 'tiny-fx.gfx-scene) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [r (tiny-fx.gfx-scene/normalize-spatial-rule {:id :r1 :a-id 1 :b-id 2})] "
-        "    [(:slot r) (:kind r) (:radius r) (:channel r)]))",
+        "    [(:slot r) (:kind r) (:self r) (:other r) (:radius r) (:channel r)]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
     CljPersistentVector *v = as_vector(out);
     TEST_ASSERT_NOT_NULL(v);
-    TEST_ASSERT_EQUAL_UINT(4, vector_count(v));
+    TEST_ASSERT_EQUAL_UINT(6, vector_count(v));
 
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":game"), vector_nth(v, 0));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":collision"), vector_nth(v, 1));
-    TEST_ASSERT_TRUE(is_fixnum(vector_nth(v, 2)));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 2)));
-    TEST_ASSERT_NULL(vector_nth(v, 3));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(v, 2)));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(v, 3)));
+    TEST_ASSERT_TRUE(is_fixnum(vector_nth(v, 4)));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 4)));
+    TEST_ASSERT_NULL(vector_nth(v, 5));
 }
 
 TEST(test_gfx_collision_contract_phase_mask_normalization_enter_exit_only) {
@@ -142,8 +152,8 @@ TEST(test_gfx_collision_contract_normalize_spatial_rule_preserves_proximity_fiel
         "  (require 'tiny-fx.gfx-scene) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [r (tiny-fx.gfx-scene/normalize-spatial-rule "
-        "            {:id :hear :slot :game :kind :proximity :a-id 10 :b-id 20 :radius 24 :channel :hearing})] "
-        "    [(:slot r) (:kind r) (:a-id r) (:b-id r) (:radius r) (:channel r)]))",
+        "            {:id :hear :slot :game :kind :proximity :self 10 :other 20 :radius 24 :channel :hearing})] "
+        "    [(:slot r) (:kind r) (:self r) (:other r) (:radius r) (:channel r)]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -196,6 +206,80 @@ TEST(test_gfx_collision_contract_callback_rejects_non_function_values) {
         "    (and rejected? (nil? v))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(out && out != clj_false);
+}
+
+TEST(test_gfx_collision_contract_spatial_watch_supports_two_and_three_arity_calls, 0) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-fx.gfx) "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  (def spatial-watch-marker (atom [])) "
+        "  (tiny-fx.gfx-collision/watch :player-hit "
+        "    (fn [event] "
+        "      (swap! spatial-watch-marker conj [:two (:phase event)]) "
+        "      nil)) "
+        "  (tiny-fx.gfx-collision/invoke-collision-callback! "
+        "    {:source :spatial :id :player-hit :rule {:id :player-hit} :phase :enter}) "
+        "  (tiny-fx.gfx-collision/watch :player-hit "
+        "    (fn [event] "
+        "      (swap! spatial-watch-marker conj [:three (:phase event)]) "
+        "      nil) "
+        "    {:channel :hearing}) "
+        "  (tiny-fx.gfx-collision/invoke-collision-callback! "
+        "    {:source :spatial :id :player-hit :rule {:id :player-hit} :phase :exit}) "
+        "  (tiny-fx.gfx-collision/watch :player-hit nil) "
+        "  @spatial-watch-marker)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(2, vector_count(v));
+
+    ID first = vector_nth(v, 0);
+    ID second = vector_nth(v, 1);
+    TEST_ASSERT_TRUE(TAG(first) == CLJ_VECTOR_PERSISTENT);
+    TEST_ASSERT_TRUE(TAG(second) == CLJ_VECTOR_PERSISTENT);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":two"), vector_nth(as_vector(first), 0));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enter"), vector_nth(as_vector(first), 1));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":three"), vector_nth(as_vector(second), 0));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":exit"), vector_nth(as_vector(second), 1));
+}
+
+TEST(test_gfx_collision_contract_event_on_spatial_descriptor_subscription_receives_matching_events, 0) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-clj.event) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  (def collision-event-on-marker (atom [])) "
+        "  (tiny-fx.gfx-collision/set-collision-callback! nil) "
+        "  (tiny-clj.event/on {:source :spatial :id :player-hit} "
+        "    (fn [event] "
+        "      (swap! collision-event-on-marker conj [(:id event) (:id (:rule event)) (:phase event)]) "
+        "      nil)) "
+        "  (tiny-fx.gfx-collision/invoke-collision-callback! "
+        "    {:source :spatial :id :player-hit :rule {:id :player-hit} :phase :enter}) "
+        "  (tiny-fx.gfx-collision/invoke-collision-callback! "
+        "    {:source :spatial :id :other :rule {:id :other} :phase :exit}) "
+        "  (tiny-clj.event/on {:source :spatial :id :player-hit} nil) "
+        "  @collision-event-on-marker)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(1, vector_count(v));
+
+    ID first = vector_nth(v, 0);
+    TEST_ASSERT_TRUE(TAG(first) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *first_vec = as_vector(first);
+    TEST_ASSERT_NOT_NULL(first_vec);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":player-hit"), vector_nth(first_vec, 0));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":player-hit"), vector_nth(first_vec, 1));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enter"), vector_nth(first_vec, 2));
 }
 
 TEST(test_gfx_collision_contract_demo_callback_mutates_scene_state_explicitly) {
@@ -284,21 +368,21 @@ TEST(test_gfx_collision_contract_runloop_dispatch_preserves_spatial_envelope_fie
         "  (tiny-fx.gfx-collision/set-collision-callback! "
         "    (fn collision-envelope-cb [event] "
         "      (reset! collision-envelope-marker "
-        "              [(:source event) (:kind event) (:phase event) (:channel event)]) "
+        "              [(:source event) (:id event) (:kind event) (:phase event) (:channel event)]) "
         "      :ignored)) "
         "  tiny-fx.gfx-collision/invoke-collision-callback!)",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(dispatch_fn);
     TEST_ASSERT_TRUE(TAG(dispatch_fn) == CLJ_FUNC || TAG(dispatch_fn) == CLJ_CLOSURE);
 
-    ID event_payload = eval_string("{:source :spatial :kind :proximity :phase :enter :channel :hearing}",
+    ID event_payload = eval_string("{:source :spatial :id :player-hear :rule {:id :player-hear} :kind :proximity :phase :enter :channel :hearing}",
                                    g_test_eval_state);
     TEST_ASSERT_NOT_NULL(event_payload);
     TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call(dispatch_fn, event_payload));
     TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
     TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
 
-    ID marker = eval_string("(= @collision-envelope-marker [:spatial :proximity :enter :hearing])",
+    ID marker = eval_string("(= @collision-envelope-marker [:spatial :player-hear :proximity :enter :hearing])",
                             g_test_eval_state);
     TEST_ASSERT_EQUAL(clj_true, marker);
 

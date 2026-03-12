@@ -205,12 +205,12 @@ TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
+        "  (defrecord Group [id t style visible children prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (->Scene "
         "    (->Group 100 nil nil true "
-        "             [(->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6)]) "
+        "             [(->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)] nil) "
         "    nil nil nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -231,11 +231,11 @@ TEST(test_vector_scene_graph_renders_line_from_flat_entity_map_records) {
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
+        "  (defrecord Group [id t style visible children prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [entities {'root (->Group 'root nil nil true [101]) "
-        "                  101 (->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6)}] "
+        "  (let [entities {'root (->Group 'root nil nil true [101] nil) "
+        "                  101 (->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)}] "
         "    (->Scene entities nil nil nil)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -256,13 +256,13 @@ TEST(test_vector_scene_graph_flat_entity_map_symbol_child_id_renders) {
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
+        "  (defrecord Group [id t style visible children prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [entities {'root (->Group 'root nil nil true ['player-line]) "
+        "  (let [entities {'root (->Group 'root nil nil true ['player-line] nil) "
         "                  'player-line (->Line 'player-line nil "
         "                                        (->Style 65535 1 true false 0 false 0) "
-        "                                        true 4 6 18 6)}] "
+        "                                        true 4 6 18 6 nil)}] "
         "    (->Scene entities nil nil nil)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -283,12 +283,12 @@ TEST(test_vector_scene_graph_flat_entity_map_nested_group_transform_inheritance)
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
+        "  (defrecord Group [id t style visible children prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [entities {'root (->Group 'root (->Transform 2 3 1 1 0) nil true [210]) "
-        "                  210 (->Group 210 (->Transform 5 2 1 1 0) nil true [211]) "
-        "                  211 (->Line 211 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0)}] "
+        "  (let [entities {'root (->Group 'root (->Transform 2 3 1 1 0) nil true [210] nil) "
+        "                  210 (->Group 210 (->Transform 5 2 1 1 0) nil true [211] nil) "
+        "                  211 (->Line 211 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0 nil)}] "
         "    (->Scene entities nil nil nil)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -307,9 +307,9 @@ TEST(test_vector_scene_graph_flat_entity_map_missing_root_symbol_fails) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Group [id t style visible children prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [entities {100 (->Group 100 nil nil true [])}] "
+        "  (let [entities {100 (->Group 100 nil nil true [] nil)}] "
         "    (->Scene entities nil nil nil)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -326,9 +326,9 @@ TEST(test_vector_scene_graph_flat_entity_map_missing_child_id_fails) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Group [id t style visible children prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [entities {'root (->Group 'root nil nil true [999])}] "
+        "  (let [entities {'root (->Group 'root nil nil true [999] nil)}] "
         "    (->Scene entities nil nil nil)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -566,6 +566,8 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_game_demo_config_shape) {
         "        spatial-callback (:spatial-callback cfg) "
         "        game-scene-atom (:game-scene-atom cfg) "
         "        game-scene @game-scene-atom "
+        "        rocket-body (get (:root game-scene) 3003) "
+        "        rocket-nose (get (:root game-scene) 3005) "
         "        rules (:collision-rules game-scene) "
         "        rule1 (first rules) "
         "        rule2 (second rules)] "
@@ -584,10 +586,14 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_game_demo_config_shape) {
         "         (= :proximity (:kind rule2)) "
         "         (= :hearing (:channel rule2)) "
         "         (= 24 (:radius rule2)) "
-        "         (= 3003 (:a-id rule1)) "
-        "         (= 3006 (:b-id rule1)) "
-        "         (= 3003 (:a-id rule2)) "
-        "         (= 3006 (:b-id rule2)))))",
+        "         (= tiny-fx.game-demo/rocket-body-prototype (:self rule1)) "
+        "         (= 3006 (:other rule1)) "
+        "         (= tiny-fx.game-demo/rocket-body-prototype (:self rule2)) "
+        "         (= 3006 (:other rule2)) "
+        "         (= tiny-fx.game-demo/rocket-body-prototype (:prototype rocket-body)) "
+        "         (= tiny-fx.game-demo/rocket-nose-prototype (:prototype rocket-nose)) "
+        "         (= 3003 (:id rocket-body)) "
+        "         (= 3005 (:id rocket-nose)))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
@@ -660,7 +666,9 @@ TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_i
         "          [(:x1 h1) (:y1 h1) (:x2 h1) (:y2 h1) (:x3 h1) (:y3 h1)]) "
         "       (= [(:x1 h0) (:y1 h0) (:x2 h0) (:y2 h0) (:x3 h0) (:y3 h0)] "
         "          [(:x1 h2) (:y1 h2) (:x2 h2) (:y2 h2) (:x3 h2) (:y3 h2)]) "
-        "       (= [1 1] [(:sx ht1) (:sy ht1)]) "
+        "       (= 0.75 (:sx ht1)) "
+        "       (> (:sy ht1) 0.70) "
+        "       (< (:sy ht1) 0.72) "
         "       (= [1 1] [(:sx ht2) (:sy ht2)])"
         "       ])))",
         g_test_eval_state);
@@ -668,10 +676,43 @@ TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_i
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
     CljPersistentVector *v = as_vector(out);
     TEST_ASSERT_NOT_NULL(v);
-    TEST_ASSERT_EQUAL_UINT(15, vector_count(v));
-    for (uint32_t i = 0; i < 15; i++) {
+    TEST_ASSERT_EQUAL_UINT(17, vector_count(v));
+    for (uint32_t i = 0; i < 17; i++) {
         TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, i));
     }
+}
+
+TEST(test_vector_scene_graph_game_demo_collision_callback_repeated_enter_reapplies_scale_from_scene_state, 0) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-fx.game-demo) "
+        "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
+        "        _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
+        "        game0 (nth bundle 2) "
+        "        _ (reset! tiny-fx.game-demo/game-scene-state game0) "
+        "        _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
+        "        player (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "        t (nth (nth (:keyframes (:t player)) 0) 1)] "
+        "    (and (= 0.75 (:sx t)) (> (:sy t) 0.70) (< (:sy t) 0.72))))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(out && out != clj_false);
+}
+
+TEST(test_vector_scene_graph_game_demo_collision_proxy_tracks_visible_player_scale, 0) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-fx.game-demo) "
+        "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
+        "        _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
+        "        player (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "        proxy (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
+        "        pt (nth (nth (:keyframes (:t player)) 0) 1) "
+        "        ht (nth (nth (:keyframes (:t proxy)) 0) 1)] "
+        "    (= [(:sx pt) (:sy pt)] [(:sx ht) (:sy ht)])))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE(out && out != clj_false);
 }
 
 TEST(test_vector_scene_graph_game_demo_hidden_collision_proxy_captures_rendered_aabb) {
@@ -831,12 +872,12 @@ TEST(test_vector_scene_graph_timeline_numeric_interpolation_moves_line) {
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (let [x1-t (->Timeline [[0 4] [100 14]] false) "
         "        x2-t (->Timeline [[0 18] [100 28]] false)] "
         "    (->Scene "
-        "      (->Line 101 nil (->Style 65535 1 true false 0 false 0) true x1-t 6 x2-t 6) "
+        "      (->Line 101 nil (->Style 65535 1 true false 0 false 0) true x1-t 6 x2-t 6 nil) "
         "      nil nil nil)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -859,12 +900,12 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_moves_line) {
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (let [t (->Timeline [[0 (->Transform 0 0 1 1 0)] "
         "                       [100 (->Transform 20 0 1 1 0)]] false)] "
         "    (->Scene "
-        "      (->Line 101 t (->Style 65535 1 true false 0 false 0) true 0 6 10 6) "
+        "      (->Line 101 t (->Style 65535 1 true false 0 false 0) true 0 6 10 6 nil) "
         "      nil nil nil)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -887,12 +928,12 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_applies_timeline_e
         "  (defrecord Timeline [keyframes loop ease]) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (let [t (->Timeline [[0 (->Transform 0 0 1 1 0)] "
         "                       [100 (->Transform 20 0 1 1 0)]] false :out-cubic)] "
         "    (->Scene "
-        "      (->Line 102 t (->Style 65535 1 true false 0 false 0) true 0 6 10 6) "
+        "      (->Line 102 t (->Style 65535 1 true false 0 false 0) true 0 6 10 6 nil) "
         "      nil nil nil)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -914,12 +955,12 @@ TEST(test_vector_scene_graph_timeline_loop_wraps_phase) {
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (let [x1-t (->Timeline [[0 4] [100 14]] true) "
         "        x2-t (->Timeline [[0 18] [100 28]] true)] "
         "    (->Scene "
-        "      (->Line 101 nil (->Style 65535 1 true false 0 false 0) true x1-t 6 x2-t 6) "
+        "      (->Line 101 nil (->Style 65535 1 true false 0 false 0) true x1-t 6 x2-t 6 nil) "
         "      nil nil nil)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -940,12 +981,12 @@ TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
+        "  (defrecord Group [id t style visible children prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (->Scene "
         "    (->Group 120 nil nil false "
-        "             [(->Line 121 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6)]) "
+        "             [(->Line 121 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)] nil) "
         "    nil nil nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -966,12 +1007,12 @@ TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
+        "  (defrecord Group [id t style visible children prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (->Scene "
         "    (->Group 200 (->Transform 7 5 1 1 0) nil true "
-        "             [(->Line 201 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0)]) "
+        "             [(->Line 201 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0 nil)] nil) "
         "    nil nil nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -992,12 +1033,12 @@ TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
-        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
+        "  (defrecord Group [id t style visible children prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (->Scene "
         "    (->Group 300 nil nil true "
-        "             [(->Line 301 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10)]) "
+        "             [(->Line 301 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil)] nil) "
         "    [20 8 10 6] "
         "    63488 nil))",
         g_test_eval_state);
@@ -1026,10 +1067,10 @@ TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
-        "    (->Line 401 nil (->Style 65535 1 true false 0 false 0) true 2 3 8 3) "
+        "    (->Line 401 nil (->Style 65535 1 true false 0 false 0) true 2 3 8 3 nil) "
         "    [1 2 10 12] "
         "    3 true true 0 1 nil))",
         g_test_eval_state);
@@ -1055,10 +1096,10 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
-        "    (->Line 501 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
+        "    (->Line 501 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
         "    [20 8 10 6] "
         "    0 true true 0 0 nil))",
         g_test_eval_state);
@@ -1088,10 +1129,10 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_whe
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
-        "    (->Line 511 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
+        "    (->Line 511 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
         "    [20 8 10 6] "
         "    0 false true 0 0 nil))",
         g_test_eval_state);
@@ -1117,10 +1158,10 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_tracks_has_animation
     ID static_scene = eval_string(
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
-        "    (->Line 521 nil (->Style 65535 1 true false 0 false 0) true 4 10 20 10) "
+        "    (->Line 521 nil (->Style 65535 1 true false 0 false 0) true 4 10 20 10 nil) "
         "    [0 8 30 6] "
         "    0 true true 0 0 nil))",
         g_test_eval_state);
@@ -1130,11 +1171,11 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_tracks_has_animation
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
         "    (->Line 522 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (->Timeline [[0 4] [100 14]] false) 10 20 10) "
+        "            (->Timeline [[0 4] [100 14]] false) 10 20 10 nil) "
         "    [0 8 30 6] "
         "    0 true true 0 0 nil))",
         g_test_eval_state);
@@ -1162,11 +1203,11 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_force_render_ticks_a
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
         "    (->Line 531 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (->Timeline [[0 4] [100 14]] false) 10 20 10) "
+        "            (->Timeline [[0 4] [100 14]] false) 10 20 10 nil) "
         "    [0 8 30 6] "
         "    0 true true 0 0 nil))",
         g_test_eval_state);
@@ -1198,10 +1239,10 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_reports_dirty_rect_u
     ID first_scene = eval_string(
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
-        "    (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
+        "    (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
         "    [20 8 10 6] "
         "    0 true true 0 1 nil))",
         g_test_eval_state);
@@ -1210,10 +1251,10 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_reports_dirty_rect_u
     ID moved_scene = eval_string(
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
-        "    (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10) "
+        "    (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
         "    [24 11 12 5] "
         "    0 true true 0 2 nil))",
         g_test_eval_state);
@@ -1371,11 +1412,11 @@ TEST(test_vector_scene_graph_slot_change_tracker_single_slot_publish_rerenders_o
     ID scenes = eval_string(
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  [(->FrameScene (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 2 4 14 4) [0 0 20 10] 0 true true 0 0 nil) "
-        "   (->FrameScene (->Line 542 nil (->Style 65535 1 true false 0 false 0) true 2 8 14 8) [0 0 20 12] 1 true true 0 0 nil) "
-        "   (->FrameScene (->Line 543 nil (->Style 65535 1 true false 0 false 0) true 2 12 14 12) [0 0 20 14] 2 true true 0 0 nil)])",
+        "  [(->FrameScene (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 2 4 14 4 nil) [0 0 20 10] 0 true true 0 0 nil) "
+        "   (->FrameScene (->Line 542 nil (->Style 65535 1 true false 0 false 0) true 2 8 14 8 nil) [0 0 20 12] 1 true true 0 0 nil) "
+        "   (->FrameScene (->Line 543 nil (->Style 65535 1 true false 0 false 0) true 2 12 14 12 nil) [0 0 20 14] 2 true true 0 0 nil)])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scenes);
     TEST_ASSERT_TRUE(is_vector(scenes));
@@ -2752,11 +2793,11 @@ TEST(test_vector_scene_graph_filled_rect_from_clojure_records) {
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Transform [tx ty sx sy rot]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Rect [id t style visible x y w h]) "
-        "  (defrecord Group [id t style visible children]) "
+        "  (defrecord Rect [id t style visible x y w h prototype]) "
+        "  (defrecord Group [id t style visible children prototype]) "
         "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
         "  (->Scene "
-        "    (->Rect 1009 nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12) "
+        "    (->Rect 1009 nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12 nil) "
         "    nil nil nil))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
@@ -3250,11 +3291,11 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_timeline_fields_
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
         "    (->Line 7101 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (->Timeline [[0 4] [100 14]] false) 6 20 6) "
+        "            (->Timeline [[0 4] [100 14]] false) 6 20 6 nil) "
         "    [0 0 64 48] "
         "    0 true true 0 0 nil))",
         g_test_eval_state);
@@ -3303,11 +3344,11 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_loop_timeline_cl
         "(do (require 'tiny-fx.gfx) "
         "  (defrecord Timeline [keyframes loop]) "
         "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2]) "
+        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
         "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
         "  (->FrameScene "
         "    (->Line 7201 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (->Timeline [[0 4] [100 14]] false) 8 20 8) "
+        "            (->Timeline [[0 4] [100 14]] false) 8 20 8 nil) "
         "    [0 0 64 48] "
         "    0 true true 0 0 nil))",
         g_test_eval_state);
