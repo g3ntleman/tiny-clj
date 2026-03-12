@@ -32,4 +32,12 @@ R"TINY_SND_DEBUG(
   (Thread/sleep 1700)
   nil)
 
+^#^{:doc "DEBUG-only piu demo: short up-ramp then down-ramp ending low (host bending). Not for production."}
+(defn play-piu-demo! []
+  (play-test-ramp! 1400 4000 18 218)
+  (Thread/sleep 22)
+  (play-test-ramp! 4000 750 48 218)
+  (Thread/sleep 80)
+  nil)
+
 )TINY_SND_DEBUG"

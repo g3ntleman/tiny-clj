@@ -681,9 +681,10 @@ TEST(test_sound_debug_lookup) {
       "tiny-fx.sound-debug/play-portamento-reference!",
       "tiny-fx.sound-debug/play-rocket-thruster-reference!",
       "tiny-fx.sound-debug/play-thrust-demo!",
+      "tiny-fx.sound-debug/play-piu-demo!",
   };
 
-  for (int i = 0; i < 7; i++) {
+  for (int i = 0; i < 8; i++) {
     char buf[192];
     test_snprintf(buf, sizeof(buf), "(do (require 'tiny-fx.sound-debug) (fn? %s))", names[i]);
     ID result = NULL;
@@ -784,7 +785,7 @@ TEST(test_sound_native_play_test_tone_returns_bool) {
 
   ID result = NULL;
   TRY {
-    result = eval_string("(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-test-tone! 440 100))",
+    result = eval_string("(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-test-tone! 440 100 0))",
                          g_test_eval_state);
   }
   CATCH(ex) {
@@ -818,7 +819,7 @@ TEST(test_sound_native_play_test_noise_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (tiny-fx.sound-debug/play-test-noise! 180 320 80 2 180))",
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-test-noise! 180 320 80 2 0))",
         g_test_eval_state);
   }
   CATCH(ex) {
@@ -835,7 +836,7 @@ TEST(test_sound_native_play_test_ramp_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-test-ramp! 220 320 120 180))",
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-test-ramp! 220 320 120 0))",
         g_test_eval_state);
   }
   CATCH(ex) {
@@ -852,7 +853,7 @@ TEST(test_sound_native_play_test_ramp_noise_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-test-ramp-noise! 180 320 80 3 180))",
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-test-ramp-noise! 180 320 80 3 0))",
         g_test_eval_state);
   }
   CATCH(ex) {
@@ -869,7 +870,7 @@ TEST(test_sound_debug_portamento_reference_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-portamento-reference!))",
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-test-ramp! 220 330 1800 0))",
         g_test_eval_state);
   }
   CATCH(ex) {
@@ -886,7 +887,7 @@ TEST(test_sound_debug_rocket_thruster_reference_returns_bool) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-rocket-thruster-reference!))",
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-test-ramp-noise! 180 360 2200 35 0))",
         g_test_eval_state);
   }
   CATCH(ex) {
