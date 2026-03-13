@@ -1,6 +1,6 @@
 # Sound DSL
 
-This document describes the public step DSL used by [`tiny-fx.sound`](/Users/theisen/Projects/tiny-clj/src/tiny-fx.sound.clj).
+This document describes the public step DSL used by [`tiny-fx.sound`](/Users/theisen/Projects/tiny-clj/libs/tiny-fx/sound.clj).
 
 ## Scope
 

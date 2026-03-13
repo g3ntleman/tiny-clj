@@ -4,25 +4,34 @@ overview: Ersetzt die doppelt gepflegten eingebetteten Clojure-Quellen durch ein
 todos:
   - id: source-of-truth
     content: /libs als einzige Quelle für eingebettete Clojure-Dateien festlegen
-    status: pending
+    status: completed
   - id: generator-script
     content: Deployment-Helfer-Script implementieren, das aus einer Clojure-Datei einen embeddbaren C-Source-Snippet erzeugt
-    status: pending
+    status: completed
   - id: build-pipeline
     content: CMake so erweitern, dass die Embedded-Sources im Build-Verzeichnis generiert und von embedded_sources.c konsumiert werden
-    status: pending
+    status: completed
   - id: deployment-classes
     content: Zwischen embedded deployten Bibliotheken und Flash-FS-nachgeladenen Dateien einen klaren Build-Vertrag definieren
-    status: pending
+    status: completed
   - id: duplicate-removal
     content: doppelte eingebettete Clojure-Dateien unter src/ entfernen oder auf generierte Artefakte umstellen
-    status: pending
+    status: completed
   - id: debug-and-feature-gating
     content: DEBUG- und Feature-abhängige Embedded-Quellen weiterhin korrekt in der Generierung abbilden
-    status: pending
+    status: completed
   - id: tests-and-tooling
     content: Build-, Resolver- und Embedded-Source-Tests sowie clj-kondo für /libs in den neuen Ablauf einpassen
-    status: pending
+    status: completed
+  - id: target-rollout-completeness
+    content: alle Targets mit embedded_sources.c, insbesondere optionale Targets wie game-demo, an die generierten Include-Verzeichnisse und Generator-Abhängigkeiten anschließen
+    status: completed
+  - id: optional-target-verification
+    content: optionale und selten gebaute Targets nach der Umstellung explizit bauen und den Rollout per Regression absichern
+    status: completed
+  - id: cleanup
+    content: Aufräumen: Planstatus, Dokumentation und verbleibende Rollout-Lücken nach der Migration konsolidieren
+    status: completed
 isProject: false
 ---
 
@@ -53,6 +62,19 @@ Wichtig dabei:
 - der Build muss deshalb explizit wissen, welche Dateien embedded sind und welche nicht
 
 ## Problem heute
+
+Nach dem ersten Umbau war ein Restproblem sichtbar geworden:
+
+- reguläre Haupttargets und Tests sind an die neue Generierung angeschlossen
+- ein optionales Ziel wie `game-demo` baute weiterhin `embedded_sources.c`, ohne das generierte Include-Verzeichnis zu kennen
+- dadurch schlug der Build mit `clojure.core.clj.inc file not found` fehl
+
+Das war kein inhaltliches Problem von `clojure.core`, sondern eine unvollständige Rollout-Stelle in CMake:
+
+- `clojure.core` selbst kann und soll aus `/libs/clojure/core.clj` generiert eingebettet werden
+- aber jedes Target, das `src/embedded_sources.c` kompiliert, muss dieselbe Build-Vertragsfläche bekommen:
+  - Abhängigkeit auf den Generator-Target
+  - Include-Pfad auf `build/generated/embedded_clojure/...`
 
 Aktuell ist mindestens ein Teil der Embedded-Clojure-Quellen gespiegelt:
 
@@ -360,9 +382,34 @@ Reihenfolge:
 1. Generator-Script für eine einzelne Datei
 2. CMake-Integration für genau einen `embedded`-Pfad
 3. Resolver-/Embedded-Tests grün halten
-4. gespiegelte Datei entfernen
-5. weitere `embedded`-Bibliotheken schrittweise migrieren
-6. danach getrennt die `flash-fs`-Klasse sauber modellieren
+4. weitere `embedded`-Bibliotheken schrittweise migrieren
+5. danach getrennt die `flash-fs`-Klasse sauber modellieren
+6. abschließenden Aufräumschritt durchführen und redundante Dateien entfernen
+
+## Nachtrag: Vollständiger Target-Rollout
+
+Die erste Migration hat gezeigt, dass wir zusätzlich einen kurzen Abschluss-Track brauchten.
+
+### Ziel
+
+Sicherstellen, dass wirklich jedes Build-Ziel, das `embedded_sources.c` nutzt, auch die generierten `.inc`-Dateien sieht.
+
+### Konkreter Plan
+
+1. Alle Targets inventarisieren, die `src/embedded_sources.c` direkt oder indirekt mitbauen.
+2. Für jedes dieser Targets prüfen, ob `tinyclj_target_use_generated_embedded_clojure(...)` oder ein äquivalenter IDF-Pfad angewendet wird.
+3. `game-demo` und andere optionale Targets an denselben Generator- und Include-Vertrag anschließen.
+4. Einen gezielten Build-Regressionstest für optionale Targets ergänzen oder dokumentiert verifizieren:
+   - `-DTINYCLJ_GAME_DEMO=ON`
+   - Build von `game-demo`
+5. Danach den Rollout als vollständig markieren.
+
+### Erfolgsbedingung
+
+Folgende Aussage muss danach gelten:
+
+- kein Target im Repo kann mehr `embedded_sources.c` kompilieren, ohne Zugriff auf die generierten `.inc`-Dateien zu haben
+- `clojure.core` und die übrigen embedded Libraries werden für alle relevanten Targets konsistent aus `/libs` generiert
 
 ## Ergebnisbild
 
@@ -373,4 +420,5 @@ Am Ende soll gelten:
 - Embedded-C-Quellen werden nur für die `embedded`-Klasse im Build-Verzeichnis erzeugt
 - Flash-FS-Dateien kommen aus denselben `/libs`-Quellen, aber über einen separaten Deployment-Pfad
 - `embedded_sources` konsumiert generierte Artefakte statt gepflegter Duplikate
+- redundante gespiegelt gepflegte Dateien unter `/src` oder an ähnlichen Übergangspunkten sind entfernt
 - Produktions- und Debug-Pfade bleiben klar getrennt

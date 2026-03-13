@@ -1,4 +1,4 @@
-R"TINY_GFX_SCENE(
+
 (ns tiny-fx.gfx-scene)
 
 ;; Central scene-record schema for tiny-fx/tiny-clj vector rendering.
@@ -202,4 +202,3 @@ The runtime emits only edge transitions (`:enter` / `:exit`)."
         node2))))
 
 
-)TINY_GFX_SCENE"

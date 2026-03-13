@@ -1,5 +1,4 @@
 
-R"TINY_DB_KV(
 (ns tiny-db.kv)
 
 ;; Native-backed KV API (separate key-space from tiny-clj.fs).
@@ -12,4 +11,3 @@ R"TINY_DB_KV(
 ^#^{:doc "Deletes key from the tiny-db KV store (native)."}
 (defn delete! [key] :native)
 
-)TINY_DB_KV"

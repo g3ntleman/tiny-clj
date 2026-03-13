@@ -1,4 +1,4 @@
-R"TINY_SND_DEBUG(
+
 (ns tiny-fx.sound-debug)
 
 ^#^{:doc "DEBUG-only sound host diagnostics map. Not part of the production sound API."}
@@ -40,4 +40,3 @@ R"TINY_SND_DEBUG(
   (Thread/sleep 80)
   nil)
 
-)TINY_SND_DEBUG"

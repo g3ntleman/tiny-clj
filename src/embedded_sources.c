@@ -15,125 +15,125 @@
 #endif
 
 static const char clojure_core_code[] =
-#include "clojure.core.clj"
+#include "clojure.core.clj.inc"
     ;
 
 static const char clojure_string_code[] =
-#include "clojure.string.clj"
+#include "clojure.string.clj.inc"
     ;
 
 static const char clojure_repl_code[] =
-#include "clojure.repl.clj"
+#include "clojure.repl.clj.inc"
     ;
 
 static const char clojure_pprint_code[] =
-#include "clojure.pprint.clj"
+#include "clojure.pprint.clj.inc"
     ;
 
 static const char clojure_stacktrace_code[] =
-#include "clojure.stacktrace.clj"
+#include "clojure.stacktrace.clj.inc"
     ;
 
 static const char tiny_clj_runtime_code[] =
-#include "tiny-clj.runtime.clj"
+#include "tiny-clj.runtime.clj.inc"
     ;
 
 static const char tiny_db_kv_code[] =
-#include "tiny-db.kv.clj"
+#include "tiny-db.kv.clj.inc"
     ;
 
 static const char tiny_clj_datetime_code[] =
-#include "tiny-clj.datetime.clj"
+#include "tiny-clj.datetime.clj.inc"
     ;
 
 static const char tiny_clj_fs_code[] =
-#include "tiny-clj.fs.clj"
+#include "tiny-clj.fs.clj.inc"
     ;
 
 #if TINYCLJ_WITH_TINY_FX
 static const char tiny_fx_sound_code[] =
-#include "tiny-fx.sound.clj"
+#include "tiny-fx.sound.clj.inc"
     ;
 
 static const char tiny_fx_sound_native_code[] =
-#include "tiny-fx.sound-native.clj"
+#include "tiny-fx.sound-native.clj.inc"
     ;
 
 #ifdef DEBUG
 static const char tiny_fx_sound_debug_code[] =
-#include "tiny-fx.sound-debug.clj"
+#include "tiny-fx.sound-debug.clj.inc"
     ;
 #endif
 #endif
 
 static const char tiny_clj_gpio_code[] =
-#include "tiny-clj.gpio.clj"
+#include "tiny-clj.gpio.clj.inc"
     ;
 
 static const char tiny_clj_board_code[] =
-#include "tiny-clj.board.clj"
+#include "tiny-clj.board.clj.inc"
     ;
 
 static const char tiny_clj_button_code[] =
-#include "tiny-clj.button.clj"
+#include "tiny-clj.button.clj.inc"
     ;
 
 static const char tiny_clj_event_code[] =
-#include "tiny-clj.event.clj"
+#include "tiny-clj.event.clj.inc"
     ;
 
 static const char tiny_clj_sensor_code[] =
-#include "tiny-clj.sensor.clj"
+#include "tiny-clj.sensor.clj.inc"
     ;
 
 static const char tiny_clj_net_code[] =
-#include "tiny-clj.net.clj"
+#include "tiny-clj.net.clj.inc"
     ;
 
 static const char tiny_clj_net_mdns_code[] =
-#include "tiny-clj.net.mdns.clj"
+#include "tiny-clj.net.mdns.clj.inc"
     ;
 
 #if TINYCLJ_WITH_TINY_FX
 static const char tiny_fx_gfx_scene_code[] =
-#include "tiny-gfx.scene.clj"
+#include "tiny-gfx.scene.clj.inc"
     ;
 
 #ifdef DEBUG
 static const char tiny_fx_gfx_collision_code[] =
-#include "tiny-gfx.collision.clj"
+#include "tiny-gfx.collision.clj.inc"
     ;
 #endif
 
 #ifdef DEBUG
 static const char tiny_fx_gfx_bench_code[] =
-#include "tiny-fx.gfx-bench.clj"
+#include "tiny-fx.gfx-bench.clj.inc"
     ;
 #endif
 
 static const char tiny_fx_gfx_code[] =
-#include "tiny-gfx.runtime.clj"
+#include "tiny-gfx.runtime.clj.inc"
     ;
 
 static const char tiny_fx_startup_code[] =
-#include "tiny-fx.startup.clj"
+#include "tiny-fx.startup.clj.inc"
     ;
 
 static const char tiny_fx_game_demo_code[] =
-#include "tiny-fx.game-demo.clj"
+#include "tiny-fx.game-demo.clj.inc"
     ;
 #endif
 
 static const char tiny_db_rrd_code[] =
-#include "tiny-db.rrd.clj"
+#include "tiny-db.rrd.clj.inc"
     ;
 
 static const char tiny_db_rrd_classic_code[] =
-#include "tiny-db.rrd-classic.clj"
+#include "tiny-db.rrd-classic.clj.inc"
     ;
 
 static const char tiny_db_rrd_spline_code[] =
-#include "tiny-db.rrd-spline.clj"
+#include "tiny-db.rrd-spline.clj.inc"
     ;
 
 typedef struct {

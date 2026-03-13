@@ -6,6 +6,7 @@
 
 get_filename_component(TINYCLJ_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 set(TINYCLJ_SRC_DIR "${TINYCLJ_REPO_ROOT}/src")
+include("${TINYCLJ_REPO_ROOT}/cmake/embedded_clojure_sources.cmake")
 
 if(NOT DEFINED TINYCLJ_WITH_TINY_FX)
   set(TINYCLJ_WITH_TINY_FX ON)
@@ -99,10 +100,20 @@ configure_file(
   @ONLY
 )
 
+tinyclj_setup_embedded_clojure_generation(
+  "${TINYCLJ_REPO_ROOT}"
+  "${CMAKE_CURRENT_BINARY_DIR}"
+  TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS
+  TINYCLJ_GENERATED_EMBEDDED_CLOJURE_DIR
+  TINYCLJ_FLASH_FS_CLOJURE_MANIFEST
+)
+add_custom_target(tinyclj_embedded_clojure_sources DEPENDS ${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS})
+
 idf_component_register(
   SRCS
     ${TINYCLJ_SRCS}
   INCLUDE_DIRS
+    "${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_DIR}"
     "${CMAKE_CURRENT_BINARY_DIR}"
     "${TINYCLJ_SRC_DIR}"
     "${TINYCLJ_REPO_ROOT}"
@@ -114,6 +125,8 @@ idf_component_register(
     esp_timer
     esp_partition
 )
+
+add_dependencies(${COMPONENT_LIB} tinyclj_embedded_clojure_sources)
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC
   ESP32_BUILD=1

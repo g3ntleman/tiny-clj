@@ -1,4 +1,4 @@
-R"TINY_GFX_RUNTIME(
+
 (ns tiny-fx.gfx
   (:require [tiny-clj.runtime]))
 
@@ -29,4 +29,3 @@ Usage: (renderer-timeline-progress :game 3001 :t) where `:game` is one configure
 (def renderer-timeline-progress tiny-clj.runtime/renderer-timeline-progress)
 
 
-)TINY_GFX_RUNTIME"

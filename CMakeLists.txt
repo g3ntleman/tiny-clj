@@ -38,6 +38,7 @@ endif()
 
 # Include common paths configuration
 include(cmake_include_paths.cmake)
+include(cmake/embedded_clojure_sources.cmake)
 
 # Set C standard
 set(CMAKE_C_STANDARD 99)
@@ -171,6 +172,15 @@ configure_file(
 # This prevents stale checked-in headers from shadowing configure_file outputs.
 include_directories(BEFORE ${CMAKE_BINARY_DIR})
 
+tinyclj_setup_embedded_clojure_generation(
+    "${CMAKE_SOURCE_DIR}"
+    "${CMAKE_BINARY_DIR}"
+    TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS
+    TINYCLJ_GENERATED_EMBEDDED_CLOJURE_DIR
+    TINYCLJ_FLASH_FS_CLOJURE_MANIFEST
+)
+add_custom_target(tinyclj_embedded_clojure_sources DEPENDS ${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS})
+
 # Core sources stay in the always-on runtime.
 set(TINYCLJ_CORE_SOURCES
     src/clojure_core.c
@@ -290,6 +300,11 @@ function(tinyclj_target_enable_tiny_fx target_name platform_name)
     endif()
 endfunction()
 
+function(tinyclj_target_use_generated_embedded_clojure target_name)
+    add_dependencies(${target_name} tinyclj_embedded_clojure_sources)
+    target_include_directories(${target_name} PRIVATE "${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_DIR}")
+endfunction()
+
 if(TINYCLJ_WITH_TINY_FX)
     add_library(tiny-fx EXCLUDE_FROM_ALL STATIC ${TINYCLJ_HOST_TINY_FX_SOURCES})
     target_include_directories(tiny-fx PUBLIC
@@ -315,6 +330,7 @@ tinyclj_target_enable_tiny_fx(tiny-clj HOST)
 target_include_directories(tiny-clj PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
+tinyclj_target_use_generated_embedded_clojure(tiny-clj)
 # Main Build - Meta only in Debug builds
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(tiny-clj PRIVATE)
@@ -382,6 +398,7 @@ target_link_libraries(tiny-clj-esp32 PRIVATE tiny-db)
 target_include_directories(tiny-clj-esp32 PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
+tinyclj_target_use_generated_embedded_clojure(tiny-clj-esp32)
 
 
 # ESP32 Ultra-Minimal Build (only core features) - DISABLED
@@ -422,6 +439,7 @@ target_include_directories(tiny-clj-esp32-repl PRIVATE
     ${CMAKE_SOURCE_DIR}/external/esp-idf/components/esp_driver_gpio/include
     ${CMAKE_SOURCE_DIR}/external/esp-idf/components/esp_common/include
 )
+tinyclj_target_use_generated_embedded_clojure(tiny-clj-esp32-repl)
 target_compile_definitions(tiny-clj-esp32-repl PRIVATE
     ESP32_BUILD
     REPL_ENABLED=1
@@ -459,6 +477,7 @@ tinyclj_target_enable_tiny_fx(tiny-clj-repl HOST)
 target_include_directories(tiny-clj-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
+tinyclj_target_use_generated_embedded_clojure(tiny-clj-repl)
 # Output directory is set globally to "build"
 # REPL Build
 # Debug in Debug mode, Release in Release mode
@@ -491,6 +510,7 @@ tinyclj_target_enable_tiny_fx(tiny-clj-profile HOST)
 target_include_directories(tiny-clj-profile PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
+tinyclj_target_use_generated_embedded_clojure(tiny-clj-profile)
 target_compile_definitions(tiny-clj-profile PRIVATE PROFILING_ENABLED=1 META_ENABLED=${META_ENABLED_VALUE} MEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE} DEBUG)
 set_target_properties(tiny-clj-profile PROPERTIES
     COMPILE_FLAGS "-g -O2 -DDEBUG -DMEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE} -fno-omit-frame-pointer"
@@ -636,6 +656,7 @@ target_include_directories(unit-tests
         ${TINYCLJ_SUBJECTIVE_C_TESTS_COMMON_ANCHOR_DIR}
         ${CMAKE_SOURCE_DIR}
 )
+tinyclj_target_use_generated_embedded_clojure(unit-tests)
 
 # Ensure subjective-c library is compiled with same flags as unit-tests
 # This is critical: exception.c must use DEBUG to match CLJException struct size,
@@ -935,6 +956,12 @@ set_tests_properties(repl-history-multiple PROPERTIES
 add_test(NAME unit-tests COMMAND $<TARGET_FILE:unit-tests>)
 set_tests_properties(unit-tests PROPERTIES LABELS "unit")
 
+add_test(
+    NAME generate-embedded-clojure-source
+    COMMAND python3 "${CMAKE_SOURCE_DIR}/scripts/test_generate_embedded_clojure_source.py"
+)
+set_tests_properties(generate-embedded-clojure-source PROPERTIES LABELS "unit;scripts")
+
 if(TINYCLJ_GAME_DEMO)
     if(NOT TINYCLJ_WITH_TINY_FX)
         message(FATAL_ERROR "game-demo requires TINYCLJ_WITH_TINY_FX=ON")
@@ -966,6 +993,7 @@ if(TINYCLJ_GAME_DEMO)
         ${SOURCES}
     )
     tinyclj_target_enable_tiny_fx(game-demo HOST)
+    tinyclj_target_use_generated_embedded_clojure(game-demo)
     if(APPLE)
         target_sources(game-demo PRIVATE src/game_demo_macos_menu.m)
     endif()

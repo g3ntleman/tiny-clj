@@ -1,5 +1,4 @@
 
-R"CLOJURE(
 (ns clojure.core)
 
 ; ============================================================================
@@ -1090,4 +1089,3 @@ This is called synchronously from atom operations (reset!/swap!)."}
           (yield remaining)
           (recur))))))
 (ns clojure.core)
-)CLOJURE"

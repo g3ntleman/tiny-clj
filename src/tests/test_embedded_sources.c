@@ -10,6 +10,93 @@
 
 ID native_slurp(ID *args, unsigned int argc);
 
+static const char *embedded_sources_repo_root(void)
+{
+    const char *marker_abs = "/src/tests/test_embedded_sources.c";
+    const char *marker_rel = "src/tests/test_embedded_sources.c";
+    const char *pos = strstr(__FILE__, marker_abs);
+    if (!pos) {
+        pos = strstr(__FILE__, marker_rel);
+    }
+    TEST_ASSERT_NOT_NULL_MESSAGE(pos, "__FILE__ must point inside the tiny-clj repo");
+    return __FILE__;
+}
+
+static void embedded_sources_repo_path(char *out, size_t out_sz, const char *repo_rel_path)
+{
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_NOT_NULL(repo_rel_path);
+    TEST_ASSERT_TRUE(out_sz > 0);
+
+    const char *repo_root = embedded_sources_repo_root();
+    const char *marker_abs = strstr(repo_root, "/src/tests/test_embedded_sources.c");
+    size_t root_len = 0;
+
+    if (marker_abs) {
+        root_len = (size_t)(marker_abs - repo_root);
+    } else {
+        const char *marker_rel = strstr(repo_root, "src/tests/test_embedded_sources.c");
+        TEST_ASSERT_NOT_NULL(marker_rel);
+        root_len = (size_t)(marker_rel - repo_root);
+    }
+
+    if (root_len == 0u) {
+        const char *rel_path = repo_rel_path[0] == '/' ? repo_rel_path + 1 : repo_rel_path;
+        TEST_ASSERT_TRUE(strlen(rel_path) + 1u < out_sz);
+        strcpy(out, rel_path);
+        return;
+    }
+
+    TEST_ASSERT_TRUE(root_len + strlen(repo_rel_path) + 1u < out_sz);
+    memcpy(out, repo_root, root_len);
+    strcpy(out + root_len, repo_rel_path);
+}
+
+static void assert_resolved_bytes_match_repo_file(const char *virtual_path, const char *repo_rel_path)
+{
+    char abs_path[1024];
+    embedded_sources_repo_path(abs_path, sizeof(abs_path), repo_rel_path);
+
+    FILE *fp = fopen(abs_path, "rb");
+    if (!fp) {
+        const char *rel_path = repo_rel_path[0] == '/' ? repo_rel_path + 1 : repo_rel_path;
+        char parent_path[1024];
+        TEST_ASSERT_TRUE(strlen(rel_path) + 4u < sizeof(parent_path));
+        strcpy(parent_path, "../");
+        strcat(parent_path, rel_path);
+        fp = fopen(parent_path, "rb");
+        if (fp) {
+            strcpy(abs_path, parent_path);
+        }
+    }
+    TEST_ASSERT_NOT_NULL_MESSAGE(fp, abs_path);
+
+    TEST_ASSERT_EQUAL_INT(0, fseek(fp, 0, SEEK_END));
+    long file_size = ftell(fp);
+    TEST_ASSERT_TRUE(file_size >= 0);
+    TEST_ASSERT_EQUAL_INT(0, fseek(fp, 0, SEEK_SET));
+
+    uint8_t *file_bytes = NULL;
+    if (file_size > 0) {
+        file_bytes = (uint8_t *)malloc((size_t)file_size);
+        TEST_ASSERT_NOT_NULL(file_bytes);
+        TEST_ASSERT_EQUAL_UINT64((uint64_t)file_size, (uint64_t)fread(file_bytes, 1, (size_t)file_size, fp));
+    }
+    fclose(fp);
+
+    ID bytes = resolve_path_to_bytes(virtual_path);
+    TEST_ASSERT_NOT_NULL(bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(bytes));
+
+    CljByteArray *ba = as_byte_array(bytes);
+    TEST_ASSERT_EQUAL_INT((int)file_size, ba->length);
+    if (file_size > 0) {
+        TEST_ASSERT_EQUAL_INT(0, memcmp(ba->data, file_bytes, (size_t)file_size));
+    }
+
+    free(file_bytes);
+}
+
 TEST(test_embedded_sources_kv_precedes_embedded)
 {
     embedded_source_map_init();
@@ -202,6 +289,38 @@ TEST(test_embedded_sources_tiny_fx_startup)
         if (memcmp(ba->data + i, needle, n) == 0) found = 1;
     }
     TEST_ASSERT_TRUE(found);
+}
+
+TEST(test_embedded_sources_core_matches_libs_file_bytes)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+    assert_resolved_bytes_match_repo_file("/libs/clojure/core.clj", "/libs/clojure/core.clj");
+}
+
+TEST(test_embedded_sources_tiny_db_kv_matches_libs_file_bytes)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+    assert_resolved_bytes_match_repo_file("/libs/tiny-db/kv.clj", "/libs/tiny-db/kv.clj");
+}
+
+TEST(test_embedded_sources_tiny_fx_sound_matches_libs_file_bytes)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+    assert_resolved_bytes_match_repo_file("/libs/tiny-fx/sound.clj", "/libs/tiny-fx/sound.clj");
+}
+
+TEST(test_embedded_sources_tiny_fx_sound_demos_is_flash_fs_only)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+
+    const uint8_t *embedded_data = NULL;
+    int embedded_len = -1;
+    TEST_ASSERT_FALSE(embedded_source_lookup("/libs/tiny-fx/sound-demos.clj", &embedded_data, &embedded_len));
+    assert_resolved_bytes_match_repo_file("/libs/tiny-fx/sound-demos.clj", "/libs/tiny-fx/sound-demos.clj");
 }
 
 TEST(test_slurp_returns_string_view)

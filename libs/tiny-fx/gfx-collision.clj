@@ -1,4 +1,4 @@
-R"TINY_GFX_COL(
+
 (ns tiny-fx.gfx-collision)
 
 ;; Spatial callback API (C detection + Clojure response routing)
@@ -63,4 +63,3 @@ Returns nil when no callback is configured."}
         (watcher event))
       result)))
 
-)TINY_GFX_COL"

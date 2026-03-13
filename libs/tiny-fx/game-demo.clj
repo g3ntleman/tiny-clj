@@ -1,4 +1,4 @@
-R"TINY_GFX_HOST(
+
 (ns tiny-fx.game-demo
   (:require [tiny-fx.gfx-scene :refer [->Transform ->Style ->Group ->Polyline
                                      ->Tri ->VText ->FrameScene ->Timeline ->SpatialRule color]]
@@ -243,6 +243,40 @@ R"TINY_GFX_HOST(
 (def player-entity-id 3002)
 (def player-collision-entity-id 3006)
 (def obstacle-entity-id 3003)
+(def starwars-title-track-id :starwars-title-2v)
+(def starwars-title-steps
+  [{:rest :t}
+   {:melody :G5 :backing [:D4] :duration :q}
+   {:melody :G5 :backing [:D4] :duration :q}
+   {:melody :G5 :backing [:D4] :duration :q}
+   {:melody :Eb5 :backing [:C4] :duration :de}
+   {:melody :Bb5 :backing [:F4] :duration :s}
+   {:melody :G5 :backing [:D4] :duration :q}
+   {:melody :Eb5 :backing [:C4] :duration :de}
+   {:melody :Bb5 :backing [:F4] :duration :s}
+   {:melody :G5 :backing [:D4] :duration :q}
+   {:rest :e}
+   {:melody :D6 :backing [:A4] :duration :q}
+   {:melody :D6 :backing [:A4] :duration :q}
+   {:melody :D6 :backing [:A4] :duration :q}
+   {:melody :Eb6 :backing [:Bb4] :duration :de}
+   {:melody :Bb5 :backing [:F4] :duration :s}
+   {:melody :Gb5 :backing [:Db4] :duration :q}
+   {:melody :Eb5 :backing [:C4] :duration :de}
+   {:melody :Bb5 :backing [:F4] :duration :s}
+   {:melody :G5 :backing [:D4] :duration :q}
+   {:rest :s}])
+
+(defn play-starwars-title!
+  "Plays the piezo-friendly Star Wars title phrase once."
+  []
+  (sound/play-steps! starwars-title-track-id starwars-title-steps
+                     {:melody {:volume 220}
+                      :backing {:volume 195}
+                      :envelope [1.0 1.0 1.0 1.0 1.0 0.1]
+                      :tempo-bpm 100
+                      :gate-percent 78}))
+
 (def demo-melody-track-id :game-demo-melody)
 (def demo-melody-steps
   [{:melody :G5 :backing [:D4] :duration :s}
@@ -372,13 +406,7 @@ return values."
       '(tiny-clj.event/on
          {:source :spatial :id :player-vs-rocket}
          (fn [event]
-           (let [next-state (tiny-fx.game-demo/event->player-small-state event)]
-             (when (not= next-state :ignore)
-               (let [game-scene @tiny-fx.game-demo/game-scene-state]
-                 (when game-scene
-                   (reset! tiny-fx.game-demo/game-scene-state
-                           (tiny-fx.game-demo/apply-player-scale game-scene next-state)))))
-             nil)))))
+           (tiny-fx.game-demo/on-player-collision-toggle! event)))))
   (reset! demo-spatial-watcher-active* true)
   nil)
 
@@ -485,5 +513,3 @@ Index layout:
     (configure-demo-input-watchers!)
     (configure-demo-spatial-watchers!)
     demo-bundle))
-
-)TINY_GFX_HOST"
