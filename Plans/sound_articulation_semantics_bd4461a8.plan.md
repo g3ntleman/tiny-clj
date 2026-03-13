@@ -20,6 +20,9 @@ todos:
   - id: buzzer-tuning
     content: Weichere Envelope-Kandidaten für Buzzer/ESP32 experimentell vergleichen und einen Default auswählen
     status: pending
+  - id: default-envelope-experiment
+    content: Experimentell eine allgemeine Default-Kurve ermitteln, die ohne explizites :envelope brauchbar klingt
+    status: pending
 isProject: false
 ---
 
@@ -105,6 +108,7 @@ Zwischenstand aus dem Hörtest:
 - `[1.0 1.0 1.0 1.0 0.1]` klingt deutlich „retro“ bzw. C64-artig
 - weichere Kandidaten wie `[1.0 1.0 0.85 0.7 0.55]` sind als Gegenprobe sinnvoll
 - für Buzzer/ESP32 ist der finale Default noch offen und soll experimentell ermittelt werden
+- zusätzlich soll eine allgemeine Default-Kurve separat ermittelt werden, damit Tracks später nicht zwingend `:envelope` angeben müssen
 
 ## Teststrategie und Ergebnis
 
@@ -132,5 +136,6 @@ Stand nach Umsetzung:
 Als separater Folgeplan sinnvoll:
 
 - weiche Envelope-Kandidaten für Buzzer systematisch vergleichen,
+- eine allgemeine Default-Kurve experimentell bestimmen,
 - daraus einen Default-Envelope ableiten,
 - Legato später separat verfeinern, falls der musikalische Bedarf bleibt.

@@ -22,6 +22,29 @@ static ID KW_TRACK_ID = NULL;
 static ID KW_AUDIO = NULL;
 static ID KW_FINISHED = NULL;
 
+#if defined(DEBUG) || defined(TINY_CLJ_TEST_RUNNER)
+__attribute__((weak)) void tinyclj_sound_backend_observe_set_voice(int voice_index,
+                                                                   uint16_t freq_hz,
+                                                                   uint8_t volume,
+                                                                   bool retrigger) {
+    (void)voice_index;
+    (void)freq_hz;
+    (void)volume;
+    (void)retrigger;
+}
+#else
+static inline void tinyclj_sound_backend_observe_set_voice(int voice_index,
+                                                           uint16_t freq_hz,
+                                                           uint8_t volume,
+                                                           bool retrigger) {
+    (void)voice_index;
+    (void)freq_hz;
+    (void)volume;
+    (void)retrigger;
+}
+#endif
+
+#ifdef DEBUG
 static bool sound_interp_debug_enabled(void) {
     static int init = 0;
     static bool enabled = false;
@@ -32,6 +55,11 @@ static bool sound_interp_debug_enabled(void) {
     }
     return enabled;
 }
+#else
+static inline bool sound_interp_debug_enabled(void) {
+    return false;
+}
+#endif
 
 /* ========================================================================= */
 /* MIDI note -> frequency table (A4 = 440 Hz, equal temperament)             */
@@ -171,20 +199,13 @@ static void stream_init(SoundStream *s, SoundTrackEntry *t, int32_t repeat) {
     memset(&s->envelope, 0, sizeof(s->envelope));
 }
 
-static void sound_envelope_reset(SoundEnvelope *env) {
-    if (!env) {
-        return;
-    }
-    memset(env, 0, sizeof(*env));
-}
-
 static bool sound_envelope_apply_points(SoundEnvelope *env,
                                         const uint8_t *levels,
                                         uint8_t point_count) {
     if (!env || !levels || point_count == 0u || point_count > TRK1_MAX_ENVELOPE_POINTS) {
         return false;
     }
-    sound_envelope_reset(env);
+    memset(env, 0, sizeof(*env));
     env->point_count = point_count;
     uint8_t current_level = levels[0];
     uint8_t current_width = 1u;
@@ -205,15 +226,6 @@ static bool sound_envelope_apply_points(SoundEnvelope *env,
     env->segment_count++;
     env->enabled = (env->segment_count > 1u);
     return true;
-}
-
-static uint32_t sound_split_proportional_ticks(uint32_t total_ticks,
-                                               uint8_t numerator,
-                                               uint8_t denominator) {
-    if (denominator == 0u) {
-        return 0u;
-    }
-    return (uint32_t)(((uint64_t)total_ticks * (uint64_t)numerator) / (uint64_t)denominator);
 }
 
 static void sound_voice_reset_envelope(SoundVoice *voice) {
@@ -248,9 +260,9 @@ static void sound_voice_apply_envelope_profile(SoundVoice *voice,
     uint8_t stage_count = 0u;
     uint32_t allocated = 0u;
     for (uint8_t i = 0u; i < env->segment_count; i++) {
-        uint32_t stage_ticks = sound_split_proportional_ticks(gate_ticks,
-                                                              env->segment_point_widths[i],
-                                                              env->point_count);
+        uint32_t stage_ticks =
+            (uint32_t)(((uint64_t)gate_ticks * (uint64_t)env->segment_point_widths[i]) /
+                       (uint64_t)env->point_count);
         if (i == (uint8_t)(env->segment_count - 1u)) {
             stage_ticks = gate_ticks - allocated;
         } else {
@@ -330,6 +342,74 @@ static void sound_engine_release_all_voice_holds(void) {
     }
 }
 
+static bool stream_decode_note_event(SoundStream *s,
+                                     uint8_t event_type,
+                                     uint16_t *out_freq_hz,
+                                     uint32_t *out_gate_ticks,
+                                     uint8_t *out_note_flags,
+                                     uint8_t *out_note) {
+    bool hz_note = (event_type == TRK1_EVT_NOTE_HZ || event_type == TRK1_EVT_NOTE_HZ_EX);
+    bool ex_note = (event_type == TRK1_EVT_NOTE_EX || event_type == TRK1_EVT_NOTE_HZ_EX);
+    *out_freq_hz = 0u;
+    *out_gate_ticks = 0u;
+    *out_note_flags = 0u;
+    *out_note = 0u;
+
+    if (hz_note) {
+        if (s->cursor + 2 > s->stream_end) {
+            return false;
+        }
+        *out_freq_hz = (uint16_t)(s->cursor[0] | (s->cursor[1] << 8));
+        s->cursor += 2;
+    } else {
+        if (s->cursor >= s->stream_end) {
+            return false;
+        }
+        *out_note = *s->cursor++;
+        *out_freq_hz = midi_note_to_freq(*out_note);
+    }
+
+    if (!trk1_decode_varuint(&s->cursor, s->stream_end, out_gate_ticks)) {
+        return false;
+    }
+
+    if (ex_note) {
+        if (s->cursor >= s->stream_end) {
+            return false;
+        }
+        *out_note_flags = *s->cursor++;
+    }
+
+    return true;
+}
+
+static void stream_log_note_event(const SoundStream *s,
+                                  uint8_t event_type,
+                                  uint8_t channel,
+                                  int voice_index,
+                                  uint8_t note,
+                                  uint16_t freq_hz,
+                                  uint32_t gate_ticks,
+                                  uint8_t note_flags,
+                                  uint8_t volume) {
+    if (!sound_interp_debug_enabled()) {
+        return;
+    }
+    fprintf(stderr,
+            "[sound-interp] %s tick=%" PRIu32 " ch=%u->v=%d note=%u freq=%u gate=%u flags=%u vol=%u\n",
+            (event_type == TRK1_EVT_NOTE_HZ_EX) ? "NOTE_HZ_EX" :
+            (event_type == TRK1_EVT_NOTE_EX) ? "NOTE_EX" :
+            (event_type == TRK1_EVT_NOTE_HZ) ? "NOTE_HZ" : "NOTE",
+            s->current_tick,
+            channel,
+            voice_index,
+            note,
+            (unsigned int)freq_hz,
+            (unsigned int)gate_ticks,
+            (unsigned int)note_flags,
+            (unsigned int)volume);
+}
+
 static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_count) {
     if (!s->active || s->cursor >= s->stream_end) return false;
 
@@ -339,115 +419,30 @@ static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_cou
     uint8_t channel = control & 0x0F;
 
     switch (event_type) {
-    case TRK1_EVT_NOTE: {
-        if (s->cursor >= s->stream_end) { s->active = false; return false; }
-        uint8_t note = *s->cursor++;
-        uint32_t gate_ticks = 0;
-        if (!trk1_decode_varuint(&s->cursor, s->stream_end, &gate_ticks)) {
-            s->active = false;
-            return false;
-        }
-        /* Map channel to voice (modulo available voices) */
-        if (voice_count > 0) {
-            int vi = channel % voice_count;
-            sound_voice_apply_note(&voices[vi], &s->envelope, midi_note_to_freq(note), gate_ticks, s->track_volume, 0u);
-            if (sound_interp_debug_enabled()) {
-                fprintf(stderr,
-                        "[sound-interp] NOTE tick=%" PRIu32 " ch=%u->v=%d note=%u freq=%u gate=%u vol=%u\n",
-                        s->current_tick,
-                        channel,
-                        vi,
-                        note,
-                        (unsigned int)voices[vi].freq_hz,
-                        (unsigned int)gate_ticks,
-                        (unsigned int)voices[vi].volume);
-            }
-        }
-        break;
-    }
-    case TRK1_EVT_NOTE_HZ: {
-        /* Payload: uint16 LE frequency Hz (0 = rest), then varuint gate_ticks */
-        if (s->cursor + 2 > s->stream_end) {
-            s->active = false;
-            return false;
-        }
-        uint16_t freq_hz = (uint16_t)(s->cursor[0] | (s->cursor[1] << 8));
-        s->cursor += 2;
-        uint32_t gate_ticks = 0;
-        if (!trk1_decode_varuint(&s->cursor, s->stream_end, &gate_ticks)) {
-            s->active = false;
-            return false;
-        }
-        if (voice_count > 0) {
-            int vi = channel % voice_count;
-            sound_voice_apply_note(&voices[vi], &s->envelope, freq_hz, gate_ticks, s->track_volume, 0u);
-            if (sound_interp_debug_enabled()) {
-                fprintf(stderr,
-                        "[sound-interp] NOTE_HZ tick=%" PRIu32 " ch=%u->v=%d freq_hz=%u gate=%u vol=%u\n",
-                        s->current_tick,
-                        channel,
-                        vi,
-                        (unsigned int)freq_hz,
-                        (unsigned int)gate_ticks,
-                        (unsigned int)voices[vi].volume);
-            }
-        }
-        break;
-    }
-    case TRK1_EVT_NOTE_EX: {
-        if (s->cursor >= s->stream_end) { s->active = false; return false; }
-        uint8_t note = *s->cursor++;
-        uint32_t gate_ticks = 0;
-        if (!trk1_decode_varuint(&s->cursor, s->stream_end, &gate_ticks) || s->cursor >= s->stream_end) {
-            s->active = false;
-            return false;
-        }
-        uint8_t note_flags = *s->cursor++;
-        if (voice_count > 0) {
-            int vi = channel % voice_count;
-            sound_voice_apply_note(&voices[vi], &s->envelope, midi_note_to_freq(note), gate_ticks, s->track_volume, note_flags);
-            if (sound_interp_debug_enabled()) {
-                fprintf(stderr,
-                        "[sound-interp] NOTE_EX tick=%" PRIu32 " ch=%u->v=%d note=%u freq=%u gate=%u flags=%u vol=%u\n",
-                        s->current_tick,
-                        channel,
-                        vi,
-                        note,
-                        (unsigned int)voices[vi].freq_hz,
-                        (unsigned int)gate_ticks,
-                        (unsigned int)note_flags,
-                        (unsigned int)voices[vi].volume);
-            }
-        }
-        break;
-    }
+    case TRK1_EVT_NOTE:
+    case TRK1_EVT_NOTE_HZ:
+    case TRK1_EVT_NOTE_EX:
     case TRK1_EVT_NOTE_HZ_EX: {
-        if (s->cursor + 2 > s->stream_end) {
+        uint16_t freq_hz = 0u;
+        uint32_t gate_ticks = 0u;
+        uint8_t note_flags = 0u;
+        uint8_t note = 0u;
+        if (!stream_decode_note_event(s, event_type, &freq_hz, &gate_ticks, &note_flags, &note)) {
             s->active = false;
             return false;
         }
-        uint16_t freq_hz = (uint16_t)(s->cursor[0] | (s->cursor[1] << 8));
-        s->cursor += 2;
-        uint32_t gate_ticks = 0;
-        if (!trk1_decode_varuint(&s->cursor, s->stream_end, &gate_ticks) || s->cursor >= s->stream_end) {
-            s->active = false;
-            return false;
-        }
-        uint8_t note_flags = *s->cursor++;
         if (voice_count > 0) {
             int vi = channel % voice_count;
             sound_voice_apply_note(&voices[vi], &s->envelope, freq_hz, gate_ticks, s->track_volume, note_flags);
-            if (sound_interp_debug_enabled()) {
-                fprintf(stderr,
-                        "[sound-interp] NOTE_HZ_EX tick=%" PRIu32 " ch=%u->v=%d freq_hz=%u gate=%u flags=%u vol=%u\n",
-                        s->current_tick,
-                        channel,
-                        vi,
-                        (unsigned int)freq_hz,
-                        (unsigned int)gate_ticks,
-                        (unsigned int)note_flags,
-                        (unsigned int)voices[vi].volume);
-            }
+            stream_log_note_event(s,
+                                  event_type,
+                                  channel,
+                                  vi,
+                                  note,
+                                  freq_hz,
+                                  gate_ticks,
+                                  note_flags,
+                                  voices[vi].volume);
         }
         break;
     }
@@ -875,6 +870,7 @@ static inline void tick_apply_voice_output(int voice_index, SoundVoice *voice) {
         return;
     }
     sound_backend_set_voice(voice_index, target_freq, target_vol, retrigger);
+    tinyclj_sound_backend_observe_set_voice(voice_index, target_freq, target_vol, retrigger);
     voice->applied_freq_hz = target_freq;
     voice->applied_volume = target_vol;
     voice->applied_attack_generation = voice->attack_generation;

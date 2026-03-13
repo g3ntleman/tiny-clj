@@ -82,58 +82,33 @@ R"TINY_SND_CMP(
   ;; has_delay=0, event_type=1 (SET_VOL)
   [(+ (* 1 16) ch) vol])
 
-(defn- evt-note-midi [ch note-kw gate-ms has-delay delay-ms]
-  ;; has_delay bit in bit7, event_type=0 (NOTE), payload = MIDI 0..127
-  (let [ctrl (+ (if has-delay 128 0) (* 0 16) ch)
-        base [ctrl (note->midi note-kw)]
-        base2 (reduce conj base (varuint gate-ms))]
-    (if has-delay
-      (reduce conj base2 (varuint delay-ms))
-      base2)))
-
-(defn- evt-note-midi-ex [ch note-kw gate-ms note-flags has-delay delay-ms]
-  (let [ctrl (+ (if has-delay 128 0) (* 4 16) ch)
-        base [ctrl (note->midi note-kw)]
-        base2 (reduce conj base (varuint gate-ms))
-        base3 (conj base2 note-flags)]
-    (if has-delay
-      (reduce conj base3 (varuint delay-ms))
-      base3)))
-
-(defn- evt-note-hz [ch freq-hz gate-ms has-delay delay-ms]
-  ;; has_delay bit in bit7, event_type=3 (NOTE_HZ), payload = uint16 LE Hz (0 = rest)
+(defn- validate-freq-hz [freq-hz]
   (when (or (not (integer? freq-hz)) (< freq-hz 0) (> freq-hz 20000))
-    (fail "compile-track: frequency Hz must be integer 0..20000"))
-  (let [ctrl (+ (if has-delay 128 0) (* 3 16) ch)
-        lo (mod freq-hz 256)
-        hi (mod (quot freq-hz 256) 256)
-        base [ctrl lo hi]
-        base2 (reduce conj base (varuint gate-ms))]
-    (if has-delay
-      (reduce conj base2 (varuint delay-ms))
-      base2)))
+    (fail "compile-track: frequency Hz must be integer 0..20000")))
 
-(defn- evt-note-hz-ex [ch freq-hz gate-ms note-flags has-delay delay-ms]
-  (when (or (not (integer? freq-hz)) (< freq-hz 0) (> freq-hz 20000))
-    (fail "compile-track: frequency Hz must be integer 0..20000"))
-  (let [ctrl (+ (if has-delay 128 0) (* 5 16) ch)
-        lo (mod freq-hz 256)
-        hi (mod (quot freq-hz 256) 256)
-        base [ctrl lo hi]
-        base2 (reduce conj base (varuint gate-ms))
-        base3 (conj base2 note-flags)]
-    (if has-delay
-      (reduce conj base3 (varuint delay-ms))
-      base3)))
+(defn- maybe-append-delay [event-bytes has-delay delay-ms]
+  (if has-delay
+    (reduce conj event-bytes (varuint delay-ms))
+    event-bytes))
 
 (defn- evt-note [ch note-val gate-ms note-flags has-delay delay-ms]
-  (if (= note-flags 0)
-    (if (integer? note-val)
-      (evt-note-hz ch note-val gate-ms has-delay delay-ms)
-      (evt-note-midi ch note-val gate-ms has-delay delay-ms))
-    (if (integer? note-val)
-      (evt-note-hz-ex ch note-val gate-ms note-flags has-delay delay-ms)
-      (evt-note-midi-ex ch note-val gate-ms note-flags has-delay delay-ms))))
+  (let [hz-note? (integer? note-val)
+        ex-note? (not (= note-flags 0))
+        event-type (cond
+                     hz-note? (if ex-note? 5 3)
+                     ex-note? 4
+                     :else 0)
+        payload (if hz-note?
+                  (do
+                    (validate-freq-hz note-val)
+                    [(mod note-val 256)
+                     (mod (quot note-val 256) 256)])
+                  [(note->midi note-val)])
+        ctrl (+ (if has-delay 128 0) (* event-type 16) ch)
+        base1 (reduce conj [ctrl] payload)
+        base2 (reduce conj base1 (varuint gate-ms))
+        base3 (if ex-note? (conj base2 note-flags) base2)]
+    (maybe-append-delay base3 has-delay delay-ms)))
 
 (defn- evt-end []
   ;; has_delay=0, event_type=2 (END), channel=0

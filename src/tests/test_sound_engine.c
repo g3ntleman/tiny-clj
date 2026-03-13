@@ -11,6 +11,26 @@
 #include "../event_loop.h"
 #include "byte_array.h"
 
+static uint32_t g_test_backend_set_voice_call_count = 0u;
+static uint32_t g_test_backend_set_voice_nonzero_count = 0u;
+
+void tinyclj_sound_backend_observe_set_voice(int voice_index,
+                                             uint16_t freq_hz,
+                                             uint8_t volume,
+                                             bool retrigger) {
+  (void)voice_index;
+  (void)retrigger;
+  g_test_backend_set_voice_call_count++;
+  if (freq_hz > 0u && volume > 0u) {
+    g_test_backend_set_voice_nonzero_count++;
+  }
+}
+
+static void reset_test_backend_set_voice_counters(void) {
+  g_test_backend_set_voice_call_count = 0u;
+  g_test_backend_set_voice_nonzero_count = 0u;
+}
+
 /* ========================================================================= */
 /* Helper: build a minimal trk1 byte array                                   */
 /* ========================================================================= */
@@ -335,6 +355,44 @@ static ID make_test_trk1_with_envelope_and_two_notes(const uint8_t *envelope_lev
   d[off++] = note2;
   for (int i = 0; i < gate2_len; i++) {
     d[off++] = gate2_buf[i];
+  }
+
+  d[off++] = (TRK1_EVT_END << 4);
+  return (ID)ba;
+}
+
+static ID make_test_trk1_with_envelope_and_note(const uint8_t *envelope_levels,
+                                                uint8_t envelope_point_count,
+                                                uint8_t note,
+                                                uint32_t gate_ticks) {
+  TEST_ASSERT_NOT_NULL(envelope_levels);
+  TEST_ASSERT_TRUE(envelope_point_count > 0u);
+  TEST_ASSERT_TRUE(envelope_point_count <= 8u);
+
+  uint8_t gate_buf[4];
+  int gate_len = encode_test_varuint(gate_ticks, gate_buf, (int)sizeof(gate_buf));
+  TEST_ASSERT_TRUE(gate_len > 0);
+
+  int stream_len = 1 + 1 + envelope_point_count +
+                   1 + 1 + gate_len +
+                   1;
+  int total_len = TRK1_HEADER_SIZE + stream_len;
+
+  CljByteArray *ba = make_byte_array(total_len);
+  uint8_t *d = ba->data;
+  write_test_trk1_header(d, 1, 0, stream_len);
+
+  int off = TRK1_HEADER_SIZE;
+  d[off++] = (TRK1_EVT_SET_ENV << 4);
+  d[off++] = envelope_point_count;
+  for (uint8_t i = 0; i < envelope_point_count; i++) {
+    d[off++] = envelope_levels[i];
+  }
+
+  d[off++] = (TRK1_EVT_NOTE << 4);
+  d[off++] = note;
+  for (int i = 0; i < gate_len; i++) {
+    d[off++] = gate_buf[i];
   }
 
   d[off++] = (TRK1_EVT_END << 4);
@@ -769,6 +827,36 @@ TEST(test_sound_track_envelope_resets_repeated_note_volume_without_retrigger_fla
   TEST_ASSERT_EQUAL_UINT16(440u, g_sound_engine.voices[0].freq_hz);
   TEST_ASSERT_EQUAL_UINT8(255u, g_sound_engine.voices[0].volume);
   TEST_ASSERT_EQUAL_UINT32(0u, g_sound_engine.voices[0].attack_generation);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_track_envelope_emits_only_two_nonzero_backend_updates_per_note) {
+  sound_engine_init(1);
+  reset_test_backend_set_voice_counters();
+
+  static const uint8_t envelope[] = {255u, 255u, 255u, 255u, 26u};
+  ID track_sym = (ID)intern_symbol_global(":envelope-update-count-test");
+  ID ba = make_test_trk1_with_envelope_and_note(envelope, 5u, 69, 10);
+
+  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+
+  for (int i = 0; i < 12; i++) {
+    sound_engine_tick();
+  }
+
+  if (g_test_backend_set_voice_nonzero_count != 2u ||
+      g_test_backend_set_voice_call_count != 3u) {
+    char msg[128];
+    snprintf(msg,
+             sizeof(msg),
+             "backend updates total=%u nonzero=%u",
+             (unsigned int)g_test_backend_set_voice_call_count,
+             (unsigned int)g_test_backend_set_voice_nonzero_count);
+    TEST_FAIL_MESSAGE(msg);
+  }
 
   RELEASE(ba);
   sound_engine_shutdown();
