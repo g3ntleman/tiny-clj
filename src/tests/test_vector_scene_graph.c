@@ -682,6 +682,54 @@ TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_i
     }
 }
 
+TEST(test_vector_scene_graph_game_demo_spatial_watcher_dispatch_toggles_player_scale) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-fx.game-demo) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  (tiny-fx.game-demo/create-demo-bundle) "
+        "  (let [enter? (nil? (tiny-fx.gfx-collision/invoke-collision-callback! "
+        "                       {:source :spatial "
+        "                        :id :player-vs-rocket "
+        "                        :rule {:id :player-vs-rocket} "
+        "                        :kind :collision "
+        "                        :phase :enter})) "
+        "        p1 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "        h1 (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
+        "        t1 (nth (nth (:keyframes (:t p1)) 0) 1) "
+        "        ht1 (nth (nth (:keyframes (:t h1)) 0) 1) "
+        "        exit? (nil? (tiny-fx.gfx-collision/invoke-collision-callback! "
+        "                      {:source :spatial "
+        "                       :id :player-vs-rocket "
+        "                       :rule {:id :player-vs-rocket} "
+        "                       :kind :collision "
+        "                       :phase :exit})) "
+        "        p2 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "        h2 (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
+        "        t2 (nth (nth (:keyframes (:t p2)) 0) 1) "
+        "        ht2 (nth (nth (:keyframes (:t h2)) 0) 1)] "
+        "    [enter? "
+        "     (= 0.75 (:sx t1)) "
+        "     (> (:sy t1) 0.70) "
+        "     (< (:sy t1) 0.72) "
+        "     (= 0.75 (:sx ht1)) "
+        "     (> (:sy ht1) 0.70) "
+        "     (< (:sy ht1) 0.72) "
+        "     exit? "
+        "     (= [1 1] [(:sx t2) (:sy t2)]) "
+        "     (= [1 1] [(:sx ht2) (:sy ht2)])]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(10, vector_count(v));
+    for (uint32_t i = 0; i < 10; i++) {
+        TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, i));
+    }
+}
+
 TEST(test_vector_scene_graph_game_demo_collision_callback_repeated_enter_reapplies_scale_from_scene_state, 0) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
