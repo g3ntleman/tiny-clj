@@ -143,13 +143,19 @@ void sound_backend_shutdown(void) {
     }
 }
 
-void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume) {
+void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume, bool retrigger) {
     if (voice_index < 0 || voice_index >= sound_backend_active_voice_count()) return;
     PwmVoice *v = &g_pwm_voices[voice_index];
 
     /* Only update hardware on actual change */
     uint8_t duty8 = (freq_hz > 0) ? (volume >> 1) : 0; /* scale 0..255 -> 0..127 for 50% max duty */
-    if (freq_hz == v->last_freq_hz && duty8 == v->last_duty) return;
+    if (!retrigger && freq_hz == v->last_freq_hz && duty8 == v->last_duty) return;
+
+    if (retrigger) {
+        (void)gpio_pwm_stop(v->pin);
+        v->last_freq_hz = 0;
+        v->last_duty = 0;
+    }
 
     if (freq_hz > 0 && duty8 > 0) {
         int32_t gpio_duty = ((int32_t)duty8 * 255 + 63) / 127;

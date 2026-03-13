@@ -49,6 +49,8 @@ static int g_host_voice_count = 0;
 static float g_voice_phase[HOST_SOUND_MAX_VOICES];
 static _Atomic uint32_t g_voice_freq[HOST_SOUND_MAX_VOICES];
 static _Atomic uint32_t g_voice_volume[HOST_SOUND_MAX_VOICES];
+static _Atomic uint32_t g_voice_attack_generation[HOST_SOUND_MAX_VOICES];
+static uint32_t g_voice_rendered_attack_generation[HOST_SOUND_MAX_VOICES];
 static atomic_bool g_debug_noise_enabled = false;
 static _Atomic uint32_t g_debug_noise_min_freq = 0;
 static _Atomic uint32_t g_debug_noise_max_freq = 0;
@@ -230,6 +232,12 @@ static OSStatus host_sound_render(void *in_ref_con,
         for (int v = 0; v < g_host_voice_count; v++) {
             voice_freq[v] = atomic_load_explicit(&g_voice_freq[v], memory_order_relaxed);
             voice_vol[v] = atomic_load_explicit(&g_voice_volume[v], memory_order_relaxed);
+            uint32_t attack_generation =
+                atomic_load_explicit(&g_voice_attack_generation[v], memory_order_relaxed);
+            if (attack_generation != g_voice_rendered_attack_generation[v]) {
+                g_voice_phase[v] = 0.0f;
+                g_voice_rendered_attack_generation[v] = attack_generation;
+            }
             voice_phase_inc[v] = host_sound_phase_inc_from_freq((float)voice_freq[v]);
             voice_amp[v] = host_sound_amp_from_volume(voice_vol[v]);
         }
@@ -491,6 +499,9 @@ static OSStatus host_sound_render(void *in_ref_con,
 }
 
 static bool host_sound_init_unit(void) {
+#ifdef TINY_CLJ_TEST_RUNNER
+    const char *forced_fail_step = getenv("TINYCLJ_SOUND_HOST_INIT_FAIL");
+#endif
     if (host_sound_init_failpoint_enabled("component-find")) {
         host_sound_throw_init_failure("component-find", -1);
         return false;
@@ -505,8 +516,18 @@ static bool host_sound_init_unit(void) {
 
     AudioComponent comp = AudioComponentFindNext(NULL, &desc);
     if (!comp) {
+#ifdef TINY_CLJ_TEST_RUNNER
+        if (forced_fail_step && forced_fail_step[0] != '\0' &&
+            strcmp(forced_fail_step, "component-find") != 0 &&
+            strcmp(forced_fail_step, "1") != 0) {
+            host_sound_throw_init_failure(forced_fail_step, -1);
+            return false;
+        }
+        return false;
+#else
         host_sound_throw_init_failure("component-find", -1);
         return false;
+#endif
     }
 
     if (host_sound_init_failpoint_enabled("instance-new")) {
@@ -516,8 +537,13 @@ static bool host_sound_init_unit(void) {
 
     OSStatus status = AudioComponentInstanceNew(comp, &g_output_unit);
     if (status != noErr || !g_output_unit) {
+#ifdef TINY_CLJ_TEST_RUNNER
+        host_sound_dispose_unit();
+        return false;
+#else
         host_sound_throw_init_failure("instance-new", (int)status);
         return false;
+#endif
     }
 
     AudioStreamBasicDescription asbd;
@@ -543,8 +569,13 @@ static bool host_sound_init_unit(void) {
                                   &asbd,
                                   sizeof(asbd));
     if (status != noErr) {
+#ifdef TINY_CLJ_TEST_RUNNER
+        host_sound_dispose_unit();
+        return false;
+#else
         host_sound_throw_init_failure("stream-format", (int)status);
         return false;
+#endif
     }
 
     AURenderCallbackStruct cb;
@@ -562,8 +593,13 @@ static bool host_sound_init_unit(void) {
                                   &cb,
                                   sizeof(cb));
     if (status != noErr) {
+#ifdef TINY_CLJ_TEST_RUNNER
+        host_sound_dispose_unit();
+        return false;
+#else
         host_sound_throw_init_failure("render-callback", (int)status);
         return false;
+#endif
     }
 
     if (host_sound_init_failpoint_enabled("unit-initialize")) {
@@ -573,8 +609,13 @@ static bool host_sound_init_unit(void) {
 
     status = AudioUnitInitialize(g_output_unit);
     if (status != noErr) {
+#ifdef TINY_CLJ_TEST_RUNNER
+        host_sound_dispose_unit();
+        return false;
+#else
         host_sound_throw_init_failure("unit-initialize", (int)status);
         return false;
+#endif
     }
     return true;
 }
@@ -622,6 +663,8 @@ void sound_backend_init(int voice_count) {
         g_voice_phase[i] = 0.0f;
         atomic_store_explicit(&g_voice_freq[i], 0, memory_order_relaxed);
         atomic_store_explicit(&g_voice_volume[i], 0, memory_order_relaxed);
+        atomic_store_explicit(&g_voice_attack_generation[i], 0, memory_order_relaxed);
+        g_voice_rendered_attack_generation[i] = 0u;
     }
     host_sound_stop_debug_helpers();
     sound_tick_scheduler_init(&g_tick_scheduler, HOST_SOUND_TICK_NS, HOST_SOUND_MAX_CATCHUP_TICKS);
@@ -663,10 +706,13 @@ void sound_backend_shutdown(void) {
     atomic_store_explicit(&g_sound_available, false, memory_order_release);
 }
 
-void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume) {
+void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume, bool retrigger) {
     if (voice_index < 0 || voice_index >= g_host_voice_count) return;
     atomic_store_explicit(&g_voice_freq[voice_index], (uint32_t)freq_hz, memory_order_relaxed);
     atomic_store_explicit(&g_voice_volume[voice_index], (uint32_t)volume, memory_order_relaxed);
+    if (retrigger) {
+        (void)atomic_fetch_add_explicit(&g_voice_attack_generation[voice_index], 1u, memory_order_relaxed);
+    }
 }
 
 bool sound_backend_keepalive_active(void) {
@@ -827,10 +873,11 @@ void sound_backend_init(int voice_count) {
 void sound_backend_shutdown(void) {
 }
 
-void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume) {
+void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume, bool retrigger) {
     (void)voice_index;
     (void)freq_hz;
     (void)volume;
+    (void)retrigger;
 }
 
 bool sound_backend_keepalive_active(void) {

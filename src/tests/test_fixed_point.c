@@ -240,6 +240,52 @@ TEST(test_fixed_variadic_operations) {
     });
 }
 
+TEST(test_fixed_mixed_multiplication_uses_wide_intermediate) {
+    WITH_AUTORELEASE_POOL({
+        if (!g_test_eval_state) {
+            TEST_FAIL_MESSAGE("Failed to create EvalState");
+            return;
+        }
+
+        CljObject *result = eval_string("(* 0.5 256)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(is_fixed(result));
+        TEST_ASSERT_FLOAT_WITHIN(0.01f, 128.0f, as_fixed(result));
+
+        result = eval_string("(* 0.1 255)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(is_fixed(result));
+        TEST_ASSERT_FLOAT_WITHIN(0.02f, 25.5f, as_fixed(result));
+    });
+}
+
+TEST(test_fixed_scaled_byte_rounding_expression_matches_envelope_needs) {
+    WITH_AUTORELEASE_POOL({
+        if (!g_test_eval_state) {
+            TEST_FAIL_MESSAGE("Failed to create EvalState");
+            return;
+        }
+
+        CljObject *result = eval_string(
+            "(let [level 0.1 "
+            "      scaled (quot (+ (* level 256) 0.5) 1)] "
+            "  (if (> scaled 255) 255 scaled))",
+            g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(is_fixnum(result));
+        TEST_ASSERT_EQUAL_INT(26, as_fixnum(result));
+
+        result = eval_string(
+            "(let [level 1.0 "
+            "      scaled (quot (+ (* level 256) 0.5) 1)] "
+            "  (if (> scaled 255) 255 scaled))",
+            g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(is_fixnum(result));
+        TEST_ASSERT_EQUAL_INT(255, as_fixnum(result));
+    });
+}
+
 TEST(test_fixed_error_handling) {
     WITH_AUTORELEASE_POOL({
         if (!g_test_eval_state) {

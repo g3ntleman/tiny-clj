@@ -168,6 +168,166 @@ static void stream_init(SoundStream *s, SoundTrackEntry *t, int32_t repeat) {
     s->track_volume = 255;
     s->active = true;
     s->track_id = t->track_id;
+    memset(&s->envelope, 0, sizeof(s->envelope));
+}
+
+static void sound_envelope_reset(SoundEnvelope *env) {
+    if (!env) {
+        return;
+    }
+    memset(env, 0, sizeof(*env));
+}
+
+static bool sound_envelope_apply_points(SoundEnvelope *env,
+                                        const uint8_t *levels,
+                                        uint8_t point_count) {
+    if (!env || !levels || point_count == 0u || point_count > TRK1_MAX_ENVELOPE_POINTS) {
+        return false;
+    }
+    sound_envelope_reset(env);
+    env->point_count = point_count;
+    uint8_t current_level = levels[0];
+    uint8_t current_width = 1u;
+    for (uint8_t i = 1u; i < point_count; i++) {
+        uint8_t level = levels[i];
+        if (level == current_level) {
+            current_width++;
+            continue;
+        }
+        env->segment_levels[env->segment_count] = current_level;
+        env->segment_point_widths[env->segment_count] = current_width;
+        env->segment_count++;
+        current_level = level;
+        current_width = 1u;
+    }
+    env->segment_levels[env->segment_count] = current_level;
+    env->segment_point_widths[env->segment_count] = current_width;
+    env->segment_count++;
+    env->enabled = (env->segment_count > 1u);
+    return true;
+}
+
+static uint32_t sound_split_proportional_ticks(uint32_t total_ticks,
+                                               uint8_t numerator,
+                                               uint8_t denominator) {
+    if (denominator == 0u) {
+        return 0u;
+    }
+    return (uint32_t)(((uint64_t)total_ticks * (uint64_t)numerator) / (uint64_t)denominator);
+}
+
+static void sound_voice_reset_envelope(SoundVoice *voice) {
+    if (!voice) {
+        return;
+    }
+    voice->envelope_enabled = false;
+    voice->envelope_stage_count = 0u;
+    voice->envelope_stage_index = 0u;
+    voice->envelope_stage_remaining_ticks = 0u;
+    memset(voice->envelope_stage_levels, 0, sizeof(voice->envelope_stage_levels));
+    memset(voice->envelope_stage_ticks, 0, sizeof(voice->envelope_stage_ticks));
+}
+
+static uint8_t sound_scale_volume_u8(uint8_t base_volume, uint8_t level) {
+    return (uint8_t)(((uint16_t)base_volume * (uint16_t)level) / 255u);
+}
+
+static void sound_voice_apply_envelope_profile(SoundVoice *voice,
+                                               const SoundEnvelope *env,
+                                               uint32_t gate_ticks,
+                                               bool disable_envelope) {
+    if (!voice) {
+        return;
+    }
+    sound_voice_reset_envelope(voice);
+    if (!env || !env->enabled || disable_envelope || gate_ticks == 0u) {
+        voice->volume = voice->base_volume;
+        return;
+    }
+
+    uint8_t stage_count = 0u;
+    uint32_t allocated = 0u;
+    for (uint8_t i = 0u; i < env->segment_count; i++) {
+        uint32_t stage_ticks = sound_split_proportional_ticks(gate_ticks,
+                                                              env->segment_point_widths[i],
+                                                              env->point_count);
+        if (i == (uint8_t)(env->segment_count - 1u)) {
+            stage_ticks = gate_ticks - allocated;
+        } else {
+            allocated += stage_ticks;
+        }
+        if (stage_ticks == 0u) {
+            continue;
+        }
+        voice->envelope_stage_levels[stage_count] = env->segment_levels[i];
+        voice->envelope_stage_ticks[stage_count] = stage_ticks;
+        stage_count++;
+    }
+
+    if (stage_count <= 1u) {
+        voice->volume = voice->base_volume;
+        return;
+    }
+
+    voice->envelope_enabled = true;
+    voice->envelope_stage_count = stage_count;
+    voice->envelope_stage_index = 0u;
+    voice->envelope_stage_remaining_ticks = voice->envelope_stage_ticks[0];
+    voice->volume = sound_scale_volume_u8(voice->base_volume, voice->envelope_stage_levels[0]);
+}
+
+static inline void sound_voice_apply_note(SoundVoice *voice,
+                                          const SoundEnvelope *env,
+                                          uint16_t freq_hz,
+                                          uint32_t gate_ticks,
+                                          uint8_t volume,
+                                          uint8_t note_flags) {
+    if (!voice) {
+        return;
+    }
+    voice->freq_hz = freq_hz;
+    voice->gate_remaining_ticks = gate_ticks;
+    voice->base_volume = volume;
+    voice->volume = volume;
+    voice->hold_until_next_note = ((note_flags & TRK1_NOTE_FLAG_LEGATO) != 0u) && (freq_hz > 0u);
+    if ((note_flags & TRK1_NOTE_FLAG_RETRIGGER) != 0u && freq_hz > 0u) {
+        voice->attack_generation++;
+    }
+    sound_voice_apply_envelope_profile(voice,
+                                       env,
+                                       gate_ticks,
+                                       voice->hold_until_next_note || freq_hz == 0u);
+    voice->active = true;
+}
+
+static inline void sound_voice_release_hold_if_idle(SoundVoice *voice) {
+    if (!voice || !voice->hold_until_next_note) {
+        return;
+    }
+    voice->hold_until_next_note = false;
+    if (voice->gate_remaining_ticks == 0u) {
+        voice->freq_hz = 0u;
+        voice->active = false;
+    }
+}
+
+static inline void sound_voice_force_silence(SoundVoice *voice) {
+    if (!voice) {
+        return;
+    }
+    voice->active = false;
+    voice->freq_hz = 0u;
+    voice->gate_remaining_ticks = 0u;
+    voice->hold_until_next_note = false;
+    voice->base_volume = 0u;
+    voice->volume = 0u;
+    sound_voice_reset_envelope(voice);
+}
+
+static void sound_engine_release_all_voice_holds(void) {
+    for (int i = 0; i < g_sound_engine.voice_count; i++) {
+        sound_voice_release_hold_if_idle(&g_sound_engine.voices[i]);
+    }
 }
 
 static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_count) {
@@ -190,10 +350,7 @@ static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_cou
         /* Map channel to voice (modulo available voices) */
         if (voice_count > 0) {
             int vi = channel % voice_count;
-            voices[vi].freq_hz = midi_note_to_freq(note);
-            voices[vi].gate_remaining_ticks = gate_ticks;
-            voices[vi].volume = s->track_volume;
-            voices[vi].active = true;
+            sound_voice_apply_note(&voices[vi], &s->envelope, midi_note_to_freq(note), gate_ticks, s->track_volume, 0u);
             if (sound_interp_debug_enabled()) {
                 fprintf(stderr,
                         "[sound-interp] NOTE tick=%" PRIu32 " ch=%u->v=%d note=%u freq=%u gate=%u vol=%u\n",
@@ -223,10 +380,7 @@ static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_cou
         }
         if (voice_count > 0) {
             int vi = channel % voice_count;
-            voices[vi].freq_hz = freq_hz;
-            voices[vi].gate_remaining_ticks = gate_ticks;
-            voices[vi].volume = s->track_volume;
-            voices[vi].active = true;
+            sound_voice_apply_note(&voices[vi], &s->envelope, freq_hz, gate_ticks, s->track_volume, 0u);
             if (sound_interp_debug_enabled()) {
                 fprintf(stderr,
                         "[sound-interp] NOTE_HZ tick=%" PRIu32 " ch=%u->v=%d freq_hz=%u gate=%u vol=%u\n",
@@ -240,6 +394,63 @@ static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_cou
         }
         break;
     }
+    case TRK1_EVT_NOTE_EX: {
+        if (s->cursor >= s->stream_end) { s->active = false; return false; }
+        uint8_t note = *s->cursor++;
+        uint32_t gate_ticks = 0;
+        if (!trk1_decode_varuint(&s->cursor, s->stream_end, &gate_ticks) || s->cursor >= s->stream_end) {
+            s->active = false;
+            return false;
+        }
+        uint8_t note_flags = *s->cursor++;
+        if (voice_count > 0) {
+            int vi = channel % voice_count;
+            sound_voice_apply_note(&voices[vi], &s->envelope, midi_note_to_freq(note), gate_ticks, s->track_volume, note_flags);
+            if (sound_interp_debug_enabled()) {
+                fprintf(stderr,
+                        "[sound-interp] NOTE_EX tick=%" PRIu32 " ch=%u->v=%d note=%u freq=%u gate=%u flags=%u vol=%u\n",
+                        s->current_tick,
+                        channel,
+                        vi,
+                        note,
+                        (unsigned int)voices[vi].freq_hz,
+                        (unsigned int)gate_ticks,
+                        (unsigned int)note_flags,
+                        (unsigned int)voices[vi].volume);
+            }
+        }
+        break;
+    }
+    case TRK1_EVT_NOTE_HZ_EX: {
+        if (s->cursor + 2 > s->stream_end) {
+            s->active = false;
+            return false;
+        }
+        uint16_t freq_hz = (uint16_t)(s->cursor[0] | (s->cursor[1] << 8));
+        s->cursor += 2;
+        uint32_t gate_ticks = 0;
+        if (!trk1_decode_varuint(&s->cursor, s->stream_end, &gate_ticks) || s->cursor >= s->stream_end) {
+            s->active = false;
+            return false;
+        }
+        uint8_t note_flags = *s->cursor++;
+        if (voice_count > 0) {
+            int vi = channel % voice_count;
+            sound_voice_apply_note(&voices[vi], &s->envelope, freq_hz, gate_ticks, s->track_volume, note_flags);
+            if (sound_interp_debug_enabled()) {
+                fprintf(stderr,
+                        "[sound-interp] NOTE_HZ_EX tick=%" PRIu32 " ch=%u->v=%d freq_hz=%u gate=%u flags=%u vol=%u\n",
+                        s->current_tick,
+                        channel,
+                        vi,
+                        (unsigned int)freq_hz,
+                        (unsigned int)gate_ticks,
+                        (unsigned int)note_flags,
+                        (unsigned int)voices[vi].volume);
+            }
+        }
+        break;
+    }
     case TRK1_EVT_SET_VOL: {
         if (s->cursor >= s->stream_end) { s->active = false; return false; }
         uint8_t vol = *s->cursor++;
@@ -247,6 +458,21 @@ static bool stream_parse_event(SoundStream *s, SoundVoice *voices, int voice_cou
             int vi = channel % voice_count;
             voices[vi].volume = vol;
         }
+        break;
+    }
+    case TRK1_EVT_SET_ENV: {
+        if (s->cursor >= s->stream_end) { s->active = false; return false; }
+        uint8_t point_count = *s->cursor++;
+        if (point_count == 0u || point_count > TRK1_MAX_ENVELOPE_POINTS ||
+            (s->cursor + point_count) > s->stream_end) {
+            s->active = false;
+            return false;
+        }
+        if (!sound_envelope_apply_points(&s->envelope, s->cursor, point_count)) {
+            s->active = false;
+            return false;
+        }
+        s->cursor += point_count;
         break;
     }
     case TRK1_EVT_END: {
@@ -393,6 +619,7 @@ bool sound_engine_unload_track(ID track_id) {
     if (g_sound_engine.music_stream.active &&
         g_sound_engine.music_stream.track_id == track_id) {
         g_sound_engine.music_stream.active = false;
+        sound_engine_release_all_voice_holds();
     }
 
     for (int i = 0; i < g_sound_engine.track_count; i++) {
@@ -527,6 +754,7 @@ static void tick_drain_commands(void) {
             if (g_sound_engine.music_stream.active &&
                 g_sound_engine.music_stream.track_id == cmd.track_id) {
                 g_sound_engine.music_stream.active = false;
+                sound_engine_release_all_voice_holds();
                 /* No finished notification for manual stop */
             }
             /* Also stop matching SFX */
@@ -535,7 +763,7 @@ static void tick_drain_commands(void) {
                     g_sound_engine.sfx[i].stream.track_id == cmd.track_id) {
                     g_sound_engine.sfx[i].stream.active = false;
                     if (g_sound_engine.sfx[i].voice_index >= 0) {
-                        g_sound_engine.voices[g_sound_engine.sfx[i].voice_index].active = false;
+                        sound_voice_force_silence(&g_sound_engine.voices[g_sound_engine.sfx[i].voice_index]);
                     }
                     g_sound_engine.sfx[i].voice_index = -1;
                 }
@@ -544,6 +772,7 @@ static void tick_drain_commands(void) {
 
         case SOUND_CMD_STOP_MUSIC:
             g_sound_engine.music_stream.active = false;
+            sound_engine_release_all_voice_holds();
             break;
 
         case SOUND_CMD_PLAY_SFX: {
@@ -606,9 +835,12 @@ static void tick_drain_commands(void) {
                 g_sound_engine.voices[i].active = false;
                 g_sound_engine.voices[i].freq_hz = 0;
                 g_sound_engine.voices[i].gate_remaining_ticks = 0;
-                sound_backend_set_voice(i, 0, 0);
+                g_sound_engine.voices[i].hold_until_next_note = false;
+                sound_backend_set_voice(i, 0, 0, false);
                 g_sound_engine.voices[i].applied_freq_hz = 0;
                 g_sound_engine.voices[i].applied_volume = 0;
+                g_sound_engine.voices[i].applied_attack_generation =
+                    g_sound_engine.voices[i].attack_generation;
             }
             break;
         }
@@ -631,16 +863,45 @@ static void tick_drain_commands(void) {
 static inline void tick_apply_voice_output(int voice_index, SoundVoice *voice) {
     uint16_t target_freq = 0;
     uint8_t target_vol = 0;
-    if (voice->active && voice->gate_remaining_ticks > 0 && voice->freq_hz > 0) {
+    bool retrigger = false;
+    if (voice->active &&
+        (voice->gate_remaining_ticks > 0 || voice->hold_until_next_note) &&
+        voice->freq_hz > 0) {
         target_freq = voice->freq_hz;
         target_vol = (uint8_t)(((uint16_t)voice->volume * g_sound_engine.music_volume) >> 8);
     }
-    if (voice->applied_freq_hz == target_freq && voice->applied_volume == target_vol) {
+    retrigger = voice->attack_generation != voice->applied_attack_generation;
+    if (!retrigger && voice->applied_freq_hz == target_freq && voice->applied_volume == target_vol) {
         return;
     }
-    sound_backend_set_voice(voice_index, target_freq, target_vol);
+    sound_backend_set_voice(voice_index, target_freq, target_vol, retrigger);
     voice->applied_freq_hz = target_freq;
     voice->applied_volume = target_vol;
+    voice->applied_attack_generation = voice->attack_generation;
+}
+
+static uint32_t tick_voice_ticks_until_envelope_boundary(const SoundVoice *voice) {
+    if (!voice || !voice->active || !voice->envelope_enabled) {
+        return UINT32_MAX;
+    }
+    if (voice->envelope_stage_index + 1u >= voice->envelope_stage_count) {
+        return UINT32_MAX;
+    }
+    return voice->envelope_stage_remaining_ticks > 0u ? voice->envelope_stage_remaining_ticks : 0u;
+}
+
+static void tick_voice_advance_envelope(SoundVoice *voice) {
+    if (!voice || !voice->envelope_enabled) {
+        return;
+    }
+    while (voice->envelope_stage_index + 1u < voice->envelope_stage_count &&
+           voice->envelope_stage_remaining_ticks == 0u) {
+        voice->envelope_stage_index++;
+        voice->envelope_stage_remaining_ticks = voice->envelope_stage_ticks[voice->envelope_stage_index];
+        voice->volume =
+            sound_scale_volume_u8(voice->base_volume,
+                                  voice->envelope_stage_levels[voice->envelope_stage_index]);
+    }
 }
 
 static void tick_release_sfx_voice(SoundSfxInstance *sfx) {
@@ -649,8 +910,7 @@ static void tick_release_sfx_voice(SoundSfxInstance *sfx) {
     }
     int vi = sfx->voice_index;
     if (vi >= 0 && vi < g_sound_engine.voice_count) {
-        g_sound_engine.voices[vi].active = false;
-        g_sound_engine.voices[vi].freq_hz = 0;
+        sound_voice_force_silence(&g_sound_engine.voices[vi]);
     }
     sfx->voice_index = -1;
 }
@@ -729,6 +989,10 @@ static uint32_t tick_ticks_until_next_boundary(void) {
         if (v->active && v->gate_remaining_ticks > 0 && v->gate_remaining_ticks < best) {
             best = v->gate_remaining_ticks;
         }
+        uint32_t env_ticks = tick_voice_ticks_until_envelope_boundary(v);
+        if (env_ticks < best) {
+            best = env_ticks;
+        }
     }
     return best;
 }
@@ -751,17 +1015,39 @@ static void tick_fast_forward(uint32_t ticks) {
         if (v->active && v->gate_remaining_ticks > 0) {
             if (v->gate_remaining_ticks <= ticks) {
                 v->gate_remaining_ticks = 0;
-                v->freq_hz = 0;
-                if (sound_interp_debug_enabled()) {
-                    fprintf(stderr,
-                            "[sound-interp] NOTE_OFF voice=%d tick_done gate=0\n",
-                            i);
+                if (v->hold_until_next_note && v->freq_hz > 0u) {
+                    if (sound_interp_debug_enabled()) {
+                        fprintf(stderr,
+                                "[sound-interp] LEGATO_HOLD voice=%d tick_done gate=0\n",
+                                i);
+                    }
+                } else {
+                    v->freq_hz = 0;
+                    if (sound_interp_debug_enabled()) {
+                        fprintf(stderr,
+                                "[sound-interp] NOTE_OFF voice=%d tick_done gate=0\n",
+                                i);
+                    }
                 }
             } else {
                 v->gate_remaining_ticks -= ticks;
             }
         }
+        if (v->active && v->envelope_enabled && v->envelope_stage_remaining_ticks > 0u) {
+            if (v->envelope_stage_remaining_ticks <= ticks) {
+                v->envelope_stage_remaining_ticks = 0u;
+            } else {
+                v->envelope_stage_remaining_ticks -= ticks;
+            }
+            tick_voice_advance_envelope(v);
+        }
         tick_apply_voice_output(i, v);
+    }
+}
+
+static void tick_apply_all_voice_outputs(void) {
+    for (int i = 0; i < g_sound_engine.voice_count; i++) {
+        tick_apply_voice_output(i, &g_sound_engine.voices[i]);
     }
 }
 
@@ -772,7 +1058,8 @@ static bool tick_has_active_audio(void) {
     }
     for (int i = 0; i < g_sound_engine.voice_count; i++) {
         if (g_sound_engine.voices[i].active &&
-            g_sound_engine.voices[i].gate_remaining_ticks > 0 &&
+            (g_sound_engine.voices[i].gate_remaining_ticks > 0 ||
+             g_sound_engine.voices[i].hold_until_next_note) &&
             g_sound_engine.voices[i].freq_hz > 0) {
             return true;
         }
@@ -807,6 +1094,7 @@ void sound_engine_advance_ticks(uint32_t ticks) {
         tick_process_due_sfx();
 
         if (remaining == 0u) {
+            tick_apply_all_voice_outputs();
             break;
         }
 

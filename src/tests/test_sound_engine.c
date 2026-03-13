@@ -104,6 +104,243 @@ static ID make_test_trk1_with_delay(uint8_t note, uint32_t gate_ticks, uint32_t 
   return make_test_trk1_common(note, gate_ticks, delay_ticks, true, channel_count, 0);
 }
 
+typedef struct {
+  uint8_t event_type;
+  uint8_t channel;
+  bool has_delay;
+  uint8_t midi_note;
+  uint16_t freq_hz;
+  uint32_t gate_ticks;
+  uint8_t note_flags;
+  uint8_t volume;
+  uint32_t delay_ticks;
+  uint8_t envelope_point_count;
+  uint8_t envelope_levels[8];
+} TestDecodedTrk1Event;
+
+static bool decode_test_trk1_event(const uint8_t **cursor,
+                                   const uint8_t *end,
+                                   TestDecodedTrk1Event *out) {
+  if (!cursor || !*cursor || !end || !out || *cursor >= end) {
+    return false;
+  }
+
+  memset(out, 0, sizeof(*out));
+  uint8_t control = *(*cursor)++;
+  out->has_delay = ((control >> 7) & 1u) != 0u;
+  out->event_type = (control >> 4) & 0x07u;
+  out->channel = control & 0x0Fu;
+
+  switch (out->event_type) {
+    case TRK1_EVT_NOTE:
+      if (*cursor >= end) {
+        return false;
+      }
+      out->midi_note = *(*cursor)++;
+      if (!trk1_decode_varuint(cursor, end, &out->gate_ticks)) {
+        return false;
+      }
+      break;
+    case TRK1_EVT_NOTE_HZ:
+      if ((*cursor + 2) > end) {
+        return false;
+      }
+      out->freq_hz = (uint16_t)((*cursor)[0] | ((*cursor)[1] << 8));
+      *cursor += 2;
+      if (!trk1_decode_varuint(cursor, end, &out->gate_ticks)) {
+        return false;
+      }
+      break;
+    case TRK1_EVT_NOTE_EX:
+      if (*cursor >= end) {
+        return false;
+      }
+      out->midi_note = *(*cursor)++;
+      if (!trk1_decode_varuint(cursor, end, &out->gate_ticks)) {
+        return false;
+      }
+      if (*cursor >= end) {
+        return false;
+      }
+      out->note_flags = *(*cursor)++;
+      break;
+    case TRK1_EVT_NOTE_HZ_EX:
+      if ((*cursor + 2) > end) {
+        return false;
+      }
+      out->freq_hz = (uint16_t)((*cursor)[0] | ((*cursor)[1] << 8));
+      *cursor += 2;
+      if (!trk1_decode_varuint(cursor, end, &out->gate_ticks)) {
+        return false;
+      }
+      if (*cursor >= end) {
+        return false;
+      }
+      out->note_flags = *(*cursor)++;
+      break;
+    case TRK1_EVT_SET_VOL:
+      if (*cursor >= end) {
+        return false;
+      }
+      out->volume = *(*cursor)++;
+      break;
+    case TRK1_EVT_SET_ENV: {
+      if (*cursor >= end) {
+        return false;
+      }
+      uint8_t point_count = *(*cursor)++;
+      if (point_count == 0u || point_count > 8u || (*cursor + point_count) > end) {
+        return false;
+      }
+      out->envelope_point_count = point_count;
+      for (uint8_t i = 0; i < point_count; i++) {
+        out->envelope_levels[i] = *(*cursor)++;
+      }
+      break;
+    }
+    case TRK1_EVT_END:
+      break;
+    default:
+      return false;
+  }
+
+  if (out->has_delay) {
+    if (!trk1_decode_varuint(cursor, end, &out->delay_ticks)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static bool decode_test_compiled_event(ID track_bytes,
+                                       int event_index,
+                                       TestDecodedTrk1Event *out_event) {
+  TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(track_bytes));
+  CljByteArray *arr = as_byte_array(track_bytes);
+  TEST_ASSERT_NOT_NULL(arr);
+
+  Trk1Header header;
+  TEST_ASSERT_TRUE(trk1_parse_header(arr->data, arr->length, &header));
+
+  const uint8_t *cursor = header.stream_start;
+  const uint8_t *end = header.stream_start + header.stream_len_bytes;
+  TestDecodedTrk1Event evt;
+  for (int i = 0; i <= event_index; i++) {
+    if (!decode_test_trk1_event(&cursor, end, &evt)) {
+      return false;
+    }
+  }
+  if (out_event) {
+    *out_event = evt;
+  }
+  return true;
+}
+
+static ID make_test_trk1_two_note_ex_track(uint8_t note1,
+                                           uint8_t flags1,
+                                           uint32_t gate1_ticks,
+                                           uint32_t delay1_ticks,
+                                           uint8_t note2,
+                                           uint8_t flags2,
+                                           uint32_t gate2_ticks) {
+  uint8_t gate1_buf[4];
+  uint8_t delay1_buf[4];
+  uint8_t gate2_buf[4];
+  int gate1_len = encode_test_varuint(gate1_ticks, gate1_buf, (int)sizeof(gate1_buf));
+  int delay1_len = encode_test_varuint(delay1_ticks, delay1_buf, (int)sizeof(delay1_buf));
+  int gate2_len = encode_test_varuint(gate2_ticks, gate2_buf, (int)sizeof(gate2_buf));
+  TEST_ASSERT_TRUE(gate1_len > 0);
+  TEST_ASSERT_TRUE(delay1_len > 0);
+  TEST_ASSERT_TRUE(gate2_len > 0);
+
+  int stream_len = 1 + 1 + gate1_len + 1 + delay1_len +
+                   1 + 1 + gate2_len + 1 +
+                   1;
+  int total_len = TRK1_HEADER_SIZE + stream_len;
+
+  CljByteArray *ba = make_byte_array(total_len);
+  uint8_t *d = ba->data;
+  write_test_trk1_header(d, 1, 0, stream_len);
+
+  int off = TRK1_HEADER_SIZE;
+  d[off++] = (1u << 7) | (TRK1_EVT_NOTE_EX << 4);
+  d[off++] = note1;
+  for (int i = 0; i < gate1_len; i++) {
+    d[off++] = gate1_buf[i];
+  }
+  d[off++] = flags1;
+  for (int i = 0; i < delay1_len; i++) {
+    d[off++] = delay1_buf[i];
+  }
+
+  d[off++] = (TRK1_EVT_NOTE_EX << 4);
+  d[off++] = note2;
+  for (int i = 0; i < gate2_len; i++) {
+    d[off++] = gate2_buf[i];
+  }
+  d[off++] = flags2;
+
+  d[off++] = (TRK1_EVT_END << 4);
+  return (ID)ba;
+}
+
+static ID make_test_trk1_with_envelope_and_two_notes(const uint8_t *envelope_levels,
+                                                     uint8_t envelope_point_count,
+                                                     uint8_t note1,
+                                                     uint32_t gate1_ticks,
+                                                     uint32_t delay1_ticks,
+                                                     uint8_t note2,
+                                                     uint32_t gate2_ticks) {
+  TEST_ASSERT_NOT_NULL(envelope_levels);
+  TEST_ASSERT_TRUE(envelope_point_count > 0u);
+  TEST_ASSERT_TRUE(envelope_point_count <= 8u);
+  uint8_t gate1_buf[4];
+  uint8_t delay1_buf[4];
+  uint8_t gate2_buf[4];
+  int gate1_len = encode_test_varuint(gate1_ticks, gate1_buf, (int)sizeof(gate1_buf));
+  int delay1_len = encode_test_varuint(delay1_ticks, delay1_buf, (int)sizeof(delay1_buf));
+  int gate2_len = encode_test_varuint(gate2_ticks, gate2_buf, (int)sizeof(gate2_buf));
+  TEST_ASSERT_TRUE(gate1_len > 0);
+  TEST_ASSERT_TRUE(delay1_len > 0);
+  TEST_ASSERT_TRUE(gate2_len > 0);
+
+  int stream_len = 1 + 1 + envelope_point_count +
+                   1 + 1 + gate1_len + delay1_len +
+                   1 + 1 + gate2_len +
+                   1;
+  int total_len = TRK1_HEADER_SIZE + stream_len;
+
+  CljByteArray *ba = make_byte_array(total_len);
+  uint8_t *d = ba->data;
+  write_test_trk1_header(d, 1, 0, stream_len);
+
+  int off = TRK1_HEADER_SIZE;
+  d[off++] = (TRK1_EVT_SET_ENV << 4);
+  d[off++] = envelope_point_count;
+  for (uint8_t i = 0; i < envelope_point_count; i++) {
+    d[off++] = envelope_levels[i];
+  }
+
+  d[off++] = (1u << 7) | (TRK1_EVT_NOTE << 4);
+  d[off++] = note1;
+  for (int i = 0; i < gate1_len; i++) {
+    d[off++] = gate1_buf[i];
+  }
+  for (int i = 0; i < delay1_len; i++) {
+    d[off++] = delay1_buf[i];
+  }
+
+  d[off++] = (TRK1_EVT_NOTE << 4);
+  d[off++] = note2;
+  for (int i = 0; i < gate2_len; i++) {
+    d[off++] = gate2_buf[i];
+  }
+
+  d[off++] = (TRK1_EVT_END << 4);
+  return (ID)ba;
+}
+
 /* ========================================================================= */
 /* trk1 header parsing tests                                                 */
 /* ========================================================================= */
@@ -405,6 +642,133 @@ TEST(test_sound_play_with_delay) {
   sound_engine_tick();
 
   TEST_ASSERT_FALSE(g_sound_engine.music_stream.active);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_legato_hold_preserves_voice_until_next_note) {
+  sound_engine_init(1);
+
+  ID track_sym = (ID)intern_symbol_global(":legato-runtime-test");
+  ID ba = make_test_trk1_two_note_ex_track(60, TRK1_NOTE_FLAG_LEGATO, 3, 3, 62, 0, 3);
+
+  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+
+  sound_engine_tick();
+  sound_engine_tick();
+  sound_engine_tick();
+
+  TEST_ASSERT_EQUAL_UINT16(262, g_sound_engine.voices[0].freq_hz);
+  TEST_ASSERT_EQUAL_UINT16(262, g_sound_engine.voices[0].applied_freq_hz);
+  TEST_ASSERT_EQUAL_UINT32(0, g_sound_engine.voices[0].gate_remaining_ticks);
+  TEST_ASSERT_TRUE(g_sound_engine.voices[0].hold_until_next_note);
+
+  sound_engine_tick();
+
+  TEST_ASSERT_EQUAL_UINT16(294, g_sound_engine.voices[0].freq_hz);
+  TEST_ASSERT_EQUAL_UINT16(294, g_sound_engine.voices[0].applied_freq_hz);
+  TEST_ASSERT_FALSE(g_sound_engine.voices[0].hold_until_next_note);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_same_note_without_retrigger_keeps_attack_generation) {
+  sound_engine_init(1);
+
+  ID track_sym = (ID)intern_symbol_global(":repeat-no-retrigger-test");
+  ID ba = make_test_trk1_two_note_ex_track(69, TRK1_NOTE_FLAG_LEGATO, 3, 3, 69, 0, 3);
+
+  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+
+  sound_engine_tick();
+  sound_engine_tick();
+  sound_engine_tick();
+  sound_engine_tick();
+
+  TEST_ASSERT_EQUAL_UINT16(440, g_sound_engine.voices[0].freq_hz);
+  TEST_ASSERT_EQUAL_UINT32(0, g_sound_engine.voices[0].attack_generation);
+  TEST_ASSERT_EQUAL_UINT32(0, g_sound_engine.voices[0].applied_attack_generation);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_same_note_with_retrigger_advances_attack_generation) {
+  sound_engine_init(1);
+
+  ID track_sym = (ID)intern_symbol_global(":repeat-retrigger-test");
+  ID ba = make_test_trk1_two_note_ex_track(69, TRK1_NOTE_FLAG_LEGATO, 3, 3, 69,
+                                           TRK1_NOTE_FLAG_RETRIGGER, 3);
+
+  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+
+  sound_engine_tick();
+  sound_engine_tick();
+  sound_engine_tick();
+  sound_engine_tick();
+
+  TEST_ASSERT_EQUAL_UINT16(440, g_sound_engine.voices[0].freq_hz);
+  TEST_ASSERT_EQUAL_UINT32(1, g_sound_engine.voices[0].attack_generation);
+  TEST_ASSERT_EQUAL_UINT32(1, g_sound_engine.voices[0].applied_attack_generation);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_track_envelope_reduces_voice_volume_in_tail_segment) {
+  sound_engine_init(1);
+
+  static const uint8_t envelope[] = {255u, 255u, 255u, 255u, 26u};
+  ID track_sym = (ID)intern_symbol_global(":envelope-tail-test");
+  ID ba = make_test_trk1_with_envelope_and_two_notes(envelope, 5u, 69, 10, 20, 72, 10);
+
+  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+
+  sound_engine_tick();
+  TEST_ASSERT_EQUAL_UINT8(255u, g_sound_engine.voices[0].volume);
+
+  for (int i = 0; i < 6; i++) {
+    sound_engine_tick();
+  }
+  TEST_ASSERT_EQUAL_UINT8(255u, g_sound_engine.voices[0].volume);
+
+  sound_engine_tick();
+  TEST_ASSERT_EQUAL_UINT8(26u, g_sound_engine.voices[0].volume);
+  TEST_ASSERT_TRUE(g_sound_engine.voices[0].gate_remaining_ticks > 0u);
+
+  RELEASE(ba);
+  sound_engine_shutdown();
+}
+
+TEST(test_sound_track_envelope_resets_repeated_note_volume_without_retrigger_flag) {
+  sound_engine_init(1);
+
+  static const uint8_t envelope[] = {255u, 255u, 255u, 255u, 26u};
+  ID track_sym = (ID)intern_symbol_global(":envelope-repeat-test");
+  ID ba = make_test_trk1_with_envelope_and_two_notes(envelope, 5u, 69, 10, 10, 69, 10);
+
+  TEST_ASSERT_TRUE(sound_engine_load_track(track_sym, ba));
+  TEST_ASSERT_TRUE(sound_engine_play_music(track_sym, 1));
+
+  sound_engine_tick();
+  for (int i = 0; i < 7; i++) {
+    sound_engine_tick();
+  }
+  TEST_ASSERT_EQUAL_UINT8(26u, g_sound_engine.voices[0].volume);
+  TEST_ASSERT_EQUAL_UINT32(0u, g_sound_engine.voices[0].attack_generation);
+
+  sound_engine_tick();
+  sound_engine_tick();
+  sound_engine_tick();
+  TEST_ASSERT_EQUAL_UINT16(440u, g_sound_engine.voices[0].freq_hz);
+  TEST_ASSERT_EQUAL_UINT8(255u, g_sound_engine.voices[0].volume);
+  TEST_ASSERT_EQUAL_UINT32(0u, g_sound_engine.voices[0].attack_generation);
 
   RELEASE(ba);
   sound_engine_shutdown();
@@ -1460,6 +1824,169 @@ TEST(test_sound_tiny_fx_sound_track_duration_ms_accepts_integer_rest) {
   END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST(test_sound_tiny_fx_sound_invalid_articulation_throws) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  bool threw = false;
+  TRY {
+    (void)eval_string(
+        "(do (require 'tiny-fx.sound) "
+        "    (tiny-fx.sound/compile-track "
+        "      [{:notes [:C4] :duration :q :articulation :accent}] "
+        "      {:channel-count 1 :volumes [0] :tempo-bpm 120}))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    threw = true;
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(threw);
+}
+
+TEST(test_sound_tiny_fx_sound_non_boolean_rearticulate_throws) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  bool threw = false;
+  TRY {
+    (void)eval_string(
+        "(do (require 'tiny-fx.sound) "
+        "    (tiny-fx.sound/compile-track "
+        "      [{:notes [:C4] :duration :q :rearticulate :yes}] "
+        "      {:channel-count 1 :volumes [0] :tempo-bpm 120}))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    threw = true;
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(threw);
+}
+
+TEST(test_sound_tiny_fx_sound_track_duration_ms_is_invariant_under_articulation_metadata) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound) "
+        "    (= 750 "
+        "       (tiny-fx.sound/track-duration-ms "
+        "         [{:notes [:C4] :duration :q :articulation :legato} "
+        "          {:notes [:C4] :duration :e :rearticulate true}] "
+        "         {:channel-count 1 :volumes [0] :tempo-bpm 120})))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("tiny-fx.sound/track-duration-ms should ignore articulation metadata");
+  }
+  END_TRY
+
+  TEST_ASSERT_TRUE(result == clj_true);
+}
+
+TEST(test_sound_tiny_fx_sound_compile_track_emits_legato_flag) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound) "
+        "    (tiny-fx.sound/compile-track "
+        "      [{:notes [:C4] :duration :q :articulation :legato} "
+        "       {:notes [:D4] :duration :q}] "
+        "      {:channel-count 1 :volumes [0] :tempo-bpm 120}))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("tiny-fx.sound/compile-track should accept :articulation :legato");
+  }
+  END_TRY
+
+  TestDecodedTrk1Event evt0;
+  TestDecodedTrk1Event evt1;
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 0, &evt0));
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 1, &evt1));
+  TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_SET_VOL, evt0.event_type);
+  TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_NOTE_EX, evt1.event_type);
+  TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_LEGATO, evt1.note_flags);
+}
+
+TEST(test_sound_tiny_fx_sound_compile_track_emits_retrigger_flag_for_same_follow_tone) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound) "
+        "    (tiny-fx.sound/compile-track "
+        "      [{:notes [:A4] :duration :q :articulation :legato} "
+        "       {:notes [:A4] :duration :q :rearticulate true}] "
+        "      {:channel-count 1 :volumes [0] :tempo-bpm 120}))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("tiny-fx.sound/compile-track should accept :rearticulate true");
+  }
+  END_TRY
+
+  TestDecodedTrk1Event evt2;
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 2, &evt2));
+  TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_NOTE_EX, evt2.event_type);
+  TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_RETRIGGER, evt2.note_flags);
+}
+
+TEST(test_sound_tiny_fx_sound_compile_track_melody_backing_preserves_articulation_flags) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound) "
+        "    (tiny-fx.sound/compile-track "
+        "      [{:melody :C4 :backing [:G3] :duration :q :articulation :legato} "
+        "       {:melody :D4 :backing [:A3] :duration :q}] "
+        "      {:melody {:volume 0} :backing {:volume 0} :tempo-bpm 120}))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("tiny-fx.sound/compile-track melody/backing articulation should not throw");
+  }
+  END_TRY
+
+  TestDecodedTrk1Event evt2;
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 2, &evt2));
+  TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_NOTE_EX, evt2.event_type);
+  TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_LEGATO, evt2.note_flags);
+}
+
+TEST(test_sound_tiny_fx_sound_compile_track_emits_track_envelope_once) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound) "
+        "    (tiny-fx.sound/compile-track "
+        "      [{:notes [:A4] :duration :q} {:notes [:A4] :duration :q}] "
+        "      {:channel-count 1 :volumes [0] :tempo-bpm 120 "
+        "       :envelope [1.0 1.0 1.0 1.0 0.1]}))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("tiny-fx.sound/compile-track should accept a per-track :envelope");
+  }
+  END_TRY
+
+  TestDecodedTrk1Event evt0;
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 0, &evt0));
+  TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_SET_ENV, evt0.event_type);
+  TEST_ASSERT_EQUAL_UINT8(5u, evt0.envelope_point_count);
+  TEST_ASSERT_EQUAL_UINT8(255u, evt0.envelope_levels[0]);
+  TEST_ASSERT_EQUAL_UINT8(26u, evt0.envelope_levels[4]);
 }
 
 TEST(test_sound_tiny_fx_sound_nonpositive_integer_duration_throws) {

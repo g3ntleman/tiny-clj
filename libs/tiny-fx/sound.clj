@@ -91,6 +91,15 @@ R"TINY_SND_CMP(
       (reduce conj base2 (varuint delay-ms))
       base2)))
 
+(defn- evt-note-midi-ex [ch note-kw gate-ms note-flags has-delay delay-ms]
+  (let [ctrl (+ (if has-delay 128 0) (* 4 16) ch)
+        base [ctrl (note->midi note-kw)]
+        base2 (reduce conj base (varuint gate-ms))
+        base3 (conj base2 note-flags)]
+    (if has-delay
+      (reduce conj base3 (varuint delay-ms))
+      base3)))
+
 (defn- evt-note-hz [ch freq-hz gate-ms has-delay delay-ms]
   ;; has_delay bit in bit7, event_type=3 (NOTE_HZ), payload = uint16 LE Hz (0 = rest)
   (when (or (not (integer? freq-hz)) (< freq-hz 0) (> freq-hz 20000))
@@ -104,10 +113,27 @@ R"TINY_SND_CMP(
       (reduce conj base2 (varuint delay-ms))
       base2)))
 
-(defn- evt-note [ch note-val gate-ms has-delay delay-ms]
-  (if (integer? note-val)
-    (evt-note-hz ch note-val gate-ms has-delay delay-ms)
-    (evt-note-midi ch note-val gate-ms has-delay delay-ms)))
+(defn- evt-note-hz-ex [ch freq-hz gate-ms note-flags has-delay delay-ms]
+  (when (or (not (integer? freq-hz)) (< freq-hz 0) (> freq-hz 20000))
+    (fail "compile-track: frequency Hz must be integer 0..20000"))
+  (let [ctrl (+ (if has-delay 128 0) (* 5 16) ch)
+        lo (mod freq-hz 256)
+        hi (mod (quot freq-hz 256) 256)
+        base [ctrl lo hi]
+        base2 (reduce conj base (varuint gate-ms))
+        base3 (conj base2 note-flags)]
+    (if has-delay
+      (reduce conj base3 (varuint delay-ms))
+      base3)))
+
+(defn- evt-note [ch note-val gate-ms note-flags has-delay delay-ms]
+  (if (= note-flags 0)
+    (if (integer? note-val)
+      (evt-note-hz ch note-val gate-ms has-delay delay-ms)
+      (evt-note-midi ch note-val gate-ms has-delay delay-ms))
+    (if (integer? note-val)
+      (evt-note-hz-ex ch note-val gate-ms note-flags has-delay delay-ms)
+      (evt-note-midi-ex ch note-val gate-ms note-flags has-delay delay-ms))))
 
 (defn- evt-end []
   ;; has_delay=0, event_type=2 (END), channel=0
@@ -295,6 +321,23 @@ R"TINY_SND_CMP(
       (fail (str ex-prefix " :noise must be boolean")))
     noise))
 
+(defn- validate-articulation [step ex-prefix]
+  (let [articulation (get step :articulation)]
+    (when (and (not (nil? articulation))
+               (not (= articulation :normal))
+               (not (= articulation :legato))
+               (not (= articulation :staccato)))
+      (fail (str ex-prefix " :articulation must be :normal, :legato or :staccato")))
+    (or articulation :normal)))
+
+(defn- validate-rearticulate [step ex-prefix]
+  (let [rearticulate (get step :rearticulate)]
+    (when (and (not (nil? rearticulate))
+               (not (= rearticulate true))
+               (not (= rearticulate false)))
+      (fail (str ex-prefix " :rearticulate must be boolean")))
+    (= rearticulate true)))
+
 (defn- generic-noise-mask-for-step [step channel-count ex-prefix]
   (let [noise (validate-noise-flag step ex-prefix)]
     (if (= noise true)
@@ -445,6 +488,24 @@ R"TINY_SND_CMP(
             dur (duration->ms (step-duration-spec step "compile-track") tempo-bpm)]
         (recur (rest s) (+ total dur))))))
 
+(defn- normal-gate-ms [dur gate-percent]
+  (max 20 (quot (* dur gate-percent) 100)))
+
+(defn- step-gate-ms [dur gate-percent articulation]
+  (cond
+    (= articulation :legato) dur
+    (= articulation :staccato) (max 20 (quot (normal-gate-ms dur gate-percent) 2))
+    :else (normal-gate-ms dur gate-percent)))
+
+(defn- compute-note-flags [articulation rearticulate note-val next-note-val]
+  (let [legato? (and (= articulation :legato)
+                     (not (= note-val :REST))
+                     (not (nil? next-note-val))
+                     (not (= next-note-val :REST)))
+        retrigger? (and rearticulate (not (= note-val :REST)))]
+    (+ (if legato? 1 0)
+       (if retrigger? 2 0))))
+
 (defn track-duration-ms
   "Returns the total playback time in milliseconds for the given step sequence.
 
@@ -464,24 +525,59 @@ R"TINY_SND_CMP(
         _ (when (or (< channel-count 1) (> channel-count 16))
             (fail "compile-track: :channel-count must be in 1..16"))
         gate-percent (or (get opts :gate-percent) 82)
+        envelope-levels (let [envelope (get opts :envelope)]
+                          (if (nil? envelope)
+                            nil
+                            (do
+                              (when (not (vector? envelope))
+                                (fail "compile-track :envelope must be a vector"))
+                              (when (or (< (count envelope) 1) (> (count envelope) 8))
+                                (fail "compile-track :envelope must contain 1..8 levels"))
+                              (loop [i 0 out []]
+                                (if (< i (count envelope))
+                                  (let [level (nth envelope i)]
+                                    (when (or (not (number? level))
+                                              (< level 0)
+                                              (> level 1.0))
+                                      (fail "compile-track :envelope levels must be numbers in 0.0..1.0"))
+                                    (let [scaled-level (quot (+ (* level 256) 0.5) 1)
+                                          byte-level (if (> scaled-level 255) 255 scaled-level)]
+                                      (recur (+ i 1)
+                                             (conj out byte-level))))
+                                  out)))))
         volumes (or (get opts :volumes) [200 180 160 140])
-        events0 (build-initial-vol-events channel-count volumes)
+        events0-base (build-initial-vol-events channel-count volumes)
+        events0 (if (nil? envelope-levels)
+                  events0-base
+                  (let [env-event (reduce conj [(+ (* 6 16) 0) (count envelope-levels)]
+                                          envelope-levels)]
+                    (into env-event events0-base)))
         eventsN (loop [s steps ev events0]
                   (if (empty? s)
                     (reduce conj ev (evt-end))
                     (let [step (first s)
+                          next-step (first (rest s))
                           dur (duration->ms (step-duration-spec step "compile-track") tempo-bpm)
-                          gate (max 20 (quot (* dur gate-percent) 100))
+                          articulation (validate-articulation step "compile-track")
+                          rearticulate (validate-rearticulate step "compile-track")
+                          gate (step-gate-ms dur gate-percent articulation)
                           has-rest (not (nil? (get step :rest)))
                           notes (if has-rest
                                   (normalize-notes [] channel-count)
                                   (normalize-notes (or (get step :notes) []) channel-count))
+                          next-notes (if (nil? next-step)
+                                       nil
+                                       (if (not (nil? (get next-step :rest)))
+                                         (normalize-notes [] channel-count)
+                                         (normalize-notes (or (get next-step :notes) []) channel-count)))
                           ev2 (loop [ch 0 acc ev]
                                 (if (< ch channel-count)
                                   (let [n (nth notes ch)
+                                        next-n (if (nil? next-notes) nil (nth next-notes ch))
+                                        note-flags (compute-note-flags articulation rearticulate n next-n)
                                         has-delay (= ch (- channel-count 1))
                                         delay (if has-delay dur 0)
-                                        acc2 (reduce conj acc (evt-note ch n gate has-delay delay))]
+                                        acc2 (reduce conj acc (evt-note ch n gate note-flags has-delay delay))]
                                     (recur (+ ch 1) acc2))
                                   acc))]
                       (recur (rest s) ev2))))
@@ -515,6 +611,8 @@ R"TINY_SND_CMP(
    - if :channel-count is omitted it is inferred from the widest step
    - if any step uses :melody or :backing, the sequence is normalized internally
      before compilation
+   - :articulation supports :normal, :legato and :staccato
+   - :rearticulate true forces a fresh attack for this step
    - :bend currently works only in generic :notes mode, not melody/backing mode
    - bent channels currently require integer Hz values in both :notes and :bend
    - in melody/backing mode, role options own the channel layout; do not pass
@@ -736,9 +834,14 @@ R"TINY_SND_CMP(
                                                 (recur (+ i 1) (conj mask true))
                                                 mask)))
                                           nil)
-                         step2 (if (nil? noise-channels)
-                                 {:notes notes :duration dur}
-                                 {:notes notes :duration dur :noise-channels noise-channels})]
+                         step2-base (if (nil? noise-channels)
+                                      {:notes notes :duration dur}
+                                      {:notes notes :duration dur :noise-channels noise-channels})
+                         step2 (cond-> step2-base
+                                 (contains? step :articulation)
+                                 (assoc :articulation (get step :articulation))
+                                 (contains? step :rearticulate)
+                                 (assoc :rearticulate (get step :rearticulate)))]
                     (recur (rest s) (conj out step2)))))]
     steps2))
 

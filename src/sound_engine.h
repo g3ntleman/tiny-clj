@@ -35,8 +35,16 @@
 #define TRK1_EVT_END     2
 /* NOTE payload is uint16 LE frequency Hz (0 = rest); same gate/delay as NOTE */
 #define TRK1_EVT_NOTE_HZ 3
+/* NOTE_EX/NOTE_HZ_EX extend NOTE payload with one articulation/retrigger flags byte. */
+#define TRK1_EVT_NOTE_EX    4
+#define TRK1_EVT_NOTE_HZ_EX 5
+#define TRK1_EVT_SET_ENV    6
+
+#define TRK1_NOTE_FLAG_LEGATO    0x01
+#define TRK1_NOTE_FLAG_RETRIGGER 0x02
 
 #define TRK1_MAX_CHANNELS 16
+#define TRK1_MAX_ENVELOPE_POINTS 8
 
 /* Varuint max value: 2^28-1 */
 #define TRK1_VARUINT_MAX 0x0FFFFFFFU
@@ -109,6 +117,14 @@ typedef struct {
 /* ========================================================================= */
 
 typedef struct {
+    bool     enabled;
+    uint8_t  point_count;
+    uint8_t  segment_count;
+    uint8_t  segment_levels[TRK1_MAX_ENVELOPE_POINTS];
+    uint8_t  segment_point_widths[TRK1_MAX_ENVELOPE_POINTS];
+} SoundEnvelope;
+
+typedef struct {
     const uint8_t *cursor;
     const uint8_t *stream_end;
     uint32_t current_tick;
@@ -118,6 +134,7 @@ typedef struct {
     bool     active;
     ID       track_id;          /* for finished notification */
     const uint8_t *stream_start; /* for repeat/loop rewind */
+    SoundEnvelope envelope;
 } SoundStream;
 
 /* ========================================================================= */
@@ -130,9 +147,19 @@ typedef struct {
     uint16_t freq_hz;
     uint16_t applied_freq_hz;
     uint32_t gate_remaining_ticks;
-    uint8_t  volume;             /* per-voice volume 0..255 */
+    uint8_t  base_volume;        /* note base volume 0..255 before envelope */
+    uint8_t  volume;             /* current per-voice volume 0..255 after envelope */
     uint8_t  applied_volume;
+    bool     hold_until_next_note;
     bool     active;
+    uint32_t attack_generation;
+    uint32_t applied_attack_generation;
+    bool     envelope_enabled;
+    uint8_t  envelope_stage_count;
+    uint8_t  envelope_stage_index;
+    uint8_t  envelope_stage_levels[TRK1_MAX_ENVELOPE_POINTS];
+    uint32_t envelope_stage_ticks[TRK1_MAX_ENVELOPE_POINTS];
+    uint32_t envelope_stage_remaining_ticks;
 } SoundVoice;
 
 /* ========================================================================= */
@@ -272,7 +299,7 @@ uint32_t sound_engine_ticks_until_deadline(void);
 /* ========================================================================= */
 
 /* Called by tick when voice state changes. Platform implements this. */
-void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume);
+void sound_backend_set_voice(int voice_index, uint16_t freq_hz, uint8_t volume, bool retrigger);
 
 /* Returns true when backend-local debug audio should keep the tick alive. */
 bool sound_backend_keepalive_active(void);

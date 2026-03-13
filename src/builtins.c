@@ -5702,7 +5702,8 @@ ID native_mul_variadic(ID *args, unsigned int argc) {
             return throw_fixed_overflow(ERR_FIXED_OVERFLOW_MULTIPLICATION);
           }
         }
-        acc_fixed = (fixnum_to_fixed(acc_i) * extract_fixed_value(args[i])) >> 13;
+        acc_fixed = (int32_t)(((int64_t)fixnum_to_fixed(acc_i) *
+                               (int64_t)extract_fixed_value(args[i])) >> CLJ_FIXED_FRAC_BITS);
         break;
       }
       }
@@ -5735,7 +5736,7 @@ ID native_mul_variadic(ID *args, unsigned int argc) {
         }
       }
 
-      acc_fixed = (acc_fixed * val) >> 13; // Fixed-Point Multiplikation mit Shift
+      acc_fixed = (int32_t)(((int64_t)acc_fixed * (int64_t)val) >> CLJ_FIXED_FRAC_BITS);
     }
   }
 

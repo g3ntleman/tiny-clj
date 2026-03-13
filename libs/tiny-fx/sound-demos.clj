@@ -469,7 +469,8 @@
   {:melody {:volume 220}
    :backing {:volume 138}
    :tempo-bpm 152
-   :gate-percent 84})
+   :envelope [1.0 1.0 1.0 1.0 0.1]
+   :gate-percent 100})
 (defn play-william-tell-finale!
   "Plays the full fast William Tell finale once, based on notation instead of the truncated demo MIDI."
   []
@@ -595,4 +596,3 @@
   "One-shot laser pew via compile-time bend expansion."
   []
   (sound/play-sfx! laser-sfx-track-id laser-sfx-steps laser-sfx-opts))
-
