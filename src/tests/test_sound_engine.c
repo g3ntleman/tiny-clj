@@ -1653,7 +1653,7 @@ TEST(test_sound_tiny_fx_sound_demos_phase_two_batch_returns_status_maps) {
                         map_get(entertainer, intern_symbol_global(":status")));
   TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":playing"),
                         map_get(gymnopedie, intern_symbol_global(":status")));
-  TEST_ASSERT_EQUAL_INT(8634, as_fixnum(map_get(entertainer, intern_symbol_global(":duration-ms"))));
+  TEST_ASSERT_EQUAL_INT(7832, as_fixnum(map_get(entertainer, intern_symbol_global(":duration-ms"))));
   TEST_ASSERT_EQUAL_INT(16569, as_fixnum(map_get(gymnopedie, intern_symbol_global(":duration-ms"))));
 }
 
@@ -1678,7 +1678,7 @@ TEST(test_sound_tiny_fx_sound_demos_play_william_tell_returns_status_map) {
   TEST_ASSERT_TRUE(is_map(result));
   TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":playing"),
                         map_get(result, intern_symbol_global(":status")));
-  TEST_ASSERT_EQUAL_INT(123322, as_fixnum(map_get(result, intern_symbol_global(":duration-ms"))));
+  TEST_ASSERT_EQUAL_INT(93900, as_fixnum(map_get(result, intern_symbol_global(":duration-ms"))));
 }
 
 TEST(test_sound_tiny_fx_sound_demos_phase_three_batch_returns_status_maps) {
@@ -2075,6 +2075,32 @@ TEST(test_sound_tiny_fx_sound_compile_track_emits_track_envelope_once) {
   TEST_ASSERT_EQUAL_UINT8(5u, evt0.envelope_point_count);
   TEST_ASSERT_EQUAL_UINT8(255u, evt0.envelope_levels[0]);
   TEST_ASSERT_EQUAL_UINT8(26u, evt0.envelope_levels[4]);
+}
+
+TEST(test_sound_tiny_fx_sound_compile_track_uses_default_track_envelope) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound) "
+        "    (tiny-fx.sound/compile-track "
+        "      [{:notes [:A4] :duration :q}] "
+        "      {:channel-count 1 :volumes [0] :tempo-bpm 120}))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("tiny-fx.sound/compile-track should apply the default :envelope when omitted");
+  }
+  END_TRY
+
+  TestDecodedTrk1Event evt0;
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 0, &evt0));
+  TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_SET_ENV, evt0.event_type);
+  TEST_ASSERT_EQUAL_UINT8(3u, evt0.envelope_point_count);
+  TEST_ASSERT_EQUAL_UINT8(255u, evt0.envelope_levels[0]);
+  TEST_ASSERT_EQUAL_UINT8(255u, evt0.envelope_levels[1]);
+  TEST_ASSERT_EQUAL_UINT8(51u, evt0.envelope_levels[2]);
 }
 
 TEST(test_sound_tiny_fx_sound_nonpositive_integer_duration_throws) {

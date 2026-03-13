@@ -1,4 +1,4 @@
-R"TINY_SND_CMP(
+
 (ns tiny-fx.sound
   (:require [tiny-fx.sound-native :as native]))
 
@@ -472,6 +472,9 @@ R"TINY_SND_CMP(
     (= articulation :staccato) (max 20 (quot (normal-gate-ms dur gate-percent) 2))
     :else (normal-gate-ms dur gate-percent)))
 
+(def ^:private default-envelope
+  [1.0 1.0 0.2])
+
 (defn- compute-note-flags [articulation rearticulate note-val next-note-val]
   (let [legato? (and (= articulation :legato)
                      (not (= note-val :REST))
@@ -500,33 +503,29 @@ R"TINY_SND_CMP(
         _ (when (or (< channel-count 1) (> channel-count 16))
             (fail "compile-track: :channel-count must be in 1..16"))
         gate-percent (or (get opts :gate-percent) 82)
-        envelope-levels (let [envelope (get opts :envelope)]
-                          (if (nil? envelope)
-                            nil
-                            (do
-                              (when (not (vector? envelope))
-                                (fail "compile-track :envelope must be a vector"))
-                              (when (or (< (count envelope) 1) (> (count envelope) 8))
-                                (fail "compile-track :envelope must contain 1..8 levels"))
-                              (loop [i 0 out []]
-                                (if (< i (count envelope))
-                                  (let [level (nth envelope i)]
-                                    (when (or (not (number? level))
-                                              (< level 0)
-                                              (> level 1.0))
-                                      (fail "compile-track :envelope levels must be numbers in 0.0..1.0"))
-                                    (let [scaled-level (quot (+ (* level 256) 0.5) 1)
-                                          byte-level (if (> scaled-level 255) 255 scaled-level)]
-                                      (recur (+ i 1)
-                                             (conj out byte-level))))
-                                  out)))))
+        envelope-levels (let [envelope (or (get opts :envelope) default-envelope)]
+                          (do
+                            (when (not (vector? envelope))
+                              (fail "compile-track :envelope must be a vector"))
+                            (when (or (< (count envelope) 1) (> (count envelope) 8))
+                              (fail "compile-track :envelope must contain 1..8 levels"))
+                            (loop [i 0 out []]
+                              (if (< i (count envelope))
+                                (let [level (nth envelope i)]
+                                  (when (or (not (number? level))
+                                            (< level 0)
+                                            (> level 1.0))
+                                    (fail "compile-track :envelope levels must be numbers in 0.0..1.0"))
+                                  (let [scaled-level (quot (+ (* level 256) 0.5) 1)
+                                        byte-level (if (> scaled-level 255) 255 scaled-level)]
+                                    (recur (+ i 1)
+                                           (conj out byte-level))))
+                                out))))
         volumes (or (get opts :volumes) [200 180 160 140])
         events0-base (build-initial-vol-events channel-count volumes)
-        events0 (if (nil? envelope-levels)
-                  events0-base
-                  (let [env-event (reduce conj [(+ (* 6 16) 0) (count envelope-levels)]
-                                          envelope-levels)]
-                    (into env-event events0-base)))
+        events0 (let [env-event (reduce conj [(+ (* 6 16) 0) (count envelope-levels)]
+                                        envelope-levels)]
+                  (into env-event events0-base))
         eventsN (loop [s steps ev events0]
                   (if (empty? s)
                     (reduce conj ev (evt-end))
@@ -573,11 +572,13 @@ R"TINY_SND_CMP(
    Generic {:notes ...} options:
    {:channel-count 1..16
     :volumes [220 160 140 ...]
+    :envelope [1.0 1.0 0.2]
     :gate-percent 82
     :tempo-bpm 120}
    Melody/backing options:
    {:melody {:volume 220}
     :backing {:channels 2 :volumes [160 140]}
+    :envelope [1.0 1.0 0.2]
     :gate-percent 82
     :tempo-bpm 120}
    Rules:
@@ -820,4 +821,3 @@ R"TINY_SND_CMP(
                     (recur (rest s) (conj out step2)))))]
     steps2))
 
-)TINY_SND_CMP"

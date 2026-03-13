@@ -65,7 +65,7 @@
 (def the-entertainer-opts
   {:melody {:volume 220}
    :backing {:volume 128}
-   :tempo-bpm 80
+   :tempo-bpm 88
    :gate-percent 78})
 (defn play-the-entertainer!
   "Plays a longer Mutopia-derived two-buzzer Entertainer phrase once."
@@ -468,8 +468,7 @@
 (def william-tell-finale-opts
   {:melody {:volume 220}
    :backing {:volume 138}
-   :tempo-bpm 152
-   :envelope [1.0 1.0 1.0 1.0 0.1]
+   :tempo-bpm 200
    :gate-percent 100})
 (defn play-william-tell-finale!
   "Plays the full fast William Tell finale once, based on notation instead of the truncated demo MIDI."
