@@ -1,6 +1,6 @@
 # Tiny-CLJ Release Notes (2026-02-20)
 
-## Version 0.4 (Current)
+## Version 0.5 (Current)
 
 ### Record Support
 - **Records (`defrecord`)**: Basis-Funktionalität ist implementiert (Descriptor, Konstruktoren `->Type`/`map->Type`, Feldzugriff).

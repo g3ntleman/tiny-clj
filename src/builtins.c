@@ -7137,7 +7137,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
 #endif
 
   ID v_os = make_string(os_name);
-  ID v_ver = make_string("0.4");
+  ID v_ver = make_string("0.5");
 
   CljPersistentMap *m;
 #if defined(BUILD_EPOCH_SECONDS)
