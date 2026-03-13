@@ -11,6 +11,7 @@
 #include "../symbol.h"
 #include "../atom.h"
 #include "../list.h"
+#include "../map.h"
 #include "../to_string.h"  // for pr_str
 #include "strings.h"    // for string_data
 #include "../function.h"   // for as_function, CljFunction
@@ -168,6 +169,53 @@ TEST(test_let_with_function_calls) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(25, as_fixnum(result));
+}
+
+// ============================================================================
+// TEST: Let local is resolved inside map literal function arguments
+// ============================================================================
+TEST(test_let_map_literal_argument_resolves_local_symbol) {
+    const char *code = "(let [pin 35] (identity {:pin pin}))";
+    CljValue result = eval_string(code, g_test_eval_state);
+
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(result));
+
+    CljValue pin_value = map_get_sentinel((CljPersistentMap *)result,
+                                          intern_symbol_global(":pin"),
+                                          NULL);
+    TEST_ASSERT_NOT_NULL(pin_value);
+    TEST_ASSERT_TRUE(is_fixnum(pin_value));
+    TEST_ASSERT_EQUAL_INT(35, as_fixnum(pin_value));
+}
+
+// ============================================================================
+// TEST: Map literal function arguments preserve outer param and inner let locals
+// ============================================================================
+TEST(test_let_map_literal_argument_preserves_param_and_inner_local) {
+    const char *code =
+        "((fn [pin]"
+        "   (let [value 0]"
+        "     (identity {:pin pin :value value})))"
+        " 35)";
+    CljValue result = eval_string(code, g_test_eval_state);
+
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(result));
+
+    CljValue pin_value = map_get_sentinel((CljPersistentMap *)result,
+                                          intern_symbol_global(":pin"),
+                                          NULL);
+    TEST_ASSERT_NOT_NULL(pin_value);
+    TEST_ASSERT_TRUE(is_fixnum(pin_value));
+    TEST_ASSERT_EQUAL_INT(35, as_fixnum(pin_value));
+
+    CljValue value_value = map_get_sentinel((CljPersistentMap *)result,
+                                            intern_symbol_global(":value"),
+                                            NULL);
+    TEST_ASSERT_NOT_NULL(value_value);
+    TEST_ASSERT_TRUE(is_fixnum(value_value));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(value_value));
 }
 
 // ============================================================================

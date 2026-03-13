@@ -36,7 +36,7 @@
 #include "file_utils.h"
 #include "to_string.h"
 #include "event_loop.h"
-#include "audio_engine.h"
+#include "sound_engine.h"
 #include "reader.h"
 #include "parser.h"
 #include "ast.h"
@@ -51,23 +51,16 @@
 #include "hashmap.h"
 #include "datetime_utc.h"
 #include "platform.h"
-#if defined(ESP32_BUILD)
-#include "gpio_esp32.h"
+#include "tiny_fx_gfx.h"
+#include "gpio.h"
+#include "builtins_gpio.h"
+#include "builtins_sound.h"
+#include "builtins_tiny_fx_gfx.h"
+
+#ifndef TINYCLJ_WITH_TINY_FX
+#define TINYCLJ_WITH_TINY_FX 1
 #endif
 
-/* Audio builtins (defined in builtins_audio.c) */
-ID native_audio_load_track(ID *args, unsigned int argc);
-ID native_audio_unload_track(ID *args, unsigned int argc);
-ID native_audio_play_music(ID *args, unsigned int argc);
-ID native_audio_stop_track(ID *args, unsigned int argc);
-ID native_audio_stop_music(ID *args, unsigned int argc);
-ID native_audio_play_sfx(ID *args, unsigned int argc);
-ID native_audio_stop_all(ID *args, unsigned int argc);
-ID native_audio_set_track_volume(ID *args, unsigned int argc);
-ID native_audio_set_music_volume(ID *args, unsigned int argc);
-ID native_audio_on_finished(ID *args, unsigned int argc);
-ID native_audio_play_test_tone(ID *args, unsigned int argc);
-ID native_audio_host_status(ID *args, unsigned int argc);
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -111,6 +104,7 @@ void builtins_reset_cached_funcs(void) {
   g_map_thunk_fn_obj = NULL;
   g_mapcat_thunk_fn_obj = NULL;
   g_range_inf_thunk_fn_obj = NULL;
+  builtins_tiny_fx_gfx_reset_cached_state();
 }
 
 // tiny-clj.datetime native functions (used by :native stubs)
@@ -126,7 +120,11 @@ ID native_tinyclj_fs_slurp_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_fs_stat(ID *args, unsigned int argc);
 ID native_tinyclj_fs_list_batch(ID *args, unsigned int argc);
 ID native_tinyclj_fs_delete(ID *args, unsigned int argc);
+ID native_tinyclj_fs_read_block(ID *args, unsigned int argc);
+ID native_tinyclj_fs_write_block(ID *args, unsigned int argc);
 ID native_tinyclj_fs_set_size(ID *args, unsigned int argc);
+ID builtin_fs_write_bytes_or_throw(const char *fn_name, const char *path,
+                                   const uint8_t *data, size_t len);
 
 ID native_tinyclj_kv_put_bytes(ID *args, unsigned int argc);
 ID native_tinyclj_kv_get_bytes(ID *args, unsigned int argc);
@@ -157,15 +155,7 @@ ID native_last(ID *args, unsigned int argc);
 
 // clojure.core namespace management (used by :native stubs)
 ID native_ns_unload(ID *args, unsigned int argc);
-
-// GPIO functions
-ID native_gpio_watch(ID *args, unsigned int argc);
-ID native_gpio_unwatch(ID *args, unsigned int argc);
-ID native_gpio_simulate(ID *args, unsigned int argc);
-ID native_gpio_write(ID *args, unsigned int argc);
-ID native_gpio_read(ID *args, unsigned int argc);
-ID native_gpio_pwm(ID *args, unsigned int argc);
-ID native_gpio_pwm_stop(ID *args, unsigned int argc);
+ID native_mark_private_bang(ID *args, unsigned int argc);
 
 ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
@@ -174,6 +164,9 @@ ID native_div_variadic(ID *args, unsigned int argc);
 ID native_mod(ID *args, unsigned int argc);
 ID native_quot(ID *args, unsigned int argc);
 ID native_bit_shift_left(ID *args, unsigned int argc);
+ID native_bit_shift_right(ID *args, unsigned int argc);
+ID native_bit_and(ID *args, unsigned int argc);
+ID native_bit_or(ID *args, unsigned int argc);
 ID native_range(ID *args, unsigned int argc);
 ID native_repeat(ID *args, unsigned int argc);
 ID native_take(ID *args, unsigned int argc);
@@ -437,7 +430,7 @@ static CljPersistentMap *map_like_to_map_owned(ID obj) {
     return map;
   }
   if (tag == CLJ_RECORD) {
-    return record_to_map(obj);
+    return make_map_from_record(obj);
   }
   return NULL;
 }
@@ -735,7 +728,7 @@ ID native_subvec(ID *args, unsigned int argc) {
   return AUTORELEASE(new_vec);
 }
 
-static ID conj2(ID vec, ID val);
+ID conj2(ID vec, ID val);
 
 ID conj2_wrapper(ID *args, unsigned int argc) {
   if (!validate_builtin_args(argc, 2, "conj"))
@@ -2896,7 +2889,8 @@ ID native_record_create(ID *args, unsigned int argc) {
     return NULL;
   }
 
-  CljPersistentRecord *record = record_create(type_symbol, values);
+  CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+  CljPersistentRecord *record = make_record_with_descriptor(desc, values);
   RELEASE(values);
   if (!record)
     return NULL;
@@ -2925,7 +2919,8 @@ ID native_record_from_map(ID *args, unsigned int argc) {
     return NULL;
   }
 
-  CljPersistentRecord *record = record_create_from_map(type_symbol, source_map);
+  CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+  CljPersistentRecord *record = make_record_from_map_with_descriptor(desc, source_map);
   if (!record)
     return NULL;
 
@@ -3298,11 +3293,6 @@ ID native_schedule(ID *args, unsigned int argc) {
     return NULL;
   bool periodic = period_from_opts && period_ms > 0;
 
-  // CRITICAL: Retain the function before passing to timer_enqueue
-  // The function may be in an autorelease pool that will be popped when this function returns
-  // timer_enqueue will retain it again, but we need to ensure it survives until then
-  RETAIN(fn_obj);
-
   if (timer_key) {
     (void)timer_upsert_named(timer_key, fn_obj, (int64_t)delay_ms, periodic, (int64_t)period_ms);
   } else {
@@ -3364,11 +3354,6 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
                     __FILE__, __LINE__, 0);
     return NULL;
   }
-
-  // CRITICAL: Retain the function before passing to timer_enqueue
-  // The function may be in an autorelease pool that will be popped when this function returns
-  // timer_enqueue will retain it again, but we need to ensure it survives until then
-  RETAIN(fn_obj);
 
   int32_t timer_id = 0;
   if (timer_key) {
@@ -3719,6 +3704,10 @@ ID native_ns_unload(ID *args, unsigned int argc) {
     RELEASE(ns->mappings);
     ns->mappings = make_map(0);
   }
+  if (ns->private_mappings) {
+    RELEASE(ns->private_mappings);
+    ns->private_mappings = NULL;
+  }
   if (ns->aliases) {
     RELEASE(ns->aliases);
     ns->aliases = make_map(0);
@@ -3735,6 +3724,30 @@ ID native_ns_unload(ID *args, unsigned int argc) {
   ns_invalidate_resolve_cache();
 
   return clj_true;
+}
+
+ID native_mark_private_bang(ID *args, unsigned int argc) {
+  if (!validate_builtin_args(argc, 1, "mark-private!"))
+    return NULL;
+
+  EvalState *st = g_current_eval_state;
+  if (!st || !st->current_ns) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "mark-private! requires a current namespace",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  ID sym_obj = args[0];
+  if (!sym_obj || TAG(sym_obj) != CLJ_SYMBOL) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                    "mark-private! expects a symbol",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  ns_mark_private(st->current_ns, sym_obj);
+  return sym_obj;
 }
 
 // Helper for dir: convert argument to namespace
@@ -4044,6 +4057,38 @@ static StaticSymbolData sym_tinyclj_runtime_stats_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-clj.runtime/stats"}};
+#ifdef DEBUG
+static StaticSymbolData sym_tinyfx_gfx_bench_vector_scene_bench_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.gfx-bench/vector-scene-bench"}};
+#endif
+static StaticSymbolData sym_tinyclj_runtime_start_renderer_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.runtime/start-renderer!"}};
+static StaticSymbolData sym_tinyclj_runtime_stop_renderer_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.runtime/stop-renderer!"}};
+static StaticSymbolData sym_tinyclj_runtime_renderer_state_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.runtime/renderer-state"}};
+static StaticSymbolData sym_tinyclj_runtime_renderer_timeline_step_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.runtime/renderer-timeline-step"}};
+static StaticSymbolData sym_tinyclj_runtime_renderer_timeline_progress_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.runtime/renderer-timeline-progress"}};
 
 static StaticSymbolData sym_tinyclj_fs_spit_bytes_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
@@ -4065,6 +4110,16 @@ static StaticSymbolData sym_tinyclj_fs_list_batch_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-clj.fs/list-batch"}};
+static StaticSymbolData sym_tinyclj_fs_read_block_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.fs/read-block"}};
+static StaticSymbolData sym_tinyclj_fs_write_block_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-clj.fs/write-block"}};
 static StaticSymbolData sym_tinyclj_fs_delete_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
             .ns_name = NULL,
@@ -4091,6 +4146,34 @@ static StaticSymbolData sym_tinyclj_kv_delete_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "tiny-db.kv/delete!"}};
+
+#ifdef DEBUG
+static StaticSymbolData sym_tinyfx_sound_debug_play_test_tone_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/play-test-tone!"}};
+static StaticSymbolData sym_tinyfx_sound_debug_play_test_noise_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/play-test-noise!"}};
+static StaticSymbolData sym_tinyfx_sound_debug_play_test_ramp_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/play-test-ramp!"}};
+static StaticSymbolData sym_tinyfx_sound_debug_play_test_ramp_noise_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/play-test-ramp-noise!"}};
+static StaticSymbolData sym_tinyfx_sound_debug_host_status_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tiny-fx.sound-debug/host-status!"}};
+#endif
 
 static StaticSymbolData sym_tinyclj_net_udp_socket_qualified_data = {
     .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
@@ -4191,6 +4274,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT_CNAME(native_eval, "eval"),
     NATIVE_ENTRY_BOOT_CNAME(native_read_string, "read-string"),
     NATIVE_ENTRY_BOOT_CNAME(native_require, "require"),
+    NATIVE_ENTRY_BOOT_CNAME(native_mark_private_bang, "mark-private!"),
     NATIVE_ENTRY_BOOT_CNAME(native_load_file, "load-file"),
     NATIVE_ENTRY_BOOT_CNAME(native_regex_p, "regex?"),
     NATIVE_ENTRY_BOOT_CNAME(native_re_pattern, "re-pattern"),
@@ -4215,15 +4299,45 @@ static const NativeFunctionEntry native_function_table[] = {
     // libs' :native stubs (pseudo-qualified cname entries)
     NATIVE_ENTRY(&sym_clojure_pprint_pprint_str_qualified_data.sym, native_clojure_pprint_pprint_str),
     NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_stats_qualified_data.sym, native_tinyclj_runtime_stats, "tiny-clj.runtime/stats"),
+#ifdef DEBUG
+    NATIVE_ENTRY_BOOT(&sym_tinyfx_gfx_bench_vector_scene_bench_qualified_data.sym,
+                      native_tinyfx_gfx_bench_vector_scene_bench,
+                      "tiny-fx.gfx-bench/vector-scene-bench"),
+#endif
+    NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_start_renderer_qualified_data.sym,
+                      native_tinyclj_runtime_start_renderer,
+                      "tiny-clj.runtime/start-renderer!"),
+    NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_stop_renderer_qualified_data.sym,
+                      native_tinyclj_runtime_stop_renderer,
+                      "tiny-clj.runtime/stop-renderer!"),
+    NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_renderer_state_qualified_data.sym,
+                      native_tinyclj_runtime_renderer_state,
+                      "tiny-clj.runtime/renderer-state"),
+    NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_renderer_timeline_step_qualified_data.sym,
+                      native_tinyclj_runtime_renderer_timeline_step,
+                      "tiny-clj.runtime/renderer-timeline-step"),
+    NATIVE_ENTRY_BOOT(&sym_tinyclj_runtime_renderer_timeline_progress_qualified_data.sym,
+                      native_tinyclj_runtime_renderer_timeline_progress,
+                      "tiny-clj.runtime/renderer-timeline-progress"),
     NATIVE_ENTRY(&sym_tinyclj_fs_spit_bytes_qualified_data.sym, native_tinyclj_fs_spit_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_slurp_bytes_qualified_data.sym, native_tinyclj_fs_slurp_bytes),
     NATIVE_ENTRY(&sym_tinyclj_fs_stat_qualified_data.sym, native_tinyclj_fs_stat),
     NATIVE_ENTRY(&sym_tinyclj_fs_list_batch_qualified_data.sym, native_tinyclj_fs_list_batch),
+    NATIVE_ENTRY(&sym_tinyclj_fs_read_block_qualified_data.sym, native_tinyclj_fs_read_block),
+    NATIVE_ENTRY(&sym_tinyclj_fs_write_block_qualified_data.sym, native_tinyclj_fs_write_block),
     NATIVE_ENTRY(&sym_tinyclj_fs_set_size_qualified_data.sym, native_tinyclj_fs_set_size),
     NATIVE_ENTRY(&sym_tinyclj_fs_delete_qualified_data.sym, native_tinyclj_fs_delete),
     NATIVE_ENTRY(&sym_tinyclj_kv_put_bytes_qualified_data.sym, native_tinyclj_kv_put_bytes),
     NATIVE_ENTRY(&sym_tinyclj_kv_get_bytes_qualified_data.sym, native_tinyclj_kv_get_bytes),
     NATIVE_ENTRY(&sym_tinyclj_kv_delete_qualified_data.sym, native_tinyclj_kv_delete),
+#ifdef DEBUG
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_play_test_tone_qualified_data.sym, native_sound_play_test_tone),
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_play_test_noise_qualified_data.sym, native_sound_play_test_noise),
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_play_test_ramp_qualified_data.sym, native_sound_play_test_ramp),
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_play_test_ramp_noise_qualified_data.sym,
+                 native_sound_play_test_ramp_noise),
+    NATIVE_ENTRY(&sym_tinyfx_sound_debug_host_status_qualified_data.sym, native_sound_host_status),
+#endif
     NATIVE_ENTRY(&sym_tinyclj_net_udp_socket_qualified_data.sym, native_tinyclj_net_udp_socket),
     NATIVE_ENTRY(&sym_tinyclj_net_on_receive_qualified_data.sym, native_tinyclj_net_on_receive),
     NATIVE_ENTRY(&sym_tinyclj_net_send_bang_qualified_data.sym, native_tinyclj_net_send_bang),
@@ -4249,13 +4363,6 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_filter_data.sym, native_filter),
     NATIVE_ENTRY(&sym_group_by_data.sym, native_group_by),
     NATIVE_ENTRY(&sym_last_data.sym, native_last),
-    NATIVE_ENTRY(&sym_gpio_watch_data.sym, native_gpio_watch),
-    NATIVE_ENTRY(&sym_gpio_unwatch_data.sym, native_gpio_unwatch),
-    NATIVE_ENTRY(&sym_gpio_simulate_data.sym, native_gpio_simulate),
-    NATIVE_ENTRY(&sym_gpio_write_data.sym, native_gpio_write),
-    NATIVE_ENTRY(&sym_gpio_read_data.sym, native_gpio_read),
-    NATIVE_ENTRY(&sym_gpio_pwm_data.sym, native_gpio_pwm),
-    NATIVE_ENTRY(&sym_gpio_pwm_stop_data.sym, native_gpio_pwm_stop),
     NATIVE_ENTRY(&sym_ns_unload_data.sym, native_ns_unload),
     NATIVE_ENTRY_BOOT(&sym_plus_data.sym, native_add_variadic, "+"),
     NATIVE_ENTRY_BOOT(&sym_minus_data.sym, native_sub_variadic, "-"),
@@ -4264,6 +4371,9 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT(&sym_mod_data.sym, native_mod, "mod"),
     NATIVE_ENTRY_BOOT(&sym_quot_data.sym, native_quot, "quot"),
     NATIVE_ENTRY(&sym_bit_shift_left_data.sym, native_bit_shift_left),
+    NATIVE_ENTRY(&sym_bit_shift_right_data.sym, native_bit_shift_right),
+    NATIVE_ENTRY(&sym_bit_and_data.sym, native_bit_and),
+    NATIVE_ENTRY(&sym_bit_or_data.sym, native_bit_or),
     NATIVE_ENTRY(&sym_range_data.sym, native_range),
     NATIVE_ENTRY(&sym_repeat_data.sym, native_repeat),
     NATIVE_ENTRY(&sym_take_native_data.sym, native_take),
@@ -4369,16 +4479,16 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_slurp_data.sym, native_slurp),
     NATIVE_ENTRY(&sym_spit_data.sym, native_spit),
     // Audio builtins
-    NATIVE_ENTRY(&sym_audio_load_track_data.sym, native_audio_load_track),
-    NATIVE_ENTRY(&sym_audio_unload_track_data.sym, native_audio_unload_track),
-    NATIVE_ENTRY(&sym_audio_play_music_data.sym, native_audio_play_music),
-    NATIVE_ENTRY(&sym_audio_stop_track_data.sym, native_audio_stop_track),
-    NATIVE_ENTRY(&sym_audio_stop_music_data.sym, native_audio_stop_music),
-    NATIVE_ENTRY(&sym_audio_play_sfx_data.sym, native_audio_play_sfx),
-    NATIVE_ENTRY(&sym_audio_stop_all_data.sym, native_audio_stop_all),
-    NATIVE_ENTRY(&sym_audio_set_track_volume_data.sym, native_audio_set_track_volume),
-    NATIVE_ENTRY(&sym_audio_set_music_volume_data.sym, native_audio_set_music_volume),
-    NATIVE_ENTRY(&sym_audio_on_finished_data.sym, native_audio_on_finished),
+    NATIVE_ENTRY(&sym_sound_load_track_data.sym, native_sound_load_track),
+    NATIVE_ENTRY(&sym_sound_unload_track_data.sym, native_sound_unload_track),
+    NATIVE_ENTRY(&sym_sound_play_music_data.sym, native_sound_play_music),
+    NATIVE_ENTRY(&sym_sound_stop_track_data.sym, native_sound_stop_track),
+    NATIVE_ENTRY(&sym_sound_stop_music_data.sym, native_sound_stop_music),
+    NATIVE_ENTRY(&sym_sound_play_sfx_data.sym, native_sound_play_sfx),
+    NATIVE_ENTRY(&sym_sound_stop_all_data.sym, native_sound_stop_all),
+    NATIVE_ENTRY(&sym_sound_set_track_volume_data.sym, native_sound_set_track_volume),
+    NATIVE_ENTRY(&sym_sound_set_music_volume_data.sym, native_sound_set_music_volume),
+    NATIVE_ENTRY(&sym_sound_on_finished_data.sym, native_sound_on_finished),
 #ifdef DEBUG
     NATIVE_ENTRY_BOOT(&sym_ast_string_data.sym, native_ast_string, "tiny-clj.runtime/ast-string"),
 #endif
@@ -4470,6 +4580,10 @@ BuiltinFn native_function_lookup(CljSymbol *symbol) {
   BuiltinFn string_fn = builtins_strings_native_function_lookup(symbol);
   if (string_fn)
     return string_fn;
+
+  BuiltinFn gpio_fn = builtins_gpio_native_function_lookup(symbol);
+  if (gpio_fn)
+    return gpio_fn;
 
   return NULL;
 }
@@ -4771,7 +4885,6 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
     const char *v = getenv("TINYCLJ_DEBUG_REQUIRE_ERRORS");
     debug_require_errors = (v && v[0] && strcmp(v, "0") != 0) ? 1 : 0;
   }
-  int success_count = 0;
   Reader reader;
   reader_init_with_length(&reader, string_data(src), (size_t)string_length(src));
   if (src_name && src_name[0]) {
@@ -4793,6 +4906,7 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
     // Save reader position before parsing to detect if we're stuck
     size_t pos_before = reader_offset(&reader);
 
+    CLJException *pending_ex = NULL;
     WITH_AUTORELEASE_POOL({
       CljValue form = NULL;
       TRY {
@@ -4811,8 +4925,6 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
         }
 
         (void)eval_parsed(form, st, NULL);
-        success_count++;
-
         size_t pos_after = reader_offset(&reader);
         if (pos_after == pos_before && !reader_is_eof(&reader))
           reader_next(&reader);
@@ -4826,16 +4938,17 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
           const char *label = (src_name && src_name[0]) ? src_name : "<namespace>";
           fprintf(stderr, "[require] %s: %s (%s:%d) [%s]\n", label, emsg, efile, eline, etype);
         }
-        while (!reader_is_eof(&reader) && reader_current(&reader) != '\n')
-          reader_next(&reader);
-        if (!reader_is_eof(&reader))
-          reader_next(&reader);
+        pending_ex = ex;
+        RETAIN(pending_ex);
       }
       END_TRY
     });
+    pending_ex = AUTORELEASE(pending_ex);
+    if (pending_ex) {
+      THROW(pending_ex);
+    }
   }
-  // Return true if at least some expressions succeeded (partial loading is OK)
-  return success_count > 0;
+  return true;
 }
 
 /**
@@ -4934,6 +5047,9 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     // Look up symbol in source namespace (missing -> NOT_FOUND, nil is a valid value)
     CljObject *val = map_get(source_ns->mappings, lookup_sym);
     if (val != NOT_FOUND) {
+      if (ns_is_private(source_ns, lookup_sym)) {
+        continue;
+      }
       // Batch refer updates into target mappings and invalidate resolve cache once.
       if (refer_assoc_into_namespace(target_ns, sym_obj, val)) {
         changed = true;
@@ -4970,6 +5086,9 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
     if (key && val && TAG(key) == CLJ_SYMBOL) {
       CljSymbol *key_sym = as_symbol(key);
       if (key_sym && key_sym->cname) {
+        if (ns_is_private(source_ns, key_sym)) {
+          continue;
+        }
         const char *unqualified_name = NULL;
 
         if (source_ns->name == SYM_CLOJURE_CORE) {
@@ -4999,6 +5118,23 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
   }
 }
 
+#define NS_INIT_TABLE_MAX 8
+static struct { const char *ns_name; NsInitFn fn; } g_ns_init_table[NS_INIT_TABLE_MAX];
+static unsigned int g_ns_init_count = 0;
+
+void ns_register_init(const char *ns_name, NsInitFn init_fn) {
+  if (!ns_name || !init_fn || g_ns_init_count >= NS_INIT_TABLE_MAX) return;
+  g_ns_init_table[g_ns_init_count++] = (typeof(g_ns_init_table[0])){ns_name, init_fn};
+}
+
+static NsInitFn ns_lookup_init(const char *ns_name) {
+  for (unsigned int i = 0; i < g_ns_init_count; i++) {
+    if (strcmp(g_ns_init_table[i].ns_name, ns_name) == 0)
+      return g_ns_init_table[i].fn;
+  }
+  return NULL;
+}
+
 bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, const char *source_path) {
   if (!st || !ns_name || !source_path || !bytes || TAG(bytes) != CLJ_BYTE_ARRAY)
     return false;
@@ -5021,12 +5157,30 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
   // Namespace source loading performs many def/defn operations; coalesce invalidate
   // calls into one epoch bump at the end of the load.
   ns_begin_resolve_cache_batch();
-  bool ok = eval_source_in_current_state(source_str, source_path, st);
+  bool ok = false;
+  CLJException *pending_ex = NULL;
+  TRY {
+    ok = eval_source_in_current_state(source_str, source_path, st);
+    if (ok) {
+      NsInitFn init_fn = ns_lookup_init(ns_name);
+      if (init_fn) ok = init_fn(st);
+    }
+    if (ok) {
+      target_ns->loaded = true;
+    }
+  } CATCH(ex) {
+    pending_ex = ex;
+    RETAIN(pending_ex);
+  }
+  END_TRY
   ns_end_resolve_cache_batch();
-  target_ns->loaded = true;
   st->current_ns = orig_ns;
   st->resolve_ns = orig_resolve_ns;
   RELEASE(source_str);
+  pending_ex = AUTORELEASE(pending_ex);
+  if (pending_ex) {
+    THROW(pending_ex);
+  }
   return ok;
 }
 
@@ -5213,21 +5367,8 @@ static bool process_require_spec(ID spec, EvalState *st) {
   }
   bool ok = load_namespace_from_bytes(st, ns_name, bytes, source_path);
   CLJ_FREE(rel);
-
-  // CRITICAL: Don't fail completely if some expressions failed to load
-  // Some functions may have been successfully defined even if others failed
-  // This allows partial loading (e.g., if one function has an error, others still work)
-  // We only return false if the namespace itself couldn't be created
   if (!ok) {
-    // Check if namespace was at least created (even if loading had errors)
-    CljNamespace *loaded_ns = ns_find(ns_name);
-    if (!loaded_ns) {
-      // Namespace wasn't even created - this is a real failure
-      // ns_name is from autoreleased CljString - no free needed
-      return false;
-    }
-    // Namespace exists but some expressions failed - continue anyway
-    // This allows partial success (some functions loaded, others didn't)
+    return false;
   }
 
   // Now that namespace is loaded, set alias/refer if needed
@@ -5383,16 +5524,6 @@ ID native_require(ID *args, unsigned int argc) {
   return NULL; // Clojure-compatible: require returns nil
 }
 
-// File I/O: spit - write string to file
-#ifdef ESP32_BUILD
-ID native_spit(ID *args, unsigned int argc) {
-  if (!validate_builtin_args(argc, 2, "spit"))
-    return NULL;
-  (void)args;
-  // No-op on ESP32 (filesystem may be unavailable).
-  return NULL;
-}
-#else
 ID native_spit(ID *args, unsigned int argc) {
   if (!validate_builtin_args(argc, 2, "spit"))
     return NULL;
@@ -5415,67 +5546,15 @@ ID native_spit(ID *args, unsigned int argc) {
                     __FILE__, __LINE__, 0);
     return NULL;
   }
-  const char *content_str = string_data(content_str_obj);
-
-  // Open file for writing (overwrites if exists)
-  FILE *fp = fopen(filename_str, "w");
-  if (!fp) {
-    char error_msg[256];
-    const char *err = strerror(errno);
-    size_t pos = 0;
-    pos = format_append(error_msg, pos, sizeof(error_msg),
-                        "Cannot open file '");
-    pos = format_append(error_msg, pos, sizeof(error_msg), filename_str);
-    pos = format_append(error_msg, pos, sizeof(error_msg), "' for writing: ");
-    format_append(error_msg, pos, sizeof(error_msg), err);
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
-                    __FILE__, __LINE__, 0);
+  const uint8_t *content_bytes = (const uint8_t *)string_data(content_str_obj);
+  size_t content_len = (size_t)string_length(content_str_obj);
+  if (file_spit_bytes(filename_str, content_bytes, content_len)) {
     return NULL;
   }
-
-  // Write content to file
-  size_t content_len = string_length(content_str_obj);
-  size_t bytes_written = fwrite(content_str, 1, content_len, fp);
-
-  // Check for write errors
-  if (bytes_written != content_len) {
-    char error_msg[256];
-    const char *err = strerror(errno);
-    size_t pos = 0;
-    pos = format_append(error_msg, pos, sizeof(error_msg),
-                        "Error writing to file '");
-    pos = format_append(error_msg, pos, sizeof(error_msg), filename_str);
-    pos = format_append(error_msg, pos, sizeof(error_msg), "': ");
-    format_append(error_msg, pos, sizeof(error_msg), err);
-    fclose(fp);
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
-                    __FILE__, __LINE__, 0);
-    return NULL;
-  }
-
-  // Ensure file is flushed
-  if (fflush(fp) != 0) {
-    char error_msg[256];
-    const char *err = strerror(errno);
-    size_t pos = 0;
-    pos = format_append(error_msg, pos, sizeof(error_msg),
-                        "Error flushing file '");
-    pos = format_append(error_msg, pos, sizeof(error_msg), filename_str);
-    pos = format_append(error_msg, pos, sizeof(error_msg), "': ");
-    format_append(error_msg, pos, sizeof(error_msg), err);
-    fclose(fp);
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
-                    __FILE__, __LINE__, 0);
-    return NULL;
-  }
-
-  // Cleanup
-  fclose(fp);
-
-  // spit returns nil
-  return NULL;
+  return builtin_fs_write_bytes_or_throw("spit", filename_str,
+                                         content_bytes,
+                                         content_len);
 }
-#endif // ESP32_BUILD
 
 // Binary operations (inline for performance)
 // Variadische Number-Reducer mit Single-Pass und Float-Promotion
@@ -5623,7 +5702,8 @@ ID native_mul_variadic(ID *args, unsigned int argc) {
             return throw_fixed_overflow(ERR_FIXED_OVERFLOW_MULTIPLICATION);
           }
         }
-        acc_fixed = (fixnum_to_fixed(acc_i) * extract_fixed_value(args[i])) >> 13;
+        acc_fixed = (int32_t)(((int64_t)fixnum_to_fixed(acc_i) *
+                               (int64_t)extract_fixed_value(args[i])) >> CLJ_FIXED_FRAC_BITS);
         break;
       }
       }
@@ -5656,7 +5736,7 @@ ID native_mul_variadic(ID *args, unsigned int argc) {
         }
       }
 
-      acc_fixed = (acc_fixed * val) >> 13; // Fixed-Point Multiplikation mit Shift
+      acc_fixed = (int32_t)(((int64_t)acc_fixed * (int64_t)val) >> CLJ_FIXED_FRAC_BITS);
     }
   }
 
@@ -5906,6 +5986,57 @@ ID native_bit_shift_left(ID *args, unsigned int argc) {
   }
 
   return create_fixnum_result(a << b);
+}
+
+ID native_bit_shift_right(ID *args, unsigned int argc) {
+  if (!validate_builtin_args(argc, 2, "bit-shift-right"))
+    return NULL;
+
+  if (TAG(args[0]) != CLJ_INT || TAG(args[1]) != CLJ_INT) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "bit-shift-right requires integer arguments",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  int a = AS_FIXNUM(args[0]);
+  int b = AS_FIXNUM(args[1]);
+  if (b < 0 || b >= 32) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "bit-shift-right shift amount must be 0-31",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  return create_fixnum_result(a >> b);
+}
+
+ID native_bit_and(ID *args, unsigned int argc) {
+  if (!validate_builtin_args(argc, 2, "bit-and"))
+    return NULL;
+
+  if (TAG(args[0]) != CLJ_INT || TAG(args[1]) != CLJ_INT) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "bit-and requires integer arguments",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  int a = AS_FIXNUM(args[0]);
+  int b = AS_FIXNUM(args[1]);
+  return create_fixnum_result(a & b);
+}
+
+ID native_bit_or(ID *args, unsigned int argc) {
+  if (!validate_builtin_args(argc, 2, "bit-or"))
+    return NULL;
+
+  if (TAG(args[0]) != CLJ_INT || TAG(args[1]) != CLJ_INT) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "bit-or requires integer arguments",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  int a = AS_FIXNUM(args[0]);
+  int b = AS_FIXNUM(args[1]);
+  return create_fixnum_result(a | b);
 }
 
 static ID native_range_infinite_thunk_executor(ID *targs, unsigned int targc) {
@@ -6159,8 +6290,12 @@ bool builtin_native_fn_needs_eval_state(BuiltinFn fn) {
          fn == native_apply ||
          fn == native_load_file ||
          fn == native_require ||
+         fn == native_mark_private_bang ||
          fn == native_eval ||
          fn == native_read_string ||
+#ifdef DEBUG
+         fn == native_tinyfx_gfx_bench_vector_scene_bench ||
+#endif
          fn == native_keyword;
 }
 
@@ -6798,8 +6933,22 @@ DEFINE_UNARY_BOOL_PREDICATE(native_list_p, "list?", (arg && is_list_type(TAG(arg
 // -----------------------------------------------------------------------------
 // yield/current-time-ms hooks (override in tests if needed)
 // -----------------------------------------------------------------------------
+__attribute__((weak)) uint32_t tinyclj_current_time_ms_for_sleep(void);
+
 __attribute__((weak)) void tinyclj_runloop_once_for_yield(unsigned int timeout_ms) {
+  uint32_t start_ms = tinyclj_current_time_ms_for_sleep();
   platform_runloop_run_once(timeout_ms);
+
+  if (timeout_ms == 0u) {
+    return;
+  }
+
+  uint32_t end_ms = tinyclj_current_time_ms_for_sleep();
+  uint32_t elapsed_ms = (end_ms >= start_ms) ? (end_ms - start_ms)
+                                             : ((86400000u - start_ms) + end_ms);
+  if (elapsed_ms < timeout_ms) {
+    platform_sleep_ms(timeout_ms - elapsed_ms);
+  }
 }
 
 __attribute__((weak)) uint32_t tinyclj_current_time_ms_for_sleep(void) {
@@ -6988,7 +7137,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
 #endif
 
   ID v_os = make_string(os_name);
-  ID v_ver = make_string("0.4");
+  ID v_ver = make_string("0.5");
 
   CljPersistentMap *m;
 #if defined(BUILD_EPOCH_SECONDS)
@@ -7009,15 +7158,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   if (!m)
     return NULL;
 
-#define MAP_REASSIGN(var, expr)           \
-  do {                                    \
-    CljPersistentMap *_next_map = (expr); \
-    if (_next_map != (var)) {             \
-      RETAIN(_next_map);                  \
-      RELEASE(var);                       \
-      (var) = _next_map;                  \
-    }                                     \
-  } while (0)
+#define MAP_REASSIGN(var, expr)             do {                                        CljPersistentMap *_next_map = (expr);     if (_next_map != (var)) {                   RETAIN(_next_map);                        RELEASE(var);                             (var) = _next_map;                      }                                       } while (0)
 
   {
     const char *os_ver = platform_os_version();
@@ -7031,52 +7172,99 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
   {
     CljSymbol *k_gpio_event_drops = intern_symbol_global(":gpio-event-drops");
     int32_t drops = 0;
-#if defined(ESP32_BUILD)
-    uint32_t raw_drops = gpio_esp32_get_event_drop_count();
+    uint32_t raw_drops = gpio_get_event_drop_count();
     drops = (raw_drops > (uint32_t)FIXNUM_MAX) ? (int32_t)FIXNUM_MAX : (int32_t)raw_drops;
-#endif
     if (k_gpio_event_drops) {
       MAP_REASSIGN(m, map_assoc(m, k_gpio_event_drops, fixnum(drops)));
     }
   }
 
   {
-    CljSymbol *k_audio_cmd_drop_count = intern_symbol_global(":audio-cmd-drop-count");
-    CljSymbol *k_audio_tick_overrun_count = intern_symbol_global(":audio-tick-overrun-count");
-    CljSymbol *k_audio_queue_high_watermark = intern_symbol_global(":audio-queue-high-watermark");
-    CljSymbol *k_audio_sfx_drop_count = intern_symbol_global(":audio-sfx-drop-count");
-    CljSymbol *k_audio_finished_drop_count = intern_symbol_global(":audio-finished-drop-count");
+#if TINYCLJ_WITH_TINY_FX
+    CljSymbol *k_sound_cmd_drop_count = intern_symbol_global(":sound-cmd-drop-count");
+    CljSymbol *k_sound_tick_overrun_count = intern_symbol_global(":sound-tick-overrun-count");
+    CljSymbol *k_sound_queue_high_watermark = intern_symbol_global(":sound-queue-high-watermark");
+    CljSymbol *k_sound_sfx_drop_count = intern_symbol_global(":sound-sfx-drop-count");
+    CljSymbol *k_sound_finished_drop_count = intern_symbol_global(":sound-finished-drop-count");
 
-    int32_t cmd_drops = (g_audio_engine.telemetry.cmd_drop_count > (uint32_t)FIXNUM_MAX)
+    int32_t cmd_drops = (g_sound_engine.telemetry.cmd_drop_count > (uint32_t)FIXNUM_MAX)
                             ? (int32_t)FIXNUM_MAX
-                            : (int32_t)g_audio_engine.telemetry.cmd_drop_count;
-    int32_t overruns = (g_audio_engine.telemetry.tick_overrun_count > (uint32_t)FIXNUM_MAX)
+                            : (int32_t)g_sound_engine.telemetry.cmd_drop_count;
+    int32_t overruns = (g_sound_engine.telemetry.tick_overrun_count > (uint32_t)FIXNUM_MAX)
                            ? (int32_t)FIXNUM_MAX
-                           : (int32_t)g_audio_engine.telemetry.tick_overrun_count;
-    int32_t queue_high_watermark = (g_audio_engine.telemetry.queue_high_watermark > (uint32_t)FIXNUM_MAX)
+                           : (int32_t)g_sound_engine.telemetry.tick_overrun_count;
+    int32_t queue_high_watermark = (g_sound_engine.telemetry.queue_high_watermark > (uint32_t)FIXNUM_MAX)
                                        ? (int32_t)FIXNUM_MAX
-                                       : (int32_t)g_audio_engine.telemetry.queue_high_watermark;
-    int32_t sfx_drops = (g_audio_engine.telemetry.sfx_drop_count > (uint32_t)FIXNUM_MAX)
+                                       : (int32_t)g_sound_engine.telemetry.queue_high_watermark;
+    int32_t sfx_drops = (g_sound_engine.telemetry.sfx_drop_count > (uint32_t)FIXNUM_MAX)
                             ? (int32_t)FIXNUM_MAX
-                            : (int32_t)g_audio_engine.telemetry.sfx_drop_count;
-    int32_t finished_drops = (g_audio_engine.telemetry.finished_drop_count > (uint32_t)FIXNUM_MAX)
+                            : (int32_t)g_sound_engine.telemetry.sfx_drop_count;
+    int32_t finished_drops = (g_sound_engine.telemetry.finished_drop_count > (uint32_t)FIXNUM_MAX)
                                  ? (int32_t)FIXNUM_MAX
-                                 : (int32_t)g_audio_engine.telemetry.finished_drop_count;
+                                 : (int32_t)g_sound_engine.telemetry.finished_drop_count;
 
-    if (k_audio_cmd_drop_count) {
-      MAP_REASSIGN(m, map_assoc(m, k_audio_cmd_drop_count, fixnum(cmd_drops)));
+    if (k_sound_cmd_drop_count) {
+      MAP_REASSIGN(m, map_assoc(m, k_sound_cmd_drop_count, fixnum(cmd_drops)));
     }
-    if (k_audio_tick_overrun_count) {
-      MAP_REASSIGN(m, map_assoc(m, k_audio_tick_overrun_count, fixnum(overruns)));
+    if (k_sound_tick_overrun_count) {
+      MAP_REASSIGN(m, map_assoc(m, k_sound_tick_overrun_count, fixnum(overruns)));
     }
-    if (k_audio_queue_high_watermark) {
-      MAP_REASSIGN(m, map_assoc(m, k_audio_queue_high_watermark, fixnum(queue_high_watermark)));
+    if (k_sound_queue_high_watermark) {
+      MAP_REASSIGN(m, map_assoc(m, k_sound_queue_high_watermark, fixnum(queue_high_watermark)));
     }
-    if (k_audio_sfx_drop_count) {
-      MAP_REASSIGN(m, map_assoc(m, k_audio_sfx_drop_count, fixnum(sfx_drops)));
+    if (k_sound_sfx_drop_count) {
+      MAP_REASSIGN(m, map_assoc(m, k_sound_sfx_drop_count, fixnum(sfx_drops)));
     }
-    if (k_audio_finished_drop_count) {
-      MAP_REASSIGN(m, map_assoc(m, k_audio_finished_drop_count, fixnum(finished_drops)));
+    if (k_sound_finished_drop_count) {
+      MAP_REASSIGN(m, map_assoc(m, k_sound_finished_drop_count, fixnum(finished_drops)));
+    }
+#endif
+  }
+
+  {
+    CljSymbol *k_event_loop_ingress_accepted_count = intern_symbol_global(":event-loop-ingress-accepted-count");
+    CljSymbol *k_event_loop_ingress_rejected_count = intern_symbol_global(":event-loop-ingress-rejected-count");
+    CljSymbol *k_event_loop_ingress_drained_count = intern_symbol_global(":event-loop-ingress-drained-count");
+    CljSymbol *k_event_loop_ingress_high_watermark = intern_symbol_global(":event-loop-ingress-high-watermark");
+    CljSymbol *k_event_loop_ingress_pending_count = intern_symbol_global(":event-loop-ingress-pending-count");
+    CljSymbol *k_event_loop_ingress_closed = intern_symbol_global(":event-loop-ingress-closed");
+
+    EventLoopIngressStats ingress_stats = {0};
+    if (event_loop_ingress_stats(&ingress_stats)) {
+      int32_t accepted_count = (ingress_stats.accepted_count > (uint32_t)FIXNUM_MAX)
+                                   ? (int32_t)FIXNUM_MAX
+                                   : (int32_t)ingress_stats.accepted_count;
+      int32_t rejected_count = (ingress_stats.rejected_count > (uint32_t)FIXNUM_MAX)
+                                   ? (int32_t)FIXNUM_MAX
+                                   : (int32_t)ingress_stats.rejected_count;
+      int32_t drained_count = (ingress_stats.drained_count > (uint32_t)FIXNUM_MAX)
+                                  ? (int32_t)FIXNUM_MAX
+                                  : (int32_t)ingress_stats.drained_count;
+      int32_t high_watermark = (ingress_stats.high_watermark > (uint32_t)FIXNUM_MAX)
+                                   ? (int32_t)FIXNUM_MAX
+                                   : (int32_t)ingress_stats.high_watermark;
+      int32_t pending_count = (ingress_stats.pending_count > (uint32_t)FIXNUM_MAX)
+                                  ? (int32_t)FIXNUM_MAX
+                                  : (int32_t)ingress_stats.pending_count;
+
+      if (k_event_loop_ingress_accepted_count) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_accepted_count, fixnum(accepted_count)));
+      }
+      if (k_event_loop_ingress_rejected_count) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_rejected_count, fixnum(rejected_count)));
+      }
+      if (k_event_loop_ingress_drained_count) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_drained_count, fixnum(drained_count)));
+      }
+      if (k_event_loop_ingress_high_watermark) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_high_watermark, fixnum(high_watermark)));
+      }
+      if (k_event_loop_ingress_pending_count) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_pending_count, fixnum(pending_count)));
+      }
+      if (k_event_loop_ingress_closed) {
+        MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_closed, ingress_stats.closed ? clj_true : clj_false));
+      }
     }
   }
 
@@ -7539,9 +7727,30 @@ ID native_do(ID *args, unsigned int argc) {
 // REGEX FUNCTIONS - moved to builtins_regex.c
 // ============================================================================
 
+static bool register_builtin_namespace_allowed(const char *cname, size_t ns_len) {
+  if (!cname) {
+    return false;
+  }
+  if (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0) {
+    return true;
+  }
+  if (builtins_sound_namespace_allowed(cname, ns_len)) {
+    return true;
+  }
+#ifdef DEBUG
+  if (ns_len == strlen("tiny-fx.gfx-bench") &&
+      strncmp(cname, "tiny-fx.gfx-bench", strlen("tiny-fx.gfx-bench")) == 0) {
+    return true;
+  }
+#endif
+  return false;
+}
+
 // Register a native builtin function.
 // - Unqualified symbols (e.g. "count") → registered in clojure.core
 // - Qualified clojure.* symbols (e.g. "clojure.repl/source") → registered in their namespace
+// - Curated tiny-fx native namespaces (`tiny-fx.sound-native` plus DEBUG-only
+//   `tiny-fx.sound-debug` / `tiny-fx.gfx-bench`) are also registered directly.
 // - Other qualified symbols (e.g. "tiny-clj.runtime/stats") → NOT registered here;
 //   they remain in native_function_table only and require explicit (require 'ns)
 //   followed by (defn ... :native) to become available (Clojure-compatible behavior).
@@ -7555,9 +7764,9 @@ static void register_builtin(const char *cname, BuiltinFn func) {
     // Qualified symbol: split into namespace and name
     size_t ns_len = slash - cname;
 
-    // Auto-register clojure.* and tiny-snd.runtime (audio API) namespaces.
+    // Auto-register curated native namespaces only.
     // Other namespaces must use (require 'ns) first, then (defn ... :native).
-    bool allow = (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0) || (ns_len >= 15 && strncmp(cname, "tiny-snd.runtime", 15) == 0);
+    bool allow = register_builtin_namespace_allowed(cname, ns_len);
     if (!allow)
       return;
 
@@ -7642,19 +7851,7 @@ void register_builtins() {
       register_builtin(entry->register_cname, entry->native_func);
     }
 
-    // Audio builtins (Runtime API in tiny-snd.runtime per plan)
-    register_builtin("tiny-snd.runtime/audio-load-track!", native_audio_load_track);
-    register_builtin("tiny-snd.runtime/audio-unload-track!", native_audio_unload_track);
-    register_builtin("tiny-snd.runtime/audio-play-music!", native_audio_play_music);
-    register_builtin("tiny-snd.runtime/audio-stop-track!", native_audio_stop_track);
-    register_builtin("tiny-snd.runtime/audio-stop-music!", native_audio_stop_music);
-    register_builtin("tiny-snd.runtime/audio-play-sfx!", native_audio_play_sfx);
-    register_builtin("tiny-snd.runtime/audio-stop-all!", native_audio_stop_all);
-    register_builtin("tiny-snd.runtime/audio-set-track-volume!", native_audio_set_track_volume);
-    register_builtin("tiny-snd.runtime/audio-set-music-volume!", native_audio_set_music_volume);
-    register_builtin("tiny-snd.runtime/audio-on-finished!", native_audio_on_finished);
-    register_builtin("tiny-snd.runtime/audio-play-test-tone!", native_audio_play_test_tone);
-    register_builtin("tiny-snd.runtime/audio-host-status!", native_audio_host_status);
+    builtins_sound_register(register_builtin);
 
     // Prime cached thunk functions during setup so tests/runtime do not pay
     // one-time cached_named_func allocations inside per-call heap assertions.
@@ -7664,5 +7861,9 @@ void register_builtins() {
     (void)cached_named_func(native_range_infinite_thunk_executor, SYM_RANGE_INF_THUNK_FN, &g_range_inf_thunk_fn_obj);
 
     ns_end_resolve_cache_batch();
+
+#if TINYCLJ_WITH_TINY_FX
+    ns_register_init("tiny-fx.gfx", tiny_fx_gfx_ensure_schema);
+#endif
   });
 }

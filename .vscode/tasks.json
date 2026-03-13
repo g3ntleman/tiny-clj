@@ -140,6 +140,26 @@
       }
     },
     {
+      "label": "run-game-demo",
+      "type": "shell",
+      "command": "pkill -f 'game-demo' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTINYCLJ_GAME_DEMO=ON -B build && cmake --build build --target game-demo && ./build/game-demo",
+      "group": "none",
+      "detail": "Configure the main build (with TINYCLJ_GAME_DEMO=ON), build the game demo viewer, then run.",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "isBackground": false,
+      "runOptions": {
+        "instanceLimit": 2
+      }
+    },
+    {
       "label": "run-tests",
       "type": "shell",
       "command": "cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target unit-tests && ./build/unit-tests",

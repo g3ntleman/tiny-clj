@@ -24,6 +24,6 @@ CljValue fixed(float value) {
         throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
                                  "Fixed-point value %.2f exceeds representable range", value); return NULL;
     }
-    int32_t fixed = (int32_t)(value * 8192.0f);
+    int32_t fixed = (int32_t)(value * (float)CLJ_FIXED_SCALE);
     return (CljValue)(((uintptr_t)fixed << TAG_BITS) | TAG_FIXED);
 }

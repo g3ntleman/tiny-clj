@@ -346,6 +346,20 @@ TEST(test_eval_string_nil_handling) {
     TEST_ASSERT_NIL(result);  // eval_string should return NULL for nil
 }
 
+TEST(test_eval_string_nil_result_is_not_an_error) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID result = (ID)0x1;
+    TRY {
+        result = eval_string("nil", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("eval_string(\"nil\") should succeed without throwing");
+        return;
+    } END_TRY
+
+    TEST_ASSERT_NIL_MESSAGE(result, "successful nil evaluation should return NULL");
+}
+
 TEST(test_eval_function_call_first_nil) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     

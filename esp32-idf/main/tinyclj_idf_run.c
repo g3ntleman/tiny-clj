@@ -6,6 +6,7 @@
 #include "platform.h"
 #include "runtime.h"
 #include "builtins.h"
+#include "source_resolver.h"
 #include "namespace.h"
 #include "meta.h"
 #include "line_editor.h"
@@ -34,6 +35,28 @@ static void esp_put_line(const char *s) {
 extern void init_special_symbols(void);
 extern EvalState *get_global_eval_state(void);
 extern int load_clojure_core(EvalState *st);
+
+static bool esp_boot_load_root_file(EvalState *st) {
+    if (!st) return false;
+
+    static const char *boot_path = "/boot/root.edn";
+    ID bytes = resolve_path_to_bytes(boot_path);
+    if (!bytes) {
+        return true; // no boot expression configured
+    }
+
+    bool ok = true;
+    TRY {
+        (void)eval_string("(load-file \"/boot/root.edn\")", st);
+    }
+    CATCH(ex) {
+        (void)ex;
+        ok = false;
+    }
+    END_TRY
+
+    return ok;
+}
 
 static unsigned int esp_repl_idle_sleep_ms(void) {
     if (event_loop_has_pending_tasks()) {
@@ -106,11 +129,19 @@ void tinyclj_idf_start(void) {
     EvalState *st = get_global_eval_state();
     evalstate_set_ns(st, "user");
 
+    bool boot_root_loaded = true;
     WITH_AUTORELEASE_POOL({
         register_builtins();
         (void)load_clojure_core(st);
         evalstate_set_ns(st, "user");
+        boot_root_loaded = esp_boot_load_root_file(st);
+        evalstate_set_ns(st, "user");
     });
+
+    if (!boot_root_loaded) {
+        platform_put_string(NULL, "Warning: failed to evaluate boot root expression from /boot/root.edn");
+        platform_put_string(NULL, "\n");
+    }
 
 #if defined(ESP_PLATFORM)
     {

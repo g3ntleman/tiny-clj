@@ -26,6 +26,7 @@
 #include "meta.h"   // For meta_get and meta_set
 #include "symbol_token.h"
 #include "eval.h"  // For eval_function_call
+#include "builtins.h" // For require_namespace_by_name (macro ns lazy-load)
 #include "macro.h" // For lookup_macro_resolve
 #include "debug.h" // For print_ast
 // is_special_symbol is in symbol.h (already included)
@@ -183,7 +184,7 @@ static bool macro_expansion_seq_needs_fallback(ID expanded_first, bool in_quote,
     return true;
   if (head_sym == SYM_LET || head_sym == SYM_LOOP || head_sym == SYM_FN)
     return true;
-  if (!is_native_symbol(head_sym) && lookup_macro_resolve(st, head_sym))
+  if ((head_sym->ns_name || !is_native_symbol(head_sym)) && lookup_macro_resolve(st, head_sym))
     return true;
   return false;
 }
@@ -540,8 +541,17 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
     if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
       CljSymbol *head_sym = as_symbol(first);
       CljFunction *macro = NULL;
-      if (!is_special_symbol(head_sym) && !is_native_symbol(head_sym)) {
+      bool is_qualified = head_sym && head_sym->ns_name;
+      if (!is_special_symbol(head_sym) && !(is_native_symbol(head_sym) && !is_qualified)) {
         macro = lookup_macro_resolve(st, head_sym);
+        if (!macro && is_qualified && head_sym->ns_name && head_sym->ns_name->cname) {
+          const char *macro_ns_name = head_sym->ns_name->cname;
+          if (ns_find(macro_ns_name) == NULL) {
+            if (require_namespace_by_name(st, macro_ns_name)) {
+              macro = lookup_macro_resolve(st, head_sym);
+            }
+          }
+        }
       }
       if (macro) {
         // Collect unevaluated arguments for macro call

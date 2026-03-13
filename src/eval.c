@@ -279,6 +279,12 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
   if (!func) {
     return make_exception(EXCEPTION_RUNTIME, "Invalid function object", NULL, 0, 0);
   }
+  CljNamespace *saved_ns = st ? st->current_ns : NULL;
+  bool switched_ns = false;
+  if (st && func->ns && st->current_ns != func->ns) {
+    st->current_ns = func->ns;
+    switched_ns = true;
+  }
 
   // Arity check - variadic functions accept >= required params
   int param_count = (int)func->param_count;
@@ -287,11 +293,18 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
   if (vi < 0) {
     if (argc != required) {
       throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
+      if (switched_ns) {
+        st->current_ns = saved_ns;
+      }
       return NULL;
     }
   } else {
     if (argc < (unsigned int)vi) {
       throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
+      if (switched_ns) {
+        st->current_ns = saved_ns;
+      }
+      return NULL;
     }
   }
 
@@ -453,6 +466,9 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljPersistentMap *env,
   RELEASE(call_env_stack);
   if (variadic_rest && (ID)variadic_rest != result) {
     RELEASE(variadic_rest);
+  }
+  if (switched_ns) {
+    st->current_ns = saved_ns;
   }
 
   return result;
@@ -2564,24 +2580,11 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         sym_buf[sym_len] = '\0';
 
         CljSymbol *ns_sym = intern_symbol_global(ns_buf);
-        CljNamespace *target_ns = ns_sym ? ns_find_by_symbol(ns_sym) : NULL;
-        if (!target_ns && ns_buf[0] != '\0') {
-          target_ns = ns_find(ns_buf);
-        }
-        if (target_ns && target_ns->mappings) {
-          CljSymbol *qualified = ns_sym ? intern_symbol(ns_sym, sym_buf) : NULL;
-          if (qualified) {
-            ID resolved = map_get(target_ns->mappings, qualified);
-            if (resolved != NOT_FOUND) {
-              return resolved;
-            }
-          }
-          CljSymbol *unqualified = intern_symbol_global(sym_buf);
-          if (unqualified) {
-            ID resolved = map_get(target_ns->mappings, unqualified);
-            if (resolved != NOT_FOUND) {
-              return resolved;
-            }
+        CljSymbol *qualified = ns_sym ? intern_symbol(ns_sym, sym_buf) : NULL;
+        if (qualified) {
+          ID resolved = ns_resolve(st, qualified);
+          if (resolved != NOT_FOUND) {
+            return resolved;
           }
         }
       }
@@ -3144,8 +3147,8 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
     MAP_FOR_EACH(map, key, value) {
       ID key_id = key;
       ID value_id = value;
-      ID eval_key = (key_id == SYM_NIL) ? NULL : eval_body(key_id, eval_env, eval_st, NULL);
-      ID eval_value = (value_id == SYM_NIL) ? NULL : eval_body(value_id, eval_env, eval_st, NULL);
+      ID eval_key = (key_id == SYM_NIL) ? NULL : eval_body(key_id, eval_env, eval_st, ctx);
+      ID eval_value = (value_id == SYM_NIL) ? NULL : eval_body(value_id, eval_env, eval_st, ctx);
       map_assoc_inplace(&result, eval_key, eval_value);
     }
 

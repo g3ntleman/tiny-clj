@@ -130,6 +130,17 @@ CljSymbol *SYM_KW_WATCHER_ID = NULL;
 CljSymbol *SYM_KW_HOST_OS = NULL;
 CljSymbol *SYM_KW_MACRO = NULL;
 CljSymbol *SYM_KW_TYPE = NULL;
+CljSymbol *SYM_KW_SIGNAL = NULL;
+CljSymbol *SYM_KW_MODE = NULL;
+CljSymbol *SYM_KW_FREQ = NULL;
+CljSymbol *SYM_KW_DUTY = NULL;
+CljSymbol *SYM_KW_DIGITAL = NULL;
+CljSymbol *SYM_KW_ANALOG = NULL;
+CljSymbol *SYM_KW_INPUT = NULL;
+CljSymbol *SYM_KW_OUTPUT = NULL;
+CljSymbol *SYM_KW_ADC = NULL;
+CljSymbol *SYM_KW_DAC = NULL;
+CljSymbol *SYM_KW_PWM = NULL;
 CljSymbol *SYM_KW_SIZE = NULL;
 CljSymbol *SYM_KW_CHUNKS = NULL;
 CljSymbol *SYM_KW_ENTRIES = NULL;
@@ -389,13 +400,6 @@ DEFINE_EXTERN_SYMBOL(sym_group_by_data, "group-by");
 DEFINE_EXTERN_SYMBOL(sym_last_data, "last");
 DEFINE_EXTERN_SYMBOL(sym_ns_unload_data, "ns-unload");
 DEFINE_EXTERN_SYMBOL(sym_get_thread_bindings_data, "get-thread-bindings");
-DEFINE_EXTERN_SYMBOL(sym_gpio_watch_data, "gpio-watch");
-DEFINE_EXTERN_SYMBOL(sym_gpio_unwatch_data, "gpio-unwatch");
-DEFINE_EXTERN_SYMBOL(sym_gpio_simulate_data, "gpio-simulate!");
-DEFINE_EXTERN_SYMBOL(sym_gpio_write_data, "gpio-write!");
-DEFINE_EXTERN_SYMBOL(sym_gpio_read_data, "gpio-read");
-DEFINE_EXTERN_SYMBOL(sym_gpio_pwm_data, "gpio-pwm!");
-DEFINE_EXTERN_SYMBOL(sym_gpio_pwm_stop_data, "gpio-pwm-stop!");
 
 // Extern symbol structs for native functions (compile-time initialization, statically allocated)
 // These are extern so they can be used in builtins.c's native function table
@@ -445,6 +449,9 @@ DEFINE_EXTERN_SYMBOL(sym_ast_string_data, "ast-string");
 DEFINE_EXTERN_SYMBOL(sym_mod_data, "mod");
 DEFINE_EXTERN_SYMBOL(sym_quot_data, "quot");
 DEFINE_EXTERN_SYMBOL(sym_bit_shift_left_data, "bit-shift-left");
+DEFINE_EXTERN_SYMBOL(sym_bit_shift_right_data, "bit-shift-right");
+DEFINE_EXTERN_SYMBOL(sym_bit_and_data, "bit-and");
+DEFINE_EXTERN_SYMBOL(sym_bit_or_data, "bit-or");
 DEFINE_EXTERN_SYMBOL(sym_range_data, "range");
 DEFINE_EXTERN_SYMBOL(sym_repeat_data, "repeat");
 DEFINE_EXTERN_SYMBOL(sym_lazy_seq_star_data, "lazy-seq*");
@@ -519,16 +526,16 @@ DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
 DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
 
 // Audio symbols
-DEFINE_EXTERN_SYMBOL(sym_audio_load_track_data, "audio-load-track!");
-DEFINE_EXTERN_SYMBOL(sym_audio_unload_track_data, "audio-unload-track!");
-DEFINE_EXTERN_SYMBOL(sym_audio_play_music_data, "audio-play-music!");
-DEFINE_EXTERN_SYMBOL(sym_audio_stop_track_data, "audio-stop-track!");
-DEFINE_EXTERN_SYMBOL(sym_audio_stop_music_data, "audio-stop-music!");
-DEFINE_EXTERN_SYMBOL(sym_audio_play_sfx_data, "audio-play-sfx!");
-DEFINE_EXTERN_SYMBOL(sym_audio_stop_all_data, "audio-stop-all!");
-DEFINE_EXTERN_SYMBOL(sym_audio_set_track_volume_data, "audio-set-track-volume!");
-DEFINE_EXTERN_SYMBOL(sym_audio_set_music_volume_data, "audio-set-music-volume!");
-DEFINE_EXTERN_SYMBOL(sym_audio_on_finished_data, "audio-on-finished!");
+DEFINE_EXTERN_SYMBOL(sym_sound_load_track_data, "sound-load-track!");
+DEFINE_EXTERN_SYMBOL(sym_sound_unload_track_data, "sound-unload-track!");
+DEFINE_EXTERN_SYMBOL(sym_sound_play_music_data, "sound-play-music!");
+DEFINE_EXTERN_SYMBOL(sym_sound_stop_track_data, "sound-stop-track!");
+DEFINE_EXTERN_SYMBOL(sym_sound_stop_music_data, "sound-stop-music!");
+DEFINE_EXTERN_SYMBOL(sym_sound_play_sfx_data, "sound-play-sfx!");
+DEFINE_EXTERN_SYMBOL(sym_sound_stop_all_data, "sound-stop-all!");
+DEFINE_EXTERN_SYMBOL(sym_sound_set_track_volume_data, "sound-set-track-volume!");
+DEFINE_EXTERN_SYMBOL(sym_sound_set_music_volume_data, "sound-set-music-volume!");
+DEFINE_EXTERN_SYMBOL(sym_sound_on_finished_data, "sound-on-finished!");
 
 // Static symbol structs for keywords (compile-time initialization)
 DEFINE_STATIC_SYMBOL(sym_kw_line_data, ":line");
@@ -559,6 +566,17 @@ DEFINE_STATIC_SYMBOL(sym_kw_meta_data, ":meta");
 DEFINE_STATIC_SYMBOL(sym_kw_host_os_data, ":host-os");
 DEFINE_STATIC_SYMBOL(sym_kw_macro_data, ":macro");
 DEFINE_STATIC_SYMBOL(sym_kw_type_data, ":type");
+DEFINE_STATIC_SYMBOL(sym_kw_signal_data, ":signal");
+DEFINE_STATIC_SYMBOL(sym_kw_mode_data, ":mode");
+DEFINE_STATIC_SYMBOL(sym_kw_freq_data, ":freq");
+DEFINE_STATIC_SYMBOL(sym_kw_duty_data, ":duty");
+DEFINE_STATIC_SYMBOL(sym_kw_digital_data, ":digital");
+DEFINE_STATIC_SYMBOL(sym_kw_analog_data, ":analog");
+DEFINE_STATIC_SYMBOL(sym_kw_input_data, ":input");
+DEFINE_STATIC_SYMBOL(sym_kw_output_data, ":output");
+DEFINE_STATIC_SYMBOL(sym_kw_adc_data, ":adc");
+DEFINE_STATIC_SYMBOL(sym_kw_dac_data, ":dac");
+DEFINE_STATIC_SYMBOL(sym_kw_pwm_data, ":pwm");
 DEFINE_STATIC_SYMBOL(sym_kw_size_data, ":size");
 DEFINE_STATIC_SYMBOL(sym_kw_chunks_data, ":chunks");
 DEFINE_STATIC_SYMBOL(sym_kw_entries_data, ":entries");
@@ -884,13 +902,6 @@ void init_special_symbols() {
     symbol_table_add(&sym_last_data.sym);
     symbol_table_add(&sym_get_thread_bindings_data.sym);
     symbol_table_add(&sym_ns_unload_data.sym);
-    symbol_table_add(&sym_gpio_watch_data.sym);
-    symbol_table_add(&sym_gpio_unwatch_data.sym);
-    symbol_table_add(&sym_gpio_simulate_data.sym);
-    symbol_table_add(&sym_gpio_write_data.sym);
-    symbol_table_add(&sym_gpio_read_data.sym);
-    symbol_table_add(&sym_gpio_pwm_data.sym);
-    symbol_table_add(&sym_gpio_pwm_stop_data.sym);
     symbol_table_add(&sym_hash_set_data.sym);
     symbol_table_add(&sym_hash_map_data.sym);
     symbol_table_add(&sym_disj_data.sym);
@@ -973,6 +984,18 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_MACRO, sym_kw_macro_data);
 
     INIT_SYMBOL(SYM_KW_TYPE, sym_kw_type_data);
+    INIT_SYMBOL(SYM_KW_SIGNAL, sym_kw_signal_data);
+
+    INIT_SYMBOL(SYM_KW_MODE, sym_kw_mode_data);
+    INIT_SYMBOL(SYM_KW_FREQ, sym_kw_freq_data);
+    INIT_SYMBOL(SYM_KW_DUTY, sym_kw_duty_data);
+    INIT_SYMBOL(SYM_KW_DIGITAL, sym_kw_digital_data);
+    INIT_SYMBOL(SYM_KW_ANALOG, sym_kw_analog_data);
+    INIT_SYMBOL(SYM_KW_INPUT, sym_kw_input_data);
+    INIT_SYMBOL(SYM_KW_OUTPUT, sym_kw_output_data);
+    INIT_SYMBOL(SYM_KW_ADC, sym_kw_adc_data);
+    INIT_SYMBOL(SYM_KW_DAC, sym_kw_dac_data);
+    INIT_SYMBOL(SYM_KW_PWM, sym_kw_pwm_data);
 
     INIT_SYMBOL(SYM_KW_SIZE, sym_kw_size_data);
     INIT_SYMBOL(SYM_KW_CHUNKS, sym_kw_chunks_data);

@@ -2,6 +2,7 @@
 
 #include "tests_common.h"
 #include "../event_loop.h"
+#include "../atom.h"
 
 int load_clojure_core(EvalState *st);
 
@@ -146,40 +147,116 @@ TEST(test_runtime_stats_gpio_event_drops_present) {
   TEST_ASSERT_TRUE(as_fixnum(v_gpio_event_drops) >= 0);
 }
 
-TEST(test_runtime_stats_audio_counters_present) {
+TEST(test_runtime_stats_sound_counters_present) {
   ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
   TEST_ASSERT_NOT_NULL(stats);
   TEST_ASSERT_TRUE(is_map(stats));
 
-  ID k_audio_cmd_drop_count = (ID)intern_symbol_global(":audio-cmd-drop-count");
-  ID k_audio_tick_overrun_count = (ID)intern_symbol_global(":audio-tick-overrun-count");
-  ID k_audio_queue_high_watermark = (ID)intern_symbol_global(":audio-queue-high-watermark");
-  ID k_audio_sfx_drop_count = (ID)intern_symbol_global(":audio-sfx-drop-count");
-  ID k_audio_finished_drop_count = (ID)intern_symbol_global(":audio-finished-drop-count");
+  ID k_sound_cmd_drop_count = (ID)intern_symbol_global(":sound-cmd-drop-count");
+  ID k_sound_tick_overrun_count = (ID)intern_symbol_global(":sound-tick-overrun-count");
+  ID k_sound_queue_high_watermark = (ID)intern_symbol_global(":sound-queue-high-watermark");
+  ID k_sound_sfx_drop_count = (ID)intern_symbol_global(":sound-sfx-drop-count");
+  ID k_sound_finished_drop_count = (ID)intern_symbol_global(":sound-finished-drop-count");
 
-  ID v_audio_cmd_drop_count = map_get_sentinel((CljPersistentMap *)stats, k_audio_cmd_drop_count, NOT_FOUND);
-  ID v_audio_tick_overrun_count = map_get_sentinel((CljPersistentMap *)stats, k_audio_tick_overrun_count, NOT_FOUND);
-  ID v_audio_queue_high_watermark = map_get_sentinel((CljPersistentMap *)stats, k_audio_queue_high_watermark, NOT_FOUND);
-  ID v_audio_sfx_drop_count = map_get_sentinel((CljPersistentMap *)stats, k_audio_sfx_drop_count, NOT_FOUND);
-  ID v_audio_finished_drop_count = map_get_sentinel((CljPersistentMap *)stats, k_audio_finished_drop_count, NOT_FOUND);
+  ID v_sound_cmd_drop_count = map_get_sentinel((CljPersistentMap *)stats, k_sound_cmd_drop_count, NOT_FOUND);
+  ID v_sound_tick_overrun_count = map_get_sentinel((CljPersistentMap *)stats, k_sound_tick_overrun_count, NOT_FOUND);
+  ID v_sound_queue_high_watermark = map_get_sentinel((CljPersistentMap *)stats, k_sound_queue_high_watermark, NOT_FOUND);
+  ID v_sound_sfx_drop_count = map_get_sentinel((CljPersistentMap *)stats, k_sound_sfx_drop_count, NOT_FOUND);
+  ID v_sound_finished_drop_count = map_get_sentinel((CljPersistentMap *)stats, k_sound_finished_drop_count, NOT_FOUND);
 
-  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_audio_cmd_drop_count);
-  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_audio_tick_overrun_count);
-  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_audio_queue_high_watermark);
-  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_audio_sfx_drop_count);
-  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_audio_finished_drop_count);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_sound_cmd_drop_count);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_sound_tick_overrun_count);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_sound_queue_high_watermark);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_sound_sfx_drop_count);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_sound_finished_drop_count);
 
-  TEST_ASSERT_TRUE(is_fixnum(v_audio_cmd_drop_count));
-  TEST_ASSERT_TRUE(is_fixnum(v_audio_tick_overrun_count));
-  TEST_ASSERT_TRUE(is_fixnum(v_audio_queue_high_watermark));
-  TEST_ASSERT_TRUE(is_fixnum(v_audio_sfx_drop_count));
-  TEST_ASSERT_TRUE(is_fixnum(v_audio_finished_drop_count));
+  TEST_ASSERT_TRUE(is_fixnum(v_sound_cmd_drop_count));
+  TEST_ASSERT_TRUE(is_fixnum(v_sound_tick_overrun_count));
+  TEST_ASSERT_TRUE(is_fixnum(v_sound_queue_high_watermark));
+  TEST_ASSERT_TRUE(is_fixnum(v_sound_sfx_drop_count));
+  TEST_ASSERT_TRUE(is_fixnum(v_sound_finished_drop_count));
 
-  TEST_ASSERT_TRUE(as_fixnum(v_audio_cmd_drop_count) >= 0);
-  TEST_ASSERT_TRUE(as_fixnum(v_audio_tick_overrun_count) >= 0);
-  TEST_ASSERT_TRUE(as_fixnum(v_audio_queue_high_watermark) >= 0);
-  TEST_ASSERT_TRUE(as_fixnum(v_audio_sfx_drop_count) >= 0);
-  TEST_ASSERT_TRUE(as_fixnum(v_audio_finished_drop_count) >= 0);
+  TEST_ASSERT_TRUE(as_fixnum(v_sound_cmd_drop_count) >= 0);
+  TEST_ASSERT_TRUE(as_fixnum(v_sound_tick_overrun_count) >= 0);
+  TEST_ASSERT_TRUE(as_fixnum(v_sound_queue_high_watermark) >= 0);
+  TEST_ASSERT_TRUE(as_fixnum(v_sound_sfx_drop_count) >= 0);
+  TEST_ASSERT_TRUE(as_fixnum(v_sound_finished_drop_count) >= 0);
+}
+
+TEST(test_runtime_stats_event_loop_ingress_counters_present) {
+  event_loop_clear();
+
+  ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(stats);
+  TEST_ASSERT_TRUE(is_map(stats));
+
+  ID k_accepted = (ID)intern_symbol_global(":event-loop-ingress-accepted-count");
+  ID k_rejected = (ID)intern_symbol_global(":event-loop-ingress-rejected-count");
+  ID k_drained = (ID)intern_symbol_global(":event-loop-ingress-drained-count");
+  ID k_high_watermark = (ID)intern_symbol_global(":event-loop-ingress-high-watermark");
+  ID k_pending = (ID)intern_symbol_global(":event-loop-ingress-pending-count");
+  ID k_closed = (ID)intern_symbol_global(":event-loop-ingress-closed");
+
+  ID v_accepted = map_get_sentinel((CljPersistentMap *)stats, k_accepted, NOT_FOUND);
+  ID v_rejected = map_get_sentinel((CljPersistentMap *)stats, k_rejected, NOT_FOUND);
+  ID v_drained = map_get_sentinel((CljPersistentMap *)stats, k_drained, NOT_FOUND);
+  ID v_high_watermark = map_get_sentinel((CljPersistentMap *)stats, k_high_watermark, NOT_FOUND);
+  ID v_pending = map_get_sentinel((CljPersistentMap *)stats, k_pending, NOT_FOUND);
+  ID v_closed = map_get_sentinel((CljPersistentMap *)stats, k_closed, NOT_FOUND);
+
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_accepted);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_rejected);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_drained);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_high_watermark);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_pending);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_closed);
+
+  TEST_ASSERT_TRUE(is_fixnum(v_accepted));
+  TEST_ASSERT_TRUE(is_fixnum(v_rejected));
+  TEST_ASSERT_TRUE(is_fixnum(v_drained));
+  TEST_ASSERT_TRUE(is_fixnum(v_high_watermark));
+  TEST_ASSERT_TRUE(is_fixnum(v_pending));
+  TEST_ASSERT_TRUE(v_closed == clj_true || v_closed == clj_false);
+}
+
+TEST(test_runtime_stats_event_loop_ingress_counters_change_on_enqueue_and_drain) {
+  event_loop_clear();
+
+  ID fn = eval_string("(fn runtime-stats-ingress-task [] nil)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(fn);
+  TEST_ASSERT_TRUE(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+  TEST_ASSERT_TRUE(event_loop_enqueue_ingress(fn));
+
+  ID before_drain = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(before_drain);
+  TEST_ASSERT_TRUE(is_map(before_drain));
+
+  ID k_accepted = (ID)intern_symbol_global(":event-loop-ingress-accepted-count");
+  ID k_pending = (ID)intern_symbol_global(":event-loop-ingress-pending-count");
+  ID k_drained = (ID)intern_symbol_global(":event-loop-ingress-drained-count");
+
+  ID v_accepted_before = map_get_sentinel((CljPersistentMap *)before_drain, k_accepted, NOT_FOUND);
+  ID v_pending_before = map_get_sentinel((CljPersistentMap *)before_drain, k_pending, NOT_FOUND);
+  ID v_drained_before = map_get_sentinel((CljPersistentMap *)before_drain, k_drained, NOT_FOUND);
+  TEST_ASSERT_TRUE(is_fixnum(v_accepted_before));
+  TEST_ASSERT_TRUE(is_fixnum(v_pending_before));
+  TEST_ASSERT_TRUE(is_fixnum(v_drained_before));
+  TEST_ASSERT_TRUE(as_fixnum(v_accepted_before) >= 1);
+  TEST_ASSERT_TRUE(as_fixnum(v_pending_before) >= 1);
+
+  bool ran = event_loop_run_next(NULL, g_test_eval_state);
+  TEST_ASSERT_TRUE(ran);
+
+  ID after_drain = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(after_drain);
+  TEST_ASSERT_TRUE(is_map(after_drain));
+
+  ID v_pending_after = map_get_sentinel((CljPersistentMap *)after_drain, k_pending, NOT_FOUND);
+  ID v_drained_after = map_get_sentinel((CljPersistentMap *)after_drain, k_drained, NOT_FOUND);
+  TEST_ASSERT_TRUE(is_fixnum(v_pending_after));
+  TEST_ASSERT_TRUE(is_fixnum(v_drained_after));
+  TEST_ASSERT_TRUE(as_fixnum(v_pending_after) <= as_fixnum(v_pending_before));
+  TEST_ASSERT_TRUE(as_fixnum(v_drained_after) >= as_fixnum(v_drained_before));
 }
 
 #if defined(DEBUG)
@@ -1173,5 +1250,41 @@ TEST(test_heap_plus_does_not_intern_user_plus_when_missing) {
   ID k_symbol = (ID)intern_symbol_global(":Symbol");
   ID v_symbol = map_get_sentinel((CljPersistentMap *)result, k_symbol, NOT_FOUND);
   TEST_ASSERT_EQUAL(NOT_FOUND, v_symbol);
+}
+
+TEST(test_runtime_stats_event_loop_ingress_call_has_no_heap_growth, 0) {
+  ID setup = eval_string(
+      "(let [a (atom nil)] "
+      "  [(fn [event] (reset! a 1)) a])",
+      g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(setup);
+  TEST_ASSERT_TRUE(is_vector(setup));
+
+  CljPersistentVector *setup_vec = as_vector(setup);
+  TEST_ASSERT_NOT_NULL(setup_vec);
+  TEST_ASSERT_EQUAL_UINT(2, vector_count(setup_vec));
+
+  ID dispatch_fn = vector_nth(setup_vec, 0);
+  ID marker_atom = vector_nth(setup_vec, 1);
+  TEST_ASSERT_NOT_NULL(dispatch_fn);
+  TEST_ASSERT_NOT_NULL(marker_atom);
+  TEST_ASSERT_TRUE(TAG(dispatch_fn) == CLJ_FUNC || TAG(dispatch_fn) == CLJ_CLOSURE);
+  TEST_ASSERT_TRUE(TAG(marker_atom) == CLJ_ATOM);
+
+  for (int i = 0; i < 32; i++) {
+    ID reset_result = atom_reset(as_atom(marker_atom), NULL);
+    TEST_ASSERT_NULL(reset_result);
+
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call(dispatch_fn, fixnum(7)));
+    TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+    TEST_ASSERT_FALSE(event_loop_has_pending_tasks());
+
+    ID marker = atom_deref(as_atom(marker_atom));
+    TEST_ASSERT_TRUE(is_fixnum(marker));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(marker));
+  }
+
+  event_loop_clear();
 }
 #endif

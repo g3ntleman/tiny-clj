@@ -9,17 +9,21 @@
 #include "vector.h"
 #include "map.h"
 #include "value.h"
+#include "gpio.h"
 #include <stdbool.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <time.h>
 #include <sys/time.h>
-#if defined(ESP32_BUILD)
-#include "gpio_esp32.h"
-#endif
 
 // Task Map keys (go-block tasks only)
 static CljSymbol *KW_FN;
 static CljSymbol *KW_RESULT_CHAN;
+static CljSymbol *KW_ARG;
+static CljSymbol *KW_HAS_ARG;
 
 typedef struct NamedTimerEntry {
     ID key;
@@ -45,9 +49,111 @@ typedef struct {
 static TimerEntry g_timer_queue[TIMER_QUEUE_CAP];
 static int        g_timer_count = 0;
 
+#define EVENT_LOOP_INGRESS_CAP 64
+static ID g_event_loop_ingress_queue[EVENT_LOOP_INGRESS_CAP];
+static uint16_t g_event_loop_ingress_head = 0u;
+static uint16_t g_event_loop_ingress_count = 0u;
+static bool g_event_loop_ingress_closed = false;
+static uint32_t g_event_loop_ingress_accepted_count = 0u;
+static uint32_t g_event_loop_ingress_rejected_count = 0u;
+static uint32_t g_event_loop_ingress_drained_count = 0u;
+static uint32_t g_event_loop_ingress_high_watermark = 0u;
+static atomic_flag g_event_loop_ingress_lock = ATOMIC_FLAG_INIT;
+static uint64_t g_runloop_last_warn_ns = 0u;
+
+#define RUNLOOP_BLOCK_WARN_THRESHOLD_NS 1000000000ull
+
+static bool event_loop_debug_enabled(void) {
+    static int cached = -1;
+    if (cached >= 0) {
+        return cached != 0;
+    }
+    const char *env = getenv("TINYCLJ_RUNLOOP_DEBUG");
+    cached = (env && env[0] != '\0' && strcmp(env, "0") != 0) ? 1 : 0;
+    return cached != 0;
+}
+
+static uint64_t event_loop_monotonic_now_ns(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0u;
+    }
+    return ((uint64_t)ts.tv_sec * 1000000000ull) + (uint64_t)ts.tv_nsec;
+}
+
+static void event_loop_warn_if_slow_tick(uint64_t elapsed_ns, uint64_t end_ns) {
+    if (elapsed_ns < RUNLOOP_BLOCK_WARN_THRESHOLD_NS || end_ns == 0u) {
+        return;
+    }
+    bool should_warn = (g_runloop_last_warn_ns == 0u) ||
+                       ((end_ns - g_runloop_last_warn_ns) >= RUNLOOP_BLOCK_WARN_THRESHOLD_NS);
+    if (!should_warn) {
+        return;
+    }
+    unsigned long long elapsed_ms = (unsigned long long)(elapsed_ns / 1000000ull);
+    fprintf(stderr,
+            "[runloop] warning: runloop tick took %llums (threshold: 1000ms)\n",
+            elapsed_ms);
+    g_runloop_last_warn_ns = end_ns;
+}
+
+static inline void event_loop_ingress_lock_acquire(void) {
+    while (atomic_flag_test_and_set_explicit(&g_event_loop_ingress_lock, memory_order_acquire)) {
+    }
+}
+
+static inline void event_loop_ingress_lock_release(void) {
+    atomic_flag_clear_explicit(&g_event_loop_ingress_lock, memory_order_release);
+}
+
+static bool event_loop_ingress_push(ID fn_zero_arity) {
+    if (!fn_zero_arity) return false;
+    event_loop_ingress_lock_acquire();
+    bool ok = false;
+    if (!g_event_loop_ingress_closed && g_event_loop_ingress_count < EVENT_LOOP_INGRESS_CAP) {
+        uint16_t tail = (uint16_t)((g_event_loop_ingress_head + g_event_loop_ingress_count) % EVENT_LOOP_INGRESS_CAP);
+        g_event_loop_ingress_queue[tail] = fn_zero_arity;
+        g_event_loop_ingress_count++;
+        g_event_loop_ingress_accepted_count++;
+        if ((uint32_t)g_event_loop_ingress_count > g_event_loop_ingress_high_watermark) {
+            g_event_loop_ingress_high_watermark = (uint32_t)g_event_loop_ingress_count;
+        }
+        ok = true;
+    } else {
+        g_event_loop_ingress_rejected_count++;
+    }
+    event_loop_ingress_lock_release();
+    return ok;
+}
+
+static ID event_loop_ingress_pop(void) {
+    ID out = NULL;
+    event_loop_ingress_lock_acquire();
+    if (g_event_loop_ingress_count > 0u) {
+        out = g_event_loop_ingress_queue[g_event_loop_ingress_head];
+        g_event_loop_ingress_queue[g_event_loop_ingress_head] = NULL;
+        g_event_loop_ingress_head = (uint16_t)((g_event_loop_ingress_head + 1u) % EVENT_LOOP_INGRESS_CAP);
+        g_event_loop_ingress_count--;
+        g_event_loop_ingress_drained_count++;
+    }
+    event_loop_ingress_lock_release();
+    return out;
+}
+
+static void event_loop_ingress_drain(void) {
+    while (true) {
+        ID fn = event_loop_ingress_pop();
+        if (!fn) {
+            return;
+        }
+        event_loop_enqueue(fn, NULL);
+        RELEASE(fn);
+    }
+}
+
 // Go-block task map helpers (tasks WITH result channel)
-static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan) {
-    CljPersistentMap *task_map = make_map(2, STRONG);
+static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan, ID arg, bool has_arg) {
+    CljPersistentMap *task_map = make_map(4, STRONG);
     if (!task_map) return NULL;
     
     CljTransientMap *tmap = map_transient(task_map);
@@ -58,6 +164,12 @@ static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan
     if (result_chan) {
         map_conj(tmap, KW_RESULT_CHAN, result_chan);
     }
+    if (has_arg) {
+        map_conj(tmap, KW_HAS_ARG, clj_true);
+    }
+    if (arg) {
+        map_conj(tmap, KW_ARG, arg);
+    }
     
     CljPersistentMap *pmap = map_persistent(tmap);
     RETAIN(pmap);
@@ -65,16 +177,20 @@ static CljPersistentMap* task_to_map(CljObject *fn, CljTransientMap *result_chan
     return pmap;
 }
 
-static bool task_from_map(CljPersistentMap *task_map, CljObject **fn, CljTransientMap **result_chan) {
+static bool task_from_map(CljPersistentMap *task_map, CljObject **fn, CljTransientMap **result_chan, ID *arg, bool *has_arg) {
     if (!task_map) return false;
     
     ID fn_val = map_get_sentinel(task_map, KW_FN, NULL);
     ID result_chan_val = map_get_sentinel(task_map, KW_RESULT_CHAN, NULL);
+    ID has_arg_val = map_get_sentinel(task_map, KW_HAS_ARG, NULL);
+    ID arg_val = map_get_sentinel(task_map, KW_ARG, NOT_FOUND);
     
     if (!fn_val) return false;
     
     if (fn) *fn = fn_val;
     if (result_chan) *result_chan = result_chan_val ? result_chan_val : NULL;
+    if (arg) *arg = (arg_val == NOT_FOUND) ? NULL : arg_val;
+    if (has_arg) *has_arg = (has_arg_val != NULL);
     
     return true;
 }
@@ -204,7 +320,7 @@ static bool timer_schedule_with_id(CljObject *fn_zero_arity,
     if (periodic && period_ms <= 0) return false;
 
     if (delay_ms == 0 && !periodic) {
-        event_loop_enqueue(RETAIN(fn_zero_arity), NULL);
+        event_loop_enqueue(fn_zero_arity, NULL);
         return true;
     }
 
@@ -253,6 +369,14 @@ static CljTransientVector* task_queue_get(void) {
 void event_loop_init(void) {
     KW_FN = intern_symbol_global(":fn");
     KW_RESULT_CHAN = intern_symbol_global(":result-chan");
+    KW_ARG = intern_symbol_global(":arg");
+    KW_HAS_ARG = intern_symbol_global(":has-arg");
+    g_event_loop_ingress_closed = false;
+    g_event_loop_ingress_accepted_count = 0u;
+    g_event_loop_ingress_rejected_count = 0u;
+    g_event_loop_ingress_drained_count = 0u;
+    g_event_loop_ingress_high_watermark = 0u;
+    g_runloop_last_warn_ns = 0u;
     task_queue_get();
 }
 
@@ -271,6 +395,20 @@ void event_loop_clear(void) {
     }
     g_timer_count = 0;
     timer_named_clear_all();
+
+    while (true) {
+        ID fn = event_loop_ingress_pop();
+        if (!fn) {
+            break;
+        }
+        RELEASE(fn);
+    }
+    g_event_loop_ingress_closed = false;
+    g_event_loop_ingress_accepted_count = 0u;
+    g_event_loop_ingress_rejected_count = 0u;
+    g_event_loop_ingress_drained_count = 0u;
+    g_event_loop_ingress_high_watermark = 0u;
+    g_runloop_last_warn_ns = 0u;
 }
 
 void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channel) {
@@ -284,10 +422,8 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
         return;
     }
     
-    CljPersistentMap *task_map = task_to_map(RETAIN(fn_zero_arity), RETAIN(result_channel));
+    CljPersistentMap *task_map = task_to_map(fn_zero_arity, result_channel, NULL, false);
     if (!task_map) {
-        RELEASE(fn_zero_arity);
-        RELEASE(result_channel);
         return;
     }
     
@@ -295,7 +431,64 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channe
     RELEASE(task_map);
 }
 
+bool event_loop_enqueue_ingress(CljObject *fn_zero_arity) {
+    if (!fn_zero_arity) return false;
+    ID retained = RETAIN(fn_zero_arity);
+    if (event_loop_ingress_push(retained)) {
+        return true;
+    }
+    RELEASE(retained);
+    return false;
+}
+
+bool event_loop_enqueue_ingress_call(CljObject *fn_one_arity, ID arg) {
+    if (!fn_one_arity) return false;
+    CljPersistentMap *task_map = task_to_map(fn_one_arity, NULL, arg, true);
+    if (!task_map) {
+        return false;
+    }
+    if (event_loop_ingress_push(task_map)) {
+        return true;
+    }
+    RELEASE(task_map);
+    return false;
+}
+
+bool event_loop_ingress_has_pending(void) {
+    event_loop_ingress_lock_acquire();
+    bool pending = g_event_loop_ingress_count > 0u;
+    event_loop_ingress_lock_release();
+    return pending;
+}
+
+void event_loop_ingress_close(void) {
+    event_loop_ingress_lock_acquire();
+    g_event_loop_ingress_closed = true;
+    event_loop_ingress_lock_release();
+}
+
+bool event_loop_ingress_is_closed(void) {
+    event_loop_ingress_lock_acquire();
+    bool closed = g_event_loop_ingress_closed;
+    event_loop_ingress_lock_release();
+    return closed;
+}
+
+bool event_loop_ingress_stats(EventLoopIngressStats *out_stats) {
+    if (!out_stats) return false;
+    event_loop_ingress_lock_acquire();
+    out_stats->accepted_count = g_event_loop_ingress_accepted_count;
+    out_stats->rejected_count = g_event_loop_ingress_rejected_count;
+    out_stats->drained_count = g_event_loop_ingress_drained_count;
+    out_stats->high_watermark = g_event_loop_ingress_high_watermark;
+    out_stats->pending_count = (uint32_t)g_event_loop_ingress_count;
+    out_stats->closed = g_event_loop_ingress_closed;
+    event_loop_ingress_lock_release();
+    return true;
+}
+
 bool event_loop_has_pending_tasks(void) {
+    if (event_loop_ingress_has_pending()) return true;
     CljTransientVector *task_vec = task_queue_get();
     if (!task_vec || !task_vec->backing) return false;
     return vector_count(task_vec->backing) > 0;
@@ -327,13 +520,15 @@ int event_loop_time_until_next_timer_ms(void) {
  * 4. Releases all task resources
  */
 bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
+    uint64_t tick_start_ns = event_loop_monotonic_now_ns();
     (void)env;
 
-#if defined(ESP32_BUILD)
     // Promote ISR-raised drain requests into regular event-loop tasks.
-    gpio_esp32_poll_drain();
-#endif
-    
+    gpio_poll_drain();
+
+    // Consume cross-thread callback ingress before timer/task processing.
+    event_loop_ingress_drain();
+
     timer_process();
     
     CljTransientVector *task_vec = task_queue_get();
@@ -351,15 +546,18 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
 
     CljObject *fn = NULL;
     CljTransientMap *result_chan = NULL;
+    ID arg = NULL;
+    bool has_arg = false;
 
     if (TAG(entry) == CLJ_MAP_PERSISTENT) {
         CljPersistentMap *task_map = entry;
-        if (!task_from_map(task_map, &fn, &result_chan)) {
+        if (!task_from_map(task_map, &fn, &result_chan, &arg, &has_arg)) {
             RELEASE(task_map);
             return false;
         }
         RETAIN(fn);
         RETAIN(result_chan);
+        RETAIN(arg);
         RELEASE(task_map);
     } else {
         fn = entry;
@@ -382,10 +580,18 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     bool ok = true;
     TRY {
         WITH_AUTORELEASE_POOL({
-            result = eval_function_call(fn, NULL, 0, env, st);
+            if (has_arg) {
+                ID call_args[1] = {arg};
+                result = eval_function_call(fn, call_args, 1, env, st);
+            } else {
+                result = eval_function_call(fn, NULL, 0, env, st);
+            }
         });
     } CATCH(ex) {
         ok = false;
+        if (event_loop_debug_enabled() && ex) {
+            fprintf(stderr, "[runloop] task exception: %s: %s\n", ex->type, ex->message);
+        }
     } END_TRY
 
     if (result_chan) {
@@ -397,7 +603,12 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     }
 
     if (!IS_IMMEDIATE(result)) RELEASE(result);
+    RELEASE(arg);
     RELEASE(fn);
+    uint64_t tick_end_ns = event_loop_monotonic_now_ns();
+    if (tick_start_ns != 0u && tick_end_ns > tick_start_ns) {
+        event_loop_warn_if_slow_tick(tick_end_ns - tick_start_ns, tick_end_ns);
+    }
     return true;
 }
 
@@ -407,7 +618,6 @@ int timer_enqueue(CljObject *fn_zero_arity, int64_t delay_ms, bool periodic, int
 
     int timer_id = ++g_runtime.timer_id_counter;
     bool ok = timer_schedule_with_id(fn_zero_arity, delay_ms, periodic, period_ms, timer_id);
-    RELEASE(fn_zero_arity);
     return ok ? timer_id : 0;
 }
 
@@ -425,7 +635,6 @@ int timer_upsert_named(ID key,
     }
 
     bool ok = timer_schedule_with_id(fn_zero_arity, delay_ms, periodic, period_ms, timer_id);
-    RELEASE(fn_zero_arity);
     if (!ok) {
         (void)timer_named_take_by_key(key, NULL);
         return 0;

@@ -10,6 +10,7 @@
 #include <subjective-c/strings.h>
 #include <subjective-c/vector.h>
 #include <subjective-c/map.h>
+#include <subjective-c/record.h>
 #include <subjective-c/hashset.h>
 #include <subjective-c/byte_array.h>
 #include <subjective-c/kv_macros.h>

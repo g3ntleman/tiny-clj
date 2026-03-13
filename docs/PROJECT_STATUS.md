@@ -231,7 +231,7 @@ Note: JVM and V8 benefit from JIT compilation. tiny-clj is a pure interpreter.
 | Target | Size | Platform |
 |--------|------|----------|
 | `tiny-clj-repl` | ~500 KB | macOS/Linux desktop |
-| `tiny-clj-esp32` | ~150 KB | ESP32 microcontroller |
+| `tiny-clj-esp32` | compact | ESP32 microcontroller |
 | `unit-tests` | ~1 MB | Test binary |
 
 ## Next Steps

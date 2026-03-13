@@ -145,32 +145,32 @@ void repl_print_build_info_with_emitter(void (*emit_line)(const char *line)) {
   char value[96];
   emit_line("=== Build Information ===");
   repl_format_compiler_line(value, sizeof(value));
-  (void)mini_snprintf(line, sizeof(line), "  Compiler          : %s", value);
+  (void)mini_snprintf(line, sizeof(line), "  Compiler           : %s", value);
   emit_line(line);
-  emit_line("  Features          :");
+  repl_format_build_date_line(value, sizeof(value));
+  (void)mini_snprintf(line, sizeof(line), "  Build Date         : %s", value);
+  emit_line(line);
+  emit_line("  Features");
 #if defined(DEBUG) && DEBUG
-  emit_line("    Debug Enabled");
+  emit_line("    Debug            : Enabled");
 #else
-  emit_line("    Debug Disabled");
+  emit_line("    Debug            : Disabled");
 #endif
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
-  emit_line("    Memory Profiling Enabled");
+  emit_line("    Memory Profiling : Enabled");
 #else
-  emit_line("    Memory Profiling Disabled");
+  emit_line("    Memory Profiling : Disabled");
 #endif
 #if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
-  emit_line("    Zombie Mode Enabled");
+  emit_line("    Zombie Mode      : Enabled");
 #else
-  emit_line("    Zombie Mode Disabled");
+  emit_line("    Zombie Mode      : Disabled");
 #endif
 #if defined(META_ENABLED) && META_ENABLED
-  emit_line("    Meta Enabled");
+  emit_line("    Meta             : Enabled");
 #else
-  emit_line("    Meta Disabled");
+  emit_line("    Meta             : Disabled");
 #endif
-  repl_format_build_date_line(value, sizeof(value));
-  (void)mini_snprintf(line, sizeof(line), "  Build Date        : %s", value);
-  emit_line(line);
   emit_line("=========================");
 }
 

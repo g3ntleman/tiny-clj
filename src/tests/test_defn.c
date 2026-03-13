@@ -703,3 +703,45 @@ TEST(test_defn_docstring_native_stub_still_works) {
         TEST_ASSERT_TRUE(TAG(r) == CLJ_STRING);
     });
 }
+
+TEST(test_defn_minus_allows_internal_helper_dispatch_from_same_namespace) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+        ID setup_result = eval_string(
+            "(do "
+            "  (ns private.demo) "
+            "  (defn- secret [] :ok) "
+            "  (defn call-secret [] (secret)))",
+            g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(setup_result);
+
+        ID result = eval_string(
+            "(do "
+            "  (ns user) "
+            "  (private.demo/call-secret))",
+            g_test_eval_state);
+
+        TEST_ASSERT_EQUAL_PTR_MESSAGE(intern_symbol_global(":ok"), result,
+                                      "public dispatcher should still call private helper inside the same namespace");
+    });
+}
+
+TEST(test_defn_minus_blocks_qualified_access_from_other_namespace) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+        TRY {
+            (void)eval_string(
+                "(do "
+                "  (ns private.demo) "
+                "  (defn- secret [] :ok) "
+                "  (ns user) "
+                "  private.demo/secret)",
+                g_test_eval_state);
+            TEST_FAIL_MESSAGE("qualified access to defn- from another namespace should throw");
+        } CATCH(ex) {
+            TEST_ASSERT_NOT_NULL(ex);
+        } END_TRY
+    });
+}

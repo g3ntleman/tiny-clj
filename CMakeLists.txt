@@ -1,5 +1,14 @@
 cmake_minimum_required(VERSION 3.10)
 project(tiny-clj)
+include(CheckLanguage)
+check_language(OBJC)
+if(CMAKE_OBJC_COMPILER)
+    enable_language(OBJC)
+endif()
+
+option(TINYCLJ_GAME_DEMO "Build optional MiniFB game demo" OFF)
+option(TINYCLJ_MINIFB_METAL "Use MiniFB Metal backend on macOS" OFF)
+option(TINYCLJ_WITH_TINY_FX "Build optional tiny-fx sound/gfx feature set" ON)
 
 # Generate compile_commands.json for IDE (Go to Definition, IntelliSense)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -29,6 +38,7 @@ endif()
 
 # Include common paths configuration
 include(cmake_include_paths.cmake)
+include(cmake/embedded_clojure_sources.cmake)
 
 # Set C standard
 set(CMAKE_C_STANDARD 99)
@@ -61,7 +71,7 @@ else()
   set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,--gc-sections -Wl,--strip-all -Wl,-S")
 endif()
 
-# Ultra-compact build for <150KB target (embedded deployment)
+# Ultra-compact build for embedded deployment
 # Target: size-focused embedded build settings (ESP32)
 set(CMAKE_C_FLAGS_EMBEDDED "${CMAKE_C_FLAGS_EMBEDDED} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common")
 if(APPLE)
@@ -162,11 +172,22 @@ configure_file(
 # This prevents stale checked-in headers from shadowing configure_file outputs.
 include_directories(BEFORE ${CMAKE_BINARY_DIR})
 
-# Source files (without main.c - main is target-specific)
-list(APPEND SOURCES
+tinyclj_setup_embedded_clojure_generation(
+    "${CMAKE_SOURCE_DIR}"
+    "${CMAKE_BINARY_DIR}"
+    TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS
+    TINYCLJ_GENERATED_EMBEDDED_CLOJURE_DIR
+    TINYCLJ_FLASH_FS_CLOJURE_MANIFEST
+)
+add_custom_target(tinyclj_embedded_clojure_sources DEPENDS ${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS})
+
+# Core sources stay in the always-on runtime.
+set(TINYCLJ_CORE_SOURCES
     src/clojure_core.c
     src/object.c
     src/builtins.c
+    src/builtins_gpio.c
+    src/builtins_tiny_fx_gfx.c
     src/builtins_net.c
     src/builtins_mdns.c
     src/mdns_codec.c
@@ -190,7 +211,12 @@ list(APPEND SOURCES
     src/equality.c
     src/hash.c
     src/event_loop.c
+    src/renderer_lifecycle.c
+    src/rendered_state_snapshot.c
+    src/render_backend.c
+    src/viewer_collision.c
     src/channel.c
+    src/lockfree_spsc_queue.c
     src/list.c
     src/ast.c
     src/atom.c
@@ -212,14 +238,84 @@ list(APPEND SOURCES
     src/to_string.c
     src/macro.c
     src/fs_layer.c
+    src/gpio.c
     src/gpio_host.c
-    src/audio_engine.c
-    src/builtins_audio.c
-    src/audio_backend_host.c
     src/repl_history_backend.c
-    src/source_resolver.c
-
 )
+
+# tiny-fx is an optional feature pack: sound + vector graphics.
+set(TINYCLJ_FX_COMMON_SOURCES
+    src/sound_tick_scheduler.c
+    src/sound_engine.c
+    src/builtins_sound.c
+    src/gfx.c
+    src/tiny_fx_gfx.c
+    src/vector_scene_graph.c
+    src/scene.c
+)
+
+set(TINYCLJ_FX_HOST_SOURCES
+    src/sound_backend_host.c
+)
+
+set(TINYCLJ_FX_ESP32_SOURCES
+    src/sound_backend_esp32.c
+)
+
+set(TINYCLJ_HOST_TINY_FX_SOURCES
+    ${TINYCLJ_FX_COMMON_SOURCES}
+    ${TINYCLJ_FX_HOST_SOURCES}
+)
+
+set(TINYCLJ_ESP32_TINY_FX_SOURCES
+    ${TINYCLJ_FX_COMMON_SOURCES}
+    ${TINYCLJ_FX_ESP32_SOURCES}
+)
+
+set(SOURCES ${TINYCLJ_CORE_SOURCES})
+
+function(tinyclj_link_apple_base target_name)
+    if(APPLE)
+        target_link_libraries(${target_name} PRIVATE "-framework CoreFoundation")
+        target_link_directories(${target_name} PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
+        target_link_libraries(${target_name} PRIVATE system_dnssd)
+    endif()
+endfunction()
+
+function(tinyclj_target_enable_tiny_fx target_name platform_name)
+    if(TINYCLJ_WITH_TINY_FX)
+        if("${platform_name}" STREQUAL "HOST")
+            target_sources(${target_name} PRIVATE ${TINYCLJ_HOST_TINY_FX_SOURCES})
+            if(APPLE)
+                target_link_libraries(${target_name} PRIVATE "-framework CoreAudio" "-framework AudioUnit")
+            endif()
+        elseif("${platform_name}" STREQUAL "ESP32")
+            target_sources(${target_name} PRIVATE ${TINYCLJ_ESP32_TINY_FX_SOURCES})
+        else()
+            message(FATAL_ERROR "Unknown tiny-fx platform: ${platform_name}")
+        endif()
+        target_compile_definitions(${target_name} PRIVATE TINYCLJ_WITH_TINY_FX=1)
+    else()
+        target_compile_definitions(${target_name} PRIVATE TINYCLJ_WITH_TINY_FX=0)
+    endif()
+endfunction()
+
+function(tinyclj_target_use_generated_embedded_clojure target_name)
+    add_dependencies(${target_name} tinyclj_embedded_clojure_sources)
+    target_include_directories(${target_name} PRIVATE "${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_DIR}")
+endfunction()
+
+if(TINYCLJ_WITH_TINY_FX)
+    add_library(tiny-fx EXCLUDE_FROM_ALL STATIC ${TINYCLJ_HOST_TINY_FX_SOURCES})
+    target_include_directories(tiny-fx PUBLIC
+        ${CMAKE_SOURCE_DIR}/src
+        ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR}
+    )
+    target_link_libraries(tiny-fx PUBLIC subjective-c tiny-db)
+    if(APPLE)
+        target_link_libraries(tiny-fx PUBLIC "-framework CoreAudio" "-framework AudioUnit")
+    endif()
+endif()
 
 # Main executable (not built by default; use REPL)
 add_executable(tiny-clj EXCLUDE_FROM_ALL 
@@ -229,17 +325,12 @@ add_executable(tiny-clj EXCLUDE_FROM_ALL
 )
 target_link_libraries(tiny-clj PRIVATE subjective-c)
 target_link_libraries(tiny-clj PRIVATE tiny-db)
-if(APPLE)
-    target_link_libraries(tiny-clj PRIVATE "-framework CoreFoundation")
-    target_link_libraries(tiny-clj PRIVATE "-framework CoreAudio" "-framework AudioUnit")
-    # DNS-SD (Bonjour) symbols are provided by libsystem_dnssd on modern macOS toolchains.
-    # ld does not always search ${SDK}/usr/lib/system by default, so add it explicitly.
-    target_link_directories(tiny-clj PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
-    target_link_libraries(tiny-clj PRIVATE system_dnssd)
-endif()
+tinyclj_link_apple_base(tiny-clj)
+tinyclj_target_enable_tiny_fx(tiny-clj HOST)
 target_include_directories(tiny-clj PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
+tinyclj_target_use_generated_embedded_clojure(tiny-clj)
 # Main Build - Meta only in Debug builds
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(tiny-clj PRIVATE)
@@ -253,6 +344,9 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/main_esp32.c
     src/platform_esp32_embedded.c
     src/event_loop.c
+    src/renderer_lifecycle.c
+    src/rendered_state_snapshot.c
+    src/render_backend.c
     src/channel.c
     src/clojure_core.c
     src/object.c
@@ -297,16 +391,17 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
 # ESP32-only sources (must not be part of host targets)
 target_sources(tiny-clj-esp32 PRIVATE
     src/gpio_esp32.c
-    src/audio_backend_esp32.c
 )
+tinyclj_target_enable_tiny_fx(tiny-clj-esp32 ESP32)
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
 target_link_libraries(tiny-clj-esp32 PRIVATE tiny-db)
 target_include_directories(tiny-clj-esp32 PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
+tinyclj_target_use_generated_embedded_clojure(tiny-clj-esp32)
 
 
-# ESP32 Ultra-Minimal Build (only core features for <150KB) - DISABLED
+# ESP32 Ultra-Minimal Build (only core features) - DISABLED
 # This target has linker issues on macOS and is not needed for development
 
 # ESP32 Production Build - No Meta, Optimized
@@ -335,8 +430,8 @@ add_executable(tiny-clj-esp32-repl EXCLUDE_FROM_ALL
 # ESP32-only sources (must not be part of host targets)
 target_sources(tiny-clj-esp32-repl PRIVATE
     src/gpio_esp32.c
-    src/audio_backend_esp32.c
 )
+tinyclj_target_enable_tiny_fx(tiny-clj-esp32-repl ESP32)
 target_link_libraries(tiny-clj-esp32-repl PRIVATE subjective-c)
 target_link_libraries(tiny-clj-esp32-repl PRIVATE tiny-db)
 target_include_directories(tiny-clj-esp32-repl PRIVATE
@@ -344,6 +439,7 @@ target_include_directories(tiny-clj-esp32-repl PRIVATE
     ${CMAKE_SOURCE_DIR}/external/esp-idf/components/esp_driver_gpio/include
     ${CMAKE_SOURCE_DIR}/external/esp-idf/components/esp_common/include
 )
+tinyclj_target_use_generated_embedded_clojure(tiny-clj-esp32-repl)
 target_compile_definitions(tiny-clj-esp32-repl PRIVATE
     ESP32_BUILD
     REPL_ENABLED=1
@@ -364,7 +460,7 @@ if(CMAKE_TOOLCHAIN_FILE MATCHES "esp32.cmake")
     message(STATUS "🔧 Using ESP32 cross-compilation toolchain")
     message(STATUS "📱 Target: ESP32 (Xtensa LX6)")
     message(STATUS "💾 Flash: 4MB, RAM: 520KB")
-    message(STATUS "🎯 Binary Size Target: <150KB")
+    message(STATUS "🎯 Binary Size Target: minimized")
 endif()
 
 # REPL executable (with line editing support)
@@ -376,15 +472,12 @@ add_executable(tiny-clj-repl
 )
 target_link_libraries(tiny-clj-repl PRIVATE subjective-c)
 target_link_libraries(tiny-clj-repl PRIVATE tiny-db)
-if(APPLE)
-    target_link_libraries(tiny-clj-repl PRIVATE "-framework CoreFoundation")
-    target_link_libraries(tiny-clj-repl PRIVATE "-framework CoreAudio" "-framework AudioUnit")
-    target_link_directories(tiny-clj-repl PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
-    target_link_libraries(tiny-clj-repl PRIVATE system_dnssd)
-endif()
+tinyclj_link_apple_base(tiny-clj-repl)
+tinyclj_target_enable_tiny_fx(tiny-clj-repl HOST)
 target_include_directories(tiny-clj-repl PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
+tinyclj_target_use_generated_embedded_clojure(tiny-clj-repl)
 # Output directory is set globally to "build"
 # REPL Build
 # Debug in Debug mode, Release in Release mode
@@ -412,13 +505,12 @@ add_executable(tiny-clj-profile
 )
 target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
 target_link_libraries(tiny-clj-profile PRIVATE tiny-db)
-if(APPLE)
-    target_link_libraries(tiny-clj-profile PRIVATE "-framework CoreFoundation")
-    target_link_libraries(tiny-clj-profile PRIVATE "-framework CoreAudio" "-framework AudioUnit")
-endif()
+tinyclj_link_apple_base(tiny-clj-profile)
+tinyclj_target_enable_tiny_fx(tiny-clj-profile HOST)
 target_include_directories(tiny-clj-profile PRIVATE
     ${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR} # allow "value.h", "common.h", etc.
 )
+tinyclj_target_use_generated_embedded_clojure(tiny-clj-profile)
 target_compile_definitions(tiny-clj-profile PRIVATE PROFILING_ENABLED=1 META_ENABLED=${META_ENABLED_VALUE} MEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE} DEBUG)
 set_target_properties(tiny-clj-profile PROPERTIES
     COMPILE_FLAGS "-g -O2 -DDEBUG -DMEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE} -fno-omit-frame-pointer"
@@ -429,10 +521,19 @@ set_target_properties(tiny-clj-profile PROPERTIES
 # CATEGORIZED TEST EXECUTABLES
 # ============================================================================
 
+set(TINYCLJ_FX_TEST_SOURCES)
+if(TINYCLJ_WITH_TINY_FX)
+    list(APPEND TINYCLJ_FX_TEST_SOURCES
+        src/tests/test_sound_engine.c
+        src/tests/test_vector_scene_graph.c
+        src/tests/test_gfx_svg.c
+        src/tests/test_gfx_collision_contract.c
+    )
+endif()
+
 # Unity Test Framework (central runner with separate test files)
 add_executable(unit-tests
     ${SOURCES}
-    src/line_editor.c
     subjective-c/tests/test_runner.c
     src/tests/unity_test_runner.c
     subjective-c/tests/test_registry.c
@@ -460,6 +561,7 @@ add_executable(unit-tests
     src/tests/test_defn.c
     src/tests/test_native_lookup.c
     src/tests/test_gpio_write.c
+    src/tests/test_gpio_input.c
     src/tests/test_gpio_architecture_contract.c
     src/tests/test_event_loop_latency.c
     src/tests/test_clojure_core_loading.c
@@ -516,7 +618,7 @@ add_executable(unit-tests
     src/tests/test_pprint.c
     src/tests/test_print.c
     src/tests/test_static_keywords.c
-    src/tests/test_audio_engine.c
+    src/tests/test_lockfree_spsc_queue.c
     src/tests/test_byte_array.c
     src/tests/test_byte_array_view.c
     src/tests/test_platform_net.c
@@ -524,6 +626,7 @@ add_executable(unit-tests
     src/tests/test_mdns_resolver.c
     src/tests/test_mdns_bindings.c
     src/tests/test_platform_mdns.c
+    ${TINYCLJ_FX_TEST_SOURCES}
     # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
@@ -541,14 +644,10 @@ target_compile_definitions(unit-tests PRIVATE
     META_ENABLED=${META_ENABLED_VALUE}
     UNITY_INCLUDE_EXEC_TIME
 )
+tinyclj_target_enable_tiny_fx(unit-tests HOST)
 target_link_libraries(unit-tests PRIVATE subjective-c)
 target_link_libraries(unit-tests PRIVATE tiny-db)
-if(APPLE)
-    target_link_libraries(unit-tests PRIVATE "-framework CoreFoundation")
-    target_link_libraries(unit-tests PRIVATE "-framework CoreAudio" "-framework AudioUnit")
-    target_link_directories(unit-tests PRIVATE "${CMAKE_OSX_SYSROOT}/usr/lib/system")
-    target_link_libraries(unit-tests PRIVATE system_dnssd)
-endif()
+tinyclj_link_apple_base(unit-tests)
 target_include_directories(unit-tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/subjective-c/tests
@@ -557,6 +656,7 @@ target_include_directories(unit-tests
         ${TINYCLJ_SUBJECTIVE_C_TESTS_COMMON_ANCHOR_DIR}
         ${CMAKE_SOURCE_DIR}
 )
+tinyclj_target_use_generated_embedded_clojure(unit-tests)
 
 # Ensure subjective-c library is compiled with same flags as unit-tests
 # This is critical: exception.c must use DEBUG to match CLJException struct size,
@@ -855,6 +955,55 @@ set_tests_properties(repl-history-multiple PROPERTIES
 # Subjective-C Unity suite (C tests)
 add_test(NAME unit-tests COMMAND $<TARGET_FILE:unit-tests>)
 set_tests_properties(unit-tests PROPERTIES LABELS "unit")
+
+add_test(
+    NAME generate-embedded-clojure-source
+    COMMAND python3 "${CMAKE_SOURCE_DIR}/scripts/test_generate_embedded_clojure_source.py"
+)
+set_tests_properties(generate-embedded-clojure-source PROPERTIES LABELS "unit;scripts")
+
+if(TINYCLJ_GAME_DEMO)
+    if(NOT TINYCLJ_WITH_TINY_FX)
+        message(FATAL_ERROR "game-demo requires TINYCLJ_WITH_TINY_FX=ON")
+    endif()
+    include(FetchContent)
+    # Select MiniFB macOS backend explicitly to keep runs reproducible.
+    if(APPLE)
+        unset(USE_METAL_API CACHE)
+        if(TINYCLJ_MINIFB_METAL)
+            set(MINIFB_USE_METAL_API ON CACHE BOOL "" FORCE)
+        else()
+            set(MINIFB_USE_METAL_API OFF CACHE BOOL "" FORCE)
+        endif()
+    endif()
+    FetchContent_Declare(
+        minifb
+        GIT_REPOSITORY https://github.com/emoon/minifb.git
+        GIT_TAG master
+    )
+    FetchContent_MakeAvailable(minifb)
+
+    if(NOT TARGET minifb)
+        message(FATAL_ERROR "MiniFB target 'minifb' was not created by dependency build.")
+    endif()
+
+    add_executable(game-demo
+        src/game_demo_minifb.c
+        src/platform_macos.c
+        ${SOURCES}
+    )
+    tinyclj_target_enable_tiny_fx(game-demo HOST)
+    tinyclj_target_use_generated_embedded_clojure(game-demo)
+    if(APPLE)
+        target_sources(game-demo PRIVATE src/game_demo_macos_menu.m)
+    endif()
+    target_include_directories(game-demo PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+    )
+    target_compile_definitions(game-demo PRIVATE TINYCLJ_WITH_MINIFB=1)
+    target_link_libraries(game-demo PRIVATE minifb m subjective-c tiny-db)
+    tinyclj_link_apple_base(game-demo)
+endif()
 
 # Seq Benchmark (REMOVED - File no longer exists)
 # Use run-tests for sequence testing instead

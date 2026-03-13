@@ -13,21 +13,233 @@ Build a reduced SVG-like 2D graphics engine with a strict PoC-first delivery pat
 
 - Record-first scene nodes (type is implicit by record, no `:type` tag dispatch in game code)
 - Group-based scene graph with inherited transforms
+- Snapshot-based rendering directly from tiny-clj/subjective-c records (no mandatory patching/canonical C scene cache for PoC)
+- Multiple independently updatable scene slots (`game`, `score`, `deco`) with clip rectangles
 - Deterministic rendering pipeline validated first on macOS host simulator
-- Deterministic immediate rendering on SPI displays (ST7789 class) after host PoC is stable
+- Fixed-first decode/transform path (Q19.13 aligned with `subjective-c`) for deterministic behavior and lower ESP32 CPU load
+- Deterministic immediate rendering on SPI displays (ST7789/ILI9341 class) or 8-bit parallel I80 displays after host PoC is stable
 - Thick-stroke primitives suitable for game, menu, and animated vector title screens
+- Solid fill color for area primitives (SVG-like paint model MVP)
+- Generalized Clojure collision API: rules and callback routing are declared/configured in Clojure, while per-frame collision detection remains in C
+- Collision callbacks are Closure-based and dispatched from C via scheduler/runloop ingress; callback return values are ignored
+- Long-term goal: enable complete games to be authored in Clojure, with C primarily providing deterministic rendering, spatial evaluation, and platform/runtime services
+
+## Target Architecture: Flat Entity Map + Timeline Animations + C Interpolation
+
+### Scene Model: Flat Entity Map per Slot
+
+Each scene slot (e.g. `game`, `score`, `deco`) is one Atom holding an immutable **flat map**
+of `{id → Record}`. Groups reference children by ID, not by embedding. The root entity
+has the symbol `root` as its `:id`.
+
+```clojure
+(def game-slot (atom
+  {root (group {:id root :style style-default :children [3001 3002 3003]})
+   3001 (polyline {:id 3001 :t (transform {:tx 0}) :style style-line :pts terrain-pts})
+   3002 (tri      {:id 3002 :t (transform {:tx 72 :ty 146}) :style style-player
+                   :x1 56 :y1 146 :x2 72 :y2 118 :x3 88 :y3 146})
+   3003 (polyline {:id 3003 :t (transform {:tx 200 :ty 126 :rot -90})
+                   :style style-rocket
+                   :pts (->Timeline [[0 pts-open] [300 pts-mid] [400 pts-closed]] true)})}))
+```
+
+Properties:
+
+- **Flat, not nested.** Entities stored by ID in a persistent map. No tree embedding.
+- **Groups reference children by ID.** Logical tree arises from `root` → `:children` → ID lookups.
+- **Root = symbol `root`.** C starts rendering at `map_get(entities, sym_root)`.
+- **Updates are O(1).** `(swap! game-slot assoc-in [3002 :t] new-transform)` – no tree walk.
+- **Structural sharing.** Only the changed entity + outer map are re-allocated.
+- `**update-nodes` (M8b) no longer needed** for typical updates; direct `assoc-in` replaces tree walking.
+
+### Timeline Animations (declarative, C-evaluated)
+
+Any Record field can hold a `Timeline` instead of a plain value:
+
+```clojure
+(defrecord Timeline [keyframes loop])
+;; keyframes = [[time-ms value] [time-ms value] ...]
+
+;; Alien cycles through 3 forms with different durations:
+(polyline {:id 3003
+           :pts   (->Timeline [[0 pts-open] [300 pts-mid] [400 pts-closed]] true)
+           :style (->Timeline [[0 style-green] [400 style-red]] true)})
+```
+
+C resolves Timelines during traversal – no Clojure eval, no timers:
+
+```c
+ID field_val = record_get(entity, FIELD_PTS);
+if (is_timeline(field_val)) {
+    field_val = timeline_resolve(field_val, current_time_ms);
+}
+```
+
+Timeline resolution for looping: `phase_ms = time_ms % total_period`, then linear scan
+over keyframes (typically 2–5 entries). Cheap enough for the render hot path.
+
+### Threading Model
+
+The architecture requires exactly **two application threads**. A third thread exists
+only on macOS as a platform quirk (Cocoa requires the OS main thread for UI).
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Thread 1: Tiny-RTOS / Clojure  (= application main thread)            │
+│                                                                         │
+│  • Runs tiny-clj scheduler, game logic, event handling                  │
+│  • Owns all scene state as flat entity maps in Atoms (one per slot)     │
+│  • Updates via swap!/reset! – never blocks                              │
+│  • Starts/stops the render thread via Clojure functions:                │
+│      (start-renderer! [game-slot score-slot deco-slot])                 │
+│      (stop-renderer!)                                                   │
+│                                                                         │
+│  On ESP32: RTOS task (the one running tiny-clj)                         │
+│  On macOS: any thread (not necessarily the OS main thread)              │
+└────────────────────────┬────────────────────────────────────────────────┘
+                         │ atom_deref per slot (lock-free pointer read)
+                         ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Thread 2: Render Thread  (spawned/stopped by Clojure)                  │
+│                                                                         │
+│  • At frame start: atom_deref per slot → immutable snapshot             │
+│  • Renders entire frame from consistent snapshot:                       │
+│    resolve Timelines, interpolate AnimState, rasterize                  │
+│  • Frame done → loop back, pick up latest snapshot for next frame       │
+│  • Read-only on Clojure data – no ASSIGN, no RETAIN/RELEASE            │
+│                                                                         │
+│  On ESP32: writes framebuffer directly to SPI/DMA → display             │
+│  On macOS: writes into RGB565 framebuffer (same as ESP32 GRAM)          │
+└────────────────────────┬────────────────────────────────────────────────┘
+                         │ (macOS only: live framebuffer read — no copy)
+                         ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  macOS only – Cocoa UI Thread  (platform requirement, not architectural)│
+│                                                                         │
+│  • Reads live fb_pixels directly (lock-free, no copy buffer)            │
+│  • Expands RGB565 → XRGB8888 for window presentation (mfb_update_ex)   │
+│  • Simulates ESP32 SPI/I80 display: bus reads live GRAM, no double-buf  │
+│  • Tearing is possible and accepted — same as on real hardware          │
+│  • MiniFB event loop, input forwarding, frame pacing, metrics           │
+│  • No scene logic, no Record mutation                                   │
+│                                                                         │
+│  Does not exist on ESP32 – render thread drives display directly.       │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**No additional RTOS threads needed** for the scene-graph engine. Other subsystems
+(audio, networking, sensor polling) may have their own threads but are orthogonal to this plan.
+
+**Key property:** The two threads are decoupled via immutable snapshots in Atoms.
+No mutex is needed for scene data exchange – `atom_deref` is a lock-free pointer read.
+On macOS, the Cocoa UI thread reads the live framebuffer directly (no mutex, no copy buffer).
+This faithfully simulates how ESP32 SPI/I80 displays read the live GRAM without double-buffering.
+
+### Layer Separation
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Thread 1: Tiny-RTOS / Clojure (= main thread)             │
+│                                                             │
+│  (def game-slot (atom {root (group ...) 3001 (tri ...) ..}))│
+│  (start-renderer! [game-slot score-slot deco-slot])         │
+│                                                             │
+│  • Flat map of {id → Record} per slot, in an Atom           │
+│  • State changes via swap!/assoc-in (event-driven)          │
+│  • Timeline Records on fields for periodic animations       │
+│  • No Clojure eval in the render loop                       │
+└────────────────────────┬────────────────────────────────────┘
+                         │ atom_deref (once per frame, lock-free)
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Thread 2: Render Thread (spawned by Clojure)               │
+│                                                             │
+│  • Snapshots flat entity maps from Atoms at frame start     │
+│  • Resolves Timeline fields by wall clock (modulo arith.)   │
+│  • Interpolates transform targets (lerp/easing for smooth   │
+│    motion) using mutable C-owned AnimState structs          │
+│  • Owns animation timing (dt, framerate-independent)        │
+│  • Traverses logical tree (root → children IDs → lookup)    │
+│  • Composes inherited transforms                            │
+│  • Rasterizes primitives with resolved field values         │
+│  • Read-only on the Clojure snapshot                        │
+│  • ESP32: writes directly to SPI/DMA → display GRAM         │
+│  • macOS: writes into shared fb_pixels (live GRAM simulation)│
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Design Principles
+
+- **Clojure never mutates Records.** State changes produce new immutable Records via `swap!`.
+- **C never mutates the Clojure snapshot.** C reads via `atom_deref` (lock-free pointer read).
+- **Records over Maps** for entities: C knows Record layout (`DEFRECORD`), field access is O(1).
+- **No Clojure eval per frame.** Clojure sets state event-driven (collision, timer, input).
+C resolves Timelines and interpolates every frame with fixed time budget.
+- **Snapshot-per-frame.** Render thread snapshots all slot Atoms once at frame start.
+The entire frame renders from this consistent state. Intermediate Clojure updates
+are picked up at the next frame start – scene data is always consistent per frame.
+Note: the display itself has no double-buffer (SPI/I80 GRAM is single-buffered),
+so visual tearing at the display level is possible and accepted — same as real hardware.
+- **Static slots skip rendering.** If a slot has no Timelines and no active AnimState,
+its output is frame-identical. Render thread skips erase + re-render until
+Clojure publishes a new snapshot. If all slots are static, render thread sleeps.
+- **Interruption-safe.** New target mid-animation → C interpolates from current visual
+position toward new target (no jump, no restart).
+- **Timelines are data, not code.** Periodic animations (form cycling, blinking, color pulsing)
+are Timeline Records on fields – C evaluates them with pure arithmetic, no timers needed.
+- **Two threads, Clojure-controlled.** Tiny-RTOS/Clojure is the main thread. Render thread
+is started/stopped from Clojure via `(start-renderer!)` / `(stop-renderer!)`.
+macOS Cocoa UI thread is a platform detail, not an architectural thread.
+No additional RTOS threads needed for the scene-graph engine.
+- **No game logic in C.** All game/app logic lives in Clojure (target states via `swap!`).
+C render thread only interpolates and rasterizes. No demo-specific gameplay functions in C.
+- **Animation descriptors (TODO).** Declarative transition animations (easing, duration, from/to
+for smooth motion) should also execute in C. Exact contract to be designed after flat entity
+map and Timeline are stable (see Optional Extension A for initial sketch).
 
 ## Constraints
 
 - MCU class: ESP32 (resource-constrained embedded target)
-- Display class: ST7789 320x240 over SPI
+- Display class: SPI (ST7789/ILI9341, 240×240 or 320×240) or 8-bit parallel I80 (faster, rarer)
+- Display has a single internal GRAM, no double-buffer — tearing is possible and accepted
 - macOS host simulator is mandatory before device bring-up
 - Shared render core between simulator and ESP32 (avoid logic forks)
 - Host emulation must happen at driver/backend level (not above primitive rasterization),
-  so primitive generation/rasterization bugs are debuggable on host.
+so primitive generation/rasterization bugs are debuggable on host.
+- Host display simulation must faithfully match ESP32 display behavior:
+  - no double-buffer on the display side
+  - render thread writes directly into a single framebuffer (GRAM equivalent)
+  - main/UI thread reads the live framebuffer without mutex or copy
+  - tearing is possible and accepted — same as on real hardware
 - No required full framebuffer on device
 - tiny-clj should not do per-pixel rendering work
 - Engine must stay compact and record-friendly
+- Decode + transform hot paths should prefer fixed-point (`CLJ_FIXED_FRAC_BITS`) and only quantize to integer at raster boundaries.
+- Render-thread safety rule:
+  - the native C render thread is read-only on published scene snapshots
+  - no MEMORY macros (`RETAIN`, `RELEASE`, `AUTORELEASE`, `ASSIGN`) in render-thread hot path
+  - no autorelease pool setup/usage in render thread
+  - memory ownership changes/allocation happen only in producer/update thread before atomic snapshot publish
+  - no blocking/channel operations in render hot path; use bounded lock-free queues for control/completion handoff
+  - render thread acquires scene snapshots via lock-free `atom_deref` at frame start;
+  renders the full frame from the consistent snapshot; picks up new state at next frame start
+- Thread ownership rule (target architecture – two threads):
+  - Thread 1 – Tiny-RTOS / Clojure (= main thread): owns scene state (Atoms with flat entity
+  maps), all game/app logic, starts/stops render thread via `(start-renderer!)` / `(stop-renderer!)`
+  - Thread 2 – Render thread (spawned by Clojure): owns interpolation (AnimState), Timeline
+  resolution, rasterization; read-only on Clojure snapshots; on ESP32 drives SPI directly
+  - macOS Cocoa UI thread: platform quirk, presentation only – not an architectural thread
+  - No game logic in C; no direct ASSIGN into scene Records from any C thread
+- Backend-parity rule (host <-> ESP32):
+  - define one shared backend submission interface (e.g. `begin_frame`, `submit_rect`, `end_frame`)
+  - render thread owns backend submission on both targets
+  - macOS main/UI thread is presentation-only (`mfb_update_ex`), matching ESP32 where render thread drives SPI/I80 writes
+- Display simulation rule (host):
+  - host viewer uses a single RGB565 framebuffer (no copy buffer, no double-buffer)
+  - render thread writes into the framebuffer; UI thread reads it live without synchronization
+  - this mirrors real SPI/I80 display behavior: the display bus reads from the live GRAM while the MCU writes into it
+  - tearing artifacts on the host are intentional and match what users see on real hardware
+  - dirty-rectangle tracking and static-slot skip remain the primary bandwidth optimization — same as on ESP32 SPI
 
 ## Definition Of Done (project-level)
 
@@ -35,15 +247,17 @@ Build a reduced SVG-like 2D graphics engine with a strict PoC-first delivery pat
 2. Nested groups with inherited transforms render deterministically frame-to-frame.
 3. Required primitives work: `Group`, `Line`, `Polyline`, `Rect`, `Tri`, `VText`.
 4. Thick stroke (`width >= 1`) looks stable and readable on 320x240.
-5. World movement is achievable by updating group transform fields only (e.g. `world.t.tx`).
-6. SPI backend supports clipping + window/burst writes without requiring a full-screen redraw.
-7. Stable `id`-based patch updates work for transform/text/visibility/style changes.
+5. Solid fill color works for area primitives (`Rect`, `Tri`, `Polyline` with `closed=true`) and respects slot clipping.
+6. World movement is achievable by updating group transform fields only (e.g. `world.t.tx`).
+7. Multiple scene slots with `clip-rect` can be rendered independently and unchanged slots are skipped.
+8. SPI backend supports slot-scoped clipping + window/burst writes without requiring a full-screen redraw.
+9. Optional-later delta paths (id-based patches and/or pointer-identity subtree reuse) are compatible with the same render core.
 
 ## Delivery Strategy (Stepwise)
 
 Phase A (PoC on host):
 
-- Build and validate scene model, transforms, rasterization, thick lines, and patch flow on macOS.
+- Build and validate scene model, transforms, rasterization, thick lines, and snapshot-slot render flow on macOS.
 - Use deterministic frame dumps/checksums as regression gates.
 
 Phase B (embedded integration):
@@ -53,7 +267,7 @@ Phase B (embedded integration):
 
 ## Milestone 0: Scene Contract + Record Schema
 
-Status: TODO
+Status: DONE (`DEFRECORD` path active; header-serialization path removed)
 
 Tasks:
 
@@ -73,25 +287,47 @@ Tasks:
   - `style` (at least stroke color + width)
   - `visible` (optional bool)
 - Define default values and validation rules.
-- Define canonicalization step from tiny-clj records into compact C render data.
+- Define nil/optional decoding contract (record-friendly direct render path):
+  - any field value may be `nil`
+  - C decoders must apply typed defaults (`0`, `1`, `true`, etc.) and inheritance semantics where applicable
+  - `nil` and explicit `false` must remain semantically distinct
+- Define slot-index cache invariant for direct record rendering:
+  - slot indices for required record fields are precomputed during schema setup and treated as always known
+  - enforce this with `CLJ_ASSERT(...)` during schema initialization / validation
+  - optionality applies to slot values (`nil`), not to slot-index discovery in the render hot path
+- Define direct-render record contract for C (slot-indexed field access; no keyword lookup in render hot path).
+- Decision (layout consistency between Clojure and C):
+  - `tiny-fx.gfx-scene` and C `DEFRECORD` declarations are the single source of truth for record field order/layout.
+  - C code uses `DEFRECORD` typed overlays plus runtime descriptor-index cache populated in `tiny_gfx_ensure_schema(...)`.
+  - Build-time header generation/codegen has been removed from the active workflow.
+  - Keep runtime checks minimal (descriptor presence/type), avoid large handwritten index-preparation/validation blocks in hot paths.
+- Current implementation notes:
+  - `tiny-fx.gfx-scene` exists and registers the record descriptors used by the C renderer.
+  - Runtime schema lookup/caching from C is implemented (descriptor-driven field indices).
+  - C-side layout-compatible overlays are declared via `DEFRECORD(...)` in `tiny_gfx.h`.
+  - Host-only tooling namespace `tiny-fx.gfx.converter` under `libs/tiny-fx/converter.clj` remains optional helper tooling (e.g. SVG subset conversion via `group-from-svg`), without any header-serialization helpers.
+  - Slot-index contract enforcement stays in C via runtime descriptor lookup + `CLJ_ASSERT(...)` (no generated index tables).
+- Keep canonicalization/compiled C scene cache optional for later optimization.
 
 Done when:
 
-- Record schema and canonicalization contract are documented and testable.
+- Record schema and direct-render access contract are documented and testable.
+- Nil/default/inheritance decoding behavior is documented and covered by schema-level tests.
+- No active header-serialization path remains in runtime/build/documented workflow.
 
 ## Milestone 1: macOS Host Simulator Skeleton (PoC Gate 1)
 
-Status: TODO
+Status: DONE
 
 Tasks:
 
 - Add a host-side simulator target for 320x240 rendering.
 - Implement offscreen RGB565 frame target in host memory.
 - Implement host simulator as a driver/backend implementation under the same primitive/render API
-  used by ESP32 (do not bypass primitive rasterizers with a separate host-only drawing path).
+used by ESP32 (do not bypass primitive rasterizers with a separate host-only drawing path).
 - Add deterministic frame export (PPM or raw dump) for golden testing.
 - Add frame checksum utility to compare expected vs actual output.
-- Ensure simulator consumes the same canonical scene data format as embedded.
+- Ensure simulator and embedded paths share the same render core and record-slot scene contract.
 
 Done when:
 
@@ -99,7 +335,7 @@ Done when:
 
 ## Milestone 2: Transform System (SVG-like behavior)
 
-Status: TODO
+Status: DONE
 
 Tasks:
 
@@ -122,7 +358,7 @@ Done when:
 
 ## Milestone 3: Primitive Rasterizers (Baseline Stroke = 1)
 
-Status: TODO
+Status: DONE
 
 Tasks:
 
@@ -142,7 +378,7 @@ Done when:
 
 ## Milestone 4: Thick Line Engine (Required)
 
-Status: TODO
+Status: DONE for now (functional and used by host demo; explicit cap/join semantics + perf gates deferred)
 
 Tasks:
 
@@ -156,39 +392,105 @@ Tasks:
 - Define initial cap/join behavior:
   - caps: `:butt` default
   - joins: bevel/none default
-- Keep advanced caps/joins optional for later:
+- Keep advanced caps/joins optional for later (deferred):
   - `:square`, `:round`, miter/round joins
+- Perf/frame-time budget validation deferred.
 
 Done when:
 
 - Thick lines are visually stable in simulator output and within host frame-time budget.
 
-## Milestone 5: Record-Friendly Diff/Patch Path (PoC Gate 2)
+## Milestone 4b: Solid Fill Color (SVG-like MVP)
 
-Status: TODO
+Status: DONE (implementation + regression tests)
 
 Tasks:
 
-- Enforce stable `id` per node.
-- Define minimal patch operations:
-  - transform changed
-  - text changed
-  - visibility changed
-  - style (`stroke`, `width`) changed
-- Implement low-allocation patch apply path in host runtime.
-- Add guardrails:
-  - max patches per frame
-  - fallback behavior on overflow
-- Validate scrolling by patching one group transform (`world.t.tx`) only.
-- Validate parallax via second group transform (`bg.t.tx = world.t.tx * k`).
+- Extend style contract with fill-color-only MVP fields:
+  - `has_fill` (bool)
+  - `fill_rgb565` (u16)
+- Keep MVP scope intentionally small:
+  - no `fill-rule` yet
+  - no fill opacity/alpha blending
+  - no gradients/patterns
+- Implement integer/fixed-point friendly fill rasterization for:
+  - `Rect`
+  - `Tri`
+  - `Polyline` when `closed=true`
+- Apply SVG-like paint order per primitive:
+  - fill first, stroke second
+- Ensure fill path respects active clip rectangle/slot clipping and deterministic pixel rules.
+- Add host regression tests for:
+  - filled rect/tri/closed-polyline basics
+  - clipping behavior
+  - deterministic output across runs
 
 Done when:
 
-- Common animation and scrolling updates are expressible as small `id`-based patches.
+- Filled area primitives render with stable solid `fill_rgb565` on host and are clipping-correct.
+- Existing stroke behavior remains unchanged for primitives without `has_fill=true`.
+
+## Milestone 5: Snapshot Slot Update Path (PoC Gate 2, Patch Optional)
+
+Status: DONE for host PoC (slot-change wait API + atom-bound changed-slot host rendering + dedicated render-thread split implemented)
+
+Tasks:
+
+- Define `FrameScene`/render-slot record contract:
+  - `root`
+  - `clip-rect` (single unified rect for erase + render clipping)
+  - `z`
+  - `visible?`
+  - `opaque?` / clear policy (`erase-rgb565` optional; no separate `erase-rect`)
+  - optional guard pixels for conservative clipping
+- Define snapshot publication protocol for render thread consumption:
+  - atomically replace one `FrameScene` descriptor (or equivalent) without in-place mutation of the active snapshot
+  - enforce thread contract: render thread only reads immutable records; producer thread owns all retain/release work
+- Provide a blocking C API for atom/snapshot changes:
+  - render thread can wait (blocking) until any registered scene atom/snapshot generation changes
+  - API returns changed-slot bitmask/list plus new generation values
+  - wakeup primitive should be condition/event based (no busy polling loop)
+  - optional timeout variant is allowed as safety fallback
+- Render multiple explicit scene roots/atoms in host runtime (e.g. `game`, `score`, `deco`).
+- In render thread, track previous slot snapshot and only clear/render/send slot region when the slot snapshot or slot properties change.
+- Render thread wait strategy:
+  - block/sleep until any scene slot snapshot changes (event/condition based wakeup)
+  - avoid continuous busy rendering when no slot changed
+  - rationale: lower power draw, better battery life, and reduced thermal load
+  - implementation note: host path uses `VgSlotChangeTracker` with a dedicated render thread that blocks on slot-change wakeups
+- Render only the affected slot region (`clip-rect`), not the full framebuffer.
+- If a slot moves, treat dirty region as `union(old_clip_rect, new_clip_rect)`.
+- Validate non-overlapping slot convention with conservative bounds (stroke width / text fringe guard).
+- Validate scrolling/parallax using separate scene slots or group transforms within a slot.
+- Current state (optional support path): `vg_scene_apply_patch()` exists for single `id`-based patch application.
+- Current implementation notes (this milestone):
+  - Blocking slot-change API exists in C via `VgSlotChangeTracker` (`scene.h/.c`):
+    - per-slot generation counters
+    - publish API (`vg_slot_change_tracker_publish`)
+    - blocking wait API returning changed-slot bitmask + latest generations (`vg_slot_change_tracker_wait_for_changes`)
+  - Host viewer uses explicit scene-slot atoms (`deco`, `score`, `game`) as snapshot carriers:
+    - slot publications write immutable `FrameScene` snapshots via `atom_reset`
+    - dedicated render thread blocks for tracker changes and renders only changed slots
+    - main/UI thread only presents framebuffer output and does not execute slot rasterization
+    - unchanged slots are skipped end-to-end in the host render path
+  - Unit tests cover tracker behavior:
+    - changed-mask/generation reporting
+    - timeout/no-change behavior
+- Optional later explicit patch path (not required for PoC):
+  - define minimal patch operations (`transform`, `text`, `visibility`, `style`)
+  - batch apply, guardrails, overflow behavior
+- Optional later optimization path (not required for PoC):
+  - for persistent tiny-clj/subjective-c render records, use pointer-identity diffing
+  (`old_subtree_ptr == new_subtree_ptr`) to skip unchanged subtrees / reuse cached decode
+  - treat this as a complementary delta strategy to explicit patch vectors, not a replacement mandate
+
+Done when:
+
+- Multiple scene slots render correctly on host, and unchanged slots are skipped without visual artifacts.
 
 ## Milestone 6: VText (Vector/Stroke Font)
 
-Status: TODO
+Status: DONE (PoC/host path)
 
 Tasks:
 
@@ -197,63 +499,1434 @@ Tasks:
 - Support `scale`, `rot`, and inherited parent transforms.
 - Support style-based stroke color and width.
 - Validate animated/rotated title text ("flying text") use case in simulator.
+- Current state: arcadefont-based glyphs are integrated with host-viewer visual regression coverage.
 
 Done when:
 
 - Animated vector text remains readable and stable under transform updates.
 
-## Milestone 7: ESP32 SPI Backend Integration (Post-PoC)
+## Milestone 7: ESP32 Display Backend Integration (Post-PoC)
 
-Status: TODO
+Status: IN PROGRESS (2026-03-07; shared backend submission API + host dirty-rect backend path landed, ESP32 transport hooks still pending)
+
+Supported display interfaces:
+
+- **SPI** (primary): ST7789, ILI9341 — serial bus, 40–80 MHz clock, bandwidth-limited
+- **8-bit parallel I80** (optional): faster bus, more pins, less common/more expensive
+- Both interfaces drive displays with a single internal GRAM and no double-buffer
+- Host viewer faithfully simulates this: single RGB565 framebuffer, no copy, no mutex in present path
 
 Tasks:
 
-- Integrate validated raster output with SPI transport model:
-  - set window + burst writes
+- Integrate validated raster output with SPI/I80 transport model:
+  - set window + burst writes (CASET/RASET/RAMWR for SPI; 8080 command sequence for I80)
+  - DMA transfer for bulk pixel data (SPI DMA or I80 DMA where available)
+- Introduce/consume shared backend submission interface used by both host and ESP32:
+  - backend command surface (frame begin/end + dirty-rect submission)
+  - keep renderer/backend boundary identical across targets
+  - no host-only rendering branch above this interface
+- Map each render slot `clip-rect` to display address windows (one window per dirty slot in the simple path).
 - Keep backend boundary identical between host and ESP32 so host can emulate the device driver layer
-  while still exercising the same primitive rasterization pipeline.
+while still exercising the same primitive rasterization pipeline.
 - Keep full framebuffer optional (not mandatory).
 - Implement minimal clipping/culling before draw submission.
-- Add optional dirty-region mode switch.
+- Add slot-dirty update mode:
+  - only clear/render/send changed slots
+  - prefer a small number of larger slot windows over many tiny widget windows
+- Leverage static-slot optimization from M9 for SPI throughput:
+  - static slots (no Timelines, no active AnimState) produce frame-identical output
+  - render thread skips erase + rasterize + SPI transfer for static slots entirely
+  - SPI bandwidth is reserved for animated slots only
+  - typical layout: 2 of 3 slots static (score HUD, deco landscape) → ~60% fewer SPI transfers per frame
+  - when all slots are static, no SPI writes at all (render thread sleeps until Atom change)
+- Define per-slot background policy for no-readback displays:
+  - opaque slots can overwrite fully
+  - non-opaque slots require explicit clear of dirty region
+- Account for slot movement:
+  - dirty window = `union(old_rect, new_rect)` to avoid trails
+- Add optional dirty-region mode switch (sub-slot refinement later).
 - Add backend conformance checks:
   - same scene input should produce same primitive command sequence as simulator.
+- Define host-analogue execution model:
+  - render thread performs backend submission stage on macOS too
+  - UI thread reads live framebuffer directly (no copy buffer, no mutex) — simulates SPI/I80 bus reading GRAM
+  - host backend path follows the same dirty-rect submission contract as ESP32 SPI/I80 path
+- SPI/I80 bandwidth optimization strategies (research-backed):
+  - **Dirty-rectangle tracking**: only transmit changed pixels — typical action games change 40–60% of pixels per frame (fbcp-ili9341: Quake averages 46%)
+  - **Static-slot skip**: HUD/score slots rarely change → 0 bytes transferred for static frames
+  - **Span merging**: merge adjacent dirty regions on same scanline to reduce CASET/RASET command overhead
+  - **DMA pipeline**: render thread prepares next frame while DMA transfers current dirty regions
+  - **Adaptive interlacing** (optional): if dirty pixel count exceeds bus capacity, alternate even/odd scanlines across frames
+  - **TE-pin synchronization** (optional): if display exposes TE signal, synchronize write start with display scan to reduce visible tearing
+  - **Write speed rule**: tearing-free operation requires write speed ≥ 50% of display read speed (Espressif docs)
+
+Proposed backend interface sketch (implementation target for this milestone):
+
+```c
+typedef struct {
+    int16_t x;
+    int16_t y;
+    int16_t w;
+    int16_t h;
+} VgBackendRect;
+
+typedef struct {
+    /* Called once per output frame before dirty rect submissions. */
+    bool (*begin_frame)(void *ctx, uint32_t frame_id);
+    /* Submit one dirty rect in framebuffer coordinates. */
+    bool (*submit_rect)(void *ctx,
+                        VgBackendRect rect,
+                        const uint16_t *rgb565_pixels,
+                        uint16_t stride_px);
+    /* Called after all rect submissions for this frame. */
+    bool (*end_frame)(void *ctx, uint32_t frame_id);
+} VgBackendOps;
+```
+
+Execution contract for this interface:
+
+- `submit_rect` receives clipped dirty regions only; no backend-side scene traversal.
+- Render thread owns all `VgBackendOps` calls on both targets.
+- macOS backend implementation:
+  - writes submitted RGB565 dirty regions directly into the live framebuffer (GRAM simulation)
+  - UI/main thread reads the live framebuffer for presentation (`mfb_update_ex`) — no copy, no lock
+  - faithfully simulates ESP32 single-GRAM display without double-buffering
+- ESP32 backend implementation:
+  - maps each submitted rect to SPI window + burst write (CASET/RASET/RAMWR) or I80 command sequence
+  - uses DMA for bulk pixel transfer to keep CPU free for render-thread work
+  - no full-frame requirement in the default path
+- Determinism/conformance:
+  - for identical scene snapshots, host and ESP32 must observe equivalent rect submission order/data contract
+  - backend conformance tests compare emitted rect sequences for representative scenes
 
 Done when:
 
 - Scene renders on device without full-frame requirement and with pacing consistent with simulator logic.
+- Shared backend submission interface is used on both targets, and conformance checks pass for representative scenes.
+- Host viewer faithfully simulates target display behavior (single GRAM, no double-buffer, live framebuffer reads).
+- Dirty-rectangle tracking reduces SPI/I80 transfer volume for typical game scenes to <60% of full-frame.
 
-## Milestone 8: Fixed-Point Transform Path (Optional, Recommended)
+Implementation notes (2026-03-07):
 
-Status: TODO
+- Added shared backend submission core (`render_backend`) with `begin_frame` / `submit_rect` / `end_frame`.
+- Host viewer now submits only finished dirty rects from the render buffer into simulated GRAM through the backend API instead of memcpy-ing the full framebuffer.
+- Slot render path now exposes deterministic dirty-rect metadata (`VgRenderFrameSlotResult`) so host and future ESP32 transport layers can consume the same rect contract.
 
-Tasks:
-
-- Add optional 16.16 fixed-point transform core.
-- Keep tiny-clj API unchanged (canonicalize converts numeric inputs).
-- Keep renderer hot path fixed-point/integer only.
-- Maintain integer clipping and integer rasterization.
-- Add compile-time switch for float vs fixed backend.
-
-Done when:
-
-- Fixed-point mode is stable, deterministic, and measurably beneficial in hot paths.
-
-## Milestone 9: Game/Menu/Title Integration
+## Milestone 7b: Bandwidth Optimization (Entity-Level Dirty Tracking)
 
 Status: TODO
 
-Tasks:
+Motivation:
 
-- Validate scene reuse across:
-  - gameplay HUD
-  - menu UI
-  - vector title animation
-- Validate update path from tiny-clj game state -> scene patches -> renderer.
-- Run long soak tests on host and ESP32 to check stability and memory behavior.
+- SPI displays are bandwidth-limited (240×240@16bit@40MHz ≈ 43fps full-frame).
+Every saved pixel directly increases achievable frame rate or frees bus time for other SPI devices.
+- The current renderer erases the **entire slot clip-rect** to background color before redrawing
+all entities — even entities that haven't changed (e.g. static text "Game Scene").
+- On ESP32, this wastes both CPU cycles (rasterizing unchanged geometry) and SPI bandwidth
+(transferring pixels that are identical to the previous frame).
+- Immutable persistent data structures provide **free entity-level change detection** via
+pointer identity: `old_entity == new_entity` means the entity is visually identical.
+
+### Core Mechanism: Pointer-Identity Change Detection
+
+```clojure
+;; Clojure: (swap! game-slot assoc-in [3002 :t] new-transform)
+;; → Entity 3002: NEW Record (different pointer)
+;; → All other entities: SAME Record (structural sharing)
+```
+
+```c
+// C: O(1) per entity — pointer comparison
+ID old_entity = map_get(prev_entity_map, entity_id);
+ID new_entity = map_get(curr_entity_map, entity_id);
+bool changed = (old_entity != new_entity);  // structural sharing → free diff
+```
+
+Two kinds of dirty detection:
+
+1. **Snapshot dirty**: Entity pointer changed → Clojure updated it via `swap!`/`assoc-in`.
+2. **Animation dirty**: Entity has Timeline fields → visual output changes every frame
+  even though the entity pointer stays the same. Detected via per-entity `has_animation` flag.
+
+### Entity Bounding Box Cache
+
+During `render_record_node`, compute and cache the axis-aligned bounding box (AABB)
+of each rendered entity in framebuffer coordinates:
+
+```c
+#define VG_MAX_CACHED_ENTITY_BBOXES 64
+
+typedef struct {
+    uintptr_t entity_id;
+    VgClipRect bbox;
+    bool has_animation;
+} VgEntityBBoxEntry;
+
+typedef struct {
+    VgEntityBBoxEntry entries[VG_MAX_CACHED_ENTITY_BBOXES];
+    uint32_t count;
+} VgEntityBBoxCache;
+```
+
+The bbox includes the full rendered extent (stroke width, text fringe, transform).
+
+### Render-Thread Frame Flow (with dirty tracking)
+
+All dirty-tracking logic runs **entirely in the render thread**. The main thread
+only reads `g_gram_pixels` for display — it never sees or needs dirty rect data.
+
+```
+viewer_render_thread_main (per frame, per slot):
+│
+├─ 1. SNAPSHOT: atom_deref(slot_atom) → curr_entity_map
+│
+├─ 2. DIFF (pointer identity):
+│     for each (id, entity) in curr_entity_map:
+│       old = lookup(prev_entity_map, id)
+│       if entity != old → mark dirty        // snapshot dirty
+│       else if bbox_cache[id].has_animation → mark dirty  // animation dirty
+│     for each id in prev but not in curr → mark dirty     // removed
+│
+├─ 3. COLLECT dirty rects:
+│     for each dirty entity:
+│       dirty_rect[i] = union(old_bbox[i], new_bbox[i])
+│
+├─ 4. MERGE overlapping rects → merged_rects[] (O(n²), n < 10)
+│
+├─ 5. ERASE + REDRAW in g_render_buffer:
+│     for each rect in merged_rects:
+│       clear(g_render_buffer, rect, clear_color)
+│       for each entity where bbox ∩ rect ≠ ∅:
+│         render(entity, clip=rect)
+│
+├─ 6. TRANSFER to GRAM (simulate SPI):
+│     for each rect in merged_rects:
+│       copy_rect(g_render_buffer → g_gram_pixels, rect)
+│       transferred_pixels += rect.area
+│
+├─ 7. DEBUG OVERLAY (if show_dirty_rects flag set):
+│     for each rect in merged_rects:
+│       draw_rect_outline(g_gram_pixels, rect, 0x07E0)   // green, GRAM only
+│
+├─ 8. UPDATE state:
+│     prev_entity_map = curr_entity_map
+│     bbox_cache = new bboxes from step 5
+│     atomic_store(last_dirty_pixels, transferred_pixels)
+│
+└─ 9. atomic_store(frame_serial++)  // main thread sees new frame
+```
+
+The `show_dirty_rects` flag is an `atomic_bool` set by the main thread on D-key press,
+read by the render thread — no synchronization beyond the atomic.
+
+### SPI Transfer Model
+
+SPI display controllers (ILI9341, ST7789, etc.) fill address windows sequentially —
+there is no skip or seek within a window. Every pixel position within
+`CASET/RASET` must be sent. Consequence:
+
+- A single union rect of all dirty areas wastes bandwidth on unchanged pixels
+between spatially separated dirty entities (worst case = full slot = no optimization).
+- **Separate address windows per merged dirty rect** minimize transfer volume.
+Command overhead per window is ~10 bytes (`CASET` + `RASET` + `RAMWR`),
+negligible vs. saved pixel data at 40 MHz SPI.
+
+```
+Example: player (40×30 @ top-left) + obstacle (20×60 @ bottom-right)
+
+Union rect:  280×200 = 56.000 px = 109 KB   ← almost full frame, no savings
+Separate:    40×30 + 20×60 = 2.400 px = 4,7 KB  ← 96% saved
+```
+
+### Expected Impact (Game Slot Example)
+
+
+| Entity       | Type     | Dirty?         | Action                   |
+| ------------ | -------- | -------------- | ------------------------ |
+| root         | Group    | —              | Traversal container      |
+| terrain      | Polyline | Yes (Timeline) | Erase old bbox → Redraw  |
+| player       | Tri      | Yes (Timeline) | Erase old bbox → Redraw  |
+| obstacle     | Polyline | Yes (Timeline) | Erase old bbox → Redraw  |
+| "Game Scene" | VText    | **No**         | **Skip** — pixels remain |
+
+
+Dirty pixels reduction: ~30–50% fewer pixels per frame for typical game scenes.
+CPU savings: static entities are neither erased nor rasterized.
+
+### Tasks
+
+1. **Entity BBox computation + cache** (`scene.c` / `vector_scene_graph.h`):
+  - Compute AABB during `render_record_node` for each primitive type.
+  - Store per-entity bbox in `VgEntityBBoxCache` (indexed by entity ID).
+  - Include stroke width and transform in bbox computation.
+  - Cache lives in `VgRenderSlotState` (per slot, persistent across frames).
+2. **Previous entity map retention** (`VgRenderSlotState`):
+  - Store pointer to previous flat entity map in slot state.
+  - On new frame: compare old vs new map entries by pointer identity.
+  - After rendering: update stored map pointer to current snapshot.
+3. **Dirty-rect collection + merge** (`scene.c` or utility):
+  - Per dirty entity: `dirty_rect = union(old_bbox, new_bbox)`.
+  - Merge overlapping rects into minimal disjoint set (O(n²), n < 10).
+  - Output: `VgClipRect merged_rects[]` + `uint32_t count`.
+4. **Per-rect erase + overlap-aware redraw** (`scene.c`):
+  - Replace full-slot `vg_framebuffer_clear_rect(dirty, clear_color)` with
+   per-merged-rect erase + redraw loop.
+  - For each merged rect: erase to clear color, then render all entities
+  whose bbox intersects the rect (dirty + clean overlapping entities),
+  clipped to the rect boundary.
+  - For `force_render` (animation tick, same snapshot): only process entities
+  with `has_animation=true`.
+  - For snapshot change: process entities whose pointer changed + removed entities.
+5. **Per-rect GRAM transfer** (`host_viewer_minifb.c` / ESP32 backend):
+  - Replace full-frame `memcpy` to GRAM with per-rect row-copy
+   from `g_render_buffer` to `g_gram_pixels` (render thread).
+  - On ESP32: each rect → `CASET` + `RASET` + `RAMWR` + DMA pixel stream.
+  - Accumulate `transferred_pixels` (sum of merged rect areas) for metrics.
+6. **Debug overlay** (`host_viewer_minifb.c`, render thread):
+  - `atomic_bool show_dirty_rects` — set by main thread on D-key, read by render thread.
+  - After per-rect GRAM copy, draw 1px green (0x07E0) outlines around each
+  merged dirty rect directly into `g_gram_pixels` (GRAM only — does not
+  persist into render buffer, disappears when overlay is toggled off).
+  - Title shows `[D]` indicator when active.
+7. **Tests + metrics**:
+  - Unit tests: entity-level dirty detection with synthetic snapshots.
+  - Unit tests: rect merge algorithm (overlapping, disjoint, nested cases).
+  - Regression tests: visual output unchanged for representative scenes.
+  - Metrics: `transferred_pixels` per frame (sum of merged rect areas).
+  - Host-viewer title: `bw` shows actual transfer volume, not full-frame size.
+
+### Complications
+
+- **Overlapping entities**: If entity A moves and its old bbox overlaps entity B,
+B must be redrawn even though B didn't change. The per-rect redraw loop
+includes all entities whose bbox intersects the merged dirty rect.
+- **Timeline entities**: Pointer is the same but visual output changes every frame.
+Per-entity `has_animation` flag (already tracked during rendering) identifies these.
+- **Entity addition/removal**: New entities have no old bbox (just draw).
+Removed entities have no new bbox (just erase old bbox).
+- **Slot property changes** (clip-rect, clear-color, visibility): Fall back to full-slot erase.
 
 Done when:
 
+- Static entities within animated slots are neither erased nor redrawn.
+- Each merged dirty rect is transferred as a separate SPI address window
+(simulated on host via per-rect memcpy in the render thread).
+- Transferred pixels per frame are measurably reduced for scenes with mixed static/animated content.
+- Visual output is identical to full-erase rendering (no ghost pixels, no missing redraws).
+- Debug overlay (D key) shows green outlines around dirty rects without affecting render state.
+- Host-viewer `bw` metric reflects actual per-rect transfer volume.
+
+## Milestone 8: Fixed-First Decode + Transform Path (Required for ESP32)
+
+Status: DONE (core decode/transform/render pipeline is fixed-first; host documentation + micro benchmark captured; ESP32 build path validated; side-by-side device perf capture still optional/pending)
+
+Motivation:
+
+- Primary target is deterministic output with lower CPU load on ESP32.
+- `subjective-c` already provides fixed numeric representation (`CLJ_FIXED_FRAC_BITS`), so decode and transform should stay fixed as long as possible.
+- Integer conversion should happen only where raster APIs require pixel-space ints.
+
+Tasks:
+
+1. **Canonical numeric decode policy (`scene.c` decoder path):**
+  - Prefer fixed/raw decode for transform-relevant fields (`sx`, `sy`, text scale, composed transform internals).
+  - Keep `fixnum` + `fixed` accepted on input records; avoid float conversion in hot decode paths.
+  - Keep typed defaults deterministic (`nil` => stable defaults).
+2. **Boundary-based quantization:**
+  - Keep world/local transform math in fixed-point until raster boundary.
+  - Convert to integer only at explicit raster boundaries (`gfx_draw`_*, clip/window setup, framebuffer index math).
+  - Avoid repeated fixed->int->fixed ping-pong across compose/apply stages.
+3. **Hot-path cleanup for ESP32 CPU:**
+  - Remove/avoid float-based helper usage in decode/transform hot path.
+  - Keep non-cardinal/trig fallback paths isolated and cold.
+  - Ensure branch structure favors common integer/fixed cases.
+4. **Contract + assertions:**
+  - Document fixed-first contract for scene records (`Transform`, `VText`, slot clip fields).
+  - Keep `CLJ_ASSERT` guards for typed overlay layout assumptions in debug builds.
+  - No release-mode guard overhead on hot paths.
+5. **Regression + determinism gates:**
+  - Scene graph test suite must pass with unchanged or intentionally updated golden checksums.
+  - Add/keep tests covering mixed numeric inputs (`fixnum` + `fixed`) and nil defaults.
+  - Verify host and ESP32 paths keep identical decode semantics.
+6. **Performance validation:**
+  - Add a small benchmark/profiling slice for decode+render on representative scene sizes.
+  - Compare before/after CPU usage on host and (where possible) ESP32.
+
+Implementation notes (2026-03-04):
+
+- Fixed-first contract + quantization boundaries documented in `docs/VECTOR_SCENE_FIXED_FIRST.md`.
+- Host decode+render micro benchmark added in `test_vector_scene_graph_decode_render_host_micro_benchmark`.
+- Host sample timings recorded for `deco`, `score`, and `game` frame scenes (Debug build).
+- Cross-target benchmark function added: `tiny-fx.gfx-bench/vector-scene-bench` (host + ESP32 UART REPL, debug/profiling builds only).
+- ESP32 IDF component source lists were aligned with host build sources for this path (`subjective-c/record.c`, `gfx.c`, `vector_scene_graph.c`, `scene.c`, `tiny_gfx.c`, `lockfree_spsc_queue.c`), and `./build_idf.sh --no-move` now completes successfully.
+- ESP32 side-by-side CPU comparison remains an optional follow-up, pending device run/capture on hardware.
+
+Done when:
+
+- Decode + transform hot paths are fixed-first by default, with integer conversion only at raster boundaries.
+- Deterministic frame outputs stay stable across runs.
+- CPU cost in representative ESP32 scenes is reduced or at least non-regressed.
+
+## Milestone 8b: Batched Scene Update API (Clojure-Side)
+
+Status: DONE
+
+Motivation:
+
+- Game scenes have 50+ sprites and 10+ groups; per-entity tree walks don't scale.
+- A single batched walk with N lookups is O(nodes) instead of O(N × nodes).
+- This is the Clojure-side primitive that both timer-based and future core.async-based animation patterns build on.
+
+Tasks:
+
+1. `**update-nodes` function in `tiny-fx.gfx-scene`:**
+  - Takes a root node and a map `{:id update-fn ...}`.
+  - Single recursive walk over the tree.
+  - For each node with `:id` in the map: apply `update-fn`, remove `:id` from map (`dissoc`).
+  - Early exit: when map is empty (`(empty? updates)`), return remaining subtree unchanged (no recursion).
+  - Works with plain maps and records alike (uses `:id` and `:children` keywords).
+2. **Unit tests:**
+  - Flat children: 2 of 3 nodes updated, 1 unchanged.
+  - Empty updates map: node returned unchanged.
+  - Nested groups: updates at different tree depths.
+3. **Integration with game-state pattern:**
+  - Designed for `(swap! game-scene update-nodes {...})` with `schedule-periodic` timers.
+  - Compatible with future core.async go-block orchestration (same primitive, different scheduling).
+
+Complexity characteristics:
+
+- 1 walk per frame (not N walks for N changes).
+- O(nodes) visits worst case, often less due to early exit after all changes applied.
+- O(1) map lookup per visited node (change-set is a persistent map).
+- Allokations: only changed nodes + path to root (structural sharing for unchanged subtrees).
+
+Done when:
+
+- `tiny-fx.gfx-scene/update-nodes` is available and tested.
+- Game code can batch all per-frame entity updates into a single tree walk.
+
+## Milestone 9: Flat Entity Map + Timeline + Declarative Scene Architecture
+
+Status: DONE (`9a` + `9b` + `9c` + `9d` baseline DONE on host/ESP32 build path; renderer lifecycle + rendered-state query baseline DONE; host loop closeout + cleanup complete; collision callback API finalized in `tiny-fx.gfx-collision`)
+Follow-ups:
+
+- (2026-03-05) API parity + Clojure docs hardening in `tiny-fx.gfx.`* is tracked under `9n`.
+- (2026-03-09) Encapsulated hash-backed entity lookup for flat scene maps is tracked under `9o`.
+- (2026-03-09) Public scene API generalization + minimization audit is tracked under `9p`.
+
+Target: Migrate host-viewer to the flat-entity-map architecture (see "Target Architecture"):
+
+- Each slot = one Atom holding `{id → Record}` (flat, not nested)
+- Root entity has `:id root` (symbol)
+- Groups reference children by ID
+- Timeline Records on fields for periodic animations (C-evaluated, no timers)
+- C reads snapshot via `atom_deref`, resolves Timelines, interpolates, renders
+
+Final state:
+
+- Flat entity maps and Timeline decode are now in place, and collision response (triangle toggle) is already executed in Clojure callback code.
+- Collision callback dispatch now routes through `tiny-fx.gfx-collision/invoke-collision-callback!` without string-eval hardcoding in the host-viewer C loop; callback target selection stays Clojure-configurable.
+- Callback execution model is one-way dispatch: C enqueues/invokes configured Clojure closure through runloop ingress and ignores return values.
+- Scene updates are explicit on the Clojure side (`swap!`/`reset!`); C never expects a returned `FrameScene` from callback execution.
+- Per-frame collision detection remains in C (required); demo-specific mutation coupling has been removed from C.
+
+### 9a: Flat Entity Map (Clojure side)
+
+- Restructure scene from nested tree to flat `{id → Record}` map per slot.
+- Root entity uses symbol `root` as `:id`. C starts rendering at `root`.
+- Groups list children as ID vectors: `(group {:id root :children [3001 3002 3003]})`.
+- Updates via `(swap! slot assoc-in [id :field] new-value)` – O(1), no tree walk.
+- `update-nodes` (M8b) becomes optional convenience; direct `assoc-in` is the primary API.
+- Implementation note (2026-03-04):
+  - `tiny-fx.scene-demo/create-demo-bundle` now publishes slot roots as flat `{id -> Record}` maps.
+  - Root entity key/id is symbol `root`; groups reference children by ID vectors (not embedded records).
+
+Example:
+
+```clojure
+(def game-slot (atom
+  {root (group {:id root :children [3001 3002 3003]})
+   3001 (polyline {:id 3001 :t (transform {:tx 0}) :style style-line :pts terrain-pts})
+   3002 (tri      {:id 3002 :t (transform {:tx 72 :ty 146}) :style style-player
+                   :x1 56 :y1 146 :x2 72 :y2 118 :x3 88 :y3 146})
+   3003 (polyline {:id 3003 :t (transform {:tx 200 :ty 126 :rot -90})
+                   :style style-rocket :pts rocket-pts})}))
+```
+
+### 9b: Timeline Record for periodic animations
+
+- Define `(defrecord Timeline [keyframes loop])`.
+  - `keyframes` = vector of `[time-ms value]` pairs, per-keyframe durations (unequal allowed).
+  - `loop` = boolean (true → `time_ms % total_period`; false → clamp at last keyframe).
+- Any entity field can hold a Timeline instead of a plain value.
+- C resolves during traversal: check if field is Timeline, resolve by wall clock.
+- No Clojure eval, no timers needed for periodic animations.
+- Implementation notes (2026-03-04):
+  - `tiny-fx.gfx-scene` now defines `Timeline` (`[keyframes loop]`).
+  - `scene.c` resolves Timeline fields during traversal.
+  - Numeric keyframes interpolate linearly (Q19.13), including looped phase wrapping.
+  - Transform keyframes interpolate `tx/ty/sx/sy/rot` and compose via `vg_transform_fixed_from_transform`.
+  - Deterministic render entry points added for tests: `vg_render_scene_record_at_ms` and `vg_render_scene_record_clipped_at_ms`.
+
+Example (alien cycling 3 forms with different durations):
+
+```clojure
+{3003 (polyline {:id 3003
+                 :pts   (->Timeline [[0 pts-open] [300 pts-mid] [400 pts-closed]] true)
+                 :style (->Timeline [[0 style-green] [400 style-red]] true)})}
+;; C resolves: phase_ms = time_ms % 600; scan keyframes to find active frame
+```
+
+### 9c: C Renderer for flat entity map
+
+- C reads the flat map snapshot from Atom via `atom_deref`.
+- Traversal: lookup `root` → read `:children` → lookup each child ID → recurse.
+- Transform inheritance: compose parent transform with each child's `:t` field.
+- Timeline resolution: at each field read, check for Timeline Record, resolve by time.
+- Entity map lookup by ID must be efficient (persistent map `get` or C-side index cache).
+- Implementation note (2026-03-04):
+  - `scene.c` render traversal now supports both legacy embedded-tree scenes and flat-map scenes.
+  - If `FrameScene.root`/`Scene.root` is a map, renderer resolves `root` symbol entry and traverses group child IDs via `map_get`.
+  - Timeline resolution is integrated in primitive/style/transform field reads during record traversal.
+
+```c
+void render_entity(ID entity_map, ID id, Transform parent_t, uint32_t time_ms) {
+    ID entity = map_get(entity_map, id);
+    ID raw_t = record_get(entity, FIELD_T);
+    ID resolved_t = is_timeline(raw_t) ? timeline_resolve(raw_t, time_ms) : raw_t;
+    Transform t = compose(parent_t, decode_transform(resolved_t));
+
+    if (is_group(entity)) {
+        ID children = record_get(entity, FIELD_CHILDREN);
+        for (int i = 0; i < vec_count(children); i++) {
+            render_entity(entity_map, vec_nth(children, i), t, time_ms);
+        }
+    } else {
+        render_primitive(entity, t, time_ms);  // resolves Timeline fields
+    }
+}
+// Entry: render_entity(entity_map, sym_root, identity, now_ms);
+```
+
+### 9d: C Interpolation State for smooth motion (AnimState)
+
+- For transform targets that change event-driven (e.g. player jump, rocket move),
+C maintains mutable `AnimState` structs to interpolate smoothly.
+- Per frame: read target transform from entity map, lerp `current → target`.
+- Interruption-safe: new target mid-animation → interpolate from current visual position.
+- AnimState is separate from the Clojure snapshot (C-owned, mutable).
+- Timeline (periodic, data-driven) and AnimState (smooth motion, C-driven) are complementary:
+Timeline = cyclic field replacement; AnimState = continuous interpolation toward targets.
+- Implementation notes (2026-03-05):
+  - Added fixed-point `VgAnimTransformState` API in `vector_scene_graph`:
+  `vg_anim_transform_state_reset`, `vg_anim_transform_state_set_target`,
+  `vg_anim_transform_state_step`, `vg_anim_transform_state_current`.
+  - Added deterministic unit tests for convergence, interruption-safe target switching,
+  and zero-duration snap behavior.
+  - Host viewer gameplay step now uses `AnimState` for terrain/player/obstacle transforms.
+  Interpolation step is integer/fixed-point only (`dt_ms`/`now_ms`), no float math in the interpolation path.
+
+### 9e: Animation descriptors (TODO – to be clarified)
+
+- Declarative transition animations (easing, duration, from/to for smooth motion)
+must execute in C, not the interpreter.
+- Open questions:
+  - Are animation descriptors authored in Clojure (as Records) and consumed by C?
+  - How do they interact with Timeline fields?
+  (Timeline = periodic/cyclic; animation descriptor = one-shot/transition?)
+  - Completion callbacks back to scheduler (reuse collision callback ingress?)
+- See Optional Extension A for initial animation record sketch.
+- Decision deferred until 9a–9d are stable.
+
+### 9f: Generalized main loop + host-viewer migration
+
+**Generalized C main loop (target):**
+
+- The main loop becomes app-agnostic – no demo-specific gameplay logic in C.
+- Main loop responsibilities: frame pacing, input forwarding, framebuffer presentation, metrics.
+- All game/app logic moves to Clojure (scene state updates via `swap!` on slot Atoms).
+- Current demo-specific code to remove from C main loop:
+  - `viewer_apply_gameplay_step()` (terrain scroll, player jump, obstacle position, collision)
+  - `set_transform_fields()`, `set_player_geometry()`, `set_obstacle_transforms()`
+  - Direct `ASSIGN(demo_bundle.score_text->text, ...)` calls
+  - `ViewerDemoBundle` struct and all per-entity handle tracking
+
+**Render thread (target):**
+
+- At frame start: `atom_deref` per slot Atom → immutable snapshot (lock-free).
+- Render entire frame from snapshot: resolve Timelines, interpolate AnimState, rasterize.
+- Frame done: signal main thread, loop back to frame start with fresh snapshot.
+
+**Static vs. animated slot optimization:**
+
+- During rendering, the render thread determines per slot whether the scene contains
+any active Timelines or AnimState interpolations (= **animated**) or not (= **static**).
+- **Static slot:** No Timelines, no AnimState in progress. The rendered output is
+identical across frames. The render thread skips erase + re-render for this slot
+in subsequent frames until:
+  - Clojure publishes a new snapshot (`swap!`/`reset!` changes the Atom value), or
+  - an AnimState target changes (which also implies a new snapshot).
+- **Animated slot:** Contains at least one Timeline or active AnimState interpolation.
+Must be re-rendered every frame (Timelines depend on wall clock, AnimState converges
+over time).
+- Detection is cheap: during traversal, set a `slot_has_animation` flag when any
+Timeline field or non-converged AnimState is encountered. Cache the flag per slot.
+- This is the generalized version of the existing slot-change-tracker concept:
+static slots behave like unchanged slots (skip rendering), animated slots always
+re-render regardless of whether the Clojure snapshot changed.
+- Power savings: if **all** slots are static, the render thread can block/sleep until
+any Atom changes (event-driven wakeup, no busy loop).
+
+**Clojure side (target):**
+
+- `tiny-fx.scene-demo` defines all scene entities as flat maps per slot.
+- Game logic (terrain scroll, player jump, obstacle, collision, score) runs as
+Clojure functions triggered by `schedule-periodic` timers or input events.
+- Each game tick: `(swap! game-slot assoc-in [entity-id :t] new-transform)`.
+- Implementation notes (2026-03-04):
+  - Demo includes first periodic Timeline slice: `hbar` uses looping transform Timeline.
+  - Host viewer no longer updates `hbar` via C-side `ASSIGN`.
+  - 2026-03-05 follow-up: direct score-text mutation (`ASSIGN(demo_bundle.score_text->text, ...)`) removed from host-viewer loop.
+  - 2026-03-05 follow-up: host-viewer demo switched terrain/player/rocket motion to Clojure-authored Timeline transforms; C-side `viewer_apply_gameplay_step()` removed from main loop.
+  - 2026-03-05 follow-up: score text switched to Timeline-driven updates in Clojure demo data (`score-text-timeline`), no C-side score writes.
+  - 2026-03-05 follow-up: removed score-slot periodic republish from host-viewer main loop; Timeline-driven score animation now advances without demo-specific publish logic.
+
+### 9g: Validate scene reuse + scheduler integration
+
+- Gameplay HUD, menu UI, vector title animation.
+- Scene updates via `(swap! slot assoc-in [id :field] new-value)`.
+- Timer/event-driven via existing tiny-clj scheduler.
+- Publish only changed slot snapshots to keep render wakeups sparse.
+
+### 9h: Host-viewer color authoring readability (DONE)
+
+- Status: DONE (2026-03-04).
+- `tiny-fx.gfx-scene/color` converts `0xRRGGBB` → RGB565.
+- `tiny-fx.gfx-scene/web-hex->color` converts `"#RRGGBB"` → RGB565.
+- Demo palette migrated to `(color 0xRRGGBB)` style.
+
+### 9i: Rendered-State Query API (Clojure → Render Thread)
+
+The Clojure Atom holds the **target** state. The render thread holds the **current visual**
+state (after interpolation + Timeline resolution). Game logic often needs the current visual
+state – e.g. "has the player reached position X?", "is the animation done?".
+
+**Rendered-State Snapshot:**
+
+- After each frame, the render thread writes resolved per-entity values into a shared
+snapshot structure (one per slot, indexed by entity ID).
+- Clojure reads this snapshot via native functions (lock-free read of last-completed frame).
+- Snapshot is updated atomically per frame – Clojure always sees a consistent frame state.
+
+**Clojure API:**
+
+```clojure
+;; Current visual transform of an entity (after interpolation):
+(renderer-state slot entity-id)
+;; => {:tx 45 :ty -12 :rot 0 :sx 1 :sy 1}
+
+;; Current Timeline keyframe index for a specific field:
+(renderer-timeline-step slot entity-id :pts)
+;; => 1  (second keyframe currently active)
+
+;; Timeline progress through full period [0.0 .. 1.0]:
+(renderer-timeline-progress slot entity-id :pts)
+;; => 0.7  (70% through the cycle)
+```
+
+**Use cases:**
+
+- Game logic: "has entity reached target?" → compare `renderer-state` with target atom
+- Collision: based on actual visual position, not target
+- Animation control: `(renderer-timeline-progress ... :pts)` = 1.0 means done (for `loop=false`)
+- REPL debugging: inspect live visual state
+
+**Implementation sketch (C side):**
+
+- Render thread maintains per-slot `RenderedEntityState` array/map.
+- After resolving each entity during traversal, writes:
+  - composed world-space transform (`tx, ty, rot, sx, sy`)
+  - active Timeline keyframe index + phase offset per animated field
+- Published atomically (pointer swap or generation counter) after frame completes.
+- Native functions `renderer_state`, `renderer_timeline_step`, `renderer_timeline_progress`
+read from the last-published snapshot.
+
+**Threading safety:**
+
+- Render thread writes → atomic publish (pointer swap).
+- Clojure reads → lock-free deref of last-published snapshot.
+- No mutex needed. Clojure may see a 1-frame-old snapshot (acceptable).
+
+Implementation notes (2026-03-05):
+
+- Added runtime query natives:
+  - `tiny-clj.runtime/renderer-state`
+  - `tiny-clj.runtime/renderer-timeline-step`
+  - `tiny-clj.runtime/renderer-timeline-progress`
+- Added lock-free double-buffered rendered-state snapshots (`rendered_state_snapshot`) published by render thread per slot/frame.
+- Scene traversal now records per-entity world transform matrices and active Timeline metadata (field + step/phase/period) into the rendered snapshot when a slot is rendered.
+- Host-viewer render loop now starts/commits/discards rendered-state capture alongside per-slot render calls.
+
+### 9j: Remaining task list (execution order)
+
+1. **Main-loop entkoppeln (host-viewer):**
+  - Remove demo-specific gameplay writes from C main loop:
+    - `viewer_apply_gameplay_step`
+    - `set_transform_fields` / `set_player_geometry` / `set_obstacle_transforms`
+    - direct score-text `ASSIGN`
+  - Keep C main loop app-agnostic (pacing, input forwarding, presentation, metrics only).
+2. **Clojure-driven scene updates finalisieren:**
+  - Move remaining gameplay target updates (`terrain`, `player`, `obstacle`, score text) into Clojure slot updates.
+  - Keep update contract: per-slot atomic snapshot via `swap!`/`reset!` on flat maps.
+  - Status (2026-03-05): DONE for host-viewer demo vertical slice (terrain/player/rocket/score moved to Timeline-driven Clojure scene data; regression tests added).
+3. **Renderer lifecycle API aus Clojure:**
+  - Add native API and docs:
+    - `(start-renderer! [game-slot score-slot deco-slot])`
+    - `(stop-renderer!)`
+  - Ensure deterministic start/stop semantics and clean shutdown ordering.
+  - Status (2026-03-05): baseline runtime API added (`tiny-clj.runtime/start-renderer!`, `tiny-clj.runtime/stop-renderer!`)
+  with deterministic idempotent bool semantics; default runtimes return `false` when no backend is registered.
+  Host-viewer now installs lifecycle callbacks through a shared renderer-lifecycle bridge and uses the same start/stop path.
+4. **Rendered-state query API implementieren (9i):**
+  - C-side snapshot structs + atomic publish per frame.
+  - Native Clojure functions:
+    - `renderer-state`
+    - `renderer-timeline-step`
+    - `renderer-timeline-progress`
+  - Verify lock-free read contract and 1-frame staleness behavior.
+  - Status (2026-03-05): baseline DONE on host path (double-buffer snapshot publish + runtime query natives + unit tests).
+5. **Tests + acceptance gates for M9:**
+  - Unit tests: AnimState + Timeline interaction, rendered-state query correctness.
+  - Integration tests: app-agnostic loop path, renderer start/stop from Clojure, no C gameplay writes.
+  - Host run: verify continuous rendering with Clojure-driven updates and stable performance counters.
+6. **Clojure-konfigurierbarer Collision-Toggle-Callback (neu):**
+  - Add a Clojure function to configure which callback is invoked on collision toggle.
+  - Remove hardcoded callback expression from C (`VIEWER_COLLISION_CALLBACK_EXPR`).
+  - Keep C side generic: invoke configured callback closure via scheduler/runloop ingress (no `FrameScene` return coupling).
+7. **Demo-Logik vollständig in Clojure verlagern (neu):**
+  - Keep collision detection + cooldown/latch evaluation per frame in C.
+  - Move collision **response** (scene mutation, gameplay state updates) to Clojure callbacks.
+  - C host loop keeps only renderer/pacing/presentation/input plus generic collision callback dispatch.
+
+### 9k: End-of-M9 code cleanup (required)
+
+After all M9 features are implemented, do a cleanup pass before declaring M9 done:
+
+- Remove dead code and compatibility shims from host-viewer:
+  - obsolete demo-specific helpers and structs
+  - stale ASSIGN-based mutation paths
+  - temporary migration flags no longer needed
+- Consolidate naming/docs around the final architecture:
+  - Tiny-RTOS/Clojure main thread vs render thread responsibilities
+  - rendered-state query API docs + examples
+- Keep only one canonical path in runtime code for:
+  - slot snapshot publication
+  - render-thread snapshot consumption
+  - Clojure API for renderer lifecycle
+- Run formatting/lint cleanup where applicable and update plan status notes.
+
+### 9l: Final M9 closeout tasks (next implementation slice)
+
+1. **Host-viewer C loop endgültig app-agnostisch machen:**
+  - Verify no remaining demo-specific gameplay mutation path is reachable in C main loop.
+  - Keep only: pacing, input forwarding, presentation, metrics.
+2. **Static-slot skip behavior implementieren/verifizieren (M9→M7 throughput bridge):**
+  - Persist per-slot `has_animation` detection from traversal.
+  - Skip erase + rasterize for static slots until next published slot snapshot.
+  - Add wake/sleep policy: if all slots static, render thread blocks on slot-change signal.
+3. **Rendered-state query API vervollständigen:**
+  - Ensure slot/entity miss behavior is deterministic (`nil`/sentinel contract documented).
+  - Verify timeline step/progress semantics for non-timeline fields and `loop=false`.
+4. **Acceptance + regression gate for M9:**
+  - Unit tests: static-slot detection, skip behavior, wakeup on publish.
+  - Integration tests: Clojure-driven slot updates visibly drive scene without C gameplay writes.
+  - Host run: stable FPS + reduced changed-slot/dirty-pixel metrics when slots are static.
+5. **Execute 9k cleanup and freeze M9 contract:**
+  - Remove dead compatibility code paths.
+  - Update docs/comments to reflect final two-thread model and APIs.
+  - Mark M9 as DONE only after tests/build pass.
+
+### 9m: Checkable PR task list (files + symbols)
+
+- **PR-1: Static-slot skip + wake/sleep policy**
+  - Files:
+    - `src/host_viewer_minifb.c`
+    - `src/scene.c`
+    - `src/scene.h`
+    - `src/tests/test_vector_scene_graph.c`
+  - Scope:
+    - Persist per-slot animation detection (`has_animation`) from traversal to slot render decision.
+    - Skip erase/rasterize/transfer for static slots until next slot publish.
+    - If all slots static, block render thread on slot-change wakeup.
+  - Acceptance:
+    - Tests prove static slot remains untouched across frames.
+    - Publish of one slot wakes render and only that slot gets re-rendered.
+  - Done (2026-03-05):
+    - `has_animation` detection is now persisted in `VgRenderSlotState` from scene traversal.
+    - Render thread now ticks animated slots without snapshot republish; static-only state blocks on slot-change wakeup.
+    - Added unit tests for `has_animation` tracking + forced animation tick without generation change.
+    - Added blocking wakeup regression test: `wait_for_changes(UINT32_MAX)` resumes on single-slot publish with exact slot mask.
+    - Added slot-level rerender regression test proving single-slot publish re-renders only that slot.
+- **PR-2: Rendered-state query API finalize**
+  - Files:
+    - `src/rendered_state_snapshot.c`
+    - `src/rendered_state_snapshot.h`
+    - `src/builtins.c`
+    - `src/tiny-clj.runtime.clj`
+    - `src/tests/test_vector_scene_graph.c`
+  - Symbols/APIs:
+    - `tiny-clj.runtime/renderer-state`
+    - `tiny-clj.runtime/renderer-timeline-step`
+    - `tiny-clj.runtime/renderer-timeline-progress`
+  - Scope:
+    - Define deterministic miss semantics (`nil`/sentinel) and document in runtime API.
+    - Verify `loop=false` and non-Timeline field behavior for step/progress queries.
+  - Acceptance:
+    - Unit tests cover miss paths + loop/non-loop semantics.
+    - API docs in `tiny-clj.runtime.clj` align with behavior.
+  - Done (2026-03-05):
+    - Runtime docs now define deterministic `nil` miss semantics for all three query APIs.
+    - Added unit tests for non-Timeline fields returning `nil` and `loop=false` end-clamp semantics in queried timeline progress.
+- **PR-3: Host loop app-agnostic verification + cleanup**
+  - Files:
+    - `src/host_viewer_minifb.c`
+    - `src/renderer_lifecycle.c`
+    - `src/renderer_lifecycle.h`
+    - `src/tests/test_vector_scene_graph.c`
+  - Scope:
+    - Ensure no demo-specific gameplay mutation path is reachable in C main loop.
+    - Keep only lifecycle/pacing/presentation/input responsibilities in C host loop.
+    - Remove obsolete migration helpers/flags discovered during cleanup.
+  - Acceptance:
+    - Integration tests confirm scene moves via Clojure slot updates only.
+    - Runtime lifecycle tests still pass (`start-renderer!` / `stop-renderer!`).
+  - Done (2026-03-06):
+    - Host path reads live framebuffer directly (lock-free, no copy buffer) — faithful ESP32 SPI/I80 GRAM simulation.
+    - Obsolete per-frame render completion wait/condvar path removed from host loop.
+    - Lifecycle integration gate re-run completed (`test_vector_scene_graph/*renderer_lifecycle`*: 38 tests, 0 failures).
+    - Integration proof covered by regression tests: scene motion data remains Timeline-driven from Clojure slot snapshots (`test_vector_scene_graph_host_viewer_demo_game_motion_is_timeline_driven`) and collision response is callback-routed from Clojure (`test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_geometry_in_clojure`).
+    - Host viewer now consumes `:slots`, `:spatial-callback`, and `:game-scene-atom` from `tiny-fx.gfx/host-viewer-config`; the C loop no longer resolves demo/collision namespaces directly and only consumes runtime config plus render/input responsibilities.
+    - Slot count, slot IDs/order, and per-slot atoms are now Clojure-defined via the ordered `:slots` descriptor list; C consumes only that configured list.
+    - Slots remain orientation-agnostic because layout continues to come from per-scene `clip-rect` data rather than from hardcoded horizontal host-viewer assumptions.
+- **PR-4: End-of-M9 cleanup + documentation freeze**
+  - Files:
+    - `src/host_viewer_minifb.c`
+    - `src/scene.c`
+    - `src/rendered_state_snapshot.c`
+    - `src/tiny-clj.runtime.clj`
+    - `.cursor/plans/esp32_vector_scene_graph_engine.plan.md`
+    - optional docs updates under `docs/` if needed
+  - Scope:
+    - Remove dead compatibility code paths and duplicate runtime paths.
+    - Ensure one canonical path for slot publication, render consumption, lifecycle API.
+    - Update plan status + docs to mark M9 DONE.
+  - Acceptance:
+    - Full relevant test suite passes.
+    - M9 `Status` changed to DONE with final notes.
+  - Done (2026-03-05):
+    - Removed remaining legacy async compatibility republish path from host-viewer loop.
+    - Finalized collision callback namespace split (`tiny-fx.gfx-collision`) and removed collision callback API from `tiny-clj.runtime`.
+    - Re-ran M9 regression gates (`test_vector_scene_graph/`*, `test_vector_scene_graph/*renderer_lifecycle`*, host-viewer demo/collision subsets).
+- **PR-5: Clojure-configurable collision callback + collision-response extraction**
+  - Files:
+    - `src/tiny-fx.scene-demo.clj`
+    - `src/tiny-gfx.collision.clj`
+    - `src/host_viewer_minifb.c`
+    - `src/viewer_legacy_collision.c`
+    - `src/viewer_legacy_collision.h`
+    - `src/tests/test_vector_scene_graph.c`
+  - Scope:
+    - Add Clojure API to configure the collision toggle callback function.
+    - Remove hardcoded callback expression from C.
+    - Keep per-frame collision detection policy in C (`viewer_legacy_collision` path).
+    - Move demo collision response/scene mutation into Clojure callback path only.
+    - Dispatch callback closures through scheduler/runloop ingress from C, without callback return-value coupling.
+    - Delete obsolete C scene-mutation helpers after migration.
+  - Acceptance:
+    - Host demo still toggles player geometry on collisions.
+    - Callback target is configurable from Clojure at runtime.
+    - Collision detection remains in C; collision response is routed via Clojure callback.
+    - C ignores callback return values; scene mutations are explicitly performed by Clojure code.
+    - Regression tests cover callback reconfiguration + toggle behavior.
+  - Done (2026-03-05):
+    - Added collision callback API in `tiny-fx.gfx-collision` (`set-collision-callback!`, `invoke-collision-callback!`) with deterministic nil/dispatch behavior.
+    - Host viewer collision callback invocation now resolves/calls runtime dispatcher directly (no hardcoded expression string eval path).
+    - Added regression coverage for callback reconfiguration and retained toggle behavior through C-driven collision detection.
+
+### 9n: `tiny-fx.gfx` API parity + Clojure documentation hardening (NEW)
+
+Status: DONE (2026-03-07; `tiny-fx.gfx` frontend aliases + scene-contract docs + parity regressions complete)
+
+Goal:
+
+- Expose the currently implemented vector-scene runtime capabilities through `tiny-fx.gfx.`* namespaces.
+- Keep `tiny-clj.runtime/`* compatibility, but provide `tiny-fx.gfx`-first API surface + docs.
+- Document Clojure-side API contracts where users author scene/collision/runtime code.
+
+Scope (first slice):
+
+- Add `tiny-fx.gfx` namespace with documented direct aliases for:
+  - `start-renderer!` / `stop-renderer!`
+  - `renderer-state`
+  - `renderer-timeline-step`
+  - `renderer-timeline-progress`
+- Add `tiny-fx.gfx-bench` namespace for:
+  - `vector-scene-bench`
+- Embed `/libs/tiny-fx/gfx.clj` in `embedded_sources.c`.
+- Embed `/libs/tiny-fx/gfx-bench.clj` in `embedded_sources.c`.
+- Add regression tests proving alias parity against existing runtime semantics.
+
+Scope (second slice):
+
+- Expand `tiny-fx.gfx-scene` Clojure docs for record contracts actually consumed by C:
+  - `Transform`, `Style`, node records, `Timeline`, `FrameScene`, `CollisionRule`, `CollisionEvent`
+  - field semantics for `clip-rect`, `guard-px`, `erase-color`, and collision rule defaults
+- Add contract notes for currently schema-only vs runtime-evaluated fields.
+
+Acceptance:
+
+- `require 'tiny-fx.gfx` works in host/unit-test runtime.
+- Wrapper APIs return same values/errors as the underlying `tiny-clj.runtime` functions.
+- Clojure docs are present at API entry points used by scene authors.
+
+Checklist:
+
+- Add embedded `tiny-fx.gfx` namespace and aliases.
+- Add tests for alias parity (`unsupported` lifecycle path + rendered-state query nil path).
+- Add/extend Clojure API docs in `tiny-fx.gfx-scene` for consumed record contracts.
+- Done (2026-03-07):
+  - Plan and naming updated to the public `tiny-fx.gfx` frontend instead of the old `tiny-gfx` wording.
+  - `tiny-fx.gfx` direct aliases now carry author-facing doc metadata for runtime, scene, and collision entry points.
+  - Regression coverage now verifies direct var alias identity for representative runtime/scene/collision APIs; source-level doc metadata is present on the public frontend surface.
+
+### 9o: Encapsulated hash-backed entity lookup for flat scene maps (NEW)
+
+Status: IN PROGRESS (2026-03-09; renderer-private subjective-c `CljHashMap` scratch lookup is wired into `scene.c` for flat-scene root/child resolution; borrowed-key/value population path avoids `RETAIN` / `RELEASE` / `AUTORELEASE` in the lookup build/use path; regression tests are green, benchmark capture still pending)
+
+Goal:
+
+- Keep the public flat scene contract from `9a` unchanged, but remove linear `scene-key -> Record`
+lookup from the hot render path.
+- Preserve vector-based `children` order for deterministic draw order.
+- Treat the hash-backed index as a renderer-owned implementation detail, not as part of the
+Clojure authoring contract.
+
+Key contract:
+
+- The private lookup keys are the flat scene-map keys themselves:
+  - the root symbol `root`
+  - stable child/entity IDs referenced from `Group.children`
+- The first implementation slice must not assume numeric-only IDs.
+- Lookup acceleration is therefore about flat scene keys, not only about integer entity IDs.
+
+Motivation:
+
+- The flat map architecture from `9a` made scene updates cheap, but current render traversal still
+does repeated map scans for root and child-ID dereference.
+- This is acceptable for the baseline PoC, but it is the wrong long-term lookup strategy for the
+vector-scene hot path and for ESP32 budget discipline.
+- The same pattern exists in rendered-state snapshots, where entity/timeline query paths are also
+currently linear.
+
+Scope:
+
+- Add a private hash-backed `scene-key -> Record` index at the decode/render boundary.
+- Use it for:
+  - root-node resolution from flat scene maps
+  - child-ID dereference during `Group.children` traversal
+- Keep out of scope for the first slice:
+  - changing the public scene shape
+  - replacing `children` vectors
+  - exposing raw hash-map semantics to Clojure scene authors
+  - replacing general `CljPersistentMap` semantics globally
+
+Constraints:
+
+- No change to visible scene semantics or ordering semantics.
+- Ownership of the index must remain local to the decode/render context and follow `MEMORY_POLICY.md`.
+- Respect the render-thread contract from this plan:
+  - no `RETAIN` / `RELEASE` / `ASSIGN` / autorelease-pool coupling in the lookup hot path
+  - use a renderer-private subjective-c `CljHashMap` scratch index with borrowed keys/values
+  - build the lookup once per published flat-scene snapshot, never per child traversal
+- The indexed path must be benchmarked on host and on ESP32 via `tiny-fx.gfx-bench/vector-scene-bench`
+before it becomes the default everywhere.
+
+Acceptance:
+
+- `scene.c` no longer performs linear map scans for root-node resolution or child-ID lookup in the
+flat-scene render path.
+- Flat `{id -> Record}` authoring remains the public API.
+- `children` remains the ordering primitive.
+- Root lookup via symbol `root` remains semantically identical.
+- Legacy embedded-tree scenes continue to render through the existing non-indexed path.
+- Benchmarks show no host regression and document the indexed-path effect.
+- ESP32 memory cost is measured and recorded before rollout is treated as complete.
+
+Checklist:
+
+- Add a renderer-private hash-backed lookup structure for `scene-key -> Record`.
+- Switch flat-scene root and child lookup to the private index.
+- Keep legacy embedded-tree compatibility intact.
+- Evaluate whether rendered-state snapshot queries should adopt the same encapsulated-index pattern.
+- Add/update benchmark notes once host and ESP32 measurements exist.
+
+### 9oa: First implementation slice (execution order)
+
+1. **Lookup abstraction + key contract fixieren:**
+  - Introduce one private renderer-side lookup abstraction instead of open-coding hash logic in `scene.c`.
+  - Prefer an equivalent private `scene.c` helper block backed by the subjective-c hash-map abstraction.
+  - Key the table by flat scene-map key (`root` symbol or child/entity ID), value = scene record pointer/ID.
+2. **Populate once per snapshot, not per node:**
+  - Build the lookup when the renderer detects a flat scene map.
+  - Reuse scratch storage across frames/slots where practical.
+  - Avoid per-child hash-table rebuilds or any lookup-path allocation coupled to autorelease pools.
+3. **Wire into render traversal:**
+  - Replace linear `map_get_sentinel(...)` in `resolve_root_node(...)` and flat-child dereference in `render_record_node(...)`.
+  - Keep legacy embedded-tree traversal unchanged when `Scene.root`/`FrameScene.root` is already a record.
+4. **Regression gate:**
+  - Prove flat-scene output is pixel-identical before/after the lookup change.
+  - Add explicit tests for:
+    - root symbol resolution
+    - child-ID dereference
+    - missing child failure behavior
+    - legacy embedded-tree compatibility
+5. **Bench + decide follow-up:**
+  - Capture host before/after numbers via `tiny-fx.gfx-bench/vector-scene-bench`.
+  - Capture ESP32 memory impact and decide whether rendered-state snapshot queries need the same pattern next.
+
+### 9ob: Checkable PR task list (files + symbols)
+
+- **PR-1: Private flat-scene lookup abstraction**
+  - Files:
+    - `src/scene.c`
+    - `src/scene.h`
+    - optional private helper module for the encapsulated lookup
+    - `src/tests/test_vector_scene_graph.c`
+  - Symbols/paths:
+    - `resolve_root_node`
+    - `render_record_node`
+    - `vg_render_scene_record_at_ms`
+    - `vg_render_frame_slot_record_if_changed_at_ms`
+  - Acceptance:
+    - Flat-scene root and child lookup no longer rely on repeated linear map scans.
+    - Legacy tree scenes still pass existing render tests.
+  - Done (2026-03-09):
+    - `scene.c` now builds one renderer-private subjective-c `CljHashMap` scratch index per flat-scene snapshot and reuses it for both `resolve_root_node(...)` and child dereference in `render_record_node(...)`.
+    - Scratch population is borrow-only: no `hashmap_assoc`, no `RETAIN`, no `AUTORELEASE`, no per-child rebuild.
+    - Added regression coverage for symbol-keyed flat-scene children and re-ran the full `test_vector_scene_graph`* suite successfully.
+- **PR-2: Regression + benchmark gate**
+  - Files:
+    - `src/tests/test_vector_scene_graph.c`
+    - `src/builtins_tiny_fx_gfx.c`
+    - `.cursor/plans/esp32_vector_scene_graph_engine.plan.md`
+  - Scope:
+    - Add regression tests for lookup semantics and unchanged render output.
+    - Record host benchmark deltas and note ESP32 capture/memory results.
+  - Acceptance:
+    - Tests isolate the lookup mechanism, not just end-to-end demo behavior.
+    - Plan notes contain before/after host data and recorded ESP32 follow-up status.
+- **PR-3: Optional rendered-state follow-up decision**
+  - Files:
+    - `src/rendered_state_snapshot.c`
+    - `src/rendered_state_snapshot.h`
+    - `src/tests/test_vector_scene_graph.c`
+    - `.cursor/plans/esp32_vector_scene_graph_engine.plan.md`
+  - Scope:
+    - Evaluate whether entity/timeline query tables need the same encapsulated hash/index pattern.
+    - Only proceed if measured lookup cost remains relevant after PR-1/PR-2.
+  - Acceptance:
+    - Either the snapshot path is upgraded with the same private-index discipline, or the plan records why it is deferred.
+
+### 9p: Public scene API generalization + minimization audit (NEW)
+
+Status: IN PROGRESS
+
+Goal:
+
+- Audit the current public scene-facing API and reduce it to the minimal stable surface needed for:
+  - scene data authoring
+  - renderer lifecycle/query access
+  - spatial callback configuration
+- Remove or relocate public symbols that are demo-specific, compatibility-only, or layer-violating.
+
+Current findings:
+
+- `tiny-fx.gfx` currently mixes four concerns in one public namespace:
+  - scene/data-model constructors and helpers
+  - runtime lifecycle/query API
+  - collision callback wiring
+  - game-demo startup/config glue
+- `tiny-fx.gfx` currently re-exports demo-coupled vars that are not core scene API:
+  - `slot-descriptors`
+  - `game-demo-config`
+  - `player-vs-obstacle-policy`
+- Legacy compatibility symbols are still public even though the active runtime contract is spatial:
+  - `->CollisionRule`
+  - `->CollisionEvent`
+  - `normalize-collision-rule`
+  - `normalize-collision-phase-mask`
+- `update-nodes` remains public although flat entity-map scenes make it compatibility-only rather than a primary authoring primitive.
+- The constructor alias surface in `tiny-fx.gfx` duplicates `tiny-fx.gfx-scene`, which increases API size without adding a new abstraction.
+
+Proposed direction:
+
+- Keep `tiny-fx.gfx-scene` as the canonical public scene/data-model namespace:
+  - record constructors
+  - color helpers
+  - active spatial-rule normalizers
+- Keep `tiny-fx.gfx` minimal and runtime-oriented:
+  - `start-renderer!` / `stop-renderer!`
+  - `renderer-state`
+  - `renderer-timeline-step`
+  - `renderer-timeline-progress`
+- Keep `tiny-fx.gfx-bench` as the benchmark/profiling namespace (debug/profiling builds only).
+- Keep `tiny-fx.gfx-collision` as the callback/configuration namespace.
+- Keep `tiny-fx.game-demo` as the owner of all demo wiring/config data.
+
+Implementation notes (2026-03-09):
+
+- First reduction slice is now landed:
+  - `tiny-fx.gfx` only publishes the runtime/query vars
+    - `start-renderer!`
+    - `stop-renderer!`
+    - `renderer-state`
+    - `renderer-timeline-step`
+    - `renderer-timeline-progress`
+  - `tiny-fx.gfx-bench` now owns `vector-scene-bench`
+  - `tiny-fx.gfx-bench` is not part of the intended production surface and is compiled/embedded only for debug-style builds
+  - `game-demo-config` moved out of `tiny-fx.gfx` and into `tiny-fx.game-demo`
+  - `slot-descriptors` is now owned by `tiny-fx.game-demo`
+  - the native `game-demo` startup path now loads config from
+  `tiny-fx.game-demo/game-demo-config`
+  - alias-parity/runtime tests were updated to the reduced surface
+- Follow-up minimization slice is now landed:
+  - `tiny-fx.gfx` no longer implicitly requires `tiny-fx.gfx-scene` or
+  `tiny-fx.gfx-collision`; callers/tests now use explicit `require`s
+  - `tiny-fx.game-demo` now exports the direct `:spatial-callback` and no longer
+  performs collision callback wiring during demo reset/setup
+  - `tiny-fx.sound` is now a curated high-level namespace only
+    - `play-steps!`
+    - `play-sfx!`
+    - track/note compilation helpers
+  - public sound API is consolidated on `tiny-fx.sound`
+  - no legacy public namespace remains in the intended
+  surface
+  - low-level sound control stays opt-in in `tiny-fx.sound-native`
+  - debug/profiling-only sound helpers live in `tiny-fx.sound-debug`
+  - the native low-level sound path is consolidated in `src/builtins_sound.c`
+    / `src/builtins_sound.h`
+  - `src/builtins.c` no longer owns sound-disabled stubs or per-symbol sound
+    registrations; it delegates curated sound namespace checks and registration
+    to the sound builtin unit
+  - repo-owned runtime/test file paths now use `sound_*` consistently
+    (`sound_engine.*`, `sound_backend_*`, `sound_tick_scheduler.*`,
+    `test_sound_engine.c`)
+  - debug/profiling-only namespaces (`tiny-fx.sound-debug`,
+  `tiny-fx.gfx-bench`) are compiled/embedded only for debug builds and are not
+  present in the checked release binary
+- Remaining compatibility cleanup is now narrower:
+  - collision compatibility helpers are still being evaluated for long-term
+  support vs. compatibility-only status
+  - `tiny-fx.gfx-collision` remains intentionally separate from the production
+  runtime surface
+
+Candidate removals or relocations:
+
+- Remove demo glue from `tiny-fx.gfx`:
+  - `slot-descriptors`
+  - `game-demo-config`
+  - `player-vs-obstacle-policy`
+- De-emphasize or remove legacy compatibility exports from the primary public surface:
+  - `->CollisionRule`
+  - `->CollisionEvent`
+  - `normalize-collision-rule`
+  - `normalize-collision-phase-mask`
+- De-emphasize or remove `update-nodes` from the primary public surface unless a concrete non-demo use remains.
+- Re-evaluate whether `invoke-collision-callback!` should stay public or become runtime/debug-only.
+
+Acceptance:
+
+- `tiny-fx.gfx` no longer exposes demo-specific config or scene-authoring constructors by default.
+- `tiny-fx.gfx-scene` contains the canonical scene/data-model authoring surface.
+- Public API has one canonical namespace per concern instead of umbrella re-exports.
+- Compatibility-only symbols are either removed from the primary public surface or explicitly documented as transitional.
+
+Checklist:
+
+- Classify all current public vars in `tiny-fx.gfx`, `tiny-fx.gfx-scene`, and `tiny-fx.gfx-collision` by concern. DONE
+- Decide the canonical public namespace for each concern and mark non-canonical re-exports for removal. DONE for the first reduction slice
+- Remove demo-coupled exports from the primary public namespace. DONE for `game-demo-config` / `slot-descriptors`
+- Decide which legacy collision/update helpers remain supported and which move to compatibility-only status.
+- Update docs/tests to reflect the reduced public surface. DONE for runtime/audio/debug namespace separation; compatibility policy docs still pending
+
+### 9pa: Suggested implementation slices
+
+1. **API classification pass:**
+  - Tag each current public var as one of:
+    - scene authoring
+    - runtime lifecycle/query
+    - spatial callback config
+    - demo-only
+    - compatibility-only
+2. **Primary-surface reduction:**
+  - Shrink `tiny-fx.gfx` to runtime-oriented entry points.
+  - Stop re-exporting demo glue and non-essential compatibility helpers there.
+  - Status (2026-03-09): first slice DONE; runtime-only alias surface is in place and demo config moved to `tiny-fx.game-demo`.
+3. **Compatibility decision pass:**
+  - Either remove legacy collision/update exports from the primary public surface or keep them with explicit compatibility docs/tests.
+4. **Doc/test freeze:**
+  - Align public docs and alias-parity tests with the reduced surface.
+  - Status (2026-03-09): alias/runtime tests updated; explicit `require` cleanup is done; remaining work is compatibility policy docs.
+
+### 9pb: Concrete proposals to validate
+
+- Preferred steady-state namespace split:
+  - `tiny-fx.gfx-scene`: scene/data-model authoring
+  - `tiny-fx.gfx`: runtime access only
+  - `tiny-fx.gfx-collision`: callback config
+  - `tiny-fx.game-demo`: demo config and demo policies
+- If `tiny-fx.gfx` remains as umbrella namespace, it should still exclude:
+  - demo config maps
+  - slot descriptors
+  - demo collision policies
+  - compatibility-only constructors that duplicate `tiny-fx.gfx-scene`
+
+### Done when
+
+- Host-viewer demo uses flat entity map architecture end-to-end:
+Clojure `{id → Record}` in Atom → C resolves Timelines + interpolates → renders.
+- Root entity is identified by symbol `root`.
+- Periodic animations run via Timeline Records (no Clojure timers for visual cycling).
+- No direct `ASSIGN` of computed positions from C into scene Records.
+- Collision callback target for demo is configured from Clojure (not hardcoded in C).
+- Per-frame collision detection remains in C; no direct demo-specific scene mutation remains in C host-viewer loop.
+- Callback dispatch from C to Clojure is closure-based via scheduler/runloop ingress.
+- Callback return values are not transferred back to C and are not used for scene updates.
+- Scene updates from collision response happen explicitly in Clojure (`swap!`/`reset!`).
+- Static slots are not erased/re-rendered/transferred until a new slot snapshot is published.
+- M9 cleanup pass (9k) is complete and obsolete code paths are removed.
 - One vertical slice runs the same scene model in simulator and on device.
+
+## Milestone 10: Spatial Trigger Contract + Generic Event Bridge
+
+Status: PLANNED-REVISION
+
+Goal:
+
+- Replace the old collision-first milestone with a general spatial trigger contract.
+- Support both `:collision` and `:proximity` as first-class trigger kinds.
+- Keep spatial evaluation deterministic in C while all higher-level reactions remain explicit in Clojure.
+- Route spatial events through the same generic event ingress used by other runtime subsystems.
+
+Final scene / rule contract:
+
+- Spatial rules are declared in published scene data.
+  - Short term compatibility path: continue accepting `FrameScene.collision-rules`
+  - Preferred naming direction: move toward neutral `spatial-rules`
+- Runtime rule shape:
+  - `SpatialRule [id slot kind self other radius channel]`
+  - `:id` is the stable semantic rule identifier
+  - `:slot` defaults to `:game`
+  - `:kind` is `:collision` or `:proximity`
+  - `:self` / `:other` are role-bearing selectors
+  - `:radius` is required for `:proximity`, ignored for direct collision
+  - `:channel` is optional semantic context such as `:hearing`
+- Selector contract:
+  - scalar `:self` / `:other` values mean exact instance ids
+  - prototype-based matching uses the direct immutable prototype object
+  - no separate prototype registry is required
+  - rules may therefore express instance-vs-instance, instance-vs-prototype, or prototype-vs-prototype
+- Prototype contract:
+  - a prototype is just an immutable scene record used as a template
+  - the prototype object itself may carry a stable semantic `:id`
+  - a prototype does not carry a `:prototype` field
+  - instances may later store a direct `:prototype` reference to that object
+  - short term, `:prototype` remains supported on `Group`, `Polyline`, `Rect`, and `Tri`
+  - `Line` and `VText` are not expected to participate in spatial/prototype matching and are candidates for later removal from the prototype-capable set
+  - for multi-color sprites, `Group` is the preferred long-term prototype carrier
+- Trigger phases are edge-only:
+  - emitted phases are `:enter` and `:exit`
+  - no `:stay` events
+- Rule removal semantics:
+  - unchanged rule identity keeps latch state
+  - removed rules drop their latch state without synthetic events
+  - missing instance ids are ignored safely during evaluation
+
+Final event contract (C -> event ingress -> Clojure):
+
+- Public runtime event shape:
+  - `{:source :spatial`
+  - ` :id <rule-id>`
+  - ` :slot-id <slot-id>`
+  - ` :kind :collision|:proximity`
+  - ` :phase :enter|:exit`
+  - ` :self <instance-id>`
+  - ` :other <instance-id>`
+  - ` :rule <immutable-rule-object>`
+  - ` :snapshot-gen <fixnum>`
+  - optional `:self-prototype`
+  - optional `:other-prototype`
+  - optional `:self-aabb`
+  - optional `:other-aabb`
+  - optional `:radius`
+  - optional `:channel` `}`
+- `:source` is always `:spatial`
+- `:rule` is mandatory; callback code should not be forced to re-resolve rule identity from a separate table
+- `:phase` is mandatory because the runtime emits edge transitions, not level-state notifications
+- `:slot-id` is mandatory and preferred over ambiguous `:slot`
+- optional prototype fields carry the full immutable prototype objects, not just prototype ids
+- optional AABB fields avoid extra engine lookups when Clojure needs the evaluated runtime geometry
+
+Runtime delivery / ownership contract:
+
+- Spatial events are dispatched through the generic one-arg event ingress (`event_loop_enqueue_ingress_call`)
+- callback targets are configured from Clojure
+- callback return values are ignored by C
+- scene mutations remain explicit Clojure actions (`swap!`, `reset!`, etc.)
+- line-of-sight checks, hearing interpretation, and AI mode transitions happen after the event in Clojure
+
+Prototype-based rule execution model:
+
+- Prototype-based selectors must not be resolved dynamically in the inner collision loop.
+- Before the hot path runs, prototype selectors are expanded to concrete instance pairs.
+- The hot path then works only on concrete pairs and the already resolved per-pair latch state.
+- `Group` must become a first-class spatial carrier, because future multi-part sprites (for example the rocket) are expected to be authored as groups rather than as one primitive per color region.
+- Therefore group-level spatial evaluation needs an aggregated runtime AABB derived from relevant child geometry before prototype-based group rules can be considered complete.
+- Leaf prototype support (`Polyline` / `Rect` / `Tri`) stays in place initially so existing proxy/hitbox patterns continue to work during the transition to group-centric sprite prototypes.
+- Auto-generated instance ids are global fixnums.
+- Explicitly named special-case instances may still use explicit ids.
+- A future `copy-from-prototype` helper should:
+  - accept a prototype object directly
+  - optionally accept an explicit instance id
+  - otherwise assign a fresh global fixnum instance id
+  - attach the prototype object directly on the spawned instance
+
+Runtime optimization policy (first cut):
+
+- Do not maintain a separate last-AABB cache per rule in the first implementation.
+- Use `is_animating` as the simple conservative hint for skipping stable concrete pairs.
+- Keep the first optimization intentionally simple and conservative rather than maximally precise.
+- Treat "prototype field footprint on leaf records" as a later memory-optimization pass, not as part of the first functional rollout.
+- That later pass should re-evaluate whether `:prototype` can be removed from some leaf-only record types once group-based sprite collisions are proven out.
+
+Implementation notes:
+
+- `tiny-fx.gfx-scene` defines the active spatial schema and may keep legacy `CollisionRule` / `CollisionEvent` records only as compatibility shims.
+- `tiny-fx.gfx-collision` should stop being a collision-special callback surface over time and instead align with the generic event API direction.
+- `event_loop` remains the shared thread-safe ingress for GPIO/input, spatial, and audio events.
+- Scene/schema follow-up:
+  - keep `Group` in the prototype-capable set
+  - keep `Polyline`, `Rect`, and `Tri` prototype-capable for now
+  - revisit `Line` / `VText` and possibly some leaf prototype fields only as an explicit memory optimization step
+- Host/runtime code should:
+  - load spatial rules directly from published scene data
+  - evaluate overlap/proximity from rendered entity state
+  - support prototype-based rules that target `Group` records, not only primitive leaves
+  - compute/refresh aggregated group AABBs where group-level spatial matching is enabled
+  - emit deterministic `:enter` / `:exit` events in rule order
+  - refresh the live game scene + rule set after Clojure-side callback mutations
+  - treat missing spatial rules as "no triggers", not as a load failure
+- Runtime configuration should continue to flow from Clojure into native host/device code rather than resolving demo namespaces directly in C.
+
+Rollout scenario:
+
+- Demo rollout should include at least one `:collision` rule and one `:proximity` rule.
+- The demo should explicitly exercise at least one prototype-based spatial rule.
+- The preferred demo direction is a `Group`-based rocket sprite with a rule that targets the rocket prototype object directly, so the path used by real multi-color sprites is exercised early.
+- Example proximity slice:
+  - enemy enters hearing radius of player -> emit `{:source :spatial :kind :proximity :phase :enter ...}`
+  - Clojure receives the event
+  - Clojure decides whether to do hearing/visibility follow-up and whether to switch enemy AI mode
+  - when the player leaves range, the matching `:exit` event is emitted
+
+Verification:
+
+- Schema and contract:
+  - `test_gfx_collision_contract_registers_record_descriptors`
+  - `test_gfx_collision_contract_normalize_rule_defaults`
+  - `test_gfx_collision_contract_phase_mask_normalization_enter_exit_only`
+  - `test_gfx_collision_contract_disabled_rule_defaults_to_no_runtime_side_effects`
+  - `test_gfx_collision_contract_normalize_spatial_rule_preserves_proximity_fields`
+- Event-bridge behavior:
+  - `test_gfx_collision_contract_callback_set_clear_and_invoke_shape`
+  - `test_gfx_collision_contract_callback_rejects_non_function_values`
+  - `test_gfx_collision_contract_runloop_dispatch_ignores_callback_return_value`
+  - `test_gfx_collision_contract_runloop_dispatch_preserves_spatial_envelope_fields`
+- Host-viewer integration:
+  - `test_vector_scene_graph_tiny_gfx_runtime_host_viewer_config_shape`
+  - `test_vector_scene_graph_host_viewer_demo_collision_callback_toggles_player_geometry_in_clojure`
+  - `test_vector_scene_graph/*renderer_lifecycle`*
+- Generic ingress / event bridge foundation:
+  - `test_event_loop_latency/event_loop_ingress_enqueue_executes_on_run_next`
+  - `test_event_loop_latency/event_loop_ingress_concurrent_producers_fifo_drain`
+  - `test_event_loop_latency/event_loop_ingress_backpressure_rejects_when_full_and_recovers_after_drain`
+
+Done when:
+
+- Spatial triggers are declared declaratively in scene data and evaluated in C.
+- `:collision` and `:proximity` are both part of the frozen contract.
+- Public events use `:source :spatial` and carry `:kind`, `:phase`, `:slot-id`, `:self`, `:other`, and `:rule`.
+- `:stay` is explicitly excluded from the contract.
+- Prototype-based selectors are supported in the contract without requiring a prototype registry.
+- Auto-generated instance ids are global fixnums.
+- Clojure receives stable spatial event payloads through the generic ingress path.
+- Callback return values are non-contractual to C.
+- Gameplay reactions, line-of-sight checks, hearing logic, and AI mode changes remain fully Clojure-owned.
+
+## Optional Extension A: Render-Thread Interpolation Animations (Off-Main-Thread)
+
+Status: OPTIONAL-LATER (generic SPSC queue + fixed-point animator math prerequisites implemented; animation command/event wiring still TODO)
+
+Relationship to Milestone 9: This extension builds on the three-layer target architecture
+(M9). The interpolation layer (Layer 2) is the foundation; this extension adds declarative
+animation descriptors that drive the interpolation automatically. Key open question from M9d:
+animations must run in C (not interpreter) – this extension defines how.
+
+Scope:
+
+- Additive extension after stable snapshot/slot pipeline; does not replace scene snapshot model.
+- Goal: keep continuous motion smooth even when cooperative Clojure scheduler is temporarily blocked.
+
+Tasks:
+
+- Define animation record contract (declarative timeline):
+  - `:target-id` (stable object id)
+  - `:property` (initially transform-like only: `:tx`, `:ty`, `:rot`, `:sx`, `:sy`)
+  - `:from`, `:to`
+  - `:start-ts-ms`, `:duration-ms`, `:easing`
+  - optional `:on-finish` event/callback token
+- Implement C-side interpolation on render thread:
+  - evaluate active animation value by render-time clock
+  - apply interpolated value transiently at draw time (no scene topology mutation in render thread)
+  - prefer fixed-point interpolation/easing in the animator path (`CLJ_FIXED_FRAC_BITS`) and quantize only at raster/application boundaries
+  - rationale: reduce float conversion overhead and keep animation playback deterministic across host/device
+- Keep strict thread ownership:
+  - producer thread publishes/updates animation descriptors
+  - render thread reads descriptors and computes interpolation only
+  - no MEMORY macros/autorelease pool usage in render hot path
+- Add bounded lock-free queue handoff (SPSC preferred):
+  - producer/update thread -> render thread: animation control commands (`start`, `cancel`, `replace-track`)
+  - render thread -> producer/event-loop: completion events (`:anim-finished`, optional `:anim-cancelled`)
+  - no per-frame progress messages; only coarse control + one-shot completion notifications
+  - define overflow policy (drop oldest/newest vs assert in debug) and counters for observability
+  - current implementation note (prerequisite done):
+    - generic bounded SPSC queue module exists in C (`lockfree_spsc_queue`)
+    - audio engine command + finished queues already use the generic queue as a production-tested reference path
+    - audio hot path uses direct generic queue calls (no forwarding wrappers)
+    - fixed-point animator math helpers (`progress`, `easing`, `lerp`, Q19.13 / `CLJ_FIXED_FRAC_BITS`) exist in `vector_scene_graph` and are covered by host unit tests
+    - host viewer demo already uses the fixed-point animator math helpers for existing movements (`player_bob`, `obstacle_x`) as an integration proof
+- Add scheduler callback integration:
+  - optional deterministic event when animation reaches end (`:anim-finished`)
+  - callback payload includes at least `:target-id`, `:property`, end timestamp
+- Add regression/perf tests:
+  - smoothness under producer-thread stalls
+  - deterministic interpolation for fixed timestamps
+  - no duplicate finish events
+
+Done when:
+
+- Continuous transform animations remain smooth under temporary scheduler stalls.
+- Extension remains additive and compatible with snapshot-based scene publication.
 
 ## Non-Goals (explicitly excluded)
 
@@ -269,16 +1942,23 @@ Done when:
 1. M0 scene contract + record schema
 2. M1 macOS simulator skeleton + deterministic frame dumps
 3. M2 transform stack + composition
-4. M3 baseline primitives (`width=1`)
-5. M4 thick line support
-6. M5 id-based patch path + scrolling/parallax PoC
-7. M6 VText integration
-8. M7 SPI backend integration
-9. M9 game/menu/title integration
+4. M8 fixed-first decode + transform policy (determinism + ESP32 CPU baseline)
+5. M3 baseline primitives (`width=1`)
+6. M4 thick line support
+7. M4b solid fill-color MVP (`has_fill` + `fill_rgb565`, no fill-rule yet)
+8. M8b batched scene update API (`update-nodes` for efficient per-frame state changes)
+9. M5 snapshot slot update path (`FrameScene` + `clip-rect` + changed-slot-only render)
+10. M6 VText integration
+11. M7 ESP32 display backend integration (SPI/I80 slot windows)
+12. M7b bandwidth optimization (entity-level dirty tracking + selective erase/redraw)
+13. M9 game/menu/title integration
+14. M10 collision contract + C-dispatched closure callback
+15. M11 user guide (Markdown)
+16. Optional later: explicit patch path + pointer-identity subtree reuse
 
 Rule:
 
-- Do not start M7 (ESP32 SPI integration) before M5 passes in host simulator.
+- Do not start M7 (ESP32 display backend) before M5 snapshot-slot rendering passes in host simulator.
 
 ## Risk Register
 
@@ -288,9 +1968,90 @@ Rule:
   - Mitigation: shared render core, backend conformance tests, deterministic frame traces.
 - Risk: Transform stack overhead in deep group trees.
   - Mitigation: shallow graph conventions, iterative traversal, compact matrix representation.
-- Risk: SPI bandwidth limits visible complexity.
-  - Mitigation: clipping/culling, dirty-region mode, avoid pathological tiny draw commands.
-- Risk: tiny-clj allocation spikes during patch generation.
-  - Mitigation: stable IDs, bounded patch vectors, canonicalized compact render data.
+- Risk: SPI/I80 bandwidth limits visible complexity.
+  - Mitigation: dirty-rectangle tracking (only changed pixels transferred), static-slot skip, span merging, DMA pipeline, adaptive interlacing fallback.
+  - Reference: 240×240@16bit full frame = 115.200 bytes; at 40 MHz SPI ~23 ms/frame (max ~43 fps). Dirty-rect tracking typically reduces transfer to 40–60% → effective 60+ fps for most game scenes.
+  - I80 parallel interface provides ~8× the bandwidth of SPI at same clock frequency, relaxing this constraint significantly.
+- Risk: tiny-clj allocation spikes during snapshot rebuilds.
+  - Mitigation: persistent data sharing, coarse scene slots, changed-slot-only rendering, optional compiled caches later.
+- Risk: Slot rectangles appear non-overlapping logically but overlap in raster output due to stroke/text fringes.
+  - Mitigation: conservative `clip-rect` guard bands, explicit slot background policy, test coverage for edge clipping.
 - Risk: Float drift/non-determinism in long animations.
-  - Mitigation: optional fixed-point transform core (16.16).
+  - Mitigation: fixed-first decode/transform path aligned with `subjective-c` fractional bits (`CLJ_FIXED_FRAC_BITS = 13`), integer quantization only at raster boundaries.
+
+## Follow-up: Clojure-defined Slots
+
+Status: DONE (2026-03-06)
+
+Goal:
+
+- Remove the fixed `:deco/:score/:game` assumption from C.
+- Define slot count, slot IDs, slot order, and per-slot atoms in Clojure, with C consuming only the configured ordered slot list.
+
+Completed:
+
+- `tiny-fx.gfx/host-viewer-config` now publishes ordered `:slots` descriptors instead of a fixed `:bundle`.
+- `tiny-fx.scene-demo` now owns canonical slot atoms for all demo slots and exposes the shared descriptor list.
+- `tiny-clj.runtime/start-renderer!` validates and registers dynamic slot descriptors in C, and rendered-state queries resolve configured slot IDs through that registry.
+- `host_viewer_minifb.c` now allocates slot runtime state dynamically from the configured slot list and resolves the spatial-trigger slot through config instead of fixed constants.
+- Runtime docs/tests/bench path now use the configured slot list; slot placement remains orientation-agnostic through per-scene `clip-rect` data.
+- This follow-up is now tracked only in the main vector-scene plan; the temporary standalone slot plan has been removed.
+
+Verification:
+
+- `cmake --build build --target unit-tests && ./build/unit-tests -test 'test_vector_scene_graph/*'`
+- `./build/unit-tests -test 'test_gfx_collision_contract/*'`
+- `cmake --build build-hostviewer --target host-viewer`
+
+## Milestone 11: User Guide (Markdown)
+
+Status: TODO
+
+Goal:
+
+- Write a complete user-facing Markdown guide that documents the final engine API and workflows.
+- Target audience: developers building scenes/gameplay in Clojure on top of the renderer.
+- Existing Clojure entry points already have `:doc` strings in runtime namespaces; this milestone should consolidate and extend that information into one cohesive guide rather than replace it.
+
+Tasks:
+
+- Create guide file (proposed path): `docs/USER_GUIDE_VECTOR_SCENE.md`.
+- Document core model and lifecycle:
+  - slot atoms and snapshot publication
+  - renderer lifecycle (`start-renderer!`, `stop-renderer!`)
+  - thread model (Tiny-RTOS/Clojure main thread, render thread, macOS UI detail)
+- Document scene authoring:
+  - flat entity maps (`{id -> Record}`)
+  - root entity (`root` symbol)
+  - groups and child-id references
+  - changing grouping dynamically at runtime (re-parenting / child list updates)
+- Document animation features with examples:
+  - Timeline-based periodic animations
+  - per-keyframe durations (uneven step times)
+  - transform interpolation (AnimState-backed smooth motion)
+  - querying current visual state (`renderer-state`, `renderer-timeline-step`, `renderer-timeline-progress`)
+- Document shape and style updates:
+  - changing geometry (`:pts`, tri vertices, text)
+  - changing style/color/visibility
+  - dynamic shape replacement patterns
+- Document time-driven flows:
+  - scheduler-driven updates
+  - event/callback-driven updates
+  - static-slot optimization behavior (when rerender happens / does not happen)
+- Document collision features:
+  - declaring collision rules in Clojure
+  - callback configuration and payload contract
+  - distinction between C collision detection and Clojure collision response
+- Add end-to-end examples:
+  - minimal scene
+  - animated scene with mixed static/animated slots
+  - collision-driven gameplay mutation
+- Add troubleshooting section:
+  - common mistakes (wrong IDs, missing `root`, stale snapshot assumptions)
+  - debugging tips via rendered-state query APIs
+
+Done when:
+
+- `docs/USER_GUIDE_VECTOR_SCENE.md` exists and is linked from relevant docs/README entry points.
+- Guide covers all major feature areas: animations, collision detection, time-driven updates, object grouping/re-grouping, shape changes.
+- Guide examples are validated against current runtime API (no outdated symbols/contracts).

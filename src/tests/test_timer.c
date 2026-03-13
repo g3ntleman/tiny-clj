@@ -440,6 +440,7 @@ TEST(test_timer_enqueue_zero_delay_enqueues_task) {
 
     CljObject *fn = eval_string("(fn [] 42)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn);
+    RETAIN(fn);
 
     CljTransientVector *task_queue = g_runtime.task_queue;
     CljPersistentVector *task_vec = task_queue ? vector_persistent(task_queue) : NULL;
@@ -466,6 +467,7 @@ TEST(test_timer_enqueue_zero_delay_enqueues_task) {
     if (g_runtime.task_queue) {
         vector_remove_at(g_runtime.task_queue, 0);
     }
+    RELEASE(fn);
     // fn is autoreleased from eval_string; TEST() pool handles cleanup.
 }
 
@@ -475,6 +477,7 @@ TEST(test_timer_enqueue_zero_delay_with_run_next) {
 
     CljObject *fn = eval_string("(fn [] 42)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn);
+    RETAIN(fn);
 
     CljTransientVector *task_queue = g_runtime.task_queue;
     CljPersistentVector *task_vec = task_queue ? vector_persistent(task_queue) : NULL;
@@ -504,6 +507,6 @@ TEST(test_timer_enqueue_zero_delay_with_run_next) {
     if (g_runtime.task_queue) {
         vector_remove_at(g_runtime.task_queue, 0);
     }
+    RELEASE(fn);
     // fn is autoreleased from eval_string; TEST() pool handles cleanup.
 }
-

@@ -3,6 +3,7 @@
 #include "object.h"
 #include "vector.h"
 #include "memory.h"
+#include "record.h"
 #include "value.h"
 #include "exception.h"
 #include "types.h"  // For SINGLETON_RC
@@ -229,6 +230,24 @@ CljPersistentMap* map_merge(CljPersistentMap* a, CljPersistentMap* b, bool overw
   }
 
   // Return result (owned rc=1 if a new map was produced, or original 'a' if in-place)
+  return result;
+}
+
+CljPersistentMap* make_map_from_record(ID record_obj) {
+  if (!is_record(record_obj))
+    return NULL;
+  CljPersistentRecord *record = as_record(record_obj);
+  unsigned int field_count = record_declared_field_count(record);
+
+  CljPersistentMap *result = make_map((int)field_count);
+  if (!result)
+    return NULL;
+  for (unsigned int i = 0; i < field_count; i++) {
+    ID key = vector_nth(record->descriptor->field_keys, i);
+    ID val = record->values[i];
+    map_assoc_inplace(&result, key, val);
+  }
+
   return result;
 }
 

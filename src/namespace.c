@@ -10,6 +10,8 @@
 #include "runtime.h"
 #include "tiny_clj.h"
 #include "memory.h"
+#include "meta.h"
+#include "builtins.h"
 #include "parser.h"  // For eval_parsed
 #include "vector.h"
 
@@ -39,6 +41,12 @@ static bool namespace_is_clojure_core(const CljNamespace *ns) {
     const char *ns_name = ns->name->cname;
     return ns_name && strcmp(ns_name, "clojure.core") == 0;
 }
+
+static bool namespace_lookup_is_private_from(CljNamespace *current_ns,
+                                             CljNamespace *target_ns,
+                                             CljSymbol *symbol);
+static INLINE bool namespace_lookup_key_is_private(CljPersistentMap *private_mappings,
+                                                   CljSymbol *symbol);
 
 static bool ambiguity_should_throw(const struct ns_search_ctx *ctx) {
     if (!ctx || !ctx->ambiguous || !ctx->result_ns || !ctx->second_ns) {
@@ -194,6 +202,7 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
     const int mappings_cap = (SYM_CLOJURE_CORE && name_symbol == SYM_CLOJURE_CORE)
         ? CLOJURE_CORE_INITIAL_MAPPINGS_CAPACITY : 4;
     ns->mappings = make_map(mappings_cap);
+    ns->private_mappings = NULL;
     ns->macro_mappings = NULL;  // Lazy initialization in register_macro
     ns->aliases = make_map(4);
 
@@ -275,11 +284,17 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             target_ns = ns_find(interned_ns_name->cname);
         }
         if (target_ns && target_ns->mappings && sym->cname) {
+            const bool privacy_check_needed =
+                (current_ns != target_ns && target_ns->private_mappings != NULL);
             // OPTIMIZATION: Fast path - try direct lookup with existing symbol pointer first
             // The symbol from AST canonicalization is already interned, so pointer equality
             // should work if the mapping was created with the same symbol pointer.
             ID resolved = map_get(target_ns->mappings, sym);
             if (resolved != NOT_FOUND) {
+                if (privacy_check_needed &&
+                    namespace_lookup_key_is_private(target_ns->private_mappings, sym)) {
+                    return NOT_FOUND;
+                }
                 return resolved;  // Found (can be NULL/nil, which is valid)
             }
 
@@ -294,6 +309,10 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             // Use sentinel to distinguish "key not found" from "value is nil"
             resolved = map_get(target_ns->mappings, interned_sym);
             if (resolved != NOT_FOUND) {
+                if (privacy_check_needed &&
+                    namespace_lookup_key_is_private(target_ns->private_mappings, interned_sym)) {
+                    return NOT_FOUND;
+                }
                 return resolved;  // Found (can be NULL/nil, which is valid)
             }
 
@@ -304,6 +323,10 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             if (unqualified_sym) {
                 resolved = map_get(target_ns->mappings, unqualified_sym);
                 if (resolved != NOT_FOUND) {
+                    if (privacy_check_needed &&
+                        namespace_lookup_key_is_private(target_ns->private_mappings, unqualified_sym)) {
+                        return NOT_FOUND;
+                    }
                     return resolved;
                 }
             }
@@ -549,12 +572,23 @@ void reset_eval_state_current_ns(void) {
 
 // EvalState functions
 // OPTIMIZATION: Now returns global thread-local state instead of heap allocation
+static void evalstate_ensure_core_bootstrap_ready(void) {
+    if (g_runtime.builtins_registered) {
+        return;
+    }
+
+    meta_registry_init();
+    register_builtins();
+    g_runtime.builtins_registered = true;
+}
+
 EvalState* evalstate_new(bool load_core) {
     EvalState *st = get_global_eval_state();
     if (!st) return NULL;
 
     // Load clojure.core automatically if requested (functions available via ns_resolve)
     if (load_core) {
+        evalstate_ensure_core_bootstrap_ready();
         WITH_AUTORELEASE_POOL({
             load_clojure_core(st);
         });
@@ -605,6 +639,7 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
 
     // Always load clojure.core if requested (for test isolation)
     if (load_core) {
+        evalstate_ensure_core_bootstrap_ready();
         evalstate_set_ns(st, "clojure.core");
         load_clojure_core(st);
     }
@@ -757,6 +792,38 @@ static CljSymbol* get_namespace_mapping_key(CljNamespace *ns, CljSymbol *symbol)
     return symbol;
 }
 
+static INLINE bool namespace_lookup_key_is_private(CljPersistentMap *private_mappings,
+                                                   CljSymbol *symbol) {
+    if (!private_mappings || !symbol) {
+        return false;
+    }
+    return map_get_sentinel(private_mappings, symbol, NOT_FOUND) != NOT_FOUND;
+}
+
+static bool namespace_lookup_is_private_from(CljNamespace *current_ns,
+                                             CljNamespace *target_ns,
+                                             CljSymbol *symbol) {
+    if (!target_ns || !target_ns->private_mappings || !symbol) {
+        return false;
+    }
+    if (current_ns == target_ns) {
+        return false;
+    }
+
+    if (namespace_lookup_key_is_private(target_ns->private_mappings, symbol)) {
+        return true;
+    }
+
+    CljSymbol *canonical = get_namespace_mapping_key(target_ns, symbol);
+    if (canonical && canonical != symbol) {
+        if (namespace_lookup_key_is_private(target_ns->private_mappings, canonical)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void ns_define(CljNamespace *ns, ID symbol, ID value) {
     CLJ_ASSERT(ns != NULL);
     CLJ_ASSERT(symbol != NULL);
@@ -806,6 +873,35 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
         // The cache will be automatically rebuilt on the next ns_resolve() call.
         ns_invalidate_resolve_cache();
     }
+}
+
+void ns_mark_private(CljNamespace *ns, ID symbol) {
+    CLJ_ASSERT(ns != NULL);
+    CLJ_ASSERT(symbol != NULL);
+
+    CljSymbol *sym = as_symbol(symbol);
+    if (!sym) {
+        return;
+    }
+
+    CljSymbol *private_symbol = get_namespace_mapping_key(ns, sym);
+    if (!private_symbol) {
+        private_symbol = sym;
+    }
+
+    if (!ns->private_mappings) {
+        ns->private_mappings = make_map(4);
+        if (!ns->private_mappings) {
+            return;
+        }
+    }
+
+    map_assoc_inplace(&ns->private_mappings, private_symbol, clj_true);
+    ns_invalidate_resolve_cache();
+}
+
+bool ns_is_private(CljNamespace *ns, CljSymbol *symbol) {
+    return namespace_lookup_is_private_from(NULL, ns, symbol);
 }
 
 // For :refer :all - stores qualified symbol (clojure.core remains special-cased)

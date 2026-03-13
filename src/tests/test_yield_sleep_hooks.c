@@ -32,7 +32,18 @@ uint32_t test_yield_sleep_now_ms(void) { return g_fake_now_ms; }
 
 void tinyclj_runloop_once_for_yield(unsigned int timeout_ms) {
     if (!g_override_enabled) {
+        uint32_t start_ms = platform_current_time_ms();
         platform_runloop_run_once(timeout_ms);
+        if (timeout_ms == 0u) {
+            return;
+        }
+
+        uint32_t end_ms = platform_current_time_ms();
+        uint32_t elapsed_ms = (end_ms >= start_ms) ? (end_ms - start_ms)
+                                                   : ((86400000u - start_ms) + end_ms);
+        if (elapsed_ms < timeout_ms) {
+            platform_sleep_ms(timeout_ms - elapsed_ms);
+        }
         return;
     }
     g_yield_calls++;
@@ -46,4 +57,3 @@ uint32_t tinyclj_current_time_ms_for_sleep(void) {
     }
     return g_fake_now_ms;
 }
-

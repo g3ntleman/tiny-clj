@@ -11,6 +11,7 @@ idf_component_register(
     "../../../subjective-c/src/vector.c"
     "../../../subjective-c/src/exception.c"
     "../../../subjective-c/src/map.c"
+    "../../../subjective-c/src/record.c"
     "../../../subjective-c/src/byte_array.c"
     "../../../subjective-c/src/hashmap.c"
     "../../../subjective-c/src/hashset.c"
@@ -32,4 +33,3 @@ target_compile_definitions(${COMPONENT_LIB} PUBLIC UNITY_USE_FLUSH_STDOUT)
 # tinyclj is built with DEBUG=1 and calls debug_trace_allocation from list.c/ast.c.
 target_compile_definitions(${COMPONENT_LIB} PUBLIC DEBUG=1)
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-clobbered)
-

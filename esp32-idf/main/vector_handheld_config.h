@@ -5,7 +5,7 @@
  * Board profile for the ESP32 vector handheld project.
  *
  * This file is intentionally pin-focused and game-specific. Keep it as the
- * single source of truth for wiring, then include it from display/input/audio
+ * single source of truth for wiring, then include it from display/input/sound
  * drivers.
  */
 
@@ -48,9 +48,9 @@
  * LEDC uses timer + channel pairs.
  * Use separate channels to keep two independent voices.
  */
-#define VG_AUDIO_LEDC_TIMER 0
-#define VG_AUDIO_LEDC_CH1 0
-#define VG_AUDIO_LEDC_CH2 1
+#define VG_SOUND_LEDC_TIMER 0
+#define VG_SOUND_LEDC_CH1 0
+#define VG_SOUND_LEDC_CH2 1
 
 /* -------------------------- Battery monitoring ---------------------------- */
 #define VG_PIN_BAT_ADC 35
@@ -67,6 +67,6 @@
 /* ------------------------------ Timing ------------------------------------ */
 #define VG_TARGET_FPS 60
 #define VG_FRAME_MS (1000 / VG_TARGET_FPS)
-#define VG_AUDIO_TICK_MS 1
+#define VG_SOUND_TICK_MS 1
 
 #endif /* TINYCLJ_VECTOR_HANDHELD_CONFIG_H */

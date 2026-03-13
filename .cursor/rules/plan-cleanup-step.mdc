@@ -1,0 +1,25 @@
+---
+description: Jeden neuen Plan um einen Aufräum-Schritt für den Sourcecode ergänzen
+globs: Plans/**/*.md
+alwaysApply: true
+---
+
+# Aufräum-Schritt in Plänen
+
+Jeder neu erstellte oder überarbeitete Plan unter `Plans/` muss einen abschließenden TODO-Punkt zum Aufräumen des Sourcecodes enthalten.
+
+## Pflichtpunkt
+
+Füge am Ende der `todos`-Liste folgenden Eintrag hinzu (Status initial `pending`):
+
+```yaml
+- id: cleanup
+  content: Sourcecode aufräumen – Debug-Code, temporäre Workarounds, tote Codepfade, überflüssige Kommentare und nicht mehr benötigte Hilfsfunktionen entfernen
+  status: pending
+```
+
+## Wann anwenden
+
+- Beim Anlegen eines neuen Plans
+- Beim Hinzufügen neuer TODO-Blöcke zu einem bestehenden Plan
+- **Nicht** rückwirkend auf abgeschlossene Pläne anwenden

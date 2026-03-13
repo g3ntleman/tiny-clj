@@ -1110,6 +1110,42 @@ TEST(test_merge_multiple_maps) {
   ASSERT_TRUE_RESULT("(= (count (merge {:a 1} {:b 2} {:c 3})) 3)");
 }
 
+TEST(test_merge_leading_and_interleaved_nil) {
+  ASSERT_TRUE_RESULT("(= (merge nil nil {:a 1} nil {:b 2} nil) {:a 1 :b 2})");
+}
+
+TEST(test_merge_last_write_wins_across_many_maps) {
+  ASSERT_TRUE_RESULT("(= (merge {:a 1 :b 1} {:a 2} {:b 3} {:a 4}) {:a 4 :b 3})");
+}
+
+TEST(test_merge_record_as_first_non_nil_map_like) {
+  ASSERT_TRUE_RESULT(
+      "(do "
+      "  (defrecord MergeRecord [a b]) "
+      "  (= (merge nil (->MergeRecord 1 2) {:c 3}) {:a 1 :b 2 :c 3}))");
+}
+
+TEST(test_merge_record_field_override_with_nil_value) {
+  ASSERT_TRUE_RESULT(
+      "(do "
+      "  (defrecord MergeRecord [a b]) "
+      "  (let [merged (merge (->MergeRecord 1 2) {:b nil})] "
+      "    (and (contains? merged :b) (nil? (:b merged)) (= 1 (:a merged)))))");
+}
+
+TEST(test_merge_non_map_argument_throws_illegal_argument_exception) {
+  bool exception_caught = false;
+  TRY {
+    (void)eval_string("(merge {:a 1} 42)", g_test_eval_state);
+    TEST_FAIL_MESSAGE("merge should throw for non-map argument");
+  } CATCH(ex) {
+    exception_caught = true;
+    TEST_ASSERT_NOT_NULL(ex);
+    TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
+  } END_TRY
+  TEST_ASSERT_TRUE(exception_caught);
+}
+
 TEST(test_hash_map_basic_binding) {
   ASSERT_TRUE_RESULT("(= (hash-map :a 1 :b 2) {:a 1 :b 2})");
 }

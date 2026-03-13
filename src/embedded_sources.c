@@ -10,68 +10,130 @@
       (const uint8_t *)(source_array),                    \
       (int)(sizeof(source_array) - 1u)}
 
+#ifndef TINYCLJ_WITH_TINY_FX
+#define TINYCLJ_WITH_TINY_FX 1
+#endif
+
 static const char clojure_core_code[] =
-#include "clojure.core.clj"
+#include "clojure.core.clj.inc"
     ;
 
 static const char clojure_string_code[] =
-#include "clojure.string.clj"
+#include "clojure.string.clj.inc"
     ;
 
 static const char clojure_repl_code[] =
-#include "clojure.repl.clj"
+#include "clojure.repl.clj.inc"
     ;
 
 static const char clojure_pprint_code[] =
-#include "clojure.pprint.clj"
+#include "clojure.pprint.clj.inc"
     ;
 
 static const char clojure_stacktrace_code[] =
-#include "clojure.stacktrace.clj"
+#include "clojure.stacktrace.clj.inc"
     ;
 
 static const char tiny_clj_runtime_code[] =
-#include "tiny-clj.runtime.clj"
+#include "tiny-clj.runtime.clj.inc"
     ;
 
 static const char tiny_db_kv_code[] =
-#include "tiny-db.kv.clj"
+#include "tiny-db.kv.clj.inc"
     ;
 
 static const char tiny_clj_datetime_code[] =
-#include "tiny-clj.datetime.clj"
+#include "tiny-clj.datetime.clj.inc"
     ;
 
 static const char tiny_clj_fs_code[] =
-#include "tiny-clj.fs.clj"
+#include "tiny-clj.fs.clj.inc"
     ;
 
-static const char tiny_snd_composer_code[] =
-#include "tiny-clj.audio.clj"
+#if TINYCLJ_WITH_TINY_FX
+static const char tiny_fx_sound_code[] =
+#include "tiny-fx.sound.clj.inc"
     ;
 
-static const char tiny_snd_runtime_code[] =
-#include "tiny_snd_runtime.clj"
+static const char tiny_fx_sound_native_code[] =
+#include "tiny-fx.sound-native.clj.inc"
+    ;
+
+#ifdef DEBUG
+static const char tiny_fx_sound_debug_code[] =
+#include "tiny-fx.sound-debug.clj.inc"
+    ;
+#endif
+#endif
+
+static const char tiny_clj_gpio_code[] =
+#include "tiny-clj.gpio.clj.inc"
+    ;
+
+static const char tiny_clj_board_code[] =
+#include "tiny-clj.board.clj.inc"
+    ;
+
+static const char tiny_clj_button_code[] =
+#include "tiny-clj.button.clj.inc"
+    ;
+
+static const char tiny_clj_event_code[] =
+#include "tiny-clj.event.clj.inc"
+    ;
+
+static const char tiny_clj_sensor_code[] =
+#include "tiny-clj.sensor.clj.inc"
     ;
 
 static const char tiny_clj_net_code[] =
-#include "tiny-clj.net.clj"
+#include "tiny-clj.net.clj.inc"
     ;
 
 static const char tiny_clj_net_mdns_code[] =
-#include "tiny-clj.net.mdns.clj"
+#include "tiny-clj.net.mdns.clj.inc"
     ;
 
+#if TINYCLJ_WITH_TINY_FX
+static const char tiny_fx_gfx_scene_code[] =
+#include "tiny-gfx.scene.clj.inc"
+    ;
+
+#ifdef DEBUG
+static const char tiny_fx_gfx_collision_code[] =
+#include "tiny-gfx.collision.clj.inc"
+    ;
+#endif
+
+#ifdef DEBUG
+static const char tiny_fx_gfx_bench_code[] =
+#include "tiny-fx.gfx-bench.clj.inc"
+    ;
+#endif
+
+static const char tiny_fx_gfx_code[] =
+#include "tiny-gfx.runtime.clj.inc"
+    ;
+
+static const char tiny_fx_startup_code[] =
+#include "tiny-fx.startup.clj.inc"
+    ;
+
+static const char tiny_fx_game_demo_code[] =
+#include "tiny-fx.game-demo.clj.inc"
+    ;
+#endif
+
 static const char tiny_db_rrd_code[] =
-#include "tiny-db.rrd.clj"
+#include "tiny-db.rrd.clj.inc"
     ;
 
 static const char tiny_db_rrd_classic_code[] =
-#include "tiny-db.rrd-classic.clj"
+#include "tiny-db.rrd-classic.clj.inc"
     ;
 
 static const char tiny_db_rrd_spline_code[] =
-#include "tiny-db.rrd-spline.clj"
+#include "tiny-db.rrd-spline.clj.inc"
     ;
 
 typedef struct {
@@ -89,10 +151,32 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/stacktrace.clj", clojure_stacktrace_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/runtime.clj", tiny_clj_runtime_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/fs.clj", tiny_clj_fs_code),
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-snd/composer.clj", tiny_snd_composer_code),
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-snd/runtime.clj", tiny_snd_runtime_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/board.clj", tiny_clj_board_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/button.clj", tiny_clj_button_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/event.clj", tiny_clj_event_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/sensor.clj", tiny_clj_sensor_code),
+#if TINYCLJ_WITH_TINY_FX
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound.clj", tiny_fx_sound_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-native.clj", tiny_fx_sound_native_code),
+#ifdef DEBUG
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-debug.clj", tiny_fx_sound_debug_code),
+#endif
+#endif
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/gpio.clj", tiny_clj_gpio_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net.clj", tiny_clj_net_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net/mdns.clj", tiny_clj_net_mdns_code),
+#if TINYCLJ_WITH_TINY_FX
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-scene.clj", tiny_fx_gfx_scene_code),
+#ifdef DEBUG
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-collision.clj", tiny_fx_gfx_collision_code),
+#endif
+#ifdef DEBUG
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-bench.clj", tiny_fx_gfx_bench_code),
+#endif
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx.clj", tiny_fx_gfx_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/startup.clj", tiny_fx_startup_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/game-demo.clj", tiny_fx_game_demo_code),
+#endif
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/kv.clj", tiny_db_kv_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/rrd.clj", tiny_db_rrd_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/rrd-classic.clj", tiny_db_rrd_classic_code),

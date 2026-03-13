@@ -2,7 +2,7 @@
 
 An **embedded-first Clojure interpreter** for microcontrollers (ESP32) and desktop platforms (macOS, Linux). Written in pure C99/C11 for maximum portability and minimal resource usage.
 
-## Status: usable Alpha-Version 0.4.
+## Status: usable Alpha-Version 0.5.
 
 ## Prerequisites
 
@@ -44,7 +44,21 @@ brew install cmake
 - **Embedded Target:** ESP32 microcontrollers
 - **Pure C99/C11:** No POSIX-only features for embedded compatibility
 - **Manual Reference Counting:** Predictable memory behavior on embedded systems
-- **Small Binary:** Target <150KB for embedded deployment
+- **Small Binary:** Optimized for embedded deployment
+
+### Sound Engine
+- **Piezo-Focused Playback:** Embedded-first sound runtime for piezo buzzers with matching desktop simulation on macOS
+- **Step Sequencer API:** `tiny-fx.sound/play-steps!` compiles note/rest step lists into efficient runtime tracks
+- **Musical Timing:** Supports millisecond durations plus musical values such as `:q`, `:e`, `:h`, dotted notes, and tempo-driven playback
+- **Melody/Backing Roles:** Lead voice plus backing voices can be described declaratively with per-role channel and volume settings
+- **Host Debugging Hooks:** Desktop status/debug helpers make it easy to validate audio behavior without ESP32 hardware
+
+### Vector Graphics Engine
+- **Scene Graph Primitives:** Groups, polylines, triangles, text, transforms, and styles can be composed into layered scenes
+- **Timeline Animation:** Transform, style, and text fields support keyframe timelines with interpolation, looping, and easing
+- **Slot-Based Renderer:** `FrameScene` slots provide z-ordering, clip rectangles, guard pixels, and efficient dirty-rect rerendering
+- **Spatial Events:** Collision and proximity rules publish host/runtime events for gameplay and interaction logic
+- **Runtime Introspection:** Renderer state and timeline progress can be queried from Clojure for debugging, tooling, and tests
 
 ## Quick Start
 
@@ -61,7 +75,7 @@ cmake --build build
 cmake -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build
 
-# Embedded Build (ultra-compact for <150KB target)
+# Embedded Build (ultra-compact embedded configuration)
 cmake -DCMAKE_BUILD_TYPE=Embedded -B build
 cmake --build build
 ```
@@ -130,6 +144,9 @@ python -m esptool --chip esp32 -b 460800 --before default_reset --after hard_res
 # REPL (shows build information at startup)
 ./build/tiny-clj-repl
 
+# Vector game demo / host viewer
+./build/game-demo
+
 # Unit Tests (shows build information at startup)
 ./build/unit-tests
 
@@ -137,6 +154,15 @@ python -m esptool --chip esp32 -b 460800 --before default_reset --after hard_res
 ./build/tiny-clj-repl --no-core -e "(+ 1 2)"
 ./build/tiny-clj-repl -f program.clj
 ```
+
+### Host Viewer Font
+
+The vector game demo uses a monospace single-stroke "Star-Wars arcade" font
+for uppercase letters and digits (`A-Z`, `0-9`). The glyph data is derived from
+the open-source `arcadefont` project (MIT license):
+
+- https://github.com/coolbutuseless/arcadefont
+- https://raw.githubusercontent.com/coolbutuseless/arcadefont/master/man/figures/README-starwars-1.png
 
 ### Build Information
 
@@ -186,6 +212,9 @@ See `docs/` directory for detailed documentation:
 - **`RELEASE_NOTES.md`** - Version history and changes
 - **`RC-COW.md`** - Reference counting and copy-on-write implementation
 - **`MEMORY_PROFILER.md`** - Memory profiling and leak detection
+- **`SOUND_DSL.md`** - Sound step-sequencer DSL and melody/backing options
+- **`SOUND_USER_GUIDE.md`** - Practical guide for composing piezo-friendly music
+- **`VECTOR_SCENE_FIXED_FIRST.md`** - Fixed-point vector scene/rendering notes
 
 ## Contributing
 - Keep the core small and clean

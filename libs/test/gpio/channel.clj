@@ -18,13 +18,17 @@
         g (tiny-clj.gpio/gpio-channel 5)
         ch (get g :ch)]
     (do
-      (clojure.core/gpio-simulate! 5 1)
+      (tiny-clj.gpio/simulate! 5 1)
       (drain-events!)
-      (assert-eq [5 1] (clojure.core.async/poll! ch) "first gpio event arrives")
+      (assert-eq {:source :gpio :signal :digital :kind :edge :pin 5 :value 1}
+                 (clojure.core.async/poll! ch)
+                 "first gpio event arrives")
 
-      (clojure.core/gpio-simulate! 5 0)
+      (tiny-clj.gpio/simulate! 5 0)
       (drain-events!)
-      (assert-eq [5 0] (clojure.core.async/poll! ch) "second gpio event arrives")
+      (assert-eq {:source :gpio :signal :digital :kind :edge :pin 5 :value 0}
+                 (clojure.core.async/poll! ch)
+                 "second gpio event arrives")
 
       ((get g :close!))
       (println "gpio channel: OK"))))

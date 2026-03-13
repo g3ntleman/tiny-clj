@@ -91,7 +91,8 @@ ID eval_parsed_value(CljValue parsed, EvalState *eval_state);
  * @brief Parse and evaluate a Clojure expression from a string (convenience)
  * @param expr_str The Clojure expression as a string
  * @param eval_state The evaluation state
- * @return The evaluated result (autoreleased) or NULL on error
+ * @return The evaluated result (autoreleased). NULL is also a valid successful
+ * result for Clojure nil; errors are reported via exceptions.
  */
 ID eval_string(const char *expr_str, EvalState *eval_state);
 

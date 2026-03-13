@@ -1,90 +1,80 @@
-// Host GPIO stubs for clojure.core/gpio-*.
+// Host GPIO stubs for tiny-clj.gpio/*.
 //
 // Keeps the host/runtime wiring lightweight while sharing argument validation
 // with ESP32 code paths.
 
 #ifndef ESP32_BUILD
 
-#include "gpio_common.h"
-#include "validation.h"
+#include "gpio.h"
+#include "gpio_host.h"
 
-ID native_gpio_watch(ID *args, unsigned int argc)
+#include <limits.h>
+
+bool gpio_host_simulate_pin_change(int32_t pin, int32_t level)
 {
-    CHECK_ARITY(argc, 2, "gpio-watch");
+    gpio_runtime_store_digital_level(pin, level);
+    gpio_runtime_dispatch_c_callbacks(pin, level);
+    gpio_poll_drain();
+    return gpio_runtime_enqueue_watch_event(pin, level);
+}
 
-    int32_t pin = 0;
-    GPIO_PARSE_PIN_FIXNUM_OR_RETURN_NULL("gpio-watch", args[0], &pin);
+bool gpio_host_simulate_analog_change(int32_t pin, int32_t value)
+{
+    gpio_runtime_store_analog_level(pin, value);
+    gpio_poll_drain();
+    return true;
+}
+
+bool gpio_host_watch_set(int32_t pin, ID callback) {
+    return gpio_runtime_watch_set(pin, callback);
+}
+
+bool gpio_host_watch_clear(int32_t pin) {
+    return gpio_runtime_watch_clear(pin);
+}
+
+bool gpio_host_write_digital(int32_t pin, int32_t level) {
     (void)pin;
-    return fixnum(1);
+    gpio_runtime_store_digital_level(pin, level);
+    return true;
 }
 
-ID native_gpio_unwatch(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "gpio-unwatch");
-    (void)args;
-    return NULL;
+bool gpio_host_write_analog(int32_t pin, int32_t value) {
+    gpio_runtime_store_analog_level(pin, value);
+    return true;
 }
 
-ID native_gpio_simulate(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 2, "gpio-simulate!");
-
-    int32_t pin = 0;
-    int32_t level = 0;
-    GPIO_PARSE_PIN_FIXNUM_OR_RETURN_NULL("gpio-simulate!", args[0], &pin);
-    GPIO_PARSE_LEVEL_FIXNUM_OR_RETURN_NULL("gpio-simulate!", args[1], &level);
+bool gpio_host_release_analog(int32_t pin) {
     (void)pin;
-    (void)level;
-    return NULL;
+    return true;
 }
 
-ID native_gpio_write(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 2, "gpio-write!");
-
-    int32_t pin = 0;
-    int32_t level = 0;
-    GPIO_PARSE_PIN_FIXNUM_OR_RETURN_NULL("gpio-write!", args[0], &pin);
-    GPIO_PARSE_LEVEL_FIXNUM_OR_RETURN_NULL("gpio-write!", args[1], &level);
-    (void)pin;
-    (void)level;
-    return NULL;
+ID gpio_host_read_digital(int32_t pin) {
+    return gpio_runtime_read_digital_level(pin);
 }
 
-ID native_gpio_read(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "gpio-read");
-
-    int32_t pin = 0;
-    GPIO_PARSE_PIN_FIXNUM_OR_RETURN_NULL("gpio-read", args[0], &pin);
-    (void)pin;
-    return fixnum(0);
+ID gpio_host_read_analog(int32_t pin) {
+    return gpio_runtime_read_analog_level(pin);
 }
 
-ID native_gpio_pwm(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 3, "gpio-pwm!");
-
-    int32_t pin = 0;
-    int32_t freq_hz = 0;
-    int32_t duty = 0;
-    GPIO_PARSE_PIN_FIXNUM_OR_RETURN_NULL("gpio-pwm!", args[0], &pin);
-    GPIO_PARSE_FIXNUM_RANGE_OR_RETURN_NULL("gpio-pwm!", "freq-hz", args[1], 1, INT_MAX, &freq_hz);
-    GPIO_PARSE_FIXNUM_RANGE_OR_RETURN_NULL("gpio-pwm!", "duty", args[2], 0, 255, &duty);
+bool gpio_host_pwm_start_or_update(int32_t pin, int32_t freq_hz, int32_t duty) {
     (void)pin;
     (void)freq_hz;
     (void)duty;
-    return NULL;
+    return true;
 }
 
-ID native_gpio_pwm_stop(ID *args, unsigned int argc)
-{
-    CHECK_ARITY(argc, 1, "gpio-pwm-stop!");
-
-    int32_t pin = 0;
-    GPIO_PARSE_PIN_FIXNUM_OR_RETURN_NULL("gpio-pwm-stop!", args[0], &pin);
+bool gpio_host_pwm_stop(int32_t pin) {
     (void)pin;
-    return NULL;
+    return true;
+}
+
+bool gpio_host_simulate_digital(int32_t pin, int32_t level) {
+    return gpio_host_simulate_pin_change(pin, level);
+}
+
+bool gpio_host_simulate_analog(int32_t pin, int32_t value) {
+    return gpio_host_simulate_analog_change(pin, value);
 }
 
 #endif // !ESP32_BUILD

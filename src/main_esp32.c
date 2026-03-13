@@ -32,17 +32,24 @@ int main() {
 
     // Load and execute startup code
     DEBUG_PRINT("Loading startup code...");
-    ID result = eval_string(startup_code, state);
-    if (!result) {
+    ID result = NULL;
+    TRY {
+        result = eval_string(startup_code, state);
+    } CATCH(ex) {
         DEBUG_PRINT("ERROR: Failed to load startup code");
+        if (ex) {
+            print_exception((CLJException *)ex);
+        }
+        autorelease_pool_free();
         return 1;
-    }
+    } END_TRY
+
     RELEASE(result);
     DEBUG_PRINT("Startup code executed successfully");
     
     // Cleanup
     DEBUG_PRINT("Done");
-    autorelease_pool_cleanup_all();
+    autorelease_pool_free();
     
     return 0;
 }

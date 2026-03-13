@@ -220,6 +220,60 @@ ID safe_return(ID obj) {
 }
 ```
 
+### Getter Contracts: strict vs borrowed
+
+Getters and field accessors must document which alias contract they return:
+
+- **Strict / pool-safe getter**: returns `AUTORELEASE(RETAIN(obj))`
+- **Borrowed getter**: returns the stored alias directly without retain/autorelease
+
+```c
+// Strict / pool-safe getter
+ID record_get_strict(ID owner, ID key, ID not_found) {
+    ID value = lookup_value(owner, key);
+    if (!value) {
+        return not_found;
+    }
+    return AUTORELEASE(RETAIN(value));
+}
+
+// Borrowed getter
+ID record_get_borrowed(ID owner, ID key, ID not_found) {
+    ID value = lookup_value(owner, key);
+    return value ? value : not_found;
+}
+```
+
+**Strict getters** are the conservative path. They are appropriate when a function must guarantee
+that the returned object stays usable until the surrounding autorelease pool closes, even if the
+caller does not retain it and even if the owner might be released immediately afterwards.
+
+**Borrowed getters** are the preferred path in hot internal loops when the owner is known to stay
+alive for the entire use of the returned value. This avoids unnecessary refcount churn and avoids
+filling autorelease pools with aliases of long-lived objects.
+
+**Optimization rule:** In many internal getter paths, the strict form
+`AUTORELEASE(RETAIN(obj))` can be optimized away without side effects when all of the following are
+true:
+
+1. The getter only exposes an already-stored child reference; it does not create a new object.
+2. The parent/owner object is guaranteed to outlive the use of the returned value.
+3. The caller does not rely on pool-safe survival after releasing or overwriting the owner.
+4. The value is only inspected, compared, dispatched on, or copied into another owner that retains it.
+
+Typical safe cases:
+- record/map/vector field reads inside a function that already owns or borrows the parent
+- hot loops that repeatedly inspect the same long-lived scene/config/runtime objects
+- printing, comparisons, branching, or immediate hand-off into `ASSIGN`, container store, or another retaining API
+
+Typical unsafe cases:
+- returning the getter result from an API that promises pool-safe usability
+- storing the alias somewhere after the owner may be released
+- crossing autorelease-pool boundaries or thread boundaries without taking ownership
+
+When in doubt, keep the strict getter contract. Optimize to borrowed only when the owner lifetime is
+clear and the callsite semantics are well understood.
+
 ## API Memory Policy
 
 **Function Categories:**
