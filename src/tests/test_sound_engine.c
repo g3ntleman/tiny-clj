@@ -1357,6 +1357,31 @@ TEST(test_sound_debug_rocket_thruster_reference_returns_bool) {
   TEST_ASSERT_TRUE(result == clj_true || result == clj_false);
 }
 
+TEST(test_sound_debug_thrust_demo_returns_status_map) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+  sound_engine_shutdown();
+  sound_engine_init(4);
+
+  ID result = NULL;
+  TRY {
+    result = eval_string(
+        "(do (require 'tiny-fx.sound-debug) (tiny-fx.sound-debug/play-thrust-demo!))",
+        g_test_eval_state);
+  }
+  CATCH(ex) {
+    TEST_FAIL_MESSAGE("play-thrust-demo! should not throw");
+  }
+  END_TRY
+
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(is_map(result));
+  TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":playing"),
+                        map_get(result, intern_symbol_global(":status")));
+  ID duration = map_get(result, intern_symbol_global(":duration-ms"));
+  TEST_ASSERT_TRUE(is_fixnum(duration));
+  TEST_ASSERT_EQUAL_INT(2800, as_fixnum(duration));
+}
+
 TEST(test_sound_native_host_status_returns_map) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 

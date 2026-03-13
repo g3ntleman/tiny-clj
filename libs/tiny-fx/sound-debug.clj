@@ -1,5 +1,6 @@
 
-(ns tiny-fx.sound-debug)
+(ns tiny-fx.sound-debug
+  (:require [tiny-fx.sound :as sound]))
 
 ^#^{:doc "DEBUG-only sound host diagnostics map. Not part of the production sound API."}
 (def host-status! (fn host-status! [] :native))
@@ -24,13 +25,18 @@
 (defn play-rocket-thruster-reference! []
   (play-test-ramp-noise! 180 360 2200 35 220))
 
-^#^{:doc "DEBUG-only thrust demo: best compromise so far. Two-segment pseudo-noise, lower bands, 4 ms hops. Not for production."}
+(def thrust-demo-track-id :debug-thrust-demo)
+(def thrust-demo-steps
+  [{:notes [90] :bend [285] :noise true :duration 1400}
+   {:notes [50] :bend [345] :noise true :duration 1400}])
+(def thrust-demo-opts
+  {:channel-count 1
+   :volumes [228]
+   :gate-percent 100})
+
+^#^{:doc "DEBUG-only thrust demo using the regular DSL/SFX path instead of host-only play-test-noise!."}
 (defn play-thrust-demo! []
-  (play-test-noise! 90 285 1400 4 228)
-  (Thread/sleep 1370)
-  (play-test-noise! 50 345 1400 4 232)
-  (Thread/sleep 1700)
-  nil)
+  (sound/play-sfx! thrust-demo-track-id thrust-demo-steps thrust-demo-opts))
 
 ^#^{:doc "DEBUG-only piu demo: short up-ramp then down-ramp ending low (host bending). Not for production."}
 (defn play-piu-demo! []
@@ -39,4 +45,3 @@
   (play-test-ramp! 4000 750 48 218)
   (Thread/sleep 80)
   nil)
-
