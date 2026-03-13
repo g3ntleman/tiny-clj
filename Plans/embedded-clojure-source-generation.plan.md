@@ -1,6 +1,6 @@
 ---
 name: embedded clojure source generation
-overview: Ersetzt die doppelt gepflegten eingebetteten Clojure-Quellen durch eine Build-Pipeline, die aus Clojure-Dateien unter /libs generierte Embedded-Sources im Build-Verzeichnis erzeugt. Ziel ist eine einzige Source of Truth für Clojure-Code, bessere Tool-Unterstützung wie clj-kondo und weniger Verwirrung im Repo.
+overview: Ersetzt die doppelt gepflegten eingebetteten Clojure-Quellen durch eine Build-Pipeline, die aus Clojure-Dateien unter /libs generierte Embedded-Sources im Build-Verzeichnis erzeugt. Zunächst ist Variante A der Zielweg. Gleichzeitig muss der Plan zwischen embedded deployten Dateien und separat aus dem Flash-FS nachgeladenen Dateien unterscheiden. Ziel ist eine einzige Source of Truth für Clojure-Code, bessere Tool-Unterstützung wie clj-kondo und weniger Verwirrung im Repo.
 todos:
   - id: source-of-truth
     content: /libs als einzige Quelle für eingebettete Clojure-Dateien festlegen
@@ -10,6 +10,9 @@ todos:
     status: pending
   - id: build-pipeline
     content: CMake so erweitern, dass die Embedded-Sources im Build-Verzeichnis generiert und von embedded_sources.c konsumiert werden
+    status: pending
+  - id: deployment-classes
+    content: Zwischen embedded deployten Bibliotheken und Flash-FS-nachgeladenen Dateien einen klaren Build-Vertrag definieren
     status: pending
   - id: duplicate-removal
     content: doppelte eingebettete Clojure-Dateien unter src/ entfernen oder auf generierte Artefakte umstellen
@@ -37,11 +40,17 @@ soll durch einen sauberen Generierungsweg ersetzt werden.
 Zielbild:
 
 - Clojure-Quellen leben nur noch unter `/libs`
-- ein Script erzeugt daraus embeddbaren C-Source im Build-Verzeichnis
-- die Build-Pipeline bindet nur die generierten Artefakte ein
+- ein Script erzeugt für eingebettete Dateien embeddbaren C-Source im Build-Verzeichnis
+- die Build-Pipeline bindet nur diese generierten Artefakte ein
 - `resolve_path_to_bytes(...)` liefert weiter Pfade wie `"/libs/tiny-fx/sound.clj"`
 - Tooling wie `clj-kondo` arbeitet direkt auf den echten `/libs`-Dateien
 - Doppelpflege zwischen `/src/*.clj` und `/libs/**/*.clj` entfällt
+
+Wichtig dabei:
+
+- nicht jede Datei unter `/libs` muss embedded deployed werden
+- ein Teil der Dateien soll weiterhin oder künftig aus dem Flash-FS nachgeladen werden
+- der Build muss deshalb explizit wissen, welche Dateien embedded sind und welche nicht
 
 ## Problem heute
 
@@ -69,7 +78,7 @@ Alle eingebetteten Clojure-Dateien liegen nur noch in `/libs`, zum Beispiel:
 
 Es soll keine manuell gepflegte Kopie derselben Quelle unter `/src` mehr geben.
 
-### 2. Generator-Script erzeugt embeddbaren C-Code
+### 2. Generator-Script erzeugt embeddbaren C-Code für ausgewählte Dateien
 
 Ein neues Script, z. B. unter:
 
@@ -88,11 +97,28 @@ Minimaler Vertrag des Scripts:
 - Symbolname oder abgeleiteter Identifier
 - Ausgabe-Dateipfad
 - bytegenaue Erhaltung des Quelltexts
-- korrektes Escaping für C-String oder Byte-Array-Ausgabe
+- Ausgabe als Raw-String-Literal im bestehenden Stil
+
+Konkret soll der generierte Include-Inhalt weiter dem heutigen Muster entsprechen:
+
+```c
+R"TINY_FX_SOUND(
+... originaler Clojure-Quelltext ...
+)TINY_FX_SOUND"
+```
+
+Wichtig:
+
+- der Clojure-Quelltext soll bytegenau per Raw-String übernommen werden
+- kein zeilenweises Escaping und kein Byte-Array
+- ein einfacher Unix-`cat` reicht als Kernmechanismus für den Payload
+- das Script muss nur Prefix/Suffix erzeugen und einen Delimiter wählen, der im Inhalt nicht kollidiert
 
 Wichtige Eigenschaft:
 
 - Das Script ist deterministisch, damit Builds reproduzierbar bleiben und CMake nur bei echten Änderungen neu baut.
+
+Der Generator soll zunächst nur für Dateien laufen, die ausdrücklich als `embedded` markiert sind.
 
 ### 3. Generierte Artefakte landen nur im Build-Verzeichnis
 
@@ -107,21 +133,27 @@ Damit bleibt das Repo sauber:
 - echte Quelltexte in `/libs`
 - generierte C-Artefakte nur im Build-Output
 
-### 4. CMake orchestriert die Generierung
+### 4. CMake orchestriert die Generierung und Deployment-Klassen
 
 `[CMakeLists.txt](/Users/theisen/Projects/tiny-clj/CMakeLists.txt)` soll pro eingebetteter Clojure-Datei einen `add_custom_command(...)` oder einen äquivalenten Generierungsschritt anlegen.
 
 Das Build-System soll:
 
 - die Eingabedatei aus `/libs` kennen
+- wissen, ob die Datei zur Klasse `embedded` oder `flash-fs` gehört
 - das Generator-Script aufrufen
-- die generierte Datei in `build/generated/...` erzeugen
+- die generierte Datei nur für `embedded`-Dateien in `build/generated/...` erzeugen
 - diese generierte Datei in `embedded_sources.c` oder einen generierten Nachfolger einbinden
 
 Wichtig:
 
 - Änderungen in `/libs/**/*.clj` müssen den relevanten Build-Schritt triggern
 - reine C-Änderungen sollen nicht unnötig alle Embedded-Sources neu generieren
+
+Für `flash-fs`-Dateien soll CMake später stattdessen:
+
+- Packaging oder Deployment-Artefakte vorbereiten
+- aber keine Embedded-C-Snippets erzeugen
 
 ## Technische Richtungsentscheidung
 
@@ -138,6 +170,7 @@ die dann in einer zentralen C-Datei per `#include` eingebunden wird.
 Vorteile:
 
 - nah am heutigen Modell
+- Raw-String-Includes bleiben unverändert zum bestehenden Einbindungsstil
 - einfach in `embedded_sources.c` integrierbar
 - kleine, lokale Änderungen
 
@@ -164,14 +197,14 @@ Nachteile:
 - größerer Umbau
 - etwas mehr CMake-Komplexität
 
-Empfehlung:
+Entscheidung für den ersten Schritt:
 
-- zuerst Variante A als pragmatischen Migrationsschritt
-- optional später auf Variante B vereinheitlichen
+- Variante A ist zunächst ausdrücklich der richtige Weg
+- Variante B bleibt höchstens eine spätere Option, falls sich die manuelle Registry als zu schwerfällig erweist
 
 ## Migrationsschritte
 
-### Schritt 1: Generator für eine einzelne Datei bauen
+### Schritt 1: Generator für eine einzelne embedded-Datei bauen
 
 Testfall mit einer bestehenden Datei, z. B.:
 
@@ -189,6 +222,7 @@ Nur einen Pfad in der Build-Pipeline umstellen, bevor die Lösung verallgemeiner
 Ziel:
 
 - Proof of Concept ohne Repo-weite Umstellung
+- und ohne sofort auch den Flash-FS-Pfad umbauen zu müssen
 
 ### Schritt 3: `embedded_sources.c` auf generierte Includes umstellen
 
@@ -209,6 +243,50 @@ Danach folgen weitere Bibliotheken wie:
 - `tiny-fx`
 - `clojure`
 - `tiny-db`
+
+Parallel oder danach:
+
+- Flash-FS-Dateien in eine eigene Liste oder Manifest-Struktur ziehen
+- Deployment-Schritt dafür getrennt modellieren
+
+## Deployment-Klassen
+
+Der Plan braucht zwei klar getrennte Klassen von Clojure-Dateien:
+
+### 1. Embedded-Dateien
+
+Diese Dateien werden in die Binary eingebettet und über `resolve_path_to_bytes(...)` direkt aus den Embedded-Sources bedient.
+
+Beispiele:
+
+- Startup-relevante Dateien
+- Kernbibliotheken, die ohne FS verfügbar sein müssen
+- kleine, immer benötigte Runtime-Bibliotheken
+- konkret im ersten Schritt: `[libs/tiny-fx/sound.clj](/Users/theisen/Projects/tiny-clj/libs/tiny-fx/sound.clj)`
+
+### 2. Flash-FS-Dateien
+
+Diese Dateien liegen als echte Dateien im Flash-Dateisystem und werden zur Laufzeit von dort geladen.
+
+Beispiele:
+
+- größere optionale Bibliotheken
+- Demo- oder App-spezifische Assets
+- Dateien, die man unabhängig vom Firmware-Build austauschen möchte
+- konkret im ersten Schritt: `[libs/tiny-fx/sound-demos.clj](/Users/theisen/Projects/tiny-clj/libs/tiny-fx/sound-demos.clj)`
+
+Wichtige Konsequenz:
+
+- `/libs` bleibt trotzdem die Source of Truth für beide Klassen
+- nur der Deployment-Weg unterscheidet sich
+- die Build-Pipeline braucht daher eine explizite Zuordnungsliste oder ein Manifest
+
+Empfehlung für den ersten Schritt:
+
+- zunächst nur die Embedded-Klasse anfassen
+- Flash-FS-Dateien noch nicht migrieren, aber im Plan schon als eigene Klasse modellieren
+- `tiny-fx.sound` als embedded Kernbibliothek behandeln
+- `tiny-fx.sound-demos` als optionales Flash-FS-Paket behandeln
 
 ## Debug- und Feature-Fälle
 
@@ -280,10 +358,11 @@ Während der Umstellung kann kurzfristig ein Hybrid aus manuellen und generierte
 Reihenfolge:
 
 1. Generator-Script für eine einzelne Datei
-2. CMake-Integration für genau einen Pfad
+2. CMake-Integration für genau einen `embedded`-Pfad
 3. Resolver-/Embedded-Tests grün halten
 4. gespiegelte Datei entfernen
-5. weitere Bibliotheken schrittweise migrieren
+5. weitere `embedded`-Bibliotheken schrittweise migrieren
+6. danach getrennt die `flash-fs`-Klasse sauber modellieren
 
 ## Ergebnisbild
 
@@ -291,6 +370,7 @@ Am Ende soll gelten:
 
 - Clojure-Dateien leben in `/libs`
 - `clj-kondo` und ähnliche Tools arbeiten direkt auf echten Quellen
-- Embedded-C-Quellen werden nur im Build-Verzeichnis erzeugt
+- Embedded-C-Quellen werden nur für die `embedded`-Klasse im Build-Verzeichnis erzeugt
+- Flash-FS-Dateien kommen aus denselben `/libs`-Quellen, aber über einen separaten Deployment-Pfad
 - `embedded_sources` konsumiert generierte Artefakte statt gepflegter Duplikate
 - Produktions- und Debug-Pfade bleiben klar getrennt
