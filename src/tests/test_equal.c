@@ -326,7 +326,7 @@ TEST_SHARED(test_vector_equal_persistent_vs_transient) {
     vec = vector_conj(vec, fixnum(2));
     vec = vector_conj(vec, fixnum(3));
 
-    CljTransientVector *tvec = vector_transient(vec);
+    CljTransientVector *tvec = make_vector_transient(vec);
     TEST_ASSERT_NOT_NULL(tvec);
     TEST_ASSERT_FALSE(clj_equal((CljValue)vec, (CljValue)tvec));
 
@@ -334,7 +334,7 @@ TEST_SHARED(test_vector_equal_persistent_vs_transient) {
     vec2 = vector_conj(vec2, fixnum(1));
     vec2 = vector_conj(vec2, fixnum(2));
     vec2 = vector_conj(vec2, fixnum(3));
-    CljTransientVector *tvec2 = vector_transient(vec2);
+    CljTransientVector *tvec2 = make_vector_transient(vec2);
     TEST_ASSERT_NOT_NULL(tvec2);
     TEST_ASSERT_FALSE(clj_equal((CljValue)tvec, (CljValue)tvec2));
 
@@ -433,8 +433,7 @@ TEST_SHARED(test_map_equal_after_add_and_remove) {
     TEST_ASSERT_EQUAL(NOT_FOUND, map_get_sentinel(back_to_orig, temp_key, NOT_FOUND));
 
     RELEASE(map);
-    if (with_temp != map)
-      RELEASE(with_temp);
+    RELEASE(with_temp);
     RELEASE(back_to_orig);
     RELEASE(key1);
     RELEASE(key2);

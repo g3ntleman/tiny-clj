@@ -403,12 +403,17 @@ ID native_sound_play_test_noise(ID *args, unsigned int argc) {
     }
 
     ensure_sound_engine_initialized();
+#ifdef ESP32_BUILD
+    (void)min_freq_hz; (void)max_freq_hz; (void)duration_ms; (void)hop_ms; (void)volume;
+    return clj_false;
+#else
     bool ok = sound_backend_host_play_debug_noise((uint16_t)min_freq_hz,
                                                   (uint16_t)max_freq_hz,
                                                   (uint32_t)duration_ms,
                                                   (uint32_t)hop_ms,
                                                   (uint8_t)volume);
     return ok ? clj_true : clj_false;
+#endif
 }
 
 ID native_sound_play_test_ramp(ID *args, unsigned int argc) {
@@ -446,11 +451,16 @@ ID native_sound_play_test_ramp(ID *args, unsigned int argc) {
     }
 
     ensure_sound_engine_initialized();
+#ifdef ESP32_BUILD
+    (void)start_freq_hz; (void)end_freq_hz; (void)duration_ms; (void)volume;
+    return clj_false;
+#else
     bool ok = sound_backend_host_play_debug_ramp((uint16_t)start_freq_hz,
                                                  (uint16_t)end_freq_hz,
                                                  (uint32_t)duration_ms,
                                                  (uint8_t)volume);
     return ok ? clj_true : clj_false;
+#endif
 }
 
 ID native_sound_play_test_ramp_noise(ID *args, unsigned int argc) {
@@ -492,12 +502,17 @@ ID native_sound_play_test_ramp_noise(ID *args, unsigned int argc) {
     }
 
     ensure_sound_engine_initialized();
+#ifdef ESP32_BUILD
+    (void)min_freq_hz; (void)max_freq_hz; (void)duration_ms; (void)hop_ms; (void)volume;
+    return clj_false;
+#else
     bool ok = sound_backend_host_play_debug_ramp_noise((uint16_t)min_freq_hz,
                                                        (uint16_t)max_freq_hz,
                                                        (uint32_t)duration_ms,
                                                        (uint32_t)hop_ms,
                                                        (uint8_t)volume);
     return ok ? clj_true : clj_false;
+#endif
 }
 #endif
 #else

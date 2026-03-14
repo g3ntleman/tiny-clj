@@ -195,9 +195,16 @@ void vector_clear(CljPersistentVector *vec);
 void vector_truncate(CljPersistentVector *vec, unsigned int n);
 
 // Transient wrapper API (wrapper pointer remains stable; `backing` may be replaced/grown).
-/** Create a transient wrapper. Returns AUTORELEASE'd transient (rc stays 1). */
-CljTransientVector* vector_transient(CljPersistentVector *vec);
-/** Convert transient to persistent snapshot.
+/** @brief Create a transient wrapper around a persistent vector.
+ * @param vec Source persistent vector to wrap
+ * @return New transient vector with rc=1; caller owns the wrapper and must
+ *         balance it with `RELEASE()` or `AUTORELEASE()`
+ *
+ * The wrapper retains `vec` as its backing store. This is an owned constructor,
+ * not a borrowed/view helper, so the `make_` prefix is intentional.
+ */
+CljTransientVector* make_vector_transient(CljPersistentVector *vec);
+/** @brief Convert transient to persistent snapshot.
  * NOTE: The returned backing is borrowed from the transient; it remains valid
  * only until the transient is mutated or released. RETAIN it if you need to
  * keep it beyond further transient operations or pool drains. */

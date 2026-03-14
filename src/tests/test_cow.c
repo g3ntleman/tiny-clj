@@ -535,7 +535,7 @@ TEST(test_vector_copy_counter_detects_forced_copy_patterns) {
                                      "vector_conj on RC=1 (no growth) should not call make_vector_copy");
 
     // Transient shares backing (COW on first mutation); no copy required here.
-    CljTransientVector *tv = vector_transient(pv);
+    CljTransientVector *tv = make_vector_transient(pv);
     TEST_ASSERT_NOT_NULL(tv);
     TEST_ASSERT_TRUE(TAG(tv) == CLJ_VECTOR_TRANSIENT);
 

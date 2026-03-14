@@ -466,7 +466,12 @@ void vector_pop_inplace(CljPersistentVector **vec_slot) {
 // Transient vectors (TAG: CLJ_VECTOR_TRANSIENT) - wrapper around persistent backing
 // ---------------------------------------------------------------------------
 
-CljTransientVector *vector_transient(CljPersistentVector *vec) {
+/**
+ * @brief Create a transient wrapper around a persistent vector.
+ * @param vec Source persistent vector
+ * @return New transient vector with rc=1; caller must RELEASE/AUTORELEASE it
+ */
+CljTransientVector *make_vector_transient(CljPersistentVector *vec) {
   if (!vec)
     return NULL;
   CLJ_ASSERT(TAG((ID)vec) == CLJ_VECTOR_PERSISTENT);

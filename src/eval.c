@@ -1083,10 +1083,11 @@ static ptrdiff_t s_eval_stack_peak = 0;
 #endif
 
 // Maximum eval stack consumption before we throw StackOverflowError.
-// ESP32: 20–32 KB total stack; leave headroom for malloc/autorelease/exception handling.
+// ESP32 REPL builds run with a 32 KB main task stack; keep a guard but leave
+// enough room so larger library namespaces can still load on-device.
 // Desktop: 8 MB stack, so 256 KB is very conservative.
 #if defined(ESP_PLATFORM) || defined(ESP32_BUILD)
-#define EVAL_STACK_LIMIT 16384 /* 16 KB */
+#define EVAL_STACK_LIMIT 28672 /* 28 KB */
 #define EVAL_STACK_CHECK_START_DEPTH 4
 #define EVAL_STACK_CHECK_INTERVAL_MASK 0x1 /* check every 2 frames after start */
 #else
@@ -2105,9 +2106,7 @@ ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
 
   // Process :require clauses: (ns name (:require [ns :as alias]))
   // Avoid list_nth in a loop (linked lists would make this O(n^2)).
-#ifndef ESP32_BUILD
   bool require_needs_eval_state = builtin_native_fn_needs_eval_state(native_require);
-#endif
   for (unsigned int i = 1; i < argc; i++) {
     CljObject *clause = (CljObject *)vector_nth(args, i);
     if (!clause)
@@ -2149,7 +2148,6 @@ ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
           ID spec = vector_nth(specs_vec, j);
           if (!spec)
             continue;
-#ifndef ESP32_BUILD
           extern void builtin_set_eval_state(EvalState * st);
           if (require_needs_eval_state)
             builtin_set_eval_state(st);
@@ -2157,7 +2155,6 @@ ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
           (void)native_require(spec_args, 1);
           if (require_needs_eval_state)
             builtin_set_eval_state(NULL); // Clear after call
-#endif
         }
       } else {
         CljList *spec_node = list_or_null(as_list(LIST_REST(as_list(clause))));
@@ -2165,7 +2162,6 @@ ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
           CljObject *spec = LIST_FIRST(s);
           if (!spec)
             continue;
-#ifndef ESP32_BUILD
           extern void builtin_set_eval_state(EvalState * st);
           if (require_needs_eval_state)
             builtin_set_eval_state(st);
@@ -2174,7 +2170,6 @@ ID eval_ns(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
           (void)native_require(spec_args, 1);
           if (require_needs_eval_state)
             builtin_set_eval_state(NULL); // Clear after call
-#endif
         }
       }
     }
@@ -3332,8 +3327,8 @@ ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
  * @brief Evaluate an expression and print heap memory growth
  *
  * Special form: (heap expr)
- * Measures heap memory consumption before and after evaluating expr.
- * Prints: "Heap growth: X bytes (current: Y, peak: Z)"
+ * Measures retained heap growth and local peak increase while evaluating expr.
+ * Prints: "Heap growth: X bytes (peak +Y bytes)"
  * Returns the result of evaluating expr.
  *
  * @param list The heap form list (heap expr)
@@ -3364,6 +3359,17 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
 
   // Capture stats before measurement
   MemoryStats stats_before = memory_profiler_get_stats();
+  size_t saved_peak_memory_usage = g_memory_stats.peak_memory_usage;
+  size_t saved_raw_bytes_peak = g_memory_stats.raw_bytes_peak;
+  size_t saved_raw_blocks_peak = g_memory_stats.raw_blocks_peak;
+  size_t saved_bytes_peak_by_type[CLJ_TYPE_COUNT];
+  for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+    saved_bytes_peak_by_type[i] = g_memory_stats.bytes_peak_by_type[i];
+    g_memory_stats.bytes_peak_by_type[i] = g_memory_stats.bytes_current_by_type[i];
+  }
+  g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
+  g_memory_stats.raw_bytes_peak = g_memory_stats.raw_bytes_current;
+  g_memory_stats.raw_blocks_peak = g_memory_stats.raw_blocks_current;
 
   // Make builtins like (eval) / (read-string) work inside (heap ...)
   // even when this path doesn't go through eval_function_call's builtin wrapper.
@@ -3383,16 +3389,36 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
 
   // Calculate total diff
   long long total_diff = (long long)stats_after.current_memory_usage - (long long)stats_before.current_memory_usage;
+  long long peak_extra = (long long)stats_after.peak_memory_usage - (long long)stats_before.current_memory_usage;
+  if (peak_extra < 0) {
+    peak_extra = 0;
+  }
 
 #if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
   // Restore callsite cache epoch
   g_runtime.resolve_cache_epoch = saved_epoch;
 #endif
 
+  g_memory_stats.peak_memory_usage = saved_peak_memory_usage > stats_after.peak_memory_usage
+                                       ? saved_peak_memory_usage
+                                       : stats_after.peak_memory_usage;
+  g_memory_stats.raw_bytes_peak = saved_raw_bytes_peak > stats_after.raw_bytes_peak
+                                    ? saved_raw_bytes_peak
+                                    : stats_after.raw_bytes_peak;
+  g_memory_stats.raw_blocks_peak = saved_raw_blocks_peak > stats_after.raw_blocks_peak
+                                     ? saved_raw_blocks_peak
+                                     : stats_after.raw_blocks_peak;
+  for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+    g_memory_stats.bytes_peak_by_type[i] = saved_bytes_peak_by_type[i] > stats_after.bytes_peak_by_type[i]
+                                             ? saved_bytes_peak_by_type[i]
+                                             : stats_after.bytes_peak_by_type[i];
+  }
+
   // Build result map with per-type diffs. Always return a map, even if all
   // deltas are zero (useful for consistent debugging output).
   CljPersistentMap *result = map_empty();
   ASSIGN(result, map_assoc(result, intern_symbol_global(":total"), fixnum((int)total_diff)));
+  ASSIGN(result, map_assoc(result, intern_symbol_global(":peak"), fixnum((int)peak_extra)));
 
   // Add per-type diffs (bytes_current_by_type tracks actual bytes)
   for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
@@ -3413,7 +3439,7 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
 
   // Print summary if output is enabled (map will be printed by REPL anyway)
   if (!g_suppress_time_output) {
-    printf("Heap growth: %lld bytes\n", total_diff);
+    printf("Heap growth: %lld bytes (peak +%lld bytes)\n", total_diff, peak_extra);
   }
 
   return AUTORELEASE(result);

@@ -2021,8 +2021,8 @@ TEST(test_sound_tiny_fx_sound_compile_track_emits_legato_flag) {
 
   TestDecodedTrk1Event evt0;
   TestDecodedTrk1Event evt1;
-  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 0, &evt0));
-  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 1, &evt1));
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 1, &evt0));
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 2, &evt1));
   TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_SET_VOL, evt0.event_type);
   TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_NOTE_EX, evt1.event_type);
   TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_LEGATO, evt1.note_flags);
@@ -2047,7 +2047,7 @@ TEST(test_sound_tiny_fx_sound_compile_track_emits_retrigger_flag_for_same_follow
   END_TRY
 
   TestDecodedTrk1Event evt2;
-  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 2, &evt2));
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 3, &evt2));
   TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_NOTE_EX, evt2.event_type);
   TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_RETRIGGER, evt2.note_flags);
 }
@@ -2071,7 +2071,7 @@ TEST(test_sound_tiny_fx_sound_compile_track_melody_backing_preserves_articulatio
   END_TRY
 
   TestDecodedTrk1Event evt2;
-  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 2, &evt2));
+  TEST_ASSERT_TRUE(decode_test_compiled_event(result, 3, &evt2));
   TEST_ASSERT_EQUAL_UINT8(TRK1_EVT_NOTE_EX, evt2.event_type);
   TEST_ASSERT_BITS_HIGH(TRK1_NOTE_FLAG_LEGATO, evt2.note_flags);
 }

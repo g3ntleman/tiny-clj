@@ -18,6 +18,10 @@ static const char clojure_core_code[] =
 #include "clojure.core.clj.inc"
     ;
 
+static const char clojure_core_async_code[] =
+#include "clojure.core.async.clj.inc"
+    ;
+
 static const char clojure_string_code[] =
 #include "clojure.string.clj.inc"
     ;
@@ -57,6 +61,10 @@ static const char tiny_fx_sound_code[] =
 
 static const char tiny_fx_sound_native_code[] =
 #include "tiny-fx.sound-native.clj.inc"
+    ;
+
+static const char tiny_fx_sound_demos_code[] =
+#include "tiny-fx.sound-demos.clj.inc"
     ;
 
 #ifdef DEBUG
@@ -145,6 +153,7 @@ typedef struct {
 
 static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/core.clj", clojure_core_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/clojure/core/async.clj", clojure_core_async_code),
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/string.clj", clojure_string_code),
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/repl.clj", clojure_repl_code),
     EMBEDDED_SOURCE_ENTRY("/libs/clojure/pprint.clj", clojure_pprint_code),
@@ -158,6 +167,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
 #if TINYCLJ_WITH_TINY_FX
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound.clj", tiny_fx_sound_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-native.clj", tiny_fx_sound_native_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos.clj", tiny_fx_sound_demos_code),
 #ifdef DEBUG
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-debug.clj", tiny_fx_sound_debug_code),
 #endif

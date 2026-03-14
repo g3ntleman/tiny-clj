@@ -88,18 +88,7 @@ if(TINYCLJ_WITH_TINY_FX)
   list(APPEND TINYCLJ_SRCS ${TINYCLJ_FX_SRCS})
 endif()
 
-# Build time (UTC epoch seconds) for runtime stats :build-time
-string(TIMESTAMP BUILD_EPOCH_SECONDS "%s" UTC)
-
-# Generate build_info.h for the ESP-IDF component build. The desktop/host build
-# generates this header in its own build dir, but IDF compiles the same sources
-# in a separate build graph and needs its own generated copy.
-configure_file(
-  "${TINYCLJ_REPO_ROOT}/build_info.h.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/build_info.h"
-  @ONLY
-)
-
+# Compute paths for embedded Clojure generation (always needed for include dirs).
 tinyclj_setup_embedded_clojure_generation(
   "${TINYCLJ_REPO_ROOT}"
   "${CMAKE_CURRENT_BINARY_DIR}"
@@ -107,8 +96,10 @@ tinyclj_setup_embedded_clojure_generation(
   TINYCLJ_GENERATED_EMBEDDED_CLOJURE_DIR
   TINYCLJ_FLASH_FS_CLOJURE_MANIFEST
 )
-add_custom_target(tinyclj_embedded_clojure_sources DEPENDS ${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS})
 
+# ESP-IDF runs this file twice: first in a scriptable requirements pass where
+# add_custom_target, add_dependencies, configure_file etc. are forbidden.
+# idf_component_register must always run (it declares the component).
 idf_component_register(
   SRCS
     ${TINYCLJ_SRCS}
@@ -126,15 +117,24 @@ idf_component_register(
     esp_partition
 )
 
-add_dependencies(${COMPONENT_LIB} tinyclj_embedded_clojure_sources)
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+  string(TIMESTAMP BUILD_EPOCH_SECONDS "%s" UTC)
+  configure_file(
+    "${TINYCLJ_REPO_ROOT}/build_info.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/build_info.h"
+    @ONLY
+  )
 
-target_compile_definitions(${COMPONENT_LIB} PUBLIC
-  ESP32_BUILD=1
-  TINYCLJ_WITH_TINY_FX=$<BOOL:${TINYCLJ_WITH_TINY_FX}>
-  TINYCLJ_RAM_BACKEND_ENABLED=0
-  LINE_EDITING_ENABLED=1
-  DEBUG=1
-  MEMORY_PROFILING_ENABLED=0
-  META_ENABLED=0
-)
-target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-clobbered)
+  add_custom_target(tinyclj_embedded_clojure_sources DEPENDS ${TINYCLJ_GENERATED_EMBEDDED_CLOJURE_OUTPUTS})
+  add_dependencies(${COMPONENT_LIB} tinyclj_embedded_clojure_sources)
+
+  target_compile_definitions(${COMPONENT_LIB} PUBLIC
+    ESP32_BUILD=1
+    TINYCLJ_WITH_TINY_FX=$<BOOL:${TINYCLJ_WITH_TINY_FX}>
+    TINYCLJ_RAM_BACKEND_ENABLED=0
+    LINE_EDITING_ENABLED=1
+    MEMORY_PROFILING_ENABLED=0
+    META_ENABLED=0
+  )
+  target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-clobbered)
+endif()

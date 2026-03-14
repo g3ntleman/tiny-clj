@@ -312,14 +312,10 @@ TEST(test_embedded_sources_tiny_fx_sound_matches_libs_file_bytes)
     assert_resolved_bytes_match_repo_file("/libs/tiny-fx/sound.clj", "/libs/tiny-fx/sound.clj");
 }
 
-TEST(test_embedded_sources_tiny_fx_sound_demos_is_flash_fs_only)
+TEST(test_embedded_sources_tiny_fx_sound_demos_matches_libs_file_bytes)
 {
     embedded_source_map_init();
     fs_global_store_reset();
-
-    const uint8_t *embedded_data = NULL;
-    int embedded_len = -1;
-    TEST_ASSERT_FALSE(embedded_source_lookup("/libs/tiny-fx/sound-demos.clj", &embedded_data, &embedded_len));
     assert_resolved_bytes_match_repo_file("/libs/tiny-fx/sound-demos.clj", "/libs/tiny-fx/sound-demos.clj");
 }
 

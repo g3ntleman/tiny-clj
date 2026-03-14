@@ -496,6 +496,56 @@
         tempo-bpm (get cfg :tempo-bpm)]
     (track-duration-ms* steps* tempo-bpm)))
 
+(defn- compile-track-envelope-levels [opts]
+  (let [envelope (or (get opts :envelope) default-envelope)]
+    (when (not (vector? envelope))
+      (fail "compile-track :envelope must be a vector"))
+    (when (or (< (count envelope) 1) (> (count envelope) 8))
+      (fail "compile-track :envelope must contain 1..8 levels"))
+    (loop [i 0 out []]
+      (if (< i (count envelope))
+        (let [level (nth envelope i)]
+          (when (or (not (number? level)) (< level 0) (> level 1.0))
+            (fail "compile-track :envelope levels must be numbers in 0.0..1.0"))
+          (let [scaled-level (quot (+ (* level 256) 0.5) 1)
+                byte-level (if (> scaled-level 255) 255 scaled-level)]
+            (recur (+ i 1) (conj out byte-level))))
+        out))))
+
+(defn- compile-track-init-events [channel-count volumes envelope-levels]
+  (let [base-events (build-initial-vol-events channel-count volumes)
+        envelope-event (reduce conj [(+ (* 6 16) 0) (count envelope-levels)]
+                               envelope-levels)]
+    (into envelope-event base-events)))
+
+(defn- step-next-notes [next-step channel-count]
+  (if (nil? next-step)
+    nil
+    (if (not (nil? (get next-step :rest)))
+      (normalize-notes [] channel-count)
+      (normalize-notes (or (get next-step :notes) []) channel-count))))
+
+(defn- compile-track-step-events [ev step next-step channel-count tempo-bpm gate-percent]
+  (let [dur (duration->ms (step-duration-spec step "compile-track") tempo-bpm)
+        articulation (validate-articulation step "compile-track")
+        rearticulate (validate-rearticulate step "compile-track")
+        gate (step-gate-ms dur gate-percent articulation)
+        has-rest (not (nil? (get step :rest)))
+        notes (if has-rest
+                (normalize-notes [] channel-count)
+                (normalize-notes (or (get step :notes) []) channel-count))
+        next-notes (step-next-notes next-step channel-count)]
+    (loop [ch 0 acc ev]
+      (if (< ch channel-count)
+        (let [n (nth notes ch)
+              next-n (if (nil? next-notes) nil (nth next-notes ch))
+              note-flags (compute-note-flags articulation rearticulate n next-n)
+              has-delay (= ch (- channel-count 1))
+              delay (if has-delay dur 0)
+              acc2 (reduce conj acc (evt-note ch n gate note-flags has-delay delay))]
+          (recur (+ ch 1) acc2))
+        acc))))
+
 (defn- compile-track*
   [steps opts tempo-bpm]
   (let [inferred (infer-channel-count steps)
@@ -503,104 +553,23 @@
         _ (when (or (< channel-count 1) (> channel-count 16))
             (fail "compile-track: :channel-count must be in 1..16"))
         gate-percent (or (get opts :gate-percent) 82)
-        envelope-levels (let [envelope (or (get opts :envelope) default-envelope)]
-                          (do
-                            (when (not (vector? envelope))
-                              (fail "compile-track :envelope must be a vector"))
-                            (when (or (< (count envelope) 1) (> (count envelope) 8))
-                              (fail "compile-track :envelope must contain 1..8 levels"))
-                            (loop [i 0 out []]
-                              (if (< i (count envelope))
-                                (let [level (nth envelope i)]
-                                  (when (or (not (number? level))
-                                            (< level 0)
-                                            (> level 1.0))
-                                    (fail "compile-track :envelope levels must be numbers in 0.0..1.0"))
-                                  (let [scaled-level (quot (+ (* level 256) 0.5) 1)
-                                        byte-level (if (> scaled-level 255) 255 scaled-level)]
-                                    (recur (+ i 1)
-                                           (conj out byte-level))))
-                                out))))
+        envelope-levels (compile-track-envelope-levels opts)
         volumes (or (get opts :volumes) [200 180 160 140])
-        events0-base (build-initial-vol-events channel-count volumes)
-        events0 (let [env-event (reduce conj [(+ (* 6 16) 0) (count envelope-levels)]
-                                        envelope-levels)]
-                  (into env-event events0-base))
+        events0 (compile-track-init-events channel-count volumes envelope-levels)
         eventsN (loop [s steps ev events0]
                   (if (empty? s)
                     (reduce conj ev (evt-end))
                     (let [step (first s)
                           next-step (first (rest s))
-                          dur (duration->ms (step-duration-spec step "compile-track") tempo-bpm)
-                          articulation (validate-articulation step "compile-track")
-                          rearticulate (validate-rearticulate step "compile-track")
-                          gate (step-gate-ms dur gate-percent articulation)
-                          has-rest (not (nil? (get step :rest)))
-                          notes (if has-rest
-                                  (normalize-notes [] channel-count)
-                                  (normalize-notes (or (get step :notes) []) channel-count))
-                          next-notes (if (nil? next-step)
-                                       nil
-                                       (if (not (nil? (get next-step :rest)))
-                                         (normalize-notes [] channel-count)
-                                         (normalize-notes (or (get next-step :notes) []) channel-count)))
-                          ev2 (loop [ch 0 acc ev]
-                                (if (< ch channel-count)
-                                  (let [n (nth notes ch)
-                                        next-n (if (nil? next-notes) nil (nth next-notes ch))
-                                        note-flags (compute-note-flags articulation rearticulate n next-n)
-                                        has-delay (= ch (- channel-count 1))
-                                        delay (if has-delay dur 0)
-                                        acc2 (reduce conj acc (evt-note ch n gate note-flags has-delay delay))]
-                                    (recur (+ ch 1) acc2))
-                                  acc))]
+                          ev2 (compile-track-step-events ev step next-step channel-count tempo-bpm gate-percent)]
                       (recur (rest s) ev2))))
         stream-len (count eventsN)
         all (reduce conj (trk1-header stream-len channel-count) eventsN)]
     (->byte-array all)))
 
 (defn compile-track
-  "Generic N-voice compiler (1..16 channels).
-   Step format:
-   {:notes [:G5 :D5 ...] :duration :q}   ;; keywords = MIDI
-   {:notes [440 880] :duration :q}       ;; integers = Hz (TRK1 NOTE_HZ)
-   {:notes [220] :bend [440] :duration 120} ;; compile-time bend expansion (integer Hz only)
-   {:melody :G5 :backing [:D5 :Bb4 ...] :duration :q} ;; backing auto-fills channels
-   {:rest :e}                     ;; full rest for all channels
-   {:notes [:G5]}                 ;; :duration defaults to :q
-   Options:
-   Generic {:notes ...} options:
-   {:channel-count 1..16
-    :volumes [220 160 140 ...]
-    :envelope [1.0 1.0 0.2]
-    :gate-percent 82
-    :tempo-bpm 120}
-   Melody/backing options:
-   {:melody {:volume 220}
-    :backing {:channels 2 :volumes [160 140]}
-    :envelope [1.0 1.0 0.2]
-    :gate-percent 82
-    :tempo-bpm 120}
-   Rules:
-   - :duration and :rest are mutually exclusive on the same step
-   - missing notes are padded with :REST up to :channel-count
-   - if :channel-count is omitted it is inferred from the widest step
-   - if any step uses :melody or :backing, the sequence is normalized internally
-     before compilation
-   - :articulation supports :normal, :legato and :staccato
-   - :rearticulate true forces a fresh attack for this step
-   - :bend currently works only in generic :notes mode, not melody/backing mode
-   - bent channels currently require integer Hz values in both :notes and :bend
-   - in melody/backing mode, role options own the channel layout; do not pass
-     top-level :channel-count or :volumes there
-   - melody defaults to 1 channel with volume 220
-   - backing channel count is inferred from the widest backing step, defaulting
-     to 1 when backing role options are present without wider backing data
-   - :tempo-bpm is required when any step uses a musical duration keyword;
-     integer-only durations/rests do not need it
-   Supported duration keywords:
-   :w :h :q :e :s :t :dh :dq :de :ds :qt :et :st
-   Integer durations are interpreted as milliseconds."
+  "Compiles generic or melody/backing steps into TRK1 bytes.
+   Supports duration keywords, articulation, rearticulation and generic bend/noise options."
   [steps opts]
   (let [cfg (normalize-playback-config steps opts "compile-track")
         steps* (get cfg :steps)
@@ -810,9 +779,11 @@
                                                 (recur (+ i 1) (conj mask true))
                                                 mask)))
                                           nil)
+                         step2-base {:notes notes
+                                     :duration dur}
                          step2-base (if (nil? noise-channels)
-                                      {:notes notes :duration dur}
-                                      {:notes notes :duration dur :noise-channels noise-channels})
+                                      step2-base
+                                      (assoc step2-base :noise-channels noise-channels))
                          step2 (cond-> step2-base
                                  (contains? step :articulation)
                                  (assoc :articulation (get step :articulation))

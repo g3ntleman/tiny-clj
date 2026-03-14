@@ -380,18 +380,10 @@ return values."
   "Registers the demo event subscription used by the game demo input simulation."
   []
   (when @demo-input-watcher-active*
-    (binding [*ns* (find-ns 'user)]
-      (eval '(tiny-clj.event/on {:source :button :id :demo/launch} nil))))
-  (binding [*ns* (find-ns 'user)]
-    (eval
-      '(tiny-clj.event/on
-         {:source :button :id :demo/launch}
-         (fn [event]
-           (when (= (:kind event) :button/down)
-             (swap! tiny-fx.game-demo/demo-melody-trigger-count* inc)
-             (sound/play-steps! demo-melody-track-id demo-melody-steps demo-melody-opts))
-           nil)
-         {:debounce-ms 0})))
+    (event/on {:source :button :id :demo/launch} nil))
+  (event/on {:source :button :id :demo/launch}
+            on-demo-input-event!
+            {:debounce-ms 0})
   (reset! demo-input-watcher-active* true)
   nil)
 
@@ -399,14 +391,9 @@ return values."
   "Registers the demo spatial subscription through the generic event API."
   []
   (when @demo-spatial-watcher-active*
-    (binding [*ns* (find-ns 'user)]
-      (eval '(tiny-clj.event/on {:source :spatial :id :player-vs-rocket} nil))))
-  (binding [*ns* (find-ns 'user)]
-    (eval
-      '(tiny-clj.event/on
-         {:source :spatial :id :player-vs-rocket}
-         (fn [event]
-           (tiny-fx.game-demo/on-player-collision-toggle! event)))))
+    (event/on {:source :spatial :id :player-vs-rocket} nil))
+  (event/on {:source :spatial :id :player-vs-rocket}
+            on-player-collision-toggle!)
   (reset! demo-spatial-watcher-active* true)
   nil)
 

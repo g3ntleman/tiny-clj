@@ -1007,3 +1007,4 @@ endif()
 
 # Seq Benchmark (REMOVED - File no longer exists)
 # Use run-tests for sequence testing instead
+target_sources(unit-tests PRIVATE src/tests/test_leak_sound_demos.c)

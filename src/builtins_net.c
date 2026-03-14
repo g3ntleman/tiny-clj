@@ -196,7 +196,7 @@ ID native_tinyclj_net_udp_socket(ID *args, unsigned int argc) {
         net_ctx_free(c);
         return NULL;
     }
-    return handle;
+    return AUTORELEASE((ID)handle);
 }
 
 ID native_tinyclj_net_on_receive(ID *args, unsigned int argc) {
@@ -387,7 +387,7 @@ ID native_tinyclj_net_tcp_connect(ID *args, unsigned int argc) {
         net_ctx_free(c);
         return NULL;
     }
-    return handle;
+    return AUTORELEASE((ID)handle);
 }
 
 ID native_tinyclj_net_tcp_on_receive(ID *args, unsigned int argc) {

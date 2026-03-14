@@ -716,7 +716,7 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
     
     // Initialize history support with transient vector for efficient in-place operations
     CljPersistentVector *persistent_vec = make_vector(50, STRONG);  // Start with persistent vector
-    editor->history = vector_transient(persistent_vec);      // Convert to transient for efficient operations
+    editor->history = make_vector_transient(persistent_vec);      // Convert to transient for efficient operations
     RELEASE(persistent_vec);  // Release the persistent version
     editor->history_index = -1;  // Not browsing
     editor->history_has_temp = false;
@@ -979,7 +979,7 @@ void line_editor_clear_history(LineEditor *editor) {
     history_exit(editor);
     RELEASE(editor->history);
     CljPersistentVector *persistent_vec = make_vector(50, STRONG);
-    editor->history = vector_transient(persistent_vec);
+    editor->history = make_vector_transient(persistent_vec);
     RELEASE(persistent_vec);
     editor->history_index = -1;
     editor->history_has_temp = false;

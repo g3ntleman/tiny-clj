@@ -686,23 +686,32 @@ static ID parse_vector(Reader *reader, EvalState *st) {
 
     // Create transient vector for efficient building
     CljPersistentVector *vec = make_vector(6, STRONG);
-    CljTransientVector *tvec = vector_transient(vec);
+    CljTransientVector *tvec = make_vector_transient(vec);
     RELEASE(vec); // Release original, use transient
 
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
       size_t before = reader_offset(reader);
-      ID value = parse_expr(reader, st);
-      size_t after = reader_offset(reader);
+      size_t after = before;
+      bool no_progress = false;
 
-      // Check if parser made progress - if not, it's an error
-      // If parser made progress, NULL means nil (which is valid)
-      if (!value && after <= before && !reader_eof(reader)) {
+      WITH_AUTORELEASE_POOL({
+        ID value = parse_expr(reader, st);
+        after = reader_offset(reader);
+
+        // Check if parser made progress - if not, it's an error
+        // If parser made progress, NULL means nil (which is valid)
+        if (!value && after <= before && !reader_eof(reader)) {
+          no_progress = true;
+        } else {
+          vector_push(tvec, value);
+        }
+      });
+
+      if (no_progress) {
         RELEASE(tvec);
         return NULL;
       }
 
-      // Use *_inplace to avoid vector_conj()'s unconditional AUTORELEASE.
-      vector_push(tvec, value);
       reader_skip_all(reader);
     }
 
@@ -738,14 +747,20 @@ static ID parse_map(Reader *reader, EvalState *st) {
   // This also matches Clojure semantics for duplicate keys (later entries win).
   CljPersistentMap *map = make_map(8, STRONG);
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
-    ID key = parse_expr(reader, st);
-    // Note: key can be NULL (nil) - that's a valid key in Clojure!
-    reader_skip_all(reader);
-    ID value = parse_expr(reader, st);
-    // Note: value can be NULL (nil) - that's a valid value in Clojure!
-    reader_skip_all(reader);
-    map_assoc_inplace(&map, key, value);
-    if (!map) {
+    bool failed = false;
+
+    WITH_AUTORELEASE_POOL({
+      ID key = parse_expr(reader, st);
+      // Note: key can be NULL (nil) - that's a valid key in Clojure!
+      reader_skip_all(reader);
+      ID value = parse_expr(reader, st);
+      // Note: value can be NULL (nil) - that's a valid value in Clojure!
+      reader_skip_all(reader);
+      map_assoc_inplace(&map, key, value);
+      failed = map == NULL;
+    });
+
+    if (failed) {
       throw_parser_exception("Failed to build map", reader);
       return NULL;
     }
@@ -777,10 +792,16 @@ static ID parse_set(Reader *reader, EvalState *st) {
 
   CljHashSet *set = make_hashset(8);
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
-    ID value = parse_expr(reader, st);
-    reader_skip_all(reader);
-    hashset_add_inplace(&set, value);
-    if (!set) {
+    bool failed = false;
+
+    WITH_AUTORELEASE_POOL({
+      ID value = parse_expr(reader, st);
+      reader_skip_all(reader);
+      hashset_add_inplace(&set, value);
+      failed = set == NULL;
+    });
+
+    if (failed) {
       throw_parser_exception("Failed to build set", reader);
       return NULL;
     }
@@ -963,19 +984,26 @@ static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open
   if (reader_peek_char(reader) == ')')
     return NULL;
 
-  ID element = parse_expr_with_progress(reader, st);
-  reader_skip_all(reader);
-  if (reader_peek_char(reader) == ')')
-    return make_list(element, NULL);
+  CljList *head = NULL;
+  WITH_AUTORELEASE_POOL({
+    ID element = parse_expr_with_progress(reader, st);
+    reader_skip_all(reader);
+    head = make_list(element, NULL);
+  });
 
-  CljList *head = make_list(element, NULL);
+  if (reader_peek_char(reader) == ')')
+    return (ID)head;
+
   CljList *tail = head;
 
   while (!reader_eof(reader) && reader_peek_char(reader) != ')') {
-    element = parse_expr_with_progress(reader, st);
-    reader_skip_all(reader);
-    CljList *node = make_list(element, NULL);
-    ASSIGN(tail->rest, node);
+    CljList *node = NULL;
+    WITH_AUTORELEASE_POOL({
+      ID element = parse_expr_with_progress(reader, st);
+      reader_skip_all(reader);
+      node = make_list(element, NULL);
+      ASSIGN(tail->rest, node);
+    });
     RELEASE(node);
     tail = as_list(tail->rest);
   }

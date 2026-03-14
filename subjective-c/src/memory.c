@@ -35,7 +35,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <inttypes.h>
-
 // Optional stack trace support (execinfo/backtrace), gated in object.h.
 // On ESP-IDF/newlib this is not available.
 #if defined(SUBJECTIVE_C_HAVE_EXECINFO) && SUBJECTIVE_C_HAVE_EXECINFO
@@ -647,15 +646,16 @@ static void release_object_deep(CljObject *v) {
 static void release_object_default(CljObject *v) {
   switch (v->type) {
   case CLJ_STRING:
-#ifndef ZOMBIE_ENABLED
     if ((v->flags & CLJ_FLAG_EXTERNAL_DATA) != 0) {
       CljByteArrayView *ext = (CljByteArrayView *)v;
+#ifndef ZOMBIE_ENABLED
       if (ext->external_free_fn)
         ext->external_free_fn(ext->external_ctx);
-    }
 #else
-    (void)v;
+      if ((v->flags & CLJ_FLAG_EXTERNAL_IS_OBJECT) != 0 && ext->external_free_fn)
+        ext->external_free_fn(ext->external_ctx);
 #endif
+    }
     break;
     // CLJ_SYMBOL: Release handler registered by tiny-clj via subjective_c_register_release_fn()
 
@@ -977,6 +977,15 @@ void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn) {
 
 void throw_oom(void) {
   extern CLJException *clj_oom_exception;
+#ifdef DEBUG
+  fprintf(stderr, "[OOM] autorelease depth=%u peak=%u\n",
+          (unsigned)autorelease_pool_depth(),
+          (unsigned)autorelease_pool_peak_count());
+#else
+  fprintf(stderr, "[OOM] autorelease depth=%u\n",
+          (unsigned)autorelease_pool_depth());
+#endif
+  fflush(stderr);
   strncpy(clj_oom_exception->message, "Out of memory", sizeof(clj_oom_exception->message) - 1);
   clj_oom_exception->message[sizeof(clj_oom_exception->message) - 1] = '\0';
   strncpy(clj_oom_exception->file, __FILE__, sizeof(clj_oom_exception->file) - 1);

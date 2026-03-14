@@ -344,7 +344,7 @@ static CljTransientVector* task_queue_get(void) {
     if (!g_runtime.task_queue) {
         CljPersistentVector* task_vec = make_vector(8, STRONG);
         if (task_vec) {
-            g_runtime.task_queue = vector_transient(task_vec);
+            g_runtime.task_queue = make_vector_transient(task_vec);
             RELEASE(task_vec);
         }
     }

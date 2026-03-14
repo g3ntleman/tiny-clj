@@ -226,10 +226,8 @@ ID native_println(ID *args, unsigned int argc);
 ID native_print(ID *args, unsigned int argc);
 ID native_pr(ID *args, unsigned int argc);
 ID native_prn(ID *args, unsigned int argc);
-#ifdef DEBUG
 ID native_print_ast(ID *args, unsigned int argc);
 ID native_ast_string(ID *args, unsigned int argc);
-#endif
 ID native_lt(ID *args, unsigned int argc);
 ID native_gt(ID *args, unsigned int argc);
 ID native_le(ID *args, unsigned int argc);
@@ -2673,7 +2671,7 @@ ID native_transient(ID *args, unsigned int argc) {
   uint16_t tag = TAG(coll);
   switch (tag) {
   case CLJ_VECTOR_PERSISTENT:
-    return AUTORELEASE(vector_transient(as_persistent_vector(coll)));
+    return AUTORELEASE(make_vector_transient(as_persistent_vector(coll)));
   case CLJ_MAP_PERSISTENT:
     return map_transient(as_persistent_map(coll));
   case CLJ_VECTOR_TRANSIENT:
@@ -3448,10 +3446,9 @@ ID native_prn(ID *args, unsigned int argc) {
   return NULL;
 }
 
-#ifdef DEBUG
 ID native_print_ast(ID *args, unsigned int argc) {
   CHECK_ARITY(argc, 1, "print-ast");
-
+#ifdef DEBUG
   ID arg = args[0];
   if (!arg) {
     printf("nil\n");
@@ -3465,20 +3462,26 @@ ID native_print_ast(ID *args, unsigned int argc) {
     CLJ_FREE((void *)ast_str);
   }
   return NULL;
+#else
+  throw_exception(EXCEPTION_RUNTIME,
+                  "print-ast is only available in DEBUG builds",
+                  __FILE__, __LINE__, 0);
+  return NULL;
+#endif
 }
 
 ID native_ast_string(ID *args, unsigned int argc) {
   CHECK_ARITY(argc, 1, "ast-string");
-
+#ifdef DEBUG
   ID arg = args[0];
   // Distinguish between NULL (evaluated nil) and SYM_NIL (unevaluated nil symbol)
   if (!arg) {
-    return make_string("nil"); // NULL = evaluated nil
+    return AUTORELEASE((ID)make_string("nil")); // NULL = evaluated nil
   }
 
   // Check if arg is SYM_NIL (unevaluated nil symbol)
   if (arg == SYM_NIL) {
-    return make_string("SYM:nil");
+    return AUTORELEASE((ID)make_string("SYM:nil"));
   }
 
   const char *ast_str = print_ast(arg);
@@ -3489,9 +3492,14 @@ ID native_ast_string(ID *args, unsigned int argc) {
     return AUTORELEASE(result);
   }
 
-  return make_string("(error: could not generate AST string)");
-}
+  return AUTORELEASE((ID)make_string("(error: could not generate AST string)"));
+#else
+  throw_exception(EXCEPTION_RUNTIME,
+                  "ast-string is only available in DEBUG builds",
+                  __FILE__, __LINE__, 0);
+  return NULL;
 #endif
+}
 
 // ============================================================================
 // HELPER FUNCTIONS (DRY Principle)
@@ -4287,9 +4295,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT_CNAME(native_instant_ms, "instant-ms"),
     NATIVE_ENTRY_BOOT_CNAME(native_get_macro, "get-macro"),
     NATIVE_ENTRY_BOOT_CNAME(native_apply, "apply"),
-#ifdef DEBUG
     NATIVE_ENTRY_BOOT_CNAME(native_print_ast, "tiny-clj.runtime/print-ast"),
-#endif
 
     // tiny-clj.datetime functions
     NATIVE_ENTRY(&sym_tinyclj_datetime_civil_from_days_qualified_data.sym, native_datetime_civil_from_days),
@@ -4489,9 +4495,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_sound_set_track_volume_data.sym, native_sound_set_track_volume),
     NATIVE_ENTRY(&sym_sound_set_music_volume_data.sym, native_sound_set_music_volume),
     NATIVE_ENTRY(&sym_sound_on_finished_data.sym, native_sound_on_finished),
-#ifdef DEBUG
-    NATIVE_ENTRY_BOOT(&sym_ast_string_data.sym, native_ast_string, "tiny-clj.runtime/ast-string"),
-#endif
+    NATIVE_ENTRY_BOOT_CNAME(native_ast_string, "tiny-clj.runtime/ast-string"),
     NATIVE_ENTRY(NULL, NULL) // Sentinel
 };
 
@@ -4894,7 +4898,6 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
   } else {
     reader_set_source_name(&reader, "<namespace>");
   }
-
   // Bound autorelease tracking per top-level form.
   // This prevents a single (ns ... (:require ...)) from accumulating thousands of
   // autoreleased temporaries while loading dependencies.
@@ -4905,7 +4908,6 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
 
     // Save reader position before parsing to detect if we're stuck
     size_t pos_before = reader_offset(&reader);
-
     CLJException *pending_ex = NULL;
     WITH_AUTORELEASE_POOL({
       CljValue form = NULL;
@@ -5440,7 +5442,7 @@ static ID normalize_require_spec(ID spec, bool *needs_release) {
     if (!vec) {
       return NULL;
     }
-    CljTransientVector *transient_vec = vector_transient(vec);
+    CljTransientVector *transient_vec = make_vector_transient(vec);
     RELEASE(vec);
     if (!transient_vec) {
       return NULL;
@@ -6499,7 +6501,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
                                 "byte-array size must be non-negative, got %d", size);
       return NULL;
     }
-    return make_byte_array(size);
+    return AUTORELEASE((ID)make_byte_array(size));
   }
   default:
     break;
@@ -6541,7 +6543,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
       i++;
     }
 
-    return arr;
+    return AUTORELEASE(arr);
   }
 
   throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "byte-array currently only supports vectors as sequences",
@@ -6633,7 +6635,7 @@ ID native_aclone(ID *args, unsigned int argc) {
     return NULL;
   }
 
-  return byte_array_clone((CljValue)arr);
+  return AUTORELEASE(byte_array_clone((CljValue)arr));
 }
 
 // Comparison operators as native functions
@@ -6901,7 +6903,7 @@ ID native_name(ID *args, unsigned int argc) {
     if (name[0] == ':')
       name++;
 
-    return make_string(name);
+    return AUTORELEASE((ID)make_string(name));
   }
   case CLJ_SYMBOL_TOKEN: {
     const char *name = symbol_token_data((CljSymbolToken *)arg);
@@ -6909,7 +6911,7 @@ ID native_name(ID *args, unsigned int argc) {
       return NULL;
     if (name[0] == ':')
       name++;
-    return make_string(name);
+    return AUTORELEASE((ID)make_string(name));
   }
   default:
     break;
@@ -7555,7 +7557,7 @@ static ID native_clojure_pprint_pprint_str(ID *args, unsigned int argc) {
   struct pprint_ctx ctx = {.buf = out, .pos = &pos, .max = sizeof(out)};
   pprint_walk(x, 0, &ctx);
 
-  return make_string(out);
+  return AUTORELEASE((ID)make_string(out));
 }
 
 ID native_instant_p(ID *args, unsigned int argc) {

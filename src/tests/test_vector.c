@@ -829,7 +829,7 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
     TEST_ASSERT_EQUAL_INT(0, vector_count(task_vec));
 
     // 2. Convert to transient (like task_queue_get does)
-    CljTransientVector *tvec = vector_transient(task_vec);
+    CljTransientVector *tvec = make_vector_transient(task_vec);
     RELEASE(task_vec);
     TEST_ASSERT_NOT_NULL(tvec);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject *)tvec)->type);
@@ -880,7 +880,7 @@ TEST_SHARED(test_clj_conj_with_empty_transient_vector) {
     TEST_ASSERT_EQUAL_INT(0, vector_count(task_vec));
 
     // Convert to transient
-    CljTransientVector *tvec = vector_transient(task_vec);
+    CljTransientVector *tvec = make_vector_transient(task_vec);
     RELEASE(task_vec);
     TEST_ASSERT_NOT_NULL(tvec);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject *)tvec)->type);
@@ -913,7 +913,7 @@ TEST_SHARED(test_transient_vector_conj_keeps_pointer_and_updates_backing_store) 
     CljPersistentVector *vec = make_vector(1, false);
     TEST_ASSERT_NOT_NULL(vec);
 
-    CljTransientVector *tvec = vector_transient(vec);
+    CljTransientVector *tvec = make_vector_transient(vec);
     RELEASE(vec);
     TEST_ASSERT_NOT_NULL(tvec);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject *)tvec)->type);
@@ -943,7 +943,7 @@ TEST_SHARED(test_transient_vector_assoc_keeps_pointer_and_updates_backing_store)
     vec = vector_conj(vec, fixnum(2));
     TEST_ASSERT_NOT_NULL(vec);
 
-    CljTransientVector *tvec = vector_transient(vec);
+    CljTransientVector *tvec = make_vector_transient(vec);
     RELEASE(vec);
     TEST_ASSERT_NOT_NULL(tvec);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject *)tvec)->type);
@@ -964,7 +964,7 @@ TEST_SHARED(test_transient_vector_capacity_growth_keeps_pointer) {
     CljPersistentVector *vec = make_vector(1, false);
     TEST_ASSERT_NOT_NULL(vec);
 
-    CljTransientVector *tvec = vector_transient(vec);
+    CljTransientVector *tvec = make_vector_transient(vec);
     RELEASE(vec);
     TEST_ASSERT_NOT_NULL(tvec);
 
@@ -1039,7 +1039,7 @@ TEST_SHARED(test_transient_on_transient_returns_same_object) {
   vec = vector_conj(vec, fixnum(1));
   vec = vector_conj(vec, fixnum(2));
   vec = vector_conj(vec, fixnum(3));
-  CljTransientVector *tvec = vector_transient(vec);
+  CljTransientVector *tvec = make_vector_transient(vec);
   RELEASE(vec);
   TEST_ASSERT_NOT_NULL(tvec);
   TEST_ASSERT_TRUE(TAG(tvec) == CLJ_VECTOR_TRANSIENT);

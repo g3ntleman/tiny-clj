@@ -20,6 +20,12 @@ typedef struct {
 #define CLJ_FLAG_EXTERNAL_DATA 0x10
 #endif
 
+// When set alongside EXTERNAL_DATA, the external_ctx is actually an ID of another Clojure object
+// that should be released. This is safe to run even in ZOMBIE_ENABLED because RELEASE handles zombies correctly.
+#ifndef CLJ_FLAG_EXTERNAL_IS_OBJECT
+#define CLJ_FLAG_EXTERNAL_IS_OBJECT 0x20
+#endif
+
 // Optional external finalizer for externally owned payloads (e.g., lwIP pbuf).
 // Called when the byte array object is released (rc reaches 0).
 typedef void (*CljByteArrayViewFreeFn)(void *ctx);

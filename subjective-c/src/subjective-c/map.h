@@ -207,7 +207,7 @@ CljPersistentMap* map_copy_with_additions(CljPersistentMap *parent_map, CljObjec
 
 /** @brief Create transient wrapper for efficient mutations
  * @param map Source map
- * @return New transient map (AUTORELEASE'd)
+ * @return New transient map with rc=1; caller must RELEASE/AUTORELEASE it
  */
 CljTransientMap* map_transient(CljPersistentMap *map);
 

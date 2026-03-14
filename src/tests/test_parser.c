@@ -78,6 +78,36 @@ TEST(test_parse_collections) {
   evalstate_free(eval_state);
 }
 
+TEST(test_parse_large_vector_drains_child_autoreleases) {
+  EvalState *eval_state = evalstate_new(false);
+  char input[4096];
+  int written = snprintf(input, sizeof(input), "[");
+  TEST_ASSERT_TRUE(written > 0 && written < (int)sizeof(input));
+
+  for (int i = 0; i < 96; i++) {
+    int remaining = (int)sizeof(input) - written;
+    int n = snprintf(input + written, (size_t)remaining, "%s{:a %d :b %d}",
+                     i == 0 ? "" : " ", i, i + 1);
+    TEST_ASSERT_TRUE(n > 0 && n < remaining);
+    written += n;
+  }
+
+  TEST_ASSERT_TRUE(written + 1 < (int)sizeof(input));
+  input[written++] = ']';
+  input[written] = '\0';
+
+  uint32_t before = autorelease_pool_depth();
+  ID result = parse(input, eval_state);
+  uint32_t after = autorelease_pool_depth();
+
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
+  TEST_ASSERT_TRUE_MESSAGE(after - before <= 16,
+                           "parse() should not leave child objects autoreleased in the caller pool");
+
+  evalstate_free(eval_state);
+}
+
 TEST(test_parse_empty_list) {
   EvalState *eval_state = evalstate_new(false);
 

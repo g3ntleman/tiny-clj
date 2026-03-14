@@ -61,7 +61,7 @@ TEST(test_cljvalue_transient_vector) {
     // Test transient vector operations
     CljPersistentVector *vec = AUTORELEASE(make_vector(0, false)); // Create persistent vector first
     TEST_ASSERT_NOT_NULL(vec);
-    CljTransientVector *tvec = AUTORELEASE(vector_transient(vec)); // Convert to transient
+    CljTransientVector *tvec = AUTORELEASE(make_vector_transient(vec)); // Convert to transient
     TEST_ASSERT_NOT_NULL(tvec);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, TAG(tvec));
     // Capacity is implementation detail, only test that vector was created

@@ -77,7 +77,7 @@ CljString* string_view_from_byte_array(ID bytes) {
     // Allocate a string view backed by the byte array's data (zero-copy).
     CljByteArrayView *view = (CljByteArrayView*)alloc(sizeof(CljByteArrayView), 1, CLJ_STRING);
     view->base_arr.base.type = CLJ_STRING;
-    view->base_arr.base.flags = CLJ_FLAG_EXTERNAL_DATA;
+    view->base_arr.base.flags = CLJ_FLAG_EXTERNAL_DATA | CLJ_FLAG_EXTERNAL_IS_OBJECT;
     view->base_arr.length = len;
     view->base_arr.data = ba->data;
     view->external_ctx = (void*)RETAIN(bytes);

@@ -524,7 +524,7 @@ EvalState* get_global_eval_state(void) {
 
         // Dynamic binding stack: transient vector used as push/pop stack.
         // Frames stored are maps (Symbol -> value), where value may be NULL (nil).
-        g_eval_state.dynamic_bindings = vector_transient(empty_vector());
+        g_eval_state.dynamic_bindings = make_vector_transient(empty_vector());
         if (!g_eval_state.dynamic_bindings) {
             throw_exception(EXCEPTION_RUNTIME, "Failed to create dynamic binding stack", NULL, 0, 0);
             return NULL;
@@ -556,7 +556,7 @@ void reset_eval_state(void) {
     g_eval_state.current_ns = ns_get_or_create("user", NULL);
     g_eval_state.resolve_ns = g_eval_state.current_ns;
 
-    g_eval_state.dynamic_bindings = vector_transient(empty_vector());
+    g_eval_state.dynamic_bindings = make_vector_transient(empty_vector());
     if (!g_eval_state.dynamic_bindings) {
         throw_exception(EXCEPTION_RUNTIME, "Failed to create dynamic binding stack", NULL, 0, 0);
         return;
