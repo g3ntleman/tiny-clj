@@ -31,6 +31,7 @@
 #include "ast_canon.h"
 #include "instant.h"
 #include "uuid.h"
+#include "platform.h"
 #include <ctype.h>
 #include "format_utils.h"
 #include <stdio.h>
@@ -43,6 +44,23 @@ static size_t format_append_hex_byte(char *dest, size_t offset, size_t capacity,
   offset = format_append_char(dest, offset, capacity, digits[(value >> 4) & 0x0F]);
   offset = format_append_char(dest, offset, capacity, digits[value & 0x0F]);
   return offset;
+}
+
+static bool parser_debug_heap_enabled(void) {
+  static int enabled = -1;
+  if (enabled == -1) {
+    const char *v = getenv("TINYCLJ_DEBUG_REQUIRE_HEAP");
+    if (v && v[0] && strcmp(v, "0") != 0) {
+      enabled = 1;
+    } else {
+#ifdef ESP_PLATFORM
+      enabled = 1;
+#else
+      enabled = 0;
+#endif
+    }
+  }
+  return enabled != 0;
 }
 
 // Helper function for parser exceptions
@@ -998,6 +1016,14 @@ static ID parse_vector_with_stack(Reader *reader, EvalState *st, CljTransientVec
   backing = vector_persistent(stack);
   unsigned int end_index = vector_count(backing);
   unsigned int count = end_index - base_index;
+  if (count >= 256 && parser_debug_heap_enabled()) {
+    const char *source_name = reader_get_source_name(reader);
+    size_t heap_free = platform_heap_bytes_free();
+    fprintf(stderr,
+            "[parser-vector] src=%s count=%u base=%u end=%u ar=%lu heap-free=%zu\n",
+            source_name ? source_name : "<unknown>", count, base_index,
+            end_index, (unsigned long)autorelease_pool_depth(), heap_free);
+  }
 
   ID *items = count > 0 ? backing->data + base_index : NULL;
   CljPersistentVector *final_vec = make_vector_from_stack(items, count);

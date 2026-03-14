@@ -4885,10 +4885,26 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
   if (!src || !st)
     return false;
   static int debug_require_errors = -1;
+  static int debug_require_heap = -1;
   if (debug_require_errors == -1) {
     const char *v = getenv("TINYCLJ_DEBUG_REQUIRE_ERRORS");
     debug_require_errors = (v && v[0] && strcmp(v, "0") != 0) ? 1 : 0;
   }
+  if (debug_require_heap == -1) {
+    const char *v = getenv("TINYCLJ_DEBUG_REQUIRE_HEAP");
+    if (v && v[0] && strcmp(v, "0") != 0) {
+      debug_require_heap = 1;
+    } else {
+#ifdef ESP_PLATFORM
+      debug_require_heap = 1;
+#else
+      debug_require_heap = 0;
+#endif
+    }
+  }
+  const bool trace_require_heap =
+      (debug_require_heap != 0) &&
+      src_name && strstr(src_name, "sound-demos.clj") != NULL;
   Reader reader;
   reader_init_with_length(&reader, string_data(src), (size_t)string_length(src));
   if (src_name && src_name[0]) {
@@ -4901,18 +4917,36 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
   // Bound autorelease tracking per top-level form.
   // This prevents a single (ns ... (:require ...)) from accumulating thousands of
   // autoreleased temporaries while loading dependencies.
+  unsigned int form_index = 0;
   while (!reader_is_eof(&reader)) {
     reader_skip_all(&reader);
     if (reader_is_eof(&reader))
       break;
+    form_index++;
 
     // Save reader position before parsing to detect if we're stuck
     size_t pos_before = reader_offset(&reader);
+    if (trace_require_heap) {
+      size_t heap_free = platform_heap_bytes_free();
+      fprintf(stderr,
+              "[require-heap] %s form=%u stage=before-parse off=%zu ar=%lu heap-free=%zu\n",
+              src_name, form_index, pos_before,
+              (unsigned long)autorelease_pool_depth(),
+              heap_free);
+    }
     CLJException *pending_ex = NULL;
     WITH_AUTORELEASE_POOL({
       CljValue form = NULL;
       TRY {
         form = value_by_parsing_expr(&reader, st);
+        if (trace_require_heap) {
+          size_t heap_free = platform_heap_bytes_free();
+          int tag = form ? (int)TAG(form) : -1;
+          fprintf(stderr,
+                  "[require-heap] %s form=%u stage=after-parse off=%zu tag=%d ar=%lu heap-free=%zu\n",
+                  src_name, form_index, reader_offset(&reader), tag,
+                  (unsigned long)autorelease_pool_depth(), heap_free);
+        }
         if (!form) {
           if (reader_is_eof(&reader)) {
             autorelease_pool_drain_to_depth(_restore);
@@ -4927,6 +4961,13 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
         }
 
         (void)eval_parsed(form, st, NULL);
+        if (trace_require_heap) {
+          size_t heap_free = platform_heap_bytes_free();
+          fprintf(stderr,
+                  "[require-heap] %s form=%u stage=after-eval off=%zu ar=%lu heap-free=%zu\n",
+                  src_name, form_index, reader_offset(&reader),
+                  (unsigned long)autorelease_pool_depth(), heap_free);
+        }
         size_t pos_after = reader_offset(&reader);
         if (pos_after == pos_before && !reader_is_eof(&reader))
           reader_next(&reader);
