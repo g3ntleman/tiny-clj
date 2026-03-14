@@ -155,8 +155,13 @@ bool memory_get_debug_output_enabled(void) {
  */
 void *alloc(size_t type_size, size_t count, CljType obj_type) {
   void *result = malloc(type_size * count);
-  if (!result)
+  if (!result) {
+    size_t requested = type_size * count;
+    fprintf(stderr,
+            "OOM alloc request: bytes=%zu type=%s(%d)\n",
+            requested, clj_type_name(obj_type), (int)obj_type);
     throw_oom();
+  }
   if (type_size >= sizeof(CljObject)) {
     CljObject *obj = (CljObject *)result;
     obj->type = obj_type;
@@ -559,7 +564,12 @@ void autorelease_pool_drain_to_depth(uint32_t mark) {
   }
 #endif
   g_in_drain = true;
-  TRY {
+  ExceptionHandler drain_handler;
+  drain_handler.next = global_exception_stack.top;
+  drain_handler.exception = NULL;
+  global_exception_stack.top = &drain_handler;
+
+  if (setjmp(drain_handler.jump_state) == 0) {
     for (unsigned int i = c; i > mark;) {
       i--;
       ID e = vector_nth(g_pool, i);
@@ -588,12 +598,15 @@ void autorelease_pool_drain_to_depth(uint32_t mark) {
 #endif
       RELEASE(e);
     }
-  }
-  CATCH(ex) {
+    global_exception_stack.top = drain_handler.next;
+    g_in_drain = false;
+  } else {
+    CLJException *ex = drain_handler.exception;
+    global_exception_stack.top = drain_handler.next;
     g_in_drain = false;
     throw_exception_object(ex);
+    return;
   }
-  END_TRY
   g_in_drain = false;
 
   // Reset pool capacity after large spikes so nested pools do not leave permanent
@@ -983,6 +996,8 @@ void throw_oom(void) {
   clj_oom_exception->file[sizeof(clj_oom_exception->file) - 1] = '\0';
   clj_oom_exception->line = __LINE__;
   clj_oom_exception->col = 0;
+  fputs("OOM throw-site backtrace:\n", stderr);
+  exception_print_native_backtrace();
   throw_exception_object(clj_oom_exception);
   abort();
 }
