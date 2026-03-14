@@ -977,15 +977,6 @@ void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn) {
 
 void throw_oom(void) {
   extern CLJException *clj_oom_exception;
-#ifdef DEBUG
-  fprintf(stderr, "[OOM] autorelease depth=%u peak=%u\n",
-          (unsigned)autorelease_pool_depth(),
-          (unsigned)autorelease_pool_peak_count());
-#else
-  fprintf(stderr, "[OOM] autorelease depth=%u\n",
-          (unsigned)autorelease_pool_depth());
-#endif
-  fflush(stderr);
   strncpy(clj_oom_exception->message, "Out of memory", sizeof(clj_oom_exception->message) - 1);
   clj_oom_exception->message[sizeof(clj_oom_exception->message) - 1] = '\0';
   strncpy(clj_oom_exception->file, __FILE__, sizeof(clj_oom_exception->file) - 1);
