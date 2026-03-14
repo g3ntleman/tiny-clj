@@ -274,6 +274,32 @@ CljPersistentVector *make_vector(unsigned int capacity, ElementRetention retenti
   return vec;
 }
 
+/** @brief Create a persistent vector from contiguous item storage.
+ * @param items Pointer to contiguous items (NULL is only valid when count is 0)
+ * @param count Number of items to copy
+ * @return New vector with exact capacity/count, or empty singleton when count is 0
+ */
+CljPersistentVector *make_vector_from_stack(ID *items, unsigned int count) {
+  if (count == 0) {
+    return empty_vector();
+  }
+  if (!items) {
+    throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                              "make_vector_from_stack: items is NULL for non-zero count");
+    return NULL;
+  }
+
+  CljPersistentVector *vec = make_vector(count, STRONG);
+  if (!vec) {
+    return NULL;
+  }
+  vec->count = count;
+  for (unsigned int i = 0; i < count; i++) {
+    vec->data[i] = RETAIN(items[i]);
+  }
+  return vec;
+}
+
 CljPersistentVector *vector_conj_owned(CljPersistentVector *vec, ID item) {
   if (!vec)
     return NULL;
@@ -628,4 +654,3 @@ void vector_truncate_transient(CljTransientVector *tvec, unsigned int new_count)
   // Truncate the backing vector in-place (since we have unique ownership)
   vector_truncate(backing, new_count);
 }
-

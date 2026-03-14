@@ -1128,6 +1128,60 @@ TEST_SHARED(test_persistent_on_persistent_returns_same_object) {
   RELEASE(map);
 }
 
+TEST_SHARED(test_make_vector_from_stack_empty_returns_singleton) {
+  CljPersistentVector *vec = make_vector_from_stack(NULL, 0);
+  TEST_ASSERT_NOT_NULL(vec);
+  TEST_ASSERT_EQUAL_PTR(empty_vector(), vec);
+  TEST_ASSERT_EQUAL_INT(0, vector_count(vec));
+  TEST_ASSERT_EQUAL_INT(0, vector_capacity(vec));
+}
+
+TEST_SHARED(test_make_vector_from_stack_exact_capacity_and_values) {
+  ID items[4] = {fixnum(10), fixnum(20), NULL, fixnum(40)};
+  CljPersistentVector *vec = make_vector_from_stack(items, 4);
+  TEST_ASSERT_NOT_NULL(vec);
+  TEST_ASSERT_EQUAL_INT(4, vector_count(vec));
+  TEST_ASSERT_EQUAL_INT(4, vector_capacity(vec));
+  TEST_ASSERT_TRUE(is_fixnum(vector_nth(vec, 0)));
+  TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(vec, 0)));
+  TEST_ASSERT_TRUE(is_fixnum(vector_nth(vec, 1)));
+  TEST_ASSERT_EQUAL_INT(20, as_fixnum(vector_nth(vec, 1)));
+  TEST_ASSERT_NULL(vector_nth(vec, 2));
+  TEST_ASSERT_TRUE(is_fixnum(vector_nth(vec, 3)));
+  TEST_ASSERT_EQUAL_INT(40, as_fixnum(vector_nth(vec, 3)));
+  RELEASE(vec);
+}
+
+TEST_SHARED(test_make_vector_from_stack_retains_heap_elements) {
+  CljPersistentMap *map = make_map(4);
+  TEST_ASSERT_NOT_NULL(map);
+  TEST_ASSERT_EQUAL_INT(1, retain_count((ID)map));
+
+  ID items[2] = {(ID)map, (ID)map};
+  CljPersistentVector *vec = make_vector_from_stack(items, 2);
+  TEST_ASSERT_NOT_NULL(vec);
+  TEST_ASSERT_EQUAL_INT(3, retain_count((ID)map));
+
+  RELEASE(vec);
+  TEST_ASSERT_EQUAL_INT(1, retain_count((ID)map));
+  RELEASE(map);
+}
+
+TEST_SHARED(test_make_vector_from_stack_null_items_with_count_throws) {
+  CLJException *caught = NULL;
+  TRY {
+    (void)make_vector_from_stack(NULL, 2);
+    TEST_FAIL_MESSAGE("make_vector_from_stack should throw on NULL items with count > 0");
+  }
+  CATCH(ex) {
+    caught = ex;
+  }
+  END_TRY
+
+  TEST_ASSERT_NOT_NULL(caught);
+  TEST_ASSERT_EQUAL_STRING(EXCEPTION_ILLEGAL_ARGUMENT, caught->type);
+}
+
 // Test VECTOR_FOR_EACH macro - iterate over all vector elements
 TEST_SHARED(test_vector_for_each_macro) {
   CljPersistentVector *vec = AUTORELEASE(make_vector(4, false));

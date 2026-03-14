@@ -56,7 +56,8 @@ ID parse_expr(Reader *reader, EvalState *st);
  * @brief Parse Clojure expression from Reader (CljValue API)
  * @param reader Reader instance for input
  * @param st Evaluation state
- * @return Parsed CljValue or NULL on error
+ * @return Parsed CljValue or NULL on error. Heap objects are caller-usable
+ *         via autorelease-pool lifetime (no manual RELEASE required).
  */
 CljValue parse_from_reader(Reader *reader, EvalState *st);
 

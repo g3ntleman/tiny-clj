@@ -19,6 +19,48 @@
 // ============================================================================
 // PARSER TESTS
 // ============================================================================
+static ID parse_from_reader_once(const char *input, EvalState *st) {
+  Reader reader;
+  reader_init(&reader, input);
+  reader_set_source_name(&reader, "<parser test>");
+  return parse_from_reader(&reader, st);
+}
+
+static void assert_type_bytes_not_growing(const MemoryStats *before,
+                                          const MemoryStats *after,
+                                          CljType type,
+                                          long long tolerance,
+                                          const char *label) {
+  long long delta = (long long)after->bytes_current_by_type[type] -
+                    (long long)before->bytes_current_by_type[type];
+  char msg[192];
+  test_snprintf(msg, sizeof(msg),
+                "%s leaked type-bytes for %s: delta=%lld (tolerance=%lld)",
+                label, clj_type_name(type), delta, tolerance);
+  TEST_ASSERT_TRUE_MESSAGE(delta <= tolerance, msg);
+}
+
+static void build_wilhelm_tell_like_vector(char *buffer, size_t buffer_size, unsigned int step_count) {
+  int written = snprintf(buffer, buffer_size, "[");
+  TEST_ASSERT_TRUE_MESSAGE(written > 0 && written < (int)buffer_size,
+                           "failed to initialize Wilhelm-Tell-like vector input");
+
+  for (unsigned int i = 0; i < step_count; i++) {
+    int remaining = (int)buffer_size - written;
+    int n = snprintf(buffer + written, (size_t)remaining,
+                     "%s{:melody :G4 :backing [:C3] :duration :q}",
+                     i == 0 ? "" : " ");
+    TEST_ASSERT_TRUE_MESSAGE(n > 0 && n < remaining,
+                             "failed to append Wilhelm-Tell-like step");
+    written += n;
+  }
+
+  TEST_ASSERT_TRUE_MESSAGE(written + 1 < (int)buffer_size,
+                           "buffer too small for Wilhelm-Tell-like vector");
+  buffer[written++] = ']';
+  buffer[written] = '\0';
+}
+
 TEST(test_parse_basic_types) {
   EvalState *eval_state = evalstate_new(false);
 
@@ -603,6 +645,132 @@ TEST(test_parse_from_reader_multiple_expressions) {
   TEST_ASSERT_TRUE(is_list_type(TAG((CljObject *)list_result)));
 
   evalstate_free(eval_state);
+}
+
+TEST(test_parse_from_reader_vector_stack_result_is_pool_managed) {
+#if !MEMORY_PROFILING_ENABLED
+  TEST_IGNORE_MESSAGE("requires MEMORY_PROFILING_ENABLED");
+#else
+  EvalState *eval_state = evalstate_new(false);
+  const char *input = "[1 2 3 4 5]";
+
+  WITH_AUTORELEASE_POOL({
+    ID parsed = parse_from_reader_once(input, eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(parsed));
+  });
+
+  MemoryStats before = memory_profiler_get_stats();
+  for (int i = 0; i < 160; i++) {
+    WITH_AUTORELEASE_POOL({
+      ID parsed = parse_from_reader_once(input, eval_state);
+      TEST_ASSERT_NOT_NULL(parsed);
+      TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(parsed));
+    });
+  }
+  MemoryStats after = memory_profiler_get_stats();
+  assert_type_bytes_not_growing(&before, &after, CLJ_VECTOR_PERSISTENT, 256,
+                                "parse_from_reader vector");
+
+  evalstate_free(eval_state);
+#endif
+}
+
+TEST(test_parse_from_reader_map_stack_result_is_pool_managed) {
+#if !MEMORY_PROFILING_ENABLED
+  TEST_IGNORE_MESSAGE("requires MEMORY_PROFILING_ENABLED");
+#else
+  EvalState *eval_state = evalstate_new(false);
+  const char *input = "{1 2 3 4 5 6}";
+
+  WITH_AUTORELEASE_POOL({
+    ID parsed = parse_from_reader_once(input, eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(parsed));
+  });
+
+  MemoryStats before = memory_profiler_get_stats();
+  for (int i = 0; i < 160; i++) {
+    WITH_AUTORELEASE_POOL({
+      ID parsed = parse_from_reader_once(input, eval_state);
+      TEST_ASSERT_NOT_NULL(parsed);
+      TEST_ASSERT_EQUAL_INT(CLJ_MAP_PERSISTENT, TAG(parsed));
+    });
+  }
+  MemoryStats after = memory_profiler_get_stats();
+  assert_type_bytes_not_growing(&before, &after, CLJ_MAP_PERSISTENT, 256,
+                                "parse_from_reader map");
+
+  evalstate_free(eval_state);
+#endif
+}
+
+TEST(test_parse_from_reader_set_stack_result_is_pool_managed) {
+#if !MEMORY_PROFILING_ENABLED
+  TEST_IGNORE_MESSAGE("requires MEMORY_PROFILING_ENABLED");
+#else
+  EvalState *eval_state = evalstate_new(false);
+  const char *input = "#{1 2 3 4 5}";
+
+  WITH_AUTORELEASE_POOL({
+    ID parsed = parse_from_reader_once(input, eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_EQUAL_INT(CLJ_HASHSET, TAG(parsed));
+  });
+
+  MemoryStats before = memory_profiler_get_stats();
+  for (int i = 0; i < 160; i++) {
+    WITH_AUTORELEASE_POOL({
+      ID parsed = parse_from_reader_once(input, eval_state);
+      TEST_ASSERT_NOT_NULL(parsed);
+      TEST_ASSERT_EQUAL_INT(CLJ_HASHSET, TAG(parsed));
+    });
+  }
+  MemoryStats after = memory_profiler_get_stats();
+  assert_type_bytes_not_growing(&before, &after, CLJ_HASHSET, 256,
+                                "parse_from_reader set");
+
+  evalstate_free(eval_state);
+#endif
+}
+
+TEST(test_parse_wilhelm_tell_like_large_vector_count_and_memory_stability) {
+#if !MEMORY_PROFILING_ENABLED
+  TEST_IGNORE_MESSAGE("requires MEMORY_PROFILING_ENABLED");
+#else
+  enum { STEP_COUNT = 367 };
+  EvalState *eval_state = evalstate_new(false);
+  char input[32768];
+  build_wilhelm_tell_like_vector(input, sizeof(input), STEP_COUNT);
+
+  // Warm-up parse to intern symbols/keywords before the memory baseline.
+  WITH_AUTORELEASE_POOL({
+    ID warmup = parse_from_reader_once(input, eval_state);
+    TEST_ASSERT_NOT_NULL(warmup);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(warmup));
+    TEST_ASSERT_EQUAL_INT(STEP_COUNT, vector_count(as_persistent_vector(warmup)));
+  });
+
+  MemoryStats before = memory_profiler_get_stats();
+  for (int i = 0; i < 20; i++) {
+    WITH_AUTORELEASE_POOL({
+      ID parsed = parse_from_reader_once(input, eval_state);
+      TEST_ASSERT_NOT_NULL(parsed);
+      TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(parsed));
+      TEST_ASSERT_EQUAL_INT(STEP_COUNT, vector_count(as_persistent_vector(parsed)));
+    });
+  }
+  MemoryStats after = memory_profiler_get_stats();
+
+  long long total_delta = (long long)after.current_memory_usage - (long long)before.current_memory_usage;
+  char msg[160];
+  test_snprintf(msg, sizeof(msg),
+                "Wilhelm-Tell-like parsing leaked memory: total delta=%lld",
+                total_delta);
+  TEST_ASSERT_TRUE_MESSAGE(total_delta <= 4096, msg);
+
+  evalstate_free(eval_state);
+#endif
 }
 
 TEST(test_parse_quote_form_with_nil) {

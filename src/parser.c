@@ -948,7 +948,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
  * @param reader Reader instance for input
  * @param st Evaluation state
  * @param stack Parser stack for temporary storage
- * @return Parsed vector CljObject or NULL on error
+ * @return Parsed vector (pool-managed) or NULL on error
  *
  * Uses the parser stack to build the vector, then creates it with exact capacity.
  * This avoids unnecessary capacity growth in the final vector.
@@ -981,6 +981,7 @@ static ID parse_vector_with_stack(Reader *reader, EvalState *st, CljTransientVec
     });
 
     if (no_progress) {
+      vector_truncate_transient(stack, base_index);
       return NULL;
     }
 
@@ -989,6 +990,7 @@ static ID parse_vector_with_stack(Reader *reader, EvalState *st, CljTransientVec
 
   if (reader_eof(reader) || !reader_match(reader, ']')) {
     throw_parser_exception("Unclosed vector - missing closing ']'", reader);
+    vector_truncate_transient(stack, base_index);
     return NULL;
   }
 
@@ -997,24 +999,17 @@ static ID parse_vector_with_stack(Reader *reader, EvalState *st, CljTransientVec
   unsigned int end_index = vector_count(backing);
   unsigned int count = end_index - base_index;
 
-  // Erstelle den finalen Vektor mit exakter Kapazität
-  CljPersistentVector *final_vec = make_vector(count, STRONG);
-  final_vec->count = count;
-
-  // Kopiere die Elemente vom Stack in den finalen Vektor
-  for (unsigned int i = 0; i < count; i++) {
-    ID elem = vector_nth(backing, base_index + i);
-    // RETAIN, da der finale Vektor die Ownership übernimmt
-    final_vec->data[i] = RETAIN(elem);
-  }
+  ID *items = count > 0 ? backing->data + base_index : NULL;
+  CljPersistentVector *final_vec = make_vector_from_stack(items, count);
 
   // Setze den Stack zurück (entferne unsere Elemente)
   vector_truncate_transient(stack, base_index);
 
-  // Lege den fertigen Vektor auf den Stack für den Aufrufer
-  vector_push(stack, final_vec);
+  if (!final_vec) {
+    return NULL;
+  }
 
-  return final_vec; // Caller ist verantwortlich für AUTORELEASE
+  return AUTORELEASE(final_vec);
 }
 
 /**
@@ -1022,7 +1017,7 @@ static ID parse_vector_with_stack(Reader *reader, EvalState *st, CljTransientVec
  * @param reader Reader instance for input
  * @param st Evaluation state
  * @param stack Parser stack for temporary storage
- * @return Parsed map CljObject or NULL on error
+ * @return Parsed map (pool-managed) or NULL on error
  */
 static ID parse_map_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack) {
   if (!reader_match(reader, '{'))
@@ -1070,10 +1065,7 @@ static ID parse_map_with_stack(Reader *reader, EvalState *st, CljTransientVector
   // Setze den Stack zurück
   vector_truncate_transient(stack, base_index);
 
-  // Lege die Map auf den Stack
-  vector_push(stack, map);
-
-  return map;
+  return AUTORELEASE(map);
 }
 
 /**
@@ -1162,7 +1154,7 @@ static ID parse_set(Reader *reader, EvalState *st) {
  * @param reader Reader instance for input
  * @param st Evaluation state
  * @param stack Parser stack for temporary storage
- * @return Parsed set CljObject or NULL on error
+ * @return Parsed set (pool-managed) or NULL on error
  */
 static ID parse_set_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack) {
   // Consume '#'
@@ -1209,10 +1201,7 @@ static ID parse_set_with_stack(Reader *reader, EvalState *st, CljTransientVector
   // Setze den Stack zurück
   vector_truncate_transient(stack, base_index);
 
-  // Lege das Set auf den Stack
-  vector_push(stack, set);
-
-  return set;
+  return AUTORELEASE(set);
 }
 
 /**
@@ -2000,7 +1989,7 @@ CljValue parse_from_reader(Reader *reader, EvalState *st) {
   // Stack aufräumen
   RELEASE(stack);
 
-  // Das Ergebnis ist bereits in einem AUTORELEASE-Pool, wenn nötig
+  // Heap objects returned from stack-based parsing are pool-managed.
   return result;
 }
 

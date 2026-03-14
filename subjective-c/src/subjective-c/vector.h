@@ -119,6 +119,13 @@ size_t vector_requested_allocation_size(unsigned int capacity);
  */
 CljPersistentVector* make_vector(unsigned int capacity, ElementRetention retention);
 
+/** @brief Create persistent vector from contiguous item storage
+ * @param items Pointer to contiguous items (can be NULL only when count is 0)
+ * @param count Number of items to copy
+ * @return New persistent vector (owned, rc=1) or empty-vector singleton when count is 0
+ */
+CljPersistentVector* make_vector_from_stack(ID *items, unsigned int count);
+
 /** @brief Append item to vector (persistent, returns new vector)
  * @param vec Source vector
  * @param item Item to append
