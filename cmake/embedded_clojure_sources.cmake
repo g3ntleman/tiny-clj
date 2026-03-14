@@ -40,10 +40,14 @@ set(TINYCLJ_EMBEDDED_CLOJURE_DEBUG_ENTRIES
     "libs/tiny-fx/gfx-collision.clj|tiny-gfx.collision.clj.inc"
     "libs/tiny-fx/gfx-bench.clj|tiny-fx.gfx-bench.clj.inc"
     "libs/tiny-fx/sound-demos.clj|tiny-fx.sound-demos.clj.inc"
+    "libs/tiny-fx/sound-demos-data.clj|tiny-fx.sound-demos-data.clj.inc"
+    "libs/tiny-fx/sound-demos-william.clj|tiny-fx.sound-demos-william.clj.inc"
 )
 
 set(TINYCLJ_FLASH_FS_CLOJURE_SOURCES
     "libs/tiny-fx/sound-demos.clj"
+    "libs/tiny-fx/sound-demos-data.clj"
+    "libs/tiny-fx/sound-demos-william.clj"
 )
 
 function(tinyclj_get_embedded_clojure_entries out_var)

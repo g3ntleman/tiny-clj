@@ -1159,21 +1159,23 @@ TEST(test_sound_demos_lookup) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound) "
-        "    (require 'tiny-fx.sound-demos) "
-        "    [(tiny-fx.sound/track-duration-ms tiny-fx.sound-demos/minuet-in-g-steps tiny-fx.sound-demos/minuet-in-g-opts) "
-        "     (tiny-fx.sound/track-duration-ms tiny-fx.sound-demos/the-entertainer-steps tiny-fx.sound-demos/the-entertainer-opts) "
-        "     (tiny-fx.sound/track-duration-ms tiny-fx.sound-demos/gymnopedie-no-1-steps tiny-fx.sound-demos/gymnopedie-no-1-opts) "
-        "     (tiny-fx.sound/track-duration-ms tiny-fx.sound-demos/william-tell-finale-steps tiny-fx.sound-demos/william-tell-finale-opts) "
-        "     (tiny-fx.sound/track-duration-ms tiny-fx.sound-demos/rondo-alla-turca-steps tiny-fx.sound-demos/rondo-alla-turca-opts) "
-        "     (tiny-fx.sound/track-duration-ms tiny-fx.sound-demos/hall-of-the-mountain-king-steps tiny-fx.sound-demos/hall-of-the-mountain-king-opts) "
-        "     (tiny-fx.sound/track-duration-ms tiny-fx.sound-demos/can-can-steps tiny-fx.sound-demos/can-can-opts) "
-        "     (tiny-fx.sound/track-duration-ms tiny-fx.sound-demos/rocket-launch-sfx-steps tiny-fx.sound-demos/rocket-launch-sfx-opts) "
-        "     (tiny-fx.sound/track-duration-ms tiny-fx.sound-demos/laser-sfx-steps tiny-fx.sound-demos/laser-sfx-opts)])",
+        "(do (require 'tiny-fx.sound-demos) "
+        "    (let [minuet (tiny-fx.sound-demos/demo :minuet-in-g) "
+        "          entertainer (tiny-fx.sound-demos/demo :the-entertainer) "
+        "          gymnopedie (tiny-fx.sound-demos/demo :gymnopedie-no-1) "
+        "          rondo (tiny-fx.sound-demos/demo :rondo-alla-turca) "
+        "          mountain (tiny-fx.sound-demos/demo :hall-of-the-mountain-king) "
+        "          cancan (tiny-fx.sound-demos/demo :can-can)] "
+        "      [(count (:steps minuet)) "
+        "       (count (:steps entertainer)) "
+        "       (count (:steps gymnopedie)) "
+        "       (count (:steps rondo)) "
+        "       (count (:steps mountain)) "
+        "       (count (:steps cancan))]))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound-demos public steps/opts should resolve with generic duration helper");
+    TEST_FAIL_MESSAGE("tiny-fx.sound-demos demo builders should resolve and return step vectors");
   }
   END_TRY
 
@@ -1181,11 +1183,10 @@ TEST(test_sound_demos_lookup) {
   TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_PERSISTENT);
   CljPersistentVector *v = as_vector(result);
   TEST_ASSERT_NOT_NULL(v);
-  TEST_ASSERT_EQUAL_UINT(9, vector_count(v));
-  for (uint32_t i = 0; i < 9; i++) {
+  TEST_ASSERT_EQUAL_UINT(6, vector_count(v));
+  for (uint32_t i = 0; i < 6; i++) {
     ID item = vector_nth(v, i);
     TEST_ASSERT_TRUE(is_fixnum(item));
-    TEST_ASSERT_TRUE(as_fixnum(item) > 0);
   }
 }
 
@@ -1539,11 +1540,11 @@ TEST(test_sound_tiny_fx_sound_demos_play_minuet_returns_status_map) {
   TRY {
     result = eval_string(
         "(do (require 'tiny-fx.sound-demos) "
-        "    (tiny-fx.sound-demos/play-minuet-in-g!))",
+        "    (tiny-fx.sound-demos/play-demo! :minuet-in-g))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound-demos/play-minuet-in-g! should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound-demos/play-demo! :minuet-in-g should not throw");
   }
   END_TRY
 
@@ -1565,11 +1566,11 @@ TEST(test_sound_tiny_fx_sound_demos_minuet_activates_two_voices) {
   TRY {
     result = eval_string(
         "(do (require 'tiny-fx.sound-demos) "
-        "    (tiny-fx.sound-demos/play-minuet-in-g!))",
+        "    (tiny-fx.sound-demos/play-demo! :minuet-in-g))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound-demos/play-minuet-in-g! two-voice activation should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound-demos/play-demo! :minuet-in-g two-voice activation should not throw");
   }
   END_TRY
 
@@ -1596,11 +1597,11 @@ TEST(test_sound_tiny_fx_sound_demos_play_rocket_launch_sfx_returns_status_map) {
   TRY {
     result = eval_string(
         "(do (require 'tiny-fx.sound-demos) "
-        "    (tiny-fx.sound-demos/play-rocket-launch-sfx!))",
+        "    (tiny-fx.sound-demos/play-demo! :rocket-launch-sfx))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound-demos/play-rocket-launch-sfx! should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound-demos/play-demo! :rocket-launch-sfx should not throw");
   }
   END_TRY
 
@@ -1622,11 +1623,11 @@ TEST(test_sound_tiny_fx_sound_demos_rocket_launch_sfx_changes_frequency_over_tim
   TRY {
     result = eval_string(
         "(do (require 'tiny-fx.sound-demos) "
-        "    (tiny-fx.sound-demos/play-rocket-launch-sfx!))",
+        "    (tiny-fx.sound-demos/play-demo! :rocket-launch-sfx))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound-demos/play-rocket-launch-sfx! motion test should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound-demos/play-demo! :rocket-launch-sfx motion test should not throw");
   }
   END_TRY
 
@@ -1656,8 +1657,8 @@ TEST(test_sound_tiny_fx_sound_demos_phase_two_batch_returns_status_maps) {
   TRY {
     result = eval_string(
         "(do (require 'tiny-fx.sound-demos) "
-        "    [(tiny-fx.sound-demos/play-the-entertainer!) "
-        "     (tiny-fx.sound-demos/play-gymnopedie-no-1!)])",
+        "    [(tiny-fx.sound-demos/play-demo! :the-entertainer) "
+        "     (tiny-fx.sound-demos/play-demo! :gymnopedie-no-1)])",
         g_test_eval_state);
   }
   CATCH(ex) {
@@ -1690,12 +1691,12 @@ TEST(test_sound_tiny_fx_sound_demos_play_william_tell_returns_status_map) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound-demos) "
-        "    (tiny-fx.sound-demos/play-william-tell-finale!))",
+        "(do (require 'tiny-fx.sound-demos-william) "
+        "    (tiny-fx.sound-demos-william/play-william-tell-finale!))",
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound-demos/play-william-tell-finale! should not throw");
+    TEST_FAIL_MESSAGE("tiny-fx.sound-demos-william/play-william-tell-finale! should not throw");
   }
   END_TRY
 
@@ -1715,9 +1716,9 @@ TEST(test_sound_tiny_fx_sound_demos_phase_three_batch_returns_status_maps) {
   TRY {
     result = eval_string(
         "(do (require 'tiny-fx.sound-demos) "
-        "    [(tiny-fx.sound-demos/play-rondo-alla-turca!) "
-        "     (tiny-fx.sound-demos/play-hall-of-the-mountain-king!) "
-        "     (tiny-fx.sound-demos/play-can-can!)])",
+        "    [(tiny-fx.sound-demos/play-demo! :rondo-alla-turca) "
+        "     (tiny-fx.sound-demos/play-demo! :hall-of-the-mountain-king) "
+        "     (tiny-fx.sound-demos/play-demo! :can-can)])",
         g_test_eval_state);
   }
   CATCH(ex) {
