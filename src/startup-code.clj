@@ -10,7 +10,7 @@ R"CLOJURE(
             (catch Exception _
               false))]
       (if fx-startup-available?
-        (tiny-fx.startup/start!)
+        (println "tiny-fx.startup loaded. Call (tiny-fx.startup/start!) to start.")
         (do
           (println "Hello ESP32!")
           (println "Embedded Clojure running!")))))
