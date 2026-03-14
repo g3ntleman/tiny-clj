@@ -284,6 +284,12 @@ void vector_remove_at_inplace(CljPersistentVector **vec_slot, unsigned int index
  */
 void vector_pop_inplace(CljPersistentVector **vec_slot);
 
+/** @brief Truncate transient vector to new count
+ * @param tvec Transient vector (must be CLJ_VECTOR_TRANSIENT)
+ * @param new_count New count after truncation (must be <= current count)
+ */
+void vector_truncate_transient(CljTransientVector *tvec, unsigned int new_count);
+
 #define VECTOR_FOR_EACH(vector, elem_var) \
     for (int _i = 0, _cnt = vector_count(vector); (vector) && _i < _cnt; ++_i) \
         for (ID *_data_ptr = vector_as_array(vector); _data_ptr; _data_ptr = NULL) \

@@ -607,3 +607,25 @@ void vector_insert_at(CljTransientVector *tvec, unsigned int index, ID item) {
   CljPersistentVector *new_backing = vector_insert_at_owned(backing, index, item);
   transient_vector_set_backing(tvec, new_backing);
 }
+
+void vector_truncate_transient(CljTransientVector *tvec, unsigned int new_count) {
+  if (!tvec) {
+    throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                              "vector_truncate_transient: vector is NULL");
+    return;
+  }
+  CLJ_ASSERT(tvec->base.type == CLJ_VECTOR_TRANSIENT);
+  CLJ_ASSERT(tvec->backing != NULL);
+
+  CljPersistentVector *backing = tvec->backing;
+  unsigned int current_count = vector_count(backing);
+
+  if (new_count >= current_count) {
+    // Nothing to truncate
+    return;
+  }
+
+  // Truncate the backing vector in-place (since we have unique ownership)
+  vector_truncate(backing, new_count);
+}
+

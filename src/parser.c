@@ -161,9 +161,13 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
 #endif
 static ID parse_anon_fn(Reader *reader, EvalState *st);
 static ID parse_vector(Reader *reader, EvalState *st);
+static ID parse_vector_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack);
 static ID parse_map(Reader *reader, EvalState *st);
+static ID parse_map_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack);
 static ID parse_set(Reader *reader, EvalState *st);
+static ID parse_set_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack);
 static ID parse_list(Reader *reader, EvalState *st);
+static ID parse_expr_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack);
 static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open_column);
 static ID parse_string_internal(Reader *reader, EvalState *st);
 static ID parse_symbol(Reader *reader, EvalState *st);
@@ -612,6 +616,213 @@ ID parse_expr(Reader *reader, EvalState *st) {
 }
 
 /**
+ * @brief Create CljObject by parsing expression from Reader with stack
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @param stack Parser stack for temporary storage
+ * @return Autoreleased object or NULL (nil) - throws exception on error (no manual RELEASE needed)
+ */
+static ID parse_expr_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack) {
+  reader_skip_all(reader);
+  if (reader_is_eof(reader))
+    return NULL;
+  char c = reader_current(reader);
+
+  switch (c) {
+  case '^':
+    return parse_meta(reader, st);
+
+  case '#': {
+    char next = reader_peek_ahead(reader, 1);
+    if (next == '^')
+      return parse_meta_map(reader, st);
+    if (next == '(')
+      return parse_anon_fn(reader, st);
+    if (next == '{')
+      return parse_set_with_stack(reader, st, stack);
+    return parse_tagged_literal(reader, st);
+  }
+
+  case '[':
+    return parse_vector_with_stack(reader, st, stack);
+
+  case '{':
+    return parse_map_with_stack(reader, st, stack);
+
+  case '(':
+    return parse_list(reader, st); // Listen noch nicht mit Stack
+
+  case '"':
+    return parse_string_internal(reader, st);
+
+  case '-':
+    if (isdigit((unsigned char)reader_peek_ahead(reader, 1)))
+      return make_number_by_parsing(reader, st);
+    break;
+
+  case '.':
+    if (isdigit((unsigned char)reader_peek_ahead(reader, 1))) {
+      char invalid_decimal[32];
+      int pos = 0;
+      invalid_decimal[pos++] = c;
+      reader_next(reader);
+      while (isdigit((unsigned char)reader_peek_char(reader)) && pos < (int)sizeof(invalid_decimal) - 1) {
+        invalid_decimal[pos++] = reader_next(reader);
+      }
+      invalid_decimal[pos] = '\0';
+      throw_parser_exceptionf(reader,
+                              "Syntax error compiling.\nUnable to resolve symbol: %s in this context",
+                              invalid_decimal);
+      return NULL;
+    }
+    break;
+
+  case 'n':
+    if (reader_peek_ahead(reader, 1) == 'i' &&
+        reader_peek_ahead(reader, 2) == 'l' &&
+        !is_alphanumeric(reader_peek_ahead(reader, 3))) {
+      reader_consume(reader);
+      reader_consume(reader);
+      reader_consume(reader);
+      CljSymbol *nil_sym = intern_symbol_global("nil");
+      if (nil_sym == SYM_NIL) {
+        return SYM_NIL;
+      }
+      return AUTORELEASE(nil_sym);
+    }
+    break;
+
+  case 't':
+    if (reader_peek_ahead(reader, 1) == 'r' &&
+        reader_peek_ahead(reader, 2) == 'u' &&
+        reader_peek_ahead(reader, 3) == 'e' &&
+        !is_alphanumeric(reader_peek_ahead(reader, 4))) {
+      reader_consume(reader);
+      reader_consume(reader);
+      reader_consume(reader);
+      reader_consume(reader);
+      return clj_true;
+    }
+    break;
+
+  case 'f':
+    if (reader_peek_ahead(reader, 1) == 'a' &&
+        reader_peek_ahead(reader, 2) == 'l' &&
+        reader_peek_ahead(reader, 3) == 's' &&
+        reader_peek_ahead(reader, 4) == 'e' &&
+        !is_alphanumeric(reader_peek_ahead(reader, 5))) {
+      reader_consume(reader);
+      reader_consume(reader);
+      reader_consume(reader);
+      reader_consume(reader);
+      reader_consume(reader);
+      return clj_false;
+    }
+    break;
+
+  case '\'':
+    reader_consume(reader);
+    reader_skip_all(reader);
+    size_t qb_before = reader_offset(reader);
+    ID quoted = parse_expr_with_stack(reader, st, stack);
+    size_t qb_after = reader_offset(reader);
+    if (qb_after <= qb_before && !reader_eof(reader)) {
+      throw_parser_exception("Parser made no progress after quote", reader);
+    }
+    if (!quoted) return NULL;
+    return AUTORELEASE(make_ast_list(SYM_QUOTE, AUTORELEASE(make_ast_list(quoted, NULL))));
+
+  case '@':
+    reader_consume(reader);
+    reader_skip_all(reader);
+    size_t db_before = reader_offset(reader);
+    ID atom_expr = parse_expr_with_stack(reader, st, stack);
+    size_t db_after = reader_offset(reader);
+    if (db_after <= db_before && !reader_eof(reader)) {
+      throw_parser_exception("Parser made no progress after @", reader);
+    }
+    if (!atom_expr) return NULL;
+    return AUTORELEASE(make_ast_list(SYM_DEREF, AUTORELEASE(make_ast_list(atom_expr, NULL))));
+
+  case '`':
+    reader_consume(reader);
+    reader_skip_all(reader);
+    size_t qq_before = reader_offset(reader);
+    ID qq_expr = parse_expr_with_stack(reader, st, stack);
+    size_t qq_after = reader_offset(reader);
+    if (qq_after <= qq_before && !reader_eof(reader)) {
+      throw_parser_exception("Parser made no progress after quasiquote", reader);
+    }
+    if (!qq_expr) return NULL;
+    return AUTORELEASE(make_ast_list(SYM_QUASIQUOTE, AUTORELEASE(make_ast_list(qq_expr, NULL))));
+
+  case '~':
+    reader_consume(reader);
+    if (reader_peek_char(reader) == '@') {
+      reader_consume(reader);
+      reader_skip_all(reader);
+      size_t sq_before = reader_offset(reader);
+      ID sq_expr = parse_expr_with_stack(reader, st, stack);
+      size_t sq_after = reader_offset(reader);
+      if (sq_after <= sq_before && !reader_eof(reader)) {
+        throw_parser_exception("Parser made no progress after unquote-splice", reader);
+      }
+      if (!sq_expr) return NULL;
+      return AUTORELEASE(make_ast_list(SYM_UNQUOTE_SPLICE, AUTORELEASE(make_ast_list(sq_expr, NULL))));
+    } else {
+      reader_skip_all(reader);
+      size_t uq_before = reader_offset(reader);
+      ID uq_expr = parse_expr_with_stack(reader, st, stack);
+      size_t uq_after = reader_offset(reader);
+      if (uq_after <= uq_before && !reader_eof(reader)) {
+        throw_parser_exception("Parser made no progress after unquote", reader);
+      }
+      if (!uq_expr) return NULL;
+      return AUTORELEASE(make_ast_list(SYM_UNQUOTE, AUTORELEASE(make_ast_list(uq_expr, NULL))));
+    }
+
+  case '\\':
+    return parse_character(reader, st);
+
+  default:
+    break;
+  }
+
+  if (isdigit(c))
+    return make_number_by_parsing(reader, st);
+
+  if (c == ':' || is_alphanumeric(c) || c == '.' || c == '%' || (unsigned char)c >= 0x80) {
+    return parse_symbol(reader, st);
+  }
+
+  if (strchr("+*/=<>", c)) {
+    char next = reader_peek_ahead(reader, 1);
+    if (next && (is_alphanumeric(next) || next == '*' || next == '+' || next == '/' || next == '=' || next == '<' || next == '>' || next == '-' || next == '_' || next == '?' || next == '!' || next == '%' || (unsigned char)next >= 0x80)) {
+      return parse_symbol(reader, st);
+    }
+    reader_consume(reader);
+    char buf[2] = {c, '\0'};
+    return intern_symbol_global(buf);
+  }
+
+  char msg[128];
+  size_t msg_pos = 0;
+  msg_pos = format_append(msg, msg_pos, sizeof(msg), "Unexpected character '");
+  msg_pos = format_append_char(msg, msg_pos, sizeof(msg), (c >= 32 && c < 127) ? c : '?');
+  msg_pos = format_append(msg, msg_pos, sizeof(msg), "' (0x");
+  msg_pos = format_append_hex_byte(msg, msg_pos, sizeof(msg), (unsigned char)c);
+  msg_pos = format_append(msg, msg_pos, sizeof(msg), ") at position ");
+  msg_pos = format_append_ulong(msg, msg_pos, sizeof(msg), (unsigned long)reader->index);
+  msg_pos = format_append(msg, msg_pos, sizeof(msg), " (line ");
+  msg_pos = format_append_int(msg, msg_pos, sizeof(msg), reader->line);
+  msg_pos = format_append(msg, msg_pos, sizeof(msg), ", col ");
+  msg_pos = format_append_int(msg, msg_pos, sizeof(msg), reader->column);
+  (void)format_append_char(msg, msg_pos, sizeof(msg), ')');
+  throw_parser_exception(msg, reader);
+  return NULL;
+}
+
+/**
  * @brief Parse Clojure expression from string input
  * @param input Input string to parse
  * @param st Evaluation state
@@ -684,10 +895,9 @@ static ID parse_vector(Reader *reader, EvalState *st) {
   if (reader_match(reader, '[')) {
     reader_skip_all(reader);
 
-    // Create transient vector for efficient building
-    CljPersistentVector *vec = make_vector(6, STRONG);
+    // Create transient vector for efficient building - use empty_vector() singleton to avoid heap allocation
+    CljPersistentVector *vec = empty_vector();
     CljTransientVector *tvec = make_vector_transient(vec);
-    RELEASE(vec); // Release original, use transient
 
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
       size_t before = reader_offset(reader);
@@ -734,6 +944,139 @@ static ID parse_vector(Reader *reader, EvalState *st) {
 }
 
 /**
+ * @brief Parse vector literal [a b c] using Reader with parser stack
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @param stack Parser stack for temporary storage
+ * @return Parsed vector CljObject or NULL on error
+ *
+ * Uses the parser stack to build the vector, then creates it with exact capacity.
+ * This avoids unnecessary capacity growth in the final vector.
+ */
+static ID parse_vector_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack) {
+  if (!reader_match(reader, '[')) {
+    return NULL;
+  }
+  reader_skip_all(reader);
+
+  // Merke die Position auf dem Stack, wo unsere Elemente beginnen
+  CljPersistentVector *backing = vector_persistent(stack);
+  unsigned int base_index = vector_count(backing);
+
+  while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
+    size_t before = reader_offset(reader);
+    bool no_progress = false;
+
+    WITH_AUTORELEASE_POOL({
+      ID value = parse_expr(reader, st);
+      size_t after = reader_offset(reader);
+
+      // Check if parser made progress - if not, it's an error
+      if (!value && after <= before && !reader_eof(reader)) {
+        no_progress = true;
+      } else {
+        // Push das Element auf den Parser-Stack
+        vector_push(stack, value);
+      }
+    });
+
+    if (no_progress) {
+      return NULL;
+    }
+
+    reader_skip_all(reader);
+  }
+
+  if (reader_eof(reader) || !reader_match(reader, ']')) {
+    throw_parser_exception("Unclosed vector - missing closing ']'", reader);
+    return NULL;
+  }
+
+  // Berechne die exakte Anzahl der Elemente
+  backing = vector_persistent(stack);
+  unsigned int end_index = vector_count(backing);
+  unsigned int count = end_index - base_index;
+
+  // Erstelle den finalen Vektor mit exakter Kapazität
+  CljPersistentVector *final_vec = make_vector(count, STRONG);
+  final_vec->count = count;
+
+  // Kopiere die Elemente vom Stack in den finalen Vektor
+  for (unsigned int i = 0; i < count; i++) {
+    ID elem = vector_nth(backing, base_index + i);
+    // RETAIN, da der finale Vektor die Ownership übernimmt
+    final_vec->data[i] = RETAIN(elem);
+  }
+
+  // Setze den Stack zurück (entferne unsere Elemente)
+  vector_truncate_transient(stack, base_index);
+
+  // Lege den fertigen Vektor auf den Stack für den Aufrufer
+  vector_push(stack, final_vec);
+
+  return final_vec; // Caller ist verantwortlich für AUTORELEASE
+}
+
+/**
+ * @brief Parse map literal {k v k v} using Reader with parser stack
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @param stack Parser stack for temporary storage
+ * @return Parsed map CljObject or NULL on error
+ */
+static ID parse_map_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack) {
+  if (!reader_match(reader, '{'))
+    return NULL;
+  reader_skip_all(reader);
+
+  // Merke die Position auf dem Stack
+  CljPersistentVector *backing = vector_persistent(stack);
+  unsigned int base_index = vector_count(backing);
+
+  while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
+    WITH_AUTORELEASE_POOL({
+      ID key = parse_expr(reader, st);
+      reader_skip_all(reader);
+      ID value = parse_expr(reader, st);
+      reader_skip_all(reader);
+
+      // Push key-value pair as two consecutive elements
+      if (key) vector_push(stack, key);
+      if (value) vector_push(stack, value);
+    });
+  }
+
+  if (reader_eof(reader) || !reader_match(reader, '}')) {
+    throw_parser_exception("Unclosed map - missing closing '}'", reader);
+    vector_truncate_transient(stack, base_index);
+    return NULL;
+  }
+
+  // Berechne die Anzahl der Key-Value-Paare
+  backing = vector_persistent(stack);
+  unsigned int end_index = vector_count(backing);
+  unsigned int pair_count = (end_index - base_index) / 2;
+
+  // Erstelle die Map mit exakter Kapazität - use 0 for empty singleton
+  CljPersistentMap *map = make_map(pair_count > 0 ? pair_count * 2 : 0, STRONG);
+
+  // Kopiere die Key-Value-Paare
+  for (unsigned int i = 0; i < pair_count; i++) {
+    ID key = vector_nth(backing, base_index + i * 2);
+    ID value = vector_nth(backing, base_index + i * 2 + 1);
+    map_assoc_inplace(&map, key, value);
+  }
+
+  // Setze den Stack zurück
+  vector_truncate_transient(stack, base_index);
+
+  // Lege die Map auf den Stack
+  vector_push(stack, map);
+
+  return map;
+}
+
+/**
  * @brief Parse map literal {k v k v} using Reader
  * @param reader Reader instance for input
  * @param st Evaluation state
@@ -745,7 +1088,8 @@ static ID parse_map(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   // Build the map incrementally to avoid relying on a fixed-size stack buffer.
   // This also matches Clojure semantics for duplicate keys (later entries win).
-  CljPersistentMap *map = make_map(8, STRONG);
+  // Use capacity=0 to get empty-map singleton and avoid heap allocation
+  CljPersistentMap *map = make_map(0, STRONG);
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
     bool failed = false;
 
@@ -811,6 +1155,64 @@ static ID parse_set(Reader *reader, EvalState *st) {
     throw_parser_exception("Unclosed set - missing closing '}'", reader);
   }
   return AUTORELEASE(set);
+}
+
+/**
+ * @brief Parse set literal #{a b c} using Reader with parser stack
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @param stack Parser stack for temporary storage
+ * @return Parsed set CljObject or NULL on error
+ */
+static ID parse_set_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack) {
+  // Consume '#'
+  if (!reader_match(reader, '#'))
+    return NULL;
+  if (!reader_match(reader, '{')) {
+    throw_parser_exception("Invalid set literal - expected '{' after '#'", reader);
+    return NULL;
+  }
+  reader_skip_all(reader);
+
+  // Merke die Position auf dem Stack
+  CljPersistentVector *backing = vector_persistent(stack);
+  unsigned int base_index = vector_count(backing);
+
+  while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
+    WITH_AUTORELEASE_POOL({
+      ID value = parse_expr(reader, st);
+      reader_skip_all(reader);
+      if (value) vector_push(stack, value);
+    });
+  }
+
+  if (reader_eof(reader) || !reader_match(reader, '}')) {
+    throw_parser_exception("Unclosed set - missing closing '}'", reader);
+    vector_truncate_transient(stack, base_index);
+    return NULL;
+  }
+
+  // Berechne die Anzahl der Elemente
+  backing = vector_persistent(stack);
+  unsigned int end_index = vector_count(backing);
+  unsigned int count = end_index - base_index;
+
+  // Erstelle das Set mit passender Größe
+  CljHashSet *set = make_hashset(count > 0 ? count : 4);
+
+  // Füge alle Elemente hinzu
+  for (unsigned int i = 0; i < count; i++) {
+    ID elem = vector_nth(backing, base_index + i);
+    hashset_add_inplace(&set, elem);
+  }
+
+  // Setze den Stack zurück
+  vector_truncate_transient(stack, base_index);
+
+  // Lege das Set auf den Stack
+  vector_push(stack, set);
+
+  return set;
 }
 
 /**
@@ -1589,10 +1991,17 @@ CljValue parse_from_reader(Reader *reader, EvalState *st) {
   if (!reader || !st)
     return NULL;
 
-  // value_by_parsing_expr already returns AUTORELEASE objects
-  // No need for additional WITH_AUTORELEASE_POOL - just return the result
-  // The object is already in the caller's autorelease pool
-  return value_by_parsing_expr(reader, st);
+  // Erstelle den Parser-Stack für Heap-effizientes Parsen
+  CljTransientVector *stack = make_vector_transient(empty_vector());
+
+  // Parse mit Stack
+  ID result = parse_expr_with_stack(reader, st, stack);
+
+  // Stack aufräumen
+  RELEASE(stack);
+
+  // Das Ergebnis ist bereits in einem AUTORELEASE-Pool, wenn nötig
+  return result;
 }
 
 /**
@@ -1763,7 +2172,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
 
     // Convert keyword to metadata map {:keyword true}
     // In Clojure, ^:keyword means ^{:keyword true}
-    CljPersistentMap *meta_map = make_map(4, STRONG);
+    CljPersistentMap *meta_map = make_map(0, STRONG);
     if (!meta_map) {
       RELEASE(keyword_meta);
       return NULL;
