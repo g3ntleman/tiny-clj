@@ -111,6 +111,7 @@ idf_component_register(
   REQUIRES
     subjective-c
     tiny-db
+    esp_app_format
     driver
     esp_adc
     esp_timer

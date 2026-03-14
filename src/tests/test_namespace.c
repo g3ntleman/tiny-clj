@@ -1393,6 +1393,34 @@ TEST(test_find_ns_returns_nil_for_nonexistent) {
     TEST_ASSERT_NIL(result); // Should return nil (NULL)
 }
 
+// Regression: find-ns must not create lazy tiny-fx namespaces as a side effect.
+TEST(test_find_ns_does_not_create_tiny_fx_namespaces) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
+
+    int before_count = map_count(g_runtime.ns_registry);
+
+    TEST_ASSERT_NULL(ns_find("tiny-fx.sound-native"));
+    CljObject *sound_ns = eval_string("(find-ns 'tiny-fx.sound-native)", g_test_eval_state);
+    TEST_ASSERT_NIL(sound_ns);
+    TEST_ASSERT_NULL(ns_find("tiny-fx.sound-native"));
+
+#ifdef DEBUG
+    TEST_ASSERT_NULL(ns_find("tiny-fx.sound-debug"));
+    CljObject *sound_debug_ns = eval_string("(find-ns 'tiny-fx.sound-debug)", g_test_eval_state);
+    TEST_ASSERT_NIL(sound_debug_ns);
+    TEST_ASSERT_NULL(ns_find("tiny-fx.sound-debug"));
+
+    TEST_ASSERT_NULL(ns_find("tiny-fx.gfx-bench"));
+    CljObject *gfx_bench_ns = eval_string("(find-ns 'tiny-fx.gfx-bench)", g_test_eval_state);
+    TEST_ASSERT_NIL(gfx_bench_ns);
+    TEST_ASSERT_NULL(ns_find("tiny-fx.gfx-bench"));
+#endif
+
+    int after_count = map_count(g_runtime.ns_registry);
+    TEST_ASSERT_EQUAL_INT(before_count, after_count);
+}
+
 // Test: find-ns with string should throw type error (Clojure-compatible)
 TEST(test_find_ns_with_string_throws) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);

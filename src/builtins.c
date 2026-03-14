@@ -5137,6 +5137,17 @@ static NsInitFn ns_lookup_init(const char *ns_name) {
   return NULL;
 }
 
+static inline bool bootstrap_register_cname_allowed(const char *cname) {
+  if (!cname || !cname[0]) {
+    return false;
+  }
+  // Keep bootstrap minimal: only unqualified core names are eagerly registered.
+  if (cname[0] == '/' && cname[1] == '\0') {
+    return true;
+  }
+  return strchr(cname, '/') == NULL;
+}
+
 bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, const char *source_path) {
   if (!st || !ns_name || !source_path || !bytes || TAG(bytes) != CLJ_BYTE_ARRAY)
     return false;
@@ -7736,23 +7747,14 @@ static bool register_builtin_namespace_allowed(const char *cname, size_t ns_len)
   if (ns_len >= 8 && strncmp(cname, "clojure.", 8) == 0) {
     return true;
   }
-  if (builtins_sound_namespace_allowed(cname, ns_len)) {
-    return true;
-  }
-#ifdef DEBUG
-  if (ns_len == strlen("tiny-fx.gfx-bench") &&
-      strncmp(cname, "tiny-fx.gfx-bench", strlen("tiny-fx.gfx-bench")) == 0) {
-    return true;
-  }
-#endif
   return false;
 }
 
 // Register a native builtin function.
 // - Unqualified symbols (e.g. "count") → registered in clojure.core
 // - Qualified clojure.* symbols (e.g. "clojure.repl/source") → registered in their namespace
-// - Curated tiny-fx native namespaces (`tiny-fx.sound-native` plus DEBUG-only
-//   `tiny-fx.sound-debug` / `tiny-fx.gfx-bench`) are also registered directly.
+// - No eager tiny-fx registration: tiny-fx namespaces should stay heap-free
+//   until they are explicitly required and their :native stubs are evaluated.
 // - Other qualified symbols (e.g. "tiny-clj.runtime/stats") → NOT registered here;
 //   they remain in native_function_table only and require explicit (require 'ns)
 //   followed by (defn ... :native) to become available (Clojure-compatible behavior).
@@ -7847,13 +7849,11 @@ void register_builtins() {
       if (!(entry->flags & NATIVE_ENTRY_BOOTSTRAP)) {
         continue;
       }
-      if (!entry->register_cname || !entry->register_cname[0]) {
+      if (!bootstrap_register_cname_allowed(entry->register_cname)) {
         continue;
       }
       register_builtin(entry->register_cname, entry->native_func);
     }
-
-    builtins_sound_register(register_builtin);
 
     // Prime cached thunk functions during setup so tests/runtime do not pay
     // one-time cached_named_func allocations inside per-call heap assertions.

@@ -26,6 +26,9 @@
 #include "repl_history_common.h"
 #include "repl_history_backend.h"
 #include "build_info.h"
+#if defined(ESP_PLATFORM)
+#include "esp_app_desc.h"
+#endif
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -97,6 +100,13 @@ static void repl_format_build_date_line(char *out, size_t out_size) {
   if (!out || out_size == 0) {
     return;
   }
+#if defined(ESP_PLATFORM)
+  const esp_app_desc_t *app = esp_app_get_description();
+  if (app && app->date[0] != '\0' && app->time[0] != '\0') {
+    (void)mini_snprintf(out, out_size, "%s %s", app->date, app->time);
+    return;
+  }
+#endif
 #if defined(BUILD_EPOCH_SECONDS)
   time_t epoch = (time_t)BUILD_EPOCH_SECONDS;
   struct tm tm_utc;
@@ -1423,7 +1433,8 @@ int main(int argc, char **argv) {
       clock_t t5 = clock();
       fprintf(stderr, "[PROFILE] load_clojure_core: %.2f ms\n", (double)(t5 - t4) * 1000.0 / CLOCKS_PER_SEC);
 #endif
-      // Load clojure.repl namespace for REPL helper functions
+      // Load clojure.repl eagerly on host. On ESP32 keep it lazy to reduce boot heap.
+#if !defined(ESP_PLATFORM)
       load_clojure_repl(st);
 #ifdef PROFILE_STARTUP
       clock_t t6 = clock();
@@ -1438,6 +1449,11 @@ int main(int argc, char **argv) {
       clock_t t7 = clock();
       fprintf(stderr, "[PROFILE] require clojure.repl: %.2f ms\n", (double)(t7 - t6) * 1000.0 / CLOCKS_PER_SEC);
       fprintf(stderr, "[PROFILE] TOTAL startup: %.2f ms\n", (double)(t7 - t0) * 1000.0 / CLOCKS_PER_SEC);
+#endif
+#else
+#ifdef PROFILE_STARTUP
+      fprintf(stderr, "[PROFILE] TOTAL startup: %.2f ms\n", (double)(t5 - t0) * 1000.0 / CLOCKS_PER_SEC);
+#endif
 #endif
     }
   });

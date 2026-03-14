@@ -85,7 +85,7 @@
     {
       "label": "ESP32: flash and monitor",
       "type": "shell",
-      "command": "pkill -f 'idf.py monitor' 2>/dev/null || true; pkill -f 'build_idf.sh.*monitor' 2>/dev/null || true; ./build_idf.sh --no-move --monitor",
+      "command": "pkill -f 'idf.py monitor' 2>/dev/null || true; pkill -f 'build_idf.sh.*monitor' 2>/dev/null || true; ./build_idf.sh --monitor",
       "group": "none",
       "detail": "Incremental IDF build (tiny + all components), no clean; then flash and monitor. Kills existing monitor so re-run needs no Restart prompt.",
       "problemMatcher": [],

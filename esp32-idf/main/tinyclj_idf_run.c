@@ -36,6 +36,25 @@ extern void init_special_symbols(void);
 extern EvalState *get_global_eval_state(void);
 extern int load_clojure_core(EvalState *st);
 
+static bool esp_repl_core_loaded(void) {
+    CljNamespace *core = ns_find("clojure.core");
+    return core && core->loaded;
+}
+
+static bool esp_repl_ensure_core_loaded(EvalState *st) {
+    if (!st) {
+        return false;
+    }
+    if (esp_repl_core_loaded()) {
+        return true;
+    }
+    if (!load_clojure_core(st)) {
+        return false;
+    }
+    evalstate_set_ns(st, "user");
+    return esp_repl_core_loaded();
+}
+
 static bool esp_boot_load_root_file(EvalState *st) {
     if (!st) return false;
 
@@ -130,11 +149,16 @@ void tinyclj_idf_start(void) {
     evalstate_set_ns(st, "user");
 
     bool boot_root_loaded = true;
+    bool boot_root_present = (resolve_path_to_bytes("/boot/root.edn") != NULL);
     WITH_AUTORELEASE_POOL({
         register_builtins();
-        (void)load_clojure_core(st);
-        evalstate_set_ns(st, "user");
-        boot_root_loaded = esp_boot_load_root_file(st);
+        // Keep startup heap low: only load full clojure.core eagerly when a boot script exists.
+        if (boot_root_present) {
+            boot_root_loaded = esp_repl_ensure_core_loaded(st);
+            if (boot_root_loaded) {
+                boot_root_loaded = esp_boot_load_root_file(st);
+            }
+        }
         evalstate_set_ns(st, "user");
     });
 
@@ -231,6 +255,11 @@ void tinyclj_idf_start(void) {
 
             line_editor_add_to_history(ed, acc);
             (void)esp_repl_history_save(ed);  // best-effort
+            if (!esp_repl_ensure_core_loaded(st)) {
+                platform_put_string(NULL, "Error: failed to load clojure.core\n");
+                acc[0] = '\0';
+                continue;
+            }
             (void)eval_multiform_string(acc, st);
             acc[0] = '\0';
         }
