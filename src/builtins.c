@@ -908,6 +908,20 @@ ID native_next(ID *args, unsigned int argc) {
     return NULL;
   }
 
+  // Fast path for list-backed inputs: avoid allocating a CLJ_SEQ wrapper.
+  // Return the tail directly with pool-managed ownership.
+  if (TAG(collection) == CLJ_LIST || TAG(collection) == CLJ_AST_NODE) {
+    CljList *list = as_list(collection);
+    if (!list || list_empty(list)) {
+      return NULL;
+    }
+    ID rest = LIST_REST(list);
+    if (!rest) {
+      return NULL;
+    }
+    return AUTORELEASE(RETAIN(rest));
+  }
+
   // EAT-YOUR-OWN-DOG-FOOD: Use seq_next for all seqable types.
   // TODO(memory/next): Reintroduce a list fast path later if needed, but keep
   // return ownership identical for all input types per MEMORY_POLICY.
@@ -2489,22 +2503,40 @@ ID native_into(ID *args, unsigned int argc) {
 
   // Handle vector target
   if (to_tag == CLJ_VECTOR_PERSISTENT || to_tag == CLJ_VECTOR_TRANSIENT) {
-    CljPersistentVector *result = to;
+    CljTransientVector *acc = NULL;
+    bool release_acc = false;
+    if (to_tag == CLJ_VECTOR_TRANSIENT) {
+      acc = as_transient_vector(to);
+    } else {
+      acc = make_vector_transient(as_persistent_vector(to));
+      if (!acc) {
+        return NULL;
+      }
+      release_acc = true;
+    }
 
     // Iterate over source
     CljType from_tag = TAG(from);
     if (from_tag == CLJ_VECTOR_PERSISTENT || from_tag == CLJ_VECTOR_TRANSIENT) {
-      VECTOR_FOR_EACH(from, elem) {
-        result = vector_conj(result, elem);
+      CljPersistentVector *src = as_vector(from);
+      VECTOR_FOR_EACH(src, elem) {
+        vector_push(acc, elem);
       }
     } else if (from_tag == CLJ_MAP_PERSISTENT || from_tag == CLJ_MAP_TRANSIENT || from_tag == CLJ_RECORD) {
       CljPersistentMap *m = map_like_to_map_owned(from);
       if (m) {
         MAP_FOR_EACH(m, key, val) {
-          CljPersistentVector *entry = make_vector(2, STRONG);
-          entry = vector_conj(entry, key);
-          entry = vector_conj(entry, val);
-          result = vector_conj(result, entry);
+          ID entry_items[2] = {key, val};
+          CljPersistentVector *entry = make_vector_from_stack(entry_items, 2);
+          if (!entry) {
+            RELEASE(m);
+            if (release_acc) {
+              RELEASE(acc);
+            }
+            return NULL;
+          }
+          vector_push(acc, entry);
+          RELEASE(entry);
         }
         RELEASE(m);
       }
@@ -2512,11 +2544,18 @@ ID native_into(ID *args, unsigned int argc) {
       // Iterate over list (CLJ_LIST or CLJ_AST_NODE - both use same structure)
       CljList *list = from;
       LIST_FOR_EACH(list, elem) {
-        result = vector_conj(result, elem);
+        vector_push(acc, elem);
       }
     }
 
-    return result;
+    if (!release_acc) {
+      return to;
+    }
+
+    CljPersistentVector *result = vector_persistent(acc);
+    ID result_safe = AUTORELEASE(RETAIN(result));
+    RELEASE(acc);
+    return result_safe;
   }
 
   // Handle map target
@@ -2541,10 +2580,11 @@ ID native_into(ID *args, unsigned int argc) {
       }
     } else if (from_tag == CLJ_VECTOR_PERSISTENT || from_tag == CLJ_VECTOR_TRANSIENT) {
       // Vector of [k v] pairs
-      VECTOR_FOR_EACH(from, entry) {
+      CljPersistentVector *src_entries = as_vector(from);
+      VECTOR_FOR_EACH(src_entries, entry) {
         unsigned char entry_tag = entry ? TAG(entry) : 0;
         if (entry_tag == CLJ_VECTOR_PERSISTENT || entry_tag == CLJ_VECTOR_TRANSIENT) {
-          CljPersistentVector *pair = entry;
+          CljPersistentVector *pair = as_vector(entry);
           if (vector_count(pair) >= 2) {
             ASSIGN(result, map_assoc(result, vector_nth(pair, 0), vector_nth(pair, 1)));
           }
@@ -2698,9 +2738,9 @@ ID native_persistent_bang(ID *args, unsigned int argc) {
   uint16_t tag = TAG(coll);
   switch (tag) {
   case CLJ_VECTOR_TRANSIENT:
-    return vector_persistent(coll);
+    return AUTORELEASE(RETAIN(vector_persistent(as_transient_vector(coll))));
   case CLJ_MAP_TRANSIENT:
-    return map_persistent(as_transient_map(coll));
+    return AUTORELEASE(RETAIN(map_persistent(as_transient_map(coll))));
   case CLJ_VECTOR_PERSISTENT:
   case CLJ_MAP_PERSISTENT:
     // persistent! on persistent returns the same object
@@ -2726,14 +2766,10 @@ ID native_conj_bang(ID *args, unsigned int argc) {
 
   int tag = TAG(coll);
   if (tag == CLJ_VECTOR_TRANSIENT) {
-    CljPersistentVector *result = coll;
-    // vector_conj automatically handles transient vectors correctly (always in-place)
     for (unsigned int i = 1; i < argc; i++) {
-      result = vector_conj(result, args[i]);
-      if (!result)
-        return NULL;
+      vector_push(as_transient_vector(coll), args[i]);
     }
-    return result;
+    return coll;
   } else if (tag == CLJ_MAP_TRANSIENT) {
     if (argc != 3)
       return NULL; // conj! for maps needs key-value pair
@@ -4815,6 +4851,8 @@ ID native_slurp(ID *args, unsigned int argc) {
   return AUTORELEASE(result);
 }
 
+static bool eval_source_buffer_in_current_state(const char *src_data, size_t src_len,
+                                                const char *src_name, EvalState *st);
 static bool eval_source_in_current_state(CljString *src, const char *src_name, EvalState *st);
 
 // load-file: read and evaluate all forms in a file (Clojure standard function)
@@ -4883,6 +4921,13 @@ static char *namespace_to_relpath(const char *ns_name) {
 static bool eval_source_in_current_state(CljString *src, const char *src_name, EvalState *st) {
   if (!src || !st)
     return false;
+  return eval_source_buffer_in_current_state(string_data(src), (size_t)string_length(src), src_name, st);
+}
+
+static bool eval_source_buffer_in_current_state(const char *src_data, size_t src_len,
+                                                const char *src_name, EvalState *st) {
+  if (!src_data || !st)
+    return false;
   static int debug_require_errors = -1;
   static int debug_require_heap = -1;
   if (debug_require_errors == -1) {
@@ -4905,7 +4950,7 @@ static bool eval_source_in_current_state(CljString *src, const char *src_name, E
       (debug_require_heap != 0) &&
       src_name && strstr(src_name, "sound-demos.clj") != NULL;
   Reader reader;
-  reader_init_with_length(&reader, string_data(src), (size_t)string_length(src));
+  reader_init_with_length(&reader, src_data, src_len);
   if (src_name && src_name[0]) {
     reader_set_source_name(&reader, src_name);
   } else if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname) {
@@ -5191,18 +5236,25 @@ static inline bool bootstrap_register_cname_allowed(const char *cname) {
 bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, const char *source_path) {
   if (!st || !ns_name || !source_path || !bytes || TAG(bytes) != CLJ_BYTE_ARRAY)
     return false;
-  CljString *source_str = string_view_from_byte_array(bytes);
-  if (!source_str)
+  ID held_bytes = RETAIN(bytes);
+  CljByteArray *source_bytes = as_byte_array((CljValue)held_bytes);
+  if (!source_bytes || source_bytes->length < 0 || !source_bytes->data) {
+    RELEASE(held_bytes);
     return false;
+  }
+
+  const char *source_data = (const char *)source_bytes->data;
+  size_t source_len = (size_t)source_bytes->length;
+
   CljNamespace *orig_ns = st->current_ns;
   CljNamespace *orig_resolve_ns = st->resolve_ns;
   CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
   if (!target_ns) {
-    RELEASE(source_str);
+    RELEASE(held_bytes);
     return false;
   }
   if (target_ns->loaded) {
-    RELEASE(source_str);
+    RELEASE(held_bytes);
     return true;
   }
   st->current_ns = target_ns;
@@ -5213,7 +5265,7 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
   bool ok = false;
   CLJException *pending_ex = NULL;
   TRY {
-    ok = eval_source_in_current_state(source_str, source_path, st);
+    ok = eval_source_buffer_in_current_state(source_data, source_len, source_path, st);
     if (ok) {
       NsInitFn init_fn = ns_lookup_init(ns_name);
       if (init_fn) ok = init_fn(st);
@@ -5229,7 +5281,7 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
   ns_end_resolve_cache_batch();
   st->current_ns = orig_ns;
   st->resolve_ns = orig_resolve_ns;
-  RELEASE(source_str);
+  RELEASE(held_bytes);
   pending_ex = AUTORELEASE(pending_ex);
   if (pending_ex) {
     THROW(pending_ex);

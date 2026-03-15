@@ -1074,6 +1074,13 @@ TEST_SHARED(test_transient_on_transient_returns_same_object) {
   RELEASE(tmap);
 }
 
+TEST_SHARED(test_conj_bang_transient_vector_appends_values) {
+  CljObject *result = eval_string("(= (persistent! (conj! (transient []) 1 2 3)) [1 2 3])",
+                                  g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_EQUAL_PTR(clj_true, result);
+}
+
 // Clojure-compatibility test: (persistent!) on persistent collection returns the same object
 TEST_SHARED(test_persistent_on_persistent_returns_same_object) {
   // Test 1: (persistent!) on persistent vector returns the same object

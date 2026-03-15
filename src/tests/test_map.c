@@ -1240,6 +1240,11 @@ TEST(test_into_pairs_to_map) {
   ASSERT_TRUE_RESULT("(= (into {:a 1} [[:b 2] [:c 3]]) {:a 1 :b 2 :c 3})");
 }
 
+/* Target: 0 (raised to 65536); TODO: tighten after parser/AST bootstrap noise is reduced in isolated map tests. */
+TEST(test_into_transient_vector_pairs_to_map, 65536) {
+  ASSERT_TRUE_RESULT("(= (into {1 10} (transient [[2 20] [3 30]])) {1 10 2 20 3 30})");
+}
+
 TEST(test_into_map_to_map) {
   ASSERT_TRUE_RESULT("(= (into {:a 1} {:b 2}) {:a 1 :b 2})");
 }
@@ -1256,6 +1261,18 @@ TEST(test_into_nil_source) {
 
 TEST(test_into_list_to_vector) {
   ASSERT_TRUE_RESULT("(= (into [] '(1 2 3)) [1 2 3])");
+}
+
+TEST(test_into_transient_vector_target, 0) {
+  ASSERT_TRUE_RESULT("(= (persistent! (into (transient []) [1 2 3])) [1 2 3])");
+}
+
+TEST(test_into_map_to_vector_heap_no_growth, 0) {
+#if !MEMORY_PROFILING_ENABLED
+  TEST_IGNORE_MESSAGE("requires MEMORY_PROFILING_ENABLED");
+#else
+  ASSERT_TRUE_RESULT("(= (:total (heap (into [] {1 2 3 4 5 6}))) 0)");
+#endif
 }
 
 // ============================================================================
