@@ -6,6 +6,7 @@
  */
 
 #include "tests_common.h"
+#include <unistd.h>
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -14,6 +15,64 @@
 // ============================================================================
 // EXCEPTION TESTS
 // ============================================================================
+
+static char *capture_print_exception_output(CLJException *ex) {
+    if (!ex) {
+        return NULL;
+    }
+
+    FILE *tmp = tmpfile();
+    if (!tmp) {
+        return NULL;
+    }
+
+    int stderr_fd = fileno(stderr);
+    int saved_stderr = dup(stderr_fd);
+    if (saved_stderr < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    fflush(stderr);
+    if (dup2(fileno(tmp), stderr_fd) < 0) {
+        close(saved_stderr);
+        fclose(tmp);
+        return NULL;
+    }
+
+    print_exception(ex);
+    fflush(stderr);
+
+    (void)dup2(saved_stderr, stderr_fd);
+    close(saved_stderr);
+
+    if (fseek(tmp, 0, SEEK_END) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    long len = ftell(tmp);
+    if (len < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    if (fseek(tmp, 0, SEEK_SET) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    char *buffer = CLJ_MALLOC((size_t)len + 1);
+    if (!buffer) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    size_t nread = fread(buffer, 1, (size_t)len, tmp);
+    buffer[nread] = '\0';
+    fclose(tmp);
+    return buffer;
+}
 
 TEST(test_simple_try_catch_exception_caught) {
     bool exception_caught = false;
@@ -275,6 +334,29 @@ TEST(test_oom_exception_is_static_and_no_stacktrace) {
     } END_TRY
 
     TEST_ASSERT_TRUE_MESSAGE(exception_caught, "OOM exception should have been caught");
+}
+
+TEST(test_print_exception_oom_includes_native_stacktrace_marker) {
+    bool exception_caught = false;
+    bool marker_found = false;
+
+    TRY {
+        throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
+                                  "Out of memory while allocating %s", "stacktrace-test");
+        TEST_FAIL_MESSAGE("Should not reach here after throwing OOM");
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("OutOfMemoryError", ex->type);
+
+        char *output = capture_print_exception_output(ex);
+        TEST_ASSERT_NOT_NULL_MESSAGE(output, "Failed to capture print_exception output");
+        marker_found = (strstr(output, "Native stack trace (OOM):") != NULL);
+        CLJ_FREE(output);
+    } END_TRY
+
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "OOM exception should have been caught");
+    TEST_ASSERT_TRUE_MESSAGE(marker_found, "OOM output should include native stacktrace marker");
 }
 
 TEST(test_throw_macro_convenience) {

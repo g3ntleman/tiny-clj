@@ -14,6 +14,9 @@
 #include "value.h"   /* IS_IMMEDIATE for AUTORELEASE macro */
 #include "memory.h"
 #include "strings.h"
+#if defined(ESP_PLATFORM)
+#include "esp_debug_helpers.h"
+#endif
 
 static void errf(const char *fmt, ...) {
     char buf[512];
@@ -101,6 +104,10 @@ static inline bool is_out_of_memory_exception_type(const char *type) {
     // Size-optimized fast path: compare pointer to interned const string.
     // This relies on callsites using EXCEPTION_OUT_OF_MEMORY.
     return type == EXCEPTION_OUT_OF_MEMORY;
+}
+
+static inline bool is_out_of_memory_exception_instance(const CLJException *ex) {
+    return ex && strcmp(ex->type, EXCEPTION_OUT_OF_MEMORY) == 0;
 }
 
 // ============================================================================
@@ -311,7 +318,9 @@ struct CljString* stacktrace(void) {
 #endif
 
 void exception_print_native_backtrace(void) {
-#if defined(DEBUG) && !defined(ESP32_BUILD)
+#if defined(ESP_PLATFORM)
+    (void)esp_backtrace_print(100);
+#elif defined(DEBUG) && !defined(ESP32_BUILD)
 #if defined(__APPLE__) || defined(__linux__)
     void *array[20];
     int size = backtrace(array, 20);
@@ -344,6 +353,7 @@ void exception_print_native_backtrace(void) {
 /** @brief Print exception details including stacktrace and object (if available) */
 void print_exception(CLJException *ex) {
     if (!ex) return;
+    const bool is_oom = is_out_of_memory_exception_instance(ex);
 
     // Print basic exception information (compact) using mini_format everywhere.
     errf("%s: %s at %s:%d:%d",
@@ -379,10 +389,20 @@ void print_exception(CLJException *ex) {
         }
     }
 
+    if (is_oom) {
+        fputs("Native stack trace (OOM):\n", stderr);
+        exception_print_native_backtrace();
+    }
+
     fputs("\n", stderr);  // Empty line after exception for readability
 #else
     // Release builds: no stacktrace or object fields
     fputs("\n", stderr);
+    if (is_oom) {
+        fputs("Native stack trace (OOM):\n", stderr);
+        exception_print_native_backtrace();
+        fputs("\n", stderr);
+    }
 #endif
 }
 
@@ -402,7 +422,9 @@ void throw_exception_object(CLJException *ex) {
 
         // No handler - unhandled exception (exit as before)
         // Tests should use TRY/CATCH to catch exceptions
-        CLJ_FREE(ex); exit(1);
+        RELEASE((CljObject *)ex);
+        fflush(stderr);
+        _Exit(1);
     }
 
     // Don't print exception details if there's a handler (expected exceptions in tests)
