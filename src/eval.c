@@ -57,6 +57,62 @@ void eval_set_use_compiled_ast(int enabled) {
 
 static ID eval_noncanonical_list_form(ID list_form);
 
+// True when evaluating this literal may change the value and therefore requires
+// materializing a new collection (e.g. symbols, calls, non-literal subforms).
+static bool literal_needs_evaluation(ID value) {
+  if (!value || IS_IMMEDIATE(value)) {
+    return false;
+  }
+
+  CljType tag = TAG(value);
+  if (tag == CLJ_SYMBOL) {
+    // nil is self-evaluating for literal reuse checks.
+    if (value == SYM_NIL) {
+      return false;
+    }
+    return !IS_KEYWORD(value);
+  }
+
+  // Lexical slot refs inside literals (e.g. [x] canonicalized to [<slot-ref>])
+  // must be resolved before the literal can be returned.
+  if (tag == CLJ_SLOT_REF) {
+    return true;
+  }
+
+  if (tag == CLJ_AST_CALL || tag == CLJ_AST_NODE || is_list_type(tag)) {
+    return true;
+  }
+
+  if (tag == CLJ_VECTOR_PERSISTENT) {
+    CljPersistentVector *vec = as_vector(value);
+    if (!vec) {
+      return false;
+    }
+    VECTOR_FOR_EACH(vec, elem) {
+      if (literal_needs_evaluation(elem)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (tag == CLJ_MAP_PERSISTENT) {
+    CljPersistentMap *map = as_map(value);
+    if (!map) {
+      return false;
+    }
+    MAP_FOR_EACH(map, key, map_value) {
+      if (literal_needs_evaluation(key) || literal_needs_evaluation(map_value)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Other object literals (string, function, closure, etc.) evaluate to themselves.
+  return false;
+}
+
 static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, CljSymbol *qualified) {
   if (!slot || !unqualified || !qualified) {
     return;
@@ -824,6 +880,9 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
 
   case CLJ_VECTOR_PERSISTENT:
   case CLJ_VECTOR_TRANSIENT: {
+    if (!literal_needs_evaluation(body)) {
+      return body;
+    }
     // Vector literals need to have their elements evaluated
     CljPersistentVector *vec = (CljPersistentVector *)body;
     unsigned int count = vector_count(vec);
@@ -857,6 +916,9 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
   }
 
   case CLJ_MAP_PERSISTENT: {
+    if (!literal_needs_evaluation(body)) {
+      return body;
+    }
     CljPersistentMap *map = (CljPersistentMap *)body;
     CljPersistentMap *result = map_empty();
 
@@ -965,6 +1027,9 @@ static ID __attribute__((noinline)) eval_body_no_ctx(ID body, CljPersistentMap *
   }
 
   case CLJ_VECTOR_PERSISTENT: {
+    if (!literal_needs_evaluation(body)) {
+      return body;
+    }
     // Vector literals need to have their elements evaluated
     // This is necessary for cases like [(f x) (g x)] where f and g should be called
     CljPersistentVector *vec = (CljPersistentVector *)body;
@@ -999,6 +1064,9 @@ static ID __attribute__((noinline)) eval_body_no_ctx(ID body, CljPersistentMap *
   }
 
   case CLJ_MAP_PERSISTENT: {
+    if (!literal_needs_evaluation(body)) {
+      return body;
+    }
     // Map literals need to have their keys and values evaluated
     // This is necessary for cases like {nil "value"} where nil should be evaluated to NULL
     CljPersistentMap *map = (CljPersistentMap *)body;
@@ -2915,8 +2983,9 @@ ID eval_let(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, con
     frame_set_bindings(let_frame, ctx ? ctx->frame : NULL,
                        binding_params, binding_values, binding_index + 1);
 
-    bool force_cow_let_env_assoc = false;
-    if (is_closure(value)) {
+    bool force_cow_let_env_assoc =
+        (value && !IS_IMMEDIATE(value) && TAG(value) == CLJ_LAZY_SEQ);
+    if (!force_cow_let_env_assoc && is_closure(value)) {
       CljFunction *fv = as_function(value);
       if (fv && fv->env_stack) {
         unsigned int captured_count = vector_count(fv->env_stack);
@@ -3358,7 +3427,6 @@ ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
  * @param ctx The evaluation context
  * @return The result of evaluating expr (autoreleased) or NULL (nil)
  */
-#ifdef DEBUG
 ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
   // (heap expr) - Memory leak detector.
   // Evaluates expr once and returns a map of per-type bytes deltas.
@@ -3465,7 +3533,6 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
 
   return AUTORELEASE(result);
 }
-#endif // DEBUG
 
 // ============================================================================
 // FUNCTION CALL IMPLEMENTATION

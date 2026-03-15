@@ -135,10 +135,6 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
     if (!st) {
         return false;
     }
-    if (!require_namespace_by_name(st, "tiny-fx.gfx-scene")) {
-        return false;
-    }
-    if (g_record_schema_initialized) return true;
 
     init_record_keys();
 
@@ -167,7 +163,27 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
     CljRecordDescriptor *d_scene = record_descriptor_lookup(g_record_schema.t_scene);
     if (!d_transform || !d_style || !d_group || !d_line || !d_poly || !d_rect || !d_tri || !d_text ||
         !d_timeline || !d_frame || !d_scene) {
-        return false;
+        if (!require_namespace_by_name(st, "tiny-fx.gfx-scene")) {
+            return false;
+        }
+        if (g_record_schema_initialized) {
+            return true;
+        }
+        d_transform = record_descriptor_lookup(g_record_schema.t_transform);
+        d_style = record_descriptor_lookup(g_record_schema.t_style);
+        d_group = record_descriptor_lookup(g_record_schema.t_group);
+        d_line = record_descriptor_lookup(g_record_schema.t_line);
+        d_poly = record_descriptor_lookup(g_record_schema.t_polyline);
+        d_rect = record_descriptor_lookup(g_record_schema.t_rect);
+        d_tri = record_descriptor_lookup(g_record_schema.t_tri);
+        d_text = record_descriptor_lookup(g_record_schema.t_vtext);
+        d_timeline = record_descriptor_lookup(g_record_schema.t_timeline);
+        d_frame = record_descriptor_lookup(g_record_schema.t_frame_scene);
+        d_scene = record_descriptor_lookup(g_record_schema.t_scene);
+        if (!d_transform || !d_style || !d_group || !d_line || !d_poly || !d_rect || !d_tri || !d_text ||
+            !d_timeline || !d_frame || !d_scene) {
+            return false;
+        }
     }
 
     g_record_schema.d_transform = d_transform;

@@ -592,3 +592,16 @@ TEST(test_stacktrace_stack_trace_returns_vector_of_strings) {
     }
 
 }
+
+TEST(test_stacktrace_stacktrace_str_returns_nil_or_string) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    CljObject *req_result = eval_string("(require 'clojure.stacktrace)", g_test_eval_state);
+    (void)req_result;
+
+    CljObject *result = eval_string(
+        "(let [e (try (/ 1 0) (catch Exception e e))] (clojure.stacktrace/stacktrace-str e))",
+        g_test_eval_state);
+    TEST_ASSERT_TRUE_MESSAGE(result == NULL || TAG(result) == CLJ_NIL || TAG(result) == CLJ_STRING,
+                             "stacktrace-str should return nil or a string");
+}

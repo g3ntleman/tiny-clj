@@ -618,6 +618,36 @@ static void mark_has_animation(bool *out_has_animation) {
     }
 }
 
+static bool timeline_record_fields(ID timeline_obj,
+                                   const VgRecordSchema *sc,
+                                   ID *out_keyframes,
+                                   ID *out_loop) {
+    if (!timeline_obj || TAG(timeline_obj) != CLJ_RECORD || !sc || !out_keyframes || !out_loop) {
+        return false;
+    }
+
+    if (record_type_hash(timeline_obj) == sc->h_timeline) {
+        Timeline *timeline = (Timeline *)timeline_obj;
+        *out_keyframes = timeline->keyframes;
+        *out_loop = timeline->loop;
+        return true;
+    }
+
+    const VgRecordKeys *keys = tiny_fx_gfx_record_keys();
+    if (!keys || !keys->k_keyframes || !keys->k_loop) {
+        return false;
+    }
+
+    ID keyframes = tiny_fx_gfx_get_field(timeline_obj, keys->k_keyframes, NOT_FOUND);
+    if (keyframes == NOT_FOUND) {
+        return false;
+    }
+
+    *out_keyframes = keyframes;
+    *out_loop = tiny_fx_gfx_get_field(timeline_obj, keys->k_loop, NULL);
+    return true;
+}
+
 static ID resolve_timeline_value_with_info(ID raw_value,
                                            uint32_t now_ms,
                                            const VgRecordSchema *sc,
@@ -626,13 +656,12 @@ static ID resolve_timeline_value_with_info(ID raw_value,
     if (out_info) {
         memset(out_info, 0, sizeof(*out_info));
     }
-    if (!raw_value || !sc || TAG(raw_value) != CLJ_RECORD || record_type_hash(raw_value) != sc->h_timeline) {
+    ID keyframes_obj = NULL;
+    ID loop_obj = NULL;
+    if (!raw_value || !sc || !timeline_record_fields(raw_value, sc, &keyframes_obj, &loop_obj)) {
         return raw_value;
     }
     mark_has_animation(out_has_animation);
-
-    Timeline *timeline = (Timeline *)raw_value;
-    ID keyframes_obj = timeline->keyframes;
     if (!id_is_vector(keyframes_obj)) {
         return NULL;
     }
@@ -673,7 +702,7 @@ static ID resolve_timeline_value_with_info(ID raw_value,
         last_value = frame_value;
     }
 
-    bool loop = id_to_bool_default(timeline->loop, false);
+    bool loop = id_to_bool_default(loop_obj, false);
     uint32_t phase_ms = timeline_phase_ms(now_ms, last_ms, loop);
     if (out_info) {
         out_info->phase_ms = phase_ms;
@@ -843,9 +872,9 @@ static VgTransformFixed decode_transform_fixed_with_info(ID obj,
     if (!obj) {
         return vg_transform_fixed_identity();
     }
-    if (TAG(obj) == CLJ_RECORD && record_type_hash(obj) == s->h_timeline) {
-        Timeline *timeline = (Timeline *)obj;
-        ID keyframes_obj = timeline->keyframes;
+    ID keyframes_obj = NULL;
+    ID loop_obj = NULL;
+    if (timeline_record_fields(obj, s, &keyframes_obj, &loop_obj)) {
         VgAnimEase ease = timeline_ease_kind(obj);
         if (!id_is_vector(keyframes_obj)) {
             return vg_transform_fixed_identity();
@@ -887,7 +916,7 @@ static VgTransformFixed decode_transform_fixed_with_info(ID obj,
             last_transform = frame_transform;
         }
 
-        bool loop = id_to_bool_default(timeline->loop, false);
+        bool loop = id_to_bool_default(loop_obj, false);
         uint32_t phase_ms = timeline_phase_ms(now_ms, last_ms, loop);
         if (out_info) {
             out_info->phase_ms = phase_ms;

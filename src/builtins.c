@@ -292,9 +292,7 @@ ID native_meta(ID *args, unsigned int argc);
 ID native_with_meta(ID *args, unsigned int argc);
 ID nth2(ID *args, unsigned int argc);
 
-#if defined(DEBUG) && !defined(ESP32_BUILD)
 ID native_stacktrace_str(ID *args, unsigned int argc);
-#endif
 
 static CljNamespace *namespace_from_value(ID value);
 static int compare_symbol_names(const void *a, const void *b);
@@ -3965,7 +3963,6 @@ ID native_get_thread_bindings(ID *args, unsigned int argc) {
   return AUTORELEASE(out);
 }
 
-#if defined(DEBUG) && !defined(ESP32_BUILD)
 // clojure.stacktrace/stacktrace-str: return native (C) backtrace string captured in CLJException
 // Intended to be used by libs/clojure/stacktrace.clj to build vector-of-frames on demand.
 ID native_stacktrace_str(ID *args, unsigned int argc) {
@@ -3976,14 +3973,18 @@ ID native_stacktrace_str(ID *args, unsigned int argc) {
     return NULL;
   }
 
+#ifdef DEBUG
   CLJException *ex = (CLJException *)ex_obj;
   if (!ex->stacktrace) {
     return NULL;
   }
 
   return ex->stacktrace;
-}
+#else
+  (void)ex_obj;
+  return NULL;
 #endif
+}
 
 ID native_meta(ID *args, unsigned int argc);
 
@@ -4012,7 +4013,6 @@ enum {
 #define NATIVE_ENTRY_BOOT_CNAME(fn, cname) \
   {NULL, (fn), (cname), NATIVE_ENTRY_BOOTSTRAP}
 
-#if defined(DEBUG) && !defined(ESP32_BUILD)
 // Qualified-name entry for clojure.stacktrace/stacktrace-str.
 // We store it as an un-namespaced static symbol and rely on native_function_lookup's
 // qualified-name string fallback (avoids eager symbol-table init for clojure.stacktrace).
@@ -4021,7 +4021,6 @@ static StaticSymbolData sym_stacktrace_str_qualified_data = {
             .ns_name = NULL,
             .unqualified = NULL,
             .cname = "clojure.stacktrace/stacktrace-str"}};
-#endif
 
 // Qualified-name entries for tiny-clj.datetime native stubs.
 // Stored as pseudo-qualified cname and rely on native_function_lookup's qualified-name fallback.
@@ -4272,9 +4271,9 @@ static const NativeFunctionEntry native_function_table[] = {
     // clojure.repl functions
     NATIVE_ENTRY_BOOT(&sym_source_data.sym, native_source, "clojure.repl/source"),
     NATIVE_ENTRY_BOOT(&sym_dir_data.sym, native_repl_dir, "clojure.repl/dir"),
-#if defined(DEBUG) && !defined(ESP32_BUILD)
+    // Must stay available in non-DEBUG/ESP32 builds because clojure.stacktrace
+    // defines stacktrace-str as a :native stub and requires native lookup.
     NATIVE_ENTRY(&sym_stacktrace_str_qualified_data.sym, native_stacktrace_str),
-#endif
     NATIVE_ENTRY_BOOT(&sym_retain_count_data.sym, native_retain_count, "tiny-clj/retain-count"),
 
     // Bootstrap-only native functions without static symbol entries.

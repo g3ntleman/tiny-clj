@@ -186,7 +186,8 @@ static ID parse_set(Reader *reader, EvalState *st);
 static ID parse_set_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack);
 static ID parse_list(Reader *reader, EvalState *st);
 static ID parse_expr_with_stack(Reader *reader, EvalState *st, CljTransientVector *stack);
-static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open_column);
+static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open_column,
+                          CljTransientVector *stack);
 static ID parse_string_internal(Reader *reader, EvalState *st);
 static ID parse_symbol(Reader *reader, EvalState *st);
 static bool skip_form_no_alloc(Reader *reader);
@@ -244,9 +245,9 @@ static ID parse_character(Reader *reader, EvalState *st);
 static CljObject *make_number_by_parsing(Reader *reader, EvalState *st);
 
 // Ensure that every parse step advances the reader or hits EOF, otherwise throw
-static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
+static ID parse_expr_with_progress(Reader *reader, EvalState *st, CljTransientVector *stack) {
   size_t before = reader_offset(reader);
-  ID val = parse_expr(reader, st);
+  ID val = stack ? parse_expr_with_stack(reader, st, stack) : parse_expr(reader, st);
   size_t after = reader_offset(reader);
   if (after <= before && !reader_eof(reader)) {
     throw_parser_exception("Parser made no progress while reading expression", reader);
@@ -931,7 +932,8 @@ static ID parse_vector(Reader *reader, EvalState *st) {
         if (!value && after <= before && !reader_eof(reader)) {
           no_progress = true;
         } else {
-          vector_push(tvec, value);
+          ID normalized = (value == SYM_NIL) ? NULL : value;
+          vector_push(tvec, normalized);
         }
       });
 
@@ -994,7 +996,8 @@ static ID parse_vector_with_stack(Reader *reader, EvalState *st, CljTransientVec
         no_progress = true;
       } else {
         // Push das Element auf den Parser-Stack
-        vector_push(stack, value);
+        ID normalized = (value == SYM_NIL) ? NULL : value;
+        vector_push(stack, normalized);
       }
     });
 
@@ -1062,8 +1065,10 @@ static ID parse_map_with_stack(Reader *reader, EvalState *st, CljTransientVector
       reader_skip_all(reader);
 
       // Push key-value pair as two consecutive elements
-      if (key) vector_push(stack, key);
-      if (value) vector_push(stack, value);
+      ID normalized_key = (key == SYM_NIL) ? NULL : key;
+      ID normalized_value = (value == SYM_NIL) ? NULL : value;
+      vector_push(stack, normalized_key);
+      vector_push(stack, normalized_value);
     });
   }
 
@@ -1118,7 +1123,9 @@ static ID parse_map(Reader *reader, EvalState *st) {
       ID value = parse_expr(reader, st);
       // Note: value can be NULL (nil) - that's a valid value in Clojure!
       reader_skip_all(reader);
-      map_assoc_inplace(&map, key, value);
+      ID normalized_key = (key == SYM_NIL) ? NULL : key;
+      ID normalized_value = (value == SYM_NIL) ? NULL : value;
+      map_assoc_inplace(&map, normalized_key, normalized_value);
       failed = map == NULL;
     });
 
@@ -1256,8 +1263,13 @@ static ID parse_list(Reader *reader, EvalState *st) {
     return (ID)empty_list();
   }
 
+  CljTransientVector *stack = AUTORELEASE(make_vector_transient(empty_vector()));
+  if (!stack) {
+    return NULL;
+  }
+
   // Parse first element
-  ID first = parse_expr_with_progress(reader, st);
+  ID first = parse_expr_with_progress(reader, st, stack);
   reader_skip_all(reader);
 
   // Check if first element is if-let symbol for macro expansion
@@ -1272,7 +1284,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
       // so use current position as approximation (this is a nested list within the if-let)
       int nested_open_line = reader->line;
       int nested_open_column = reader->column > 1 ? reader->column - 1 : 1;
-      ID rest = parse_list_rest(reader, st, nested_open_line, nested_open_column);
+      ID rest = parse_list_rest(reader, st, nested_open_line, nested_open_column, stack);
       if (!rest) {
         throw_parser_exception("if-let requires at least binding vector and then expression", reader);
       }
@@ -1359,7 +1371,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
   }
 
   // Parse rest of the list recursively
-  ID rest = parse_list_rest(reader, st, open_line, open_column);
+  ID rest = parse_list_rest(reader, st, open_line, open_column, stack);
 
   // Build list from first and rest
   // Return autoreleased object - caller can use until pool is popped
@@ -1387,9 +1399,11 @@ static ID parse_list(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @param open_line Line number where the list was opened (for error messages)
  * @param open_column Column number where the list was opened (for error messages)
+ * @param stack Optional parser stack for nested collection parsing
  * @return Parsed rest of list or NULL for empty rest
  */
-static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open_column) {
+static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open_column,
+                          CljTransientVector *stack) {
   reader_skip_all(reader);
 
   if (reader_eof(reader)) {
@@ -1403,7 +1417,7 @@ static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open
 
   CljList *head = NULL;
   WITH_AUTORELEASE_POOL({
-    ID element = parse_expr_with_progress(reader, st);
+    ID element = parse_expr_with_progress(reader, st, stack);
     reader_skip_all(reader);
     head = make_list(element, NULL);
   });
@@ -1416,7 +1430,7 @@ static ID parse_list_rest(Reader *reader, EvalState *st, int open_line, int open
   while (!reader_eof(reader) && reader_peek_char(reader) != ')') {
     CljList *node = NULL;
     WITH_AUTORELEASE_POOL({
-      ID element = parse_expr_with_progress(reader, st);
+      ID element = parse_expr_with_progress(reader, st, stack);
       reader_skip_all(reader);
       node = make_list(element, NULL);
       ASSIGN(tail->rest, node);
@@ -2270,7 +2284,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
 
   // Parse the body (list contents)
   // Note: parse_list_rest does NOT consume the closing ')', so we need to do it
-  ID body = parse_list_rest(reader, st, open_line, open_column);
+  ID body = parse_list_rest(reader, st, open_line, open_column, NULL);
 
   // Consume closing ')'
   reader_skip_all(reader);
