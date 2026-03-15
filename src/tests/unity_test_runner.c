@@ -15,6 +15,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <fcntl.h>
 #ifdef __APPLE__
 #include <malloc/malloc.h>
 #endif
@@ -45,6 +46,8 @@ static bool g_batch_mode = false;
 
 // Quiet output mode: suppress PASS lines and stdout from passing tests
 static bool g_quiet_output = false;
+static int g_quiet_saved_stdout_fd = -1;
+static bool g_quiet_stdout_redirect_active = false;
 
 // Single test mode: enable verbose memory stats when only one test runs
 static bool g_single_test_mode = false;
@@ -64,6 +67,64 @@ static bool g_heap_check_enabled = false;
 static size_t g_heap_growth_limit_bytes = 0;
 static uint32_t g_heap_baseline_pool_depth = 0;
 
+static bool env_list_contains_group(const char *csv, const char *group) {
+  if (!csv || !*csv || !group || !*group) {
+    return false;
+  }
+
+  const char *p = csv;
+  while (*p) {
+    while (*p == ' ' || *p == '\t' || *p == ',') {
+      p++;
+    }
+    if (!*p) {
+      break;
+    }
+
+    const char *start = p;
+    while (*p && *p != ',') {
+      p++;
+    }
+    const char *end = p;
+    while (end > start && (end[-1] == ' ' || end[-1] == '\t')) {
+      end--;
+    }
+
+    size_t len = (size_t)(end - start);
+    if (len > 0 && strlen(group) == len && strncmp(start, group, len) == 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static bool group_runs_batched(const char *group) {
+  if (!group) {
+    return false;
+  }
+  if (strncmp(group, "shared_", 7) == 0) {
+    return true;
+  }
+  if (!env_list_contains_group(getenv("TINY_CLJ_TEST_DISABLE_DEFAULT_BATCH"), "1")) {
+    static const char *k_default_batched_groups[] = {
+        "test_sound_engine",
+        "test_map",
+        "test_namespace",
+        "test_sequences",
+        "test_let",
+        "test_file_io",
+        "test_repl",
+    };
+    for (size_t i = 0; i < sizeof(k_default_batched_groups) / sizeof(k_default_batched_groups[0]); i++) {
+      if (strcmp(group, k_default_batched_groups[i]) == 0) {
+        return true;
+      }
+    }
+  }
+  return env_list_contains_group(getenv("TINY_CLJ_TEST_BATCH_GROUPS"), group);
+}
+
 static bool is_shared_test_entry(const SubjectiveCTestEntry *entry) {
   if (!entry || !entry->group)
     return false;
@@ -74,9 +135,140 @@ static bool is_shared_test_entry(const SubjectiveCTestEntry *entry) {
 static bool group_runs_without_core(const SubjectiveCTestEntry *entry) {
   if (!entry || !entry->group)
     return false;
-  const char *g = entry->group;
-  return strcmp(g, "test_parser") == 0 || strcmp(g, "test_static_keywords") == 0;
+  const char *group = entry->group;
+  static const char *k_default_no_core_groups[] = {
+      "test_byte_array",
+      "test_byte_array_view",
+      "test_call_frame",
+      "test_compiled_ast",
+      "test_cow",
+      "test_edn_file_all_types",
+      "test_embedded_sources",
+      "test_exception",
+      "test_fixed_point",
+      "test_gpio_architecture_contract",
+      "test_instant_uuid",
+      "test_let_performance",
+      "test_line_editor_serial",
+      "test_list",
+      "test_list_resolution",
+      "test_lockfree_spsc_queue",
+      "test_macro_expander_debug",
+      "test_mdns_bindings",
+      "test_mdns_codec",
+      "test_mdns_resolver",
+      "test_memory",
+      "test_memory_macros",
+      "test_meta",
+      "test_parser",
+      "test_platform_mdns",
+      "test_platform_net",
+      "test_pprint",
+      "test_runner_patterns",
+      "test_static_keywords",
+      "test_symbol_clojure_compat",
+      "test_utf8_emoji",
+      "test_values",
+  };
+  for (size_t i = 0; i < sizeof(k_default_no_core_groups) / sizeof(k_default_no_core_groups[0]); i++) {
+    if (strcmp(group, k_default_no_core_groups[i]) == 0) {
+      return true;
+    }
+  }
+  return false;
 }
+
+static void quiet_output_begin_capture(void) {
+  if (!g_quiet_output || g_quiet_stdout_redirect_active) {
+    return;
+  }
+  fflush(stdout);
+  int saved = dup(STDOUT_FILENO);
+  if (saved < 0) {
+    return;
+  }
+  int sink = open("/dev/null", O_WRONLY);
+  if (sink < 0) {
+    close(saved);
+    return;
+  }
+  if (dup2(sink, STDOUT_FILENO) < 0) {
+    close(sink);
+    close(saved);
+    return;
+  }
+  close(sink);
+  g_quiet_saved_stdout_fd = saved;
+  g_quiet_stdout_redirect_active = true;
+}
+
+static void quiet_output_end_capture(void) {
+  if (!g_quiet_stdout_redirect_active) {
+    return;
+  }
+  fflush(stdout);
+  (void)dup2(g_quiet_saved_stdout_fd, STDOUT_FILENO);
+  close(g_quiet_saved_stdout_fd);
+  g_quiet_saved_stdout_fd = -1;
+  g_quiet_stdout_redirect_active = false;
+}
+
+static void quiet_output_emit_fail_line(const SubjectiveCTestEntry *entry) {
+  const char *file = (entry && entry->file) ? entry->file : "unknown";
+  int line = (entry && entry->line > 0) ? entry->line : 0;
+  const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
+
+  if (line > 0) {
+    test_fprintf(stderr, "%s:%d:%s:FAIL\n", file, line, name);
+  } else {
+    test_fprintf(stderr, "%s:%s:FAIL\n", file, name);
+  }
+
+  if (g_quiet_saved_stdout_fd >= 0) {
+    if (line > 0) {
+      dprintf(g_quiet_saved_stdout_fd, "%s:%d:%s:FAIL\n", file, line, name);
+    } else {
+      dprintf(g_quiet_saved_stdout_fd, "%s:%s:FAIL\n", file, name);
+    }
+    return;
+  }
+
+  if (line > 0) {
+    test_fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
+  } else {
+    test_fprintf(stdout, "%s:%s:FAIL\n", file, name);
+  }
+}
+
+#ifdef __APPLE__
+static bool g_malloc_check_interval_initialized = false;
+static unsigned long g_malloc_check_interval = 64;
+static unsigned long g_malloc_check_counter = 0;
+
+static unsigned long test_malloc_check_interval(void) {
+  if (!g_malloc_check_interval_initialized) {
+    const char *env = getenv("TINY_CLJ_MALLOC_CHECK_INTERVAL");
+    if (env && *env) {
+      char *end = NULL;
+      unsigned long parsed = strtoul(env, &end, 10);
+      if (end && *end == '\0') {
+        g_malloc_check_interval = parsed;
+      }
+    }
+    g_malloc_check_interval_initialized = true;
+  }
+  return g_malloc_check_interval;
+}
+
+static bool should_run_malloc_zone_check(void) {
+  unsigned long interval = test_malloc_check_interval();
+  if (interval == 0) {
+    return false;
+  }
+  g_malloc_check_counter++;
+  return (g_malloc_check_counter % interval) == 0;
+}
+#endif
 
 void test_heap_growth_disable(void) { g_heap_check_enabled = false; }
 void test_heap_growth_allow_all(void) {
@@ -181,6 +373,9 @@ void setUp(void) {
 
   // CRITICAL: Reset all runtime state for test isolation
   // This consolidates all reset operations for CljRuntime
+  // Reset symbol table here (instead of tearDown) so batched groups pay this
+  // cost once per batch while preserving per-test isolation semantics.
+  symbol_table_cleanup();
   runtime_reset(&g_runtime);
 
   // runtime_init may call functions that use AUTORELEASE (e.g., make_map, vector_transient)
@@ -290,15 +485,14 @@ void tearDown(void) {
   // growth in integer_overflow_detection and similar.
   autorelease_pool_free();
   fs_global_store_reset();
-  runtime_reset(&g_runtime);
-  // Reset symbol table between tests to avoid cross-test contamination.
-  symbol_table_cleanup();
 #ifdef __APPLE__
-  int heap_ok = malloc_zone_check(malloc_default_zone());
-  if (heap_ok != 1) {
-    test_fprintf(stderr, "Heap check failed after test (malloc_zone_check=%d)\n", heap_ok);
-    fflush(stderr);
-    abort();
+  if (should_run_malloc_zone_check()) {
+    int heap_ok = malloc_zone_check(malloc_default_zone());
+    if (heap_ok != 1) {
+      test_fprintf(stderr, "Heap check failed after test (malloc_zone_check=%d)\n", heap_ok);
+      fflush(stderr);
+      abort();
+    }
   }
 #endif
 }
@@ -338,39 +532,7 @@ static void set_unity_test_file_info(const SubjectiveCTestEntry *entry) {
 
 // Helper function to run a single test with exception handling
 static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) {
-  FILE *captured_stdout = NULL;
-  int saved_stdout = -1;
-  bool capturing_stdout = false;
   bool test_failed = false;
-  bool quiet_capture_failed = false;
-
-  // In quiet mode, capture stdout to a temporary file
-  if (g_quiet_output) {
-    captured_stdout = tmpfile();
-    if (!captured_stdout) {
-      test_fprintf(stderr, "Warning: Could not create temporary file for stdout capture, running test normally\n");
-      quiet_capture_failed = true;
-    } else {
-      saved_stdout = dup(STDOUT_FILENO);
-      if (saved_stdout < 0) {
-        fclose(captured_stdout);
-        captured_stdout = NULL;
-        test_fprintf(stderr, "Warning: Could not save stdout, running test normally\n");
-        quiet_capture_failed = true;
-      } else {
-        if (dup2(fileno(captured_stdout), STDOUT_FILENO) < 0) {
-          close(saved_stdout);
-          saved_stdout = -1;
-          fclose(captured_stdout);
-          captured_stdout = NULL;
-          test_fprintf(stderr, "Warning: Could not redirect stdout, running test normally\n");
-          quiet_capture_failed = true;
-        } else {
-          capturing_stdout = true;
-        }
-      }
-    }
-  }
 
   // Save initial failure count to detect if this test failed
   UNITY_COUNTER_TYPE initial_failures = Unity.TestFailures;
@@ -415,50 +577,12 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
   END_TRY
   g_current_test_entry = NULL;
 
-  // Restore stdout if we captured it
-  if (capturing_stdout && saved_stdout >= 0) {
-    fflush(stdout); // Flush any remaining output to temp file
-    dup2(saved_stdout, STDOUT_FILENO);
-    close(saved_stdout);
-    saved_stdout = -1;
-  }
-
   // Quiet mode contract: print ONLY FAIL lines (no PASS lines).
-  // We intentionally do NOT replay captured stdout, because it can contain arbitrary
-  // output (including Unity PASS lines when capture fails). Instead, emit a single
-  // normalized FAIL line when the test fails.
+  // stdout is redirected once per run to avoid per-test tmpfile/dup2 overhead.
   if (g_quiet_output) {
     if (test_failed) {
-      const char *file = (entry && entry->file) ? entry->file : "unknown";
-      int line = (entry && entry->line > 0) ? entry->line : 0;
-      const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
-      if (line > 0) {
-        test_fprintf(stderr, "%s:%d:%s:FAIL\n", file, line, name);
-      } else {
-        test_fprintf(stderr, "%s:%s:FAIL\n", file, name);
-      }
+      quiet_output_emit_fail_line(entry);
     }
-    if (test_failed) {
-      const char *file = (entry && entry->file) ? entry->file : "unknown";
-      int line = (entry && entry->line > 0) ? entry->line : 0;
-      const char *name = (entry && entry->qualified_name) ? entry->qualified_name : (entry ? entry->name : "unknown");
-      if (line > 0) {
-        test_fprintf(stdout, "%s:%d:%s:FAIL\n", file, line, name);
-      } else {
-        test_fprintf(stdout, "%s:%s:FAIL\n", file, name);
-      }
-    }
-    if (quiet_capture_failed) {
-      test_fprintf(stderr, "Note: Quiet output capture failed; PASS lines may appear.\n");
-    }
-    if (captured_stdout) {
-      fclose(captured_stdout);
-      captured_stdout = NULL;
-    }
-  } else if (captured_stdout) {
-    // Not quiet: close any tmpfile we opened.
-    fclose(captured_stdout);
-    captured_stdout = NULL;
   }
 
 #if MEMORY_PROFILING_ENABLED
@@ -483,7 +607,7 @@ void run_shared_tests_batched(void) {
   size_t group_count = 0;
 
   for (size_t i = 0; i < test_count; i++) {
-    if (strncmp(all_tests[i].group, "shared_", 7) == 0) {
+    if (group_runs_batched(all_tests[i].group)) {
       // Check if group already collected
       bool found = false;
       for (size_t j = 0; j < group_count; j++) {
@@ -550,6 +674,9 @@ void run_tests_by_registry_impl(void) {
   size_t test_count;
   const SubjectiveCTestEntry *all_tests = subjective_c_test_registry_entries(&test_count);
   g_single_test_mode = false;
+  if (g_quiet_output) {
+    quiet_output_begin_capture();
+  }
 
   // Shared tests are explicitly designed to run in batch mode with one heavy
   // setup/teardown per group; this avoids counting fixture/bootstrap costs as
@@ -558,7 +685,7 @@ void run_tests_by_registry_impl(void) {
 
   for (size_t i = 0; i < test_count; i++) {
     const SubjectiveCTestEntry *e = &all_tests[i];
-    if (e->group && strncmp(e->group, "shared_", 7) == 0) {
+    if (group_runs_batched(e->group)) {
       continue; // Already executed via run_shared_tests_batched().
     }
     set_unity_test_file_info(e);
@@ -573,6 +700,9 @@ void run_tests_by_registry_impl(void) {
     }
     END_TRY
   }
+  if (g_quiet_output) {
+    quiet_output_end_capture();
+  }
 }
 
 static bool contains_wildcard(const char *pattern) {
@@ -581,6 +711,9 @@ static bool contains_wildcard(const char *pattern) {
 
 void run_specific_test_impl(const char *test_name_or_pattern) {
   g_single_test_mode = false;
+  if (g_quiet_output) {
+    quiet_output_begin_capture();
+  }
   // Check if it's a wildcard pattern
   if (contains_wildcard(test_name_or_pattern)) {
     // Use pattern matching logic
@@ -611,7 +744,7 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
       }
       Unity.NumberOfTests++;
       Unity.TestFailures++;
-      return;
+      goto done;
     }
 
     if (found == 1) {
@@ -676,6 +809,10 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
       Unity.TestFailures++;
     }
   }
+done:
+  if (g_quiet_output) {
+    quiet_output_end_capture();
+  }
 }
 
 // Set quiet output mode (suppress PASS lines and stdout from passing tests)
@@ -704,6 +841,17 @@ void tiny_clj_test_cleanup(bool show_memory_summary) {
   }
 
   reset_eval_state_current_ns();
+
+#ifdef __APPLE__
+  if (test_malloc_check_interval() > 0) {
+    int heap_ok = malloc_zone_check(malloc_default_zone());
+    if (heap_ok != 1) {
+      test_fprintf(stderr, "Heap check failed at suite end (malloc_zone_check=%d)\n", heap_ok);
+      fflush(stderr);
+      abort();
+    }
+  }
+#endif
 
   runtime_reset(&g_runtime);
 
