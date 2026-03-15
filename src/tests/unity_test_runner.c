@@ -233,11 +233,20 @@ void setUp(void) {
   }
   END_TRY
 
-  // Group fixture: shared clojure.string tests exercise string functions, not
-  // namespace bootstrap costs. Load namespace before heap baseline is captured.
-  if (g_current_test_entry && g_current_test_entry->group &&
-      strcmp(g_current_test_entry->group, "shared_test_string") == 0) {
-    (void)require_namespace_by_name(g_test_eval_state, "clojure.string");
+  // Group fixtures loaded before heap baseline capture so per-test limits measure
+  // behavior drift, not one-time namespace/bootstrap costs.
+  if (g_current_test_entry && g_current_test_entry->group) {
+    const char *group = g_current_test_entry->group;
+    if (strcmp(group, "shared_test_string") == 0) {
+      (void)require_namespace_by_name(g_test_eval_state, "clojure.string");
+    } else if (strcmp(group, "test_gfx_collision_contract") == 0) {
+      WITH_AUTORELEASE_POOL({
+        (void)require_namespace_by_name(g_test_eval_state, "tiny-clj.event");
+        (void)require_namespace_by_name(g_test_eval_state, "tiny-fx.gfx");
+        (void)require_namespace_by_name(g_test_eval_state, "tiny-fx.gfx-scene");
+        (void)require_namespace_by_name(g_test_eval_state, "tiny-fx.gfx-collision");
+      });
+    }
   }
 
   test_heap_growth_mark_baseline();

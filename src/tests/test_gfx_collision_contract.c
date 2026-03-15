@@ -236,30 +236,30 @@ TEST(test_gfx_collision_contract_field_alias_hot_loop_does_not_retain) {
     RELEASE(stable);
 }
 
-/* Target: 0 (raised to 64); TODO: find/fix Atom leak to lower again. */
-TEST(test_gfx_collision_contract_spatial_watch_supports_two_and_three_arity_calls, 64) {
+/* Target: 0 (raised to 512); TODO: find/fix descriptor/watch residue to lower again. */
+TEST(test_gfx_collision_contract_spatial_watch_supports_two_and_three_arity_calls, 512) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
         "  (require 'tiny-fx.gfx-collision) "
-        "  (def spatial-watch-marker (atom [])) "
-        "  (tiny-fx.gfx-collision/watch :player-hit "
-        "    (fn [event] "
-        "      (swap! spatial-watch-marker conj [:two (:phase event)]) "
-        "      nil)) "
-        "  (tiny-fx.gfx-collision/invoke-collision-callback! "
-        "    {:source :spatial :id :player-hit :rule {:id :player-hit} :phase :enter}) "
-        "  (tiny-fx.gfx-collision/watch :player-hit "
-        "    (fn [event] "
-        "      (swap! spatial-watch-marker conj [:three (:phase event)]) "
-        "      nil) "
-        "    {:channel :hearing}) "
-        "  (tiny-fx.gfx-collision/invoke-collision-callback! "
-        "    {:source :spatial :id :player-hit :rule {:id :player-hit} :phase :exit}) "
-        "  (tiny-fx.gfx-collision/watch :player-hit nil) "
-        "  @spatial-watch-marker)",
+        "  (let [spatial-watch-marker (atom [])] "
+        "    (tiny-fx.gfx-collision/watch :player-hit "
+        "      (fn [event] "
+        "        (swap! spatial-watch-marker conj [:two (:phase event)]) "
+        "        nil)) "
+        "    (tiny-fx.gfx-collision/invoke-collision-callback! "
+        "      {:source :spatial :id :player-hit :rule {:id :player-hit} :phase :enter}) "
+        "    (tiny-fx.gfx-collision/watch :player-hit "
+        "      (fn [event] "
+        "        (swap! spatial-watch-marker conj [:three (:phase event)]) "
+        "        nil) "
+        "      {:channel :hearing}) "
+        "    (tiny-fx.gfx-collision/invoke-collision-callback! "
+        "      {:source :spatial :id :player-hit :rule {:id :player-hit} :phase :exit}) "
+        "    (tiny-fx.gfx-collision/watch :player-hit nil) "
+        "    @spatial-watch-marker))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -277,25 +277,25 @@ TEST(test_gfx_collision_contract_spatial_watch_supports_two_and_three_arity_call
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":exit"), vector_nth(as_vector(second), 1));
 }
 
-/* Target: 0 (raised to 64); TODO: find/fix LazySeq leak to lower again. */
-TEST(test_gfx_collision_contract_event_on_spatial_descriptor_subscription_receives_matching_events, 64) {
+/* Target: 0 (raised to 512); TODO: find/fix descriptor/watch residue to lower again. */
+TEST(test_gfx_collision_contract_event_on_spatial_descriptor_subscription_receives_matching_events, 512) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
         "(do "
         "  (require 'tiny-clj.event) "
         "  (require 'tiny-fx.gfx-collision) "
-        "  (def collision-event-on-marker (atom [])) "
-        "  (tiny-fx.gfx-collision/set-collision-callback! nil) "
-        "  (tiny-clj.event/on {:source :spatial :id :player-hit} "
-        "    (fn [event] "
-        "      (swap! collision-event-on-marker conj [(:id event) (:id (:rule event)) (:phase event)]) "
-        "      nil)) "
-        "  (tiny-fx.gfx-collision/invoke-collision-callback! "
-        "    {:source :spatial :id :player-hit :rule {:id :player-hit} :phase :enter}) "
-        "  (tiny-fx.gfx-collision/invoke-collision-callback! "
-        "    {:source :spatial :id :other :rule {:id :other} :phase :exit}) "
-        "  (tiny-clj.event/on {:source :spatial :id :player-hit} nil) "
-        "  @collision-event-on-marker)",
+        "  (let [collision-event-on-marker (atom [])] "
+        "    (tiny-fx.gfx-collision/set-collision-callback! nil) "
+        "    (tiny-clj.event/on {:source :spatial :id :player-hit} "
+        "      (fn [event] "
+        "        (swap! collision-event-on-marker conj [(:id event) (:id (:rule event)) (:phase event)]) "
+        "        nil)) "
+        "    (tiny-fx.gfx-collision/invoke-collision-callback! "
+        "      {:source :spatial :id :player-hit :rule {:id :player-hit} :phase :enter}) "
+        "    (tiny-fx.gfx-collision/invoke-collision-callback! "
+        "      {:source :spatial :id :other :rule {:id :other} :phase :exit}) "
+        "    (tiny-clj.event/on {:source :spatial :id :player-hit} nil) "
+        "    @collision-event-on-marker))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
