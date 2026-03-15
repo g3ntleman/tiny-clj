@@ -47,9 +47,7 @@ ID eval_list_function(CljList *list, CljPersistentMap *env);
 ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_symbol(CljSymbol *symbol, EvalState *st);
 ID eval_time(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
-#ifdef DEBUG
 ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
-#endif
 
 // Additional built-in helpers
 

@@ -94,6 +94,22 @@ TEST(test_runtime_stats_build_time_before_now) {
   }
 }
 
+TEST(test_heap_special_form_is_available) {
+  ID result = eval_string("(heap (+ 1 2))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result);
+  TEST_ASSERT_TRUE(is_map(result));
+
+  ID k_total = (ID)intern_symbol_global(":total");
+  ID k_peak = (ID)intern_symbol_global(":peak");
+  ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+  ID v_peak = map_get_sentinel((CljPersistentMap *)result, k_peak, NOT_FOUND);
+
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+  TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_peak);
+  TEST_ASSERT_TRUE(is_fixnum(v_total));
+  TEST_ASSERT_TRUE(is_fixnum(v_peak));
+}
+
 TEST(test_runtime_stats_hardware_gpio_pin_count_when_hardware_present) {
   ID stats = eval_string("(do (require 'tiny-clj.runtime) (tiny-clj.runtime/stats))", g_test_eval_state);
   TEST_ASSERT_NOT_NULL(stats);
@@ -1010,17 +1026,6 @@ TEST(test_runtime_stats_heap_eval_read_string_let_named_fn_if_optimizer_no_ast_g
 TEST(test_runtime_stats_heap_let_lazy_seq_binding_discard_no_growth, 64) {
   const char *expr = "(heap (let [v (lazy-seq* (fn [] (list 1)))] nil))";
 
-  runtime_reset(&g_runtime);
-  WITH_AUTORELEASE_POOL({
-    runtime_init(&g_runtime);
-  });
-  event_loop_init();
-  meta_registry_init();
-  init_special_symbols();
-  register_builtins();
-  g_runtime.builtins_registered = true;
-  evalstate_reset(&g_test_eval_state, true);
-
   ID k_total = (ID)intern_symbol_global(":total");
   ID k_lazy = (ID)intern_symbol_global(":LazySeq");
   ID k_closure = (ID)intern_symbol_global(":Closure");
@@ -1067,17 +1072,6 @@ TEST(test_runtime_stats_heap_let_lazy_seq_binding_discard_no_growth, 64) {
 TEST(test_runtime_stats_heap_let_lazy_seq_binding_alias_no_growth, 64) {
   const char *expr = "(heap (let [v (lazy-seq* (fn [] (list 1)))] v))";
 
-  runtime_reset(&g_runtime);
-  WITH_AUTORELEASE_POOL({
-    runtime_init(&g_runtime);
-  });
-  event_loop_init();
-  meta_registry_init();
-  init_special_symbols();
-  register_builtins();
-  g_runtime.builtins_registered = true;
-  evalstate_reset(&g_test_eval_state, true);
-
   ID k_total = (ID)intern_symbol_global(":total");
   ID k_lazy = (ID)intern_symbol_global(":LazySeq");
   ID k_closure = (ID)intern_symbol_global(":Closure");
@@ -1123,17 +1117,6 @@ TEST(test_runtime_stats_heap_let_lazy_seq_binding_alias_no_growth, 64) {
 /* Target: 0 (raised to 64); TODO: find/fix LazySeq leak to lower again. */
 TEST(test_runtime_stats_heap_for_single_binding_lazy_seq_result_no_growth, 64) {
   const char *expr = "(heap (let [r (for [x (list 1)] x)] nil))";
-
-  runtime_reset(&g_runtime);
-  WITH_AUTORELEASE_POOL({
-    runtime_init(&g_runtime);
-  });
-  event_loop_init();
-  meta_registry_init();
-  init_special_symbols();
-  register_builtins();
-  g_runtime.builtins_registered = true;
-  evalstate_reset(&g_test_eval_state, true);
 
   ID k_total = (ID)intern_symbol_global(":total");
   ID k_lazy = (ID)intern_symbol_global(":LazySeq");

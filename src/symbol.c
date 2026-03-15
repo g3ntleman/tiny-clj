@@ -59,9 +59,7 @@ CljSymbol *SYM_VAR = NULL;
 CljSymbol *SYM_NS = NULL;
 CljSymbol *SYM_BINDING = NULL;
 CljSymbol *SYM_TIME = NULL;
-#ifdef DEBUG
 CljSymbol *SYM_HEAP = NULL;
-#endif
 CljSymbol *SYM_GO = NULL;
 CljSymbol *SYM_DEREF = NULL;
 CljSymbol *SYM_NIL = NULL;
@@ -763,9 +761,7 @@ void init_special_symbols() {
     SYM_NS = (CljSymbol*)&g_special_symbols[SYM_NS_IDX].sym;
     SYM_BINDING = (CljSymbol*)&g_special_symbols[SYM_BINDING_IDX].sym;
     SYM_TIME = (CljSymbol*)&g_special_symbols[SYM_TIME_IDX].sym;
-#ifdef DEBUG
     SYM_HEAP = (CljSymbol*)&g_special_symbols[SYM_HEAP_IDX].sym;
-#endif
     SYM_GO = (CljSymbol*)&g_special_symbols[SYM_GO_IDX].sym;
     SYM_AND = (CljSymbol*)&g_special_symbols[SYM_AND_IDX].sym;
     SYM_OR = (CljSymbol*)&g_special_symbols[SYM_OR_IDX].sym;
@@ -1121,11 +1117,9 @@ void init_special_symbols() {
     if (is_special_symbol(SYM_TIME)) {
         ((CljSpecialSymbol*)SYM_TIME)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_time;
     }
-#ifdef DEBUG
     if (is_special_symbol(SYM_HEAP)) {
         ((CljSpecialSymbol*)SYM_HEAP)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_heap;
     }
-#endif
     if (is_special_symbol(SYM_BINDING)) {
         ((CljSpecialSymbol*)SYM_BINDING)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_binding;
     }

@@ -643,11 +643,9 @@ ID eval_special_time(CljPersistentVector *args, CljPersistentMap *env, EvalState
   return eval_time(args, eval_env_or_ns_mappings(env, st), st, ctx);
 }
 
-#ifdef DEBUG
 ID eval_special_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
   return eval_heap(args, eval_env_or_ns_mappings(env, st), st, ctx);
 }
-#endif
 
 ID eval_special_dotimes(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
   (void)ctx; // Unused
