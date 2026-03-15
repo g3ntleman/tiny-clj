@@ -237,6 +237,7 @@ set(TINYCLJ_CORE_SOURCES
     src/eval_compiled.c
     src/to_string.c
     src/macro.c
+    src/startup_pipeline.c
     src/fs_layer.c
     src/gpio.c
     src/gpio_host.c
@@ -383,6 +384,7 @@ add_executable(tiny-clj-esp32 EXCLUDE_FROM_ALL
     src/eval_special_forms.c
     src/to_string.c
     src/macro.c
+    src/startup_pipeline.c
     src/file_utils.c
     src/source_resolver.c
     src/embedded_sources.c
@@ -588,6 +590,7 @@ add_executable(unit-tests
     src/tests/test_require_perf.c
     src/tests/test_qualified_symbol_resolution.c
     src/tests/test_recursive_resolution.c
+    src/tests/test_main_entry.c
     src/tests/test_repl.c
     src/tests/test_runner_patterns.c
     src/tests/test_file_io.c
@@ -932,6 +935,17 @@ set_tests_properties(repl-println-vector PROPERTIES PASS_REGULAR_EXPRESSION "nil
 
 add_test(NAME repl-ns-eval COMMAND tiny-clj-repl -n user -e "(+ 2 2)")
 set_tests_properties(repl-ns-eval PROPERTIES PASS_REGULAR_EXPRESSION "4\n" LABELS "repl")
+
+add_test(NAME repl-main-option-boundary COMMAND tiny-clj-repl -m test.main-entry-missing --x)
+set_tests_properties(repl-main-option-boundary PROPERTIES
+    WILL_FAIL TRUE
+    FAIL_REGULAR_EXPRESSION "Unknown argument"
+    LABELS "repl")
+
+add_test(NAME repl-main-conflict-with-eval
+    COMMAND bash -c "\"$<TARGET_FILE:tiny-clj-repl>\" -e \"(+ 1 2)\" -m test.main-entry-missing 2>&1 | grep -F -- \"-m/--main cannot be combined\" >/dev/null")
+set_tests_properties(repl-main-conflict-with-eval PROPERTIES
+    LABELS "repl")
 
 add_test(NAME repl-error-divzero COMMAND tiny-clj-repl -e "(/ 1 0)")
 set_tests_properties(repl-error-divzero PROPERTIES WILL_FAIL TRUE LABELS "repl")

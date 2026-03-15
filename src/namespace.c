@@ -572,7 +572,7 @@ void reset_eval_state_current_ns(void) {
 
 // EvalState functions
 // OPTIMIZATION: Now returns global thread-local state instead of heap allocation
-static void evalstate_ensure_core_bootstrap_ready(void) {
+void evalstate_ensure_builtins_ready(void) {
     if (g_runtime.builtins_registered) {
         return;
     }
@@ -588,7 +588,7 @@ EvalState* evalstate_new(bool load_core) {
 
     // Load clojure.core automatically if requested (functions available via ns_resolve)
     if (load_core) {
-        evalstate_ensure_core_bootstrap_ready();
+        evalstate_ensure_builtins_ready();
         WITH_AUTORELEASE_POOL({
             load_clojure_core(st);
         });
@@ -639,7 +639,7 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
 
     // Always load clojure.core if requested (for test isolation)
     if (load_core) {
-        evalstate_ensure_core_bootstrap_ready();
+        evalstate_ensure_builtins_ready();
         evalstate_set_ns(st, "clojure.core");
         load_clojure_core(st);
     }

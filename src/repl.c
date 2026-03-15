@@ -1,6 +1,7 @@
 #include "platform.h"
 #include "common.h"
 #include "tiny_clj.h"
+#include "startup_pipeline.h"
 #include "repl.h"
 #include "parser.h"
 #include "eval.h"   // For eval_parsed_value
@@ -938,15 +939,18 @@ static void repl_stdout_put_line(const char *line) {
   printf("%s\n", line);
 }
 
+#if !defined(UNITY_TESTS)
 /** @brief Print command-line usage information.
  *  @param prog Program name for usage display
  */
-static void __attribute__((unused)) usage(const char *prog) {
-  printf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [--no-core] [--repl] [--zombie] [--memory-debug]\n", prog);
+static void usage(const char *prog) {
+  printf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [-m NS [ARGS...]] [--no-core] [--repl] [--zombie] [--memory-debug]\n",
+         prog);
   printf("\nOptions:\n");
   printf("  -n, --ns NS          Set namespace\n");
   printf("  -e, --eval EXPR      Evaluate expression (can be used multiple times)\n");
   printf("  -f, --file FILE      Evaluate file\n");
+  printf("  -m, --main NS        Invoke NS/-main with remaining args as program arguments\n");
   printf("  --no-core            Don't load clojure.core\n");
   printf("  --repl               Start REPL after evaluating files/expressions\n");
   printf("  --zombie             Enable zombie mode for memory debugging\n");
@@ -954,15 +958,147 @@ static void __attribute__((unused)) usage(const char *prog) {
   printf("  -h, --help           Show this help message\n");
 }
 
+typedef struct {
+  const char *ns_arg;
+  const char *file_arg;
+  const char **eval_args;
+  int eval_count;
+  const char *main_ns;
+  const char **main_argv;
+  int main_argc;
+  bool no_core;
+  bool start_repl;
+  bool zombie_mode;
+  bool memory_debug;
+  bool show_help;
+} ReplCliOptions;
+
+static bool parse_repl_cli_options(int argc,
+                                   char **argv,
+                                   ReplCliOptions *opts,
+                                   const char **error_message) {
+  if (!opts) {
+    if (error_message) {
+      *error_message = "Internal error: missing option storage";
+    }
+    return false;
+  }
+
+  memset(opts, 0, sizeof(*opts));
+  if (error_message) {
+    *error_message = NULL;
+  }
+
+  int eval_capacity = (argc > 1) ? (argc - 1) : 0;
+  if (eval_capacity > 0) {
+    opts->eval_args = (const char **)CLJ_MALLOC(sizeof(char *) * (size_t)eval_capacity);
+    if (!opts->eval_args) {
+      if (error_message) {
+        *error_message = "Failed to allocate CLI argument buffer";
+      }
+      return false;
+    }
+  }
+
+  for (int i = 1; i < argc; i++) {
+    const char *arg = argv[i];
+    if (strcmp(arg, "-n") == 0 || strcmp(arg, "--ns") == 0) {
+      if (i + 1 >= argc) {
+        if (error_message) {
+          *error_message = "Missing namespace after --ns";
+        }
+        return false;
+      }
+      opts->ns_arg = argv[++i];
+      continue;
+    }
+
+    if (strcmp(arg, "-e") == 0 || strcmp(arg, "--eval") == 0) {
+      if (i + 1 >= argc) {
+        if (error_message) {
+          *error_message = "Missing expression after --eval";
+        }
+        return false;
+      }
+      opts->eval_args[opts->eval_count++] = argv[++i];
+      continue;
+    }
+
+    if (strcmp(arg, "-f") == 0 || strcmp(arg, "--file") == 0) {
+      if (i + 1 >= argc) {
+        if (error_message) {
+          *error_message = "Missing filename after --file";
+        }
+        return false;
+      }
+      opts->file_arg = argv[++i];
+      continue;
+    }
+
+    if (strcmp(arg, "-m") == 0 || strcmp(arg, "--main") == 0) {
+      if (i + 1 >= argc) {
+        if (error_message) {
+          *error_message = "Missing namespace after --main";
+        }
+        return false;
+      }
+      opts->main_ns = argv[++i];
+      opts->main_argv = (const char **)&argv[i + 1];
+      opts->main_argc = argc - (i + 1);
+      break;
+    }
+
+    if (strcmp(arg, "--no-core") == 0) {
+      opts->no_core = true;
+      continue;
+    }
+
+    if (strcmp(arg, "--repl") == 0) {
+      opts->start_repl = true;
+      continue;
+    }
+
+    if (strcmp(arg, "--zombie") == 0) {
+      opts->zombie_mode = true;
+      continue;
+    }
+
+    if (strcmp(arg, "--memory-debug") == 0) {
+      opts->memory_debug = true;
+      continue;
+    }
+
+    if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
+      opts->show_help = true;
+      return true;
+    }
+
+    if (error_message) {
+      *error_message = "Unknown argument";
+    }
+    return false;
+  }
+
+  if (opts->main_ns && (opts->eval_count > 0 || opts->file_arg || opts->start_repl)) {
+    if (error_message) {
+      *error_message = "-m/--main cannot be combined with -e, -f, or --repl";
+    }
+    return false;
+  }
+
+  return true;
+}
+
 /** @brief Clean up resources and exit with specified code.
  *  @param eval_args Array to free before exit
  *  @param exit_code Exit code to use
  */
-static void __attribute__((unused)) cleanup_and_exit(const char **eval_args, int exit_code) {
+static void cleanup_and_exit(const char **eval_args, int exit_code) {
   if (eval_args)
     CLJ_FREE(eval_args);
   exit(exit_code);
 }
+#endif
 
 /** @brief Run the interactive REPL loop with input handling and evaluation.
  *  @param st Evaluation state for the REPL session
@@ -1333,157 +1469,84 @@ int main(int argc, char **argv) {
   set_memory_verbose_mode(false);
   memory_set_debug_output_enabled(memory_get_debug_output_enabled());
 #endif
+
+  ReplCliOptions cli = {0};
+  const char *cli_error = NULL;
+  if (!parse_repl_cli_options(argc, argv, &cli, &cli_error)) {
+    if (cli_error) {
+      fprintf(stderr, "Error: %s\n", cli_error);
+    }
+    usage(argv[0]);
+    cleanup_and_exit(cli.eval_args, 1);
+  }
+
+  if (cli.show_help) {
+    usage(argv[0]);
+    cleanup_and_exit(cli.eval_args, 0);
+  }
+
   // Install SIGTRAP handler for startup diagnostics.
   signal(SIGTRAP, repl_sigtrap_handler);
-  platform_init();
-  runtime_init(&g_runtime);
-  meta_registry_init();
-  init_special_symbols();
-  event_loop_init();
+
+  EvalState *st = NULL;
+  TinycljRuntimeBootstrapOptions runtime_opts = {
+      .init_event_loop = true,
+  };
+  if (!tinyclj_startup_bootstrap_runtime(&runtime_opts, &st) || !st) {
+    cleanup_and_exit(cli.eval_args, 1);
+  }
+
+  TinycljLanguageBootstrapOptions language_opts = {
+      .ensure_builtins = true,
+      .load_core = !cli.no_core,
+      .load_repl = false,
+      .refer_repl = false,
+      .core_quiet = (argc > 1),
+  };
+  bool bootstrap_ok = false;
+  WITH_AUTORELEASE_POOL({
+    bootstrap_ok = tinyclj_startup_bootstrap_language(st, &language_opts);
+  });
+  if (!bootstrap_ok) {
+    cleanup_and_exit(cli.eval_args, 1);
+  }
 #ifdef PROFILE_STARTUP
   clock_t t1 = clock();
-  fprintf(stderr, "[PROFILE] init: %.2f ms\n", (double)(t1 - t0) * 1000.0 / CLOCKS_PER_SEC);
+  fprintf(stderr, "[PROFILE] startup pipeline: %.2f ms\n", (double)(t1 - t0) * 1000.0 / CLOCKS_PER_SEC);
 #endif
-  EvalState *st = get_global_eval_state();
-  // Note: set_global_eval_state() removed - Exception handling now independent
-  evalstate_set_ns(st, "user");
-  // Quiet mode for CLI eval (no banner)
-  bool no_core = false;
-  if (argc > 1)
-    clojure_core_set_quiet(1);
-
-  const char *ns_arg = NULL;
-  const char **eval_args = NULL;
-  int eval_count = 0;
-  const char *file_arg = NULL;
-  bool start_repl = false;
-  bool zombie_mode = false;
-  bool memory_debug = false;
-
-  // First pass: count -e arguments
-  for (int i = 1; i < argc; i++) {
-    if ((strcmp(argv[i], "-e") == 0 || strcmp(argv[i], "--eval") == 0) && i + 1 < argc) {
-      eval_count++;
-      i++; // skip the argument value
-    }
-  }
-
-  // Allocate array for eval arguments
-  if (eval_count > 0) {
-    eval_args = CLJ_MALLOC(sizeof(char *) * eval_count);
-  }
-
-  // Second pass: collect all arguments
-  int eval_idx = 0;
-  for (int i = 1; i < argc; i++) {
-    if ((strcmp(argv[i], "-n") == 0 || strcmp(argv[i], "--ns") == 0) && i + 1 < argc) {
-      ns_arg = argv[++i];
-    } else if ((strcmp(argv[i], "-e") == 0 || strcmp(argv[i], "--eval") == 0) && i + 1 < argc) {
-      eval_args[eval_idx++] = argv[++i];
-    } else if ((strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--file") == 0) && i + 1 < argc) {
-      file_arg = argv[++i];
-    } else if (strcmp(argv[i], "--no-core") == 0) {
-      no_core = true;
-    } else if (strcmp(argv[i], "--repl") == 0) {
-      start_repl = true;
-    } else if (strcmp(argv[i], "--zombie") == 0) {
-      zombie_mode = true;
-    } else if (strcmp(argv[i], "--memory-debug") == 0) {
-      memory_debug = true;
-    } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-      usage(argv[0]);
-      cleanup_and_exit(eval_args, 0);
-    } else {
-      usage(argv[0]);
-      cleanup_and_exit(eval_args, 1);
-    }
-  }
-
-  // Register builtin functions and load clojure.core in autorelease pool
-  // Both operations may use AUTORELEASE calls (LIST_FIRST/LIST_REST macros)
-  WITH_AUTORELEASE_POOL({
-#ifdef PROFILE_STARTUP
-    clock_t t2 = clock();
-#endif
-    // Register builtin functions first (they may be used during core loading)
-    register_builtins();
-#ifdef PROFILE_STARTUP
-    clock_t t3 = clock();
-    fprintf(stderr, "[PROFILE] register_builtins: %.2f ms\n", (double)(t3 - t2) * 1000.0 / CLOCKS_PER_SEC);
-#endif
-
-    if (!no_core) {
-#ifdef PROFILE_STARTUP
-      clock_t t4 = clock();
-#endif
-      // Load clojure.core in autorelease pool to handle AUTORELEASE calls
-#ifdef DEBUG
-      if (memory_debug) {
-        autorelease_pool_peak_reset();
-      }
-#endif
-      load_clojure_core(st);
-#ifdef DEBUG
-      if (memory_debug) {
-        fprintf(stderr, "[DEBUG] autorelease_pool peak during load_clojure_core: %u\n",
-                (unsigned)autorelease_pool_peak_count());
-      }
-#endif
-#ifdef PROFILE_STARTUP
-      clock_t t5 = clock();
-      fprintf(stderr, "[PROFILE] load_clojure_core: %.2f ms\n", (double)(t5 - t4) * 1000.0 / CLOCKS_PER_SEC);
-#endif
-      // Load clojure.repl eagerly on host. On ESP32 keep it lazy to reduce boot heap.
-#if !defined(ESP_PLATFORM)
-      load_clojure_repl(st);
-#ifdef PROFILE_STARTUP
-      clock_t t6 = clock();
-      fprintf(stderr, "[PROFILE] load_clojure_repl: %.2f ms\n", (double)(t6 - t5) * 1000.0 / CLOCKS_PER_SEC);
-#endif
-      // Require clojure.repl with :refer :all to make functions available in user namespace
-      // This ensures functions like doc, source, dir, etc. are available without namespace prefix
-      evalstate_set_ns(st, "user");
-      const char *require_code = "(require '[clojure.repl :refer :all])";
-      eval_multiform_string(require_code, st);
-#ifdef PROFILE_STARTUP
-      clock_t t7 = clock();
-      fprintf(stderr, "[PROFILE] require clojure.repl: %.2f ms\n", (double)(t7 - t6) * 1000.0 / CLOCKS_PER_SEC);
-      fprintf(stderr, "[PROFILE] TOTAL startup: %.2f ms\n", (double)(t7 - t0) * 1000.0 / CLOCKS_PER_SEC);
-#endif
-#else
-#ifdef PROFILE_STARTUP
-      fprintf(stderr, "[PROFILE] TOTAL startup: %.2f ms\n", (double)(t5 - t0) * 1000.0 / CLOCKS_PER_SEC);
-#endif
-#endif
-    }
-  });
-
-  if (ns_arg) {
-    evalstate_set_ns(st, ns_arg);
+  if (cli.ns_arg) {
+    evalstate_set_ns(st, cli.ns_arg);
   } else {
-    // After loading clojure.core, explicitly return to user namespace
     evalstate_set_ns(st, "user");
   }
 
-  if (file_arg) {
+  if (cli.main_ns) {
+    bool main_ok = false;
+    WITH_AUTORELEASE_POOL({
+      main_ok = tinyclj_startup_invoke_main(st, cli.main_ns, cli.main_argc, cli.main_argv, true);
+    });
+    cleanup_and_exit(cli.eval_args, main_ok ? 0 : 1);
+  }
+
+  if (cli.file_arg) {
     // Load entire file into memory for proper parsing (handles metadata across lines)
-    FILE *fp = fopen(file_arg, "r");
+    FILE *fp = fopen(cli.file_arg, "r");
     if (!fp) {
-      printf("Error: Cannot open file '%s': %s\n", file_arg, strerror(errno));
-      cleanup_and_exit(eval_args, 1);
+      printf("Error: Cannot open file '%s': %s\n", cli.file_arg, strerror(errno));
+      cleanup_and_exit(cli.eval_args, 1);
     }
 
     // Get file size
     if (fseek(fp, 0, SEEK_END) != 0) {
       fclose(fp);
-      printf("Error: Cannot seek in file '%s': %s\n", file_arg, strerror(errno));
-      cleanup_and_exit(eval_args, 1);
+      printf("Error: Cannot seek in file '%s': %s\n", cli.file_arg, strerror(errno));
+      cleanup_and_exit(cli.eval_args, 1);
     }
     long sz = ftell(fp);
     if (sz < 0) {
       fclose(fp);
-      printf("Error: Cannot get file size for '%s': %s\n", file_arg, strerror(errno));
-      cleanup_and_exit(eval_args, 1);
+      printf("Error: Cannot get file size for '%s': %s\n", cli.file_arg, strerror(errno));
+      cleanup_and_exit(cli.eval_args, 1);
     }
     rewind(fp);
 
@@ -1499,10 +1562,10 @@ int main(int argc, char **argv) {
     bool success = eval_multiform_string(buffer, st);
     CLJ_FREE(buffer);
     if (!success) {
-      cleanup_and_exit(eval_args, 1);
+      cleanup_and_exit(cli.eval_args, 1);
     }
-    if (!start_repl && eval_count == 0) {
-      cleanup_and_exit(eval_args, 0);
+    if (!cli.start_repl && cli.eval_count == 0) {
+      cleanup_and_exit(cli.eval_args, 0);
     }
   }
 
@@ -1510,18 +1573,18 @@ int main(int argc, char **argv) {
 
   // Execute all -e arguments in order
   int i = 0;
-  while (i < eval_count) {
+  while (i < cli.eval_count) {
     // Simple eval-args without TRY/CATCH
-    bool success = repl_eval_arg(eval_args[i], st);
+    bool success = repl_eval_arg(cli.eval_args[i], st);
     if (!success) {
       // Parse error or evaluation failed
-      cleanup_and_exit(eval_args, 1);
+      cleanup_and_exit(cli.eval_args, 1);
     }
     i++;
   }
 
-  if (eval_count > 0 && !start_repl) {
-    cleanup_and_exit(eval_args, 0);
+  if (cli.eval_count > 0 && !cli.start_repl) {
+    cleanup_and_exit(cli.eval_args, 0);
   }
 
   bool stdin_is_tty = isatty(STDIN_FILENO) != 0;
@@ -1544,16 +1607,33 @@ int main(int argc, char **argv) {
 
     if (len == 0) {
       CLJ_FREE(buffer);
-      cleanup_and_exit(eval_args, 0);
+      cleanup_and_exit(cli.eval_args, 0);
     }
 
     bool success = eval_multiform_string(buffer, st);
     CLJ_FREE(buffer);
-    cleanup_and_exit(eval_args, success ? 0 : 1);
+    cleanup_and_exit(cli.eval_args, success ? 0 : 1);
+  }
+
+  if (!cli.no_core) {
+    TinycljLanguageBootstrapOptions repl_language_opts = {
+        .ensure_builtins = true,
+        .load_core = false,
+        .load_repl = true,
+        .refer_repl = true,
+        .core_quiet = true,
+    };
+    bool repl_bootstrap_ok = false;
+    WITH_AUTORELEASE_POOL({
+      repl_bootstrap_ok = tinyclj_startup_bootstrap_language(st, &repl_language_opts);
+    });
+    if (!repl_bootstrap_ok) {
+      cleanup_and_exit(cli.eval_args, 1);
+    }
   }
 
   // Interactive REPL
-  run_interactive_repl(st, zombie_mode, memory_debug);
+  run_interactive_repl(st, cli.zombie_mode, cli.memory_debug);
 
 #if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
   // Restore terminal settings
@@ -1562,6 +1642,9 @@ int main(int argc, char **argv) {
 
   // Free EvalState before exit (no memory leaks)
   evalstate_free(st);
+  if (cli.eval_args) {
+    CLJ_FREE(cli.eval_args);
+  }
 
   return 0;
 }
