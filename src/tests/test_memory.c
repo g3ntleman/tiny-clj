@@ -284,6 +284,29 @@ TEST(test_memory_profiler_tracks_raw_alloc_blocks) {
 #endif
 }
 
+TEST(test_autorelease_pool_drain_to_depth_avoids_raw_allocations) {
+#if MEMORY_PROFILING_ENABLED
+    enable_memory_profiling(true);
+
+    WITH_AUTORELEASE_POOL({
+        // Build a non-empty pool and then drain a suffix.
+        ID keep = make_string("keep");
+        ID drop = make_string("drop");
+        AUTORELEASE(keep);
+        uint32_t mark = autorelease_pool_depth();
+        AUTORELEASE(drop);
+
+        MemoryStats before = memory_profiler_get_stats();
+        autorelease_pool_drain_to_depth(mark);
+        MemoryStats after = memory_profiler_get_stats();
+
+        TEST_ASSERT_EQUAL_UINT64(before.raw_allocations, after.raw_allocations);
+    });
+#else
+    TEST_IGNORE();
+#endif
+}
+
 #if defined(DEBUG) && defined(ZOMBIE_ENABLED)
 TEST(test_zombie_detection) {
     // Test zombie detection: access an object after it became a zombie.

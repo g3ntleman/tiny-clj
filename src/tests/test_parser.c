@@ -1069,6 +1069,50 @@ TEST(test_anon_fn_reader_macro) {
   TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result3));
   TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result3));
 }
+
+TEST(test_eval_self_evaluating_vector_literal_reuses_parsed_object) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID parsed = parse("[{:a 1 :b :x} {:c [1 2 nil]}]", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(parsed);
+  TEST_ASSERT_TRUE(is_vector(parsed));
+
+  ID evaluated = eval_parsed(parsed, g_test_eval_state, NULL);
+  TEST_ASSERT_NOT_NULL(evaluated);
+  TEST_ASSERT_EQUAL_PTR(parsed, evaluated);
+}
+
+TEST(test_eval_self_evaluating_map_literal_reuses_parsed_object) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID parsed = parse("{:a 1 :nested {:k :v} :vec [1 2 nil]}", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(parsed);
+  TEST_ASSERT_TRUE(is_map(parsed));
+
+  ID evaluated = eval_parsed(parsed, g_test_eval_state, NULL);
+  TEST_ASSERT_NOT_NULL(evaluated);
+  TEST_ASSERT_EQUAL_PTR(parsed, evaluated);
+}
+
+TEST(test_eval_vector_literal_with_symbol_still_evaluates) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  ID def_result = eval_string("(def test-eval-lit-x 42)", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(def_result);
+
+  ID parsed = parse("[test-eval-lit-x]", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(parsed);
+  TEST_ASSERT_TRUE(is_vector(parsed));
+
+  ID evaluated = eval_parsed(parsed, g_test_eval_state, NULL);
+  TEST_ASSERT_NOT_NULL(evaluated);
+  TEST_ASSERT_TRUE(is_vector(evaluated));
+  TEST_ASSERT_NOT_EQUAL(parsed, evaluated);
+
+  ID first = vector_nth(as_vector(evaluated), 0);
+  TEST_ASSERT_TRUE(is_fixnum(first));
+  TEST_ASSERT_EQUAL_INT(42, as_fixnum(first));
+}
 // ============================================================================
 // TEST GROUPS
 // ============================================================================
