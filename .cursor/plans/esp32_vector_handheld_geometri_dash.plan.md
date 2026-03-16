@@ -1,16 +1,17 @@
 ---
-name: ""
-overview: ""
-todos: []
+name: "ESP32 Vector Handheld Geometri Dash"
+overview: "Repo-basierter Umsetzungsplan fuer ESP32-Handheld mit tiny-clj Gameplay, C-Render und C-Sound."
+todos:
+  - "ST7789 ESP32 Backend an Renderer-Lifecycle anbinden"
+  - "Input Snapshot Layer fuer Encoder + Buttons bauen"
+  - "Gameplay Frame-Contract (state/input/patches/audio) finalisieren"
 isProject: false
 ---
 
 # ESP32 Vector Handheld Plan (tiny-clj + C)
 
 ## Goal
-
 Build a compact ESP32 handheld game ("Geometri Dash" style) with:
-
 - ST7789 320x240 display over SPI
 - Single-threaded runtime
 - Game logic in tiny-clj (interpreted)
@@ -18,24 +19,56 @@ Build a compact ESP32 handheld game ("Geometri Dash" style) with:
 - Configurable-channel retro sound on passive piezos via LEDC PWM (board default: 2 outputs)
 
 ## Constraints
-
 - MCU: ESP32 (WEMOS Lite V1 class), 4 MB flash
 - No MP3, no I2S audio stack, no heavy media libs
 - Stable frame pacing preferred over max visual complexity
 - tiny-clj should not do per-pixel work
 
+## Repo Snapshot (2026-03-16)
+
+Current state derived from code and tests in this repository:
+
+1. Graphics core in C is far advanced and tested.
+- Evidence:
+  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/vector_scene_graph.c`
+  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/scene.c`
+  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/render_backend.c`
+  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/builtins_tiny_fx_gfx.c`
+  - `/Users/theisen/Projects/Work/tiny-clj-feature/libs/tiny-fx/gfx.clj`
+- Validation:
+  - `./build/unit-tests --test 'test_vector_scene_graph/*'` -> `99 Tests, 0 Failures`.
+
+2. Sound core in C + tiny-clj API is far advanced and tested.
+- Evidence:
+  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/sound_engine.c`
+  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/sound_backend_esp32.c`
+  - `/Users/theisen/Projects/Work/tiny-clj-feature/src/builtins_sound.c`
+  - `/Users/theisen/Projects/Work/tiny-clj-feature/libs/tiny-fx/sound.clj`
+- Validation:
+  - `./build/unit-tests --test 'test_sound_engine/*'` -> `104 Tests, 0 Failures`.
+
+3. Board profile exists, but appears to be template/default and not final board wiring.
+- Evidence:
+  - `/Users/theisen/Projects/Work/tiny-clj-feature/esp32-idf/main/vector_handheld_config.h`
+
+4. Missing for device bring-up:
+- No ESP32 ST7789 backend wiring into `tiny_renderer_lifecycle_set_callbacks`.
+- No project-specific input snapshot layer for encoder + D-pad + action buttons.
+- No geometri-dash gameplay loop wired to frame contract on-device.
+
+5. Assumed completed dependency:
+- `Plans/edn-assets-on-demand-test-first-plan.md` is treated as implemented.
+- Consequence: EDN asset loading is not a blocker for gameplay bring-up in this plan.
+
 ## Upstream Dependency: Vector Scene Graph Engine
 
 Primary dependency plan:
-
 - `/Users/theisen/Projects/tiny-clj/.cursor/plans/esp32_vector_scene_graph_engine.plan.md`
 
 Integration rule:
-
 - This Geometri Dash plan consumes the scene-graph renderer contract and patch path from the dependency plan, instead of defining a separate render primitive stack.
 
 Hard gates:
-
 - Gate A (before gameplay rendering integration):
   - Scene-graph plan M0..M5 must pass (record schema, macOS simulator PoC, transforms, primitives, thick lines, id-based patches).
 - Gate B (before full on-device gameplay rendering):
@@ -51,46 +84,39 @@ Hard gates:
 6. Gameplay render path uses the shared scene-graph engine contract (no parallel custom renderer).
 
 ## Milestone 0: Hardware Lock-In
-
-Status: TODO
+Status: IN_PROGRESS
 
 Tasks:
-
 - Finalize GPIO map for:
   - ST7789 (SCLK, MOSI, CS, DC, RST, BL)
-  - Encoder (A/B/SW)
-  - D-pad (4 buttons) — optional, may come later
+  - Encoder (A/B/SW), D-pad, optional A/B action
   - Optional A/B action buttons
   - Piezo outputs (board default: Piezo 1 + Piezo 2)
   - Battery ADC pin + divider values
 - Validate boot-safe pins (avoid strapping conflicts).
-- Commit board profile header with final values.
+- Replace template defaults in `vector_handheld_config.h` with verified wiring.
 
 Done when:
-
 - Pin map compiles and device boots reliably across power cycles.
 
-## Milestone 1: Display Bring-Up (C, panel smoke only)
-
-Status: TODO
+## Milestone 1: Graphics Pipeline
+Status: PARTIAL
 
 Tasks:
-
-- Add ST7789 init + orientation + RGB565 clear.
-- Validate backlight control and viewport orientation.
-- Measure baseline panel write throughput at target SPI clock.
-- Keep this milestone intentionally minimal; scene primitives and vector rendering are delivered via the upstream scene-graph plan.
+1. Done:
+- Scene graph rendering core, clipping, dirty-region flow, runtime query builtins.
+2. Open:
+- Add ESP32 ST7789 backend (`begin_frame/submit_rect/end_frame`) and register it via lifecycle callbacks.
+- Wire backend start/stop into ESP32 runtime startup path.
+- Validate panel orientation, backlight, and throughput.
 
 Done when:
-
-- Panel bring-up is stable across reboots and can clear/fill test colors reliably.
+- C scene graph output is visible on real ST7789 display through lifecycle backend path.
 
 ## Milestone 2: Input Layer (C)
-
 Status: TODO
 
 Tasks:
-
 - Configure button GPIOs (pullups, debounce strategy).
 - Implement encoder decode with edge-safe state machine.
 - Build frame input snapshot struct:
@@ -100,36 +126,24 @@ Tasks:
 - Expose one polling function called once per frame.
 
 Done when:
-
 - Input test page shows correct edge/held states with no bounce spam.
 
 ## Milestone 3: Audio Core (C, LEDC)
-
-Status: TODO
+Status: PARTIAL
 
 Tasks:
-
-- 2 independent square-wave voices on LEDC channels.
-- 1 ms scheduler tick (esp_timer).
-- Command queue:
-  - note on/off
-  - frequency set
-  - volume/envelope step
-  - priority class
-- Ducking policy (music lowers under important SFX).
-- Implement SFX presets:
-  - laser
-  - explosion
-  - hit
-  - menu
-  - r2d2-style chirp
+1. Done:
+- 2-voice ESP32 backend via LEDC/PWM and `esp_timer` tick scheduling.
+- Sound engine queueing, track loading, music + SFX APIs, envelope support.
+2. Open:
+- Explicit priority/ducking policy for gameplay SFX over music.
+- Final on-device loudness balancing and piezo tuning.
+- Final game SFX preset pack (laser/explosion/hit/menu/r2d2) as project assets.
 
 Done when:
-
 - Music + overlapping SFX play cleanly with no frame hitching.
 
 ## Game model: Clojure data structures (recommendations)
-
 For the tiny-clj game loop, keep state flat and allocation-bounded:
 
 - **Maps** for game state: one main state map with a small, fixed set of keys (e.g. `:player-x`, `:player-y`, `:vy`, `:score`, `:phase`, `:seed`). Use `assoc`/`update` for single-key changes to avoid full copy cost where possible; tiny-clj’s persistent semantics still apply.
@@ -144,11 +158,9 @@ Input from C can be a small map (e.g. `{:held bits :pressed bits :encoder-delta 
 - **No atoms** for game state: the runtime is single-threaded and the frame contract is “state in → new state out”. The C host holds the current state and passes it in each frame; Clojure’s `update` returns the new state. Using an atom (`swap!` each frame) would not reduce allocation (the new map is still created every frame) and would add mutable state inside the interpreter without benefit. Keeping state at the boundary (C owns the reference) keeps the loop pure, testable, and replay-friendly.
 
 ## Milestone 4: tiny-clj Host Contract
-
-Status: TODO
+Status: IN_PROGRESS
 
 Tasks:
-
 - Define strict frame contract (gameplay side):
   - Input map in
   - New state out
@@ -163,15 +175,12 @@ Tasks:
   - max audio events per frame
 
 Done when:
-
 - tiny-clj update function can drive one frame end-to-end using scene patches + audio events.
 
 ## Milestone 5: Core Gameplay (tiny-clj)
-
 Status: TODO
 
 Tasks:
-
 - Implement pure update(state, input, dt-ms):
   - jump physics
   - obstacle scroll/spawn
@@ -179,17 +188,15 @@ Tasks:
   - score/progress
 - Emit render/audio intents only, no direct hardware calls.
 - Add deterministic seed/path mode for repeatable tests.
+- Consume on-demand EDN asset loading (already implemented) for level/music tables; do not re-implement asset IO in gameplay loop.
 
 Done when:
-
 - Loop is playable, restart works, score increases correctly.
 
 ## Milestone 6: Performance + Stability
-
 Status: TODO
 
 Tasks:
-
 - Profile frame time buckets:
   - input
   - tiny-clj update
@@ -203,11 +210,9 @@ Tasks:
 - Run 30+ min soak test.
 
 Done when:
-
 - No crash, no progressive slowdown, no visible GC spikes during normal play.
 
 ## Milestone 7: Power + Battery UX
-
 Status: TODO
 
 Tasks:
@@ -219,11 +224,9 @@ Tasks:
 - Idle timeout for menu screen.
 
 Done when:
-
 - Battery reading is stable enough for user-facing indicator.
 
 ## Milestone 8: Mechanical Integration Checks
-
 Status: TODO
 
 Tasks:
@@ -234,19 +237,18 @@ Tasks:
 - Verify USB cable clearance and screw stack-up.
 
 Done when:
-
 - Enclosure assembly passes repeated open/close cycles without stress issues.
 
-## Recommended Implementation Order (first 2 weeks)
+## Next Execution Order (updated)
 
 1. M0 hardware lock-in
-2. M1 display bring-up (panel smoke only)
-3. M2 input layer
-4. M3 audio core skeleton
-5. Dependency Gate A: complete scene-graph plan M0..M5 on macOS simulator
-6. M4 tiny-clj host contract (scene patches + audio events)
-7. Dependency Gate B: complete scene-graph plan M7 on ESP32
-8. M5 minimal playable loop on device
+2. M1 open items: ESP32 ST7789 backend + lifecycle callback wiring
+3. M2 input snapshot layer (encoder/buttons)
+4. M4 finalize gameplay frame contract with hard caps
+5. M5 minimal playable geometri-dash loop on device
+6. M3 open audio items: ducking + final SFX pack + piezo tuning
+7. M6 profiling and soak
+8. M7/M8 battery + mechanical finalization
 
 ## Risk Register
 
