@@ -53,7 +53,7 @@ and game-demo startup."
     {:status (if (sound/sound-play-music! starwars-title-track-id 1) :playing :stopped)
      :duration-ms 8925}))
 
-(defn- player-jump-timeline-for-state
+(defn player-jump-timeline-for-state
   [player-small?]
   (let [data (load-demo-data!)]
     (if player-small?
