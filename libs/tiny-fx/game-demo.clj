@@ -12,7 +12,6 @@
 (def obstacle-entity-id 3003)
 (def starwars-title-track-id :starwars-title-2v)
 (def demo-melody-track-id :game-demo-melody)
-
 (def demo-data* (atom nil))
 
 (def deco-scene-state (atom nil))
@@ -32,15 +31,12 @@ and game-demo startup."
    {:id :score :atom score-scene-state}
    {:id :game :atom game-scene-state}])
 
-(def demo-data* (atom nil))
-
 (defn load-demo-data! []
   (let [d @demo-data*]
     (if d
       d
-      (let [_ (require 'tiny-fx.gfx)
-            raw (tiny-fx.assets/load-edn-asset "/libs/tiny-fx/assets/game-demo.edn" nil)
-            parsed (tiny-fx.gfx-scene/edn->scene raw)]
+      (let [raw (assets/load-edn-asset "/libs/tiny-fx/assets/game-demo.edn" nil)
+            parsed (edn->scene raw)]
         (reset! demo-data* parsed)
         parsed))))
 
@@ -66,17 +62,16 @@ and game-demo startup."
         player (get root player-entity-id)
         proxy (get root player-collision-entity-id)
         next-timeline (player-jump-timeline-for-state player-small?)]
-    (if (and (= (:t player) next-timeline)
-             (= (:t proxy) next-timeline))
+    (if (or (nil? player)
+            (nil? proxy)
+            (and (= (:t player) next-timeline)
+                 (= (:t proxy) next-timeline)))
       game-scene
-      (let [updated-root (-> root
-                             (assoc player-entity-id (assoc player :t next-timeline))
-                             (assoc player-collision-entity-id (assoc proxy :t next-timeline)))
-            scene-tree (get root 'root)
-            updated-tree (tiny-fx.gfx-scene/update-nodes scene-tree
-                           {player-entity-id (fn [n] (assoc n :t next-timeline))
-                            player-collision-entity-id (fn [n] (assoc n :t next-timeline))})]
-        (assoc game-scene :root (assoc updated-root 'root updated-tree))))))
+      (let [updated-player (assoc player :t next-timeline)
+            updated-proxy (assoc proxy :t next-timeline)
+            next-root (assoc (assoc root player-entity-id updated-player) player-collision-entity-id updated-proxy)]
+        ;; Keep scene as FrameScene record so native viewer accepts atom updates.
+        (record-from-map 'FrameScene (assoc game-scene :root next-root))))))
 
 (defn- event->player-small-state
   [event]

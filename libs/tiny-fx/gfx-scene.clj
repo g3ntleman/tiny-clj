@@ -1,133 +1,43 @@
-
 (ns tiny-fx.gfx-scene)
 
-;; Central scene-record schema for tiny-fx/tiny-clj vector rendering.
-;;
-;; defrecord registers each type with the C renderer (which matches record
-;; type names by exact unqualified symbol cname) and creates ->Type /
-;; map->Type constructors that other namespaces can import via :refer.
-;;
-;; Record contracts consumed by the C renderer:
-;; - Transform [tx ty sx sy rot]
-;;   tx/ty: translation in px, sx/sy: scale factors, rot: degrees.
-;; - Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]
-;;   colors are RGB565 integers.
-;; - Group/Line/Polyline/Rect/Tri/VText all share [id t style visible ...].
-;;   :id must be stable across snapshot publishes for deterministic state/collision routing.
-;;   :t/:style fields can hold plain values or Timeline records.
-;; - Timeline [keyframes loop]
-;;   keyframes are [[time-ms value] ...] with monotonic time-ms.
-;; - Scene [root clip-rect erase-color collision-rules]
-;; - FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]
-;;   root may be flat entity map ({id -> Record}) or legacy nested root node.
-;;   clip-rect is [x y w h], guard-px expands dirty area for slot rerender diffing.
-;;   collision-rules carries host/runtime spatial trigger declarations for the published snapshot.
-;; - CollisionRule / CollisionEvent are legacy names kept for compatibility.
-;; - SpatialRule [id slot kind self other radius channel]
-;; - Aabb [min-x min-y max-x max-y]
-;; - SpatialEvent [source id slot-id kind phase self other rule snapshot-gen
-;;                 self-aabb other-aabb self-prototype other-prototype radius channel]
+(defn ->Style [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
+  (record-create 'Style [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]))
 
-(defrecord Transform [tx ty sx sy rot])
-(defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color])
-(defrecord Group [id t style visible children prototype])
-(defrecord Line [id t style visible x1 y1 x2 y2 prototype])
-(defrecord Polyline [id t style visible pts closed prototype])
-(defrecord Rect [id t style visible x y w h prototype])
-(defrecord Tri [id t style visible x1 y1 x2 y2 x3 y3 prototype])
-(defrecord VText [id t style visible x y scale rot text prototype])
-(defrecord Timeline [keyframes loop])
-(defrecord Scene [root clip-rect erase-color collision-rules])
-(defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules])
-(defrecord CollisionRule [id slot a-id b-id phase-mask enabled cooldown-ms])
-(defrecord CollisionEvent [rule-id slot a-id b-id phase snapshot-gen ts-ms])
-(defrecord SpatialRule [id slot kind self other radius channel])
-(defrecord Aabb [min-x min-y max-x max-y])
-(defrecord SpatialEvent [source id slot-id kind phase self other rule snapshot-gen
-                         self-aabb other-aabb self-prototype other-prototype radius channel])
+(defn ->Group [id t style visible children anim]
+  (record-create 'Group [id t style visible children anim]))
 
-;; Color helpers
-;;
-;; web-hex->color converts CSS-like #RRGGBB strings to RGB565 integer colors.
-;; Returns nil for invalid input.
-(defn- hex-digit-value
-  [c]
+(defn ->Transform [id t style visible x y scale rot children anim]
+  (record-create 'Transform [id t style visible x y scale rot children anim]))
+
+(defn ->Line [id t style visible x1 y1 x2 y2 anim]
+  (record-create 'Line [id t style visible x1 y1 x2 y2 anim]))
+
+(defn ->Rect [id t style visible x y w h anim]
+  (record-create 'Rect [id t style visible x y w h anim]))
+
+(defn ->Polyline [id t style visible pts closed anim]
+  (record-create 'Polyline [id t style visible pts closed anim]))
+
+(defn ->VText [id t style visible x y scale rot text anim]
+  (record-create 'VText [id t style visible x y scale rot text anim]))
+
+(defn edn->scene
+  "Recursively converts generic EDN maps with a :type keyword into corresponding gfx-scene records."
+  [m]
   (cond
-    (or (= c \0) (= c 48)) 0
-    (or (= c \1) (= c 49)) 1
-    (or (= c \2) (= c 50)) 2
-    (or (= c \3) (= c 51)) 3
-    (or (= c \4) (= c 52)) 4
-    (or (= c \5) (= c 53)) 5
-    (or (= c \6) (= c 54)) 6
-    (or (= c \7) (= c 55)) 7
-    (or (= c \8) (= c 56)) 8
-    (or (= c \9) (= c 57)) 9
-    (or (= c \a) (= c 97)) 10
-    (or (= c \b) (= c 98)) 11
-    (or (= c \c) (= c 99)) 12
-    (or (= c \d) (= c 100)) 13
-    (or (= c \e) (= c 101)) 14
-    (or (= c \f) (= c 102)) 15
-    (or (= c \A) (= c 65)) 10
-    (or (= c \B) (= c 66)) 11
-    (or (= c \C) (= c 67)) 12
-    (or (= c \D) (= c 68)) 13
-    (or (= c \E) (= c 69)) 14
-    (or (= c \F) (= c 70)) 15
-    :else -1))
-
-(defn- parse-hex2
-  [s offset]
-  (let [c1 (hex-digit-value (nth s offset))
-        c2 (hex-digit-value (nth s (+ offset 1)))]
-    (if (or (< c1 0) (< c2 0))
-      nil
-      (+ (* c1 16) c2))))
-
-(defn rgb888->color
-  "Converts 8-bit RGB channels to RGB565 integer color."
-  [r g b]
-  (let [r5 (quot (* r 31) 255)
-        g6 (quot (* g 63) 255)
-        b5 (quot (* b 31) 255)]
-    (+ (* r5 2048) (* g6 32) b5)))
-
-(defn color
-  "Converts a 24-bit RGB888 integer (0xRRGGBB) to RGB565 integer color.
-Returns nil for invalid input."
-  [rgb]
-  (if (or (nil? rgb)
-          (not (integer? rgb))
-          (< rgb 0)
-          (> rgb 16777215))
-    nil
-    (let [r (bit-and (bit-shift-right rgb 16) 255)
-          g (bit-and (bit-shift-right rgb 8) 255)
-          b (bit-and rgb 255)]
-      (rgb888->color r g b))))
-
-(defn web-hex->color
-  "Converts #RRGGBB into RGB565 integer color. Returns nil for invalid input."
-  [s]
-  (if (nil? s)
-    nil
-    (let [t (str s)]
-      (if (and (= (count t) 7) (= (subs t 0 1) "#"))
-        (let [r (parse-hex2 t 1)
-              g (parse-hex2 t 3)
-              b (parse-hex2 t 5)]
-          (if (or (nil? r) (nil? g) (nil? b))
-            nil
-            (color (+ (* r 65536) (* g 256) b))))
-        nil))))
+    (map? m)
+    (let [m2 (reduce (fn [acc [k v]] (assoc acc k (edn->scene v))) {} m)
+          t (:type m2)]
+      (if t
+        (record-from-map (symbol (name t)) (dissoc m2 :type))
+        m2))
+    (vector? m)
+    (mapv edn->scene m)
+    :else m))
 
 ;; Collision/spatial contract helpers.
 ;; CollisionRule remains a legacy schema bridge.
 ;; SpatialRule/SpatialEvent define the active host-side trigger contract.
-(def default-collision-slot :game)
-(def default-collision-phase-mask [:enter :exit])
-(def default-spatial-kind :collision)
 
 (defn- phase-present?
   [xs v]
@@ -143,7 +53,7 @@ Returns nil for invalid input."
 Accepts vector/list/keyword/nil and returns a validated vector."
   [phase-mask]
   (let [raw (cond
-              (nil? phase-mask) default-collision-phase-mask
+              (nil? phase-mask) [:enter :exit]
               (vector? phase-mask) phase-mask
               (list? phase-mask) (vec phase-mask)
               (keyword? phase-mask) [phase-mask]
@@ -153,14 +63,14 @@ Accepts vector/list/keyword/nil and returns a validated vector."
                          out (if (phase-present? raw :exit) (conj out :exit) out)]
                      out)]
     (if (empty? normalized)
-      default-collision-phase-mask
+      [:enter :exit]
       normalized)))
 
 (defn normalize-collision-rule
   "Applies legacy collision-rule defaults and normalization."
   [rule]
   {:id (get rule :id)
-   :slot (or (get rule :slot) default-collision-slot)
+   :slot (or (get rule :slot) :game)
    :a-id (get rule :a-id)
    :b-id (get rule :b-id)
    :phase-mask (normalize-collision-phase-mask (get rule :phase-mask))
@@ -173,8 +83,8 @@ Accepts vector/list/keyword/nil and returns a validated vector."
 The runtime emits only edge transitions (`:enter` / `:exit`)."
   [rule]
   {:id (get rule :id)
-   :slot (or (get rule :slot) default-collision-slot)
-   :kind (or (get rule :kind) default-spatial-kind)
+   :slot (or (get rule :slot) :game)
+   :kind (or (get rule :kind) :collision)
    :self (let [v (get rule :self)]
            (if (nil? v) (get rule :a-id) v))
    :other (let [v (get rule :other)]
@@ -200,5 +110,3 @@ The runtime emits only edge transitions (`:enter` / `:exit`)."
         (assoc node2 :children
           (mapv (fn [ch] (update-nodes ch updates2)) children))
         node2))))
-
-

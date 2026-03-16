@@ -67,10 +67,6 @@ static const char tiny_fx_sound_demos_code[] =
 #include "tiny-fx.sound-demos.clj.inc"
     ;
 
-static const char tiny_fx_sound_demos_data_code[] =
-#include "tiny-fx.sound-demos-data.clj.inc"
-    ;
-
 static const char tiny_fx_sound_demos_william_code[] =
 #include "tiny-fx.sound-demos-william.clj.inc"
     ;
@@ -176,7 +172,6 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound.clj", tiny_fx_sound_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-native.clj", tiny_fx_sound_native_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos.clj", tiny_fx_sound_demos_code),
-    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos-data.clj", tiny_fx_sound_demos_data_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos-william.clj", tiny_fx_sound_demos_william_code),
 #ifdef DEBUG
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-debug.clj", tiny_fx_sound_debug_code),

@@ -1,20 +1,22 @@
 (ns tiny-fx.sound-demos
-  (:require [tiny-fx.sound :as sound]))
-
-(defn ensure-sound-demo-data-loaded!
-  []
-  (load-file "/libs/tiny-fx/sound-demos-data.clj"))
+  (:require [tiny-fx.assets :as assets]))
 
 (defn demo
   [which]
-  (ensure-sound-demo-data-loaded!)
-  (tiny-fx.sound-demos-data/build-demo which))
+  (let [path (str "/libs/tiny-fx/assets/sound-demos/" (name which) ".edn")]
+    (assets/load-edn-asset path [:track-id :steps :opts])))
+
+(defn sfx-demo-key?
+  [which]
+  (or (= which :rocket-launch-sfx)
+      (= which :laser-sfx)))
 
 (defn play-demo!
   [which]
+  (require 'tiny-fx.sound)
   (let [d (demo which)]
     (when (nil? d)
       (throw "Unknown sound demo"))
-    (if (tiny-fx.sound-demos-data/sfx-demo-key? which)
-      (sound/play-sfx! (:track-id d) (:steps d) (:opts d))
-      (sound/play-steps! (:track-id d) (:steps d) (:opts d)))))
+    (if (sfx-demo-key? which)
+      (tiny-fx.sound/play-sfx! (:track-id d) (:steps d) (:opts d))
+      (tiny-fx.sound/play-steps! (:track-id d) (:steps d) (:opts d)))))

@@ -1,0 +1,7 @@
+{:track-id :sound-demos-rocket-launch-sfx
+ :steps [{:notes [180] :bend [285] :noise true :duration 1100}
+         {:notes [220] :bend [345] :noise true :duration 1100}
+         {:notes [560] :duration 80}]
+ :opts {:channel-count 1
+        :volumes [240]
+        :gate-percent 100}}

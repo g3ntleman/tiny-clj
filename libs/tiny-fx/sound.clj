@@ -42,10 +42,30 @@
     :else
     (let [s (name note-kw)
           n (count s)
-          letter (read-string (str "\\" (subs s 0 1)))
+          letter (let [c-str (subs s 0 1)]
+                   (cond
+                     (= c-str "C") \C
+                     (= c-str "D") \D
+                     (= c-str "E") \E
+                     (= c-str "F") \F
+                     (= c-str "G") \G
+                     (= c-str "A") \A
+                     (= c-str "B") \B
+                     :else (fail "Invalid note letter")))
           accidental (if (= n 3) (subs s 1 2) "")
           octave-str (if (= n 3) (subs s 2 3) (subs s 1 2))
-          octave (read-string octave-str)
+          octave (cond
+                   (= octave-str "0") 0
+                   (= octave-str "1") 1
+                   (= octave-str "2") 2
+                   (= octave-str "3") 3
+                   (= octave-str "4") 4
+                   (= octave-str "5") 5
+                   (= octave-str "6") 6
+                   (= octave-str "7") 7
+                   (= octave-str "8") 8
+                   (= octave-str "9") 9
+                   :else (fail "Invalid octave"))
           base (semitone-base letter)
           semi (cond
                  (= accidental "#") (+ base 1)

@@ -1217,9 +1217,7 @@ TEST(test_sound_native_play_music_initializes_engine_if_needed) {
   sound_engine_shutdown();
   TEST_ASSERT_EQUAL_INT(0, g_sound_engine.voice_count);
 
-  ID result = NULL;
-  TRY {
-    result = eval_string(
+  ID result = eval_string(
         "(do "
         "  (require 'tiny-fx.sound) "
         "  (let [ret (tiny-fx.sound/play-steps! :lazy-init "
@@ -1228,11 +1226,6 @@ TEST(test_sound_native_play_music_initializes_engine_if_needed) {
         "    (and (= :playing (:status ret)) "
         "         (= 125 (:duration-ms ret)))))",
         g_test_eval_state);
-  }
-  CATCH(ex) {
-    TEST_FAIL_MESSAGE("sound native play path should initialize engine lazily");
-  }
-  END_TRY
 
   TEST_ASSERT_TRUE(result == clj_true);
   TEST_ASSERT_TRUE(g_sound_engine.voice_count > 0);
@@ -1513,7 +1506,9 @@ TEST(test_sound_tiny_fx_game_demo_play_starwars_title_returns_status_map) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.game-demo) "
+        "(do (require 'tiny-fx.gfx) "
+        "    (tiny-fx.gfx/start-renderer!) "
+        "    (require 'tiny-fx.game-demo) "
         "    (tiny-fx.game-demo/play-starwars-title!))",
         g_test_eval_state);
   }
@@ -1539,7 +1534,9 @@ TEST(test_sound_tiny_fx_sound_demos_play_minuet_returns_status_map) {
   ID result = NULL;
   TRY {
     result = eval_string(
-        "(do (require 'tiny-fx.sound-demos) "
+        "(do (require 'tiny-fx.gfx) "
+        "    (tiny-fx.gfx/start-renderer!) "
+        "    (require 'tiny-fx.sound-demos) "
         "    (tiny-fx.sound-demos/play-demo! :minuet-in-g))",
         g_test_eval_state);
   }

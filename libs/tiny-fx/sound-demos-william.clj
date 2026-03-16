@@ -1,5 +1,4 @@
-(ns tiny-fx.sound-demos-william
-  (:require [tiny-fx.sound :as sound]))
+(ns tiny-fx.sound-demos-william)
 
 ;; William Tell kept in a dedicated namespace so the large literal data is
 ;; only loaded when explicitly requested.
@@ -403,5 +402,6 @@
 (defn play-william-tell-finale!
   "Plays the full fast William Tell finale once, based on notation instead of the truncated demo MIDI."
   []
+  (require 'tiny-fx.sound)
   (let [demo (build-william-tell-finale-demo)]
-    (sound/play-steps! (:track-id demo) (:steps demo) (:opts demo))))
+    (tiny-fx.sound/play-steps! (:track-id demo) (:steps demo) (:opts demo))))

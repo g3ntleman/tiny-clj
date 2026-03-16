@@ -351,7 +351,8 @@ static uint32_t viewer_collect_selector_entity_ids(ID root,
         if (count >= max_ids) {
             break;
         }
-        if (viewer_entity_prototype(entity_rec) == selector) {
+        ID entity_prototype = viewer_entity_prototype(entity_rec);
+        if (entity_prototype == selector || (entity_prototype && clj_equal(entity_prototype, selector))) {
             out_ids[count++] = entity_id;
         }
     }
@@ -1025,6 +1026,11 @@ static void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
     }
     for (uint8_t i = 0; i < bundle->slot_count; i++) {
         FrameScene *scene = viewer_frame_scene_from_atom(bundle->slots[i].scene_atom);
+        /*
+         * Runtime invariant: configured slot atoms must always deref to FrameScene.
+         * If this breaks, fail fast in debug builds instead of silently skipping updates.
+         */
+        CLJ_ASSERT(scene && "configured slot atom must deref to FrameScene record");
         if (!scene || scene == bundle->slots[i].scene) {
             continue;
         }

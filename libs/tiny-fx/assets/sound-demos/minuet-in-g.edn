@@ -1,0 +1,21 @@
+{:track-id :sound-demos-minuet-in-g
+ :steps [{:melody :D5 :backing [:G3] :duration :q}
+         {:melody :G5 :backing [:D4] :duration :e}
+         {:melody :A5 :backing [:D4] :duration :e}
+         {:melody :B5 :backing [:G3] :duration :q}
+         {:melody :G5 :backing [:D4] :duration :q}
+         {:melody :D6 :backing [:G3] :duration :q}
+         {:melody :B5 :backing [:D4] :duration :q}
+         {:melody :G5 :backing [:G3] :duration :dq}
+         {:melody :A5 :backing [:D4] :duration :e}
+         {:melody :B5 :backing [:G3] :duration :q}
+         {:melody :C6 :backing [:E4] :duration :q}
+         {:melody :D6 :backing [:A3] :duration :q}
+         {:rest :e}
+         {:melody :B5 :backing [:D4] :duration :e}
+         {:melody :A5 :backing [:G3] :duration :q}
+         {:melody :G5 :backing [:D4] :duration :dh}]
+ :opts {:melody {:volume 220}
+        :backing {:volume 150}
+        :tempo-bpm 140
+        :gate-percent 78}}

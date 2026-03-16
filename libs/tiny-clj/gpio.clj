@@ -92,33 +92,6 @@ Returns nil."}
       (reset! core-async-loaded? true)
       nil)))
 
-^#^{:doc "Creates a core.async channel that receives GPIO edge events.
-
-  (gpio-channel pin)              ; default sliding-buffer 64
-  (gpio-channel pin custom-buf)   ; custom buffer
-
-Returns {:ch ch, :pin pin, :close! (fn [])}.
-Events on ch: {:source :gpio, :signal :digital, :kind :edge, :pin <fixnum>, :value <0|1>}.
-Call (:close! result) to unwatch the pin and close the channel."}
-(defn gpio-channel [& args]
-  (do
-    (ensure-core-async!)
-    (let [argc (count args)]
-      (if (< argc 1)
-        (throw "tiny-clj.gpio/gpio-channel requires pin")
-        (let [pin (nth args 0)
-              buf (if (>= argc 2) (nth args 1) (clojure.core.async/sliding-buffer 64))
-              ch (clojure.core.async/chan buf)]
-          (watch pin
-            (fn [ev]
-              (clojure.core.async/offer! ch ev)))
-          {:ch ch
-           :pin pin
-           :close! (fn []
-                     (do
-                       (watch pin nil)
-                       (clojure.core.async/close! ch)
-                       nil))})))))
 
 ^#^{:doc "Internal helper for the polling-based analog watch path."}
 (defn- watch-analog [pin callback opts]

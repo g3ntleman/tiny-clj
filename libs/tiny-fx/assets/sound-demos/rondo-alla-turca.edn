@@ -1,0 +1,26 @@
+{:track-id :sound-demos-rondo-alla-turca
+ :steps [{:melody :A5 :backing [:A3] :duration :s}
+         {:melody :Gs5 :backing [:E4] :duration :s}
+         {:melody :A5 :backing [:A3] :duration :s}
+         {:melody :C6 :backing [:E4] :duration :s}
+         {:melody :E6 :backing [:A3] :duration :e}
+         {:melody :A5 :backing [:A3] :duration :s}
+         {:melody :Gs5 :backing [:E4] :duration :s}
+         {:melody :A5 :backing [:A3] :duration :s}
+         {:melody :B5 :backing [:E4] :duration :s}
+         {:melody :C6 :backing [:A3] :duration :e}
+         {:melody :A5 :backing [:A3] :duration :s}
+         {:melody :Gs5 :backing [:E4] :duration :s}
+         {:melody :A5 :backing [:A3] :duration :s}
+         {:melody :E5 :backing [:E4] :duration :s}
+         {:melody :A5 :backing [:A3] :duration :e}
+         {:rest :e}
+         {:melody :G5 :backing [:G3] :duration :e}
+         {:melody :A5 :backing [:E4] :duration :e}
+         {:melody :B5 :backing [:G3] :duration :e}
+         {:melody :C6 :backing [:A3] :duration :e}
+         {:melody :E6 :backing [:A3] :duration :h}]
+ :opts {:melody {:volume 220}
+        :backing {:volume 142}
+        :tempo-bpm 120
+        :gate-percent 72}}

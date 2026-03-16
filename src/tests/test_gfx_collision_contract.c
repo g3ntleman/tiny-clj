@@ -61,6 +61,7 @@ TEST(test_gfx_collision_contract_normalize_rule_defaults) {
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [r (tiny-fx.gfx-scene/normalize-spatial-rule {:id :r1 :a-id 1 :b-id 2})] "
         "    [(:slot r) (:kind r) (:self r) (:other r) (:radius r) (:channel r)]))",
@@ -86,6 +87,7 @@ TEST(test_gfx_collision_contract_phase_mask_normalization_enter_exit_only) {
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [r1 (tiny-fx.gfx-scene/normalize-collision-rule "
         "             {:id :r1 :a-id 1 :b-id 2 :phase-mask [:enter :foo]}) "
@@ -121,6 +123,7 @@ TEST(test_gfx_collision_contract_disabled_rule_defaults_to_no_runtime_side_effec
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [r (tiny-fx.gfx-scene/normalize-collision-rule "
         "            {:id :r-disabled :a-id 7 :b-id 9 :enabled false})] "
@@ -151,6 +154,7 @@ TEST(test_gfx_collision_contract_normalize_spatial_rule_preserves_proximity_fiel
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [r (tiny-fx.gfx-scene/normalize-spatial-rule "
         "            {:id :hear :slot :game :kind :proximity :self 10 :other 20 :radius 24 :channel :hearing})] "
@@ -175,6 +179,7 @@ TEST(test_gfx_collision_contract_callback_set_clear_and_invoke_shape) {
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (def collision-contract-cb (fn collision-contract-cb [event] (:phase event))) "
         "  (let [assigned (tiny-fx.gfx-collision/set-collision-callback! collision-contract-cb) "
@@ -199,6 +204,7 @@ TEST(test_gfx_collision_contract_callback_rejects_non_function_values) {
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [_ (tiny-fx.gfx-collision/set-collision-callback! nil) "
         "        rejected? (try (do (tiny-fx.gfx-collision/set-collision-callback! 7) false) "
@@ -214,8 +220,8 @@ TEST(test_gfx_collision_contract_field_alias_hot_loop_does_not_retain) {
     ID rule = eval_string(
         "(do "
         "  (require 'tiny-fx.game-demo) "
-        "  (tiny-fx.game-demo/create-demo-bundle) "
-        "  (nth (:collision-rules @tiny-fx.game-demo/game-scene-state) 0))",
+        "  (let [game-scene-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config))] "
+        "    (nth (:collision-rules @game-scene-atom) 0)))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(rule);
     TEST_ASSERT_TRUE(TAG(rule) == CLJ_RECORD);
@@ -243,6 +249,7 @@ TEST(test_gfx_collision_contract_spatial_watch_supports_two_and_three_arity_call
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [spatial-watch-marker (atom [])] "
         "    (tiny-fx.gfx-collision/watch :player-hit "
@@ -318,16 +325,17 @@ TEST(test_gfx_collision_contract_demo_callback_mutates_scene_state_explicitly) {
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (require 'tiny-fx.gfx-scene) "
-        "  (tiny-fx.game-demo/create-demo-bundle) "
-        "  (let [player0 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "  (require 'tiny-fx.color) "
+        "  (let [game-scene-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
+        "        player0 (get (:root @game-scene-atom) 3002) "
         "        before-x1 (:x1 player0) "
         "        before-sx (:sx (nth (nth (:keyframes (:t player0)) 0) 1)) "
         "        ret1 (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
-        "        player1 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "        player1 (get (:root @game-scene-atom) 3002) "
         "        after-enter-x1 (:x1 player1) "
         "        after-enter-sx (:sx (nth (nth (:keyframes (:t player1)) 0) 1)) "
         "        ret2 (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :exit}) "
-        "        player2 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "        player2 (get (:root @game-scene-atom) 3002) "
         "        after-exit-x1 (:x1 player2) "
         "        after-exit-sx (:sx (nth (nth (:keyframes (:t player2)) 0) 1))] "
         "    (and (= -16 before-x1) "
@@ -339,6 +347,9 @@ TEST(test_gfx_collision_contract_demo_callback_mutates_scene_state_explicitly) {
         "         (nil? ret1) "
         "         (nil? ret2))))",
         g_test_eval_state);
+    if (!out || out == clj_false) {
+        test_fprintf(stderr, "test_gfx_collision_contract_demo_callback_mutates_scene_state_explicitly failed! out=%p\n", (void*)out);
+    }
     TEST_ASSERT_TRUE(out && out != clj_false);
 }
 
@@ -429,6 +440,7 @@ TEST(test_gfx_scene_update_nodes_applies_batched_changes) {
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [tree {:id :root :children "
         "              [{:id :a :x 10 :y 20} "
@@ -462,6 +474,7 @@ TEST(test_gfx_scene_update_nodes_empty_updates_returns_unchanged) {
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [tree {:id :root :x 5} "
         "        t2 (tiny-fx.gfx-scene/update-nodes tree {})] "
@@ -478,6 +491,7 @@ TEST(test_gfx_scene_update_nodes_nested_groups) {
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [tree {:id :root :children "
         "              [{:id :g1 :children "
@@ -503,11 +517,12 @@ TEST(test_gfx_scene_web_hex_color_conversion) {
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
-        "  [(tiny-fx.gfx-scene/web-hex->color \"#00FFFF\") "
-        "   (tiny-fx.gfx-scene/web-hex->color \"#FFFFFF\") "
-        "   (tiny-fx.gfx-scene/web-hex->color \"#FF00FF\") "
-        "   (tiny-fx.gfx-scene/web-hex->color \"#FF0000\")])",
+        "  [(tiny-fx.color/web-hex->color \"#00FFFF\") "
+        "   (tiny-fx.color/web-hex->color \"#FFFFFF\") "
+        "   (tiny-fx.color/web-hex->color \"#FF00FF\") "
+        "   (tiny-fx.color/web-hex->color \"#FF0000\")])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -526,11 +541,12 @@ TEST(test_gfx_scene_rgb888_int_color_conversion) {
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
-        "  [(tiny-fx.gfx-scene/color 0x00FFFF) "
-        "   (tiny-fx.gfx-scene/color 0xFFFFFF) "
-        "   (tiny-fx.gfx-scene/color 0xFF00FF) "
-        "   (tiny-fx.gfx-scene/color 0xFF0000)])",
+        "  [(tiny-fx.color/color 0x00FFFF) "
+        "   (tiny-fx.color/color 0xFFFFFF) "
+        "   (tiny-fx.color/color 0xFF00FF) "
+        "   (tiny-fx.color/color 0xFF0000)])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -549,11 +565,12 @@ TEST(test_gfx_scene_rgb888_int_color_invalid_input) {
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
-        "  [(tiny-fx.gfx-scene/color nil) "
-        "   (tiny-fx.gfx-scene/color -1) "
-        "   (tiny-fx.gfx-scene/color 16777216) "
-        "   (tiny-fx.gfx-scene/color 3.14)])",
+        "  [(tiny-fx.color/color nil) "
+        "   (tiny-fx.color/color -1) "
+        "   (tiny-fx.color/color 16777216) "
+        "   (tiny-fx.color/color 3.14)])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -572,11 +589,12 @@ TEST(test_gfx_scene_web_hex_color_invalid_input) {
         "(do "
         "  (require 'tiny-fx.gfx) "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
-        "  [(tiny-fx.gfx-scene/web-hex->color nil) "
-        "   (tiny-fx.gfx-scene/web-hex->color \"\") "
-        "   (tiny-fx.gfx-scene/web-hex->color \"#FFF\") "
-        "   (tiny-fx.gfx-scene/web-hex->color \"#GG00FF\")])",
+        "  [(tiny-fx.color/web-hex->color nil) "
+        "   (tiny-fx.color/web-hex->color \"\") "
+        "   (tiny-fx.color/web-hex->color \"#FFF\") "
+        "   (tiny-fx.color/web-hex->color \"#GG00FF\")])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);

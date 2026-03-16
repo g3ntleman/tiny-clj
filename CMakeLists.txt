@@ -541,6 +541,7 @@ add_executable(unit-tests
     subjective-c/tests/test_registry.c
     src/tests/test_memory_macros.c
     src/tests/test_memory.c
+    src/tests/test_assets_edn.c
     src/tests/test_closure_capture_minimal.c
     src/tests/test_parser.c
     src/tests/test_utf8_emoji.c
