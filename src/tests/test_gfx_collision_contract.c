@@ -4,6 +4,7 @@
 #include "../symbol.h"
 #include "../tiny_fx_gfx.h"
 #include "../vector.h"
+#include "../viewer_collision.h"
 
 TEST(test_gfx_collision_contract_registers_record_descriptors) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -146,6 +147,30 @@ TEST(test_gfx_collision_contract_disabled_rule_defaults_to_no_runtime_side_effec
     TEST_ASSERT_EQUAL_UINT(2, vector_count(mask_vec));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enter"), vector_nth(mask_vec, 0));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":exit"), vector_nth(mask_vec, 1));
+}
+
+TEST(test_gfx_collision_contract_selector_match_accepts_structural_equality_fallback) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID values = eval_string(
+        "(let [a [1 2] b [1 2] c [1 3]] [a b c])",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(values);
+    TEST_ASSERT_TRUE(TAG(values) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(values);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_UINT(3, vector_count(v));
+
+    ID a = vector_nth(v, 0);
+    ID b = vector_nth(v, 1);
+    ID c = vector_nth(v, 2);
+    TEST_ASSERT_NOT_NULL(a);
+    TEST_ASSERT_NOT_NULL(b);
+    TEST_ASSERT_NOT_NULL(c);
+    TEST_ASSERT_TRUE(a != b);
+    TEST_ASSERT_TRUE(vg_collision_selector_matches_entity_prototype(a, b));
+    TEST_ASSERT_FALSE(vg_collision_selector_matches_entity_prototype(a, c));
+    TEST_ASSERT_FALSE(vg_collision_selector_matches_entity_prototype(a, NULL));
+    TEST_ASSERT_FALSE(vg_collision_selector_matches_entity_prototype(NULL, b));
 }
 
 TEST(test_gfx_collision_contract_normalize_spatial_rule_preserves_proximity_fields) {

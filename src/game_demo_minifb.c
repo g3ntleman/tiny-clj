@@ -352,7 +352,7 @@ static uint32_t viewer_collect_selector_entity_ids(ID root,
             break;
         }
         ID entity_prototype = viewer_entity_prototype(entity_rec);
-        if (entity_prototype == selector || (entity_prototype && clj_equal(entity_prototype, selector))) {
+        if (vg_collision_selector_matches_entity_prototype(entity_prototype, selector)) {
             out_ids[count++] = entity_id;
         }
     }
