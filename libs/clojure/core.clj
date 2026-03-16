@@ -551,17 +551,7 @@
 (defn name [x] :native)
 
 ^#^{:doc "Defines a record type with compact field layout plus ->Type/map->Type constructors."}
-(defmacro defrecord [type-name fields]
-  (let [ctor (symbol (str "->" (name type-name)))
-        map-ctor (symbol (str "map->" (name type-name)))
-        m (symbol "m")
-        ctor-body (list 'record-create (list 'quote type-name) fields)
-        map-body (list 'record-from-map (list 'quote type-name) m)]
-    (list 'do
-          (list 'record-register (list 'quote type-name) (list 'quote fields))
-          (list 'def ctor (list 'fn ctor fields ctor-body))
-          (list 'def map-ctor (list 'fn map-ctor [m] map-body))
-          (list 'quote type-name))))
+;; defrecord is implemented as a native special form in C runtime.
 
 ; ============================================================================
 ; Sequence Functions (Native)

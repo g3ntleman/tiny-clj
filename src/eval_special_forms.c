@@ -21,8 +21,10 @@
 #include "strings.h"
 #include "to_string.h"
 #include "debug.h"
+#include "record.h"
 
 #include <string.h>
+#include <stdio.h>
 
 static INLINE bool sym_name_eq(ID obj, const char *name) {
   CLJ_ASSERT(name != NULL && "sym_name_eq: name must not be NULL");
@@ -1237,4 +1239,173 @@ ID eval_special_defmacro(CljPersistentVector *args, CljPersistentMap *env, EvalS
   ns_define(st->current_ns, name, fn_result);
 
   return fn_result;
+}
+
+// ============================================================================
+// defrecord Special Form - C-native record declaration
+// ============================================================================
+
+static ID make_quote_expr(ID value_expr) {
+  CljPersistentVector *quote_args = make_vector(1, STRONG);
+  if (!quote_args) {
+    return NULL;
+  }
+  vector_conj_inplace(&quote_args, value_expr);
+  CljASTCall *quote_call = make_ast_call(SYM_QUOTE, quote_args);
+  RELEASE(quote_args);
+  return quote_call ? (ID)quote_call : NULL;
+}
+
+static ID make_record_ctor_body(ID type_symbol, ID values_expr) {
+  ID quoted_type = make_quote_expr(type_symbol);
+  if (!quoted_type) {
+    return NULL;
+  }
+  CljPersistentVector *call_args = make_vector(2, STRONG);
+  if (!call_args) {
+    RELEASE(quoted_type);
+    return NULL;
+  }
+  vector_conj_inplace(&call_args, quoted_type);
+  vector_conj_inplace(&call_args, values_expr);
+  CljASTCall *call = make_ast_call(intern_symbol_global("record-create"), call_args);
+  RELEASE(call_args);
+  RELEASE(quoted_type);
+  return call ? (ID)call : NULL;
+}
+
+static ID make_record_map_ctor_body(ID type_symbol, ID map_symbol) {
+  ID quoted_type = make_quote_expr(type_symbol);
+  if (!quoted_type) {
+    return NULL;
+  }
+  CljPersistentVector *call_args = make_vector(2, STRONG);
+  if (!call_args) {
+    RELEASE(quoted_type);
+    return NULL;
+  }
+  vector_conj_inplace(&call_args, quoted_type);
+  vector_conj_inplace(&call_args, map_symbol);
+  CljASTCall *call = make_ast_call(intern_symbol_global("record-from-map"), call_args);
+  RELEASE(call_args);
+  RELEASE(quoted_type);
+  return call ? (ID)call : NULL;
+}
+
+static ID make_named_closure(CljSymbol *fn_name, ID params_vec, ID body_expr, CljPersistentMap *env, EvalState *st) {
+  CljPersistentVector *fn_args = make_vector(3, STRONG);
+  if (!fn_args) {
+    return NULL;
+  }
+  vector_conj_inplace(&fn_args, fn_name);
+  vector_conj_inplace(&fn_args, params_vec);
+  vector_conj_inplace(&fn_args, body_expr);
+  ID fn_obj = eval_fn(fn_args, env, st, NULL);
+  RELEASE(fn_args);
+  if (!fn_obj || TAG(fn_obj) != CLJ_CLOSURE) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "defrecord failed to create constructor closure",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+  return fn_obj;
+}
+
+ID eval_special_defrecord(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+  (void)ctx;
+  if (!st || !st->current_ns) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "defrecord requires a current namespace",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  unsigned int argc = args_count(args);
+  if (argc != 2) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                    "defrecord requires type symbol and fields vector",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  ID type_obj = args_nth(args, 0);
+  ID fields_obj = args_nth(args, 1);
+
+  if (!is_symbol(type_obj)) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                    "defrecord type must be a symbol",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+  if (!is_vector(fields_obj)) {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                    "defrecord fields must be a vector",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  CljRecordDescriptor *desc = record_register_descriptor(type_obj, fields_obj);
+  if (!desc) {
+    return NULL;
+  }
+
+  CljSymbol *type_sym = as_symbol(type_obj);
+  if (!type_sym || !type_sym->cname || type_sym->cname[0] == '\0') {
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                    "defrecord type symbol must have a name",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  char ctor_name[SYMBOL_NAME_MAX_LEN] = {0};
+  char map_ctor_name[SYMBOL_NAME_MAX_LEN] = {0};
+  snprintf(ctor_name, sizeof(ctor_name), "->%s", type_sym->cname);
+  snprintf(map_ctor_name, sizeof(map_ctor_name), "map->%s", type_sym->cname);
+
+  CljSymbol *ctor_sym = intern_symbol_global(ctor_name);
+  CljSymbol *map_ctor_sym = intern_symbol_global(map_ctor_name);
+  CljSymbol *m_sym = intern_symbol_global("m");
+  if (!ctor_sym || !map_ctor_sym || !m_sym) {
+    throw_exception(EXCEPTION_RUNTIME,
+                    "defrecord failed to intern constructor symbols",
+                    __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  ID ctor_body = make_record_ctor_body(type_obj, fields_obj);
+  if (!ctor_body) {
+    return NULL;
+  }
+  ID ctor_fn = make_named_closure(ctor_sym, fields_obj, ctor_body, env, st);
+  RELEASE(ctor_body);
+  if (!ctor_fn) {
+    return NULL;
+  }
+
+  CljPersistentVector *map_params = make_vector(1, STRONG);
+  if (!map_params) {
+    RELEASE(ctor_fn);
+    return NULL;
+  }
+  vector_conj_inplace(&map_params, m_sym);
+  ID map_body = make_record_map_ctor_body(type_obj, m_sym);
+  if (!map_body) {
+    RELEASE(map_params);
+    RELEASE(ctor_fn);
+    return NULL;
+  }
+  ID map_ctor_fn = make_named_closure(map_ctor_sym, map_params, map_body, env, st);
+  RELEASE(map_body);
+  RELEASE(map_params);
+  if (!map_ctor_fn) {
+    RELEASE(ctor_fn);
+    return NULL;
+  }
+
+  ns_define(st->current_ns, ctor_sym, ctor_fn);
+  ns_define(st->current_ns, map_ctor_sym, map_ctor_fn);
+  RELEASE(ctor_fn);
+  RELEASE(map_ctor_fn);
+
+  return desc->type_symbol ? desc->type_symbol : type_obj;
 }

@@ -41,6 +41,7 @@ CljSymbol *SYM_FN = NULL;
 CljSymbol *SYM_DEF = NULL;
 CljSymbol *SYM_DEFN = NULL;
 CljSymbol *SYM_DEFMACRO = NULL;
+CljSymbol *SYM_DEFRECORD = NULL;
 CljSymbol *SYM_QUOTE = NULL;
 CljSymbol *SYM_QUASIQUOTE = NULL;
 CljSymbol *SYM_UNQUOTE = NULL;
@@ -265,6 +266,7 @@ static struct {
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "fn" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "def" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "defmacro" }, .eval_fn = NULL } },
+    { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "defrecord" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "quote" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "quasiquote" }, .eval_fn = NULL } },
     { .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "unquote" }, .eval_fn = NULL } },
@@ -312,22 +314,23 @@ static struct {
 #define SYM_FN_IDX 7
 #define SYM_DEF_IDX 8
 #define SYM_DEFMACRO_IDX 9
-#define SYM_QUOTE_IDX 10
-#define SYM_QUASIQUOTE_IDX 11
-#define SYM_UNQUOTE_IDX 12
-#define SYM_UNQUOTE_SPLICE_IDX 13
-#define SYM_LOOP_IDX 14
-#define SYM_RECUR_IDX 15
-#define SYM_THROW_IDX 16
-#define SYM_FINALLY_IDX 17
-#define SYM_VAR_IDX 18
-#define SYM_NS_IDX 19
-#define SYM_BINDING_IDX 20
-#define SYM_TIME_IDX 21
-#define SYM_HEAP_IDX 22
-#define SYM_GO_IDX 23
-#define SYM_AND_IDX 24
-#define SYM_OR_IDX 25
+#define SYM_DEFRECORD_IDX 10
+#define SYM_QUOTE_IDX 11
+#define SYM_QUASIQUOTE_IDX 12
+#define SYM_UNQUOTE_IDX 13
+#define SYM_UNQUOTE_SPLICE_IDX 14
+#define SYM_LOOP_IDX 15
+#define SYM_RECUR_IDX 16
+#define SYM_THROW_IDX 17
+#define SYM_FINALLY_IDX 18
+#define SYM_VAR_IDX 19
+#define SYM_NS_IDX 20
+#define SYM_BINDING_IDX 21
+#define SYM_TIME_IDX 22
+#define SYM_HEAP_IDX 23
+#define SYM_GO_IDX 24
+#define SYM_AND_IDX 25
+#define SYM_OR_IDX 26
 
 #define G_SPECIAL_SYMBOLS_COUNT (sizeof(g_special_symbols) / sizeof(g_special_symbols[0]))
 
@@ -749,6 +752,7 @@ void init_special_symbols() {
     SYM_FN = (CljSymbol*)&g_special_symbols[SYM_FN_IDX].sym;
     SYM_DEF = (CljSymbol*)&g_special_symbols[SYM_DEF_IDX].sym;
     SYM_DEFMACRO = (CljSymbol*)&g_special_symbols[SYM_DEFMACRO_IDX].sym;
+    SYM_DEFRECORD = (CljSymbol*)&g_special_symbols[SYM_DEFRECORD_IDX].sym;
     SYM_QUOTE = (CljSymbol*)&g_special_symbols[SYM_QUOTE_IDX].sym;
     SYM_QUASIQUOTE = (CljSymbol*)&g_special_symbols[SYM_QUASIQUOTE_IDX].sym;
     SYM_UNQUOTE = (CljSymbol*)&g_special_symbols[SYM_UNQUOTE_IDX].sym;
@@ -1133,6 +1137,9 @@ void init_special_symbols() {
     // defmacro Special Form - defines macros in the current namespace
     if (is_special_symbol(SYM_DEFMACRO)) {
         ((CljSpecialSymbol*)SYM_DEFMACRO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defmacro;
+    }
+    if (is_special_symbol(SYM_DEFRECORD)) {
+        ((CljSpecialSymbol*)SYM_DEFRECORD)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defrecord;
     }
     
 }

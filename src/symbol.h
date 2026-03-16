@@ -67,6 +67,7 @@ extern CljSymbol *SYM_FN;
 extern CljSymbol *SYM_DEF;
 extern CljSymbol *SYM_DEFN;
 extern CljSymbol *SYM_DEFMACRO;
+extern CljSymbol *SYM_DEFRECORD;
 extern CljSymbol *SYM_VAR;
 extern CljSymbol *SYM_QUOTE;
 extern CljSymbol *SYM_QUASIQUOTE;

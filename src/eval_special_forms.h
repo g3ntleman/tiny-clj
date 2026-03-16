@@ -40,6 +40,7 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
 ID eval_special_quasiquote(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 void eval_special_forms_reset_caches(void);
 ID eval_special_defmacro(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_special_defrecord(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx);
 
 #ifdef __cplusplus
 }
