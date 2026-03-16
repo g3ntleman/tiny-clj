@@ -24,7 +24,7 @@ ID native_nilp(ID *args, unsigned int argc);
 // COLLECTION FUNCTIONS
 // ============================================================================
 
-TEST_SHARED(test_core_count) {
+TEST_SHARED(test_core_count, 16) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   // Test: (count [1 2 3]) => 3
@@ -44,6 +44,12 @@ TEST_SHARED(test_core_count) {
   TEST_ASSERT_NOT_NULL(result3);
   TEST_ASSERT_TRUE(is_fixnum(result3));
   TEST_ASSERT_EQUAL_INT(0, as_fixnum(result3));
+
+  // Regression: byte arrays should report their length via count (Clojure-compatible).
+  CljObject *result4 = eval_string("(count (byte-array [1 2 3 4]))", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(result4);
+  TEST_ASSERT_TRUE(is_fixnum(result4));
+  TEST_ASSERT_EQUAL_INT(4, as_fixnum(result4));
 }
 
 TEST_SHARED(test_core_first) {

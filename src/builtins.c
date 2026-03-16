@@ -2844,6 +2844,9 @@ ID native_count(ID *args, unsigned int argc) {
 
       // Return string length directly
       return fixnum(str->length);
+    } else if (tag == CLJ_BYTE_ARRAY) {
+      // Clojure-compatible: count on arrays returns array length.
+      return fixnum(byte_array_length(coll));
     }
   }
 
