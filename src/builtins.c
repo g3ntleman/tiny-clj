@@ -2955,6 +2955,9 @@ ID native_record_from_map(ID *args, unsigned int argc) {
   }
 
   CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+  if (!desc) {
+    fprintf(stderr, "record type not registered: %s\\n", as_symbol(type_symbol)->cname);
+  }
   CljPersistentRecord *record = make_record_from_map_with_descriptor(desc, source_map);
   if (!record)
     return NULL;
@@ -3667,6 +3670,25 @@ ID native_find_ns(ID *args, unsigned int argc) {
   throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0,
                             "find-ns: argument must be a symbol");
   return NULL;
+}
+
+// bound?: Returns true if the symbol is bound to a value, false otherwise
+// Usage: (tiny-clj.runtime/bound? 'sym)
+ID native_bound_p(ID *args, unsigned int argc) {
+  if (!validate_builtin_args(argc, 1, "bound?"))
+    return NULL;
+
+  ID sym_arg = args[0];
+  if (!sym_arg || TAG(sym_arg) != CLJ_SYMBOL) {
+    throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0,
+                              "bound?: argument must be a symbol");
+    return NULL;
+  }
+
+  EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+  ID resolved = ns_resolve(st, as_symbol(sym_arg));
+
+  return resolved != NOT_FOUND ? clj_true : clj_false;
 }
 
 // all-ns: Returns a list of all namespace objects
@@ -4534,6 +4556,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_sound_set_music_volume_data.sym, native_sound_set_music_volume),
     NATIVE_ENTRY(&sym_sound_on_finished_data.sym, native_sound_on_finished),
     NATIVE_ENTRY_BOOT_CNAME(native_ast_string, "tiny-clj.runtime/ast-string"),
+    NATIVE_ENTRY_BOOT_CNAME(native_bound_p, "bound?"),
     NATIVE_ENTRY(NULL, NULL) // Sentinel
 };
 

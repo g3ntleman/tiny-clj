@@ -212,6 +212,12 @@
 ; ============================================================================
 ; Macros (sorted by dependencies on other macros)
 ; ============================================================================
+^#^{:doc "defs name to have the root value of the expr iff the named var has no root value, else does nothing"}
+(defmacro defonce [name expr]
+  (list 'if (list 'bound? (list 'quote name))
+    nil
+    (list 'def name expr)))
+
 ^#^{:doc "Like defn, but marks the resulting var as private to the current namespace."}
 (defmacro defn- [name & args]
   (list 'mark-private! (cons 'defn (cons name args))))
