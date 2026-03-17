@@ -584,6 +584,8 @@ add_executable(unit-tests
     src/tests/test_core.c
     src/tests/test_builtins_destructure.c
     src/tests/test_macros.c
+    src/tests/test_macro_alias_regression.c
+    src/tests/test_macro_ns_asset_regression.c
     src/tests/test_macro_expander_debug.c
     src/tests/test_threading_macros.c
     src/tests/test_predicates.c

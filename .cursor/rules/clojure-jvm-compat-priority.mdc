@@ -1,0 +1,12 @@
+---
+description: Prioritize Clojure/JVM compatibility for language semantics
+alwaysApply: true
+---
+
+# Clojure/JVM Compatibility First
+
+- Implement language behavior to match Clojure/JVM semantics whenever feasible.
+- For ambiguous behavior, verify with `clj -e` before implementing.
+- Treat tiny-clj deviations from Clojure/JVM as compatibility bugs unless explicitly accepted by the user.
+- Prefer tests that assert Clojure/JVM behavior over tests that encode current tiny-clj quirks.
+- If keeping a known deviation temporarily, mark it explicitly in tests/comments as a temporary compatibility gap.
