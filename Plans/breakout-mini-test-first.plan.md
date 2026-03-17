@@ -76,6 +76,8 @@ Create a simple and robust Breakout demo for the tiny-handheld:
 - Paddle input must support two interchangeable sources: GPIO left/right simulation and rotary encoder delta.
 - Breakout module must not depend on `tiny-fx.startup` or `tiny-fx.game-demo`.
 - Build/Test wiring should be centralized in namespace `tiny-clj.deployment`.
+- Breakout demo code must use new namespaces under `tiny-breakout.*`.
+- Breakout namespaces may only depend on `tiny-clj.*` and `tiny-fx.*` (plus `clojure.core`).
 
 ## Existing patterns to reuse
 
@@ -116,6 +118,7 @@ Exit criterion:
 3. Decide and document deterministic constants (playfield size, paddle speed, ball speed, lives).
 4. Define an input adapter contract that normalizes GPIO and rotary events into one paddle-intent format.
 5. Add a phase-note matrix that maps each implementation step to a corresponding MDN lesson.
+6. Define namespace boundaries for the demo (`tiny-breakout.core`, `tiny-breakout.scene`, `tiny-breakout.input`, `tiny-breakout.audio`, `tiny-breakout.levels`) and add a dependency contract test that enforces allowed prefixes.
 
 Exit criterion:
 - contract document and fixture vectors/maps are committed as baseline for tests.
@@ -212,10 +215,15 @@ MDN mapping:
 ## File plan (expected)
 
 - New:
-  - `libs/tiny-fx/breakout.clj` (game state/update/render contract, MDN-mechanics port)
+  - `libs/tiny-breakout/core.clj` (game state/update contract, state machine)
+  - `libs/tiny-breakout/scene.clj` (scene snapshot build/update with stable IDs)
+  - `libs/tiny-breakout/input.clj` (GPIO/rotary normalization to paddle intent)
+  - `libs/tiny-breakout/audio.clj` (gameplay events to sound triggers)
+  - `libs/tiny-breakout/levels.clj` (level fixtures and loading helpers)
   - `libs/tiny-fx/assets/breakout.edn` (optional declarative layout/HUD presets)
   - `libs/tiny-clj/deployment.clj` (centralizes breakout build/test wiring and deployment helpers)
   - `src/tests/test_breakout_contract.c` (primary behavior contract tests)
+  - `src/tests/test_breakout_namespace_contract.c` (enforces `tiny-breakout.*` + dependency restrictions)
 - Possible updates:
   - `CMakeLists.txt` and related build files, only to hook into `tiny-clj.deployment`-driven workflow
 
@@ -230,3 +238,4 @@ MDN mapping:
 7. No regression in existing relevant tiny-fx test groups.
 8. Full unit-test run is green.
 9. ESP32 Optimization: Code is optimized for the ESP32 platform, considering code size, heap usage, and execution speed.
+10. Breakout implementation namespaces are under `tiny-breakout.*` and dependency-contract tests are green.
