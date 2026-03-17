@@ -1,0 +1,13 @@
+{:track-id :sound-demos-gymnopedie-no-1
+ :steps [{:melody :D5 :backing :G2 :duration :dh}
+         {:melody :E5 :backing :D3 :duration :dh}
+         {:melody :D5 :backing :G2 :duration :dh}
+         {:melody :B4 :backing :D3 :duration :dh}
+         {:melody :A4 :backing :G2 :duration :h}
+         {:rest :q}
+         {:melody :B4 :backing :D3 :duration :dh}
+         {:melody :D5 :backing :G2 :duration :dh}]
+ :opts {:melody {:volume 210}
+        :backing {:volume 120}
+        :tempo-bpm 76
+        :gate-percent 88}}

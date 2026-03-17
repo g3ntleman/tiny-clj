@@ -50,11 +50,12 @@ static ID source_resolver_try_filesystem(const char *path) {
     if (!path || !path[0]) return NULL;
     size_t path_len = strlen(path);
     bool is_libs_path = strncmp(path, "/libs/", 6) == 0;
+    bool is_assets_path = strncmp(path, "/assets/", 8) == 0;
     bool is_clj_path = path_len >= 4u && strcmp(path + path_len - 4u, ".clj") == 0;
 
-    // Keep filesystem fallback scoped to source/module resolution.
-    // This avoids changing slurp() behavior for arbitrary text files.
-    if (!is_libs_path && !is_clj_path) return NULL;
+    // Keep filesystem fallback scoped to source/module resolution plus
+    // project asset lookups under /assets/.
+    if (!is_libs_path && !is_assets_path && !is_clj_path) return NULL;
 
     // 1) Allow direct absolute/relative paths first.
     ID bytes = source_resolver_read_file_bytes(path);

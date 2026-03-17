@@ -630,9 +630,25 @@
     {:status (if (native/sound-play-sfx! track-id) :playing :dropped)
      :duration-ms duration-ms}))
 
+(defn play!
+  "Plays a song descriptor map.
+   Expected keys: :track-id, :steps, :opts and optional :kind (:music|:sfx).
+   Defaults to :music when :kind is not provided."
+  [song]
+  (let [track-id (:track-id song)
+        steps (:steps song)
+        opts (:opts song)
+        kind (or (:kind song) :music)]
+    (when (or (nil? track-id) (nil? steps))
+      (fail "play! expects song map with :track-id and :steps"))
+    (if (= kind :sfx)
+      (play-sfx! track-id steps opts)
+      (play-steps! track-id steps opts))))
+
 ;; Melody + backing transformation helper.
 ;; Input step format:
-;; {:melody :G5 :backing [:D5 :Bb4 ...] :duration :q}
+;; {:melody :G5 :backing :D4maj :duration :q}
+;; {:melody :G5 :backing 220 :duration :q}
 ;; {:rest :e}  ;; full rest for melody and backing channels
 
 (def ^:private default-melody-volume 220)
@@ -670,13 +686,20 @@
         true
         (recur (rest s))))))
 
+(defn- backing-width [backing]
+  (cond
+    (nil? backing) 0
+    (vector? backing) (count backing)
+    :else 1))
+
 (defn- widest-backing-width [steps]
   (loop [s steps best 0]
     (if (empty? s)
       best
       (let [step (first s)
-            backing (or (get step :backing) [])
-            best2 (if (> (count backing) best) (count backing) best)]
+            backing (get step :backing)
+            width (backing-width backing)
+            best2 (if (> width best) width best)]
         (recur (rest s) best2)))))
 
 (defn- reject-legacy-melody-backing-opts [base melody-opts backing-opts]
@@ -752,27 +775,135 @@
         opts3 (assoc opts2 :volumes volumes)]
     (assoc opts3 :gate-percent gate-percent)))
 
-(defn- expand-backing-auto [backing target-count]
+(defn- semitone->note-name [semitone]
+  (cond
+    (= semitone 0) "C"
+    (= semitone 1) "Cs"
+    (= semitone 2) "D"
+    (= semitone 3) "Ds"
+    (= semitone 4) "E"
+    (= semitone 5) "F"
+    (= semitone 6) "Fs"
+    (= semitone 7) "G"
+    (= semitone 8) "Gs"
+    (= semitone 9) "A"
+    (= semitone 10) "As"
+    :else "B"))
+
+(defn- midi->note-keyword [midi]
+  (if (or (< midi 0) (> midi 127))
+    :REST
+    (let [octave (- (quot midi 12) 1)
+          semitone (mod midi 12)]
+      (keyword (str (semitone->note-name semitone) octave)))))
+
+(defn- digit-str? [s]
+  (or (= s "0") (= s "1") (= s "2") (= s "3") (= s "4")
+      (= s "5") (= s "6") (= s "7") (= s "8") (= s "9")))
+
+(defn- chord-token->notes [chord-token]
+  (let [s (name chord-token)
+        n (count s)
+        _ (when (< n 2)
+            (fail "compile-track-melody-backing: chord token is too short"))
+        c0 (subs s 0 1)
+        _ (when (not (or (= c0 "A") (= c0 "B") (= c0 "C") (= c0 "D")
+                         (= c0 "E") (= c0 "F") (= c0 "G")))
+            (fail "compile-track-melody-backing: chord token must start with note letter A..G"))
+        c1 (if (> n 1) (subs s 1 2) "")
+        root-len (if (or (= c1 "#") (= c1 "s") (= c1 "b"))
+                   (do
+                     (when (or (< n 3) (not (digit-str? (subs s 2 3))))
+                       (fail "compile-track-melody-backing: chord root must include octave digit"))
+                     3)
+                   (do
+                     (when (or (< n 2) (not (digit-str? c1)))
+                       (fail "compile-track-melody-backing: chord root must include octave digit"))
+                     2))
+        root-str (subs s 0 root-len)
+        quality (subs s root-len n)
+        intervals (cond
+                    (or (= quality "") (= quality "maj")) [0 4 7]
+                    (= quality "min") [0 3 7]
+                    (= quality "dim") [0 3 6]
+                    (= quality "aug") [0 4 8]
+                    (= quality "5") [0 7]
+                    :else
+                    (fail "compile-track-melody-backing: unsupported chord quality (use maj|min|dim|aug|5)"))
+        root-midi (note->midi (keyword root-str))]
+    (loop [i 0 out []]
+      (if (< i (count intervals))
+        (let [note (midi->note-keyword (+ root-midi (nth intervals i)))]
+          (if (= note :REST)
+            (recur (+ i 1) out)
+            (recur (+ i 1) (conj out note))))
+        (if (empty? out) [(midi->note-keyword root-midi)] out)))))
+
+(defn- chord-quality-suffix? [token-name]
+  (let [n (count token-name)
+        ends-with? (fn [suffix]
+                     (let [m (count suffix)]
+                       (and (>= n m)
+                            (= (subs token-name (- n m) n) suffix))))]
+    (or (ends-with? "maj")
+        (ends-with? "min")
+        (ends-with? "dim")
+        (ends-with? "aug")
+        (ends-with? "5"))))
+
+(defn- backing-token->notes [backing-token]
+  (cond
+    (nil? backing-token) []
+    (vector? backing-token) backing-token
+    (integer? backing-token) [backing-token]
+    (keyword? backing-token)
+    (if (chord-quality-suffix? (name backing-token))
+      (chord-token->notes backing-token)
+      [backing-token])
+    ;; Backward compatibility for older step data using symbols.
+    (symbol? backing-token) (chord-token->notes backing-token)
+    :else (fail "compile-track-melody-backing: :backing must be keyword, integer, symbol (legacy) or vector (legacy)")))
+
+(defn- auto-backing-notes [melody target-count]
+  (let [intervals [7 12 4 9]]
+    (loop [i 0 out []]
+      (if (< i target-count)
+        (let [interval (nth intervals (mod i (count intervals)))
+              note (if (or (nil? melody) (= melody :REST))
+                     :REST
+                     (if (integer? melody)
+                       melody
+                       (midi->note-keyword (+ (note->midi melody) interval))))]
+          (recur (+ i 1) (conj out note)))
+        out))))
+
+(defn- expand-backing-auto [backing-notes target-count melody explicit-backing?]
   (if (<= target-count 0)
     []
-    (if (empty? backing)
+    (if (empty? backing-notes)
+      (if explicit-backing?
+        (loop [i 0 out []]
+          (if (< i target-count)
+            (recur (+ i 1) (conj out :REST))
+            out))
+        (auto-backing-notes melody target-count))
       (loop [i 0 out []]
         (if (< i target-count)
-          (recur (+ i 1) (conj out :REST))
-          out))
-      (loop [i 0 out []]
-        (if (< i target-count)
-          (recur (+ i 1) (conj out (nth backing (mod i (count backing)))))
+          (recur (+ i 1) (conj out (nth backing-notes (mod i (count backing-notes)))))
           out)))))
 
 (defn- melody-backing->steps
   "Normalizes melody+backing steps into generic {:notes [...] :duration ...} steps.
    Backing is automatically expanded to all available backing channels.
+   If :backing is omitted and backing channels are available, harmony tones
+   are generated automatically (cycling through intervals 5th, octave, 3rd, 6th).
+   Explicit :backing accepts keyword chord (e.g. :D4maj), integer Hz,
+   keyword note (e.g. :D4), plus legacy symbol/vector compatibility.
    Melody always uses 1 channel.
    Backing channel count comes from :backing {:channels N} or is inferred from the
    widest backing step.
    Supports pause shorthand per step: {:rest :e}.
-   Empty backing expands to rests; short backing patterns repeat to fill the
+   Explicitly empty backing expands to rests; short backing patterns repeat to fill the
    available backing channels."
   [steps opts]
   (let [opts2 (compile-opts-melody-backing steps opts)
@@ -784,11 +915,13 @@
                    (let [step (first s)
                          rest-dur (get step :rest)
                          has-rest (not (nil? rest-dur))
+                         explicit-backing? (contains? step :backing)
                          noise (validate-noise-flag step "compile-track-melody-backing")
                          melody (if has-rest :REST (or (get step :melody) :REST))
                          dur (step-duration-spec step "compile-track-melody-backing")
-                         backing-src (if has-rest [] (or (get step :backing) []))
-                         backing (expand-backing-auto backing-src backing-count)
+                         backing-token (if has-rest nil (get step :backing))
+                         backing-src (if has-rest [] (backing-token->notes backing-token))
+                         backing (expand-backing-auto backing-src backing-count melody explicit-backing?)
                          notes (into [melody] backing)
                          noise-channels (if (= noise true)
                                           (do

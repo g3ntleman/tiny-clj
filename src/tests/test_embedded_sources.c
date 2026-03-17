@@ -319,6 +319,13 @@ TEST(test_embedded_sources_tiny_fx_sound_demos_matches_libs_file_bytes)
     assert_resolved_bytes_match_repo_file("/libs/tiny-fx/sound-demos.clj", "/libs/tiny-fx/sound-demos.clj");
 }
 
+TEST(test_source_resolver_assets_path_maps_to_repo_assets_directory)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+    assert_resolved_bytes_match_repo_file("/assets/tiny-fx/startup.edn", "/assets/tiny-fx/startup.edn");
+}
+
 TEST(test_slurp_returns_string_view)
 {
     embedded_source_map_init();
