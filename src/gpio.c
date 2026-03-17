@@ -37,6 +37,14 @@ static CljSymbol *KW_HELD_MS = NULL;
 static CljSymbol *KW_PRESSED_MS = NULL;
 static CljSymbol *KW_DELTA = NULL;
 static CljSymbol *KW_ACTIVE = NULL;
+static CljSymbol *KW_BUTTON_DOWN = NULL;
+static CljSymbol *KW_BUTTON_UP = NULL;
+static CljSymbol *KW_BUTTON_CLICK = NULL;
+static CljSymbol *KW_BUTTON_HOLD = NULL;
+static CljSymbol *KW_SENSOR_CHANGE = NULL;
+static CljSymbol *KW_SENSOR_THRESHOLD_CROSSED = NULL;
+static CljSymbol *KW_SENSOR_ACTIVE = NULL;
+static CljSymbol *KW_SENSOR_INACTIVE = NULL;
 static int32_t g_next_watcher_id = 1;
 
 enum {
@@ -130,7 +138,7 @@ static inline void gpio_runtime_release_sensor_watch(GpioSensorWatch *watch) {
     ASSIGN(watch->callback, NULL);
     watch->active = false;
     watch->pin = -1;
-    watch->signal = NULL;
+    ASSIGN(watch->signal, NULL);
     watch->range_min = 0;
     watch->range_max = 0;
     watch->threshold = -1;
@@ -177,6 +185,14 @@ static inline void gpio_runtime_ensure_initialized(void) {
     KW_PRESSED_MS = intern_symbol_global(":pressed-ms");
     KW_DELTA = intern_symbol_global(":delta");
     KW_ACTIVE = intern_symbol_global(":active");
+    KW_BUTTON_DOWN = intern_symbol_global(":button/down");
+    KW_BUTTON_UP = intern_symbol_global(":button/up");
+    KW_BUTTON_CLICK = intern_symbol_global(":button/click");
+    KW_BUTTON_HOLD = intern_symbol_global(":button/hold");
+    KW_SENSOR_CHANGE = intern_symbol_global(":sensor/change");
+    KW_SENSOR_THRESHOLD_CROSSED = intern_symbol_global(":sensor/threshold-crossed");
+    KW_SENSOR_ACTIVE = intern_symbol_global(":sensor/active");
+    KW_SENSOR_INACTIVE = intern_symbol_global(":sensor/inactive");
     g_gpio_input_timer_key = intern_symbol_global(":gpio-input-runtime");
 }
 
@@ -234,6 +250,14 @@ void gpio_runtime_reset_state(void) {
     KW_PRESSED_MS = NULL;
     KW_DELTA = NULL;
     KW_ACTIVE = NULL;
+    KW_BUTTON_DOWN = NULL;
+    KW_BUTTON_UP = NULL;
+    KW_BUTTON_CLICK = NULL;
+    KW_BUTTON_HOLD = NULL;
+    KW_SENSOR_CHANGE = NULL;
+    KW_SENSOR_THRESHOLD_CROSSED = NULL;
+    KW_SENSOR_ACTIVE = NULL;
+    KW_SENSOR_INACTIVE = NULL;
     g_gpio_input_timer_key = NULL;
     g_next_watcher_id = 1;
 }
@@ -678,12 +702,12 @@ static bool gpio_runtime_process_button_watch(GpioButtonWatch *watch, uint32_t n
             watch->pressed = true;
             watch->down_at_ms = now_ms;
             watch->hold_fired = false;
-            gpio_runtime_emit_button_event(watch, intern_symbol_global(":button/down"), -1, -1);
+            gpio_runtime_emit_button_event(watch, KW_BUTTON_DOWN, -1, -1);
         } else {
             int32_t pressed_ms = watch->pressed ? (int32_t)gpio_runtime_elapsed_ms(watch->down_at_ms, now_ms) : 0;
-            gpio_runtime_emit_button_event(watch, intern_symbol_global(":button/up"), pressed_ms, -1);
+            gpio_runtime_emit_button_event(watch, KW_BUTTON_UP, pressed_ms, -1);
             if (watch->pressed && !watch->hold_fired) {
-                gpio_runtime_emit_button_event(watch, intern_symbol_global(":button/click"), pressed_ms, -1);
+                gpio_runtime_emit_button_event(watch, KW_BUTTON_CLICK, pressed_ms, -1);
             }
             watch->pressed = false;
             watch->hold_fired = false;
@@ -693,10 +717,11 @@ static bool gpio_runtime_process_button_watch(GpioButtonWatch *watch, uint32_t n
         !watch->hold_fired &&
         gpio_runtime_elapsed_ms(watch->down_at_ms, now_ms) >= watch->hold_ms) {
         watch->hold_fired = true;
-        gpio_runtime_emit_button_event(watch,
-                                       intern_symbol_global(":button/hold"),
-                                       -1,
-                                       (int32_t)gpio_runtime_elapsed_ms(watch->down_at_ms, now_ms));
+        gpio_runtime_emit_button_event(
+            watch,
+            KW_BUTTON_HOLD,
+            -1,
+            (int32_t)gpio_runtime_elapsed_ms(watch->down_at_ms, now_ms));
     }
     return false;
 }
@@ -732,7 +757,7 @@ static bool gpio_runtime_process_sensor_watch(GpioSensorWatch *watch, uint32_t n
     watch->initialized = true;
 
     if (!watch->last_emitted_valid || value != watch->last_emitted_value) {
-        gpio_runtime_emit_sensor_event(watch, intern_symbol_global(":sensor/change"), value, delta, false, false);
+        gpio_runtime_emit_sensor_event(watch, KW_SENSOR_CHANGE, value, delta, false, false);
         watch->last_emitted_value = value;
         watch->last_emitted_valid = true;
     }
@@ -764,15 +789,15 @@ static bool gpio_runtime_process_sensor_watch(GpioSensorWatch *watch, uint32_t n
     watch->active_state = desired_active;
     watch->candidate_valid = false;
     gpio_runtime_emit_sensor_event(watch,
-                                   intern_symbol_global(":sensor/threshold-crossed"),
+                                   KW_SENSOR_THRESHOLD_CROSSED,
                                    value,
                                    delta,
                                    true,
                                    watch->active_state);
     gpio_runtime_emit_sensor_event(watch,
                                    watch->active_state
-                                       ? intern_symbol_global(":sensor/active")
-                                       : intern_symbol_global(":sensor/inactive"),
+                                       ? KW_SENSOR_ACTIVE
+                                       : KW_SENSOR_INACTIVE,
                                    value,
                                    delta,
                                    true,
