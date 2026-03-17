@@ -41,6 +41,8 @@ static SoundTickScheduler g_tick_scheduler;
 #ifndef TINY_CLJ_TEST_RUNNER
 static pthread_t g_tick_thread;
 static atomic_bool g_tick_thread_running = false;
+static pthread_mutex_t g_tick_wait_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_tick_wait_cond = PTHREAD_COND_INITIALIZER;
 #endif
 static atomic_bool g_tick_enabled = false;
 static atomic_bool g_sound_running = false;
@@ -625,7 +627,12 @@ static void *host_tick_thread_main(void *arg) {
     (void)arg;
     while (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire)) {
         if (!atomic_load_explicit(&g_tick_enabled, memory_order_relaxed)) {
-            host_sound_sleep_until_ns(host_sound_monotonic_now_ns() + HOST_SOUND_IDLE_SLEEP_NS);
+            pthread_mutex_lock(&g_tick_wait_mutex);
+            while (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire) &&
+                   !atomic_load_explicit(&g_tick_enabled, memory_order_relaxed)) {
+                pthread_cond_wait(&g_tick_wait_cond, &g_tick_wait_mutex);
+            }
+            pthread_mutex_unlock(&g_tick_wait_mutex);
             continue;
         }
 
@@ -698,6 +705,9 @@ void sound_backend_shutdown(void) {
 #ifndef TINY_CLJ_TEST_RUNNER
     if (atomic_load_explicit(&g_tick_thread_running, memory_order_acquire)) {
         atomic_store_explicit(&g_tick_thread_running, false, memory_order_release);
+        pthread_mutex_lock(&g_tick_wait_mutex);
+        pthread_cond_broadcast(&g_tick_wait_cond);
+        pthread_mutex_unlock(&g_tick_wait_mutex);
         (void)pthread_join(g_tick_thread, NULL);
     }
 #endif
@@ -722,22 +732,32 @@ bool sound_backend_keepalive_active(void) {
 }
 
 void sound_tick_start(void) {
-    if (g_sound_engine.tick_running) {
+    bool started_now = sound_engine_tick_mark_running();
+    if (!started_now) {
         atomic_store_explicit(&g_tick_enabled, true, memory_order_release);
         atomic_store_explicit(&g_sound_running, true, memory_order_release);
+#ifndef TINY_CLJ_TEST_RUNNER
+        pthread_mutex_lock(&g_tick_wait_mutex);
+        pthread_cond_broadcast(&g_tick_wait_cond);
+        pthread_mutex_unlock(&g_tick_wait_mutex);
+#endif
         return;
     }
-    g_sound_engine.tick_running = true;
     sound_tick_scheduler_start(&g_tick_scheduler, host_sound_monotonic_now_ns());
     atomic_store_explicit(&g_tick_enabled, true, memory_order_release);
     atomic_store_explicit(&g_sound_running, true, memory_order_release);
+#ifndef TINY_CLJ_TEST_RUNNER
+    pthread_mutex_lock(&g_tick_wait_mutex);
+    pthread_cond_broadcast(&g_tick_wait_cond);
+    pthread_mutex_unlock(&g_tick_wait_mutex);
+#endif
     if (atomic_load_explicit(&g_sound_available, memory_order_acquire) && g_output_unit) {
         (void)AudioOutputUnitStart(g_output_unit);
     }
 }
 
 void sound_tick_stop(void) {
-    g_sound_engine.tick_running = false;
+    sound_engine_tick_mark_stopped();
     sound_tick_scheduler_stop(&g_tick_scheduler);
     atomic_store_explicit(&g_tick_enabled, false, memory_order_release);
     atomic_store_explicit(&g_sound_running, false, memory_order_release);
@@ -747,7 +767,7 @@ void sound_tick_stop(void) {
 }
 
 void sound_tick_kick(void) {
-    if (!g_sound_engine.tick_running) {
+    if (!sound_engine_tick_is_running()) {
         sound_tick_start();
     }
 }
@@ -885,15 +905,15 @@ bool sound_backend_keepalive_active(void) {
 }
 
 void sound_tick_start(void) {
-    g_sound_engine.tick_running = true;
+    (void)sound_engine_tick_mark_running();
 }
 
 void sound_tick_stop(void) {
-    g_sound_engine.tick_running = false;
+    sound_engine_tick_mark_stopped();
 }
 
 void sound_tick_kick(void) {
-    if (!g_sound_engine.tick_running) {
+    if (!sound_engine_tick_is_running()) {
         sound_tick_start();
     }
 }
