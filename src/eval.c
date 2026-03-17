@@ -24,22 +24,15 @@
 #include "namespace.h"
 #include "memory.h"
 #include "memory_profiler.h"
-#include "meta.h"
 #include "value.h"
 #include "environment.h"
 #include "ast.h"
 #include "ast_canon.h"
 #include "vector.h"
 #include "env_stack.h"
-#include "strings.h" // For pr_str
-#include "eval_arithmetic.h"
-#include "debug.h" // For print_ast
-#include "eval_comparison.h"
 #include <time.h>
 
-#include "eval_sequence.h"
 #include "eval_special_forms.h"
-#include "macro.h" // For lookup_macro_resolve
 
 #include <signal.h>
 extern __attribute__((weak)) volatile sig_atomic_t g_clojure_core_last_form;
@@ -607,8 +600,7 @@ static INLINE bool is_ns_star_symbol(const CljSymbol *symbol) {
   if (symbol == SYM_NS_STAR) {
     return true;
   }
-  CljSymbol *resolved = intern_symbol_global("*ns*");
-  return resolved && symbol == resolved;
+  return symbol->cname && strcmp(symbol->cname, "*ns*") == 0;
 }
 
 // Extended version that also searches in CallFrame

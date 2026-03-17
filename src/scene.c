@@ -12,6 +12,7 @@
 #include "hashmap.h"
 #include "map.h"
 #include "record.h"
+#include "symbol_cache.h"
 #include "strings.h"
 #include "symbol.h"
 #include "thread_local.h"
@@ -38,6 +39,20 @@ typedef struct {
 } VgFlatSceneLookup;
 
 static THREAD_LOCAL CljHashMap *g_flat_scene_lookup_scratch = NULL;
+static CljSymbol *g_kw_timeline_ease = NULL;
+static CljSymbol *g_kw_timeline_easing = NULL;
+static const SymbolCacheEntry g_scene_symbol_cache[] = {
+    {&g_kw_timeline_ease, ":ease", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_kw_timeline_easing, ":easing", SYMBOL_CACHE_SCOPE_GLOBAL},
+};
+
+static inline void scene_ensure_timeline_keyword_cache(void) {
+    if (!g_kw_timeline_ease || !g_kw_timeline_easing) {
+        (void)symbol_cache_init_global(
+            g_scene_symbol_cache,
+            sizeof(g_scene_symbol_cache) / sizeof(g_scene_symbol_cache[0]));
+    }
+}
 
 static void vg_flat_scene_lookup_reset_borrowed(CljHashMap *index) {
     if (!index) {
@@ -787,9 +802,10 @@ static bool timeline_transform_keyframe_at(ID keyframes_obj,
 }
 
 static VgAnimEase timeline_ease_kind(ID timeline_obj) {
-    ID ease_obj = tiny_fx_gfx_get_field(timeline_obj, intern_symbol_global(":ease"), NULL);
+    scene_ensure_timeline_keyword_cache();
+    ID ease_obj = tiny_fx_gfx_get_field(timeline_obj, g_kw_timeline_ease, NULL);
     if (!ease_obj) {
-        ease_obj = tiny_fx_gfx_get_field(timeline_obj, intern_symbol_global(":easing"), NULL);
+        ease_obj = tiny_fx_gfx_get_field(timeline_obj, g_kw_timeline_easing, NULL);
     }
     if (!ease_obj) {
         return VG_ANIM_EASE_LINEAR;
