@@ -338,6 +338,78 @@ TEST(test_require_both_reverse_functions) {
     TEST_ASSERT_EQUAL_STRING("cba", clj_string_data(str));
 }
 
+static ID lookup_ns_var(const char *ns_name, const char *var_name) {
+    TEST_ASSERT_NOT_NULL(ns_name);
+    TEST_ASSERT_NOT_NULL(var_name);
+    CljNamespace *ns = ns_find(ns_name);
+    TEST_ASSERT_NOT_NULL(ns);
+    TEST_ASSERT_NOT_NULL(ns->name);
+    TEST_ASSERT_NOT_NULL(ns->mappings);
+    CljSymbol *var_sym = intern_symbol(ns->name, var_name);
+    TEST_ASSERT_NOT_NULL(var_sym);
+    ID value = map_get(ns->mappings, var_sym);
+    TEST_ASSERT_TRUE(value != NOT_FOUND);
+    return value;
+}
+
+TEST(test_require_reload_reloads_only_target_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    register_resolver_source(
+        "/libs/test/reload_target.clj",
+        "(ns test.reload-target)\n"
+        "(defn marker [] :v1)\n");
+    register_resolver_source(
+        "/libs/test/reload-dep-target.clj",
+        "(ns test.reload-dep-target)\n"
+        "(defn marker [] :dep-v1)\n");
+    register_resolver_source(
+        "/libs/test/reload-root.clj",
+        "(ns test.reload-root (:require [test.reload-dep-target]))\n"
+        "(defn marker [] (test.reload-dep-target/marker))\n");
+
+    (void)eval_string("(require 'test.reload-root)", g_test_eval_state);
+    ID dep_before = lookup_ns_var("test.reload-dep-target", "marker");
+    ID root_before = lookup_ns_var("test.reload-root", "marker");
+
+    (void)eval_string("(require 'test.reload-root)", g_test_eval_state);
+    ID dep_no_reload = lookup_ns_var("test.reload-dep-target", "marker");
+    ID root_no_reload = lookup_ns_var("test.reload-root", "marker");
+    TEST_ASSERT_EQUAL_PTR(root_before, root_no_reload);
+    TEST_ASSERT_EQUAL_PTR(dep_before, dep_no_reload);
+
+    (void)eval_string("(require '[test.reload-root :reload])", g_test_eval_state);
+    ID dep_after_reload = lookup_ns_var("test.reload-dep-target", "marker");
+    ID root_after_reload = lookup_ns_var("test.reload-root", "marker");
+
+    TEST_ASSERT_TRUE(root_before != root_after_reload);
+    TEST_ASSERT_EQUAL_PTR(dep_before, dep_after_reload);
+}
+
+TEST(test_require_reload_all_reloads_target_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    register_resolver_source(
+        "/libs/test/reload-all-dep.clj",
+        "(ns test.reload-all-dep)\n"
+        "(defn marker [] :dep)\n");
+    register_resolver_source(
+        "/libs/test/reload-all-root.clj",
+        "(ns test.reload-all-root (:require [test.reload-all-dep]))\n"
+        "(defn marker [] (test.reload-all-dep/marker))\n");
+
+    (void)eval_string("(require 'test.reload-all-root)", g_test_eval_state);
+    ID dep_before = lookup_ns_var("test.reload-all-dep", "marker");
+    ID root_before = lookup_ns_var("test.reload-all-root", "marker");
+
+    (void)eval_string("(require 'test.reload-all-root :reload-all)", g_test_eval_state);
+    ID dep_after = lookup_ns_var("test.reload-all-dep", "marker");
+    ID root_after = lookup_ns_var("test.reload-all-root", "marker");
+
+    TEST_ASSERT_TRUE(root_before != root_after);
+    TEST_ASSERT_EQUAL_PTR(dep_before, dep_after);
+}
+
 // ============================================================================
 // METADATA TESTS
 // ============================================================================

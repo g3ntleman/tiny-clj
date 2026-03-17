@@ -1,4 +1,5 @@
-(ns tiny-fx.gfx-scene)
+(ns tiny-fx.gfx-scene
+  (:require [tiny-fx.gfx]))
 
 (defn ->Style [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]
   (record-create 'Style [stroke-color stroke-width visible has-fill fill-color has-bg-color bg-color]))
