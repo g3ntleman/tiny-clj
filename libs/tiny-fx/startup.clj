@@ -14,7 +14,7 @@
 (defn create-startup-bundle
   "Creates the global FX startup bundle and publishes fresh scene atoms."
   []
-  (let [data (assets/load-edn-asset "/libs/tiny-fx/assets/startup.edn" [:deco-scene-template :overlay-scene-template])
+  (let [data (assets/edn-asset-under-prefix "tiny-fx" "startup.edn" [:deco-scene-template :overlay-scene-template])
         deco-scene-template (edn->scene (:deco-scene-template data))
         overlay-scene-template (edn->scene (:overlay-scene-template data))
         bundle [deco-scene-template overlay-scene-template]]

@@ -1,0 +1,12 @@
+# Pre-1.0: Prefer Breaking Changes
+
+Before version 1.0, prefer hard migrations over compatibility layers.
+
+Rules:
+- Do not add compatibility wrappers or legacy aliases just to preserve old callsites.
+- Update all in-repo callsites to the new API directly.
+- Remove deprecated temporary APIs quickly once migrations are done.
+- If an API changes, fail fast and fix usages, instead of keeping dual paths.
+
+Assumption:
+- There are currently no external dependent projects that require backward compatibility guarantees.

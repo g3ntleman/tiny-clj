@@ -2902,6 +2902,19 @@ ID native_record_register(ID *args, unsigned int argc) {
   return desc->type_symbol ? desc->type_symbol : type_symbol;
 }
 
+static CljRecordDescriptor *lookup_record_descriptor_with_schema(ID type_symbol) {
+  CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+#if TINYCLJ_WITH_TINY_FX
+  if (!desc) {
+    EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+    if (tiny_fx_gfx_ensure_schema(st)) {
+      desc = record_descriptor_lookup(type_symbol);
+    }
+  }
+#endif
+  return desc;
+}
+
 ID native_record_create(ID *args, unsigned int argc) {
   if (!validate_builtin_args(argc, 2, "record-create"))
     return NULL;
@@ -2924,7 +2937,7 @@ ID native_record_create(ID *args, unsigned int argc) {
     return NULL;
   }
 
-  CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+  CljRecordDescriptor *desc = lookup_record_descriptor_with_schema(type_symbol);
   CljPersistentRecord *record = make_record_with_descriptor(desc, values);
   RELEASE(values);
   if (!record)
@@ -2954,7 +2967,7 @@ ID native_record_from_map(ID *args, unsigned int argc) {
     return NULL;
   }
 
-  CljRecordDescriptor *desc = record_descriptor_lookup(type_symbol);
+  CljRecordDescriptor *desc = lookup_record_descriptor_with_schema(type_symbol);
   if (!desc) {
     fprintf(stderr, "record type not registered: %s\\n", as_symbol(type_symbol)->cname);
   }
@@ -3573,7 +3586,7 @@ static ID throw_fixed_overflow(const char *err_msg) {
 }
 
 static inline bool is_numeric_tag(uint16_t tag) {
-  return tag == CLJ_INT || tag == CLJ_FLOAT;
+  return tag == CLJ_INT || tag == CLJ_FLOAT || tag == CLJ_CHAR;
 }
 
 static inline ID throw_expected_number(void) {
@@ -5234,6 +5247,29 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
 #define NS_INIT_TABLE_MAX 8
 static struct { const char *ns_name; NsInitFn fn; } g_ns_init_table[NS_INIT_TABLE_MAX];
 static unsigned int g_ns_init_count = 0;
+typedef struct RequireOptions {
+  bool reload;
+  bool reload_all;
+} RequireOptions;
+
+static bool parse_require_option_keyword(ID elem, RequireOptions *options) {
+  if (!elem || TAG(elem) != CLJ_SYMBOL || !options) {
+    return false;
+  }
+  CljSymbol *kw = as_symbol(elem);
+  if (!kw || !kw->cname) {
+    return false;
+  }
+  if (strcmp(kw->cname, ":reload") == 0) {
+    options->reload = true;
+    return true;
+  }
+  if (strcmp(kw->cname, ":reload-all") == 0) {
+    options->reload_all = true;
+    return true;
+  }
+  return false;
+}
 
 void ns_register_init(const char *ns_name, NsInitFn init_fn) {
   if (!ns_name || !init_fn || g_ns_init_count >= NS_INIT_TABLE_MAX) return;
@@ -5321,10 +5357,11 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
  * @param st Evaluation state
  * @return true on success, false on error
  */
-static bool process_require_spec(ID spec, EvalState *st) {
+static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *global_options) {
   if (!spec || !st)
     return false;
 
+  RequireOptions options = global_options ? *global_options : (RequireOptions){0};
   const char *ns_name = NULL;
   CljObject *alias_sym = NULL;
   CljObject *refer_syms = NULL;
@@ -5372,6 +5409,10 @@ static bool process_require_spec(ID spec, EvalState *st) {
       if (!elem)
         continue;
 
+      if (parse_require_option_keyword(elem, &options)) {
+        continue;
+      }
+
       // Check if it's a keyword (Symbol starting with :)
       if (elem && TAG(elem) == CLJ_SYMBOL) {
         CljSymbol *kw = as_symbol(elem);
@@ -5412,6 +5453,11 @@ static bool process_require_spec(ID spec, EvalState *st) {
   if (!ns_name)
     return false;
 
+  bool force_reload = options.reload || options.reload_all;
+  if (strcmp(ns_name, "clojure.core") == 0) {
+    force_reload = false;
+  }
+
   // Load namespace (existing logic)
   // CRITICAL: Check if namespace exists, but don't skip loading if it only has native functions
   // A namespace might exist because native functions were registered, but Clojure code hasn't been loaded yet
@@ -5419,6 +5465,13 @@ static bool process_require_spec(ID spec, EvalState *st) {
   if (existing) {
     // Generic idempotence: if namespace source has been loaded once, don't re-evaluate.
     if (existing->loaded) {
+      if (force_reload) {
+        existing->loaded = false;
+      } else {
+      NsInitFn init_fn = ns_lookup_init(ns_name);
+      if (init_fn && !init_fn(st)) {
+        return false;
+      }
       // Namespace already fully loaded - just set alias/refer if needed
       // CRITICAL: Ensure st->current_ns is valid before setting alias
       // This is the namespace where the alias should be stored
@@ -5442,6 +5495,7 @@ static bool process_require_spec(ID spec, EvalState *st) {
       }
       // ns_name is from autoreleased CljString - no free needed
       return true;
+      }
     }
     // Fall through to load Clojure code even though namespace exists
   }
@@ -5531,7 +5585,8 @@ bool require_namespace_by_name(EvalState *st, const char *ns_name) {
   CljSymbol *sym = intern_symbol_global(ns_name);
   if (!sym)
     return false;
-  return process_require_spec((ID)sym, st);
+  RequireOptions options = {0};
+  return process_require_spec((ID)sym, st, &options);
 }
 
 static ID normalize_require_spec(ID spec, bool *needs_release) {
@@ -5607,6 +5662,8 @@ ID native_require(ID *args, unsigned int argc) {
   ID normalized_specs[argc];
   bool needs_release[argc];
   memset(needs_release, 0, sizeof(needs_release));
+  unsigned int spec_count = 0;
+  RequireOptions options = {0};
 
   EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
 
@@ -5621,13 +5678,39 @@ ID native_require(ID *args, unsigned int argc) {
       }
       return NULL;
     }
-    normalized_specs[i] = spec;
-    needs_release[i] = release_spec;
+    if (parse_require_option_keyword(spec, &options)) {
+      if (release_spec) {
+        RELEASE(spec);
+      }
+      continue;
+    }
 
     unsigned char spec_tag = spec ? TAG(spec) : 0;
     if (spec && spec_tag != CLJ_SYMBOL && spec_tag != CLJ_VECTOR_PERSISTENT) {
-      throw_exception(EXCEPTION_TYPE, "require expects a symbol or vector", __FILE__, __LINE__, 0);
-      for (unsigned int j = 0; j <= i; j++) {
+      throw_exception(EXCEPTION_TYPE, "require expects a symbol, vector, :reload, or :reload-all", __FILE__, __LINE__, 0);
+      for (unsigned int j = 0; j < spec_count; j++) {
+        if (needs_release[j]) {
+          RELEASE(normalized_specs[j]);
+        }
+      }
+      if (release_spec) {
+        RELEASE(spec);
+      }
+      return NULL;
+    }
+    normalized_specs[spec_count] = spec;
+    needs_release[spec_count] = release_spec;
+    spec_count++;
+  }
+
+  if (spec_count == 0) {
+    throw_exception(EXCEPTION_ARITY, "require requires at least one namespace spec", __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  for (unsigned int i = 0; i < spec_count; i++) {
+    if (!process_require_spec(normalized_specs[i], st, &options)) {
+      for (unsigned int j = 0; j < spec_count; j++) {
         if (needs_release[j]) {
           RELEASE(normalized_specs[j]);
         }
@@ -5636,18 +5719,7 @@ ID native_require(ID *args, unsigned int argc) {
     }
   }
 
-  for (unsigned int i = 0; i < argc; i++) {
-    if (!process_require_spec(normalized_specs[i], st)) {
-      for (unsigned int j = 0; j < argc; j++) {
-        if (needs_release[j]) {
-          RELEASE(normalized_specs[j]);
-        }
-      }
-      return NULL;
-    }
-  }
-
-  for (unsigned int i = 0; i < argc; i++) {
+  for (unsigned int i = 0; i < spec_count; i++) {
     if (needs_release[i]) {
       RELEASE(normalized_specs[i]);
     }
@@ -5887,6 +5959,8 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
     switch (tag) {
     case CLJ_INT:
       return create_fixnum_result(-AS_FIXNUM(args[0]));
+    case CLJ_CHAR:
+      return create_fixnum_result(-(int)as_character(args[0]));
     case CLJ_FLOAT:
     default:
       return create_fixed_result(-extract_fixed_value(args[0]));
@@ -5904,6 +5978,9 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
   switch (tag0) {
   case CLJ_INT:
     acc_i = AS_FIXNUM(args[0]);
+    break;
+  case CLJ_CHAR:
+    acc_i = (int)as_character(args[0]);
     break;
   case CLJ_FLOAT:
   default:
@@ -5933,6 +6010,17 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
         }
         break;
       }
+      case CLJ_CHAR: {
+        int new_val = (int)as_character(args[i]);
+        if (acc_i > 0 && new_val < acc_i - INT_MAX) {
+          return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_SUBTRACTION, acc_i, new_val);
+        } else if (acc_i < 0 && new_val > acc_i - INT_MIN) {
+          return throw_arithmetic_overflow(ERR_INTEGER_UNDERFLOW_SUBTRACTION, acc_i, new_val);
+        } else {
+          acc_i -= new_val;
+        }
+        break;
+      }
       case CLJ_FLOAT: {
         acc_fixed = fixnum_to_fixed(acc_i);
         sawFixed = true;
@@ -5940,6 +6028,9 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
         switch (tag) {
         case CLJ_INT:
           val = fixnum_to_fixed(AS_FIXNUM(args[i]));
+          break;
+        case CLJ_CHAR:
+          val = fixnum_to_fixed((int)as_character(args[i]));
           break;
         case CLJ_FLOAT:
           val = extract_fixed_value(args[i]);
@@ -5956,6 +6047,9 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
       switch (tag) {
       case CLJ_INT:
         val = fixnum_to_fixed(AS_FIXNUM(args[i]));
+        break;
+      case CLJ_CHAR:
+        val = fixnum_to_fixed((int)as_character(args[i]));
         break;
       case CLJ_FLOAT:
         val = extract_fixed_value(args[i]);
@@ -7984,6 +8078,7 @@ void register_builtins() {
 
 #if TINYCLJ_WITH_TINY_FX
     ns_register_init("tiny-fx.gfx", tiny_fx_gfx_ensure_schema);
+    ns_register_init("tiny-fx.gfx-scene", tiny_fx_gfx_ensure_schema);
 #endif
   });
 }

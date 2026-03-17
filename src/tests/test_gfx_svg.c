@@ -22,7 +22,7 @@ TEST(test_gfx_svg_group_from_line) {
   TEST_ASSERT_TRUE(is_fixnum(y2));
   TEST_ASSERT_EQUAL_INT(40, as_fixnum(y2));
 
-  ID stroke_width = eval_string("(get (get (first (get gsvg :children)) :style) :stroke_width)", g_test_eval_state);
+  ID stroke_width = eval_string("(get (get (first (get gsvg :children)) :style) :stroke-width)", g_test_eval_state);
   TEST_ASSERT_TRUE(is_fixnum(stroke_width));
   TEST_ASSERT_EQUAL_INT(2, as_fixnum(stroke_width));
 }
@@ -65,7 +65,7 @@ TEST(test_gfx_svg_circle_maps_to_polygon_polyline) {
       "       (= [28 30] (nth pts 4)) "
       "       (= [20 38] (nth pts 8)) "
       "       (= [12 30] (nth pts 12)) "
-      "       (= true (:has_fill style))))",
+      "       (= true (:has-fill style))))",
       g_test_eval_state);
   TEST_ASSERT_TRUE(circle_ok && circle_ok != clj_false);
 }

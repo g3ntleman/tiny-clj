@@ -9,7 +9,6 @@
 static VgRecordSchema g_record_schema = {0};
 static VgRecordKeys g_record_keys = {0};
 static bool g_record_keys_initialized = false;
-static bool g_record_schema_initialized = false;
 
 // Static symbol payloads (like other module-local symbol singletons).
 #define STATIC_SYMBOL_DATA(name, cname_literal) \
@@ -299,13 +298,7 @@ static void register_builtin_gfx_records(void) {
 }
 
 bool tiny_fx_gfx_ensure_schema(EvalState *st) {
-    if (g_record_schema_initialized) {
-        return true;
-    }
-    if (!st) {
-        return false;
-    }
-
+    (void)st;
     init_record_keys();
 
     g_record_schema.t_transform = &sym_type_transform_data.sym;
@@ -483,7 +476,6 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
         return false;
     }
 
-    g_record_schema_initialized = true;
     return true;
 }
 

@@ -916,7 +916,7 @@ ID eval_special_binding(CljPersistentVector *args, CljPersistentMap *env, EvalSt
     ID value = expr_id ? eval_body(expr_id, base_env, st, ctx) : NULL;
 
     // If binding *ns*, accept namespace object (preferred) or resolve symbol/string to namespace.
-    if (sym == SYM_NS_STAR) {
+    if (sym == SYM_NS_STAR || (sym->cname && strcmp(sym->cname, "*ns*") == 0)) {
       if (!value) {
         RELEASE(frame);
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "*ns* cannot be bound to nil", __FILE__, __LINE__, 0);
@@ -1404,8 +1404,8 @@ ID eval_special_defrecord(CljPersistentVector *args, CljPersistentMap *env, Eval
 
   ns_define(st->current_ns, ctor_sym, ctor_fn);
   ns_define(st->current_ns, map_ctor_sym, map_ctor_fn);
-  RELEASE(ctor_fn);
-  RELEASE(map_ctor_fn);
+  // make_named_closure/eval_fn returns autoreleased closures.
+  // Do not RELEASE here: namespace retain + pool drain must leave rc=1.
 
   return desc->type_symbol ? desc->type_symbol : type_obj;
 }

@@ -35,7 +35,7 @@ and game-demo startup."
   (let [d @demo-data*]
     (if d
       d
-      (let [raw (assets/load-edn-asset "/libs/tiny-fx/assets/game-demo.edn" nil)
+      (let [raw (assets/edn-asset-under-prefix "tiny-fx" "game-demo.edn" nil)
             parsed (edn->scene raw)]
         (reset! demo-data* parsed)
         parsed))))
