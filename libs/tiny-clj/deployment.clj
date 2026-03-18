@@ -2,7 +2,8 @@
   (:require [tiny-breakout.core :as breakout-core]
             [tiny-breakout.input :as breakout-input]
             [tiny-breakout.scene :as breakout-scene]
-            [tiny-clj.event :as event]))
+            [tiny-clj.event :as event]
+            [tiny-fx.gfx-collision :as collision]))
 
 (def breakout-host-state* (atom nil))
 (def breakout-host-scene* (atom nil))
@@ -59,7 +60,8 @@
   nil)
 
 (defn breakout-host-spatial-callback!
-  [_event]
+  [event]
+  (collision/invoke-collision-callback! event)
   nil)
 
 (defn breakout-host-animation-event!

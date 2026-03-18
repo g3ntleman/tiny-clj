@@ -1,16 +1,16 @@
 ---
 name: Breakout Collision Migration
-overview: Breakout soll von handgeschriebenen nativen AABB-Checks auf die vorhandene Collision-Pipeline umgestellt werden. Der autoritative Spielzustand bleibt vollstaendig in Clojure; Clojure expandiert deklarative Regeln inkrementell in konkrete Policies und plant diskrete Bewegungssegmente, waehrend die native Seite nur noch segmentbasierte Animation, Detection und Event-Zustellung fuer explizit markierte Timeline-Felder uebernimmt.
+overview: Breakout soll von handgeschriebenen nativen AABB-Checks auf die vorhandene Collision-Pipeline umgestellt werden. In diesem Durchgang wurde der Szenen- und Callback-Vertrag auf die Collision-Pipeline vorbereitet und der native Uebergangspfad speichersauberer gemacht: entity-map-Root, stabile Prototypen, deklarative `SpatialRule`s, generischer Clojure-Dispatcher, Host-seitige Rule-Persistenz sowie in-place Scene-Updates mit stabilen Brick-Records im nativen Hot-Path. Die native Gameplay-Autoritaet und segmentbasierte Bewegung bleiben Folgeschritte.
 todos:
   - id: scene-prototypes-rules
     content: Breakout-Szene auf entity-map-Root, stabile Ball/Paddle/Brick-Prototypen und deklarative Regeln plus expandierte Policy-Daten umstellen
-    status: pending
+    status: completed
   - id: clojure-policy-expansion
     content: Inkrementelle Policy-Expansion in Clojure mit `CljTransientVector` einfuehren, nur bei Rule-Aenderungen oder neuen Objekten erweitern und Objektentfall lazy behandeln
     status: pending
   - id: callback-dispatch
     content: Breakout-`spatial-callback` in Clojure verdrahten und Watcher fuer Paddle-/Brick-Kollisionen auf Basis von Kollisions-Snapshots implementieren
-    status: pending
+    status: completed
   - id: runtime-thin-host
     content: Native Breakout-Runtime zu einem duennen Host-Pfad ohne autoritativen Gameplay-State umbauen, expandierte Policies konsumieren und segmentbasierte Ballanimation statt manueller Paddle-/Brick-Kollisionen ausfuehren
     status: pending
@@ -22,7 +22,7 @@ todos:
     status: pending
   - id: regression-tests
     content: Regressionstests fuer Prototypen, Rule-Expansion, segmentbasierte Ballbewegung, Snapshot-Events und Host-Startpfad ergaenzen
-    status: pending
+    status: in_progress
   - id: cleanup
     content: Sourcecode aufraeumen – Debug-Code, temporaere Workarounds, tote Codepfade, ueberfluessige Kommentare und nicht mehr benoetigte Hilfsfunktionen entfernen
     status: pending
@@ -30,6 +30,17 @@ isProject: false
 ---
 
 # Breakout auf Collision-Pipeline umstellen
+
+## Stand dieses Durchgangs
+
+- Umgesetzt: `libs/tiny-breakout/scene.clj` liefert jetzt ein entity-map-basiertes `FrameScene.root` mit `'root`-Group, stabilen Ball-/Paddle-/Brick-Prototypen und zwei deklarativen `SpatialRule`-Records fuer `:ball-vs-paddle` und `:ball-vs-brick`.
+- Umgesetzt: `libs/tiny-clj/deployment.clj` leitet Breakout-`spatial-callback`s jetzt ueber den generischen Dispatcher `tiny-fx.gfx-collision/invoke-collision-callback!`, so dass die bestehende Watcher-Infrastruktur fuer Spatial-Events greift.
+- Umgesetzt: `src/game_demo_minifb.c` behaelt im nativen Breakout-Uebergangspfad bereits geladene SpatialRules bei, auch wenn die native Szene noch kein entity-map-Root publiziert. Das vermeidet, dass die frisch deklarierte Collision-Konfiguration sofort wieder verloren geht.
+- Umgesetzt: Der native Breakout-Hot-Path aktualisiert Paddle/Ball/HUD/Overlay jetzt in-place auf dem bereits publizierten Szenengraphen; neue Szenen werden nur noch bei echten Layoutwechseln wie Staging-Transition oder Levelwechsel gebaut.
+- Umgesetzt: Brick-Records bleiben innerhalb eines Levels stabil und werden bei Treffern nur deaktiviert bzw. unsichtbar gemacht. Dadurch entfaellt das frameweise Neuaufbauen des Szenengraphen bei Brick-Hits.
+- Umgesetzt: Regressionstests decken jetzt Root-Shape, Prototyp-/Rule-Vertrag, generischen Spatial-Callback-Dispatch, in-place Scene-Reuse und den Host-Startup-Pfad mit persistenten Breakout-SpatialRules ab.
+- Offen: Die eigentliche Gameplay-Autoritaet liegt weiterhin im nativen Breakout-Pfad. Paddle-/Brick-Kollisionen, Segmentplanung und Snapshot-basierte State-Mutationen sind noch nicht nach Clojure verschoben.
+- Offen: Der direkte native Scene-Rebuild-Pfad allokiert weiterhin deutlich mehr als der in-place Hot-Path. Fuer die vollstaendige Migration ist das tolerierbar, sollte aber nicht als allgemeines Pattern in weitere Hostpfade uebernommen werden.
 
 ## Zielbild
 

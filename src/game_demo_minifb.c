@@ -361,6 +361,7 @@ typedef struct {
     int16_t w;
     int16_t h;
     int16_t points;
+    bool active;
     ID record;
 } ViewerBreakoutBrick;
 
@@ -386,6 +387,7 @@ typedef struct {
     uint32_t level_count;
     ViewerBreakoutBrick active_bricks[VIEWER_BREAKOUT_MAX_BRICKS];
     uint32_t active_brick_count;
+    uint32_t remaining_brick_count;
     ID background_rect;
     ID clip_rect;
     ID staging_scene;
@@ -406,6 +408,11 @@ static ID viewer_breakout_make_rect_record(int32_t id,
 static ID viewer_breakout_make_staging_scene_record(ViewerBreakoutRuntime *runtime);
 static bool viewer_breakout_runtime_prepare_cached_scene_bits(ViewerBreakoutRuntime *runtime);
 static FrameScene *viewer_frame_scene_from_atom(CljAtom *scene_atom);
+static bool viewer_breakout_update_scene_in_place(ViewerSceneBundle *bundle,
+                                                  ViewerBreakoutRuntime *runtime);
+static void viewer_breakout_sync_scene(ViewerSceneBundle *bundle,
+                                       ViewerBreakoutRuntime *runtime);
+static void publish_frame_scene_slot_record(size_t slot_index, ID scene, uint32_t *out_generation);
 static void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
                                          ViewerSpatialRuleSet *rule_set,
                                          bool publish_changes);
@@ -434,15 +441,13 @@ static ViewerBreakoutPhase viewer_breakout_phase_from_id(ID value) {
     static ID k_level_clear = NULL;
     static ID k_game_over = NULL;
     static ID k_victory = NULL;
-    if (!k_title) {
-        k_title = intern_symbol_global(":title");
-        k_serve = intern_symbol_global(":serve");
-        k_play = intern_symbol_global(":play");
-        k_pause = intern_symbol_global(":pause");
-        k_level_clear = intern_symbol_global(":level-clear");
-        k_game_over = intern_symbol_global(":game-over");
-        k_victory = intern_symbol_global(":victory");
-    }
+    k_title = intern_symbol_global(":title");
+    k_serve = intern_symbol_global(":serve");
+    k_play = intern_symbol_global(":play");
+    k_pause = intern_symbol_global(":pause");
+    k_level_clear = intern_symbol_global(":level-clear");
+    k_game_over = intern_symbol_global(":game-over");
+    k_victory = intern_symbol_global(":victory");
     if (value == k_serve) {
         return BREAKOUT_PHASE_SERVE;
     }
@@ -478,10 +483,8 @@ static const char *viewer_breakout_overlay_text(ViewerBreakoutPhase phase) {
 static bool viewer_breakout_runtime_enabled(const ViewerSceneBundle *bundle) {
     static ID k_native_breakout = NULL;
     static ID k_tiny_breakout = NULL;
-    if (!k_native_breakout) {
-        k_native_breakout = intern_symbol_global(":native-breakout");
-        k_tiny_breakout = intern_symbol_global(":tiny-breakout");
-    }
+    k_native_breakout = intern_symbol_global(":native-breakout");
+    k_tiny_breakout = intern_symbol_global(":tiny-breakout");
     return bundle &&
            bundle->host_runtime == k_native_breakout &&
            bundle->entry == k_tiny_breakout &&
@@ -518,14 +521,12 @@ static bool viewer_breakout_parse_brick(ID brick_obj, ViewerBreakoutBrick *out_b
     static ID k_w = NULL;
     static ID k_h = NULL;
     static ID k_points = NULL;
-    if (!k_id) {
-        k_id = intern_symbol_global(":id");
-        k_x = intern_symbol_global(":x");
-        k_y = intern_symbol_global(":y");
-        k_w = intern_symbol_global(":w");
-        k_h = intern_symbol_global(":h");
-        k_points = intern_symbol_global(":points");
-    }
+    k_id = intern_symbol_global(":id");
+    k_x = intern_symbol_global(":x");
+    k_y = intern_symbol_global(":y");
+    k_w = intern_symbol_global(":w");
+    k_h = intern_symbol_global(":h");
+    k_points = intern_symbol_global(":points");
     if (!out_brick || !brick_obj || !is_map(brick_obj)) {
         return false;
     }
@@ -547,8 +548,10 @@ static void viewer_breakout_runtime_load_level(ViewerBreakoutRuntime *runtime, u
         runtime->active_bricks[i].record = NULL;
     }
     runtime->active_brick_count = runtime->levels[level_index].brick_count;
+    runtime->remaining_brick_count = runtime->active_brick_count;
     for (uint32_t i = 0; i < runtime->active_brick_count; i++) {
         runtime->active_bricks[i] = runtime->levels[level_index].bricks[i];
+        runtime->active_bricks[i].active = true;
         runtime->active_bricks[i].record = viewer_breakout_make_rect_record(runtime->active_bricks[i].id,
                                                                             runtime->active_bricks[i].x,
                                                                             runtime->active_bricks[i].y,
@@ -601,19 +604,17 @@ static bool viewer_breakout_runtime_init_from_state(ViewerBreakoutRuntime *runti
     static ID k_ball_y = NULL;
     static ID k_ball_vx = NULL;
     static ID k_ball_vy = NULL;
-    if (!k_phase) {
-        k_phase = intern_symbol_global(":phase");
-        k_score = intern_symbol_global(":score");
-        k_lives = intern_symbol_global(":lives");
-        k_level_index = intern_symbol_global(":level-index");
-        k_levels = intern_symbol_global(":levels");
-        k_bricks = intern_symbol_global(":bricks");
-        k_paddle_x = intern_symbol_global(":paddle-x");
-        k_ball_x = intern_symbol_global(":ball-x");
-        k_ball_y = intern_symbol_global(":ball-y");
-        k_ball_vx = intern_symbol_global(":ball-vx");
-        k_ball_vy = intern_symbol_global(":ball-vy");
-    }
+    k_phase = intern_symbol_global(":phase");
+    k_score = intern_symbol_global(":score");
+    k_lives = intern_symbol_global(":lives");
+    k_level_index = intern_symbol_global(":level-index");
+    k_levels = intern_symbol_global(":levels");
+    k_bricks = intern_symbol_global(":bricks");
+    k_paddle_x = intern_symbol_global(":paddle-x");
+    k_ball_x = intern_symbol_global(":ball-x");
+    k_ball_y = intern_symbol_global(":ball-y");
+    k_ball_vx = intern_symbol_global(":ball-vx");
+    k_ball_vy = intern_symbol_global(":ball-vy");
     if (!runtime || !bundle || !bundle->game_state_atom) {
         return false;
     }
@@ -933,6 +934,83 @@ static void viewer_breakout_publish_scene(ViewerSceneBundle *bundle,
     RELEASE(scene);
 }
 
+static bool viewer_breakout_update_scene_in_place(ViewerSceneBundle *bundle,
+                                                  ViewerBreakoutRuntime *runtime) {
+    const VgRecordSchema *schema = tiny_fx_gfx_schema();
+    if (!bundle || !runtime || !bundle->game_scene_atom || !schema) {
+        return false;
+    }
+
+    FrameScene *scene = viewer_frame_scene_from_atom(bundle->game_scene_atom);
+    if (!scene || !scene->root || viewer_record_type_hash(scene->root) != schema->h_group) {
+        return false;
+    }
+
+    Group *root = (Group *)scene->root;
+    if (!root->children || !is_vector(root->children)) {
+        return false;
+    }
+
+    CljPersistentVector *children = as_vector(root->children);
+    if (!children || vector_count(children) != (5u + runtime->active_brick_count)) {
+        return false;
+    }
+
+    ID paddle_obj = vector_nth(children, 1u);
+    ID ball_obj = vector_nth(children, 2u);
+    ID hud_obj = vector_nth(children, 3u);
+    ID overlay_obj = vector_nth(children, 4u);
+    if (!paddle_obj || !ball_obj || !hud_obj || !overlay_obj ||
+        viewer_record_type_hash(paddle_obj) != schema->h_rect ||
+        viewer_record_type_hash(ball_obj) != schema->h_rect ||
+        viewer_record_type_hash(hud_obj) != schema->h_vtext ||
+        viewer_record_type_hash(overlay_obj) != schema->h_vtext) {
+        return false;
+    }
+
+    for (uint32_t i = 0; i < runtime->active_brick_count; i++) {
+        if (vector_nth(children, 5u + i) != runtime->active_bricks[i].record) {
+            return false;
+        }
+    }
+
+    Rect *paddle = (Rect *)paddle_obj;
+    Rect *ball = (Rect *)ball_obj;
+    VText *hud_text = (VText *)hud_obj;
+    VText *overlay_text = (VText *)overlay_obj;
+    ID hud_value = viewer_breakout_hud_text_value(runtime);
+    ID overlay_value = viewer_breakout_overlay_text_value(runtime);
+    if (!hud_value || !overlay_value) {
+        return false;
+    }
+
+    ASSIGN(paddle->x, fixnum(runtime->paddle_x));
+    ASSIGN(ball->x, fixnum(runtime->ball_x));
+    ASSIGN(ball->y, fixnum(runtime->ball_y));
+    ASSIGN(hud_text->text, hud_value);
+    ASSIGN(overlay_text->text, overlay_value);
+
+    if (bundle->has_game_slot) {
+        bundle->game_scene = scene;
+        bundle->slots[bundle->game_slot_index].scene = scene;
+        publish_frame_scene_slot_record(bundle->game_slot_index, (ID)scene, NULL);
+    }
+    return true;
+}
+
+static void viewer_breakout_sync_scene(ViewerSceneBundle *bundle,
+                                       ViewerBreakoutRuntime *runtime) {
+    if (viewer_breakout_update_scene_in_place(bundle, runtime)) {
+        return;
+    }
+    viewer_breakout_publish_scene(bundle, runtime);
+    if (bundle && bundle->has_game_slot) {
+        FrameScene *scene = viewer_frame_scene_from_atom(bundle->game_scene_atom);
+        bundle->game_scene = scene;
+        bundle->slots[bundle->game_slot_index].scene = scene;
+    }
+}
+
 static void viewer_breakout_stage_scene(ViewerSceneBundle *bundle,
                                         ViewerBreakoutRuntime *runtime) {
     if (!bundle || !runtime || !bundle->game_scene_atom || !runtime->staging_scene) {
@@ -1012,6 +1090,7 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
             runtime->ball_vy = -2;
             runtime->tick_ms = 0;
             runtime->active_brick_count = 0;
+            runtime->remaining_brick_count = 0;
         }
         return;
     }
@@ -1019,7 +1098,7 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
     if (runtime->phase == BREAKOUT_PHASE_PAUSE) {
         if (pause_pressed) {
             runtime->phase = BREAKOUT_PHASE_PLAY;
-            viewer_breakout_publish_scene(bundle, runtime);
+            viewer_breakout_sync_scene(bundle, runtime);
         }
         return;
     }
@@ -1040,21 +1119,21 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
         viewer_breakout_runtime_serve_ball(runtime);
         if (fire_pressed) {
             runtime->phase = BREAKOUT_PHASE_PLAY;
-            viewer_breakout_publish_scene(bundle, runtime);
+            viewer_breakout_sync_scene(bundle, runtime);
             return;
         }
         if (showing_staging_scene ||
             dx != 0 ||
             runtime->ball_x != previous_ball_x ||
             runtime->ball_y != previous_ball_y) {
-            viewer_breakout_publish_scene(bundle, runtime);
+            viewer_breakout_sync_scene(bundle, runtime);
         }
         return;
     }
 
     if (pause_pressed) {
         runtime->phase = BREAKOUT_PHASE_PAUSE;
-        viewer_breakout_publish_scene(bundle, runtime);
+        viewer_breakout_sync_scene(bundle, runtime);
         return;
     }
 
@@ -1086,17 +1165,22 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
 
     for (uint32_t i = 0; i < runtime->active_brick_count; i++) {
         ViewerBreakoutBrick *brick = &runtime->active_bricks[i];
+        if (!brick->active) {
+            continue;
+        }
         if (viewer_breakout_rect_overlap(runtime->ball_x, runtime->ball_y, 4, 4,
                                          brick->x, brick->y, brick->w, brick->h)) {
             runtime->score += brick->points;
             runtime->ball_vy = -runtime->ball_vy;
-            RELEASE(brick->record);
-            brick->record = NULL;
-            for (uint32_t j = i + 1u; j < runtime->active_brick_count; j++) {
-                runtime->active_bricks[j - 1u] = runtime->active_bricks[j];
+            brick->active = false;
+            if (brick->record) {
+                Rect *brick_rect = (Rect *)brick->record;
+                ASSIGN(brick_rect->visible, clj_false);
             }
-            runtime->active_brick_count--;
-            if (runtime->active_brick_count == 0u) {
+            if (runtime->remaining_brick_count > 0u) {
+                runtime->remaining_brick_count--;
+            }
+            if (runtime->remaining_brick_count == 0u) {
                 if (((uint32_t)runtime->level_index + 1u) < runtime->level_count) {
                     runtime->phase = BREAKOUT_PHASE_LEVEL_CLEAR;
                 } else {
@@ -1120,7 +1204,7 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
         }
     }
 
-    viewer_breakout_publish_scene(bundle, runtime);
+    viewer_breakout_sync_scene(bundle, runtime);
 }
 
 static void destroy_scene_bundle(ViewerSceneBundle *bundle) {
@@ -1245,9 +1329,7 @@ static bool viewer_collision_policy_same_identity(const ViewerCollisionPolicy *a
 
 static ID viewer_entity_prototype(ID entity_rec) {
     static CljSymbol *k_prototype = NULL;
-    if (!k_prototype) {
-        k_prototype = intern_symbol_global(":prototype");
-    }
+    k_prototype = intern_symbol_global(":prototype");
     if (!entity_rec || TAG(entity_rec) != CLJ_RECORD || !k_prototype) {
         return NULL;
     }
@@ -1325,10 +1407,8 @@ static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) 
     }
     static ID k_id = NULL;
     static ID k_atom = NULL;
-    if (!k_id) {
-        k_id = intern_symbol_global(":id");
-        k_atom = intern_symbol_global(":atom");
-    }
+    k_id = intern_symbol_global(":id");
+    k_atom = intern_symbol_global(":atom");
     if (!k_id || !k_atom) {
         return false;
     }
@@ -1462,18 +1542,16 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
     static CljSymbol *k_other = NULL;
     static CljSymbol *k_a_id = NULL;
     static CljSymbol *k_b_id = NULL;
-    if (!k_collision_rules) {
-        k_collision_rules = intern_symbol_global(":collision-rules");
-        k_id = intern_symbol_global(":id");
-        k_slot = intern_symbol_global(":slot");
-        k_kind = intern_symbol_global(":kind");
-        k_channel = intern_symbol_global(":channel");
-        k_radius = intern_symbol_global(":radius");
-        k_self = intern_symbol_global(":self");
-        k_other = intern_symbol_global(":other");
-        k_a_id = intern_symbol_global(":a-id");
-        k_b_id = intern_symbol_global(":b-id");
-    }
+    k_collision_rules = intern_symbol_global(":collision-rules");
+    k_id = intern_symbol_global(":id");
+    k_slot = intern_symbol_global(":slot");
+    k_kind = intern_symbol_global(":kind");
+    k_channel = intern_symbol_global(":channel");
+    k_radius = intern_symbol_global(":radius");
+    k_self = intern_symbol_global(":self");
+    k_other = intern_symbol_global(":other");
+    k_a_id = intern_symbol_global(":a-id");
+    k_b_id = intern_symbol_global(":b-id");
     if (!k_collision_rules || !k_id || !k_slot || !k_kind || !k_channel || !k_radius ||
         !k_self || !k_other || !k_a_id || !k_b_id) {
         return false;
@@ -1603,14 +1681,12 @@ static bool viewer_load_game_demo_config(EvalState *st,
     static CljSymbol *k_spatial_callback = NULL;
     static CljSymbol *k_game_state_atom = NULL;
     static CljSymbol *k_game_scene_atom = NULL;
-    if (!k_slots) {
-        k_slots = intern_symbol_global(":slots");
-        k_host_runtime = intern_symbol_global(":host-runtime");
-        k_entry = intern_symbol_global(":entry");
-        k_spatial_callback = intern_symbol_global(":spatial-callback");
-        k_game_state_atom = intern_symbol_global(":game-state-atom");
-        k_game_scene_atom = intern_symbol_global(":game-scene-atom");
-    }
+    k_slots = intern_symbol_global(":slots");
+    k_host_runtime = intern_symbol_global(":host-runtime");
+    k_entry = intern_symbol_global(":entry");
+    k_spatial_callback = intern_symbol_global(":spatial-callback");
+    k_game_state_atom = intern_symbol_global(":game-state-atom");
+    k_game_scene_atom = intern_symbol_global(":game-scene-atom");
     if (!k_slots || !k_host_runtime || !k_entry || !k_spatial_callback || !k_game_state_atom || !k_game_scene_atom) {
         return viewer_fail_game_demo_config(NULL, "viewer failed to intern required config keys");
     }
@@ -1984,7 +2060,14 @@ static void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
         if (bundle->has_game_slot && i == bundle->game_slot_index) {
             bundle->game_scene = scene;
             if (rule_set) {
-                (void)viewer_load_spatial_rules_from_scene(scene, rule_set);
+                /*
+                 * Breakout is still on the transitional native scene path, so keep the
+                 * already-expanded spatial rules alive until the host scene itself is
+                 * migrated to entity-map roots.
+                 */
+                if (!(viewer_breakout_runtime_enabled(bundle) && !is_map(scene->root))) {
+                    (void)viewer_load_spatial_rules_from_scene(scene, rule_set);
+                }
             }
         }
         if (publish_changes) {

@@ -182,7 +182,7 @@ TEST(test_breakout_contract_level_clear_advances_and_victory_overlay_is_exact) {
         "        s1 (tiny-breakout.core/step-state s0 {:dx 0} 16) "
         "        s2 (tiny-breakout.core/step-state s1 {:launch true} 16) "
         "        victory-scene (tiny-breakout.scene/build-scene (assoc s1 :phase :victory)) "
-        "        overlay (nth (:children (:root victory-scene)) 4)] "
+        "        overlay (get (:root victory-scene) 1005)] "
         "    (and (= :level-clear (:phase s1)) "
         "         (= :serve (:phase s2)) "
         "         (= \"You win!\" (:text overlay)))))",
@@ -207,20 +207,35 @@ TEST(test_breakout_contract_input_normalization_supports_digital_and_rotary) {
     TEST_ASSERT_EQUAL_INT(-1, as_fixnum(vector_nth(v, 1)));
 }
 
-TEST(test_breakout_contract_scene_build_returns_frame_scene_record) {
+TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rules) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (require 'tiny-breakout.scene) "
-        "  (let [s (tiny-breakout.core/init-state) "
+        "  (let [brick {:id 2001 :x 40 :y 32 :w 20 :h 10 :points 10} "
+        "        s (assoc (tiny-breakout.core/init-state) :bricks [brick]) "
         "        frame (tiny-breakout.scene/build-scene s) "
         "        root (:root frame) "
-        "        children (:children root)] "
+        "        root-node (get root 'root) "
+        "        rules (:collision-rules frame) "
+        "        paddle (get root 1002) "
+        "        ball (get root 1003) "
+        "        brick-node (get root 2001) "
+        "        paddle-rule (nth rules 0) "
+        "        brick-rule (nth rules 1)] "
         "    (and (= true (:visible frame)) "
-        "         (= 1000 (:id root)) "
-        "         (= 5 (count children)) "
-        "         (= 1002 (:id (nth children 1))))))",
+        "         (map? root) "
+        "         (contains? root 'root) "
+        "         (= 1000 (:id root-node)) "
+        "         (= [1001 1002 1003 1004 1005 2001] (:children root-node)) "
+        "         (= 2 (count rules)) "
+        "         (= :ball-vs-paddle (:id paddle-rule)) "
+        "         (= :ball-vs-brick (:id brick-rule)) "
+        "         (= (:prototype ball) (:self paddle-rule)) "
+        "         (= (:prototype paddle) (:other paddle-rule)) "
+        "         (= (:prototype ball) (:self brick-rule)) "
+        "         (= (:prototype brick-node) (:other brick-rule)))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
@@ -233,8 +248,8 @@ TEST(test_breakout_contract_scene_uses_exact_terminal_overlay_texts) {
         "  (require 'tiny-breakout.scene) "
         "  (let [lose (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :game-over)) "
         "        win (tiny-breakout.scene/build-scene (assoc (tiny-breakout.core/init-state) :phase :victory)) "
-        "        lose-overlay (nth (:children (:root lose)) 4) "
-        "        win-overlay (nth (:children (:root win)) 4)] "
+        "        lose-overlay (get (:root lose) 1005) "
+        "        win-overlay (get (:root win) 1005)] "
         "    (and (= \"Game Over\" (:text lose-overlay)) "
         "         (= \"You win!\" (:text win-overlay)))))",
         g_test_eval_state);
@@ -321,6 +336,26 @@ TEST(test_breakout_contract_host_button_events_mutate_state_discretely) {
         "         (= :serve (:phase s1)) "
         "         (> (:paddle-x s2) (:paddle-x s1)) "
         "         (= true (:visible scene)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_host_spatial_callback_dispatches_generic_spatial_watchers) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-clj.deployment) "
+        "  (require 'tiny-clj.event) "
+        "  (let [cfg (tiny-clj.deployment/breakout-host-config) "
+        "        seen (atom []) "
+        "        _ (tiny-clj.event/on {:source :spatial :id :ball-vs-paddle} "
+        "            (fn [event] "
+        "              (swap! seen conj [(:id event) (:phase event)]) "
+        "              nil)) "
+        "        _ ((:spatial-callback cfg) "
+        "            {:source :spatial :id :ball-vs-paddle :rule {:id :ball-vs-paddle} :phase :enter}) "
+        "        _ (tiny-clj.event/on {:source :spatial :id :ball-vs-paddle} nil)] "
+        "    (= [[:ball-vs-paddle :enter]] @seen)))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
