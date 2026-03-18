@@ -87,6 +87,9 @@ typedef struct {
 static ViewerRunloopThread g_runloop_thread = {0};
 
 static inline uint32_t viewer_record_type_hash(ID obj) {
+    if (!obj || TAG(obj) != CLJ_RECORD) {
+        return 0u;
+    }
     CljPersistentRecord *r = (CljPersistentRecord *)obj;
     return r->descriptor ? clj_hash(r->descriptor->type_symbol) : 0u;
 }
@@ -408,10 +411,15 @@ static ID viewer_breakout_make_rect_record(int32_t id,
 static ID viewer_breakout_make_staging_scene_record(ViewerBreakoutRuntime *runtime);
 static bool viewer_breakout_runtime_prepare_cached_scene_bits(ViewerBreakoutRuntime *runtime);
 static FrameScene *viewer_frame_scene_from_atom(CljAtom *scene_atom);
+static void viewer_breakout_bind_scene(ViewerSceneBundle *bundle,
+                                       FrameScene *scene,
+                                       bool publish_slot_change);
+static void viewer_breakout_runtime_clear_active_bricks(ViewerBreakoutRuntime *runtime);
+static void viewer_breakout_runtime_reset_to_title(ViewerBreakoutRuntime *runtime);
 static bool viewer_breakout_update_scene_in_place(ViewerSceneBundle *bundle,
                                                   ViewerBreakoutRuntime *runtime);
-static void viewer_breakout_sync_scene(ViewerSceneBundle *bundle,
-                                       ViewerBreakoutRuntime *runtime);
+static void viewer_breakout_commit_scene(ViewerSceneBundle *bundle,
+                                         ViewerBreakoutRuntime *runtime);
 static void publish_frame_scene_slot_record(size_t slot_index, ID scene, uint32_t *out_generation);
 static void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
                                          ViewerSpatialRuleSet *rule_set,
@@ -434,14 +442,12 @@ static int32_t viewer_id_to_i32_default(ID value, int32_t fallback) {
 }
 
 static ViewerBreakoutPhase viewer_breakout_phase_from_id(ID value) {
-    static ID k_title = NULL;
     static ID k_serve = NULL;
     static ID k_play = NULL;
     static ID k_pause = NULL;
     static ID k_level_clear = NULL;
     static ID k_game_over = NULL;
     static ID k_victory = NULL;
-    k_title = intern_symbol_global(":title");
     k_serve = intern_symbol_global(":serve");
     k_play = intern_symbol_global(":play");
     k_pause = intern_symbol_global(":pause");
@@ -500,10 +506,19 @@ static void viewer_breakout_runtime_release_cached_objects(ViewerBreakoutRuntime
     RELEASE(runtime->staging_scene);
     RELEASE(runtime->hud_text_value);
     RELEASE(runtime->overlay_text_value);
+    viewer_breakout_runtime_clear_active_bricks(runtime);
+}
+
+static void viewer_breakout_runtime_clear_active_bricks(ViewerBreakoutRuntime *runtime) {
+    if (!runtime) {
+        return;
+    }
     for (uint32_t i = 0; i < runtime->active_brick_count && i < VIEWER_BREAKOUT_MAX_BRICKS; i++) {
         RELEASE(runtime->active_bricks[i].record);
         runtime->active_bricks[i].record = NULL;
     }
+    runtime->active_brick_count = 0u;
+    runtime->remaining_brick_count = 0u;
 }
 
 static void viewer_breakout_runtime_clear(ViewerBreakoutRuntime *runtime) {
@@ -543,10 +558,7 @@ static void viewer_breakout_runtime_load_level(ViewerBreakoutRuntime *runtime, u
     if (!runtime || level_index >= runtime->level_count) {
         return;
     }
-    for (uint32_t i = 0; i < runtime->active_brick_count && i < VIEWER_BREAKOUT_MAX_BRICKS; i++) {
-        RELEASE(runtime->active_bricks[i].record);
-        runtime->active_bricks[i].record = NULL;
-    }
+    viewer_breakout_runtime_clear_active_bricks(runtime);
     runtime->active_brick_count = runtime->levels[level_index].brick_count;
     runtime->remaining_brick_count = runtime->active_brick_count;
     for (uint32_t i = 0; i < runtime->active_brick_count; i++) {
@@ -589,6 +601,23 @@ static void viewer_breakout_runtime_fresh_game(ViewerBreakoutRuntime *runtime) {
     runtime->score = 0;
     runtime->lives = 3;
     viewer_breakout_runtime_prepare_level(runtime, 0u, BREAKOUT_PHASE_SERVE);
+}
+
+static void viewer_breakout_runtime_reset_to_title(ViewerBreakoutRuntime *runtime) {
+    if (!runtime) {
+        return;
+    }
+    viewer_breakout_runtime_clear_active_bricks(runtime);
+    runtime->score = 0;
+    runtime->lives = 3;
+    runtime->level_index = 0;
+    runtime->phase = BREAKOUT_PHASE_TITLE;
+    runtime->paddle_x = 140;
+    runtime->ball_x = 160;
+    runtime->ball_y = 210;
+    runtime->ball_vx = 2;
+    runtime->ball_vy = -2;
+    runtime->tick_ms = 0;
 }
 
 static bool viewer_breakout_runtime_init_from_state(ViewerBreakoutRuntime *runtime,
@@ -921,17 +950,17 @@ static ID viewer_breakout_make_scene_record(ViewerBreakoutRuntime *runtime) {
     return scene;
 }
 
-static void viewer_breakout_publish_scene(ViewerSceneBundle *bundle,
-                                          ViewerBreakoutRuntime *runtime) {
-    if (!bundle || !runtime || !bundle->game_scene_atom) {
+static void viewer_breakout_bind_scene(ViewerSceneBundle *bundle,
+                                       FrameScene *scene,
+                                       bool publish_slot_change) {
+    if (!bundle || !bundle->has_game_slot) {
         return;
     }
-    ID scene = viewer_breakout_make_scene_record(runtime);
-    if (!scene) {
-        return;
+    bundle->game_scene = scene;
+    bundle->slots[bundle->game_slot_index].scene = scene;
+    if (publish_slot_change) {
+        publish_frame_scene_slot_record(bundle->game_slot_index, (ID)scene, NULL);
     }
-    atom_set(bundle->game_scene_atom, scene);
-    RELEASE(scene);
 }
 
 static bool viewer_breakout_update_scene_in_place(ViewerSceneBundle *bundle,
@@ -990,25 +1019,23 @@ static bool viewer_breakout_update_scene_in_place(ViewerSceneBundle *bundle,
     ASSIGN(hud_text->text, hud_value);
     ASSIGN(overlay_text->text, overlay_value);
 
-    if (bundle->has_game_slot) {
-        bundle->game_scene = scene;
-        bundle->slots[bundle->game_slot_index].scene = scene;
-        publish_frame_scene_slot_record(bundle->game_slot_index, (ID)scene, NULL);
-    }
+    viewer_breakout_bind_scene(bundle, scene, true);
     return true;
 }
 
-static void viewer_breakout_sync_scene(ViewerSceneBundle *bundle,
-                                       ViewerBreakoutRuntime *runtime) {
+static void viewer_breakout_commit_scene(ViewerSceneBundle *bundle,
+                                         ViewerBreakoutRuntime *runtime) {
     if (viewer_breakout_update_scene_in_place(bundle, runtime)) {
         return;
     }
-    viewer_breakout_publish_scene(bundle, runtime);
-    if (bundle && bundle->has_game_slot) {
-        FrameScene *scene = viewer_frame_scene_from_atom(bundle->game_scene_atom);
-        bundle->game_scene = scene;
-        bundle->slots[bundle->game_slot_index].scene = scene;
+    ID scene = viewer_breakout_make_scene_record(runtime);
+    if (!scene || !bundle || !bundle->game_scene_atom) {
+        RELEASE(scene);
+        return;
     }
+    atom_set(bundle->game_scene_atom, scene);
+    RELEASE(scene);
+    viewer_breakout_bind_scene(bundle, viewer_frame_scene_from_atom(bundle->game_scene_atom), false);
 }
 
 static void viewer_breakout_stage_scene(ViewerSceneBundle *bundle,
@@ -1017,10 +1044,7 @@ static void viewer_breakout_stage_scene(ViewerSceneBundle *bundle,
         return;
     }
     atom_set(bundle->game_scene_atom, runtime->staging_scene);
-    if (bundle->has_game_slot) {
-        bundle->game_scene = (FrameScene *)runtime->staging_scene;
-        bundle->slots[bundle->game_slot_index].scene = (FrameScene *)runtime->staging_scene;
-    }
+    viewer_breakout_bind_scene(bundle, (FrameScene *)runtime->staging_scene, false);
 }
 
 static bool viewer_breakout_runtime_activate(ViewerBreakoutRuntime *runtime,
@@ -1031,7 +1055,7 @@ static bool viewer_breakout_runtime_activate(ViewerBreakoutRuntime *runtime,
     if (!runtime || !runtime->enabled || !runtime->initialized || !bundle || !bundle->game_scene_atom) {
         return false;
     }
-    viewer_breakout_publish_scene(bundle, runtime);
+    viewer_breakout_commit_scene(bundle, runtime);
     viewer_sync_configured_slots(bundle, rule_set, publish_changes);
     return viewer_frame_scene_from_atom(bundle->game_scene_atom) != NULL &&
            viewer_frame_scene_from_atom(bundle->game_scene_atom) != previous_scene;
@@ -1075,22 +1099,7 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
     if (runtime->phase == BREAKOUT_PHASE_GAME_OVER || runtime->phase == BREAKOUT_PHASE_VICTORY) {
         if (fire_pressed) {
             viewer_breakout_stage_scene(bundle, runtime);
-            for (uint32_t i = 0; i < runtime->active_brick_count && i < VIEWER_BREAKOUT_MAX_BRICKS; i++) {
-                RELEASE(runtime->active_bricks[i].record);
-                runtime->active_bricks[i].record = NULL;
-            }
-            runtime->score = 0;
-            runtime->lives = 3;
-            runtime->level_index = 0;
-            runtime->phase = BREAKOUT_PHASE_TITLE;
-            runtime->paddle_x = 140;
-            runtime->ball_x = 160;
-            runtime->ball_y = 210;
-            runtime->ball_vx = 2;
-            runtime->ball_vy = -2;
-            runtime->tick_ms = 0;
-            runtime->active_brick_count = 0;
-            runtime->remaining_brick_count = 0;
+            viewer_breakout_runtime_reset_to_title(runtime);
         }
         return;
     }
@@ -1098,7 +1107,7 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
     if (runtime->phase == BREAKOUT_PHASE_PAUSE) {
         if (pause_pressed) {
             runtime->phase = BREAKOUT_PHASE_PLAY;
-            viewer_breakout_sync_scene(bundle, runtime);
+            viewer_breakout_commit_scene(bundle, runtime);
         }
         return;
     }
@@ -1119,21 +1128,21 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
         viewer_breakout_runtime_serve_ball(runtime);
         if (fire_pressed) {
             runtime->phase = BREAKOUT_PHASE_PLAY;
-            viewer_breakout_sync_scene(bundle, runtime);
+            viewer_breakout_commit_scene(bundle, runtime);
             return;
         }
         if (showing_staging_scene ||
             dx != 0 ||
             runtime->ball_x != previous_ball_x ||
             runtime->ball_y != previous_ball_y) {
-            viewer_breakout_sync_scene(bundle, runtime);
+            viewer_breakout_commit_scene(bundle, runtime);
         }
         return;
     }
 
     if (pause_pressed) {
         runtime->phase = BREAKOUT_PHASE_PAUSE;
-        viewer_breakout_sync_scene(bundle, runtime);
+        viewer_breakout_commit_scene(bundle, runtime);
         return;
     }
 
@@ -1204,7 +1213,7 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
         }
     }
 
-    viewer_breakout_sync_scene(bundle, runtime);
+    viewer_breakout_commit_scene(bundle, runtime);
 }
 
 static void destroy_scene_bundle(ViewerSceneBundle *bundle) {
