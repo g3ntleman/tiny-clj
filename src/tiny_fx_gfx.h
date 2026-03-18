@@ -21,11 +21,13 @@ typedef struct {
     int tri_id, tri_t, tri_style, tri_visible, tri_x1, tri_y1, tri_x2, tri_y2, tri_x3, tri_y3;
     int text_id, text_t, text_style, text_visible, text_x, text_y, text_scale, text_rot, text_text;
     int timeline_keyframes, timeline_loop;
-    int frame_root, frame_clip_rect, frame_z, frame_visible, frame_opaque, frame_erase_color, frame_guard_px;
+    int frame_root, frame_index, frame_clip_rect, frame_z, frame_visible, frame_opaque, frame_erase_color, frame_guard_px;
+    int scene_root, scene_index, scene_clip_rect, scene_erase_color;
 } VgRecordSchema;
 
 typedef struct {
     ID k_root;
+    ID k_index;
     ID k_id;
     ID k_t;
     ID k_style;
@@ -75,8 +77,8 @@ DEFRECORD(Rect, id, t, style, visible, x, y, w, h, prototype)
 DEFRECORD(Tri, id, t, style, visible, x1, y1, x2, y2, x3, y3, prototype)
 DEFRECORD(VText, id, t, style, visible, x, y, scale, rot, text, prototype)
 DEFRECORD(Timeline, keyframes, loop)
-DEFRECORD(FrameScene, root, clip_rect, z, visible, opaque, erase_color, guard_px)
-DEFRECORD(Scene, root, clip_rect, erase_color)
+DEFRECORD(FrameScene, root, index, clip_rect, z, visible, opaque, erase_color, guard_px)
+DEFRECORD(Scene, root, index, clip_rect, erase_color)
 
 bool tiny_fx_gfx_ensure_schema(EvalState *st);
 const VgRecordSchema *tiny_fx_gfx_schema(void);

@@ -1538,6 +1538,7 @@ static bool render_record_node(ID node_obj,
 }
 
 static bool resolve_root_node(ID root_field,
+                              ID index_field,
                               const VgFlatSceneLookup *lookup,
                               ID *out_root_node,
                               ID *out_entity_map) {
@@ -1553,6 +1554,16 @@ static bool resolve_root_node(ID root_field,
     if (!root_field) {
         return true;
     }
+    if (index_field) {
+        if (!is_map(index_field)) {
+            return false;
+        }
+        if (out_entity_map) {
+            *out_entity_map = index_field;
+        }
+        *out_root_node = root_field;
+        return true;
+    }
     if (!is_map(root_field)) {
         *out_root_node = root_field;
         return true;
@@ -1564,13 +1575,14 @@ static bool resolve_root_node(ID root_field,
     return *out_root_node != NULL;
 }
 
-static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_clip, ID *out_erase) {
+static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_index, ID *out_clip, ID *out_erase) {
     if (!scene_record || TAG(scene_record) != CLJ_RECORD) return false;
     const VgRecordSchema *sc = tiny_fx_gfx_schema();
     uint32_t h = record_type_hash(scene_record);
     if (h == sc->h_frame_scene) {
         FrameScene *fs = scene_record;
         *out_root = fs->root;
+        if (out_index) *out_index = fs->index;
         *out_clip = fs->clip_rect;
         if (out_erase) *out_erase = fs->erase_color;
         return true;
@@ -1578,6 +1590,7 @@ static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_clip, ID 
     if (h == sc->h_scene) {
         Scene *s = scene_record;
         *out_root = s->root;
+        if (out_index) *out_index = s->index;
         *out_clip = s->clip_rect;
         if (out_erase) *out_erase = s->erase_color;
         return true;
@@ -1591,9 +1604,10 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
     }
 
     ID root = NULL;
+    ID index = NULL;
     ID clip_source = NULL;
     ID erase_source = NULL;
-    if (!decode_scene_fields(scene_record, &root, &clip_source, &erase_source)) {
+    if (!decode_scene_fields(scene_record, &root, &index, &clip_source, &erase_source)) {
         return false;
     }
 
@@ -1608,7 +1622,7 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
     if (is_map(resolved_root) && !vg_flat_scene_lookup_build(resolved_root, &lookup)) {
         return false;
     }
-    if (!resolve_root_node(resolved_root, &lookup, &root_node, &entity_map)) {
+    if (!resolve_root_node(resolved_root, index, &lookup, &root_node, &entity_map)) {
         return false;
     }
 
@@ -1646,8 +1660,9 @@ static bool render_scene_record_clipped_at_ms_internal(ID scene_record,
     }
 
     ID root = NULL;
+    ID index = NULL;
     ID clip_source = NULL;
-    if (!decode_scene_fields(scene_record, &root, &clip_source, NULL)) {
+    if (!decode_scene_fields(scene_record, &root, &index, &clip_source, NULL)) {
         return false;
     }
 
@@ -1668,7 +1683,7 @@ static bool render_scene_record_clipped_at_ms_internal(ID scene_record,
     if (is_map(resolved_root) && !vg_flat_scene_lookup_build(resolved_root, &lookup)) {
         return false;
     }
-    if (!resolve_root_node(resolved_root, &lookup, &root_node, &entity_map)) {
+    if (!resolve_root_node(resolved_root, index, &lookup, &root_node, &entity_map)) {
         return false;
     }
     if (!root_node) {

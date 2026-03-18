@@ -43,7 +43,7 @@ TEST(test_gfx_collision_contract_registers_record_descriptors) {
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":enabled"), vector_nth(d_rule->field_keys, 5));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":cooldown-ms"), vector_nth(d_rule->field_keys, 6));
     TEST_ASSERT_EQUAL_UINT(7, vector_count(d_spatial_rule->field_keys));
-    TEST_ASSERT_EQUAL_UINT(15, vector_count(d_spatial_event->field_keys));
+    TEST_ASSERT_EQUAL_UINT(17, vector_count(d_spatial_event->field_keys));
     TEST_ASSERT_EQUAL_UINT(4, vector_count(d_aabb->field_keys));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":id"), vector_nth(d_spatial_rule->field_keys, 0));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":slot"), vector_nth(d_spatial_rule->field_keys, 1));
@@ -53,7 +53,9 @@ TEST(test_gfx_collision_contract_registers_record_descriptors) {
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":source"), vector_nth(d_spatial_event->field_keys, 0));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":id"), vector_nth(d_spatial_event->field_keys, 1));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":slot-id"), vector_nth(d_spatial_event->field_keys, 2));
-    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":rule"), vector_nth(d_spatial_event->field_keys, 7));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":self-entity"), vector_nth(d_spatial_event->field_keys, 7));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":other-entity"), vector_nth(d_spatial_event->field_keys, 8));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":rule"), vector_nth(d_spatial_event->field_keys, 9));
 }
 
 TEST(test_gfx_collision_contract_normalize_rule_defaults) {
@@ -352,15 +354,15 @@ TEST(test_gfx_collision_contract_demo_callback_mutates_scene_state_explicitly) {
         "  (require 'tiny-fx.gfx-scene) "
         "  (require 'tiny-fx.color) "
         "  (let [game-scene-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
-        "        player0 (get (:root @game-scene-atom) 3002) "
+        "        player0 (get (:index @game-scene-atom) 3002) "
         "        before-x1 (:x1 player0) "
         "        before-sx (:sx (nth (nth (:keyframes (:t player0)) 0) 1)) "
         "        ret1 (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
-        "        player1 (get (:root @game-scene-atom) 3002) "
+        "        player1 (get (:index @game-scene-atom) 3002) "
         "        after-enter-x1 (:x1 player1) "
         "        after-enter-sx (:sx (nth (nth (:keyframes (:t player1)) 0) 1)) "
         "        ret2 (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :exit}) "
-        "        player2 (get (:root @game-scene-atom) 3002) "
+        "        player2 (get (:index @game-scene-atom) 3002) "
         "        after-exit-x1 (:x1 player2) "
         "        after-exit-sx (:sx (nth (nth (:keyframes (:t player2)) 0) 1))] "
         "    (and (= -16 before-x1) "

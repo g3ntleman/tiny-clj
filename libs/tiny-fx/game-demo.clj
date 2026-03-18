@@ -58,9 +58,9 @@ and game-demo startup."
 
 (defn apply-player-scale
   [game-scene player-small?]
-  (let [root (:root game-scene)
-        player (get root player-entity-id)
-        proxy (get root player-collision-entity-id)
+  (let [index (:index game-scene)
+        player (get index player-entity-id)
+        proxy (get index player-collision-entity-id)
         next-timeline (player-jump-timeline-for-state player-small?)]
     (if (or (nil? player)
             (nil? proxy)
@@ -69,9 +69,21 @@ and game-demo startup."
       game-scene
       (let [updated-player (assoc player :t next-timeline)
             updated-proxy (assoc proxy :t next-timeline)
-            next-root (assoc (assoc root player-entity-id updated-player) player-collision-entity-id updated-proxy)]
+            next-index (assoc (assoc index player-entity-id updated-player) player-collision-entity-id updated-proxy)]
         ;; Keep scene as FrameScene record so native viewer accepts atom updates.
-        (record-from-map 'FrameScene (assoc game-scene :root next-root))))))
+        (record-from-map 'FrameScene (assoc game-scene :index next-index))))))
+
+(defn- ensure-frame-scene-root-index
+  [scene]
+  (let [root (:root scene)]
+    (if (and (nil? (:index scene))
+             (map? root)
+             (contains? root 'root))
+      (record-from-map 'FrameScene
+                       (assoc scene
+                              :root (get root 'root)
+                              :index (dissoc root 'root)))
+      scene)))
 
 (defn- event->player-small-state
   [event]
@@ -148,12 +160,15 @@ Index layout:
 2 game-scene"
   []
   (let [data (load-demo-data!)
+        deco-scene (ensure-frame-scene-root-index (:deco-scene-template data))
+        score-scene (ensure-frame-scene-root-index (:score-scene-template data))
         game-entities (assoc (:game-entities-static data)
                         obstacle-entity-id (:rocket-body-instance data)
                         3005 (:rocket-nose-instance data)
                         player-collision-entity-id (:game-player-collision data)
                         player-entity-id (:game-player data))
-        game-scene (record-create 'FrameScene [game-entities
+        game-scene (record-create 'FrameScene [(get game-entities 'root)
+                                                   (dissoc game-entities 'root)
                                                    [0 40 320 136]
                                                    2
                                                    true
@@ -161,9 +176,9 @@ Index layout:
                                                    0
                                                    1
                                                    [(:collision-rule data)]])
-        demo-bundle [(:deco-scene-template data) (:score-scene-template data) game-scene]]
-    (reset! deco-scene-state (:deco-scene-template data))
-    (reset! score-scene-state (:score-scene-template data))
+        demo-bundle [deco-scene score-scene game-scene]]
+    (reset! deco-scene-state deco-scene)
+    (reset! score-scene-state score-scene)
     (reset! game-scene-state game-scene)
     (reset! demo-melody-trigger-count* 0)
     (reset! demo-launch-pressed* false)

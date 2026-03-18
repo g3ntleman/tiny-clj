@@ -38,6 +38,14 @@ static size_t breakout_runtime_test_measure_play_loop_heap_growth(BreakoutRuntim
                                                                   uint8_t *keys,
                                                                   int frame_count,
                                                                   bool sync_slots);
+static size_t breakout_runtime_test_run_play_loop(BreakoutRuntimeTestContext *ctx,
+                                                  ViewerRuntimeFlags *runtime_flags,
+                                                  uint8_t *keys,
+                                                  int frame_count,
+                                                  bool sync_slots,
+                                                  bool render_scene,
+                                                  bool log_each_second);
+static double breakout_runtime_test_bytes_to_mib(size_t bytes);
 
 static void breakout_runtime_test_context_destroy(BreakoutRuntimeTestContext *ctx) {
     if (!ctx) {
@@ -134,12 +142,45 @@ static size_t breakout_runtime_test_measure_play_loop_heap_growth(BreakoutRuntim
                                                                   uint8_t *keys,
                                                                   int frame_count,
                                                                   bool sync_slots) {
+    return breakout_runtime_test_run_play_loop(ctx,
+                                               runtime_flags,
+                                               keys,
+                                               frame_count,
+                                               sync_slots,
+                                               false,
+                                               false);
+}
+
+static double breakout_runtime_test_bytes_to_mib(size_t bytes) {
+    return (double)bytes / (1024.0 * 1024.0);
+}
+
+static size_t breakout_runtime_test_run_play_loop(BreakoutRuntimeTestContext *ctx,
+                                                  ViewerRuntimeFlags *runtime_flags,
+                                                  uint8_t *keys,
+                                                  int frame_count,
+                                                  bool sync_slots,
+                                                  bool render_scene,
+                                                  bool log_each_second) {
     TEST_ASSERT_NOT_NULL(ctx);
     TEST_ASSERT_NOT_NULL(runtime_flags);
     TEST_ASSERT_NOT_NULL(keys);
     TEST_ASSERT_TRUE(frame_count >= 0);
 
     size_t baseline = memory_current_usage_bytes();
+    uint16_t *pixels = NULL;
+    VgFrameBuffer fb = {0};
+    VgRenderSlotState render_state = {0};
+
+    if (render_scene) {
+        pixels = (uint16_t *)CLJ_HOST_CALLOC((size_t)VIEW_W * (size_t)VIEW_H, sizeof(uint16_t));
+        TEST_ASSERT_NOT_NULL(pixels);
+        TEST_ASSERT_TRUE(vg_framebuffer_init(&fb,
+                                             VIEW_W,
+                                             VIEW_H,
+                                             pixels,
+                                             (size_t)VIEW_W * (size_t)VIEW_H));
+    }
 
     for (int frame = 0; frame < frame_count; frame++) {
         WITH_AUTORELEASE_POOL({
@@ -160,12 +201,57 @@ static size_t breakout_runtime_test_measure_play_loop_heap_growth(BreakoutRuntim
             if (sync_slots) {
                 viewer_sync_configured_slots(&ctx->bundle, &ctx->spatial_rules, false);
             }
+            if (render_scene) {
+                FrameScene *scene = viewer_frame_scene_from_atom(ctx->bundle.game_scene_atom);
+                TEST_ASSERT_NOT_NULL(scene);
+                TEST_ASSERT_TRUE(vg_render_frame_slot_record_result_at_ms((ID)scene,
+                                                                          &render_state,
+                                                                          &fb,
+                                                                          (uint32_t)frame + 1u,
+                                                                          (uint32_t)frame * 16u,
+                                                                          true,
+                                                                          NULL));
+            }
         });
         runtime_flags->fire_key_was_down = keys[KB_KEY_ENTER] != 0;
         runtime_flags->pause_key_was_down = keys[KB_KEY_Y] != 0;
+
+        if (log_each_second && (((frame + 1) % 60) == 0 || frame == frame_count - 1)) {
+            size_t current = memory_current_usage_bytes();
+            size_t growth = (current >= baseline) ? (current - baseline) : 0u;
+            size_t heap_limit = memory_get_heap_limit_bytes();
+            bool heap_limit_active = heap_limit > 0u;
+            size_t headroom = 0u;
+            char headroom_buf[96] = {0};
+            if (heap_limit_active && heap_limit > current) {
+                headroom = heap_limit - current;
+            }
+            if (heap_limit_active) {
+                test_snprintf(headroom_buf,
+                              sizeof(headroom_buf),
+                              " limit=%.2f MiB headroom=%lu B",
+                              breakout_runtime_test_bytes_to_mib(heap_limit),
+                              (unsigned long)headroom);
+            }
+            test_fprintf(stderr,
+                         "[breakout-heap] t=%2ds frame=%4d baseline=%.2f MiB current=%.2f MiB delta=%lu B%s phase=%d level=%d bricks=%d\n",
+                         (frame + 1) / 60,
+                         frame + 1,
+                         breakout_runtime_test_bytes_to_mib(baseline),
+                         breakout_runtime_test_bytes_to_mib(current),
+                         (unsigned long)growth,
+                         headroom_buf,
+                         (int)g_breakout_runtime.phase,
+                         g_breakout_runtime.level_index + 1,
+                         (int)g_breakout_runtime.remaining_brick_count);
+        }
     }
 
-    return memory_current_usage_bytes() - baseline;
+    size_t growth = memory_current_usage_bytes() - baseline;
+    if (pixels) {
+        CLJ_HOST_FREE(pixels);
+    }
+    return growth;
 }
 
 TEST(test_breakout_runtime_startup_host_app_fits_debug_heap_limit) {
@@ -288,6 +374,80 @@ TEST(test_breakout_runtime_startup_preserves_loaded_spatial_rules_across_native_
     breakout_runtime_test_context_destroy(&ctx);
 }
 
+TEST(test_breakout_runtime_startup_loads_concrete_spatial_rules_for_active_bricks) {
+    BreakoutRuntimeTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_runtime_test_context_init(&ctx));
+
+    uint8_t keys[KB_KEY_LAST + 1] = {0};
+    ViewerRuntimeFlags runtime_flags = {0};
+    keys[KB_KEY_ENTER] = 1;
+    viewer_breakout_runtime_step(&g_breakout_runtime, &ctx.bundle, &runtime_flags, keys);
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, false);
+    memset(keys, 0, sizeof(keys));
+    viewer_breakout_runtime_step(&g_breakout_runtime, &ctx.bundle, &runtime_flags, keys);
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, false);
+
+    TEST_ASSERT_TRUE(g_breakout_runtime.active_brick_count > 0u);
+    TEST_ASSERT_EQUAL_UINT32(1u + g_breakout_runtime.active_brick_count, ctx.spatial_rules.count);
+    TEST_ASSERT_EQUAL_INT(1003, AS_FIXNUM(ctx.spatial_rules.items[0].self_entity_id));
+    TEST_ASSERT_EQUAL_INT(1002, AS_FIXNUM(ctx.spatial_rules.items[0].other_entity_id));
+
+    bool found_brick_rule = false;
+    for (uint32_t i = 1u; i < ctx.spatial_rules.count; i++) {
+        ViewerCollisionPolicy *policy = &ctx.spatial_rules.items[i];
+        if (AS_FIXNUM(policy->self_entity_id) != 1003) {
+            continue;
+        }
+        for (uint32_t brick_i = 0u; brick_i < g_breakout_runtime.active_brick_count; brick_i++) {
+            if (policy->other_entity_id == fixnum(g_breakout_runtime.active_bricks[brick_i].id)) {
+                found_brick_rule = true;
+                break;
+            }
+        }
+        if (found_brick_rule) {
+            break;
+        }
+    }
+    TEST_ASSERT_TRUE(found_brick_rule);
+
+    breakout_runtime_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_spatial_events_include_entity_snapshots) {
+    BreakoutRuntimeTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_runtime_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(ctx.spatial_rules.count > 0u);
+
+    FrameScene *scene = viewer_frame_scene_from_atom(ctx.bundle.game_scene_atom);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    ViewerCollisionPolicy *policy = &ctx.spatial_rules.items[0];
+    ID expected_self = map_get_sentinel(viewer_scene_entity_map(scene), policy->self_entity_id, NULL);
+    ID expected_other = map_get_sentinel(viewer_scene_entity_map(scene), policy->other_entity_id, NULL);
+    TEST_ASSERT_NOT_NULL(expected_self);
+    TEST_ASSERT_NOT_NULL(expected_other);
+
+    VgAabb self_box = {.min_x = 1, .min_y = 2, .max_x = 3, .max_y = 4};
+    VgAabb other_box = {.min_x = 5, .min_y = 6, .max_x = 7, .max_y = 8};
+    ID event = viewer_make_spatial_event(&ctx.bundle,
+                                         policy,
+                                         intern_symbol_global(":enter"),
+                                         17u,
+                                         &self_box,
+                                         &other_box);
+    TEST_ASSERT_NOT_NULL(event);
+
+    ID k_self_entity = intern_symbol_global(":self-entity");
+    ID k_other_entity = intern_symbol_global(":other-entity");
+    TEST_ASSERT_NOT_NULL(k_self_entity);
+    TEST_ASSERT_NOT_NULL(k_other_entity);
+    TEST_ASSERT_EQUAL_PTR(expected_self, tiny_fx_gfx_get_field(event, k_self_entity, NULL));
+    TEST_ASSERT_EQUAL_PTR(expected_other, tiny_fx_gfx_get_field(event, k_other_entity, NULL));
+
+    RELEASE(event);
+    breakout_runtime_test_context_destroy(&ctx);
+}
+
 TEST(test_breakout_runtime_startup_only_materializes_active_level_brick_records) {
     BreakoutRuntimeTestContext ctx = {0};
     TEST_ASSERT_TRUE(breakout_runtime_test_context_init(&ctx));
@@ -309,6 +469,44 @@ TEST(test_breakout_runtime_startup_only_materializes_active_level_brick_records)
     TEST_ASSERT_NOT_NULL(g_breakout_runtime.active_bricks[0].record);
     TEST_ASSERT_NULL(g_breakout_runtime.levels[0].bricks[0].record);
 
+    breakout_runtime_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_level_clear_fire_publishes_next_level_immediately) {
+    BreakoutRuntimeTestContext ctx = {0};
+    ViewerRuntimeFlags runtime_flags = {0};
+    uint8_t keys[KB_KEY_LAST + 1] = {0};
+
+    TEST_ASSERT_TRUE(breakout_runtime_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(g_breakout_runtime.level_count > 1u);
+
+    breakout_runtime_test_enter_play(&ctx, &runtime_flags, keys);
+    g_breakout_runtime.phase = BREAKOUT_PHASE_LEVEL_CLEAR;
+    g_breakout_runtime.level_index = 0;
+    viewer_breakout_commit_scene(&ctx.bundle, &g_breakout_runtime);
+
+    ID level_clear_scene = RETAIN(atom_peek(ctx.bundle.game_scene_atom));
+    TEST_ASSERT_NOT_NULL(level_clear_scene);
+
+    memset(keys, 0, sizeof(keys));
+    keys[KB_KEY_SPACE] = 1;
+    viewer_breakout_runtime_step(&g_breakout_runtime, &ctx.bundle, &runtime_flags, keys);
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, false);
+
+    ID next_scene = atom_peek(ctx.bundle.game_scene_atom);
+    TEST_ASSERT_NOT_NULL(next_scene);
+    TEST_ASSERT_NOT_EQUAL(level_clear_scene, next_scene);
+    TEST_ASSERT_EQUAL_INT(BREAKOUT_PHASE_SERVE, g_breakout_runtime.phase);
+    TEST_ASSERT_EQUAL_INT(1, g_breakout_runtime.level_index);
+
+    FrameScene *serve_scene = (FrameScene *)next_scene;
+    TEST_ASSERT_NOT_NULL(serve_scene->root);
+    Group *root_group = (Group *)serve_scene->root;
+    TEST_ASSERT_NOT_NULL(root_group->children);
+    TEST_ASSERT_EQUAL_UINT32(5u + g_breakout_runtime.active_brick_count,
+                             vector_count((CljPersistentVector *)root_group->children));
+
+    RELEASE(level_clear_scene);
     breakout_runtime_test_context_destroy(&ctx);
 }
 
@@ -400,13 +598,14 @@ TEST(test_breakout_runtime_play_step_updates_scene_in_place) {
     TEST_ASSERT_NOT_NULL(scene_obj);
     FrameScene *scene = (FrameScene *)scene_obj;
     TEST_ASSERT_NOT_NULL(scene->root);
+    TEST_ASSERT_TRUE(is_map(scene->index));
     Group *root_group = (Group *)scene->root;
     TEST_ASSERT_NOT_NULL(root_group->children);
 
     ID root_before = scene->root;
     ID children_before = root_group->children;
-    Rect *paddle_before = (Rect *)vector_nth((CljPersistentVector *)root_group->children, 1u);
-    Rect *ball_before = (Rect *)vector_nth((CljPersistentVector *)root_group->children, 2u);
+    Rect *paddle_before = (Rect *)map_get_sentinel(scene->index, fixnum(1002), NULL);
+    Rect *ball_before = (Rect *)map_get_sentinel(scene->index, fixnum(1003), NULL);
     int32_t previous_ball_x = AS_FIXNUM(ball_before->x);
     int32_t previous_ball_y = AS_FIXNUM(ball_before->y);
 
@@ -419,11 +618,12 @@ TEST(test_breakout_runtime_play_step_updates_scene_in_place) {
     FrameScene *updated_scene = (FrameScene *)updated_scene_obj;
     TEST_ASSERT_EQUAL_PTR(root_before, updated_scene->root);
     TEST_ASSERT_EQUAL_PTR(children_before, ((Group *)updated_scene->root)->children);
+    TEST_ASSERT_EQUAL_PTR(scene->index, updated_scene->index);
     TEST_ASSERT_EQUAL_PTR(updated_scene, ctx.bundle.game_scene);
     TEST_ASSERT_EQUAL_PTR(updated_scene, ctx.bundle.slots[ctx.bundle.game_slot_index].scene);
 
-    Rect *updated_paddle = (Rect *)vector_nth((CljPersistentVector *)((Group *)updated_scene->root)->children, 1u);
-    Rect *updated_ball = (Rect *)vector_nth((CljPersistentVector *)((Group *)updated_scene->root)->children, 2u);
+    Rect *updated_paddle = (Rect *)map_get_sentinel(updated_scene->index, fixnum(1002), NULL);
+    Rect *updated_ball = (Rect *)map_get_sentinel(updated_scene->index, fixnum(1003), NULL);
     TEST_ASSERT_EQUAL_PTR(paddle_before, updated_paddle);
     TEST_ASSERT_EQUAL_PTR(ball_before, updated_ball);
     TEST_ASSERT_EQUAL_INT(g_breakout_runtime.paddle_x, AS_FIXNUM(updated_paddle->x));
@@ -501,6 +701,33 @@ TEST(test_breakout_runtime_play_loop_publish_only_does_not_accumulate_unbounded_
 
     test_snprintf(msg, sizeof(msg),
                   "native breakout publish-only growth=%lu limit=%lu",
+                  (unsigned long)growth,
+                  (unsigned long)allowed_growth);
+    TEST_ASSERT_TRUE_MESSAGE(growth <= allowed_growth, msg);
+
+    breakout_runtime_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_play_loop_with_slot_render_does_not_crash) {
+    BreakoutRuntimeTestContext ctx = {0};
+    ViewerRuntimeFlags runtime_flags = {0};
+    uint8_t keys[KB_KEY_LAST + 1] = {0};
+    size_t growth = 0;
+    const size_t allowed_growth = 16384u;
+    char msg[160];
+
+    TEST_ASSERT_TRUE(breakout_runtime_test_context_init(&ctx));
+    breakout_runtime_test_enter_play(&ctx, &runtime_flags, keys);
+
+    growth = breakout_runtime_test_run_play_loop(&ctx,
+                                                 &runtime_flags,
+                                                 keys,
+                                                 2400,
+                                                 true,
+                                                 true,
+                                                 true);
+    test_snprintf(msg, sizeof(msg),
+                  "native breakout render loop growth=%lu limit=%lu",
                   (unsigned long)growth,
                   (unsigned long)allowed_growth);
     TEST_ASSERT_TRUE_MESSAGE(growth <= allowed_growth, msg);

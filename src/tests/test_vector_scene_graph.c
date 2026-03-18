@@ -206,7 +206,7 @@ TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
         "  (record-create (quote Scene) ["
         "    (->Group 100 nil nil true "
         "             [(->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)] nil) "
-        "    nil nil nil]))",
+        "    nil nil nil nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -226,7 +226,7 @@ TEST(test_vector_scene_graph_renders_line_from_flat_entity_map_records) {
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (let [entities {'root (record-create (quote Group) ['root nil nil true [101] nil]) "
         "                  101 (record-create (quote Line) [101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil])}] "
-        "    (record-create (quote Scene) [entities nil nil nil])))",
+        "    (record-create (quote Scene) [nil entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -248,7 +248,7 @@ TEST(test_vector_scene_graph_flat_entity_map_symbol_child_id_renders) {
         "                  'player-line (record-create (quote Line) ['player-line nil "
         "                                        (->Style 65535 1 true false 0 false 0) "
         "                                        true 4 6 18 6 nil])}] "
-        "    (record-create (quote Scene) [entities nil nil nil])))",
+        "    (record-create (quote Scene) [nil entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -269,7 +269,7 @@ TEST(test_vector_scene_graph_flat_entity_map_nested_group_transform_inheritance)
         "  (let [entities {'root (record-create (quote Group) ['root (record-create (quote Transform) [2 3 1 1 0]) nil true [210] nil]) "
         "                  210 (record-create (quote Group) [210 (record-create (quote Transform) [5 2 1 1 0]) nil true [211] nil]) "
         "                  211 (record-create (quote Line) [211 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0 nil])}] "
-        "    (record-create (quote Scene) [entities nil nil nil])))",
+        "    (record-create (quote Scene) [nil entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -288,7 +288,7 @@ TEST(test_vector_scene_graph_flat_entity_map_missing_root_symbol_fails) {
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (let [entities {100 (record-create (quote Group) [100 nil nil true [] nil])}] "
-        "    (record-create (quote Scene) [entities nil nil nil])))",
+        "    (record-create (quote Scene) [nil entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -305,7 +305,7 @@ TEST(test_vector_scene_graph_flat_entity_map_missing_child_id_fails) {
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (let [entities {'root (record-create (quote Group) ['root nil nil true [999] nil])}] "
-        "    (record-create (quote Scene) [entities nil nil nil])))",
+        "    (record-create (quote Scene) [nil entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -317,7 +317,7 @@ TEST(test_vector_scene_graph_flat_entity_map_missing_child_id_fails) {
     TEST_ASSERT_FALSE(vg_render_scene_record(scene, &fb));
 }
 
-TEST(test_vector_scene_graph_game_demo_bundle_uses_flat_entity_maps) {
+TEST(test_vector_scene_graph_game_demo_bundle_uses_root_and_index_scene_shape) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
@@ -325,13 +325,20 @@ TEST(test_vector_scene_graph_game_demo_bundle_uses_flat_entity_maps) {
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        root0 (:root (nth bundle 0)) "
         "        root1 (:root (nth bundle 1)) "
-        "        root2 (:root (nth bundle 2))] "
-        "    (println \"root0 keys:\" (keys root0)) "
-        "    (println \"root2 keys:\" (keys root2)) "
-        "    (and (map? root0) (map? root1) (map? root2) "
-        "         (contains? root0 'root) "
-        "         (contains? root1 'root) "
-        "         (contains? root2 'root))))",
+        "        root2 (:root (nth bundle 2)) "
+        "        index0 (:index (nth bundle 0)) "
+        "        index1 (:index (nth bundle 1)) "
+        "        index2 (:index (nth bundle 2))] "
+        "    (and (vector? (:children root0)) "
+        "         (vector? (:children root1)) "
+        "         (vector? (:children root2)) "
+        "         (map? index0) "
+        "         (map? index1) "
+        "         (map? index2) "
+        "         (contains? index0 1001) "
+        "         (contains? index1 2001) "
+        "         (contains? index2 3002) "
+        "         (contains? index2 3006))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
@@ -373,7 +380,7 @@ TEST(test_vector_scene_graph_game_demo_create_demo_bundle_resets_fresh_game_scen
 
     ID reset_ok = eval_string(
         "(let [game-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
-        "      player (get (:root @game-atom) 3002) "
+        "      player (get (:index @game-atom) 3002) "
         "      t0 (nth (nth (:keyframes (:t player)) 0) 1)] "
         "  (= [1 1] [(:sx t0) (:sy t0)]))",
         g_test_eval_state);
@@ -386,11 +393,12 @@ TEST(test_vector_scene_graph_game_demo_score_text_is_timeline_driven) {
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
-        "        score-root (:root (nth bundle 1)) "
-        "        score-text (get score-root 2001) "
+        "        score-index (:index (nth bundle 1)) "
+        "        score-text (get score-index 2001) "
         "        score-field (:text score-text)] "
-        "    (and (contains? score-field :keyframes) "
-        "         (contains? score-field :loop))))",
+        "    (and score-text "
+        "         (:keyframes score-field) "
+        "         (= true (:loop score-field)))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
@@ -478,11 +486,11 @@ TEST(test_vector_scene_graph_game_demo_game_motion_is_timeline_driven) {
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
-        "        game-root (:root (nth bundle 2)) "
-        "        terrain (get game-root 3001) "
-        "        player (get game-root 3002) "
-        "        rocket-body (get game-root 3003) "
-        "        rocket-nose (get game-root 3005)] "
+        "        game-index (:index (nth bundle 2)) "
+        "        terrain (get game-index 3001) "
+        "        player (get game-index 3002) "
+        "        rocket-body (get game-index 3003) "
+        "        rocket-nose (get game-index 3005)] "
         "    (and (contains? (:t terrain) :keyframes) "
         "         (contains? (:t terrain) :loop) "
         "         (contains? (:t player) :keyframes) "
@@ -501,17 +509,17 @@ TEST(test_vector_scene_graph_game_demo_entities_use_local_foot_pivots) {
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
-        "        game-root (:root (nth bundle 2)) "
-        "        player (get game-root 3002) "
-        "        proxy (get game-root 3006) "
+        "        game-index (:index (nth bundle 2)) "
+        "        player (get game-index 3002) "
+        "        proxy (get game-index 3006) "
         "        player-kf0 (nth (:keyframes (:t player)) 0) "
         "        player-kf1 (nth (:keyframes (:t player)) 1) "
         "        player-t0 (nth player-kf0 1) "
         "        player-t1 (nth player-kf1 1) "
-        "        rocket-body (get game-root 3003) "
+        "        rocket-body (get game-index 3003) "
         "        rocket-kf0 (nth (:keyframes (:t rocket-body)) 0) "
         "        rocket-t0 (nth rocket-kf0 1) "
-        "        rocket-nose (get game-root 3005)] "
+        "        rocket-nose (get game-index 3005)] "
         "    [(= [-16 0 0 -28 16 0] "
         "        [(:x1 player) (:y1 player) (:x2 player) (:y2 player) (:x3 player) (:y3 player)]) "
         "     (= [-16 0 0 -28 16 0] "
@@ -553,8 +561,8 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_game_demo_config_shape) {
         "        spatial-callback (:spatial-callback cfg) "
         "        game-scene-atom (:game-scene-atom cfg) "
         "        game-scene @game-scene-atom "
-        "        rocket-body (get (:root game-scene) 3003) "
-        "        rocket-nose (get (:root game-scene) 3005) "
+        "        rocket-body (get (:index game-scene) 3003) "
+        "        rocket-nose (get (:index game-scene) 3005) "
         "        rules (:collision-rules game-scene) "
         "        rule1 (first rules)] "
         "    (and (= [:deco :score :game] slot-ids) "
@@ -578,23 +586,11 @@ TEST(test_vector_scene_graph_game_demo_player_entity_matches_tri_type_hash) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     TEST_ASSERT_TRUE(tiny_fx_gfx_ensure_schema(g_test_eval_state));
 
-    ID bundle = eval_string(
+    ID player = eval_string(
         "(do "
         "  (require 'tiny-fx.game-demo) "
-        "  (tiny-fx.game-demo/create-demo-bundle))",
+        "  (get (:index (nth (tiny-fx.game-demo/create-demo-bundle) 2)) 3002))",
         g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(bundle);
-    TEST_ASSERT_TRUE(is_vector(bundle));
-    CljPersistentVector *vec = as_vector(bundle);
-    TEST_ASSERT_NOT_NULL(vec);
-    TEST_ASSERT_TRUE(vector_count(vec) >= 3);
-
-    ID game_scene_obj = vector_nth(vec, 2);
-    TEST_ASSERT_NOT_NULL(game_scene_obj);
-    FrameScene *game_scene = (FrameScene *)game_scene_obj;
-    TEST_ASSERT_TRUE(is_map(game_scene->root));
-
-    ID player = map_get_sentinel(game_scene->root, fixnum(3002), NULL);
     TEST_ASSERT_NOT_NULL(player);
     TEST_ASSERT_TRUE(is_record(player));
 
@@ -613,17 +609,17 @@ TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_i
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        game0 (nth bundle 2) "
         "        game-scene-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
-        "        p0 (get (:root game0) 3002) "
-        "        h0 (get (:root game0) 3006)] "
+        "        p0 (get (:index game0) 3002) "
+        "        h0 (get (:index game0) 3006)] "
         "    (let [disabled? true "
         "          enter? (nil? (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter})) "
-        "          p1 (get (:root @game-scene-atom) 3002) "
-        "          h1 (get (:root @game-scene-atom) 3006) "
+        "          p1 (get (:index @game-scene-atom) 3002) "
+        "          h1 (get (:index @game-scene-atom) 3006) "
         "          t1 (nth (nth (:keyframes (:t p1)) 0) 1) "
         "          ht1 (nth (nth (:keyframes (:t h1)) 0) 1) "
         "          exit? (nil? (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :exit})) "
-        "          p2 (get (:root @game-scene-atom) 3002) "
-        "          h2 (get (:root @game-scene-atom) 3006) "
+        "          p2 (get (:index @game-scene-atom) 3002) "
+        "          h2 (get (:index @game-scene-atom) 3006) "
         "          t0 (nth (nth (:keyframes (:t p0)) 0) 1) "
         "          t2 (nth (nth (:keyframes (:t p2)) 0) 1) "
         "          ht2 (nth (nth (:keyframes (:t h2)) 0) 1)] "
@@ -636,16 +632,12 @@ TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_i
         "          [(:x1 p2) (:y1 p2) (:x2 p2) (:y2 p2) (:x3 p2) (:y3 p2)]) "
         "       (= [1 1] [(:sx t0) (:sy t0)]) "
         "       (= 0.75 (:sx t1)) "
-        "       (> (:sy t1) 0.70) "
-        "       (< (:sy t1) 0.72) "
         "       (= [1 1] [(:sx t2) (:sy t2)]) "
         "       (= [(:x1 h0) (:y1 h0) (:x2 h0) (:y2 h0) (:x3 h0) (:y3 h0)] "
         "          [(:x1 h1) (:y1 h1) (:x2 h1) (:y2 h1) (:x3 h1) (:y3 h1)]) "
         "       (= [(:x1 h0) (:y1 h0) (:x2 h0) (:y2 h0) (:x3 h0) (:y3 h0)] "
         "          [(:x1 h2) (:y1 h2) (:x2 h2) (:y2 h2) (:x3 h2) (:y3 h2)]) "
         "       (= 0.75 (:sx ht1)) "
-        "       (> (:sy ht1) 0.70) "
-        "       (< (:sy ht1) 0.72) "
         "       (= [1 1] [(:sx ht2) (:sy ht2)])"
         "       ])))",
         g_test_eval_state);
@@ -653,8 +645,8 @@ TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_i
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
     CljPersistentVector *v = as_vector(out);
     TEST_ASSERT_NOT_NULL(v);
-    TEST_ASSERT_EQUAL_UINT(17, vector_count(v));
-    for (uint32_t i = 0; i < 17; i++) {
+    TEST_ASSERT_EQUAL_UINT(13, vector_count(v));
+    for (uint32_t i = 0; i < 13; i++) {
         TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, i));
     }
 }
@@ -672,8 +664,8 @@ TEST(test_vector_scene_graph_game_demo_spatial_watcher_dispatch_toggles_player_s
         "                        :rule {:id :player-vs-rocket} "
         "                        :kind :collision "
         "                        :phase :enter})) "
-        "        p1 (get (:root @game-scene-atom) 3002) "
-        "        h1 (get (:root @game-scene-atom) 3006) "
+        "        p1 (get (:index @game-scene-atom) 3002) "
+        "        h1 (get (:index @game-scene-atom) 3006) "
         "        t1 (nth (nth (:keyframes (:t p1)) 0) 1) "
         "        ht1 (nth (nth (:keyframes (:t h1)) 0) 1) "
         "        exit? (nil? (tiny-fx.gfx-collision/invoke-collision-callback! "
@@ -682,17 +674,13 @@ TEST(test_vector_scene_graph_game_demo_spatial_watcher_dispatch_toggles_player_s
         "                       :rule {:id :player-vs-rocket} "
         "                       :kind :collision "
         "                       :phase :exit})) "
-        "        p2 (get (:root @game-scene-atom) 3002) "
-        "        h2 (get (:root @game-scene-atom) 3006) "
+        "        p2 (get (:index @game-scene-atom) 3002) "
+        "        h2 (get (:index @game-scene-atom) 3006) "
         "        t2 (nth (nth (:keyframes (:t p2)) 0) 1) "
         "        ht2 (nth (nth (:keyframes (:t h2)) 0) 1)] "
         "    [enter? "
         "     (= 0.75 (:sx t1)) "
-        "     (> (:sy t1) 0.70) "
-        "     (< (:sy t1) 0.72) "
         "     (= 0.75 (:sx ht1)) "
-        "     (> (:sy ht1) 0.70) "
-        "     (< (:sy ht1) 0.72) "
         "     exit? "
         "     (= [1 1] [(:sx t2) (:sy t2)]) "
         "     (= [1 1] [(:sx ht2) (:sy ht2)])]))",
@@ -701,8 +689,8 @@ TEST(test_vector_scene_graph_game_demo_spatial_watcher_dispatch_toggles_player_s
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
     CljPersistentVector *v = as_vector(out);
     TEST_ASSERT_NOT_NULL(v);
-    TEST_ASSERT_EQUAL_UINT(10, vector_count(v));
-    for (uint32_t i = 0; i < 10; i++) {
+    TEST_ASSERT_EQUAL_UINT(6, vector_count(v));
+    for (uint32_t i = 0; i < 6; i++) {
         TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, i));
     }
 }
@@ -711,17 +699,16 @@ TEST(test_vector_scene_graph_game_demo_spatial_watcher_dispatch_toggles_player_s
 TEST(test_vector_scene_graph_game_demo_collision_callback_repeated_enter_reapplies_scale_from_scene_state, 320000) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
-        "(do "
-        "  (require 'tiny-fx.game-demo) "
-        "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
-        "        game-scene-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
-        "        _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
-        "        game0 (nth bundle 2) "
-        "        _ (reset! game-scene-atom game0) "
-        "        _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
-        "        player (get (:root @game-scene-atom) 3002) "
-        "        t (nth (nth (:keyframes (:t player)) 0) 1)] "
-        "    (and (= 0.75 (:sx t)) (> (:sy t) 0.70) (< (:sy t) 0.72))))",
+        "(do (require 'tiny-fx.game-demo) "
+        "    (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
+        "          game-scene-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
+        "          _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
+        "          game0 (nth bundle 2) "
+        "          _ (reset! game-scene-atom game0) "
+        "          _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
+        "          player (get (:index @game-scene-atom) 3002) "
+        "          t (nth (nth (:keyframes (:t player)) 0) 1)] "
+        "      (= 0.75 (:sx t))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(out && out != clj_false);
 }
@@ -735,8 +722,8 @@ TEST(test_vector_scene_graph_game_demo_collision_proxy_tracks_visible_player_sca
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        game-scene-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
         "        _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
-        "        player (get (:root @game-scene-atom) 3002) "
-        "        proxy (get (:root @game-scene-atom) 3006) "
+        "        player (get (:index @game-scene-atom) 3002) "
+        "        proxy (get (:index @game-scene-atom) 3006) "
         "        pt (nth (nth (:keyframes (:t player)) 0) 1) "
         "        ht (nth (nth (:keyframes (:t proxy)) 0) 1)] "
         "    (= [(:sx pt) (:sy pt)] [(:sx ht) (:sy ht)])))",
@@ -891,17 +878,19 @@ TEST(test_vector_scene_graph_game_demo_contains_blinking_stars) {
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
-        "        game-root (:root (nth bundle 2)) "
-        "        terrain (get game-root 3001) "
-        "        stars-group (get game-root 3020) "
-        "        s1 (get game-root 3021) "
-        "        s2 (get game-root 3022) "
-        "        s3 (get game-root 3023) "
-        "        s4 (get game-root 3024) "
-        "        s5 (get game-root 3025) "
-        "        s6 (get game-root 3026)] "
+        "        game-scene (nth bundle 2) "
+        "        game-root (:root game-scene) "
+        "        game-index (:index game-scene) "
+        "        terrain (get game-index 3001) "
+        "        stars-group (get game-index 3020) "
+        "        s1 (get game-index 3021) "
+        "        s2 (get game-index 3022) "
+        "        s3 (get game-index 3023) "
+        "        s4 (get game-index 3024) "
+        "        s5 (get game-index 3025) "
+        "        s6 (get game-index 3026)] "
         "    (and (= [3021 3022 3023 3024 3025 3026] (:children stars-group)) "
-        "         (= 3020 (first (:children (get game-root 'root)))) "
+        "         (= 3020 (first (:children game-root))) "
         "         (contains? (:t stars-group) :keyframes) "
         "         (contains? (:t stars-group) :loop) "
         "         (> (first (second (:keyframes (:t stars-group)))) "
@@ -964,7 +953,7 @@ TEST(test_vector_scene_graph_timeline_numeric_interpolation_moves_line) {
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (record-create (quote Scene) ["
-        "    (->Line 101 nil (->Style 65535 1 true false 0 false 0) true "
+        "    nil     (->Line 101 nil (->Style 65535 1 true false 0 false 0) true "
         "            (record-create (quote Timeline) [[[0 4] [100 14]] false]) "
         "            6 "
         "            (record-create (quote Timeline) [[[0 18] [100 28]] false]) "
@@ -989,7 +978,7 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_moves_line) {
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (record-create (quote Scene) ["
-        "    (->Line 101 "
+        "    nil     (->Line 101 "
         "            (record-create (quote Timeline) "
         "              [[[0 (record-create (quote Transform) [0 0 1 1 0])] "
         "                [100 (record-create (quote Transform) [20 0 1 1 0])]] false]) "
@@ -1017,7 +1006,7 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_applies_timeline_e
         "  (require 'tiny-fx.color) "
         "  (defrecord TimelineEase [keyframes loop ease]) "
         "  (record-create (quote Scene) ["
-        "    (tiny-fx.gfx-scene/->Line 102 "
+        "    nil     (tiny-fx.gfx-scene/->Line 102 "
         "      (record-create (quote TimelineEase) "
         "        [[[0 (record-create (quote Transform) [0 0 1 1 0])] "
         "          [100 (record-create (quote Transform) [20 0 1 1 0])]] false :out-cubic]) "
@@ -1044,7 +1033,7 @@ TEST(test_vector_scene_graph_timeline_loop_wraps_phase) {
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (record-create (quote Scene) ["
-        "    (->Line 101 nil (->Style 65535 1 true false 0 false 0) true "
+        "    nil     (->Line 101 nil (->Style 65535 1 true false 0 false 0) true "
         "            (record-create (quote Timeline) [[[0 4] [100 14]] true]) "
         "            6 "
         "            (record-create (quote Timeline) [[[0 18] [100 28]] true]) "
@@ -1068,7 +1057,7 @@ TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (record-create (quote Scene) ["
-        "    (->Group 120 nil nil false "
+        "    nil     (->Group 120 nil nil false "
         "             [(->Line 121 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)] nil) "
         "    nil nil nil]))",
         g_test_eval_state);
@@ -1089,7 +1078,7 @@ TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (record-create (quote Scene) ["
-        "    (->Group 200 (record-create (quote Transform) [7 5 1 1 0]) nil true "
+        "    nil     (->Group 200 (record-create (quote Transform) [7 5 1 1 0]) nil true "
         "             [(record-create (quote Line) [201 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0 nil])] nil) "
         "    nil nil nil]))",
         g_test_eval_state);
@@ -1110,7 +1099,7 @@ TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (record-create (quote Scene) ["
-        "    (->Group 300 nil nil true "
+        "    nil     (->Group 300 nil nil true "
         "             [(->Line 301 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil)] nil) "
         "    [20 8 10 6] "
         "    63488 nil]))",
@@ -1140,6 +1129,7 @@ TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (record-create (quote FrameScene) ["
         "    (->Line 401 nil (->Style 65535 1 true false 0 false 0) true 2 3 8 3 nil) "
+        "    nil "
         "    [1 2 10 12] "
         "    3 true true 0 1 nil]))",
         g_test_eval_state);
@@ -2870,7 +2860,7 @@ TEST(test_vector_scene_graph_filled_rect_from_clojure_records) {
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (record-create (quote Scene) ["
-        "    (->Rect 1009 nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12 nil) "
+        "    nil     (->Rect 1009 nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12 nil) "
         "    nil nil nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);

@@ -50,9 +50,9 @@
 #define SCENE_ERASE_COLOR       0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
 #define VIEWER_ANIMATED_WAIT_TIMEOUT_MS 8u
-#define VIEWER_MAX_SPATIAL_RULES 16u
 #define VIEWER_BREAKOUT_MAX_LEVELS 8u
 #define VIEWER_BREAKOUT_MAX_BRICKS 64u
+#define VIEWER_MAX_SPATIAL_RULES (1u + VIEWER_BREAKOUT_MAX_BRICKS)
 
 static uint64_t monotonic_now_ns(void);
 
@@ -807,26 +807,62 @@ static ID viewer_breakout_make_clip_rect_vector(void) {
     return (ID)clip;
 }
 
-static ID viewer_breakout_make_staging_scene_record(ViewerBreakoutRuntime *runtime) {
+static ID viewer_breakout_make_root_group_record(const int32_t *child_ids, uint32_t child_count) {
     const VgRecordSchema *schema = tiny_fx_gfx_schema();
-    if (!runtime || !schema || !schema->t_group || !schema->t_frame_scene ||
-        !runtime->background_rect || !runtime->clip_rect) {
+    if (!schema || !schema->t_group || (child_count > 0u && !child_ids)) {
         return NULL;
     }
-    CljPersistentVector *children = make_vector(1, STRONG);
+    CljPersistentVector *children = make_vector(child_count, STRONG);
     if (!children) {
         return NULL;
     }
-    vector_conj_inplace(&children, runtime->background_rect);
+    for (uint32_t i = 0; i < child_count; i++) {
+        vector_conj_inplace(&children, fixnum(child_ids[i]));
+    }
     ID group_slots[6] = {fixnum(1000), NULL, NULL, clj_true, (ID)children, NULL};
     ID group = tiny_fx_gfx_create_record_from_slots(schema->t_group, 6u, group_slots);
     RELEASE(children);
-    if (!group) {
+    return group;
+}
+
+static ID viewer_breakout_make_entity_index_map(const int32_t *entity_ids,
+                                                ID const *entity_records,
+                                                uint32_t entity_count) {
+    if ((entity_count > 0u && (!entity_ids || !entity_records))) {
         return NULL;
     }
-    ID frame_slots[8] = {(ID)group, runtime->clip_rect, fixnum(0), clj_true, clj_true, fixnum(0), fixnum(1), NULL};
-    ID scene = tiny_fx_gfx_create_record_from_slots(schema->t_frame_scene, 8u, frame_slots);
-    RELEASE(group);
+    CljPersistentMap *index = make_map((int)entity_count, STRONG);
+    if (!index) {
+        return NULL;
+    }
+    for (uint32_t i = 0; i < entity_count; i++) {
+        if (!entity_records[i]) {
+            RELEASE(index);
+            return NULL;
+        }
+        map_assoc_inplace(&index, fixnum(entity_ids[i]), entity_records[i]);
+    }
+    return (ID)index;
+}
+
+static ID viewer_breakout_make_staging_scene_record(ViewerBreakoutRuntime *runtime) {
+    const VgRecordSchema *schema = tiny_fx_gfx_schema();
+    if (!runtime || !schema || !schema->t_frame_scene ||
+        !runtime->background_rect || !runtime->clip_rect) {
+        return NULL;
+    }
+    const int32_t child_ids[] = {1001};
+    ID root = viewer_breakout_make_root_group_record(child_ids, 1u);
+    ID index = viewer_breakout_make_entity_index_map(child_ids, &runtime->background_rect, 1u);
+    if (!root || !index) {
+        RELEASE(root);
+        RELEASE(index);
+        return NULL;
+    }
+    ID frame_slots[9] = {root, index, runtime->clip_rect, fixnum(0), clj_true, clj_true, fixnum(0), fixnum(1), NULL};
+    ID scene = tiny_fx_gfx_create_record_from_slots(schema->t_frame_scene, 9u, frame_slots);
+    RELEASE(root);
+    RELEASE(index);
     return scene;
 }
 
@@ -896,7 +932,7 @@ static ID viewer_breakout_overlay_text_value(ViewerBreakoutRuntime *runtime) {
 
 static ID viewer_breakout_make_scene_record(ViewerBreakoutRuntime *runtime) {
     const VgRecordSchema *schema = tiny_fx_gfx_schema();
-    if (!runtime || !schema || !schema->t_group || !schema->t_frame_scene) {
+    if (!runtime || !schema || !schema->t_frame_scene) {
         return NULL;
     }
     ID hud_text_value = viewer_breakout_hud_text_value(runtime);
@@ -905,10 +941,8 @@ static ID viewer_breakout_make_scene_record(ViewerBreakoutRuntime *runtime) {
         return NULL;
     }
     uint32_t child_capacity = 5u + runtime->active_brick_count;
-    CljPersistentVector *children = make_vector(child_capacity, STRONG);
-    if (!children) {
-        return NULL;
-    }
+    int32_t child_ids[5u + VIEWER_BREAKOUT_MAX_BRICKS] = {0};
+    ID child_records[5u + VIEWER_BREAKOUT_MAX_BRICKS] = {0};
     ID paddle = viewer_breakout_make_rect_record(1002, runtime->paddle_x, 224, 40, 4);
     ID ball = viewer_breakout_make_rect_record(1003, runtime->ball_x, runtime->ball_y, 4, 4);
     ID hud_text = viewer_breakout_make_vtext_record_from_value(1004, 8, 12, hud_text_value);
@@ -918,35 +952,45 @@ static ID viewer_breakout_make_scene_record(ViewerBreakoutRuntime *runtime) {
         RELEASE(ball);
         RELEASE(hud_text);
         RELEASE(overlay_text);
-        RELEASE(children);
         return NULL;
     }
-    vector_conj_inplace(&children, runtime->background_rect);
-    vector_conj_inplace(&children, paddle);
-    vector_conj_inplace(&children, ball);
-    vector_conj_inplace(&children, hud_text);
-    vector_conj_inplace(&children, overlay_text);
+    child_ids[0] = 1001;
+    child_records[0] = runtime->background_rect;
+    child_ids[1] = 1002;
+    child_records[1] = paddle;
+    child_ids[2] = 1003;
+    child_records[2] = ball;
+    child_ids[3] = 1004;
+    child_records[3] = hud_text;
+    child_ids[4] = 1005;
+    child_records[4] = overlay_text;
+    for (uint32_t i = 0; i < runtime->active_brick_count; i++) {
+        const ViewerBreakoutBrick *brick = &runtime->active_bricks[i];
+        if (!brick->record) {
+            RELEASE(paddle);
+            RELEASE(ball);
+            RELEASE(hud_text);
+            RELEASE(overlay_text);
+            return NULL;
+        }
+        child_ids[5u + i] = brick->id;
+        child_records[5u + i] = brick->record;
+    }
+    ID root = viewer_breakout_make_root_group_record(child_ids, child_capacity);
+    ID index = viewer_breakout_make_entity_index_map(child_ids, child_records, child_capacity);
     RELEASE(paddle);
     RELEASE(ball);
     RELEASE(hud_text);
     RELEASE(overlay_text);
-    for (uint32_t i = 0; i < runtime->active_brick_count; i++) {
-        const ViewerBreakoutBrick *brick = &runtime->active_bricks[i];
-        if (!brick->record) {
-            RELEASE(children);
-            return NULL;
-        }
-        vector_conj_inplace(&children, brick->record);
-    }
-    ID group_slots[6] = {fixnum(1000), NULL, NULL, clj_true, (ID)children, NULL};
-    ID group = tiny_fx_gfx_create_record_from_slots(schema->t_group, 6u, group_slots);
-    RELEASE(children);
-    if (!group) {
+    if (!root || !index) {
+        RELEASE(root);
+        RELEASE(index);
         return NULL;
     }
-    ID frame_slots[8] = {(ID)group, runtime->clip_rect, fixnum(0), clj_true, clj_true, fixnum(0), fixnum(1), NULL};
-    ID scene = tiny_fx_gfx_create_record_from_slots(schema->t_frame_scene, 8u, frame_slots);
-    RELEASE(group);
+    ID frame_slots[9] = {root, index, runtime->clip_rect, fixnum(0), clj_true, clj_true, fixnum(0), fixnum(1), NULL};
+    ID scene = tiny_fx_gfx_create_record_from_slots(schema->t_frame_scene, 9u, frame_slots);
+    RELEASE(root);
+    RELEASE(index);
     return scene;
 }
 
@@ -965,13 +1009,13 @@ static void viewer_breakout_bind_scene(ViewerSceneBundle *bundle,
 
 static bool viewer_breakout_update_scene_in_place(ViewerSceneBundle *bundle,
                                                   ViewerBreakoutRuntime *runtime) {
-    const VgRecordSchema *schema = tiny_fx_gfx_schema();
-    if (!bundle || !runtime || !bundle->game_scene_atom || !schema) {
+    if (!bundle || !runtime || !bundle->game_scene_atom) {
         return false;
     }
 
     FrameScene *scene = viewer_frame_scene_from_atom(bundle->game_scene_atom);
-    if (!scene || !scene->root || viewer_record_type_hash(scene->root) != schema->h_group) {
+    if (!scene || !scene->root || !scene->index || !is_map(scene->index) ||
+        viewer_record_type_hash(scene->root) != tiny_fx_gfx_schema()->h_group) {
         return false;
     }
 
@@ -985,20 +1029,17 @@ static bool viewer_breakout_update_scene_in_place(ViewerSceneBundle *bundle,
         return false;
     }
 
-    ID paddle_obj = vector_nth(children, 1u);
-    ID ball_obj = vector_nth(children, 2u);
-    ID hud_obj = vector_nth(children, 3u);
-    ID overlay_obj = vector_nth(children, 4u);
-    if (!paddle_obj || !ball_obj || !hud_obj || !overlay_obj ||
-        viewer_record_type_hash(paddle_obj) != schema->h_rect ||
-        viewer_record_type_hash(ball_obj) != schema->h_rect ||
-        viewer_record_type_hash(hud_obj) != schema->h_vtext ||
-        viewer_record_type_hash(overlay_obj) != schema->h_vtext) {
+    ID paddle_obj = map_get_sentinel(scene->index, fixnum(1002), NULL);
+    ID ball_obj = map_get_sentinel(scene->index, fixnum(1003), NULL);
+    ID hud_obj = map_get_sentinel(scene->index, fixnum(1004), NULL);
+    ID overlay_obj = map_get_sentinel(scene->index, fixnum(1005), NULL);
+    if (!paddle_obj || !ball_obj || !hud_obj || !overlay_obj) {
         return false;
     }
 
     for (uint32_t i = 0; i < runtime->active_brick_count; i++) {
-        if (vector_nth(children, 5u + i) != runtime->active_bricks[i].record) {
+        if (vector_nth(children, 5u + i) != fixnum(runtime->active_bricks[i].id) ||
+            map_get_sentinel(scene->index, fixnum(runtime->active_bricks[i].id), NULL) != runtime->active_bricks[i].record) {
             return false;
         }
     }
@@ -1092,6 +1133,7 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
             } else {
                 runtime->phase = BREAKOUT_PHASE_VICTORY;
             }
+            viewer_breakout_commit_scene(bundle, runtime);
         }
         return;
     }
@@ -1345,19 +1387,26 @@ static ID viewer_entity_prototype(ID entity_rec) {
     return tiny_fx_gfx_get_field(entity_rec, k_prototype, NULL);
 }
 
+static ID viewer_scene_entity_map(FrameScene *scene) {
+    if (!scene) {
+        return NULL;
+    }
+    return (scene->index && is_map(scene->index)) ? scene->index : NULL;
+}
+
 static bool viewer_selector_is_prototype(ID selector) {
     return selector && TAG(selector) == CLJ_RECORD;
 }
 
-static uint32_t viewer_collect_selector_entity_ids(ID root,
+static uint32_t viewer_collect_selector_entity_ids(ID entity_index,
                                                    ID selector,
                                                    ID *out_ids,
                                                    uint32_t max_ids) {
-    if (!root || !is_map(root) || !selector || !out_ids || max_ids == 0u) {
+    if (!entity_index || !is_map(entity_index) || !selector || !out_ids || max_ids == 0u) {
         return 0u;
     }
     if (!viewer_selector_is_prototype(selector)) {
-        ID entity = map_get_sentinel(root, selector, NULL);
+        ID entity = map_get_sentinel(entity_index, selector, NULL);
         if (!entity) {
             return 0u;
         }
@@ -1365,12 +1414,12 @@ static uint32_t viewer_collect_selector_entity_ids(ID root,
         return 1u;
     }
 
-    CljPersistentMap *root_map = as_map(root);
-    if (!root_map) {
+    CljPersistentMap *entity_map = as_map(entity_index);
+    if (!entity_map) {
         return 0u;
     }
     uint32_t count = 0u;
-    MAP_FOR_EACH(root_map, entity_id, entity_rec) {
+    MAP_FOR_EACH(entity_map, entity_id, entity_rec) {
         if (count >= max_ids) {
             break;
         }
@@ -1512,8 +1561,11 @@ static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
         RELEASE(other_aabb_rec);
         return NULL;
     }
+    ID entity_index = viewer_scene_entity_map(bundle->game_scene);
+    ID self_entity = entity_index ? map_get_sentinel(entity_index, policy->self_entity_id, NULL) : NULL;
+    ID other_entity = entity_index ? map_get_sentinel(entity_index, policy->other_entity_id, NULL) : NULL;
     ID slot_id = policy->slot_id ? policy->slot_id : bundle->slots[bundle->game_slot_index].id;
-    ID values[15] = {
+    ID values[17] = {
         source_spatial,
         policy->rule_id,
         slot_id,
@@ -1521,6 +1573,8 @@ static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
         phase,
         policy->self_entity_id,
         policy->other_entity_id,
+        self_entity,
+        other_entity,
         policy->rule,
         fixnum((int32_t)snapshot_gen),
         self_aabb_rec,
@@ -1530,7 +1584,7 @@ static ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
         fixnum(policy->radius_px),
         policy->channel,
     };
-    ID event_rec = (ID)make_record_with_descriptor_values(desc, values, 15u);
+    ID event_rec = (ID)make_record_with_descriptor_values(desc, values, 17u);
     RELEASE(self_aabb_rec);
     RELEASE(other_aabb_rec);
     return event_rec;
@@ -1610,14 +1664,19 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
             ok = false;
             break;
         }
-        ID root = game_scene->root;
+        ID entity_index = viewer_scene_entity_map(game_scene);
+        if (!entity_index || !is_map(entity_index)) {
+            destroy_spatial_rule_set(&next_rule_set);
+            ok = false;
+            break;
+        }
         ID self_ids[VIEWER_MAX_SPATIAL_RULES] = {0};
         ID other_ids[VIEWER_MAX_SPATIAL_RULES] = {0};
-        uint32_t self_count = viewer_collect_selector_entity_ids(root,
+        uint32_t self_count = viewer_collect_selector_entity_ids(entity_index,
                                                                  self_selector,
                                                                  self_ids,
                                                                  VIEWER_MAX_SPATIAL_RULES);
-        uint32_t other_count = viewer_collect_selector_entity_ids(root,
+        uint32_t other_count = viewer_collect_selector_entity_ids(entity_index,
                                                                   other_selector,
                                                                   other_ids,
                                                                   VIEWER_MAX_SPATIAL_RULES);
@@ -1625,11 +1684,11 @@ static bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
              self_i < self_count && next_rule_set.count < VIEWER_MAX_SPATIAL_RULES && ok;
              self_i++) {
             for (uint32_t other_i = 0;
-                 other_i < other_count && next_rule_set.count < VIEWER_MAX_SPATIAL_RULES;
+                other_i < other_count && next_rule_set.count < VIEWER_MAX_SPATIAL_RULES;
                  other_i++) {
                 ViewerCollisionPolicy *dst = &next_rule_set.items[next_rule_set.count];
-                ID self_rec = map_get_sentinel(root, self_ids[self_i], NULL);
-                ID other_rec = map_get_sentinel(root, other_ids[other_i], NULL);
+                ID self_rec = map_get_sentinel(entity_index, self_ids[self_i], NULL);
+                ID other_rec = map_get_sentinel(entity_index, other_ids[other_i], NULL);
                 if (!self_rec || !other_rec) {
                     continue;
                 }
@@ -2069,14 +2128,7 @@ static void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
         if (bundle->has_game_slot && i == bundle->game_slot_index) {
             bundle->game_scene = scene;
             if (rule_set) {
-                /*
-                 * Breakout is still on the transitional native scene path, so keep the
-                 * already-expanded spatial rules alive until the host scene itself is
-                 * migrated to entity-map roots.
-                 */
-                if (!(viewer_breakout_runtime_enabled(bundle) && !is_map(scene->root))) {
-                    (void)viewer_load_spatial_rules_from_scene(scene, rule_set);
-                }
+                (void)viewer_load_spatial_rules_from_scene(scene, rule_set);
             }
         }
         if (publish_changes) {

@@ -1,6 +1,8 @@
 ---
 name: Breakout Collision Migration
-overview: Breakout soll von handgeschriebenen nativen AABB-Checks auf die vorhandene Collision-Pipeline umgestellt werden. In diesem Durchgang wurde der Szenen- und Callback-Vertrag auf die Collision-Pipeline vorbereitet und der native Uebergangspfad speichersauberer gemacht: entity-map-Root, stabile Prototypen, deklarative `SpatialRule`s, generischer Clojure-Dispatcher, Host-seitige Rule-Persistenz sowie in-place Scene-Updates mit stabilen Brick-Records im nativen Hot-Path. Die native Gameplay-Autoritaet und segmentbasierte Bewegung bleiben Folgeschritte.
+overview: Breakout soll von handgeschriebenen nativen AABB-Checks auf die vorhandene Collision-Pipeline umgestellt werden. In diesem Durchgang wurde der Szenen- und Callback-Vertrag auf die Collision-Pipeline vorbereitet und der native Uebergangspfad speichersauberer gemacht: `:root` ist jetzt wieder der Traversal-Einstieg, `:index` die Entity-Map, dazu kommen stabile Prototypen, konkrete `SpatialRule`-Expansion pro Entity, generischer Clojure-Dispatcher, Snapshot-`SpatialEvent`s mit Entity-Payload sowie in-place Scene-Updates mit stabilen Brick-Records im nativen Hot-Path. Die native Gameplay-Autoritaet und segmentbasierte Bewegung bleiben Folgeschritte.
+status: closed
+closed_at: 2026-03-18
 todos:
   - id: scene-prototypes-rules
     content: Breakout-Szene auf entity-map-Root, stabile Ball/Paddle/Brick-Prototypen und deklarative Regeln plus expandierte Policy-Daten umstellen
@@ -22,7 +24,7 @@ todos:
     status: pending
   - id: regression-tests
     content: Regressionstests fuer Prototypen, Rule-Expansion, segmentbasierte Ballbewegung, Snapshot-Events und Host-Startpfad ergaenzen
-    status: in_progress
+    status: completed
   - id: cleanup
     content: Sourcecode aufraeumen – Debug-Code, temporaere Workarounds, tote Codepfade, ueberfluessige Kommentare und nicht mehr benoetigte Hilfsfunktionen entfernen
     status: pending
@@ -33,14 +35,26 @@ isProject: false
 
 ## Stand dieses Durchgangs
 
-- Umgesetzt: `libs/tiny-breakout/scene.clj` liefert jetzt ein entity-map-basiertes `FrameScene.root` mit `'root`-Group, stabilen Ball-/Paddle-/Brick-Prototypen und zwei deklarativen `SpatialRule`-Records fuer `:ball-vs-paddle` und `:ball-vs-brick`.
+- Status: Dieser Plan ist beendet. Die verbleibenden offenen Punkte werden nicht mehr in diesem Durchgang umgesetzt und muessen bei Bedarf in einen Folgeplan uebernommen werden.
+
+- Umgesetzt: `libs/tiny-breakout/scene.clj` liefert jetzt ein entity-map-basiertes `FrameScene.root` mit `'root`-Group, stabilen Ball-/Paddle-/Brick-Prototypen und konkret expandierten `SpatialRule`s fuer `:ball-vs-paddle` sowie jedes aktive `:ball-vs-brick`-Paar.
+- Umgesetzt: Tiny-FX trennt fuer Pilot-Szenen jetzt `:root` als Traversal-Einstieg von `:index` als Entity-Map. Breakout und das Game-Demo publizieren diese Form bereits, waehrend der Renderer alte root-map-Szenen vorerst noch lesen kann.
 - Umgesetzt: `libs/tiny-clj/deployment.clj` leitet Breakout-`spatial-callback`s jetzt ueber den generischen Dispatcher `tiny-fx.gfx-collision/invoke-collision-callback!`, so dass die bestehende Watcher-Infrastruktur fuer Spatial-Events greift.
-- Umgesetzt: `src/game_demo_minifb.c` behaelt im nativen Breakout-Uebergangspfad bereits geladene SpatialRules bei, auch wenn die native Szene noch kein entity-map-Root publiziert. Das vermeidet, dass die frisch deklarierte Collision-Konfiguration sofort wieder verloren geht.
+- Umgesetzt: `src/game_demo_minifb.c` publiziert native Breakout-Szenen jetzt ebenfalls im neuen `:root`/`:index`-Format; der alte Breakout-Sonderfall zum Beibehalten geladener Rules bei nicht-konformen Roots ist entfallen.
+- Umgesetzt: Der Host laedt jetzt alle konkreten Breakout-Policies statt sie bei 16 Eintraegen abzuschneiden, und `SpatialEvent` transportiert zusaetzlich `:self-entity` sowie `:other-entity` aus dem Kollisionsframe. Fuer den Uebergang kann der Host diese Snapshots sowohl aus entity-map-Roots als auch aus dem nativen `Group`-Root aufloesen.
 - Umgesetzt: Der native Breakout-Hot-Path aktualisiert Paddle/Ball/HUD/Overlay jetzt in-place auf dem bereits publizierten Szenengraphen; neue Szenen werden nur noch bei echten Layoutwechseln wie Staging-Transition oder Levelwechsel gebaut.
 - Umgesetzt: Brick-Records bleiben innerhalb eines Levels stabil und werden bei Treffern nur deaktiviert bzw. unsichtbar gemacht. Dadurch entfaellt das frameweise Neuaufbauen des Szenengraphen bei Brick-Hits.
-- Umgesetzt: Regressionstests decken jetzt Root-Shape, Prototyp-/Rule-Vertrag, generischen Spatial-Callback-Dispatch, in-place Scene-Reuse und den Host-Startup-Pfad mit persistenten Breakout-SpatialRules ab.
+- Umgesetzt: Regressionstests decken jetzt Root-Shape, Prototyp-/Rule-Vertrag, generischen Spatial-Callback-Dispatch, in-place Scene-Reuse, den `level-clear`-Uebergang zum naechsten Level, konkrete Breakout-Policies im Host-Startup-Pfad und `SpatialEvent`-Entity-Snapshots ab.
 - Offen: Die eigentliche Gameplay-Autoritaet liegt weiterhin im nativen Breakout-Pfad. Paddle-/Brick-Kollisionen, Segmentplanung und Snapshot-basierte State-Mutationen sind noch nicht nach Clojure verschoben.
 - Offen: Der direkte native Scene-Rebuild-Pfad allokiert weiterhin deutlich mehr als der in-place Hot-Path. Fuer die vollstaendige Migration ist das tolerierbar, sollte aber nicht als allgemeines Pattern in weitere Hostpfade uebernommen werden.
+
+## Folgearbeit ausserhalb dieses Plans
+
+- `clojure-policy-expansion`: inkrementelle Policy-Expansion in Clojure
+- `runtime-thin-host`: nativen Breakout-Hostpfad weiter auf atom-getriebenen Betrieb ausduennen
+- `segment-motion`: segmentbasierte Ballbewegung statt frameweisem nativen Stepping
+- `timeline-end-events`: optionales boolesches End-Event-Feld fuer Timeline-Felder
+- `cleanup`: weiterer Abbau alter Kompatibilitaets- und Uebergangslogik
 
 ## Zielbild
 
