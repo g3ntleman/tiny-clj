@@ -7,6 +7,7 @@
 static CljSymbol *SYM_TEST_RECORD_TYPE_KEYS = NULL;
 static CljSymbol *SYM_TEST_RECORD_TYPE_VALUES = NULL;
 static CljSymbol *SYM_TEST_RECORD_TYPE_VALUES_ARRAY = NULL;
+static CljSymbol *SYM_TEST_RECORD_TYPE_LAST_OWNER = NULL;
 static CljSymbol *SYM_TEST_RECORD_TYPE_MAP = NULL;
 static CljSymbol *SYM_TEST_RECORD_TYPE_CONFLICT = NULL;
 
@@ -547,6 +548,37 @@ TEST(test_make_record_with_descriptor_values_retains_and_nil_pads, 0) {
     RELEASE(fields);
     RELEASE(key_a);
     RELEASE(key_b);
+    RELEASE(value_a);
+}
+
+TEST(test_record_release_handles_last_owned_descriptor, 0) {
+    ID type_name = (ID)test_record_type_symbol(&SYM_TEST_RECORD_TYPE_LAST_OWNER, "ManualTypeLastOwner");
+    ID key_a = make_string("field-a");
+    ID value_a = make_string("value-a");
+
+    CljPersistentVector *fields = make_vector(1, STRONG);
+    TEST_ASSERT_NOT_NULL(fields);
+    vector_conj_inplace(&fields, key_a);
+
+    int fields_rc_before_desc = retain_count((ID)fields);
+    CljRecordDescriptor *desc = record_descriptor_create(type_name, fields);
+    TEST_ASSERT_NOT_NULL(desc);
+    TEST_ASSERT_EQUAL_INT(fields_rc_before_desc + 1, retain_count((ID)fields));
+
+    int value_rc_before_record = retain_count(value_a);
+    ID values[1] = { value_a };
+    CljPersistentRecord *record = make_record_with_descriptor_values(desc, values, 1u);
+    TEST_ASSERT_NOT_NULL(record);
+    TEST_ASSERT_EQUAL_INT(value_rc_before_record + 1, retain_count(value_a));
+
+    RELEASE(desc);
+    RELEASE(record);
+
+    TEST_ASSERT_EQUAL_INT(fields_rc_before_desc, retain_count((ID)fields));
+    TEST_ASSERT_EQUAL_INT(value_rc_before_record, retain_count(value_a));
+
+    RELEASE(fields);
+    RELEASE(key_a);
     RELEASE(value_a);
 }
 

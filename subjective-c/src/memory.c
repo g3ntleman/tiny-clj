@@ -802,11 +802,11 @@ static void release_object_default(CljObject *v) {
     CljPersistentRecord *record = (CljPersistentRecord *)v;
     if (!record)
       break;
-    RELEASE(record->descriptor);
     unsigned int field_count = record_declared_field_count(record);
     for (unsigned int i = 0; i < field_count; i++) {
       RELEASE(record->values[i]);
     }
+    RELEASE(record->descriptor);
     break;
   }
 
