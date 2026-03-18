@@ -341,6 +341,16 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
     g_memory_stats.deallocations_by_type[obj->type]++;
 }
 
+/**
+ * @brief Track one logical object destruction when zombie mode keeps the backing allocation alive.
+ *
+ * Zombie mode preserves the object's bytes for post-mortem debugging, but for profiler
+ * and heap-budget purposes we still count the object as deallocated here. This keeps
+ * `current_memory_usage` aligned with logical ownership instead of the intentionally
+ * inflated debug-only zombie retention.
+ *
+ * @param obj Object that reached rc=0 and was converted into a zombie.
+ */
 void memory_profiler_track_object_zombify(CljObject *obj) {
     if (!obj) return;
     if (is_immediate((CljValue)obj) || is_singleton(obj)) return;

@@ -454,7 +454,12 @@ void release(CljObject *v) {
       (void)throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0, "%s", msg);
     }
     release_object_deep(v);                  /* Release nested refs so rc counts match Clojure semantics */
-    MEMORY_PROFILER_TRACK_OBJECT_ZOMBIFY(v); /* Realistic stats; no free – keep object as zombie */
+    /*
+     * Zombie mode intentionally keeps the top-level allocation around for debugging.
+     * We still report this as a logical deallocation so heap-limit checks and memory
+     * stats reflect ownership semantics instead of debug-only zombie retention.
+     */
+    MEMORY_PROFILER_TRACK_OBJECT_ZOMBIFY(v);
 #else
     release_object_deep(v);
     if (g_debug_output_active)
