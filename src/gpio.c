@@ -245,6 +245,8 @@ void gpio_runtime_reset_state(void) {
 #ifdef ESP32_BUILD
     gpio_esp32_runtime_reset_state();
 #endif
+    symbol_cache_clear(g_gpio_runtime_symbol_cache,
+                       sizeof(g_gpio_runtime_symbol_cache) / sizeof(g_gpio_runtime_symbol_cache[0]));
     KW_SIGNAL = NULL;
     g_gpio_input_timer_key = NULL;
     g_next_watcher_id = 1;

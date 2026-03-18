@@ -345,10 +345,12 @@ static inline bool node_culled_rect(VgTransformFixed t, int16_t x, int16_t y,
                                     int16_t w, int16_t h, int sw,
                                     int fb_w, int fb_h, bool use_clip, VgClipRect clip) {
     int c[8];
+    int16_t x_max = (w > 0) ? (int16_t)(x + w - 1) : x;
+    int16_t y_max = (h > 0) ? (int16_t)(y + h - 1) : y;
     transform_point(t, x,     y,     &c[0], &c[1]);
-    transform_point(t, (int16_t)(x+w), y,     &c[2], &c[3]);
-    transform_point(t, (int16_t)(x+w), (int16_t)(y+h), &c[4], &c[5]);
-    transform_point(t, x,     (int16_t)(y+h), &c[6], &c[7]);
+    transform_point(t, x_max, y,     &c[2], &c[3]);
+    transform_point(t, x_max, y_max, &c[4], &c[5]);
+    transform_point(t, x,     y_max, &c[6], &c[7]);
     int mn_x = c[0], mx_x = c[0], mn_y = c[1], mx_y = c[1];
     for (int i = 2; i < 8; i += 2) {
         if (c[i]   < mn_x) mn_x = c[i];
@@ -1393,11 +1395,17 @@ static bool render_record_node(ID node_obj,
                                                                         out_has_animation),
                                              0);
         {
+            int16_t x_max = (temp.data.rect.w > 0)
+                                ? (int16_t)(temp.data.rect.x + temp.data.rect.w - 1)
+                                : temp.data.rect.x;
+            int16_t y_max = (temp.data.rect.h > 0)
+                                ? (int16_t)(temp.data.rect.y + temp.data.rect.h - 1)
+                                : temp.data.rect.y;
             VgPoint points[4] = {
                 {.x = temp.data.rect.x, .y = temp.data.rect.y},
-                {.x = (int16_t)(temp.data.rect.x + temp.data.rect.w), .y = temp.data.rect.y},
-                {.x = (int16_t)(temp.data.rect.x + temp.data.rect.w), .y = (int16_t)(temp.data.rect.y + temp.data.rect.h)},
-                {.x = temp.data.rect.x, .y = (int16_t)(temp.data.rect.y + temp.data.rect.h)},
+                {.x = x_max, .y = temp.data.rect.y},
+                {.x = x_max, .y = y_max},
+                {.x = temp.data.rect.x, .y = y_max},
             };
             if (!leaf_visible_after_aabb_capture(entity_id, world_t, points, 4u, style.visible)) {
                 return true;

@@ -19,6 +19,7 @@ set(TINYCLJ_EMBEDDED_CLOJURE_CORE_ENTRIES
     "libs/tiny-clj/button.clj|tiny-clj.button.clj.inc"
     "libs/tiny-clj/event.clj|tiny-clj.event.clj.inc"
     "libs/tiny-clj/sensor.clj|tiny-clj.sensor.clj.inc"
+    "libs/tiny-clj/deployment.clj|tiny-clj.deployment.clj.inc"
     "libs/tiny-clj/net.clj|tiny-clj.net.clj.inc"
     "libs/tiny-clj/net/mdns.clj|tiny-clj.net.mdns.clj.inc"
     "libs/tiny-db/rrd.clj|tiny-db.rrd.clj.inc"
@@ -29,10 +30,16 @@ set(TINYCLJ_EMBEDDED_CLOJURE_CORE_ENTRIES
 set(TINYCLJ_EMBEDDED_CLOJURE_TINY_FX_ENTRIES
     "libs/tiny-fx/sound.clj|tiny-fx.sound.clj.inc"
     "libs/tiny-fx/sound-native.clj|tiny-fx.sound-native.clj.inc"
+    "libs/tiny-fx/assets.clj|tiny-fx.assets.clj.inc"
     "libs/tiny-fx/gfx-scene.clj|tiny-gfx.scene.clj.inc"
     "libs/tiny-fx/gfx.clj|tiny-gfx.runtime.clj.inc"
     "libs/tiny-fx/startup.clj|tiny-fx.startup.clj.inc"
     "libs/tiny-fx/game-demo.clj|tiny-fx.game-demo.clj.inc"
+    "libs/tiny-breakout/core.clj|tiny-breakout.core.clj.inc"
+    "libs/tiny-breakout/scene.clj|tiny-breakout.scene.clj.inc"
+    "libs/tiny-breakout/input.clj|tiny-breakout.input.clj.inc"
+    "libs/tiny-breakout/audio.clj|tiny-breakout.audio.clj.inc"
+    "libs/tiny-breakout/levels.clj|tiny-breakout.levels.clj.inc"
 )
 
 set(TINYCLJ_EMBEDDED_CLOJURE_DEBUG_ENTRIES

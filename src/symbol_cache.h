@@ -47,4 +47,16 @@ static inline bool symbol_cache_init_global(const SymbolCacheEntry *entries, siz
     return symbol_cache_init(entries, count, NULL);
 }
 
+static inline void symbol_cache_clear(const SymbolCacheEntry *entries, size_t count) {
+    if (!entries) {
+        return;
+    }
+    for (size_t i = 0; i < count; i++) {
+        if (!entries[i].slot) {
+            continue;
+        }
+        *entries[i].slot = NULL;
+    }
+}
+
 #endif

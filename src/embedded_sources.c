@@ -63,6 +63,10 @@ static const char tiny_fx_sound_native_code[] =
 #include "tiny-fx.sound-native.clj.inc"
     ;
 
+static const char tiny_fx_assets_code[] =
+#include "tiny-fx.assets.clj.inc"
+    ;
+
 static const char tiny_fx_sound_demos_code[] =
 #include "tiny-fx.sound-demos.clj.inc"
     ;
@@ -96,6 +100,10 @@ static const char tiny_clj_event_code[] =
 
 static const char tiny_clj_sensor_code[] =
 #include "tiny-clj.sensor.clj.inc"
+    ;
+
+static const char tiny_clj_deployment_code[] =
+#include "tiny-clj.deployment.clj.inc"
     ;
 
 static const char tiny_clj_net_code[] =
@@ -134,6 +142,26 @@ static const char tiny_fx_startup_code[] =
 static const char tiny_fx_game_demo_code[] =
 #include "tiny-fx.game-demo.clj.inc"
     ;
+
+static const char tiny_breakout_core_code[] =
+#include "tiny-breakout.core.clj.inc"
+    ;
+
+static const char tiny_breakout_scene_code[] =
+#include "tiny-breakout.scene.clj.inc"
+    ;
+
+static const char tiny_breakout_input_code[] =
+#include "tiny-breakout.input.clj.inc"
+    ;
+
+static const char tiny_breakout_audio_code[] =
+#include "tiny-breakout.audio.clj.inc"
+    ;
+
+static const char tiny_breakout_levels_code[] =
+#include "tiny-breakout.levels.clj.inc"
+    ;
 #endif
 
 static const char tiny_db_rrd_code[] =
@@ -168,9 +196,11 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/button.clj", tiny_clj_button_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/event.clj", tiny_clj_event_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/sensor.clj", tiny_clj_sensor_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/deployment.clj", tiny_clj_deployment_code),
 #if TINYCLJ_WITH_TINY_FX
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound.clj", tiny_fx_sound_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-native.clj", tiny_fx_sound_native_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/assets.clj", tiny_fx_assets_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos.clj", tiny_fx_sound_demos_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/sound-demos-william.clj", tiny_fx_sound_demos_william_code),
 #ifdef DEBUG
@@ -191,6 +221,11 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx.clj", tiny_fx_gfx_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/startup.clj", tiny_fx_startup_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/game-demo.clj", tiny_fx_game_demo_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/core.clj", tiny_breakout_core_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/scene.clj", tiny_breakout_scene_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/input.clj", tiny_breakout_input_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/audio.clj", tiny_breakout_audio_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/levels.clj", tiny_breakout_levels_code),
 #endif
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/kv.clj", tiny_db_kv_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/rrd.clj", tiny_db_rrd_code),

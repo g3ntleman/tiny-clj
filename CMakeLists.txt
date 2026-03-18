@@ -566,6 +566,8 @@ add_executable(unit-tests
     src/tests/test_gpio_write.c
     src/tests/test_gpio_input.c
     src/tests/test_gpio_architecture_contract.c
+    src/tests/test_breakout_contract.c
+    src/tests/test_breakout_namespace_contract.c
     src/tests/test_event_loop_latency.c
     src/tests/test_clojure_core_loading.c
     src/tests/test_memory_leak_fibonacci.c

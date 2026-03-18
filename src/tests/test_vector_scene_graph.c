@@ -2621,6 +2621,36 @@ TEST(test_vector_scene_graph_filled_rect_produces_interior_pixels) {
     TEST_ASSERT_TRUE(fill_count > stroke_count);
 }
 
+TEST(test_vector_scene_graph_rect_width_and_height_are_pixel_extents) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_color = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_color = 0x07e0u;
+
+    VgNode rect = {
+        .id = 1011,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 10, .y = 10, .w = 20, .h = 12}
+    };
+
+    vg_render_scene(&rect, &fb);
+
+    TEST_ASSERT_NOT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 10]);
+    TEST_ASSERT_NOT_EQUAL_HEX16(0x0000u, pixels[(size_t)21 * TEST_W + 29]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 30]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)22 * TEST_W + 10]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)22 * TEST_W + 30]);
+}
+
 TEST(test_vector_scene_graph_filled_tri_produces_interior_pixels) {
     uint16_t pixels[TEST_W * TEST_H];
     VgFrameBuffer fb;

@@ -30,6 +30,16 @@ CljAtom *make_atom(ID value);
 /** Get the current value of an atom (MEMORY_POLICY: usable/pool-safe return). */
 ID atom_deref(CljAtom *atom);
 
+/** Borrow the current atom value without retain/autorelease churn.
+ * Intended for hot C paths when the atom outlives the usage.
+ */
+ID atom_peek(CljAtom *atom);
+
+/** Set the value of an atom without creating a pool-safe return value.
+ * Intended for hot C paths that only need store semantics.
+ */
+void atom_set(CljAtom *atom, ID new_value);
+
 /** Set the value of an atom directly (MEMORY_POLICY: usable/pool-safe return). */
 ID atom_reset(CljAtom *atom, ID new_value);
 

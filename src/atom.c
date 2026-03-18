@@ -28,13 +28,24 @@ ID atom_deref(CljAtom *atom) {
   return AUTORELEASE(RETAIN(atom->value));
 }
 
+ID atom_peek(CljAtom *atom) {
+  if (!atom)
+    return NULL;
+  return atom->value;
+}
+
+void atom_set(CljAtom *atom, ID new_value) {
+  if (!atom)
+    return;
+  ASSIGN(atom->value, new_value);
+}
+
 /** Internal helper: set atom value and return owned result. */
 static ID atom_reset_owned(CljAtom *atom, ID new_value) {
   if (!atom)
     return NULL;
 
-  // Use ASSIGN to safely replace atom value (releases old, retains new)
-  ASSIGN(atom->value, new_value);
+  atom_set(atom, new_value);
 
   // Return new value (RETAIN handles nil and immediates safely)
   return RETAIN(new_value);
