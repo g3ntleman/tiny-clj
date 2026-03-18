@@ -1,6 +1,6 @@
 ---
 name: Breakout Collision Migration
-overview: Breakout soll von handgeschriebenen nativen AABB-Checks auf die vorhandene Collision-Pipeline umgestellt werden. Der autoritative Spielzustand bleibt vollstaendig in Clojure; Clojure expandiert deklarative Regeln inkrementell in konkrete Policies, waehrend die native Seite nur noch Detection und Event-Zustellung uebernimmt.
+overview: Breakout soll von handgeschriebenen nativen AABB-Checks auf die vorhandene Collision-Pipeline umgestellt werden. Der autoritative Spielzustand bleibt vollstaendig in Clojure; Clojure expandiert deklarative Regeln inkrementell in konkrete Policies und plant diskrete Bewegungssegmente, waehrend die native Seite nur noch segmentbasierte Animation, Detection und Event-Zustellung uebernimmt.
 todos:
   - id: scene-prototypes-rules
     content: Breakout-Szene auf entity-map-Root, stabile Ball/Paddle/Brick-Prototypen und deklarative Regeln plus expandierte Policy-Daten umstellen
@@ -9,13 +9,16 @@ todos:
     content: Inkrementelle Policy-Expansion in Clojure mit `CljTransientVector` einfuehren, nur bei Rule-Aenderungen oder neuen Objekten erweitern und Objektentfall lazy behandeln
     status: pending
   - id: callback-dispatch
-    content: Breakout-`spatial-callback` in Clojure verdrahten und Watcher fuer Paddle-/Brick-Kollisionen implementieren
+    content: Breakout-`spatial-callback` in Clojure verdrahten und Watcher fuer Paddle-/Brick-Kollisionen auf Basis von Kollisions-Snapshots implementieren
     status: pending
   - id: runtime-thin-host
-    content: Native Breakout-Runtime zu einem duennen Host-Pfad ohne autoritativen Gameplay-State umbauen, expandierte Policies konsumieren und manuelle Paddle-/Brick-Kollisionen entfernen
+    content: Native Breakout-Runtime zu einem duennen Host-Pfad ohne autoritativen Gameplay-State umbauen, expandierte Policies konsumieren und segmentbasierte Ballanimation statt manueller Paddle-/Brick-Kollisionen ausfuehren
+    status: pending
+  - id: segment-motion
+    content: Ballbewegung als von der Grafik-Engine ausgefuehrte Segmente bis zur naechsten Wand modellieren und Replanung nur bei Segmentende oder Kollisions-Event vorsehen
     status: pending
   - id: regression-tests
-    content: Regressionstests fuer Prototypen, Rule-Expansion, callback-getriebene Brick-Hits und Host-Startpfad ergaenzen
+    content: Regressionstests fuer Prototypen, Rule-Expansion, segmentbasierte Ballbewegung, Snapshot-Events und Host-Startpfad ergaenzen
     status: pending
   - id: cleanup
     content: Sourcecode aufraeumen – Debug-Code, temporaere Workarounds, tote Codepfade, ueberfluessige Kommentare und nicht mehr benoetigte Hilfsfunktionen entfernen
@@ -35,17 +38,19 @@ Breakout nutzt die vorhandene Collision-Pipeline end-to-end, waehrend Clojure di
 - Die Expansion erfolgt inkrementell nur bei Rule-Aenderungen oder wenn neue relevante Objekte hinzukommen.
 - Wegfallende Objekte muessen nicht sofort aus der expandierten Menge entfernt werden; fehlende Entities werden im Viewer zur Laufzeit inert, und bei Bedarf kann die konkrete expandierte Rule zusaetzlich direkt deaktiviert werden.
 - Wenn der Viewer viele tote oder deaktivierte konkrete Policies sieht, kann C zusaetzlich ein diskretes Maintenance-Event an Clojure werfen, damit die expandierte Policy-Menge gezielt gefiltert oder neu kompiliert wird.
-- `viewer_apply_collision_step()` arbeitet nur noch auf expandierten Policies und erzeugt daraus `SpatialEvent`s.
-- Der Clojure-`spatial-callback` reagiert auf `:ball-vs-paddle` und `:ball-vs-brick` und aktualisiert State/Scene.
+- Die Grafik-Engine animiert den Ball jeweils entlang eines von Clojure geplanten Bewegungssegments bis spaetestens zur naechsten Wand.
+- `viewer_apply_collision_step()` arbeitet nur noch auf expandierten Policies und erzeugt daraus `SpatialEvent`s mit den beteiligten Objekten im Kollisionszustand.
+- Der Clojure-`spatial-callback` reagiert auf `:ball-vs-paddle` und `:ball-vs-brick`, kann Objekte auf den Kollisions-Snapshot zuruecksetzen und plant von dort aus das naechste Segment.
 - `game_state_atom` und `game_scene_atom` bleiben autoritativ und werden nicht in einen langlebigen nativen Gameplay-State ueberfuehrt.
-- Die native Seite uebernimmt nur Tick, Snapshot/Render, Collision-Detection auf konkreten Policies und die Zustellung diskreter Events an Clojure.
+- Die native Seite uebernimmt nur Tick, Snapshot/Render, segmentbasierte Ballanimation, Collision-Detection auf konkreten Policies und die Zustellung diskreter Events an Clojure.
 
 ## Relevante Stellen
 
 - [libs/tiny-breakout/scene.clj](libs/tiny-breakout/scene.clj): baut aktuell `->Group`-Root und setzt `:collision-rules nil`; das muss auf collision-faehige Entities mit Prototypen umgestellt werden.
 - [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj): `breakout-host-spatial-callback!` ist aktuell ein No-op; hier muss die echte Breakout-Collision-Dispatch-Schicht entstehen.
-- [src/game_demo_minifb.c](src/game_demo_minifb.c): nutzt noch direkte `viewer_breakout_rect_overlap(...)`-Checks, haelt eine eigene Breakout-Runtime als Gameplay-Quelle und expandiert Rules selbst; das passt nicht zum neuen Modell.
+- [src/game_demo_minifb.c](src/game_demo_minifb.c): nutzt noch direkte `viewer_breakout_rect_overlap(...)`-Checks, haelt eine eigene Breakout-Runtime als Gameplay-Quelle, expandiert Rules selbst und stept den Ball frameweise; das passt nicht zum neuen Modell.
 - [src/viewer_collision.c](src/viewer_collision.c): bestaetigt, dass Prototyp-Selektoren per struktureller Gleichheit funktionieren; darauf kann der Brick-Prototyp aufbauen.
+- [src/tiny_fx_gfx.c](src/tiny_fx_gfx.c): registriert `SpatialEvent`; hier muss das Event-Schema fuer echte Kollisions-Snapshots der beteiligten Objekte erweitert werden.
 
 ## Kritische Architekturpunkte
 
@@ -55,19 +60,25 @@ Breakout nutzt die vorhandene Collision-Pipeline end-to-end, waehrend Clojure di
   Wegen Ownership, Memory-Macros und globalem Autorelease-Pool ist es einfacher, deklarative Regeln in Clojure mit `CljTransientVector` in konkrete Policies zu expandieren und dem Viewer direkt die expandierte Menge zu geben.
 3. Die Expansion soll inkrementell und bewusst simpel bleiben.
   Es sind weniger als 20 deklarative Regeln zu erwarten. Deshalb ist im ersten Wurf kein zusaetzlicher Index noetig; bei neuen Objekten reicht ein linearer Scan ueber alle Regeln und das Anhängen der betroffenen konkreten Policies.
-4. Der native Breakout-Sonderpfad muss seine Gameplay-Autoritaet verlieren.
-  Der aktuelle Pfad kopiert den State einmal aus `game_state_atom`, leert das Atom danach und fuehrt Ball/Paddle/Brick-Logik in C weiter. Fuer Clojure als Source of Truth darf dieser Besitzwechsel nicht mehr stattfinden; der Host darf nur noch diskrete Inputs und Spatial-Events an Clojure liefern und die daraus publizierte Szene anzeigen.
+4. Die Ballbewegung soll segmentbasiert statt frameweise modelliert werden.
+  Clojure plant jeweils das naechste Bewegungssegment des Balls bis zur naechsten Wand. Die Grafik-Engine animiert dieses Segment autonom, bis es endet oder durch einen Paddle-/Brick-Event unterbrochen wird. So bleibt Clojure diskret, waehrend die Bewegung flach und performant bleibt.
+5. Der native Breakout-Sonderpfad muss seine Gameplay-Autoritaet verlieren.
+  Der aktuelle Pfad kopiert den State einmal aus `game_state_atom`, leert das Atom danach und fuehrt Ball/Paddle/Brick-Logik in C weiter. Fuer Clojure als Source of Truth darf dieser Besitzwechsel nicht mehr stattfinden; der Host darf nur noch diskrete Inputs, Segmentende und Spatial-Events an Clojure liefern und die daraus publizierte Szene anzeigen.
 
 ```mermaid
 flowchart LR
   hostTick[HostTickAndInput] --> cljStep[BreakoutStepInClojure]
-  cljStep --> expandPolicies[ExpandPoliciesInClojure]
+  cljStep --> planSegment[PlanNextBallSegment]
+  planSegment --> expandPolicies[ExpandPoliciesInClojure]
   expandPolicies --> publishAtoms[Update game_state_atom and game_scene_atom]
   publishAtoms --> viewerRender[ViewerRendersScene]
   publishAtoms --> publishPolicies[Update expandedPolicyAtom]
+  publishAtoms --> runSegment[GraphicsEngineAnimatesSegment]
   publishPolicies --> collisionStep[viewer_apply_collision_step]
   viewerRender --> collisionStep
-  collisionStep --> spatialEvent[SpatialEvent]
+  runSegment --> segmentEnd[SegmentEndEvent]
+  segmentEnd --> cljStep
+  collisionStep --> spatialEvent[SpatialEventWithSnapshots]
   spatialEvent --> cljCallback[BreakoutSpatialCallback]
   cljCallback --> publishAtoms
   collisionStep --> maintenanceEvent[CleanupEventFromC]
@@ -80,24 +91,30 @@ flowchart LR
   In [libs/tiny-breakout/scene.clj](libs/tiny-breakout/scene.clj) stabile Prototypen fuer `ball`, `paddle` und `brick` einfuehren, das Root auf eine Entity-Map umstellen und deklarative `SpatialRule`-Records fuer `:ball-vs-paddle` und `:ball-vs-brick` definieren.
 2. Inkrementelle Policy-Expansion in Clojure einfuehren.
   In den betroffenen Breakout-/tiny-fx-Namespaces eine expandierte Runtime-Form aufbauen, die deklarative Regeln mit `CljTransientVector` in konkrete Policies ueberfuehrt. Dabei nur bei Rule-Aenderungen oder neuen Objekten anhaengen; bei Objektentfall bleiben alte Policies vorerst bestehen, werden entweder inert oder bei Bedarf per Record-Mutation direkt deaktiviert und erst spaeter optional kompaktierte.
-3. Breakout-Hostpfad auf atom-getriebenen Betrieb umbauen.
-  In [src/game_demo_minifb.c](src/game_demo_minifb.c) den nativen Breakout-Sonderpfad so reduzieren, dass er nicht mehr selbst Ball/Paddle/Brick-State besitzt oder Rules expandiert. Stattdessen soll der Host diskrete Button-Ereignisse und Spatial-Events an Clojure zustellen, die jeweils aktuelle Szene aus `game_scene_atom` rendern und konkrete Policies aus einer expandierten Datenstruktur konsumieren.
-4. Breakout-Collision-Callback in Clojure verdrahten.
-  In [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj) den Breakout-`spatial-callback` von No-op auf den generischen Dispatcher umstellen und Breakout-spezifische Watcher/Handler registrieren, die aus `SpatialEvent`s deterministisch `ball bounce`, `brick removal`, `score`, `phase` und ggf. `level clear` ableiten.
-5. Maintenance-Event fuer Policy-Cleanup vorsehen.
+3. Kollisions-Events zu Snapshot-Events ausbauen.
+  In [src/tiny_fx_gfx.c](src/tiny_fx_gfx.c), [src/game_demo_minifb.c](src/game_demo_minifb.c) und den zugehoerigen Tests `SpatialEvent` so erweitern, dass neben IDs und AABBs auch `:self-entity` und `:other-entity` im Zustand des Kollisionsframes transportiert werden.
+4. Segmentbasierte Ballbewegung definieren.
+  In den Breakout-Namespaces ein Modell einfuehren, bei dem Clojure jeweils das naechste Ballsegment bis zur naechsten Wand plant. Die Grafik-Engine fuehrt dieses Segment aus; bei Segmentende oder Kollisions-Event wird in Clojure neu geplant.
+5. Breakout-Hostpfad auf atom-getriebenen Betrieb umbauen.
+  In [src/game_demo_minifb.c](src/game_demo_minifb.c) den nativen Breakout-Sonderpfad so reduzieren, dass er nicht mehr selbst Ball/Paddle/Brick-State besitzt, Rules expandiert oder den Ball frameweise stept. Stattdessen soll der Host diskrete Button-Ereignisse, Segmentenden und Spatial-Events an Clojure zustellen, die aktuelle Szene aus `game_scene_atom` rendern und konkrete Policies aus einer expandierten Datenstruktur konsumieren.
+6. Breakout-Collision-Callback in Clojure verdrahten.
+  In [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj) den Breakout-`spatial-callback` von No-op auf den generischen Dispatcher umstellen und Breakout-spezifische Watcher/Handler registrieren, die aus Snapshot-`SpatialEvent`s deterministisch `ball bounce`, `brick removal`, `score`, `phase` und ggf. `level clear` ableiten.
+7. Maintenance-Event fuer Policy-Cleanup vorsehen.
   In [src/game_demo_minifb.c](src/game_demo_minifb.c) und [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj) einen schmalen Pfad vorsehen, ueber den C bei Bedarf ein diskretes Event an Clojure wirft, wenn expandierte Policies gefiltert, deaktivierte Eintraege bereinigt oder konkret neu aufgebaut werden sollen.
-6. Clojure-Step fuer Host-Ticks sauber definieren.
-  In [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj) und den betroffenen Breakout-Namespaces einen klaren Tick-/Input-/Collision-/Maintenance-Updatepfad bauen, so dass `step-state`, Policy-Pflege und Szenenaufbau in Clojure bleiben und der Host nur noch diskrete Ereignisse liefert. Dabei muessen Paddle-/Brick-Kollisionen aus dem nativen Sonderpfad entfernt werden.
-7. Regressionstests vor/nach der Umstellung absichern.
-  Tests fuer Root-Shape, Prototypen, deklarative Rules, inkrementelle Expansion bei neuen Objekten, lazy Objektentfall bzw. Rule-Deaktivierung per Record-Mutation, Cleanup per Event aus C, callback-getriebene Brick-Entfernung, Clojure als autoritative State-Quelle und das Fehlen der alten manuellen Kollision in [src/tests/test_breakout_contract.c](src/tests/test_breakout_contract.c), [src/tests/test_breakout_runtime_startup.c](src/tests/test_breakout_runtime_startup.c) und ggf. [src/tests/test_gfx_collision_contract.c](src/tests/test_gfx_collision_contract.c) ergaenzen.
-8. Verifikation.
-  Relevante Unit-Tests plus Breakout-Start auf dem Host ausfuehren und gezielt pruefen, dass Ball/Paddle/Brick jetzt ueber `SpatialEvent`s und Clojure-State reagieren, neue Bricks nur inkrementell Policies anhaengen, entfernte Bricks keine Kollisionen mehr feuern und keine native Zweitquelle mehr vorhanden ist.
+8. Clojure-Step fuer Host-Ticks sauber definieren.
+  In [libs/tiny-clj/deployment.clj](libs/tiny-clj/deployment.clj) und den betroffenen Breakout-Namespaces einen klaren Input-/Collision-/Segmentende-/Maintenance-Updatepfad bauen, so dass `step-state`, Policy-Pflege, Segmentplanung und Szenenaufbau in Clojure bleiben und der Host nur noch diskrete Ereignisse liefert. Dabei muessen Paddle-/Brick-Kollisionen und frameweises Ball-Stepping aus dem nativen Sonderpfad entfernt werden.
+9. Regressionstests vor/nach der Umstellung absichern.
+  Tests fuer Root-Shape, Prototypen, deklarative Rules, inkrementelle Expansion bei neuen Objekten, lazy Objektentfall bzw. Rule-Deaktivierung per Record-Mutation, Snapshot-`SpatialEvent`s mit Objekten, segmentbasierte Ballbewegung bis zur naechsten Wand, Cleanup per Event aus C, callback-getriebene Brick-Entfernung, Clojure als autoritative State-Quelle und das Fehlen der alten manuellen Kollision in [src/tests/test_breakout_contract.c](src/tests/test_breakout_contract.c), [src/tests/test_breakout_runtime_startup.c](src/tests/test_breakout_runtime_startup.c) und ggf. [src/tests/test_gfx_collision_contract.c](src/tests/test_gfx_collision_contract.c) ergaenzen.
+10. Verifikation.
+  Relevante Unit-Tests plus Breakout-Start auf dem Host ausfuehren und gezielt pruefen, dass Ball/Paddle/Brick jetzt ueber Snapshot-`SpatialEvent`s und Clojure-State reagieren, der Ball zwischen diskreten Replanungen von der Grafik-Engine bis zur naechsten Wand animiert wird, neue Bricks nur inkrementell Policies anhaengen, entfernte Bricks keine Kollisionen mehr feuern und keine native Zweitquelle mehr vorhanden ist.
 
 ## Besondere Risiken
 
 - Snapshot-basierte Collision-Events koennen ein Frame spaeter kommen als die bisherige direkte Physics-Pruefung; das muss in den Bounce-Regeln und Tests explizit abgesichert werden.
+- Wenn Snapshot-Events nicht die beteiligten Objekte selbst enthalten, kann Clojure nur gegen einen spaeteren Live-State reagieren; deshalb muessen echte Objekt-Snapshots Teil des Events sein.
 - Wenn der Host noch irgendwo einen eigenen Brick-/Ball-Cache behaelt, drohen Ghost-Collisions oder doppelte Hits; die Umstellung muss solche nativen Zweitquellen vollstaendig entfernen oder strikt auf Render-Caches begrenzen.
 - Die append-only Expansion braucht eine Duplikat-Sicherung, damit neu erscheinende Objekte konkrete Policies nicht mehrfach anhaengen.
 - Lazy Removal darf nicht zu dauerhaft wachsenden Policy-Mengen fuehren; falls konkrete Policies bei Objektentfall per Record-Mutation deaktiviert werden, muss diese Mutation eindeutig und testbar sein. Eine spaetere opportunistische Kompaktierung sollte als Folgeschritt moeglich bleiben, aber nicht Teil des ersten Wurfs sein.
 - Ein Maintenance-Event aus C darf nicht im Hot-Path spammen; es braucht eine klare Trigger-Bedingung oder Entprellung, damit Cleanup/Filtern nur bei echtem Bedarf angestossen wird.
 - Die Umstellung auf entity-map-Root darf Render-Reihenfolge und Sichtbarkeit der bestehenden Breakout-Szene nicht veraendern.
+- Segmentende, Wandkontakt und Paddle-/Brick-Kollision duerfen sich nicht widersprechen; die Prioritaet zwischen Segment-Ende und vorzeitigem Collision-Event muss klar definiert und getestet werden.
