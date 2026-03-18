@@ -3,27 +3,29 @@ import subprocess
 import sys
 import os
 
-def test_repl_fails_without_image():
-    print("Testing that tiny-clj-repl fails without --image (no RAM fallback)...")
-    # Execute tiny-clj-repl without any arguments
-    # Expect it to exit with non-zero status because RAM backend is disabled
+def test_unified_tinyclj_cli_eval():
+    print("Testing that tiny-clj evaluates expressions through the unified launcher...")
     try:
-        result = subprocess.run(["./build/tiny-clj-repl", "-e", "(+ 1 1)"], 
+        result = subprocess.run(["./build/tiny-clj", "-e", "(+ 1 1)"], 
                                 capture_output=True, text=True, timeout=5)
-        
-        # If it returns 0, it means it succeeded with RAM backend. That's a failure of the new contract.
-        if result.returncode == 0:
-            print(f"FAIL: REPL started successfully without --image. RAM fallback is still active.")
-            print(f"Output: {result.stdout}")
+
+        if result.returncode != 0:
+            print("FAIL: tiny-clj CLI eval returned non-zero status.")
+            print(f"stderr: {result.stderr}")
             return False
-            
-        print("PASS: REPL failed without image configuration.")
+
+        if "2" not in result.stdout:
+            print("FAIL: tiny-clj CLI eval did not print the expected result.")
+            print(f"stdout: {result.stdout}")
+            return False
+
+        print("PASS: tiny-clj CLI eval succeeded.")
         return True
     except FileNotFoundError:
-        print("SKIP: tiny-clj-repl not built yet.")
+        print("SKIP: tiny-clj not built yet.")
         return True
     except subprocess.TimeoutExpired:
-        print("FAIL: REPL hung without image configuration.")
+        print("FAIL: tiny-clj CLI eval hung.")
         return False
 
 def test_tinyclj_cp_cli():
@@ -67,7 +69,7 @@ def test_tinyclj_cp_cli():
 def main():
     print("=== Running Image/Deployment Contract Tests (Phase 3c) ===")
     success = True
-    if not test_repl_fails_without_image():
+    if not test_unified_tinyclj_cli_eval():
         success = False
     if not test_tinyclj_cp_cli():
         success = False

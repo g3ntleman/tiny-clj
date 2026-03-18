@@ -58,11 +58,12 @@ isProject: false
 - Replace the current asymmetric mix of `run-repl`, `run-game-demo`, and ESP32 flash and monitor tasks with four clearly named run tasks.
 - Target labels:
   `build&run: tiny-clj (macos)`,
-  `build&run: tiny-fx (macos)`,
+  `build&run: tiny-fx.app`,
   `build&run: tiny-clj (esp32)`,
   `build&run: tiny-fx (esp32)`.
 - All four tasks must use incremental builds and reuse existing build directories instead of forcing clean rebuilds or full reconfiguration.
 - The macOS tasks should build the matching CMake target incrementally and then launch the resulting product.
+  For `tiny-fx.app`, the canonical launch command is `open -n ./build/tiny-fx.app`, not a direct `Contents/MacOS/...` executable invocation.
 - The ESP32 tasks should build the matching firmware mode incrementally, flash it, and enter the monitor.
 - The task implementation must reflect the separate platform build directories so macOS and ESP32 tasks remain independently incremental.
 - Task names should match the final product names so Cursor tasks, build targets, and CLI documentation stay consistent.
@@ -84,6 +85,7 @@ isProject: false
 
 - Reuse the existing tiny-fx source and link logic in [`CMakeLists.txt`](/Users/theisen/Projects/tiny-clj/CMakeLists.txt), but make the product entry points match the `tiny-clj` family.
 - On macOS, build `tiny-fx` as an app bundle instead of only as a loose CLI binary. The existing `MACOSX_BUNDLE` approach for `breakout-app` in [`CMakeLists.txt`](/Users/theisen/Projects/tiny-clj/CMakeLists.txt) is the natural starting point.
+- The normal host launch for the bundle is via `open -n`, so developer docs and tasks should treat `tiny-fx.app` as a macOS app bundle first and only use `Contents/MacOS/...` for low-level debugging.
 - The current viewer-specific path in [`src/game_demo_minifb.c`](/Users/theisen/Projects/tiny-clj/src/game_demo_minifb.c) should stop being treated as a separate product; relevant startup and runloop mechanics should move into reusable components or a later `tiny-fx` menu and launcher layer.
 - Official application entry points such as Breakout should be launched via explicit namespaces, for example through existing deployment entry points in [`libs/tiny-clj/deployment.clj`](/Users/theisen/Projects/tiny-clj/libs/tiny-clj/deployment.clj).
 

@@ -4,7 +4,7 @@
     {
       "label": "build-repl",
       "type": "shell",
-      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj-repl",
+      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj",
       "group": {
         "kind": "build",
         "isDefault": false
@@ -55,7 +55,7 @@
     {
       "label": "build-image",
       "type": "shell",
-      "command": "./build_idf.sh",
+      "command": "./build_idf.sh --product tiny-clj",
       "group": {
         "kind": "build",
         "isDefault": false
@@ -70,7 +70,7 @@
     {
       "label": "flash image",
       "type": "shell",
-      "command": "./build_idf.sh --flash",
+      "command": "./build_idf.sh --product tiny-clj --flash",
       "group": {
         "kind": "build",
         "isDefault": false
@@ -85,7 +85,7 @@
     {
       "label": "ESP32: flash and monitor",
       "type": "shell",
-      "command": "pkill -f 'idf.py monitor' 2>/dev/null || true; pkill -f 'build_idf.sh.*monitor' 2>/dev/null || true; ./build_idf.sh --monitor",
+      "command": "pkill -f 'idf.py monitor' 2>/dev/null || true; pkill -f 'build_idf.sh.*monitor' 2>/dev/null || true; ./build_idf.sh --product tiny-clj --monitor",
       "group": "none",
       "detail": "Incremental IDF build (tiny + all components), no clean; then flash and monitor. Kills existing monitor so re-run needs no Restart prompt.",
       "problemMatcher": [],
@@ -105,7 +105,7 @@
     {
       "label": "ESP32: flash and monitor (no build)",
       "type": "shell",
-      "command": "source ./scripts/esp_env.sh && cd esp32-idf && idf.py flash && idf.py monitor",
+      "command": "source ./scripts/esp_env.sh && cd esp32-idf && idf.py -DTINYCLJ_PRODUCT=tiny-clj flash && idf.py -DTINYCLJ_PRODUCT=tiny-clj monitor",
       "group": "none",
       "problemMatcher": [],
       "presentation": {
@@ -121,9 +121,9 @@
       }
     },
     {
-      "label": "run-repl",
+      "label": "build&run: tiny-clj (macos)",
       "type": "shell",
-      "command": "pkill -f '/build/tiny-clj-repl' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj-repl && ./build/tiny-clj-repl",
+      "command": "pkill -f '/build/tiny-clj' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-clj && ./build/tiny-clj",
       "group": "none",
       "problemMatcher": [],
       "presentation": {
@@ -140,11 +140,51 @@
       }
     },
     {
-      "label": "run-game-demo",
+      "label": "build&run: tiny-fx.app",
       "type": "shell",
-      "command": "pkill -f 'game-demo' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DTINYCLJ_GAME_DEMO=ON -B build && cmake --build build --target game-demo && ./build/game-demo",
+      "command": "pkill -f 'tiny-fx.app/Contents/MacOS/tiny-fx' || true; cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build && cmake --build build --target tiny-fx && open -n ./build/tiny-fx.app",
       "group": "none",
-      "detail": "Configure the main build (with TINYCLJ_GAME_DEMO=ON), build the game demo viewer, then run.",
+      "detail": "Build the generic tiny-fx app bundle incrementally, then launch a fresh macOS app-bundle instance.",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "isBackground": false,
+      "runOptions": {
+        "instanceLimit": 2
+      }
+    },
+    {
+      "label": "build&run: tiny-clj (esp32)",
+      "type": "shell",
+      "command": "pkill -f 'idf.py monitor' 2>/dev/null || true; pkill -f 'build_idf.sh.*monitor' 2>/dev/null || true; ./build_idf.sh --product tiny-clj --monitor",
+      "group": "none",
+      "detail": "Incremental ESP32 build for the tiny-clj product, then flash and monitor.",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "isBackground": false,
+      "runOptions": {
+        "instanceLimit": 2
+      }
+    },
+    {
+      "label": "build&run: tiny-fx (esp32)",
+      "type": "shell",
+      "command": "pkill -f 'idf.py monitor' 2>/dev/null || true; pkill -f 'build_idf.sh.*monitor' 2>/dev/null || true; ./build_idf.sh --product tiny-fx --monitor",
+      "group": "none",
+      "detail": "Incremental ESP32 build for the tiny-fx product, then flash and monitor.",
       "problemMatcher": [],
       "presentation": {
         "echo": true,

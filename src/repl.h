@@ -81,6 +81,21 @@ typedef struct ReplStartupBannerConfig {
 } ReplStartupBannerConfig;
 
 /**
+ * @brief Inputs for deciding whether a macOS bundle launch should switch to the host app path.
+ */
+typedef struct ReplBundleLaunchDecisionInputs {
+    bool tiny_fx_enabled;
+    bool bundle_launch;
+    bool stdin_is_tty;
+    bool has_ns_arg;
+    bool has_eval_args;
+    bool has_file_arg;
+    bool has_main_ns;
+    bool start_repl;
+    bool no_core;
+} ReplBundleLaunchDecisionInputs;
+
+/**
  * @brief Print build information lines using a caller-provided line emitter.
  * @param emit_line Callback that prints one line (without trailing newline handling constraints).
  */
@@ -93,5 +108,12 @@ void repl_print_build_info_with_emitter(void (*emit_line)(const char *line));
  */
 void repl_print_startup_banner_with_emitter(const ReplStartupBannerConfig *config,
                                             void (*emit_line)(const char *line));
+
+/**
+ * @brief Decide whether `tiny-fx.app` should switch to the host app path instead of the CLI EOF path.
+ * @param inputs Launch context summary.
+ * @return true when the bundle launch should enter the host app path.
+ */
+bool repl_should_launch_tiny_fx_host_app(const ReplBundleLaunchDecisionInputs *inputs);
 
 #endif // REPL_H

@@ -3,6 +3,7 @@
 #include "tiny_clj.h"
 #include "startup_pipeline.h"
 #include "repl.h"
+#include "app_bundle_path.h"
 #include "parser.h"
 #include "eval.h"   // For eval_parsed_value
 #include "symbol.h" // Must be included before namespace.h for CljSymbol definition
@@ -30,12 +31,16 @@
 #if defined(ESP_PLATFORM)
 #include "esp_app_desc.h"
 #endif
+#if defined(TINYCLJ_TINY_FX_HOST_APP_AVAILABLE) && TINYCLJ_TINY_FX_HOST_APP_AVAILABLE
+#include "tiny_fx_host_app.h"
+#endif
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -939,6 +944,22 @@ static void repl_stdout_put_line(const char *line) {
   printf("%s\n", line);
 }
 
+bool repl_should_launch_tiny_fx_host_app(const ReplBundleLaunchDecisionInputs *inputs) {
+  if (!inputs) {
+    return false;
+  }
+
+  return inputs->tiny_fx_enabled &&
+         inputs->bundle_launch &&
+         !inputs->stdin_is_tty &&
+         !inputs->has_ns_arg &&
+         !inputs->has_eval_args &&
+         !inputs->has_file_arg &&
+         !inputs->has_main_ns &&
+         !inputs->start_repl &&
+         !inputs->no_core;
+}
+
 #if !defined(UNITY_TESTS)
 /** @brief Print command-line usage information.
  *  @param prog Program name for usage display
@@ -950,9 +971,9 @@ static void usage(const char *prog) {
   printf("  -n, --ns NS          Set namespace\n");
   printf("  -e, --eval EXPR      Evaluate expression (can be used multiple times)\n");
   printf("  -f, --file FILE      Evaluate file\n");
-  printf("  -m, --main NS        Invoke NS/-main with remaining args as program arguments\n");
+  printf("  -m, --main NS        Invoke NS/-main with remaining args, then continue into the REPL\n");
   printf("  --no-core            Don't load clojure.core\n");
-  printf("  --repl               Start REPL after evaluating files/expressions\n");
+  printf("  --repl               Start REPL after evaluating files/expressions (default after -m)\n");
   printf("  --zombie             Enable zombie mode for memory debugging\n");
   printf("  --memory-debug       Enable verbose memory debugging\n");
   printf("  -h, --help           Show this help message\n");
@@ -1079,9 +1100,9 @@ static bool parse_repl_cli_options(int argc,
     return false;
   }
 
-  if (opts->main_ns && (opts->eval_count > 0 || opts->file_arg || opts->start_repl)) {
+  if (opts->main_ns && (opts->eval_count > 0 || opts->file_arg)) {
     if (error_message) {
-      *error_message = "-m/--main cannot be combined with -e, -f, or --repl";
+      *error_message = "-m/--main cannot be combined with -e or -f";
     }
     return false;
   }
@@ -1485,6 +1506,31 @@ int main(int argc, char **argv) {
     cleanup_and_exit(cli.eval_args, 0);
   }
 
+  bool stdin_is_tty = isatty(STDIN_FILENO) != 0;
+  ReplBundleLaunchDecisionInputs bundle_launch = {
+      .tiny_fx_enabled =
+#if defined(TINYCLJ_TINY_FX_HOST_APP_AVAILABLE) && TINYCLJ_TINY_FX_HOST_APP_AVAILABLE
+          true,
+#else
+          false,
+#endif
+      .bundle_launch = tinyclj_process_is_app_bundle(),
+      .stdin_is_tty = stdin_is_tty,
+      .has_ns_arg = cli.ns_arg != NULL,
+      .has_eval_args = cli.eval_count > 0,
+      .has_file_arg = cli.file_arg != NULL,
+      .has_main_ns = cli.main_ns != NULL,
+      .start_repl = cli.start_repl,
+      .no_core = cli.no_core,
+  };
+  if (repl_should_launch_tiny_fx_host_app(&bundle_launch)) {
+#if defined(TINYCLJ_TINY_FX_HOST_APP_AVAILABLE) && TINYCLJ_TINY_FX_HOST_APP_AVAILABLE
+    cleanup_and_exit(cli.eval_args, tinyclj_tiny_fx_host_app_run());
+#else
+    cleanup_and_exit(cli.eval_args, 1);
+#endif
+  }
+
   // Install SIGTRAP handler for startup diagnostics.
   signal(SIGTRAP, repl_sigtrap_handler);
 
@@ -1518,14 +1564,6 @@ int main(int argc, char **argv) {
     evalstate_set_ns(st, cli.ns_arg);
   } else {
     evalstate_set_ns(st, "user");
-  }
-
-  if (cli.main_ns) {
-    bool main_ok = false;
-    WITH_AUTORELEASE_POOL({
-      main_ok = tinyclj_startup_invoke_main(st, cli.main_ns, cli.main_argc, cli.main_argv, true);
-    });
-    cleanup_and_exit(cli.eval_args, main_ok ? 0 : 1);
   }
 
   if (cli.file_arg) {
@@ -1587,7 +1625,26 @@ int main(int argc, char **argv) {
     cleanup_and_exit(cli.eval_args, 0);
   }
 
-  bool stdin_is_tty = isatty(STDIN_FILENO) != 0;
+  if (cli.main_ns) {
+    bool main_ok = false;
+    WITH_AUTORELEASE_POOL({
+      main_ok = tinyclj_startup_invoke_main(st, cli.main_ns, cli.main_argc, cli.main_argv, true);
+    });
+    if (!main_ok) {
+      cleanup_and_exit(cli.eval_args, 1);
+    }
+  }
+
+  if (!cli.no_core && (cli.main_ns || cli.start_repl || isatty(STDIN_FILENO) != 0)) {
+    bool repl_bootstrap_ok = false;
+    WITH_AUTORELEASE_POOL({
+      repl_bootstrap_ok = tinyclj_startup_prepare_repl(st);
+    });
+    if (!repl_bootstrap_ok) {
+      cleanup_and_exit(cli.eval_args, 1);
+    }
+  }
+
   if (!stdin_is_tty) {
     size_t capacity = 4096;
     size_t len = 0;
@@ -1613,23 +1670,6 @@ int main(int argc, char **argv) {
     bool success = eval_multiform_string(buffer, st);
     CLJ_FREE(buffer);
     cleanup_and_exit(cli.eval_args, success ? 0 : 1);
-  }
-
-  if (!cli.no_core) {
-    TinycljLanguageBootstrapOptions repl_language_opts = {
-        .ensure_builtins = true,
-        .load_core = false,
-        .load_repl = true,
-        .refer_repl = true,
-        .core_quiet = true,
-    };
-    bool repl_bootstrap_ok = false;
-    WITH_AUTORELEASE_POOL({
-      repl_bootstrap_ok = tinyclj_startup_bootstrap_language(st, &repl_language_opts);
-    });
-    if (!repl_bootstrap_ok) {
-      cleanup_and_exit(cli.eval_args, 1);
-    }
   }
 
   // Interactive REPL

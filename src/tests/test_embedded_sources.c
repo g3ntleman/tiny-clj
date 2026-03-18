@@ -7,6 +7,10 @@
 #include "../embedded_sources.h"
 #include "../fs_layer.h"
 #include "../source_resolver.h"
+#include <errno.h>
+#include <limits.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 ID native_slurp(ID *args, unsigned int argc);
 
@@ -95,6 +99,15 @@ static void assert_resolved_bytes_match_repo_file(const char *virtual_path, cons
     }
 
     free(file_bytes);
+}
+
+static void assert_test_mkdir_ok(const char *path)
+{
+    TEST_ASSERT_NOT_NULL(path);
+    int rc = mkdir(path, 0777);
+    if (rc != 0) {
+        TEST_ASSERT_EQUAL_INT(EEXIST, errno);
+    }
 }
 
 TEST(test_embedded_sources_kv_precedes_embedded)
@@ -324,6 +337,65 @@ TEST(test_source_resolver_assets_path_maps_to_repo_assets_directory)
     embedded_source_map_init();
     fs_global_store_reset();
     assert_resolved_bytes_match_repo_file("/assets/tiny-fx/startup.edn", "/assets/tiny-fx/startup.edn");
+}
+
+TEST(test_source_resolver_bundle_resource_root_resolves_libs_and_assets)
+{
+    embedded_source_map_init();
+    fs_global_store_reset();
+
+    char temp_template[] = "/tmp/tinyclj-bundle-XXXXXX";
+    char *temp_dir = mkdtemp(temp_template);
+    TEST_ASSERT_NOT_NULL(temp_dir);
+
+    char contents_dir[PATH_MAX];
+    char resources_dir[PATH_MAX];
+    char libs_dir[PATH_MAX];
+    char test_lib_dir[PATH_MAX];
+    char assets_dir[PATH_MAX];
+    char test_asset_dir[PATH_MAX];
+    char lib_file[PATH_MAX];
+    char asset_file[PATH_MAX];
+
+    test_snprintf(contents_dir, sizeof(contents_dir), "%s/Contents", temp_dir);
+    test_snprintf(resources_dir, sizeof(resources_dir), "%s/Contents/Resources", temp_dir);
+    test_snprintf(libs_dir, sizeof(libs_dir), "%s/libs", resources_dir);
+    test_snprintf(test_lib_dir, sizeof(test_lib_dir), "%s/test", libs_dir);
+    test_snprintf(assets_dir, sizeof(assets_dir), "%s/assets", resources_dir);
+    test_snprintf(test_asset_dir, sizeof(test_asset_dir), "%s/test-bundle", assets_dir);
+    test_snprintf(lib_file, sizeof(lib_file), "%s/bundle-only.clj", test_lib_dir);
+    test_snprintf(asset_file, sizeof(asset_file), "%s/data.edn", test_asset_dir);
+
+    assert_test_mkdir_ok(contents_dir);
+    assert_test_mkdir_ok(resources_dir);
+    assert_test_mkdir_ok(libs_dir);
+    assert_test_mkdir_ok(test_lib_dir);
+    assert_test_mkdir_ok(assets_dir);
+    assert_test_mkdir_ok(test_asset_dir);
+
+    FILE *fp = fopen(lib_file, "wb");
+    TEST_ASSERT_NOT_NULL(fp);
+    TEST_ASSERT_EQUAL_UINT64(26u, fwrite("(ns test.bundle-only)\n42\n", 1, 26u, fp));
+    TEST_ASSERT_EQUAL_INT(0, fclose(fp));
+
+    fp = fopen(asset_file, "wb");
+    TEST_ASSERT_NOT_NULL(fp);
+    TEST_ASSERT_EQUAL_UINT64(11u, fwrite("{:bundle 1}\n", 1, 11u, fp));
+    TEST_ASSERT_EQUAL_INT(0, fclose(fp));
+
+    source_resolver_set_bundle_resource_root(resources_dir);
+
+    ID lib_bytes = resolve_path_to_bytes("/libs/test/bundle-only.clj");
+    TEST_ASSERT_NOT_NULL(lib_bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(lib_bytes));
+    TEST_ASSERT_TRUE(as_byte_array(lib_bytes)->length > 0);
+
+    ID asset_bytes = resolve_path_to_bytes("/assets/test-bundle/data.edn");
+    TEST_ASSERT_NOT_NULL(asset_bytes);
+    TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(asset_bytes));
+    TEST_ASSERT_TRUE(as_byte_array(asset_bytes)->length > 0);
+
+    source_resolver_clear_bundle_resource_root();
 }
 
 TEST(test_slurp_returns_string_view)

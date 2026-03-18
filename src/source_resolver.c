@@ -7,6 +7,145 @@
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
+#if defined(__APPLE__) && !defined(ESP32_BUILD)
+#include <mach-o/dyld.h>
+#endif
+
+static char g_source_resolver_bundle_root[PATH_MAX] = {0};
+static bool g_source_resolver_bundle_root_override_active = false;
+
+static bool source_resolver_has_prefix(const char *text, const char *prefix) {
+    if (!text || !prefix) {
+        return false;
+    }
+    size_t prefix_len = strlen(prefix);
+    return strncmp(text, prefix, prefix_len) == 0;
+}
+
+static bool source_resolver_has_suffix(const char *text, const char *suffix) {
+    if (!text || !suffix) {
+        return false;
+    }
+    size_t text_len = strlen(text);
+    size_t suffix_len = strlen(suffix);
+    return text_len >= suffix_len && strcmp(text + text_len - suffix_len, suffix) == 0;
+}
+
+static const char *source_resolver_virtual_rel_path(const char *path) {
+    if (!path) {
+        return NULL;
+    }
+    return path[0] == '/' ? path + 1 : path;
+}
+
+static bool source_resolver_is_bundle_virtual_path(const char *path) {
+    return source_resolver_has_prefix(path, "/libs/") ||
+           source_resolver_has_prefix(path, "/assets/") ||
+           source_resolver_has_prefix(path, "/boot/") ||
+           source_resolver_has_suffix(path, ".clj");
+}
+
+static bool source_resolver_is_filesystem_fallback_path(const char *path) {
+    return source_resolver_has_prefix(path, "/libs/") ||
+           source_resolver_has_prefix(path, "/assets/") ||
+           source_resolver_has_suffix(path, ".clj");
+}
+
+static bool source_resolver_join_path(char *out, size_t out_size, const char *root, const char *rel) {
+    if (!out || out_size == 0u || !root || !root[0] || !rel || !rel[0]) {
+        return false;
+    }
+
+    int written = snprintf(out, out_size, "%s/%s", root, rel);
+    return written > 0 && (size_t)written < out_size;
+}
+
+void source_resolver_set_bundle_resource_root(const char *root_path) {
+    g_source_resolver_bundle_root[0] = '\0';
+    g_source_resolver_bundle_root_override_active = false;
+    if (!root_path || !root_path[0]) {
+        return;
+    }
+    size_t len = strlen(root_path);
+    if (len >= sizeof(g_source_resolver_bundle_root)) {
+        len = sizeof(g_source_resolver_bundle_root) - 1u;
+    }
+    memcpy(g_source_resolver_bundle_root, root_path, len);
+    g_source_resolver_bundle_root[len] = '\0';
+    g_source_resolver_bundle_root_override_active = true;
+}
+
+void source_resolver_clear_bundle_resource_root(void) {
+    g_source_resolver_bundle_root[0] = '\0';
+    g_source_resolver_bundle_root_override_active = false;
+}
+
+static const char *source_resolver_bundle_root(void) {
+    if (g_source_resolver_bundle_root_override_active) {
+        return g_source_resolver_bundle_root[0] ? g_source_resolver_bundle_root : NULL;
+    }
+
+#if defined(__APPLE__) && !defined(ESP32_BUILD)
+    static char detected_root[PATH_MAX] = {0};
+    static bool did_probe = false;
+    if (did_probe) {
+        return detected_root[0] ? detected_root : NULL;
+    }
+    did_probe = true;
+
+    uint32_t exe_size = (uint32_t)sizeof(detected_root);
+    if (_NSGetExecutablePath(detected_root, &exe_size) == 0) {
+        const char *marker = strstr(detected_root, ".app/Contents/MacOS/");
+        if (marker) {
+            size_t app_prefix_len = (size_t)(marker - detected_root) + 4u;
+            if (app_prefix_len + strlen("/Contents/Resources") + 1u < sizeof(detected_root)) {
+                char bundle_root[PATH_MAX];
+                memcpy(bundle_root, detected_root, app_prefix_len);
+                bundle_root[app_prefix_len] = '\0';
+                strcat(bundle_root, "/Contents/Resources");
+                strcpy(detected_root, bundle_root);
+                return detected_root;
+            }
+        }
+    }
+    detected_root[0] = '\0';
+#endif
+
+    return NULL;
+}
+
+static const char *source_resolver_repo_root(void) {
+#if defined(ESP32_BUILD)
+    return NULL;
+#else
+    static char repo_root[PATH_MAX] = {0};
+    static bool did_probe = false;
+
+    if (did_probe) {
+        return repo_root[0] ? repo_root : NULL;
+    }
+    did_probe = true;
+
+    const char *marker_abs = "/src/source_resolver.c";
+    const char *marker_rel = "src/source_resolver.c";
+    const char *pos = strstr(__FILE__, marker_abs);
+    if (!pos) {
+        pos = strstr(__FILE__, marker_rel);
+    }
+    if (!pos) {
+        return NULL;
+    }
+
+    size_t repo_len = (size_t)(pos - __FILE__);
+    if (repo_len == 0u || repo_len >= sizeof(repo_root)) {
+        return NULL;
+    }
+
+    memcpy(repo_root, __FILE__, repo_len);
+    repo_root[repo_len] = '\0';
+    return repo_root;
+#endif
+}
 
 static ID source_resolver_read_file_bytes(const char *fs_path) {
     if (!fs_path || !fs_path[0]) return NULL;
@@ -46,22 +185,37 @@ static ID source_resolver_read_file_bytes(const char *fs_path) {
     return AUTORELEASE(bytes);
 }
 
+static ID source_resolver_try_bundle_resources(const char *path) {
+#if defined(ESP32_BUILD)
+    (void)path;
+    return NULL;
+#else
+    if (!source_resolver_is_bundle_virtual_path(path)) return NULL;
+
+    const char *bundle_root = source_resolver_bundle_root();
+    if (!bundle_root || !bundle_root[0]) return NULL;
+
+    char bundle_path[PATH_MAX];
+    const char *rel = source_resolver_virtual_rel_path(path);
+    if (!source_resolver_join_path(bundle_path, sizeof(bundle_path), bundle_root, rel)) {
+        return NULL;
+    }
+    return source_resolver_read_file_bytes(bundle_path);
+#endif
+}
+
 static ID source_resolver_try_filesystem(const char *path) {
     if (!path || !path[0]) return NULL;
-    size_t path_len = strlen(path);
-    bool is_libs_path = strncmp(path, "/libs/", 6) == 0;
-    bool is_assets_path = strncmp(path, "/assets/", 8) == 0;
-    bool is_clj_path = path_len >= 4u && strcmp(path + path_len - 4u, ".clj") == 0;
 
     // Keep filesystem fallback scoped to source/module resolution plus
     // project asset lookups under /assets/.
-    if (!is_libs_path && !is_assets_path && !is_clj_path) return NULL;
+    if (!source_resolver_is_filesystem_fallback_path(path)) return NULL;
 
     // 1) Allow direct absolute/relative paths first.
     ID bytes = source_resolver_read_file_bytes(path);
     if (bytes) return bytes;
 
-    const char *rel = path[0] == '/' ? path + 1 : path;
+    const char *rel = source_resolver_virtual_rel_path(path);
 
     // 2) Common fallback for running from project root.
     bytes = source_resolver_read_file_bytes(rel);
@@ -70,27 +224,18 @@ static ID source_resolver_try_filesystem(const char *path) {
 #if !defined(ESP32_BUILD)
     // 2) Try repository-root mapping derived from this source file path.
     //    Example: /libs/tiny-gfx/converter.clj -> <repo>/libs/tiny-gfx/converter.clj
-    const char *marker_abs = "/src/source_resolver.c";
-    const char *marker_rel = "src/source_resolver.c";
-    const char *pos = strstr(__FILE__, marker_abs);
-    if (!pos) pos = strstr(__FILE__, marker_rel);
-    if (pos) {
-        size_t repo_len = (size_t)(pos - __FILE__);
-        size_t rel_len = strlen(rel);
-        if (repo_len > 0u && repo_len + 1u + rel_len + 1u < 1024u) {
-            char repo_path[1024];
-            memcpy(repo_path, __FILE__, repo_len);
-            repo_path[repo_len] = '/';
-            memcpy(repo_path + repo_len + 1u, rel, rel_len);
-            repo_path[repo_len + 1u + rel_len] = '\0';
+    const char *repo_root = source_resolver_repo_root();
+    if (repo_root) {
+        char repo_path[PATH_MAX];
+        if (source_resolver_join_path(repo_path, sizeof(repo_path), repo_root, rel)) {
             bytes = source_resolver_read_file_bytes(repo_path);
             if (bytes) return bytes;
         }
     }
 
     // 3) Host fallback for running from build/ or similar.
-    if (strlen(rel) + 4u < 1024u) {
-        char parent_path[1024];
+    if (strlen(rel) + 4u < PATH_MAX) {
+        char parent_path[PATH_MAX];
         parent_path[0] = '.';
         parent_path[1] = '.';
         parent_path[2] = '/';
@@ -134,6 +279,9 @@ ID resolve_path_to_bytes(const char *path) {
         if (!view) return NULL;
         return AUTORELEASE((ID)view);
     }
+
+    ID bundle_bytes = source_resolver_try_bundle_resources(path);
+    if (bundle_bytes) return bundle_bytes;
 
     ID fs_bytes = source_resolver_try_filesystem(path);
     if (fs_bytes) return fs_bytes;

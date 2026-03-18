@@ -77,6 +77,26 @@ static bool breakout_runtime_test_context_init(BreakoutRuntimeTestContext *ctx) 
                                             false);
 }
 
+TEST(test_breakout_runtime_startup_defaults_host_demo_selection_to_breakout) {
+    const char *env_name = "TINYCLJ_HOST_DEMO";
+    const char *saved_env = getenv(env_name);
+    char *saved_copy = saved_env ? strdup(saved_env) : NULL;
+
+    unsetenv(env_name);
+    ViewerConfigSource config_source = viewer_selected_config_source();
+
+    if (saved_copy) {
+        setenv(env_name, saved_copy, 1);
+        free(saved_copy);
+    } else {
+        unsetenv(env_name);
+    }
+
+    TEST_ASSERT_EQUAL_STRING("tiny-clj.deployment", config_source.namespace_name);
+    TEST_ASSERT_EQUAL_STRING("(tiny-clj.deployment/breakout-host-config)", config_source.config_expr);
+    TEST_ASSERT_EQUAL_STRING("tiny-clj.deployment/breakout-host-config", config_source.display_name);
+}
+
 TEST(test_breakout_runtime_startup_activates_native_title_scene_before_first_input) {
     BreakoutRuntimeTestContext ctx = {0};
     TEST_ASSERT_TRUE(breakout_runtime_test_context_init(&ctx));
@@ -186,4 +206,32 @@ TEST(test_breakout_runtime_first_fire_releases_title_scene_before_serve_scene_bu
     TEST_ASSERT_NOT_NULL(viewer_frame_scene_from_atom(run_ctx.bundle.game_scene_atom));
 
     breakout_runtime_test_context_destroy(&run_ctx);
+}
+
+TEST(test_breakout_runtime_idle_serve_does_not_rebuild_identical_scene_under_tight_heap_limit) {
+    BreakoutRuntimeTestContext ctx = {0};
+    size_t before_idle = 0;
+    size_t after_idle = 0;
+
+    TEST_ASSERT_TRUE(breakout_runtime_test_context_init(&ctx));
+
+    uint8_t keys[KB_KEY_LAST + 1] = {0};
+    ViewerRuntimeFlags runtime_flags = {0};
+    keys[KB_KEY_ENTER] = 1;
+    viewer_breakout_runtime_step(&g_breakout_runtime, &ctx.bundle, &runtime_flags, keys);
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, false);
+    memset(keys, 0, sizeof(keys));
+    viewer_breakout_runtime_step(&g_breakout_runtime, &ctx.bundle, &runtime_flags, keys);
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, false);
+
+    TEST_ASSERT_EQUAL_INT(BREAKOUT_PHASE_SERVE, g_breakout_runtime.phase);
+    before_idle = memory_current_usage_bytes();
+    viewer_breakout_runtime_step(&g_breakout_runtime, &ctx.bundle, &runtime_flags, keys);
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, false);
+    after_idle = memory_current_usage_bytes();
+
+    TEST_ASSERT_EQUAL_UINT64(before_idle, after_idle);
+    TEST_ASSERT_EQUAL_INT(BREAKOUT_PHASE_SERVE, g_breakout_runtime.phase);
+
+    breakout_runtime_test_context_destroy(&ctx);
 }

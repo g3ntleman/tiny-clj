@@ -26,6 +26,7 @@
 #include "record.h"
 #include "event_loop.h"
 #include "renderer_lifecycle.h"
+#include "tiny_fx_host_app.h"
 #include "rendered_state_snapshot.h"
 #include "render_backend.h"
 #include "viewer_collision.h"
@@ -1027,11 +1028,22 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
     runtime->paddle_x = viewer_breakout_clamp_i32(runtime->paddle_x + (dx * 4), 0, 280);
 
     if (runtime->phase == BREAKOUT_PHASE_SERVE) {
+        int32_t previous_ball_x = runtime->ball_x;
+        int32_t previous_ball_y = runtime->ball_y;
+        bool showing_staging_scene = viewer_frame_scene_from_atom(bundle->game_scene_atom) ==
+                                     (FrameScene *)runtime->staging_scene;
         viewer_breakout_runtime_serve_ball(runtime);
         if (fire_pressed) {
             runtime->phase = BREAKOUT_PHASE_PLAY;
+            viewer_breakout_publish_scene(bundle, runtime);
+            return;
         }
-        viewer_breakout_publish_scene(bundle, runtime);
+        if (showing_staging_scene ||
+            dx != 0 ||
+            runtime->ball_x != previous_ball_x ||
+            runtime->ball_y != previous_ball_y) {
+            viewer_breakout_publish_scene(bundle, runtime);
+        }
         return;
     }
 
@@ -1135,17 +1147,20 @@ static ViewerConfigSource viewer_selected_config_source(void) {
         host_demo = TINYCLJ_DEFAULT_HOST_DEMO;
     }
 #endif
-    if (host_demo && strcmp(host_demo, "breakout") == 0) {
+    if (!host_demo || host_demo[0] == '\0') {
+        host_demo = "breakout";
+    }
+    if (strcmp(host_demo, "game-demo") == 0) {
         return (ViewerConfigSource){
-            .namespace_name = "tiny-clj.deployment",
-            .config_expr = "(tiny-clj.deployment/breakout-host-config)",
-            .display_name = "tiny-clj.deployment/breakout-host-config",
+            .namespace_name = "tiny-fx.game-demo",
+            .config_expr = "(tiny-fx.game-demo/game-demo-config)",
+            .display_name = "tiny-fx.game-demo/game-demo-config",
         };
     }
     return (ViewerConfigSource){
-        .namespace_name = "tiny-fx.game-demo",
-        .config_expr = "(tiny-fx.game-demo/game-demo-config)",
-        .display_name = "tiny-fx.game-demo/game-demo-config",
+        .namespace_name = "tiny-clj.deployment",
+        .config_expr = "(tiny-clj.deployment/breakout-host-config)",
+        .display_name = "tiny-clj.deployment/breakout-host-config",
     };
 }
 
@@ -2381,7 +2396,7 @@ static void viewer_expand_rgb565_to_window(const uint16_t *src, uint32_t *dst, s
 }
 #endif
 
-int main(void) {
+int tinyclj_tiny_fx_host_app_run(void) {
 #if !defined(TINYCLJ_WITH_MINIFB)
     fprintf(stderr, "MiniFB support is disabled for this build.\n");
     return 1;
@@ -2411,8 +2426,14 @@ int main(void) {
         fprintf(stderr, "Failed to initialize framebuffer\n");
         return 1;
     }
-#if defined(DEBUG) && defined(TINYCLJ_HOST_HEAP_LIMIT_BYTES)
-    memory_set_heap_limit_bytes((size_t)TINYCLJ_HOST_HEAP_LIMIT_BYTES);
+#if defined(DEBUG)
+    /*
+     * The standalone tiny-fx app loads the full demo/runtime scene graph and can
+     * legitimately exceed the small CLI-oriented host heap guardrail used by the
+     * REPL. Keep the app bundle unconstrained here so macOS launch does not fail
+     * before the window is created.
+     */
+    memory_set_heap_limit_bytes(0u);
 #endif
     runtime_init(&g_runtime);
     event_loop_init();
@@ -2481,7 +2502,7 @@ int main(void) {
 #endif
     const unsigned default_win_w = VIEW_W * VIEW_DEFAULT_WINDOW_SCALE;
     const unsigned default_win_h = VIEW_H * VIEW_DEFAULT_WINDOW_SCALE;
-    window = mfb_open_ex("tiny-clj game demo", default_win_w, default_win_h, 0);
+    window = mfb_open_ex("tiny-fx", default_win_w, default_win_h, 0);
     if (!window) {
         fprintf(stderr, "Failed to open MiniFB window\n");
         goto cleanup;

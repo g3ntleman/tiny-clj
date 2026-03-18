@@ -152,6 +152,15 @@ static void startup_print_caught_exception(CLJException *ex) {
   }
 }
 
+static bool startup_namespace_loaded(const char *ns_name) {
+  if (!ns_name || ns_name[0] == '\0') {
+    return false;
+  }
+
+  CljNamespace *ns = ns_find(ns_name);
+  return ns && ns->loaded;
+}
+
 bool tinyclj_startup_bootstrap_runtime(const TinycljRuntimeBootstrapOptions *opts,
                                        EvalState **out_state) {
   bool init_event_loop = true;
@@ -244,6 +253,17 @@ bool tinyclj_startup_bootstrap_language(EvalState *st,
   END_TRY
 
   return success;
+}
+
+bool tinyclj_startup_prepare_repl(EvalState *st) {
+  TinycljLanguageBootstrapOptions repl_opts = {
+      .ensure_builtins = true,
+      .load_core = !startup_namespace_loaded("clojure.core"),
+      .load_repl = !startup_namespace_loaded("clojure.repl"),
+      .refer_repl = true,
+      .core_quiet = true,
+  };
+  return tinyclj_startup_bootstrap_language(st, &repl_opts);
 }
 
 bool tinyclj_startup_invoke_main(EvalState *st,
