@@ -122,6 +122,7 @@ set(TINYCLJ_SUBJECTIVE_C_HEADERS_DIR "${TINYCLJ_SUBJECTIVE_C_PUBLIC_INCLUDE_DIR}
 # relative includes like "../exception.h". Keep includes unchanged and provide
 # an include-dir where ".." resolves into the subjective-c header directory.
 set(TINYCLJ_SUBJECTIVE_C_TESTS_COMMON_ANCHOR_DIR "${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR}/include_anchor")
+set(TINYCLJ_HOST_HEAP_LIMIT_BYTES 819200)
 
 # Zombie mode is compile-time and must be consistent across all targets.
 # Default is OFF because zombie mode can lead to very high memory usage (OOM) in long test runs.
@@ -287,6 +288,7 @@ function(tinyclj_target_enable_tiny_fx target_name platform_name)
     if(TINYCLJ_WITH_TINY_FX)
         if("${platform_name}" STREQUAL "HOST")
             target_sources(${target_name} PRIVATE ${TINYCLJ_HOST_TINY_FX_SOURCES})
+            target_compile_definitions(${target_name} PRIVATE TINYCLJ_HOST_HEAP_LIMIT_BYTES=${TINYCLJ_HOST_HEAP_LIMIT_BYTES})
             if(APPLE)
                 target_link_libraries(${target_name} PRIVATE "-framework CoreAudio" "-framework AudioUnit")
             endif()
@@ -1021,7 +1023,34 @@ if(TINYCLJ_GAME_DEMO)
     )
     target_compile_definitions(game-demo PRIVATE TINYCLJ_WITH_MINIFB=1)
     target_link_libraries(game-demo PRIVATE minifb m subjective-c tiny-db)
+    target_sources(unit-tests PRIVATE src/tests/test_breakout_runtime_startup.c)
+    target_link_libraries(unit-tests PRIVATE minifb)
     tinyclj_link_apple_base(game-demo)
+    if(APPLE)
+        add_executable(breakout-app MACOSX_BUNDLE
+            src/game_demo_minifb.c
+            src/platform_macos.c
+            ${SOURCES}
+        )
+        tinyclj_target_enable_tiny_fx(breakout-app HOST)
+        tinyclj_target_use_generated_embedded_clojure(breakout-app)
+        target_sources(breakout-app PRIVATE src/game_demo_macos_menu.m)
+        target_include_directories(breakout-app PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+        )
+        target_compile_definitions(breakout-app PRIVATE
+            TINYCLJ_WITH_MINIFB=1
+            TINYCLJ_DEFAULT_HOST_DEMO=\"breakout\"
+        )
+        target_link_libraries(breakout-app PRIVATE minifb m subjective-c tiny-db)
+        set_target_properties(breakout-app PROPERTIES
+            OUTPUT_NAME "Breakout"
+            MACOSX_BUNDLE_BUNDLE_NAME "Breakout"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "org.tinyclj.breakout"
+            MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/cmake/breakout_app_info.plist.in"
+        )
+        tinyclj_link_apple_base(breakout-app)
+    endif()
 endif()
 
 # Seq Benchmark (REMOVED - File no longer exists)

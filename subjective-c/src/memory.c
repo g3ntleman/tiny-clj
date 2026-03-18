@@ -29,6 +29,7 @@
 #include "hashset.h"    // For CljHashSet
 #include "byte_array.h" // For CljByteArray and external buffer flags
 #include "subjective-c/record.h" // For CljPersistentRecord/CljRecordDescriptor
+#include "subjective-c/platform_allocated_size.h"
 #include "thread_local.h"
 #include "mini_format.h"
 #include <string.h>
@@ -129,6 +130,7 @@ static inline void update_debug_output_active(void) {
 }
 
 static SubjectiveCZombieLogFn g_zombie_log_fn = NULL;
+static size_t g_heap_limit_bytes = 0;
 
 /** @brief Set zombie logging callback. */
 void subjective_c_set_zombie_log_fn(SubjectiveCZombieLogFn fn) {
@@ -146,6 +148,43 @@ bool memory_get_debug_output_enabled(void) {
   return g_debug_output_enabled;
 }
 
+void memory_set_heap_limit_bytes(size_t limit) {
+  g_heap_limit_bytes = limit;
+}
+
+size_t memory_get_heap_limit_bytes(void) {
+  return g_heap_limit_bytes;
+}
+
+size_t memory_current_usage_bytes(void) {
+  return g_memory_stats.current_memory_usage;
+}
+
+size_t memory_actual_allocation_size(const void *ptr, size_t requested_size) {
+  if (!ptr) {
+    return requested_size;
+  }
+  size_t actual = platform_allocated_size(ptr);
+  return actual > 0 ? actual : requested_size;
+}
+
+size_t memory_tracked_raw_allocation_size(const void *ptr) {
+  return memory_actual_allocation_size(ptr, 0);
+}
+
+bool memory_heap_limit_would_exceed(size_t released_size, size_t requested_size) {
+  if (g_heap_limit_bytes == 0) {
+    return false;
+  }
+  size_t current = memory_current_usage_bytes();
+  size_t projected = current >= released_size ? current - released_size : 0;
+  if (requested_size > SIZE_MAX - projected) {
+    return true;
+  }
+  projected += requested_size;
+  return projected > g_heap_limit_bytes;
+}
+
 /**
  * @brief Allocate memory for Clojure objects.
  * @param type_size Size of object type
@@ -154,13 +193,29 @@ bool memory_get_debug_output_enabled(void) {
  * @return Non-NULL allocated object with rc=1. On OOM, throws and never returns.
  */
 void *alloc(size_t type_size, size_t count, CljType obj_type) {
-  void *result = malloc(type_size * count);
+  if (count != 0 && type_size > SIZE_MAX / count) {
+    throw_oom();
+  }
+  size_t requested = type_size * count;
+  if (requested != 0 && memory_heap_limit_would_exceed(0, requested)) {
+    throw_oom();
+  }
+  void *result = malloc(requested);
   if (!result) {
-    size_t requested = type_size * count;
     fprintf(stderr,
             "OOM alloc request: bytes=%zu type=%s(%d)\n",
             requested, clj_type_name(obj_type), (int)obj_type);
     throw_oom();
+  }
+  if (requested != 0) {
+    size_t actual = memory_actual_allocation_size(result, requested);
+    if (memory_heap_limit_would_exceed(0, actual)) {
+      free(result);
+      fprintf(stderr,
+              "OOM alloc request: bytes=%zu type=%s(%d)\n",
+              actual, clj_type_name(obj_type), (int)obj_type);
+      throw_oom();
+    }
   }
   if (type_size >= sizeof(CljObject)) {
     CljObject *obj = (CljObject *)result;

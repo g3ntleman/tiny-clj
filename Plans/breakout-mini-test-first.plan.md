@@ -4,39 +4,42 @@ overview: Build a one-screen Breakout demo for the tiny-handheld using tiny-fx s
 todos:
   - id: define-scope-and-contracts
     content: Define one-screen scope, game states, controls, and deterministic update contracts before implementation
-    status: pending
+    status: completed
   - id: consolidate-deployment-tools
     content: Konsolidiere alle build-tools unter dem Namespace "tiny-clj.deployment"
-    status: pending
+    status: completed
   - id: phase-1-red-core-motion-tests
     content: Add failing tests for paddle movement, serve state, and basic ball motion/reflection
-    status: pending
+    status: completed
   - id: phase-2-green-core-loop
     content: Implement minimal playable loop to satisfy phase-1 tests without adding polish features
-    status: pending
+    status: completed
   - id: phase-3-red-collision-and-scoring-tests
     content: Add failing tests for brick collisions, score updates, life loss, and deterministic resets
-    status: pending
+    status: completed
   - id: phase-4-green-collision-and-scoring
     content: Implement brick field, collision handling, score/lives state, and level-clear transitions
-    status: pending
+    status: completed
   - id: phase-5-red-ui-and-state-machine-tests
     content: Add failing tests for title, pause, game-over, victory, and restart state transitions
-    status: pending
+    status: completed
   - id: phase-6-green-ui-and-flow
     content: Implement one-screen UI and full state-machine flow with stable scene snapshots
-    status: pending
+    status: completed
   - id: phase-7-red-audio-and-feel-tests
-    content: Add failing tests for sound trigger semantics and bounded gameplay pacing assumptions
-    status: pending
+    content: Complete failing tests for sound trigger semantics and bounded gameplay pacing assumptions after the current mini-SFX descriptor/mapping baseline
+    status: in_progress
   - id: phase-8-green-audio-and-polish
-    content: Implement hit/lose/win audio hooks and minimal visual feedback without changing gameplay contracts
+    content: Implement 3 mini sound effects plus hit/lose/win audio hooks and minimal visual feedback without changing gameplay contracts
+    status: pending
+  - id: esp32-optimization
+    content: Optimize the native Breakout runtime and scene publishing path for ESP32 code size, heap usage, and execution speed
     status: pending
   - id: phase-9-regression-and-budgets
-    content: Run focused and full regression tests and lock acceptance criteria for the demo
-    status: pending
+    content: Run remaining broader and full regression tests and lock acceptance criteria for the demo
+    status: in_progress
   - id: cleanup
-    content: Sourcecode aufräumen – Debug-Code, temporäre Workarounds, tote Codepfade, überflüssige Kommentare und nicht mehr benötigte Hilfsfunktionen entfernen. Optimiere für esp32 (Codesize, Heap-Use, Speed).
+    content: Sourcecode aufräumen – Debug-Code, temporäre Workarounds, tote Codepfade, überflüssige Kommentare und nicht mehr benötigte Hilfsfunktionen entfernen
     status: pending
 isProject: false
 ---
@@ -64,6 +67,14 @@ Create a simple and robust Breakout demo for the tiny-handheld:
 - one fixed playfield
 - short session length (2-4 minutes)
 - deterministic behavior suitable for host/unit testing
+
+## Current status snapshot
+
+- Core Breakout gameplay, level flow, scene building, namespace boundaries, and host deployment wiring are implemented.
+- The host viewer now runs Breakout through the native C runtime path (`:host-runtime :native-breakout`) instead of a Clojure-driven frame loop.
+- The renderer-side one-pixel border mismatch was fixed in the library by tightening `Rect` pixel-extent semantics; the temporary app-side workaround was removed.
+- Focused Breakout and renderer regressions are green, and the demo has been manually verified as playable in the host window.
+- Remaining planned work is primarily audio hookup/polish, broader regression coverage, and explicit ESP32 optimization follow-up.
 
 ## Constraints
 
@@ -198,8 +209,16 @@ Add failing tests first:
 1. Distinct events emitted for paddle-hit, brick-hit, life-lost, level-clear, game-over, victory.
 2. No duplicate event emission for a single simulation tick/collision.
 3. Pause state suppresses gameplay events.
+4. Exactly three mini-SFX descriptors exist and are bound to gameplay events:
+   - `:sfx/paddle-hit` for paddle collision
+   - `:sfx/brick-hit` for brick collision
+   - `:sfx/life-lost` when the ball exits at bottom
 
 Then implement sound/event triggers against existing sound APIs.
+
+Status update:
+- Implemented baseline: deterministic event-to-cue mapping plus three mini-SFX descriptors in `tiny-breakout.audio`.
+- Still open: wire cues into runtime sound playback and cover any remaining pacing/feel assertions with tests.
 
 MDN mapping:
 - Finishing up (feedback/polish), adapted to tiny-fx sound/event model
@@ -211,6 +230,10 @@ MDN mapping:
 3. Run full unit-test suite before marking the plan complete.
 4. Execute build/test orchestration through `tiny-clj.deployment` entry points (no scattered ad-hoc wiring).
 5. Capture final acceptance checklist and known limitations.
+
+Status update:
+- Done so far: focused `test_vector_scene_graph*` and `test_breakout_contract*` runs, host build, and manual gameplay verification.
+- Still open: broader relevant suites and a full unit-test pass before the plan can be considered complete.
 
 ## File plan (expected)
 
@@ -239,3 +262,4 @@ MDN mapping:
 8. Full unit-test run is green.
 9. ESP32 Optimization: Code is optimized for the ESP32 platform, considering code size, heap usage, and execution speed.
 10. Breakout implementation namespaces are under `tiny-breakout.*` and dependency-contract tests are green.
+11. Three mini sound effects are implemented and test-covered (`:sfx/paddle-hit`, `:sfx/brick-hit`, `:sfx/life-lost`).

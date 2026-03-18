@@ -25,10 +25,16 @@ bool g_memory_profiling_enabled = false;
 bool g_memory_leak_reporting_enabled = true;
 bool g_memory_verbose_mode = false;
 
-// Lightweight heap tracking (always enabled in DEBUG, even without full profiling)
-#ifdef DEBUG
+static inline bool memory_runtime_heap_tracking_enabled(void) {
+#if defined(DEBUG)
+    return true;
+#else
+    return memory_get_heap_limit_bytes() > 0;
+#endif
+}
+
 static inline void memory_track_heap_simple(void *obj, size_t size, bool is_alloc) {
-    if (!obj || size == 0) return;
+    if (!obj || size == 0 || !memory_runtime_heap_tracking_enabled()) return;
     if (is_alloc) {
         g_memory_stats.current_memory_usage += size;
         if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage)
@@ -40,9 +46,8 @@ static inline void memory_track_heap_simple(void *obj, size_t size, bool is_allo
             g_memory_stats.current_memory_usage = 0;
     }
 }
-#endif
 
-#if defined(DEBUG) || MEMORY_PROFILING_ENABLED
+#if 1
 typedef struct { void *ptr; size_t size; } RawBlock;
 static RawBlock *g_raw_blocks = NULL;
 static size_t g_raw_blocks_count = 0, g_raw_blocks_capacity = 0;
@@ -562,67 +567,48 @@ void memory_test_start(const char *n) { (void)n; }
 void memory_test_end(const char *n) { (void)n; }
 void memory_profiler_init(void) {}
 void memory_profiler_reset(void) {
-#ifdef DEBUG
-    // Reset lightweight heap tracking (always in DEBUG)
-    g_memory_stats.current_memory_usage = 0;
-    g_memory_stats.peak_memory_usage = 0;
-    raw_blocks_reset();
-#endif
+    if (memory_runtime_heap_tracking_enabled()) {
+        g_memory_stats.current_memory_usage = 0;
+        g_memory_stats.peak_memory_usage = 0;
+        raw_blocks_reset();
+    }
 }
 void memory_profiler_cleanup(void) {}
 MemoryStats memory_profiler_get_stats(void) {
-#ifdef DEBUG
-    // In DEBUG, always return current/peak heap usage (even without full profiling)
-    return g_memory_stats;
-#else
+    if (memory_runtime_heap_tracking_enabled()) {
+        return g_memory_stats;
+    }
     MemoryStats e = {0}; return e;
-#endif
 }
 void memory_profiler_print_stats(const char *n) { (void)n; }
 void memory_profiler_track_deallocation(size_t s) { (void)s; }
 void memory_profiler_track_object_creation(CljObject *o) { (void)o; }
 void memory_profiler_track_object_creation_sized(CljObject *o, size_t s) {
-#ifdef DEBUG
-    // Lightweight heap tracking (always in DEBUG, even without full profiling)
     if (o && !is_immediate((CljValue)o) && !is_singleton(o)) {
         size_t obj_size = (s > 0) ? s : sizeof(CljObject);
         { size_t r = platform_allocated_size(o); if (r > 0) obj_size = r; }
         memory_track_heap_simple(o, obj_size, true);
     }
-#else
-    (void)o;(void)s;
-#endif
 }
 
 void memory_profiler_track_object_destruction(CljObject *o) {
-#ifdef DEBUG
-    // Lightweight heap tracking (always in DEBUG, even without full profiling)
     if (o && !is_immediate((CljValue)o) && !is_singleton(o)) {
         size_t obj_size = sizeof(CljObject);
         { size_t r = platform_allocated_size(o); if (r > 0) obj_size = r; }
         memory_track_heap_simple(o, obj_size, false);
     }
-#else
-    (void)o;
-#endif
 }
 
 void memory_profiler_track_object_zombify(CljObject *o) {
-#ifdef DEBUG
-    // Lightweight heap tracking: treat zombify as deallocation for heap stats
     if (o && !is_immediate((CljValue)o) && !is_singleton(o)) {
         size_t obj_size = sizeof(CljObject);
         { size_t r = platform_allocated_size(o); if (r > 0) obj_size = r; }
         memory_track_heap_simple(o, obj_size, false);
     }
-#else
-    (void)o;
-#endif
 }
 void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, int line) {
     (void)file; (void)line; (void)size;
-#ifdef DEBUG
-    if (!ptr) return;
+    if (!ptr || !memory_runtime_heap_tracking_enabled()) return;
     g_memory_stats.raw_allocations++;
     size_t actual = size;
     { size_t r = platform_allocated_size(ptr); if (r > 0) actual = r; }
@@ -647,13 +633,11 @@ void memory_profiler_track_raw_alloc(void *ptr, size_t size, const char *file, i
     g_memory_stats.current_memory_usage += actual;
     if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage)
         g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
-#endif
 }
 
 void memory_profiler_track_raw_free(void *ptr, const char *file, int line) {
     (void)file; (void)line;
-#ifdef DEBUG
-    if (!ptr) return;
+    if (!ptr || !memory_runtime_heap_tracking_enabled()) return;
     g_memory_stats.raw_frees++;
     long idx = raw_blocks_find(ptr);
     if (idx < 0) return;
@@ -662,12 +646,13 @@ void memory_profiler_track_raw_free(void *ptr, const char *file, int line) {
     if (g_memory_stats.raw_blocks_current > 0) g_memory_stats.raw_blocks_current--;
     g_memory_stats.raw_bytes_current = (g_memory_stats.raw_bytes_current >= old) ? g_memory_stats.raw_bytes_current - old : 0;
     g_memory_stats.current_memory_usage = (g_memory_stats.current_memory_usage >= old) ? g_memory_stats.current_memory_usage - old : 0;
-#endif
 }
 
 void memory_profiler_track_raw_realloc(uintptr_t old_ptr_addr, void *new_ptr, size_t new_size, const char *file, int line) {
     (void)file; (void)line;
-#ifdef DEBUG
+    if (!memory_runtime_heap_tracking_enabled()) {
+        return;
+    }
     void *old_ptr = (void*)old_ptr_addr;
     g_memory_stats.raw_reallocations++;
     if (!old_ptr) { memory_profiler_track_raw_alloc(new_ptr, new_size, file, line); return; }
@@ -690,9 +675,6 @@ void memory_profiler_track_raw_realloc(uintptr_t old_ptr_addr, void *new_ptr, si
     }
     memory_profiler_track_raw_free(old_ptr, file, line);
     memory_profiler_track_raw_alloc(new_ptr, new_size, file, line);
-#else
-    (void)old_ptr_addr; (void)new_ptr; (void)new_size;
-#endif
 }
 void memory_profiler_track_retain(CljObject *o) { (void)o; }
 void memory_profiler_track_release(CljObject *o) { (void)o; }

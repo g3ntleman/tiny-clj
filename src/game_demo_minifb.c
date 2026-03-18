@@ -32,6 +32,7 @@
 #include "platform.h"
 #include "gpio.h"
 #include "atom.h"
+#include "memory.h"
 #include "vector.h"
 #include "strings.h"
 #include "MiniFB.h"
@@ -381,6 +382,7 @@ typedef struct {
     uint32_t active_brick_count;
     ID background_rect;
     ID clip_rect;
+    ID staging_scene;
     ID hud_text_value;
     ID overlay_text_value;
     int32_t hud_score_cached;
@@ -395,7 +397,12 @@ static ID viewer_breakout_make_rect_record(int32_t id,
                                            int32_t y,
                                            int32_t w,
                                            int32_t h);
+static ID viewer_breakout_make_staging_scene_record(ViewerBreakoutRuntime *runtime);
 static bool viewer_breakout_runtime_prepare_cached_scene_bits(ViewerBreakoutRuntime *runtime);
+static FrameScene *viewer_frame_scene_from_atom(CljAtom *scene_atom);
+static void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
+                                         ViewerSpatialRuleSet *rule_set,
+                                         bool publish_changes);
 
 static bool viewer_id_to_i32(ID value, int32_t *out_value) {
     if (!out_value || !value || !is_fixnum(value)) {
@@ -481,13 +488,12 @@ static void viewer_breakout_runtime_release_cached_objects(ViewerBreakoutRuntime
     }
     RELEASE(runtime->background_rect);
     RELEASE(runtime->clip_rect);
+    RELEASE(runtime->staging_scene);
     RELEASE(runtime->hud_text_value);
     RELEASE(runtime->overlay_text_value);
-    for (uint32_t i = 0; i < VIEWER_BREAKOUT_MAX_LEVELS; i++) {
-        for (uint32_t j = 0; j < runtime->levels[i].brick_count && j < VIEWER_BREAKOUT_MAX_BRICKS; j++) {
-            RELEASE(runtime->levels[i].bricks[j].record);
-            runtime->levels[i].bricks[j].record = NULL;
-        }
+    for (uint32_t i = 0; i < runtime->active_brick_count && i < VIEWER_BREAKOUT_MAX_BRICKS; i++) {
+        RELEASE(runtime->active_bricks[i].record);
+        runtime->active_bricks[i].record = NULL;
     }
 }
 
@@ -530,10 +536,19 @@ static void viewer_breakout_runtime_load_level(ViewerBreakoutRuntime *runtime, u
     if (!runtime || level_index >= runtime->level_count) {
         return;
     }
+    for (uint32_t i = 0; i < runtime->active_brick_count && i < VIEWER_BREAKOUT_MAX_BRICKS; i++) {
+        RELEASE(runtime->active_bricks[i].record);
+        runtime->active_bricks[i].record = NULL;
+    }
     runtime->active_brick_count = runtime->levels[level_index].brick_count;
-    memcpy(runtime->active_bricks,
-           runtime->levels[level_index].bricks,
-           sizeof(ViewerBreakoutBrick) * runtime->active_brick_count);
+    for (uint32_t i = 0; i < runtime->active_brick_count; i++) {
+        runtime->active_bricks[i] = runtime->levels[level_index].bricks[i];
+        runtime->active_bricks[i].record = viewer_breakout_make_rect_record(runtime->active_bricks[i].id,
+                                                                            runtime->active_bricks[i].x,
+                                                                            runtime->active_bricks[i].y,
+                                                                            runtime->active_bricks[i].w,
+                                                                            runtime->active_bricks[i].h);
+    }
 }
 
 static void viewer_breakout_runtime_serve_ball(ViewerBreakoutRuntime *runtime) {
@@ -640,10 +655,6 @@ static bool viewer_breakout_runtime_init_from_state(ViewerBreakoutRuntime *runti
         for (uint32_t j = 0; j < brick_count; j++) {
             ViewerBreakoutBrick brick = {0};
             if (viewer_breakout_parse_brick(vector_nth(brick_vec, j), &brick)) {
-                brick.record = viewer_breakout_make_rect_record(brick.id, brick.x, brick.y, brick.w, brick.h);
-                if (!brick.record) {
-                    return false;
-                }
                 runtime->levels[i].bricks[runtime->levels[i].brick_count++] = brick;
             }
         }
@@ -656,6 +667,7 @@ static bool viewer_breakout_runtime_init_from_state(ViewerBreakoutRuntime *runti
         (uint32_t)runtime->level_index < runtime->level_count) {
         viewer_breakout_runtime_load_level(runtime, (uint32_t)runtime->level_index);
     }
+    atom_set(bundle->game_state_atom, NULL);
     runtime->initialized = true;
     return true;
 }
@@ -759,6 +771,29 @@ static ID viewer_breakout_make_clip_rect_vector(void) {
     return (ID)clip;
 }
 
+static ID viewer_breakout_make_staging_scene_record(ViewerBreakoutRuntime *runtime) {
+    const VgRecordSchema *schema = tiny_fx_gfx_schema();
+    if (!runtime || !schema || !schema->t_group || !schema->t_frame_scene ||
+        !runtime->background_rect || !runtime->clip_rect) {
+        return NULL;
+    }
+    CljPersistentVector *children = make_vector(1, STRONG);
+    if (!children) {
+        return NULL;
+    }
+    vector_conj_inplace(&children, runtime->background_rect);
+    ID group_slots[6] = {fixnum(1000), NULL, NULL, clj_true, (ID)children, NULL};
+    ID group = tiny_fx_gfx_create_record_from_slots(schema->t_group, 6u, group_slots);
+    RELEASE(children);
+    if (!group) {
+        return NULL;
+    }
+    ID frame_slots[8] = {(ID)group, runtime->clip_rect, fixnum(0), clj_true, clj_true, fixnum(0), fixnum(1), NULL};
+    ID scene = tiny_fx_gfx_create_record_from_slots(schema->t_frame_scene, 8u, frame_slots);
+    RELEASE(group);
+    return scene;
+}
+
 static bool viewer_breakout_runtime_prepare_cached_scene_bits(ViewerBreakoutRuntime *runtime) {
     if (!runtime) {
         return false;
@@ -772,6 +807,12 @@ static bool viewer_breakout_runtime_prepare_cached_scene_bits(ViewerBreakoutRunt
     if (!runtime->clip_rect) {
         runtime->clip_rect = viewer_breakout_make_clip_rect_vector();
         if (!runtime->clip_rect) {
+            return false;
+        }
+    }
+    if (!runtime->staging_scene) {
+        runtime->staging_scene = viewer_breakout_make_staging_scene_record(runtime);
+        if (!runtime->staging_scene) {
             return false;
         }
     }
@@ -886,6 +927,32 @@ static void viewer_breakout_publish_scene(ViewerSceneBundle *bundle,
     RELEASE(scene);
 }
 
+static void viewer_breakout_stage_scene(ViewerSceneBundle *bundle,
+                                        ViewerBreakoutRuntime *runtime) {
+    if (!bundle || !runtime || !bundle->game_scene_atom || !runtime->staging_scene) {
+        return;
+    }
+    atom_set(bundle->game_scene_atom, runtime->staging_scene);
+    if (bundle->has_game_slot) {
+        bundle->game_scene = (FrameScene *)runtime->staging_scene;
+        bundle->slots[bundle->game_slot_index].scene = (FrameScene *)runtime->staging_scene;
+    }
+}
+
+static bool viewer_breakout_runtime_activate(ViewerBreakoutRuntime *runtime,
+                                             ViewerSceneBundle *bundle,
+                                             ViewerSpatialRuleSet *rule_set,
+                                             bool publish_changes) {
+    FrameScene *previous_scene = viewer_frame_scene_from_atom(bundle ? bundle->game_scene_atom : NULL);
+    if (!runtime || !runtime->enabled || !runtime->initialized || !bundle || !bundle->game_scene_atom) {
+        return false;
+    }
+    viewer_breakout_publish_scene(bundle, runtime);
+    viewer_sync_configured_slots(bundle, rule_set, publish_changes);
+    return viewer_frame_scene_from_atom(bundle->game_scene_atom) != NULL &&
+           viewer_frame_scene_from_atom(bundle->game_scene_atom) != previous_scene;
+}
+
 static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
                                          ViewerSceneBundle *bundle,
                                          const ViewerRuntimeFlags *flags,
@@ -902,27 +969,32 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
 
     if (runtime->phase == BREAKOUT_PHASE_TITLE) {
         if (fire_pressed) {
+            viewer_breakout_stage_scene(bundle, runtime);
             viewer_breakout_runtime_fresh_game(runtime);
-            viewer_breakout_publish_scene(bundle, runtime);
         }
         return;
     }
 
     if (runtime->phase == BREAKOUT_PHASE_LEVEL_CLEAR) {
         if (fire_pressed) {
+            viewer_breakout_stage_scene(bundle, runtime);
             uint32_t next_level = (uint32_t)runtime->level_index + 1u;
             if (next_level < runtime->level_count) {
                 viewer_breakout_runtime_prepare_level(runtime, next_level, BREAKOUT_PHASE_SERVE);
             } else {
                 runtime->phase = BREAKOUT_PHASE_VICTORY;
             }
-            viewer_breakout_publish_scene(bundle, runtime);
         }
         return;
     }
 
     if (runtime->phase == BREAKOUT_PHASE_GAME_OVER || runtime->phase == BREAKOUT_PHASE_VICTORY) {
         if (fire_pressed) {
+            viewer_breakout_stage_scene(bundle, runtime);
+            for (uint32_t i = 0; i < runtime->active_brick_count && i < VIEWER_BREAKOUT_MAX_BRICKS; i++) {
+                RELEASE(runtime->active_bricks[i].record);
+                runtime->active_bricks[i].record = NULL;
+            }
             runtime->score = 0;
             runtime->lives = 3;
             runtime->level_index = 0;
@@ -934,7 +1006,6 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
             runtime->ball_vy = -2;
             runtime->tick_ms = 0;
             runtime->active_brick_count = 0;
-            viewer_breakout_publish_scene(bundle, runtime);
         }
         return;
     }
@@ -1002,6 +1073,8 @@ static void viewer_breakout_runtime_step(ViewerBreakoutRuntime *runtime,
                                          brick->x, brick->y, brick->w, brick->h)) {
             runtime->score += brick->points;
             runtime->ball_vy = -runtime->ball_vy;
+            RELEASE(brick->record);
+            brick->record = NULL;
             for (uint32_t j = i + 1u; j < runtime->active_brick_count; j++) {
                 runtime->active_bricks[j - 1u] = runtime->active_bricks[j];
             }
@@ -1037,7 +1110,7 @@ static void destroy_scene_bundle(ViewerSceneBundle *bundle) {
     if (!bundle) {
         return;
     }
-    CLJ_FREE(bundle->slots);
+    CLJ_HOST_FREE(bundle->slots);
     RELEASE(bundle->slots_root);
     RELEASE(bundle->host_runtime);
     RELEASE(bundle->entry);
@@ -1057,6 +1130,11 @@ static bool viewer_fail_game_demo_config(ViewerSceneBundle *bundle, const char *
 
 static ViewerConfigSource viewer_selected_config_source(void) {
     const char *host_demo = getenv("TINYCLJ_HOST_DEMO");
+#if defined(TINYCLJ_DEFAULT_HOST_DEMO)
+    if (!host_demo || host_demo[0] == '\0') {
+        host_demo = TINYCLJ_DEFAULT_HOST_DEMO;
+    }
+#endif
     if (host_demo && strcmp(host_demo, "breakout") == 0) {
         return (ViewerConfigSource){
             .namespace_name = "tiny-clj.deployment",
@@ -1217,7 +1295,7 @@ static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) 
         return false;
     }
     ViewerConfiguredSlot *slot_items =
-        (ViewerConfiguredSlot *)CLJ_CALLOC((size_t)raw_count, sizeof(ViewerConfiguredSlot));
+        (ViewerConfiguredSlot *)CLJ_HOST_CALLOC((size_t)raw_count, sizeof(ViewerConfiguredSlot));
     if (!slot_items) {
         return false;
     }
@@ -1226,18 +1304,18 @@ static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) 
         ID slot_id = viewer_slot_desc_field(slot_desc, k_id);
         ID slot_atom = viewer_slot_desc_field(slot_desc, k_atom);
         if (!slot_id || !is_symbol(slot_id) || !slot_atom || TAG(slot_atom) != CLJ_ATOM) {
-            CLJ_FREE(slot_items);
+            CLJ_HOST_FREE(slot_items);
             return false;
         }
         for (uint32_t j = 0; j < i; j++) {
             if (slot_items[j].id == slot_id) {
-                CLJ_FREE(slot_items);
+                CLJ_HOST_FREE(slot_items);
                 return false;
             }
         }
         FrameScene *scene = viewer_frame_scene_from_atom((CljAtom *)slot_atom);
         if (!scene) {
-            CLJ_FREE(slot_items);
+            CLJ_HOST_FREE(slot_items);
             return false;
         }
         slot_items[i].id = slot_id;
@@ -1739,14 +1817,14 @@ static uint32_t viewer_compute_animated_slots_mask(const VgRenderSlotState *slot
 }
 
 static void viewer_destroy_slot_runtime_buffers(void) {
-    CLJ_FREE(g_render_thread.slot_states);
-    CLJ_FREE(g_render_thread.slot_seen_generations);
-    CLJ_FREE(g_render_thread.last_rendered_generation);
+    CLJ_HOST_FREE(g_render_thread.slot_states);
+    CLJ_HOST_FREE(g_render_thread.slot_seen_generations);
+    CLJ_HOST_FREE(g_render_thread.last_rendered_generation);
     g_render_thread.slot_states = NULL;
     g_render_thread.slot_seen_generations = NULL;
     g_render_thread.last_rendered_generation = NULL;
-    CLJ_FREE(g_scene_slot_atoms);
-    CLJ_FREE(g_slot_render_priority);
+    CLJ_HOST_FREE(g_scene_slot_atoms);
+    CLJ_HOST_FREE(g_slot_render_priority);
     g_scene_slot_atoms = NULL;
     g_slot_render_priority = NULL;
     g_viewer_slot_count = 0u;
@@ -1757,14 +1835,14 @@ static bool viewer_init_slot_runtime_buffers(const ViewerSceneBundle *bundle) {
         return false;
     }
     viewer_destroy_slot_runtime_buffers();
-    g_scene_slot_atoms = (CljAtom **)CLJ_CALLOC(bundle->slot_count, sizeof(CljAtom *));
-    g_slot_render_priority = (uint8_t *)CLJ_MALLOC(bundle->slot_count * sizeof(uint8_t));
+    g_scene_slot_atoms = (CljAtom **)CLJ_HOST_CALLOC(bundle->slot_count, sizeof(CljAtom *));
+    g_slot_render_priority = (uint8_t *)CLJ_HOST_MALLOC(bundle->slot_count * sizeof(uint8_t));
     g_render_thread.slot_states =
-        (VgRenderSlotState *)CLJ_CALLOC(bundle->slot_count, sizeof(VgRenderSlotState));
+        (VgRenderSlotState *)CLJ_HOST_CALLOC(bundle->slot_count, sizeof(VgRenderSlotState));
     g_render_thread.slot_seen_generations =
-        (uint32_t *)CLJ_CALLOC(bundle->slot_count, sizeof(uint32_t));
+        (uint32_t *)CLJ_HOST_CALLOC(bundle->slot_count, sizeof(uint32_t));
     g_render_thread.last_rendered_generation =
-        (uint32_t *)CLJ_CALLOC(bundle->slot_count, sizeof(uint32_t));
+        (uint32_t *)CLJ_HOST_CALLOC(bundle->slot_count, sizeof(uint32_t));
     if (!g_scene_slot_atoms || !g_slot_render_priority || !g_render_thread.slot_states ||
         !g_render_thread.slot_seen_generations || !g_render_thread.last_rendered_generation) {
         viewer_destroy_slot_runtime_buffers();
@@ -2333,6 +2411,9 @@ int main(void) {
         fprintf(stderr, "Failed to initialize framebuffer\n");
         return 1;
     }
+#if defined(DEBUG) && defined(TINYCLJ_HOST_HEAP_LIMIT_BYTES)
+    memory_set_heap_limit_bytes((size_t)TINYCLJ_HOST_HEAP_LIMIT_BYTES);
+#endif
     runtime_init(&g_runtime);
     event_loop_init();
     vg_rendered_state_reset_all();
@@ -2363,6 +2444,11 @@ int main(void) {
     if (viewer_breakout_runtime_enabled(&demo_bundle) &&
         !viewer_breakout_runtime_init_from_state(&g_breakout_runtime, &demo_bundle)) {
         fprintf(stderr, "Failed to initialize native breakout runtime\n");
+        goto cleanup;
+    }
+    if (viewer_breakout_runtime_enabled(&demo_bundle) &&
+        !viewer_breakout_runtime_activate(&g_breakout_runtime, &demo_bundle, &spatial_rules, false)) {
+        fprintf(stderr, "Failed to activate native breakout startup scene\n");
         goto cleanup;
     }
     if (!viewer_init_slot_runtime_buffers(&demo_bundle)) {
@@ -2403,6 +2489,7 @@ int main(void) {
 #if defined(__APPLE__)
     macos_viewer_register_window_callbacks();
     macos_viewer_restore_window_position();
+    macos_viewer_activate_app_window();
 #endif
     mfb_show_cursor(window, true);
     (void)mfb_set_viewport(window, 0, 0, default_win_w, default_win_h);

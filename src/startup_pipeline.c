@@ -166,6 +166,9 @@ bool tinyclj_startup_bootstrap_runtime(const TinycljRuntimeBootstrapOptions *opt
   bool success = true;
 
   TRY {
+#if defined(DEBUG) && defined(TINYCLJ_HOST_HEAP_LIMIT_BYTES) && !defined(ESP32_BUILD)
+    memory_set_heap_limit_bytes((size_t)TINYCLJ_HOST_HEAP_LIMIT_BYTES);
+#endif
     platform_init();
     runtime_init(&g_runtime);
     if (init_event_loop) {

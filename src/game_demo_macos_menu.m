@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CoreGraphics.h>
 #include "game_demo_macos_menu.h"
 
@@ -182,9 +183,21 @@ static NSWindow *macos_viewer_primary_window(void) {
 @end
 
 static MacosViewerWindowObserver *g_macos_viewer_window_observer = nil;
+static bool g_macos_viewer_foreground_promoted = false;
+
+static void macos_viewer_promote_current_process_to_foreground(void) {
+    if (g_macos_viewer_foreground_promoted) {
+        return;
+    }
+    ProcessSerialNumber psn = {0, kCurrentProcess};
+    (void)TransformProcessType(&psn, kProcessTransformToForegroundApplication);
+    (void)SetFrontProcess(&psn);
+    g_macos_viewer_foreground_promoted = true;
+}
 
 void macos_viewer_install_menu(void) {
     @autoreleasepool {
+        macos_viewer_promote_current_process_to_foreground();
         NSApplication *app = [NSApplication sharedApplication];
         [app setActivationPolicy:NSApplicationActivationPolicyRegular];
 
@@ -225,6 +238,32 @@ void macos_viewer_restore_window_position(void) {
     @autoreleasepool {
         NSWindow *window = macos_viewer_primary_window();
         macos_viewer_bind_window_autosave(window);
+    }
+}
+
+void macos_viewer_activate_app_window(void) {
+    @autoreleasepool {
+        macos_viewer_promote_current_process_to_foreground();
+        NSApplication *app = [NSApplication sharedApplication];
+        if ([app respondsToSelector:@selector(finishLaunching)]) {
+            [app finishLaunching];
+        }
+        if ([NSRunningApplication respondsToSelector:@selector(currentApplication)]) {
+            NSRunningApplication *current = [NSRunningApplication currentApplication];
+            if (current) {
+                [current activateWithOptions:(NSApplicationActivateIgnoringOtherApps |
+                                             NSApplicationActivateAllWindows)];
+            }
+        }
+        [app activateIgnoringOtherApps:YES];
+        [app unhide:nil];
+
+        NSWindow *window = macos_viewer_primary_window();
+        if (!window) {
+            return;
+        }
+        [window makeKeyAndOrderFront:nil];
+        [window orderFrontRegardless];
     }
 }
 

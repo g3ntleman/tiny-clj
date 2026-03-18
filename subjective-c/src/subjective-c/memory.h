@@ -65,6 +65,24 @@ void memory_set_debug_output_enabled(bool enabled);
  */
 bool memory_get_debug_output_enabled(void);
 
+/** @brief Set a process-wide heap usage limit in bytes. Zero disables the limit. */
+void memory_set_heap_limit_bytes(size_t limit);
+
+/** @brief Get the active process-wide heap usage limit in bytes. */
+size_t memory_get_heap_limit_bytes(void);
+
+/** @brief Return tracked current heap usage in bytes. */
+size_t memory_current_usage_bytes(void);
+
+/** @brief Return best-effort allocated size for a pointer, or requested_size when unknown. */
+size_t memory_actual_allocation_size(const void *ptr, size_t requested_size);
+
+/** @brief Return tracked/raw best-effort size for an existing raw allocation pointer. */
+size_t memory_tracked_raw_allocation_size(const void *ptr);
+
+/** @brief Check whether replacing released_size with requested_size would exceed the heap limit. */
+bool memory_heap_limit_would_exceed(size_t released_size, size_t requested_size);
+
 /** @brief Add object to autorelease pool for deferred release
  * @param v Object to autorelease
  * @return The same object (for convenience)
@@ -101,9 +119,19 @@ void throw_oom(void) __attribute__((noreturn));
 
 static inline void* clj_malloc_impl(size_t n, const char *file, int line) {
     (void)file; (void)line;
+    if (n != 0 && memory_heap_limit_would_exceed(0, n)) {
+        throw_oom(); // never returns
+    }
     void *p = malloc(n);
     if (!p && n != 0) {
         throw_oom(); // never returns
+    }
+    if (p && n != 0) {
+        size_t actual = memory_actual_allocation_size(p, n);
+        if (memory_heap_limit_would_exceed(0, actual)) {
+            free(p);
+            throw_oom(); // never returns
+        }
     }
     memory_profiler_track_raw_alloc(p, n, file, line);
     return p;
@@ -116,9 +144,19 @@ static inline void* clj_calloc_impl(size_t nmemb, size_t size, const char *file,
         throw_oom(); // never returns
     }
     size_t n = nmemb * size;
+    if (n != 0 && memory_heap_limit_would_exceed(0, n)) {
+        throw_oom(); // never returns
+    }
     void *p = calloc(nmemb, size);
     if (!p && n != 0) {
         throw_oom(); // never returns
+    }
+    if (p && n != 0) {
+        size_t actual = memory_actual_allocation_size(p, n);
+        if (memory_heap_limit_would_exceed(0, actual)) {
+            free(p);
+            throw_oom(); // never returns
+        }
     }
     memory_profiler_track_raw_alloc(p, n, file, line);
     return p;
@@ -126,6 +164,10 @@ static inline void* clj_calloc_impl(size_t nmemb, size_t size, const char *file,
 
 static inline void* clj_realloc_impl(void *old_ptr, size_t n, const char *file, int line) {
     (void)file; (void)line;
+    size_t old_size = old_ptr ? memory_tracked_raw_allocation_size(old_ptr) : 0;
+    if (n != 0 && memory_heap_limit_would_exceed(old_size, n)) {
+        throw_oom(); // never returns; old_ptr remains valid
+    }
     uintptr_t old_ptr_addr = (uintptr_t)old_ptr;
     void *new_ptr = realloc(old_ptr, n);
     if (!new_ptr && n != 0) {
@@ -189,6 +231,38 @@ static inline void clj_free_impl(void *ptr, const char *file, int line) {
 
 #endif // MEMORY_PROFILING_ENABLED
 
+static inline void* clj_host_malloc_impl(size_t n) {
+    void *p = malloc(n);
+    if (!p && n != 0) {
+        throw_oom(); // never returns
+    }
+    return p;
+}
+
+static inline void* clj_host_calloc_impl(size_t nmemb, size_t size) {
+    if (nmemb != 0 && size > ((size_t)-1) / nmemb) {
+        throw_oom(); // never returns
+    }
+    size_t n = nmemb * size;
+    void *p = calloc(nmemb, size);
+    if (!p && n != 0) {
+        throw_oom(); // never returns
+    }
+    return p;
+}
+
+static inline void* clj_host_realloc_impl(void *old_ptr, size_t n) {
+    void *new_ptr = realloc(old_ptr, n);
+    if (!new_ptr && n != 0) {
+        throw_oom(); // never returns; old_ptr remains valid per realloc contract
+    }
+    return new_ptr;
+}
+
+static inline void clj_host_free_impl(void *ptr) {
+    free(ptr);
+}
+
 // -----------------------------------------------------------------------------
 // Canonical allocation macro API
 // -----------------------------------------------------------------------------
@@ -200,6 +274,12 @@ static inline void clj_free_impl(void *ptr, const char *file, int line) {
 #define CLJ_BUF_CALLOC(nmemb, size) clj_calloc_impl((nmemb), (size), __FILE__, __LINE__)
 #define CLJ_BUF_REALLOC(ptr, n) clj_realloc_impl((ptr), (n), __FILE__, __LINE__)
 #define CLJ_BUF_FREE(ptr) clj_free_impl((ptr), __FILE__, __LINE__)
+
+/* Host-emulation buffers stay outside the tiny-clj/Clojure heap limit. */
+#define CLJ_HOST_MALLOC(n) clj_host_malloc_impl((n))
+#define CLJ_HOST_CALLOC(nmemb, size) clj_host_calloc_impl((nmemb), (size))
+#define CLJ_HOST_REALLOC(ptr, n) clj_host_realloc_impl((ptr), (n))
+#define CLJ_HOST_FREE(ptr) clj_host_free_impl((ptr))
 
 // Backward-compatible aliases. Prefer CLJ_BUF_* in new code.
 #define CLJ_MALLOC(n) CLJ_BUF_MALLOC(n)
