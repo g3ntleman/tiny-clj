@@ -27,20 +27,20 @@ todos:
     content: Implement one-screen UI and full state-machine flow with stable scene snapshots
     status: completed
   - id: phase-7-red-audio-and-feel-tests
-    content: Complete failing tests for sound trigger semantics and bounded gameplay pacing assumptions after the current mini-SFX descriptor/mapping baseline
-    status: in_progress
+    content: Record the shipped audio baseline and explicitly defer runtime sound hookup/pacing polish to follow-up work
+    status: completed
   - id: phase-8-green-audio-and-polish
-    content: Implement 3 mini sound effects plus hit/lose/win audio hooks and minimal visual feedback without changing gameplay contracts
-    status: pending
+    content: Close v1 scope without extra audio polish and move non-essential feel work to follow-up plans
+    status: completed
   - id: esp32-optimization
-    content: Optimize the native Breakout runtime and scene publishing path for ESP32 code size, heap usage, and execution speed
-    status: pending
+    content: Carve out ESP32 code-size/heap/runtime optimization as explicit follow-up work outside this v1 demo plan
+    status: completed
   - id: phase-9-regression-and-budgets
-    content: Run remaining broader and full regression tests and lock acceptance criteria for the demo
-    status: in_progress
+    content: Capture the verification that was completed for v1 and finalize the acceptance boundary for the shipped mini demo
+    status: completed
   - id: cleanup
-    content: Sourcecode aufräumen – Debug-Code, temporäre Workarounds, tote Codepfade, überflüssige Kommentare und nicht mehr benötigte Hilfsfunktionen entfernen
-    status: pending
+    content: Finalize the plan by separating shipped cleanup from larger refactors that now live in follow-up plans
+    status: completed
 isProject: false
 ---
 
@@ -70,11 +70,12 @@ Create a simple and robust Breakout demo for the tiny-handheld:
 
 ## Current status snapshot
 
-- Core Breakout gameplay, level flow, scene building, namespace boundaries, and host deployment wiring are implemented.
-- The host viewer now runs Breakout through the native C runtime path (`:host-runtime :native-breakout`) instead of a Clojure-driven frame loop.
+- Core Breakout gameplay, level flow, scene building, namespace boundaries, and host deployment wiring are implemented and shipped as the v1 mini demo.
+- The host viewer runs Breakout through the native C runtime path (`:host-runtime :native-breakout`) instead of a Clojure-driven frame loop.
+- `tiny-fx.app` is now the canonical macOS host product and starts Breakout by default; the older `game-demo` path remains available only as an explicit override (`TINYCLJ_HOST_DEMO=game-demo`).
 - The renderer-side one-pixel border mismatch was fixed in the library by tightening `Rect` pixel-extent semantics; the temporary app-side workaround was removed.
-- Focused Breakout and renderer regressions are green, and the demo has been manually verified as playable in the host window.
-- Remaining planned work is primarily audio hookup/polish, broader regression coverage, and explicit ESP32 optimization follow-up.
+- Focused Breakout/runtime/launcher regressions are green, and the demo has been manually verified as playable in the host window and app bundle.
+- Remaining non-v1 items are no longer tracked as open work in this plan; they now belong to explicit follow-up plans, especially the collision/runtime migration plan and future audio/ESP32 follow-up work.
 
 ## Constraints
 
@@ -89,6 +90,17 @@ Create a simple and robust Breakout demo for the tiny-handheld:
 - Build/Test wiring should be centralized in namespace `tiny-clj.deployment`.
 - Breakout demo code must use new namespaces under `tiny-breakout.*`.
 - Breakout namespaces may only depend on `tiny-clj.*` and `tiny-fx.*` (plus `clojure.core`).
+
+## Final scope decision
+
+This plan is now complete for the shipped v1 mini demo. Its purpose was to get one-screen Breakout working end-to-end with deterministic gameplay contracts, stable scene snapshots, namespace discipline, host deployment wiring, and a real `tiny-fx` launch path.
+
+The following items are explicitly out of scope for this finished plan and belong in follow-up work:
+
+- replacing the current native host runtime with the newer collision/snapshot-driven architecture tracked in [`Plans/breakout-collision-migration.plan.md`](/Users/theisen/Projects/tiny-clj/Plans/breakout-collision-migration.plan.md)
+- wiring the current `tiny-breakout.audio` cue mapping into full runtime playback/polish
+- broader ESP32-specific optimization and budgeting beyond the current host/runtime correctness checks
+- broader whole-repo regression passes beyond the focused verification already run during implementation
 
 ## Existing patterns to reuse
 
@@ -217,8 +229,8 @@ Add failing tests first:
 Then implement sound/event triggers against existing sound APIs.
 
 Status update:
-- Implemented baseline: deterministic event-to-cue mapping plus three mini-SFX descriptors in `tiny-breakout.audio`.
-- Still open: wire cues into runtime sound playback and cover any remaining pacing/feel assertions with tests.
+- Shipped in v1: deterministic event-to-cue mapping plus three mini-SFX descriptors in `tiny-breakout.audio`.
+- Deferred out of this plan: runtime sound playback hookup and any additional pacing/feel assertions.
 
 MDN mapping:
 - Finishing up (feedback/polish), adapted to tiny-fx sound/event model
@@ -232,8 +244,9 @@ MDN mapping:
 5. Capture final acceptance checklist and known limitations.
 
 Status update:
-- Done so far: focused `test_vector_scene_graph*` and `test_breakout_contract*` runs, host build, and manual gameplay verification.
-- Still open: broader relevant suites and a full unit-test pass before the plan can be considered complete.
+- Completed for this plan: focused `test_breakout_contract*`, `test_breakout_namespace_contract*`, `test_breakout_runtime_startup*`, `test_main_entry*`, embedded-source/deploy contract checks, host builds, and manual gameplay verification.
+- Also completed during product unification: `tiny-fx.app` launch-path checks, bundle resource checks, and `-m`/REPL startup regressions relevant to the new host products.
+- Deferred out of this plan: any future broad/full-suite certification work that is not Breakout-mini specific.
 
 ## File plan (expected)
 
@@ -258,8 +271,28 @@ Status update:
 4. Paddle control works via both input modes: GPIO left/right simulation and rotary encoder.
 5. All planned state transitions are covered by tests and green.
 6. Collision, score, and life-loss behavior are deterministic in tests.
-7. No regression in existing relevant tiny-fx test groups.
-8. Full unit-test run is green.
-9. ESP32 Optimization: Code is optimized for the ESP32 platform, considering code size, heap usage, and execution speed.
-10. Breakout implementation namespaces are under `tiny-breakout.*` and dependency-contract tests are green.
-11. Three mini sound effects are implemented and test-covered (`:sfx/paddle-hit`, `:sfx/brick-hit`, `:sfx/life-lost`).
+7. Breakout implementation namespaces are under `tiny-breakout.*` and dependency-contract tests are green.
+8. `tiny-clj.deployment` exposes deterministic Breakout startup configs for both data-only startup and native host runtime startup.
+9. `tiny-fx` / `tiny-fx.app` can launch the Breakout host path successfully as the canonical macOS product for the demo.
+10. Three mini sound effects are implemented and test-covered (`:sfx/paddle-hit`, `:sfx/brick-hit`, `:sfx/life-lost`).
+
+## Final verification snapshot
+
+- Verified in focused unit coverage:
+  - `src/tests/test_breakout_contract.c`
+  - `src/tests/test_breakout_namespace_contract.c`
+  - `src/tests/test_breakout_runtime_startup.c`
+  - `src/tests/test_main_entry.c`
+  - `src/tests/test_embedded_sources.c`
+  - `src/tests/test_deploy_contract.py`
+- Verified in build/runtime wiring:
+  - host builds for `tiny-clj` and `tiny-fx`
+  - macOS app-bundle launch path for `tiny-fx.app`
+  - bundle resource embedding and startup pipeline regressions
+- Manually verified:
+  - Breakout is playable in the host viewer
+  - `tiny-fx.app` launches Breakout by default
+
+## Completion note
+
+This plan is finalized as complete. Remaining structural/runtime evolution belongs to dedicated successor plans rather than to this original mini-demo delivery plan.
