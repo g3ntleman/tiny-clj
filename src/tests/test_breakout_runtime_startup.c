@@ -28,6 +28,9 @@ typedef struct {
     EvalState *st;
 } BreakoutRuntimeTestContext;
 
+static bool breakout_runtime_test_context_init_with_heap_budget(BreakoutRuntimeTestContext *ctx,
+                                                                bool apply_host_heap_budget);
+
 static void breakout_runtime_test_context_destroy(BreakoutRuntimeTestContext *ctx) {
     if (!ctx) {
         return;
@@ -40,6 +43,11 @@ static void breakout_runtime_test_context_destroy(BreakoutRuntimeTestContext *ct
 }
 
 static bool breakout_runtime_test_context_init(BreakoutRuntimeTestContext *ctx) {
+    return breakout_runtime_test_context_init_with_heap_budget(ctx, false);
+}
+
+static bool breakout_runtime_test_context_init_with_heap_budget(BreakoutRuntimeTestContext *ctx,
+                                                                bool apply_host_heap_budget) {
     if (!ctx) {
         return false;
     }
@@ -62,6 +70,9 @@ static bool breakout_runtime_test_context_init(BreakoutRuntimeTestContext *ctx) 
     if (!tiny_fx_gfx_ensure_schema(ctx->st)) {
         return false;
     }
+    if (apply_host_heap_budget) {
+        viewer_tiny_fx_host_apply_heap_limit_after_bootstrap();
+    }
     if (!viewer_load_game_demo_config(ctx->st, config_source, &ctx->bundle, &ctx->spatial_rules)) {
         return false;
     }
@@ -75,6 +86,22 @@ static bool breakout_runtime_test_context_init(BreakoutRuntimeTestContext *ctx) 
                                             &ctx->bundle,
                                             &ctx->spatial_rules,
                                             false);
+}
+
+TEST(test_breakout_runtime_startup_host_app_fits_debug_heap_limit) {
+    BreakoutRuntimeTestContext ctx = {0};
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    size_t host_limit = viewer_tiny_fx_host_heap_limit_bytes();
+    bool init_ok = false;
+
+    TEST_ASSERT_EQUAL_UINT64(614400u, host_limit);
+    init_ok = breakout_runtime_test_context_init_with_heap_budget(&ctx, true);
+    memory_set_heap_limit_bytes(previous_limit);
+
+    if (init_ok) {
+        breakout_runtime_test_context_destroy(&ctx);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should fit inside the tiny-fx debug heap limit");
 }
 
 TEST(test_breakout_runtime_startup_defaults_host_demo_selection_to_breakout) {
@@ -95,6 +122,36 @@ TEST(test_breakout_runtime_startup_defaults_host_demo_selection_to_breakout) {
     TEST_ASSERT_EQUAL_STRING("tiny-clj.deployment", config_source.namespace_name);
     TEST_ASSERT_EQUAL_STRING("(tiny-clj.deployment/breakout-host-config)", config_source.config_expr);
     TEST_ASSERT_EQUAL_STRING("tiny-clj.deployment/breakout-host-config", config_source.display_name);
+}
+
+TEST(test_breakout_runtime_startup_runloop_thread_start_is_idempotent) {
+    EvalState *st_primary = NULL;
+    EvalState *st_secondary = NULL;
+    pthread_t first_thread;
+
+    runtime_init(&g_runtime);
+    event_loop_init();
+
+    st_primary = evalstate_new(true);
+    TEST_ASSERT_NOT_NULL(st_primary);
+    st_secondary = evalstate_new(true);
+    TEST_ASSERT_NOT_NULL(st_secondary);
+
+    TEST_ASSERT_TRUE(start_runloop_thread(st_primary));
+    TEST_ASSERT_TRUE(g_runloop_thread.started);
+    first_thread = g_runloop_thread.thread;
+    TEST_ASSERT_EQUAL_PTR(st_primary, g_runloop_thread.eval_state);
+
+    TEST_ASSERT_TRUE(start_runloop_thread(st_secondary));
+    TEST_ASSERT_TRUE(g_runloop_thread.started);
+    TEST_ASSERT_TRUE(pthread_equal(first_thread, g_runloop_thread.thread));
+    TEST_ASSERT_EQUAL_PTR(st_primary, g_runloop_thread.eval_state);
+
+    stop_runloop_thread();
+    stop_runloop_thread();
+
+    evalstate_free(st_secondary);
+    evalstate_free(st_primary);
 }
 
 TEST(test_breakout_runtime_startup_activates_native_title_scene_before_first_input) {
@@ -232,6 +289,66 @@ TEST(test_breakout_runtime_idle_serve_does_not_rebuild_identical_scene_under_tig
 
     TEST_ASSERT_EQUAL_UINT64(before_idle, after_idle);
     TEST_ASSERT_EQUAL_INT(BREAKOUT_PHASE_SERVE, g_breakout_runtime.phase);
+
+    breakout_runtime_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_play_loop_does_not_accumulate_unbounded_heap_growth) {
+    BreakoutRuntimeTestContext ctx = {0};
+    ViewerRuntimeFlags runtime_flags = {0};
+    uint8_t keys[KB_KEY_LAST + 1] = {0};
+    size_t baseline = 0;
+    size_t after = 0;
+    const size_t allowed_growth = 16384u;
+
+    TEST_ASSERT_TRUE(breakout_runtime_test_context_init(&ctx));
+
+    keys[KB_KEY_ENTER] = 1;
+    viewer_breakout_runtime_step(&g_breakout_runtime, &ctx.bundle, &runtime_flags, keys);
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, false);
+    runtime_flags.fire_key_was_down = true;
+
+    memset(keys, 0, sizeof(keys));
+    viewer_breakout_runtime_step(&g_breakout_runtime, &ctx.bundle, &runtime_flags, keys);
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, false);
+    runtime_flags.fire_key_was_down = false;
+
+    keys[KB_KEY_ENTER] = 1;
+    viewer_breakout_runtime_step(&g_breakout_runtime, &ctx.bundle, &runtime_flags, keys);
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, false);
+    runtime_flags.fire_key_was_down = true;
+
+    memset(keys, 0, sizeof(keys));
+    viewer_breakout_runtime_step(&g_breakout_runtime, &ctx.bundle, &runtime_flags, keys);
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, false);
+    runtime_flags.fire_key_was_down = false;
+
+    baseline = memory_current_usage_bytes();
+
+    for (int frame = 0; frame < 600; frame++) {
+        memset(keys, 0, sizeof(keys));
+        if (g_breakout_runtime.phase == BREAKOUT_PHASE_TITLE ||
+            g_breakout_runtime.phase == BREAKOUT_PHASE_SERVE ||
+            g_breakout_runtime.phase == BREAKOUT_PHASE_LEVEL_CLEAR ||
+            g_breakout_runtime.phase == BREAKOUT_PHASE_GAME_OVER ||
+            g_breakout_runtime.phase == BREAKOUT_PHASE_VICTORY) {
+            keys[KB_KEY_ENTER] = 1;
+        } else if (g_breakout_runtime.ball_x + 2 < g_breakout_runtime.paddle_x + 20) {
+            keys[KB_KEY_LEFT] = 1;
+        } else if (g_breakout_runtime.ball_x + 2 > g_breakout_runtime.paddle_x + 20) {
+            keys[KB_KEY_RIGHT] = 1;
+        }
+
+        viewer_breakout_runtime_step(&g_breakout_runtime, &ctx.bundle, &runtime_flags, keys);
+        viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, false);
+
+        runtime_flags.fire_key_was_down = keys[KB_KEY_ENTER] != 0;
+        runtime_flags.pause_key_was_down = keys[KB_KEY_Y] != 0;
+    }
+
+    after = memory_current_usage_bytes();
+    TEST_ASSERT_TRUE_MESSAGE(after <= baseline + allowed_growth,
+                             "native breakout play loop should not show unbounded heap growth");
 
     breakout_runtime_test_context_destroy(&ctx);
 }

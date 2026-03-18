@@ -46,6 +46,7 @@
 #define VIEW_DEFAULT_WINDOW_SCALE 2u
 #define VIEWER_MAX_SLOTS VG_RENDERED_STATE_MAX_SLOTS
 #define TARGET_FPS              60u
+#define TINYCLJ_TINY_FX_HOST_HEAP_LIMIT_BYTES 614400u
 #define SCENE_ERASE_COLOR       0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
 #define VIEWER_ANIMATED_WAIT_TIMEOUT_MS 8u
@@ -192,6 +193,9 @@ static bool start_runloop_thread(EvalState *st) {
     if (!st) {
         return false;
     }
+    if (g_runloop_thread.started) {
+        return true;
+    }
     g_runloop_thread.eval_state = st;
     atomic_store_explicit(&g_runloop_thread.running, true, memory_order_release);
     if (pthread_create(&g_runloop_thread.thread, NULL, viewer_runloop_thread_main, st) != 0) {
@@ -210,6 +214,7 @@ static void stop_runloop_thread(void) {
     atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);
     (void)pthread_join(g_runloop_thread.thread, NULL);
     g_runloop_thread.started = false;
+    memset(&g_runloop_thread.thread, 0, sizeof(g_runloop_thread.thread));
     g_runloop_thread.eval_state = NULL;
 }
 
@@ -1162,6 +1167,32 @@ static ViewerConfigSource viewer_selected_config_source(void) {
         .config_expr = "(tiny-clj.deployment/breakout-host-config)",
         .display_name = "tiny-clj.deployment/breakout-host-config",
     };
+}
+
+static size_t viewer_tiny_fx_host_heap_limit_bytes(void) {
+#if defined(DEBUG) && !defined(ESP32_BUILD)
+#if defined(TINYCLJ_HOST_HEAP_LIMIT_BYTES)
+    return (size_t)TINYCLJ_HOST_HEAP_LIMIT_BYTES;
+#else
+    return (size_t)TINYCLJ_TINY_FX_HOST_HEAP_LIMIT_BYTES;
+#endif
+#else
+    return 0u;
+#endif
+}
+
+static void viewer_tiny_fx_host_apply_heap_limit_after_bootstrap(void) {
+    size_t host_heap_limit = viewer_tiny_fx_host_heap_limit_bytes();
+    if (host_heap_limit == 0u) {
+        return;
+    }
+
+    size_t baseline = memory_current_usage_bytes();
+    if (SIZE_MAX - baseline < host_heap_limit) {
+        memory_set_heap_limit_bytes(SIZE_MAX);
+        return;
+    }
+    memory_set_heap_limit_bytes(baseline + host_heap_limit);
 }
 
 static void destroy_collision_policy(ViewerCollisionPolicy *policy) {
@@ -2426,15 +2457,6 @@ int tinyclj_tiny_fx_host_app_run(void) {
         fprintf(stderr, "Failed to initialize framebuffer\n");
         return 1;
     }
-#if defined(DEBUG)
-    /*
-     * The standalone tiny-fx app loads the full demo/runtime scene graph and can
-     * legitimately exceed the small CLI-oriented host heap guardrail used by the
-     * REPL. Keep the app bundle unconstrained here so macOS launch does not fail
-     * before the window is created.
-     */
-    memory_set_heap_limit_bytes(0u);
-#endif
     runtime_init(&g_runtime);
     event_loop_init();
     vg_rendered_state_reset_all();
@@ -2448,6 +2470,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
         fprintf(stderr, "Failed to initialize vector scene record schema via tiny-fx.gfx\n");
         goto cleanup;
     }
+    viewer_tiny_fx_host_apply_heap_limit_after_bootstrap();
     ViewerConfigSource config_source = viewer_selected_config_source();
     TRY {
         if (!viewer_load_game_demo_config(viewer_eval_state, config_source, &demo_bundle, &spatial_rules)) {

@@ -122,7 +122,7 @@ set(TINYCLJ_SUBJECTIVE_C_HEADERS_DIR "${TINYCLJ_SUBJECTIVE_C_PUBLIC_INCLUDE_DIR}
 # relative includes like "../exception.h". Keep includes unchanged and provide
 # an include-dir where ".." resolves into the subjective-c header directory.
 set(TINYCLJ_SUBJECTIVE_C_TESTS_COMMON_ANCHOR_DIR "${TINYCLJ_SUBJECTIVE_C_HEADERS_DIR}/include_anchor")
-set(TINYCLJ_HOST_HEAP_LIMIT_BYTES 819200)
+set(TINYCLJ_HOST_HEAP_LIMIT_BYTES 614400)
 
 # Zombie mode is compile-time and must be consistent across all targets.
 # Default is OFF because zombie mode can lead to very high memory usage (OOM) in long test runs.
@@ -602,6 +602,7 @@ target_compile_definitions(unit-tests PRIVATE
     TINY_CLJ_TEST_RUNNER
     UNITY_USE_COMMAND_LINE_ARGS
     LINE_EDITING_ENABLED=1
+    TINYCLJ_HOST_HEAP_LIMIT_BYTES=${TINYCLJ_HOST_HEAP_LIMIT_BYTES}
     MEMORY_PROFILING_ENABLED=${MEMORY_PROFILING_ENABLED_VALUE}
     META_ENABLED=${META_ENABLED_VALUE}
     UNITY_INCLUDE_EXEC_TIME
