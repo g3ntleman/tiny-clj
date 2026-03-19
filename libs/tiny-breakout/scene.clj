@@ -57,19 +57,34 @@
           prototype))
 
 (defn- maybe-field-timeline
-  [state from-value axis-key]
-  (let [segment (:ball-segment state)]
-    (if (and (map? segment)
-             (number? (:start-ms segment))
-             (number? (:end-ms segment))
-             (> (:end-ms segment) (:start-ms segment)))
+  [motion from-value axis-key]
+  (if (and (map? motion)
+           (number? (:start-ms motion))
+           (number? (:end-ms motion))
+           (> (:end-ms motion) (:start-ms motion)))
+    (record-create 'Timeline
+                   [[[(let [v (:start-ms motion)] (if (number? v) v 0))
+                      from-value]
+                     [(let [v (:end-ms motion)] (if (number? v) v 0))
+                      (get motion axis-key)]]
+                    false])
+    from-value))
+
+(defn- attached-ball-motion
+  [state]
+  (let [phase (get state :phase)
+        motion (get state :paddle-motion)
+        paddle-x (let [v (get state :paddle-x)] (if (number? v) v 0))
+        ball-x (let [v (get state :ball-x)] (if (number? v) v 0))]
+    (if (and (map? motion)
+             (or (= phase :title) (= phase :serve)))
       (record-create 'Timeline
-                     [[[(let [v (:start-ms segment)] (if (number? v) v 0))
-                        from-value]
-                       [(let [v (:end-ms segment)] (if (number? v) v 0))
-                        (get segment axis-key)]]
+                     [[[(let [v (:start-ms motion)] (if (number? v) v 0))
+                        ball-x]
+                       [(let [v (:end-ms motion)] (if (number? v) v 0))
+                        (+ ball-x (- (get motion :to-x) paddle-x))]]
                       false])
-      from-value)))
+      nil)))
 
 (defn- visible-bricks
   [state]
@@ -79,13 +94,13 @@
         phase (get state :phase)]
     (cond
       (and (vector? active-bricks)
-           (or (not (empty? active-bricks))
-               (not= phase :title)))
+           (not (empty? active-bricks)))
       active-bricks
       (and (vector? levels)
            (number? level-index)
            (<= 0 level-index)
-           (< level-index (count levels)))
+           (< level-index (count levels))
+           (not= phase :title))
       (let [level (nth levels level-index)
             bricks (get level :bricks)]
         (if (vector? bricks) bricks []))
@@ -97,38 +112,47 @@
   (let [paddle-x (let [v (get state :paddle-x)] (if (number? v) v 0))
         ball-x (let [v (get state :ball-x)] (if (number? v) v 0))
         ball-y (let [v (get state :ball-y)] (if (number? v) v 0))
-        ball-x-field (maybe-field-timeline state ball-x :to-x)
-        ball-y-field (maybe-field-timeline state ball-y :to-y)
+        paddle-motion (get state :paddle-motion)
+        ball-segment (get state :ball-segment)
+        paddle-x-field (maybe-field-timeline paddle-motion paddle-x :to-x)
+        attached-ball-x-field (attached-ball-motion state)
+        ball-x-field (if (nil? attached-ball-x-field)
+                       (maybe-field-timeline ball-segment ball-x :to-x)
+                       attached-ball-x-field)
+        ball-y-field (maybe-field-timeline ball-segment ball-y :to-y)
         score (let [v (get state :score)] (if (number? v) v 0))
         lives (let [v (get state :lives)] (if (number? v) v 0))
         phase (or (get state :phase) :title)
-        paddle-prototype (paddle-prototype)
-        ball-prototype (ball-prototype)
-        brick-prototype (brick-prototype)
-        hud (str "Score: " score "  Lives: " lives)
-        overlay (overlay-text phase)
-        bricks (visible-bricks state)
-        base-entities {1001 (->Rect 1001 nil nil true 0 0 core/playfield-width core/playfield-height nil)
-                       1002 (->Rect 1002 nil nil true paddle-x core/paddle-y core/paddle-width core/paddle-height paddle-prototype)
-                       1003 (->Rect 1003 nil nil true ball-x-field ball-y-field core/ball-size core/ball-size ball-prototype)
-                       1004 (->VText 1004 nil nil true 8 12 1 0 hud nil)
-                       1005 (->VText 1005 nil nil true 100 120 1 0 overlay nil)}]
-    (loop [remaining bricks
-           entities base-entities
-           child-ids [1001 1002 1003 1004 1005]]
-      (if (empty? remaining)
-        {:type :FrameScene
-         :root (->Group 1000 nil nil true child-ids nil)
-         :index entities
-         :clip-rect [0 0 320 240]
-         :z 0
-         :visible true
-         :opaque true
-         :erase-color 0
-         :guard-px 1
-         :collision-rules (expand-breakout-spatial-rules (drop 5 child-ids))}
-        (let [brick (first remaining)
-              brick-id (:id brick)]
-          (recur (rest remaining)
-                 (assoc entities brick-id (brick->entity brick brick-prototype))
-                 (conj child-ids brick-id)))))))
+        bricks (visible-bricks state)]
+    (let [paddle-shape (paddle-prototype)
+          ball-shape (ball-prototype)
+          brick-shape (brick-prototype)
+          score-text (str "Score: " score)
+          lives-text (str lives)
+          overlay (overlay-text phase)
+          base-entities {1001 (->Rect 1001 nil nil true 0 0 core/playfield-width core/playfield-height nil)
+                         1002 (->Rect 1002 nil nil true paddle-x-field core/paddle-y core/paddle-width core/paddle-height paddle-shape)
+                         1003 (->Rect 1003 nil nil true ball-x-field ball-y-field core/ball-size core/ball-size ball-shape)
+                         1004 (->VText 1004 nil nil true 8 12 1 0 score-text nil)
+                         1005 (->VText 1005 nil nil true 100 120 1 0 overlay nil)
+                         1006 (->VText 1006 nil nil true 258 12 1 0 "Lives" nil)
+                         1007 (->VText 1007 nil nil true 302 12 1 0 lives-text nil)}]
+      (loop [remaining bricks
+             entities base-entities
+             child-ids [1001 1002 1003 1004 1005 1006 1007]]
+        (if (empty? remaining)
+          {:type :FrameScene
+           :root (->Group 1000 nil nil true child-ids nil)
+           :index entities
+           :clip-rect [0 0 320 240]
+           :z 0
+           :visible true
+           :opaque true
+           :erase-color 0
+           :guard-px 1
+           :collision-rules (expand-breakout-spatial-rules (drop 7 child-ids))}
+          (let [brick (first remaining)
+                brick-id (:id brick)]
+            (recur (rest remaining)
+                   (assoc entities brick-id (brick->entity brick brick-shape))
+                   (conj child-ids brick-id))))))))

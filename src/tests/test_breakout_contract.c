@@ -14,6 +14,25 @@ TEST(test_breakout_contract_namespaces_load) {
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
+TEST(test_breakout_contract_audio_events_resolve_to_playable_sfx) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.audio) "
+        "  (let [cues (tiny-breakout.audio/events->cues [:brick-hit :level-clear :victory]) "
+        "        played (tiny-breakout.audio/play-events! [:brick-hit :victory])] "
+        "    (and (= [:sfx/brick-hit :sfx/level-clear :sfx/victory] cues) "
+        "         (= 2 (count played)) "
+        "         (map? (nth played 0)) "
+        "         (contains? (nth played 0) :status) "
+        "         (contains? (nth played 0) :duration-ms) "
+        "         (map? (nth played 1)) "
+        "         (contains? (nth played 1) :status) "
+        "         (contains? (nth played 1) :duration-ms))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
 TEST(test_breakout_contract_core_input_flow_title_to_play_creates_segment) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
@@ -21,20 +40,18 @@ TEST(test_breakout_contract_core_input_flow_title_to_play_creates_segment) {
         "  (require 'tiny-breakout.core) "
         "  (let [s0 (tiny-breakout.core/init-state) "
         "        s1 (tiny-breakout.core/apply-input s0 {:launch true} 100 nil) "
-        "        s2 (tiny-breakout.core/apply-input s1 {:launch true} 200 nil) "
-        "        seg (:ball-segment s2)] "
-        "    [(:phase s0) (:phase s1) (:phase s2) (map? seg) (:start-ms seg) (:end-ms seg)]))",
+        "        seg (:ball-segment s1)] "
+        "    [(:phase s0) (:phase s1) (map? seg) (:start-ms seg) (:end-ms seg)]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
     CljPersistentVector *v = as_vector(out);
-    TEST_ASSERT_EQUAL_UINT(6, vector_count(v));
+    TEST_ASSERT_EQUAL_UINT(5, vector_count(v));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":title"), vector_nth(v, 0));
-    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":serve"), vector_nth(v, 1));
-    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":play"), vector_nth(v, 2));
-    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 3));
-    TEST_ASSERT_TRUE(as_fixnum(vector_nth(v, 4)) >= 200);
-    TEST_ASSERT_TRUE(as_fixnum(vector_nth(v, 5)) > as_fixnum(vector_nth(v, 4)));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":play"), vector_nth(v, 1));
+    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 2));
+    TEST_ASSERT_TRUE(as_fixnum(vector_nth(v, 3)) >= 100);
+    TEST_ASSERT_TRUE(as_fixnum(vector_nth(v, 4)) > as_fixnum(vector_nth(v, 3)));
 }
 
 TEST(test_breakout_contract_paddle_clamps_at_bounds) {
@@ -60,7 +77,7 @@ TEST(test_breakout_contract_serve_keeps_ball_attached_to_paddle) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-breakout.core) "
-        "  (let [s0 (tiny-breakout.core/apply-input (tiny-breakout.core/init-state) {:launch true} 16 nil) "
+        "  (let [s0 (assoc (tiny-breakout.core/init-state) :phase :serve :paddle-x 140) "
         "        s1 (tiny-breakout.core/apply-input (assoc s0 :paddle-x 120) {:dx 0} 16 nil)] "
         "    [(:phase s1) (:ball-x s1) (:ball-y s1) (:ball-segment s1)]))",
         g_test_eval_state);
@@ -177,14 +194,15 @@ TEST(test_breakout_contract_runtime_input_supports_digital_and_rotary) {
         "(do "
         "  (require 'tiny-breakout.runtime) "
         "  (tiny-breakout.runtime/reset-runtime!) "
-        "  (let [x0 (:paddle-x @tiny-breakout.runtime/state*) "
-        "        _ (tiny-breakout.runtime/apply-input! {:left true}) "
-        "        x1 (:paddle-x @tiny-breakout.runtime/state*) "
-        "        _ (tiny-breakout.runtime/reset-runtime!) "
-        "        y0 (:paddle-x @tiny-breakout.runtime/state*) "
-        "        _ (tiny-breakout.runtime/apply-input! {:rotary-delta -1}) "
-        "        y1 (:paddle-x @tiny-breakout.runtime/state*)] "
-        "    [(- x1 x0) (- y1 y0)]))",
+        "  (def breakout-test-x0 (:paddle-x @tiny-breakout.runtime/state*)) "
+        "  (tiny-breakout.runtime/apply-input! {:left true}) "
+        "  (def breakout-test-x1 (:paddle-x @tiny-breakout.runtime/state*)) "
+        "  (tiny-breakout.runtime/reset-runtime!) "
+        "  (def breakout-test-y0 (:paddle-x @tiny-breakout.runtime/state*)) "
+        "  (tiny-breakout.runtime/apply-input! {:rotary-delta -1}) "
+        "  (def breakout-test-y1 (:paddle-x @tiny-breakout.runtime/state*)) "
+        "  [(- breakout-test-x1 breakout-test-x0) "
+        "   (- breakout-test-y1 breakout-test-y0)])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -200,31 +218,55 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (require 'tiny-breakout.scene) "
-        "  (let [brick {:id 2001 :x 40 :y 32 :w 20 :h 10 :points 10} "
-        "        s (assoc (tiny-breakout.core/init-state) :bricks [brick]) "
-        "        frame (tiny-breakout.scene/build-scene s) "
-        "        root (:root frame) "
-        "        index (:index frame) "
-        "        rules (:collision-rules frame) "
-        "        paddle (get index 1002) "
-        "        ball (get index 1003) "
-        "        brick-node (get index 2001) "
-        "        paddle-rule (nth rules 0) "
-        "        brick-rule (nth rules 1)] "
-        "    (and (= true (:visible frame)) "
-        "         (= 1000 (:id root)) "
-        "         (map? index) "
-        "         (= [1001 1002 1003 1004 1005 2001] (:children root)) "
-        "         (= 2 (count rules)) "
-        "         (= :ball-vs-paddle (:id paddle-rule)) "
-        "         (= :ball-vs-brick (:id brick-rule)) "
-        "         (= 1003 (:self paddle-rule)) "
-        "         (= 1002 (:other paddle-rule)) "
-        "         (= 1003 (:self brick-rule)) "
-        "         (= 2001 (:other brick-rule)) "
-        "         (= :breakout/ball (:id (:prototype ball))) "
-        "         (= :breakout/paddle (:id (:prototype paddle))) "
-        "         (= :breakout/brick (:id (:prototype brick-node))))))",
+        "  (def breakout-test-brick {:id 2001 :x 40 :y 32 :w 20 :h 10 :points 10}) "
+        "  (def breakout-test-state "
+        "    (assoc (tiny-breakout.core/init-state) :bricks [breakout-test-brick])) "
+        "  (def breakout-test-frame (tiny-breakout.scene/build-scene breakout-test-state)) "
+        "  (def breakout-test-root (:root breakout-test-frame)) "
+        "  (def breakout-test-index (:index breakout-test-frame)) "
+        "  (def breakout-test-rules (:collision-rules breakout-test-frame)) "
+        "  (def breakout-test-paddle (get breakout-test-index 1002)) "
+        "  (def breakout-test-ball (get breakout-test-index 1003)) "
+        "  (def breakout-test-lives-label (get breakout-test-index 1006)) "
+        "  (def breakout-test-lives-value (get breakout-test-index 1007)) "
+        "  (def breakout-test-brick-node (get breakout-test-index 2001)) "
+        "  (def breakout-test-paddle-rule (nth breakout-test-rules 0)) "
+        "  (def breakout-test-brick-rule (nth breakout-test-rules 1)) "
+        "  (and (= true (:visible breakout-test-frame)) "
+        "       (= 1000 (:id breakout-test-root)) "
+        "       (map? breakout-test-index) "
+        "       (= [1001 1002 1003 1004 1005 1006 1007 2001] (:children breakout-test-root)) "
+        "       (= 2 (count breakout-test-rules)) "
+        "       (= :ball-vs-paddle (:id breakout-test-paddle-rule)) "
+        "       (= :ball-vs-brick (:id breakout-test-brick-rule)) "
+        "       (= 1003 (:self breakout-test-paddle-rule)) "
+        "       (= 1002 (:other breakout-test-paddle-rule)) "
+        "       (= 1003 (:self breakout-test-brick-rule)) "
+        "       (= 2001 (:other breakout-test-brick-rule)) "
+        "       (= \"Lives\" (:text breakout-test-lives-label)) "
+        "       (= \"3\" (:text breakout-test-lives-value)) "
+        "       (= 258 (:x breakout-test-lives-label)) "
+        "       (= 302 (:x breakout-test-lives-value)) "
+        "       (= :breakout/ball (:id (:prototype breakout-test-ball))) "
+        "       (= :breakout/paddle (:id (:prototype breakout-test-paddle))) "
+        "       (= :breakout/brick (:id (:prototype breakout-test-brick-node)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_title_scene_hides_level_bricks_until_launch) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.scene) "
+        "  (def breakout-title-frame (tiny-breakout.scene/build-scene (tiny-breakout.core/init-state))) "
+        "  (def breakout-title-root (:root breakout-title-frame)) "
+        "  (def breakout-title-index (:index breakout-title-frame)) "
+        "  (def breakout-title-overlay (get breakout-title-index 1005)) "
+        "  (and (= [1001 1002 1003 1004 1005 1006 1007] (:children breakout-title-root)) "
+        "       (= \"Breakout\" (:text breakout-title-overlay)) "
+        "       (= nil (get breakout-title-index 2001))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
@@ -296,9 +338,60 @@ TEST(test_breakout_contract_runtime_apply_input_mutates_state_discretely) {
         "        s2 @tiny-breakout.runtime/state* "
         "        scene @(:game-scene-atom cfg)] "
         "    (and (= :title (:phase s0)) "
-        "         (= :serve (:phase s1)) "
+        "         (= :play (:phase s1)) "
         "         (> (:paddle-x s2) (:paddle-x s1)) "
         "         (= true (:visible scene)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_host_fire_button_simulation_reaches_breakout_runtime) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-clj.deployment) "
+        "  (require 'tiny-clj.gpio) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-clj.gpio/simulate! 13 1) "
+        "  (tiny-clj.deployment/breakout-host-config) "
+        "  (tiny-clj.gpio/simulate! 13 0) "
+        "  (Thread/sleep 30) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  (tiny-clj.gpio/simulate! 13 1) "
+        "  (Thread/sleep 30) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  (= :play (:phase @tiny-breakout.runtime/state*)))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_host_left_button_moves_until_button_up) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-clj.deployment) "
+        "  (require 'tiny-clj.gpio) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-clj.gpio/simulate! 14 1) "
+        "  (tiny-clj.deployment/breakout-host-config) "
+        "  (let [x0 (:paddle-x @tiny-breakout.runtime/state*) "
+        "        _ (tiny-clj.gpio/simulate! 14 0) "
+        "        _ (Thread/sleep 35) "
+        "        _ (dotimes [_ 8] (run-next-task)) "
+        "        moving-scene @tiny-breakout.runtime/scene* "
+        "        moving-paddle (get (:index moving-scene) 1002) "
+        "        moving-x (:x moving-paddle) "
+        "        _ (Thread/sleep 70) "
+        "        _ (tiny-clj.gpio/simulate! 14 1) "
+        "        _ (Thread/sleep 35) "
+        "        _ (dotimes [_ 8] (run-next-task)) "
+        "        s1 @tiny-breakout.runtime/state* "
+        "        stopped-scene @tiny-breakout.runtime/scene* "
+        "        stopped-paddle (get (:index stopped-scene) 1002)] "
+        "    (and (map? moving-x) "
+        "         (contains? moving-x :keyframes) "
+        "         (< (:paddle-x s1) (- x0 4)) "
+        "         (number? (:x stopped-paddle)))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
