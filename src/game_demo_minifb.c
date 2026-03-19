@@ -1321,13 +1321,7 @@ static void viewer_tiny_fx_host_apply_heap_limit_after_bootstrap(void) {
     if (host_heap_limit == 0u) {
         return;
     }
-
-    size_t baseline = memory_current_usage_bytes();
-    if (SIZE_MAX - baseline < host_heap_limit) {
-        memory_set_heap_limit_bytes(SIZE_MAX);
-        return;
-    }
-    memory_set_heap_limit_bytes(baseline + host_heap_limit);
+    memory_set_heap_limit_bytes(host_heap_limit);
 }
 
 static void destroy_collision_policy(ViewerCollisionPolicy *policy) {

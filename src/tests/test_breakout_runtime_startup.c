@@ -259,15 +259,34 @@ TEST(test_breakout_runtime_startup_host_app_fits_debug_heap_limit) {
     size_t previous_limit = memory_get_heap_limit_bytes();
     size_t host_limit = viewer_tiny_fx_host_heap_limit_bytes();
     bool init_ok = false;
+    bool caught = false;
+    ID caught_ex = NULL;
 
     TEST_ASSERT_EQUAL_UINT64(614400u, host_limit);
-    init_ok = breakout_runtime_test_context_init_with_heap_budget(&ctx, true);
+    TRY {
+        init_ok = breakout_runtime_test_context_init_with_heap_budget(&ctx, true);
+    } CATCH(ex) {
+        caught = true;
+        caught_ex = ex;
+    } END_TRY
     memory_set_heap_limit_bytes(previous_limit);
 
     if (init_ok) {
         breakout_runtime_test_context_destroy(&ctx);
     }
+    TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "breakout host startup should not OOM under 640KB total heap budget" : "");
     TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should fit inside the tiny-fx debug heap limit");
+}
+
+TEST(test_breakout_runtime_startup_applies_absolute_host_heap_limit) {
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    size_t host_limit = viewer_tiny_fx_host_heap_limit_bytes();
+
+    TEST_ASSERT_TRUE(memory_current_usage_bytes() > 0u);
+    viewer_tiny_fx_host_apply_heap_limit_after_bootstrap();
+    TEST_ASSERT_EQUAL_UINT64(host_limit, memory_get_heap_limit_bytes());
+
+    memory_set_heap_limit_bytes(previous_limit);
 }
 
 TEST(test_breakout_runtime_startup_defaults_host_demo_selection_to_breakout) {
