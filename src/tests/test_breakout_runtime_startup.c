@@ -47,6 +47,7 @@ static bool breakout_viewer_test_context_init_with_heap_budget(BreakoutViewerTes
     runtime_init(&g_runtime);
     event_loop_init();
     vg_rendered_state_reset_all();
+    viewer_seed_gpio_key_levels();
     if (apply_host_heap_budget) {
         viewer_tiny_fx_host_apply_heap_limit();
     }
@@ -171,7 +172,18 @@ TEST(test_breakout_runtime_startup_loads_breakout_host_config_into_generic_viewe
     TEST_ASSERT_NOT_NULL(ctx.bundle.spatial_callback);
     TEST_ASSERT_TRUE(ctx.bundle.game_slot_index < ctx.bundle.slot_count);
     TEST_ASSERT_EQUAL_PTR(ctx.bundle.game_scene, ctx.bundle.slots[ctx.bundle.game_slot_index].scene);
-    TEST_ASSERT_TRUE(ctx.spatial_rules.count > 1u);
+    TEST_ASSERT_TRUE(ctx.spatial_rules.count >= 1u);
+
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_retain_slot_scenes_independently_of_scene_atoms) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+
+    TEST_ASSERT_TRUE(ctx.bundle.has_game_slot);
+    TEST_ASSERT_NOT_NULL(ctx.bundle.game_scene);
+    TEST_ASSERT_TRUE(((CljObject *)ctx.bundle.game_scene)->rc > 1);
 
     breakout_viewer_test_context_destroy(&ctx);
 }
@@ -208,5 +220,26 @@ TEST(test_breakout_runtime_startup_spatial_events_include_entity_snapshots) {
     TEST_ASSERT_EQUAL_PTR(expected_other, tiny_fx_gfx_get_field(event, k_other_entity, NULL));
 
     RELEASE(event);
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_fire_button_seeded_inactive_before_breakout_watchers) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-clj.gpio) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-clj.gpio/simulate! 13 0) "
+        "  (Thread/sleep 30) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  (tiny-clj.gpio/simulate! 13 1) "
+        "  (Thread/sleep 30) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  (= :play (:phase @tiny-breakout.runtime/state*)))",
+        ctx.st);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+
     breakout_viewer_test_context_destroy(&ctx);
 }

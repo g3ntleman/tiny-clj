@@ -63,16 +63,6 @@ static uint64_t g_runloop_last_warn_ns = 0u;
 
 #define RUNLOOP_BLOCK_WARN_THRESHOLD_NS 1000000000ull
 
-static bool event_loop_debug_enabled(void) {
-    static int cached = -1;
-    if (cached >= 0) {
-        return cached != 0;
-    }
-    const char *env = getenv("TINYCLJ_RUNLOOP_DEBUG");
-    cached = (env && env[0] != '\0' && strcmp(env, "0") != 0) ? 1 : 0;
-    return cached != 0;
-}
-
 static uint64_t event_loop_monotonic_now_ns(void) {
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
@@ -589,8 +579,10 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
         });
     } CATCH(ex) {
         ok = false;
-        if (event_loop_debug_enabled() && ex) {
-            fprintf(stderr, "[runloop] task exception: %s: %s\n", ex->type, ex->message);
+        if (ex) {
+            fprintf(stderr, "[runloop] task exception while executing deferred callback/task\n");
+            print_exception(ex);
+            fflush(stderr);
         }
     } END_TRY
 

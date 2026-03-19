@@ -165,7 +165,11 @@ static bool viewer_drain_one_runloop_task(EvalState *st) {
     TRY {
         ran = event_loop_run_next(NULL, st);
     } CATCH(ex) {
-        (void)ex;
+        if (ex) {
+            fprintf(stderr, "[viewer-runloop] uncaught exception while draining runloop task\n");
+            print_exception(ex);
+            fflush(stderr);
+        }
         ran = false;
     } END_TRY
     return ran;
@@ -351,6 +355,11 @@ static void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
 static void destroy_scene_bundle(ViewerSceneBundle *bundle) {
     if (!bundle) {
         return;
+    }
+    if (bundle->slots) {
+        for (uint8_t i = 0; i < bundle->slot_count; i++) {
+            RELEASE(bundle->slots[i].scene);
+        }
     }
     CLJ_HOST_FREE(bundle->slots);
     RELEASE(bundle->slots_root);
@@ -587,6 +596,7 @@ static bool viewer_extract_scene_slots(ID slots, ViewerSceneBundle *out_bundle) 
         slot_items[i].id = slot_id;
         slot_items[i].scene_atom = (CljAtom *)slot_atom;
         slot_items[i].scene = scene;
+        RETAIN(scene);
     }
     RETAIN(slots);
     out_bundle->slots_root = slots;
@@ -875,7 +885,7 @@ static bool viewer_load_game_demo_config(EvalState *st,
             out_bundle,
             "viewer config must include :game-scene-atom in :slots");
     }
-    out_bundle->slots[out_bundle->game_slot_index].scene = out_bundle->game_scene;
+    out_bundle->game_scene = out_bundle->slots[out_bundle->game_slot_index].scene;
     if (!viewer_load_spatial_rules_from_scene(out_bundle->game_scene, out_rule_set)) {
         return viewer_fail_game_demo_config(
             out_bundle,
@@ -1196,6 +1206,8 @@ static void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
         if (!scene || scene == bundle->slots[i].scene) {
             continue;
         }
+        RETAIN(scene);
+        RELEASE(bundle->slots[i].scene);
         bundle->slots[i].scene = scene;
         if (bundle->has_game_slot && i == bundle->game_slot_index) {
             bundle->game_scene = scene;
@@ -1676,6 +1688,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
     runtime_init(&g_runtime);
     event_loop_init();
     vg_rendered_state_reset_all();
+    viewer_seed_gpio_key_levels();
     viewer_tiny_fx_host_apply_heap_limit();
     EvalState *viewer_eval_state = evalstate_new(true);
     if (!viewer_eval_state) {
@@ -1756,7 +1769,6 @@ int tinyclj_tiny_fx_host_app_run(void) {
         .use_mfb_waitsync = true,
         .w_key_was_down = false
     };
-    viewer_seed_gpio_key_levels();
     const uint64_t target_frame_ns = 1000000000ull / TARGET_FPS;
     uint64_t next_frame_deadline_ns = monotonic_now_ns() + target_frame_ns;
     uint64_t last_present_ns = 0u;

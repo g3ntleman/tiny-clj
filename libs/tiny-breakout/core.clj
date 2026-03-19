@@ -51,6 +51,14 @@
   [state]
   (prepare-level (assoc state :score 0 :lives default-lives) 0 :serve))
 
+(defn- launch-from-serve
+  [state now-ms]
+  (plan-next-segment (assoc (serve-ball state)
+                            :phase :play
+                            :ball-vx launch-speed-x
+                            :ball-vy launch-speed-y)
+                     now-ms))
+
 (defn init-state
   "Returns deterministic baseline game-state for one-screen breakout."
   []
@@ -344,16 +352,12 @@ current animated ball position before interrupting motion."
     (cond
       (= (:phase moved) :title)
       (if launch?
-        (fresh-game-state moved)
+        (launch-from-serve (fresh-game-state moved) now-ms)
         moved)
 
       (= (:phase moved) :serve)
       (if launch?
-        (plan-next-segment (assoc (serve-ball moved)
-                                  :phase :play
-                                  :ball-vx launch-speed-x
-                                  :ball-vy launch-speed-y)
-                           now-ms)
+        (launch-from-serve moved now-ms)
         (serve-ball moved))
 
       (= (:phase moved) :play)

@@ -1,4 +1,5 @@
-(ns tiny-breakout.audio)
+(ns tiny-breakout.audio
+  (:require [tiny-fx.sound :as sound]))
 
 (def sfx-library
   {:sfx/paddle-hit
@@ -28,7 +29,38 @@
             {:notes [440] :duration 54}]
     :opts {:channel-count 1
            :gate-percent 78
-           :volumes [220]}}})
+           :volumes [220]}}
+
+   :sfx/level-clear
+   {:track-id :tiny-breakout/level-clear
+    :kind :sfx
+    :steps [{:notes [880] :duration 24}
+            {:notes [1320] :duration 24}
+            {:notes [1760] :duration 36}]
+    :opts {:channel-count 1
+           :gate-percent 76
+           :volumes [210]}}
+
+   :sfx/game-over
+   {:track-id :tiny-breakout/game-over
+    :kind :sfx
+    :steps [{:notes [740] :duration 28}
+            {:notes [554] :duration 36}
+            {:notes [392] :duration 60}]
+    :opts {:channel-count 1
+           :gate-percent 80
+           :volumes [220]}}
+
+   :sfx/victory
+   {:track-id :tiny-breakout/victory
+    :kind :sfx
+    :steps [{:notes [1040] :duration 20}
+            {:notes [1318] :duration 20}
+            {:notes [1568] :duration 24}
+            {:notes [2093] :duration 48}]
+    :opts {:channel-count 1
+           :gate-percent 74
+           :volumes [210]}}})
 
 (defn event->cue
   "Maps one normalized gameplay event keyword to a symbolic audio cue."
@@ -37,9 +69,9 @@
     (= event-id :paddle-hit) :sfx/paddle-hit
     (= event-id :brick-hit) :sfx/brick-hit
     (= event-id :life-lost) :sfx/life-lost
-    (= event-id :level-clear) :cue/level-clear
-    (= event-id :game-over) :cue/game-over
-    (= event-id :victory) :cue/victory
+    (= event-id :level-clear) :sfx/level-clear
+    (= event-id :game-over) :sfx/game-over
+    (= event-id :victory) :sfx/victory
     :else nil))
 
 (defn sfx-spec
@@ -56,3 +88,21 @@
                 (if cue (conj out cue) out)))
             []
             xs)))
+
+(defn play-cue!
+  "Plays one symbolic cue when it resolves to a known SFX descriptor."
+  [cue-id]
+  (let [spec (sfx-spec cue-id)]
+    (if (map? spec)
+      (sound/play! spec)
+      nil)))
+
+(defn play-events!
+  "Plays all known audio cues for the given gameplay events."
+  [events]
+  (loop [remaining (events->cues events)
+         out []]
+    (if (empty? remaining)
+      out
+      (recur (rest remaining)
+             (conj out (play-cue! (first remaining)))))))
