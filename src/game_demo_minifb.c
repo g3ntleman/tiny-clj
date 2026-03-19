@@ -214,7 +214,7 @@ static void stop_runloop_thread(void) {
     atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);
     (void)pthread_join(g_runloop_thread.thread, NULL);
     g_runloop_thread.started = false;
-    memset(&g_runloop_thread.thread, 0, sizeof(g_runloop_thread.thread));
+    memset(&g_runloop_thread.thread, 0, sizeof(pthread_t));
     g_runloop_thread.eval_state = NULL;
 }
 
@@ -404,7 +404,7 @@ static size_t viewer_tiny_fx_host_heap_limit_bytes(void) {
 #endif
 }
 
-static void viewer_tiny_fx_host_apply_heap_limit_after_bootstrap(void) {
+static void viewer_tiny_fx_host_apply_heap_limit(void) {
     size_t host_heap_limit = viewer_tiny_fx_host_heap_limit_bytes();
     if (host_heap_limit == 0u) {
         return;
@@ -1676,6 +1676,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
     runtime_init(&g_runtime);
     event_loop_init();
     vg_rendered_state_reset_all();
+    viewer_tiny_fx_host_apply_heap_limit();
     EvalState *viewer_eval_state = evalstate_new(true);
     if (!viewer_eval_state) {
         fprintf(stderr, "Failed to initialize eval state\n");
@@ -1686,7 +1687,6 @@ int tinyclj_tiny_fx_host_app_run(void) {
         fprintf(stderr, "Failed to initialize vector scene record schema via tiny-fx.gfx\n");
         goto cleanup;
     }
-    viewer_tiny_fx_host_apply_heap_limit_after_bootstrap();
     ViewerConfigSource config_source = viewer_selected_config_source();
     TRY {
         if (!viewer_load_game_demo_config(viewer_eval_state, config_source, &demo_bundle, &spatial_rules)) {

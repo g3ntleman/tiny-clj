@@ -1,4 +1,4 @@
-#include "tests_common.h"
+#include <stdbool.h>
 
 #ifndef TINYCLJ_WITH_MINIFB
 #define TINYCLJ_WITH_MINIFB 1
@@ -21,6 +21,8 @@ void macos_viewer_end_performance_activity(void) {}
 #define main tinyclj_game_demo_minifb_test_main
 #include "../game_demo_minifb.c"
 #undef main
+#include "unity/src/unity.h"
+#include "test_registry.h"
 
 typedef struct {
     ViewerSceneBundle bundle;
@@ -45,6 +47,9 @@ static bool breakout_viewer_test_context_init_with_heap_budget(BreakoutViewerTes
     runtime_init(&g_runtime);
     event_loop_init();
     vg_rendered_state_reset_all();
+    if (apply_host_heap_budget) {
+        viewer_tiny_fx_host_apply_heap_limit();
+    }
 
     ctx->st = evalstate_new(true);
     if (!ctx->st) {
@@ -53,9 +58,6 @@ static bool breakout_viewer_test_context_init_with_heap_budget(BreakoutViewerTes
     evalstate_set_ns(ctx->st, "user");
     if (!tiny_fx_gfx_ensure_schema(ctx->st)) {
         return false;
-    }
-    if (apply_host_heap_budget) {
-        viewer_tiny_fx_host_apply_heap_limit_after_bootstrap();
     }
     return viewer_load_game_demo_config(ctx->st, config_source, &ctx->bundle, &ctx->spatial_rules);
 }
@@ -98,12 +100,12 @@ TEST(test_breakout_runtime_startup_host_app_fits_debug_heap_limit) {
     TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should fit inside the tiny-fx debug heap limit");
 }
 
-TEST(test_breakout_runtime_startup_applies_absolute_host_heap_limit) {
+TEST(test_breakout_runtime_startup_applies_absolute_host_heap_limit_before_clojure_bootstrap) {
     size_t previous_limit = memory_get_heap_limit_bytes();
     size_t host_limit = viewer_tiny_fx_host_heap_limit_bytes();
 
     TEST_ASSERT_TRUE(memory_current_usage_bytes() > 0u);
-    viewer_tiny_fx_host_apply_heap_limit_after_bootstrap();
+    viewer_tiny_fx_host_apply_heap_limit();
     TEST_ASSERT_EQUAL_UINT64(host_limit, memory_get_heap_limit_bytes());
 
     memory_set_heap_limit_bytes(previous_limit);
