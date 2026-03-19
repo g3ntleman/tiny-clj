@@ -1,5 +1,6 @@
 (ns tiny-breakout.scene
-  (:require [tiny-fx.gfx-scene :refer [->Group ->Rect ->VText normalize-spatial-rule]]))
+  (:require [tiny-breakout.core :as core]
+            [tiny-fx.gfx-scene :refer [->Group ->Rect ->VText normalize-spatial-rule]]))
 
 (defn- paddle-prototype
   []
@@ -55,6 +56,21 @@
           (:h brick)
           prototype))
 
+(defn- maybe-field-timeline
+  [state from-value axis-key]
+  (let [segment (:ball-segment state)]
+    (if (and (map? segment)
+             (number? (:start-ms segment))
+             (number? (:end-ms segment))
+             (> (:end-ms segment) (:start-ms segment)))
+      (record-create 'Timeline
+                     [[[(let [v (:start-ms segment)] (if (number? v) v 0))
+                        from-value]
+                       [(let [v (:end-ms segment)] (if (number? v) v 0))
+                        (get segment axis-key)]]
+                      false])
+      from-value)))
+
 (defn- visible-bricks
   [state]
   (let [active-bricks (get state :bricks)
@@ -81,6 +97,8 @@
   (let [paddle-x (let [v (get state :paddle-x)] (if (number? v) v 0))
         ball-x (let [v (get state :ball-x)] (if (number? v) v 0))
         ball-y (let [v (get state :ball-y)] (if (number? v) v 0))
+        ball-x-field (maybe-field-timeline state ball-x :to-x)
+        ball-y-field (maybe-field-timeline state ball-y :to-y)
         score (let [v (get state :score)] (if (number? v) v 0))
         lives (let [v (get state :lives)] (if (number? v) v 0))
         phase (or (get state :phase) :title)
@@ -90,9 +108,9 @@
         hud (str "Score: " score "  Lives: " lives)
         overlay (overlay-text phase)
         bricks (visible-bricks state)
-        base-entities {1001 (->Rect 1001 nil nil true 0 0 320 240 nil)
-                       1002 (->Rect 1002 nil nil true paddle-x 224 40 4 paddle-prototype)
-                       1003 (->Rect 1003 nil nil true ball-x ball-y 4 4 ball-prototype)
+        base-entities {1001 (->Rect 1001 nil nil true 0 0 core/playfield-width core/playfield-height nil)
+                       1002 (->Rect 1002 nil nil true paddle-x core/paddle-y core/paddle-width core/paddle-height paddle-prototype)
+                       1003 (->Rect 1003 nil nil true ball-x-field ball-y-field core/ball-size core/ball-size ball-prototype)
                        1004 (->VText 1004 nil nil true 8 12 1 0 hud nil)
                        1005 (->VText 1005 nil nil true 100 120 1 0 overlay nil)}]
     (loop [remaining bricks

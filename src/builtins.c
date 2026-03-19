@@ -232,6 +232,9 @@ ID native_lt(ID *args, unsigned int argc);
 ID native_gt(ID *args, unsigned int argc);
 ID native_le(ID *args, unsigned int argc);
 ID native_ge(ID *args, unsigned int argc);
+ID native_max(ID *args, unsigned int argc);
+ID native_min(ID *args, unsigned int argc);
+ID native_abs(ID *args, unsigned int argc);
 ID native_eq(ID *args, unsigned int argc);
 ID native_not_eq(ID *args, unsigned int argc);
 ID native_identical(ID *args, unsigned int argc);
@@ -4447,6 +4450,9 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT(&sym_minus_data.sym, native_sub_variadic, "-"),
     NATIVE_ENTRY_BOOT(&sym_multiply_data.sym, native_mul_variadic, "*"),
     NATIVE_ENTRY_BOOT(&sym_divide_data.sym, native_div_variadic, "/"),
+    NATIVE_ENTRY(&sym_max_data.sym, native_max),
+    NATIVE_ENTRY(&sym_min_data.sym, native_min),
+    NATIVE_ENTRY(&sym_abs_data.sym, native_abs),
     NATIVE_ENTRY_BOOT(&sym_mod_data.sym, native_mod, "mod"),
     NATIVE_ENTRY_BOOT(&sym_quot_data.sym, native_quot, "quot"),
     NATIVE_ENTRY(&sym_bit_shift_left_data.sym, native_bit_shift_left),
@@ -6904,6 +6910,51 @@ ID native_ge(ID *args, unsigned int argc) {
     return NULL;
   }
   return (result == COMPARE_GREATER || result == COMPARE_EQUAL) ? clj_true : clj_false;
+}
+
+ID native_max(ID *args, unsigned int argc) {
+  (void)argc;
+  CompareResult result;
+  if (!compare_numeric_values(args[0], args[1], &result)) {
+    throw_exception(EXCEPTION_TYPE, "Expected number for max", __FILE__, __LINE__, 0);
+    return NULL;
+  }
+  return (result == COMPARE_LESS) ? args[1] : args[0];
+}
+
+ID native_min(ID *args, unsigned int argc) {
+  (void)argc;
+  CompareResult result;
+  if (!compare_numeric_values(args[0], args[1], &result)) {
+    throw_exception(EXCEPTION_TYPE, "Expected number for min", __FILE__, __LINE__, 0);
+    return NULL;
+  }
+  return (result == COMPARE_GREATER) ? args[1] : args[0];
+}
+
+ID native_abs(ID *args, unsigned int argc) {
+  (void)argc;
+  uint16_t tag = TAG(args[0]);
+  if (!is_numeric_tag(tag)) {
+    throw_exception(EXCEPTION_TYPE, "Expected number for abs", __FILE__, __LINE__, 0);
+    return NULL;
+  }
+
+  switch (tag) {
+  case CLJ_INT: {
+    int value = AS_FIXNUM(args[0]);
+    return (value < 0) ? create_fixnum_result(-value) : args[0];
+  }
+  case CLJ_CHAR: {
+    int value = (int)as_character(args[0]);
+    return (value < 0) ? create_fixnum_result(-value) : args[0];
+  }
+  case CLJ_FLOAT:
+  default: {
+    int32_t value = extract_fixed_value(args[0]);
+    return (value < 0) ? create_fixed_result(-value) : args[0];
+  }
+  }
 }
 
 ID native_eq(ID *args, unsigned int argc) {

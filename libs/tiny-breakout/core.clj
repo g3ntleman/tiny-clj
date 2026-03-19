@@ -11,25 +11,7 @@
 (def default-lives 3)
 (def launch-speed-x 2)
 (def launch-speed-y -2)
-
-(defn- clamp
-  [v min-v max-v]
-  (if (< v min-v)
-    min-v
-    (if (> v max-v)
-      max-v
-      v)))
-
-(defn- abs-int
-  [v]
-  (if (< v 0) (- v) v))
-
-(defn- rect-overlap?
-  [ax ay aw ah bx by bw bh]
-  (not (or (> ax (+ bx bw -1))
-           (> bx (+ ax aw -1))
-           (> ay (+ by bh -1))
-           (> by (+ ay ah -1)))))
+(def segment-step-ms 16)
 
 (defn- level-count
   [state]
@@ -39,11 +21,20 @@
   [state level-index]
   (:bricks (nth (:levels state) level-index)))
 
+(defn- clear-events
+  [state]
+  (assoc state :events []))
+
+(defn- clear-ball-segment
+  [state]
+  (assoc state :ball-segment nil))
+
 (defn- serve-ball
   [state]
-  (assoc state
-         :ball-x (+ (:paddle-x state) (quot paddle-width 2))
-         :ball-y (- paddle-y 6)))
+  (-> state
+      (clear-ball-segment)
+      (assoc :ball-x (+ (:paddle-x state) (quot paddle-width 2))
+             :ball-y (- paddle-y 6))))
 
 (defn- prepare-level
   [state level-index phase]
@@ -75,7 +66,8 @@
    :ball-y 210
    :ball-vx launch-speed-x
    :ball-vy launch-speed-y
-   :tick 0})
+   :ball-segment nil
+   :segment-id-seq 0})
 
 (defn- paddle-bounce-vx
   [paddle-x ball-x]
@@ -89,67 +81,77 @@
       (> delta 4) 1
       :else 0)))
 
-(defn- apply-wall-bounce
-  [state]
-  (let [x (:ball-x state)
-        y (:ball-y state)
-        vx (:ball-vx state)
-        vy (:ball-vy state)
-        hit-side? (or (< x 0) (> x (- playfield-width ball-size)))
-        hit-top? (< y 0)]
-    (assoc state
-           :ball-x (cond
-                     (< x 0) 0
-                     (> x (- playfield-width ball-size)) (- playfield-width ball-size)
-                     :else x)
-           :ball-y (if hit-top? 0 y)
-           :ball-vx (if hit-side? (- vx) vx)
-           :ball-vy (if hit-top? (- vy) vy))))
+(defn- duration-ms-for-distance
+  [distance speed]
+  (if (<= speed 0)
+    0
+    (let [scaled (* distance segment-step-ms)]
+      (quot (+ scaled (- speed 1)) speed))))
 
-(defn- apply-paddle-bounce
-  [state]
-  (let [hit? (and (> (:ball-vy state) 0)
-                  (rect-overlap? (:ball-x state) (:ball-y state) ball-size ball-size
-                                 (:paddle-x state) paddle-y paddle-width paddle-height))]
-    (if hit?
-      (assoc state
-             :ball-y (- paddle-y ball-size)
-             :ball-vx (paddle-bounce-vx (:paddle-x state) (:ball-x state))
-             :ball-vy (- (max 2 (abs-int (:ball-vy state))))
-             :events (conj (:events state) :paddle-hit))
-      state)))
+(defn- candidate-segment
+  [wall duration-ms]
+  {:wall wall
+   :duration-ms duration-ms})
 
-(defn- remove-first-hit-brick
-  [bricks ball-x ball-y]
-  (loop [rest-bricks bricks
-         kept []
-         hit nil]
-    (if (empty? rest-bricks)
-      {:hit hit :bricks kept}
-      (let [brick (first rest-bricks)
-            overlap? (rect-overlap? ball-x ball-y ball-size ball-size
-                                    (:x brick) (:y brick) (:w brick) (:h brick))]
-        (if (and overlap? (nil? hit))
-          (recur (rest rest-bricks) kept brick)
-          (recur (rest rest-bricks) (conj kept brick) hit))))))
+(defn- earlier-segment
+  [best candidate]
+  (if (nil? best)
+    candidate
+    (if (< (:duration-ms candidate) (:duration-ms best))
+      candidate
+      best)))
 
-(defn- apply-brick-collision
-  [state]
-  (let [result (remove-first-hit-brick (:bricks state) (:ball-x state) (:ball-y state))
-        hit (:hit result)
-        remaining (:bricks result)]
-    (if hit
-      (let [state2 (assoc state
-                          :bricks remaining
-                          :score (+ (:score state) (:points hit))
-                          :ball-vy (- (:ball-vy state))
-                          :events (conj (:events state) :brick-hit))]
-        (if (empty? remaining)
-          (if (= (+ (:level-index state) 1) (level-count state))
-            (assoc state2 :phase :victory :events (conj (:events state2) :victory))
-            (assoc state2 :phase :level-clear :events (conj (:events state2) :level-clear)))
-          state2))
-      state)))
+(defn- choose-segment-wall
+  [ball-x ball-y vx vy]
+  (let [right-limit (- playfield-width ball-size)
+        bottom-limit (+ playfield-height 1)
+        best-x (if (> vx 0)
+                 (candidate-segment :right (duration-ms-for-distance (- right-limit ball-x) vx))
+                 (if (< vx 0)
+                   (candidate-segment :left (duration-ms-for-distance ball-x (- vx)))
+                   nil))
+        best-y (if (> vy 0)
+                 (candidate-segment :bottom (duration-ms-for-distance (- bottom-limit ball-y) vy))
+                 (if (< vy 0)
+                   (candidate-segment :top (duration-ms-for-distance ball-y (- vy)))
+                   nil))]
+    (let [best (earlier-segment best-x best-y)]
+      (if (and best (> (:duration-ms best) 0))
+        best
+        nil))))
+
+(defn- project-axis
+  [pos velocity duration-ms]
+  (+ pos (quot (* velocity duration-ms) segment-step-ms)))
+
+(defn- plan-next-segment
+  [state now-ms]
+  (if (not= (:phase state) :play)
+    (clear-ball-segment state)
+    (let [ball-x (let [v (:ball-x state)] (if (number? v) v 0))
+          ball-y (let [v (:ball-y state)] (if (number? v) v 0))
+          vx (let [v (:ball-vx state)] (if (number? v) v 0))
+          vy (let [v (:ball-vy state)] (if (number? v) v 0))
+          chosen (choose-segment-wall ball-x ball-y vx vy)]
+      (if (nil? chosen)
+        (clear-ball-segment state)
+        (let [duration-ms (:duration-ms chosen)
+              segment-id (+ (let [v (:segment-id-seq state)] (if (number? v) v 0)) 1)
+              wall (:wall chosen)
+              target-x (if (or (= wall :left) (= wall :right))
+                         (if (= wall :left) 0 (- playfield-width ball-size))
+                         (project-axis ball-x vx duration-ms))
+              target-y (if (or (= wall :top) (= wall :bottom))
+                         (if (= wall :top) 0 (+ playfield-height 1))
+                         (project-axis ball-y vy duration-ms))]
+          (assoc state
+                 :segment-id-seq segment-id
+                 :ball-segment {:id segment-id
+                                :start-ms now-ms
+                                :end-ms (+ now-ms duration-ms)
+                                :to-x target-x
+                                :to-y target-y
+                                :wall wall}))))))
 
 (defn- apply-bottom-out
   [state]
@@ -160,7 +162,8 @@
         (assoc state
                :phase :game-over
                :lives 0
-               :events (conj events :game-over))
+               :events (conj events :game-over)
+               :ball-segment nil)
         (serve-ball (assoc state
                            :phase :serve
                            :lives lives-left
@@ -169,31 +172,175 @@
                            :events events))))
     state))
 
-(defn- simulate-play
-  [state]
-  (-> state
-      (assoc :events [])
-      (assoc :ball-x (+ (:ball-x state) (:ball-vx state))
-             :ball-y (+ (:ball-y state) (:ball-vy state)))
-      (apply-wall-bounce)
-      (apply-paddle-bounce)
-      (apply-brick-collision)
-      (apply-bottom-out)))
+(defn- anchor-ball
+  [state ball-x ball-y]
+  (assoc state
+         :ball-x ball-x
+         :ball-y ball-y
+         :ball-segment nil))
 
-(defn step-state
-  "Pure update step.
-Input contract: {:dx n :launch? bool :pause? bool}"
-  [state input dt-ms]
+(defn- anchor-ball-from-render
+  [state rendered-ball]
+  (if (and (map? rendered-ball)
+           (number? (:x rendered-ball))
+           (number? (:y rendered-ball)))
+    (anchor-ball state (:x rendered-ball) (:y rendered-ball))
+    state))
+
+(defn- event-rule-id
+  [event]
+  (let [id (:id event)
+        rule (:rule event)
+        rule-id (if rule (:id rule) nil)]
+    (if (nil? id) rule-id id)))
+
+(defn- overlap-width
+  [self-aabb other-aabb]
+  (let [x0 (max (:min-x self-aabb) (:min-x other-aabb))
+        x1 (min (:max-x self-aabb) (:max-x other-aabb))]
+    (- x1 x0)))
+
+(defn- overlap-height
+  [self-aabb other-aabb]
+  (let [y0 (max (:min-y self-aabb) (:min-y other-aabb))
+        y1 (min (:max-y self-aabb) (:max-y other-aabb))]
+    (- y1 y0)))
+
+(defn- ball-anchor-from-event
+  [event]
+  (let [self-aabb (:self-aabb event)]
+    {:x (:min-x self-aabb)
+     :y (:min-y self-aabb)}))
+
+(defn- remove-brick-by-id
+  [bricks brick-id]
+  (loop [remaining bricks
+         kept []
+         hit nil]
+    (if (empty? remaining)
+      {:hit hit :bricks kept}
+      (let [brick (first remaining)]
+        (if (and (nil? hit) (= (:id brick) brick-id))
+          (recur (rest remaining) kept brick)
+          (recur (rest remaining) (conj kept brick) hit))))))
+
+(defn- finish-brick-hit
+  [state remaining]
+  (if (empty? remaining)
+    (if (= (+ (:level-index state) 1) (level-count state))
+      (assoc state
+             :phase :victory
+             :ball-segment nil
+             :events (conj (:events state) :victory))
+      (assoc state
+             :phase :level-clear
+             :ball-segment nil
+             :events (conj (:events state) :level-clear)))
+    state))
+
+(defn apply-spatial-event
+  "Pure domain transition for one host-provided spatial event."
+  [state event now-ms]
+  (let [phase (:phase state)
+        event-phase (:phase event)
+        rule-id (event-rule-id event)]
+    (if (or (not= phase :play) (not= event-phase :enter))
+      (clear-events state)
+      (let [anchor (ball-anchor-from-event event)
+            ball-x (:x anchor)
+            ball-y (:y anchor)]
+        (cond
+          (= rule-id :ball-vs-paddle)
+          (let [other-aabb (:other-aabb event)
+                paddle-x (:min-x other-aabb)
+                next-state (-> state
+                               (clear-events)
+                               (anchor-ball ball-x (- (:min-y other-aabb) ball-size))
+                               (assoc :ball-vx (paddle-bounce-vx paddle-x ball-x)
+                                      :ball-vy (- (max 2 (abs (:ball-vy state))))
+                                      :events (conj (:events (clear-events state)) :paddle-hit)))]
+            (plan-next-segment next-state now-ms))
+
+          (= rule-id :ball-vs-brick)
+          (let [other-id (:other event)
+                removal (remove-brick-by-id (:bricks state) other-id)
+                hit (:hit removal)
+                remaining (:bricks removal)]
+            (if (nil? hit)
+              (clear-events state)
+              (let [self-aabb (:self-aabb event)
+                    other-aabb (:other-aabb event)
+                    overlap-x (overlap-width self-aabb other-aabb)
+                    overlap-y (overlap-height self-aabb other-aabb)
+                    horizontal? (< overlap-x overlap-y)
+                    bounced-vx (if horizontal? (- (:ball-vx state)) (:ball-vx state))
+                    bounced-vy (if horizontal? (:ball-vy state) (- (:ball-vy state)))
+                    snapped-x (if horizontal?
+                                (if (> (:ball-vx state) 0)
+                                  (- (:min-x other-aabb) ball-size)
+                                  (:max-x other-aabb))
+                                ball-x)
+                    snapped-y (if horizontal?
+                                ball-y
+                                (if (> (:ball-vy state) 0)
+                                  (- (:min-y other-aabb) ball-size)
+                                  (:max-y other-aabb)))
+                    state2 (-> state
+                               (clear-events)
+                               (anchor-ball snapped-x snapped-y)
+                               (assoc :bricks remaining
+                                      :score (+ (:score state) (:points hit))
+                                      :ball-vx bounced-vx
+                                      :ball-vy bounced-vy
+                                      :events (conj (:events (clear-events state)) :brick-hit)))
+                    advanced (finish-brick-hit state2 remaining)]
+                (if (= (:phase advanced) :play)
+                  (plan-next-segment advanced now-ms)
+                  advanced))))
+
+          :else
+          (clear-events state))))))
+
+(defn apply-segment-end
+  "Pure domain transition for one expected segment-end notification."
+  [state segment-id]
+  (let [segment (:ball-segment state)]
+    (if (or (nil? segment) (not= (:id segment) segment-id))
+      (clear-events state)
+      (let [wall (:wall segment)
+            end-ms (:end-ms segment)
+            anchored (-> state
+                         (clear-events)
+                         (anchor-ball (:to-x segment) (:to-y segment)))]
+        (cond
+          (= wall :left)
+          (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) end-ms)
+
+          (= wall :right)
+          (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) end-ms)
+
+          (= wall :top)
+          (plan-next-segment (assoc anchored :ball-vy (- (:ball-vy anchored))) end-ms)
+
+          (= wall :bottom)
+          (apply-bottom-out anchored)
+
+          :else
+          anchored)))))
+
+(defn apply-input
+  "Pure domain transition for one normalized input map.
+Optional `rendered-ball` should be {:x n :y n} when the host can sample the
+current animated ball position before interrupting motion."
+  [state input now-ms rendered-ball]
   (let [dx (let [v (get input :dx)] (if (number? v) v 0))
         launch? (or (= true (get input :launch))
                     (= true (get input :launch?)))
         pause? (or (= true (get input :pause))
                    (= true (get input :pause?)))
-        next-paddle (clamp (+ (:paddle-x state) (* dx paddle-speed)) 0 (- playfield-width paddle-width))
-        moved (assoc state
-                     :paddle-x next-paddle
-                     :tick (+ (:tick state) (if (number? dt-ms) dt-ms 0))
-                     :events [])]
+        next-paddle (max 0 (min (- playfield-width paddle-width)
+                                (+ (:paddle-x state) (* dx paddle-speed))))
+        moved (assoc (clear-events state) :paddle-x next-paddle)]
     (cond
       (= (:phase moved) :title)
       (if launch?
@@ -202,17 +349,23 @@ Input contract: {:dx n :launch? bool :pause? bool}"
 
       (= (:phase moved) :serve)
       (if launch?
-        (assoc moved :phase :play :ball-vx launch-speed-x :ball-vy launch-speed-y)
+        (plan-next-segment (assoc (serve-ball moved)
+                                  :phase :play
+                                  :ball-vx launch-speed-x
+                                  :ball-vy launch-speed-y)
+                           now-ms)
         (serve-ball moved))
 
       (= (:phase moved) :play)
       (if pause?
-        (assoc moved :phase :pause)
-        (simulate-play moved))
+        (-> moved
+            (anchor-ball-from-render rendered-ball)
+            (assoc :phase :pause))
+        moved)
 
       (= (:phase moved) :pause)
       (if pause?
-        (assoc moved :phase :play)
+        (plan-next-segment (assoc moved :phase :play) now-ms)
         moved)
 
       (= (:phase moved) :level-clear)

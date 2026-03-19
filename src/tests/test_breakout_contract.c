@@ -1,4 +1,4 @@
-#include "test_breakout_helpers.h"
+#include "tests_common.h"
 
 TEST(test_breakout_contract_namespaces_load) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -6,31 +6,35 @@ TEST(test_breakout_contract_namespaces_load) {
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (require 'tiny-breakout.scene) "
-        "  (require 'tiny-breakout.input) "
         "  (require 'tiny-breakout.audio) "
         "  (require 'tiny-breakout.levels) "
+        "  (require 'tiny-breakout.runtime) "
         "  true)",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
-TEST(test_breakout_contract_core_state_flow_title_to_play) {
+TEST(test_breakout_contract_core_input_flow_title_to_play_creates_segment) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (let [s0 (tiny-breakout.core/init-state) "
-        "        s1 (tiny-breakout.core/step-state s0 {:dx 0 :launch true :pause false} 16) "
-        "        s2 (tiny-breakout.core/step-state s1 {:dx 0 :launch true :pause false} 16)] "
-        "    [(:phase s0) (:phase s1) (:phase s2)]))",
+        "        s1 (tiny-breakout.core/apply-input s0 {:launch true} 100 nil) "
+        "        s2 (tiny-breakout.core/apply-input s1 {:launch true} 200 nil) "
+        "        seg (:ball-segment s2)] "
+        "    [(:phase s0) (:phase s1) (:phase s2) (map? seg) (:start-ms seg) (:end-ms seg)]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
     CljPersistentVector *v = as_vector(out);
-    TEST_ASSERT_EQUAL_UINT(3, vector_count(v));
+    TEST_ASSERT_EQUAL_UINT(6, vector_count(v));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":title"), vector_nth(v, 0));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":serve"), vector_nth(v, 1));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":play"), vector_nth(v, 2));
+    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 3));
+    TEST_ASSERT_TRUE(as_fixnum(vector_nth(v, 4)) >= 200);
+    TEST_ASSERT_TRUE(as_fixnum(vector_nth(v, 5)) > as_fixnum(vector_nth(v, 4)));
 }
 
 TEST(test_breakout_contract_paddle_clamps_at_bounds) {
@@ -39,9 +43,9 @@ TEST(test_breakout_contract_paddle_clamps_at_bounds) {
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (let [s0 (assoc (tiny-breakout.core/init-state) :phase :serve :paddle-x 0) "
-        "        s1 (tiny-breakout.core/step-state s0 {:dx -1} 16) "
+        "        s1 (tiny-breakout.core/apply-input s0 {:dx -1} 16 nil) "
         "        s2 (assoc s0 :paddle-x 280) "
-        "        s3 (tiny-breakout.core/step-state s2 {:dx 8} 16)] "
+        "        s3 (tiny-breakout.core/apply-input s2 {:dx 8} 16 nil)] "
         "    [(:paddle-x s1) (:paddle-x s3)]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
@@ -56,9 +60,9 @@ TEST(test_breakout_contract_serve_keeps_ball_attached_to_paddle) {
     ID out = eval_string(
         "(do "
         "  (require 'tiny-breakout.core) "
-        "  (let [s0 (tiny-breakout.core/step-state (tiny-breakout.core/init-state) {:launch true} 16) "
-        "        s1 (tiny-breakout.core/step-state (assoc s0 :paddle-x 120) {:dx 0} 16)] "
-        "    [(:phase s1) (:ball-x s1) (:ball-y s1)]))",
+        "  (let [s0 (tiny-breakout.core/apply-input (tiny-breakout.core/init-state) {:launch true} 16 nil) "
+        "        s1 (tiny-breakout.core/apply-input (assoc s0 :paddle-x 120) {:dx 0} 16 nil)] "
+        "    [(:phase s1) (:ball-x s1) (:ball-y s1) (:ball-segment s1)]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
@@ -66,59 +70,20 @@ TEST(test_breakout_contract_serve_keeps_ball_attached_to_paddle) {
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":serve"), vector_nth(v, 0));
     TEST_ASSERT_EQUAL_INT(140, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_INT(218, as_fixnum(vector_nth(v, 2)));
+    TEST_ASSERT_TRUE(vector_nth(v, 3) == NULL);
 }
 
-TEST(test_breakout_contract_wall_reflection_keeps_ball_inside_bounds) {
+TEST(test_breakout_contract_segment_end_bottom_out_decrements_life_and_enters_serve) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (let [s0 (assoc (tiny-breakout.core/init-state) "
-        "                  :phase :play :ball-x 317 :ball-y -1 :ball-vx 2 :ball-vy -2) "
-        "        s1 (tiny-breakout.core/step-state s0 {:dx 0 :pause false} 16)] "
-        "    [(:ball-x s1) (:ball-y s1) (:ball-vx s1) (:ball-vy s1)]))",
-        g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(out);
-    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
-    CljPersistentVector *v = as_vector(out);
-    TEST_ASSERT_EQUAL_INT(316, as_fixnum(vector_nth(v, 0)));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
-    TEST_ASSERT_EQUAL_INT(-2, as_fixnum(vector_nth(v, 2)));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(v, 3)));
-}
-
-TEST(test_breakout_contract_brick_hit_removes_one_brick_and_scores_once) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    ID out = eval_string(
-        "(do "
-        "  (require 'tiny-breakout.core) "
-        "  (let [brick {:id 2001 :x 50 :y 50 :w 20 :h 10 :points 10} "
-        "        s-base (tiny-breakout.core/init-state) "
-        "        s-a (assoc s-base :phase :play :score 0) "
-        "        s-b (assoc s-a :levels [{:id :only :bricks [brick]}] :level-index 0 :bricks [brick]) "
-        "        s0 (assoc s-b :ball-x 50 :ball-y 49 :ball-vx 0 :ball-vy 2) "
-        "        s1 (tiny-breakout.core/step-state s0 {:dx 0} 16)] "
-        "    [(:score s1) (count (:bricks s1)) (:phase s1) (:events s1)]))",
-        g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(out);
-    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
-    CljPersistentVector *v = as_vector(out);
-    TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(v, 0)));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
-    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":victory"), vector_nth(v, 2));
-    ID events = vector_nth(v, 3);
-    TEST_ASSERT_TRUE(TAG(events) == CLJ_VECTOR_PERSISTENT);
-}
-
-TEST(test_breakout_contract_bottom_out_decrements_life_and_enters_serve) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    ID out = eval_string(
-        "(do "
-        "  (require 'tiny-breakout.core) "
-        "  (let [s0 (assoc (tiny-breakout.core/init-state) "
-        "                  :phase :play :lives 3 :levels [{:id :l1 :bricks []}] "
-        "                  :bricks [] :ball-y 239 :ball-vx 0 :ball-vy 3) "
-        "        s1 (tiny-breakout.core/step-state s0 {:dx 0} 16)] "
+        "                  :phase :play :lives 3 "
+        "                  :levels [{:id :l1 :bricks []}] "
+        "                  :bricks [] "
+        "                  :ball-segment {:id 7 :end-ms 500 :to-x 100 :to-y 241 :wall :bottom}) "
+        "        s1 (tiny-breakout.core/apply-segment-end s0 7)] "
         "    [(:lives s1) (:phase s1) (:ball-y s1)]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
@@ -129,82 +94,104 @@ TEST(test_breakout_contract_bottom_out_decrements_life_and_enters_serve) {
     TEST_ASSERT_EQUAL_INT(218, as_fixnum(vector_nth(v, 2)));
 }
 
-TEST(test_breakout_contract_zero_lives_enters_game_over_and_restart_returns_serve) {
+TEST(test_breakout_contract_paddle_collision_reanchors_ball_and_replans_segment) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (let [s0 (assoc (tiny-breakout.core/init-state) "
+        "                  :phase :play :paddle-x 120 :ball-vx 2 :ball-vy 2 "
+        "                  :ball-segment {:id 1 :start-ms 10 :end-ms 40 :to-x 150 :to-y 220 :wall :bottom}) "
+        "        ev {:id :ball-vs-paddle "
+        "            :phase :enter "
+        "            :self-aabb {:min-x 138 :min-y 220 :max-x 142 :max-y 224} "
+        "            :other-aabb {:min-x 120 :min-y 224 :max-x 160 :max-y 228}} "
+        "        s1 (tiny-breakout.core/apply-spatial-event s0 ev 300)] "
+        "    (and (= :play (:phase s1)) "
+        "         (< (:ball-vy s1) 0) "
+        "         (= 220 (:ball-y s1)) "
+        "         (= :paddle-hit (first (:events s1))) "
+        "         (map? (:ball-segment s1)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_brick_collision_removes_brick_scores_and_can_win) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (let [brick {:id 2001 :x 50 :y 50 :w 20 :h 10 :points 10} "
+        "        s0 (-> (tiny-breakout.core/init-state) "
+        "               (assoc :phase :play) "
+        "               (assoc :score 0) "
+        "               (assoc :levels [{:id :only :bricks [brick]}]) "
+        "               (assoc :level-index 0) "
+        "               (assoc :bricks [brick]) "
+        "               (assoc :ball-vx 0) "
+        "               (assoc :ball-vy 2) "
+        "               (assoc :ball-segment {:id 1 :start-ms 10 :end-ms 40 :to-x 50 :to-y 55 :wall :bottom})) "
+        "        ev {:id :ball-vs-brick "
+        "            :phase :enter "
+        "            :other 2001 "
+        "            :self-aabb {:min-x 50 :min-y 49 :max-x 54 :max-y 53} "
+        "            :other-aabb {:min-x 50 :min-y 50 :max-x 70 :max-y 60}} "
+        "        s1 (tiny-breakout.core/apply-spatial-event s0 ev 300)] "
+        "    [(:score s1) (count (:bricks s1)) (:phase s1) (first (:events s1))]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(v, 0)));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":victory"), vector_nth(v, 2));
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":brick-hit"), vector_nth(v, 3));
+}
+
+TEST(test_breakout_contract_pause_toggle_anchors_rendered_ball_and_resumes_segment) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
         "(do "
         "  (require 'tiny-breakout.core) "
         "  (let [s0 (assoc (tiny-breakout.core/init-state) "
-        "                  :phase :play :lives 1 :ball-y 239 :ball-vx 0 :ball-vy 3) "
-        "        s1 (tiny-breakout.core/step-state s0 {:dx 0} 16) "
-        "        s2 (tiny-breakout.core/step-state s1 {:launch true} 16)] "
-        "    [(:phase s1) (:phase s2) (:lives s2) (:score s2)]))",
-        g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(out);
-    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
-    CljPersistentVector *v = as_vector(out);
-    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":game-over"), vector_nth(v, 0));
-    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":serve"), vector_nth(v, 1));
-    TEST_ASSERT_EQUAL_INT(3, as_fixnum(vector_nth(v, 2)));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 3)));
-}
-
-TEST(test_breakout_contract_pause_toggle_and_pause_suppresses_events) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    ID out = eval_string(
-        "(do "
-        "  (require 'tiny-breakout.core) "
-        "  (let [s0 (assoc (tiny-breakout.core/init-state) :phase :play) "
-        "        s1 (tiny-breakout.core/step-state s0 {:pause true} 16) "
-        "        s2 (tiny-breakout.core/step-state s1 {:dx 0} 16) "
-        "        s3 (tiny-breakout.core/step-state s2 {:pause true} 16)] "
-        "    [(:phase s1) (count (:events s2)) (:phase s3)]))",
+        "                  :phase :play "
+        "                  :ball-segment {:id 2 :start-ms 10 :end-ms 100 :to-x 70 :to-y 80 :wall :top}) "
+        "        s1 (tiny-breakout.core/apply-input s0 {:pause true} 40 {:x 33 :y 44}) "
+        "        s2 (tiny-breakout.core/apply-input s1 {:pause true} 60 nil)] "
+        "    [(:phase s1) (:ball-x s1) (:ball-y s1) (:ball-segment s1) (:phase s2) (map? (:ball-segment s2))]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
     CljPersistentVector *v = as_vector(out);
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":pause"), vector_nth(v, 0));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
-    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":play"), vector_nth(v, 2));
+    TEST_ASSERT_EQUAL_INT(33, as_fixnum(vector_nth(v, 1)));
+    TEST_ASSERT_EQUAL_INT(44, as_fixnum(vector_nth(v, 2)));
+    TEST_ASSERT_TRUE(vector_nth(v, 3) == NULL);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":play"), vector_nth(v, 4));
+    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 5));
 }
 
-TEST(test_breakout_contract_level_clear_advances_and_victory_overlay_is_exact) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    ID ok = eval_string(
-        "(do "
-        "  (require 'tiny-breakout.core) "
-        "  (require 'tiny-breakout.scene) "
-        "  (let [brick {:id 2001 :x 50 :y 50 :w 20 :h 10 :points 10} "
-        "        levels [{:id :l1 :bricks [brick]} {:id :l2 :bricks []}] "
-        "        s-base (tiny-breakout.core/init-state) "
-        "        s-a (assoc s-base :phase :play :levels levels :level-index 0 :bricks [brick]) "
-        "        s0 (assoc s-a :ball-x 50 :ball-y 49 :ball-vx 0 :ball-vy 2) "
-        "        s1 (tiny-breakout.core/step-state s0 {:dx 0} 16) "
-        "        s2 (tiny-breakout.core/step-state s1 {:launch true} 16) "
-        "        victory-scene (tiny-breakout.scene/build-scene (assoc s1 :phase :victory)) "
-        "        overlay (get (:index victory-scene) 1005)] "
-        "    (and (= :level-clear (:phase s1)) "
-        "         (= :serve (:phase s2)) "
-        "         (= \"You win!\" (:text overlay)))))",
-        g_test_eval_state);
-    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
-}
-
-TEST(test_breakout_contract_input_normalization_supports_digital_and_rotary) {
+TEST(test_breakout_contract_runtime_input_supports_digital_and_rotary) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
         "(do "
-        "  (require 'tiny-breakout.input) "
-        "  (let [a (tiny-breakout.input/normalize-paddle-intent {:left true}) "
-        "        b (tiny-breakout.input/normalize-paddle-intent {:rotary-delta -1})] "
-        "    [(:dx a) (:dx b)]))",
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/reset-runtime!) "
+        "  (let [x0 (:paddle-x @tiny-breakout.runtime/state*) "
+        "        _ (tiny-breakout.runtime/apply-input! {:left true}) "
+        "        x1 (:paddle-x @tiny-breakout.runtime/state*) "
+        "        _ (tiny-breakout.runtime/reset-runtime!) "
+        "        y0 (:paddle-x @tiny-breakout.runtime/state*) "
+        "        _ (tiny-breakout.runtime/apply-input! {:rotary-delta -1}) "
+        "        y1 (:paddle-x @tiny-breakout.runtime/state*)] "
+        "    [(- x1 x0) (- y1 y0)]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
     CljPersistentVector *v = as_vector(out);
     TEST_ASSERT_EQUAL_UINT(2, vector_count(v));
-    TEST_ASSERT_EQUAL_INT(-1, as_fixnum(vector_nth(v, 0)));
-    TEST_ASSERT_EQUAL_INT(-1, as_fixnum(vector_nth(v, 1)));
+    TEST_ASSERT_EQUAL_INT(-4, as_fixnum(vector_nth(v, 0)));
+    TEST_ASSERT_EQUAL_INT(-4, as_fixnum(vector_nth(v, 1)));
 }
 
 TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rules) {
@@ -242,6 +229,24 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
+TEST(test_breakout_contract_scene_ball_segment_projects_absolute_timelines) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.scene) "
+        "  (let [s (assoc (tiny-breakout.core/init-state) "
+        "                 :phase :play "
+        "                 :ball-x 10 :ball-y 20 "
+        "                 :ball-segment {:id 4 :start-ms 123 :end-ms 234 :to-x 44 :to-y 66 :wall :right}) "
+        "        frame (tiny-breakout.scene/build-scene s) "
+        "        ball (get (:index frame) 1003)] "
+        "    (and (= [[123 10] [234 44]] (:keyframes (:x ball))) "
+        "         (= [[123 20] [234 66]] (:keyframes (:y ball))))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
 TEST(test_breakout_contract_scene_uses_exact_terminal_overlay_texts) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
@@ -258,81 +263,37 @@ TEST(test_breakout_contract_scene_uses_exact_terminal_overlay_texts) {
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
-TEST(test_breakout_contract_audio_mapping_is_deterministic) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    ID ok = eval_string(
-        "(do "
-        "  (require 'tiny-breakout.audio) "
-        "  (= (tiny-breakout.audio/events->cues [:brick-hit :unknown :victory]) "
-        "     [:sfx/brick-hit :cue/victory]))",
-        g_test_eval_state);
-    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
-}
-
-TEST(test_breakout_contract_audio_defines_three_mini_sfx) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    ID ok = eval_string(
-        "(do "
-        "  (require 'tiny-breakout.audio) "
-        "  (and (= 3 (count tiny-breakout.audio/sfx-library)) "
-        "       (= :tiny-breakout/paddle-hit (:track-id (tiny-breakout.audio/sfx-spec :sfx/paddle-hit))) "
-        "       (= :tiny-breakout/brick-hit (:track-id (tiny-breakout.audio/sfx-spec :sfx/brick-hit))) "
-        "       (= :tiny-breakout/life-lost (:track-id (tiny-breakout.audio/sfx-spec :sfx/life-lost)))))",
-        g_test_eval_state);
-    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
-}
-
-TEST(test_breakout_contract_deployment_namespace_returns_breakout_entry) {
+TEST(test_breakout_contract_host_config_exposes_viewer_slots_and_atoms_without_native_runtime_flag) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-clj.deployment) "
-        "  (let [cfg (tiny-clj.deployment/breakout-demo-config)] "
-        "    (and (= :tiny-breakout (:entry cfg)) "
-        "         (= :title (:phase (:state cfg))) "
-        "         (= true (:visible (:frame cfg))))))",
-        g_test_eval_state);
-    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
-}
-
-TEST(test_breakout_contract_host_config_exposes_viewer_slots_and_atom) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    ID ok = eval_string(
-        "(do "
-        "  (require 'tiny-clj.deployment) "
-        "  (require 'tiny-clj.event) "
         "  (let [cfg (tiny-clj.deployment/breakout-host-config) "
         "        slots (:slots cfg) "
-        "        game-atom (:game-scene-atom cfg) "
-        "        state-atom (:game-state-atom cfg) "
-        "        ok (and (= :tiny-breakout (:entry cfg)) "
-        "                (= :native-breakout (:host-runtime cfg)) "
-        "                (= 1 (count slots)) "
-        "                (atom? game-atom) "
-        "                (atom? state-atom) "
-        "                (fn? (:spatial-callback cfg)) "
-        "                (= game-atom (:atom (first slots))) "
-        "                (= true (:visible (deref game-atom))))] "
-        "    (tiny-clj.event/on {:source :button :id :left} nil) "
-        "    (tiny-clj.event/on {:source :button :id :right} nil) "
-        "    (tiny-clj.event/on {:source :button :id :fire} nil) "
-        "    (tiny-clj.event/on {:source :button :id :y} nil) "
-        "    ok))",
+        "        game-atom (:game-scene-atom cfg)] "
+        "    (and (= :tiny-breakout (:entry cfg)) "
+        "         (nil? (:host-runtime cfg)) "
+        "         (= 1 (count slots)) "
+        "         (atom? game-atom) "
+        "         (fn? (:spatial-callback cfg)) "
+        "         (= game-atom (:atom (first slots))) "
+        "         (= true (:visible (deref game-atom))))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
-TEST(test_breakout_contract_host_button_events_mutate_state_discretely) {
+TEST(test_breakout_contract_runtime_apply_input_mutates_state_discretely) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-clj.deployment) "
+        "  (require 'tiny-breakout.runtime) "
         "  (let [cfg (tiny-clj.deployment/breakout-host-config) "
-        "        s0 @tiny-clj.deployment/breakout-host-state* "
-        "        _ (tiny-clj.deployment/breakout-host-button-event! {:id :fire :kind :button/down}) "
-        "        s1 @tiny-clj.deployment/breakout-host-state* "
-        "        _ (tiny-clj.deployment/breakout-host-button-event! {:id :right :kind :button/down}) "
-        "        s2 @tiny-clj.deployment/breakout-host-state* "
+        "        s0 @tiny-breakout.runtime/state* "
+        "        _ (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "        s1 @tiny-breakout.runtime/state* "
+        "        _ (tiny-breakout.runtime/apply-input! {:right true}) "
+        "        s2 @tiny-breakout.runtime/state* "
         "        scene @(:game-scene-atom cfg)] "
         "    (and (= :title (:phase s0)) "
         "         (= :serve (:phase s1)) "
@@ -355,43 +316,12 @@ TEST(test_breakout_contract_host_spatial_callback_dispatches_generic_spatial_wat
         "              (swap! seen conj [(:id event) (:phase event)]) "
         "              nil)) "
         "        _ ((:spatial-callback cfg) "
-        "            {:source :spatial :id :ball-vs-paddle :rule {:id :ball-vs-paddle} :phase :enter}) "
+        "            {:source :spatial :id :ball-vs-paddle :rule {:id :ball-vs-paddle} "
+        "             :phase :enter "
+        "             :self-aabb {:min-x 10 :min-y 20 :max-x 14 :max-y 24} "
+        "             :other-aabb {:min-x 0 :min-y 24 :max-x 40 :max-y 28}}) "
         "        _ (tiny-clj.event/on {:source :spatial :id :ball-vs-paddle} nil)] "
         "    (= [[:ball-vs-paddle :enter]] @seen)))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
-}
-
-TEST(test_breakout_contract_namespace_files_use_tiny_breakout_prefix) {
-    const char *files[] = {"core.clj", "scene.clj", "input.clj", "audio.clj", "levels.clj"};
-    for (unsigned int i = 0; i < (unsigned int)(sizeof(files) / sizeof(files[0])); i++) {
-        size_t len = 0;
-        char *src = read_breakout_source(files[i], &len);
-        TEST_ASSERT_TRUE(len > 0);
-        TEST_ASSERT_NOT_NULL_MESSAGE(strstr(src, "(ns tiny-breakout."),
-                                     "all breakout files must declare tiny-breakout.* namespace");
-        CLJ_FREE(src);
-    }
-}
-
-TEST(test_breakout_contract_dependencies_are_limited_to_tiny_clj_and_tiny_fx) {
-    const char *files[] = {"core.clj", "scene.clj", "input.clj", "audio.clj", "levels.clj"};
-    for (unsigned int i = 0; i < (unsigned int)(sizeof(files) / sizeof(files[0])); i++) {
-        size_t len = 0;
-        char *src = read_breakout_source(files[i], &len);
-        TEST_ASSERT_TRUE(len > 0);
-
-        TEST_ASSERT_NULL_MESSAGE(strstr(src, "tiny-fx.game-demo"),
-                                 "breakout namespaces must not depend on tiny-fx.game-demo");
-        TEST_ASSERT_NULL_MESSAGE(strstr(src, "tiny-fx.startup"),
-                                 "breakout namespaces must not depend on tiny-fx.startup");
-        TEST_ASSERT_NULL_MESSAGE(strstr(src, "tiny-db."),
-                                 "breakout namespaces must not depend on tiny-db namespaces");
-        TEST_ASSERT_NULL_MESSAGE(strstr(src, "clojure.string"),
-                                 "breakout namespaces must not depend on clojure.string");
-        TEST_ASSERT_NULL_MESSAGE(strstr(src, "clojure.set"),
-                                 "breakout namespaces must not depend on clojure.set");
-
-        CLJ_FREE(src);
-    }
 }

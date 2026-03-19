@@ -97,9 +97,9 @@
 ^#^{:doc "Returns true if x is odd, false otherwise."}
 (def odd? (fn [x] (= (mod x 2) 1)))
 ^#^{:doc "Returns the maximum of a and b."}
-(def max (fn [a b] (if (> a b) a b)))
+(defn max [a b] :native)
 ^#^{:doc "Returns the minimum of a and b."}
-(def min (fn [a b] (if (< a b) a b)))
+(defn min [a b] :native)
 
 ; ============================================================================
 ; Collection Functions
@@ -825,8 +825,7 @@
             init (keys m))))
 
 ^#^{:doc "Returns the absolute value of a."}
-(defn abs [x]
-  (if (< x 0) (- x) x))
+(defn abs [x] :native)
 
 ^#^{:doc "Remainder of dividing numerator by denominator."}
 (defn rem [num div]

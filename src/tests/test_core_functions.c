@@ -556,6 +556,11 @@ TEST_SHARED(test_abs_negative) {
   assert_eval_truthy("(= (abs -5) 5)");
 }
 
+TEST_SHARED(test_abs_fixed_point) {
+  // (abs -1.5) => 1.5
+  assert_eval_truthy("(= (abs -1.5) 1.5)");
+}
+
 TEST_SHARED(test_abs_positive) {
   // (abs 5) => 5
   assert_eval_truthy("(= (abs 5) 5)");
@@ -564,6 +569,16 @@ TEST_SHARED(test_abs_positive) {
 TEST_SHARED(test_abs_zero) {
   // (abs 0) => 0
   assert_eval_truthy("(= (abs 0) 0)");
+}
+
+TEST_SHARED(test_max_promotes_numeric_inputs) {
+  // (max 1 1.5) => 1.5
+  assert_eval_truthy("(= (max 1 1.5) 1.5)");
+}
+
+TEST_SHARED(test_min_promotes_numeric_inputs) {
+  // (min 1 1.5) => 1
+  assert_eval_truthy("(= (min 1 1.5) 1)");
 }
 
 // --- rem ---

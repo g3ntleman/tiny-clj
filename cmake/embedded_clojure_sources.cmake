@@ -37,7 +37,6 @@ set(TINYCLJ_EMBEDDED_CLOJURE_TINY_FX_ENTRIES
     "libs/tiny-fx/game-demo.clj|tiny-fx.game-demo.clj.inc"
     "libs/tiny-breakout/core.clj|tiny-breakout.core.clj.inc"
     "libs/tiny-breakout/scene.clj|tiny-breakout.scene.clj.inc"
-    "libs/tiny-breakout/input.clj|tiny-breakout.input.clj.inc"
     "libs/tiny-breakout/audio.clj|tiny-breakout.audio.clj.inc"
     "libs/tiny-breakout/levels.clj|tiny-breakout.levels.clj.inc"
 )
