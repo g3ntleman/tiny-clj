@@ -135,8 +135,8 @@
                          1003 (->Rect 1003 nil nil true ball-x-field ball-y-field core/ball-size core/ball-size ball-shape)
                          1004 (->VText 1004 nil nil true 8 12 1 0 score-text nil)
                          1005 (->VText 1005 nil nil true 100 120 1 0 overlay nil)
-                         1006 (->VText 1006 nil nil true 258 12 1 0 "Lives" nil)
-                         1007 (->VText 1007 nil nil true 302 12 1 0 lives-text nil)}]
+                         1006 (->VText 1006 nil nil true 226 12 1 0 "Lives:" nil)
+                         1007 (->VText 1007 nil nil true 286 12 1 0 lives-text nil)}]
       (loop [remaining bricks
              entities base-entities
              child-ids [1001 1002 1003 1004 1005 1006 1007]]

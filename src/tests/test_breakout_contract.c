@@ -243,10 +243,10 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
         "       (= 1002 (:other breakout-test-paddle-rule)) "
         "       (= 1003 (:self breakout-test-brick-rule)) "
         "       (= 2001 (:other breakout-test-brick-rule)) "
-        "       (= \"Lives\" (:text breakout-test-lives-label)) "
+        "       (= \"Lives:\" (:text breakout-test-lives-label)) "
         "       (= \"3\" (:text breakout-test-lives-value)) "
-        "       (= 258 (:x breakout-test-lives-label)) "
-        "       (= 302 (:x breakout-test-lives-value)) "
+        "       (= 226 (:x breakout-test-lives-label)) "
+        "       (= 286 (:x breakout-test-lives-value)) "
         "       (= :breakout/ball (:id (:prototype breakout-test-ball))) "
         "       (= :breakout/paddle (:id (:prototype breakout-test-paddle))) "
         "       (= :breakout/brick (:id (:prototype breakout-test-brick-node)))))",
