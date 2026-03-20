@@ -1437,18 +1437,17 @@ TEST(test_vector_scene_graph_dirty_union_tree_budget_splits_when_union_exceeds_b
     TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[1], leaves[1]));
 }
 
-TEST(test_vector_scene_graph_dirty_union_tree_budget_keeps_union_when_it_fits) {
+TEST(test_vector_scene_graph_dirty_union_tree_budget_keeps_non_overlapping_clusters_separate) {
     VgClipRect leaves[2] = {
         {.x = 4, .y = 4, .w = 4, .h = 4},
         {.x = 10, .y = 4, .w = 4, .h = 4},
     };
     VgClipRect planned[4] = {0};
-    VgClipRect expected_union = vg_clip_rect_union(leaves[0], leaves[1]);
-
     size_t plan_count = vg_dirty_union_plan_rects(leaves, 2u, 64u, planned, 4u);
 
-    TEST_ASSERT_EQUAL_UINT(1u, plan_count);
-    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], expected_union));
+    TEST_ASSERT_EQUAL_UINT(2u, plan_count);
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], leaves[0]));
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[1], leaves[1]));
 }
 
 TEST(test_vector_scene_graph_dirty_union_tree_budget_splits_oversized_leaf_geometrically) {
@@ -1462,6 +1461,36 @@ TEST(test_vector_scene_graph_dirty_union_tree_budget_splits_oversized_leaf_geome
     TEST_ASSERT_EQUAL_UINT(2u, plan_count);
     TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], (VgClipRect){.x = 0, .y = 0, .w = 8, .h = 8}));
     TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[1], (VgClipRect){.x = 8, .y = 0, .w = 8, .h = 8}));
+}
+
+TEST(test_vector_scene_graph_dirty_union_tree_budget_merges_overlapping_leaves_per_cluster) {
+    VgClipRect leaves[3] = {
+        {.x = 2, .y = 2, .w = 6, .h = 4},
+        {.x = 6, .y = 3, .w = 6, .h = 4},
+        {.x = 42, .y = 28, .w = 6, .h = 4},
+    };
+    VgClipRect planned[4] = {0};
+
+    size_t plan_count = vg_dirty_union_plan_rects(leaves, 3u, 64u, planned, 4u);
+
+    TEST_ASSERT_EQUAL_UINT(2u, plan_count);
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], (VgClipRect){.x = 2, .y = 2, .w = 10, .h = 5}));
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[1], leaves[2]));
+}
+
+TEST(test_vector_scene_graph_dirty_union_tree_budget_falls_back_to_union_when_output_capacity_too_small) {
+    VgClipRect leaves[3] = {
+        {.x = 2, .y = 2, .w = 6, .h = 4},
+        {.x = 6, .y = 3, .w = 6, .h = 4},
+        {.x = 42, .y = 28, .w = 6, .h = 4},
+    };
+    VgClipRect planned[1] = {0};
+    VgClipRect expected_union = vg_clip_rect_union(vg_clip_rect_union(leaves[0], leaves[1]), leaves[2]);
+
+    size_t plan_count = vg_dirty_union_plan_rects(leaves, 3u, 64u, planned, 1u);
+
+    TEST_ASSERT_EQUAL_UINT(1u, plan_count);
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], expected_union));
 }
 
 TEST(test_vector_scene_graph_slot_change_tracker_publish_and_wait_reports_changed_mask) {
