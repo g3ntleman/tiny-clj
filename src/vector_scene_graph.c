@@ -79,6 +79,60 @@ uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb) {
     return h;
 }
 
+size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
+                                 size_t leaf_count,
+                                 uint32_t pixel_budget,
+                                 VgClipRect *out_rects,
+                                 size_t out_capacity) {
+    if (!dirty_leaves || !out_rects || out_capacity == 0 || leaf_count == 0) {
+        return 0u;
+    }
+    if (pixel_budget == 0u) {
+        return 0u;
+    }
+
+    VgClipRect merged = {0};
+    bool has_any = false;
+    size_t non_empty_count = 0u;
+    bool leaves_fit_budget = true;
+
+    for (size_t i = 0; i < leaf_count; i++) {
+        if (vg_clip_rect_is_empty(dirty_leaves[i])) {
+            continue;
+        }
+        uint32_t area = (uint32_t)dirty_leaves[i].w * (uint32_t)dirty_leaves[i].h;
+        if (area > pixel_budget) {
+            leaves_fit_budget = false;
+        }
+        merged = has_any ? vg_clip_rect_union(merged, dirty_leaves[i]) : dirty_leaves[i];
+        has_any = true;
+        non_empty_count++;
+    }
+    if (!has_any) {
+        return 0u;
+    }
+
+    uint32_t merged_area = (uint32_t)merged.w * (uint32_t)merged.h;
+    if (merged_area <= pixel_budget) {
+        out_rects[0] = merged;
+        return 1u;
+    }
+
+    if (leaves_fit_budget && non_empty_count <= out_capacity) {
+        size_t out_i = 0u;
+        for (size_t i = 0; i < leaf_count; i++) {
+            if (vg_clip_rect_is_empty(dirty_leaves[i])) {
+                continue;
+            }
+            out_rects[out_i++] = dirty_leaves[i];
+        }
+        return out_i;
+    }
+
+    out_rects[0] = merged;
+    return 1u;
+}
+
 #define VG_FP_SHIFT CLJ_FIXED_FRAC_BITS
 #define VG_FP_ONE CLJ_FIXED_SCALE
 

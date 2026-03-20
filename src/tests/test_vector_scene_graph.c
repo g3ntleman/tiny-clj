@@ -1420,6 +1420,23 @@ TEST(test_vector_scene_graph_dirty_union_tree_non_overlap_children_match_union) 
     TEST_ASSERT_EQUAL_MEMORY(union_fb.pixels, child_fb.pixels, sizeof(union_pixels));
 }
 
+TEST(test_vector_scene_graph_dirty_union_tree_budget_splits_when_union_exceeds_budget) {
+    VgClipRect leaves[2] = {
+        {.x = 2, .y = 2, .w = 6, .h = 4},
+        {.x = 42, .y = 28, .w = 6, .h = 4},
+    };
+    VgClipRect planned[4] = {0};
+
+    size_t plan_count = vg_dirty_union_plan_rects(leaves, 2u, 64u, planned, 4u);
+
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(
+        2u,
+        plan_count,
+        "dirty-union planner should split into child rects when union exceeds budget but leaves fit");
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], leaves[0]));
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[1], leaves[1]));
+}
+
 TEST(test_vector_scene_graph_slot_change_tracker_publish_and_wait_reports_changed_mask) {
     VgSlotChangeTracker tracker;
     TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&tracker, 3));

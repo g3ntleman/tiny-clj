@@ -251,6 +251,16 @@ void vg_framebuffer_clear(VgFrameBuffer *fb, uint16_t color);
 void vg_framebuffer_clear_rect(VgFrameBuffer *fb, VgClipRect rect, uint16_t color);
 uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb);
 
+/*
+ * Plans dirty rect render passes under a pixel budget.
+ * Current baseline implementation keeps one union rect.
+ */
+size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
+                                 size_t leaf_count,
+                                 uint32_t pixel_budget,
+                                 VgClipRect *out_rects,
+                                 size_t out_capacity);
+
 void vg_render_scene(const VgNode *root, VgFrameBuffer *fb);
 void vg_render_scene_clipped(const VgNode *root, VgFrameBuffer *fb, VgClipRect clip_rect);
 void vg_render_node_fixed(const VgNode *node, VgTransformFixed world_t, VgFrameBuffer *fb);
