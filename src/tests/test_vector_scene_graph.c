@@ -1450,6 +1450,24 @@ TEST(test_vector_scene_graph_dirty_union_tree_budget_keeps_non_overlapping_clust
     TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[1], leaves[1]));
 }
 
+TEST(test_vector_scene_graph_dirty_union_tree_budget_does_not_merge_leaf_inside_cluster_bbox_hole) {
+    VgClipRect leaves[3] = {
+        {.x = 0, .y = 0, .w = 8, .h = 4},
+        {.x = 0, .y = 0, .w = 4, .h = 8},
+        {.x = 4, .y = 4, .w = 4, .h = 4},
+    };
+    VgClipRect planned[4] = {0};
+
+    size_t plan_count = vg_dirty_union_plan_rects(leaves, 3u, 64u, planned, 4u);
+
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(
+        2u,
+        plan_count,
+        "leaf inside union bbox hole must stay separate unless it overlaps a cluster leaf");
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], (VgClipRect){.x = 0, .y = 0, .w = 8, .h = 8}));
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[1], leaves[2]));
+}
+
 TEST(test_vector_scene_graph_dirty_union_tree_budget_splits_oversized_leaf_geometrically) {
     VgClipRect leaves[1] = {
         {.x = 0, .y = 0, .w = 16, .h = 8},

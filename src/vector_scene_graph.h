@@ -253,7 +253,8 @@ uint32_t vg_framebuffer_checksum(const VgFrameBuffer *fb);
 
 /*
  * Plans dirty rect render passes under a pixel budget.
- * Current baseline implementation keeps one union rect.
+ * Overlapping leaves form connected clusters; oversized unions fall back to
+ * child rects and, for oversized leaves, geometric splits.
  */
 size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
                                  size_t leaf_count,

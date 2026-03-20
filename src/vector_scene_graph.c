@@ -175,24 +175,29 @@ size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
 
         size_t cluster_members[leaf_count];
         size_t cluster_count = 0u;
-        VgClipRect cluster_union = dirty_leaves[i];
         assigned[i] = true;
         cluster_members[cluster_count++] = i;
 
-        bool changed = true;
-        while (changed) {
-            changed = false;
+        /*
+         * Build connected components from actual leaf overlaps so we do not
+         * merge a rect that only happens to lie inside the cluster union bbox.
+         */
+        for (size_t cursor = 0; cursor < cluster_count; cursor++) {
+            size_t member_index = cluster_members[cursor];
             for (size_t j = 0; j < leaf_count; j++) {
                 if (assigned[j] || vg_clip_rect_is_empty(dirty_leaves[j])) {
                     continue;
                 }
-                if (clip_rects_overlap(cluster_union, dirty_leaves[j])) {
+                if (clip_rects_overlap(dirty_leaves[member_index], dirty_leaves[j])) {
                     assigned[j] = true;
                     cluster_members[cluster_count++] = j;
-                    cluster_union = vg_clip_rect_union(cluster_union, dirty_leaves[j]);
-                    changed = true;
                 }
             }
+        }
+
+        VgClipRect cluster_union = dirty_leaves[cluster_members[0]];
+        for (size_t m = 1; m < cluster_count; m++) {
+            cluster_union = vg_clip_rect_union(cluster_union, dirty_leaves[cluster_members[m]]);
         }
 
         if (clip_rect_area_px(cluster_union) <= pixel_budget) {
