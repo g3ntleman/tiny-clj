@@ -4,7 +4,6 @@
 #include "../vector_scene_graph.h"
 #include "../scene.h"
 #include "../tiny_fx_gfx.h"
-#include "../render_backend.h"
 #include "../rendered_state_snapshot.h"
 #include "../renderer_lifecycle.h"
 #include "../viewer_collision.h"
@@ -104,6 +103,15 @@ static uint64_t benchmark_scene_record_render_ns(ID scene,
         return 0u;
     }
     return end_ns - start_ns;
+}
+
+static void render_scene_over_clips(const VgNode *root,
+                                    VgFrameBuffer *fb,
+                                    const VgClipRect *clips,
+                                    size_t clip_count) {
+    for (size_t i = 0; i < clip_count; i++) {
+        vg_render_scene_clipped(root, fb, clips[i]);
+    }
 }
 
 #if defined(__APPLE__) || defined(__linux__)
@@ -1302,88 +1310,114 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_reports_dirty_rect_u
     TEST_ASSERT_EQUAL_INT(11, result.dirty_rect.h);
 }
 
-typedef struct {
-    uint16_t pixels[TEST_W * TEST_H];
-    uint16_t width;
-    uint16_t height;
-    uint32_t begin_frame_calls;
-    uint32_t submit_rect_calls;
-    uint32_t end_frame_calls;
-    VgBackendRect last_rect;
-    uint32_t last_frame_id;
-} TestBackendCapture;
+TEST(test_vector_scene_graph_dirty_union_tree_overlap_cluster_child_first_matches_union) {
+    uint16_t union_pixels[TEST_W * TEST_H];
+    uint16_t child_pixels[TEST_W * TEST_H];
+    VgFrameBuffer union_fb;
+    VgFrameBuffer child_fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&union_fb, TEST_W, TEST_H, union_pixels, TEST_W * TEST_H));
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&child_fb, TEST_W, TEST_H, child_pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&union_fb, 0x0000u);
+    vg_framebuffer_clear(&child_fb, 0x0000u);
 
-static bool test_backend_begin_frame(void *ctx, uint32_t frame_id) {
-    TestBackendCapture *capture = (TestBackendCapture *)ctx;
-    TEST_ASSERT_NOT_NULL(capture);
-    capture->begin_frame_calls++;
-    capture->last_frame_id = frame_id;
-    return true;
-}
+    VgStyle red_fill = vg_style_default();
+    red_fill.has_fill = true;
+    red_fill.fill_color = 0xf800u;
+    VgStyle green_fill = vg_style_default();
+    green_fill.has_fill = true;
+    green_fill.fill_color = 0x07e0u;
 
-static bool test_backend_submit_rect(void *ctx,
-                                     VgBackendRect rect,
-                                     const uint16_t *rgb565_pixels,
-                                     uint16_t stride_px) {
-    TestBackendCapture *capture = (TestBackendCapture *)ctx;
-    TEST_ASSERT_NOT_NULL(capture);
-    TEST_ASSERT_NOT_NULL(rgb565_pixels);
-    capture->submit_rect_calls++;
-    capture->last_rect = rect;
-    for (int16_t row = 0; row < rect.h; row++) {
-        size_t dst_off = (size_t)(rect.y + row) * capture->width + (size_t)rect.x;
-        size_t src_off = (size_t)row * (size_t)stride_px;
-        memcpy(&capture->pixels[dst_off], &rgb565_pixels[src_off], (size_t)rect.w * sizeof(uint16_t));
-    }
-    return true;
-}
-
-static bool test_backend_end_frame(void *ctx, uint32_t frame_id) {
-    TestBackendCapture *capture = (TestBackendCapture *)ctx;
-    TEST_ASSERT_NOT_NULL(capture);
-    capture->end_frame_calls++;
-    capture->last_frame_id = frame_id;
-    return true;
-}
-
-TEST(test_vector_scene_graph_render_backend_submit_clip_rect_clips_and_forwards_stride) {
-    uint16_t src_pixels[TEST_W * TEST_H];
-    for (size_t i = 0; i < TEST_W * TEST_H; i++) {
-        src_pixels[i] = (uint16_t)i;
-    }
-
-    VgFrameBuffer fb;
-    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, src_pixels, TEST_W * TEST_H));
-
-    TestBackendCapture capture = {0};
-    capture.width = TEST_W;
-    capture.height = TEST_H;
-
-    const VgBackendOps ops = {
-        .begin_frame = test_backend_begin_frame,
-        .submit_rect = test_backend_submit_rect,
-        .end_frame = test_backend_end_frame,
+    VgNode r1 = {
+        .id = 1,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = red_fill,
+        .data.rect = {.x = 10, .y = 10, .w = 18, .h = 12}
     };
-    VgBackend backend = {
-        .ops = &ops,
-        .ctx = &capture,
+    VgNode r2 = {
+        .id = 2,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = green_fill,
+        .data.rect = {.x = 20, .y = 14, .w = 18, .h = 12}
+    };
+    VgNode *children[] = {&r1, &r2};
+    VgNode root = {
+        .id = 100,
+        .type = VG_NODE_GROUP,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = vg_style_default(),
+        .data.group = {.children = children, .child_count = 2}
     };
 
-    TEST_ASSERT_TRUE(vg_backend_begin_frame(&backend, 17u));
-    TEST_ASSERT_TRUE(vg_backend_submit_clip_rect(&backend, &fb, (VgClipRect){-2, 3, 5, 2}));
-    TEST_ASSERT_TRUE(vg_backend_end_frame(&backend, 17u));
+    VgClipRect child_clips[2] = {
+        {.x = 10, .y = 10, .w = 18, .h = 12},
+        {.x = 20, .y = 14, .w = 18, .h = 12},
+    };
+    VgClipRect union_clip = vg_clip_rect_union(child_clips[0], child_clips[1]);
 
-    TEST_ASSERT_EQUAL_UINT32(1u, capture.begin_frame_calls);
-    TEST_ASSERT_EQUAL_UINT32(1u, capture.submit_rect_calls);
-    TEST_ASSERT_EQUAL_UINT32(1u, capture.end_frame_calls);
-    TEST_ASSERT_EQUAL_UINT32(17u, capture.last_frame_id);
-    TEST_ASSERT_EQUAL_INT(0, capture.last_rect.x);
-    TEST_ASSERT_EQUAL_INT(3, capture.last_rect.y);
-    TEST_ASSERT_EQUAL_INT(3, capture.last_rect.w);
-    TEST_ASSERT_EQUAL_INT(2, capture.last_rect.h);
-    TEST_ASSERT_EQUAL_UINT16(src_pixels[(size_t)3 * TEST_W + 0], capture.pixels[(size_t)3 * TEST_W + 0]);
-    TEST_ASSERT_EQUAL_UINT16(src_pixels[(size_t)3 * TEST_W + 2], capture.pixels[(size_t)3 * TEST_W + 2]);
-    TEST_ASSERT_EQUAL_UINT16(src_pixels[(size_t)4 * TEST_W + 1], capture.pixels[(size_t)4 * TEST_W + 1]);
+    vg_render_scene_clipped(&root, &union_fb, union_clip);
+    render_scene_over_clips(&root, &child_fb, child_clips, 2u);
+
+    TEST_ASSERT_EQUAL_MEMORY(union_fb.pixels, child_fb.pixels, sizeof(union_pixels));
+}
+
+TEST(test_vector_scene_graph_dirty_union_tree_non_overlap_children_match_union) {
+    uint16_t union_pixels[TEST_W * TEST_H];
+    uint16_t child_pixels[TEST_W * TEST_H];
+    VgFrameBuffer union_fb;
+    VgFrameBuffer child_fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&union_fb, TEST_W, TEST_H, union_pixels, TEST_W * TEST_H));
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&child_fb, TEST_W, TEST_H, child_pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&union_fb, 0x0000u);
+    vg_framebuffer_clear(&child_fb, 0x0000u);
+
+    VgStyle cyan_fill = vg_style_default();
+    cyan_fill.has_fill = true;
+    cyan_fill.fill_color = 0x07ffu;
+    VgStyle magenta_fill = vg_style_default();
+    magenta_fill.has_fill = true;
+    magenta_fill.fill_color = 0xf81fu;
+
+    VgNode r1 = {
+        .id = 11,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = cyan_fill,
+        .data.rect = {.x = 6, .y = 6, .w = 10, .h = 8}
+    };
+    VgNode r2 = {
+        .id = 12,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = magenta_fill,
+        .data.rect = {.x = 38, .y = 26, .w = 12, .h = 10}
+    };
+    VgNode *children[] = {&r1, &r2};
+    VgNode root = {
+        .id = 110,
+        .type = VG_NODE_GROUP,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = vg_style_default(),
+        .data.group = {.children = children, .child_count = 2}
+    };
+
+    VgClipRect child_clips[2] = {
+        {.x = 6, .y = 6, .w = 10, .h = 8},
+        {.x = 38, .y = 26, .w = 12, .h = 10},
+    };
+    VgClipRect union_clip = vg_clip_rect_union(child_clips[0], child_clips[1]);
+
+    vg_render_scene_clipped(&root, &union_fb, union_clip);
+    render_scene_over_clips(&root, &child_fb, child_clips, 2u);
+
+    TEST_ASSERT_EQUAL_MEMORY(union_fb.pixels, child_fb.pixels, sizeof(union_pixels));
 }
 
 TEST(test_vector_scene_graph_slot_change_tracker_publish_and_wait_reports_changed_mask) {
