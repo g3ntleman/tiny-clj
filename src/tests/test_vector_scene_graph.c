@@ -199,14 +199,12 @@ TEST(test_vector_scene_graph_group_visible_false_skips_children) {
     TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)6 * TEST_W + 18]);
 }
 
-TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
+TEST(test_vector_scene_graph_renders_line_from_canonical_scene_entity_map) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote Scene) ["
-        "    (->Group 100 nil nil true "
-        "             [(->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)] nil) "
-        "    nil nil nil nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)}] "
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -226,7 +224,7 @@ TEST(test_vector_scene_graph_renders_line_from_flat_entity_map_records) {
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (let [entities {'root (record-create (quote Group) ['root nil nil true [101] nil]) "
         "                  101 (record-create (quote Line) [101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil])}] "
-        "    (record-create (quote Scene) [nil entities nil nil nil])))",
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -248,7 +246,7 @@ TEST(test_vector_scene_graph_flat_entity_map_symbol_child_id_renders) {
         "                  'player-line (record-create (quote Line) ['player-line nil "
         "                                        (->Style 65535 1 true false 0 false 0) "
         "                                        true 4 6 18 6 nil])}] "
-        "    (record-create (quote Scene) [nil entities nil nil nil])))",
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -269,7 +267,7 @@ TEST(test_vector_scene_graph_flat_entity_map_nested_group_transform_inheritance)
         "  (let [entities {'root (record-create (quote Group) ['root (record-create (quote Transform) [2 3 1 1 0]) nil true [210] nil]) "
         "                  210 (record-create (quote Group) [210 (record-create (quote Transform) [5 2 1 1 0]) nil true [211] nil]) "
         "                  211 (record-create (quote Line) [211 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0 nil])}] "
-        "    (record-create (quote Scene) [nil entities nil nil nil])))",
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -288,7 +286,7 @@ TEST(test_vector_scene_graph_flat_entity_map_missing_root_symbol_fails) {
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (let [entities {100 (record-create (quote Group) [100 nil nil true [] nil])}] "
-        "    (record-create (quote Scene) [nil entities nil nil nil])))",
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -305,7 +303,7 @@ TEST(test_vector_scene_graph_flat_entity_map_missing_child_id_fails) {
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (let [entities {'root (record-create (quote Group) ['root nil nil true [999] nil])}] "
-        "    (record-create (quote Scene) [nil entities nil nil nil])))",
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -323,18 +321,30 @@ TEST(test_vector_scene_graph_game_demo_bundle_uses_root_and_index_scene_shape) {
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
-        "        root0 (:root (nth bundle 0)) "
-        "        root1 (:root (nth bundle 1)) "
-        "        root2 (:root (nth bundle 2)) "
         "        index0 (:index (nth bundle 0)) "
         "        index1 (:index (nth bundle 1)) "
-        "        index2 (:index (nth bundle 2))] "
-        "    (and (vector? (:children root0)) "
+        "        index2 (:index (nth bundle 2)) "
+        "        root0-id (:root (nth bundle 0)) "
+        "        root1-id (:root (nth bundle 1)) "
+        "        root2-id (:root (nth bundle 2)) "
+        "        root0 (get index0 root0-id) "
+        "        root1 (get index1 root1-id) "
+        "        root2 (get index2 root2-id)] "
+        "    (and (= 'root root0-id) "
+        "         (= 'root root1-id) "
+        "         (= 'root root2-id) "
+        "         (= 'root (:id root0)) "
+        "         (= 'root (:id root1)) "
+        "         (= 'root (:id root2)) "
+        "         (vector? (:children root0)) "
         "         (vector? (:children root1)) "
         "         (vector? (:children root2)) "
         "         (map? index0) "
         "         (map? index1) "
         "         (map? index2) "
+        "         (contains? index0 'root) "
+        "         (contains? index1 'root) "
+        "         (contains? index2 'root) "
         "         (contains? index0 1001) "
         "         (contains? index1 2001) "
         "         (contains? index2 3002) "
@@ -879,8 +889,8 @@ TEST(test_vector_scene_graph_game_demo_contains_blinking_stars) {
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        game-scene (nth bundle 2) "
-        "        game-root (:root game-scene) "
         "        game-index (:index game-scene) "
+        "        game-root (get game-index (:root game-scene)) "
         "        terrain (get game-index 3001) "
         "        stars-group (get game-index 3020) "
         "        s1 (get game-index 3021) "
@@ -952,13 +962,12 @@ TEST(test_vector_scene_graph_timeline_numeric_interpolation_moves_line) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote Scene) ["
-        "    nil     (->Line 101 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (record-create (quote Timeline) [[[0 4] [100 14]] false]) "
-        "            6 "
-        "            (record-create (quote Timeline) [[[0 18] [100 28]] false]) "
-        "            6 nil) "
-        "    nil nil nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true "
+        "                          (record-create (quote Timeline) [[[0 4] [100 14]] false]) "
+        "                          6 "
+        "                          (record-create (quote Timeline) [[[0 18] [100 28]] false]) "
+        "                          6 nil)}] "
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -977,13 +986,12 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_moves_line) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote Scene) ["
-        "    nil     (->Line 101 "
-        "            (record-create (quote Timeline) "
-        "              [[[0 (record-create (quote Transform) [0 0 1 1 0])] "
-        "                [100 (record-create (quote Transform) [20 0 1 1 0])]] false]) "
-        "            (->Style 65535 1 true false 0 false 0) true 0 6 10 6 nil) "
-        "    nil nil nil]))",
+        "  (let [entities {'root (->Line 'root "
+        "                          (record-create (quote Timeline) "
+        "                            [[[0 (record-create (quote Transform) [0 0 1 1 0])] "
+        "                              [100 (record-create (quote Transform) [20 0 1 1 0])]] false]) "
+        "                          (->Style 65535 1 true false 0 false 0) true 0 6 10 6 nil)}] "
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1005,13 +1013,12 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_applies_timeline_e
         "  (require 'tiny-fx.gfx-scene) "
         "  (require 'tiny-fx.color) "
         "  (defrecord TimelineEase [keyframes loop ease]) "
-        "  (record-create (quote Scene) ["
-        "    nil     (tiny-fx.gfx-scene/->Line 102 "
-        "      (record-create (quote TimelineEase) "
-        "        [[[0 (record-create (quote Transform) [0 0 1 1 0])] "
-        "          [100 (record-create (quote Transform) [20 0 1 1 0])]] false :out-cubic]) "
-        "      (tiny-fx.gfx-scene/->Style 65535 1 true false 0 false 0) true 0 6 10 6 nil) "
-        "    nil nil nil]))",
+        "  (let [entities {'root (tiny-fx.gfx-scene/->Line 'root "
+        "                            (record-create (quote TimelineEase) "
+        "                              [[[0 (record-create (quote Transform) [0 0 1 1 0])] "
+        "                                [100 (record-create (quote Transform) [20 0 1 1 0])]] false :out-cubic]) "
+        "                            (tiny-fx.gfx-scene/->Style 65535 1 true false 0 false 0) true 0 6 10 6 nil)}] "
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1032,13 +1039,12 @@ TEST(test_vector_scene_graph_timeline_loop_wraps_phase) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote Scene) ["
-        "    nil     (->Line 101 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (record-create (quote Timeline) [[[0 4] [100 14]] true]) "
-        "            6 "
-        "            (record-create (quote Timeline) [[[0 18] [100 28]] true]) "
-        "            6 nil) "
-        "    nil nil nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true "
+        "                          (record-create (quote Timeline) [[[0 4] [100 14]] true]) "
+        "                          6 "
+        "                          (record-create (quote Timeline) [[[0 18] [100 28]] true]) "
+        "                          6 nil)}] "
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1056,10 +1062,9 @@ TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote Scene) ["
-        "    nil     (->Group 120 nil nil false "
-        "             [(->Line 121 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)] nil) "
-        "    nil nil nil]))",
+        "  (let [entities {'root (->Group 'root nil nil false [121] nil) "
+        "                  121 (->Line 121 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)}] "
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1073,14 +1078,13 @@ TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
     TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)6 * TEST_W + 18]);
 }
 
-TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
+TEST(test_vector_scene_graph_renders_nested_entity_map_transform_inheritance) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote Scene) ["
-        "    nil     (->Group 200 (record-create (quote Transform) [7 5 1 1 0]) nil true "
-        "             [(record-create (quote Line) [201 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0 nil])] nil) "
-        "    nil nil nil]))",
+        "  (let [entities {'root (->Group 'root (record-create (quote Transform) [7 5 1 1 0]) nil true [201] nil) "
+        "                  201 (record-create (quote Line) [201 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0 nil])}] "
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1098,11 +1102,9 @@ TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote Scene) ["
-        "    nil     (->Group 300 nil nil true "
-        "             [(->Line 301 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil)] nil) "
-        "    [20 8 10 6] "
-        "    63488 nil]))",
+        "  (let [entities {'root (->Group 'root nil nil true [301] nil) "
+        "                  301 (->Line 301 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil)}] "
+        "    (record-create (quote Scene) ['root entities [20 8 10 6] 63488 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1127,11 +1129,8 @@ TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote FrameScene) ["
-        "    (->Line 401 nil (->Style 65535 1 true false 0 false 0) true 2 3 8 3 nil) "
-        "    nil "
-        "    [1 2 10 12] "
-        "    3 true true 0 1 nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 2 3 8 3 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [1 2 10 12] 3 true true 0 1 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1153,10 +1152,8 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote FrameScene) ["
-        "    (->Line 501 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
-        "    [20 8 10 6] "
-        "    0 true true 0 0 nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [20 8 10 6] 0 true true 0 0 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1182,10 +1179,8 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_whe
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote FrameScene) ["
-        "    (->Line 511 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
-        "    [20 8 10 6] "
-        "    0 false true 0 0 nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [20 8 10 6] 0 false true 0 0 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1208,20 +1203,16 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_tracks_has_animation
 
     ID static_scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote FrameScene) ["
-        "    (->Line 521 nil (->Style 65535 1 true false 0 false 0) true 4 10 20 10 nil) "
-        "    [0 8 30 6] "
-        "    0 true true 0 0 nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 4 10 20 10 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [0 8 30 6] 0 true true 0 0 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(static_scene);
 
     ID animated_scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote FrameScene) ["
-        "    (->Line 522 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (record-create (quote Timeline) [[[0 4] [100 14]] false]) 10 20 10 nil) "
-        "    [0 8 30 6] "
-        "    0 true true 0 0 nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true "
+        "                          (record-create (quote Timeline) [[[0 4] [100 14]] false]) 10 20 10 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [0 8 30 6] 0 true true 0 0 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(animated_scene);
 
@@ -1245,11 +1236,9 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_force_render_ticks_a
 
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote FrameScene) ["
-        "    (->Line 531 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (record-create (quote Timeline) [[[0 4] [100 14]] false]) 10 20 10 nil) "
-        "    [0 8 30 6] "
-        "    0 true true 0 0 nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true "
+        "                          (record-create (quote Timeline) [[[0 4] [100 14]] false]) 10 20 10 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [0 8 30 6] 0 true true 0 0 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1278,19 +1267,15 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_reports_dirty_rect_u
 
     ID first_scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote FrameScene) ["
-        "    (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
-        "    [20 8 10 6] "
-        "    0 true true 0 1 nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [20 8 10 6] 0 true true 0 1 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(first_scene);
 
     ID moved_scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote FrameScene) ["
-        "    (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
-        "    [24 11 12 5] "
-        "    0 true true 0 2 nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [24 11 12 5] 0 true true 0 2 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(moved_scene);
 
@@ -1446,15 +1431,9 @@ TEST(test_vector_scene_graph_slot_change_tracker_single_slot_publish_rerenders_o
     ID scenes = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "  (vector "
-        "    (record-create (quote FrameScene) ["
-        "      (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 2 4 14 4 nil) "
-        "      [0 0 20 10] 0 true true 0 0 nil]) "
-        "    (record-create (quote FrameScene) ["
-        "      (->Line 542 nil (->Style 65535 1 true false 0 false 0) true 2 8 14 8 nil) "
-        "      [0 0 20 12] 1 true true 0 0 nil]) "
-        "    (record-create (quote FrameScene) ["
-        "      (->Line 543 nil (->Style 65535 1 true false 0 false 0) true 2 12 14 12 nil) "
-        "      [0 0 20 14] 2 true true 0 0 nil])))",
+        "    (record-create (quote FrameScene) ['root {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 2 4 14 4 nil)} [0 0 20 10] 0 true true 0 0 nil]) "
+        "    (record-create (quote FrameScene) ['root {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 2 8 14 8 nil)} [0 0 20 12] 1 true true 0 0 nil]) "
+        "    (record-create (quote FrameScene) ['root {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 2 12 14 12 nil)} [0 0 20 14] 2 true true 0 0 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scenes);
     TEST_ASSERT_TRUE(is_vector(scenes));
@@ -2859,9 +2838,8 @@ TEST(test_vector_scene_graph_filled_rect_from_clojure_records) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote Scene) ["
-        "    nil     (->Rect 1009 nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12 nil) "
-        "    nil nil nil]))",
+        "  (let [entities {'root (->Rect 'root nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12 nil)}] "
+        "    (record-create (quote Scene) ['root entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -3352,11 +3330,9 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_timeline_fields_
 
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote FrameScene) ["
-        "    (->Line 7101 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (record-create (quote Timeline) [[[0 4] [100 14]] false]) 6 20 6 nil) "
-        "    [0 0 64 48] "
-        "    0 true true 0 0 nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true "
+        "                          (record-create (quote Timeline) [[[0 4] [100 14]] false]) 6 20 6 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [0 0 64 48] 0 true true 0 0 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -3401,11 +3377,9 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_loop_timeline_cl
 
     ID scene = eval_string(
         "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
-        "  (record-create (quote FrameScene) ["
-        "    (->Line 7201 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (record-create (quote Timeline) [[[0 4] [100 14]] false]) 8 20 8 nil) "
-        "    [0 0 64 48] "
-        "    0 true true 0 0 nil]))",
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true "
+        "                          (record-create (quote Timeline) [[[0 4] [100 14]] false]) 8 20 8 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [0 0 64 48] 0 true true 0 0 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -3430,8 +3404,8 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_loop_timeline_cl
         "    (require 'tiny-fx.gfx) "
         "    (require 'tiny-fx.game-demo) "
         "    (tiny-clj.runtime/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
-        "    [(tiny-clj.runtime/renderer-timeline-step :game 7201 :x1) "
-        "     (tiny-clj.runtime/renderer-timeline-progress :game 7201 :x1)])",
+        "    [(tiny-clj.runtime/renderer-timeline-step :game 'root :x1) "
+        "     (tiny-clj.runtime/renderer-timeline-progress :game 'root :x1)])",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));

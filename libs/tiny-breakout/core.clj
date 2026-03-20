@@ -29,6 +29,10 @@
   [state]
   (assoc state :ball-segment nil))
 
+(defn- clear-paddle-motion
+  [state]
+  (assoc state :paddle-motion nil))
+
 (defn- serve-ball
   [state]
   (-> state
@@ -236,14 +240,16 @@
   [state remaining]
   (if (empty? remaining)
     (if (= (+ (:level-index state) 1) (level-count state))
-      (assoc state
-             :phase :victory
-             :ball-segment nil
-             :events (conj (:events state) :victory))
-      (assoc state
-             :phase :level-clear
-             :ball-segment nil
-             :events (conj (:events state) :level-clear)))
+      (-> state
+          (clear-paddle-motion)
+          (assoc :phase :victory
+                 :ball-segment nil
+                 :events (conj (:events state) :victory)))
+      (-> state
+          (clear-paddle-motion)
+          (assoc :phase :level-clear
+                 :ball-segment nil
+                 :events (conj (:events state) :level-clear))))
     state))
 
 (defn apply-spatial-event

@@ -162,6 +162,10 @@ static inline ID vg_flat_scene_lookup_get(const VgFlatSceneLookup *lookup, ID en
     return map_get_sentinel(entity_map, key, NULL);
 }
 
+static inline bool vg_scene_root_is_canonical(ID root_field) {
+    return root_field && clj_equal(root_field, (ID)&sym_entity_root_data.sym);
+}
+
 static inline uint32_t record_type_hash(ID obj) {
     CljPersistentRecord *r = (CljPersistentRecord *)obj;
     return r->descriptor ? clj_hash(r->descriptor->type_symbol) : 0;
@@ -1551,27 +1555,13 @@ static bool resolve_root_node(ID root_field,
     if (!out_root_node) {
         return false;
     }
-    if (!root_field) {
-        return true;
-    }
-    if (index_field) {
-        if (!is_map(index_field)) {
-            return false;
-        }
-        if (out_entity_map) {
-            *out_entity_map = index_field;
-        }
-        *out_root_node = root_field;
-        return true;
-    }
-    if (!is_map(root_field)) {
-        *out_root_node = root_field;
-        return true;
+    if (!vg_scene_root_is_canonical(root_field) || !index_field || !is_map(index_field)) {
+        return false;
     }
     if (out_entity_map) {
-        *out_entity_map = root_field;
+        *out_entity_map = index_field;
     }
-    *out_root_node = vg_flat_scene_lookup_get(lookup, root_field, (ID)&sym_entity_root_data.sym);
+    *out_root_node = vg_flat_scene_lookup_get(lookup, index_field, (ID)&sym_entity_root_data.sym);
     return *out_root_node != NULL;
 }
 
@@ -1619,7 +1609,7 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
     ID entity_map = NULL;
     ID root_node = NULL;
     VgFlatSceneLookup lookup = {0};
-    if (is_map(resolved_root) && !vg_flat_scene_lookup_build(resolved_root, &lookup)) {
+    if (!is_map(index) || !vg_flat_scene_lookup_build(index, &lookup)) {
         return false;
     }
     if (!resolve_root_node(resolved_root, index, &lookup, &root_node, &entity_map)) {
@@ -1723,7 +1713,18 @@ bool vg_decode_frame_slot_record(ID frame_scene_record, VgRenderSlot *out_slot) 
         return false;
     }
 
-    out_slot->root = scene->root;
+    if (!vg_scene_root_is_canonical(scene->root) || !scene->index || !is_map(scene->index)) {
+        return false;
+    }
+    VgFlatSceneLookup lookup = {0};
+    if (!vg_flat_scene_lookup_build(scene->index, &lookup)) {
+        return false;
+    }
+    ID root_node = vg_flat_scene_lookup_get(&lookup, scene->index, (ID)&sym_entity_root_data.sym);
+    if (!root_node) {
+        return false;
+    }
+    out_slot->root = root_node;
     out_slot->clip_rect = clip;
     out_slot->z = id_to_i16_default(scene->z, 0);
     out_slot->visible = id_to_bool_default(scene->visible, true);

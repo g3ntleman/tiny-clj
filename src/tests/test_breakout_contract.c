@@ -222,8 +222,9 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
         "  (def breakout-test-state "
         "    (assoc (tiny-breakout.core/init-state) :bricks [breakout-test-brick])) "
         "  (def breakout-test-frame (tiny-breakout.scene/build-scene breakout-test-state)) "
-        "  (def breakout-test-root (:root breakout-test-frame)) "
+        "  (def breakout-test-root-id (:root breakout-test-frame)) "
         "  (def breakout-test-index (:index breakout-test-frame)) "
+        "  (def breakout-test-root (get breakout-test-index breakout-test-root-id)) "
         "  (def breakout-test-rules (:collision-rules breakout-test-frame)) "
         "  (def breakout-test-paddle (get breakout-test-index 1002)) "
         "  (def breakout-test-ball (get breakout-test-index 1003)) "
@@ -233,7 +234,8 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
         "  (def breakout-test-paddle-rule (nth breakout-test-rules 0)) "
         "  (def breakout-test-brick-rule (nth breakout-test-rules 1)) "
         "  (and (= true (:visible breakout-test-frame)) "
-        "       (= 1000 (:id breakout-test-root)) "
+        "       (= 'root breakout-test-root-id) "
+        "       (= 'root (:id breakout-test-root)) "
         "       (map? breakout-test-index) "
         "       (= [1001 1002 1003 1004 1005 1006 1007 2001] (:children breakout-test-root)) "
         "       (= 2 (count breakout-test-rules)) "
@@ -261,8 +263,8 @@ TEST(test_breakout_contract_title_scene_hides_level_bricks_until_launch) {
         "  (require 'tiny-breakout.core) "
         "  (require 'tiny-breakout.scene) "
         "  (def breakout-title-frame (tiny-breakout.scene/build-scene (tiny-breakout.core/init-state))) "
-        "  (def breakout-title-root (:root breakout-title-frame)) "
         "  (def breakout-title-index (:index breakout-title-frame)) "
+        "  (def breakout-title-root (get breakout-title-index (:root breakout-title-frame))) "
         "  (def breakout-title-overlay (get breakout-title-index 1005)) "
         "  (and (= [1001 1002 1003 1004 1005 1006 1007] (:children breakout-title-root)) "
         "       (= \"Breakout\" (:text breakout-title-overlay)) "
@@ -392,6 +394,37 @@ TEST(test_breakout_contract_host_left_button_moves_until_button_up) {
         "         (contains? moving-x :keyframes) "
         "         (< (:paddle-x s1) (- x0 4)) "
         "         (number? (:x stopped-paddle)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_level_clear_stops_paddle_motion) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.scene) "
+        "  (let [s0 (-> (tiny-breakout.core/init-state) "
+        "               (assoc :phase :play) "
+        "               (assoc :level-index 0) "
+        "               (assoc :bricks [{:id 2001 :x 10 :y 10 :w 32 :h 12 :points 7}]) "
+        "               (assoc :paddle-x 120) "
+        "               (assoc :paddle-motion {:dir 1 :start-ms 100 :end-ms 300 :to-x 280}) "
+        "               (assoc :ball-x 10) "
+        "               (assoc :ball-y 6) "
+        "               (assoc :ball-vx 2) "
+        "               (assoc :ball-vy 2) "
+        "               (assoc :events [])) "
+        "        event {:source :spatial :id :ball-vs-brick :rule {:id :ball-vs-brick} :phase :enter "
+        "               :self-aabb {:min-x 10 :min-y 6 :max-x 14 :max-y 10} "
+        "               :other 2001 "
+        "               :other-aabb {:min-x 10 :min-y 10 :max-x 42 :max-y 22}} "
+        "        s1 (tiny-breakout.core/apply-spatial-event s0 event 200) "
+        "        frame (tiny-breakout.scene/build-scene s1) "
+        "        paddle (get (:index frame) 1002)] "
+        "    (and (= :level-clear (:phase s1)) "
+        "         (nil? (:paddle-motion s1)) "
+        "         (number? (:x paddle)))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }

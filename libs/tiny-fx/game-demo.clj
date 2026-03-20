@@ -73,17 +73,29 @@ and game-demo startup."
         ;; Keep scene as FrameScene record so native viewer accepts atom updates.
         (record-from-map 'FrameScene (assoc game-scene :index next-index))))))
 
-(defn- ensure-frame-scene-root-index
+(defn- canonicalize-frame-scene
   [scene]
-  (let [root (:root scene)]
-    (if (and (nil? (:index scene))
-             (map? root)
-             (contains? root 'root))
+  (let [root (:root scene)
+        index (:index scene)]
+    (cond
+      (and (map? index) (= root 'root) (contains? index 'root))
       (record-from-map 'FrameScene
                        (assoc scene
-                              :root (get root 'root)
-                              :index (dissoc root 'root)))
-      scene)))
+                              :index (assoc index 'root (assoc (get index 'root) :id 'root))))
+
+      (and (map? index) root)
+      (record-from-map 'FrameScene
+                       (assoc scene
+                              :root 'root
+                              :index (assoc index 'root (assoc root :id 'root))))
+
+      (and (nil? index) (map? root) (contains? root 'root))
+      (record-from-map 'FrameScene
+                       (assoc scene
+                              :root 'root
+                              :index (assoc root 'root (assoc (get root 'root) :id 'root))))
+
+      :else scene)))
 
 (defn- event->player-small-state
   [event]
@@ -160,15 +172,16 @@ Index layout:
 2 game-scene"
   []
   (let [data (load-demo-data!)
-        deco-scene (ensure-frame-scene-root-index (:deco-scene-template data))
-        score-scene (ensure-frame-scene-root-index (:score-scene-template data))
+        deco-scene (canonicalize-frame-scene (:deco-scene-template data))
+        score-scene (canonicalize-frame-scene (:score-scene-template data))
         game-entities (assoc (:game-entities-static data)
+                        'root (assoc (get (:game-entities-static data) 'root) :id 'root)
                         obstacle-entity-id (:rocket-body-instance data)
                         3005 (:rocket-nose-instance data)
                         player-collision-entity-id (:game-player-collision data)
                         player-entity-id (:game-player data))
-        game-scene (record-create 'FrameScene [(get game-entities 'root)
-                                                   (dissoc game-entities 'root)
+        game-scene (record-create 'FrameScene ['root
+                                                   game-entities
                                                    [0 40 320 136]
                                                    2
                                                    true

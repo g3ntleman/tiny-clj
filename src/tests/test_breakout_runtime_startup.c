@@ -21,6 +21,7 @@ void macos_viewer_end_performance_activity(void) {}
 #define main tinyclj_game_demo_minifb_test_main
 #include "../game_demo_minifb.c"
 #undef main
+#include "../tiny_clj.h"
 #include "unity/src/unity.h"
 #include "test_registry.h"
 
@@ -240,6 +241,53 @@ TEST(test_breakout_runtime_startup_fire_button_seeded_inactive_before_breakout_w
         "  (= :play (:phase @tiny-breakout.runtime/state*)))",
         ctx.st);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_spatial_callback_scene_replacement_reloads_rules_safely) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(ctx.bundle.has_game_slot);
+    TEST_ASSERT_TRUE(ctx.spatial_rules.count > 0u);
+
+    ID replacement_scene = eval_string(
+        "(do "
+        "  (require 'tiny-fx.gfx) "
+        "  (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote FrameScene) ["
+        "    'root "
+        "    {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true 0 0 1 1 nil)} "
+        "    [0 0 320 240] "
+        "    0 true true 0 0 nil]))",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(replacement_scene);
+
+    ViewerCollisionPolicy *policy = &ctx.spatial_rules.items[0];
+    VgTransformFixed world_t = {
+        .m00 = VG_SCALE_ONE,
+        .m01 = 0,
+        .m02 = 0,
+        .m10 = 0,
+        .m11 = VG_SCALE_ONE,
+        .m12 = 0,
+    };
+    VgAabb self_box = {.min_x = 10, .min_y = 10, .max_x = 20, .max_y = 20};
+    VgAabb other_box = {.min_x = 12, .min_y = 12, .max_x = 18, .max_y = 18};
+
+    vg_rendered_state_reset_all();
+    vg_rendered_state_capture_begin(ctx.bundle.game_slot_index, 1u, 0u);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->self_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->self_entity_id, self_box);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->other_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, other_box);
+    vg_rendered_state_capture_commit();
+
+    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle, &ctx.spatial_rules, NULL, 0u));
+    TEST_ASSERT_EQUAL_PTR(replacement_scene, atom_reset(ctx.bundle.game_scene_atom, replacement_scene));
+
+    viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
+    TEST_ASSERT_EQUAL_UINT32(0u, ctx.spatial_rules.count);
 
     breakout_viewer_test_context_destroy(&ctx);
 }

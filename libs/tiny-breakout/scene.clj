@@ -141,16 +141,17 @@
              entities base-entities
              child-ids [1001 1002 1003 1004 1005 1006 1007]]
         (if (empty? remaining)
-          {:type :FrameScene
-           :root (->Group 1000 nil nil true child-ids nil)
-           :index entities
-           :clip-rect [0 0 320 240]
-           :z 0
-           :visible true
-           :opaque true
-           :erase-color 0
-           :guard-px 1
-           :collision-rules (expand-breakout-spatial-rules (drop 7 child-ids))}
+          (let [root-node (->Group 'root nil nil true child-ids nil)]
+            {:type :FrameScene
+             :root 'root
+             :index (assoc entities 'root root-node)
+             :clip-rect [0 0 320 240]
+             :z 0
+             :visible true
+             :opaque true
+             :erase-color 0
+             :guard-px 1
+             :collision-rules (expand-breakout-spatial-rules (drop 7 child-ids))})
           (let [brick (first remaining)
                 brick-id (:id brick)]
             (recur (rest remaining)
