@@ -431,7 +431,7 @@ static void print_result(CljObject *v) {
     platform_put_char(NULL, '\n');
     return;
   }
-  CljString *s = pr_str(v);
+  CljString *s = make_string_description(v);
   if (s) {
     platform_put_string(NULL, string_data(s));
     platform_put_char(NULL, '\n');
