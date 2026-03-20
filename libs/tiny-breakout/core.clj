@@ -315,32 +315,39 @@
           :else
           (clear-events state))))))
 
-(defn apply-segment-end
-  "Pure domain transition for one expected segment-end notification."
-  [state segment-id]
+(defn apply-segment-end-at-ms
+  "Pure domain transition for one expected segment-end notification.
+now-ms may be nil; in that case the segment end timestamp is used."
+  [state segment-id now-ms]
   (let [segment (:ball-segment state)]
     (if (or (nil? segment) (not= (:id segment) segment-id))
       (clear-events state)
       (let [wall (:wall segment)
             end-ms (:end-ms segment)
+            resume-ms (if (number? now-ms) now-ms end-ms)
             anchored (-> state
                          (clear-events)
                          (anchor-ball (:to-x segment) (:to-y segment)))]
         (cond
           (= wall :left)
-          (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) end-ms)
+          (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) resume-ms)
 
           (= wall :right)
-          (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) end-ms)
+          (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) resume-ms)
 
           (= wall :top)
-          (plan-next-segment (assoc anchored :ball-vy (- (:ball-vy anchored))) end-ms)
+          (plan-next-segment (assoc anchored :ball-vy (- (:ball-vy anchored))) resume-ms)
 
           (= wall :bottom)
           (apply-bottom-out anchored)
 
           :else
           anchored)))))
+
+(defn apply-segment-end
+  "Pure domain transition for one expected segment-end notification."
+  [state segment-id]
+  (apply-segment-end-at-ms state segment-id nil))
 
 (defn apply-input
   "Pure domain transition for one normalized input map.

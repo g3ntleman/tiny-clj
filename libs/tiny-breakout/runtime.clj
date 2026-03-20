@@ -191,9 +191,10 @@
         (schedule safe-delay
                   {:id segment-timer-id
                    :fn (fn []
-                         (let [next-state (swap! state*
+                         (let [now-ms (current-time-ms)
+                               next-state (swap! state*
                                                  (fn [current]
-                                                   (core/apply-segment-end current segment-id)))]
+                                                   (core/apply-segment-end-at-ms current segment-id now-ms)))]
                            (reset! scene* (scene-record next-state))
                            (sync-segment-timer! next-state)
                            nil))}))))
@@ -201,10 +202,12 @@
 
 (defn- publish-state!
   [state]
-  (reset! state* state)
-  (reset! scene* (scene-record state))
-  (sync-segment-timer! state)
-  (audio/play-events! (:events state))
+  (let [events (:events state)
+        state-without-events (assoc state :events [])]
+    (reset! state* state-without-events)
+    (reset! scene* (scene-record state-without-events))
+    (sync-segment-timer! state-without-events)
+    (audio/play-events! events))
   nil)
 
 (defn- state-after-input
@@ -289,6 +292,7 @@
 (defn reset-runtime!
   []
   (reset! held-buttons* idle-held-buttons)
+  (audio/preload!)
   (publish-state! (core/init-state))
   (configure-input-watchers!)
   nil)

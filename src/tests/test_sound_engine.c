@@ -963,7 +963,7 @@ TEST(test_sound_sfx_oneshot) {
   sound_engine_shutdown();
 }
 
-TEST(test_sound_sfx_drop_when_all_slots_busy) {
+TEST(test_sound_sfx_last_start_wins_when_all_slots_busy) {
   sound_engine_init(2);
 
   ID sfx_sym = (ID)intern_symbol_global(":sfx-drop");
@@ -977,8 +977,8 @@ TEST(test_sound_sfx_drop_when_all_slots_busy) {
   TEST_ASSERT_TRUE(sound_engine_play_sfx(sfx_sym));
   sound_engine_tick();
 
-  TEST_ASSERT_FALSE(sound_engine_play_sfx(sfx_sym));
-  TEST_ASSERT_EQUAL_UINT32(1, g_sound_engine.telemetry.sfx_drop_count);
+  TEST_ASSERT_TRUE(sound_engine_play_sfx(sfx_sym));
+  TEST_ASSERT_EQUAL_UINT32(0, g_sound_engine.telemetry.sfx_drop_count);
 
   RELEASE(ba);
   sound_engine_shutdown();

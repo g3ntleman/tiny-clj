@@ -327,19 +327,12 @@ void exception_print_native_backtrace(void) {
     if (size <= 0) {
         return;
     }
-
-    char **strings = backtrace_symbols(array, size);
-    if (!strings) {
-        return;
-    }
-
+    /* Keep this path allocation-free and symbol-resolution-free.
+     * backtrace_symbols()/dladdr() can fault when memory is already corrupted
+     * or when called from stressed worker threads during exception storms. */
     for (int i = 0; i < size; i++) {
-        if (strings[i]) {
-            errf("  %d: %s\n", i, strings[i]);
-        }
+        errf("  %d: %p\n", i, array[i]);
     }
-
-    CLJ_FREE(strings);
 #else
     // Platform without execinfo support
 #endif

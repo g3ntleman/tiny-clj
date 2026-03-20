@@ -1,5 +1,6 @@
 (ns tiny-breakout.audio
-  (:require [tiny-fx.sound :as sound]))
+  (:require [tiny-fx.sound :as sound]
+            [tiny-fx.sound-native :as sound-native]))
 
 (def sfx-library
   {:sfx/paddle-hit
@@ -89,13 +90,38 @@
             []
             xs)))
 
+(def ^:private preloaded-durations* (atom {}))
+
+(defn preload!
+  "Pre-compiles and loads all SFX tracks into the sound engine."
+  []
+  (loop [entries (seq sfx-library)
+         durations {}]
+    (if (empty? entries)
+      (reset! preloaded-durations* durations)
+      (let [entry (first entries)
+            cue-id (first entry)
+            spec (second entry)
+            track-id (:track-id spec)
+            steps (:steps spec)
+            opts (:opts spec)]
+        (if (and track-id steps)
+          (let [track-bytes (sound/compile-track steps opts)
+                duration-ms (sound/track-duration-ms steps opts)]
+            (sound-native/sound-load-track! track-id track-bytes)
+            (recur (rest entries) (assoc durations cue-id duration-ms)))
+          (recur (rest entries) durations))))))
+
 (defn play-cue!
-  "Plays one symbolic cue when it resolves to a known SFX descriptor."
+  "Triggers a pre-loaded SFX by cue id.
+   Returns a status map compatible with sound/play-sfx! or nil."
   [cue-id]
   (let [spec (sfx-spec cue-id)]
-    (if (map? spec)
-      (sound/play! spec)
-      nil)))
+    (when (map? spec)
+      (let [ok (sound-native/sound-play-sfx! (:track-id spec))
+            duration-ms (get @preloaded-durations* cue-id 0)]
+        {:status (if ok :playing :dropped)
+         :duration-ms duration-ms}))))
 
 (defn play-events!
   "Plays all known audio cues for the given gameplay events."
