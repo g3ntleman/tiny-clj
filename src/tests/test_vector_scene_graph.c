@@ -1437,6 +1437,33 @@ TEST(test_vector_scene_graph_dirty_union_tree_budget_splits_when_union_exceeds_b
     TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[1], leaves[1]));
 }
 
+TEST(test_vector_scene_graph_dirty_union_tree_budget_keeps_union_when_it_fits) {
+    VgClipRect leaves[2] = {
+        {.x = 4, .y = 4, .w = 4, .h = 4},
+        {.x = 10, .y = 4, .w = 4, .h = 4},
+    };
+    VgClipRect planned[4] = {0};
+    VgClipRect expected_union = vg_clip_rect_union(leaves[0], leaves[1]);
+
+    size_t plan_count = vg_dirty_union_plan_rects(leaves, 2u, 64u, planned, 4u);
+
+    TEST_ASSERT_EQUAL_UINT(1u, plan_count);
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], expected_union));
+}
+
+TEST(test_vector_scene_graph_dirty_union_tree_budget_splits_oversized_leaf_geometrically) {
+    VgClipRect leaves[1] = {
+        {.x = 0, .y = 0, .w = 16, .h = 8},
+    };
+    VgClipRect planned[8] = {0};
+
+    size_t plan_count = vg_dirty_union_plan_rects(leaves, 1u, 64u, planned, 8u);
+
+    TEST_ASSERT_EQUAL_UINT(2u, plan_count);
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], (VgClipRect){.x = 0, .y = 0, .w = 8, .h = 8}));
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[1], (VgClipRect){.x = 8, .y = 0, .w = 8, .h = 8}));
+}
+
 TEST(test_vector_scene_graph_slot_change_tracker_publish_and_wait_reports_changed_mask) {
     VgSlotChangeTracker tracker;
     TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&tracker, 3));

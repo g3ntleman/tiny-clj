@@ -23,7 +23,8 @@
 #include "renderer_lifecycle.h"
 #include "tiny_fx_host_app.h"
 #include "rendered_state_snapshot.h"
-#include "render_backend.h"
+#include "panel.h"
+#include "panel_backend.h"
 #include "viewer_host_runloop.h"
 #include "viewer_host_slots.h"
 #include "viewer_host_spatial.h"
@@ -44,6 +45,9 @@
 #define SCENE_ERASE_COLOR       0x0000u
 #define RGB565_BYTES_PER_PIXEL 2u
 #define VIEWER_ANIMATED_WAIT_TIMEOUT_MS 8u
+#define VIEWER_DIRTY_BUFFER_BUDGET_BYTES (20u * 1024u)
+#define VIEWER_DIRTY_PIXEL_BUDGET (VIEWER_DIRTY_BUFFER_BUDGET_BYTES / RGB565_BYTES_PER_PIXEL)
+#define VIEWER_MAX_DIRTY_PLAN_RECTS (VIEWER_MAX_SLOTS * 16u)
 
 static uint64_t monotonic_now_ns(void);
 
@@ -325,48 +329,124 @@ typedef struct {
     uint16_t *gram_pixels;
     uint16_t width;
     uint16_t height;
-} ViewerGramBackend;
+    bool display_enabled;
+    bool sleeping;
+} ViewerGramPanel;
 
-static ViewerGramBackend g_gram_backend = {0};
+static ViewerGramPanel g_gram_panel_ctx = {0};
+static VgPanel g_gram_panel = {0};
 
-static bool viewer_backend_begin_frame(void *ctx, uint32_t frame_id) {
+static bool viewer_panel_reset(void *ctx) {
+    ViewerGramPanel *panel = (ViewerGramPanel *)ctx;
+    if (!panel) {
+        return false;
+    }
+    panel->display_enabled = false;
+    panel->sleeping = false;
+    return true;
+}
+
+static bool viewer_panel_init(void *ctx) {
     (void)ctx;
-    (void)frame_id;
     return true;
 }
 
-static bool viewer_backend_submit_rect(void *ctx,
-                                       VgBackendRect rect,
-                                       const uint16_t *rgb565_pixels,
-                                       uint16_t stride_px) {
-    ViewerGramBackend *backend = (ViewerGramBackend *)ctx;
-    if (!backend || !backend->gram_pixels || !rgb565_pixels || rect.w <= 0 || rect.h <= 0) {
-        return false;
-    }
-    if (rect.x < 0 || rect.y < 0) {
-        return false;
-    }
-    if ((uint16_t)(rect.x + rect.w) > backend->width || (uint16_t)(rect.y + rect.h) > backend->height) {
-        return false;
-    }
-    for (int16_t row = 0; row < rect.h; row++) {
-        size_t dst_off = (size_t)(rect.y + row) * (size_t)backend->width + (size_t)rect.x;
-        size_t src_off = (size_t)row * (size_t)stride_px;
-        memcpy(&backend->gram_pixels[dst_off], &rgb565_pixels[src_off], (size_t)rect.w * sizeof(uint16_t));
-    }
-    return true;
-}
-
-static bool viewer_backend_end_frame(void *ctx, uint32_t frame_id) {
+static bool viewer_panel_set_orientation(void *ctx, bool mirror_x, bool mirror_y, bool swap_xy) {
     (void)ctx;
-    (void)frame_id;
+    (void)mirror_x;
+    (void)mirror_y;
+    (void)swap_xy;
     return true;
 }
 
-static const VgBackendOps g_viewer_backend_ops = {
-    .begin_frame = viewer_backend_begin_frame,
-    .submit_rect = viewer_backend_submit_rect,
-    .end_frame = viewer_backend_end_frame,
+static bool viewer_panel_set_gap(void *ctx, int16_t x_gap, int16_t y_gap) {
+    (void)ctx;
+    (void)x_gap;
+    (void)y_gap;
+    return true;
+}
+
+static bool viewer_panel_write_bitmap(void *ctx,
+                                      int16_t x_start,
+                                      int16_t y_start,
+                                      int16_t x_end,
+                                      int16_t y_end,
+                                      const uint16_t *rgb565_pixels) {
+    ViewerGramPanel *panel = (ViewerGramPanel *)ctx;
+    VgPanelBitmapView view = {0};
+    int16_t rect_w = (int16_t)(x_end - x_start);
+    int16_t rect_h = (int16_t)(y_end - y_start);
+    if (!panel || !panel->gram_pixels || !rgb565_pixels || rect_w <= 0 || rect_h <= 0) {
+        return false;
+    }
+    view.pixels = rgb565_pixels;
+    view.stride_px = (uint16_t)rect_w;
+    view.width = rect_w;
+    view.height = rect_h;
+    return vg_panel_rgb565_blit(panel->gram_pixels, panel->width, panel->height, x_start, y_start, &view);
+}
+
+static bool viewer_panel_write_bitmap_2d(void *ctx,
+                                         int16_t x_start,
+                                         int16_t y_start,
+                                         int16_t x_end,
+                                         int16_t y_end,
+                                         const uint16_t *src_pixels,
+                                         uint16_t src_w,
+                                         uint16_t src_h,
+                                         int16_t src_x_start,
+                                         int16_t src_y_start,
+                                         int16_t src_x_end,
+                                         int16_t src_y_end) {
+    ViewerGramPanel *panel = (ViewerGramPanel *)ctx;
+    VgPanelBitmapView view = {0};
+    if (!panel || !panel->gram_pixels || !src_pixels) {
+        return false;
+    }
+    if ((int16_t)(x_end - x_start) != (int16_t)(src_x_end - src_x_start) ||
+        (int16_t)(y_end - y_start) != (int16_t)(src_y_end - src_y_start)) {
+        return false;
+    }
+    if (!vg_panel_bitmap_view_init(src_pixels,
+                                   src_w,
+                                   src_h,
+                                   src_x_start,
+                                   src_y_start,
+                                   src_x_end,
+                                   src_y_end,
+                                   &view)) {
+        return false;
+    }
+    return vg_panel_rgb565_blit(panel->gram_pixels, panel->width, panel->height, x_start, y_start, &view);
+}
+
+static bool viewer_panel_set_display_enabled(void *ctx, bool enabled) {
+    ViewerGramPanel *panel = (ViewerGramPanel *)ctx;
+    if (!panel) {
+        return false;
+    }
+    panel->display_enabled = enabled;
+    return true;
+}
+
+static bool viewer_panel_set_sleep(void *ctx, bool sleep) {
+    ViewerGramPanel *panel = (ViewerGramPanel *)ctx;
+    if (!panel) {
+        return false;
+    }
+    panel->sleeping = sleep;
+    return true;
+}
+
+static const VgPanelOps g_viewer_panel_ops = {
+    .reset = viewer_panel_reset,
+    .init = viewer_panel_init,
+    .set_orientation = viewer_panel_set_orientation,
+    .set_gap = viewer_panel_set_gap,
+    .write_bitmap = viewer_panel_write_bitmap,
+    .write_bitmap_2d = viewer_panel_write_bitmap_2d,
+    .set_display_enabled = viewer_panel_set_display_enabled,
+    .set_sleep = viewer_panel_set_sleep,
 };
 typedef struct {
     pthread_t thread;
@@ -658,18 +738,14 @@ static void *viewer_render_thread_main(void *arg) {
          * finished dirty rects are copied into the live GRAM after rendering.
          */
         if (g_gram_pixels && frame_dirty_rect_count > 0u) {
-            VgBackend backend = {
-                .ops = &g_viewer_backend_ops,
-                .ctx = &g_gram_backend,
-            };
-            uint32_t frame_id = (uint32_t)atomic_load_explicit(&g_render_thread.rendered_frame_serial,
-                                                               memory_order_relaxed) +
-                                1u;
-            if (vg_backend_begin_frame(&backend, frame_id)) {
-                for (uint8_t rect_i = 0; rect_i < frame_dirty_rect_count; rect_i++) {
-                    (void)vg_backend_submit_clip_rect(&backend, fb, frame_dirty_rects[rect_i]);
-                }
-                (void)vg_backend_end_frame(&backend, frame_id);
+            VgClipRect planned_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
+            size_t planned_count = vg_dirty_union_plan_rects(frame_dirty_rects,
+                                                             (size_t)frame_dirty_rect_count,
+                                                             VIEWER_DIRTY_PIXEL_BUDGET,
+                                                             planned_rects,
+                                                             VIEWER_MAX_DIRTY_PLAN_RECTS);
+            for (size_t rect_i = 0; rect_i < planned_count; rect_i++) {
+                (void)vg_panel_backend_submit_clip_rect(&g_gram_panel, fb, planned_rects[rect_i]);
             }
         }
         atomic_fetch_add_explicit(&g_render_thread.rendered_frame_serial, 1u, memory_order_release);
@@ -824,11 +900,22 @@ int tinyclj_tiny_fx_host_app_run(void) {
     viewer_set_realtime_thread_policy();
 
     g_gram_pixels = fb_pixels;
-    g_gram_backend.gram_pixels = fb_pixels;
-    g_gram_backend.width = VIEW_W;
-    g_gram_backend.height = VIEW_H;
+    g_gram_panel_ctx.gram_pixels = fb_pixels;
+    g_gram_panel_ctx.width = VIEW_W;
+    g_gram_panel_ctx.height = VIEW_H;
+    g_gram_panel_ctx.display_enabled = false;
+    g_gram_panel_ctx.sleeping = false;
+    g_gram_panel.ops = &g_viewer_panel_ops;
+    g_gram_panel.ctx = &g_gram_panel_ctx;
+    g_gram_panel.initialized = false;
     memset(g_render_buffer, 0, sizeof(g_render_buffer));
     memset(fb_pixels, 0, sizeof(uint16_t) * VIEW_W * VIEW_H);
+    if (!vg_panel_reset(&g_gram_panel) ||
+        !vg_panel_init(&g_gram_panel) ||
+        !vg_panel_set_display_enabled(&g_gram_panel, true)) {
+        fprintf(stderr, "Failed to initialize host panel simulation\n");
+        return 1;
+    }
     VgFrameBuffer fb;
     if (!vg_framebuffer_init(&fb, VIEW_W, VIEW_H, g_render_buffer, VIEW_W * VIEW_H)) {
         fprintf(stderr, "Failed to initialize framebuffer\n");
@@ -1089,7 +1176,8 @@ cleanup:
     }
     destroy_spatial_rule_set(&spatial_rules);
     g_gram_pixels = NULL;
-    memset(&g_gram_backend, 0, sizeof(g_gram_backend));
+    memset(&g_gram_panel_ctx, 0, sizeof(g_gram_panel_ctx));
+    memset(&g_gram_panel, 0, sizeof(g_gram_panel));
     runtime_reset(&g_runtime);
     return exit_code;
 #endif
