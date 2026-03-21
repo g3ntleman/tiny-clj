@@ -261,8 +261,8 @@ set(TINYCLJ_FX_HOST_SOURCES
     src/sound_backend_host.c
     src/viewer_host_runloop.c
     src/viewer_host_slots.c
-    src/viewer_host_spatial_rules.c
-    src/viewer_host_spatial_runtime.c
+    src/viewer_collision_scene_bridge.c
+    src/viewer_collision_dispatch.c
 )
 
 set(TINYCLJ_FX_ESP32_SOURCES

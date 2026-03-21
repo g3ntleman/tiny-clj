@@ -19,6 +19,7 @@ bool macos_viewer_get_content_size(unsigned *out_w, unsigned *out_h) {
 void macos_viewer_begin_performance_activity(void) {}
 void macos_viewer_end_performance_activity(void) {}
 #endif
+#include "../viewer_collision_bridge.h"
 #define main tinyclj_game_demo_minifb_test_main
 #include "../game_demo_minifb.c"
 #undef main
@@ -248,19 +249,19 @@ TEST(test_breakout_runtime_startup_spatial_events_include_entity_snapshots) {
     TEST_ASSERT_NOT_NULL(scene);
 
     ViewerCollisionPolicy *policy = &ctx.spatial_rules.items[0];
-    ID expected_self = map_get_sentinel(viewer_scene_entity_map(scene), policy->self_entity_id, NULL);
-    ID expected_other = map_get_sentinel(viewer_scene_entity_map(scene), policy->other_entity_id, NULL);
+    ID expected_self = map_get_sentinel(viewer_collision_scene_entity_map(scene), policy->self_entity_id, NULL);
+    ID expected_other = map_get_sentinel(viewer_collision_scene_entity_map(scene), policy->other_entity_id, NULL);
     TEST_ASSERT_NOT_NULL(expected_self);
     TEST_ASSERT_NOT_NULL(expected_other);
 
     VgAabb self_box = {.min_x = 1, .min_y = 2, .max_x = 3, .max_y = 4};
     VgAabb other_box = {.min_x = 5, .min_y = 6, .max_x = 7, .max_y = 8};
-    ID event = viewer_make_spatial_event(&ctx.bundle,
-                                         policy,
-                                         intern_symbol_global(":enter"),
-                                         17u,
-                                         &self_box,
-                                         &other_box);
+    ID event = viewer_collision_make_spatial_event(&ctx.bundle,
+                                                   policy,
+                                                   intern_symbol_global(":enter"),
+                                                   17u,
+                                                   &self_box,
+                                                   &other_box);
     TEST_ASSERT_NOT_NULL(event);
 
     ID k_self_entity = intern_symbol_global(":self-entity");
@@ -333,7 +334,7 @@ TEST(test_breakout_runtime_startup_spatial_callback_scene_replacement_reloads_ru
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, other_box);
     vg_rendered_state_capture_commit();
 
-    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
+    TEST_ASSERT_TRUE(viewer_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
     TEST_ASSERT_EQUAL_PTR(replacement_scene, atom_reset(ctx.bundle.game_scene_atom, replacement_scene));
 
     viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
@@ -378,11 +379,11 @@ TEST(test_breakout_runtime_startup_collision_latch_recovers_after_missing_snapsh
     vg_rendered_state_capture_record_entity((uintptr_t)policy->other_entity_id, world_t);
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
     vg_rendered_state_capture_commit();
-    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
+    TEST_ASSERT_TRUE(viewer_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
 
     vg_rendered_state_capture_begin(slot, 2u, 0u);
     vg_rendered_state_capture_commit();
-    TEST_ASSERT_FALSE(viewer_apply_collision_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
+    TEST_ASSERT_FALSE(viewer_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
 
     vg_rendered_state_capture_begin(slot, 3u, 0u);
     vg_rendered_state_capture_record_entity((uintptr_t)policy->self_entity_id, world_t);
@@ -390,7 +391,7 @@ TEST(test_breakout_runtime_startup_collision_latch_recovers_after_missing_snapsh
     vg_rendered_state_capture_record_entity((uintptr_t)policy->other_entity_id, world_t);
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
     vg_rendered_state_capture_commit();
-    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
+    TEST_ASSERT_TRUE(viewer_collision_detect_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
 
     breakout_viewer_test_context_destroy(&ctx);
 }
@@ -428,18 +429,18 @@ TEST(test_breakout_runtime_startup_collision_step_filters_candidates_by_dirty_re
     vg_rendered_state_capture_commit();
 
     VgClipRect far_dirty = {.x = 0, .y = 0, .w = 16, .h = 16};
-    TEST_ASSERT_FALSE(viewer_apply_collision_step(&ctx.bundle,
-                                                  &single_rule_set,
-                                                  0u,
-                                                  &far_dirty,
-                                                  1u));
+    TEST_ASSERT_FALSE(viewer_collision_detect_step(&ctx.bundle,
+                                                   &single_rule_set,
+                                                   0u,
+                                                   &far_dirty,
+                                                   1u));
 
     VgClipRect hit_dirty = {.x = 150, .y = 216, .w = 40, .h = 20};
-    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle,
-                                                 &single_rule_set,
-                                                 0u,
-                                                 &hit_dirty,
-                                                 1u));
+    TEST_ASSERT_TRUE(viewer_collision_detect_step(&ctx.bundle,
+                                                  &single_rule_set,
+                                                  0u,
+                                                  &hit_dirty,
+                                                  1u));
 
     breakout_viewer_test_context_destroy(&ctx);
 }
@@ -489,7 +490,7 @@ TEST(test_breakout_runtime_startup_collision_step_defers_dispatch_until_collisio
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
     vg_rendered_state_capture_commit();
 
-    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u));
+    TEST_ASSERT_TRUE(viewer_collision_detect_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u));
     TEST_ASSERT_FALSE(event_loop_has_pending_tasks());
     TEST_ASSERT_FALSE(event_loop_ingress_has_pending());
     TEST_ASSERT_NULL(eval_string("@breakout-collision-drain-marker", ctx.st));
@@ -549,7 +550,7 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
     bool drained = false;
     TRY {
         memory_set_heap_limit_bytes(baseline + 16u);
-        triggered = viewer_apply_collision_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u);
+        triggered = viewer_collision_detect_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u);
         drained = viewer_collision_poll_drain();
     } CATCH(ex) {
         (void)ex;
@@ -653,11 +654,11 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timer_driven_scene
     for (int i = 0; i < 300; i++) {
         usleep(20000);
         viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
-        (void)viewer_apply_collision_step(&ctx.bundle,
-                                          &ctx.spatial_rules,
-                                          (uint32_t)platform_current_time_ms(),
-                                          NULL,
-                                          0u);
+        (void)viewer_collision_detect_step(&ctx.bundle,
+                                           &ctx.spatial_rules,
+                                           (uint32_t)platform_current_time_ms(),
+                                           NULL,
+                                           0u);
     }
 
     stop_runloop_thread();

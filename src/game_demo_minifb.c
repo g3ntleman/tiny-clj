@@ -27,7 +27,7 @@
 #include "panel_backend.h"
 #include "viewer_host_runloop.h"
 #include "viewer_host_slots.h"
-#include "viewer_host_spatial.h"
+#include "viewer_collision_bridge.h"
 #include "platform.h"
 #include "gpio.h"
 #include "atom.h"
@@ -1219,11 +1219,11 @@ int tinyclj_tiny_fx_host_app_run(void) {
             VgClipRect collision_dirty_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
             size_t collision_dirty_count = viewer_collect_collision_dirty_rects(collision_dirty_rects,
                                                                                 VIEWER_MAX_DIRTY_PLAN_RECTS);
-            (void)viewer_apply_collision_step(&demo_bundle,
-                                              &spatial_rules,
-                                              platform_current_time_ms(),
-                                              collision_dirty_rects,
-                                              collision_dirty_count);
+            (void)viewer_collision_detect_step(&demo_bundle,
+                                               &spatial_rules,
+                                               platform_current_time_ms(),
+                                               collision_dirty_rects,
+                                               collision_dirty_count);
         }
 
         viewer_expand_rgb565_to_window(fb_pixels, window_pixels, (size_t)VIEW_W * (size_t)VIEW_H);

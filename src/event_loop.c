@@ -10,7 +10,7 @@
 #include "map.h"
 #include "value.h"
 #include "gpio.h"
-#include "viewer_host_spatial.h"
+#include "viewer_collision_bridge.h"
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <stdio.h>

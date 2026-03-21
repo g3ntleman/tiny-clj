@@ -12,7 +12,7 @@
 #include "tiny_clj.h"
 #include "tiny_fx_gfx.h"
 #include "vector.h"
-#include "viewer_host_spatial.h"
+#include "viewer_collision_bridge.h"
 
 #define TINYCLJ_TINY_FX_HOST_HEAP_LIMIT_BYTES 614400u
 
@@ -251,7 +251,7 @@ bool viewer_load_game_demo_config(EvalState *st,
             "viewer config must include :game-scene-atom in :slots");
     }
     out_bundle->game_scene = out_bundle->slots[out_bundle->game_slot_index].scene;
-    if (!viewer_load_spatial_rules_from_scene(out_bundle->game_scene, out_rule_set)) {
+    if (!viewer_collision_load_rules_from_scene(out_bundle->game_scene, out_rule_set)) {
         return viewer_fail_game_demo_config(
             out_bundle,
             "viewer config game scene contains invalid spatial rules");
@@ -279,7 +279,7 @@ void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
         if (bundle->has_game_slot && i == bundle->game_slot_index) {
             bundle->game_scene = scene;
             if (rule_set) {
-                (void)viewer_load_spatial_rules_from_scene(scene, rule_set);
+                (void)viewer_collision_load_rules_from_scene(scene, rule_set);
             }
         }
         if (publish_changes && slot_change_tracker) {
