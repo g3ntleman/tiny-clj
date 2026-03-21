@@ -21,6 +21,7 @@ set(TINYCLJ_CORE_SRCS
   "${TINYCLJ_SRC_DIR}/builtins.c"
   "${TINYCLJ_SRC_DIR}/builtins_gpio.c"
   "${TINYCLJ_SRC_DIR}/builtins_tiny_fx_gfx.c"
+  "${TINYCLJ_SRC_DIR}/builtins_sound.c"
   "${TINYCLJ_SRC_DIR}/builtins_net.c"
   "${TINYCLJ_SRC_DIR}/builtins_mdns.c"
   "${TINYCLJ_SRC_DIR}/builtins_tiny_db.c"
@@ -79,7 +80,6 @@ set(TINYCLJ_FX_SRCS
   "${TINYCLJ_SRC_DIR}/rendered_state_snapshot.c"
   "${TINYCLJ_SRC_DIR}/render_backend.c"
   "${TINYCLJ_SRC_DIR}/sound_engine.c"
-  "${TINYCLJ_SRC_DIR}/builtins_sound.c"
   "${TINYCLJ_SRC_DIR}/sound_backend_esp32.c"
 )
 

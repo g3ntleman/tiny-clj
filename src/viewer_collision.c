@@ -72,3 +72,11 @@ bool vg_collision_step_latched_cooldown(VgCollisionState *state,
     state->collision_cooldown_end_ms = now_ms + cooldown_ms;
     return true;
 }
+
+bool vg_collision_selector_matches_entity_prototype(ID entity_prototype,
+                                                    ID selector) {
+    if (!entity_prototype || !selector) {
+        return false;
+    }
+    return entity_prototype == selector || clj_equal(entity_prototype, selector);
+}

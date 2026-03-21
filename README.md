@@ -142,17 +142,17 @@ python -m esptool --chip esp32 -b 460800 --before default_reset --after hard_res
 
 ```bash
 # REPL (shows build information at startup)
-./build/tiny-clj-repl
+./build/tiny-clj
 
-# Vector game demo / host viewer
-./build/game-demo
+# Generic tiny-fx app bundle
+open -n ./build/tiny-fx.app
 
 # Unit Tests (shows build information at startup)
 ./build/unit-tests
 
 # Examples
-./build/tiny-clj-repl --no-core -e "(+ 1 2)"
-./build/tiny-clj-repl -f program.clj
+./build/tiny-clj --no-core -e "(+ 1 2)"
+./build/tiny-clj -f program.clj
 ```
 
 ### Host Viewer Font

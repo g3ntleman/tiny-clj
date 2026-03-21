@@ -22,6 +22,8 @@ bool tinyclj_startup_bootstrap_runtime(const TinycljRuntimeBootstrapOptions *opt
 bool tinyclj_startup_bootstrap_language(EvalState *st,
                                         const TinycljLanguageBootstrapOptions *opts);
 
+bool tinyclj_startup_prepare_repl(EvalState *st);
+
 bool tinyclj_startup_invoke_main(EvalState *st,
                                  const char *ns_name,
                                  int argc,

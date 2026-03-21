@@ -73,6 +73,14 @@ TEST(test_atom_deref_nil) {
   RELEASE(atom);
 }
 
+TEST(test_atom_peek_returns_borrowed_value) {
+  CljAtom *atom = make_atom(fixnum(42));
+  ID value = atom_peek(atom);
+  TEST_ASSERT_NOT_NULL(value);
+  TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)value));
+  RELEASE(atom);
+}
+
 // ============================================================================
 // TEST: Atom Reset (reset!)
 // ============================================================================
@@ -90,6 +98,15 @@ TEST(test_atom_reset_to_nil) {
   CljAtom *atom = make_atom(fixnum(42));
   ID new_value = atom_reset(atom, NULL);
   TEST_ASSERT_NULL(new_value);
+  TEST_ASSERT_NULL(atom->value);
+  RELEASE(atom);
+}
+
+TEST(test_atom_set_changes_value_without_return_contract) {
+  CljAtom *atom = make_atom(fixnum(42));
+  atom_set(atom, fixnum(100));
+  TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)atom->value));
+  atom_set(atom, NULL);
   TEST_ASSERT_NULL(atom->value);
   RELEASE(atom);
 }

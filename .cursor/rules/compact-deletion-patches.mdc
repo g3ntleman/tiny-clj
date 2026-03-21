@@ -1,0 +1,13 @@
+---
+description: Keep large deletion patches compact
+alwaysApply: true
+---
+
+# Große Löschungen kompakt halten
+
+Wenn große Codeblöcke entfernt werden:
+
+- Den gelöschten Block nicht vollständig im Patch ausbuchstabieren, nur um ihn zu entfernen.
+- Stattdessen kompakte, robuste Methoden bevorzugen: kleine Kontext-Hunks, gezielte skriptbasierte Löschung oder andere tokenarme Editierwege.
+- Im Patch nur den minimal nötigen Kontext zeigen, damit die Änderung eindeutig und sicher ist.
+- Besonders bei Legacy-Cleanup und totem Code auf knappe Lösch-Diffs achten.

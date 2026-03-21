@@ -9,7 +9,6 @@
 static VgRecordSchema g_record_schema = {0};
 static VgRecordKeys g_record_keys = {0};
 static bool g_record_keys_initialized = false;
-static bool g_record_schema_initialized = false;
 
 // Static symbol payloads (like other module-local symbol singletons).
 #define STATIC_SYMBOL_DATA(name, cname_literal) \
@@ -23,6 +22,7 @@ static bool g_record_schema_initialized = false;
     }
 
 STATIC_SYMBOL_DATA(sym_kw_root_data, ":root");
+STATIC_SYMBOL_DATA(sym_kw_index_data, ":index");
 STATIC_SYMBOL_DATA(sym_kw_id_data, ":id");
 STATIC_SYMBOL_DATA(sym_kw_t_data, ":t");
 STATIC_SYMBOL_DATA(sym_kw_style_data, ":style");
@@ -49,12 +49,12 @@ STATIC_SYMBOL_DATA(sym_kw_tx_data, ":tx");
 STATIC_SYMBOL_DATA(sym_kw_ty_data, ":ty");
 STATIC_SYMBOL_DATA(sym_kw_sx_data, ":sx");
 STATIC_SYMBOL_DATA(sym_kw_sy_data, ":sy");
-STATIC_SYMBOL_DATA(sym_kw_stroke_color_data, ":stroke_color");
-STATIC_SYMBOL_DATA(sym_kw_stroke_width_data, ":stroke_width");
-STATIC_SYMBOL_DATA(sym_kw_has_fill_data, ":has_fill");
-STATIC_SYMBOL_DATA(sym_kw_fill_color_data, ":fill_color");
-STATIC_SYMBOL_DATA(sym_kw_has_bg_color_data, ":has_bg_color");
-STATIC_SYMBOL_DATA(sym_kw_bg_color_data, ":bg_color");
+STATIC_SYMBOL_DATA(sym_kw_stroke_color_data, ":stroke-color");
+STATIC_SYMBOL_DATA(sym_kw_stroke_width_data, ":stroke-width");
+STATIC_SYMBOL_DATA(sym_kw_has_fill_data, ":has-fill");
+STATIC_SYMBOL_DATA(sym_kw_fill_color_data, ":fill-color");
+STATIC_SYMBOL_DATA(sym_kw_has_bg_color_data, ":has-bg-color");
+STATIC_SYMBOL_DATA(sym_kw_bg_color_data, ":bg-color");
 STATIC_SYMBOL_DATA(sym_kw_clip_rect_data, ":clip-rect");
 STATIC_SYMBOL_DATA(sym_kw_erase_color_data, ":erase-color");
 STATIC_SYMBOL_DATA(sym_kw_z_data, ":z");
@@ -88,6 +88,7 @@ static void init_record_keys(void) {
     }
 
     g_record_keys.k_root = &sym_kw_root_data.sym;
+    g_record_keys.k_index = &sym_kw_index_data.sym;
     g_record_keys.k_id = &sym_kw_id_data.sym;
     g_record_keys.k_t = &sym_kw_t_data.sym;
     g_record_keys.k_style = &sym_kw_style_data.sym;
@@ -128,14 +129,182 @@ static void init_record_keys(void) {
     g_record_keys_initialized = true;
 }
 
-bool tiny_fx_gfx_ensure_schema(EvalState *st) {
-    if (g_record_schema_initialized) {
-        return true;
-    }
-    if (!st) {
-        return false;
-    }
+static void register_builtin_gfx_records(void) {
+    CljPersistentVector *fv;
+    fv = make_vector(5, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":tx"));
+    vector_conj_inplace(&fv, intern_symbol_global(":ty"));
+    vector_conj_inplace(&fv, intern_symbol_global(":sx"));
+    vector_conj_inplace(&fv, intern_symbol_global(":sy"));
+    vector_conj_inplace(&fv, intern_symbol_global(":rot"));
+    record_register_descriptor(intern_symbol_global("Transform"), fv);
+    RELEASE(fv);
+    fv = make_vector(7, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":stroke-color"));
+    vector_conj_inplace(&fv, intern_symbol_global(":stroke-width"));
+    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
+    vector_conj_inplace(&fv, intern_symbol_global(":has-fill"));
+    vector_conj_inplace(&fv, intern_symbol_global(":fill-color"));
+    vector_conj_inplace(&fv, intern_symbol_global(":has-bg-color"));
+    vector_conj_inplace(&fv, intern_symbol_global(":bg-color"));
+    record_register_descriptor(intern_symbol_global("Style"), fv);
+    RELEASE(fv);
+    fv = make_vector(6, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":t"));
+    vector_conj_inplace(&fv, intern_symbol_global(":style"));
+    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
+    vector_conj_inplace(&fv, intern_symbol_global(":children"));
+    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
+    record_register_descriptor(intern_symbol_global("Group"), fv);
+    RELEASE(fv);
+    fv = make_vector(9, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":t"));
+    vector_conj_inplace(&fv, intern_symbol_global(":style"));
+    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
+    vector_conj_inplace(&fv, intern_symbol_global(":x1"));
+    vector_conj_inplace(&fv, intern_symbol_global(":y1"));
+    vector_conj_inplace(&fv, intern_symbol_global(":x2"));
+    vector_conj_inplace(&fv, intern_symbol_global(":y2"));
+    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
+    record_register_descriptor(intern_symbol_global("Line"), fv);
+    RELEASE(fv);
+    fv = make_vector(7, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":t"));
+    vector_conj_inplace(&fv, intern_symbol_global(":style"));
+    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
+    vector_conj_inplace(&fv, intern_symbol_global(":pts"));
+    vector_conj_inplace(&fv, intern_symbol_global(":closed"));
+    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
+    record_register_descriptor(intern_symbol_global("Polyline"), fv);
+    RELEASE(fv);
+    fv = make_vector(9, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":t"));
+    vector_conj_inplace(&fv, intern_symbol_global(":style"));
+    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
+    vector_conj_inplace(&fv, intern_symbol_global(":x"));
+    vector_conj_inplace(&fv, intern_symbol_global(":y"));
+    vector_conj_inplace(&fv, intern_symbol_global(":w"));
+    vector_conj_inplace(&fv, intern_symbol_global(":h"));
+    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
+    record_register_descriptor(intern_symbol_global("Rect"), fv);
+    RELEASE(fv);
+    fv = make_vector(11, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":t"));
+    vector_conj_inplace(&fv, intern_symbol_global(":style"));
+    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
+    vector_conj_inplace(&fv, intern_symbol_global(":x1"));
+    vector_conj_inplace(&fv, intern_symbol_global(":y1"));
+    vector_conj_inplace(&fv, intern_symbol_global(":x2"));
+    vector_conj_inplace(&fv, intern_symbol_global(":y2"));
+    vector_conj_inplace(&fv, intern_symbol_global(":x3"));
+    vector_conj_inplace(&fv, intern_symbol_global(":y3"));
+    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
+    record_register_descriptor(intern_symbol_global("Tri"), fv);
+    RELEASE(fv);
+    fv = make_vector(10, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":t"));
+    vector_conj_inplace(&fv, intern_symbol_global(":style"));
+    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
+    vector_conj_inplace(&fv, intern_symbol_global(":x"));
+    vector_conj_inplace(&fv, intern_symbol_global(":y"));
+    vector_conj_inplace(&fv, intern_symbol_global(":scale"));
+    vector_conj_inplace(&fv, intern_symbol_global(":rot"));
+    vector_conj_inplace(&fv, intern_symbol_global(":text"));
+    vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
+    record_register_descriptor(intern_symbol_global("VText"), fv);
+    RELEASE(fv);
+    fv = make_vector(2, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":keyframes"));
+    vector_conj_inplace(&fv, intern_symbol_global(":loop"));
+    record_register_descriptor(intern_symbol_global("Timeline"), fv);
+    RELEASE(fv);
+    fv = make_vector(5, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":root"));
+    vector_conj_inplace(&fv, intern_symbol_global(":index"));
+    vector_conj_inplace(&fv, intern_symbol_global(":clip-rect"));
+    vector_conj_inplace(&fv, intern_symbol_global(":erase-color"));
+    vector_conj_inplace(&fv, intern_symbol_global(":collision-rules"));
+    record_register_descriptor(intern_symbol_global("Scene"), fv);
+    RELEASE(fv);
+    fv = make_vector(9, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":root"));
+    vector_conj_inplace(&fv, intern_symbol_global(":index"));
+    vector_conj_inplace(&fv, intern_symbol_global(":clip-rect"));
+    vector_conj_inplace(&fv, intern_symbol_global(":z"));
+    vector_conj_inplace(&fv, intern_symbol_global(":visible"));
+    vector_conj_inplace(&fv, intern_symbol_global(":opaque"));
+    vector_conj_inplace(&fv, intern_symbol_global(":erase-color"));
+    vector_conj_inplace(&fv, intern_symbol_global(":guard-px"));
+    vector_conj_inplace(&fv, intern_symbol_global(":collision-rules"));
+    record_register_descriptor(intern_symbol_global("FrameScene"), fv);
+    RELEASE(fv);
+    fv = make_vector(7, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":slot"));
+    vector_conj_inplace(&fv, intern_symbol_global(":a-id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":b-id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":phase-mask"));
+    vector_conj_inplace(&fv, intern_symbol_global(":enabled"));
+    vector_conj_inplace(&fv, intern_symbol_global(":cooldown-ms"));
+    record_register_descriptor(intern_symbol_global("CollisionRule"), fv);
+    RELEASE(fv);
+    fv = make_vector(7, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":rule-id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":slot"));
+    vector_conj_inplace(&fv, intern_symbol_global(":a-id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":b-id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":phase"));
+    vector_conj_inplace(&fv, intern_symbol_global(":snapshot-gen"));
+    vector_conj_inplace(&fv, intern_symbol_global(":ts-ms"));
+    record_register_descriptor(intern_symbol_global("CollisionEvent"), fv);
+    RELEASE(fv);
+    fv = make_vector(7, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":slot"));
+    vector_conj_inplace(&fv, intern_symbol_global(":kind"));
+    vector_conj_inplace(&fv, intern_symbol_global(":self"));
+    vector_conj_inplace(&fv, intern_symbol_global(":other"));
+    vector_conj_inplace(&fv, intern_symbol_global(":radius"));
+    vector_conj_inplace(&fv, intern_symbol_global(":channel"));
+    record_register_descriptor(intern_symbol_global("SpatialRule"), fv);
+    RELEASE(fv);
+    fv = make_vector(4, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":min-x"));
+    vector_conj_inplace(&fv, intern_symbol_global(":min-y"));
+    vector_conj_inplace(&fv, intern_symbol_global(":max-x"));
+    vector_conj_inplace(&fv, intern_symbol_global(":max-y"));
+    record_register_descriptor(intern_symbol_global("Aabb"), fv);
+    RELEASE(fv);
+    fv = make_vector(17, STRONG);
+    vector_conj_inplace(&fv, intern_symbol_global(":source"));
+    vector_conj_inplace(&fv, intern_symbol_global(":id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":slot-id"));
+    vector_conj_inplace(&fv, intern_symbol_global(":kind"));
+    vector_conj_inplace(&fv, intern_symbol_global(":phase"));
+    vector_conj_inplace(&fv, intern_symbol_global(":self"));
+    vector_conj_inplace(&fv, intern_symbol_global(":other"));
+    vector_conj_inplace(&fv, intern_symbol_global(":self-entity"));
+    vector_conj_inplace(&fv, intern_symbol_global(":other-entity"));
+    vector_conj_inplace(&fv, intern_symbol_global(":rule"));
+    vector_conj_inplace(&fv, intern_symbol_global(":snapshot-gen"));
+    vector_conj_inplace(&fv, intern_symbol_global(":self-aabb"));
+    vector_conj_inplace(&fv, intern_symbol_global(":other-aabb"));
+    vector_conj_inplace(&fv, intern_symbol_global(":self-prototype"));
+    vector_conj_inplace(&fv, intern_symbol_global(":other-prototype"));
+    vector_conj_inplace(&fv, intern_symbol_global(":radius"));
+    vector_conj_inplace(&fv, intern_symbol_global(":channel"));
+    record_register_descriptor(intern_symbol_global("SpatialEvent"), fv);
+    RELEASE(fv);
+}
 
+bool tiny_fx_gfx_ensure_schema(EvalState *st) {
+    (void)st;
     init_record_keys();
 
     g_record_schema.t_transform = &sym_type_transform_data.sym;
@@ -163,12 +332,8 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
     CljRecordDescriptor *d_scene = record_descriptor_lookup(g_record_schema.t_scene);
     if (!d_transform || !d_style || !d_group || !d_line || !d_poly || !d_rect || !d_tri || !d_text ||
         !d_timeline || !d_frame || !d_scene) {
-        if (!require_namespace_by_name(st, "tiny-fx.gfx-scene")) {
-            return false;
-        }
-        if (g_record_schema_initialized) {
-            return true;
-        }
+        register_builtin_gfx_records();
+        
         d_transform = record_descriptor_lookup(g_record_schema.t_transform);
         d_style = record_descriptor_lookup(g_record_schema.t_style);
         d_group = record_descriptor_lookup(g_record_schema.t_group);
@@ -283,12 +448,17 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
     g_record_schema.timeline_keyframes = descriptor_index_of(d_timeline, g_record_keys.k_keyframes);
     g_record_schema.timeline_loop = descriptor_index_of(d_timeline, g_record_keys.k_loop);
     g_record_schema.frame_root = descriptor_index_of(d_frame, g_record_keys.k_root);
+    g_record_schema.frame_index = descriptor_index_of(d_frame, g_record_keys.k_index);
     g_record_schema.frame_clip_rect = descriptor_index_of(d_frame, g_record_keys.k_clip_rect);
     g_record_schema.frame_z = descriptor_index_of(d_frame, g_record_keys.k_z);
     g_record_schema.frame_visible = descriptor_index_of(d_frame, g_record_keys.k_visible);
     g_record_schema.frame_opaque = descriptor_index_of(d_frame, g_record_keys.k_opaque);
     g_record_schema.frame_erase_color = descriptor_index_of(d_frame, g_record_keys.k_erase_color);
     g_record_schema.frame_guard_px = descriptor_index_of(d_frame, g_record_keys.k_guard_px);
+    g_record_schema.scene_root = descriptor_index_of(d_scene, g_record_keys.k_root);
+    g_record_schema.scene_index = descriptor_index_of(d_scene, g_record_keys.k_index);
+    g_record_schema.scene_clip_rect = descriptor_index_of(d_scene, g_record_keys.k_clip_rect);
+    g_record_schema.scene_erase_color = descriptor_index_of(d_scene, g_record_keys.k_erase_color);
 
     if (g_record_schema.transform_tx < 0 || g_record_schema.transform_ty < 0 || g_record_schema.transform_sx < 0 ||
         g_record_schema.transform_sy < 0 || g_record_schema.transform_rot < 0 || g_record_schema.style_stroke_color < 0 ||
@@ -311,13 +481,14 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
         g_record_schema.text_x < 0 || g_record_schema.text_y < 0 || g_record_schema.text_scale < 0 ||
         g_record_schema.text_rot < 0 || g_record_schema.text_text < 0 ||
         g_record_schema.timeline_keyframes < 0 || g_record_schema.timeline_loop < 0 ||
-        g_record_schema.frame_root < 0 ||
+        g_record_schema.frame_root < 0 || g_record_schema.frame_index < 0 ||
         g_record_schema.frame_clip_rect < 0 || g_record_schema.frame_z < 0 || g_record_schema.frame_visible < 0 ||
-        g_record_schema.frame_opaque < 0 || g_record_schema.frame_erase_color < 0 || g_record_schema.frame_guard_px < 0) {
+        g_record_schema.frame_opaque < 0 || g_record_schema.frame_erase_color < 0 || g_record_schema.frame_guard_px < 0 ||
+        g_record_schema.scene_root < 0 || g_record_schema.scene_index < 0 ||
+        g_record_schema.scene_clip_rect < 0 || g_record_schema.scene_erase_color < 0) {
         return false;
     }
 
-    g_record_schema_initialized = true;
     return true;
 }
 

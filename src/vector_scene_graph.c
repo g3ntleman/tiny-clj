@@ -518,10 +518,12 @@ static void draw_polyline_node(VgFrameBuffer *fb, const VgPolylineData *p, VgTra
 
 static void draw_rect_node(VgFrameBuffer *fb, const VgRectData *r, VgTransformFixed tf, VgStyle style) {
     int x1 = 0, y1 = 0, x2 = 0, y2 = 0, x3 = 0, y3 = 0, x4 = 0, y4 = 0;
+    int16_t x_max = (r->w > 0) ? (int16_t)(r->x + r->w - 1) : r->x;
+    int16_t y_max = (r->h > 0) ? (int16_t)(r->y + r->h - 1) : r->y;
     apply_xy_fixed_px(&tf, r->x, r->y, &x1, &y1);
-    apply_xy_fixed_px(&tf, (int16_t)(r->x + r->w), r->y, &x2, &y2);
-    apply_xy_fixed_px(&tf, (int16_t)(r->x + r->w), (int16_t)(r->y + r->h), &x3, &y3);
-    apply_xy_fixed_px(&tf, r->x, (int16_t)(r->y + r->h), &x4, &y4);
+    apply_xy_fixed_px(&tf, x_max, r->y, &x2, &y2);
+    apply_xy_fixed_px(&tf, x_max, y_max, &x3, &y3);
+    apply_xy_fixed_px(&tf, r->x, y_max, &x4, &y4);
     if (style.has_fill) {
         int vx[4] = {x1, x2, x3, x4};
         int vy[4] = {y1, y2, y3, y4};

@@ -12,6 +12,9 @@
 
 int main() {
     platform_init();
+#if defined(DEBUG) && defined(TINYCLJ_HOST_HEAP_LIMIT_BYTES)
+    memory_set_heap_limit_bytes((size_t)TINYCLJ_HOST_HEAP_LIMIT_BYTES);
+#endif
     runtime_init(&g_runtime);
     
     const char *cname = platform_name();

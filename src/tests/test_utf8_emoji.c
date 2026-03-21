@@ -9,8 +9,10 @@
 
 static int32_t as_unsigned_byte(ID value) {
     TEST_ASSERT_NOT_NULL(value);
-    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(value), "nth result should be a fixnum");
-    int32_t raw = as_fixnum(value);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(value) || is_character(value),
+                             "nth result should be a fixnum or character");
+    int32_t raw = is_character(value) ? (int32_t)as_character(value)
+                                      : as_fixnum(value);
     return (raw < 0) ? (raw + 256) : raw;
 }
 

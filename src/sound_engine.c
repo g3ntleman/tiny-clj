@@ -728,6 +728,20 @@ void sound_engine_on_finished(ID callback_fn) {
 /* Tick implementation                                                       */
 /* ========================================================================= */
 
+bool sound_engine_tick_mark_running(void) {
+    bool was_running = g_sound_engine.tick_running;
+    g_sound_engine.tick_running = true;
+    return !was_running;
+}
+
+void sound_engine_tick_mark_stopped(void) {
+    g_sound_engine.tick_running = false;
+}
+
+bool sound_engine_tick_is_running(void) {
+    return g_sound_engine.tick_running;
+}
+
 static void tick_drain_commands(void) {
     SoundCmd cmd;
     int drained = 0;

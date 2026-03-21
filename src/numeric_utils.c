@@ -83,6 +83,8 @@ bool extract_numeric_values(ID a, ID b, float *val_a, float *val_b) {
     // Extract value from first object
     if (is_fixnum(a)) {
         *val_a = (float)as_fixnum(a);
+    } else if (is_character(a)) {
+        *val_a = (float)as_character(a);
     } else if (is_fixed(a)) {
         *val_a = as_fixed(a);
     } else {
@@ -92,6 +94,8 @@ bool extract_numeric_values(ID a, ID b, float *val_a, float *val_b) {
     // Extract value from second object
     if (is_fixnum(b)) {
         *val_b = (float)as_fixnum(b);
+    } else if (is_character(b)) {
+        *val_b = (float)as_character(b);
     } else if (is_fixed(b)) {
         *val_b = as_fixed(b);
     } else {

@@ -345,6 +345,9 @@ static void test_heap_growth_check(void) {
 // ============================================================================
 
 void setUp(void) {
+#if defined(DEBUG) && defined(TINYCLJ_HOST_HEAP_LIMIT_BYTES)
+  memory_set_heap_limit_bytes((size_t)TINYCLJ_HOST_HEAP_LIMIT_BYTES);
+#endif
   // Default: enforce heap growth checks for shared (read-only) tests only
   g_heap_check_enabled = is_shared_test_entry(g_current_test_entry);
   g_heap_growth_limit_bytes = 0;

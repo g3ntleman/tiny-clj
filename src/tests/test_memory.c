@@ -284,6 +284,47 @@ TEST(test_memory_profiler_tracks_raw_alloc_blocks) {
 #endif
 }
 
+TEST(test_memory_heap_limit_setter_and_predicate_work_for_raw_allocations) {
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    size_t baseline = memory_current_usage_bytes();
+
+    memory_set_heap_limit_bytes(baseline + 64);
+    TEST_ASSERT_EQUAL_UINT64(baseline + 64, memory_get_heap_limit_bytes());
+    TEST_ASSERT_TRUE(memory_heap_limit_would_exceed(0, 1024));
+    TEST_ASSERT_FALSE(memory_heap_limit_would_exceed(0, 16));
+    memory_set_heap_limit_bytes(previous_limit);
+}
+
+TEST(test_memory_heap_limit_accounts_for_released_bytes) {
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    size_t baseline = memory_current_usage_bytes();
+
+    memory_set_heap_limit_bytes(baseline + 96);
+    void *p = CLJ_MALLOC(48);
+    TEST_ASSERT_NOT_NULL(p);
+
+    size_t tracked = memory_tracked_raw_allocation_size(p);
+    TEST_ASSERT_TRUE(tracked >= 48);
+    TEST_ASSERT_TRUE(memory_heap_limit_would_exceed(0, 80));
+    TEST_ASSERT_FALSE(memory_heap_limit_would_exceed(tracked, 80));
+
+    CLJ_FREE(p);
+    memory_set_heap_limit_bytes(previous_limit);
+}
+
+TEST(test_memory_host_allocations_do_not_count_toward_heap_limit) {
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    size_t baseline = memory_current_usage_bytes();
+
+    memory_set_heap_limit_bytes(baseline + 64);
+    void *p = CLJ_HOST_MALLOC(4096);
+    TEST_ASSERT_NOT_NULL(p);
+    TEST_ASSERT_EQUAL_UINT64(baseline, memory_current_usage_bytes());
+
+    CLJ_HOST_FREE(p);
+    memory_set_heap_limit_bytes(previous_limit);
+}
+
 TEST(test_autorelease_pool_drain_to_depth_avoids_raw_allocations) {
 #if MEMORY_PROFILING_ENABLED
     enable_memory_profiling(true);

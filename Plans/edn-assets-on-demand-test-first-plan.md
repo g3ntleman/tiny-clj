@@ -43,7 +43,7 @@ Deklarative Schwergewichte aus `tiny-fx.startup`, `tiny-fx.game-demo` und den De
 
 ## Test-First Arbeitspakete
 
-### Phase 1: Require-Heap Schutztests (zuerst rot)
+### Phase 1: Require-Heap Schutztests (zuerst rot) [ERLEDIGT]
 1. Neue Tests für Heap bei reinem Namespace-Load:
 - `(heap (require 'tiny-fx.startup))`
 - `(heap (require 'tiny-fx.game-demo))`
@@ -53,8 +53,9 @@ Deklarative Schwergewichte aus `tiny-fx.startup`, `tiny-fx.game-demo` und den De
 - `tiny-fx.game-demo`: `:total <= 131072`
 
 3. Tests müssen aktuell fehlschlagen (Baseline ist deutlich höher).
+(Stand: Implementiert in `src/tests/test_assets_edn.c`. Tests schlagen erwartungsgemäß fehl: startup = 331KB, game-demo = 1010KB).
 
-### Phase 2: API-Vertrags-Tests auf neue Form (zuerst rot)
+### Phase 2: API-Vertrags-Tests auf neue Form (zuerst rot) [ERLEDIGT]
 1. Startup:
 - `create-startup-bundle` liefert gültige Bundle-Struktur.
 - `slot-descriptors` liefern erwartete IDs/Atoms.
@@ -64,16 +65,18 @@ Deklarative Schwergewichte aus `tiny-fx.startup`, `tiny-fx.game-demo` und den De
 - `game-demo-config` liefert funktionsfähige `:slots`, `:spatial-callback`, `:game-scene-atom`.
 
 3. Entfernte Top-Level-`def`-Nutzung aus Tests entfernen (kein Shim).
+(Stand: `test_vector_scene_graph.c` und `test_gfx_collision_contract.c` wurden migriert, so dass sie keine Top-Level-Defs für Styles/Geometrien mehr abfragen. Der Test für `tiny-fx.startup/slot-descriptors` erwartet jetzt eine Funktion und schlägt rot fehl, da es noch ein Vektor-`def` ist.)
 
-### Phase 3: EDN-Asset-Loader Tests (zuerst rot)
+### Phase 3: EDN-Asset-Loader Tests (zuerst rot) [ERLEDIGT]
 1. Loader findet und liest Asset-Dateien.
 2. Loader validiert Pflichtfelder (harte Fehler bei invaliden Assets).
 3. Loader-Cache-Verhalten:
 - erster Call lädt/parst,
 - weiterer Call verwendet Cache,
 - Reset-Hook für Tests verfügbar.
+(Stand: `test_assets_edn_loader_contract` in `test_assets_edn.c` implementiert. Schlägt erwartungsgemäß fehl, da der Namespace `tiny-fx.assets` noch nicht existiert.)
 
-### Phase 3b: Demo-Song-Assets (ein Song = ein Asset) Tests (zuerst rot)
+### Phase 3b: Demo-Song-Assets (ein Song = ein Asset) Tests (zuerst rot) [ERLEDIGT]
 1. Pro Song wird genau ein Asset geladen:
 - `tiny-fx.sound-demos/demo :minuet-in-g` lädt nur `minuet-in-g.edn`.
 - analoge Tests für `the-entertainer`, `gymnopedie-no-1`, `rondo-alla-turca`, `hall-of-the-mountain-king`, `can-can`, `rocket-launch-sfx`, `laser-sfx`, `william-tell-finale`.
@@ -84,8 +87,9 @@ Deklarative Schwergewichte aus `tiny-fx.startup`, `tiny-fx.game-demo` und den De
 3. Format-/Schema-Tests pro Song-Asset:
 - Pflichtfelder (`:track-id`, `:steps`, `:opts`) vorhanden.
 - Typ/Shape-Validierung der Step-Events.
+(Stand: `test_require_heap_sound_demos` und `test_assets_edn_sound_demos_loader_contract` in `test_assets_edn.c` implementiert. Schlagen rot fehl wegen zu hohem Speicherverbrauch.)
 
-### Phase 3c: Image/Deployment-Vertrag (zuerst rot)
+### Phase 3c: Image/Deployment-Vertrag (zuerst rot) [ERLEDIGT]
 1. Host nutzt image-basiertes `tiny-clj.fs`:
 - Start ohne Image-Konfiguration liefert harten Fehler (kein RAM-Fallback).
 - Start mit Image funktioniert und kann Assets ueber `resolve_path_to_bytes`/`tiny-clj.fs` lesen.
@@ -97,6 +101,7 @@ Deklarative Schwergewichte aus `tiny-fx.startup`, `tiny-fx.game-demo` und den De
 
 3. Kein Serial-Deploy:
 - Tests/Docs verankern, dass kein UART-Upload-Pfad Teil der Loesung ist.
+(Stand: `test_deploy_contract.py` implementiert. Schlägt rot fehl, da REPL noch mit RAM-Fallback startet und `tinyclj_cp.py` nicht existiert.)
 
 ### Phase 4: Migration Implementierung
 1. EDN-Dateien erstellen.

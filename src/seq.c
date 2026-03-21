@@ -408,9 +408,9 @@ ID seq_iter_first(const SeqIterator *iter) {
         
         case CLJ_STRING: {
             if (iter->state.str.index < iter->state.str.length) {
-                // Return character as integer
-                char c = iter->state.str.data[iter->state.str.index];
-                return fixnum((int)c);
+                // Clojure-compatible: nth/seq over string yields characters.
+                unsigned char c = (unsigned char)iter->state.str.data[iter->state.str.index];
+                return character(c);
             }
             return NULL;
         }

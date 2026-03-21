@@ -314,6 +314,11 @@ void sound_backend_shutdown(void);
 /* Tick lifecycle (platform-specific)                                         */
 /* ========================================================================= */
 
+/* Shared tick-running state transitions for platform backends. */
+bool sound_engine_tick_mark_running(void);
+void sound_engine_tick_mark_stopped(void);
+bool sound_engine_tick_is_running(void);
+
 void sound_tick_start(void);
 void sound_tick_stop(void);
 void sound_tick_kick(void);

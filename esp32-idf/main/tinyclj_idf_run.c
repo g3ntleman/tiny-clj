@@ -7,12 +7,12 @@
 #include "runtime.h"
 #include "builtins.h"
 #include "source_resolver.h"
-#include "namespace.h"
 #include "meta.h"
 #include "line_editor.h"
 #include "event_loop.h"
 #include "mini_format.h"
 #include "repl.h"
+#include "startup_pipeline.h"
 #include "tiny_clj.h"
 
 #ifndef ESP_REPL_HISTORY_PERSIST_ENABLED
@@ -36,30 +36,6 @@ static bool g_esp_history_disabled = false;
 
 static bool esp_exception_is_oom(const CLJException *ex) {
     return ex && ex->type[0] && strcmp(ex->type, EXCEPTION_OUT_OF_MEMORY) == 0;
-}
-
-// No public header exists for these yet.
-extern void init_special_symbols(void);
-extern EvalState *get_global_eval_state(void);
-extern int load_clojure_core(EvalState *st);
-
-static bool esp_repl_core_loaded(void) {
-    CljNamespace *core = ns_find("clojure.core");
-    return core && core->loaded;
-}
-
-static bool esp_repl_ensure_core_loaded(EvalState *st) {
-    if (!st) {
-        return false;
-    }
-    if (esp_repl_core_loaded()) {
-        return true;
-    }
-    if (!load_clojure_core(st)) {
-        return false;
-    }
-    evalstate_set_ns(st, "user");
-    return esp_repl_core_loaded();
 }
 
 static bool esp_boot_load_root_file(EvalState *st) {
@@ -183,33 +159,38 @@ static void esp_repl_history_add_best_effort(LineEditor *ed, const char *line) {
  * @brief Boots tiny-clj runtime and serves the ESP32 UART REPL loop.
  */
 void tinyclj_idf_start(void) {
-    platform_init();
-
-    // Runtime bootstrap (same order as repl.c, minus host-specific CLI handling).
-    runtime_init(&g_runtime);
-    meta_registry_init();
-    init_special_symbols();
-    event_loop_init();
-
-    EvalState *st = get_global_eval_state();
-    evalstate_set_ns(st, "user");
+    EvalState *st = NULL;
+    TinycljRuntimeBootstrapOptions runtime_opts = {
+        .init_event_loop = true,
+    };
+    if (!tinyclj_startup_bootstrap_runtime(&runtime_opts, &st) || !st) {
+        platform_put_string(NULL, "Error: runtime bootstrap failed\n");
+        return;
+    }
 
     bool boot_root_loaded = true;
     bool boot_root_present = (resolve_path_to_bytes("/boot/root.edn") != NULL);
+    TinycljLanguageBootstrapOptions language_opts = {
+        .ensure_builtins = true,
+        .load_core = true,
+        .load_repl = false,
+        .refer_repl = false,
+        .core_quiet = !boot_root_present,
+    };
     WITH_AUTORELEASE_POOL({
-        register_builtins();
-        // Keep startup heap low: only load full clojure.core eagerly when a boot script exists.
-        if (boot_root_present) {
-            boot_root_loaded = esp_repl_ensure_core_loaded(st);
-            if (boot_root_loaded) {
-                boot_root_loaded = esp_boot_load_root_file(st);
-            }
+        if (!tinyclj_startup_bootstrap_language(st, &language_opts)) {
+            boot_root_loaded = false;
         }
-        evalstate_set_ns(st, "user");
+        if (boot_root_loaded && boot_root_present) {
+            boot_root_loaded = esp_boot_load_root_file(st);
+        }
+        if (boot_root_loaded) {
+            boot_root_loaded = tinyclj_startup_prepare_repl(st);
+        }
     });
 
     if (!boot_root_loaded) {
-        platform_put_string(NULL, "Warning: failed to evaluate boot root expression from /boot/root.edn");
+        platform_put_string(NULL, "Warning: failed to initialize boot root or REPL");
         platform_put_string(NULL, "\n");
     }
 
@@ -301,11 +282,6 @@ void tinyclj_idf_start(void) {
 
             esp_repl_history_add_best_effort(ed, acc);
             (void)esp_repl_history_save(ed);  // best-effort
-            if (!esp_repl_ensure_core_loaded(st)) {
-                platform_put_string(NULL, "Error: failed to load clojure.core\n");
-                acc[0] = '\0';
-                continue;
-            }
             (void)eval_multiform_string(acc, st);
             acc[0] = '\0';
         }

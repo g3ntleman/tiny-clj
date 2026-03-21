@@ -19,6 +19,7 @@ Usage:
 Options:
   --clean         Remove esp32-idf/build and esp32-idf/sdkconfig before building.
   --target <t>    Set ESP-IDF target (default: esp32). Example: esp32s3
+  --product <p>   Runtime product: tiny-clj or tiny-fx (default: tiny-clj).
   --flash         Run `idf.py flash` after a successful build.
   --monitor       Run `idf.py monitor` after a successful build (implies --flash).
   --no-move       Do not move build to builds/esp32-idf (keeps esp32-idf/build for incremental builds).
@@ -35,6 +36,7 @@ EOF
 }
 
 TARGET="esp32"
+PRODUCT="tiny-clj"
 DO_CLEAN=0
 DO_FLASH=0
 DO_MONITOR=0
@@ -53,6 +55,14 @@ while [ $# -gt 0 ]; do
         exit 2
       fi
       TARGET="$2"
+      shift 2
+      ;;
+    --product)
+      if [ $# -lt 2 ]; then
+        echo "ERROR: --product requires a value" >&2
+        exit 2
+      fi
+      PRODUCT="$2"
       shift 2
       ;;
     --flash)
@@ -88,6 +98,15 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+case "${PRODUCT}" in
+  tiny-clj|tiny-fx)
+    ;;
+  *)
+    echo "ERROR: --product must be 'tiny-clj' or 'tiny-fx'" >&2
+    exit 2
+    ;;
+esac
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}" && pwd)"
 IDF_PROJECT_DIR="${REPO_ROOT}/esp32-idf"
@@ -103,6 +122,8 @@ fi
 source "${REPO_ROOT}/scripts/esp_env.sh"
 
 cd "${IDF_PROJECT_DIR}"
+
+declare -a PRODUCT_ARGS=("-DTINYCLJ_PRODUCT=${PRODUCT}")
 
 # Repair stale/dangling symlinks from interrupted runs.
 if [ -L build ] && [ ! -e build ]; then
@@ -126,14 +147,14 @@ fi
 
 # set-target only when no build (first run or after --clean); else incremental.
 if [ ! -d build ]; then
-  idf.py set-target "${TARGET}"
+  idf.py "${PRODUCT_ARGS[@]}" set-target "${TARGET}"
 fi
 
 run_idf_build_logged() {
   local log_file="$1"
   set +e
   # Nounset-safe array expansion (EXTRA_IDF_ARGS may be unset/non-array in some shells).
-  idf.py build ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"} 2>&1 | tee "${log_file}"
+  idf.py "${PRODUCT_ARGS[@]}" build ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"} 2>&1 | tee "${log_file}"
   local rc=${PIPESTATUS[0]}
   set -e
   return "${rc}"
@@ -144,7 +165,7 @@ if ! run_idf_build_logged "${BUILD_LOG}"; then
   if grep -q "Cannot find component list file" "${BUILD_LOG}"; then
     echo "Detected stale CMake component metadata. Reconfiguring from a clean build directory..."
     rm -rf build
-    idf.py set-target "${TARGET}"
+    idf.py "${PRODUCT_ARGS[@]}" set-target "${TARGET}"
     run_idf_build_logged "${BUILD_LOG}"
   else
     echo "Build failed. Log: ${BUILD_LOG}" >&2
@@ -155,11 +176,11 @@ rm -f "${BUILD_LOG}"
 
 # If requested, run flash/monitor before moving the build dir.
 if [ "${DO_FLASH}" -eq 1 ]; then
-  idf.py flash ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"}
+  idf.py "${PRODUCT_ARGS[@]}" flash ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"}
 fi
 
 if [ "${DO_MONITOR}" -eq 1 ]; then
-  idf.py monitor ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"}
+  idf.py "${PRODUCT_ARGS[@]}" monitor ${EXTRA_IDF_ARGS[@]+"${EXTRA_IDF_ARGS[@]}"}
 fi
 
 # Optionally move the produced build directory into the centralized builds area.

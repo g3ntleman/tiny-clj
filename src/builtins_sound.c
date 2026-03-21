@@ -16,6 +16,7 @@
 #include "builtins_sound.h"
 #include "validation.h"
 #include "value.h"
+#include "symbol_cache.h"
 #include "symbol.h"
 #include "map.h"
 #include "byte_array.h"
@@ -35,6 +36,46 @@
 static bool tinyclj_sound_ns_matches(const char *cname, size_t ns_len, const char *ns_name) {
     size_t expected_len = strlen(ns_name);
     return cname && ns_len == expected_len && strncmp(cname, ns_name, expected_len) == 0;
+}
+
+#ifdef DEBUG
+static CljSymbol *g_sound_kw_backend_available = NULL;
+static CljSymbol *g_sound_kw_sound_running = NULL;
+static CljSymbol *g_sound_kw_tick_enabled = NULL;
+static CljSymbol *g_sound_kw_tick_thread_running = NULL;
+static CljSymbol *g_sound_kw_tick_running = NULL;
+static CljSymbol *g_sound_kw_voice_count = NULL;
+static CljSymbol *g_sound_kw_debug_noise_active = NULL;
+static CljSymbol *g_sound_kw_debug_ramp_active = NULL;
+static CljSymbol *g_sound_kw_debug_ramp_noise_active = NULL;
+static CljSymbol *g_sound_kw_engine_voice_freqs = NULL;
+static CljSymbol *g_sound_kw_engine_voice_gates = NULL;
+static CljSymbol *g_sound_kw_engine_voice_active = NULL;
+static CljSymbol *g_sound_kw_supported = NULL;
+static CljSymbol *g_sound_kw_host_test_tone = NULL;
+static const SymbolCacheEntry g_sound_symbol_cache[] = {
+    {&g_sound_kw_backend_available, ":backend-available", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_sound_running, ":sound-running", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_tick_enabled, ":tick-enabled", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_tick_thread_running, ":tick-thread-running", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_tick_running, ":tick-running", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_voice_count, ":voice-count", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_debug_noise_active, ":debug-noise-active", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_debug_ramp_active, ":debug-ramp-active", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_debug_ramp_noise_active, ":debug-ramp-noise-active", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_engine_voice_freqs, ":engine-voice-freqs", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_engine_voice_gates, ":engine-voice-gates", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_engine_voice_active, ":engine-voice-active", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_supported, ":supported", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_sound_kw_host_test_tone, ":__host-test-tone", SYMBOL_CACHE_SCOPE_GLOBAL},
+};
+#endif
+
+static void builtins_sound_init_symbols(void) {
+#ifdef DEBUG
+    (void)symbol_cache_init_global(g_sound_symbol_cache,
+                                   sizeof(g_sound_symbol_cache) / sizeof(g_sound_symbol_cache[0]));
+#endif
 }
 
 #if TINYCLJ_WITH_TINY_FX
@@ -205,23 +246,11 @@ ID native_sound_host_status(ID *args, unsigned int argc) {
     if (!validate_arity(argc, 0, "host-status!")) return NULL;
     (void)args;
 
+    builtins_sound_init_symbols();
     ensure_sound_engine_initialized();
 
     SoundHostStatus st = {0};
     bool ok = sound_backend_host_get_status(&st);
-    ID k_backend_available = intern_symbol_global(":backend-available");
-    ID k_sound_running = intern_symbol_global(":sound-running");
-    ID k_tick_enabled = intern_symbol_global(":tick-enabled");
-    ID k_tick_thread_running = intern_symbol_global(":tick-thread-running");
-    ID k_tick_running = intern_symbol_global(":tick-running");
-    ID k_voice_count = intern_symbol_global(":voice-count");
-    ID k_debug_noise_active = intern_symbol_global(":debug-noise-active");
-    ID k_debug_ramp_active = intern_symbol_global(":debug-ramp-active");
-    ID k_debug_ramp_noise_active = intern_symbol_global(":debug-ramp-noise-active");
-    ID k_engine_voice_freqs = intern_symbol_global(":engine-voice-freqs");
-    ID k_engine_voice_gates = intern_symbol_global(":engine-voice-gates");
-    ID k_engine_voice_active = intern_symbol_global(":engine-voice-active");
-    ID k_supported = intern_symbol_global(":supported");
 
     ID v_backend_available = st.backend_available ? clj_true : clj_false;
     ID v_sound_running = st.sound_running ? clj_true : clj_false;
@@ -244,19 +273,19 @@ ID native_sound_host_status(ID *args, unsigned int argc) {
     }
 
     return make_map_from_kv(13,
-                            k_supported, v_supported,
-                            k_backend_available, v_backend_available,
-                            k_sound_running, v_sound_running,
-                            k_tick_enabled, v_tick_enabled,
-                            k_tick_thread_running, v_tick_thread_running,
-                            k_tick_running, v_tick_running,
-                            k_voice_count, v_voice_count,
-                            k_debug_noise_active, v_debug_noise_active,
-                            k_debug_ramp_active, v_debug_ramp_active,
-                            k_debug_ramp_noise_active, v_debug_ramp_noise_active,
-                            k_engine_voice_freqs, engine_voice_freqs,
-                            k_engine_voice_gates, engine_voice_gates,
-                            k_engine_voice_active, engine_voice_active);
+                            g_sound_kw_supported, v_supported,
+                            g_sound_kw_backend_available, v_backend_available,
+                            g_sound_kw_sound_running, v_sound_running,
+                            g_sound_kw_tick_enabled, v_tick_enabled,
+                            g_sound_kw_tick_thread_running, v_tick_thread_running,
+                            g_sound_kw_tick_running, v_tick_running,
+                            g_sound_kw_voice_count, v_voice_count,
+                            g_sound_kw_debug_noise_active, v_debug_noise_active,
+                            g_sound_kw_debug_ramp_active, v_debug_ramp_active,
+                            g_sound_kw_debug_ramp_noise_active, v_debug_ramp_noise_active,
+                            g_sound_kw_engine_voice_freqs, engine_voice_freqs,
+                            g_sound_kw_engine_voice_gates, engine_voice_gates,
+                            g_sound_kw_engine_voice_active, engine_voice_active);
 }
 
 static uint8_t sound_encode_varuint(uint32_t value, uint8_t *out) {
@@ -354,7 +383,8 @@ ID native_sound_play_test_tone(ID *args, unsigned int argc) {
 
     ensure_sound_engine_initialized();
 
-    ID track_id = intern_symbol_global(":__host-test-tone");
+    builtins_sound_init_symbols();
+    ID track_id = g_sound_kw_host_test_tone;
     ID ba_id = ba;
     bool loaded = sound_engine_load_track(track_id, ba_id);
     RELEASE(ba_id);
@@ -550,10 +580,10 @@ TINYCLJ_DEFINE_SOUND_DISABLED_STUB(native_sound_play_test_ramp_noise, "play-test
 ID native_sound_host_status(ID *args, unsigned int argc) {
     (void)args;
     (void)argc;
+    builtins_sound_init_symbols();
     CljPersistentMap *m = make_map(1);
-    ID k_supported = intern_symbol_global(":supported");
-    if (m && k_supported) {
-        map_assoc_inplace(&m, k_supported, clj_false);
+    if (m && g_sound_kw_supported) {
+        map_assoc_inplace(&m, g_sound_kw_supported, clj_false);
     }
     return AUTORELEASE(m);
 }
@@ -586,6 +616,7 @@ void builtins_sound_register(BuiltinsSoundRegisterFn registrar) {
     if (!registrar) {
         return;
     }
+    builtins_sound_init_symbols();
 #if TINYCLJ_WITH_TINY_FX
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-load-track!", native_sound_load_track);
     registrar(TINYCLJ_SOUND_NATIVE_NS "/sound-unload-track!", native_sound_unload_track);

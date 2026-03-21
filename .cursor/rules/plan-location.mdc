@@ -1,0 +1,10 @@
+---
+description: Store new plans in repository Plans directory
+alwaysApply: true
+---
+
+# Plan Location
+
+- Create new plans in the repository under `Plans/`.
+- Do not create new plan files under `.cursor/plans/`.
+- If a plan is first created outside the repository, move it into `Plans/` and remove the original so there is a single source of truth.

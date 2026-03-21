@@ -639,30 +639,59 @@ TEST(test_for_macroexpand_destructuring) {
 // This test verifies that cond with :else works correctly during macro expansion
 TEST(test_for_macroexpand_with_cond_else) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Test basic for expansion - this should work if cond with :else works
     // Use macroexpand (not macroexpand-1) to fully expand
     CljObject *result = eval_string(
         "(macroexpand '(for [x [1 2 3]] x))",
         g_test_eval_state);
-    
+
     // Check if expansion succeeded (if cond fails, result will be NULL or exception thrown)
     if (!result) {
         TEST_FAIL_MESSAGE("for macro expansion failed - cond with :else may not work during macro expansion");
         return;
     }
-    
+
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "for macro expansion should succeed");
     TEST_ASSERT_TRUE(is_list_type(TAG(result)));
-    
+
     CljList *expanded = as_list(result);
     TEST_ASSERT_NOT_NULL(expanded);
-    
+
     // First element should be mapcat (no legacy for*)
     ID first = LIST_FIRST(expanded);
     TEST_ASSERT_TRUE(is_symbol(first));
     CljSymbol *op_sym = as_symbol(first);
     TEST_ASSERT_NOT_NULL(op_sym);
     TEST_ASSERT_TRUE(strcmp(op_sym->cname, "mapcat") == 0);
+}
+
+// ============================================================================
+// TEST: defonce
+// ============================================================================
+
+TEST(test_defonce) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Initial defonce
+    CljObject *res1 = eval_string("(defonce my-test-var 42)", g_test_eval_state);
+    // In tiny-clj, def returns the namespace-qualified symbol
+    TEST_ASSERT_NOT_NULL(res1);
+    TEST_ASSERT_TRUE(is_symbol(res1));
+
+    // Verify value
+    CljObject *val1 = eval_string("my-test-var", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(val1);
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(val1));
+
+    // Second defonce with different value
+    CljObject *res2 = eval_string("(defonce my-test-var 100)", g_test_eval_state);
+    // Should return nil because it's already bound
+    TEST_ASSERT_NIL(res2);
+
+    // Verify value is unchanged
+    CljObject *val2 = eval_string("my-test-var", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(val2);
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(val2));
 }
 

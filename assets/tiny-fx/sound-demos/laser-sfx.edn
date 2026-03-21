@@ -1,0 +1,6 @@
+{:track-id :sound-demos-laser
+ :steps [{:notes [5200] :bend [1200] :duration 160}
+         {:notes [550] :duration 56}]
+ :opts {:channel-count 1
+        :volumes [228]
+        :gate-percent 88}}

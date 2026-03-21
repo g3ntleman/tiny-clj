@@ -1,5 +1,8 @@
 #include "tests_common.h"
+#include "../app_bundle_path.h"
+#include "../repl.h"
 #include "../startup_pipeline.h"
+#include "../event_loop.h"
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -61,6 +64,32 @@ TEST(test_main_invoke_explicit_ns_passes_args_and_command_line_args) {
   TEST_ASSERT_EQUAL_PTR(clj_true, cli_ok);
 }
 
+TEST(test_main_invoke_restores_command_line_args_after_return) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state->dynamic_bindings);
+  TEST_ASSERT_NOT_NULL(g_test_eval_state->dynamic_bindings->backing);
+
+  register_resolver_source(
+      "/libs/test/main-entry-restores-cli.clj",
+      "(ns test.main-entry-restores-cli)\n"
+      "(def seen-cli-args (atom nil))\n"
+      "(defn -main [& args]\n"
+      "  (reset! seen-cli-args *command-line-args*)\n"
+      "  nil)\n");
+
+  const char *argv_main[] = {"left", "right"};
+  unsigned int binding_depth_before = vector_count(g_test_eval_state->dynamic_bindings->backing);
+  TEST_ASSERT_TRUE(
+      tinyclj_startup_invoke_main(g_test_eval_state, "test.main-entry-restores-cli", 2, argv_main, true));
+
+  ID seen_ok = eval_string("(= @test.main-entry-restores-cli/seen-cli-args '(\"left\" \"right\"))",
+                           g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, seen_ok);
+
+  unsigned int binding_depth_after = vector_count(g_test_eval_state->dynamic_bindings->backing);
+  TEST_ASSERT_EQUAL_UINT(binding_depth_before, binding_depth_after);
+}
+
 TEST(test_main_invoke_current_ns_mode_uses_active_namespace) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -112,6 +141,54 @@ TEST(test_main_invoke_returns_false_when_main_not_callable) {
   TEST_ASSERT_FALSE(ok);
 }
 
+TEST(test_startup_pipeline_supports_repl_and_runloop_after_main) {
+  TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+  register_resolver_source(
+      "/libs/test/main-entry-repl-continue.clj",
+      "(ns test.main-entry-repl-continue)\n"
+      "(def invoked? (atom false))\n"
+      "(defn -main [& _args]\n"
+      "  (reset! invoked? true)\n"
+      "  nil)\n");
+
+  TEST_ASSERT_TRUE(
+      tinyclj_startup_invoke_main(g_test_eval_state, "test.main-entry-repl-continue", 0, NULL, true));
+
+  ID invoked = eval_string("@test.main-entry-repl-continue/invoked?", g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, invoked);
+
+  TinycljLanguageBootstrapOptions repl_opts = {
+      .ensure_builtins = true,
+      .load_core = false,
+      .load_repl = true,
+      .refer_repl = true,
+      .core_quiet = true,
+  };
+  TEST_ASSERT_TRUE(tinyclj_startup_bootstrap_language(g_test_eval_state, &repl_opts));
+
+  ID doc_ok = eval_string("(fn? doc)", g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, doc_ok);
+
+  ID setup_ok = eval_string(
+      "(do "
+      "  (def startup-runloop-counter (atom 0)) "
+      "  (defn startup-runloop-tick [] "
+      "    (swap! startup-runloop-counter inc) "
+      "    nil) "
+      "  true)",
+      g_test_eval_state);
+  TEST_ASSERT_EQUAL_PTR(clj_true, setup_ok);
+
+  ID tick_fn = eval_string("startup-runloop-tick", g_test_eval_state);
+  TEST_ASSERT_NOT_NULL(tick_fn);
+  TEST_ASSERT_TRUE(event_loop_enqueue_ingress((CljObject *)tick_fn));
+  TEST_ASSERT_TRUE(event_loop_run_next(NULL, g_test_eval_state));
+
+  ID counter = eval_string("@startup-runloop-counter", g_test_eval_state);
+  assert_fixnum((CljObject *)counter, 1);
+}
+
 TEST(test_startup_language_bootstrap_builtins_is_idempotent) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -125,4 +202,43 @@ TEST(test_startup_language_bootstrap_builtins_is_idempotent) {
 
   TEST_ASSERT_TRUE(tinyclj_startup_bootstrap_language(g_test_eval_state, &opts));
   TEST_ASSERT_TRUE(tinyclj_startup_bootstrap_language(g_test_eval_state, &opts));
+}
+
+TEST(test_repl_bundle_launch_switches_tiny_fx_app_to_host_app_mode) {
+  ReplBundleLaunchDecisionInputs inputs = {
+      .tiny_fx_enabled = true,
+      .bundle_launch = true,
+      .stdin_is_tty = false,
+      .has_ns_arg = false,
+      .has_eval_args = false,
+      .has_file_arg = false,
+      .has_main_ns = false,
+      .start_repl = false,
+      .no_core = false,
+  };
+
+  TEST_ASSERT_TRUE(repl_should_launch_tiny_fx_host_app(&inputs));
+
+  inputs.stdin_is_tty = true;
+  TEST_ASSERT_FALSE(repl_should_launch_tiny_fx_host_app(&inputs));
+
+  inputs.stdin_is_tty = false;
+  inputs.has_eval_args = true;
+  TEST_ASSERT_FALSE(repl_should_launch_tiny_fx_host_app(&inputs));
+
+  inputs.has_eval_args = false;
+  inputs.has_main_ns = true;
+  TEST_ASSERT_FALSE(repl_should_launch_tiny_fx_host_app(&inputs));
+
+  inputs.has_main_ns = false;
+  inputs.tiny_fx_enabled = false;
+  TEST_ASSERT_FALSE(repl_should_launch_tiny_fx_host_app(&inputs));
+}
+
+TEST(test_app_bundle_path_detects_macos_bundle_executables) {
+  TEST_ASSERT_TRUE(tinyclj_path_is_app_bundle_executable(
+      "/Users/test/build/tiny-fx.app/Contents/MacOS/tiny-fx"));
+  TEST_ASSERT_FALSE(tinyclj_path_is_app_bundle_executable(
+      "/Users/test/build/tiny-clj"));
+  TEST_ASSERT_FALSE(tinyclj_path_is_app_bundle_executable(NULL));
 }

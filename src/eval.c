@@ -24,22 +24,15 @@
 #include "namespace.h"
 #include "memory.h"
 #include "memory_profiler.h"
-#include "meta.h"
 #include "value.h"
 #include "environment.h"
 #include "ast.h"
 #include "ast_canon.h"
 #include "vector.h"
 #include "env_stack.h"
-#include "strings.h" // For pr_str
-#include "eval_arithmetic.h"
-#include "debug.h" // For print_ast
-#include "eval_comparison.h"
 #include <time.h>
 
-#include "eval_sequence.h"
 #include "eval_special_forms.h"
-#include "macro.h" // For lookup_macro_resolve
 
 #include <signal.h>
 extern __attribute__((weak)) volatile sig_atomic_t g_clojure_core_last_form;
@@ -598,9 +591,21 @@ static const EvalContext *ensure_eval_context(CljPersistentMap *env,
 // Forward declarations (defined later in this file)
 static INLINE bool is_dynamic_var_symbol(const CljSymbol *symbol);
 static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol);
+static INLINE bool is_ns_star_symbol(const CljSymbol *symbol);
+
+static INLINE bool is_ns_star_symbol(const CljSymbol *symbol) {
+  if (!symbol) {
+    return false;
+  }
+  if (symbol == SYM_NS_STAR) {
+    return true;
+  }
+  return symbol->cname && strcmp(symbol->cname, "*ns*") == 0;
+}
 
 // Extended version that also searches in CallFrame
 static INLINE ID resolve_symbol_in_env_with_frame(CljPersistentVector *env_stack, CljPersistentMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
+  EvalState *lookup_st = st ? st : get_global_eval_state();
   if (!sym || TAG(sym) != CLJ_SYMBOL) {
     return NOT_FOUND;
   }
@@ -620,18 +625,24 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljPersistentVector *env_stack
   // This is common for function calls like (fib ...) where fib is in namespace
   if (!env_stack && !fallback_env) {
     // Fast-path: check current namespace mappings directly so a "found but nil" value is preserved.
-    if (st && st->current_ns && st->current_ns->mappings) {
-      ID resolved = map_get(st->current_ns->mappings, sym);
+    if (lookup_st && lookup_st->current_ns && lookup_st->current_ns->mappings) {
+      ID resolved = map_get(lookup_st->current_ns->mappings, sym);
       if (resolved != NOT_FOUND) {
         return resolved ? resolved : (ID)SYM_NIL;
       }
     }
 
     // Dynamic vars can be bound to nil (NULL) and must be treated as resolved.
-    if (st) {
+    if (lookup_st) {
       CljSymbol *sym_obj = as_symbol(sym);
+      if (sym_obj && is_ns_star_symbol(sym_obj)) {
+        CljNamespace *current = lookup_st->current_ns ? lookup_st->current_ns : ns_get_or_create("user", NULL);
+        if (current) {
+          return (ID)current;
+        }
+      }
       if (sym_obj && is_dynamic_var_symbol(sym_obj)) {
-        ID bound = dynamic_binding_lookup(st, sym_obj);
+        ID bound = dynamic_binding_lookup(lookup_st, sym_obj);
         if (bound != NOT_FOUND) {
           return bound ? bound : (ID)SYM_NIL;
         }
@@ -639,8 +650,8 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljPersistentVector *env_stack
     }
 
     // Final fallback: full symbol resolution (may throw on unresolved).
-    if (st) {
-      ID resolved_ns = eval_symbol(as_symbol(sym), st);
+    if (lookup_st) {
+      ID resolved_ns = eval_symbol(as_symbol(sym), lookup_st);
       if (resolved_ns && resolved_ns != sym) {
         return resolved_ns;
       }
@@ -668,18 +679,24 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljPersistentVector *env_stack
   }
 
   // Fallback to namespace mappings directly (preserves "found but nil").
-  if (st && st->current_ns && st->current_ns->mappings) {
-    ID resolved = map_get(st->current_ns->mappings, sym);
+  if (lookup_st && lookup_st->current_ns && lookup_st->current_ns->mappings) {
+    ID resolved = map_get(lookup_st->current_ns->mappings, sym);
     if (resolved != NOT_FOUND) {
       return resolved ? resolved : (ID)SYM_NIL;
     }
   }
 
   // Dynamic vars can be bound to nil (NULL) and must be treated as resolved.
-  if (st) {
+  if (lookup_st) {
     CljSymbol *sym_obj = as_symbol(sym);
+    if (sym_obj && is_ns_star_symbol(sym_obj)) {
+      CljNamespace *current = lookup_st->current_ns ? lookup_st->current_ns : ns_get_or_create("user", NULL);
+      if (current) {
+        return (ID)current;
+      }
+    }
     if (sym_obj && is_dynamic_var_symbol(sym_obj)) {
-      ID bound = dynamic_binding_lookup(st, sym_obj);
+      ID bound = dynamic_binding_lookup(lookup_st, sym_obj);
       if (bound != NOT_FOUND) {
         return bound ? bound : (ID)SYM_NIL;
       }
@@ -687,8 +704,8 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljPersistentVector *env_stack
   }
 
   // Final fallback: full symbol resolution.
-  if (st) {
-    ID resolved_ns = eval_symbol(as_symbol(sym), st);
+  if (lookup_st) {
+    ID resolved_ns = eval_symbol(as_symbol(sym), lookup_st);
     if (resolved_ns && resolved_ns != sym) {
       return resolved_ns;
     }
@@ -2677,7 +2694,7 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
 
   // *ns* is represented as the current namespace object.
   // This makes it dynamically bindable by updating EvalState.current_ns in (binding ...).
-  if (symbol == SYM_NS_STAR) {
+  if (symbol == SYM_NS_STAR || (symbol->cname && strcmp(symbol->cname, "*ns*") == 0)) {
     if (st && st->current_ns) {
       return (ID)st->current_ns;
     }
@@ -3161,11 +3178,18 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
     }
 
     if (!resolved_value) {
+      EvalState *lookup_st = eval_st ? eval_st : get_global_eval_state();
       // Dynamic vars may be bound to nil; allow use in argument position.
-      if (eval_st) {
+      if (lookup_st) {
         CljSymbol *sym = as_symbol(expr);
+        if (sym && is_ns_star_symbol(sym)) {
+          CljNamespace *current = lookup_st->current_ns ? lookup_st->current_ns : ns_get_or_create("user", NULL);
+          if (current) {
+            return (ID)current;
+          }
+        }
         if (sym && is_dynamic_var_symbol(sym)) {
-          ID bound = dynamic_binding_lookup(eval_st, sym);
+          ID bound = dynamic_binding_lookup(lookup_st, sym);
           if (bound != NOT_FOUND) {
             if (!bound)
               return NULL;
@@ -3176,7 +3200,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st
         }
       }
 
-      ID resolved = ns_resolve(eval_st, as_symbol(expr));
+      ID resolved = ns_resolve(lookup_st, as_symbol(expr));
       if (resolved != NOT_FOUND) {
         resolved_found = true;
         if (!resolved || resolved == SYM_NIL) {

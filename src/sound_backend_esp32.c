@@ -85,7 +85,7 @@ static uint64_t sound_backend_ticks_to_delay_us(uint32_t ticks) {
 }
 
 static void sound_backend_schedule_next_timer(uint32_t ticks) {
-    if (!g_sound_timer || !g_sound_engine.tick_running) {
+    if (!g_sound_timer || !sound_engine_tick_is_running()) {
         return;
     }
     atomic_store_explicit(&g_sound_scheduled_ticks, ticks, memory_order_release);
@@ -115,7 +115,7 @@ static void sound_timer_callback(void *arg) {
     if (elapsed_us > budget_us) {
         g_sound_engine.telemetry.tick_overrun_count++;
     }
-    if (g_sound_engine.tick_running) {
+    if (sound_engine_tick_is_running()) {
         sound_backend_schedule_next_timer(sound_engine_ticks_until_deadline());
     }
     atomic_store_explicit(&g_sound_tick_in_callback, false, memory_order_release);
@@ -191,24 +191,22 @@ void sound_tick_start(void) {
         }
     }
 
-    if (!g_sound_engine.tick_running) {
-        g_sound_engine.tick_running = true;
-    }
+    (void)sound_engine_tick_mark_running();
     sound_backend_schedule_next_timer(0u);
 }
 
 void sound_tick_stop(void) {
-    if (!g_sound_engine.tick_running) return;
+    if (!sound_engine_tick_is_running()) return;
     if (g_sound_timer) {
         esp_timer_stop(g_sound_timer);
     }
     atomic_store_explicit(&g_sound_scheduled_ticks, 0u, memory_order_release);
-    g_sound_engine.tick_running = false;
+    sound_engine_tick_mark_stopped();
     sound_backend_silence_pwm_voices();
 }
 
 void sound_tick_kick(void) {
-    if (!g_sound_engine.tick_running) {
+    if (!sound_engine_tick_is_running()) {
         sound_tick_start();
         return;
     }
@@ -219,8 +217,8 @@ bool sound_backend_host_get_status(SoundHostStatus *out) {
     if (!out) return false;
 
     out->backend_available = true;
-    out->sound_running = g_sound_engine.tick_running;
-    out->tick_enabled = g_sound_engine.tick_running;
+    out->sound_running = sound_engine_tick_is_running();
+    out->tick_enabled = sound_engine_tick_is_running();
     out->tick_thread_running = false;
     out->voice_count = g_sound_engine.voice_count;
     return true;

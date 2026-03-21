@@ -7,6 +7,7 @@
 #include "tests_common.h"
 #include "../event_loop.h"
 #include "../channel.h"
+#include <unistd.h>
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -15,6 +16,70 @@
 // ============================================================================
 // GO-BLOCK TESTS
 // ============================================================================
+
+static char *capture_eval_stderr(const char *expr, ID *out_result) {
+    if (out_result) {
+        *out_result = NULL;
+    }
+    FILE *tmp = tmpfile();
+    if (!tmp) {
+        return NULL;
+    }
+
+    int stderr_fd = fileno(stderr);
+    int saved_stderr = dup(stderr_fd);
+    if (saved_stderr < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    fflush(stderr);
+    if (dup2(fileno(tmp), stderr_fd) < 0) {
+        close(saved_stderr);
+        fclose(tmp);
+        return NULL;
+    }
+
+    TRY {
+        if (out_result) {
+            *out_result = eval_string(expr, g_test_eval_state);
+        } else {
+            (void)eval_string(expr, g_test_eval_state);
+        }
+    } CATCH(ex) {
+        if (ex) {
+            print_exception(ex);
+        }
+    } END_TRY
+
+    fflush(stderr);
+    (void)dup2(saved_stderr, stderr_fd);
+    close(saved_stderr);
+
+    if (fseek(tmp, 0, SEEK_END) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+    long len = ftell(tmp);
+    if (len < 0) {
+        fclose(tmp);
+        return NULL;
+    }
+    if (fseek(tmp, 0, SEEK_SET) != 0) {
+        fclose(tmp);
+        return NULL;
+    }
+
+    char *buffer = CLJ_MALLOC((size_t)len + 1);
+    if (!buffer) {
+        fclose(tmp);
+        return NULL;
+    }
+    size_t nread = fread(buffer, 1, (size_t)len, tmp);
+    buffer[nread] = '\0';
+    fclose(tmp);
+    return buffer;
+}
 
 // Test that go-block enqueues task and result channel receives value
 // High-level test using eval_string
@@ -130,6 +195,33 @@ TEST(test_go_exception_closes_channel_without_value) {
     TEST_ASSERT_NIL(val);
 
     // Cleanup
+    RELEASE(chan);
+}
+
+TEST(test_run_next_task_logs_task_exception_to_stderr) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    CljTransientMap *chan = NULL;
+    TRY {
+        chan = eval_string("(go (/ 1 0))", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("Creating go-block with failing body should not throw");
+        return;
+    } END_TRY
+    TEST_ASSERT_NOT_NULL(chan);
+
+    ID ran_val = NULL;
+    char *stderr_output = capture_eval_stderr("(run-next-task)", &ran_val);
+    TEST_ASSERT_NOT_NULL_MESSAGE(stderr_output, "Failed to capture stderr for run-next-task");
+    TEST_ASSERT_NOT_NULL(ran_val);
+    TEST_ASSERT_TRUE(is_special((CljValue)ran_val));
+    TEST_ASSERT_TRUE(as_special((CljValue)ran_val) == SPECIAL_TRUE);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stderr_output, "[runloop] task exception"),
+                                 "run-next-task should log deferred task exceptions");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(stderr_output, "DivisionByZeroError"),
+                                 "run-next-task exception log should include exception type");
+
+    CLJ_FREE(stderr_output);
     RELEASE(chan);
 }
 

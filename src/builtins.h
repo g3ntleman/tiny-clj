@@ -47,6 +47,7 @@ ID native_repeat(ID *args, unsigned int argc);
 ID native_math_sqrt(ID *args, unsigned int argc);
 ID native_format(ID *args, unsigned int argc);
 ID native_eval(ID *args, unsigned int argc);
+ID native_bound_p(ID *args, unsigned int argc);
 ID native_read_string(ID *args, unsigned int argc);
 ID native_meta(ID *args, unsigned int argc);
 void builtin_set_eval_state(EvalState *st);

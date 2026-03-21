@@ -7,6 +7,7 @@
 #include "map.h"
 #include "memory.h"
 #include "platform.h"
+#include "symbol_cache.h"
 #include "symbol.h"
 #include "value.h"
 #ifdef ESP32_BUILD
@@ -23,9 +24,9 @@ static CljPersistentMap *g_gpio_watchers = NULL;
 static CljPersistentMap *g_gpio_pin_levels = NULL;
 static CljPersistentMap *g_gpio_analog_levels = NULL;
 static CljPersistentMap *g_gpio_pin_modes = NULL;
+static CljSymbol *KW_SIGNAL = NULL;
 static CljSymbol *KW_SOURCE = NULL;
 static CljSymbol *KW_KIND = NULL;
-static CljSymbol *KW_SIGNAL = NULL;
 static CljSymbol *KW_PIN = NULL;
 static CljSymbol *KW_VALUE = NULL;
 static CljSymbol *KW_GPIO = NULL;
@@ -37,6 +38,41 @@ static CljSymbol *KW_HELD_MS = NULL;
 static CljSymbol *KW_PRESSED_MS = NULL;
 static CljSymbol *KW_DELTA = NULL;
 static CljSymbol *KW_ACTIVE = NULL;
+static CljSymbol *KW_BUTTON_DOWN = NULL;
+static CljSymbol *KW_BUTTON_UP = NULL;
+static CljSymbol *KW_BUTTON_CLICK = NULL;
+static CljSymbol *KW_BUTTON_HOLD = NULL;
+static CljSymbol *KW_SENSOR_CHANGE = NULL;
+static CljSymbol *KW_SENSOR_THRESHOLD_CROSSED = NULL;
+static CljSymbol *KW_SENSOR_ACTIVE = NULL;
+static CljSymbol *KW_SENSOR_INACTIVE = NULL;
+static CljSymbol *KW_INPUT_RUNTIME = NULL;
+static CljSymbol *SYM_GPIO_INPUT_RUNTIME_TICK = NULL;
+static const SymbolCacheEntry g_gpio_runtime_symbol_cache[] = {
+    {&KW_SOURCE, ":source", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_KIND, ":kind", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_PIN, ":pin", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_VALUE, ":value", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_GPIO, ":gpio", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_EDGE, ":edge", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_BUTTON, ":button", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_SENSOR, ":sensor", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_ID, ":id", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_HELD_MS, ":held-ms", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_PRESSED_MS, ":pressed-ms", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_DELTA, ":delta", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_ACTIVE, ":active", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_BUTTON_DOWN, ":button/down", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_BUTTON_UP, ":button/up", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_BUTTON_CLICK, ":button/click", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_BUTTON_HOLD, ":button/hold", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_SENSOR_CHANGE, ":sensor/change", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_SENSOR_THRESHOLD_CROSSED, ":sensor/threshold-crossed", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_SENSOR_ACTIVE, ":sensor/active", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_SENSOR_INACTIVE, ":sensor/inactive", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&KW_INPUT_RUNTIME, ":gpio-input-runtime", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&SYM_GPIO_INPUT_RUNTIME_TICK, "tiny-clj.gpio/input-runtime-tick!", SYMBOL_CACHE_SCOPE_GLOBAL},
+};
 static int32_t g_next_watcher_id = 1;
 
 enum {
@@ -130,7 +166,7 @@ static inline void gpio_runtime_release_sensor_watch(GpioSensorWatch *watch) {
     ASSIGN(watch->callback, NULL);
     watch->active = false;
     watch->pin = -1;
-    watch->signal = NULL;
+    ASSIGN(watch->signal, NULL);
     watch->range_min = 0;
     watch->range_max = 0;
     watch->threshold = -1;
@@ -163,21 +199,10 @@ static inline void gpio_runtime_ensure_initialized(void) {
     g_gpio_pin_levels = make_map(8, STRONG);
     g_gpio_analog_levels = make_map(8, STRONG);
     g_gpio_pin_modes = make_map(8, STRONG);
-    KW_SOURCE = intern_symbol_global(":source");
-    KW_KIND = intern_symbol_global(":kind");
+    (void)symbol_cache_init_global(g_gpio_runtime_symbol_cache,
+                                   sizeof(g_gpio_runtime_symbol_cache) / sizeof(g_gpio_runtime_symbol_cache[0]));
     KW_SIGNAL = SYM_KW_SIGNAL;
-    KW_PIN = intern_symbol_global(":pin");
-    KW_VALUE = intern_symbol_global(":value");
-    KW_GPIO = intern_symbol_global(":gpio");
-    KW_EDGE = intern_symbol_global(":edge");
-    KW_BUTTON = intern_symbol_global(":button");
-    KW_SENSOR = intern_symbol_global(":sensor");
-    KW_ID = intern_symbol_global(":id");
-    KW_HELD_MS = intern_symbol_global(":held-ms");
-    KW_PRESSED_MS = intern_symbol_global(":pressed-ms");
-    KW_DELTA = intern_symbol_global(":delta");
-    KW_ACTIVE = intern_symbol_global(":active");
-    g_gpio_input_timer_key = intern_symbol_global(":gpio-input-runtime");
+    g_gpio_input_timer_key = KW_INPUT_RUNTIME;
 }
 
 #ifdef ESP32_BUILD
@@ -220,20 +245,9 @@ void gpio_runtime_reset_state(void) {
 #ifdef ESP32_BUILD
     gpio_esp32_runtime_reset_state();
 #endif
-    KW_SOURCE = NULL;
-    KW_KIND = NULL;
+    symbol_cache_clear(g_gpio_runtime_symbol_cache,
+                       sizeof(g_gpio_runtime_symbol_cache) / sizeof(g_gpio_runtime_symbol_cache[0]));
     KW_SIGNAL = NULL;
-    KW_PIN = NULL;
-    KW_VALUE = NULL;
-    KW_GPIO = NULL;
-    KW_EDGE = NULL;
-    KW_BUTTON = NULL;
-    KW_SENSOR = NULL;
-    KW_ID = NULL;
-    KW_HELD_MS = NULL;
-    KW_PRESSED_MS = NULL;
-    KW_DELTA = NULL;
-    KW_ACTIVE = NULL;
     g_gpio_input_timer_key = NULL;
     g_next_watcher_id = 1;
 }
@@ -565,11 +579,11 @@ static bool gpio_runtime_has_input_watchers(void) {
 static void gpio_runtime_input_timer_refresh(void) {
     gpio_runtime_ensure_initialized();
     if (!g_gpio_input_timer_key) {
-        g_gpio_input_timer_key = intern_symbol_global(":gpio-input-runtime");
+        g_gpio_input_timer_key = KW_INPUT_RUNTIME;
     }
     if (!g_gpio_input_timer_fn) {
         g_gpio_input_timer_fn = make_named_func(gpio_runtime_input_tick_native,
-                                                intern_symbol_global("tiny-clj.gpio/input-runtime-tick!"));
+                                                SYM_GPIO_INPUT_RUNTIME_TICK);
     }
     if (gpio_runtime_has_input_watchers()) {
         (void)timer_upsert_named(g_gpio_input_timer_key, g_gpio_input_timer_fn, 0, true, GPIO_INPUT_RUNTIME_TICK_MS);
@@ -678,12 +692,12 @@ static bool gpio_runtime_process_button_watch(GpioButtonWatch *watch, uint32_t n
             watch->pressed = true;
             watch->down_at_ms = now_ms;
             watch->hold_fired = false;
-            gpio_runtime_emit_button_event(watch, intern_symbol_global(":button/down"), -1, -1);
+            gpio_runtime_emit_button_event(watch, KW_BUTTON_DOWN, -1, -1);
         } else {
             int32_t pressed_ms = watch->pressed ? (int32_t)gpio_runtime_elapsed_ms(watch->down_at_ms, now_ms) : 0;
-            gpio_runtime_emit_button_event(watch, intern_symbol_global(":button/up"), pressed_ms, -1);
+            gpio_runtime_emit_button_event(watch, KW_BUTTON_UP, pressed_ms, -1);
             if (watch->pressed && !watch->hold_fired) {
-                gpio_runtime_emit_button_event(watch, intern_symbol_global(":button/click"), pressed_ms, -1);
+                gpio_runtime_emit_button_event(watch, KW_BUTTON_CLICK, pressed_ms, -1);
             }
             watch->pressed = false;
             watch->hold_fired = false;
@@ -693,10 +707,11 @@ static bool gpio_runtime_process_button_watch(GpioButtonWatch *watch, uint32_t n
         !watch->hold_fired &&
         gpio_runtime_elapsed_ms(watch->down_at_ms, now_ms) >= watch->hold_ms) {
         watch->hold_fired = true;
-        gpio_runtime_emit_button_event(watch,
-                                       intern_symbol_global(":button/hold"),
-                                       -1,
-                                       (int32_t)gpio_runtime_elapsed_ms(watch->down_at_ms, now_ms));
+        gpio_runtime_emit_button_event(
+            watch,
+            KW_BUTTON_HOLD,
+            -1,
+            (int32_t)gpio_runtime_elapsed_ms(watch->down_at_ms, now_ms));
     }
     return false;
 }
@@ -732,7 +747,7 @@ static bool gpio_runtime_process_sensor_watch(GpioSensorWatch *watch, uint32_t n
     watch->initialized = true;
 
     if (!watch->last_emitted_valid || value != watch->last_emitted_value) {
-        gpio_runtime_emit_sensor_event(watch, intern_symbol_global(":sensor/change"), value, delta, false, false);
+        gpio_runtime_emit_sensor_event(watch, KW_SENSOR_CHANGE, value, delta, false, false);
         watch->last_emitted_value = value;
         watch->last_emitted_valid = true;
     }
@@ -764,15 +779,15 @@ static bool gpio_runtime_process_sensor_watch(GpioSensorWatch *watch, uint32_t n
     watch->active_state = desired_active;
     watch->candidate_valid = false;
     gpio_runtime_emit_sensor_event(watch,
-                                   intern_symbol_global(":sensor/threshold-crossed"),
+                                   KW_SENSOR_THRESHOLD_CROSSED,
                                    value,
                                    delta,
                                    true,
                                    watch->active_state);
     gpio_runtime_emit_sensor_event(watch,
                                    watch->active_state
-                                       ? intern_symbol_global(":sensor/active")
-                                       : intern_symbol_global(":sensor/inactive"),
+                                       ? KW_SENSOR_ACTIVE
+                                       : KW_SENSOR_INACTIVE,
                                    value,
                                    delta,
                                    true,

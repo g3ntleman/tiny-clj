@@ -1,3 +1,31 @@
+---
+name: "Add watch implementation"
+overview: "Test-first implementation of Clojure-compatible add-watch/remove-watch for atoms, including registry, C hook integration in atom_reset!/swap!, and regression/performance checks for embedded targets."
+todos:
+  - id: test-infrastructure
+    content: Test-Infrastruktur für Atom-Watches anlegen und initiale Registry-Tests rot/grün durchlaufen lassen
+    status: completed
+  - id: add-watch
+    content: add-watch in clojure.core implementieren (Validierung, Rückgabewert, Doku) und Tests absichern
+    status: completed
+  - id: remove-watch
+    content: remove-watch implementieren und idempotentes Verhalten mit Tests absichern
+    status: completed
+  - id: notify-watchers-clj
+    content: notify-watchers in Clojure implementieren (Argumentvertrag, Fehlerisolation pro Watcher) und testen
+    status: in_progress
+  - id: atom-c-hook
+    content: C-Hook in atom_reset und atom_swap integrieren (old/new Übergabe, minimaler Overhead, Caching) und testen
+    status: pending
+  - id: full-validation
+    content: Vollständige Testläufe und Memory-Checks für atom_watch und Regressionen durchführen
+    status: pending
+  - id: cleanup
+    content: Sourcecode aufräumen – Debug-Code, temporäre Workarounds, tote Codepfade, überflüssige Kommentare und nicht mehr benötigte Hilfsfunktionen entfernen
+    status: pending
+isProject: false
+---
+
 # Add-Watch and Remove-Watch Implementation Plan
 
 ## Overview
@@ -119,15 +147,11 @@ TEST(test_watcher_registry_starts_empty) {
 }
 ```
 
-
-
 ### 1.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
-
-
 
 ### 1.3 Implement Registry
 
@@ -147,15 +171,11 @@ TEST(test_watcher_registry_starts_empty) {
   (swap! watcher-registry update atom (fnil f {})))
 ```
 
-
-
 ### 1.4 Run Tests (should pass)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
-
-
 
 ## Step 2: Add-Watch Function
 
@@ -227,15 +247,11 @@ TEST(test_add_watch_validates_function) {
 }
 ```
 
-
-
 ### 2.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
-
-
 
 ### 2.3 Implement add-watch
 
@@ -288,15 +304,11 @@ TEST(test_add_watch_validates_function) {
   atom)
 ```
 
-
-
 ### 2.4 Run Tests (should pass)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
-
-
 
 ## Step 3: Remove-Watch Function
 
@@ -360,15 +372,11 @@ TEST(test_remove_watch_cleans_up_empty) {
 }
 ```
 
-
-
 ### 3.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
-
-
 
 ### 3.3 Implement remove-watch
 
@@ -392,15 +400,11 @@ TEST(test_remove_watch_cleans_up_empty) {
   atom)
 ```
 
-
-
 ### 3.4 Run Tests (should pass)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
-
-
 
 ## Step 4: Notify Watchers (Clojure)
 
@@ -446,15 +450,11 @@ TEST(test_notify_watchers_calls_watcher) {
 }
 ```
 
-
-
 ### 4.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
-
-
 
 ### 4.3 Implement notify-watchers
 
@@ -482,15 +482,11 @@ Add:
             (println "Watcher error:" e)))))))
 ```
 
-
-
 ### 4.4 Run Tests (should pass)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
-
-
 
 ## Step 5: C Hook (Minimal)
 
@@ -538,15 +534,11 @@ TEST(test_atom_notify_watchers_calls_clojure) {
 }
 ```
 
-
-
 ### 5.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
-
-
 
 ### 5.3 Implement C Hook
 
@@ -593,15 +585,11 @@ void atom_notify_watchers(CljAtom *atom, ID old_value, ID new_value) {
 void atom_notify_watchers(CljAtom *atom, ID old_value, ID new_value);
 ```
 
-
-
 ### 5.4 Run Tests (should pass)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
-
-
 
 ## Step 6: Integration into atom_reset and atom_swap
 
@@ -708,15 +696,11 @@ TEST(test_watcher_exception_handled) {
 }
 ```
 
-
-
 ### 6.2 Run Tests (should fail)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/*
 ```
-
-
 
 ### 6.3 Integrate into atom_reset
 
@@ -737,15 +721,11 @@ ID atom_reset(CljAtom *atom, ID new_value) {
 }
 ```
 
-
-
 ### 6.4 Run Tests (should pass for reset!)
 
 ```bash
 ./scripts/run_unit_tests.sh --test atom_watch/test_reset_triggers_watchers
 ```
-
-
 
 ### 6.5 Integrate into atom_swap
 
@@ -771,15 +751,11 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
 }
 ```
 
-
-
 ### 6.6 Run All Tests
 
 ```bash
 ./scripts/run_unit_tests.sh
 ```
-
-
 
 ## Step 7: Final Verification and Cleanup
 
@@ -789,8 +765,6 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
 ./scripts/run_unit_tests.sh
 ```
 
-
-
 ### 7.2 Memory Profiling
 
 ```bash
@@ -798,18 +772,16 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
 ./build/unit-tests --test atom_watch/*
 ```
 
-
-
 ### 7.3 Code Review Checklist
 
-- [ ] DRY: No code duplication (helpers reused)
-- [ ] Embedded: Function caching implemented
-- [ ] Embedded: Simple maps used (not HashMaps for small lists)
-- [ ] Embedded: Minimal C code (~15 lines)
-- [ ] Tests: All tests pass
-- [ ] Tests: No memory leaks
-- [ ] Tests: No Autorelease-Pools used
-- [ ] Performance: Function resolution cached
+- DRY: No code duplication (helpers reused)
+- Embedded: Function caching implemented
+- Embedded: Simple maps used (not HashMaps for small lists)
+- Embedded: Minimal C code (~15 lines)
+- Tests: All tests pass
+- Tests: No memory leaks
+- Tests: No Autorelease-Pools used
+- Performance: Function resolution cached
 
 ## File Changes Summary
 
@@ -845,3 +817,4 @@ Key points:
 - **Watcher functions receive the atom as an argument** - they should NOT capture it in their closure
 - **If a watcher captures the atom**, the user MUST call `remove-watch` before releasing the atom
 - **Best practice**: Always use the `atom` parameter, never capture it
+

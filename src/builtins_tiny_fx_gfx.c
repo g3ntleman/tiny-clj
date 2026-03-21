@@ -1,10 +1,16 @@
 #include "builtins_tiny_fx_gfx.h"
 
+#include "exception.h"
+
+#ifndef TINYCLJ_WITH_TINY_FX
+#define TINYCLJ_WITH_TINY_FX 1
+#endif
+
+#if TINYCLJ_WITH_TINY_FX
 #include <stdint.h>
 #include <string.h>
 
 #include "eval.h"
-#include "exception.h"
 #include "map.h"
 #include "memory.h"
 #include "platform.h"
@@ -14,6 +20,59 @@
 #include "symbol.h"
 #include "tiny_fx_gfx.h"
 #include "vector.h"
+#endif
+
+#if !TINYCLJ_WITH_TINY_FX
+
+static ID tinyclj_runtime_fx_disabled(const char *fn_name) {
+    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                              "tiny-fx is disabled; %s is unavailable",
+                              fn_name ? fn_name : "renderer API");
+    return NULL;
+}
+
+void builtins_tiny_fx_gfx_reset_cached_state(void) {
+}
+
+#ifdef DEBUG
+ID native_tinyfx_gfx_bench_vector_scene_bench(ID *args, unsigned int argc) {
+    (void)args;
+    (void)argc;
+    return tinyclj_runtime_fx_disabled("tiny-clj.runtime/vector-scene-bench");
+}
+#endif
+
+ID native_tinyclj_runtime_start_renderer(ID *args, unsigned int argc) {
+    (void)args;
+    (void)argc;
+    return tinyclj_runtime_fx_disabled("tiny-clj.runtime/start-renderer!");
+}
+
+ID native_tinyclj_runtime_stop_renderer(ID *args, unsigned int argc) {
+    (void)args;
+    (void)argc;
+    return tinyclj_runtime_fx_disabled("tiny-clj.runtime/stop-renderer!");
+}
+
+ID native_tinyclj_runtime_renderer_state(ID *args, unsigned int argc) {
+    (void)args;
+    (void)argc;
+    return tinyclj_runtime_fx_disabled("tiny-clj.runtime/renderer-state");
+}
+
+ID native_tinyclj_runtime_renderer_timeline_step(ID *args, unsigned int argc) {
+    (void)args;
+    (void)argc;
+    return tinyclj_runtime_fx_disabled("tiny-clj.runtime/renderer-timeline-step");
+}
+
+ID native_tinyclj_runtime_renderer_timeline_progress(ID *args, unsigned int argc) {
+    (void)args;
+    (void)argc;
+    return tinyclj_runtime_fx_disabled("tiny-clj.runtime/renderer-timeline-progress");
+}
+
+#else
 
 #define TINYCLJ_SCENE_BENCH_WIDTH 320u
 #define TINYCLJ_SCENE_BENCH_HEIGHT 240u
@@ -23,6 +82,21 @@ typedef struct {
     ID id;
     uint8_t index;
 } TinycljRendererSlotBinding;
+
+typedef struct {
+    ID *slot;
+    const char *name;
+} TinycljKeywordCacheEntry;
+
+typedef struct {
+    ID *slot;
+    uint8_t index;
+} TinycljNamedRendererSlot;
+
+typedef struct {
+    ID *slot;
+    VgRenderedField field;
+} TinycljRenderedFieldKeyword;
 
 static TinycljRendererSlotBinding g_renderer_slot_bindings[VG_RENDERED_STATE_MAX_SLOTS];
 static uint8_t g_renderer_slot_binding_count = 0u;
@@ -83,76 +157,110 @@ static ID g_kw_period_ms = NULL;
 static ID g_kw_loop = NULL;
 static ID g_kw_permille = NULL;
 
-static bool tinyclj_runtime_intern_common_keywords(void) {
-    if (g_kw_id) {
-        return true;
+static TinycljKeywordCacheEntry g_runtime_keyword_cache[] = {
+    {&g_kw_id, ":id"},
+    {&g_kw_atom, ":atom"},
+    {&g_kw_deco, ":deco"},
+    {&g_kw_score, ":score"},
+    {&g_kw_game, ":game"},
+    {&g_kw_t, ":t"},
+    {&g_kw_style, ":style"},
+    {&g_kw_visible, ":visible"},
+    {&g_kw_children, ":children"},
+    {&g_kw_pts, ":pts"},
+    {&g_kw_closed, ":closed"},
+    {&g_kw_x, ":x"},
+    {&g_kw_y, ":y"},
+    {&g_kw_w, ":w"},
+    {&g_kw_h, ":h"},
+    {&g_kw_x1, ":x1"},
+    {&g_kw_y1, ":y1"},
+    {&g_kw_x2, ":x2"},
+    {&g_kw_y2, ":y2"},
+    {&g_kw_x3, ":x3"},
+    {&g_kw_y3, ":y3"},
+    {&g_kw_scale, ":scale"},
+    {&g_kw_rot, ":rot"},
+    {&g_kw_text, ":text"},
+    {&g_kw_platform, ":platform"},
+    {&g_kw_iterations, ":iterations"},
+    {&g_kw_warmup, ":warmup"},
+    {&g_kw_slot_count, ":slot-count"},
+    {&g_kw_deco_total_ms, ":deco-total-ms"},
+    {&g_kw_score_total_ms, ":score-total-ms"},
+    {&g_kw_game_total_ms, ":game-total-ms"},
+    {&g_kw_deco_us_per_frame, ":deco-us-per-frame"},
+    {&g_kw_score_us_per_frame, ":score-us-per-frame"},
+    {&g_kw_game_us_per_frame, ":game-us-per-frame"},
+    {&g_kw_total_ms, ":total-ms"},
+    {&g_kw_tx, ":tx"},
+    {&g_kw_ty, ":ty"},
+    {&g_kw_m00, ":m00"},
+    {&g_kw_m01, ":m01"},
+    {&g_kw_m02, ":m02"},
+    {&g_kw_m10, ":m10"},
+    {&g_kw_m11, ":m11"},
+    {&g_kw_m12, ":m12"},
+    {&g_kw_snapshot_gen, ":snapshot-gen"},
+    {&g_kw_ts_ms, ":ts-ms"},
+    {&g_kw_step, ":step"},
+    {&g_kw_count, ":count"},
+    {&g_kw_phase_ms, ":phase-ms"},
+    {&g_kw_period_ms, ":period-ms"},
+    {&g_kw_loop, ":loop"},
+    {&g_kw_permille, ":permille"},
+};
+
+static const TinycljNamedRendererSlot g_named_renderer_slots[] = {
+    {&g_kw_deco, 0u},
+    {&g_kw_score, 1u},
+    {&g_kw_game, 2u},
+};
+
+static const TinycljRenderedFieldKeyword g_rendered_field_keywords[] = {
+    {&g_kw_t, VG_RENDERED_FIELD_T},
+    {&g_kw_style, VG_RENDERED_FIELD_STYLE},
+    {&g_kw_visible, VG_RENDERED_FIELD_VISIBLE},
+    {&g_kw_children, VG_RENDERED_FIELD_CHILDREN},
+    {&g_kw_pts, VG_RENDERED_FIELD_PTS},
+    {&g_kw_closed, VG_RENDERED_FIELD_CLOSED},
+    {&g_kw_x, VG_RENDERED_FIELD_X},
+    {&g_kw_y, VG_RENDERED_FIELD_Y},
+    {&g_kw_w, VG_RENDERED_FIELD_W},
+    {&g_kw_h, VG_RENDERED_FIELD_H},
+    {&g_kw_x1, VG_RENDERED_FIELD_X1},
+    {&g_kw_y1, VG_RENDERED_FIELD_Y1},
+    {&g_kw_x2, VG_RENDERED_FIELD_X2},
+    {&g_kw_y2, VG_RENDERED_FIELD_Y2},
+    {&g_kw_x3, VG_RENDERED_FIELD_X3},
+    {&g_kw_y3, VG_RENDERED_FIELD_Y3},
+    {&g_kw_scale, VG_RENDERED_FIELD_SCALE},
+    {&g_kw_rot, VG_RENDERED_FIELD_ROT},
+    {&g_kw_text, VG_RENDERED_FIELD_TEXT},
+};
+
+static void tinyclj_runtime_reset_keyword_cache(void) {
+    size_t keyword_count = sizeof(g_runtime_keyword_cache) / sizeof(g_runtime_keyword_cache[0]);
+    for (size_t i = 0; i < keyword_count; i++) {
+        *g_runtime_keyword_cache[i].slot = NULL;
     }
+}
 
-    g_kw_id = intern_symbol_global(":id");
-    g_kw_atom = intern_symbol_global(":atom");
-    g_kw_deco = intern_symbol_global(":deco");
-    g_kw_score = intern_symbol_global(":score");
-    g_kw_game = intern_symbol_global(":game");
+static bool tinyclj_runtime_intern_common_keywords(void) {
+    size_t keyword_count = sizeof(g_runtime_keyword_cache) / sizeof(g_runtime_keyword_cache[0]);
 
-    g_kw_t = intern_symbol_global(":t");
-    g_kw_style = intern_symbol_global(":style");
-    g_kw_visible = intern_symbol_global(":visible");
-    g_kw_children = intern_symbol_global(":children");
-    g_kw_pts = intern_symbol_global(":pts");
-    g_kw_closed = intern_symbol_global(":closed");
-    g_kw_x = intern_symbol_global(":x");
-    g_kw_y = intern_symbol_global(":y");
-    g_kw_w = intern_symbol_global(":w");
-    g_kw_h = intern_symbol_global(":h");
-    g_kw_x1 = intern_symbol_global(":x1");
-    g_kw_y1 = intern_symbol_global(":y1");
-    g_kw_x2 = intern_symbol_global(":x2");
-    g_kw_y2 = intern_symbol_global(":y2");
-    g_kw_x3 = intern_symbol_global(":x3");
-    g_kw_y3 = intern_symbol_global(":y3");
-    g_kw_scale = intern_symbol_global(":scale");
-    g_kw_rot = intern_symbol_global(":rot");
-    g_kw_text = intern_symbol_global(":text");
-
-    g_kw_platform = intern_symbol_global(":platform");
-    g_kw_iterations = intern_symbol_global(":iterations");
-    g_kw_warmup = intern_symbol_global(":warmup");
-    g_kw_slot_count = intern_symbol_global(":slot-count");
-    g_kw_deco_total_ms = intern_symbol_global(":deco-total-ms");
-    g_kw_score_total_ms = intern_symbol_global(":score-total-ms");
-    g_kw_game_total_ms = intern_symbol_global(":game-total-ms");
-    g_kw_deco_us_per_frame = intern_symbol_global(":deco-us-per-frame");
-    g_kw_score_us_per_frame = intern_symbol_global(":score-us-per-frame");
-    g_kw_game_us_per_frame = intern_symbol_global(":game-us-per-frame");
-    g_kw_total_ms = intern_symbol_global(":total-ms");
-
-    g_kw_tx = intern_symbol_global(":tx");
-    g_kw_ty = intern_symbol_global(":ty");
-    g_kw_m00 = intern_symbol_global(":m00");
-    g_kw_m01 = intern_symbol_global(":m01");
-    g_kw_m02 = intern_symbol_global(":m02");
-    g_kw_m10 = intern_symbol_global(":m10");
-    g_kw_m11 = intern_symbol_global(":m11");
-    g_kw_m12 = intern_symbol_global(":m12");
-    g_kw_snapshot_gen = intern_symbol_global(":snapshot-gen");
-    g_kw_ts_ms = intern_symbol_global(":ts-ms");
-
-    g_kw_step = intern_symbol_global(":step");
-    g_kw_count = intern_symbol_global(":count");
-    g_kw_phase_ms = intern_symbol_global(":phase-ms");
-    g_kw_period_ms = intern_symbol_global(":period-ms");
-    g_kw_loop = intern_symbol_global(":loop");
-    g_kw_permille = intern_symbol_global(":permille");
-
-    return g_kw_id && g_kw_atom && g_kw_deco && g_kw_score && g_kw_game && g_kw_t && g_kw_style &&
-           g_kw_visible && g_kw_children && g_kw_pts && g_kw_closed && g_kw_x && g_kw_y && g_kw_w &&
-           g_kw_h && g_kw_x1 && g_kw_y1 && g_kw_x2 && g_kw_y2 && g_kw_x3 && g_kw_y3 && g_kw_scale &&
-           g_kw_rot && g_kw_text && g_kw_platform && g_kw_iterations && g_kw_warmup && g_kw_slot_count &&
-           g_kw_deco_total_ms && g_kw_score_total_ms && g_kw_game_total_ms && g_kw_deco_us_per_frame &&
-           g_kw_score_us_per_frame && g_kw_game_us_per_frame && g_kw_total_ms && g_kw_tx && g_kw_ty &&
-           g_kw_m00 && g_kw_m01 && g_kw_m02 && g_kw_m10 && g_kw_m11 && g_kw_m12 && g_kw_snapshot_gen &&
-           g_kw_ts_ms && g_kw_step && g_kw_count && g_kw_phase_ms && g_kw_period_ms && g_kw_loop &&
-           g_kw_permille;
+    for (size_t i = 0; i < keyword_count; i++) {
+        TinycljKeywordCacheEntry *entry = &g_runtime_keyword_cache[i];
+        if (*entry->slot) {
+            continue;
+        }
+        *entry->slot = intern_symbol_global(entry->name);
+        if (!*entry->slot) {
+            tinyclj_runtime_reset_keyword_cache();
+            return false;
+        }
+    }
+    return true;
 }
 
 static ID tinyclj_runtime_slot_desc_field(ID slot_desc, ID key) {
@@ -325,17 +433,12 @@ static bool tinyclj_runtime_parse_renderer_slot(ID slot_obj, uint8_t *out_slot) 
         }
     }
 
-    if (slot_obj == g_kw_deco) {
-        *out_slot = 0u;
-        return true;
-    }
-    if (slot_obj == g_kw_score) {
-        *out_slot = 1u;
-        return true;
-    }
-    if (slot_obj == g_kw_game) {
-        *out_slot = 2u;
-        return true;
+    size_t named_slot_count = sizeof(g_named_renderer_slots) / sizeof(g_named_renderer_slots[0]);
+    for (size_t i = 0; i < named_slot_count; i++) {
+        if (slot_obj == *g_named_renderer_slots[i].slot) {
+            *out_slot = g_named_renderer_slots[i].index;
+            return true;
+        }
     }
     return false;
 }
@@ -345,81 +448,12 @@ static bool tinyclj_runtime_parse_rendered_field(ID field_obj, VgRenderedField *
         return false;
     }
 
-    if (field_obj == g_kw_t) {
-        *out_field = VG_RENDERED_FIELD_T;
-        return true;
-    }
-    if (field_obj == g_kw_style) {
-        *out_field = VG_RENDERED_FIELD_STYLE;
-        return true;
-    }
-    if (field_obj == g_kw_visible) {
-        *out_field = VG_RENDERED_FIELD_VISIBLE;
-        return true;
-    }
-    if (field_obj == g_kw_children) {
-        *out_field = VG_RENDERED_FIELD_CHILDREN;
-        return true;
-    }
-    if (field_obj == g_kw_pts) {
-        *out_field = VG_RENDERED_FIELD_PTS;
-        return true;
-    }
-    if (field_obj == g_kw_closed) {
-        *out_field = VG_RENDERED_FIELD_CLOSED;
-        return true;
-    }
-    if (field_obj == g_kw_x) {
-        *out_field = VG_RENDERED_FIELD_X;
-        return true;
-    }
-    if (field_obj == g_kw_y) {
-        *out_field = VG_RENDERED_FIELD_Y;
-        return true;
-    }
-    if (field_obj == g_kw_w) {
-        *out_field = VG_RENDERED_FIELD_W;
-        return true;
-    }
-    if (field_obj == g_kw_h) {
-        *out_field = VG_RENDERED_FIELD_H;
-        return true;
-    }
-    if (field_obj == g_kw_x1) {
-        *out_field = VG_RENDERED_FIELD_X1;
-        return true;
-    }
-    if (field_obj == g_kw_y1) {
-        *out_field = VG_RENDERED_FIELD_Y1;
-        return true;
-    }
-    if (field_obj == g_kw_x2) {
-        *out_field = VG_RENDERED_FIELD_X2;
-        return true;
-    }
-    if (field_obj == g_kw_y2) {
-        *out_field = VG_RENDERED_FIELD_Y2;
-        return true;
-    }
-    if (field_obj == g_kw_x3) {
-        *out_field = VG_RENDERED_FIELD_X3;
-        return true;
-    }
-    if (field_obj == g_kw_y3) {
-        *out_field = VG_RENDERED_FIELD_Y3;
-        return true;
-    }
-    if (field_obj == g_kw_scale) {
-        *out_field = VG_RENDERED_FIELD_SCALE;
-        return true;
-    }
-    if (field_obj == g_kw_rot) {
-        *out_field = VG_RENDERED_FIELD_ROT;
-        return true;
-    }
-    if (field_obj == g_kw_text) {
-        *out_field = VG_RENDERED_FIELD_TEXT;
-        return true;
+    size_t field_count = sizeof(g_rendered_field_keywords) / sizeof(g_rendered_field_keywords[0]);
+    for (size_t i = 0; i < field_count; i++) {
+        if (field_obj == *g_rendered_field_keywords[i].slot) {
+            *out_field = g_rendered_field_keywords[i].field;
+            return true;
+        }
     }
     return false;
 }
@@ -432,62 +466,7 @@ static bool tinyclj_runtime_parse_rendered_field(ID field_obj, VgRenderedField *
  */
 void builtins_tiny_fx_gfx_reset_cached_state(void) {
     tinyclj_runtime_clear_slot_bindings();
-
-    g_kw_id = NULL;
-    g_kw_atom = NULL;
-    g_kw_deco = NULL;
-    g_kw_score = NULL;
-    g_kw_game = NULL;
-
-    g_kw_t = NULL;
-    g_kw_style = NULL;
-    g_kw_visible = NULL;
-    g_kw_children = NULL;
-    g_kw_pts = NULL;
-    g_kw_closed = NULL;
-    g_kw_x = NULL;
-    g_kw_y = NULL;
-    g_kw_w = NULL;
-    g_kw_h = NULL;
-    g_kw_x1 = NULL;
-    g_kw_y1 = NULL;
-    g_kw_x2 = NULL;
-    g_kw_y2 = NULL;
-    g_kw_x3 = NULL;
-    g_kw_y3 = NULL;
-    g_kw_scale = NULL;
-    g_kw_rot = NULL;
-    g_kw_text = NULL;
-
-    g_kw_platform = NULL;
-    g_kw_iterations = NULL;
-    g_kw_warmup = NULL;
-    g_kw_slot_count = NULL;
-    g_kw_deco_total_ms = NULL;
-    g_kw_score_total_ms = NULL;
-    g_kw_game_total_ms = NULL;
-    g_kw_deco_us_per_frame = NULL;
-    g_kw_score_us_per_frame = NULL;
-    g_kw_game_us_per_frame = NULL;
-    g_kw_total_ms = NULL;
-
-    g_kw_tx = NULL;
-    g_kw_ty = NULL;
-    g_kw_m00 = NULL;
-    g_kw_m01 = NULL;
-    g_kw_m02 = NULL;
-    g_kw_m10 = NULL;
-    g_kw_m11 = NULL;
-    g_kw_m12 = NULL;
-    g_kw_snapshot_gen = NULL;
-    g_kw_ts_ms = NULL;
-
-    g_kw_step = NULL;
-    g_kw_count = NULL;
-    g_kw_phase_ms = NULL;
-    g_kw_period_ms = NULL;
-    g_kw_loop = NULL;
-    g_kw_permille = NULL;
+    tinyclj_runtime_reset_keyword_cache();
 }
 
 #ifdef DEBUG
@@ -866,3 +845,5 @@ ID native_tinyclj_runtime_renderer_timeline_progress(ID *args, unsigned int argc
         g_kw_snapshot_gen, fixnum((int32_t)state.snapshot_generation),
         g_kw_ts_ms, fixnum((int32_t)state.frame_time_ms)));
 }
+
+#endif

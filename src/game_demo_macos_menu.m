@@ -228,6 +228,22 @@ void macos_viewer_restore_window_position(void) {
     }
 }
 
+void macos_viewer_activate_app_window(void) {
+    @autoreleasepool {
+        NSApplication *app = [NSApplication sharedApplication];
+        if ([app respondsToSelector:@selector(finishLaunching)]) {
+            [app finishLaunching];
+        }
+        [app unhide:nil];
+
+        NSWindow *window = macos_viewer_primary_window();
+        if (!window) {
+            return;
+        }
+        [window makeKeyAndOrderFront:nil];
+    }
+}
+
 void macos_viewer_register_window_callbacks(void) {
     @autoreleasepool {
         if (g_macos_viewer_window_callbacks_registered) {

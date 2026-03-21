@@ -22,7 +22,7 @@ TEST(test_gfx_svg_group_from_line) {
   TEST_ASSERT_TRUE(is_fixnum(y2));
   TEST_ASSERT_EQUAL_INT(40, as_fixnum(y2));
 
-  ID stroke_width = eval_string("(get (get (first (get gsvg :children)) :style) :stroke_width)", g_test_eval_state);
+  ID stroke_width = eval_string("(get (get (first (get gsvg :children)) :style) :stroke-width)", g_test_eval_state);
   TEST_ASSERT_TRUE(is_fixnum(stroke_width));
   TEST_ASSERT_EQUAL_INT(2, as_fixnum(stroke_width));
 }
@@ -65,7 +65,7 @@ TEST(test_gfx_svg_circle_maps_to_polygon_polyline) {
       "       (= [28 30] (nth pts 4)) "
       "       (= [20 38] (nth pts 8)) "
       "       (= [12 30] (nth pts 12)) "
-      "       (= true (:has_fill style))))",
+      "       (= true (:has-fill style))))",
       g_test_eval_state);
   TEST_ASSERT_TRUE(circle_ok && circle_ok != clj_false);
 }
@@ -75,6 +75,7 @@ TEST(test_gfx_svg_text_maps_to_vtext) {
       "(do "
       "  (require 'tiny-fx.svg) "
       "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
       "  (def gsvg_text (tiny-fx.svg/group-from-svg "
       "                  \"<svg><text x='12' y='34' fill='#00FF00' font-size='16'>TinyBoy</text></svg>\")) "
       "  true)",
@@ -88,8 +89,8 @@ TEST(test_gfx_svg_text_maps_to_vtext) {
       "       (= 12 (get node :x)) "
       "       (= 34 (get node :y)) "
       "       (= 2 (get node :scale)) "
-      "       (= (tiny-fx.gfx-scene/web-hex->color \"#00FF00\") "
-      "          (get style :stroke_color))))",
+      "       (= (tiny-fx.color/web-hex->color \"#00FF00\") "
+      "          (get style :stroke-color))))",
       g_test_eval_state);
   TEST_ASSERT_TRUE(text_ok && text_ok != clj_false);
 }
@@ -99,6 +100,7 @@ TEST(test_gfx_svg_text_decodes_entities_and_inline_style) {
       "(do "
       "  (require 'tiny-fx.svg) "
       "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
       "  (def gsvg_text_style (tiny-fx.svg/group-from-svg "
       "                        \"<svg><text x='5' y='9' style='fill:#FF00FF;font-size:8px'>A&amp;B &lt;3</text></svg>\")) "
       "  true)",
@@ -110,8 +112,8 @@ TEST(test_gfx_svg_text_decodes_entities_and_inline_style) {
       "      style (get node :style)] "
       "  (and (= \"A&B <3\" (get node :text)) "
       "       (= 1 (get node :scale)) "
-      "       (= (tiny-fx.gfx-scene/web-hex->color \"#FF00FF\") "
-      "          (get style :stroke_color))))",
+      "       (= (tiny-fx.color/web-hex->color \"#FF00FF\") "
+      "          (get style :stroke-color))))",
       g_test_eval_state);
   TEST_ASSERT_TRUE(text_ok && text_ok != clj_false);
 }

@@ -12,6 +12,7 @@
 #include "hashmap.h"
 #include "map.h"
 #include "record.h"
+#include "symbol_cache.h"
 #include "strings.h"
 #include "symbol.h"
 #include "thread_local.h"
@@ -38,6 +39,20 @@ typedef struct {
 } VgFlatSceneLookup;
 
 static THREAD_LOCAL CljHashMap *g_flat_scene_lookup_scratch = NULL;
+static CljSymbol *g_kw_timeline_ease = NULL;
+static CljSymbol *g_kw_timeline_easing = NULL;
+static const SymbolCacheEntry g_scene_symbol_cache[] = {
+    {&g_kw_timeline_ease, ":ease", SYMBOL_CACHE_SCOPE_GLOBAL},
+    {&g_kw_timeline_easing, ":easing", SYMBOL_CACHE_SCOPE_GLOBAL},
+};
+
+static inline void scene_ensure_timeline_keyword_cache(void) {
+    if (!g_kw_timeline_ease || !g_kw_timeline_easing) {
+        (void)symbol_cache_init_global(
+            g_scene_symbol_cache,
+            sizeof(g_scene_symbol_cache) / sizeof(g_scene_symbol_cache[0]));
+    }
+}
 
 static void vg_flat_scene_lookup_reset_borrowed(CljHashMap *index) {
     if (!index) {
@@ -330,10 +345,12 @@ static inline bool node_culled_rect(VgTransformFixed t, int16_t x, int16_t y,
                                     int16_t w, int16_t h, int sw,
                                     int fb_w, int fb_h, bool use_clip, VgClipRect clip) {
     int c[8];
+    int16_t x_max = (w > 0) ? (int16_t)(x + w - 1) : x;
+    int16_t y_max = (h > 0) ? (int16_t)(y + h - 1) : y;
     transform_point(t, x,     y,     &c[0], &c[1]);
-    transform_point(t, (int16_t)(x+w), y,     &c[2], &c[3]);
-    transform_point(t, (int16_t)(x+w), (int16_t)(y+h), &c[4], &c[5]);
-    transform_point(t, x,     (int16_t)(y+h), &c[6], &c[7]);
+    transform_point(t, x_max, y,     &c[2], &c[3]);
+    transform_point(t, x_max, y_max, &c[4], &c[5]);
+    transform_point(t, x,     y_max, &c[6], &c[7]);
     int mn_x = c[0], mx_x = c[0], mn_y = c[1], mx_y = c[1];
     for (int i = 2; i < 8; i += 2) {
         if (c[i]   < mn_x) mn_x = c[i];
@@ -787,9 +804,10 @@ static bool timeline_transform_keyframe_at(ID keyframes_obj,
 }
 
 static VgAnimEase timeline_ease_kind(ID timeline_obj) {
-    ID ease_obj = tiny_fx_gfx_get_field(timeline_obj, intern_symbol_global(":ease"), NULL);
+    scene_ensure_timeline_keyword_cache();
+    ID ease_obj = tiny_fx_gfx_get_field(timeline_obj, g_kw_timeline_ease, NULL);
     if (!ease_obj) {
-        ease_obj = tiny_fx_gfx_get_field(timeline_obj, intern_symbol_global(":easing"), NULL);
+        ease_obj = tiny_fx_gfx_get_field(timeline_obj, g_kw_timeline_easing, NULL);
     }
     if (!ease_obj) {
         return VG_ANIM_EASE_LINEAR;
@@ -1377,11 +1395,17 @@ static bool render_record_node(ID node_obj,
                                                                         out_has_animation),
                                              0);
         {
+            int16_t x_max = (temp.data.rect.w > 0)
+                                ? (int16_t)(temp.data.rect.x + temp.data.rect.w - 1)
+                                : temp.data.rect.x;
+            int16_t y_max = (temp.data.rect.h > 0)
+                                ? (int16_t)(temp.data.rect.y + temp.data.rect.h - 1)
+                                : temp.data.rect.y;
             VgPoint points[4] = {
                 {.x = temp.data.rect.x, .y = temp.data.rect.y},
-                {.x = (int16_t)(temp.data.rect.x + temp.data.rect.w), .y = temp.data.rect.y},
-                {.x = (int16_t)(temp.data.rect.x + temp.data.rect.w), .y = (int16_t)(temp.data.rect.y + temp.data.rect.h)},
-                {.x = temp.data.rect.x, .y = (int16_t)(temp.data.rect.y + temp.data.rect.h)},
+                {.x = x_max, .y = temp.data.rect.y},
+                {.x = x_max, .y = y_max},
+                {.x = temp.data.rect.x, .y = y_max},
             };
             if (!leaf_visible_after_aabb_capture(entity_id, world_t, points, 4u, style.visible)) {
                 return true;
@@ -1514,6 +1538,7 @@ static bool render_record_node(ID node_obj,
 }
 
 static bool resolve_root_node(ID root_field,
+                              ID index_field,
                               const VgFlatSceneLookup *lookup,
                               ID *out_root_node,
                               ID *out_entity_map) {
@@ -1529,6 +1554,16 @@ static bool resolve_root_node(ID root_field,
     if (!root_field) {
         return true;
     }
+    if (index_field) {
+        if (!is_map(index_field)) {
+            return false;
+        }
+        if (out_entity_map) {
+            *out_entity_map = index_field;
+        }
+        *out_root_node = root_field;
+        return true;
+    }
     if (!is_map(root_field)) {
         *out_root_node = root_field;
         return true;
@@ -1540,13 +1575,14 @@ static bool resolve_root_node(ID root_field,
     return *out_root_node != NULL;
 }
 
-static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_clip, ID *out_erase) {
+static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_index, ID *out_clip, ID *out_erase) {
     if (!scene_record || TAG(scene_record) != CLJ_RECORD) return false;
     const VgRecordSchema *sc = tiny_fx_gfx_schema();
     uint32_t h = record_type_hash(scene_record);
     if (h == sc->h_frame_scene) {
         FrameScene *fs = scene_record;
         *out_root = fs->root;
+        if (out_index) *out_index = fs->index;
         *out_clip = fs->clip_rect;
         if (out_erase) *out_erase = fs->erase_color;
         return true;
@@ -1554,6 +1590,7 @@ static bool decode_scene_fields(ID scene_record, ID *out_root, ID *out_clip, ID 
     if (h == sc->h_scene) {
         Scene *s = scene_record;
         *out_root = s->root;
+        if (out_index) *out_index = s->index;
         *out_clip = s->clip_rect;
         if (out_erase) *out_erase = s->erase_color;
         return true;
@@ -1567,9 +1604,10 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
     }
 
     ID root = NULL;
+    ID index = NULL;
     ID clip_source = NULL;
     ID erase_source = NULL;
-    if (!decode_scene_fields(scene_record, &root, &clip_source, &erase_source)) {
+    if (!decode_scene_fields(scene_record, &root, &index, &clip_source, &erase_source)) {
         return false;
     }
 
@@ -1584,7 +1622,7 @@ bool vg_render_scene_record_at_ms(ID scene_record, VgFrameBuffer *fb, uint32_t n
     if (is_map(resolved_root) && !vg_flat_scene_lookup_build(resolved_root, &lookup)) {
         return false;
     }
-    if (!resolve_root_node(resolved_root, &lookup, &root_node, &entity_map)) {
+    if (!resolve_root_node(resolved_root, index, &lookup, &root_node, &entity_map)) {
         return false;
     }
 
@@ -1622,8 +1660,9 @@ static bool render_scene_record_clipped_at_ms_internal(ID scene_record,
     }
 
     ID root = NULL;
+    ID index = NULL;
     ID clip_source = NULL;
-    if (!decode_scene_fields(scene_record, &root, &clip_source, NULL)) {
+    if (!decode_scene_fields(scene_record, &root, &index, &clip_source, NULL)) {
         return false;
     }
 
@@ -1644,7 +1683,7 @@ static bool render_scene_record_clipped_at_ms_internal(ID scene_record,
     if (is_map(resolved_root) && !vg_flat_scene_lookup_build(resolved_root, &lookup)) {
         return false;
     }
-    if (!resolve_root_node(resolved_root, &lookup, &root_node, &entity_map)) {
+    if (!resolve_root_node(resolved_root, index, &lookup, &root_node, &entity_map)) {
         return false;
     }
     if (!root_node) {

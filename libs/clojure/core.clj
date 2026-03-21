@@ -97,9 +97,9 @@
 ^#^{:doc "Returns true if x is odd, false otherwise."}
 (def odd? (fn [x] (= (mod x 2) 1)))
 ^#^{:doc "Returns the maximum of a and b."}
-(def max (fn [a b] (if (> a b) a b)))
+(defn max [a b] :native)
 ^#^{:doc "Returns the minimum of a and b."}
-(def min (fn [a b] (if (< a b) a b)))
+(defn min [a b] :native)
 
 ; ============================================================================
 ; Collection Functions
@@ -212,6 +212,12 @@
 ; ============================================================================
 ; Macros (sorted by dependencies on other macros)
 ; ============================================================================
+^#^{:doc "defs name to have the root value of the expr iff the named var has no root value, else does nothing"}
+(defmacro defonce [name expr]
+  (list 'if (list 'bound? (list 'quote name))
+    nil
+    (list 'def name expr)))
+
 ^#^{:doc "Like defn, but marks the resulting var as private to the current namespace."}
 (defmacro defn- [name & args]
   (list 'mark-private! (cons 'defn (cons name args))))
@@ -545,17 +551,7 @@
 (defn name [x] :native)
 
 ^#^{:doc "Defines a record type with compact field layout plus ->Type/map->Type constructors."}
-(defmacro defrecord [type-name fields]
-  (let [ctor (symbol (str "->" (name type-name)))
-        map-ctor (symbol (str "map->" (name type-name)))
-        m (symbol "m")
-        ctor-body (list 'record-create (list 'quote type-name) fields)
-        map-body (list 'record-from-map (list 'quote type-name) m)]
-    (list 'do
-          (list 'record-register (list 'quote type-name) (list 'quote fields))
-          (list 'def ctor (list 'fn ctor fields ctor-body))
-          (list 'def map-ctor (list 'fn map-ctor [m] map-body))
-          (list 'quote type-name))))
+;; defrecord is implemented as a native special form in C runtime.
 
 ; ============================================================================
 ; Sequence Functions (Native)
@@ -829,8 +825,7 @@
             init (keys m))))
 
 ^#^{:doc "Returns the absolute value of a."}
-(defn abs [x]
-  (if (< x 0) (- x) x))
+(defn abs [x] :native)
 
 ^#^{:doc "Remainder of dividing numerator by denominator."}
 (defn rem [num div]

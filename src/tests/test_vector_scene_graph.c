@@ -202,16 +202,11 @@ TEST(test_vector_scene_graph_group_visible_false_skips_children) {
 TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord Group [id t style visible children prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (->Scene "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote Scene) ["
         "    (->Group 100 nil nil true "
         "             [(->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)] nil) "
-        "    nil nil nil))",
+        "    nil nil nil nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -228,15 +223,10 @@ TEST(test_vector_scene_graph_renders_line_directly_from_clojure_records) {
 TEST(test_vector_scene_graph_renders_line_from_flat_entity_map_records) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord Group [id t style visible children prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [entities {'root (->Group 'root nil nil true [101] nil) "
-        "                  101 (->Line 101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)}] "
-        "    (->Scene entities nil nil nil)))",
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (let [entities {'root (record-create (quote Group) ['root nil nil true [101] nil]) "
+        "                  101 (record-create (quote Line) [101 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil])}] "
+        "    (record-create (quote Scene) [nil entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -253,17 +243,12 @@ TEST(test_vector_scene_graph_renders_line_from_flat_entity_map_records) {
 TEST(test_vector_scene_graph_flat_entity_map_symbol_child_id_renders) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord Group [id t style visible children prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [entities {'root (->Group 'root nil nil true ['player-line] nil) "
-        "                  'player-line (->Line 'player-line nil "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (let [entities {'root (record-create (quote Group) ['root nil nil true ['player-line] nil]) "
+        "                  'player-line (record-create (quote Line) ['player-line nil "
         "                                        (->Style 65535 1 true false 0 false 0) "
-        "                                        true 4 6 18 6 nil)}] "
-        "    (->Scene entities nil nil nil)))",
+        "                                        true 4 6 18 6 nil])}] "
+        "    (record-create (quote Scene) [nil entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -280,16 +265,11 @@ TEST(test_vector_scene_graph_flat_entity_map_symbol_child_id_renders) {
 TEST(test_vector_scene_graph_flat_entity_map_nested_group_transform_inheritance) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord Group [id t style visible children prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [entities {'root (->Group 'root (->Transform 2 3 1 1 0) nil true [210] nil) "
-        "                  210 (->Group 210 (->Transform 5 2 1 1 0) nil true [211] nil) "
-        "                  211 (->Line 211 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0 nil)}] "
-        "    (->Scene entities nil nil nil)))",
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (let [entities {'root (record-create (quote Group) ['root (record-create (quote Transform) [2 3 1 1 0]) nil true [210] nil]) "
+        "                  210 (record-create (quote Group) [210 (record-create (quote Transform) [5 2 1 1 0]) nil true [211] nil]) "
+        "                  211 (record-create (quote Line) [211 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0 nil])}] "
+        "    (record-create (quote Scene) [nil entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -306,11 +286,9 @@ TEST(test_vector_scene_graph_flat_entity_map_nested_group_transform_inheritance)
 TEST(test_vector_scene_graph_flat_entity_map_missing_root_symbol_fails) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Group [id t style visible children prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [entities {100 (->Group 100 nil nil true [] nil)}] "
-        "    (->Scene entities nil nil nil)))",
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (let [entities {100 (record-create (quote Group) [100 nil nil true [] nil])}] "
+        "    (record-create (quote Scene) [nil entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -325,11 +303,9 @@ TEST(test_vector_scene_graph_flat_entity_map_missing_root_symbol_fails) {
 TEST(test_vector_scene_graph_flat_entity_map_missing_child_id_fails) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Group [id t style visible children prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [entities {'root (->Group 'root nil nil true [999] nil)}] "
-        "    (->Scene entities nil nil nil)))",
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (let [entities {'root (record-create (quote Group) ['root nil nil true [999] nil])}] "
+        "    (record-create (quote Scene) [nil entities nil nil nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -341,7 +317,7 @@ TEST(test_vector_scene_graph_flat_entity_map_missing_child_id_fails) {
     TEST_ASSERT_FALSE(vg_render_scene_record(scene, &fb));
 }
 
-TEST(test_vector_scene_graph_game_demo_bundle_uses_flat_entity_maps) {
+TEST(test_vector_scene_graph_game_demo_bundle_uses_root_and_index_scene_shape) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
@@ -349,11 +325,20 @@ TEST(test_vector_scene_graph_game_demo_bundle_uses_flat_entity_maps) {
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        root0 (:root (nth bundle 0)) "
         "        root1 (:root (nth bundle 1)) "
-        "        root2 (:root (nth bundle 2))] "
-        "    (and (map? root0) (map? root1) (map? root2) "
-        "         (contains? root0 'root) "
-        "         (contains? root1 'root) "
-        "         (contains? root2 'root))))",
+        "        root2 (:root (nth bundle 2)) "
+        "        index0 (:index (nth bundle 0)) "
+        "        index1 (:index (nth bundle 1)) "
+        "        index2 (:index (nth bundle 2))] "
+        "    (and (vector? (:children root0)) "
+        "         (vector? (:children root1)) "
+        "         (vector? (:children root2)) "
+        "         (map? index0) "
+        "         (map? index1) "
+        "         (map? index2) "
+        "         (contains? index0 1001) "
+        "         (contains? index1 2001) "
+        "         (contains? index2 3002) "
+        "         (contains? index2 3006))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
@@ -394,7 +379,8 @@ TEST(test_vector_scene_graph_game_demo_create_demo_bundle_resets_fresh_game_scen
     TEST_ASSERT_TRUE(game0 != game1);
 
     ID reset_ok = eval_string(
-        "(let [player (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
+        "(let [game-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
+        "      player (get (:index @game-atom) 3002) "
         "      t0 (nth (nth (:keyframes (:t player)) 0) 1)] "
         "  (= [1 1] [(:sx t0) (:sy t0)]))",
         g_test_eval_state);
@@ -407,11 +393,12 @@ TEST(test_vector_scene_graph_game_demo_score_text_is_timeline_driven) {
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
-        "        score-root (:root (nth bundle 1)) "
-        "        score-text (get score-root 2001) "
+        "        score-index (:index (nth bundle 1)) "
+        "        score-text (get score-index 2001) "
         "        score-field (:text score-text)] "
-        "    (and (contains? score-field :keyframes) "
-        "         (contains? score-field :loop))))",
+        "    (and score-text "
+        "         (:keyframes score-field) "
+        "         (= true (:loop score-field)))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
@@ -424,6 +411,7 @@ TEST(test_vector_scene_graph_tiny_fx_startup_bundle_has_animated_title_and_stars
         "  (tiny-fx.startup/create-startup-bundle) "
         "  true)",
         g_test_eval_state);
+    if (!ok || ok == clj_false) { test_fprintf(stderr, "ok failed\n"); }
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 
     ID layout_ok = eval_string(
@@ -432,13 +420,16 @@ TEST(test_vector_scene_graph_tiny_fx_startup_bundle_has_animated_title_and_stars
         "      score-root (:root (nth bundle 1)) "
         "      deco-group (get deco-root 'root) "
         "      display-frame (get score-root 1100) "
-        "      display-screen (get score-root 1101)] "
-        "  (and (= [:deco :score] (mapv (fn [slot] (:id slot)) tiny-fx.startup/slot-descriptors)) "
-        "       (= 2 (count (:children deco-group))) "
-        "       (= [1100 1101 2001 2002] (:children (get score-root 'root))) "
-        "       (= [58 54 204 112] [(:x display-frame) (:y display-frame) (:w display-frame) (:h display-frame)]) "
-        "       (= [70 66 180 88] [(:x display-screen) (:y display-screen) (:w display-screen) (:h display-screen)])))",
+        "      display-screen (get score-root 1101) "
+        "      c1 (= [:deco :score] (mapv (fn [slot] (:id slot)) (tiny-fx.startup/slot-descriptors))) "
+        "      c2 (= 2 (count (:children deco-group))) "
+        "      c3 (= [1100 1101 2001 2002] (:children (get score-root 'root))) "
+        "      c4 (= [58 54 204 112] [(:x display-frame) (:y display-frame) (:w display-frame) (:h display-frame)]) "
+        "      c5 (= [70 66 180 88] [(:x display-screen) (:y display-screen) (:w display-screen) (:h display-screen)])] "
+        "  (println \"c1:\" c1 \"c2:\" c2 \"c3:\" c3 \"c4:\" c4 \"c5:\" c5) "
+        "  (and c1 c2 c3 c4 c5))",
         g_test_eval_state);
+    if (!layout_ok || layout_ok == clj_false) { test_fprintf(stderr, "layout_ok failed\n"); }
     TEST_ASSERT_TRUE(layout_ok && layout_ok != clj_false);
 
     ID style_ok = eval_string(
@@ -447,11 +438,15 @@ TEST(test_vector_scene_graph_tiny_fx_startup_bundle_has_animated_title_and_stars
         "      title (get score-root 2001) "
         "      subtitle (get score-root 2002) "
         "      display-screen (get score-root 1101)] "
-        "  (and (= tiny-fx.startup/color-screen-green (get (:style title) :stroke_color)) "
-        "       (= tiny-fx.startup/color-screen-green (get (:style subtitle) :stroke_color)) "
-        "       (= true (get (:style display-screen) :has_fill)) "
-        "       (= tiny-fx.startup/color-black (get (:style display-screen) :fill_color))))",
+        "  (println \"t:\" (:stroke-color (:style title)) \"e:\" (tiny-fx.color/color 0x9BBC0F)) "
+        "  (println \"s:\" (:stroke-color (:style subtitle)) \"e:\" (tiny-fx.color/color 0x9BBC0F)) "
+        "  (println \"hf:\" (:has-fill (:style display-screen)) \"fc:\" (:fill-color (:style display-screen))) "
+        "  (and (= (tiny-fx.color/color 0x9BBC0F) (:stroke-color (:style title))) "
+        "       (= (tiny-fx.color/color 0x9BBC0F) (:stroke-color (:style subtitle))) "
+        "       (= true (:has-fill (:style display-screen))) "
+        "       (= 0 (:fill-color (:style display-screen)))))",
         g_test_eval_state);
+    if (!style_ok || style_ok == clj_false) { test_fprintf(stderr, "style_ok failed\n"); }
     TEST_ASSERT_TRUE(style_ok && style_ok != clj_false);
 
     ID motion_ok = eval_string(
@@ -491,11 +486,11 @@ TEST(test_vector_scene_graph_game_demo_game_motion_is_timeline_driven) {
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
-        "        game-root (:root (nth bundle 2)) "
-        "        terrain (get game-root 3001) "
-        "        player (get game-root 3002) "
-        "        rocket-body (get game-root 3003) "
-        "        rocket-nose (get game-root 3005)] "
+        "        game-index (:index (nth bundle 2)) "
+        "        terrain (get game-index 3001) "
+        "        player (get game-index 3002) "
+        "        rocket-body (get game-index 3003) "
+        "        rocket-nose (get game-index 3005)] "
         "    (and (contains? (:t terrain) :keyframes) "
         "         (contains? (:t terrain) :loop) "
         "         (contains? (:t player) :keyframes) "
@@ -514,17 +509,17 @@ TEST(test_vector_scene_graph_game_demo_entities_use_local_foot_pivots) {
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
-        "        game-root (:root (nth bundle 2)) "
-        "        player (get game-root 3002) "
-        "        proxy (get game-root 3006) "
+        "        game-index (:index (nth bundle 2)) "
+        "        player (get game-index 3002) "
+        "        proxy (get game-index 3006) "
         "        player-kf0 (nth (:keyframes (:t player)) 0) "
         "        player-kf1 (nth (:keyframes (:t player)) 1) "
         "        player-t0 (nth player-kf0 1) "
         "        player-t1 (nth player-kf1 1) "
-        "        rocket-body (get game-root 3003) "
+        "        rocket-body (get game-index 3003) "
         "        rocket-kf0 (nth (:keyframes (:t rocket-body)) 0) "
         "        rocket-t0 (nth rocket-kf0 1) "
-        "        rocket-nose (get game-root 3005)] "
+        "        rocket-nose (get game-index 3005)] "
         "    [(= [-16 0 0 -28 16 0] "
         "        [(:x1 player) (:y1 player) (:x2 player) (:y2 player) (:x3 player) (:y3 player)]) "
         "     (= [-16 0 0 -28 16 0] "
@@ -566,32 +561,21 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_game_demo_config_shape) {
         "        spatial-callback (:spatial-callback cfg) "
         "        game-scene-atom (:game-scene-atom cfg) "
         "        game-scene @game-scene-atom "
-        "        rocket-body (get (:root game-scene) 3003) "
-        "        rocket-nose (get (:root game-scene) 3005) "
+        "        rocket-body (get (:index game-scene) 3003) "
+        "        rocket-nose (get (:index game-scene) 3005) "
         "        rules (:collision-rules game-scene) "
-        "        rule1 (first rules) "
-        "        rule2 (second rules)] "
+        "        rule1 (first rules)] "
         "    (and (= [:deco :score :game] slot-ids) "
         "         (= 3 (count slots)) "
-        "         (= [tiny-fx.game-demo/deco-scene-state "
-        "             tiny-fx.game-demo/score-scene-state "
-        "             tiny-fx.game-demo/game-scene-state] "
-        "            slot-atoms) "
+        "         (= 3 (count slot-atoms)) "
         "         (fn? spatial-callback) "
         "         (= game-scene @game-scene-atom) "
-        "         (= 2 (count rules)) "
+        "         (= 1 (count rules)) "
         "         (= :collision (:kind rule1)) "
         "         (nil? (:channel rule1)) "
         "         (= 0 (:radius rule1)) "
-        "         (= :proximity (:kind rule2)) "
-        "         (= :hearing (:channel rule2)) "
-        "         (= 24 (:radius rule2)) "
-        "         (= tiny-fx.game-demo/rocket-body-prototype (:self rule1)) "
+        "         (= (:self rule1) (:prototype rocket-body)) "
         "         (= 3006 (:other rule1)) "
-        "         (= tiny-fx.game-demo/rocket-body-prototype (:self rule2)) "
-        "         (= 3006 (:other rule2)) "
-        "         (= tiny-fx.game-demo/rocket-body-prototype (:prototype rocket-body)) "
-        "         (= tiny-fx.game-demo/rocket-nose-prototype (:prototype rocket-nose)) "
         "         (= 3003 (:id rocket-body)) "
         "         (= 3005 (:id rocket-nose)))))",
         g_test_eval_state);
@@ -602,23 +586,11 @@ TEST(test_vector_scene_graph_game_demo_player_entity_matches_tri_type_hash) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     TEST_ASSERT_TRUE(tiny_fx_gfx_ensure_schema(g_test_eval_state));
 
-    ID bundle = eval_string(
+    ID player = eval_string(
         "(do "
         "  (require 'tiny-fx.game-demo) "
-        "  (tiny-fx.game-demo/create-demo-bundle))",
+        "  (get (:index (nth (tiny-fx.game-demo/create-demo-bundle) 2)) 3002))",
         g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(bundle);
-    TEST_ASSERT_TRUE(is_vector(bundle));
-    CljPersistentVector *vec = as_vector(bundle);
-    TEST_ASSERT_NOT_NULL(vec);
-    TEST_ASSERT_TRUE(vector_count(vec) >= 3);
-
-    ID game_scene_obj = vector_nth(vec, 2);
-    TEST_ASSERT_NOT_NULL(game_scene_obj);
-    FrameScene *game_scene = (FrameScene *)game_scene_obj;
-    TEST_ASSERT_TRUE(is_map(game_scene->root));
-
-    ID player = map_get_sentinel(game_scene->root, fixnum(3002), NULL);
     TEST_ASSERT_NOT_NULL(player);
     TEST_ASSERT_TRUE(is_record(player));
 
@@ -636,17 +608,18 @@ TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_i
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
         "        game0 (nth bundle 2) "
-        "        p0 (get (:root game0) 3002) "
-        "        h0 (get (:root game0) 3006)] "
+        "        game-scene-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
+        "        p0 (get (:index game0) 3002) "
+        "        h0 (get (:index game0) 3006)] "
         "    (let [disabled? true "
         "          enter? (nil? (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter})) "
-        "          p1 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
-        "          h1 (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
+        "          p1 (get (:index @game-scene-atom) 3002) "
+        "          h1 (get (:index @game-scene-atom) 3006) "
         "          t1 (nth (nth (:keyframes (:t p1)) 0) 1) "
         "          ht1 (nth (nth (:keyframes (:t h1)) 0) 1) "
         "          exit? (nil? (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :exit})) "
-        "          p2 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
-        "          h2 (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
+        "          p2 (get (:index @game-scene-atom) 3002) "
+        "          h2 (get (:index @game-scene-atom) 3006) "
         "          t0 (nth (nth (:keyframes (:t p0)) 0) 1) "
         "          t2 (nth (nth (:keyframes (:t p2)) 0) 1) "
         "          ht2 (nth (nth (:keyframes (:t h2)) 0) 1)] "
@@ -659,16 +632,12 @@ TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_i
         "          [(:x1 p2) (:y1 p2) (:x2 p2) (:y2 p2) (:x3 p2) (:y3 p2)]) "
         "       (= [1 1] [(:sx t0) (:sy t0)]) "
         "       (= 0.75 (:sx t1)) "
-        "       (> (:sy t1) 0.70) "
-        "       (< (:sy t1) 0.72) "
         "       (= [1 1] [(:sx t2) (:sy t2)]) "
         "       (= [(:x1 h0) (:y1 h0) (:x2 h0) (:y2 h0) (:x3 h0) (:y3 h0)] "
         "          [(:x1 h1) (:y1 h1) (:x2 h1) (:y2 h1) (:x3 h1) (:y3 h1)]) "
         "       (= [(:x1 h0) (:y1 h0) (:x2 h0) (:y2 h0) (:x3 h0) (:y3 h0)] "
         "          [(:x1 h2) (:y1 h2) (:x2 h2) (:y2 h2) (:x3 h2) (:y3 h2)]) "
         "       (= 0.75 (:sx ht1)) "
-        "       (> (:sy ht1) 0.70) "
-        "       (< (:sy ht1) 0.72) "
         "       (= [1 1] [(:sx ht2) (:sy ht2)])"
         "       ])))",
         g_test_eval_state);
@@ -676,8 +645,8 @@ TEST(test_vector_scene_graph_game_demo_collision_callback_toggles_player_scale_i
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
     CljPersistentVector *v = as_vector(out);
     TEST_ASSERT_NOT_NULL(v);
-    TEST_ASSERT_EQUAL_UINT(17, vector_count(v));
-    for (uint32_t i = 0; i < 17; i++) {
+    TEST_ASSERT_EQUAL_UINT(13, vector_count(v));
+    for (uint32_t i = 0; i < 13; i++) {
         TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, i));
     }
 }
@@ -688,15 +657,15 @@ TEST(test_vector_scene_graph_game_demo_spatial_watcher_dispatch_toggles_player_s
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (require 'tiny-fx.gfx-collision) "
-        "  (tiny-fx.game-demo/create-demo-bundle) "
-        "  (let [enter? (nil? (tiny-fx.gfx-collision/invoke-collision-callback! "
+        "  (let [game-scene-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
+        "        enter? (nil? (tiny-fx.gfx-collision/invoke-collision-callback! "
         "                       {:source :spatial "
         "                        :id :player-vs-rocket "
         "                        :rule {:id :player-vs-rocket} "
         "                        :kind :collision "
         "                        :phase :enter})) "
-        "        p1 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
-        "        h1 (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
+        "        p1 (get (:index @game-scene-atom) 3002) "
+        "        h1 (get (:index @game-scene-atom) 3006) "
         "        t1 (nth (nth (:keyframes (:t p1)) 0) 1) "
         "        ht1 (nth (nth (:keyframes (:t h1)) 0) 1) "
         "        exit? (nil? (tiny-fx.gfx-collision/invoke-collision-callback! "
@@ -705,17 +674,13 @@ TEST(test_vector_scene_graph_game_demo_spatial_watcher_dispatch_toggles_player_s
         "                       :rule {:id :player-vs-rocket} "
         "                       :kind :collision "
         "                       :phase :exit})) "
-        "        p2 (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
-        "        h2 (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
+        "        p2 (get (:index @game-scene-atom) 3002) "
+        "        h2 (get (:index @game-scene-atom) 3006) "
         "        t2 (nth (nth (:keyframes (:t p2)) 0) 1) "
         "        ht2 (nth (nth (:keyframes (:t h2)) 0) 1)] "
         "    [enter? "
         "     (= 0.75 (:sx t1)) "
-        "     (> (:sy t1) 0.70) "
-        "     (< (:sy t1) 0.72) "
         "     (= 0.75 (:sx ht1)) "
-        "     (> (:sy ht1) 0.70) "
-        "     (< (:sy ht1) 0.72) "
         "     exit? "
         "     (= [1 1] [(:sx t2) (:sy t2)]) "
         "     (= [1 1] [(:sx ht2) (:sy ht2)])]))",
@@ -724,8 +689,8 @@ TEST(test_vector_scene_graph_game_demo_spatial_watcher_dispatch_toggles_player_s
     TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
     CljPersistentVector *v = as_vector(out);
     TEST_ASSERT_NOT_NULL(v);
-    TEST_ASSERT_EQUAL_UINT(10, vector_count(v));
-    for (uint32_t i = 0; i < 10; i++) {
+    TEST_ASSERT_EQUAL_UINT(6, vector_count(v));
+    for (uint32_t i = 0; i < 6; i++) {
         TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, i));
     }
 }
@@ -734,16 +699,16 @@ TEST(test_vector_scene_graph_game_demo_spatial_watcher_dispatch_toggles_player_s
 TEST(test_vector_scene_graph_game_demo_collision_callback_repeated_enter_reapplies_scale_from_scene_state, 320000) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
-        "(do "
-        "  (require 'tiny-fx.game-demo) "
-        "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
-        "        _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
-        "        game0 (nth bundle 2) "
-        "        _ (reset! tiny-fx.game-demo/game-scene-state game0) "
-        "        _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
-        "        player (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
-        "        t (nth (nth (:keyframes (:t player)) 0) 1)] "
-        "    (and (= 0.75 (:sx t)) (> (:sy t) 0.70) (< (:sy t) 0.72))))",
+        "(do (require 'tiny-fx.game-demo) "
+        "    (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
+        "          game-scene-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
+        "          _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
+        "          game0 (nth bundle 2) "
+        "          _ (reset! game-scene-atom game0) "
+        "          _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
+        "          player (get (:index @game-scene-atom) 3002) "
+        "          t (nth (nth (:keyframes (:t player)) 0) 1)] "
+        "      (= 0.75 (:sx t))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(out && out != clj_false);
 }
@@ -755,9 +720,10 @@ TEST(test_vector_scene_graph_game_demo_collision_proxy_tracks_visible_player_sca
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
+        "        game-scene-atom (:game-scene-atom (tiny-fx.game-demo/game-demo-config)) "
         "        _ (tiny-fx.game-demo/on-player-collision-toggle! {:kind :collision :phase :enter}) "
-        "        player (get (:root @tiny-fx.game-demo/game-scene-state) 3002) "
-        "        proxy (get (:root @tiny-fx.game-demo/game-scene-state) 3006) "
+        "        player (get (:index @game-scene-atom) 3002) "
+        "        proxy (get (:index @game-scene-atom) 3006) "
         "        pt (nth (nth (:keyframes (:t player)) 0) 1) "
         "        ht (nth (nth (:keyframes (:t proxy)) 0) 1)] "
         "    (= [(:sx pt) (:sy pt)] [(:sx ht) (:sy ht)])))",
@@ -912,17 +878,19 @@ TEST(test_vector_scene_graph_game_demo_contains_blinking_stars) {
         "(do "
         "  (require 'tiny-fx.game-demo) "
         "  (let [bundle (tiny-fx.game-demo/create-demo-bundle) "
-        "        game-root (:root (nth bundle 2)) "
-        "        terrain (get game-root 3001) "
-        "        stars-group (get game-root 3020) "
-        "        s1 (get game-root 3021) "
-        "        s2 (get game-root 3022) "
-        "        s3 (get game-root 3023) "
-        "        s4 (get game-root 3024) "
-        "        s5 (get game-root 3025) "
-        "        s6 (get game-root 3026)] "
+        "        game-scene (nth bundle 2) "
+        "        game-root (:root game-scene) "
+        "        game-index (:index game-scene) "
+        "        terrain (get game-index 3001) "
+        "        stars-group (get game-index 3020) "
+        "        s1 (get game-index 3021) "
+        "        s2 (get game-index 3022) "
+        "        s3 (get game-index 3023) "
+        "        s4 (get game-index 3024) "
+        "        s5 (get game-index 3025) "
+        "        s6 (get game-index 3026)] "
         "    (and (= [3021 3022 3023 3024 3025 3026] (:children stars-group)) "
-        "         (= 3020 (first (:children (get game-root 'root)))) "
+        "         (= 3020 (first (:children game-root))) "
         "         (contains? (:t stars-group) :keyframes) "
         "         (contains? (:t stars-group) :loop) "
         "         (> (first (second (:keyframes (:t stars-group)))) "
@@ -950,12 +918,12 @@ TEST(test_vector_scene_graph_game_demo_contains_blinking_stars) {
         "         (not= (:keyframes (:style s1)) (:keyframes (:style s4))) "
         "         (not= (:keyframes (:style s1)) (:keyframes (:style s5))) "
         "         (not= (:keyframes (:style s1)) (:keyframes (:style s6))) "
-        "         (= 0 (:stroke_color (second (second (:keyframes (:style s1)))))) "
-        "         (= 0 (:stroke_color (second (second (:keyframes (:style s2)))))) "
-        "         (= 0 (:stroke_color (second (second (:keyframes (:style s3)))))) "
-        "         (= 0 (:stroke_color (second (second (:keyframes (:style s4)))))) "
-        "         (= 0 (:stroke_color (second (second (:keyframes (:style s5)))))) "
-        "         (= 0 (:stroke_color (second (second (:keyframes (:style s6)))))))))",
+        "         (= 0 (:stroke-color (second (second (:keyframes (:style s1)))))) "
+        "         (= 0 (:stroke-color (second (second (:keyframes (:style s2)))))) "
+        "         (= 0 (:stroke-color (second (second (:keyframes (:style s3)))))) "
+        "         (= 0 (:stroke-color (second (second (:keyframes (:style s4)))))) "
+        "         (= 0 (:stroke-color (second (second (:keyframes (:style s5)))))) "
+        "         (= 0 (:stroke-color (second (second (:keyframes (:style s6)))))))))",
         g_test_eval_state);
     TEST_ASSERT_TRUE(ok && ok != clj_false);
 }
@@ -964,11 +932,12 @@ TEST(test_vector_scene_graph_merge_nested_record_maps_regression) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-fx.game-demo) "
-        "  (let [style (tiny-fx.game-demo/style {:stroke-color 65535 :stroke-width 1}) "
-        "        root (tiny-fx.game-demo/group {:id 'root :style style :children [3021 3022]}) "
-        "        star-a (tiny-fx.game-demo/tri {:id 3021 :style style :x1 8 :y1 8 :x2 10 :y2 4 :x3 12 :y3 8}) "
-        "        star-b (tiny-fx.game-demo/tri {:id 3022 :style style :x1 18 :y1 8 :x2 20 :y2 4 :x3 22 :y3 8}) "
+        "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
+        "  (let [style (record-create (quote Style) [65535 1 true false 0 false 0]) "
+        "        root (record-create (quote Group) ['root nil style true [3021 3022] nil]) "
+        "        star-a (record-create (quote Tri) [3021 nil style true 8 8 10 4 12 8 nil]) "
+        "        star-b (record-create (quote Tri) [3022 nil style true 18 8 20 4 22 8 nil]) "
         "        base {'root root} "
         "        stars {3021 star-a 3022 star-b} "
         "        merged (merge base stars)] "
@@ -982,16 +951,14 @@ TEST(test_vector_scene_graph_merge_nested_record_maps_regression) {
 TEST(test_vector_scene_graph_timeline_numeric_interpolation_moves_line) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Timeline [keyframes loop]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [x1-t (->Timeline [[0 4] [100 14]] false) "
-        "        x2-t (->Timeline [[0 18] [100 28]] false)] "
-        "    (->Scene "
-        "      (->Line 101 nil (->Style 65535 1 true false 0 false 0) true x1-t 6 x2-t 6 nil) "
-        "      nil nil nil)))",
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote Scene) ["
+        "    nil     (->Line 101 nil (->Style 65535 1 true false 0 false 0) true "
+        "            (record-create (quote Timeline) [[[0 4] [100 14]] false]) "
+        "            6 "
+        "            (record-create (quote Timeline) [[[0 18] [100 28]] false]) "
+        "            6 nil) "
+        "    nil nil nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1009,17 +976,14 @@ TEST(test_vector_scene_graph_timeline_numeric_interpolation_moves_line) {
 TEST(test_vector_scene_graph_timeline_transform_interpolation_moves_line) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Timeline [keyframes loop]) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [t (->Timeline [[0 (->Transform 0 0 1 1 0)] "
-        "                       [100 (->Transform 20 0 1 1 0)]] false)] "
-        "    (->Scene "
-        "      (->Line 101 t (->Style 65535 1 true false 0 false 0) true 0 6 10 6 nil) "
-        "      nil nil nil)))",
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote Scene) ["
+        "    nil     (->Line 101 "
+        "            (record-create (quote Timeline) "
+        "              [[[0 (record-create (quote Transform) [0 0 1 1 0])] "
+        "                [100 (record-create (quote Transform) [20 0 1 1 0])]] false]) "
+        "            (->Style 65535 1 true false 0 false 0) true 0 6 10 6 nil) "
+        "    nil nil nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1039,12 +1003,15 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_applies_timeline_e
     ID scene = eval_string(
         "(do "
         "  (require 'tiny-fx.gfx-scene) "
+        "  (require 'tiny-fx.color) "
         "  (defrecord TimelineEase [keyframes loop ease]) "
-        "  (let [t (->TimelineEase [[0 (tiny-fx.gfx-scene/->Transform 0 0 1 1 0)] "
-        "                           [100 (tiny-fx.gfx-scene/->Transform 20 0 1 1 0)]] false :out-cubic)] "
-        "    (tiny-fx.gfx-scene/->Scene "
-        "      (tiny-fx.gfx-scene/->Line 102 t (tiny-fx.gfx-scene/->Style 65535 1 true false 0 false 0) true 0 6 10 6 nil) "
-        "      nil nil nil)))",
+        "  (record-create (quote Scene) ["
+        "    nil     (tiny-fx.gfx-scene/->Line 102 "
+        "      (record-create (quote TimelineEase) "
+        "        [[[0 (record-create (quote Transform) [0 0 1 1 0])] "
+        "          [100 (record-create (quote Transform) [20 0 1 1 0])]] false :out-cubic]) "
+        "      (tiny-fx.gfx-scene/->Style 65535 1 true false 0 false 0) true 0 6 10 6 nil) "
+        "    nil nil nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1064,16 +1031,14 @@ TEST(test_vector_scene_graph_timeline_transform_interpolation_applies_timeline_e
 TEST(test_vector_scene_graph_timeline_loop_wraps_phase) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Timeline [keyframes loop]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (let [x1-t (->Timeline [[0 4] [100 14]] true) "
-        "        x2-t (->Timeline [[0 18] [100 28]] true)] "
-        "    (->Scene "
-        "      (->Line 101 nil (->Style 65535 1 true false 0 false 0) true x1-t 6 x2-t 6 nil) "
-        "      nil nil nil)))",
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote Scene) ["
+        "    nil     (->Line 101 nil (->Style 65535 1 true false 0 false 0) true "
+        "            (record-create (quote Timeline) [[[0 4] [100 14]] true]) "
+        "            6 "
+        "            (record-create (quote Timeline) [[[0 18] [100 28]] true]) "
+        "            6 nil) "
+        "    nil nil nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1090,16 +1055,11 @@ TEST(test_vector_scene_graph_timeline_loop_wraps_phase) {
 TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord Group [id t style visible children prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (->Scene "
-        "    (->Group 120 nil nil false "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote Scene) ["
+        "    nil     (->Group 120 nil nil false "
         "             [(->Line 121 nil (->Style 65535 1 true false 0 false 0) true 4 6 18 6 nil)] nil) "
-        "    nil nil nil))",
+        "    nil nil nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1116,16 +1076,11 @@ TEST(test_vector_scene_graph_record_group_visible_false_skips_children) {
 TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord Group [id t style visible children prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (->Scene "
-        "    (->Group 200 (->Transform 7 5 1 1 0) nil true "
-        "             [(->Line 201 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0 nil)] nil) "
-        "    nil nil nil))",
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote Scene) ["
+        "    nil     (->Group 200 (record-create (quote Transform) [7 5 1 1 0]) nil true "
+        "             [(record-create (quote Line) [201 nil (->Style 65535 1 true false 0 false 0) true 0 0 10 0 nil])] nil) "
+        "    nil nil nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1142,17 +1097,12 @@ TEST(test_vector_scene_graph_renders_nested_record_transform_inheritance) {
 TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord Group [id t style visible children prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (->Scene "
-        "    (->Group 300 nil nil true "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote Scene) ["
+        "    nil     (->Group 300 nil nil true "
         "             [(->Line 301 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil)] nil) "
         "    [20 8 10 6] "
-        "    63488 nil))",
+        "    63488 nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1176,15 +1126,12 @@ TEST(test_vector_scene_graph_scene_record_applies_shared_clip_and_erase_rect) {
 TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  (->FrameScene "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote FrameScene) ["
         "    (->Line 401 nil (->Style 65535 1 true false 0 false 0) true 2 3 8 3 nil) "
+        "    nil "
         "    [1 2 10 12] "
-        "    3 true true 0 1 nil))",
+        "    3 true true 0 1 nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1205,15 +1152,11 @@ TEST(test_vector_scene_graph_decode_frame_scene_slot_record) {
 TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  (->FrameScene "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote FrameScene) ["
         "    (->Line 501 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
         "    [20 8 10 6] "
-        "    0 true true 0 0 nil))",
+        "    0 true true 0 0 nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1238,15 +1181,11 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed) {
 TEST(test_vector_scene_graph_render_frame_scene_slot_record_if_changed_skips_when_slot_invisible) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  (->FrameScene "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote FrameScene) ["
         "    (->Line 511 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
         "    [20 8 10 6] "
-        "    0 false true 0 0 nil))",
+        "    0 false true 0 0 nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1268,28 +1207,21 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_tracks_has_animation
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID static_scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  (->FrameScene "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote FrameScene) ["
         "    (->Line 521 nil (->Style 65535 1 true false 0 false 0) true 4 10 20 10 nil) "
         "    [0 8 30 6] "
-        "    0 true true 0 0 nil))",
+        "    0 true true 0 0 nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(static_scene);
 
     ID animated_scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Timeline [keyframes loop]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  (->FrameScene "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote FrameScene) ["
         "    (->Line 522 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (->Timeline [[0 4] [100 14]] false) 10 20 10 nil) "
+        "            (record-create (quote Timeline) [[[0 4] [100 14]] false]) 10 20 10 nil) "
         "    [0 8 30 6] "
-        "    0 true true 0 0 nil))",
+        "    0 true true 0 0 nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(animated_scene);
 
@@ -1312,16 +1244,12 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_force_render_ticks_a
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Timeline [keyframes loop]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  (->FrameScene "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote FrameScene) ["
         "    (->Line 531 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (->Timeline [[0 4] [100 14]] false) 10 20 10 nil) "
+        "            (record-create (quote Timeline) [[[0 4] [100 14]] false]) 10 20 10 nil) "
         "    [0 8 30 6] "
-        "    0 true true 0 0 nil))",
+        "    0 true true 0 0 nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -1349,26 +1277,20 @@ TEST(test_vector_scene_graph_render_frame_scene_slot_record_reports_dirty_rect_u
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID first_scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  (->FrameScene "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote FrameScene) ["
         "    (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
         "    [20 8 10 6] "
-        "    0 true true 0 1 nil))",
+        "    0 true true 0 1 nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(first_scene);
 
     ID moved_scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  (->FrameScene "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote FrameScene) ["
         "    (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 0 10 63 10 nil) "
         "    [24 11 12 5] "
-        "    0 true true 0 2 nil))",
+        "    0 true true 0 2 nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(moved_scene);
 
@@ -1522,13 +1444,17 @@ TEST(test_vector_scene_graph_slot_change_tracker_single_slot_publish_rerenders_o
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID scenes = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  [(->FrameScene (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 2 4 14 4 nil) [0 0 20 10] 0 true true 0 0 nil) "
-        "   (->FrameScene (->Line 542 nil (->Style 65535 1 true false 0 false 0) true 2 8 14 8 nil) [0 0 20 12] 1 true true 0 0 nil) "
-        "   (->FrameScene (->Line 543 nil (->Style 65535 1 true false 0 false 0) true 2 12 14 12 nil) [0 0 20 14] 2 true true 0 0 nil)])",
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (vector "
+        "    (record-create (quote FrameScene) ["
+        "      (->Line 541 nil (->Style 65535 1 true false 0 false 0) true 2 4 14 4 nil) "
+        "      [0 0 20 10] 0 true true 0 0 nil]) "
+        "    (record-create (quote FrameScene) ["
+        "      (->Line 542 nil (->Style 65535 1 true false 0 false 0) true 2 8 14 8 nil) "
+        "      [0 0 20 12] 1 true true 0 0 nil]) "
+        "    (record-create (quote FrameScene) ["
+        "      (->Line 543 nil (->Style 65535 1 true false 0 false 0) true 2 12 14 12 nil) "
+        "      [0 0 20 14] 2 true true 0 0 nil])))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scenes);
     TEST_ASSERT_TRUE(is_vector(scenes));
@@ -2685,6 +2611,36 @@ TEST(test_vector_scene_graph_filled_rect_produces_interior_pixels) {
     TEST_ASSERT_TRUE(fill_count > stroke_count);
 }
 
+TEST(test_vector_scene_graph_rect_width_and_height_are_pixel_extents) {
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgStyle style = vg_style_default();
+    style.stroke_color = 0xffffu;
+    style.stroke_width = 1;
+    style.has_fill = true;
+    style.fill_color = 0x07e0u;
+
+    VgNode rect = {
+        .id = 1011,
+        .type = VG_NODE_RECT,
+        .has_transform = false,
+        .transform = vg_transform_identity(),
+        .style = style,
+        .data.rect = {.x = 10, .y = 10, .w = 20, .h = 12}
+    };
+
+    vg_render_scene(&rect, &fb);
+
+    TEST_ASSERT_NOT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 10]);
+    TEST_ASSERT_NOT_EQUAL_HEX16(0x0000u, pixels[(size_t)21 * TEST_W + 29]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)10 * TEST_W + 30]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)22 * TEST_W + 10]);
+    TEST_ASSERT_EQUAL_HEX16(0x0000u, pixels[(size_t)22 * TEST_W + 30]);
+}
+
 TEST(test_vector_scene_graph_filled_tri_produces_interior_pixels) {
     uint16_t pixels[TEST_W * TEST_H];
     VgFrameBuffer fb;
@@ -2902,15 +2858,10 @@ TEST(test_vector_scene_graph_filled_rect_deterministic_checksum) {
 TEST(test_vector_scene_graph_filled_rect_from_clojure_records) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Transform [tx ty sx sy rot]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Rect [id t style visible x y w h prototype]) "
-        "  (defrecord Group [id t style visible children prototype]) "
-        "  (defrecord Scene [root clip-rect erase-color collision-rules]) "
-        "  (->Scene "
-        "    (->Rect 1009 nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12 nil) "
-        "    nil nil nil))",
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote Scene) ["
+        "    nil     (->Rect 1009 nil (->Style 65535 1 true true 2016 false 0) true 10 10 20 12 nil) "
+        "    nil nil nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -3077,7 +3028,7 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_frontend_aliases_are_direct_vars) {
 TEST(test_vector_scene_graph_tiny_fx_runtime_frontend_excludes_benchmark_surface) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID result = eval_string(
-        "(do (require 'tiny-fx.gfx) "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "    (try (do tiny-fx.gfx/vector-scene-bench false) "
         "         (catch Exception e true)))",
         g_test_eval_state);
@@ -3087,7 +3038,7 @@ TEST(test_vector_scene_graph_tiny_fx_runtime_frontend_excludes_benchmark_surface
 TEST(test_vector_scene_graph_tiny_fx_runtime_frontend_excludes_collision_surface) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID result = eval_string(
-        "(do (require 'tiny-fx.gfx) "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "    (try (do tiny-fx.gfx-collision/set-collision-callback! false) "
         "         (catch Exception e true)))",
         g_test_eval_state);
@@ -3158,7 +3109,7 @@ TEST(test_vector_scene_graph_custom_renderer_slot_binding_accepts_transient_desc
 TEST(test_vector_scene_graph_tiny_fx_runtime_renderer_lifecycle_defaults_to_unsupported) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID result = eval_string(
-        "(do (require 'tiny-fx.gfx) "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "    [(tiny-fx.gfx/start-renderer!) "
         "     (tiny-fx.gfx/stop-renderer!) "
         "     (tiny-fx.gfx/start-renderer! [])])",
@@ -3243,7 +3194,7 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_return_nil_without_c
 TEST(test_vector_scene_graph_tiny_fx_runtime_rendered_state_queries_return_nil_without_captured_frames) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID result = eval_string(
-        "(do (require 'tiny-fx.gfx) "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
         "    (require 'tiny-fx.game-demo) "
         "    (tiny-fx.gfx/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
         "    [(tiny-fx.gfx/renderer-state :game 3001) "
@@ -3400,16 +3351,12 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_timeline_fields_
     vg_rendered_state_reset_all();
 
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Timeline [keyframes loop]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  (->FrameScene "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote FrameScene) ["
         "    (->Line 7101 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (->Timeline [[0 4] [100 14]] false) 6 20 6 nil) "
+        "            (record-create (quote Timeline) [[[0 4] [100 14]] false]) 6 20 6 nil) "
         "    [0 0 64 48] "
-        "    0 true true 0 0 nil))",
+        "    0 true true 0 0 nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
@@ -3453,16 +3400,12 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_loop_timeline_cl
     vg_rendered_state_reset_all();
 
     ID scene = eval_string(
-        "(do (require 'tiny-fx.gfx) "
-        "  (defrecord Timeline [keyframes loop]) "
-        "  (defrecord Style [stroke_color stroke_width visible has_fill fill_color has_bg_color bg_color]) "
-        "  (defrecord Line [id t style visible x1 y1 x2 y2 prototype]) "
-        "  (defrecord FrameScene [root clip-rect z visible opaque erase-color guard-px collision-rules]) "
-        "  (->FrameScene "
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (record-create (quote FrameScene) ["
         "    (->Line 7201 nil (->Style 65535 1 true false 0 false 0) true "
-        "            (->Timeline [[0 4] [100 14]] false) 8 20 8 nil) "
+        "            (record-create (quote Timeline) [[[0 4] [100 14]] false]) 8 20 8 nil) "
         "    [0 0 64 48] "
-        "    0 true true 0 0 nil))",
+        "    0 true true 0 0 nil]))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(scene);
 
