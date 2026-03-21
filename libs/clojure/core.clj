@@ -218,7 +218,7 @@
     nil
     (list 'def name expr)))
 
-^#^{:doc "Declares vars for forward references. Compatibility no-op in tiny-clj for now."}
+^#^{:doc "Declares vars for forward references. Compatibility no-op in tiny-clj for now; code relying on this behavior is not unchanged-compatible with Clojure/JVM declare semantics."}
 (defmacro declare [& names]
   nil)
 
