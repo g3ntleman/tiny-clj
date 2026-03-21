@@ -59,6 +59,30 @@ TEST(test_macro_nested_expansion) {
     TEST_ASSERT_EQUAL_INT(7, as_fixnum((CljValue)result));  // 5 + 1 + 1 = 7
 }
 
+TEST(test_macro_declare_is_accepted_as_noop) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    CljObject *result = eval_string("(do (declare future-name another-name) 7)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
+    TEST_ASSERT_EQUAL_INT(7, as_fixnum((CljValue)result));
+}
+
+TEST(test_macro_declare_allows_forward_reference_compatibility) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    CljObject *result = eval_string(
+        "(do "
+        "  (declare later) "
+        "  (defn earlier [] (later)) "
+        "  (defn later [] 42) "
+        "  (earlier))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_FIXNUM, TAG(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+}
+
 TEST(test_macro_expansion_seq_result_is_fully_canonicalized) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
@@ -694,4 +718,3 @@ TEST(test_defonce) {
     TEST_ASSERT_NOT_NULL(val2);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val2));
 }
-

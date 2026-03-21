@@ -218,6 +218,10 @@
     nil
     (list 'def name expr)))
 
+^#^{:doc "Declares vars for forward references. Compatibility no-op in tiny-clj for now."}
+(defmacro declare [& names]
+  nil)
+
 ^#^{:doc "Like defn, but marks the resulting var as private to the current namespace."}
 (defmacro defn- [name & args]
   (list 'mark-private! (cons 'defn (cons name args))))
