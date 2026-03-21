@@ -383,6 +383,38 @@ TEST(test_special_form_when) {
     // result1-10 and regression test results are automatically managed by eval_string
 }
 
+TEST(test_macro_when_not) {
+    // (when-not false expr) => expr
+    ID result1 = eval_string("(when-not false 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(is_fixnum(result1));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result1));
+
+    // (when-not true expr) => nil
+    ID result2 = eval_string("(when-not true 42)", g_test_eval_state);
+    TEST_ASSERT_NIL(result2);
+
+    // (when-not nil expr) => expr
+    ID result3 = eval_string("(when-not nil 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_TRUE(is_fixnum(result3));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result3));
+
+    // (when-not false expr1 expr2) => expr2
+    ID result4 = eval_string("(when-not false 1 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result4);
+    TEST_ASSERT_TRUE(is_fixnum(result4));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result4));
+
+    // (when-not true) => nil
+    ID result5 = eval_string("(when-not true)", g_test_eval_state);
+    TEST_ASSERT_NIL(result5);
+
+    // (when-not true ...) must not evaluate the body
+    ID result6 = eval_string("(when-not true (throw (Exception. \"should not be evaluated\")))", g_test_eval_state);
+    TEST_ASSERT_NIL(result6);
+}
+
 // ============================================================================
 // REGRESSION TEST: nil in if statements within functions
 // ============================================================================

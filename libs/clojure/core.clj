@@ -59,6 +59,10 @@
 ^#^{:doc "Returns the logical complement of x. Returns true if x is false or nil, false otherwise."}
 (defn not [x] :native)
 
+^#^{:doc "Evaluates body when test is logically false; returns nil when test is truthy."}
+(defmacro when-not [test & body]
+  (list 'if test nil (cons 'do body)))
+
 ^#^{:doc "Internal helper. Creates a LazySeq from a 0-arity thunk."}
 (defn lazy-seq* [f] :native)
 
