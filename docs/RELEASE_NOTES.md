@@ -150,7 +150,7 @@
 
 ### Code Refactoring & Architecture Improvements (Latest)
 - **Object.c Refactoring**: Auslagerung von Funktionen aus object.c in thematische Dateien
-  - String-Formatierung (to_cstring, pr_str, print_str) nach strings.c
+  - String-Formatierung (to_cstring, make_string_description, print_str) nach strings.c
   - Exception-Erstellung (make_exception) nach exception.c
   - Object-Erstellung: make_list nach list.c, make_function nach function.c
   - Environment-Funktionen nach environment.c

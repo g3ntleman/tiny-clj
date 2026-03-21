@@ -23,16 +23,71 @@
                                             :self self-id
                                             :other other-id})))
 
-(defn- expand-breakout-spatial-rules
-  [brick-ids]
-  (loop [remaining brick-ids
-         rules (conj! (transient [])
-                      (concrete-spatial-rule :ball-vs-paddle 1003 1002))]
+(defn- paddle-rule
+  []
+  (concrete-spatial-rule :ball-vs-paddle 1003 1002))
+
+(defn- paddle-rule?
+  [rule]
+  (and (= :ball-vs-paddle (:id rule))
+       (= 1003 (:self rule))
+       (= 1002 (:other rule))))
+
+(defn- brick-rule-target-id
+  [rule]
+  (if (and (= :ball-vs-brick (:id rule))
+           (= 1003 (:self rule))
+           (number? (:other rule)))
+    (:other rule)
+    nil))
+
+(defn- rule-targets
+  [rules]
+  (loop [remaining rules
+         known {}]
     (if (empty? remaining)
-      (persistent! rules)
+      known
+      (let [rule (first remaining)
+            brick-id (brick-rule-target-id rule)]
+        (recur (rest remaining)
+               (if brick-id
+                 (assoc known brick-id true)
+                 known))))))
+
+(defn- visible-brick-ids
+  [state]
+  (loop [remaining (visible-bricks state)
+         ids []]
+    (if (empty? remaining)
+      ids
       (recur (rest remaining)
-             (conj! rules
-                    (concrete-spatial-rule :ball-vs-brick 1003 (first remaining)))))))
+             (conj ids (:id (first remaining)))))))
+
+(defn with-expanded-collision-rules
+  "Ensures breakout state carries an append-only concrete rule vector.
+
+  Existing brick rules stay in place so removed bricks become inert via the
+  scene index instead of forcing eager recompaction."
+  [state]
+  (let [brick-ids (visible-brick-ids state)
+        existing-rules (let [rules (:collision-rules state)]
+                         (if (vector? rules) rules []))
+        base-rules (if (some paddle-rule? existing-rules)
+                     existing-rules
+                     (into [(paddle-rule)] existing-rules))
+        known-targets (rule-targets base-rules)]
+    (loop [remaining brick-ids
+           known known-targets
+           rules (transient base-rules)]
+      (if (empty? remaining)
+        (assoc state :collision-rules (persistent! rules))
+        (let [brick-id (first remaining)]
+          (if (get known brick-id)
+            (recur (rest remaining) known rules)
+            (recur (rest remaining)
+                   (assoc known brick-id true)
+                   (conj! rules
+                          (concrete-spatial-rule :ball-vs-brick 1003 brick-id)))))))))
 
 (defn- overlay-text
   [phase]
@@ -57,7 +112,7 @@
           prototype))
 
 (defn- maybe-field-timeline
-  [motion from-value axis-key]
+  [motion from-value axis-key end-event?]
   (if (and (map? motion)
            (number? (:start-ms motion))
            (number? (:end-ms motion))
@@ -67,7 +122,8 @@
                       from-value]
                      [(let [v (:end-ms motion)] (if (number? v) v 0))
                       (get motion axis-key)]]
-                    false])
+                    false
+                    end-event?])
     from-value))
 
 (defn- attached-ball-motion
@@ -83,6 +139,7 @@
                         ball-x]
                        [(let [v (:end-ms motion)] (if (number? v) v 0))
                         (+ ball-x (- (get motion :to-x) paddle-x))]]
+                      false
                       false])
       nil)))
 
@@ -109,17 +166,18 @@
 (defn build-scene
   "Builds one deterministic frame-scene shaped map from breakout state map."
   [state]
-  (let [paddle-x (let [v (get state :paddle-x)] (if (number? v) v 0))
+  (let [state (with-expanded-collision-rules state)
+        paddle-x (let [v (get state :paddle-x)] (if (number? v) v 0))
         ball-x (let [v (get state :ball-x)] (if (number? v) v 0))
         ball-y (let [v (get state :ball-y)] (if (number? v) v 0))
         paddle-motion (get state :paddle-motion)
         ball-segment (get state :ball-segment)
-        paddle-x-field (maybe-field-timeline paddle-motion paddle-x :to-x)
+        paddle-x-field (maybe-field-timeline paddle-motion paddle-x :to-x false)
         attached-ball-x-field (attached-ball-motion state)
         ball-x-field (if (nil? attached-ball-x-field)
-                       (maybe-field-timeline ball-segment ball-x :to-x)
+                       (maybe-field-timeline ball-segment ball-x :to-x true)
                        attached-ball-x-field)
-        ball-y-field (maybe-field-timeline ball-segment ball-y :to-y)
+        ball-y-field (maybe-field-timeline ball-segment ball-y :to-y true)
         score (let [v (get state :score)] (if (number? v) v 0))
         lives (let [v (get state :lives)] (if (number? v) v 0))
         phase (or (get state :phase) :title)
@@ -151,7 +209,7 @@
              :opaque true
              :erase-color 0
              :guard-px 1
-             :collision-rules (expand-breakout-spatial-rules (drop 7 child-ids))})
+             :collision-rules (:collision-rules state)})
           (let [brick (first remaining)
                 brick-id (:id brick)]
             (recur (rest remaining)

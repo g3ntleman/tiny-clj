@@ -401,7 +401,7 @@ ID eval_special_throw(CljPersistentVector *args, CljPersistentMap *env, EvalStat
   const char *msg = "nil";
   if (thrown) {
     msg = "throw";
-    CljString *s = pr_str(thrown);
+    CljString *s = make_string_description(thrown);
     if (s) {
       msg = string_data(s);
     }

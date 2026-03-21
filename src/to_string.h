@@ -27,7 +27,7 @@ CljString* to_string_with_escape(ID v, bool escape_strings);
  * @param v Value to convert
  * @return CljString with the readable representation (caller must release)
  */
-CljString* pr_str(ID v);
+CljString* make_string_description(ID v);
 
 /**
  * @brief Convert a value to print string representation (like Clojure's print-str)

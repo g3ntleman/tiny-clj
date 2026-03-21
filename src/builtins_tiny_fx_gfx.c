@@ -155,6 +155,8 @@ static ID g_kw_count = NULL;
 static ID g_kw_phase_ms = NULL;
 static ID g_kw_period_ms = NULL;
 static ID g_kw_loop = NULL;
+static ID g_kw_end_event = NULL;
+static ID g_kw_at_end = NULL;
 static ID g_kw_permille = NULL;
 
 static TinycljKeywordCacheEntry g_runtime_keyword_cache[] = {
@@ -208,6 +210,8 @@ static TinycljKeywordCacheEntry g_runtime_keyword_cache[] = {
     {&g_kw_phase_ms, ":phase-ms"},
     {&g_kw_period_ms, ":period-ms"},
     {&g_kw_loop, ":loop"},
+    {&g_kw_end_event, ":end-event"},
+    {&g_kw_at_end, ":at-end"},
     {&g_kw_permille, ":permille"},
 };
 
@@ -835,12 +839,14 @@ ID native_tinyclj_runtime_renderer_timeline_progress(ID *args, unsigned int argc
     }
 
     return AUTORELEASE(make_map_from_kv(
-        8,
+        10,
         g_kw_step, fixnum((int32_t)state.sample.step_index),
         g_kw_count, fixnum((int32_t)state.sample.keyframe_count),
         g_kw_phase_ms, fixnum((int32_t)phase),
         g_kw_period_ms, fixnum((int32_t)period),
         g_kw_loop, state.sample.loop ? clj_true : clj_false,
+        g_kw_end_event, state.sample.end_event ? clj_true : clj_false,
+        g_kw_at_end, state.sample.at_end ? clj_true : clj_false,
         g_kw_permille, fixnum((int32_t)permille),
         g_kw_snapshot_gen, fixnum((int32_t)state.snapshot_generation),
         g_kw_ts_ms, fixnum((int32_t)state.frame_time_ms)));

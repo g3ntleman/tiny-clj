@@ -1,7 +1,7 @@
 #include "tests_common.h"
 #include "../tiny_clj.h"
 
-TEST_SHARED_1(test_assets_edn_loader_contract) {
+TEST(test_assets_edn_loader_contract) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Setup fake EDN files
@@ -45,7 +45,7 @@ TEST_SHARED_1(test_assets_edn_loader_contract) {
 
 // Diese Tests stellen sicher, dass das Laden der Namespaces nicht zu viel Speicher verbraucht.
 
-TEST_SHARED_1(test_require_heap_startup) {
+TEST(test_require_heap_startup) {
     // Heap-Messung für tiny-fx.startup
     ID result = eval_string("(:total (heap (require 'tiny-fx.startup)))", g_test_eval_state);
     
@@ -59,7 +59,7 @@ TEST_SHARED_1(test_require_heap_startup) {
     TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(95000, total_bytes, "tiny-fx.startup require exceeded heap budget");
 }
 
-TEST_SHARED_1(test_require_heap_game_demo) {
+TEST(test_require_heap_game_demo) {
     // Heap-Messung für tiny-fx.game-demo
     ID result = eval_string("(:total (heap (require 'tiny-fx.game-demo)))", g_test_eval_state);
     
@@ -73,7 +73,7 @@ TEST_SHARED_1(test_require_heap_game_demo) {
     TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(190000, total_bytes, "tiny-fx.game-demo require exceeded heap budget");
 }
 
-TEST_SHARED_1(test_require_heap_sound_demos) {
+TEST(test_require_heap_sound_demos) {
     // Heap-Messung für tiny-fx.sound-demos
     ID result = eval_string("(:total (heap (require 'tiny-fx.sound-demos)))", g_test_eval_state);
     
@@ -86,7 +86,7 @@ TEST_SHARED_1(test_require_heap_sound_demos) {
     TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(32768, total_bytes, "tiny-fx.sound-demos require exceeded heap budget");
 }
 
-TEST_SHARED_1(test_require_sound_demos_does_not_autoload_sound_namespace) {
+TEST(test_require_sound_demos_does_not_autoload_sound_namespace) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     (void)eval_string("(require 'tiny-fx.sound-demos)", g_test_eval_state);
@@ -102,7 +102,7 @@ TEST_SHARED_1(test_require_sound_demos_does_not_autoload_sound_namespace) {
                                  "play-demo! should load tiny-fx.sound on demand");
 }
 
-TEST_SHARED_1(test_assets_edn_sound_demos_loader_contract) {
+TEST(test_assets_edn_sound_demos_loader_contract) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // 1. Pro Song wird genau ein Asset geladen (hier exemplarisch für minuet-in-g)
@@ -128,7 +128,7 @@ TEST_SHARED_1(test_assets_edn_sound_demos_loader_contract) {
     TEST_ASSERT_TRUE_MESSAGE(check_keys && check_keys != clj_false, "minuet-in-g missing required keys");
 }
 
-TEST_SHARED(test_assets_edn_file_load_has_zero_heap_growth, 0) {
+TEST(test_assets_edn_file_load_has_zero_heap_growth) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID setup = eval_string(
@@ -184,7 +184,7 @@ TEST_SHARED(test_assets_edn_file_load_has_zero_heap_growth, 0) {
                              "heap-zero.edn should include all EDN types including a record");
 }
 
-TEST_SHARED(test_sound_demo_asset_load_is_reclaimable, 0) {
+TEST(test_sound_demo_asset_load_is_reclaimable) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // tiny-fx.sound-demos/load-song must load data on demand and keep no global

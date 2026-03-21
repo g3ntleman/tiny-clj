@@ -47,6 +47,8 @@ typedef struct {
     uint32_t phase_ms;
     uint32_t period_ms;
     bool loop;
+    bool end_event;
+    bool at_end;
 } VgRenderedTimelineSample;
 
 typedef struct {
@@ -74,6 +76,12 @@ bool vg_rendered_state_capture_compute_dirty_rect(uint8_t slot_index,
                                                   VgClipRect clip_rect,
                                                   uint8_t padding_px,
                                                   VgClipRect *out_dirty_rect);
+bool vg_rendered_state_capture_collect_dirty_rects(uint8_t slot_index,
+                                                   VgClipRect clip_rect,
+                                                   uint8_t padding_px,
+                                                   VgClipRect *out_rects,
+                                                   size_t out_capacity,
+                                                   size_t *out_count);
 void vg_rendered_state_capture_commit(void);
 void vg_rendered_state_capture_discard(void);
 

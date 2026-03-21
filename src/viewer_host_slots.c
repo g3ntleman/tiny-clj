@@ -64,6 +64,7 @@ void destroy_scene_bundle(ViewerSceneBundle *bundle) {
     CLJ_HOST_FREE(bundle->slots);
     RELEASE(bundle->slots_root);
     RELEASE(bundle->entry);
+    RELEASE(bundle->startup_callback);
     RELEASE(bundle->spatial_callback);
     RELEASE(bundle->game_scene_atom);
     memset(bundle, 0, sizeof(*bundle));
@@ -193,26 +194,37 @@ bool viewer_load_game_demo_config(EvalState *st,
     if (!config_source.namespace_name || !config_source.config_expr) {
         return viewer_fail_game_demo_config(NULL, "viewer config source is incomplete");
     }
-    if (!require_namespace_by_name(st, config_source.namespace_name)) {
+    bool require_ok = false;
+    WITH_AUTORELEASE_POOL({
+        require_ok = require_namespace_by_name(st, config_source.namespace_name);
+    });
+    if (!require_ok) {
         return false;
     }
-    ID cfg = eval_string(config_source.config_expr, st);
+    ID cfg = NULL;
+    WITH_AUTORELEASE_POOL({
+        cfg = RETAIN(eval_string(config_source.config_expr, st));
+    });
+    cfg = AUTORELEASE(cfg);
     if (!is_map(cfg)) {
         return viewer_fail_game_demo_config(NULL, "viewer config function must return a map");
     }
     static CljSymbol *k_slots = NULL;
     static CljSymbol *k_entry = NULL;
+    static CljSymbol *k_startup_callback = NULL;
     static CljSymbol *k_spatial_callback = NULL;
     static CljSymbol *k_game_scene_atom = NULL;
     k_slots = intern_symbol_global(":slots");
     k_entry = intern_symbol_global(":entry");
+    k_startup_callback = intern_symbol_global(":startup-callback");
     k_spatial_callback = intern_symbol_global(":spatial-callback");
     k_game_scene_atom = intern_symbol_global(":game-scene-atom");
-    if (!k_slots || !k_entry || !k_spatial_callback || !k_game_scene_atom) {
+    if (!k_slots || !k_entry || !k_startup_callback || !k_spatial_callback || !k_game_scene_atom) {
         return viewer_fail_game_demo_config(NULL, "viewer failed to intern required config keys");
     }
     ID slots = map_get_sentinel(cfg, k_slots, NULL);
     ID entry = map_get_sentinel(cfg, k_entry, NULL);
+    ID startup_callback = map_get_sentinel(cfg, k_startup_callback, NULL);
     ID spatial_callback = map_get_sentinel(cfg, k_spatial_callback, NULL);
     ID game_scene_atom = map_get_sentinel(cfg, k_game_scene_atom, NULL);
     if (!viewer_extract_scene_slots(slots, out_bundle)) {
@@ -229,7 +241,16 @@ bool viewer_load_game_demo_config(EvalState *st,
             out_bundle,
             "viewer config :spatial-callback must be callable");
     }
+    if (startup_callback) {
+        unsigned char startup_tag = TAG(startup_callback);
+        if ((startup_tag != CLJ_FUNC && startup_tag != CLJ_CLOSURE)) {
+            return viewer_fail_game_demo_config(
+                out_bundle,
+                "viewer config :startup-callback must be callable");
+        }
+    }
     out_bundle->entry = RETAIN(entry);
+    out_bundle->startup_callback = RETAIN(startup_callback);
     out_bundle->spatial_callback = RETAIN(spatial_callback);
     out_bundle->game_scene_atom = (CljAtom *)RETAIN(game_scene_atom);
     out_bundle->game_scene = viewer_frame_scene_from_atom(out_bundle->game_scene_atom);

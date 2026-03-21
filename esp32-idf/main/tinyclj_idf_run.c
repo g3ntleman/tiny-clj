@@ -15,6 +15,8 @@
 #include "repl.h"
 #include "startup_pipeline.h"
 #include "tiny_clj.h"
+#include "tinyclj_idf_display.h"
+#include "panel.h"
 
 #ifndef ESP_REPL_HISTORY_PERSIST_ENABLED
 #define ESP_REPL_HISTORY_PERSIST_ENABLED 1
@@ -66,6 +68,58 @@ static unsigned int esp_repl_idle_sleep_ms(void) {
 
     return 10u;
 }
+
+#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+static void esp_report_display_throughput_if_due(void) {
+    static uint32_t s_last_report_ms = 0u;
+    uint32_t now_ms = tinyclj_esp32_current_time_ms();
+    uint32_t elapsed_ms = now_ms - s_last_report_ms;
+    if (elapsed_ms < 1000u) {
+        return;
+    }
+
+    TinycljIdfDisplay *display = tinyclj_idf_display_get();
+    if (!display || !display->initialized) {
+        s_last_report_ms = now_ms;
+        return;
+    }
+
+    VgPanelTransferStats stats = {0};
+    if (!vg_panel_transfer_stats_snapshot(&display->panel.panel, &stats)) {
+        s_last_report_ms = now_ms;
+        return;
+    }
+    if (!vg_panel_transfer_stats_reset(&display->panel.panel)) {
+        s_last_report_ms = now_ms;
+        return;
+    }
+    if (stats.transfer_count == 0u) {
+        s_last_report_ms = now_ms;
+        return;
+    }
+
+    uint64_t bytes_per_s = (stats.transferred_bytes * 1000u) / (uint64_t)elapsed_ms;
+    uint64_t mib_x1000 = (bytes_per_s * 1000u) / (1024u * 1024u);
+    uint32_t mib_int = (uint32_t)(mib_x1000 / 1000u);
+    uint32_t mib_frac = (uint32_t)(mib_x1000 % 1000u);
+
+    char line[192];
+    (void)mini_snprintf(line,
+                        sizeof(line),
+                        "[esp-panel] tx=%llu px=%llu bytes=%llu rate=%llu B/s (%u.%03u MiB/s)\n",
+                        (unsigned long long)stats.transfer_count,
+                        (unsigned long long)stats.transferred_pixels,
+                        (unsigned long long)stats.transferred_bytes,
+                        (unsigned long long)bytes_per_s,
+                        mib_int,
+                        mib_frac);
+    platform_put_string(NULL, line);
+    s_last_report_ms = now_ms;
+}
+#else
+static void esp_report_display_throughput_if_due(void) {
+}
+#endif
 
 /**
  * @brief Loads serialized REPL history from KV storage.
@@ -203,6 +257,7 @@ void tinyclj_idf_start(void) {
                 return;
             }
             repl_process_event_loop(st);
+            esp_report_display_throughput_if_due();
             platform_sleep_ms(esp_repl_idle_sleep_ms());
         }
 

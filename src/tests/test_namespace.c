@@ -1453,7 +1453,7 @@ TEST(test_find_ns_print_repr_full_name) {
     (void)eval_string("(require 'clojure.string)", g_test_eval_state);
 
     // pr-str should return full namespace name
-    CljString *repr = pr_str(eval_string("(find-ns 'clojure.string)", g_test_eval_state));
+    CljString *repr = make_string_description(eval_string("(find-ns 'clojure.string)", g_test_eval_state));
     TEST_ASSERT_NOT_NULL(repr);
     TEST_ASSERT_EQUAL_STRING("clojure.string", string_data(repr));
 }

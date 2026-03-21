@@ -12,5 +12,7 @@ void macos_viewer_activate_app_window(void);
 bool macos_viewer_get_content_size(unsigned *out_w, unsigned *out_h);
 void macos_viewer_begin_performance_activity(void);
 void macos_viewer_end_performance_activity(void);
+void macos_viewer_start_runloop_watchdog(void);
+void macos_viewer_stop_runloop_watchdog(void);
 
 #endif

@@ -31,6 +31,7 @@ typedef struct ViewerSceneBundle {
     uint8_t game_slot_index;
     bool has_game_slot;
     ID entry;
+    ID startup_callback;
     ID spatial_callback;
     CljAtom *game_scene_atom;
     FrameScene *game_scene;

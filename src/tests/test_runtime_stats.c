@@ -855,6 +855,72 @@ TEST(test_runtime_stats_heap_eval_read_string_loop_binding_alias_no_growth) {
 #endif
 
 #if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_builtin_call_no_growth) {
+  const char *expr = "(heap (+ 1 2))";
+
+  runtime_reset(&g_runtime);
+  WITH_AUTORELEASE_POOL({
+    runtime_init(&g_runtime);
+  });
+  event_loop_init();
+  meta_registry_init();
+  init_special_symbols();
+  register_builtins();
+  g_runtime.builtins_registered = true;
+  evalstate_reset(&g_test_eval_state, true);
+
+  ID k_total = (ID)intern_symbol_global(":total");
+
+  for (int i = 0; i < 5; i++) {
+    WITH_AUTORELEASE_POOL({
+      ID result = eval_string(expr, g_test_eval_state);
+      TEST_ASSERT_NOT_NULL(result);
+      TEST_ASSERT_TRUE(is_map(result));
+
+      ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+      TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+      TEST_ASSERT_TRUE(is_fixnum(v_total));
+      TEST_ASSERT_EQUAL_INT_MESSAGE(0, as_fixnum(v_total),
+                                    "builtin call path should not retain heap bytes after pool drain");
+    });
+  }
+}
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
+TEST(test_runtime_stats_heap_let_binding_no_growth) {
+  const char *expr = "(heap (let [a 1] a))";
+
+  runtime_reset(&g_runtime);
+  WITH_AUTORELEASE_POOL({
+    runtime_init(&g_runtime);
+  });
+  event_loop_init();
+  meta_registry_init();
+  init_special_symbols();
+  register_builtins();
+  g_runtime.builtins_registered = true;
+  evalstate_reset(&g_test_eval_state, true);
+
+  ID k_total = (ID)intern_symbol_global(":total");
+
+  for (int i = 0; i < 5; i++) {
+    WITH_AUTORELEASE_POOL({
+      ID result = eval_string(expr, g_test_eval_state);
+      TEST_ASSERT_NOT_NULL(result);
+      TEST_ASSERT_TRUE(is_map(result));
+
+      ID v_total = map_get_sentinel((CljPersistentMap *)result, k_total, NOT_FOUND);
+      TEST_ASSERT_NOT_EQUAL(NOT_FOUND, v_total);
+      TEST_ASSERT_TRUE(is_fixnum(v_total));
+      TEST_ASSERT_EQUAL_INT_MESSAGE(0, as_fixnum(v_total),
+                                    "let frame/env setup should not retain heap bytes after evaluation");
+    });
+  }
+}
+#endif
+
+#if defined(DEBUG) && defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
 TEST(test_runtime_stats_heap_eval_read_string_first_borrowed_list_alias_no_growth) {
   const char *expr = "(heap (eval (read-string \"(first (quote ((range 3))))\")))";
 

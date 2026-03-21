@@ -3,7 +3,7 @@
  * @brief String conversion functions for Clojure values
  * 
  * This file provides functions for converting Clojure values to their
- * string representations, including pr_str (readable) and print_str
+ * string representations, including make_string_description (readable) and print_str
  * (human-readable) variants.
  */
 
@@ -1001,7 +1001,7 @@ CljString* to_string_with_escape(ID v, bool escape_strings) {
     return result;
 }
 
-CljString* pr_str(ID v) {
+CljString* make_string_description(ID v) {
     return to_string_with_escape(v, true);
 }
 

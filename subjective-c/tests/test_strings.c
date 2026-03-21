@@ -27,6 +27,6 @@ TEST(test_make_string_buffer_zero_filled) {
     RELEASE(buf);
 }
 
-// Tests for to_string, pr_str, strings_register_special_form, etc. 
+// Tests for to_string, make_string_description, strings_register_special_form, etc. 
 // have been moved to src/tests/ since these functions are now in src/object.c and src/symbol.c
 

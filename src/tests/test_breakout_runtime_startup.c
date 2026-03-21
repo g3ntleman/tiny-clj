@@ -5,6 +5,14 @@
 #define TINYCLJ_WITH_MINIFB 1
 #endif
 #if defined(__APPLE__)
+static int g_macos_runloop_watchdog_start_calls = 0;
+static int g_macos_runloop_watchdog_stop_calls = 0;
+
+static void breakout_reset_macos_watchdog_counters(void) {
+    g_macos_runloop_watchdog_start_calls = 0;
+    g_macos_runloop_watchdog_stop_calls = 0;
+}
+
 void macos_viewer_install_menu(void) {}
 void macos_viewer_set_window_title(const char *title) { (void)title; }
 void macos_viewer_register_window_callbacks(void) {}
@@ -18,6 +26,8 @@ bool macos_viewer_get_content_size(unsigned *out_w, unsigned *out_h) {
 }
 void macos_viewer_begin_performance_activity(void) {}
 void macos_viewer_end_performance_activity(void) {}
+void macos_viewer_start_runloop_watchdog(void) { g_macos_runloop_watchdog_start_calls++; }
+void macos_viewer_stop_runloop_watchdog(void) { g_macos_runloop_watchdog_stop_calls++; }
 #endif
 #include "../viewer_collision_bridge.h"
 #define main tinyclj_game_demo_minifb_test_main
@@ -83,6 +93,42 @@ static bool breakout_viewer_test_context_init_with_heap_budget(BreakoutViewerTes
     return true;
 }
 
+static bool breakout_viewer_test_context_init_with_heap_limit(BreakoutViewerTestContext *ctx,
+                                                              size_t heap_limit_bytes) {
+    if (!ctx) {
+        return false;
+    }
+    memset(ctx, 0, sizeof(*ctx));
+    stop_runloop_thread();
+
+    ViewerConfigSource config_source = {
+        .namespace_name = "tiny-clj.deployment",
+        .config_expr = "(tiny-clj.deployment/breakout-host-config)",
+        .display_name = "tiny-clj.deployment/breakout-host-config",
+    };
+
+    runtime_init(&g_runtime);
+    event_loop_init();
+    event_loop_clear();
+    vg_rendered_state_reset_all();
+    viewer_seed_gpio_key_levels();
+    memory_set_heap_limit_bytes(heap_limit_bytes);
+
+    ctx->st = evalstate_new(true);
+    if (!ctx->st) {
+        return false;
+    }
+    evalstate_set_ns(ctx->st, "user");
+    if (!tiny_fx_gfx_ensure_schema(ctx->st)) {
+        return false;
+    }
+    if (!viewer_load_game_demo_config(ctx->st, config_source, &ctx->bundle, &ctx->spatial_rules)) {
+        return false;
+    }
+    viewer_collision_set_dispatch_context(&ctx->bundle, &ctx->spatial_rules);
+    return true;
+}
+
 static bool breakout_viewer_test_context_init(BreakoutViewerTestContext *ctx) {
     return breakout_viewer_test_context_init_with_heap_budget(ctx, false);
 }
@@ -124,6 +170,76 @@ TEST(test_breakout_runtime_startup_host_app_fits_debug_heap_limit) {
     TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should fit inside the tiny-fx debug heap limit");
 }
 
+TEST(test_breakout_runtime_startup_host_app_fits_400k_startup_budget) {
+    BreakoutViewerTestContext ctx = {0};
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    const size_t startup_budget = 400u * 1024u;
+    const size_t startup_required_headroom = 2u * 1024u;
+    const size_t startup_limit = startup_budget - startup_required_headroom;
+    bool init_ok = false;
+    bool caught = false;
+    ID caught_ex = NULL;
+    MemoryStats stats = {0};
+
+    TRY {
+        init_ok = breakout_viewer_test_context_init_with_heap_limit(&ctx, startup_limit);
+    } CATCH(ex) {
+        caught = true;
+        caught_ex = ex;
+    } END_TRY
+    stats = memory_profiler_get_stats();
+    fprintf(stderr,
+            "[startup-400k] budget=%zu reserved=%zu limit=%zu current=%zu peak=%zu headroom=%lld\n",
+            startup_budget,
+            startup_required_headroom,
+            startup_limit,
+            stats.current_memory_usage,
+            stats.peak_memory_usage,
+            (long long)startup_budget - (long long)stats.current_memory_usage);
+    memory_set_heap_limit_bytes(previous_limit);
+
+    if (init_ok) {
+        breakout_viewer_test_context_destroy(&ctx);
+    }
+    TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "breakout host startup should not OOM under a 400KB startup budget with 2KB reserved headroom" : "");
+    TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should fit inside a 400KB startup budget while preserving 2KB free");
+    TEST_ASSERT_TRUE_MESSAGE(stats.current_memory_usage + startup_required_headroom <= startup_budget,
+                             "startup should retain at least 2KB free heap headroom inside the 400KB budget");
+}
+
+TEST(test_breakout_runtime_startup_first_launch_fits_debug_heap_limit) {
+    BreakoutViewerTestContext ctx = {0};
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    bool init_ok = false;
+    bool caught = false;
+    ID caught_ex = NULL;
+    ID launched = NULL;
+
+    TRY {
+        init_ok = breakout_viewer_test_context_init_with_heap_budget(&ctx, true);
+        if (init_ok) {
+            launched = eval_string(
+                "(do "
+                "  (tiny-breakout.runtime/start-runtime! nil) "
+                "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+                "  (= :play (:phase @tiny-breakout.runtime/state*)))",
+                ctx.st);
+        }
+    } CATCH(ex) {
+        caught = true;
+        caught_ex = ex;
+    } END_TRY
+    memory_set_heap_limit_bytes(previous_limit);
+
+    if (init_ok) {
+        breakout_viewer_test_context_destroy(&ctx);
+    }
+
+    TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "first breakout launch should not OOM under 640KB total heap budget" : "");
+    TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should initialize before first-launch heap assertion");
+    TEST_ASSERT_EQUAL_PTR(clj_true, launched);
+}
+
 TEST(test_breakout_runtime_startup_applies_absolute_host_heap_limit_before_clojure_bootstrap) {
     size_t previous_limit = memory_get_heap_limit_bytes();
     size_t host_limit = viewer_tiny_fx_host_heap_limit_bytes();
@@ -133,6 +249,39 @@ TEST(test_breakout_runtime_startup_applies_absolute_host_heap_limit_before_cloju
     TEST_ASSERT_EQUAL_UINT64(host_limit, memory_get_heap_limit_bytes());
 
     memory_set_heap_limit_bytes(previous_limit);
+}
+
+TEST(test_breakout_runtime_startup_tolerates_host_sound_init_failure_during_audio_preload) {
+    BreakoutViewerTestContext ctx = {0};
+    const char *env_name = "TINYCLJ_SOUND_HOST_INIT_FAIL";
+    const char *saved_env = getenv(env_name);
+    char *saved_copy = saved_env ? strdup(saved_env) : NULL;
+    bool init_ok = false;
+    bool caught = false;
+    ID caught_ex = NULL;
+
+    setenv(env_name, "component-find", 1);
+
+    TRY {
+        init_ok = breakout_viewer_test_context_init(&ctx);
+    } CATCH(ex) {
+        caught = true;
+        caught_ex = ex;
+    } END_TRY
+
+    if (saved_copy) {
+        setenv(env_name, saved_copy, 1);
+        free(saved_copy);
+    } else {
+        unsetenv(env_name);
+    }
+
+    if (init_ok) {
+        breakout_viewer_test_context_destroy(&ctx);
+    }
+
+    TEST_ASSERT_FALSE_MESSAGE(caught, caught_ex ? "breakout host startup should tolerate host audio init failures" : "");
+    TEST_ASSERT_TRUE_MESSAGE(init_ok, "breakout host startup should still load when host audio init fails");
 }
 
 TEST(test_breakout_runtime_startup_defaults_host_demo_selection_to_breakout) {
@@ -214,11 +363,79 @@ TEST(test_breakout_runtime_startup_runloop_thread_registers_interpreter_thread) 
     evalstate_free(st);
 }
 
+TEST(test_breakout_runtime_startup_runloop_liveness_snapshot_resets_cleanly) {
+    viewer_runloop_liveness_reset();
+
+    ViewerRunloopLivenessSnapshot snapshot = viewer_runloop_liveness_snapshot(9ull * 1000ull * 1000ull * 1000ull);
+
+    TEST_ASSERT_EQUAL_UINT64(0u, snapshot.last_tick_ns);
+    TEST_ASSERT_EQUAL_UINT64(0u, snapshot.iteration_count);
+    TEST_ASSERT_EQUAL_UINT64(0u, snapshot.age_ns);
+    TEST_ASSERT_EQUAL_INT(VIEWER_RUNLOOP_LIVENESS_HEALTHY, snapshot.state);
+}
+
+TEST(test_breakout_runtime_startup_runloop_liveness_snapshot_tracks_progress) {
+    viewer_runloop_liveness_reset();
+    viewer_runloop_liveness_note_progress_for_tests(2ull * 1000ull * 1000ull * 1000ull);
+    viewer_runloop_liveness_note_progress_for_tests(3ull * 1000ull * 1000ull * 1000ull);
+
+    ViewerRunloopLivenessSnapshot snapshot = viewer_runloop_liveness_snapshot(4ull * 1000ull * 1000ull * 1000ull);
+
+    TEST_ASSERT_EQUAL_UINT64(3ull * 1000ull * 1000ull * 1000ull, snapshot.last_tick_ns);
+    TEST_ASSERT_EQUAL_UINT64(2u, snapshot.iteration_count);
+    TEST_ASSERT_EQUAL_UINT64(1ull * 1000ull * 1000ull * 1000ull, snapshot.age_ns);
+    TEST_ASSERT_EQUAL_INT(VIEWER_RUNLOOP_LIVENESS_HEALTHY, snapshot.state);
+}
+
+TEST(test_breakout_runtime_startup_runloop_liveness_snapshot_flags_stalls_after_threshold) {
+    viewer_runloop_liveness_reset();
+    viewer_runloop_liveness_note_progress_for_tests(1ull * 1000ull * 1000ull * 1000ull);
+
+    ViewerRunloopLivenessSnapshot snapshot = viewer_runloop_liveness_snapshot(7ull * 1000ull * 1000ull * 1000ull);
+
+    TEST_ASSERT_EQUAL_UINT64(6ull * 1000ull * 1000ull * 1000ull, snapshot.age_ns);
+    TEST_ASSERT_EQUAL_INT(VIEWER_RUNLOOP_LIVENESS_STALLED, snapshot.state);
+}
+
+#if defined(__APPLE__)
+static ViewerHostWindow *breakout_test_open_host_window(const char *title, unsigned width, unsigned height) {
+    (void)title;
+    (void)width;
+    (void)height;
+    return (ViewerHostWindow *)(uintptr_t)0x1;
+}
+
+static void breakout_test_close_host_window(ViewerHostWindow *window) {
+    TEST_ASSERT_EQUAL_PTR((ViewerHostWindow *)(uintptr_t)0x1, window);
+}
+
+TEST(test_breakout_runtime_startup_host_window_open_starts_macos_runloop_watchdog) {
+    breakout_reset_macos_watchdog_counters();
+
+    ViewerHostWindow *window =
+        viewer_host_window_open_with_backend(breakout_test_open_host_window, "tiny-fx", 640u, 480u);
+
+    TEST_ASSERT_NOT_NULL(window);
+    TEST_ASSERT_EQUAL_INT(1, g_macos_runloop_watchdog_start_calls);
+    TEST_ASSERT_EQUAL_INT(0, g_macos_runloop_watchdog_stop_calls);
+}
+
+TEST(test_breakout_runtime_startup_host_window_close_stops_macos_runloop_watchdog) {
+    breakout_reset_macos_watchdog_counters();
+
+    viewer_host_window_close_with_backend((ViewerHostWindow *)(uintptr_t)0x1, breakout_test_close_host_window);
+
+    TEST_ASSERT_EQUAL_INT(0, g_macos_runloop_watchdog_start_calls);
+    TEST_ASSERT_EQUAL_INT(1, g_macos_runloop_watchdog_stop_calls);
+}
+#endif
+
 TEST(test_breakout_runtime_startup_loads_breakout_host_config_into_generic_viewer_bundle) {
     BreakoutViewerTestContext ctx = {0};
     TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
 
     TEST_ASSERT_TRUE(ctx.bundle.has_game_slot);
+    TEST_ASSERT_NOT_NULL(ctx.bundle.startup_callback);
     TEST_ASSERT_NOT_NULL(ctx.bundle.game_scene_atom);
     TEST_ASSERT_NOT_NULL(ctx.bundle.game_scene);
     TEST_ASSERT_NOT_NULL(ctx.bundle.spatial_callback);
@@ -283,6 +500,7 @@ TEST(test_breakout_runtime_startup_fire_button_seeded_inactive_before_breakout_w
         "(do "
         "  (require 'tiny-clj.gpio) "
         "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
         "  (tiny-clj.gpio/simulate! 13 0) "
         "  (Thread/sleep 30) "
         "  (dotimes [_ 8] (run-next-task)) "
@@ -292,6 +510,51 @@ TEST(test_breakout_runtime_startup_fire_button_seeded_inactive_before_breakout_w
         "  (= :play (:phase @tiny-breakout.runtime/state*)))",
         ctx.st);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_fire_button_heap_profile_stays_bounded) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
+
+    ID stats = eval_string(
+        "(do "
+        "  (require 'tiny-clj.gpio) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (heap "
+        "    (do "
+        "      (tiny-breakout.runtime/start-runtime! nil) "
+        "      (tiny-clj.gpio/simulate! 13 0) "
+        "      (Thread/sleep 30) "
+        "      (dotimes [_ 8] (run-next-task)) "
+        "      (tiny-clj.gpio/simulate! 13 1) "
+        "      (Thread/sleep 30) "
+        "      (dotimes [_ 8] (run-next-task)) "
+        "      (:phase @tiny-breakout.runtime/state*))))",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(stats);
+    TEST_ASSERT_TRUE(is_map(stats));
+
+    ID k_total = intern_symbol_global(":total");
+    ID k_peak = intern_symbol_global(":peak");
+    TEST_ASSERT_NOT_NULL(k_total);
+    TEST_ASSERT_NOT_NULL(k_peak);
+
+    ID total = map_get_sentinel((CljPersistentMap *)stats, k_total, NOT_FOUND);
+    ID peak = map_get_sentinel((CljPersistentMap *)stats, k_peak, NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, total);
+    TEST_ASSERT_NOT_EQUAL(NOT_FOUND, peak);
+    TEST_ASSERT_TRUE(is_fixnum(total));
+    TEST_ASSERT_TRUE(is_fixnum(peak));
+
+    fprintf(stderr,
+            "[breakout-fire-heap] total=%d peak=%d\n",
+            as_fixnum(total),
+            as_fixnum(peak));
+
+    TEST_ASSERT_TRUE_MESSAGE(as_fixnum(peak) < 128 * 1024,
+                             "fire button path should stay below 128KB local peak");
 
     breakout_viewer_test_context_destroy(&ctx);
 }
@@ -566,6 +829,18 @@ TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_hea
     breakout_viewer_test_context_destroy(&ctx);
 }
 
+#if defined(__APPLE__)
+TEST(test_breakout_runtime_startup_maps_macos_virtual_keys_to_runtime_keys) {
+    TEST_ASSERT_EQUAL_INT(KB_KEY_SPACE, tinyfx_macos_key_from_virtual_key(0x31));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_ENTER, tinyfx_macos_key_from_virtual_key(0x24));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_Q, tinyfx_macos_key_from_virtual_key(0x0C));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_LEFT, tinyfx_macos_key_from_virtual_key(0x7B));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_RIGHT, tinyfx_macos_key_from_virtual_key(0x7C));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_LEFT_SUPER, tinyfx_macos_key_from_virtual_key(0x37));
+    TEST_ASSERT_EQUAL_INT(KB_KEY_UNKNOWN, tinyfx_macos_key_from_virtual_key(0xFFFFu));
+}
+#endif
+
 TEST(test_breakout_runtime_startup_perf_window_snapshot_reports_spi_throughput_metrics) {
     ViewerPerfWindow perf = {0};
     ViewerPerfSnapshot snapshot = {0};
@@ -634,7 +909,7 @@ TEST(test_breakout_runtime_startup_collision_step_runs_once_per_rendered_frame) 
     TEST_ASSERT_EQUAL_UINT64(2u, (uint64_t)last_collision_frame_serial);
 }
 
-TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timer_driven_scene_updates) {
+TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_driven_scene_updates) {
     BreakoutViewerTestContext ctx = {0};
     VgSlotChangeTracker slot_change_tracker = {0};
     TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
@@ -670,4 +945,82 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timer_driven_scene
     TEST_ASSERT_NOT_NULL(viewer_frame_scene_from_atom(ctx.bundle.game_scene_atom));
 
     breakout_viewer_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_limit) {
+    BreakoutViewerTestContext ctx = {0};
+    VgSlotChangeTracker slot_change_tracker = {0};
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    const size_t stricter_limit = 592u * 1024u;
+    bool caught = false;
+    ID caught_ex = NULL;
+
+    TRY {
+        TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
+        fprintf(stderr, "[post-launch-stage] after-init=%zu\n", memory_current_usage_bytes());
+        memory_set_heap_limit_bytes(stricter_limit);
+        TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&slot_change_tracker, ctx.bundle.slot_count));
+        fprintf(stderr, "[post-launch-stage] after-slot-tracker=%zu limit=%zu\n",
+                memory_current_usage_bytes(),
+                memory_get_heap_limit_bytes());
+
+        ID ok = eval_string(
+            "(do "
+            "  (require 'tiny-breakout.runtime) "
+            "  (tiny-breakout.runtime/start-runtime! nil) "
+            "  true)",
+            ctx.st);
+        TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+        fprintf(stderr, "[post-launch-stage] after-start-runtime=%zu\n", memory_current_usage_bytes());
+
+        ok = eval_string(
+            "(do "
+            "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+            "  true)",
+            ctx.st);
+        TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+        fprintf(stderr, "[post-launch-stage] after-launch=%zu\n", memory_current_usage_bytes());
+
+        TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+        fprintf(stderr, "[post-launch-stage] after-runloop-start=%zu\n", memory_current_usage_bytes());
+
+        for (int i = 0; i < 90; i++) {
+            size_t before_sleep = memory_current_usage_bytes();
+            usleep(16000);
+            size_t before_sync = memory_current_usage_bytes();
+            viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
+            size_t after_sync = memory_current_usage_bytes();
+            (void)viewer_collision_detect_step(&ctx.bundle,
+                                               &ctx.spatial_rules,
+                                               (uint32_t)platform_current_time_ms(),
+                                               NULL,
+                                               0u);
+            size_t after_collision = memory_current_usage_bytes();
+            if ((i < 8) || (i % 10 == 9) || (after_collision > (580u * 1024u))) {
+                fprintf(stderr,
+                        "[post-launch-frame] i=%d before-sleep=%zu before-sync=%zu after-sync=%zu after-collision=%zu\n",
+                        i,
+                        before_sleep,
+                        before_sync,
+                        after_sync,
+                        after_collision);
+            }
+        }
+    } CATCH(ex) {
+        caught = true;
+        caught_ex = ex;
+    } END_TRY
+
+    memory_set_heap_limit_bytes(previous_limit);
+    stop_runloop_thread();
+    vg_slot_change_tracker_destroy(&slot_change_tracker);
+    breakout_viewer_test_context_destroy(&ctx);
+
+    if (caught_ex) {
+        print_exception(caught_ex);
+    }
+
+    TEST_ASSERT_FALSE_MESSAGE(caught,
+                              caught_ex ? "post-launch runloop frames should fit inside the stricter 592KB debug heap budget"
+                                        : "");
 }

@@ -49,7 +49,7 @@ Diese Funktionen benötigen nur `CljString` und generische Runtime-Funktionen:
 - `to_string_build_string()` - statisch, rekursiv für alle Objekttypen
 - `to_string()` - öffentlich
 - `to_string_with_escape()` - öffentlich
-- `pr_str()` - öffentlich
+- `make_string_description()` - öffentlich
 - `print_str()` - öffentlich
 
 Diese Funktionen benötigen:
@@ -89,7 +89,7 @@ Diese Funktionen benötigen:
 - Wird in vielen Dateien verwendet für String-Erstellung
 - Bleibt in subjective-c
 
-### to_string / pr_str / print_str
+### to_string / make_string_description / print_str
 - Wird in builtins.c, eval.c, repl.c, tests verwendet
 - Wird nach object.c verschoben
 

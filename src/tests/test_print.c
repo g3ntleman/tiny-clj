@@ -39,9 +39,9 @@ TEST_SHARED(test_print_str_basic_functionality) {
 }
 
 // ============================================================================
-// TEST: print_str() vs pr_str() difference
+// TEST: print_str() vs make_string_description() difference
 // ============================================================================
-TEST_SHARED(test_print_str_vs_pr_str_difference) {
+TEST_SHARED(test_print_str_vs_make_string_description_difference) {
   WITH_AUTORELEASE_POOL({
     CljString *str = make_string("Hello");
 
@@ -50,8 +50,8 @@ TEST_SHARED(test_print_str_vs_pr_str_difference) {
     TEST_ASSERT_NOT_NULL(print_result);
     TEST_ASSERT_EQUAL_STRING("Hello", string_data(print_result));
 
-    // pr_str() should return string with quotes
-    CljString *pr_result = pr_str(str);
+    // make_string_description() should return string with quotes
+    CljString *pr_result = make_string_description(str);
     TEST_ASSERT_NOT_NULL(pr_result);
     TEST_ASSERT_EQUAL_STRING("\"Hello\"", string_data(pr_result));
 
@@ -60,18 +60,18 @@ TEST_SHARED(test_print_str_vs_pr_str_difference) {
 }
 
 // ============================================================================
-// TEST: pr_str() with containers containing strings
+// TEST: make_string_description() with containers containing strings
 // ============================================================================
-TEST_SHARED(test_pr_str_with_containers) {
+TEST_SHARED(test_make_string_description_with_containers) {
   WITH_AUTORELEASE_POOL({
-    // Test: pr_str with vector containing strings
+    // Test: make_string_description with vector containing strings
     CljPersistentVector *vec = make_vector(4, STRONG);
     CljString *str1 = make_string("hello");
     CljString *str2 = make_string("world");
     vec = vector_conj(vec, str1);
     vec = vector_conj(vec, str2);
 
-    CljString *result = pr_str((CljObject *)vec);
+    CljString *result = make_string_description((CljObject *)vec);
     TEST_ASSERT_NOT_NULL(result);
     // Should be ["\"hello\"" "\"world\""] or ["hello" "world"] depending on format
     // The strings inside should have quotes
@@ -81,13 +81,13 @@ TEST_SHARED(test_pr_str_with_containers) {
     RELEASE(str1);
     RELEASE(str2);
 
-    // Test: pr_str with map containing strings
+    // Test: make_string_description with map containing strings
     CljPersistentMap *map = make_map(2);
     CljString *key_str = make_string("a");
     CljString *val_str = make_string("hello");
     ASSIGN(map, map_assoc(map, (ID)key_str, (ID)val_str));
 
-    result = pr_str((CljObject *)map);
+    result = make_string_description((CljObject *)map);
     TEST_ASSERT_NOT_NULL(result);
     // The string values should have quotes
     TEST_ASSERT_TRUE(strstr(string_data(result), "\"hello\"") != NULL || strstr(string_data(result), "hello") != NULL);
@@ -95,14 +95,14 @@ TEST_SHARED(test_pr_str_with_containers) {
     RELEASE(key_str);
     RELEASE(val_str);
 
-    // Test: pr_str with nested containers
+    // Test: make_string_description with nested containers
     CljPersistentVector *outer_vec = make_vector(4, STRONG);
     CljPersistentVector *inner_vec = make_vector(4, STRONG);
     CljString *nested_str = make_string("nested");
     inner_vec = vector_conj(inner_vec, nested_str);
     outer_vec = vector_conj(outer_vec, inner_vec);
 
-    result = pr_str((CljObject *)outer_vec);
+    result = make_string_description((CljObject *)outer_vec);
     TEST_ASSERT_NOT_NULL(result);
     // Nested string should have quotes
     TEST_ASSERT_TRUE(strstr(string_data(result), "\"nested\"") != NULL || strstr(string_data(result), "nested") != NULL);

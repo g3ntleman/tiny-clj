@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "platform.h"
+#include "tinyclj_idf_display.h"
 
 #if defined(ESP_PLATFORM) && defined(__has_include)
 #if __has_include(<esp_system.h>) && __has_include(<esp_timer.h>) && __has_include(<esp_heap_caps.h>) && __has_include(<esp_chip_info.h>) && __has_include(<esp_flash.h>) && __has_include(<driver/uart.h>) && __has_include(<freertos/FreeRTOS.h>) && __has_include(<freertos/task.h>) && __has_include(<soc/soc_caps.h>)
@@ -212,6 +213,10 @@ void app_main(void) {
     };
     (void)uart_param_config(UART_NUM_0, &cfg);
     (void)uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0);
+#endif
+
+#if defined(TINYCLJ_WITH_TINY_FX) && TINYCLJ_WITH_TINY_FX
+    (void)tinyclj_idf_display_bootstrap();
 #endif
 
     tinyclj_idf_start();

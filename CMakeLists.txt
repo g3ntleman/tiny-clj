@@ -216,7 +216,6 @@ set(TINYCLJ_CORE_SOURCES
     src/event_loop.c
     src/renderer_lifecycle.c
     src/rendered_state_snapshot.c
-    src/render_backend.c
     src/viewer_collision.c
     src/channel.c
     src/lockfree_spsc_queue.c
@@ -252,6 +251,9 @@ set(TINYCLJ_FX_COMMON_SOURCES
     src/sound_tick_scheduler.c
     src/sound_engine.c
     src/gfx.c
+    src/panel.c
+    src/panel_esp_lcd.c
+    src/panel_backend.c
     src/tiny_fx_gfx.c
     src/vector_scene_graph.c
     src/scene.c
@@ -409,6 +411,7 @@ if(APPLE)
         src/line_editor.c
         src/game_demo_minifb.c
         src/game_demo_macos_menu.m
+        src/tiny_fx_macos_app.m
         ${SOURCES}
         ${TINYCLJ_APP_RESOURCE_FILES}
     )
@@ -485,6 +488,8 @@ set(TINYCLJ_FX_TEST_SOURCES)
 if(TINYCLJ_WITH_TINY_FX)
     list(APPEND TINYCLJ_FX_TEST_SOURCES
         src/tests/test_sound_engine.c
+        src/tests/test_panel_api.c
+        src/tests/test_panel_esp32_architecture_contract.c
         src/tests/test_vector_scene_graph.c
         src/tests/test_gfx_svg.c
         src/tests/test_gfx_collision_contract.c
@@ -956,6 +961,9 @@ if(TINYCLJ_GAME_DEMO)
     tinyclj_ensure_minifb_target()
 
     target_sources(unit-tests PRIVATE src/tests/test_breakout_runtime_startup.c)
+    if(APPLE)
+        target_sources(unit-tests PRIVATE src/tiny_fx_macos_app.m)
+    endif()
     target_link_libraries(unit-tests PRIVATE minifb)
 endif()
 

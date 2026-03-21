@@ -14,19 +14,22 @@ todos:
     status: completed
   - id: clojure-policy-expansion
     content: Inkrementelle Policy-Expansion in Clojure mit `CljTransientVector` einfuehren, nur bei Rule-Aenderungen oder neuen Objekten erweitern und Objektentfall lazy behandeln
-    status: pending
+    status: completed
   - id: callback-dispatch
     content: Breakout-`spatial-callback` in Clojure verdrahten und Watcher fuer Paddle-/Brick-Kollisionen auf Basis von Kollisions-Snapshots implementieren
     status: completed
   - id: runtime-thin-host
     content: Native Breakout-Runtime zu einem duennen Host-Pfad ohne autoritativen Gameplay-State umbauen, expandierte Policies konsumieren und segmentbasierte Ballanimation statt manueller Paddle-/Brick-Kollisionen ausfuehren
-    status: pending
+    status: completed
   - id: segment-motion
     content: Ballbewegung als von der Grafik-Engine ausgefuehrte Segmente bis zur naechsten Wand modellieren und Replanung nur bei Segmentende oder Kollisions-Event vorsehen
-    status: pending
+    status: completed
   - id: timeline-end-events
-    content: Optionales boolesches End-Event-Feld direkt am Timeline-Feld einfuehren, damit nur markierte Animationen einen End-Event-Watch registrieren
-    status: pending
+    content: Optionales boolesches End-Event-Feld direkt am Timeline-Feld einfuehren und im Renderer-Snapshot als Metadatum verfuegbar machen
+    status: completed
+  - id: timeline-end-watchers
+    content: Generischen Watch-/Dispatch-Pfad fuer markierte Timeline-Enden einfuehren, damit Segmentenden ohne Breakout-Sondertimer aus dem Engine-Vertrag kommen
+    status: completed
   - id: regression-tests
     content: Regressionstests fuer Prototypen, Rule-Expansion, segmentbasierte Ballbewegung, Snapshot-Events und Host-Startpfad ergaenzen
     status: completed
@@ -34,7 +37,7 @@ todos:
     content: Sourcecode aufraeumen – Debug-Code, temporaere Workarounds, tote Codepfade, ueberfluessige Kommentare und nicht mehr benoetigte Hilfsfunktionen entfernen
     status: pending
   - id: host-bridge-split
-    content: Host-Spatial-Bridge in kleinere Module fuer Rule-Loading/Event-Encoding versus Detect/Drain aufteilen, damit `viewer_host_spatial.c` als Monolith entfaellt
+    content: Collision-Bridge in kleinere Module fuer Rule-Loading/Event-Encoding versus Detect/Drain aufteilen, damit der alte `viewer_host_spatial.c`-Monolith entfaellt
     status: completed
 isProject: false
 ---
@@ -53,21 +56,20 @@ isProject: false
 - Umgesetzt: Der native Breakout-Hot-Path aktualisiert Paddle/Ball/HUD/Overlay jetzt in-place auf dem bereits publizierten Szenengraphen; neue Szenen werden nur noch bei echten Layoutwechseln wie Staging-Transition oder Levelwechsel gebaut.
 - Umgesetzt: Brick-Records bleiben innerhalb eines Levels stabil und werden bei Treffern nur deaktiviert bzw. unsichtbar gemacht. Dadurch entfaellt das frameweise Neuaufbauen des Szenengraphen bei Brick-Hits.
 - Umgesetzt: Regressionstests decken jetzt Root-Shape, Prototyp-/Rule-Vertrag, generischen Spatial-Callback-Dispatch, in-place Scene-Reuse, den `level-clear`-Uebergang zum naechsten Level, konkrete Breakout-Policies im Host-Startup-Pfad und `SpatialEvent`-Entity-Snapshots ab.
-- Umgesetzt: Die Host-Collision-Pipeline ist jetzt zweiphasig: `viewer_apply_collision_step()` erkennt nur noch Treffer und puffert rohe Hits, waehrend `viewer_collision_poll_drain()` die `SpatialEvent`-Allokation und den Clojure-Dispatch auf dem Scheduler-/Runloop-Thread uebernimmt.
+- Umgesetzt: Die Host-Collision-Pipeline ist jetzt zweiphasig: `viewer_collision_detect_step()` erkennt nur noch Treffer und puffert rohe Hits, waehrend `viewer_collision_poll_drain()` die `SpatialEvent`-Allokation und den Clojure-Dispatch auf dem Scheduler-/Runloop-Thread uebernimmt.
 - Umgesetzt: Roh-Treffer tragen eine Rule-Generation, damit veraltete Hits bei Scene-/Rule-Wechsel nicht mehr gegen eine neue Policy-Generation dispatcht werden.
 - Umgesetzt: Host-Tests decken jetzt explizit ab, dass Detect und Dispatch getrennt sind, enge Heap-Grenzen nur noch den Dispatch betreffen und der echte Viewer-Runloop einen global sichtbaren Interpreter-Thread-Marker registriert.
-- Umgesetzt: `viewer_host_spatial` cached keine `SpatialEvent`-/`Aabb`-Descriptoren oder Symbol-Keys mehr ueber Runtime-Resets hinweg; damit entfallen die bisherigen `[nil nil]`-Events und Crashs nach Test-/Runtime-Resets.
-- Umgesetzt: Die Host-Spatial-Bridge ist jetzt entlang ihrer Verantwortung getrennt: `viewer_host_spatial_rules.c` haelt Rule-Expansion und `SpatialEvent`-Encoding, `viewer_host_spatial_runtime.c` Detect-only, Raw-Hit-Queue und Drain/Dispatch.
-- Offen: Die eigentliche Gameplay-Autoritaet liegt weiterhin im nativen Breakout-Pfad. Paddle-/Brick-Kollisionen, Segmentplanung und Snapshot-basierte State-Mutationen sind noch nicht nach Clojure verschoben.
+- Umgesetzt: Die Collision-Bridge cached keine `SpatialEvent`-/`Aabb`-Descriptoren oder Symbol-Keys mehr ueber Runtime-Resets hinweg; damit entfallen die bisherigen `[nil nil]`-Events und Crashs nach Test-/Runtime-Resets.
+- Umgesetzt: Die Collision-Bridge ist jetzt entlang ihrer Verantwortung getrennt: `viewer_collision_scene_bridge.c` haelt Rule-Expansion und `SpatialEvent`-Encoding, `viewer_collision_dispatch.c` Detect-only, Raw-Hit-Queue und Drain/Dispatch.
+- Umgesetzt: Breakout pflegt seine konkreten Collision-Policies jetzt inkrementell in Clojure: `tiny-breakout.scene/with-expanded-collision-rules` fuegt neue Brick-Paare append-only per `transient` hinzu, behaelt vorhandene Regeln stabil und behandelt entfernte Bricks lazy ueber fehlende Scene-Entities.
+- Umgesetzt: Der Hostpfad ist inzwischen duenn: `tiny-clj.deployment/breakout-host-config` publiziert nur Slots, Scene-Atom und Spatial-Callback, waehrend Spielzustand, Segmentplanung und Input-Reaktion in `tiny-breakout.runtime` bzw. `tiny-breakout.core` leben.
+- Umgesetzt: Ballbewegung laeuft bereits segmentbasiert aus Clojure heraus. `tiny-breakout.core` plant Wandsegmente, `tiny-breakout.scene` projiziert sie auf Timeline-Felder, und `tiny-breakout.runtime` replanted bei Segmentende oder Spatial-Event.
+- Umgesetzt: `Timeline` traegt jetzt optional `:end-event`, und der Renderer-Snapshot bzw. `tiny-clj.runtime/renderer-timeline-progress` liefern dazu generische Metadaten (`:end-event`, `:at-end`). Breakout markiert damit bereits Ballsegment-Timelines im Szenenvertrag.
+- Umgesetzt: `tiny-fx.gfx-timeline/watch` bildet jetzt einen generischen Timeline-End-Watcher auf dem Scheduler-Thread. Breakout nutzt diesen Pfad fuer Ballsegment-Enden; der alte benannte Segment-Timer ist entfernt.
 - Offen: Der direkte native Scene-Rebuild-Pfad allokiert weiterhin deutlich mehr als der in-place Hot-Path. Fuer die vollstaendige Migration ist das tolerierbar, sollte aber nicht als allgemeines Pattern in weitere Hostpfade uebernommen werden.
-- Offen: Die aufgeteilte Host-Spatial-Bridge ist strukturell sauberer, aber der Name `viewer_host_spatial*` bleibt noch host-zentriert; spaetere Umbenennung in klarere Collision-Module ist moeglich, aber fuer diesen Plan nicht mehr zwingend.
 
 ## Folgearbeit ausserhalb dieses Plans
 
-- `clojure-policy-expansion`: inkrementelle Policy-Expansion in Clojure
-- `runtime-thin-host`: nativen Breakout-Hostpfad weiter auf atom-getriebenen Betrieb ausduennen
-- `segment-motion`: segmentbasierte Ballbewegung statt frameweisem nativen Stepping
-- `timeline-end-events`: optionales boolesches End-Event-Feld fuer Timeline-Felder
 - `cleanup`: weiterer Abbau alter Kompatibilitaets- und Uebergangslogik
 
 ## Zielbild
@@ -83,7 +85,7 @@ Breakout nutzt die vorhandene Collision-Pipeline end-to-end, waehrend Clojure di
 - Wenn der Viewer viele tote oder deaktivierte konkrete Policies sieht, kann C zusaetzlich ein diskretes Maintenance-Event an Clojure werfen, damit die expandierte Policy-Menge gezielt gefiltert oder neu kompiliert wird.
 - Die Grafik-Engine animiert den Ball jeweils entlang eines von Clojure geplanten Bewegungssegments bis spaetestens zur naechsten Wand.
 - Animationen koennen optional direkt am Timeline-Feld ein boolesches End-Event-Flag tragen; nur diese markierten Felder werden bis zum Ende beobachtet.
-- `viewer_apply_collision_step()` arbeitet nur noch auf expandierten Policies und erzeugt daraus `SpatialEvent`s mit den beteiligten Objekten im Kollisionszustand.
+- `viewer_collision_detect_step()` arbeitet nur noch auf expandierten Policies und erzeugt daraus `SpatialEvent`s mit den beteiligten Objekten im Kollisionszustand.
 - Der Clojure-`spatial-callback` reagiert auf `:ball-vs-paddle` und `:ball-vs-brick`, kann Objekte auf den Kollisions-Snapshot zuruecksetzen und plant von dort aus das naechste Segment.
 - `game_state_atom` und `game_scene_atom` bleiben autoritativ und werden nicht in einen langlebigen nativen Gameplay-State ueberfuehrt.
 - Die native Seite uebernimmt nur Tick, Snapshot/Render, segmentbasierte Ballanimation, Collision-Detection auf konkreten Policies und die Zustellung diskreter Events an Clojure; End-Events werden nur fuer markierte Timeline-Felder erzeugt.
@@ -124,7 +126,7 @@ flowchart LR
   publishAtoms --> publishPolicies[Update expandedPolicyAtom]
   publishAtoms --> runSegment[GraphicsEngineAnimatesSegment]
   publishAtoms --> timelineWatch[RegisterEndWatchWhenFlagged]
-  publishPolicies --> collisionStep[viewer_apply_collision_step]
+  publishPolicies --> collisionStep[viewer_collision_detect_step]
   viewerRender --> collisionStep
   timelineWatch --> runSegment
   runSegment --> segmentEnd[SegmentEndEvent]

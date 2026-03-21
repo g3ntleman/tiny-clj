@@ -849,6 +849,46 @@ TEST(test_vector_scene_graph_rendered_state_capture_compute_dirty_rect_falls_bac
     vg_rendered_state_reset_all();
 }
 
+TEST(test_vector_scene_graph_rendered_state_capture_collect_dirty_rects_keeps_far_entities_separate, 0) {
+    vg_rendered_state_reset_all();
+
+    VgTransformFixed t0 = vg_transform_fixed_identity();
+    VgTransformFixed t1 = vg_transform_fixed_identity();
+    t1.m02 = 100 * VG_SCALE_ONE;
+    uintptr_t paddle = (uintptr_t)fixnum(4301);
+    uintptr_t ball = (uintptr_t)fixnum(4302);
+
+    vg_rendered_state_capture_begin(5u, 1u, 0u);
+    vg_rendered_state_capture_record_entity(paddle, t0);
+    vg_rendered_state_capture_record_entity_aabb(paddle, (VgAabb){140, 179, 224, 227});
+    vg_rendered_state_capture_record_entity(ball, t0);
+    vg_rendered_state_capture_record_entity_aabb(ball, (VgAabb){156, 159, 120, 123});
+    vg_rendered_state_capture_commit();
+
+    vg_rendered_state_capture_begin(5u, 2u, 16u);
+    vg_rendered_state_capture_record_entity(paddle, t1);
+    vg_rendered_state_capture_record_entity_aabb(paddle, (VgAabb){240, 279, 224, 227});
+    vg_rendered_state_capture_record_entity(ball, t1);
+    vg_rendered_state_capture_record_entity_aabb(ball, (VgAabb){256, 259, 120, 123});
+
+    VgClipRect dirty_rects[4] = {0};
+    size_t dirty_count = 0u;
+    TEST_ASSERT_TRUE(vg_rendered_state_capture_collect_dirty_rects(5u,
+                                                                   (VgClipRect){0, 0, 320, 240},
+                                                                   1u,
+                                                                   dirty_rects,
+                                                                   4u,
+                                                                   &dirty_count));
+    TEST_ASSERT_EQUAL_UINT(4u, dirty_count);
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(dirty_rects[0], (VgClipRect){.x = 139, .y = 223, .w = 42, .h = 6}));
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(dirty_rects[1], (VgClipRect){.x = 239, .y = 223, .w = 42, .h = 6}));
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(dirty_rects[2], (VgClipRect){.x = 155, .y = 119, .w = 6, .h = 6}));
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(dirty_rects[3], (VgClipRect){.x = 255, .y = 119, .w = 6, .h = 6}));
+
+    vg_rendered_state_capture_discard();
+    vg_rendered_state_reset_all();
+}
+
 TEST(test_vector_scene_graph_game_demo_gpio_press_triggers_demo_melody_once) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
@@ -1494,6 +1534,20 @@ TEST(test_vector_scene_graph_dirty_union_tree_budget_merges_overlapping_leaves_p
     TEST_ASSERT_EQUAL_UINT(2u, plan_count);
     TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], (VgClipRect){.x = 2, .y = 2, .w = 10, .h = 5}));
     TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[1], leaves[2]));
+}
+
+TEST(test_vector_scene_graph_dirty_union_tree_budget_keeps_overlap_cluster_split_when_union_area_is_too_large) {
+    VgClipRect leaves[2] = {
+        {.x = 0, .y = 0, .w = 10, .h = 2},
+        {.x = 8, .y = 1, .w = 10, .h = 2},
+    };
+    VgClipRect planned[4] = {0};
+
+    size_t plan_count = vg_dirty_union_plan_rects(leaves, 2u, 64u, planned, 4u);
+
+    TEST_ASSERT_EQUAL_UINT(2u, plan_count);
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[0], leaves[0]));
+    TEST_ASSERT_TRUE(vg_clip_rect_equal(planned[1], leaves[1]));
 }
 
 TEST(test_vector_scene_graph_dirty_union_tree_budget_falls_back_to_union_when_output_capacity_too_small) {
@@ -3552,8 +3606,111 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_non_loop_timeline_cl
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":period-ms"))));
     TEST_ASSERT_EQUAL_INT(1000, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":permille"))));
     TEST_ASSERT_TRUE(map_get(progress_map, (ID)intern_symbol_global(":loop")) == clj_false);
+    TEST_ASSERT_TRUE(map_get(progress_map, (ID)intern_symbol_global(":end-event")) == clj_false);
+    TEST_ASSERT_TRUE(map_get(progress_map, (ID)intern_symbol_global(":at-end")) == clj_true);
     TEST_ASSERT_EQUAL_INT(92, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":snapshot-gen"))));
     TEST_ASSERT_EQUAL_INT(150, as_fixnum(map_get(progress_map, (ID)intern_symbol_global(":ts-ms"))));
+
+    vg_rendered_state_reset_all();
+}
+
+TEST(test_vector_scene_graph_runtime_rendered_state_queries_expose_timeline_end_event_metadata) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    vg_rendered_state_reset_all();
+
+    ID scene = eval_string(
+        "(do (require 'tiny-fx.gfx) (require '[tiny-fx.gfx-scene :refer :all]) "
+        "  (let [entities {'root (->Line 'root nil (->Style 65535 1 true false 0 false 0) true "
+        "                          (record-create (quote Timeline) [[[0 4] [100 14]] false true]) 8 20 8 nil)}] "
+        "    (record-create (quote FrameScene) ['root entities [0 0 64 48] 0 true true 0 0 nil])))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(scene);
+
+    uint16_t pixels[TEST_W * TEST_H];
+    VgFrameBuffer fb;
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, TEST_W, TEST_H, pixels, TEST_W * TEST_H));
+    vg_framebuffer_clear(&fb, 0x0000u);
+
+    VgRenderSlotState state = {0};
+    uint32_t dirty_pixels = 0u;
+    vg_rendered_state_capture_begin(2u, 93u, 150u);
+    bool rendered = vg_render_frame_slot_record_if_changed_at_ms(scene, &state, &fb, 1u, 150u, &dirty_pixels);
+    if (rendered) {
+        vg_rendered_state_capture_commit();
+    } else {
+        vg_rendered_state_capture_discard();
+    }
+    TEST_ASSERT_TRUE(rendered);
+
+    ID result = eval_string(
+        "(do (require 'tiny-clj.runtime) "
+        "    (require 'tiny-fx.gfx) "
+        "    (require 'tiny-fx.game-demo) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
+        "    (tiny-clj.runtime/renderer-timeline-progress :game 'root :x1))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_map(result));
+
+    TEST_ASSERT_TRUE(map_get(result, (ID)intern_symbol_global(":loop")) == clj_false);
+    TEST_ASSERT_TRUE(map_get(result, (ID)intern_symbol_global(":end-event")) == clj_true);
+    TEST_ASSERT_TRUE(map_get(result, (ID)intern_symbol_global(":at-end")) == clj_true);
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(map_get(result, (ID)intern_symbol_global(":step"))));
+    TEST_ASSERT_EQUAL_INT(100, as_fixnum(map_get(result, (ID)intern_symbol_global(":period-ms"))));
+    TEST_ASSERT_EQUAL_INT(1000, as_fixnum(map_get(result, (ID)intern_symbol_global(":permille"))));
+
+    vg_rendered_state_reset_all();
+}
+
+TEST(test_vector_scene_graph_timeline_watch_polls_marked_end_edges_once) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    vg_rendered_state_reset_all();
+
+    VgRenderedTimelineSample sample = {
+        .step_index = 1u,
+        .keyframe_count = 2u,
+        .phase_ms = 100u,
+        .period_ms = 100u,
+        .loop = false,
+        .end_event = true,
+        .at_end = true,
+    };
+
+    vg_rendered_state_capture_begin(2u, 44u, 150u);
+    vg_rendered_state_capture_record_timeline((uintptr_t)fixnum(3001), VG_RENDERED_FIELD_T, sample);
+    vg_rendered_state_capture_commit();
+
+    ID result = eval_string(
+        "(do (require 'tiny-clj.runtime) "
+        "    (require 'tiny-fx.gfx) "
+        "    (require 'tiny-fx.gfx-timeline) "
+        "    (require 'tiny-fx.game-demo) "
+        "    (tiny-clj.runtime/start-renderer! (tiny-fx.game-demo/slot-descriptors)) "
+        "    (let [seen (atom [])] "
+        "      (tiny-fx.gfx-timeline/watch :demo/end "
+        "        (fn [event] "
+        "          (swap! seen conj [(:id event) (:at-end (:progress event))]) "
+        "          nil) "
+        "        {:slot :game :entity-id 3001 :field :t}) "
+        "      (tiny-fx.gfx-timeline/poll-watchers!) "
+        "      (tiny-fx.gfx-timeline/poll-watchers!) "
+        "      (tiny-fx.gfx-timeline/watch :demo/end nil) "
+        "      @seen))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(result));
+    CljPersistentVector *vec = as_vector(result);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(1, vector_count(vec));
+
+    ID entry = vector_nth(vec, 0);
+    TEST_ASSERT_NOT_NULL(entry);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_PERSISTENT, TAG(entry));
+    CljPersistentVector *event_vec = as_vector(entry);
+    TEST_ASSERT_NOT_NULL(event_vec);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(event_vec));
+    TEST_ASSERT_NOT_NULL(vector_nth(event_vec, 0));
+    TEST_ASSERT_TRUE(vector_nth(event_vec, 1) == clj_true);
 
     vg_rendered_state_reset_all();
 }

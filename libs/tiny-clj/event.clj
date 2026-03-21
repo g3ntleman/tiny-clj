@@ -3,6 +3,17 @@
             [tiny-clj.sensor :as sensor]
             [tiny-fx.gfx-collision :as collision]))
 
+(def gfx-timeline-loaded? (atom false))
+
+(defn- ensure-gfx-timeline!
+  []
+  (if @gfx-timeline-loaded?
+    nil
+    (do
+      (require 'tiny-fx.gfx-timeline)
+      (reset! gfx-timeline-loaded? true)
+      nil)))
+
 (defn- subscribe [descriptor callback opts]
   (let [source (get descriptor :source)
         id (get descriptor :id)]
@@ -14,6 +25,11 @@
       (= source :button) (button/watch id callback opts)
       (= source :sensor) (sensor/watch id callback opts)
       (= source :spatial) (collision/watch id callback opts)
+      (= source :timeline) (if (and (nil? callback) (not @gfx-timeline-loaded?))
+                             nil
+                             (do
+                               (ensure-gfx-timeline!)
+                               (tiny-fx.gfx-timeline/watch id callback opts)))
       :else (throw (str "event/on: unsupported :source " source)))))
 
 (defn on
@@ -28,6 +44,7 @@ Supported sources:
   :button  -> semantic button events
   :sensor  -> semantic sensor events
   :spatial -> semantic spatial/collision events
+  :timeline -> semantic timeline-end events
 
 Options are forwarded to the underlying source-specific runtime."
   [& args]
@@ -47,3 +64,9 @@ Options are forwarded to the underlying source-specific runtime."
 
       :else
       (throw "event/on expects 2, 3, or 4 arguments"))))
+
+(defn kick-timeline-watchers!
+  []
+  (when @gfx-timeline-loaded?
+    (tiny-fx.gfx-timeline/kick-watchers!))
+  nil)

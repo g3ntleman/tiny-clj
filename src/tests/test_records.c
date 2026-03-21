@@ -726,6 +726,9 @@ TEST(test_record_value_accessors_return_borrowed_aliases_for_manual_descriptor) 
     TEST_ASSERT_EQUAL_INT(key_rc_before, retain_count(key_name));
     TEST_ASSERT_EQUAL_INT(value_rc_before, retain_count(value_name));
 
+    RETAIN(key_out);
+    RETAIN(value_out_index);
+
     RELEASE(record);
     RELEASE(vals);
     RELEASE(desc);
@@ -735,6 +738,10 @@ TEST(test_record_value_accessors_return_borrowed_aliases_for_manual_descriptor) 
 
     TEST_ASSERT_EQUAL_STRING("value-a", string_data(value_out_index));
     TEST_ASSERT_EQUAL_STRING("value-a", string_data(value_out_lookup));
+    TEST_ASSERT_EQUAL_STRING("field-a", string_data(key_out));
+
+    RELEASE(value_out_index);
+    RELEASE(key_out);
 }
 
 TEST(test_make_map_from_record_returns_owned_map_without_leaking_when_released) {

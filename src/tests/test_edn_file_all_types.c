@@ -174,7 +174,7 @@ TEST(test_tagged_literals_roundtrip_inst_uuid)
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     ID inst = AUTORELEASE(make_instant(0, 0));
-    CljString *inst_str = pr_str(inst);
+    CljString *inst_str = make_string_description(inst);
     TEST_ASSERT_NOT_NULL(inst_str);
 
     Reader inst_reader;
@@ -187,7 +187,7 @@ TEST(test_tagged_literals_roundtrip_inst_uuid)
 
     ID uuid = AUTORELEASE(clj_uuid_from_string("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"));
     TEST_ASSERT_NOT_NULL(uuid);
-    CljString *uuid_str = pr_str(uuid);
+    CljString *uuid_str = make_string_description(uuid);
     TEST_ASSERT_NOT_NULL(uuid_str);
 
     Reader uuid_reader;

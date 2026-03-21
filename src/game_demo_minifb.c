@@ -35,6 +35,7 @@
 #include "MiniFB.h"
 #if defined(__APPLE__)
 #include "game_demo_macos_menu.h"
+#include "tiny_fx_macos_app.h"
 #endif
 
 #define VIEW_W 320
@@ -207,6 +208,115 @@ static void viewer_draw_redraw_overlay(uint32_t *pixels,
     for (size_t i = 0; i < rect_count; i++) {
         viewer_draw_rect_outline_xrgb8888(pixels, width, height, rects[i], color);
     }
+}
+
+#if defined(__APPLE__)
+typedef TinyFxMacosWindow ViewerHostWindow;
+typedef ViewerHostWindow *(*ViewerHostWindowOpenFn)(const char *title, unsigned width, unsigned height);
+typedef void (*ViewerHostWindowCloseFn)(ViewerHostWindow *window);
+#else
+typedef struct mfb_window ViewerHostWindow;
+#endif
+
+#if defined(__APPLE__)
+static ViewerHostWindow *viewer_host_window_open_with_backend(ViewerHostWindowOpenFn open_window_fn,
+                                                              const char *title,
+                                                              unsigned width,
+                                                              unsigned height) {
+    if (!open_window_fn) {
+        return NULL;
+    }
+    ViewerHostWindow *window = open_window_fn(title, width, height);
+    if (!window) {
+        return NULL;
+    }
+    macos_viewer_start_runloop_watchdog();
+    return window;
+}
+#endif
+
+static ViewerHostWindow *viewer_host_window_open(const char *title,
+                                                 unsigned width,
+                                                 unsigned height) {
+#if defined(__APPLE__)
+    return viewer_host_window_open_with_backend(tinyfx_macos_window_open, title, width, height);
+#else
+    return mfb_open_ex(title, width, height, 0u);
+#endif
+}
+
+#if defined(__APPLE__)
+static void viewer_host_window_close_with_backend(ViewerHostWindow *window,
+                                                  ViewerHostWindowCloseFn close_window_fn) {
+    if (!window || !close_window_fn) {
+        return;
+    }
+    macos_viewer_stop_runloop_watchdog();
+    close_window_fn(window);
+}
+#endif
+
+static void viewer_host_window_close(ViewerHostWindow *window) {
+#if defined(__APPLE__)
+    viewer_host_window_close_with_backend(window, tinyfx_macos_window_close);
+#else
+    mfb_close(window);
+#endif
+}
+
+static void viewer_host_window_show_cursor(ViewerHostWindow *window, bool show) {
+#if defined(__APPLE__)
+    tinyfx_macos_window_show_cursor(window, show);
+#else
+    mfb_show_cursor(window, show);
+#endif
+}
+
+static bool viewer_host_window_set_viewport(ViewerHostWindow *window,
+                                            unsigned offset_x,
+                                            unsigned offset_y,
+                                            unsigned width,
+                                            unsigned height) {
+#if defined(__APPLE__)
+    return tinyfx_macos_window_set_viewport(window, offset_x, offset_y, width, height);
+#else
+    return mfb_set_viewport(window, offset_x, offset_y, width, height);
+#endif
+}
+
+static const uint8_t *viewer_host_window_get_key_buffer(ViewerHostWindow *window) {
+#if defined(__APPLE__)
+    return tinyfx_macos_window_get_key_buffer(window);
+#else
+    return mfb_get_key_buffer(window);
+#endif
+}
+
+static bool viewer_host_window_pump_events(ViewerHostWindow *window) {
+#if defined(__APPLE__)
+    return tinyfx_macos_window_pump_events(window);
+#else
+    return mfb_update_events(window) == STATE_OK;
+#endif
+}
+
+static bool viewer_host_window_wait_sync(ViewerHostWindow *window) {
+#if defined(__APPLE__)
+    return tinyfx_macos_window_wait_sync(window);
+#else
+    return mfb_wait_sync(window);
+#endif
+}
+
+static mfb_update_state viewer_host_window_update(ViewerHostWindow *window,
+                                                  const uint32_t *buffer,
+                                                  unsigned width,
+                                                  unsigned height) {
+#if defined(__APPLE__)
+    return tinyfx_macos_window_update(window, buffer, width, height);
+#else
+    return mfb_update_ex(window, (void *)buffer, width, height);
+#endif
 }
 
 static uint32_t viewer_clip_rect_area_on_framebuffer(VgClipRect rect, int fb_w, int fb_h) {
@@ -712,8 +822,8 @@ static void *viewer_render_thread_main(void *arg) {
         uint32_t frame_dirty_pixels = 0u;
         uint32_t frame_changed_slots = 0u;
         uint64_t frame_skipped_total = 0u;
-        VgClipRect frame_dirty_rects[VIEWER_MAX_SLOTS] = {0};
-        uint8_t frame_dirty_rect_count = 0u;
+        VgClipRect frame_dirty_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
+        size_t frame_dirty_rect_count = 0u;
         if (pthread_mutex_lock(&g_render_thread.mutex) != 0) {
             continue;
         }
@@ -739,6 +849,9 @@ static void *viewer_render_thread_main(void *arg) {
             uint16_t prev_clear_color = g_render_thread.slot_states[i].last_clear_color;
             uint8_t prev_guard_px = g_render_thread.slot_states[i].last_guard_px;
             VgRenderFrameSlotResult slot_result = {0};
+            VgClipRect refined_dirty_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
+            size_t refined_dirty_count = 0u;
+            bool use_refined_dirty_rects = false;
             vg_rendered_state_capture_begin(i, slot_generations[i], frame_now_ms);
             bool rendered = vg_render_frame_slot_record_result_at_ms(snapshot,
                                                                      &g_render_thread.slot_states[i],
@@ -754,18 +867,24 @@ static void *viewer_render_thread_main(void *arg) {
                                         prev_opaque == g_render_thread.slot_states[i].last_opaque &&
                                         prev_clear_color == g_render_thread.slot_states[i].last_clear_color &&
                                         prev_guard_px == g_render_thread.slot_states[i].last_guard_px;
-            if (rendered && slot_animated_tick && slot_props_unchanged) {
-                VgClipRect refined_dirty = {0};
+            if (rendered && slot_props_unchanged) {
                 uint8_t dirty_padding = (g_render_thread.slot_states[i].last_guard_px <= 253u)
                                             ? (uint8_t)(g_render_thread.slot_states[i].last_guard_px + 2u)
                                             : UINT8_MAX;
-                if (vg_rendered_state_capture_compute_dirty_rect(i,
-                                                                 g_render_thread.slot_states[i].last_clip_rect,
-                                                                 dirty_padding,
-                                                                 &refined_dirty)) {
-                    slot_result.dirty_rect = refined_dirty;
-                    slot_result.dirty_pixels =
-                        viewer_clip_rect_area_on_framebuffer(refined_dirty, fb->width, fb->height);
+                if (vg_rendered_state_capture_collect_dirty_rects(i,
+                                                                  g_render_thread.slot_states[i].last_clip_rect,
+                                                                  dirty_padding,
+                                                                  refined_dirty_rects,
+                                                                  VIEWER_MAX_DIRTY_PLAN_RECTS,
+                                                                  &refined_dirty_count) &&
+                    refined_dirty_count > 0u) {
+                    use_refined_dirty_rects = true;
+                    slot_result.dirty_rect = refined_dirty_rects[0];
+                    slot_result.dirty_pixels = 0u;
+                    for (size_t dirty_i = 0; dirty_i < refined_dirty_count; dirty_i++) {
+                        slot_result.dirty_pixels +=
+                            viewer_clip_rect_area_on_framebuffer(refined_dirty_rects[dirty_i], fb->width, fb->height);
+                    }
                 }
             }
             if (rendered) {
@@ -794,7 +913,12 @@ static void *viewer_render_thread_main(void *arg) {
                 g_render_thread.last_rendered_generation[i] = curr_gen;
                 frame_changed_slots++;
                 frame_dirty_pixels += slot_result.dirty_pixels;
-                if (frame_dirty_rect_count < g_viewer_slot_count) {
+                if (use_refined_dirty_rects &&
+                    frame_dirty_rect_count + refined_dirty_count <= VIEWER_MAX_DIRTY_PLAN_RECTS) {
+                    for (size_t dirty_i = 0; dirty_i < refined_dirty_count; dirty_i++) {
+                        frame_dirty_rects[frame_dirty_rect_count++] = refined_dirty_rects[dirty_i];
+                    }
+                } else if (frame_dirty_rect_count < VIEWER_MAX_DIRTY_PLAN_RECTS) {
                     frame_dirty_rects[frame_dirty_rect_count++] = slot_result.dirty_rect;
                 }
             }
@@ -841,7 +965,7 @@ static void *viewer_render_thread_main(void *arg) {
             uint64_t transfer_begin_ns = monotonic_now_ns();
             VgClipRect planned_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
             size_t planned_count = vg_dirty_union_plan_rects(frame_dirty_rects,
-                                                             (size_t)frame_dirty_rect_count,
+                                                             frame_dirty_rect_count,
                                                              VIEWER_DIRTY_PIXEL_BUDGET,
                                                              planned_rects,
                                                              VIEWER_MAX_DIRTY_PLAN_RECTS);
@@ -949,7 +1073,7 @@ static bool viewer_renderer_stop_callback(void *user_data) {
 }
 
 /* Publish one already-built FrameScene record into one slot atom and mark it dirty. */
-static bool viewer_wait_for_frame_pacing(struct mfb_window *window,
+static bool viewer_wait_for_frame_pacing(ViewerHostWindow *window,
                                          bool use_mfb_waitsync,
                                          uint64_t target_frame_ns,
                                          uint64_t *next_frame_deadline_ns,
@@ -957,7 +1081,7 @@ static bool viewer_wait_for_frame_pacing(struct mfb_window *window,
     uint64_t waitsync_begin_ns = monotonic_now_ns();
     bool waitsync_ok = true;
     if (use_mfb_waitsync) {
-        waitsync_ok = mfb_wait_sync(window);
+        waitsync_ok = viewer_host_window_wait_sync(window);
     } else {
 #if defined(__APPLE__)
         uint64_t deadline_mach = mach_absolute_time() +
@@ -1055,8 +1179,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
 #else
     uint16_t fb_pixels[VIEW_W * VIEW_H];
     uint32_t window_pixels[VIEW_W * VIEW_H];
-    struct mfb_window *window = NULL;
-    struct mfb_timer *timer = NULL;
+    ViewerHostWindow *window = NULL;
     bool slot_runtime_initialized = false;
     bool slot_tracker_initialized = false;
     bool render_thread_started = false;
@@ -1065,6 +1188,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
     ViewerSceneBundle demo_bundle = {0};
     ViewerSpatialRuleSet spatial_rules = {0};
     int exit_code = 1;
+    uint64_t app_start_ns = monotonic_now_ns();
     viewer_set_realtime_thread_policy();
 
     g_gram_pixels = fb_pixels;
@@ -1128,6 +1252,11 @@ int tinyclj_tiny_fx_host_app_run(void) {
         goto cleanup;
     }
     runloop_thread_started = true;
+    if (demo_bundle.startup_callback &&
+        !event_loop_enqueue_ingress_call((CljObject *)demo_bundle.startup_callback, NULL)) {
+        fprintf(stderr, "Failed to enqueue viewer startup callback\n");
+        goto cleanup;
+    }
     if (!vg_slot_change_tracker_init(&g_slot_change_tracker, demo_bundle.slot_count)) {
         fprintf(stderr, "Failed to initialize slot change tracker\n");
         goto cleanup;
@@ -1144,35 +1273,28 @@ int tinyclj_tiny_fx_host_app_run(void) {
     render_thread_started = true;
 
 #if defined(__APPLE__)
-    macos_viewer_install_menu();
     macos_viewer_begin_performance_activity();
 #endif
     const unsigned default_win_w = VIEW_W * VIEW_DEFAULT_WINDOW_SCALE;
     const unsigned default_win_h = VIEW_H * VIEW_DEFAULT_WINDOW_SCALE;
-    window = mfb_open_ex("tiny-fx", default_win_w, default_win_h, 0);
+    window = viewer_host_window_open("tiny-fx", default_win_w, default_win_h);
     if (!window) {
         fprintf(stderr, "Failed to open MiniFB window\n");
         goto cleanup;
     }
-#if defined(__APPLE__)
-    macos_viewer_register_window_callbacks();
-    macos_viewer_restore_window_position();
-    macos_viewer_activate_app_window();
-#endif
-    mfb_show_cursor(window, true);
-    (void)mfb_set_viewport(window, 0, 0, default_win_w, default_win_h);
-    timer = mfb_timer_create();
-    if (!timer) {
-        fprintf(stderr, "Failed to create MiniFB timer\n");
-        goto cleanup;
-    }
+    viewer_host_window_show_cursor(window, true);
+    (void)viewer_host_window_set_viewport(window, 0, 0, default_win_w, default_win_h);
     ViewerPerfWindow perf_window;
-    perf_window_init(&perf_window, mfb_timer_now(timer));
+    perf_window_init(&perf_window, 0.0);
 
     uint_fast32_t last_presented_frame_serial = 0u;
     uint_fast32_t last_collision_frame_serial = 0u;
     ViewerRuntimeFlags runtime_flags = {
+#if defined(__APPLE__)
+        .use_mfb_waitsync = false,
+#else
         .use_mfb_waitsync = true,
+#endif
         .r_key_was_down = false,
         .redraw_overlay_enabled = false,
         .w_key_was_down = false
@@ -1194,7 +1316,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
     }
 
     while (true) {
-        float time_s = (float)mfb_timer_now(timer);
+        double time_s = (double)(monotonic_now_ns() - app_start_ns) / 1e9;
         if (!viewer_wait_for_frame_pacing(window,
                                           runtime_flags.use_mfb_waitsync,
                                           target_frame_ns,
@@ -1203,7 +1325,10 @@ int tinyclj_tiny_fx_host_app_run(void) {
             break;
         }
 
-        const uint8_t *keys = mfb_get_key_buffer(window);
+        if (!viewer_host_window_pump_events(window)) {
+            break;
+        }
+        const uint8_t *keys = viewer_host_window_get_key_buffer(window);
         if (viewer_should_exit_for_keys(keys)) {
             break;
         }
@@ -1244,7 +1369,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
         }
 
         ViewerPerfSnapshot perf_snapshot;
-        bool perf_ready = perf_window_take_snapshot_if_due(&perf_window, (double)time_s, &perf_snapshot);
+        bool perf_ready = perf_window_take_snapshot_if_due(&perf_window, time_s, &perf_snapshot);
         if (perf_ready) {
             collect_render_thread_metrics(&perf_snapshot);
         }
@@ -1326,7 +1451,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
         last_present_ns = now_ns;
 
         uint64_t update_begin_ns = monotonic_now_ns();
-        mfb_update_state state = mfb_update_ex(window, window_pixels, VIEW_W, VIEW_H);
+        mfb_update_state state = viewer_host_window_update(window, window_pixels, VIEW_W, VIEW_H);
         uint64_t update_end_ns = monotonic_now_ns();
         uint64_t update_ns = (update_end_ns > update_begin_ns)
                                  ? (update_end_ns - update_begin_ns)
@@ -1340,9 +1465,6 @@ int tinyclj_tiny_fx_host_app_run(void) {
     exit_code = 0;
 
 cleanup:
-    if (timer) {
-        mfb_timer_destroy(timer);
-    }
 #if defined(__APPLE__)
     if (window) {
         macos_viewer_save_window_position();
@@ -1350,7 +1472,7 @@ cleanup:
     macos_viewer_end_performance_activity();
 #endif
     if (window) {
-        mfb_close(window);
+        viewer_host_window_close(window);
     }
     if (runloop_thread_started) {
         stop_runloop_thread();

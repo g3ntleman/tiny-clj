@@ -1,55 +1,58 @@
 ---
 name: Host Panel API Align
-overview: Host-Simulator und ESP-Display-Pfad werden über eine gemeinsame controller-agnostische Panel-API vereinheitlicht. Die Migration erfolgt test-first, schrittweise und verankert eine budgetierte Dirty-Rect-Renderstrategie mit Union-Baum, bevor die Alt-API abgebaut und der SPI-Durchsatz gemessen wird.
+overview: Host-Simulator und ESP-Display-Pfad werden über eine gemeinsame controller-agnostische Panel-API vereinheitlicht. Host-seitige Panel-API, Adapter, Direkt-Flush und Alt-API-Abbau sind bereits umgesetzt; der Host-Dirty-Rect-Planer clustert inzwischen nur noch über echte Blatt-Überlappungen statt über Cluster-BBoxen. Offen bleiben vor allem das konkrete ESP-Backend, die weitere Dirty-Union-/Buffer-Budget-Arbeit und die hardware-nahe Verifikation.
 todos:
   - id: baseline-tests
     content: Bestehende Render-/Runtime-Tests als Baseline ausführen und dokumentieren
-    status: pending
+    status: completed
   - id: test-panel-contract
     content: Zuerst Kontrakt-Tests für die neue Panel-API anlegen (reset, init, orientation, bitmap-write, Fehlerfälle, Reihenfolge)
-    status: pending
+    status: completed
   - id: implement-panel-api
     content: Controller-agnostische Panel-API (Header, Basistypen und esp_lcd-nahes Operationsmodell) implementieren, ohne Aufrufer zu migrieren
-    status: pending
+    status: completed
   - id: test-compat-adapter
     content: Adapter-Tests für Mapping von VgBackendOps.submit_rect auf Panel-API schreiben
-    status: pending
+    status: completed
   - id: implement-compat-adapter
     content: Kompatibilitäts-Layer implementieren und bestehende Aufrufer unverändert weiter betreiben
-    status: pending
+    status: completed
   - id: test-host-migration
     content: Host-spezifische Tests für GRAM-Update und MiniFB-Integrationsgrenzen ergänzen
-    status: pending
+    status: completed
   - id: migrate-host-panel
     content: Host-Simulator (game_demo_minifb und viewer_host_*) auf die Panel-API umstellen
-    status: pending
+    status: completed
   - id: test-esp-panel
     content: ESP/ILI9341-nahe Tests für set_window und write_rgb565 Transferpfad ergänzen
-    status: pending
+    status: completed
   - id: implement-esp-panel
     content: ESP-Panel-Backend hinter derselben Panel-API anbinden
-    status: pending
+    status: in_progress
   - id: test-throughput-metrics
     content: Tests für Erfassung und Ausgabe von SPI-Durchsatzmetriken ergänzen
-    status: pending
+    status: completed
   - id: tune-buffer-sweet-spot
     content: Sweet Spot fuer Startgroesse, Wachstum und Obergrenze des Redraw-Buffers je Spielprofil empirisch bestimmen
     status: pending
   - id: test-dirty-union-tree
     content: Tests für Dirty-Rect-Cluster, Union-Baum, Budget-Entscheidung und geometrischen Fallback für zu große Blätter ergänzen
-    status: pending
+    status: completed
   - id: implement-dirty-union-tree
     content: Budgetierte Dirty-Rect-Strategie mit Union-Baum und Rendering über Kinder vor der Union implementieren
-    status: pending
+    status: in_progress
+  - id: stabilize-host-collision-wall-crash
+    content: Sporadischen Host-Crash bei Wandkollisionen im Breakout-Pfad test-first stabilisieren (ohne LLDB, nur über reproduzierbare Regressionstests und Instrumentierung)
+    status: in_progress
   - id: measure-spi-throughput
     content: SPI-Durchsatz instrumentieren und reproduzierbar auswerten (Host und ESP getrennt)
-    status: pending
+    status: completed
   - id: test-legacy-removal
     content: Schutztests für verbliebene Alt-API-Aufrufer hinzufügen, um vollständige Migration sicherzustellen
-    status: pending
+    status: completed
   - id: decommission-legacy-api
     content: Alte Display-/Backend-API nach vollständiger Migration entfernen
-    status: pending
+    status: completed
   - id: cleanup
     content: Sourcecode aufräumen – Debug-Code, temporäre Workarounds, tote Codepfade, überflüssige Kommentare und nicht mehr benötigte Hilfsfunktionen entfernen
     status: pending
@@ -82,7 +85,7 @@ isProject: true
 ## Relevante Dateien
 
 - Host-Flush und Viewer-Pfad: [`/Users/theisen/Projects/tiny-clj/src/game_demo_minifb.c`](/Users/theisen/Projects/tiny-clj/src/game_demo_minifb.c)
-- Aktuelle Backend-Grenze: [`/Users/theisen/Projects/tiny-clj/src/render_backend.h`](/Users/theisen/Projects/tiny-clj/src/render_backend.h)
+- Gemeinsame Panel-Grenze: [`/Users/theisen/Projects/tiny-clj/src/panel.h`](/Users/theisen/Projects/tiny-clj/src/panel.h), [`/Users/theisen/Projects/tiny-clj/src/panel_backend.h`](/Users/theisen/Projects/tiny-clj/src/panel_backend.h), [`/Users/theisen/Projects/tiny-clj/src/panel_esp_lcd.h`](/Users/theisen/Projects/tiny-clj/src/panel_esp_lcd.h), [`/Users/theisen/Projects/tiny-clj/src/panel_esp_lcd.c`](/Users/theisen/Projects/tiny-clj/src/panel_esp_lcd.c)
 - Framebuffer/Primitives: [`/Users/theisen/Projects/tiny-clj/src/vector_scene_graph.h`](/Users/theisen/Projects/tiny-clj/src/vector_scene_graph.h), [`/Users/theisen/Projects/tiny-clj/src/gfx.h`](/Users/theisen/Projects/tiny-clj/src/gfx.h)
 - Host-Helfer: [`/Users/theisen/Projects/tiny-clj/src/viewer_host_runloop.h`](/Users/theisen/Projects/tiny-clj/src/viewer_host_runloop.h), [`/Users/theisen/Projects/tiny-clj/src/viewer_host_slots.h`](/Users/theisen/Projects/tiny-clj/src/viewer_host_slots.h), [`/Users/theisen/Projects/tiny-clj/src/viewer_host_spatial.h`](/Users/theisen/Projects/tiny-clj/src/viewer_host_spatial.h)
 - Testbasis: [`/Users/theisen/Projects/tiny-clj/src/tests/test_vector_scene_graph.c`](/Users/theisen/Projects/tiny-clj/src/tests/test_vector_scene_graph.c), [`/Users/theisen/Projects/tiny-clj/src/tests/test_breakout_contract.c`](/Users/theisen/Projects/tiny-clj/src/tests/test_breakout_contract.c), [`/Users/theisen/Projects/tiny-clj/src/tests/test_breakout_runtime_startup.c`](/Users/theisen/Projects/tiny-clj/src/tests/test_breakout_runtime_startup.c)
@@ -102,6 +105,28 @@ isProject: true
 - Rohes Controller-I/O (`tx_param`, `tx_color`) bleibt eine untere Escape-Hatch fuer herstellerspezifische ILI9341/Panel-Kommandos, gehoert aber nicht zur normalen App-Grenze.
 - Rendering-Primitive bleiben oberhalb dieser Schicht in der bestehenden Renderer-/Dirty-Rect-Logik.
 - Die App soll gegen die gemeinsame Panel-API arbeiten; die ESP-Implementierung mappt auf `esp_lcd_panel_*`, der Host auf GRAM-/Fenster-Simulation.
+
+## Aktueller Stand
+
+- Der Host-Viewer flushte bereits erfolgreich ueber die gemeinsame Panel-Layer.
+- Die fruehere `render_backend`-Zwischenschicht ist entfernt; produktive Host-Aufrufer sprechen direkt mit `panel`/`panel_backend`.
+- Gemeinsame, allokationsfreie Helper fuer strided RGB565-Views und Blits sind vorhanden, damit Host und spaeter ESP dieselbe Geometrie-/Copy-Logik nutzen.
+- Ein host-testbarer `esp_lcd`-Adapter (`panel_esp_lcd`) fuer `reset/init`, Orientierung, Gap, Bitmap-Flush, Display an/aus und Sleep ist vorhanden und in Host- sowie ESP32-Builds eingebunden.
+- Fuer den ESP32 existiert nun ein konkreter ST7789-Bootstrap unter `esp32-idf/main/tinyclj_idf_display.c`, der Board-Pins aus `vector_handheld_config.h` verwendet, ein `esp_lcd`-Panel erstellt und ueber `vg_esp_lcd_panel_init_handle` als `VgPanel` exponiert.
+- `app_main()` haengt diesen Display-Bootstrap in `tiny-fx`-Builds bereits best-effort ein; offen bleibt vor allem die spaetere Nutzung dieses Panels durch den eigentlichen ESP-Render-/Flush-Pfad.
+- Breakout laeuft auf dem Host ueber denselben generischen Viewer-/Panel-Pfad.
+- Collision-Checks im Host wurden bereits an Render-Snapshots gekoppelt und um Dirty-Rect-basierte Kandidatenfilter erweitert, um unnoetige Regelpruefungen zu vermeiden.
+- Der aktuelle Dirty-Rect-Planer bildet Cluster jetzt aus echten Leaf-Ueberlappungen statt aus der wachsenden Cluster-Union-BBox; damit werden weit getrennte Rects wie Ball und Schlaeger nicht mehr unnoetig zu einem Transfer-Rect vereinigt.
+- Ein Regressionstest deckt den Fehlpfad ab, bei dem ein Rect nur innerhalb des Bounding-Box-Lochs eines Clusters liegt und deshalb trotz fehlender Leaf-Ueberlappung frueher irrtuemlich mit dem Cluster gemerged wurde.
+- Es gibt weiterhin sporadische Host-Crashes bei Wandkollisionen im Breakout-Flow; der reine Core-Wall-Pfad ist bereits per Regressionstest abgesichert, der verbleibende Fehler liegt voraussichtlich im Host-Interplay (Render/Collision/Event-Loop).
+- Debug-Constraint: Fuer diese Crash-Analyse ist LLDB nicht verfuegbar (keine Admin-Rechte); die Stabilisierung erfolgt deshalb test-first ueber reproduzierbare Unit-/Contract-Tests und gezielte Instrumentierung.
+
+## Abgrenzung zum Button-Handling
+
+- Das Display-/Panel-Thema bleibt in diesem Plan auf Flush-, Dirty-Rect- und ESP-Panel-Mapping fokussiert.
+- Das aktuell sichtbare Stabilitaetsproblem im Host-Breakout betrifft nicht die Panel-Layer selbst, sondern den Input-/Timer-Pfad fuer GPIO-Buttons.
+- Nicht-pollendes Button-Handling fuer ESP32 und Host-Testbarkeit wird deshalb in einem separaten Plan behandelt: `Plans/esp32_button_handling_no_polling.plan.md`.
+- Der konkrete ESP-Panel-Pfad kann unabhaengig vorbereitet werden, produktive End-to-End-Verifikation mit Breakout sollte aber erst nach Stabilisierung des Button-Pfads als gruene Gate-Pruefung gelten.
 
 ## Schrittweises Vorgehen mit Gates
 
@@ -127,11 +152,13 @@ isProject: true
 5. ESP-Pfad test-first
 - Erst ESP/ILI9341-nahe Tests fuer `esp_lcd`-Mapping definieren (`panel_reset/init`, Orientierung, Bitmap-Flush).
 - Dann konkretes ESP-Backend hinter derselben Panel-API implementieren.
+- Fuer End-to-End-Tests mit Breakout ist vorausgesetzt, dass der Button-/Runloop-Pfad nicht mehr am periodischen Polling-Timer haengt.
 - Gate: Shared API laeuft fuer Host und ESP mit denselben Kernkontrakten und bildet sich ohne Sonderfaelle auf `esp_lcd_panel_*` ab.
 
 6. Dirty-Union-Baum test-first
 - Erst Tests fuer die neue Redraw-Strategie definieren:
   - ueberlappende Rects werden zu logischen Clustern zusammengefasst
+  - ein Rect innerhalb der Bounding-Box eines Clusters, aber ohne Leaf-Ueberlappung, bleibt getrennt
   - ein Union-Knoten wird nur direkt gerendert, wenn seine Flaeche ins Buffer-Budget passt
   - passt die Union nicht, werden die beiden Kinder vor der Union separat gerendert
   - beide Kinder werden mit derselben Objektmenge des logischen Clusters gerendert, aber jeweils geclippt
@@ -161,6 +188,7 @@ isProject: true
 - Der konkrete Sweet Spot fuer Startgroesse und Wachstum wird empirisch bestimmt und kann je Spiel oder Szenenprofil unterschiedlich ausfallen.
 - Untere Schranke fuer die Obergrenze: Die konfigurierte Maximalgroesse des Buffers muss gross genug sein, um eine Textzeile ueber die volle Slot-Breite in einem einzelnen Render-/Flush-Pass aufzunehmen.
 - Dirty-Rects werden nicht sofort global unioniert, sondern als Blaetter eines Union-Baums behandelt.
+- Clusterbildung basiert auf Connected Components aus tatsaechlichen Leaf-Ueberlappungen; eine reine Ueberlappung mit der Bounding-Box eines Clusters reicht nicht aus.
 - Ein innerer Knoten repraesentiert die Union zweier Kinder nur als logische Compositing-Einheit.
 - Renderentscheidung pro Knoten:
   - passt `area(rect) * 2` in die aktuell verfuegbare Buffer-Groesse, darf der Knoten direkt gerendert und geflusht werden

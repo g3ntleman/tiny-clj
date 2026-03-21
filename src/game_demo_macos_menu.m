@@ -1,6 +1,8 @@
 #import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
+#include <time.h>
 #include "game_demo_macos_menu.h"
+#include "viewer_host_runloop.h"
 
 static NSString *const kMacosViewerWindowAutosaveName = @"macos_viewer.main_window";
 static NSString *const kMacosViewerScreenUUIDKey = @"macos_viewer.window.screen_uuid";
@@ -10,6 +12,15 @@ static id g_macos_viewer_performance_activity = nil;
 static bool g_macos_viewer_window_autosave_bound = false;
 static bool g_macos_viewer_window_callbacks_registered = false;
 static bool g_macos_viewer_screen_restore_applied = false;
+static NSTimer *g_macos_viewer_runloop_watchdog_timer = nil;
+static NSView *g_macos_viewer_runloop_watchdog_overlay = nil;
+static NSTextField *g_macos_viewer_runloop_watchdog_label = nil;
+static bool g_macos_viewer_runloop_watchdog_stalled = false;
+
+static NSTimeInterval const kMacosViewerRunloopWatchdogPollIntervalSeconds = 3.0;
+static CGFloat const kMacosViewerRunloopWatchdogInset = 12.0;
+static CGFloat const kMacosViewerRunloopWatchdogWidth = 300.0;
+static CGFloat const kMacosViewerRunloopWatchdogHeight = 52.0;
 
 static void macos_viewer_set_performance_activity(id token) {
     id old_token = g_macos_viewer_performance_activity;
@@ -63,6 +74,12 @@ static NSScreen *macos_viewer_find_screen_by_uuid(NSString *target_uuid) {
         }
     }
     return nil;
+}
+
+static uint64_t macos_viewer_monotonic_now_ns(void) {
+    struct timespec ts;
+    (void)clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ((uint64_t)ts.tv_sec * 1000000000ull) + (uint64_t)ts.tv_nsec;
 }
 
 static void macos_viewer_store_screen_position_for_window(NSWindow *window) {
@@ -153,6 +170,112 @@ static NSWindow *macos_viewer_primary_window(void) {
     }
     return nil;
 }
+
+static void macos_viewer_hide_runloop_watchdog_overlay(void) {
+    if (g_macos_viewer_runloop_watchdog_overlay) {
+        [g_macos_viewer_runloop_watchdog_overlay setHidden:YES];
+    }
+}
+
+static void macos_viewer_position_runloop_watchdog_overlay(NSWindow *window) {
+    if (!window || !g_macos_viewer_runloop_watchdog_overlay) {
+        return;
+    }
+    NSView *content_view = [window contentView];
+    if (!content_view) {
+        return;
+    }
+    NSRect bounds = [content_view bounds];
+    NSRect frame = NSMakeRect(kMacosViewerRunloopWatchdogInset,
+                              NSHeight(bounds) - kMacosViewerRunloopWatchdogHeight - kMacosViewerRunloopWatchdogInset,
+                              kMacosViewerRunloopWatchdogWidth,
+                              kMacosViewerRunloopWatchdogHeight);
+    [g_macos_viewer_runloop_watchdog_overlay setFrame:frame];
+}
+
+static void macos_viewer_ensure_runloop_watchdog_overlay(NSWindow *window) {
+    if (!window) {
+        return;
+    }
+    NSView *content_view = [window contentView];
+    if (!content_view) {
+        return;
+    }
+    if (!g_macos_viewer_runloop_watchdog_overlay) {
+        g_macos_viewer_runloop_watchdog_overlay =
+            [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kMacosViewerRunloopWatchdogWidth, kMacosViewerRunloopWatchdogHeight)];
+        [g_macos_viewer_runloop_watchdog_overlay setWantsLayer:YES];
+        [[g_macos_viewer_runloop_watchdog_overlay layer] setCornerRadius:8.0];
+        [[g_macos_viewer_runloop_watchdog_overlay layer]
+            setBackgroundColor:[[NSColor colorWithCalibratedRed:0.74 green:0.14 blue:0.14 alpha:0.92] CGColor]];
+        [g_macos_viewer_runloop_watchdog_overlay setAutoresizingMask:NSViewMaxXMargin | NSViewMinYMargin];
+
+        g_macos_viewer_runloop_watchdog_label =
+            [[NSTextField alloc] initWithFrame:NSMakeRect(10.0, 10.0, kMacosViewerRunloopWatchdogWidth - 20.0, 32.0)];
+        [g_macos_viewer_runloop_watchdog_label setEditable:NO];
+        [g_macos_viewer_runloop_watchdog_label setSelectable:NO];
+        [g_macos_viewer_runloop_watchdog_label setBezeled:NO];
+        [g_macos_viewer_runloop_watchdog_label setBordered:NO];
+        [g_macos_viewer_runloop_watchdog_label setDrawsBackground:NO];
+        [g_macos_viewer_runloop_watchdog_label setTextColor:[NSColor whiteColor]];
+        [g_macos_viewer_runloop_watchdog_label setFont:[NSFont boldSystemFontOfSize:12.0]];
+        [g_macos_viewer_runloop_watchdog_label setLineBreakMode:NSLineBreakByWordWrapping];
+        [g_macos_viewer_runloop_watchdog_label setStringValue:@""];
+        [g_macos_viewer_runloop_watchdog_overlay addSubview:g_macos_viewer_runloop_watchdog_label];
+        [g_macos_viewer_runloop_watchdog_overlay setHidden:YES];
+    }
+    if ([g_macos_viewer_runloop_watchdog_overlay superview] != content_view) {
+        [g_macos_viewer_runloop_watchdog_overlay removeFromSuperview];
+        [content_view addSubview:g_macos_viewer_runloop_watchdog_overlay];
+    }
+    macos_viewer_position_runloop_watchdog_overlay(window);
+}
+
+static void macos_viewer_update_runloop_watchdog_overlay(ViewerRunloopLivenessSnapshot snapshot) {
+    if (snapshot.state != VIEWER_RUNLOOP_LIVENESS_STALLED) {
+        if (g_macos_viewer_runloop_watchdog_stalled) {
+            fprintf(stderr,
+                    "[viewer-runloop] recovered after %.1fs without a runloop tick\n",
+                    (double)snapshot.age_ns / 1e9);
+            fflush(stderr);
+        }
+        g_macos_viewer_runloop_watchdog_stalled = false;
+        macos_viewer_hide_runloop_watchdog_overlay();
+        return;
+    }
+
+    NSWindow *window = macos_viewer_primary_window();
+    if (window) {
+        macos_viewer_ensure_runloop_watchdog_overlay(window);
+        NSString *message =
+            [NSString stringWithFormat:@"Runloop stalled\nLast tick %.1fs ago, iterations %llu",
+                                       (double)snapshot.age_ns / 1e9,
+                                       (unsigned long long)snapshot.iteration_count];
+        [g_macos_viewer_runloop_watchdog_label setStringValue:message];
+        [g_macos_viewer_runloop_watchdog_overlay setHidden:NO];
+    }
+    if (!g_macos_viewer_runloop_watchdog_stalled) {
+        fprintf(stderr,
+                "[viewer-runloop] stalled for %.1fs (iterations=%llu)\n",
+                (double)snapshot.age_ns / 1e9,
+                (unsigned long long)snapshot.iteration_count);
+        fflush(stderr);
+    }
+    g_macos_viewer_runloop_watchdog_stalled = true;
+}
+
+@interface MacosViewerRunloopWatchdogObserver : NSObject
+@end
+
+@implementation MacosViewerRunloopWatchdogObserver
+- (void)runloopWatchdogTimerFired:(NSTimer *)timer {
+    (void)timer;
+    ViewerRunloopLivenessSnapshot snapshot = viewer_runloop_liveness_snapshot(macos_viewer_monotonic_now_ns());
+    macos_viewer_update_runloop_watchdog_overlay(snapshot);
+}
+@end
+
+static MacosViewerRunloopWatchdogObserver *g_macos_viewer_runloop_watchdog_observer = nil;
 
 @interface MacosViewerWindowObserver : NSObject
 @end
@@ -270,6 +393,37 @@ void macos_viewer_register_window_callbacks(void) {
                    name:NSWindowDidChangeScreenNotification
                  object:nil];
         g_macos_viewer_window_callbacks_registered = true;
+    }
+}
+
+void macos_viewer_start_runloop_watchdog(void) {
+    @autoreleasepool {
+        if (g_macos_viewer_runloop_watchdog_timer) {
+            return;
+        }
+        if (!g_macos_viewer_runloop_watchdog_observer) {
+            g_macos_viewer_runloop_watchdog_observer = [MacosViewerRunloopWatchdogObserver new];
+        }
+        g_macos_viewer_runloop_watchdog_stalled = false;
+        macos_viewer_hide_runloop_watchdog_overlay();
+        g_macos_viewer_runloop_watchdog_timer =
+            [[NSTimer scheduledTimerWithTimeInterval:kMacosViewerRunloopWatchdogPollIntervalSeconds
+                                              target:g_macos_viewer_runloop_watchdog_observer
+                                            selector:@selector(runloopWatchdogTimerFired:)
+                                            userInfo:nil
+                                             repeats:YES] retain];
+    }
+}
+
+void macos_viewer_stop_runloop_watchdog(void) {
+    @autoreleasepool {
+        if (g_macos_viewer_runloop_watchdog_timer) {
+            [g_macos_viewer_runloop_watchdog_timer invalidate];
+            [g_macos_viewer_runloop_watchdog_timer release];
+            g_macos_viewer_runloop_watchdog_timer = nil;
+        }
+        g_macos_viewer_runloop_watchdog_stalled = false;
+        macos_viewer_hide_runloop_watchdog_overlay();
     }
 }
 

@@ -45,6 +45,7 @@ STATIC_SYMBOL_DATA(sym_kw_rot_data, ":rot");
 STATIC_SYMBOL_DATA(sym_kw_text_data, ":text");
 STATIC_SYMBOL_DATA(sym_kw_keyframes_data, ":keyframes");
 STATIC_SYMBOL_DATA(sym_kw_loop_data, ":loop");
+STATIC_SYMBOL_DATA(sym_kw_end_event_data, ":end-event");
 STATIC_SYMBOL_DATA(sym_kw_tx_data, ":tx");
 STATIC_SYMBOL_DATA(sym_kw_ty_data, ":ty");
 STATIC_SYMBOL_DATA(sym_kw_sx_data, ":sx");
@@ -111,6 +112,7 @@ static void init_record_keys(void) {
     g_record_keys.k_text = &sym_kw_text_data.sym;
     g_record_keys.k_keyframes = &sym_kw_keyframes_data.sym;
     g_record_keys.k_loop = &sym_kw_loop_data.sym;
+    g_record_keys.k_end_event = &sym_kw_end_event_data.sym;
     g_record_keys.k_tx = &sym_kw_tx_data.sym;
     g_record_keys.k_ty = &sym_kw_ty_data.sym;
     g_record_keys.k_sx = &sym_kw_sx_data.sym;
@@ -219,9 +221,10 @@ static void register_builtin_gfx_records(void) {
     vector_conj_inplace(&fv, intern_symbol_global(":prototype"));
     record_register_descriptor(intern_symbol_global("VText"), fv);
     RELEASE(fv);
-    fv = make_vector(2, STRONG);
+    fv = make_vector(3, STRONG);
     vector_conj_inplace(&fv, intern_symbol_global(":keyframes"));
     vector_conj_inplace(&fv, intern_symbol_global(":loop"));
+    vector_conj_inplace(&fv, intern_symbol_global(":end-event"));
     record_register_descriptor(intern_symbol_global("Timeline"), fv);
     RELEASE(fv);
     fv = make_vector(5, STRONG);
@@ -447,6 +450,7 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
     g_record_schema.text_text = descriptor_index_of(d_text, g_record_keys.k_text);
     g_record_schema.timeline_keyframes = descriptor_index_of(d_timeline, g_record_keys.k_keyframes);
     g_record_schema.timeline_loop = descriptor_index_of(d_timeline, g_record_keys.k_loop);
+    g_record_schema.timeline_end_event = descriptor_index_of(d_timeline, g_record_keys.k_end_event);
     g_record_schema.frame_root = descriptor_index_of(d_frame, g_record_keys.k_root);
     g_record_schema.frame_index = descriptor_index_of(d_frame, g_record_keys.k_index);
     g_record_schema.frame_clip_rect = descriptor_index_of(d_frame, g_record_keys.k_clip_rect);
@@ -481,6 +485,7 @@ bool tiny_fx_gfx_ensure_schema(EvalState *st) {
         g_record_schema.text_x < 0 || g_record_schema.text_y < 0 || g_record_schema.text_scale < 0 ||
         g_record_schema.text_rot < 0 || g_record_schema.text_text < 0 ||
         g_record_schema.timeline_keyframes < 0 || g_record_schema.timeline_loop < 0 ||
+        g_record_schema.timeline_end_event < 0 ||
         g_record_schema.frame_root < 0 || g_record_schema.frame_index < 0 ||
         g_record_schema.frame_clip_rect < 0 || g_record_schema.frame_z < 0 || g_record_schema.frame_visible < 0 ||
         g_record_schema.frame_opaque < 0 || g_record_schema.frame_erase_color < 0 || g_record_schema.frame_guard_px < 0 ||

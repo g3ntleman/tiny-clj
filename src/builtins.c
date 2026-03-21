@@ -3460,7 +3460,7 @@ static void print_helper(ID *args, unsigned int argc, bool readable, bool newlin
   // Print all arguments separated by spaces
   for (unsigned int i = 0; i < argc; i++) {
     if (args[i]) {
-      CljString *str = readable ? pr_str(args[i]) : print_str(args[i]);
+      CljString *str = readable ? make_string_description(args[i]) : print_str(args[i]);
       if (str) {
         platform_put_string(NULL, string_data(str));
       }

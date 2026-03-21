@@ -21,6 +21,7 @@ idf_component_register(
   SRCS
     "tinyclj_idf_main.c"
     "tinyclj_idf_run.c"
+    "tinyclj_idf_display.c"
     ${PLATFORM_SRCS}
   INCLUDE_DIRS
     "."
@@ -32,6 +33,9 @@ idf_component_register(
     esp_hw_support
     heap
     log
+    esp_driver_gpio
+    esp_driver_spi
+    esp_lcd
     esp_driver_uart
     spi_flash
     subjective-c

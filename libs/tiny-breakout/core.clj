@@ -17,6 +17,14 @@
   [state]
   (count (:levels state)))
 
+(defn- ensure-levels
+  [state]
+  (let [xs (:levels state)]
+    (if (and (vector? xs)
+             (not (empty? xs)))
+      state
+      (assoc state :levels (levels/load-levels)))))
+
 (defn- level-bricks
   [state level-index]
   (:bricks (nth (:levels state) level-index)))
@@ -42,7 +50,8 @@
 
 (defn- prepare-level
   [state level-index phase]
-  (let [state2 (assoc state
+  (let [state (ensure-levels state)
+        state2 (assoc state
                       :phase phase
                       :level-index level-index
                       :bricks (level-bricks state level-index)
@@ -70,7 +79,7 @@
    :score 0
    :lives default-lives
    :level-index 0
-   :levels (levels/load-levels)
+   :levels nil
    :bricks []
    :events []
    :paddle-x 140
@@ -102,8 +111,10 @@
 
 (defn- candidate-segment
   [wall duration-ms]
-  {:wall wall
-   :duration-ms duration-ms})
+  (if (> duration-ms 0)
+    {:wall wall
+     :duration-ms duration-ms}
+    nil))
 
 (defn- earlier-segment
   [best candidate]
@@ -127,10 +138,7 @@
                  (if (< vy 0)
                    (candidate-segment :top (duration-ms-for-distance ball-y (- vy)))
                    nil))]
-    (let [best (earlier-segment best-x best-y)]
-      (if (and best (> (:duration-ms best) 0))
-        best
-        nil))))
+    (earlier-segment best-x best-y)))
 
 (defn- project-axis
   [pos velocity duration-ms]
@@ -292,13 +300,13 @@
                     snapped-x (if horizontal?
                                 (if (> (:ball-vx state) 0)
                                   (- (:min-x other-aabb) ball-size)
-                                  (:max-x other-aabb))
+                                  (+ (:max-x other-aabb) 1))
                                 ball-x)
                     snapped-y (if horizontal?
                                 ball-y
                                 (if (> (:ball-vy state) 0)
                                   (- (:min-y other-aabb) ball-size)
-                                  (:max-y other-aabb)))
+                                  (+ (:max-y other-aabb) 1)))
                     state2 (-> state
                                (clear-events)
                                (anchor-ball snapped-x snapped-y)

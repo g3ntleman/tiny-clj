@@ -1,9 +1,6 @@
 (ns tiny-breakout.runtime
-  (:require [tiny-breakout.audio :as audio]
-            [tiny-breakout.core :as core]
+  (:require [tiny-breakout.core :as core]
             [tiny-breakout.scene :as scene]
-            [tiny-fx.gfx-collision :as collision]
-            [tiny-clj.event :as event]
             [tiny-clj.runtime :as runtime]))
 
 (def state* (atom nil))
@@ -11,7 +8,9 @@
 (def ^:private idle-held-buttons {:left false :right false :last nil})
 (def ^:private held-buttons* (atom idle-held-buttons))
 
-(def ^:private segment-timer-id :tiny-breakout/segment-end)
+(def ^:private segment-watch-id :tiny-breakout/segment-end)
+(def ^:private segment-watch-opts {:slot :game :entity-id 1003 :field :x})
+(def ^:private segment-watch-active* (atom false))
 
 (defn- button-down-event?
   [event]
@@ -28,6 +27,19 @@
 (defn- scene-record
   [state]
   (record-from-map 'FrameScene (dissoc (scene/build-scene state) :type)))
+
+(defn- on-segment-timeline-event!
+  [_event]
+  (let [now-ms (current-time-ms)
+        current @state*
+        segment (:ball-segment current)]
+    (when (and (map? segment)
+               (number? (:id segment))
+               (number? (:end-ms segment))
+               (<= (:end-ms segment) now-ms))
+      (tiny-breakout.runtime/publish-state!
+       (core/apply-segment-end-at-ms current (:id segment) now-ms))))
+  nil)
 
 (defn- rendered-entity-state
   [entity-id]
@@ -63,6 +75,48 @@
 (defn- attached-ball-y
   []
   (- core/paddle-y 6))
+
+(defn- play-events!
+  [events]
+  (when (seq events)
+    (require 'tiny-breakout.audio)
+    (tiny-breakout.audio/play-events! events))
+  nil)
+
+(defn- ensure-event!
+  []
+  (require 'tiny-clj.event)
+  nil)
+
+(defn- ensure-collision!
+  []
+  (require 'tiny-fx.gfx-collision)
+  nil)
+
+(defn publish-state!
+  [state]
+  ((fn publish-state-loop
+     [state]
+     (let [state (scene/with-expanded-collision-rules state)
+           events (:events state)
+           state-without-events (assoc state :events [])]
+       (when (and (map? (:ball-segment state-without-events))
+                  (not @tiny-breakout.runtime/segment-watch-active*))
+         (ensure-event!)
+         (tiny-clj.event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id}
+                   tiny-breakout.runtime/on-segment-timeline-event!
+                   tiny-breakout.runtime/segment-watch-opts)
+         (reset! tiny-breakout.runtime/segment-watch-active* true))
+       (reset! state* state-without-events)
+       (reset! scene* (scene-record state-without-events))
+       (if (map? (:ball-segment state-without-events))
+         (do
+           (ensure-event!)
+           (tiny-clj.event/kick-timeline-watchers!))
+         nil)
+       (play-events! events))
+     nil)
+   state))
 
 (defn- stop-paddle-motion
   [state]
@@ -159,15 +213,15 @@
         current-dir (paddle-motion-direction current)]
     (cond
       (nil? desired-dir)
-      (publish-state! (stop-paddle-motion current))
+      (tiny-breakout.runtime/publish-state! (stop-paddle-motion current))
 
       (= desired-dir current-dir)
       nil
 
       :else
-      (publish-state! (plan-paddle-motion (stop-paddle-motion current)
-                                          desired-dir
-                                          now-ms)))))
+      (tiny-breakout.runtime/publish-state! (plan-paddle-motion (stop-paddle-motion current)
+                                                                desired-dir
+                                                                now-ms)))))
 
 (defn- update-held-button!
   [button-id pressed?]
@@ -177,38 +231,6 @@
                   button-id pressed?
                   :last (if pressed? button-id (get held :last)))))
   (apply-held-paddle-direction!))
-
-(defn- sync-segment-timer!
-  [state]
-  (cancel-timer segment-timer-id)
-  (let [segment (:ball-segment state)]
-    (when (and (map? segment)
-               (number? (:id segment))
-               (number? (:end-ms segment)))
-      (let [segment-id (:id segment)
-            delay-ms (- (:end-ms segment) (current-time-ms))
-            safe-delay (if (> delay-ms 0) delay-ms 0)]
-        (schedule safe-delay
-                  {:id segment-timer-id
-                   :fn (fn []
-                         (let [now-ms (current-time-ms)
-                               next-state (swap! state*
-                                                 (fn [current]
-                                                   (core/apply-segment-end-at-ms current segment-id now-ms)))]
-                           (reset! scene* (scene-record next-state))
-                           (sync-segment-timer! next-state)
-                           nil))}))))
-  nil)
-
-(defn- publish-state!
-  [state]
-  (let [events (:events state)
-        state-without-events (assoc state :events [])]
-    (reset! state* state-without-events)
-    (reset! scene* (scene-record state-without-events))
-    (sync-segment-timer! state-without-events)
-    (audio/play-events! events))
-  nil)
 
 (defn- state-after-input
   [input-map]
@@ -244,7 +266,7 @@
   [input-map]
   (let [intent (normalize-paddle-intent input-map)
         next-state (state-after-input intent)]
-    (publish-state! next-state)))
+    (tiny-breakout.runtime/publish-state! next-state)))
 
 (defn on-spatial-event!
   [event]
@@ -252,8 +274,9 @@
         next-state (swap! state*
                           (fn [current]
                             (core/apply-spatial-event current event now-ms)))]
-    (publish-state! next-state)
-    (collision/invoke-collision-callback! event)
+    (tiny-breakout.runtime/publish-state! next-state)
+    (ensure-collision!)
+    (tiny-fx.gfx-collision/invoke-collision-callback! event)
     nil))
 
 (defn- on-movement-button-event!
@@ -273,26 +296,61 @@
     (apply-input! input-map))
   nil)
 
+(defn- on-launch-button-event!
+  [event]
+  ;; Be robust against missed down edges: release should still launch from serve/title.
+  ;; In :play phase, :launch is ignored by core/apply-input, so duplicate triggers are harmless.
+  (when (or (button-down-event? event)
+            (button-release-event? event))
+    (apply-input! {:launch true}))
+  nil)
+
 (defn configure-input-watchers!
   []
-  (event/on {:source :button :id :left}
+  (ensure-event!)
+  (tiny-clj.event/on {:source :button :id :left}
             (fn [event]
               (on-movement-button-event! :left event)))
-  (event/on {:source :button :id :right}
+  (tiny-clj.event/on {:source :button :id :right}
             (fn [event]
               (on-movement-button-event! :right event)))
-  (event/on {:source :button :id :fire}
+  (tiny-clj.event/on {:source :button :id :fire}
             (fn [event]
-              (on-action-button-event! {:launch true} event)))
-  (event/on {:source :button :id :y}
+              (on-launch-button-event! event)))
+  (tiny-clj.event/on {:source :button :id :y}
             (fn [event]
               (on-action-button-event! {:pause true} event)))
   nil)
 
 (defn reset-runtime!
   []
-  (reset! held-buttons* idle-held-buttons)
-  (audio/preload!)
-  (publish-state! (core/init-state))
-  (configure-input-watchers!)
+  (reset! tiny-breakout.runtime/held-buttons* tiny-breakout.runtime/idle-held-buttons)
+  (when @tiny-breakout.runtime/segment-watch-active*
+    (ensure-event!)
+    (tiny-clj.event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id} nil)
+    (reset! tiny-breakout.runtime/segment-watch-active* false))
+  (let [state (scene/with-expanded-collision-rules (core/init-state))
+        events (:events state)
+        state-without-events (assoc state :events [])]
+    (reset! tiny-breakout.runtime/state* state-without-events)
+    (reset! tiny-breakout.runtime/scene* (tiny-breakout.runtime/scene-record state-without-events))
+    (play-events! events))
+  nil)
+
+(defn bootstrap-runtime!
+  []
+  (reset! tiny-breakout.runtime/held-buttons* tiny-breakout.runtime/idle-held-buttons)
+  (when @tiny-breakout.runtime/segment-watch-active*
+    (ensure-event!)
+    (tiny-clj.event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id} nil)
+    (reset! tiny-breakout.runtime/segment-watch-active* false))
+  (let [state (scene/with-expanded-collision-rules (core/init-state))
+        state-without-events (assoc state :events [])]
+    (reset! tiny-breakout.runtime/state* state-without-events)
+    (reset! tiny-breakout.runtime/scene* (tiny-breakout.runtime/scene-record state-without-events)))
+  nil)
+
+(defn start-runtime!
+  [& _args]
+  (tiny-breakout.runtime/configure-input-watchers!)
   nil)

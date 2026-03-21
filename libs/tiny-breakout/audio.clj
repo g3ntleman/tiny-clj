@@ -92,6 +92,22 @@
 
 (def ^:private preloaded-durations* (atom {}))
 
+(defn- ensure-cue-loaded!
+  [cue-id]
+  (if (contains? @preloaded-durations* cue-id)
+    (get @preloaded-durations* cue-id)
+    (let [spec (sfx-spec cue-id)
+          track-id (:track-id spec)
+          steps (:steps spec)
+          opts (:opts spec)]
+      (if (and track-id steps)
+        (let [track-bytes (sound/compile-track steps opts)
+              duration-ms (sound/track-duration-ms steps opts)]
+          (sound-native/sound-load-track! track-id track-bytes)
+          (swap! preloaded-durations* assoc cue-id duration-ms)
+          duration-ms)
+        0))))
+
 (defn preload!
   "Pre-compiles and loads all SFX tracks into the sound engine."
   []
@@ -118,17 +134,17 @@
   [cue-id]
   (let [spec (sfx-spec cue-id)]
     (when (map? spec)
-      (let [ok (sound-native/sound-play-sfx! (:track-id spec))
-            duration-ms (get @preloaded-durations* cue-id 0)]
+      (let [duration-ms (ensure-cue-loaded! cue-id)
+            ok (sound-native/sound-play-sfx! (:track-id spec))]
         {:status (if ok :playing :dropped)
          :duration-ms duration-ms}))))
 
 (defn play-events!
   "Plays all known audio cues for the given gameplay events."
   [events]
-  (loop [remaining (events->cues events)
-         out []]
+  (loop [remaining (events->cues events)]
     (if (empty? remaining)
-      out
-      (recur (rest remaining)
-             (conj out (play-cue! (first remaining)))))))
+      nil
+      (do
+        (play-cue! (first remaining))
+        (recur (rest remaining))))))

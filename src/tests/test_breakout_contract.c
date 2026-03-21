@@ -14,6 +14,17 @@ TEST(test_breakout_contract_namespaces_load) {
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
+TEST(test_breakout_contract_runtime_reset_works_after_fresh_reload) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime :reload) "
+        "  (tiny-breakout.runtime/reset-runtime!) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
 TEST(test_breakout_contract_audio_events_resolve_to_playable_sfx) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
@@ -22,13 +33,7 @@ TEST(test_breakout_contract_audio_events_resolve_to_playable_sfx) {
         "  (let [cues (tiny-breakout.audio/events->cues [:brick-hit :level-clear :victory]) "
         "        played (tiny-breakout.audio/play-events! [:brick-hit :victory])] "
         "    (and (= [:sfx/brick-hit :sfx/level-clear :sfx/victory] cues) "
-        "         (= 2 (count played)) "
-        "         (map? (nth played 0)) "
-        "         (contains? (nth played 0) :status) "
-        "         (contains? (nth played 0) :duration-ms) "
-        "         (map? (nth played 1)) "
-        "         (contains? (nth played 1) :status) "
-        "         (contains? (nth played 1) :duration-ms))))",
+        "         (nil? played))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
@@ -326,6 +331,39 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
+TEST(test_breakout_contract_collision_rules_expand_incrementally_and_keep_removed_bricks_lazy) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.scene) "
+        "  (let [b1 {:id 2001 :x 40 :y 32 :w 20 :h 10 :points 10} "
+        "        b2 {:id 2002 :x 64 :y 32 :w 20 :h 10 :points 10} "
+        "        s0 (assoc (tiny-breakout.core/init-state) :phase :play :bricks [b1]) "
+        "        s1 (tiny-breakout.scene/with-expanded-collision-rules s0) "
+        "        r1 (:collision-rules s1) "
+        "        s2 (tiny-breakout.scene/with-expanded-collision-rules "
+        "             (assoc s1 :bricks [b1 b2])) "
+        "        r2 (:collision-rules s2) "
+        "        s3 (tiny-breakout.scene/with-expanded-collision-rules "
+        "             (assoc s2 :bricks [b2])) "
+        "        r3 (:collision-rules s3) "
+        "        targets (loop [remaining r3 out []] "
+        "                  (if (empty? remaining) "
+        "                    out "
+        "                    (recur (rest remaining) (conj out (:other (first remaining))))))] "
+        "    (and (= 2 (count r1)) "
+        "         (= 3 (count r2)) "
+        "         (= 3 (count r3)) "
+        "         (= [1002 2001 2002] targets) "
+        "         (= (nth r1 1) (nth r2 1)) "
+        "         (= (nth r2 0) (nth r3 0)) "
+        "         (= (nth r2 1) (nth r3 1)) "
+        "         (= (nth r2 2) (nth r3 2)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
 TEST(test_breakout_contract_title_scene_hides_level_bricks_until_launch) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
@@ -495,6 +533,19 @@ TEST(test_breakout_contract_level_clear_stops_paddle_motion) {
         "    (and (= :level-clear (:phase s1)) "
         "         (nil? (:paddle-motion s1)) "
         "         (number? (:x paddle)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_segment_progression_no_longer_uses_named_segment_timer) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-clj.deployment) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-clj.deployment/breakout-host-config) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  (= false (cancel-timer :tiny-breakout/segment-end)))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }

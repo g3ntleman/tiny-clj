@@ -131,6 +131,24 @@ static bool append_dirty_aabb_rect(VgClipRect *io_dirty_rect,
     return true;
 }
 
+static bool append_dirty_aabb_rect_leaf(VgClipRect *out_rects,
+                                        size_t out_capacity,
+                                        size_t *io_count,
+                                        VgAabb box,
+                                        uint8_t padding_px,
+                                        VgClipRect clip_rect) {
+    if (!out_rects || !io_count || *io_count >= out_capacity) {
+        return false;
+    }
+    VgClipRect rect = clip_rect_from_aabb(box, padding_px);
+    VgClipRect clipped = {0};
+    if (!vg_clip_rect_intersect(rect, clip_rect, &clipped)) {
+        return false;
+    }
+    out_rects[(*io_count)++] = clipped;
+    return true;
+}
+
 void vg_rendered_state_capture_begin(uint8_t slot_index, uint32_t snapshot_generation, uint32_t frame_time_ms) {
     g_capture_ctx.active = false;
     g_capture_ctx.slot_index = 0u;
@@ -280,6 +298,87 @@ bool vg_rendered_state_capture_compute_dirty_rect(uint8_t slot_index,
 
     *out_dirty_rect = dirty_rect;
     return true;
+}
+
+bool vg_rendered_state_capture_collect_dirty_rects(uint8_t slot_index,
+                                                   VgClipRect clip_rect,
+                                                   uint8_t padding_px,
+                                                   VgClipRect *out_rects,
+                                                   size_t out_capacity,
+                                                   size_t *out_count) {
+    if (out_count) {
+        *out_count = 0u;
+    }
+    if (!out_rects || !out_count || out_capacity == 0u || slot_index >= VG_RENDERED_STATE_MAX_SLOTS ||
+        !g_capture_ctx.active || g_capture_ctx.slot_index != slot_index || vg_clip_rect_is_empty(clip_rect)) {
+        return false;
+    }
+
+    RenderedSlotStore *store = &g_rendered_slots[slot_index];
+    unsigned int active = atomic_load_explicit(&store->active_buffer_index, memory_order_acquire);
+    if (active > 1u) {
+        return false;
+    }
+
+    RenderedSlotSnapshot *prev = &store->buffers[active];
+    RenderedSlotSnapshot *curr = &store->buffers[g_capture_ctx.write_buffer_index];
+    size_t count = 0u;
+
+    for (uint16_t i = 0; i < curr->entity_count; i++) {
+        RenderedEntityRow *curr_row = &curr->entities[i];
+        int prev_idx = find_entity_row(prev, curr_row->entity_id_bits);
+        RenderedEntityRow *prev_row = (prev_idx >= 0) ? &prev->entities[prev_idx] : NULL;
+        bool changed = !prev_row ||
+                       memcmp(&curr_row->world_t, &prev_row->world_t, sizeof(curr_row->world_t)) != 0 ||
+                       curr_row->has_world_aabb != prev_row->has_world_aabb ||
+                       (curr_row->has_world_aabb && prev_row->has_world_aabb &&
+                        !aabb_equal(curr_row->world_aabb, prev_row->world_aabb));
+        if (!changed) {
+            continue;
+        }
+
+        if (prev_row && prev_row->has_world_aabb) {
+            if (!append_dirty_aabb_rect_leaf(out_rects,
+                                             out_capacity,
+                                             &count,
+                                             prev_row->world_aabb,
+                                             padding_px,
+                                             clip_rect)) {
+                return false;
+            }
+        }
+        if (curr_row->has_world_aabb) {
+            if (!append_dirty_aabb_rect_leaf(out_rects,
+                                             out_capacity,
+                                             &count,
+                                             curr_row->world_aabb,
+                                             padding_px,
+                                             clip_rect)) {
+                return false;
+            }
+        }
+    }
+
+    for (uint16_t i = 0; i < prev->entity_count; i++) {
+        RenderedEntityRow *prev_row = &prev->entities[i];
+        if (find_entity_row(curr, prev_row->entity_id_bits) >= 0) {
+            continue;
+        }
+        if (!prev_row->has_world_aabb) {
+            return false;
+        }
+        if (!append_dirty_aabb_rect_leaf(out_rects,
+                                         out_capacity,
+                                         &count,
+                                         prev_row->world_aabb,
+                                         padding_px,
+                                         clip_rect)) {
+            return false;
+        }
+    }
+
+    *out_count = count;
+    return count > 0u;
 }
 
 void vg_rendered_state_capture_commit(void) {

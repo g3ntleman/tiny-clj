@@ -90,6 +90,18 @@ static bool clip_rects_overlap(VgClipRect a, VgClipRect b) {
     return vg_clip_rect_intersect(a, b, NULL);
 }
 
+static bool dirty_union_area_within_merge_factor(uint32_t union_area, uint32_t separate_area) {
+    /*
+     * Keep this comparison division-free and overflow-safe:
+     *   union_area / separate_area <= 3 / 2
+     * becomes
+     *   union_area * 2 <= separate_area * 3
+     */
+    const uint64_t lhs = (uint64_t)union_area * 2u;
+    const uint64_t rhs = (uint64_t)separate_area * 3u;
+    return lhs <= rhs;
+}
+
 static bool split_rect_to_budget(VgClipRect rect,
                                  uint32_t pixel_budget,
                                  VgClipRect *out_rects,
@@ -196,11 +208,18 @@ size_t vg_dirty_union_plan_rects(const VgClipRect *dirty_leaves,
         }
 
         VgClipRect cluster_union = dirty_leaves[cluster_members[0]];
+        uint32_t cluster_leaf_area_sum = clip_rect_area_px(cluster_union);
         for (size_t m = 1; m < cluster_count; m++) {
             cluster_union = vg_clip_rect_union(cluster_union, dirty_leaves[cluster_members[m]]);
+            cluster_leaf_area_sum += clip_rect_area_px(dirty_leaves[cluster_members[m]]);
         }
 
-        if (clip_rect_area_px(cluster_union) <= pixel_budget) {
+        uint32_t cluster_union_area = clip_rect_area_px(cluster_union);
+        bool cluster_union_fits_budget = cluster_union_area <= pixel_budget;
+        bool cluster_union_is_worth_it =
+            dirty_union_area_within_merge_factor(cluster_union_area, cluster_leaf_area_sum);
+
+        if (cluster_union_fits_budget && cluster_union_is_worth_it) {
             if (out_i >= out_capacity) {
                 out_rects[0] = merged;
                 return 1u;

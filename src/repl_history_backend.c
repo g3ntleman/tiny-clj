@@ -107,7 +107,7 @@ static CljPersistentVector *repl_history_trim_to_byte_limit(CljPersistentVector 
     size_t repr_len = 0;
     bool have_repr_len = candidate && repl_history_string_vector_serialized_length(candidate, &repr_len);
     if (!have_repr_len) {
-      CljString *repr = candidate ? pr_str(candidate) : NULL;
+      CljString *repr = candidate ? make_string_description(candidate) : NULL;
       repr_len = repr ? string_length(repr) : (size_t)-1;
       have_repr_len = (repr != NULL);
     }
@@ -173,7 +173,7 @@ static bool repl_history_verify_payload(const ReplHistoryBackend *backend,
 }
 
 /**
- * @brief Tries to serialize history as EDN vector of strings without generic pr_str().
+ * @brief Tries to serialize history as EDN vector of strings without generic make_string_description().
  *
  * This fast-path keeps the on-disk format identical (e.g. ["cmd1" "cmd2"]) but
  * avoids traversing the generic printer for the common REPL history case.
@@ -305,7 +305,7 @@ bool repl_history_backend_save(const ReplHistoryBackend *backend, CljPersistentV
 
   CljString *repr = NULL;
   if (!payload) {
-    repr = pr_str(work);
+    repr = make_string_description(work);
     if (!repr) {
       RELEASE(work);
       return false;

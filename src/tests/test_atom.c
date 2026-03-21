@@ -300,7 +300,7 @@ TEST(test_atom_reference_sharing) {
 
 TEST(test_atom_print_representation) {
   CljAtom *atom = make_atom(fixnum(42));
-  CljString *str = pr_str(atom);
+  CljString *str = make_string_description(atom);
   TEST_ASSERT_NOT_NULL(str);
   TEST_ASSERT_NOT_NULL(strstr(string_data(str), "Atom"));
   RELEASE(atom);
