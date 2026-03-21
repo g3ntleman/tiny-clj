@@ -47,6 +47,11 @@ Do not add this trailer to commits:
 
 `Co-authored-by: Cursor <cursoragent@cursor.com>`
 
+## Planning documents (project-specific)
+
+- New or updated **feature/architecture plans** belong in the workspace folder **`Plans/`** at the repository root (versioned in git), e.g. `Plans/my-topic.plan.md`. If a plan is created under `.cursor/plans/`, **move** it to `Plans/` (do not duplicate; single canonical path).
+- See `.cursor/rules/plans-workspace-location.mdc` and `.cursor/rules/plan-cleanup-step.mdc` (cleanup todos).
+
 ## Documentation Preference (project-specific)
 
 - Document C APIs in the corresponding `.c` files.

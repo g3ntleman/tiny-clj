@@ -585,6 +585,12 @@
     {:track-bytes (compile-track* steps* opts* tempo-bpm)
      :duration-ms (track-duration-ms* steps* tempo-bpm)}))
 
+(defn compile-steps
+  "Compiles steps into track bytes and returns
+   {:track-bytes <byte-array> :duration-ms <int>} without loading or playing."
+  [steps opts]
+  (prepare-track-playback steps opts))
+
 (defn play-steps!
   "Compiles, loads and plays steps once.
    Options map is passed to compile-track.
@@ -791,4 +797,3 @@
                                  (assoc :rearticulate (get step :rearticulate)))]
                     (recur (rest s) (conj out step2)))))]
     steps2))
-

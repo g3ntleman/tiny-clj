@@ -1,0 +1,11 @@
+---
+description: Neue Projekt-Pläne unter Plans/ im Workspace ablegen
+globs: Plans/**/*.md
+alwaysApply: true
+---
+
+# Ablageort für Pläne
+
+- **Kanonischer Ort** für neue oder überarbeitete **Feature-/Architektur-Pläne** in diesem Repository: Verzeichnis **`Plans/`** (Großschreibung, Repo-Root), Dateinamen z. B. `thema-kurzbeschreibung.plan.md` (ASCII, Bindestriche).
+- Wenn ein Plan unter `.cursor/plans/` angelegt wird, **nach `Plans/` verschieben** (keine Kopie; ein kanonischer Pfad).
+- Bestehende Regel: Abschluss-TODO **cleanup** in [plan-cleanup-step.mdc](plan-cleanup-step.mdc) bleibt Pflicht.

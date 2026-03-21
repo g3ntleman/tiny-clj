@@ -1696,7 +1696,12 @@ TEST(test_sound_tiny_fx_sound_demos_play_william_tell_returns_status_map) {
         g_test_eval_state);
   }
   CATCH(ex) {
-    TEST_FAIL_MESSAGE("tiny-fx.sound-demos-william/play-william-tell-finale! should not throw");
+    char msg[512];
+    const char *detail = (ex && ex->message[0] != '\0') ? ex->message : "<no-message>";
+    test_snprintf(msg, sizeof(msg),
+                  "tiny-fx.sound-demos-william/play-william-tell-finale! should not throw: %s",
+                  detail);
+    TEST_FAIL_MESSAGE(msg);
   }
   END_TRY
 

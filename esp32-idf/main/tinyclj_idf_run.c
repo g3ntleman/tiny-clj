@@ -31,6 +31,13 @@ static void esp_put_line(const char *s) {
 }
 #endif
 
+// If history handling ever OOMs, disable it for the running session.
+static bool g_esp_history_disabled = false;
+
+static bool esp_exception_is_oom(const CLJException *ex) {
+    return ex && ex->type[0] && strcmp(ex->type, EXCEPTION_OUT_OF_MEMORY) == 0;
+}
+
 // No public header exists for these yet.
 extern void init_special_symbols(void);
 extern EvalState *get_global_eval_state(void);
@@ -120,6 +127,9 @@ static bool esp_repl_history_save(LineEditor *ed) {
     (void)ed;
     return false;
 #else
+    if (g_esp_history_disabled) {
+        return false;
+    }
     if (!ed) {
         return false;
     }
@@ -127,10 +137,46 @@ static bool esp_repl_history_save(LineEditor *ed) {
     if (!history) {
         return false;
     }
-    bool saved = line_editor_history_save_default((CljObject*)history);
+    bool saved = false;
+    TRY {
+        saved = line_editor_history_save_default((CljObject*)history);
+    }
+    CATCH(ex) {
+        if (esp_exception_is_oom(ex)) {
+            g_esp_history_disabled = true;
+            line_editor_clear_history(ed);
+        }
+        saved = false;
+    }
+    END_TRY
     RELEASE(history);
     return saved;
 #endif
+}
+
+/**
+ * @brief Adds an entry to REPL history without letting history failures abort the REPL.
+ *
+ * History is best-effort on ESP32. Under memory pressure, adding an entry may throw
+ * (e.g. while growing the backing vector). Those failures are intentionally swallowed.
+ */
+static void esp_repl_history_add_best_effort(LineEditor *ed, const char *line) {
+    if (g_esp_history_disabled) {
+        return;
+    }
+    if (!ed || !line) {
+        return;
+    }
+    TRY {
+        line_editor_add_to_history(ed, line);
+    }
+    CATCH(ex) {
+        if (esp_exception_is_oom(ex)) {
+            g_esp_history_disabled = true;
+            line_editor_clear_history(ed);
+        }
+    }
+    END_TRY
 }
 
 /**
@@ -247,13 +293,13 @@ void tinyclj_idf_start(void) {
             }
             if (form_state == REPL_FORM_INVALID) {
                 platform_put_string(NULL, "Error: Too many closing parentheses\n");
-                line_editor_add_to_history(ed, acc);
+                esp_repl_history_add_best_effort(ed, acc);
                 (void)esp_repl_history_save(ed); // best-effort
                 acc[0] = '\0';
                 continue;
             }
 
-            line_editor_add_to_history(ed, acc);
+            esp_repl_history_add_best_effort(ed, acc);
             (void)esp_repl_history_save(ed);  // best-effort
             if (!esp_repl_ensure_core_loaded(st)) {
                 platform_put_string(NULL, "Error: failed to load clojure.core\n");
