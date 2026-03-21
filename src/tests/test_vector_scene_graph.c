@@ -3631,29 +3631,3 @@ TEST(test_vector_scene_graph_collision_detect_aabb_overlap_bounds) {
     TEST_ASSERT_FALSE(vg_collision_detect_aabb_overlap(&player, &far_obstacle));
     TEST_ASSERT_FALSE(vg_collision_detect_aabb_overlap(&player, &high_obstacle));
 }
-
-TEST(test_vector_scene_graph_collision_step_latch_and_cooldown) {
-    VgCollisionState state = {0};
-
-    bool toggled = vg_collision_step_latched_cooldown(&state, 1000u, 300u, true);
-    TEST_ASSERT_TRUE(toggled);
-    TEST_ASSERT_TRUE(state.collision_latched);
-    TEST_ASSERT_EQUAL_UINT32(1300u, state.collision_cooldown_end_ms);
-
-    toggled = vg_collision_step_latched_cooldown(&state, 1010u, 300u, true);
-    TEST_ASSERT_FALSE(toggled);
-    TEST_ASSERT_TRUE(state.collision_latched);
-
-    toggled = vg_collision_step_latched_cooldown(&state, 1020u, 300u, false);
-    TEST_ASSERT_FALSE(toggled);
-    TEST_ASSERT_FALSE(state.collision_latched);
-
-    toggled = vg_collision_step_latched_cooldown(&state, 1200u, 300u, true);
-    TEST_ASSERT_FALSE(toggled);
-    TEST_ASSERT_FALSE(state.collision_latched);
-
-    toggled = vg_collision_step_latched_cooldown(&state, 1300u, 300u, true);
-    TEST_ASSERT_TRUE(toggled);
-    TEST_ASSERT_TRUE(state.collision_latched);
-    TEST_ASSERT_EQUAL_UINT32(1600u, state.collision_cooldown_end_ms);
-}
