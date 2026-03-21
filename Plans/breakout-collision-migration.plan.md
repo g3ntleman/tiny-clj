@@ -1,11 +1,16 @@
 ---
 name: Breakout Collision Migration
-overview: Breakout soll von handgeschriebenen nativen AABB-Checks auf die vorhandene Collision-Pipeline umgestellt werden. In diesem Durchgang wurde der Szenen- und Callback-Vertrag auf die Collision-Pipeline vorbereitet und der native Uebergangspfad speichersauberer gemacht: `:root` ist jetzt wieder der Traversal-Einstieg, `:index` die Entity-Map, dazu kommen stabile Prototypen, konkrete `SpatialRule`-Expansion pro Entity, generischer Clojure-Dispatcher, Snapshot-`SpatialEvent`s mit Entity-Payload sowie in-place Scene-Updates mit stabilen Brick-Records im nativen Hot-Path. Die native Gameplay-Autoritaet und segmentbasierte Bewegung bleiben Folgeschritte.
-status: closed
-closed_at: 2026-03-18
+overview: Breakout wird schrittweise von handgeschriebenen nativen AABB-Checks auf die vorhandene Collision-Pipeline umgestellt. Der bisherige Durchgang hat den Szenen- und Callback-Vertrag vorbereitet; der aktuelle Folgezug hat die Host-Collision-Bridge auf einen sicheren Zweiphasenpfad umgestellt: Detect-only auf dem UI-/Render-nahen Thread, Raw-Hit-Puffer mit Mutex, Dispatch erst auf dem Scheduler-/Runloop-Thread. Dazu kommen reset-sichere SpatialEvent-/Aabb-Lookups, ein expliziter Interpreter-Thread-Marker neben dem OS-Main-Thread und bessere Test-Isolation im Host-Startup-Pfad. Die native Gameplay-Autoritaet und segmentbasierte Bewegung bleiben Folgeschritte.
+status: active
 todos:
   - id: scene-prototypes-rules
     content: Breakout-Szene auf entity-map-Root, stabile Ball/Paddle/Brick-Prototypen und deklarative Regeln plus expandierte Policy-Daten umstellen
+    status: completed
+  - id: deferred-host-dispatch
+    content: Host-Collision-Pipeline auf detect-only im UI-Thread, statischen Raw-Hit-Puffer und Dispatch auf dem Scheduler-/Runloop-Thread umstellen
+    status: completed
+  - id: thread-role-markers
+    content: Neben dem OS-Main-Thread auch den Interpreter-/Scheduler-Thread als global testbare Runtime-Rolle markieren
     status: completed
   - id: clojure-policy-expansion
     content: Inkrementelle Policy-Expansion in Clojure mit `CljTransientVector` einfuehren, nur bei Rule-Aenderungen oder neuen Objekten erweitern und Objektentfall lazy behandeln
@@ -28,6 +33,9 @@ todos:
   - id: cleanup
     content: Sourcecode aufraeumen – Debug-Code, temporaere Workarounds, tote Codepfade, ueberfluessige Kommentare und nicht mehr benoetigte Hilfsfunktionen entfernen
     status: pending
+  - id: host-bridge-split
+    content: Host-Spatial-Bridge in kleinere Module fuer Rule-Loading/Event-Encoding versus Detect/Drain aufteilen, damit `viewer_host_spatial.c` als Monolith entfaellt
+    status: completed
 isProject: false
 ---
 
@@ -35,7 +43,7 @@ isProject: false
 
 ## Stand dieses Durchgangs
 
-- Status: Dieser Plan ist beendet. Die verbleibenden offenen Punkte werden nicht mehr in diesem Durchgang umgesetzt und muessen bei Bedarf in einen Folgeplan uebernommen werden.
+- Status: Der Plan ist wieder aktiv. Die Collision-Bridge ist inzwischen weitergezogen als der letzte abgeschlossene Stand; der Host-Monolith ist jetzt in kleinere Runtime- und Rule-/Event-Module aufgeteilt.
 
 - Umgesetzt: `libs/tiny-breakout/scene.clj` liefert jetzt ein entity-map-basiertes `FrameScene.root` mit `'root`-Group, stabilen Ball-/Paddle-/Brick-Prototypen und konkret expandierten `SpatialRule`s fuer `:ball-vs-paddle` sowie jedes aktive `:ball-vs-brick`-Paar.
 - Umgesetzt: Tiny-FX trennt fuer Pilot-Szenen jetzt `:root` als Traversal-Einstieg von `:index` als Entity-Map. Breakout und das Game-Demo publizieren diese Form bereits, waehrend der Renderer alte root-map-Szenen vorerst noch lesen kann.
@@ -45,8 +53,14 @@ isProject: false
 - Umgesetzt: Der native Breakout-Hot-Path aktualisiert Paddle/Ball/HUD/Overlay jetzt in-place auf dem bereits publizierten Szenengraphen; neue Szenen werden nur noch bei echten Layoutwechseln wie Staging-Transition oder Levelwechsel gebaut.
 - Umgesetzt: Brick-Records bleiben innerhalb eines Levels stabil und werden bei Treffern nur deaktiviert bzw. unsichtbar gemacht. Dadurch entfaellt das frameweise Neuaufbauen des Szenengraphen bei Brick-Hits.
 - Umgesetzt: Regressionstests decken jetzt Root-Shape, Prototyp-/Rule-Vertrag, generischen Spatial-Callback-Dispatch, in-place Scene-Reuse, den `level-clear`-Uebergang zum naechsten Level, konkrete Breakout-Policies im Host-Startup-Pfad und `SpatialEvent`-Entity-Snapshots ab.
+- Umgesetzt: Die Host-Collision-Pipeline ist jetzt zweiphasig: `viewer_apply_collision_step()` erkennt nur noch Treffer und puffert rohe Hits, waehrend `viewer_collision_poll_drain()` die `SpatialEvent`-Allokation und den Clojure-Dispatch auf dem Scheduler-/Runloop-Thread uebernimmt.
+- Umgesetzt: Roh-Treffer tragen eine Rule-Generation, damit veraltete Hits bei Scene-/Rule-Wechsel nicht mehr gegen eine neue Policy-Generation dispatcht werden.
+- Umgesetzt: Host-Tests decken jetzt explizit ab, dass Detect und Dispatch getrennt sind, enge Heap-Grenzen nur noch den Dispatch betreffen und der echte Viewer-Runloop einen global sichtbaren Interpreter-Thread-Marker registriert.
+- Umgesetzt: `viewer_host_spatial` cached keine `SpatialEvent`-/`Aabb`-Descriptoren oder Symbol-Keys mehr ueber Runtime-Resets hinweg; damit entfallen die bisherigen `[nil nil]`-Events und Crashs nach Test-/Runtime-Resets.
+- Umgesetzt: Die Host-Spatial-Bridge ist jetzt entlang ihrer Verantwortung getrennt: `viewer_host_spatial_rules.c` haelt Rule-Expansion und `SpatialEvent`-Encoding, `viewer_host_spatial_runtime.c` Detect-only, Raw-Hit-Queue und Drain/Dispatch.
 - Offen: Die eigentliche Gameplay-Autoritaet liegt weiterhin im nativen Breakout-Pfad. Paddle-/Brick-Kollisionen, Segmentplanung und Snapshot-basierte State-Mutationen sind noch nicht nach Clojure verschoben.
 - Offen: Der direkte native Scene-Rebuild-Pfad allokiert weiterhin deutlich mehr als der in-place Hot-Path. Fuer die vollstaendige Migration ist das tolerierbar, sollte aber nicht als allgemeines Pattern in weitere Hostpfade uebernommen werden.
+- Offen: Die aufgeteilte Host-Spatial-Bridge ist strukturell sauberer, aber der Name `viewer_host_spatial*` bleibt noch host-zentriert; spaetere Umbenennung in klarere Collision-Module ist moeglich, aber fuer diesen Plan nicht mehr zwingend.
 
 ## Folgearbeit ausserhalb dieses Plans
 

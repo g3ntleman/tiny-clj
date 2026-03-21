@@ -2,40 +2,11 @@
 
 #include <string.h>
 
-#include "event_loop.h"
 #include "memory.h"
 #include "record.h"
-#include "rendered_state_snapshot.h"
 #include "tiny_fx_gfx.h"
 #include "vector.h"
-#include "viewer_collision.h"
 #include "viewer_host_slots.h"
-
-void destroy_collision_policy(ViewerCollisionPolicy *policy) {
-    if (!policy) {
-        return;
-    }
-    RELEASE(policy->self_entity_id);
-    RELEASE(policy->other_entity_id);
-    RELEASE(policy->self_prototype);
-    RELEASE(policy->other_prototype);
-    RELEASE(policy->slot_id);
-    RELEASE(policy->rule);
-    RELEASE(policy->rule_id);
-    RELEASE(policy->kind);
-    RELEASE(policy->channel);
-    memset(policy, 0, sizeof(*policy));
-}
-
-void destroy_spatial_rule_set(ViewerSpatialRuleSet *rule_set) {
-    if (!rule_set) {
-        return;
-    }
-    for (uint32_t i = 0; i < rule_set->count && i < VIEWER_MAX_SPATIAL_RULES; i++) {
-        destroy_collision_policy(&rule_set->items[i]);
-    }
-    memset(rule_set, 0, sizeof(*rule_set));
-}
 
 static bool viewer_collision_policy_same_identity(const ViewerCollisionPolicy *a,
                                                   const ViewerCollisionPolicy *b) {
@@ -60,19 +31,11 @@ static bool viewer_collision_policy_same_identity(const ViewerCollisionPolicy *a
 }
 
 static ID viewer_entity_prototype(ID entity_rec) {
-    static CljSymbol *k_prototype = NULL;
-    k_prototype = intern_symbol_global(":prototype");
+    ID k_prototype = intern_symbol_global(":prototype");
     if (!entity_rec || TAG(entity_rec) != CLJ_RECORD || !k_prototype) {
         return NULL;
     }
     return tiny_fx_gfx_get_field(entity_rec, k_prototype, NULL);
-}
-
-ID viewer_scene_entity_map(FrameScene *scene) {
-    if (!scene) {
-        return NULL;
-    }
-    return (scene->index && is_map(scene->index)) ? scene->index : NULL;
 }
 
 static bool viewer_selector_is_prototype(ID selector) {
@@ -116,10 +79,7 @@ static ID viewer_make_aabb_record(const VgAabb *box) {
     if (!box) {
         return NULL;
     }
-    static CljRecordDescriptor *desc = NULL;
-    if (!desc) {
-        desc = record_descriptor_lookup(intern_symbol_global("Aabb"));
-    }
+    CljRecordDescriptor *desc = record_descriptor_lookup(intern_symbol_global("Aabb"));
     if (!desc) {
         return NULL;
     }
@@ -132,6 +92,76 @@ static ID viewer_make_aabb_record(const VgAabb *box) {
     return (ID)make_record_with_descriptor_values(desc, values, 4u);
 }
 
+static uint32_t viewer_next_rule_set_version(const ViewerSpatialRuleSet *rule_set) {
+    uint32_t version = rule_set ? (rule_set->version + 1u) : 1u;
+    if (version == 0u) {
+        version = 1u;
+    }
+    return version;
+}
+
+/**
+ * @brief Returns the entity index map for a frame scene when present.
+ *
+ * @param scene Frame scene whose `:index` map should be exposed.
+ * @return Entity-map root or `NULL` when the scene does not publish one.
+ */
+ID viewer_scene_entity_map(FrameScene *scene) {
+    if (!scene) {
+        return NULL;
+    }
+    return (scene->index && is_map(scene->index)) ? scene->index : NULL;
+}
+
+/**
+ * @brief Releases all retained fields of a collision policy.
+ *
+ * @param policy Policy to clear in place.
+ * @return void
+ */
+void destroy_collision_policy(ViewerCollisionPolicy *policy) {
+    if (!policy) {
+        return;
+    }
+    RELEASE(policy->self_entity_id);
+    RELEASE(policy->other_entity_id);
+    RELEASE(policy->self_prototype);
+    RELEASE(policy->other_prototype);
+    RELEASE(policy->slot_id);
+    RELEASE(policy->rule);
+    RELEASE(policy->rule_id);
+    RELEASE(policy->kind);
+    RELEASE(policy->channel);
+    memset(policy, 0, sizeof(*policy));
+}
+
+/**
+ * @brief Releases all policies and latch state held by a spatial rule set.
+ *
+ * @param rule_set Rule set to clear in place.
+ * @return void
+ */
+void destroy_spatial_rule_set(ViewerSpatialRuleSet *rule_set) {
+    if (!rule_set) {
+        return;
+    }
+    for (uint32_t i = 0; i < rule_set->count && i < VIEWER_MAX_SPATIAL_RULES; i++) {
+        destroy_collision_policy(&rule_set->items[i]);
+    }
+    memset(rule_set, 0, sizeof(*rule_set));
+}
+
+/**
+ * @brief Builds a `SpatialEvent` record from a concrete collision policy.
+ *
+ * @param bundle Active viewer scene bundle.
+ * @param policy Concrete collision policy for the hit.
+ * @param phase Collision edge symbol such as `:enter` or `:exit`.
+ * @param snapshot_gen Snapshot generation observed during detection.
+ * @param self_box World-space AABB of the initiating entity.
+ * @param other_box World-space AABB of the collided entity.
+ * @return Newly created event record or `NULL` when required metadata is unavailable.
+ */
 ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
                              const ViewerCollisionPolicy *policy,
                              ID phase,
@@ -142,14 +172,8 @@ ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
         bundle->game_slot_index >= bundle->slot_count || !phase || !self_box || !other_box) {
         return NULL;
     }
-    static CljRecordDescriptor *desc = NULL;
-    static ID source_spatial = NULL;
-    if (!desc) {
-        desc = record_descriptor_lookup(intern_symbol_global("SpatialEvent"));
-    }
-    if (!source_spatial) {
-        source_spatial = intern_symbol_global(":spatial");
-    }
+    CljRecordDescriptor *desc = record_descriptor_lookup(intern_symbol_global("SpatialEvent"));
+    ID source_spatial = intern_symbol_global(":spatial");
     if (!desc || !source_spatial) {
         return NULL;
     }
@@ -189,39 +213,38 @@ ID viewer_make_spatial_event(const ViewerSceneBundle *bundle,
     return event_rec;
 }
 
+/**
+ * @brief Expands scene-level spatial rules into concrete host collision policies.
+ *
+ * @param game_scene Scene whose `:collision-rules` should be expanded.
+ * @param io_rule_set Rule set updated in place on success.
+ * @return `true` when the scene publishes a valid collision rule shape.
+ */
 bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
                                           ViewerSpatialRuleSet *io_rule_set) {
     if (!game_scene || !io_rule_set) {
         return false;
     }
-    static CljSymbol *k_collision_rules = NULL;
-    static CljSymbol *k_id = NULL;
-    static CljSymbol *k_slot = NULL;
-    static CljSymbol *k_kind = NULL;
-    static CljSymbol *k_channel = NULL;
-    static CljSymbol *k_radius = NULL;
-    static CljSymbol *k_self = NULL;
-    static CljSymbol *k_other = NULL;
-    static CljSymbol *k_a_id = NULL;
-    static CljSymbol *k_b_id = NULL;
-    k_collision_rules = intern_symbol_global(":collision-rules");
-    k_id = intern_symbol_global(":id");
-    k_slot = intern_symbol_global(":slot");
-    k_kind = intern_symbol_global(":kind");
-    k_channel = intern_symbol_global(":channel");
-    k_radius = intern_symbol_global(":radius");
-    k_self = intern_symbol_global(":self");
-    k_other = intern_symbol_global(":other");
-    k_a_id = intern_symbol_global(":a-id");
-    k_b_id = intern_symbol_global(":b-id");
+    ID k_collision_rules = intern_symbol_global(":collision-rules");
+    ID k_id = intern_symbol_global(":id");
+    ID k_slot = intern_symbol_global(":slot");
+    ID k_kind = intern_symbol_global(":kind");
+    ID k_channel = intern_symbol_global(":channel");
+    ID k_radius = intern_symbol_global(":radius");
+    ID k_self = intern_symbol_global(":self");
+    ID k_other = intern_symbol_global(":other");
+    ID k_a_id = intern_symbol_global(":a-id");
+    ID k_b_id = intern_symbol_global(":b-id");
     if (!k_collision_rules || !k_id || !k_slot || !k_kind || !k_channel || !k_radius ||
         !k_self || !k_other || !k_a_id || !k_b_id) {
         return false;
     }
     bool ok = true;
+    uint32_t next_version = viewer_next_rule_set_version(io_rule_set);
     ID rules = tiny_fx_gfx_get_field((ID)game_scene, k_collision_rules, NULL);
     if (!rules) {
         destroy_spatial_rule_set(io_rule_set);
+        io_rule_set->version = next_version;
         return true;
     }
     if (!is_vector(rules)) {
@@ -234,6 +257,7 @@ bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
         return false;
     }
     ViewerSpatialRuleSet next_rule_set = {0};
+    next_rule_set.version = next_version;
     uint32_t rule_count = vector_count(rules_vec);
     if (rule_count > VIEWER_MAX_SPATIAL_RULES) {
         rule_count = VIEWER_MAX_SPATIAL_RULES;
@@ -316,146 +340,4 @@ bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
         *io_rule_set = next_rule_set;
     }
     return ok;
-}
-
-static bool viewer_invoke_collision_callback(const ViewerSceneBundle *bundle,
-                                             ID event_payload) {
-    if (!bundle || !bundle->spatial_callback || !event_payload) {
-        return false;
-    }
-    return event_loop_enqueue_ingress_call(bundle->spatial_callback, event_payload);
-}
-
-bool viewer_apply_collision_step(ViewerSceneBundle *bundle,
-                                 ViewerSpatialRuleSet *rule_set,
-                                 VgSlotChangeTracker *slot_change_tracker,
-                                 uint32_t now_ms) {
-    if (!bundle || !rule_set || !bundle->game_scene || !bundle->has_game_slot) {
-        return false;
-    }
-
-    (void)now_ms;
-    bool any_triggered = false;
-    bool needs_slot_sync = false;
-    uint8_t game_slot = bundle->game_slot_index;
-    typedef struct {
-        ID entity_id;
-        bool resolved;
-        bool present;
-        VgRenderedEntityState state;
-    } ViewerEntityStateCacheEntry;
-    ViewerEntityStateCacheEntry state_cache[VIEWER_MAX_SPATIAL_RULES * 2u] = {0};
-    uint32_t state_cache_count = 0u;
-    static ID phase_enter = NULL;
-    static ID phase_exit = NULL;
-    if (!phase_enter) {
-        phase_enter = intern_symbol_global(":enter");
-        phase_exit = intern_symbol_global(":exit");
-    }
-    for (uint32_t i = 0; i < rule_set->count; i++) {
-        ViewerCollisionPolicy *policy = &rule_set->items[i];
-        VgCollisionState *state = &rule_set->states[i];
-        VgRenderedEntityState self_state;
-        VgRenderedEntityState other_state;
-        bool found_self = false;
-        bool found_other = false;
-        bool have_self = false;
-        bool have_other = false;
-        for (uint32_t cache_i = 0; cache_i < state_cache_count; cache_i++) {
-            ViewerEntityStateCacheEntry *entry = &state_cache[cache_i];
-            if (entry->resolved && entry->entity_id == policy->self_entity_id) {
-                found_self = true;
-                have_self = entry->present;
-                if (have_self) {
-                    self_state = entry->state;
-                }
-                break;
-            }
-        }
-        if (!found_self) {
-            have_self = vg_rendered_state_query_entity(game_slot,
-                                                       (uintptr_t)policy->self_entity_id,
-                                                       &self_state);
-            if (state_cache_count < (VIEWER_MAX_SPATIAL_RULES * 2u)) {
-                ViewerEntityStateCacheEntry *entry = &state_cache[state_cache_count++];
-                entry->entity_id = policy->self_entity_id;
-                entry->resolved = true;
-                entry->present = have_self;
-                if (have_self) {
-                    entry->state = self_state;
-                }
-            }
-        }
-        for (uint32_t cache_i = 0; cache_i < state_cache_count; cache_i++) {
-            ViewerEntityStateCacheEntry *entry = &state_cache[cache_i];
-            if (entry->resolved && entry->entity_id == policy->other_entity_id) {
-                found_other = true;
-                have_other = entry->present;
-                if (have_other) {
-                    other_state = entry->state;
-                }
-                break;
-            }
-        }
-        if (!found_other) {
-            have_other = vg_rendered_state_query_entity(game_slot,
-                                                        (uintptr_t)policy->other_entity_id,
-                                                        &other_state);
-            if (state_cache_count < (VIEWER_MAX_SPATIAL_RULES * 2u)) {
-                ViewerEntityStateCacheEntry *entry = &state_cache[state_cache_count++];
-                entry->entity_id = policy->other_entity_id;
-                entry->resolved = true;
-                entry->present = have_other;
-                if (have_other) {
-                    entry->state = other_state;
-                }
-            }
-        }
-        if (!have_self || !have_other) {
-            continue;
-        }
-        if (!self_state.has_world_aabb || !other_state.has_world_aabb) {
-            continue;
-        }
-        VgAabb self_box = self_state.world_aabb;
-        VgAabb other_box = other_state.world_aabb;
-        VgAabb sense_box = self_box;
-        sense_box.min_x -= policy->radius_px;
-        sense_box.max_x += policy->radius_px;
-        sense_box.min_y -= policy->radius_px;
-        sense_box.max_y += policy->radius_px;
-        bool inside = vg_collision_detect_aabb_overlap(&sense_box, &other_box);
-        bool was_inside = state->collision_latched;
-        if (inside == was_inside) {
-            continue;
-        }
-        state->collision_latched = inside;
-        ID phase = inside ? phase_enter : phase_exit;
-        ID event_payload = viewer_make_spatial_event(bundle,
-                                                     policy,
-                                                     phase,
-                                                     other_state.snapshot_generation,
-                                                     &self_box,
-                                                     &other_box);
-        if (!event_payload) {
-            continue;
-        }
-        bool invoked = viewer_invoke_collision_callback(bundle, event_payload);
-        RELEASE(event_payload);
-        if (!invoked) {
-            continue;
-        }
-        any_triggered = true;
-        needs_slot_sync = true;
-    }
-    if (needs_slot_sync) {
-        /*
-         * Spatial callbacks may replace the game scene and rebuild the spatial
-         * rules asynchronously. Defer slot/rule synchronization until after the
-         * iteration completes so we never reload or destroy rule storage while
-         * this loop is still walking it.
-         */
-        viewer_sync_configured_slots(bundle, rule_set, slot_change_tracker, true);
-    }
-    return any_triggered;
 }

@@ -6,6 +6,7 @@
  */
 
 #include "tests_common.h"
+#include <pthread.h>
 #include <unistd.h>
 
 // ============================================================================
@@ -72,6 +73,61 @@ static char *capture_print_exception_output(CLJException *ex) {
     buffer[nread] = '\0';
     fclose(tmp);
     return buffer;
+}
+
+typedef struct {
+    bool returned;
+} ThrowOomWorkerArgs;
+
+typedef struct {
+    bool before_register_is_main_thread;
+    bool after_register_is_main_thread;
+} MainThreadRegistrationWorkerArgs;
+
+typedef struct {
+    bool before_has_interpreter_thread;
+    bool before_is_interpreter_thread;
+    bool after_register_has_interpreter_thread;
+    bool after_register_is_interpreter_thread;
+    bool after_clear_has_interpreter_thread;
+    bool after_clear_is_interpreter_thread;
+} InterpreterThreadRegistrationWorkerArgs;
+
+static void *throw_oom_worker_main(void *arg) {
+    ThrowOomWorkerArgs *args = (ThrowOomWorkerArgs *)arg;
+    if (!args) {
+        return NULL;
+    }
+    throw_oom();
+    args->returned = true;
+    return NULL;
+}
+
+static void *main_thread_registration_worker_main(void *arg) {
+    MainThreadRegistrationWorkerArgs *args = (MainThreadRegistrationWorkerArgs *)arg;
+    if (!args) {
+        return NULL;
+    }
+    args->before_register_is_main_thread = subjective_c_is_main_thread();
+    subjective_c_register_main_thread();
+    args->after_register_is_main_thread = subjective_c_is_main_thread();
+    return NULL;
+}
+
+static void *interpreter_thread_registration_worker_main(void *arg) {
+    InterpreterThreadRegistrationWorkerArgs *args = (InterpreterThreadRegistrationWorkerArgs *)arg;
+    if (!args) {
+        return NULL;
+    }
+    args->before_has_interpreter_thread = subjective_c_has_interpreter_thread();
+    args->before_is_interpreter_thread = subjective_c_is_interpreter_thread();
+    subjective_c_register_interpreter_thread();
+    args->after_register_has_interpreter_thread = subjective_c_has_interpreter_thread();
+    args->after_register_is_interpreter_thread = subjective_c_is_interpreter_thread();
+    subjective_c_clear_interpreter_thread();
+    args->after_clear_has_interpreter_thread = subjective_c_has_interpreter_thread();
+    args->after_clear_is_interpreter_thread = subjective_c_is_interpreter_thread();
+    return NULL;
 }
 
 TEST(test_simple_try_catch_exception_caught) {
@@ -357,6 +413,70 @@ TEST(test_print_exception_oom_includes_native_stacktrace_marker) {
 
     TEST_ASSERT_TRUE_MESSAGE(exception_caught, "OOM exception should have been caught");
     TEST_ASSERT_TRUE_MESSAGE(marker_found, "OOM output should include native stacktrace marker");
+}
+
+TEST(test_throw_oom_on_background_thread_does_not_cross_thread_longjmp) {
+    pthread_t worker;
+    ThrowOomWorkerArgs args = {0};
+    bool exception_caught = false;
+
+    subjective_c_register_main_thread();
+    TEST_ASSERT_TRUE(subjective_c_is_main_thread());
+
+    TRY {
+        TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, throw_oom_worker_main, &args));
+        TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
+    } CATCH(ex) {
+        (void)ex;
+        exception_caught = true;
+    } END_TRY
+
+    TEST_ASSERT_FALSE_MESSAGE(exception_caught, "background-thread OOM must not longjmp into main-thread TRY");
+    TEST_ASSERT_TRUE_MESSAGE(args.returned, "throw_oom should return on background threads");
+}
+
+TEST(test_register_main_thread_does_not_replace_existing_main_thread) {
+    pthread_t worker;
+    MainThreadRegistrationWorkerArgs args = {0};
+
+    subjective_c_register_main_thread();
+    TEST_ASSERT_TRUE(subjective_c_is_main_thread());
+
+    TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, main_thread_registration_worker_main, &args));
+    TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
+
+    TEST_ASSERT_FALSE_MESSAGE(args.before_register_is_main_thread, "worker must not start as main thread");
+    TEST_ASSERT_FALSE_MESSAGE(args.after_register_is_main_thread, "worker must not become main thread by registering");
+    TEST_ASSERT_TRUE_MESSAGE(subjective_c_is_main_thread(), "main-thread registration must remain stable");
+}
+
+TEST(test_register_interpreter_thread_is_visible_process_wide_and_clearable) {
+    pthread_t worker;
+    InterpreterThreadRegistrationWorkerArgs args = {0};
+
+    subjective_c_clear_interpreter_thread();
+    TEST_ASSERT_FALSE(subjective_c_has_interpreter_thread());
+    TEST_ASSERT_FALSE(subjective_c_is_interpreter_thread());
+
+    TEST_ASSERT_EQUAL_INT(0, pthread_create(&worker, NULL, interpreter_thread_registration_worker_main, &args));
+    TEST_ASSERT_EQUAL_INT(0, pthread_join(worker, NULL));
+
+    TEST_ASSERT_FALSE_MESSAGE(args.before_has_interpreter_thread,
+                              "worker must not start with a registered interpreter thread");
+    TEST_ASSERT_FALSE_MESSAGE(args.before_is_interpreter_thread,
+                              "worker must not start as interpreter thread");
+    TEST_ASSERT_TRUE_MESSAGE(args.after_register_has_interpreter_thread,
+                             "worker registration must become globally visible");
+    TEST_ASSERT_TRUE_MESSAGE(args.after_register_is_interpreter_thread,
+                             "registered worker must see itself as interpreter thread");
+    TEST_ASSERT_FALSE_MESSAGE(args.after_clear_has_interpreter_thread,
+                              "clearing interpreter thread must remove global registration");
+    TEST_ASSERT_FALSE_MESSAGE(args.after_clear_is_interpreter_thread,
+                              "worker must stop matching interpreter thread after clear");
+    TEST_ASSERT_FALSE_MESSAGE(subjective_c_has_interpreter_thread(),
+                              "main thread must observe cleared interpreter-thread registration");
+    TEST_ASSERT_FALSE_MESSAGE(subjective_c_is_interpreter_thread(),
+                              "main thread must not match interpreter-thread registration");
 }
 
 TEST(test_throw_macro_convenience) {

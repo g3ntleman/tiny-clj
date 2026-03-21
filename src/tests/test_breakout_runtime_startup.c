@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <unistd.h>
 
 #ifndef TINYCLJ_WITH_MINIFB
 #define TINYCLJ_WITH_MINIFB 1
@@ -31,6 +32,18 @@ typedef struct {
     EvalState *st;
 } BreakoutViewerTestContext;
 
+static ViewerCollisionPolicy *breakout_find_policy_by_id(ViewerSpatialRuleSet *rules, ID rule_id) {
+    if (!rules || !rule_id) {
+        return NULL;
+    }
+    for (uint32_t i = 0; i < rules->count; i++) {
+        if (rules->items[i].rule_id == rule_id) {
+            return &rules->items[i];
+        }
+    }
+    return NULL;
+}
+
 static bool breakout_viewer_test_context_init_with_heap_budget(BreakoutViewerTestContext *ctx,
                                                                bool apply_host_heap_budget) {
     if (!ctx) {
@@ -47,6 +60,7 @@ static bool breakout_viewer_test_context_init_with_heap_budget(BreakoutViewerTes
 
     runtime_init(&g_runtime);
     event_loop_init();
+    event_loop_clear();
     vg_rendered_state_reset_all();
     viewer_seed_gpio_key_levels();
     if (apply_host_heap_budget) {
@@ -61,7 +75,11 @@ static bool breakout_viewer_test_context_init_with_heap_budget(BreakoutViewerTes
     if (!tiny_fx_gfx_ensure_schema(ctx->st)) {
         return false;
     }
-    return viewer_load_game_demo_config(ctx->st, config_source, &ctx->bundle, &ctx->spatial_rules);
+    if (!viewer_load_game_demo_config(ctx->st, config_source, &ctx->bundle, &ctx->spatial_rules)) {
+        return false;
+    }
+    viewer_collision_set_dispatch_context(&ctx->bundle, &ctx->spatial_rules);
+    return true;
 }
 
 static bool breakout_viewer_test_context_init(BreakoutViewerTestContext *ctx) {
@@ -72,6 +90,9 @@ static void breakout_viewer_test_context_destroy(BreakoutViewerTestContext *ctx)
     if (!ctx) {
         return;
     }
+    stop_runloop_thread();
+    event_loop_clear();
+    viewer_collision_reset_dispatch_state();
     destroy_scene_bundle(&ctx->bundle);
     destroy_spatial_rule_set(&ctx->spatial_rules);
     evalstate_free(ctx->st);
@@ -161,6 +182,35 @@ TEST(test_breakout_runtime_startup_runloop_thread_start_is_idempotent) {
 
     evalstate_free(st_secondary);
     evalstate_free(st_primary);
+}
+
+TEST(test_breakout_runtime_startup_runloop_thread_registers_interpreter_thread) {
+    EvalState *st = NULL;
+
+    runtime_init(&g_runtime);
+    event_loop_init();
+    event_loop_clear();
+    subjective_c_clear_interpreter_thread();
+
+    st = evalstate_new(true);
+    TEST_ASSERT_NOT_NULL(st);
+
+    TEST_ASSERT_FALSE(subjective_c_has_interpreter_thread());
+    TEST_ASSERT_FALSE(subjective_c_is_interpreter_thread());
+    TEST_ASSERT_TRUE(start_runloop_thread(st));
+
+    for (int attempt = 0; attempt < 50 && !subjective_c_has_interpreter_thread(); attempt++) {
+        usleep(1000);
+    }
+
+    TEST_ASSERT_TRUE(subjective_c_has_interpreter_thread());
+    TEST_ASSERT_FALSE(subjective_c_is_interpreter_thread());
+
+    stop_runloop_thread();
+    TEST_ASSERT_FALSE(subjective_c_has_interpreter_thread());
+    TEST_ASSERT_FALSE(subjective_c_is_interpreter_thread());
+
+    evalstate_free(st);
 }
 
 TEST(test_breakout_runtime_startup_loads_breakout_host_config_into_generic_viewer_bundle) {
@@ -283,11 +333,340 @@ TEST(test_breakout_runtime_startup_spatial_callback_scene_replacement_reloads_ru
     vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, other_box);
     vg_rendered_state_capture_commit();
 
-    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle, &ctx.spatial_rules, NULL, 0u));
+    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
     TEST_ASSERT_EQUAL_PTR(replacement_scene, atom_reset(ctx.bundle.game_scene_atom, replacement_scene));
 
     viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
     TEST_ASSERT_EQUAL_UINT32(0u, ctx.spatial_rules.count);
+
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_collision_latch_recovers_after_missing_snapshot_entities) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(ctx.bundle.has_game_slot);
+
+    ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
+    ViewerCollisionPolicy *policy = breakout_find_policy_by_id(&ctx.spatial_rules, paddle_rule_id);
+    TEST_ASSERT_NOT_NULL(policy);
+    ViewerSpatialRuleSet single_rule_set = {0};
+    single_rule_set.items[0] = *policy;
+    single_rule_set.count = 1u;
+
+    uint8_t slot = ctx.bundle.game_slot_index;
+    VgTransformFixed world_t = {
+        .m00 = VG_SCALE_ONE,
+        .m01 = 0,
+        .m02 = 0,
+        .m10 = 0,
+        .m11 = VG_SCALE_ONE,
+        .m12 = 0,
+    };
+    /*
+     * Right-edge paddle case: paddle protrudes one pixel beyond playfield,
+     * ball overlaps at the edge.
+     */
+    VgAabb ball_box = {.min_x = 317, .max_x = 320, .min_y = 223, .max_y = 226};
+    VgAabb paddle_box = {.min_x = 281, .max_x = 320, .min_y = 224, .max_y = 227};
+
+    vg_rendered_state_reset_all();
+
+    vg_rendered_state_capture_begin(slot, 1u, 0u);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->self_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->self_entity_id, ball_box);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->other_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
+    vg_rendered_state_capture_commit();
+    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
+
+    vg_rendered_state_capture_begin(slot, 2u, 0u);
+    vg_rendered_state_capture_commit();
+    TEST_ASSERT_FALSE(viewer_apply_collision_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
+
+    vg_rendered_state_capture_begin(slot, 3u, 0u);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->self_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->self_entity_id, ball_box);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->other_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
+    vg_rendered_state_capture_commit();
+    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle, &ctx.spatial_rules, 0u, NULL, 0u));
+
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_collision_step_filters_candidates_by_dirty_rects) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(ctx.bundle.has_game_slot);
+
+    ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
+    ViewerCollisionPolicy *policy = breakout_find_policy_by_id(&ctx.spatial_rules, paddle_rule_id);
+    TEST_ASSERT_NOT_NULL(policy);
+    ViewerSpatialRuleSet single_rule_set = {0};
+    single_rule_set.items[0] = *policy;
+    single_rule_set.count = 1u;
+
+    uint8_t slot = ctx.bundle.game_slot_index;
+    VgTransformFixed world_t = {
+        .m00 = VG_SCALE_ONE,
+        .m01 = 0,
+        .m02 = 0,
+        .m10 = 0,
+        .m11 = VG_SCALE_ONE,
+        .m12 = 0,
+    };
+    VgAabb ball_box = {.min_x = 156, .max_x = 159, .min_y = 221, .max_y = 224};
+    VgAabb paddle_box = {.min_x = 140, .max_x = 179, .min_y = 224, .max_y = 227};
+
+    vg_rendered_state_reset_all();
+    vg_rendered_state_capture_begin(slot, 1u, 0u);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->self_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->self_entity_id, ball_box);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->other_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
+    vg_rendered_state_capture_commit();
+
+    VgClipRect far_dirty = {.x = 0, .y = 0, .w = 16, .h = 16};
+    TEST_ASSERT_FALSE(viewer_apply_collision_step(&ctx.bundle,
+                                                  &single_rule_set,
+                                                  0u,
+                                                  &far_dirty,
+                                                  1u));
+
+    VgClipRect hit_dirty = {.x = 150, .y = 216, .w = 40, .h = 20};
+    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle,
+                                                 &single_rule_set,
+                                                 0u,
+                                                 &hit_dirty,
+                                                 1u));
+
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_collision_step_defers_dispatch_until_collision_drain) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(ctx.bundle.has_game_slot);
+
+    ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
+    ViewerCollisionPolicy *policy = breakout_find_policy_by_id(&ctx.spatial_rules, paddle_rule_id);
+    TEST_ASSERT_NOT_NULL(policy);
+    ViewerSpatialRuleSet single_rule_set = {0};
+    single_rule_set.items[0] = *policy;
+    single_rule_set.count = 1u;
+
+    ID callback = eval_string(
+        "(do "
+        "  (def breakout-collision-drain-marker (atom nil)) "
+        "  (fn [event] "
+        "    (reset! breakout-collision-drain-marker [(:phase event) (:id event)]) "
+        "    nil))",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(callback);
+    RELEASE(ctx.bundle.spatial_callback);
+    ctx.bundle.spatial_callback = RETAIN(callback);
+
+    viewer_collision_set_dispatch_context(&ctx.bundle, &single_rule_set);
+
+    uint8_t slot = ctx.bundle.game_slot_index;
+    VgTransformFixed world_t = {
+        .m00 = VG_SCALE_ONE,
+        .m01 = 0,
+        .m02 = 0,
+        .m10 = 0,
+        .m11 = VG_SCALE_ONE,
+        .m12 = 0,
+    };
+    VgAabb ball_box = {.min_x = 156, .max_x = 159, .min_y = 221, .max_y = 224};
+    VgAabb paddle_box = {.min_x = 140, .max_x = 179, .min_y = 224, .max_y = 227};
+
+    vg_rendered_state_reset_all();
+    vg_rendered_state_capture_begin(slot, 1u, 0u);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->self_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->self_entity_id, ball_box);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->other_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
+    vg_rendered_state_capture_commit();
+
+    TEST_ASSERT_TRUE(viewer_apply_collision_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u));
+    TEST_ASSERT_FALSE(event_loop_has_pending_tasks());
+    TEST_ASSERT_FALSE(event_loop_ingress_has_pending());
+    TEST_ASSERT_NULL(eval_string("@breakout-collision-drain-marker", ctx.st));
+
+    TEST_ASSERT_TRUE(viewer_collision_poll_drain());
+    TEST_ASSERT_TRUE(event_loop_has_pending_tasks());
+    TEST_ASSERT_TRUE(event_loop_ingress_has_pending());
+    TEST_ASSERT_NULL(eval_string("@breakout-collision-drain-marker", ctx.st));
+
+    TEST_ASSERT_TRUE(event_loop_run_next(NULL, ctx.st));
+    ID marker = eval_string("@breakout-collision-drain-marker", ctx.st);
+    TEST_ASSERT_NOT_NULL(marker);
+    TEST_ASSERT_TRUE(TAG(marker) == CLJ_VECTOR_PERSISTENT);
+    ID marker_ok = eval_string("(= @breakout-collision-drain-marker [:enter :ball-vs-paddle])", ctx.st);
+    TEST_ASSERT_EQUAL_PTR(clj_true, marker_ok);
+
+    viewer_collision_reset_dispatch_state();
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_collision_step_drops_callback_under_tight_heap_limit_without_crashing) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(ctx.bundle.has_game_slot);
+
+    ID paddle_rule_id = intern_symbol_global(":ball-vs-paddle");
+    ViewerCollisionPolicy *policy = breakout_find_policy_by_id(&ctx.spatial_rules, paddle_rule_id);
+    TEST_ASSERT_NOT_NULL(policy);
+    ViewerSpatialRuleSet single_rule_set = {0};
+    single_rule_set.items[0] = *policy;
+    single_rule_set.count = 1u;
+
+    uint8_t slot = ctx.bundle.game_slot_index;
+    VgTransformFixed world_t = {
+        .m00 = VG_SCALE_ONE,
+        .m01 = 0,
+        .m02 = 0,
+        .m10 = 0,
+        .m11 = VG_SCALE_ONE,
+        .m12 = 0,
+    };
+    VgAabb ball_box = {.min_x = 156, .max_x = 159, .min_y = 221, .max_y = 224};
+    VgAabb paddle_box = {.min_x = 140, .max_x = 179, .min_y = 224, .max_y = 227};
+
+    vg_rendered_state_reset_all();
+    vg_rendered_state_capture_begin(slot, 1u, 0u);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->self_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->self_entity_id, ball_box);
+    vg_rendered_state_capture_record_entity((uintptr_t)policy->other_entity_id, world_t);
+    vg_rendered_state_capture_record_entity_aabb((uintptr_t)policy->other_entity_id, paddle_box);
+    vg_rendered_state_capture_commit();
+
+    size_t prev_limit = memory_get_heap_limit_bytes();
+    size_t baseline = memory_current_usage_bytes();
+    bool caught = false;
+    bool triggered = false;
+    bool drained = false;
+    TRY {
+        memory_set_heap_limit_bytes(baseline + 16u);
+        triggered = viewer_apply_collision_step(&ctx.bundle, &single_rule_set, 0u, NULL, 0u);
+        drained = viewer_collision_poll_drain();
+    } CATCH(ex) {
+        (void)ex;
+        caught = true;
+    } END_TRY
+    memory_set_heap_limit_bytes(prev_limit);
+
+    TEST_ASSERT_FALSE(caught);
+    TEST_ASSERT_TRUE(triggered);
+    TEST_ASSERT_FALSE(drained);
+    TEST_ASSERT_FALSE(event_loop_ingress_has_pending());
+
+    breakout_viewer_test_context_destroy(&ctx);
+}
+
+TEST(test_breakout_runtime_startup_perf_window_snapshot_reports_spi_throughput_metrics) {
+    ViewerPerfWindow perf = {0};
+    ViewerPerfSnapshot snapshot = {0};
+
+    perf_window_init(&perf, 10.0);
+    perf_window_record_frame(&perf, 100u, 2u, 1u, 2000000u);
+    perf_window_record_frame(&perf, 300u, 4u, 3u, 6000000u);
+
+    TEST_ASSERT_TRUE(perf_window_take_snapshot_if_due(&perf, 11.0, &snapshot));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 2.0f, (float)snapshot.fps);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 200.0f, (float)snapshot.avg_dirty_px_per_frame);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 800.0f, (float)snapshot.dirty_bytes_per_s);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 307200.0f, (float)snapshot.full_bytes_per_s);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 3.0f, (float)snapshot.avg_changed_slots);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 4.0f, (float)snapshot.transfer_rects_per_s);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 2.0f, (float)snapshot.avg_transfer_rects_per_frame);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 4.0f, (float)snapshot.avg_transfer_ms_per_frame);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 600.0f, (float)snapshot.max_dirty_bytes_per_frame);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 200.0f / 76800.0f, (float)snapshot.dirty_ratio);
+
+    TEST_ASSERT_FALSE(perf_window_take_snapshot_if_due(&perf, 11.2, &snapshot));
+}
+
+TEST(test_breakout_runtime_startup_perf_window_snapshot_waits_for_full_second) {
+    ViewerPerfWindow perf = {0};
+    ViewerPerfSnapshot snapshot = {0};
+
+    perf_window_init(&perf, 3.0);
+    perf_window_record_frame(&perf, 256u, 1u, 2u, 1000000u);
+
+    TEST_ASSERT_FALSE(perf_window_take_snapshot_if_due(&perf, 3.8, &snapshot));
+    TEST_ASSERT_TRUE(perf_window_take_snapshot_if_due(&perf, 4.1, &snapshot));
+}
+
+TEST(test_breakout_runtime_startup_perf_window_snapshot_reports_zero_when_idle) {
+    ViewerPerfWindow perf = {0};
+    ViewerPerfSnapshot snapshot = {0};
+
+    perf_window_init(&perf, 7.0);
+
+    TEST_ASSERT_TRUE(perf_window_take_snapshot_if_due(&perf, 8.2, &snapshot));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, (float)snapshot.fps);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, (float)snapshot.dirty_bytes_per_s);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, (float)snapshot.transfer_rects_per_s);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, (float)snapshot.avg_transfer_ms_per_frame);
+}
+
+TEST(test_breakout_runtime_startup_spi_mib_conversion_matches_binary_units) {
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, (float)bytes_per_second_to_mib_per_second(0.0));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, (float)bytes_per_second_to_mib_per_second(-123.0));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, (float)bytes_per_second_to_mib_per_second(1024.0 * 1024.0));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 2.5f, (float)bytes_per_second_to_mib_per_second(2.5 * 1024.0 * 1024.0));
+}
+
+TEST(test_breakout_runtime_startup_collision_step_runs_once_per_rendered_frame) {
+    uint_fast32_t last_collision_frame_serial = 0u;
+
+    TEST_ASSERT_FALSE(viewer_should_run_collision_step(0u, &last_collision_frame_serial));
+    TEST_ASSERT_EQUAL_UINT64(0u, (uint64_t)last_collision_frame_serial);
+
+    TEST_ASSERT_TRUE(viewer_should_run_collision_step(1u, &last_collision_frame_serial));
+    TEST_ASSERT_EQUAL_UINT64(1u, (uint64_t)last_collision_frame_serial);
+    TEST_ASSERT_FALSE(viewer_should_run_collision_step(1u, &last_collision_frame_serial));
+
+    TEST_ASSERT_TRUE(viewer_should_run_collision_step(2u, &last_collision_frame_serial));
+    TEST_ASSERT_EQUAL_UINT64(2u, (uint64_t)last_collision_frame_serial);
+}
+
+TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timer_driven_scene_updates) {
+    BreakoutViewerTestContext ctx = {0};
+    VgSlotChangeTracker slot_change_tracker = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&slot_change_tracker, ctx.bundle.slot_count));
+
+    ID state_atom_id = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  tiny-breakout.runtime/state*)",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(state_atom_id);
+    TEST_ASSERT_EQUAL_UINT8(CLJ_ATOM, TAG(state_atom_id));
+
+    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+
+    for (int i = 0; i < 300; i++) {
+        usleep(20000);
+        viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
+        (void)viewer_apply_collision_step(&ctx.bundle,
+                                          &ctx.spatial_rules,
+                                          (uint32_t)platform_current_time_ms(),
+                                          NULL,
+                                          0u);
+    }
+
+    stop_runloop_thread();
+    vg_slot_change_tracker_destroy(&slot_change_tracker);
+
+    ID state = atom_deref((CljAtom *)state_atom_id);
+    TEST_ASSERT_NOT_NULL(state);
+    TEST_ASSERT_TRUE(is_map(state));
+    TEST_ASSERT_NOT_NULL(viewer_frame_scene_from_atom(ctx.bundle.game_scene_atom));
 
     breakout_viewer_test_context_destroy(&ctx);
 }

@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 // Forward declaration for CljString
 struct CljString;
@@ -101,6 +102,34 @@ typedef struct GlobalExceptionStack {
 
 /** @brief Global exception stack instance. */
 extern GlobalExceptionStack global_exception_stack;
+
+/**
+ * @brief Read-only view of a registered process-global thread role.
+ */
+typedef struct SubjectiveCThreadState {
+    pthread_t value;
+    bool initialized;
+} SubjectiveCThreadState;
+
+/** @brief Read-only process-global main thread state. */
+extern const SubjectiveCThreadState *const subjective_c_main_thread;
+/** @brief Read-only process-global interpreter thread state. */
+extern const SubjectiveCThreadState *const subjective_c_interpreter_thread;
+
+/** @brief Register the current thread as the process-global main thread. */
+void subjective_c_register_main_thread(void);
+/** @brief Register or replace the current thread as the process-global interpreter thread. */
+void subjective_c_register_interpreter_thread(void);
+/** @brief Clear the registered process-global interpreter thread. */
+void subjective_c_clear_interpreter_thread(void);
+/** @brief Return true when a process-global main thread has been registered. */
+bool subjective_c_has_main_thread(void);
+/** @brief Return true when a process-global interpreter thread has been registered. */
+bool subjective_c_has_interpreter_thread(void);
+/** @brief Return true when the current thread is the registered main thread. */
+bool subjective_c_is_main_thread(void);
+/** @brief Return true when the current thread is the registered interpreter thread. */
+bool subjective_c_is_interpreter_thread(void);
 
 // ============================================================================
 // TRY/CATCH MACROS (Objective-C style, efficient by design)

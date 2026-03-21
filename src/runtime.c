@@ -6,6 +6,7 @@
 #include "meta.h"
 #include "vector.h"
 #include "memory.h"
+#include "exception.h"
 #include "eval.h"  // For reset_eval_arg_depth()
 #include "event_loop.h"     // For event_loop_clear()
 #include "macro.h"          // For macro_cache_reset()
@@ -22,7 +23,7 @@
 #endif
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
-#include "to_string.h"      // For to_string(), pr_str; strings.h for string_data
+#include "to_string.h"      // For to_string(), make_string_description; strings.h for string_data
 #include "callbacks.h"  // For clj_set_callbacks
 #include <stdint.h>
 #include <inttypes.h>
@@ -61,9 +62,9 @@ static inline uint8_t runtime_next_lifecycle_generation(void) {
 #if defined(ZOMBIE_ENABLED) && ZOMBIE_ENABLED
 static void zombie_log_fn(CljObject *v, bool is_double_free) {
     WITH_AUTORELEASE_POOL({
-        CljString *s = pr_str((ID)v);
+        CljString *s = make_string_description((ID)v);
         if (s) {
-            fputs(is_double_free ? "DOUBLE-FREE pr_str: " : "ZOMBIE pr_str: ", stderr);
+            fputs(is_double_free ? "DOUBLE-FREE make_string_description: " : "ZOMBIE make_string_description: ", stderr);
             fputs(string_data((CljObject *)s), stderr);
             fputc('\n', stderr);
         }
@@ -98,6 +99,7 @@ uint16_t runtime_next_resolve_epoch(uint8_t *out_generation) {
 
 void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime) return;
+    subjective_c_register_main_thread();
     
     // Initialize autorelease pool first (needed by make_* functions)
     autorelease_pool_init();

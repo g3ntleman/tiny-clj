@@ -269,16 +269,13 @@ TEST(test_gfx_collision_contract_field_alias_hot_loop_does_not_retain) {
     RELEASE(stable);
 }
 
-/* Target: 0 (raised to 512); TODO: find/fix descriptor/watch residue to lower again. */
 TEST(test_gfx_collision_contract_spatial_watch_supports_two_and_three_arity_calls, 512) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID out = eval_string(
         "(do "
-        "  (require 'tiny-fx.gfx) "
-        "  (require 'tiny-fx.gfx-scene) "
-        "  (require 'tiny-fx.color) "
         "  (require 'tiny-fx.gfx-collision) "
         "  (let [spatial-watch-marker (atom [])] "
+        "    (tiny-fx.gfx-collision/set-collision-callback! nil) "
         "    (tiny-fx.gfx-collision/watch :player-hit "
         "      (fn [event] "
         "        (swap! spatial-watch-marker conj [:two (:phase event)]) "
@@ -293,6 +290,7 @@ TEST(test_gfx_collision_contract_spatial_watch_supports_two_and_three_arity_call
         "    (tiny-fx.gfx-collision/invoke-collision-callback! "
         "      {:source :spatial :id :player-hit :rule {:id :player-hit} :phase :exit}) "
         "    (tiny-fx.gfx-collision/watch :player-hit nil) "
+        "    (tiny-fx.gfx-collision/set-collision-callback! nil) "
         "    @spatial-watch-marker))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(out);

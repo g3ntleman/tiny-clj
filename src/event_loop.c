@@ -10,6 +10,7 @@
 #include "map.h"
 #include "value.h"
 #include "gpio.h"
+#include "viewer_host_spatial.h"
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -399,6 +400,7 @@ void event_loop_clear(void) {
     g_event_loop_ingress_drained_count = 0u;
     g_event_loop_ingress_high_watermark = 0u;
     g_runloop_last_warn_ns = 0u;
+    viewer_collision_reset_dispatch_state();
 }
 
 void event_loop_enqueue(CljObject *fn_zero_arity, CljTransientMap *result_channel) {
@@ -515,6 +517,9 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
 
     // Promote ISR-raised drain requests into regular event-loop tasks.
     gpio_poll_drain();
+
+    // Promote raw UI-thread collision hits into runloop-safe ingress calls.
+    (void)viewer_collision_poll_drain();
 
     // Consume cross-thread callback ingress before timer/task processing.
     event_loop_ingress_drain();

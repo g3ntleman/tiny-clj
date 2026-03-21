@@ -190,15 +190,17 @@ bool memory_heap_limit_would_exceed(size_t released_size, size_t requested_size)
  * @param type_size Size of object type
  * @param count Number of objects
  * @param obj_type Clojure type tag
- * @return Non-NULL allocated object with rc=1. On OOM, throws and never returns.
+ * @return Non-NULL allocated object with rc=1. On OOM, throws on the main thread and never returns.
  */
 void *alloc(size_t type_size, size_t count, CljType obj_type) {
   if (count != 0 && type_size > SIZE_MAX / count) {
     throw_oom();
+    abort();
   }
   size_t requested = type_size * count;
   if (requested != 0 && memory_heap_limit_would_exceed(0, requested)) {
     throw_oom();
+    abort();
   }
   void *result = malloc(requested);
   if (!result) {
@@ -206,6 +208,7 @@ void *alloc(size_t type_size, size_t count, CljType obj_type) {
             "OOM alloc request: bytes=%zu type=%s(%d)\n",
             requested, clj_type_name(obj_type), (int)obj_type);
     throw_oom();
+    abort();
   }
   if (requested != 0) {
     size_t actual = memory_actual_allocation_size(result, requested);
@@ -215,6 +218,7 @@ void *alloc(size_t type_size, size_t count, CljType obj_type) {
               "OOM alloc request: bytes=%zu type=%s(%d)\n",
               actual, clj_type_name(obj_type), (int)obj_type);
       throw_oom();
+      abort();
     }
   }
   if (type_size >= sizeof(CljObject)) {
@@ -1056,6 +1060,12 @@ void throw_oom(void) {
   clj_oom_exception->file[sizeof(clj_oom_exception->file) - 1] = '\0';
   clj_oom_exception->line = __LINE__;
   clj_oom_exception->col = 0;
+  if (subjective_c_has_main_thread() && !subjective_c_is_main_thread()) {
+    fputs("OOM on non-main thread; suppressing exception longjmp.\n", stderr);
+    fputs("OOM throw-site backtrace:\n", stderr);
+    exception_print_native_backtrace();
+    return;
+  }
   fputs("OOM throw-site backtrace:\n", stderr);
   exception_print_native_backtrace();
   throw_exception_object(clj_oom_exception);

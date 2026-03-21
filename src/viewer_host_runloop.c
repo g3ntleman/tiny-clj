@@ -32,6 +32,7 @@ static void *viewer_runloop_thread_main(void *arg) {
     if (!st) {
         return NULL;
     }
+    subjective_c_register_interpreter_thread();
     while (atomic_load_explicit(&g_runloop_thread.running, memory_order_acquire)) {
         if (viewer_drain_one_runloop_task(st)) {
             continue;
@@ -42,6 +43,7 @@ static void *viewer_runloop_thread_main(void *arg) {
         }
         platform_runloop_run_once((unsigned int)timeout_ms);
     }
+    subjective_c_clear_interpreter_thread();
     return NULL;
 }
 
@@ -57,6 +59,7 @@ bool start_runloop_thread(EvalState *st) {
     if (pthread_create(&g_runloop_thread.thread, NULL, viewer_runloop_thread_main, st) != 0) {
         atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);
         g_runloop_thread.eval_state = NULL;
+        subjective_c_clear_interpreter_thread();
         return false;
     }
     g_runloop_thread.started = true;
@@ -69,6 +72,7 @@ void stop_runloop_thread(void) {
     }
     atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);
     (void)pthread_join(g_runloop_thread.thread, NULL);
+    subjective_c_clear_interpreter_thread();
     g_runloop_thread.started = false;
     memset(&g_runloop_thread.thread, 0, sizeof(pthread_t));
     g_runloop_thread.eval_state = NULL;

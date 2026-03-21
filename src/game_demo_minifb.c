@@ -85,6 +85,8 @@ static bool viewer_should_exit_for_keys(const uint8_t *keys) {
 typedef struct {
     bool use_mfb_waitsync;
     bool w_key_was_down;
+    bool r_key_was_down;
+    bool redraw_overlay_enabled;
     bool fire_key_was_down;
     bool pause_key_was_down;
     bool gpio_key_was_down[VIEWER_GPIO_KEY_BINDING_COUNT];
@@ -93,6 +95,8 @@ typedef struct {
 typedef struct {
     uint32_t dirty_pixels;
     uint32_t changed_slots;
+    uint32_t transfer_rects;
+    uint64_t transfer_ns;
     uint_fast32_t frame_serial;
 } ViewerFrameRenderResult;
 
@@ -160,6 +164,51 @@ static uint32_t rgb565_to_xrgb8888(uint16_t c) {
     return 0xff000000u | (r << 16) | (g << 8) | b;
 }
 
+static void viewer_draw_rect_outline_xrgb8888(uint32_t *pixels,
+                                              int width,
+                                              int height,
+                                              VgClipRect rect,
+                                              uint32_t color) {
+    if (!pixels || width <= 0 || height <= 0 || vg_clip_rect_is_empty(rect)) {
+        return;
+    }
+    int x0 = (rect.x < 0) ? 0 : rect.x;
+    int y0 = (rect.y < 0) ? 0 : rect.y;
+    int x1 = rect.x + rect.w - 1;
+    int y1 = rect.y + rect.h - 1;
+    if (x1 >= width) {
+        x1 = width - 1;
+    }
+    if (y1 >= height) {
+        y1 = height - 1;
+    }
+    if (x1 < x0 || y1 < y0) {
+        return;
+    }
+    for (int x = x0; x <= x1; x++) {
+        pixels[(size_t)y0 * (size_t)width + (size_t)x] = color;
+        pixels[(size_t)y1 * (size_t)width + (size_t)x] = color;
+    }
+    for (int y = y0; y <= y1; y++) {
+        pixels[(size_t)y * (size_t)width + (size_t)x0] = color;
+        pixels[(size_t)y * (size_t)width + (size_t)x1] = color;
+    }
+}
+
+static void viewer_draw_redraw_overlay(uint32_t *pixels,
+                                       int width,
+                                       int height,
+                                       const VgClipRect *rects,
+                                       size_t rect_count) {
+    if (!pixels || !rects || rect_count == 0u) {
+        return;
+    }
+    const uint32_t color = 0xff00ffffu; /* cyan */
+    for (size_t i = 0; i < rect_count; i++) {
+        viewer_draw_rect_outline_xrgb8888(pixels, width, height, rects[i], color);
+    }
+}
+
 static uint32_t viewer_clip_rect_area_on_framebuffer(VgClipRect rect, int fb_w, int fb_h) {
     if (vg_clip_rect_is_empty(rect) || fb_w <= 0 || fb_h <= 0) {
         return 0u;
@@ -185,6 +234,8 @@ typedef struct {
     uint64_t window_frames;
     uint64_t window_dirty_pixels;
     uint64_t window_changed_slots;
+    uint64_t window_transfer_rects;
+    uint64_t window_transfer_ns;
     uint32_t max_dirty_px_frame;
 } ViewerPerfWindow;
 
@@ -195,6 +246,9 @@ typedef struct {
     double dirty_bytes_per_s;
     double full_bytes_per_s;
     double avg_changed_slots;
+    double transfer_rects_per_s;
+    double avg_transfer_rects_per_frame;
+    double avg_transfer_ms_per_frame;
     double max_dirty_bytes_per_frame;
     double avg_render_lock_hold_us;
     double max_render_lock_hold_us;
@@ -249,6 +303,13 @@ static double timing_accumulator_max_ms(const TimingAccumulator *acc) {
     return (double)acc->max_ns / 1e6;
 }
 
+static double bytes_per_second_to_mib_per_second(double bytes_per_second) {
+    if (bytes_per_second <= 0.0) {
+        return 0.0;
+    }
+    return bytes_per_second / (1024.0 * 1024.0);
+}
+
 /* Initialize rolling perf window counters for throughput estimation. */
 static void perf_window_init(ViewerPerfWindow *perf, double start_s) {
     if (!perf) {
@@ -259,13 +320,19 @@ static void perf_window_init(ViewerPerfWindow *perf, double start_s) {
 }
 
 /* Accumulate dirty-area and slot-change stats for one rendered frame. */
-static void perf_window_record_frame(ViewerPerfWindow *perf, uint32_t dirty_pixels, uint32_t changed_slots) {
+static void perf_window_record_frame(ViewerPerfWindow *perf,
+                                     uint32_t dirty_pixels,
+                                     uint32_t changed_slots,
+                                     uint32_t transfer_rects,
+                                     uint64_t transfer_ns) {
     if (!perf) {
         return;
     }
     perf->window_frames++;
     perf->window_dirty_pixels += dirty_pixels;
     perf->window_changed_slots += changed_slots;
+    perf->window_transfer_rects += transfer_rects;
+    perf->window_transfer_ns += transfer_ns;
     if (dirty_pixels > perf->max_dirty_px_frame) {
         perf->max_dirty_px_frame = dirty_pixels;
     }
@@ -282,23 +349,33 @@ static bool perf_window_take_snapshot_if_due(ViewerPerfWindow *perf,
         return false;
     }
     double elapsed_s = now_s - perf->window_start_s;
-    if (elapsed_s < 1.0 || perf->window_frames == 0u) {
+    if (elapsed_s < 1.0) {
         return false;
     }
     if (out_snapshot) {
-        out_snapshot->fps = (double)perf->window_frames / elapsed_s;
-        out_snapshot->avg_dirty_px_per_frame = (double)perf->window_dirty_pixels / (double)perf->window_frames;
-        out_snapshot->dirty_ratio = out_snapshot->avg_dirty_px_per_frame / (double)(VIEW_W * VIEW_H);
-        out_snapshot->dirty_bytes_per_s =
-            ((double)perf->window_dirty_pixels * (double)RGB565_BYTES_PER_PIXEL) / elapsed_s;
-        out_snapshot->full_bytes_per_s = out_snapshot->fps * (double)(VIEW_W * VIEW_H * RGB565_BYTES_PER_PIXEL);
-        out_snapshot->avg_changed_slots = (double)perf->window_changed_slots / (double)perf->window_frames;
-        out_snapshot->max_dirty_bytes_per_frame = (double)perf->max_dirty_px_frame * (double)RGB565_BYTES_PER_PIXEL;
+        if (perf->window_frames > 0u) {
+            out_snapshot->fps = (double)perf->window_frames / elapsed_s;
+            out_snapshot->avg_dirty_px_per_frame = (double)perf->window_dirty_pixels / (double)perf->window_frames;
+            out_snapshot->dirty_ratio = out_snapshot->avg_dirty_px_per_frame / (double)(VIEW_W * VIEW_H);
+            out_snapshot->dirty_bytes_per_s =
+                ((double)perf->window_dirty_pixels * (double)RGB565_BYTES_PER_PIXEL) / elapsed_s;
+            out_snapshot->full_bytes_per_s = out_snapshot->fps * (double)(VIEW_W * VIEW_H * RGB565_BYTES_PER_PIXEL);
+            out_snapshot->avg_changed_slots = (double)perf->window_changed_slots / (double)perf->window_frames;
+            out_snapshot->transfer_rects_per_s = (double)perf->window_transfer_rects / elapsed_s;
+            out_snapshot->avg_transfer_rects_per_frame =
+                (double)perf->window_transfer_rects / (double)perf->window_frames;
+            out_snapshot->avg_transfer_ms_per_frame =
+                ((double)perf->window_transfer_ns / (double)perf->window_frames) / 1e6;
+            out_snapshot->max_dirty_bytes_per_frame =
+                (double)perf->max_dirty_px_frame * (double)RGB565_BYTES_PER_PIXEL;
+        }
     }
     perf->window_start_s = now_s;
     perf->window_frames = 0u;
     perf->window_dirty_pixels = 0u;
     perf->window_changed_slots = 0u;
+    perf->window_transfer_rects = 0u;
+    perf->window_transfer_ns = 0u;
     perf->max_dirty_px_frame = 0u;
     return true;
 }
@@ -465,6 +542,11 @@ typedef struct {
     atomic_uint_fast64_t skipped_generations_total;
     atomic_uint_fast64_t skipped_max_frame;
     atomic_uint_fast64_t skipped_max_slot;
+    atomic_uint_fast32_t last_transfer_rects;
+    atomic_uint_fast64_t last_transfer_ns;
+    VgClipRect last_transfer_clip_rects[VIEWER_MAX_DIRTY_PLAN_RECTS];
+    uint16_t last_transfer_clip_rect_count;
+    pthread_mutex_t transfer_rects_mutex;
     atomic_uint_fast32_t animated_slots_mask;
 } ViewerRenderThread;
 static ViewerRenderThread g_render_thread = {0};
@@ -581,6 +663,24 @@ static void collect_render_thread_metrics(ViewerPerfSnapshot *out_snapshot) {
     out_snapshot->avg_render_lock_hold_us =
         render_samples ? ((double)render_hold_ns / (double)render_samples) / 1000.0 : 0.0;
     out_snapshot->max_render_lock_hold_us = (double)render_hold_max_ns / 1000.0;
+}
+
+static size_t viewer_copy_last_transfer_rects(VgClipRect *out_rects, size_t out_capacity) {
+    if (!out_rects || out_capacity == 0u) {
+        return 0u;
+    }
+    if (pthread_mutex_lock(&g_render_thread.transfer_rects_mutex) != 0) {
+        return 0u;
+    }
+    size_t count = (size_t)g_render_thread.last_transfer_clip_rect_count;
+    if (count > out_capacity) {
+        count = out_capacity;
+    }
+    if (count > 0u) {
+        memcpy(out_rects, g_render_thread.last_transfer_clip_rects, count * sizeof(VgClipRect));
+    }
+    (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
+    return count;
 }
 
 /* Render-thread loop: changed slots render immediately; animated slots tick continuously. */
@@ -738,6 +838,7 @@ static void *viewer_render_thread_main(void *arg) {
          * finished dirty rects are copied into the live GRAM after rendering.
          */
         if (g_gram_pixels && frame_dirty_rect_count > 0u) {
+            uint64_t transfer_begin_ns = monotonic_now_ns();
             VgClipRect planned_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
             size_t planned_count = vg_dirty_union_plan_rects(frame_dirty_rects,
                                                              (size_t)frame_dirty_rect_count,
@@ -746,6 +847,34 @@ static void *viewer_render_thread_main(void *arg) {
                                                              VIEWER_MAX_DIRTY_PLAN_RECTS);
             for (size_t rect_i = 0; rect_i < planned_count; rect_i++) {
                 (void)vg_panel_backend_submit_clip_rect(&g_gram_panel, fb, planned_rects[rect_i]);
+            }
+            if (pthread_mutex_lock(&g_render_thread.transfer_rects_mutex) == 0) {
+                size_t stored_count = planned_count;
+                if (stored_count > VIEWER_MAX_DIRTY_PLAN_RECTS) {
+                    stored_count = VIEWER_MAX_DIRTY_PLAN_RECTS;
+                }
+                g_render_thread.last_transfer_clip_rect_count = (uint16_t)stored_count;
+                if (stored_count > 0u) {
+                    memcpy(g_render_thread.last_transfer_clip_rects,
+                           planned_rects,
+                           stored_count * sizeof(VgClipRect));
+                }
+                (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
+            }
+            uint64_t transfer_end_ns = monotonic_now_ns();
+            uint64_t transfer_ns = (transfer_end_ns > transfer_begin_ns)
+                                       ? (transfer_end_ns - transfer_begin_ns)
+                                       : 0u;
+            atomic_store_explicit(&g_render_thread.last_transfer_rects,
+                                  (uint32_t)planned_count,
+                                  memory_order_relaxed);
+            atomic_store_explicit(&g_render_thread.last_transfer_ns, transfer_ns, memory_order_relaxed);
+        } else {
+            atomic_store_explicit(&g_render_thread.last_transfer_rects, 0u, memory_order_relaxed);
+            atomic_store_explicit(&g_render_thread.last_transfer_ns, 0u, memory_order_relaxed);
+            if (pthread_mutex_lock(&g_render_thread.transfer_rects_mutex) == 0) {
+                g_render_thread.last_transfer_clip_rect_count = 0u;
+                (void)pthread_mutex_unlock(&g_render_thread.transfer_rects_mutex);
             }
         }
         atomic_fetch_add_explicit(&g_render_thread.rendered_frame_serial, 1u, memory_order_release);
@@ -771,13 +900,21 @@ static bool start_render_thread(VgFrameBuffer *fb) {
     atomic_store_explicit(&g_render_thread.skipped_generations_total, 0u, memory_order_release);
     atomic_store_explicit(&g_render_thread.skipped_max_frame, 0u, memory_order_release);
     atomic_store_explicit(&g_render_thread.skipped_max_slot, 0u, memory_order_release);
+    atomic_store_explicit(&g_render_thread.last_transfer_rects, 0u, memory_order_release);
+    atomic_store_explicit(&g_render_thread.last_transfer_ns, 0u, memory_order_release);
     atomic_store_explicit(&g_render_thread.animated_slots_mask, 0u, memory_order_release);
     if (pthread_mutex_init(&g_render_thread.mutex, NULL) != 0) {
         return false;
     }
+    if (pthread_mutex_init(&g_render_thread.transfer_rects_mutex, NULL) != 0) {
+        (void)pthread_mutex_destroy(&g_render_thread.mutex);
+        return false;
+    }
+    g_render_thread.last_transfer_clip_rect_count = 0u;
     atomic_store_explicit(&g_render_thread.running, true, memory_order_release);
     if (pthread_create(&g_render_thread.thread, NULL, viewer_render_thread_main, fb) != 0) {
         atomic_store_explicit(&g_render_thread.running, false, memory_order_release);
+        (void)pthread_mutex_destroy(&g_render_thread.transfer_rects_mutex);
         (void)pthread_mutex_destroy(&g_render_thread.mutex);
         return false;
     }
@@ -794,6 +931,7 @@ static void stop_render_thread(void) {
     /* Wake blocked render wait to allow clean shutdown. */
     (void)vg_slot_change_tracker_publish(&g_slot_change_tracker, 0u, NULL);
     (void)pthread_join(g_render_thread.thread, NULL);
+    (void)pthread_mutex_destroy(&g_render_thread.transfer_rects_mutex);
     (void)pthread_mutex_destroy(&g_render_thread.mutex);
     g_render_thread.started = false;
 }
@@ -867,6 +1005,8 @@ static ViewerFrameRenderResult viewer_poll_render_frame(void) {
     result.frame_serial = atomic_load_explicit(&g_render_thread.rendered_frame_serial, memory_order_acquire);
     result.dirty_pixels = atomic_load_explicit(&g_render_thread.last_dirty_pixels, memory_order_relaxed);
     result.changed_slots = atomic_load_explicit(&g_render_thread.last_changed_slots, memory_order_relaxed);
+    result.transfer_rects = atomic_load_explicit(&g_render_thread.last_transfer_rects, memory_order_relaxed);
+    result.transfer_ns = atomic_load_explicit(&g_render_thread.last_transfer_ns, memory_order_relaxed);
     return result;
 }
 
@@ -876,6 +1016,34 @@ static void viewer_expand_rgb565_to_window(const uint16_t *src, uint32_t *dst, s
     }
     for (size_t i = 0; i < count; i++) {
         dst[i] = rgb565_to_xrgb8888(src[i]);
+    }
+}
+
+static bool viewer_should_run_collision_step(uint_fast32_t frame_serial,
+                                             uint_fast32_t *io_last_collision_frame_serial) {
+    if (!io_last_collision_frame_serial || frame_serial == 0u) {
+        return false;
+    }
+    if (frame_serial == *io_last_collision_frame_serial) {
+        return false;
+    }
+    *io_last_collision_frame_serial = frame_serial;
+    return true;
+}
+
+static size_t viewer_collect_collision_dirty_rects(VgClipRect *out_rects, size_t out_capacity) {
+    if (!out_rects || out_capacity == 0u) {
+        return 0u;
+    }
+    return viewer_copy_last_transfer_rects(out_rects, out_capacity);
+}
+
+static void viewer_update_redraw_overlay_toggle(const uint8_t *keys, ViewerRuntimeFlags *flags) {
+    if (!flags) {
+        return;
+    }
+    if (viewer_key_pressed_once(keys, KB_KEY_R, &flags->r_key_was_down)) {
+        flags->redraw_overlay_enabled = !flags->redraw_overlay_enabled;
     }
 }
 #endif
@@ -965,6 +1133,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
         goto cleanup;
     }
     slot_tracker_initialized = true;
+    viewer_collision_set_dispatch_context(&demo_bundle, &spatial_rules);
     tiny_renderer_lifecycle_set_callbacks(viewer_renderer_start_callback,
                                           viewer_renderer_stop_callback,
                                           &fb);
@@ -1001,8 +1170,11 @@ int tinyclj_tiny_fx_host_app_run(void) {
     perf_window_init(&perf_window, mfb_timer_now(timer));
 
     uint_fast32_t last_presented_frame_serial = 0u;
+    uint_fast32_t last_collision_frame_serial = 0u;
     ViewerRuntimeFlags runtime_flags = {
         .use_mfb_waitsync = true,
+        .r_key_was_down = false,
+        .redraw_overlay_enabled = false,
         .w_key_was_down = false
     };
     const uint64_t target_frame_ns = 1000000000ull / TARGET_FPS;
@@ -1036,21 +1208,38 @@ int tinyclj_tiny_fx_host_app_run(void) {
             break;
         }
         viewer_update_runtime_flags(keys, &runtime_flags, &next_frame_deadline_ns, target_frame_ns);
+        viewer_update_redraw_overlay_toggle(keys, &runtime_flags);
         viewer_simulate_gpio_keys(keys, &runtime_flags);
         runtime_flags.fire_key_was_down = keys && ((keys[KB_KEY_SPACE] != 0) || (keys[KB_KEY_ENTER] != 0));
         runtime_flags.pause_key_was_down = keys && (keys[KB_KEY_Y] != 0);
         viewer_sync_configured_slots(&demo_bundle, &spatial_rules, &g_slot_change_tracker, true);
 
         ViewerFrameRenderResult frame_result = viewer_poll_render_frame();
-        (void)viewer_apply_collision_step(&demo_bundle,
-                                          &spatial_rules,
-                                          &g_slot_change_tracker,
-                                          platform_current_time_ms());
+        if (viewer_should_run_collision_step(frame_result.frame_serial, &last_collision_frame_serial)) {
+            VgClipRect collision_dirty_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
+            size_t collision_dirty_count = viewer_collect_collision_dirty_rects(collision_dirty_rects,
+                                                                                VIEWER_MAX_DIRTY_PLAN_RECTS);
+            (void)viewer_apply_collision_step(&demo_bundle,
+                                              &spatial_rules,
+                                              platform_current_time_ms(),
+                                              collision_dirty_rects,
+                                              collision_dirty_count);
+        }
 
         viewer_expand_rgb565_to_window(fb_pixels, window_pixels, (size_t)VIEW_W * (size_t)VIEW_H);
+        if (runtime_flags.redraw_overlay_enabled) {
+            VgClipRect overlay_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
+            size_t overlay_count = viewer_copy_last_transfer_rects(overlay_rects,
+                                                                   VIEWER_MAX_DIRTY_PLAN_RECTS);
+            viewer_draw_redraw_overlay(window_pixels, VIEW_W, VIEW_H, overlay_rects, overlay_count);
+        }
 
         if (frame_result.frame_serial != last_presented_frame_serial) {
-            perf_window_record_frame(&perf_window, frame_result.dirty_pixels, frame_result.changed_slots);
+            perf_window_record_frame(&perf_window,
+                                     frame_result.dirty_pixels,
+                                     frame_result.changed_slots,
+                                     frame_result.transfer_rects,
+                                     frame_result.transfer_ns);
             last_presented_frame_serial = frame_result.frame_serial;
         }
 
@@ -1074,12 +1263,17 @@ int tinyclj_tiny_fx_host_app_run(void) {
              */
             double full_frame_kb = (double)(VIEW_W * VIEW_H * RGB565_BYTES_PER_PIXEL) / 1024.0;
             double max_bw_kb = perf_snapshot.max_dirty_bytes_per_frame / 1024.0;
+            double spi_mib_s = bytes_per_second_to_mib_per_second(perf_snapshot.dirty_bytes_per_s);
             char title[200];
             (void)snprintf(title,
                            sizeof(title),
-                           "[%s] FPS %.1f bw %.1f/%.0fKB sk %llu/%llu lf %u dmx %.1f lk %.0fus dt %.1f up %.1f",
+                           "[%s%s] FPS %.1f spi %.2fMiB/s tx %.1f/s tm %.2f bw %.1f/%.0fKB sk %llu/%llu lf %u dmx %.1f lk %.0fus dt %.1f up %.1f",
                            runtime_flags.use_mfb_waitsync ? "WAITSYNC" : "CUSTOM",
+                           runtime_flags.redraw_overlay_enabled ? "+R" : "",
                            perf_snapshot.fps,
+                           spi_mib_s,
+                           perf_snapshot.transfer_rects_per_s,
+                           perf_snapshot.avg_transfer_ms_per_frame,
                            max_bw_kb,
                            full_frame_kb,
                            (unsigned long long)perf_snapshot.skipped_generations,
@@ -1172,6 +1366,7 @@ cleanup:
         vg_slot_change_tracker_destroy(&g_slot_change_tracker);
     }
     if (demo_bundle_initialized) {
+        viewer_collision_reset_dispatch_state();
         destroy_scene_bundle(&demo_bundle);
     }
     destroy_spatial_rule_set(&spatial_rules);

@@ -56,6 +56,46 @@ struct CljString* stacktrace(void);
 
 // Global exception stack (independent of EvalState)
 GlobalExceptionStack global_exception_stack = {0};
+static SubjectiveCThreadState subjective_c_main_thread_storage = {0};
+static SubjectiveCThreadState subjective_c_interpreter_thread_storage = {0};
+const SubjectiveCThreadState *const subjective_c_main_thread = &subjective_c_main_thread_storage;
+const SubjectiveCThreadState *const subjective_c_interpreter_thread = &subjective_c_interpreter_thread_storage;
+
+static bool subjective_c_thread_state_matches_current(const SubjectiveCThreadState *state) {
+    return state && state->initialized && pthread_equal(state->value, pthread_self()) != 0;
+}
+
+void subjective_c_register_main_thread(void) {
+    if (!subjective_c_main_thread_storage.initialized) {
+        subjective_c_main_thread_storage.value = pthread_self();
+        subjective_c_main_thread_storage.initialized = true;
+    }
+}
+
+void subjective_c_register_interpreter_thread(void) {
+    subjective_c_interpreter_thread_storage.value = pthread_self();
+    subjective_c_interpreter_thread_storage.initialized = true;
+}
+
+void subjective_c_clear_interpreter_thread(void) {
+    memset(&subjective_c_interpreter_thread_storage, 0, sizeof(subjective_c_interpreter_thread_storage));
+}
+
+bool subjective_c_has_main_thread(void) {
+    return subjective_c_main_thread_storage.initialized;
+}
+
+bool subjective_c_has_interpreter_thread(void) {
+    return subjective_c_interpreter_thread_storage.initialized;
+}
+
+bool subjective_c_is_main_thread(void) {
+    return subjective_c_thread_state_matches_current(&subjective_c_main_thread_storage);
+}
+
+bool subjective_c_is_interpreter_thread(void) {
+    return subjective_c_thread_state_matches_current(&subjective_c_interpreter_thread_storage);
+}
 
 // ============================================================================
 // STATIC EXCEPTION TYPE CONSTANTS

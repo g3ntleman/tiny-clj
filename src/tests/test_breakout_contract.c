@@ -111,6 +111,24 @@ TEST(test_breakout_contract_segment_end_bottom_out_decrements_life_and_enters_se
     TEST_ASSERT_EQUAL_INT(218, as_fixnum(vector_nth(v, 2)));
 }
 
+TEST(test_breakout_contract_wall_only_segment_progression_never_drops_segment_while_playing) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (let [s0 (tiny-breakout.core/apply-input (tiny-breakout.core/init-state) {:launch true} 0 nil)] "
+        "    (loop [s s0 i 0] "
+        "      (cond "
+        "        (>= i 300) true "
+        "        (not= :play (:phase s)) true "
+        "        (nil? (:ball-segment s)) false "
+        "        :else (let [seg (:ball-segment s) "
+        "                    s1 (tiny-breakout.core/apply-segment-end-at-ms s (:id seg) (:end-ms seg))] "
+        "                (recur s1 (inc i)))))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
 TEST(test_breakout_contract_paddle_collision_reanchors_ball_and_replans_segment) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
@@ -129,6 +147,27 @@ TEST(test_breakout_contract_paddle_collision_reanchors_ball_and_replans_segment)
         "         (= 220 (:ball-y s1)) "
         "         (= :paddle-hit (first (:events s1))) "
         "         (map? (:ball-segment s1)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_paddle_collision_at_left_wall_still_replans_segment) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (let [s0 (assoc (tiny-breakout.core/init-state) "
+        "                  :phase :play :paddle-x 0 :ball-vx -2 :ball-vy 2 "
+        "                  :ball-segment {:id 1 :start-ms 10 :end-ms 40 :to-x 0 :to-y 220 :wall :bottom}) "
+        "        ev {:id :ball-vs-paddle "
+        "            :phase :enter "
+        "            :self-aabb {:min-x 0 :min-y 220 :max-x 4 :max-y 224} "
+        "            :other-aabb {:min-x 0 :min-y 224 :max-x 40 :max-y 228}} "
+        "        s1 (tiny-breakout.core/apply-spatial-event s0 ev 300)] "
+        "    (and (= :play (:phase s1)) "
+        "         (map? (:ball-segment s1)) "
+        "         (> (:end-ms (:ball-segment s1)) 300) "
+        "         (< (:ball-vy s1) 0))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
@@ -163,6 +202,37 @@ TEST(test_breakout_contract_brick_collision_removes_brick_scores_and_can_win) {
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(vector_nth(v, 1)));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":victory"), vector_nth(v, 2));
     TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":brick-hit"), vector_nth(v, 3));
+}
+
+TEST(test_breakout_contract_brick_collision_from_below_snaps_ball_outside_brick_bounds) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (let [brick {:id 2001 :x 50 :y 0 :w 20 :h 10 :points 10} "
+        "        brick2 {:id 2002 :x 80 :y 0 :w 20 :h 10 :points 10} "
+        "        s0 (-> (tiny-breakout.core/init-state) "
+        "               (assoc :phase :play) "
+        "               (assoc :levels [{:id :only :bricks [brick brick2]}]) "
+        "               (assoc :level-index 0) "
+        "               (assoc :bricks [brick brick2]) "
+        "               (assoc :ball-vx 0) "
+        "               (assoc :ball-vy -2) "
+        "               (assoc :ball-segment {:id 1 :start-ms 10 :end-ms 40 :to-x 56 :to-y 8 :wall :top})) "
+        "        ev {:id :ball-vs-brick "
+        "            :phase :enter "
+        "            :other 2001 "
+        "            :self-aabb {:min-x 56 :min-y 8 :max-x 59 :max-y 11} "
+        "            :other-aabb {:min-x 50 :min-y 0 :max-x 69 :max-y 9}} "
+        "        s1 (tiny-breakout.core/apply-spatial-event s0 ev 300)] "
+        "    [(:ball-y s1) (:ball-vy s1) (map? (:ball-segment s1))]))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(v, 0)));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(v, 1)));
+    TEST_ASSERT_EQUAL_PTR(clj_true, vector_nth(v, 2));
 }
 
 TEST(test_breakout_contract_pause_toggle_anchors_rendered_ball_and_resumes_segment) {

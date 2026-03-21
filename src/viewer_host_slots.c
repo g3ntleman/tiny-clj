@@ -266,6 +266,7 @@ void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
     if (!bundle || !bundle->slots) {
         return;
     }
+    viewer_collision_dispatch_state_lock();
     for (uint8_t i = 0; i < bundle->slot_count; i++) {
         FrameScene *scene = viewer_frame_scene_from_atom(bundle->slots[i].scene_atom);
         CLJ_ASSERT(scene && "configured slot atom must deref to FrameScene record");
@@ -285,4 +286,5 @@ void viewer_sync_configured_slots(ViewerSceneBundle *bundle,
             (void)vg_slot_change_tracker_publish(slot_change_tracker, i, NULL);
         }
     }
+    viewer_collision_dispatch_state_unlock();
 }

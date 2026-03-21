@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #include "scene.h"
 #include "tiny_fx_gfx.h"
@@ -29,11 +30,18 @@ typedef struct ViewerSpatialRuleSet {
     ViewerCollisionPolicy items[VIEWER_MAX_SPATIAL_RULES];
     VgCollisionState states[VIEWER_MAX_SPATIAL_RULES];
     uint32_t count;
+    uint32_t version;
 } ViewerSpatialRuleSet;
 
 ID viewer_scene_entity_map(FrameScene *scene);
 void destroy_collision_policy(ViewerCollisionPolicy *policy);
 void destroy_spatial_rule_set(ViewerSpatialRuleSet *rule_set);
+void viewer_collision_dispatch_state_lock(void);
+void viewer_collision_dispatch_state_unlock(void);
+void viewer_collision_set_dispatch_context(struct ViewerSceneBundle *bundle,
+                                          ViewerSpatialRuleSet *rule_set);
+void viewer_collision_reset_dispatch_state(void);
+bool viewer_collision_poll_drain(void);
 ID viewer_make_spatial_event(const struct ViewerSceneBundle *bundle,
                              const ViewerCollisionPolicy *policy,
                              ID phase,
@@ -44,7 +52,8 @@ bool viewer_load_spatial_rules_from_scene(FrameScene *game_scene,
                                           ViewerSpatialRuleSet *io_rule_set);
 bool viewer_apply_collision_step(struct ViewerSceneBundle *bundle,
                                  ViewerSpatialRuleSet *rule_set,
-                                 VgSlotChangeTracker *slot_change_tracker,
-                                 uint32_t now_ms);
+                                 uint32_t now_ms,
+                                 const VgClipRect *dirty_rects,
+                                 size_t dirty_rect_count);
 
 #endif /* TINY_CLJ_VIEWER_HOST_SPATIAL_H */
