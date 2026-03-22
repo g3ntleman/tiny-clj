@@ -909,6 +909,7 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
     ID state_atom_id = eval_string(
         "(do "
         "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime!) "
         "  (tiny-breakout.runtime/apply-input! {:launch true}) "
         "  tiny-breakout.runtime/state*)",
         ctx.st);
