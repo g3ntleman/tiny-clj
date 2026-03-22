@@ -978,21 +978,25 @@ static void release_object_default(CljObject *v) {
   }
 
   case CLJ_BYTE_ARRAY:
-#ifndef ZOMBIE_ENABLED
   {
-    CljByteArray *ba = as_byte_array(v);
+    CljByteArray *ba = (CljByteArray *)v;
     if (ba) {
       if ((ba->base.flags & CLJ_FLAG_EXTERNAL_DATA) != 0) {
+#ifndef ZOMBIE_ENABLED
         CljByteArrayView *ext = (CljByteArrayView *)ba;
         if (ext->external_free_fn)
           ext->external_free_fn(ext->external_ctx);
-      } else if (ba->data)
+#endif
+      } else if (ba->data) {
+#ifdef ZOMBIE_ENABLED
+        // Simulate deallocation: count but don't free
+        memory_profiler_track_raw_free(ba->data, __FILE__, __LINE__);
+#else
         CLJ_FREE(ba->data);
+#endif
+      }
     }
   }
-#else
-    (void)v;
-#endif
   break;
   case CLJ_ATOM:
     RELEASE(((CljAtom *)v)->value);
@@ -1011,10 +1015,13 @@ static void release_object_default(CljObject *v) {
     RELEASE(ns->mappings);
     RELEASE(ns->private_mappings);
     RELEASE(ns->aliases);
-#ifndef ZOMBIE_ENABLED
-    if (ns->filename)
+    if (ns->filename) {
+#ifdef ZOMBIE_ENABLED
+      memory_profiler_track_raw_free((void *)ns->filename, __FILE__, __LINE__);
+#else
       CLJ_FREE((void *)ns->filename);
 #endif
+    }
     break;
   }
   default:
