@@ -54,39 +54,48 @@
                  (assoc known brick-id true)
                  known))))))
 
-(defn- visible-brick-ids
-  [state]
-  (loop [remaining (visible-bricks state)
-         ids []]
-    (if (empty? remaining)
-      ids
-      (recur (rest remaining)
-             (conj ids (:id (first remaining)))))))
+(defn- rule-target-cache-valid?
+  [state rules]
+  (and (map? (:collision-rule-targets state))
+       (vector? (:collision-rule-targets-for state))
+       (identical? (:collision-rule-targets-for state) rules)))
 
 (defn with-expanded-collision-rules
   "Ensures breakout state carries an append-only concrete rule vector.
 
   Existing brick rules stay in place so removed bricks become inert via the
   scene index instead of forcing eager recompaction.
-  Returns state unchanged when all rules already present (zero allocation)."
+  After one cache warm-up, returns state unchanged when all rules already
+  present (zero allocation on the steady-state path)."
   [state]
-  (let [brick-ids (visible-brick-ids state)
+  (let [bricks (visible-bricks state)
         existing-rules (let [rules (:collision-rules state)]
                          (if (vector? rules) rules []))
         base-rules (if (some paddle-rule? existing-rules)
                      existing-rules
                      (into [(paddle-rule)] existing-rules))
-        known-targets (rule-targets base-rules)]
-    (loop [remaining brick-ids
+        has-target-cache? (rule-target-cache-valid? state base-rules)
+        known-targets (if has-target-cache?
+                        (:collision-rule-targets state)
+                        (rule-targets base-rules))]
+    (loop [remaining bricks
            known known-targets
            rules (transient base-rules)
            added? (not (identical? base-rules existing-rules))]
       (if (empty? remaining)
-        (if added?
-          (assoc state :collision-rules (persistent! rules))
-          state)
-        (let [brick-id (first remaining)]
-          (if (get known brick-id)
+        (let [rules-out (if added?
+                          (persistent! rules)
+                          base-rules)]
+          (if (or added? (not has-target-cache?))
+            (assoc state
+                   :collision-rules rules-out
+                   :collision-rule-targets known
+                   :collision-rule-targets-for rules-out)
+            state))
+        (let [brick (first remaining)
+              brick-id (:id brick)]
+          (if (or (not (number? brick-id))
+                  (get known brick-id))
             (recur (rest remaining) known rules added?)
             (recur (rest remaining)
                    (assoc known brick-id true)

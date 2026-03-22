@@ -1,7 +1,248 @@
 #include "tests_common.h"
+#include "../builtins.h"
 #include "../event_loop.h"
 #include "../rendered_state_snapshot.h"
+#include "../source_resolver.h"
 #include "../vector_scene_graph.h"
+
+TEST(test_breakout_contract_audio_namespace_does_not_autoload_tiny_fx_sound) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    CljNamespace *sound_ns_before = ns_find("tiny-fx.sound");
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.audio :reload) "
+        "  (tiny-breakout.audio/play-events! [:brick-hit :victory]) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+
+    CljNamespace *sound_ns_after = ns_find("tiny-fx.sound");
+    TEST_ASSERT_TRUE_MESSAGE(sound_ns_after == sound_ns_before,
+                             "tiny-breakout.audio must not require tiny-fx.sound while resolving/playing breakout SFX");
+}
+
+TEST(test_breakout_contract_runtime_namespace_reload_is_reclaimable) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    WITH_AUTORELEASE_POOL({
+        ID bytes = resolve_path_to_bytes("/libs/tiny-breakout/runtime.clj");
+        TEST_ASSERT_NOT_NULL(bytes);
+        TEST_ASSERT_TRUE(load_namespace_from_bytes(g_test_eval_state,
+                                                   "tiny-breakout.runtime",
+                                                   bytes,
+                                                   "/libs/tiny-breakout/runtime.clj"));
+    });
+
+    MemoryStats before = memory_profiler_get_stats();
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID bytes = resolve_path_to_bytes("/libs/tiny-breakout/runtime.clj");
+            TEST_ASSERT_NOT_NULL(bytes);
+            CljNamespace *ns = ns_find("tiny-breakout.runtime");
+            TEST_ASSERT_NOT_NULL(ns);
+            ns->loaded = false;
+            ns->loading = false;
+            TEST_ASSERT_TRUE(load_namespace_from_bytes(g_test_eval_state,
+                                                       "tiny-breakout.runtime",
+                                                       bytes,
+                                                       "/libs/tiny-breakout/runtime.clj"));
+        });
+    }
+    MemoryStats after = memory_profiler_get_stats();
+
+    long long diff = (long long)after.current_memory_usage - (long long)before.current_memory_usage;
+    long long tracked_before = 0;
+    long long tracked_after = 0;
+    for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+        tracked_before += (long long)before.bytes_current_by_type[i];
+        tracked_after += (long long)after.bytes_current_by_type[i];
+    }
+    long long tracked_diff = tracked_after - tracked_before;
+    long long raw_diff = (long long)after.raw_bytes_current - (long long)before.raw_bytes_current;
+    long long raw_blocks_diff = (long long)after.raw_blocks_current - (long long)before.raw_blocks_current;
+    fprintf(stderr, "\nBreakout runtime leak after 5 reloads: %lld bytes\n", diff);
+    fprintf(stderr, "  tracked object diff: %lld bytes\n", tracked_diff);
+    fprintf(stderr, "  raw/native diff (profiler): %lld bytes\n", raw_diff);
+    fprintf(stderr, "  raw blocks diff: %lld\n", raw_blocks_diff);
+    fprintf(stderr, "  untracked/native diff: %lld bytes\n", diff - tracked_diff);
+    for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+        long long type_diff = (long long)after.bytes_current_by_type[i] -
+                              (long long)before.bytes_current_by_type[i];
+        if (type_diff != 0) {
+            fprintf(stderr, "  %s: %lld bytes\n", clj_type_name((CljType)i), type_diff);
+        }
+    }
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(131072, (int)diff,
+                                          "tiny-breakout.runtime reload path should not leak unboundedly");
+}
+
+static long long breakout_reload_diff_for(const char *ns_name,
+                                          const char *source_path,
+                                          int reload_count) {
+    WITH_AUTORELEASE_POOL({
+        ID bytes = resolve_path_to_bytes(source_path);
+        TEST_ASSERT_NOT_NULL(bytes);
+        TEST_ASSERT_TRUE(load_namespace_from_bytes(g_test_eval_state, ns_name, bytes, source_path));
+    });
+
+    MemoryStats before = memory_profiler_get_stats();
+    for (int i = 0; i < reload_count; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID bytes = resolve_path_to_bytes(source_path);
+            TEST_ASSERT_NOT_NULL(bytes);
+            CljNamespace *ns = ns_find(ns_name);
+            TEST_ASSERT_NOT_NULL(ns);
+            ns->loaded = false;
+            ns->loading = false;
+            TEST_ASSERT_TRUE(load_namespace_from_bytes(g_test_eval_state, ns_name, bytes, source_path));
+        });
+    }
+    MemoryStats after = memory_profiler_get_stats();
+    long long diff = (long long)after.current_memory_usage - (long long)before.current_memory_usage;
+    long long raw_diff = (long long)after.raw_bytes_current - (long long)before.raw_bytes_current;
+    fprintf(stderr, "  %s reload x%d => total %+lld bytes, raw %+lld bytes\n",
+            ns_name, reload_count, diff, raw_diff);
+    return diff;
+}
+
+TEST(test_breakout_contract_namespace_reload_memory_profile_breakdown) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    fprintf(stderr, "\nBreakout namespace reload memory profile:\n");
+    long long core_diff = breakout_reload_diff_for("tiny-breakout.core",
+                                                   "/libs/tiny-breakout/core.clj",
+                                                   5);
+    long long scene_diff = breakout_reload_diff_for("tiny-breakout.scene",
+                                                    "/libs/tiny-breakout/scene.clj",
+                                                    5);
+    long long audio_diff = breakout_reload_diff_for("tiny-breakout.audio",
+                                                    "/libs/tiny-breakout/audio.clj",
+                                                    5);
+    long long runtime_diff = breakout_reload_diff_for("tiny-breakout.runtime",
+                                                      "/libs/tiny-breakout/runtime.clj",
+                                                      5);
+    TEST_ASSERT_TRUE_MESSAGE(core_diff <= 131072 &&
+                             scene_diff <= 131072 &&
+                             audio_diff <= 131072 &&
+                             runtime_diff <= 131072,
+                             "reload profile indicates unexpectedly large retained growth");
+}
+
+TEST(test_breakout_contract_runtime_source_bytes_are_reclaimable) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    MemoryStats before = memory_profiler_get_stats();
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID bytes = resolve_path_to_bytes("/libs/tiny-breakout/runtime.clj");
+            TEST_ASSERT_NOT_NULL(bytes);
+            TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(bytes));
+        });
+    }
+    MemoryStats after = memory_profiler_get_stats();
+    long long total_diff = (long long)after.current_memory_usage - (long long)before.current_memory_usage;
+    long long raw_diff = (long long)after.raw_bytes_current - (long long)before.raw_bytes_current;
+    fprintf(stderr,
+            "\nBreakout runtime source-byte reclaim check: total %+lld, raw %+lld bytes\n",
+            total_diff, raw_diff);
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(4096, (int)total_diff,
+                                          "resolve_path_to_bytes for runtime.clj must not retain growing total heap");
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(512, (int)raw_diff,
+                                          "resolve_path_to_bytes for runtime.clj must reclaim raw/native byte buffers");
+}
+
+static void breakout_print_fixnum_vector(const char *label, ID value) {
+    if (!label) {
+        label = "values";
+    }
+    if (!value || TAG(value) != CLJ_VECTOR_PERSISTENT) {
+        fprintf(stderr, "\n%s: <non-vector>\n", label);
+        return;
+    }
+    CljPersistentVector *v = as_vector(value);
+    fprintf(stderr, "\n%s:", label);
+    VECTOR_FOR_EACH(v, elem) {
+        if (elem && is_fixnum(elem)) {
+            fprintf(stderr, " %d", as_fixnum(elem));
+        } else {
+            fprintf(stderr, " <non-fixnum>");
+        }
+    }
+    fputc('\n', stderr);
+}
+
+TEST(test_breakout_contract_heap_probe_runtime_reload_persistence) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (loop [i 0 out []] "
+        "    (if (< i 5) "
+        "      (recur (+ i 1) (conj out (:total (heap (require 'tiny-breakout.runtime :reload))))) "
+        "      out)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_EQUAL_UINT(5, vector_count(v));
+    breakout_print_fixnum_vector("heap totals runtime :reload", out);
+    VECTOR_FOR_EACH(v, elem) {
+        TEST_ASSERT_TRUE_MESSAGE(elem && is_fixnum(elem),
+                                 "heap probe must return fixnum totals");
+        TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(1024, as_fixnum(elem),
+                                              "runtime :reload should not accumulate persistent heap between runs");
+    }
+}
+
+TEST(test_breakout_contract_heap_probe_core_reload_baseline) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (loop [i 0 out []] "
+        "    (if (< i 5) "
+        "      (recur (+ i 1) (conj out (:total (heap (require 'tiny-breakout.core :reload))))) "
+        "      out)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_EQUAL_UINT(5, vector_count(v));
+    breakout_print_fixnum_vector("heap totals core :reload", out);
+}
+
+TEST(test_breakout_contract_heap_probe_scene_reload_baseline) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.scene) "
+        "  (loop [i 0 out []] "
+        "    (if (< i 5) "
+        "      (recur (+ i 1) (conj out (:total (heap (require 'tiny-breakout.scene :reload))))) "
+        "      out)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_EQUAL_UINT(5, vector_count(v));
+    breakout_print_fixnum_vector("heap totals scene :reload", out);
+}
+
+TEST(test_breakout_contract_heap_probe_audio_reload_baseline) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID out = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.audio) "
+        "  (loop [i 0 out []] "
+        "    (if (< i 5) "
+        "      (recur (+ i 1) (conj out (:total (heap (require 'tiny-breakout.audio :reload))))) "
+        "      out)))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out);
+    TEST_ASSERT_TRUE(TAG(out) == CLJ_VECTOR_PERSISTENT);
+    CljPersistentVector *v = as_vector(out);
+    TEST_ASSERT_EQUAL_UINT(5, vector_count(v));
+    breakout_print_fixnum_vector("heap totals audio :reload", out);
+}
 
 TEST(test_breakout_contract_namespaces_load) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);

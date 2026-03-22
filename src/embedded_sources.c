@@ -159,6 +159,10 @@ static const char tiny_breakout_audio_code[] =
 #include "tiny-breakout.audio.clj.inc"
     ;
 
+static const char tiny_breakout_audio_compiler_code[] =
+#include "tiny-breakout.audio-compiler.clj.inc"
+    ;
+
 static const char tiny_breakout_levels_code[] =
 #include "tiny-breakout.levels.clj.inc"
     ;
@@ -225,6 +229,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/core.clj", tiny_breakout_core_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/scene.clj", tiny_breakout_scene_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/audio.clj", tiny_breakout_audio_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/audio-compiler.clj", tiny_breakout_audio_compiler_code),
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-breakout/levels.clj", tiny_breakout_levels_code),
 #endif
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-db/kv.clj", tiny_db_kv_code),

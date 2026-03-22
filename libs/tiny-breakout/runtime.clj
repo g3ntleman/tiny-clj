@@ -1,5 +1,6 @@
 (ns tiny-breakout.runtime
   (:require [tiny-breakout.core :as core]
+            [tiny-breakout.audio :as audio]
             [tiny-breakout.scene :as scene]
             [tiny-clj.event :as event]
             [tiny-fx.gfx-collision :as collision]
@@ -13,8 +14,6 @@
 (def ^:private segment-watch-id :tiny-breakout/segment-end)
 (def ^:private segment-watch-opts {:slot :game :entity-id 1003 :field :x})
 (def ^:private segment-watch-active* (atom false))
-(def ^:private audio-play-events-fn* (atom nil))
-(def ^:private audio-preload-scheduled* (atom false))
 
 (defn- button-down-event?
   [event]
@@ -94,28 +93,8 @@
 
 (defn- play-events!
   [events]
-  (let [play-fn @audio-play-events-fn*]
-    (when (and (seq events)
-               (fn? play-fn))
-      (play-fn events)))
-  nil)
-
-(defn- preload-audio-runtime!
-  []
-  (when (nil? @audio-play-events-fn*)
-    (require 'tiny-breakout.audio)
-    (reset! tiny-breakout.runtime/audio-play-events-fn* tiny-breakout.audio/play-events!))
-  nil)
-
-(defn- schedule-audio-preload!
-  []
-  (when (and (nil? @audio-play-events-fn*)
-             (not @audio-preload-scheduled*))
-    (reset! tiny-breakout.runtime/audio-preload-scheduled* true)
-    (schedule 250
-              (fn preload-audio-runtime-task []
-                (reset! tiny-breakout.runtime/audio-preload-scheduled* false)
-                (preload-audio-runtime!))))
+  (when (seq events)
+    (audio/play-events! events))
   nil)
 
 (defn publish-state!
@@ -347,7 +326,6 @@
 (defn reset-runtime!
   []
   (reset! tiny-breakout.runtime/held-buttons* tiny-breakout.runtime/idle-held-buttons)
-  (reset! tiny-breakout.runtime/audio-preload-scheduled* false)
   (when @tiny-breakout.runtime/segment-watch-active*
     (event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id} nil)
     (reset! tiny-breakout.runtime/segment-watch-active* false))
@@ -364,8 +342,13 @@
   start-runtime! (startup callback) so the heavy work runs after config load
   and autorelease pool drain — avoids OOM during viewer_load_game_demo_config."
   []
+  (try
+    (audio/preload-tracks!)
+    (catch RuntimeException _
+      nil)
+    (catch Exception _
+      nil))
   (reset! tiny-breakout.runtime/held-buttons* tiny-breakout.runtime/idle-held-buttons)
-  (reset! tiny-breakout.runtime/audio-preload-scheduled* false)
   (when @tiny-breakout.runtime/segment-watch-active*
     (event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id} nil)
     (reset! tiny-breakout.runtime/segment-watch-active* false))
@@ -377,6 +360,5 @@
 
 (defn start-runtime!
   [& _args]
-  (schedule-audio-preload!)
   (tiny-breakout.runtime/configure-input-watchers!)
   nil)

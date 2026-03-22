@@ -271,6 +271,27 @@ TEST(test_resolve_clojure_string_join_in_local_fn) {
     TEST_ASSERT_TRUE(TAG(call_result) == CLJ_STRING);
 }
 
+// Test: qualified symbol calls must not be mistaken for same-cname self recursion.
+TEST(test_qualified_symbol_does_not_trigger_named_self_recursion) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    load_clojure_string_namespace();
+
+    ID ok = NULL;
+    bool threw = false;
+    TRY {
+        ok = eval_string("(= ((fn reverse [s] (clojure.string/reverse s)) \"ab\") \"ba\")",
+                         g_test_eval_state);
+    } CATCH(ex) {
+        (void)ex;
+        threw = true;
+    } END_TRY
+
+    TEST_ASSERT_FALSE_MESSAGE(threw,
+                              "qualified symbol must not resolve to current function via cname-only recursion shortcut");
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
 // ============================================================================
 // TESTS FOR NAMESPACE ALIAS RESOLUTION
 // ============================================================================

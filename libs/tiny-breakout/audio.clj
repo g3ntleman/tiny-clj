@@ -1,61 +1,41 @@
-(ns tiny-breakout.audio)
+(ns tiny-breakout.audio
+  (:require [tiny-fx.sound-native :as sound-native]))
 
-(def ^:private sound-loaded?* (atom false))
+;; Runtime audio keeps only precompiled TRK1 payloads.
+;; The DSL compiler lives in tiny-breakout.audio-compiler and is intentionally
+;; not required here.
+(def ^:private cue-specs
+  {:sfx/paddle-hit
+   {:track-id :tiny-breakout/paddle-hit
+    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 13 0 0 0 0 0 0 0 16 180 176 16 4 20 20 176 40 5 20 24 32])}
 
-(defn- ensure-sound!
-  []
-  (when (not @sound-loaded?*)
-    (require 'tiny-fx.sound)
-    (require 'tiny-fx.sound-native)
-    (reset! sound-loaded?* true))
-  nil)
+   :sfx/brick-hit
+   {:track-id :tiny-breakout/brick-hit
+    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 200 176 200 5 20 16 176 184 6 20 16 176 168 7 20 18 32])}
 
-(defn- sfx-spec
-  [cue-id]
-  (cond
-    (= cue-id :sfx/paddle-hit)
-    {:track-id :tiny-breakout/paddle-hit
-     :steps [{:notes [1040] :duration 20}
-             {:notes [1320] :duration 24}]
-     :opts {:channel-count 1 :gate-percent 72 :volumes [180]}}
+   :sfx/life-lost
+   {:track-id :tiny-breakout/life-lost
+    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 220 176 112 3 24 32 176 148 2 28 36 176 184 1 42 54 32])}
 
-    (= cue-id :sfx/brick-hit)
-    {:track-id :tiny-breakout/brick-hit
-     :steps [{:notes [1480] :duration 16}
-             {:notes [1720] :duration 16}
-             {:notes [1960] :duration 18}]
-     :opts {:channel-count 1 :gate-percent 70 :volumes [200]}}
+   :sfx/level-clear
+   {:track-id :tiny-breakout/level-clear
+    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 210 176 112 3 20 24 176 40 5 20 24 176 224 6 27 36 32])}
 
-    (= cue-id :sfx/life-lost)
-    {:track-id :tiny-breakout/life-lost
-     :steps [{:notes [880] :duration 32}
-             {:notes [660] :duration 36}
-             {:notes [440] :duration 54}]
-     :opts {:channel-count 1 :gate-percent 78 :volumes [220]}}
+   :sfx/game-over
+   {:track-id :tiny-breakout/game-over
+    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 18 0 0 0 0 0 0 0 16 220 176 228 2 22 28 176 42 2 28 36 176 136 1 48 60 32])}
 
-    (= cue-id :sfx/level-clear)
-    {:track-id :tiny-breakout/level-clear
-     :steps [{:notes [880] :duration 24}
-             {:notes [1320] :duration 24}
-             {:notes [1760] :duration 36}]
-     :opts {:channel-count 1 :gate-percent 76 :volumes [210]}}
+   :sfx/victory
+   {:track-id :tiny-breakout/victory
+    :track-bytes (byte-array [84 82 75 49 1 0 1 0 1 0 60 0 23 0 0 0 0 0 0 0 16 210 176 16 4 20 20 176 38 5 20 20 176 32 6 20 24 176 45 8 35 48 32])}})
 
-    (= cue-id :sfx/game-over)
-    {:track-id :tiny-breakout/game-over
-     :steps [{:notes [740] :duration 28}
-             {:notes [554] :duration 36}
-             {:notes [392] :duration 60}]
-     :opts {:channel-count 1 :gate-percent 80 :volumes [220]}}
-
-    (= cue-id :sfx/victory)
-    {:track-id :tiny-breakout/victory
-     :steps [{:notes [1040] :duration 20}
-             {:notes [1318] :duration 20}
-             {:notes [1568] :duration 24}
-             {:notes [2093] :duration 48}]
-     :opts {:channel-count 1 :gate-percent 74 :volumes [210]}}
-
-    :else nil))
+(def ^:private known-cues
+  [:sfx/paddle-hit
+   :sfx/brick-hit
+   :sfx/life-lost
+   :sfx/level-clear
+   :sfx/game-over
+   :sfx/victory])
 
 (defn- event->cue
   [event-id]
@@ -80,26 +60,58 @@
 
 (def ^:private loaded-tracks* (atom #{}))
 
+(defn- cue-spec
+  [cue-id]
+  (get cue-specs cue-id))
+
 (defn- ensure-cue-loaded!
   [cue-id]
   (when (not (contains? @loaded-tracks* cue-id))
-    (ensure-sound!)
-    (let [spec (sfx-spec cue-id)
+    (let [spec (cue-spec cue-id)
           track-id (:track-id spec)
-          steps (:steps spec)
-          opts (:opts spec)]
-      (when (and track-id steps)
-        (let [track-bytes (tiny-fx.sound/compile-track steps opts)]
-          (tiny-fx.sound-native/sound-load-track! track-id track-bytes)
-          (swap! loaded-tracks* conj cue-id)))))
+          track-bytes (:track-bytes spec)]
+      (when (and track-id track-bytes)
+        (try
+          (sound-native/sound-load-track! track-id track-bytes)
+          (swap! loaded-tracks* conj cue-id)
+          (catch RuntimeException _
+            nil)
+          (catch Exception _
+            nil)))))
+  nil)
+
+(defn preload-tracks!
+  []
+  (loop [remaining known-cues]
+    (when (seq remaining)
+      (ensure-cue-loaded! (first remaining))
+      (recur (next remaining))))
+  nil)
+
+(defn unload-tracks!
+  []
+  (loop [remaining known-cues]
+    (when (seq remaining)
+      (let [cue-id (first remaining)
+            spec (cue-spec cue-id)
+            track-id (:track-id spec)]
+        (when track-id
+          (sound-native/sound-unload-track! track-id))
+        (recur (next remaining)))))
+  (reset! loaded-tracks* #{})
   nil)
 
 (defn- play-cue!
   [cue-id]
-  (let [spec (sfx-spec cue-id)]
+  (let [spec (cue-spec cue-id)]
     (when (map? spec)
       (ensure-cue-loaded! cue-id)
-      (tiny-fx.sound-native/sound-play-sfx! (:track-id spec)))))
+      (try
+        (sound-native/sound-play-sfx! (:track-id spec))
+        (catch RuntimeException _
+          nil)
+        (catch Exception _
+          nil)))))
 
 (defn play-events!
   [events]
@@ -107,4 +119,5 @@
     (when (seq remaining)
       (let [cue (event->cue (first remaining))]
         (when cue (play-cue! cue))
-        (recur (next remaining))))))
+        (recur (next remaining)))))
+  nil)

@@ -16,6 +16,7 @@
 struct CljNamespace {
     CljObject base;           // type + rc (4 bytes) - must be first field
     bool loaded;              // true once namespace source has been loaded/evaluated
+    bool loading;             // true while namespace source is currently being evaluated
     CljSymbol *name;          // z.B. 'user', 'math'
     CljPersistentMap *mappings;         // Map: Symbol → CljObject (def, defn, vars)
     CljPersistentMap *private_mappings; // Set-like map: private Symbol → true

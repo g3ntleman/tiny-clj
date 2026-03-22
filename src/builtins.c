@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <math.h>
 #include <ctype.h>
 #include "object.h"
@@ -5014,6 +5015,28 @@ static char *namespace_to_relpath(const char *ns_name) {
   return buf;
 }
 
+static int require_trace_enabled(void) {
+  static int debug_require_trace = -1;
+  if (debug_require_trace == -1) {
+    const char *v = getenv("TINYCLJ_DEBUG_REQUIRE_TRACE");
+    debug_require_trace = (v && v[0] && strcmp(v, "0") != 0) ? 1 : 0;
+  }
+  return debug_require_trace;
+}
+
+static void require_trace_log(const char *fmt, ...) {
+  if (!require_trace_enabled()) {
+    return;
+  }
+  va_list ap;
+  va_start(ap, fmt);
+  fprintf(stderr, "[require-trace] ");
+  vfprintf(stderr, fmt, ap);
+  fprintf(stderr, "\n");
+  fflush(stderr);
+  va_end(ap);
+}
+
 static bool eval_source_in_current_state(CljString *src, const char *src_name, EvalState *st) {
   if (!src || !st)
     return false;
@@ -5376,6 +5399,11 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
     RELEASE(held_bytes);
     return true;
   }
+  if (target_ns->loading) {
+    RELEASE(held_bytes);
+    return true;
+  }
+  target_ns->loading = true;
   st->current_ns = target_ns;
   st->resolve_ns = target_ns;
   // Namespace source loading performs many def/defn operations; coalesce invalidate
@@ -5397,6 +5425,7 @@ bool load_namespace_from_bytes(EvalState *st, const char *ns_name, ID bytes, con
     RETAIN(pending_ex);
   }
   END_TRY
+  target_ns->loading = false;
   ns_end_resolve_cache_batch();
   st->current_ns = orig_ns;
   st->resolve_ns = orig_resolve_ns;
@@ -5510,6 +5539,13 @@ static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *g
   if (!ns_name)
     return false;
 
+  require_trace_log("spec_tag=%u ns=%s current_ns=%s",
+                    (unsigned int)TAG(spec),
+                    ns_name ? ns_name : "<nil>",
+                    (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname)
+                        ? st->current_ns->name->cname
+                        : "<nil>");
+
   bool force_reload = options.reload || options.reload_all;
   if (strcmp(ns_name, "clojure.core") == 0) {
     force_reload = false;
@@ -5520,10 +5556,16 @@ static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *g
   // A namespace might exist because native functions were registered, but Clojure code hasn't been loaded yet
   CljNamespace *existing = ns_find(ns_name);
   if (existing) {
+    require_trace_log("existing ns=%s loaded=%d loading=%d force_reload=%d",
+                      ns_name,
+                      existing->loaded ? 1 : 0,
+                      existing->loading ? 1 : 0,
+                      force_reload ? 1 : 0);
     // Generic idempotence: if namespace source has been loaded once, don't re-evaluate.
     if (existing->loaded) {
       if (force_reload) {
         existing->loaded = false;
+        existing->loading = false;
       } else {
       NsInitFn init_fn = ns_lookup_init(ns_name);
       if (init_fn && !init_fn(st)) {
@@ -5553,6 +5595,15 @@ static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *g
       // ns_name is from autoreleased CljString - no free needed
       return true;
       }
+    }
+    if (existing->loading) {
+      if (st && st->current_ns && alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
+        ID ns_name_sym = intern_symbol_global(ns_name);
+        if (ns_name_sym) {
+          ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
+        }
+      }
+      return true;
     }
     // Fall through to load Clojure code even though namespace exists
   }
@@ -5608,6 +5659,7 @@ static bool process_require_spec(ID spec, EvalState *st, const RequireOptions *g
     return false;
   }
   bool ok = load_namespace_from_bytes(st, ns_name, bytes, source_path);
+  require_trace_log("load ns=%s ok=%d source=%s", ns_name, ok ? 1 : 0, source_path ? source_path : "<nil>");
   CLJ_FREE(rel);
   if (!ok) {
     return false;
@@ -7592,6 +7644,19 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
       }
       if (k_event_loop_ingress_closed) {
         MAP_REASSIGN(m, map_assoc(m, k_event_loop_ingress_closed, ingress_stats.closed ? clj_true : clj_false));
+      }
+    }
+  }
+
+  {
+    size_t heap_limit = memory_get_heap_limit_bytes();
+    if (heap_limit > 0u) {
+      CljSymbol *k_heap_limit_bytes = intern_symbol_global(":heap-limit-bytes");
+      if (k_heap_limit_bytes) {
+        int32_t heap_limit_fixnum = (heap_limit > (size_t)FIXNUM_MAX)
+                                        ? (int32_t)FIXNUM_MAX
+                                        : (int32_t)heap_limit;
+        MAP_REASSIGN(m, map_assoc(m, k_heap_limit_bytes, fixnum(heap_limit_fixnum)));
       }
     }
   }

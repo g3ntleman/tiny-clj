@@ -64,3 +64,24 @@ TEST(test_byte_array_external_calls_finalizer_on_release)
     // Clean up payload explicitly (external owner responsibility).
     CLJ_FREE(payload);
 }
+
+TEST(test_byte_array_internal_payload_does_not_accumulate_raw_heap)
+{
+#if MEMORY_PROFILING_ENABLED
+    MemoryStats before = memory_profiler_get_stats();
+    for (int i = 0; i < 5; i++) {
+        WITH_AUTORELEASE_POOL({
+            ID arr = (ID)make_byte_array(4096);
+            TEST_ASSERT_NOT_NULL(arr);
+            TEST_ASSERT_EQUAL_INT(CLJ_BYTE_ARRAY, TAG(arr));
+            AUTORELEASE(arr);
+        });
+    }
+    MemoryStats after = memory_profiler_get_stats();
+    long long raw_diff = (long long)after.raw_bytes_current - (long long)before.raw_bytes_current;
+    TEST_ASSERT_LESS_OR_EQUAL_INT_MESSAGE(512, (int)raw_diff,
+                                          "byte-array payload bytes must be reclaimed after pool drain");
+#else
+    TEST_IGNORE();
+#endif
+}
