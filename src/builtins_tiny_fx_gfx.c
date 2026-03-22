@@ -285,7 +285,13 @@ static void tinyclj_runtime_clear_slot_bindings(void) {
     g_renderer_slot_binding_count = 0u;
 }
 
-static bool tinyclj_runtime_register_slot_bindings(ID slot_atoms) {
+/**
+ * @brief Populate native renderer slot index map from host :slots vector.
+ *
+ * @param slot_atoms Vector of {:id kw :atom atom} slot descriptors (same shape as start-renderer!).
+ * @return true when bindings were applied or slot_atoms was nil; false on invalid shape.
+ */
+bool builtins_tiny_fx_gfx_register_slot_bindings(ID slot_atoms) {
     tinyclj_runtime_clear_slot_bindings();
     if (!slot_atoms) {
         return true;
@@ -661,7 +667,7 @@ ID native_tinyclj_runtime_start_renderer(ID *args, unsigned int argc) {
                             0);
             return NULL;
         }
-        if (!tinyclj_runtime_register_slot_bindings(slot_atoms)) {
+        if (!builtins_tiny_fx_gfx_register_slot_bindings(slot_atoms)) {
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                             "tiny-clj.runtime/start-renderer! slot descriptors must contain unique {:id kw :atom atom} entries",
                             __FILE__,

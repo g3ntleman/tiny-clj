@@ -12,5 +12,6 @@ ID native_tinyclj_runtime_renderer_state(ID *args, unsigned int argc);
 ID native_tinyclj_runtime_renderer_timeline_step(ID *args, unsigned int argc);
 ID native_tinyclj_runtime_renderer_timeline_progress(ID *args, unsigned int argc);
 void builtins_tiny_fx_gfx_reset_cached_state(void);
+bool builtins_tiny_fx_gfx_register_slot_bindings(ID slot_atoms);
 
 #endif

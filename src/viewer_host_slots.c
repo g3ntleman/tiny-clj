@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "builtins.h"
+#include "builtins_tiny_fx_gfx.h"
 #include "callbacks.h"
 #include "exception.h"
 #include "memory.h"
@@ -230,6 +231,7 @@ bool viewer_load_game_demo_config(EvalState *st,
     if (!viewer_extract_scene_slots(slots, out_bundle)) {
         return viewer_fail_game_demo_config(NULL, "viewer config contains invalid :slots data");
     }
+    builtins_tiny_fx_gfx_register_slot_bindings(slots);
     if (!spatial_callback || !game_scene_atom || TAG(game_scene_atom) != CLJ_ATOM) {
         return viewer_fail_game_demo_config(
             out_bundle,
