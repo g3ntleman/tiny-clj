@@ -35,24 +35,51 @@
 
 (def default-levels
   [{:id :level-1
-    :bricks (pattern->bricks 1
-                             [[1 1 1 1 1 1 1 1]
-                              [1 1 1 1 1 1 1 1]
-                              [1 1 1 1 1 1 1 1]
-                              [1 1 1 1 1 1 1 1]])}
+    :ordinal 1
+    :rows [[1 1 1 1 1 1 1 1]
+           [1 1 1 1 1 1 1 1]
+           [1 1 1 1 1 1 1 1]
+           [1 1 1 1 1 1 1 1]]}
    {:id :level-2
-    :bricks (pattern->bricks 2
-                             [[1 1 0 1 1 0 1 1]
-                              [1 0 1 1 1 1 0 1]
-                              [1 1 1 0 0 1 1 1]
-                              [0 1 1 1 1 1 1 0]])}
+    :ordinal 2
+    :rows [[1 1 0 1 1 0 1 1]
+           [1 0 1 1 1 1 0 1]
+           [1 1 1 0 0 1 1 1]
+           [0 1 1 1 1 1 1 0]]}
    {:id :level-3
-    :bricks (pattern->bricks 3
-                             [[0 1 1 1 1 1 1 0]
-                              [1 1 0 1 1 0 1 1]
-                              [1 1 1 1 1 1 1 1]
-                              [1 0 1 1 1 1 0 1]
-                              [0 1 1 0 0 1 1 0]])}])
+    :ordinal 3
+    :rows [[0 1 1 1 1 1 1 0]
+           [1 1 0 1 1 0 1 1]
+           [1 1 1 1 1 1 1 1]
+           [1 0 1 1 1 1 0 1]
+           [0 1 1 0 0 1 1 0]]}])
+
+(defn level-count
+  "Returns the number of built-in breakout levels."
+  []
+  (count default-levels))
+
+(defn level-bricks
+  "Returns concrete brick maps for one level descriptor.
+Accepts both compact {:ordinal n :rows [...]} and pre-expanded {:bricks [...]} forms."
+  [level]
+  (let [bricks (:bricks level)]
+    (if (vector? bricks)
+      bricks
+      (let [rows (:rows level)
+            ordinal (:ordinal level)]
+        (if (and (vector? rows) (number? ordinal))
+          (pattern->bricks ordinal rows)
+          [])))))
+
+(defn level-bricks-by-index
+  "Returns concrete bricks for a built-in level index, or [] when out of range."
+  [level-index]
+  (if (and (number? level-index)
+           (<= 0 level-index)
+           (< level-index (count default-levels)))
+    (level-bricks (nth default-levels level-index))
+    []))
 
 (defn load-levels
   "Loads optional breakout EDN under /assets/tiny-fx/breakout.edn.

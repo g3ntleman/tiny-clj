@@ -13,21 +13,27 @@
 (def launch-speed-y -2)
 (def segment-step-ms 16)
 
-(defn- level-count
-  [state]
-  (count (:levels state)))
-
-(defn- ensure-levels
+(defn- custom-levels
   [state]
   (let [xs (:levels state)]
     (if (and (vector? xs)
              (not (empty? xs)))
-      state
-      (assoc state :levels (levels/load-levels)))))
+      xs
+      nil)))
 
-(defn- level-bricks
+(defn- state-level-count
+  [state]
+  (let [xs (custom-levels state)]
+    (if xs
+      (count xs)
+      (levels/level-count))))
+
+(defn- current-level-bricks
   [state level-index]
-  (:bricks (nth (:levels state) level-index)))
+  (let [xs (custom-levels state)]
+    (if xs
+      (levels/level-bricks (nth xs level-index))
+      (levels/level-bricks-by-index level-index))))
 
 (defn- clear-events
   [state]
@@ -50,11 +56,10 @@
 
 (defn- prepare-level
   [state level-index phase]
-  (let [state (ensure-levels state)
-        state2 (assoc state
+  (let [state2 (assoc state
                       :phase phase
                       :level-index level-index
-                      :bricks (level-bricks state level-index)
+                      :bricks (current-level-bricks state level-index)
                       :events []
                       :ball-vx launch-speed-x
                       :ball-vy launch-speed-y)]
@@ -79,7 +84,6 @@
    :score 0
    :lives default-lives
    :level-index 0
-   :levels nil
    :bricks []
    :events []
    :paddle-x 140
@@ -247,7 +251,7 @@
 (defn- finish-brick-hit
   [state remaining]
   (if (empty? remaining)
-    (if (= (+ (:level-index state) 1) (level-count state))
+    (if (= (+ (:level-index state) 1) (state-level-count state))
       (-> state
           (clear-paddle-motion)
           (assoc :phase :victory
