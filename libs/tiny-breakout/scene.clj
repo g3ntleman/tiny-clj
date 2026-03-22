@@ -67,7 +67,8 @@
   "Ensures breakout state carries an append-only concrete rule vector.
 
   Existing brick rules stay in place so removed bricks become inert via the
-  scene index instead of forcing eager recompaction."
+  scene index instead of forcing eager recompaction.
+  Returns state unchanged when all rules already present (zero allocation)."
   [state]
   (let [brick-ids (visible-brick-ids state)
         existing-rules (let [rules (:collision-rules state)]
@@ -78,16 +79,20 @@
         known-targets (rule-targets base-rules)]
     (loop [remaining brick-ids
            known known-targets
-           rules (transient base-rules)]
+           rules (transient base-rules)
+           added? (not (identical? base-rules existing-rules))]
       (if (empty? remaining)
-        (assoc state :collision-rules (persistent! rules))
+        (if added?
+          (assoc state :collision-rules (persistent! rules))
+          state)
         (let [brick-id (first remaining)]
           (if (get known brick-id)
-            (recur (rest remaining) known rules)
+            (recur (rest remaining) known rules added?)
             (recur (rest remaining)
                    (assoc known brick-id true)
                    (conj! rules
-                          (concrete-spatial-rule :ball-vs-brick 1003 brick-id)))))))))
+                          (concrete-spatial-rule :ball-vs-brick 1003 brick-id))
+                   true)))))))
 
 (defn- overlay-text
   [phase]
@@ -164,10 +169,10 @@
       :else [])))
 
 (defn build-scene
-  "Builds one deterministic frame-scene shaped map from breakout state map."
+  "Builds one deterministic frame-scene shaped map from breakout state map.
+  State must already carry expanded collision rules (via with-expanded-collision-rules)."
   [state]
-  (let [state (with-expanded-collision-rules state)
-        paddle-x (let [v (get state :paddle-x)] (if (number? v) v 0))
+  (let [paddle-x (let [v (get state :paddle-x)] (if (number? v) v 0))
         ball-x (let [v (get state :ball-x)] (if (number? v) v 0))
         ball-y (let [v (get state :ball-y)] (if (number? v) v 0))
         paddle-motion (get state :paddle-motion)
@@ -193,8 +198,8 @@
                          1003 (->Rect 1003 nil nil true ball-x-field ball-y-field core/ball-size core/ball-size ball-shape)
                          1004 (->VText 1004 nil nil true 8 12 1 0 score-text nil)
                          1005 (->VText 1005 nil nil true 100 120 1 0 overlay nil)
-                         1006 (->VText 1006 nil nil true 226 12 1 0 "Lives:" nil)
-                         1007 (->VText 1007 nil nil true 286 12 1 0 lives-text nil)}]
+                         1006 (->VText 1006 nil nil true 236 12 1 0 "Lifes:" nil)
+                         1007 (->VText 1007 nil nil true 296 12 1 0 lives-text nil)}]
       (loop [remaining bricks
              entities base-entities
              child-ids [1001 1002 1003 1004 1005 1006 1007]]

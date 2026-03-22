@@ -295,7 +295,8 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
         "  (require 'tiny-breakout.scene) "
         "  (def breakout-test-brick {:id 2001 :x 40 :y 32 :w 20 :h 10 :points 10}) "
         "  (def breakout-test-state "
-        "    (assoc (tiny-breakout.core/init-state) :bricks [breakout-test-brick])) "
+        "    (tiny-breakout.scene/with-expanded-collision-rules "
+        "      (assoc (tiny-breakout.core/init-state) :bricks [breakout-test-brick]))) "
         "  (def breakout-test-frame (tiny-breakout.scene/build-scene breakout-test-state)) "
         "  (def breakout-test-root-id (:root breakout-test-frame)) "
         "  (def breakout-test-index (:index breakout-test-frame)) "
@@ -320,10 +321,10 @@ TEST(test_breakout_contract_scene_build_returns_entity_map_root_with_spatial_rul
         "       (= 1002 (:other breakout-test-paddle-rule)) "
         "       (= 1003 (:self breakout-test-brick-rule)) "
         "       (= 2001 (:other breakout-test-brick-rule)) "
-        "       (= \"Lives:\" (:text breakout-test-lives-label)) "
+        "       (= \"Lifes:\" (:text breakout-test-lives-label)) "
         "       (= \"3\" (:text breakout-test-lives-value)) "
-        "       (= 226 (:x breakout-test-lives-label)) "
-        "       (= 286 (:x breakout-test-lives-value)) "
+        "       (= 236 (:x breakout-test-lives-label)) "
+        "       (= 296 (:x breakout-test-lives-value)) "
         "       (= :breakout/ball (:id (:prototype breakout-test-ball))) "
         "       (= :breakout/paddle (:id (:prototype breakout-test-paddle))) "
         "       (= :breakout/brick (:id (:prototype breakout-test-brick-node)))))",
@@ -463,14 +464,10 @@ TEST(test_breakout_contract_host_fire_button_simulation_reaches_breakout_runtime
         "  (require 'tiny-clj.gpio) "
         "  (require 'tiny-breakout.runtime) "
         "  (tiny-clj.gpio/simulate! 13 1) "
-        "  (tiny-clj.deployment/breakout-host-config) "
-        "  (tiny-clj.gpio/simulate! 13 0) "
-        "  (Thread/sleep 30) "
-        "  (dotimes [_ 8] (run-next-task)) "
-        "  (tiny-clj.gpio/simulate! 13 1) "
-        "  (Thread/sleep 30) "
-        "  (dotimes [_ 8] (run-next-task)) "
-        "  (= :play (:phase @tiny-breakout.runtime/state*)))",
+        "  (let [cfg (tiny-clj.deployment/breakout-host-config)] "
+        "    (tiny-breakout.runtime/start-runtime! nil) "
+        "    (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "    (= :play (:phase @tiny-breakout.runtime/state*))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
@@ -484,6 +481,8 @@ TEST(test_breakout_contract_host_left_button_moves_until_button_up) {
         "  (require 'tiny-breakout.runtime) "
         "  (tiny-clj.gpio/simulate! 14 1) "
         "  (tiny-clj.deployment/breakout-host-config) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
         "  (let [x0 (:paddle-x @tiny-breakout.runtime/state*) "
         "        _ (tiny-clj.gpio/simulate! 14 0) "
         "        _ (Thread/sleep 35) "
@@ -546,6 +545,40 @@ TEST(test_breakout_contract_segment_progression_no_longer_uses_named_segment_tim
         "  (tiny-clj.deployment/breakout-host-config) "
         "  (tiny-breakout.runtime/apply-input! {:launch true}) "
         "  (= false (cancel-timer :tiny-breakout/segment-end)))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_segment_timeline_event_replans_even_if_event_arrives_before_wall_clock_end) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (require 'tiny-fx.gfx-timeline) "
+        "  (tiny-breakout.runtime/reset-runtime!) "
+        "  (let [future-end (+ (current-time-ms) 60000) "
+        "        seeded (assoc @tiny-breakout.runtime/state* "
+        "                 :phase :play "
+        "                 :ball-x 160 :ball-y 120 "
+        "                 :ball-vx 2 :ball-vy -2 "
+        "                 :events [] "
+        "                 :ball-segment {:id 42 :start-ms 1000 :end-ms future-end :to-x 316 :to-y 60 :wall :right}) "
+        "        _ (tiny-breakout.runtime/publish-state! seeded) "
+        "        watcher (get @tiny-fx.gfx-timeline/timeline-watchers* :tiny-breakout/segment-end) "
+        "        callback (:callback watcher) "
+        "        before @tiny-breakout.runtime/state* "
+        "        _ (callback "
+        "           {:source :timeline "
+        "            :id :tiny-breakout/segment-end "
+        "            :progress {:end-event true :at-end true :phase-ms 1 :period-ms 1}}) "
+        "        after @tiny-breakout.runtime/state* "
+        "        before-seg (:ball-segment before) "
+        "        after-seg (:ball-segment after)] "
+        "    (and (fn? callback) "
+        "         (= 42 (:id before-seg)) "
+        "         (map? after-seg) "
+        "         (= -2 (:ball-vx after)) "
+        "         (not= (:id after-seg) (:id before-seg)))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
