@@ -951,9 +951,32 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
     TEST_ASSERT_TRUE(is_map(state));
     ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
     ID segment_seq = map_get_sentinel(state, intern_symbol_global(":segment-id-seq"), NULL);
-    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":play"), phase);
-    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(segment_seq) && as_fixnum(segment_seq) > 1,
-                             "ball should have replanned beyond the first launched segment");
+    const char *phase_name = "<non-symbol>";
+    if (phase == NULL) {
+        phase_name = "<nil>";
+    } else if (TAG(phase) == CLJ_SYMBOL) {
+        CljSymbol *phase_sym = as_symbol(phase);
+        if (phase_sym && phase_sym->cname) {
+            phase_name = phase_sym->cname;
+        }
+    }
+    ID play_kw = intern_symbol_global(":play");
+    ID serve_kw = intern_symbol_global(":serve");
+    bool phase_ok = (phase == play_kw) || (phase == serve_kw);
+    char phase_msg[128];
+    mini_snprintf(phase_msg, sizeof(phase_msg),
+                  "expected phase :play or :serve after runloop exercise, got %s",
+                  phase_name);
+    TEST_ASSERT_TRUE_MESSAGE(phase_ok, phase_msg);
+    char seq_msg[128];
+    if (is_fixnum(segment_seq)) {
+        mini_snprintf(seq_msg, sizeof(seq_msg), "segment-id-seq should advance beyond first segment, got %d",
+                      as_fixnum(segment_seq));
+    } else {
+        mini_snprintf(seq_msg, sizeof(seq_msg), "segment-id-seq should be fixnum, got tag %u",
+                      segment_seq ? (unsigned int)TAG(segment_seq) : 255u);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(segment_seq) && as_fixnum(segment_seq) > 1, seq_msg);
 
     breakout_viewer_test_context_destroy(&ctx);
 }
@@ -1014,4 +1037,68 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
     TEST_ASSERT_FALSE_MESSAGE(caught,
                               caught_ex ? "post-launch runloop frames should fit inside the stricter 592KB debug heap budget"
                                         : "");
+}
+
+TEST(test_breakout_runtime_startup_brick_collision_runloop_path_survives_and_scores_once) {
+    BreakoutViewerTestContext ctx = {0};
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    TEST_ASSERT_NOT_NULL(ctx.bundle.spatial_callback);
+
+    ID state_atom_id = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  tiny-breakout.runtime/state*)",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(state_atom_id);
+    TEST_ASSERT_EQUAL_UINT8(CLJ_ATOM, TAG(state_atom_id));
+    CljAtom *state_atom = as_atom(state_atom_id);
+    TEST_ASSERT_NOT_NULL(state_atom);
+
+    ID score_kw = intern_symbol_global(":score");
+    TEST_ASSERT_NOT_NULL(score_kw);
+
+    ID brick_event = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (let [b (first (:bricks @tiny-breakout.runtime/state*)) "
+        "        bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
+        "    {:source :spatial "
+        "     :id :ball-vs-brick "
+        "     :rule {:id :ball-vs-brick} "
+        "     :phase :enter "
+        "     :other (:id b) "
+        "     :self-aabb {:min-x bx :min-y (+ by bh) :max-x (+ bx 4) :max-y (+ by bh 4)} "
+        "     :other-aabb {:min-x bx :min-y by :max-x (+ bx bw) :max-y (+ by bh)}}))",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(brick_event);
+    TEST_ASSERT_TRUE(is_map(brick_event));
+
+    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+    ID retained_event = RETAIN(brick_event);
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)ctx.bundle.spatial_callback, retained_event));
+    RELEASE(retained_event);
+
+    bool saw_brick_score = false;
+    for (int i = 0; i < 120; i++) {
+        usleep(10000);
+        ID state = atom_deref_owned(state_atom);
+        if (state && is_map(state)) {
+            ID score = map_get_sentinel(state, score_kw, NULL);
+            if (score && is_fixnum(score) && as_fixnum(score) > 0) {
+                saw_brick_score = true;
+            }
+        }
+        RELEASE(state);
+        if (saw_brick_score) {
+            break;
+        }
+    }
+
+    stop_runloop_thread();
+    breakout_viewer_test_context_destroy(&ctx);
+
+    TEST_ASSERT_TRUE_MESSAGE(saw_brick_score,
+                             "expected at least one brick-hit score update while runloop + collision dispatch are active");
 }

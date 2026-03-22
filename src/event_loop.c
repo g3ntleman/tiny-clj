@@ -573,13 +573,11 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     bool ok = true;
     char eval_task_stack_anchor;
     TRY {
-        /* Host runloop pthread: C stack span vs. anchor is misleading (false StackOverflowError).
-         * Main thread / tests: keep byte-based guard when base is set. */
-        if (subjective_c_is_interpreter_thread()) {
-            eval_bind_task_stack_anchor(NULL);
-        } else {
-            eval_bind_task_stack_anchor(&eval_task_stack_anchor);
-        }
+        /*
+         * Always bind a per-task stack anchor so eval's byte-based stack guard
+         * can trap deep recursion before the OS guard page is hit.
+         */
+        eval_bind_task_stack_anchor(&eval_task_stack_anchor);
         WITH_AUTORELEASE_POOL({
             if (has_arg) {
                 ID call_args[1] = {arg};

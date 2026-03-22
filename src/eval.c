@@ -171,9 +171,33 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
   }
 }
 
+static inline bool symbol_namespace_matches(const CljSymbol *a, const CljSymbol *b) {
+  if (!a || !b) {
+    return false;
+  }
+  const CljSymbol *a_ns = a->ns_name;
+  const CljSymbol *b_ns = b->ns_name;
+  if (!a_ns && !b_ns) {
+    return true;
+  }
+  if (!a_ns || !b_ns) {
+    return false;
+  }
+  if (a_ns == b_ns) {
+    return true;
+  }
+  if (!a_ns->cname || !b_ns->cname) {
+    return false;
+  }
+  return strcmp(a_ns->cname, b_ns->cname) == 0;
+}
+
 static inline bool symbol_name_matches(CljSymbol *a, CljSymbol *b) {
   if (!a || !b)
     return false;
+  if (!symbol_namespace_matches(a, b)) {
+    return false;
+  }
   if (a == b)
     return true;
   if (!a->cname || !b->cname)
@@ -529,7 +553,23 @@ static INLINE CljPersistentMap *env_stack_head(CljPersistentVector *stack) {
   return env_stack_top(stack);
 }
 
+static INLINE const EvalContext *sanitize_eval_context(const EvalContext *ctx) {
+  if (!ctx) {
+    return NULL;
+  }
+  /*
+   * EvalContext objects are stack-local by contract (see eval.h). In host
+   * threaded runloop scenarios, stale pointers can surface after callback
+   * boundaries; treat non-stack pointers as absent context.
+   */
+  if (!is_pointer_on_stack(ctx)) {
+    return NULL;
+  }
+  return ctx;
+}
+
 static INLINE CljPersistentMap *get_closure_env(const EvalContext *ctx) {
+  ctx = sanitize_eval_context(ctx);
   if (!ctx) {
     return NULL;
   }
@@ -541,6 +581,7 @@ static INLINE CljPersistentMap *get_closure_env(const EvalContext *ctx) {
 }
 
 static INLINE EvalState *get_eval_state(const EvalContext *ctx, EvalState *fallback) {
+  ctx = sanitize_eval_context(ctx);
   if (ctx && ctx->st) {
     return ctx->st;
   }
@@ -552,6 +593,7 @@ static const EvalContext *ensure_eval_context(CljPersistentMap *env,
                                               const EvalContext *ctx,
                                               EvalContext *local_ctx,
                                               CljPersistentVector **owned_stack) {
+  ctx = sanitize_eval_context(ctx);
   *owned_stack = NULL;
   if (!ctx) {
     *local_ctx = (EvalContext){
@@ -752,6 +794,7 @@ ID eval_body_with_env(ID body, CljPersistentMap *env, EvalState *st) {
 
 // Simplified body evaluation with parameter binding
 ID eval_body_with_params(ID body, const EvalContext *ctx) {
+  ctx = sanitize_eval_context(ctx);
   // Handle nil body gracefully (represents Clojure nil)
   if (!body) {
     return NULL;
@@ -1128,6 +1171,7 @@ static ID __attribute__((noinline)) eval_body_no_ctx(ID body, CljPersistentMap *
 // without allocating the full frame of eval_body_no_ctx. This saves ~250 bytes of stack
 // per eval recursion level (measured: 304 → ~48 bytes).
 ID eval_body(ID body, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+  ctx = sanitize_eval_context(ctx);
   if (ctx) {
     return eval_body_with_params(body, ctx);
   }
@@ -1767,6 +1811,7 @@ static INLINE ID call_function_with_args_and_context_vec(ID fn, CljPersistentVec
 }
 
 static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+  ctx = sanitize_eval_context(ctx);
   int next_eval_ast_call_depth = g_eval_ast_call_depth + 1;
   // Stack-based depth guard: measure actual C stack usage to prevent stack overflow.
   // More reliable than a counter: fires based on real stack consumption, not call count.
@@ -2324,6 +2369,7 @@ ID eval_var(CljPersistentVector *args, CljPersistentMap *env, EvalState *st) {
 // TCO functions moved to optimize.c
 
 ID eval_fn(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+  ctx = sanitize_eval_context(ctx);
   // Some call paths (notably during bootstrap / lazy builder thunks) may not have
   // an explicit EvalState or lexical env map available.
   if (!st)
@@ -3080,6 +3126,7 @@ ID eval_arg_with_context(CljList *list, int index, CljPersistentMap *env, EvalSt
 }
 
 ID eval_arg_from_expr_with_context(ID expr, CljPersistentMap *env, EvalState *st, const EvalContext *ctx) {
+  ctx = sanitize_eval_context(ctx);
   if (expr == SYM_NIL)
     return NULL;
   if (!expr)
