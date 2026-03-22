@@ -1,5 +1,6 @@
 (ns tiny-fx.gfx-timeline
-  (:require [tiny-clj.runtime :as runtime]))
+  (:require [tiny-clj.runtime :as runtime]
+            [tiny-clj.event :as event]))
 
 (declare poll-watchers!)
 
@@ -151,3 +152,6 @@ renderer has not published a fresh snapshot yet."
                           :last-at-end false})))
         (kick-watchers!)
         nil))))
+
+;; Mark timeline as loaded so event/on :timeline works without explicit preload.
+(reset! event/gfx-timeline-loaded? true)
