@@ -4,7 +4,10 @@
             [tiny-breakout.scene :as scene]
             [tiny-clj.event :as event]
             [tiny-fx.gfx-collision :as collision]
+            [tiny-fx.gfx-timeline]
             [tiny-clj.runtime :as runtime]))
+
+(reset! event/gfx-timeline-loaded? true)
 
 (def state* (atom nil))
 (def scene* (atom nil))
