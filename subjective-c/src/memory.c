@@ -982,27 +982,29 @@ static void release_object_default(CljObject *v) {
     break;
   }
 
-  case CLJ_BYTE_ARRAY:
-  {
+  case CLJ_BYTE_ARRAY: {
     CljByteArray *ba = (CljByteArray *)v;
-    if (ba) {
-      if ((ba->base.flags & CLJ_FLAG_EXTERNAL_DATA) != 0) {
+    if (!ba)
+      break;
+    if ((ba->base.flags & CLJ_FLAG_EXTERNAL_DATA) != 0) {
+      CljByteArrayView *ext = (CljByteArrayView *)ba;
 #ifndef ZOMBIE_ENABLED
-        CljByteArrayView *ext = (CljByteArrayView *)ba;
-        if (ext->external_free_fn)
-          ext->external_free_fn(ext->external_ctx);
-#endif
-      } else if (ba->data) {
-#ifdef ZOMBIE_ENABLED
-        // Simulate deallocation: count but don't free
-        memory_profiler_track_raw_free(ba->data, __FILE__, __LINE__);
+      if (ext->external_free_fn)
+        ext->external_free_fn(ext->external_ctx);
 #else
-        CLJ_FREE(ba->data);
+      if ((ba->base.flags & CLJ_FLAG_EXTERNAL_IS_OBJECT) != 0 && ext->external_free_fn)
+        ext->external_free_fn(ext->external_ctx);
 #endif
-      }
+    } else if (ba->data) {
+#ifdef ZOMBIE_ENABLED
+      /* Simulate deallocation: count but don't free (matches main zombie semantics). */
+      memory_profiler_track_raw_free(ba->data, __FILE__, __LINE__);
+#else
+      CLJ_FREE(ba->data);
+#endif
     }
+    break;
   }
-  break;
   case CLJ_ATOM:
     RELEASE(((CljAtom *)v)->value);
     atom_destroy((CljAtom *)v);
