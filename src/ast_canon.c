@@ -1172,3 +1172,74 @@ ID canonicalize_ast_as_data(ID parsed_expr, EvalState *st) {
   // Treat lists as data (quoted) but still canonicalize symbol tokens.
   return canonicalize_expr(parsed_expr, st, true);
 }
+
+ID ast_canon_macroexpand_1(EvalState *st, ID form) {
+  CLJ_ASSERT(st != NULL);
+  if (!form) {
+    RETAIN(form);
+    return form;
+  }
+  unsigned char tag = TAG(form);
+  if (!is_list_type(tag)) {
+    RETAIN(form);
+    return form;
+  }
+  CljList *list = as_list(form);
+  CLJ_ASSERT(list != NULL);
+  ID first_raw = list->first;
+  CljSymbol *head_sym = NULL;
+  ID converted_head = NULL;
+  if (first_raw && TAG(first_raw) == CLJ_SYMBOL_TOKEN) {
+    head_sym = canonicalize_symbol_token((CljSymbolToken *)first_raw, st);
+    if (!head_sym) {
+      RETAIN(form);
+      return form;
+    }
+    converted_head = (ID)head_sym;
+  } else if (first_raw && TAG(first_raw) == CLJ_SYMBOL) {
+    head_sym = as_symbol(first_raw);
+  } else {
+    RETAIN(form);
+    return form;
+  }
+
+  bool is_qualified = head_sym && head_sym->ns_name;
+  if (is_special_symbol(head_sym) || (is_native_symbol(head_sym) && !is_qualified)) {
+    if (converted_head)
+      RELEASE(converted_head);
+    RETAIN(form);
+    return form;
+  }
+  CljFunction *macro = lookup_macro_resolve(st, head_sym);
+  if (converted_head)
+    RELEASE(converted_head);
+  if (!macro) {
+    RETAIN(form);
+    return form;
+  }
+
+  CljList *rest = list_or_null(as_list(LIST_REST(list)));
+  int argc = rest ? list_count(rest) : 0;
+  ID args_stack[16];
+  ID *args = alloc_obj_array(argc, args_stack);
+  int i = 0;
+  LIST_FOR_EACH(rest, arg) {
+    args[i++] = arg;
+  }
+
+  CljNamespace *saved_ns = st->current_ns;
+  if (macro->ns) {
+    st->current_ns = macro->ns;
+  }
+  unsigned long macro_gensym = 0;
+  unsigned long *prev_gensym = gensym_use_local(&macro_gensym);
+  ID expanded = eval_function_call((ID)macro, args, argc, NULL, st);
+  gensym_use_local(prev_gensym);
+  free_obj_array(args, args_stack);
+  st->current_ns = saved_ns;
+  if (!expanded)
+    return NULL;
+  move_meta(list, expanded);
+  RETAIN(expanded);
+  return expanded;
+}

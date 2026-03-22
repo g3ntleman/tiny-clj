@@ -287,6 +287,7 @@ ID native_eval(ID *args, unsigned int argc);
 ID native_read_string(ID *args, unsigned int argc);
 ID native_now(ID *args, unsigned int argc);
 ID native_get_macro(ID *args, unsigned int argc);
+ID native_macroexpand_1(ID *args, unsigned int argc);
 ID native_apply(ID *args, unsigned int argc);
 // (declarations in builtins_strings.h)
 ID native_source(ID *args, unsigned int argc);
@@ -4405,6 +4406,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY_BOOT_CNAME(native_instant_days, "instant-days"),
     NATIVE_ENTRY_BOOT_CNAME(native_instant_ms, "instant-ms"),
     NATIVE_ENTRY_BOOT_CNAME(native_get_macro, "get-macro"),
+    NATIVE_ENTRY_BOOT_CNAME(native_macroexpand_1, "macroexpand-1"),
     NATIVE_ENTRY_BOOT_CNAME(native_apply, "apply"),
     NATIVE_ENTRY_BOOT_CNAME(native_print_ast, "tiny-clj.runtime/print-ast"),
 
@@ -4787,6 +4789,19 @@ ID native_get_macro(ID *args, unsigned int argc) {
     return NULL;
   CljFunction *macro = lookup_macro_resolve(g_current_eval_state, as_symbol(args[0]));
   return (ID)macro;
+}
+
+// One macro step using the same path as AST canonicalization (not Clojure apply).
+ID native_macroexpand_1(ID *args, unsigned int argc) {
+  CHECK_ARITY(argc, 1, "macroexpand-1");
+  EvalState *st = g_current_eval_state;
+  if (!st) {
+    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                              "macroexpand-1 requires active evaluation context");
+    return NULL;
+  }
+  ID out = ast_canon_macroexpand_1(st, args[0]);
+  return out ? AUTORELEASE(out) : NULL;
 }
 
 // Apply function to arguments: (apply f args) or (apply f a b c args)
@@ -6554,6 +6569,7 @@ bool builtin_native_fn_needs_eval_state(BuiltinFn fn) {
          fn == native_get_thread_bindings ||
          fn == native_meta ||
          fn == native_get_macro ||
+         fn == native_macroexpand_1 ||
          fn == native_apply ||
          fn == native_load_file ||
          fn == native_require ||

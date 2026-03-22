@@ -33,6 +33,7 @@
   (let [now-ms (current-time-ms)
         current @state*
         segment (:ball-segment current)
+        segment-id (:id segment)
         progress (if (map? event) (:progress event) nil)
         at-end? (and (map? progress)
                      (= true (:at-end progress))
@@ -45,14 +46,14 @@
                     end-ms
                     now-ms)]
     (when (and (map? segment)
-               (number? (:id segment))
+               (number? segment-id)
                ready?)
-      ;; Second schedule: timeline cb already runs in a runloop task; publishing here can
-      ;; synchronously re-enter watchers/poll paths and blow the pthread stack (8 MiB).
-      (schedule 0
-                (fn segment-end-publish-deferred []
-                  (publish-state!
-                   (core/apply-segment-end-at-ms current (:id segment) resume-ms))))))
+      (let [latest @state*
+            latest-segment (:ball-segment latest)]
+        (when (and (map? latest-segment)
+                   (= segment-id (:id latest-segment)))
+          (publish-state!
+           (core/apply-segment-end-at-ms latest segment-id resume-ms))))))
   nil)
 
 (defn- rendered-entity-state
@@ -287,7 +288,7 @@
         next-state (core/apply-spatial-event @state* event now-ms)]
     (tiny-breakout.runtime/publish-state! next-state)
     (ensure-collision!)
-    (tiny-fx.gfx-collision/invoke-collision-callback! event)
+    (tiny-fx.gfx-collision/dispatch-spatial-watchers! event)
     nil))
 
 (defn- on-movement-button-event!

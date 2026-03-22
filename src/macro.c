@@ -3,7 +3,7 @@
  * @brief Macro registry and lookup
  *
  * Minimal C implementation for macro storage/lookup in namespaces.
- * Macro expansion is done at compile-time in ast_canon.c.
+ * Macro expansion is done at compile-time in ast_canon.c; (macroexpand-1) uses the same path natively.
  */
 
 #include "macro.h"

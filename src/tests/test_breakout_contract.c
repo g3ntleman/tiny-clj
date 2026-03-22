@@ -506,6 +506,40 @@ TEST(test_breakout_contract_host_left_button_moves_until_button_up) {
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
+TEST(test_breakout_contract_host_right_button_release_does_not_snap_to_left_edge) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-clj.deployment) "
+        "  (require 'tiny-clj.gpio) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-clj.gpio/simulate! 12 1) "
+        "  (tiny-clj.deployment/breakout-host-config) "
+        "  (tiny-breakout.runtime/start-runtime! nil) "
+        "  (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "  (let [x0 (:paddle-x @tiny-breakout.runtime/state*) "
+        "        _ (tiny-clj.gpio/simulate! 12 0) "
+        "        _ (Thread/sleep 35) "
+        "        _ (dotimes [_ 8] (run-next-task)) "
+        "        moving-scene @tiny-breakout.runtime/scene* "
+        "        moving-paddle (get (:index moving-scene) 1002) "
+        "        moving-x (:x moving-paddle) "
+        "        _ (Thread/sleep 70) "
+        "        _ (tiny-clj.gpio/simulate! 12 1) "
+        "        _ (Thread/sleep 35) "
+        "        _ (dotimes [_ 8] (run-next-task)) "
+        "        s1 @tiny-breakout.runtime/state* "
+        "        stopped-scene @tiny-breakout.runtime/scene* "
+        "        stopped-paddle (get (:index stopped-scene) 1002)] "
+        "    (and (map? moving-x) "
+        "         (contains? moving-x :keyframes) "
+        "         (> (:paddle-x s1) (+ x0 4)) "
+        "         (number? (:x stopped-paddle)) "
+        "         (> (:x stopped-paddle) 0))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
 TEST(test_breakout_contract_level_clear_stops_paddle_motion) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
@@ -586,6 +620,38 @@ TEST(test_breakout_contract_segment_timeline_event_replans_even_if_event_arrives
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
+TEST(test_breakout_contract_segment_timeline_deferred_callback_does_not_overwrite_newer_paddle_state) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.runtime) "
+        "  (require 'tiny-fx.gfx-timeline) "
+        "  (tiny-breakout.runtime/reset-runtime!) "
+        "  (let [now-ms (current-time-ms) "
+        "        seeded (-> @tiny-breakout.runtime/state* "
+        "                   (assoc :phase :play) "
+        "                   (assoc :paddle-x 120) "
+        "                   (assoc :ball-x 160) "
+        "                   (assoc :ball-y 120) "
+        "                   (assoc :ball-vx 2) "
+        "                   (assoc :ball-vy -2) "
+        "                   (assoc :events []) "
+        "                   (assoc :ball-segment {:id 7 :start-ms (- now-ms 1000) :end-ms now-ms :to-x 316 :to-y 60 :wall :right})) "
+        "        _ (tiny-breakout.runtime/publish-state! seeded) "
+        "        watcher (get @tiny-fx.gfx-timeline/timeline-watchers* :tiny-breakout/segment-end) "
+        "        callback (:callback watcher) "
+        "        _ (callback {:source :timeline "
+        "                     :id :tiny-breakout/segment-end "
+        "                     :progress {:end-event true :at-end true :phase-ms 1 :period-ms 1}}) "
+        "        _ (tiny-breakout.runtime/publish-state! (assoc @tiny-breakout.runtime/state* :paddle-x 250 :paddle-motion nil)) "
+        "        _ (dotimes [_ 16] (run-next-task)) "
+        "        final @tiny-breakout.runtime/state*] "
+        "    (and (fn? callback) "
+        "         (= 250 (:paddle-x final)))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
 TEST(test_breakout_contract_host_spatial_callback_dispatches_generic_spatial_watchers) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
@@ -605,6 +671,37 @@ TEST(test_breakout_contract_host_spatial_callback_dispatches_generic_spatial_wat
         "             :other-aabb {:min-x 0 :min-y 24 :max-x 40 :max-y 28}}) "
         "        _ (tiny-clj.event/on {:source :spatial :id :ball-vs-paddle} nil)] "
         "    (= [[:ball-vs-paddle :enter]] @seen)))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_host_spatial_callback_does_not_reenter_global_collision_callback) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-clj.deployment) "
+        "  (require 'tiny-clj.event) "
+        "  (require 'tiny-fx.gfx-collision) "
+        "  (let [cfg (tiny-clj.deployment/breakout-host-config) "
+        "        callback-calls (atom 0) "
+        "        watcher-calls (atom 0) "
+        "        _ (tiny-fx.gfx-collision/set-collision-callback! "
+        "            (fn [_event] "
+        "              (swap! callback-calls inc) "
+        "              nil)) "
+        "        _ (tiny-clj.event/on {:source :spatial :id :ball-vs-paddle} "
+        "            (fn [_event] "
+        "              (swap! watcher-calls inc) "
+        "              nil)) "
+        "        _ ((:spatial-callback cfg) "
+        "           {:source :spatial :id :ball-vs-paddle :rule {:id :ball-vs-paddle} "
+        "            :phase :enter "
+        "            :self-aabb {:min-x 10 :min-y 20 :max-x 14 :max-y 24} "
+        "            :other-aabb {:min-x 0 :min-y 24 :max-x 40 :max-y 28}}) "
+        "        _ (tiny-clj.event/on {:source :spatial :id :ball-vs-paddle} nil) "
+        "        _ (tiny-fx.gfx-collision/set-collision-callback! nil)] "
+        "    (and (= 0 @callback-calls) "
+        "         (= 1 @watcher-calls))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }

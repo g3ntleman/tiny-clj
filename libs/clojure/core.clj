@@ -941,21 +941,9 @@
   (for-build (seq (normalize-for-bindings bindings)) body))
 
 ; ============================================================================
-; Macro Expansion Functions (bootstrap-safe: uses only basic special forms)
+; Macro expansion: macroexpand-1 is native (same path as preprocess/canonicalize).
+; macroexpand loops in Clojure without apply-based macro invocation.
 ; ============================================================================
-
-^#^{:doc "If form represents a macro call, returns its macro expansion, else returns form."}
-(def macroexpand-1
-  (fn [form]
-    (if (list? form)
-      (let [op (first form)]
-        (if (symbol? op)
-          (let [macro-fn (get-macro op)]
-            (if macro-fn
-              (apply macro-fn (rest form))
-              form))
-          form))
-      form)))
 
 ^#^{:doc "Repeatedly calls macroexpand-1 on form until it no longer represents a macro form."}
 (def macroexpand
