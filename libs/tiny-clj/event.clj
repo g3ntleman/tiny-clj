@@ -28,8 +28,8 @@
       (= source :timeline) (if (and (nil? callback) (not @gfx-timeline-loaded?))
                              nil
                              (do
-                               (when (not @gfx-timeline-loaded?)
-                                 (throw "event/on: :timeline source requires preloaded tiny-fx.gfx-timeline"))
+                               (when-not @gfx-timeline-loaded?
+                                 (preload-timeline-runtime!))
                                (tiny-fx.gfx-timeline/watch id callback opts)))
       :else (throw (str "event/on: unsupported :source " source)))))
 
@@ -45,7 +45,7 @@ Supported sources:
   :button  -> semantic button events
   :sensor  -> semantic sensor events
   :spatial -> semantic spatial/collision events
-  :timeline -> semantic timeline-end events
+  :timeline -> semantic timeline-end events (loads tiny-fx.gfx-timeline on first subscribe with a callback)
 
 Options are forwarded to the underlying source-specific runtime."
   [& args]
