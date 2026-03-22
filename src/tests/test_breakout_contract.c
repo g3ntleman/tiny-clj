@@ -1,5 +1,7 @@
 #include "tests_common.h"
 #include "../event_loop.h"
+#include "../rendered_state_snapshot.h"
+#include "../vector_scene_graph.h"
 
 TEST(test_breakout_contract_namespaces_load) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -366,6 +368,36 @@ TEST(test_breakout_contract_collision_rules_expand_incrementally_and_keep_remove
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
 
+TEST(test_breakout_contract_collision_rule_expansion_persists_target_cache_for_reuse) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    ID ok = eval_string(
+        "(do "
+        "  (require 'tiny-breakout.core) "
+        "  (require 'tiny-breakout.scene) "
+        "  (let [bricks (loop [i 0 out []] "
+        "                 (if (= i 24) "
+        "                   out "
+        "                   (recur (+ i 1) "
+        "                          (conj out {:id (+ 3000 i) "
+        "                                     :x (* 20 (mod i 8)) "
+        "                                     :y (+ 32 (* 10 (quot i 8))) "
+        "                                     :w 20 :h 10 :points 10})))) "
+        "        s0 (assoc (tiny-breakout.core/init-state) :phase :play :bricks bricks) "
+        "        s1 (tiny-breakout.scene/with-expanded-collision-rules s0) "
+        "        s2 (tiny-breakout.scene/with-expanded-collision-rules s1) "
+        "        targets (:collision-rule-targets s1) "
+        "        targets2 (:collision-rule-targets s2) "
+        "        targets-for (:collision-rule-targets-for s1)] "
+        "    (and (map? targets) "
+        "         (= (count bricks) (count targets)) "
+        "         (identical? targets-for (:collision-rules s1)) "
+        "         (identical? s1 s2) "
+        "         (identical? targets targets2) "
+        "         (= (+ 1 (count bricks)) (count (:collision-rules s1))))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
 TEST(test_breakout_contract_title_scene_hides_level_bricks_until_launch) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     ID ok = eval_string(
@@ -536,6 +568,116 @@ TEST(test_breakout_contract_host_right_button_release_does_not_snap_to_left_edge
         "         (> (:paddle-x s1) (+ x0 4)) "
         "         (number? (:x stopped-paddle)) "
         "         (> (:x stopped-paddle) 0))))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_host_right_button_release_ignores_stale_renderer_snapshot) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    vg_rendered_state_reset_all();
+
+    ID setup_ok = eval_string(
+        "(do "
+        "  (require 'tiny-clj.deployment) "
+        "  (require 'tiny-clj.gpio) "
+        "  (require 'tiny-clj.runtime) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-clj.gpio/simulate! 12 1) "
+        "  (let [cfg (tiny-clj.deployment/breakout-host-config)] "
+        "    (tiny-clj.runtime/start-renderer! (:slots cfg)) "
+        "    (tiny-breakout.runtime/start-runtime! nil) "
+        "    (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "    true))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, setup_ok);
+
+    ID moved_ok = eval_string(
+        "(do "
+        "  (tiny-clj.gpio/simulate! 12 0) "
+        "  (Thread/sleep 35) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, moved_ok);
+
+    VgTransformFixed stale_world_t = {
+        .m00 = VG_SCALE_ONE,
+        .m01 = 0,
+        .m02 = 0,
+        .m10 = 0,
+        .m11 = VG_SCALE_ONE,
+        .m12 = 0,
+    };
+    vg_rendered_state_capture_begin(0u, 99u, 0u);
+    vg_rendered_state_capture_record_entity((uintptr_t)fixnum(1002), stale_world_t);
+    vg_rendered_state_capture_commit();
+
+    ID ok = eval_string(
+        "(do "
+        "  (tiny-clj.gpio/simulate! 12 1) "
+        "  (Thread/sleep 35) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  (let [s @tiny-breakout.runtime/state*] "
+        "    (> (:paddle-x s) 0)))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, ok);
+}
+
+TEST(test_breakout_contract_host_right_second_press_does_not_snap_to_left_with_stale_renderer_snapshot) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    vg_rendered_state_reset_all();
+
+    ID setup_ok = eval_string(
+        "(do "
+        "  (require 'tiny-clj.deployment) "
+        "  (require 'tiny-clj.gpio) "
+        "  (require 'tiny-clj.runtime) "
+        "  (require 'tiny-breakout.runtime) "
+        "  (tiny-clj.gpio/simulate! 12 1) "
+        "  (let [cfg (tiny-clj.deployment/breakout-host-config)] "
+        "    (tiny-clj.runtime/start-renderer! (:slots cfg)) "
+        "    (tiny-breakout.runtime/start-runtime! nil) "
+        "    (tiny-breakout.runtime/apply-input! {:launch true}) "
+        "    true))",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, setup_ok);
+
+    ID moved_ok = eval_string(
+        "(do "
+        "  (tiny-clj.gpio/simulate! 12 0) "
+        "  (Thread/sleep 35) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  true)",
+        g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, moved_ok);
+
+    VgTransformFixed stale_world_t = {
+        .m00 = VG_SCALE_ONE,
+        .m01 = 0,
+        .m02 = 0,
+        .m10 = 0,
+        .m11 = VG_SCALE_ONE,
+        .m12 = 0,
+    };
+    vg_rendered_state_capture_begin(0u, 101u, 0u);
+    vg_rendered_state_capture_record_entity((uintptr_t)fixnum(1002), stale_world_t);
+    vg_rendered_state_capture_commit();
+
+    ID ok = eval_string(
+        "(do "
+        "  (tiny-clj.gpio/simulate! 12 1) "
+        "  (Thread/sleep 35) "
+        "  (dotimes [_ 8] (run-next-task)) "
+        "  (let [x1 (:paddle-x @tiny-breakout.runtime/state*) "
+        "        _ (tiny-clj.gpio/simulate! 12 0) "
+        "        _ (Thread/sleep 20) "
+        "        _ (dotimes [_ 6] (run-next-task)) "
+        "        _ (tiny-clj.gpio/simulate! 12 1) "
+        "        _ (Thread/sleep 20) "
+        "        _ (dotimes [_ 6] (run-next-task)) "
+        "        x2 (:paddle-x @tiny-breakout.runtime/state*)] "
+        "    (and (> x1 0) "
+        "         (>= x2 x1))))",
         g_test_eval_state);
     TEST_ASSERT_EQUAL_PTR(clj_true, ok);
 }
