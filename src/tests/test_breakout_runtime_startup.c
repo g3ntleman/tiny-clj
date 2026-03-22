@@ -903,7 +903,10 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
     uint16_t pixels[320u * 240u] = {0};
     VgFrameBuffer fb = {0};
     VgRenderSlotState render_state = {0};
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
+    size_t previous_limit = memory_get_heap_limit_bytes();
+    bool caught_oom = false;
+
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
     TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 320u, 240u, pixels, 320u * 240u));
 
     ID state_atom_id = eval_string(
@@ -928,24 +931,33 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
     }
     TEST_ASSERT_TRUE(initial_rendered);
 
-    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
-    for (int i = 0; i < 200; i++) {
-        usleep(20000);
-        ID snapshot = atom_deref_owned(ctx.bundle.game_scene_atom);
-        if (snapshot) {
-            vg_rendered_state_capture_begin(ctx.bundle.game_slot_index, (uint32_t)(i + 2), (uint32_t)platform_current_time_ms());
-            VgRenderFrameSlotResult r = {0};
-            if (vg_render_frame_slot_record_result_at_ms(snapshot, &render_state, &fb,
-                    (uint32_t)(i + 2), (uint32_t)platform_current_time_ms(),
-                    render_state.has_animation, &r)) {
-                vg_rendered_state_capture_commit();
-            } else {
-                vg_rendered_state_capture_discard();
+    TRY {
+        TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+        for (int i = 0; i < 200; i++) {
+            usleep(20000);
+            ID snapshot = atom_deref_owned(ctx.bundle.game_scene_atom);
+            if (snapshot) {
+                vg_rendered_state_capture_begin(ctx.bundle.game_slot_index, (uint32_t)(i + 2), (uint32_t)platform_current_time_ms());
+                VgRenderFrameSlotResult r = {0};
+                if (vg_render_frame_slot_record_result_at_ms(snapshot, &render_state, &fb,
+                        (uint32_t)(i + 2), (uint32_t)platform_current_time_ms(),
+                        render_state.has_animation, &r)) {
+                    vg_rendered_state_capture_commit();
+                } else {
+                    vg_rendered_state_capture_discard();
+                }
+                RELEASE(snapshot);
             }
-            RELEASE(snapshot);
         }
-    }
+    } CATCH(ex) {
+        caught_oom = true;
+        if (ex) {
+            print_exception(ex);
+        }
+    } END_TRY
+
     stop_runloop_thread();
+    memory_set_heap_limit_bytes(previous_limit);
 
     ID state = atom_deref((CljAtom *)state_atom_id);
     TEST_ASSERT_NOT_NULL(state);
@@ -978,6 +990,8 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
                       segment_seq ? (unsigned int)TAG(segment_seq) : 255u);
     }
     TEST_ASSERT_TRUE_MESSAGE(is_fixnum(segment_seq) && as_fixnum(segment_seq) > 1, seq_msg);
+    TEST_ASSERT_FALSE_MESSAGE(caught_oom,
+                              "play loop OOM: memory leak during timeline-driven scene updates");
 
     breakout_viewer_test_context_destroy(&ctx);
 }
