@@ -449,3 +449,23 @@ TEST(test_nonexistent_namespace_throws) {
     } END_TRY
 }
 
+// Test: Qualified native namespaces must not auto-require during symbol resolution.
+TEST(test_qualified_native_symbol_requires_explicit_require) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    (void)eval_string("(ns-unload 'tiny-fx.sound-native)", g_test_eval_state);
+
+    bool threw_unresolved = false;
+    TRY {
+        (void)eval_string("tiny-fx.sound-native/sound-play-sfx!", g_test_eval_state);
+    } CATCH(ex) {
+        threw_unresolved = true;
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(threw_unresolved,
+                             "qualified symbol lookup must not auto-require tiny-fx.sound-native");
+
+    ID loaded = eval_string("(do (require 'tiny-fx.sound-native) (fn? tiny-fx.sound-native/sound-play-sfx!))",
+                            g_test_eval_state);
+    TEST_ASSERT_EQUAL_PTR(clj_true, loaded);
+}

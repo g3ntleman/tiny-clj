@@ -2643,18 +2643,6 @@ static INLINE bool is_builtin_function(CljSymbol *symbol) {
           symbol == SYM_DOTIMES);
 }
 
-static INLINE bool should_lazy_require_native_namespace(const char *ns_name) {
-  if (!ns_name) {
-    return false;
-  }
-  return strcmp(ns_name, "tiny-fx.sound-native") == 0
-#ifdef DEBUG
-      || strcmp(ns_name, "tiny-fx.sound-debug") == 0
-      || strcmp(ns_name, "tiny-fx.gfx-bench") == 0
-#endif
-      ;
-}
-
 ID eval_symbol(CljSymbol *symbol, EvalState *st) {
   if (!symbol) {
     return NULL;
@@ -2728,15 +2716,6 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     }
 
     const char *ns_cname = symbol->ns_name->cname;
-    EvalState *req_st = st ? st : get_global_eval_state();
-    if (should_lazy_require_native_namespace(ns_cname) && req_st &&
-        require_namespace_by_name(req_st, ns_cname)) {
-      resolved = ns_resolve(st, symbol);
-      if (resolved != NOT_FOUND) {
-        return resolved;
-      }
-    }
-
     // Qualified symbol not found in target namespace
     const char *cname = symbol->cname ? symbol->cname : "unknown";
     bool suggest_require = false;
