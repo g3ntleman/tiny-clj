@@ -103,14 +103,16 @@
         events (:events state)
         state-without-events (assoc state :events [])]
     (when (and (map? (:ball-segment state-without-events))
-               (not @tiny-breakout.runtime/segment-watch-active*))
+               (not @tiny-breakout.runtime/segment-watch-active*)
+               @event/gfx-timeline-loaded?)
       (event/on {:source :timeline :id tiny-breakout.runtime/segment-watch-id}
                 tiny-breakout.runtime/on-segment-timeline-event!
                 tiny-breakout.runtime/segment-watch-opts)
       (reset! tiny-breakout.runtime/segment-watch-active* true))
     (reset! state* state-without-events)
     (reset! scene* (scene-record state-without-events))
-    (if (map? (:ball-segment state-without-events))
+    (if (and (map? (:ball-segment state-without-events))
+             @event/gfx-timeline-loaded?)
       (do
         ;; Defer kick: synchronous kick from inside a timeline poll/callback can
         ;; re-enter poll-watchers! on the same C stack and overflow (runloop test).
@@ -360,5 +362,6 @@
 
 (defn start-runtime!
   [& _args]
+  (event/preload-timeline-runtime!)
   (tiny-breakout.runtime/configure-input-watchers!)
   nil)
