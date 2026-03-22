@@ -130,7 +130,7 @@ static inline void update_debug_output_active(void) {
 }
 
 static SubjectiveCZombieLogFn g_zombie_log_fn = NULL;
-static size_t g_heap_limit_bytes = 0;
+static size_t g_heap_limit_bytes = SIZE_MAX;
 
 /** @brief Set zombie logging callback. */
 void subjective_c_set_zombie_log_fn(SubjectiveCZombieLogFn fn) {
@@ -173,7 +173,7 @@ size_t memory_tracked_raw_allocation_size(const void *ptr) {
 }
 
 bool memory_heap_limit_would_exceed(size_t released_size, size_t requested_size) {
-  if (g_heap_limit_bytes == 0) {
+  if (g_heap_limit_bytes == SIZE_MAX) {
     return false;
   }
   size_t current = memory_current_usage_bytes();

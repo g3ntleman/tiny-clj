@@ -7650,7 +7650,7 @@ static ID native_tinyclj_runtime_stats(ID *args, unsigned int argc) {
 
   {
     size_t heap_limit = memory_get_heap_limit_bytes();
-    if (heap_limit > 0u) {
+    if (heap_limit < SIZE_MAX) {
       CljSymbol *k_heap_limit_bytes = intern_symbol_global(":heap-limit-bytes");
       if (k_heap_limit_bytes) {
         int32_t heap_limit_fixnum = (heap_limit > (size_t)FIXNUM_MAX)

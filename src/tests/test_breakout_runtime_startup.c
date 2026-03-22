@@ -903,10 +903,8 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
     uint16_t pixels[320u * 240u] = {0};
     VgFrameBuffer fb = {0};
     VgRenderSlotState render_state = {0};
-    size_t previous_limit = memory_get_heap_limit_bytes();
-    bool caught_oom = false;
 
-    TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
+    TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
     TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 320u, 240u, pixels, 320u * 240u));
 
     ID state_atom_id = eval_string(
@@ -931,33 +929,51 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
     }
     TEST_ASSERT_TRUE(initial_rendered);
 
-    TRY {
-        TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
-        for (int i = 0; i < 200; i++) {
-            usleep(20000);
-            ID snapshot = atom_deref_owned(ctx.bundle.game_scene_atom);
-            if (snapshot) {
-                vg_rendered_state_capture_begin(ctx.bundle.game_slot_index, (uint32_t)(i + 2), (uint32_t)platform_current_time_ms());
-                VgRenderFrameSlotResult r = {0};
-                if (vg_render_frame_slot_record_result_at_ms(snapshot, &render_state, &fb,
-                        (uint32_t)(i + 2), (uint32_t)platform_current_time_ms(),
-                        render_state.has_animation, &r)) {
-                    vg_rendered_state_capture_commit();
-                } else {
-                    vg_rendered_state_capture_discard();
-                }
-                RELEASE(snapshot);
-            }
-        }
-    } CATCH(ex) {
-        caught_oom = true;
-        if (ex) {
-            print_exception(ex);
-        }
-    } END_TRY
+    /* Build a brick-collision event so the loop exercises spatial dispatch too. */
+    ID brick_event = eval_string(
+        "(do "
+        "  (let [b (first (:bricks @tiny-breakout.runtime/state*)) "
+        "        bx (:x b) by (:y b) bw (:w b) bh (:h b)] "
+        "    {:source :spatial "
+        "     :id :ball-vs-brick "
+        "     :rule {:id :ball-vs-brick} "
+        "     :phase :enter "
+        "     :other (:id b) "
+        "     :self-aabb {:min-x bx :min-y (+ by bh) :max-x (+ bx 4) :max-y (+ by bh 4)} "
+        "     :other-aabb {:min-x bx :min-y by :max-x (+ bx bw) :max-y (+ by bh)}}))",
+        ctx.st);
+    TEST_ASSERT_NOT_NULL(brick_event);
+    RETAIN(brick_event);
 
+    size_t mem_before = memory_current_usage_bytes();
+
+    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+
+    /* Dispatch one brick collision to exercise the spatial callback path. */
+    TEST_ASSERT_TRUE(event_loop_enqueue_ingress_call((CljObject *)ctx.bundle.spatial_callback, brick_event));
+    RELEASE(brick_event);
+
+    for (int i = 0; i < 600; i++) {
+        usleep(16000);
+        viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, NULL, false);
+        ID snapshot = atom_deref_owned(ctx.bundle.game_scene_atom);
+        if (snapshot) {
+            vg_rendered_state_capture_begin(ctx.bundle.game_slot_index, (uint32_t)(i + 2), (uint32_t)platform_current_time_ms());
+            VgRenderFrameSlotResult r = {0};
+            if (vg_render_frame_slot_record_result_at_ms(snapshot, &render_state, &fb,
+                    (uint32_t)(i + 2), (uint32_t)platform_current_time_ms(),
+                    render_state.has_animation, &r)) {
+                vg_rendered_state_capture_commit();
+            } else {
+                vg_rendered_state_capture_discard();
+            }
+            RELEASE(snapshot);
+        }
+    }
     stop_runloop_thread();
-    memory_set_heap_limit_bytes(previous_limit);
+
+    size_t mem_after = memory_current_usage_bytes();
+    size_t mem_growth = (mem_after > mem_before) ? (mem_after - mem_before) : 0u;
 
     ID state = atom_deref((CljAtom *)state_atom_id);
     TEST_ASSERT_NOT_NULL(state);
@@ -990,8 +1006,14 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
                       segment_seq ? (unsigned int)TAG(segment_seq) : 255u);
     }
     TEST_ASSERT_TRUE_MESSAGE(is_fixnum(segment_seq) && as_fixnum(segment_seq) > 1, seq_msg);
-    TEST_ASSERT_FALSE_MESSAGE(caught_oom,
-                              "play loop OOM: memory leak during timeline-driven scene updates");
+
+    /* Play loop memory must stay bounded. Allow up to 8KB growth for the last
+       scene/state still in atoms plus one pending timer closure. Anything more
+       indicates a leak that will eventually OOM under the 600KB host budget. */
+    char growth_msg[128];
+    mini_snprintf(growth_msg, sizeof(growth_msg),
+                  "play loop leaked %zu bytes (limit 8192)", mem_growth);
+    TEST_ASSERT_TRUE_MESSAGE(mem_growth <= 8192u, growth_msg);
 
     breakout_viewer_test_context_destroy(&ctx);
 }

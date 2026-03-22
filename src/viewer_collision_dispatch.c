@@ -87,7 +87,7 @@ static bool viewer_collision_event_budget_available(void) {
      * throw_oom() on the host UI thread.
      */
     size_t heap_limit = memory_get_heap_limit_bytes();
-    if (heap_limit > 0u) {
+    if (heap_limit < SIZE_MAX) {
         size_t heap_used = memory_current_usage_bytes();
         if (heap_used >= heap_limit) {
             return false;

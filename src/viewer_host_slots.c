@@ -111,15 +111,12 @@ size_t viewer_tiny_fx_host_heap_limit_bytes(void) {
     return (size_t)TINYCLJ_TINY_FX_HOST_HEAP_LIMIT_BYTES;
 #endif
 #else
-    return 0u;
+    return SIZE_MAX;
 #endif
 }
 
 void viewer_tiny_fx_host_apply_heap_limit(void) {
     size_t host_heap_limit = viewer_tiny_fx_host_heap_limit_bytes();
-    if (host_heap_limit == 0u) {
-        return;
-    }
     memory_set_heap_limit_bytes(host_heap_limit);
 }
 
