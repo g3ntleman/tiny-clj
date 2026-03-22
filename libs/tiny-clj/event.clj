@@ -28,8 +28,7 @@
       (= source :timeline) (if (and (nil? callback) (not @gfx-timeline-loaded?))
                              nil
                              (do
-                               (when (not @gfx-timeline-loaded?)
-                                 (throw "event/on: :timeline source requires preloaded tiny-fx.gfx-timeline"))
+                               (preload-timeline-runtime!)
                                (tiny-fx.gfx-timeline/watch id callback opts)))
       :else (throw (str "event/on: unsupported :source " source)))))
 
