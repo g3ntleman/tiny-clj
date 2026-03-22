@@ -93,12 +93,12 @@ static bool clip_rects_overlap(VgClipRect a, VgClipRect b) {
 static bool dirty_union_area_within_merge_factor(uint32_t union_area, uint32_t separate_area) {
     /*
      * Keep this comparison division-free and overflow-safe:
-     *   union_area / separate_area <= 3 / 2
+     *   union_area / separate_area <= 4 / 3
      * becomes
-     *   union_area * 2 <= separate_area * 3
+     *   union_area * 3 <= separate_area * 4
      */
-    const uint64_t lhs = (uint64_t)union_area * 2u;
-    const uint64_t rhs = (uint64_t)separate_area * 3u;
+    const uint64_t lhs = (uint64_t)union_area * 3u;
+    const uint64_t rhs = (uint64_t)separate_area * 4u;
     return lhs <= rhs;
 }
 

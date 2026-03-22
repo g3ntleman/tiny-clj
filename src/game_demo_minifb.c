@@ -887,6 +887,15 @@ static void *viewer_render_thread_main(void *arg) {
                     }
                 }
             }
+            if (rendered && slot_props_unchanged && !use_refined_dirty_rects) {
+                /*
+                 * No detected dirty leaves for this slot revision. Avoid
+                 * falling back to the full slot dirty rect, which forces
+                 * full-screen transfer plans while the image is unchanged.
+                 */
+                slot_result.dirty_rect = (VgClipRect){0};
+                slot_result.dirty_pixels = 0u;
+            }
             if (rendered) {
                 vg_rendered_state_capture_commit();
             } else {
@@ -911,15 +920,17 @@ static void *viewer_render_thread_main(void *arg) {
                     }
                 }
                 g_render_thread.last_rendered_generation[i] = curr_gen;
-                frame_changed_slots++;
-                frame_dirty_pixels += slot_result.dirty_pixels;
-                if (use_refined_dirty_rects &&
-                    frame_dirty_rect_count + refined_dirty_count <= VIEWER_MAX_DIRTY_PLAN_RECTS) {
-                    for (size_t dirty_i = 0; dirty_i < refined_dirty_count; dirty_i++) {
-                        frame_dirty_rects[frame_dirty_rect_count++] = refined_dirty_rects[dirty_i];
+                if (slot_result.dirty_pixels > 0u && !vg_clip_rect_is_empty(slot_result.dirty_rect)) {
+                    frame_changed_slots++;
+                    frame_dirty_pixels += slot_result.dirty_pixels;
+                    if (use_refined_dirty_rects &&
+                        frame_dirty_rect_count + refined_dirty_count <= VIEWER_MAX_DIRTY_PLAN_RECTS) {
+                        for (size_t dirty_i = 0; dirty_i < refined_dirty_count; dirty_i++) {
+                            frame_dirty_rects[frame_dirty_rect_count++] = refined_dirty_rects[dirty_i];
+                        }
+                    } else if (frame_dirty_rect_count < VIEWER_MAX_DIRTY_PLAN_RECTS) {
+                        frame_dirty_rects[frame_dirty_rect_count++] = slot_result.dirty_rect;
                     }
-                } else if (frame_dirty_rect_count < VIEWER_MAX_DIRTY_PLAN_RECTS) {
-                    frame_dirty_rects[frame_dirty_rect_count++] = slot_result.dirty_rect;
                 }
             }
         }
@@ -1340,6 +1351,7 @@ int tinyclj_tiny_fx_host_app_run(void) {
         viewer_sync_configured_slots(&demo_bundle, &spatial_rules, &g_slot_change_tracker, true);
 
         ViewerFrameRenderResult frame_result = viewer_poll_render_frame();
+        bool has_new_render_frame = frame_result.frame_serial != last_presented_frame_serial;
         if (viewer_should_run_collision_step(frame_result.frame_serial, &last_collision_frame_serial)) {
             VgClipRect collision_dirty_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
             size_t collision_dirty_count = viewer_collect_collision_dirty_rects(collision_dirty_rects,
@@ -1352,14 +1364,14 @@ int tinyclj_tiny_fx_host_app_run(void) {
         }
 
         viewer_expand_rgb565_to_window(fb_pixels, window_pixels, (size_t)VIEW_W * (size_t)VIEW_H);
-        if (runtime_flags.redraw_overlay_enabled) {
+        if (runtime_flags.redraw_overlay_enabled && has_new_render_frame && frame_result.transfer_rects > 0u) {
             VgClipRect overlay_rects[VIEWER_MAX_DIRTY_PLAN_RECTS] = {0};
             size_t overlay_count = viewer_copy_last_transfer_rects(overlay_rects,
                                                                    VIEWER_MAX_DIRTY_PLAN_RECTS);
             viewer_draw_redraw_overlay(window_pixels, VIEW_W, VIEW_H, overlay_rects, overlay_count);
         }
 
-        if (frame_result.frame_serial != last_presented_frame_serial) {
+        if (has_new_render_frame) {
             perf_window_record_frame(&perf_window,
                                      frame_result.dirty_pixels,
                                      frame_result.changed_slots,
