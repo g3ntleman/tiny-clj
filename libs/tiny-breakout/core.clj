@@ -77,6 +77,12 @@
                             :ball-vy launch-speed-y)
                      now-ms))
 
+(defn skip-title-launch-state
+  "Same domain state as after :fire on the title screen: level 0, :play, first ball segment.
+  now-ms is used for segment timing (use `current-time-ms` from the host)."
+  [now-ms]
+  (launch-from-serve (fresh-game-state (init-state)) now-ms))
+
 (defn init-state
   "Returns deterministic baseline game-state for one-screen breakout."
   []
@@ -274,87 +280,91 @@
       (clear-events state)
       (let [anchor (ball-anchor-from-event event)
             ball-x (:x anchor)
-            ball-y (:y anchor)]
-        (cond
-          (= rule-id :ball-vs-paddle)
-          (let [other-aabb (:other-aabb event)
-                paddle-x (:min-x other-aabb)
-                next-state (-> state
-                               (clear-events)
-                               (anchor-ball ball-x (- (:min-y other-aabb) ball-size))
-                               (assoc :ball-vx (paddle-bounce-vx paddle-x ball-x)
-                                      :ball-vy (- (max 2 (abs (:ball-vy state))))
-                                      :events (conj (:events (clear-events state)) :paddle-hit)))]
-            (plan-next-segment next-state now-ms))
+            ball-y (:y anchor)
+            result
+            (cond
+              (= rule-id :ball-vs-paddle)
+              (let [other-aabb (:other-aabb event)
+                    paddle-x (:min-x other-aabb)
+                    next-state (-> state
+                                   (clear-events)
+                                   (anchor-ball ball-x (- (:min-y other-aabb) ball-size))
+                                   (assoc :ball-vx (paddle-bounce-vx paddle-x ball-x)
+                                          :ball-vy (- (max 2 (abs (:ball-vy state))))
+                                          :events (conj (:events (clear-events state)) :paddle-hit)))]
+                (plan-next-segment next-state now-ms))
 
-          (= rule-id :ball-vs-brick)
-          (let [other-id (:other event)
-                removal (remove-brick-by-id (:bricks state) other-id)
-                hit (:hit removal)
-                remaining (:bricks removal)]
-            (if (nil? hit)
-              (clear-events state)
-              (let [self-aabb (:self-aabb event)
-                    other-aabb (:other-aabb event)
-                    overlap-x (overlap-width self-aabb other-aabb)
-                    overlap-y (overlap-height self-aabb other-aabb)
-                    horizontal? (< overlap-x overlap-y)
-                    bounced-vx (if horizontal? (- (:ball-vx state)) (:ball-vx state))
-                    bounced-vy (if horizontal? (:ball-vy state) (- (:ball-vy state)))
-                    snapped-x (if horizontal?
-                                (if (> (:ball-vx state) 0)
-                                  (- (:min-x other-aabb) ball-size)
-                                  (+ (:max-x other-aabb) 1))
-                                ball-x)
-                    snapped-y (if horizontal?
-                                ball-y
-                                (if (> (:ball-vy state) 0)
-                                  (- (:min-y other-aabb) ball-size)
-                                  (+ (:max-y other-aabb) 1)))
-                    state2 (-> state
-                               (clear-events)
-                               (anchor-ball snapped-x snapped-y)
-                               (assoc :bricks remaining
-                                      :score (+ (:score state) (:points hit))
-                                      :ball-vx bounced-vx
-                                      :ball-vy bounced-vy
-                                      :events (conj (:events (clear-events state)) :brick-hit)))
-                    advanced (finish-brick-hit state2 remaining)]
-                (if (= (:phase advanced) :play)
-                  (plan-next-segment advanced now-ms)
-                  advanced))))
+              (= rule-id :ball-vs-brick)
+              (let [other-id (:other event)
+                    removal (remove-brick-by-id (:bricks state) other-id)
+                    hit (:hit removal)
+                    remaining (:bricks removal)]
+                (if (nil? hit)
+                  (clear-events state)
+                  (let [self-aabb (:self-aabb event)
+                        other-aabb (:other-aabb event)
+                        overlap-x (overlap-width self-aabb other-aabb)
+                        overlap-y (overlap-height self-aabb other-aabb)
+                        horizontal? (< overlap-x overlap-y)
+                        bounced-vx (if horizontal? (- (:ball-vx state)) (:ball-vx state))
+                        bounced-vy (if horizontal? (:ball-vy state) (- (:ball-vy state)))
+                        snapped-x (if horizontal?
+                                    (if (> (:ball-vx state) 0)
+                                      (- (:min-x other-aabb) ball-size)
+                                      (+ (:max-x other-aabb) 1))
+                                    ball-x)
+                        snapped-y (if horizontal?
+                                    ball-y
+                                    (if (> (:ball-vy state) 0)
+                                      (- (:min-y other-aabb) ball-size)
+                                      (+ (:max-y other-aabb) 1)))
+                        state2 (-> state
+                                   (clear-events)
+                                   (anchor-ball snapped-x snapped-y)
+                                   (assoc :bricks remaining
+                                          :score (+ (:score state) (:points hit))
+                                          :ball-vx bounced-vx
+                                          :ball-vy bounced-vy
+                                          :events (conj (:events (clear-events state)) :brick-hit)))
+                        advanced (finish-brick-hit state2 remaining)]
+                    (if (= (:phase advanced) :play)
+                      (plan-next-segment advanced now-ms)
+                      advanced))))
 
-          :else
-          (clear-events state))))))
+              :else
+              (clear-events state))]
+        result))))
 
 (defn apply-segment-end-at-ms
   "Pure domain transition for one expected segment-end notification.
 now-ms may be nil; in that case the segment end timestamp is used."
   [state segment-id now-ms]
-  (let [segment (:ball-segment state)]
-    (if (or (nil? segment) (not= (:id segment) segment-id))
-      (clear-events state)
-      (let [wall (:wall segment)
-            end-ms (:end-ms segment)
-            resume-ms (if (number? now-ms) now-ms end-ms)
-            anchored (-> state
-                         (clear-events)
-                         (anchor-ball (:to-x segment) (:to-y segment)))]
-        (cond
-          (= wall :left)
-          (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) resume-ms)
+  (let [segment (:ball-segment state)
+        result
+        (if (or (nil? segment) (not= (:id segment) segment-id))
+          (clear-events state)
+          (let [wall (:wall segment)
+                end-ms (:end-ms segment)
+                resume-ms (if (number? now-ms) now-ms end-ms)
+                anchored (-> state
+                             (clear-events)
+                             (anchor-ball (:to-x segment) (:to-y segment)))]
+            (cond
+              (= wall :left)
+              (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) resume-ms)
 
-          (= wall :right)
-          (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) resume-ms)
+              (= wall :right)
+              (plan-next-segment (assoc anchored :ball-vx (- (:ball-vx anchored))) resume-ms)
 
-          (= wall :top)
-          (plan-next-segment (assoc anchored :ball-vy (- (:ball-vy anchored))) resume-ms)
+              (= wall :top)
+              (plan-next-segment (assoc anchored :ball-vy (- (:ball-vy anchored))) resume-ms)
 
-          (= wall :bottom)
-          (apply-bottom-out anchored)
+              (= wall :bottom)
+              (apply-bottom-out anchored)
 
-          :else
-          anchored)))))
+              :else
+              anchored)))]
+    result))
 
 (defn apply-segment-end
   "Pure domain transition for one expected segment-end notification."

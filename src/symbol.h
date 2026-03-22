@@ -403,6 +403,7 @@ extern StaticSymbolData sym_aset_data;
 extern StaticSymbolData sym_alength_data;
 extern StaticSymbolData sym_aclone_data;
 extern StaticSymbolData sym_run_next_task_data;
+extern StaticSymbolData sym_with_pool_data;
 extern StaticSymbolData sym_schedule_data;
 extern StaticSymbolData sym_schedule_periodic_data;
 extern StaticSymbolData sym_cancel_timer_data;

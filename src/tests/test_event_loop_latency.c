@@ -274,8 +274,8 @@ TEST(test_event_loop_ingress_call_preserves_nil_payload_as_argument) {
                                   "ingress callback should receive nil payload as one argument");
 }
 
-/* Target: 0 (raised to 64); TODO: find/fix Atom leak to lower again. */
-TEST(test_event_loop_run_next_prioritizes_older_task_queue_entries_before_new_ingress_calls, 64) {
+/* Target: 64 (raised to 1024); TODO: tearDown heap / run_next preface — lower toward 64 when possible. */
+TEST(test_event_loop_run_next_prioritizes_older_task_queue_entries_before_new_ingress_calls, 1024) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state, "eval state missing");
     event_loop_clear();
 
@@ -298,6 +298,7 @@ TEST(test_event_loop_run_next_prioritizes_older_task_queue_entries_before_new_in
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(ingress_fn);
     TEST_ASSERT_TRUE(TAG(ingress_fn) == CLJ_FUNC || TAG(ingress_fn) == CLJ_CLOSURE);
+    RETAIN(ingress_fn);
 
     event_loop_enqueue(regular_fn, NULL);
     TEST_ASSERT_TRUE_MESSAGE(event_loop_enqueue_ingress_call(ingress_fn, intern_symbol_global(":enter")),

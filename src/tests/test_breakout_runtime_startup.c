@@ -188,14 +188,6 @@ TEST(test_breakout_runtime_startup_host_app_fits_400k_startup_budget) {
         caught_ex = ex;
     } END_TRY
     stats = memory_profiler_get_stats();
-    fprintf(stderr,
-            "[startup-400k] budget=%zu reserved=%zu limit=%zu current=%zu peak=%zu headroom=%lld\n",
-            startup_budget,
-            startup_required_headroom,
-            startup_limit,
-            stats.current_memory_usage,
-            stats.peak_memory_usage,
-            (long long)startup_budget - (long long)stats.current_memory_usage);
     memory_set_heap_limit_bytes(previous_limit);
 
     if (init_ok) {
@@ -522,6 +514,8 @@ TEST(test_breakout_runtime_startup_fire_button_heap_profile_stays_bounded) {
         "(do "
         "  (require 'tiny-clj.gpio) "
         "  (require 'tiny-breakout.runtime) "
+        "  (require 'tiny-clj.event) "
+        "  (require 'tiny-fx.gfx-timeline) "
         "  (heap "
         "    (do "
         "      (tiny-breakout.runtime/start-runtime! nil) "
@@ -547,11 +541,6 @@ TEST(test_breakout_runtime_startup_fire_button_heap_profile_stays_bounded) {
     TEST_ASSERT_NOT_EQUAL(NOT_FOUND, peak);
     TEST_ASSERT_TRUE(is_fixnum(total));
     TEST_ASSERT_TRUE(is_fixnum(peak));
-
-    fprintf(stderr,
-            "[breakout-fire-heap] total=%d peak=%d\n",
-            as_fixnum(total),
-            as_fixnum(peak));
 
     TEST_ASSERT_TRUE_MESSAGE(as_fixnum(peak) < 128 * 1024,
                              "fire button path should stay below 128KB local peak");
@@ -911,9 +900,11 @@ TEST(test_breakout_runtime_startup_collision_step_runs_once_per_rendered_frame) 
 
 TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_driven_scene_updates) {
     BreakoutViewerTestContext ctx = {0};
-    VgSlotChangeTracker slot_change_tracker = {0};
+    uint16_t pixels[320u * 240u] = {0};
+    VgFrameBuffer fb = {0};
+    VgRenderSlotState render_state = {0};
     TEST_ASSERT_TRUE(breakout_viewer_test_context_init(&ctx));
-    TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&slot_change_tracker, ctx.bundle.slot_count));
+    TEST_ASSERT_TRUE(vg_framebuffer_init(&fb, 320u, 240u, pixels, 320u * 240u));
 
     ID state_atom_id = eval_string(
         "(do "
@@ -924,25 +915,45 @@ TEST(test_breakout_runtime_startup_runloop_play_loop_survives_timeline_watch_dri
     TEST_ASSERT_NOT_NULL(state_atom_id);
     TEST_ASSERT_EQUAL_UINT8(CLJ_ATOM, TAG(state_atom_id));
 
-    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
-
-    for (int i = 0; i < 300; i++) {
-        usleep(20000);
-        viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
-        (void)viewer_collision_detect_step(&ctx.bundle,
-                                           &ctx.spatial_rules,
-                                           (uint32_t)platform_current_time_ms(),
-                                           NULL,
-                                           0u);
+    vg_rendered_state_capture_begin(ctx.bundle.game_slot_index, 1u, (uint32_t)platform_current_time_ms());
+    VgRenderFrameSlotResult initial_slot_result = {0};
+    bool initial_rendered = vg_render_frame_slot_record_result_at_ms(
+        atom_deref(ctx.bundle.game_scene_atom), &render_state, &fb,
+        1u, (uint32_t)platform_current_time_ms(), false, &initial_slot_result);
+    if (initial_rendered) {
+        vg_rendered_state_capture_commit();
+    } else {
+        vg_rendered_state_capture_discard();
     }
+    TEST_ASSERT_TRUE(initial_rendered);
 
+    TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
+    for (int i = 0; i < 200; i++) {
+        usleep(20000);
+        ID snapshot = atom_deref_owned(ctx.bundle.game_scene_atom);
+        if (snapshot) {
+            vg_rendered_state_capture_begin(ctx.bundle.game_slot_index, (uint32_t)(i + 2), (uint32_t)platform_current_time_ms());
+            VgRenderFrameSlotResult r = {0};
+            if (vg_render_frame_slot_record_result_at_ms(snapshot, &render_state, &fb,
+                    (uint32_t)(i + 2), (uint32_t)platform_current_time_ms(),
+                    render_state.has_animation, &r)) {
+                vg_rendered_state_capture_commit();
+            } else {
+                vg_rendered_state_capture_discard();
+            }
+            RELEASE(snapshot);
+        }
+    }
     stop_runloop_thread();
-    vg_slot_change_tracker_destroy(&slot_change_tracker);
 
     ID state = atom_deref((CljAtom *)state_atom_id);
     TEST_ASSERT_NOT_NULL(state);
     TEST_ASSERT_TRUE(is_map(state));
-    TEST_ASSERT_NOT_NULL(viewer_frame_scene_from_atom(ctx.bundle.game_scene_atom));
+    ID phase = map_get_sentinel(state, intern_symbol_global(":phase"), NULL);
+    ID segment_seq = map_get_sentinel(state, intern_symbol_global(":segment-id-seq"), NULL);
+    TEST_ASSERT_EQUAL_PTR(intern_symbol_global(":play"), phase);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(segment_seq) && as_fixnum(segment_seq) > 1,
+                             "ball should have replanned beyond the first launched segment");
 
     breakout_viewer_test_context_destroy(&ctx);
 }
@@ -957,12 +968,8 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
 
     TRY {
         TEST_ASSERT_TRUE(breakout_viewer_test_context_init_with_heap_budget(&ctx, true));
-        fprintf(stderr, "[post-launch-stage] after-init=%zu\n", memory_current_usage_bytes());
         memory_set_heap_limit_bytes(stricter_limit);
         TEST_ASSERT_TRUE(vg_slot_change_tracker_init(&slot_change_tracker, ctx.bundle.slot_count));
-        fprintf(stderr, "[post-launch-stage] after-slot-tracker=%zu limit=%zu\n",
-                memory_current_usage_bytes(),
-                memory_get_heap_limit_bytes());
 
         ID ok = eval_string(
             "(do "
@@ -971,7 +978,6 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
             "  true)",
             ctx.st);
         TEST_ASSERT_EQUAL_PTR(clj_true, ok);
-        fprintf(stderr, "[post-launch-stage] after-start-runtime=%zu\n", memory_current_usage_bytes());
 
         ok = eval_string(
             "(do "
@@ -979,32 +985,17 @@ TEST(test_breakout_runtime_startup_post_launch_runloop_frames_fit_debug_heap_lim
             "  true)",
             ctx.st);
         TEST_ASSERT_EQUAL_PTR(clj_true, ok);
-        fprintf(stderr, "[post-launch-stage] after-launch=%zu\n", memory_current_usage_bytes());
 
         TEST_ASSERT_TRUE(start_runloop_thread(ctx.st));
-        fprintf(stderr, "[post-launch-stage] after-runloop-start=%zu\n", memory_current_usage_bytes());
 
         for (int i = 0; i < 90; i++) {
-            size_t before_sleep = memory_current_usage_bytes();
             usleep(16000);
-            size_t before_sync = memory_current_usage_bytes();
             viewer_sync_configured_slots(&ctx.bundle, &ctx.spatial_rules, &slot_change_tracker, true);
-            size_t after_sync = memory_current_usage_bytes();
             (void)viewer_collision_detect_step(&ctx.bundle,
                                                &ctx.spatial_rules,
                                                (uint32_t)platform_current_time_ms(),
                                                NULL,
                                                0u);
-            size_t after_collision = memory_current_usage_bytes();
-            if ((i < 8) || (i % 10 == 9) || (after_collision > (580u * 1024u))) {
-                fprintf(stderr,
-                        "[post-launch-frame] i=%d before-sleep=%zu before-sync=%zu after-sync=%zu after-collision=%zu\n",
-                        i,
-                        before_sleep,
-                        before_sync,
-                        after_sync,
-                        after_collision);
-            }
         }
     } CATCH(ex) {
         caught = true;

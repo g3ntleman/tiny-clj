@@ -38,6 +38,11 @@
 #include "tiny_fx_macos_app.h"
 #endif
 
+static bool viewer_perf_stderr_diag_enabled(void) {
+    const char *v = getenv("TINYCLJ_VIEWER_PERF_DIAG");
+    return v && v[0] != '\0' && v[0] != '0';
+}
+
 #define VIEW_W 320
 #define VIEW_H 240
 #define VIEW_DEFAULT_WINDOW_SCALE 2u
@@ -838,7 +843,8 @@ static void *viewer_render_thread_main(void *arg) {
             if (!g_scene_slot_atoms[i]) {
                 continue;
             }
-            ID snapshot = atom_peek(g_scene_slot_atoms[i]);
+            /* Strong ref: runloop may reset! the atom while we render (atom_peek would be UAF). */
+            ID snapshot = atom_deref_owned(g_scene_slot_atoms[i]);
             if (!snapshot) {
                 continue;
             }
@@ -933,6 +939,7 @@ static void *viewer_render_thread_main(void *arg) {
                     }
                 }
             }
+            RELEASE(snapshot);
         }
         if (frame_skipped_total > 0u) {
             uint64_t frame_max = atomic_load_explicit(&g_render_thread.skipped_max_frame, memory_order_relaxed);
@@ -1421,29 +1428,31 @@ int tinyclj_tiny_fx_host_app_run(void) {
                            dt_avg_ms,
                            up_avg_ms);
             macos_viewer_set_window_title(title);
-            if (perf_snapshot.skipped_generations > 0u) {
-                fprintf(stderr,
-                        "[viewer] skip-diag: total=%llu frame-max=%llu slot-max=%llu "
-                        "lock-max=%.0fus fps=%.1f dt=%.1f ws=%.1f up=%.1f\n",
-                        (unsigned long long)perf_snapshot.skipped_generations,
-                        (unsigned long long)perf_snapshot.skipped_max_frame,
-                        (unsigned long long)perf_snapshot.skipped_max_slot,
-                        perf_snapshot.max_render_lock_hold_us,
-                        perf_snapshot.fps,
-                        dt_avg_ms,
-                        ws_avg_ms,
-                        up_avg_ms);
-            }
-            if (long_frame_count > 0u) {
-                fprintf(stderr,
-                        "[viewer] stutter-diag: long=%u dt-max=%.1fms "
-                        "fps=%.1f dt=%.1f ws=%.1f up=%.1f\n",
-                        long_frame_count,
-                        dt_max_ms,
-                        perf_snapshot.fps,
-                        dt_avg_ms,
-                        ws_avg_ms,
-                        up_avg_ms);
+            if (viewer_perf_stderr_diag_enabled()) {
+                if (perf_snapshot.skipped_generations > 0u) {
+                    fprintf(stderr,
+                            "[viewer] skip-diag: total=%llu frame-max=%llu slot-max=%llu "
+                            "lock-max=%.0fus fps=%.1f dt=%.1f ws=%.1f up=%.1f\n",
+                            (unsigned long long)perf_snapshot.skipped_generations,
+                            (unsigned long long)perf_snapshot.skipped_max_frame,
+                            (unsigned long long)perf_snapshot.skipped_max_slot,
+                            perf_snapshot.max_render_lock_hold_us,
+                            perf_snapshot.fps,
+                            dt_avg_ms,
+                            ws_avg_ms,
+                            up_avg_ms);
+                }
+                if (long_frame_count > 0u) {
+                    fprintf(stderr,
+                            "[viewer] stutter-diag: long=%u dt-max=%.1fms "
+                            "fps=%.1f dt=%.1f ws=%.1f up=%.1f\n",
+                            long_frame_count,
+                            dt_max_ms,
+                            perf_snapshot.fps,
+                            dt_avg_ms,
+                            ws_avg_ms,
+                            up_avg_ms);
+                }
             }
             long_frame_count = 0u;
         }

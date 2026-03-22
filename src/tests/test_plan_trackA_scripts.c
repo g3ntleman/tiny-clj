@@ -66,16 +66,17 @@ TEST(test_plan_trackB_core_async_qualified_go_returns_channel_result) {
 
     ID result = NULL;
     TRY {
-        result = eval_string(
-            "(do "
-            "  (require 'clojure.core.async) "
-            "  (defn __drain_tasks_for_test__ [] "
-            "    (if (run-next-task) "
-            "      (__drain_tasks_for_test__) "
-            "      nil)) "
-            "  (let [out (clojure.core.async/go (+ 1 2))] "
+        eval_string("(require 'clojure.core.async)", g_test_eval_state);
+        eval_string(
+            "(defn __drain_tasks_for_test__ [] "
+            "  (if (run-next-task) "
             "    (__drain_tasks_for_test__) "
-            "    (clojure.core.async/poll! out)))",
+            "    nil))",
+            g_test_eval_state);
+        result = eval_string(
+            "(let [out (clojure.core.async/go (+ 1 2))] "
+            "  (__drain_tasks_for_test__) "
+            "  (clojure.core.async/poll! out))",
             g_test_eval_state);
     } CATCH(ex) {
         if (ex) {

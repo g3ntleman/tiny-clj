@@ -628,6 +628,8 @@
 ; ============================================================================
 ^#^{:doc "Runs the next task in the event loop queue, if any. Returns true if a task was run, false otherwise."}
 (defn run-next-task [] :native)
+^#^{:doc "Calls f inside a nested autorelease pool. Temporaries created by f are freed on return; the return value is transferred to the outer pool."}
+(defn with-pool [f] :native)
 ^#^{:doc "Schedules work after ms milliseconds. Second arg can be a function f, or options map {:fn f :id k :period-ms p}. With :id, scheduling upserts by equal key. If :period-ms > 0, the timer is periodic."}
 (defn schedule [ms f] :native)
 ^#^{:doc "Schedules periodic work. Third arg can be function f or options map {:fn f :id k}. With :id, scheduling upserts by equal key."}

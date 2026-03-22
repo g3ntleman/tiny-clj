@@ -32,6 +32,7 @@ set(TINYCLJ_EMBEDDED_CLOJURE_TINY_FX_ENTRIES
     "libs/tiny-fx/sound-native.clj|tiny-fx.sound-native.clj.inc"
     "libs/tiny-fx/assets.clj|tiny-fx.assets.clj.inc"
     "libs/tiny-fx/gfx-scene.clj|tiny-gfx.scene.clj.inc"
+    "libs/tiny-fx/gfx-timeline.clj|tiny-fx.gfx-timeline.clj.inc"
     "libs/tiny-fx/gfx.clj|tiny-gfx.runtime.clj.inc"
     "libs/tiny-fx/startup.clj|tiny-fx.startup.clj.inc"
     "libs/tiny-fx/game-demo.clj|tiny-fx.game-demo.clj.inc"

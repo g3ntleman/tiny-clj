@@ -7,6 +7,9 @@
 
 (def ^:private poll-timer-id :tiny-fx/timeline-watch-poll)
 (def ^:private poll-period-ms 1)
+;; When next-poll-delay-ms is nil (e.g. renderer still shows stale :at-end after a fired
+;; callback, or no snapshot yet), poll at ~60fps instead of 1ms to avoid starving the loop.
+(def ^:private coarse-poll-ms 16)
 
 (defn- validate-watch
   [id f opts]
@@ -25,36 +28,45 @@
   "Runtime helper: checks watched timelines and emits one callback on each false->true :at-end edge."
   []
   (let [watchers @timeline-watchers*]
-    (loop [remaining (seq watchers)]
-      (when (seq remaining)
-          (let [[watch-id watcher] (first remaining)
-              progress (runtime/renderer-timeline-progress (:slot watcher)
-                                                          (:entity-id watcher)
-                                                          (:field watcher))
-              flagged (= true (:end-event progress))
-              at-end (and flagged (= true (:at-end progress)))
-              was-at-end (= true (:last-at-end watcher))]
-          (when (not= was-at-end at-end)
-            (swap! timeline-watchers*
-                   (fn [current]
-                     (if (contains? current watch-id)
-                       (assoc current
-                              watch-id
-                              (assoc (get current watch-id) :last-at-end at-end))
-                       current))))
-          (when (and at-end (not was-at-end))
-            ((:callback watcher)
-             {:source :timeline
-              :id (:id watcher)
-              :slot (:slot watcher)
-              :entity-id (:entity-id watcher)
-              :field (:field watcher)
-              :progress progress}))
-          (recur (next remaining))))))
-  (let [delay-ms (next-poll-delay-ms)]
-    (if (number? delay-ms)
-      (schedule delay-ms tiny-fx.gfx-timeline/poll-timer-spec)
-      (cancel-timer poll-timer-id)))
+    (let [callback-fired?
+          (loop [remaining (seq watchers)
+                 fired? false]
+            (if (seq remaining)
+              (let [[watch-id watcher] (first remaining)
+                    progress (runtime/renderer-timeline-progress (:slot watcher)
+                                                                (:entity-id watcher)
+                                                                (:field watcher))
+                    flagged (= true (:end-event progress))
+                    at-end (and flagged (= true (:at-end progress)))
+                    was-at-end (= true (:last-at-end watcher))]
+                (when (not= was-at-end at-end)
+                  (swap! timeline-watchers*
+                         (fn [current]
+                           (if (contains? current watch-id)
+                             (assoc current
+                                    watch-id
+                                    (assoc (get current watch-id) :last-at-end at-end))
+                             current))))
+                (recur (next remaining)
+                       (or fired?
+                            (when (and at-end (not was-at-end))
+                              ;; Defer callback to a fresh event-loop task (schedule 0). A synchronous
+                              ;; call can recurse: callback -> publish-state! -> kick-timeline-watchers!
+                              ;; -> poll path and blow the C eval stack (see breakout runloop test).
+                              (let [cb (:callback watcher)
+                                    payload {:source :timeline
+                                             :id (:id watcher)
+                                             :slot (:slot watcher)
+                                             :entity-id (:entity-id watcher)
+                                             :field (:field watcher)
+                                             :progress progress}]
+                                (schedule 0 (fn timeline-watch-deferred-cb [] (cb payload)))
+                                true)))))
+              fired?))]
+      ;; A fired callback runs publish-state! -> kick-timeline-watchers! -> schedule.
+      ;; Do not cancel-timer or kick-watchers! here — that used to erase the new timer.
+      (when (not callback-fired?)
+        (tiny-fx.gfx-timeline/kick-watchers!))))
   nil)
 
 (def ^:private poll-timer-fn
@@ -105,7 +117,7 @@ renderer has not published a fresh snapshot yet."
   (let [delay-ms (if (empty? @timeline-watchers*)
                    nil
                    (let [computed (next-poll-delay-ms)]
-                     (if (number? computed) computed poll-period-ms)))]
+                     (if (number? computed) computed coarse-poll-ms)))]
     (if (number? delay-ms)
       (schedule delay-ms tiny-fx.gfx-timeline/poll-timer-spec)
       (cancel-timer poll-timer-id)))

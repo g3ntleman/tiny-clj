@@ -68,6 +68,14 @@ void set_suppress_time_output(bool suppress);
 
 // Reset eval arg depth (for test isolation)
 void reset_eval_arg_depth(void);
+/**
+ * @brief Anchor C-stack depth measurement for eval (see eval_ast_call guard).
+ *
+ * @param anchor Address of a byte in a stack frame that stays alive for the whole
+ *               evaluation span (caller's local). Using a pointer into a callee frame
+ *               that has already returned is undefined behavior and breaks the guard.
+ */
+void eval_bind_task_stack_anchor(char *anchor);
 
 // Control pretreated AST execution (primarily for tests/benchmarks).
 // - enabled = 0: force disabled

@@ -1,12 +1,20 @@
 #include "viewer_host_runloop.h"
 
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
+#include "eval.h"
 #include "event_loop.h"
 #include "platform.h"
 #include "exception.h"
+
+/* Host viewer only (this file is not linked on ESP32 — see TINYCLJ_FX_HOST_SOURCES).
+ * Must exceed desktop EVAL_STACK_LIMIT with headroom: deep Clojure eval on this thread
+ * Event-loop tasks clear the eval C-stack base (see event_loop_run_next); keep pthread stack
+ * large enough for deep Clojure eval without OS stack faults. */
+#define VIEWER_RUNLOOP_STACK_SIZE (8u * 1024u * 1024u)
 
 #define VIEWER_RUNLOOP_STALL_THRESHOLD_NS (5ull * 1000ull * 1000ull * 1000ull)
 
@@ -82,6 +90,8 @@ static void *viewer_runloop_thread_main(void *arg) {
     if (!st) {
         return NULL;
     }
+    char runloop_thread_stack_anchor;
+    eval_bind_task_stack_anchor(&runloop_thread_stack_anchor);
     subjective_c_register_interpreter_thread();
     while (atomic_load_explicit(&g_runloop_thread.running, memory_order_acquire)) {
         uint64_t now_ns = viewer_runloop_monotonic_now_ns();
@@ -111,7 +121,12 @@ bool start_runloop_thread(EvalState *st) {
     atomic_store_explicit(&g_runloop_thread.last_tick_ns, viewer_runloop_monotonic_now_ns(), memory_order_relaxed);
     g_runloop_thread.eval_state = st;
     atomic_store_explicit(&g_runloop_thread.running, true, memory_order_release);
-    if (pthread_create(&g_runloop_thread.thread, NULL, viewer_runloop_thread_main, st) != 0) {
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, VIEWER_RUNLOOP_STACK_SIZE);
+    int rc = pthread_create(&g_runloop_thread.thread, &attr, viewer_runloop_thread_main, st);
+    pthread_attr_destroy(&attr);
+    if (rc != 0) {
         atomic_store_explicit(&g_runloop_thread.running, false, memory_order_release);
         g_runloop_thread.eval_state = NULL;
         viewer_runloop_liveness_reset();

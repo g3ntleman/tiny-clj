@@ -1151,20 +1151,20 @@ static ID resolve_list_operator(ID op, CljPersistentMap *env, EvalState *st, con
                                 CljObject *call_form, bool hot_ctx_cache_already_checked);
 
 // Recursion depth tracking for nested eval_arg/call dispatch.
-// tiny-clj is currently single-threaded in supported runtime modes; keep this as a
-// plain static to avoid thread-local access overhead in the eval hot path.
-static int g_eval_arg_depth = 0;
+/* Per-thread eval depth/stack: host viewer runs Clojure on a dedicated runloop thread while
+ * the main thread may still call eval_string (tests, REPL). Globals would race and corrupt
+ * stack-base for the C-stack guard (false StackOverflowError). Embedded REPL stays single-threaded. */
+#if (defined(__APPLE__) || defined(__linux__)) && !defined(ESP32_BUILD) && !defined(ESP_PLATFORM)
+#define EVAL_THREAD_LOCAL _Thread_local
+#else
+#define EVAL_THREAD_LOCAL
+#endif
 
-// Recursion depth tracking for eval_ast_call (stack overflow guard).
-static int g_eval_ast_call_depth = 0;
-
-// Stack-based recursion guard: measures actual C stack usage (no heap alloc needed).
-// s_eval_stack_base is set at top-level eval entry (eval_parsed_value) and compared
-// against the current stack position in eval_ast_call.  After longjmp-based exception
-// recovery, the stack unwinds, so the measurement auto-corrects.
-static uintptr_t s_eval_stack_base = 0;
+static EVAL_THREAD_LOCAL int g_eval_arg_depth = 0;
+static EVAL_THREAD_LOCAL int g_eval_ast_call_depth = 0;
+static EVAL_THREAD_LOCAL uintptr_t s_eval_stack_base = 0;
 #ifdef DEBUG
-static ptrdiff_t s_eval_stack_peak = 0;
+static EVAL_THREAD_LOCAL ptrdiff_t s_eval_stack_peak = 0;
 #endif
 
 // Maximum eval stack consumption before we throw StackOverflowError.
@@ -1176,15 +1176,23 @@ static ptrdiff_t s_eval_stack_peak = 0;
 #define EVAL_STACK_CHECK_START_DEPTH 4
 #define EVAL_STACK_CHECK_INTERVAL_MASK 0x1 /* check every 2 frames after start */
 #else
-#define EVAL_STACK_LIMIT 2097152 /* 2 MB (desktop stack is 8 MB+) */
+#define EVAL_STACK_LIMIT 2097152 /* 2 MiB when s_eval_stack_base is set (main thread / REPL) */
 #define EVAL_STACK_CHECK_START_DEPTH 16
 #define EVAL_STACK_CHECK_INTERVAL_MASK 0x7 /* check every 8 frames after start */
 #endif
+
+/* When s_eval_stack_base==0 (event-loop tasks), byte-span is skipped; cap AST nesting instead. */
+#define EVAL_AST_CALL_DEPTH_HARD_LIMIT 12000
 
 // Reset eval depths (for test isolation and after exception recovery)
 void reset_eval_depths(void) {
   g_eval_arg_depth = 0;
   g_eval_ast_call_depth = 0;
+}
+
+void eval_bind_task_stack_anchor(char *anchor) {
+  s_eval_stack_base = anchor ? (uintptr_t)(void *)anchor : 0u;
+  reset_eval_depths();
 }
 
 #ifdef DEBUG
@@ -1788,6 +1796,12 @@ static ID eval_ast_call(CljASTCall *call, CljPersistentMap *env, EvalState *st, 
         return NULL; // unreachable (longjmp)
       }
     }
+  }
+  if (next_eval_ast_call_depth > EVAL_AST_CALL_DEPTH_HARD_LIMIT) {
+    throw_exception(EXCEPTION_STACK_OVERFLOW,
+                    "Maximum eval stack depth exceeded",
+                    __FILE__, __LINE__, 0);
+    return NULL;
   }
   g_eval_ast_call_depth = next_eval_ast_call_depth;
 
@@ -3575,31 +3589,47 @@ ID eval_heap(CljPersistentVector *args, CljPersistentMap *env, EvalState *st, co
  * This is a DRY helper used by both eval_string and eval_multiform_string.
  */
 ID eval_parsed_value(CljValue parsed, EvalState *eval_state) {
-  // Reset eval recursion depth at each top-level eval entry.
-  // This ensures the counter is correct even after longjmp-based exception recovery.
-  reset_eval_depths();
-  // Set stack base ON THIS FRAME (not inside reset_eval_depths, whose frame is gone).
-  char _stack_base_marker;
-  s_eval_stack_base = (uintptr_t)(void *)&_stack_base_marker;
+  // Reset eval recursion depth at each eval_string / parsed entry.
+  uintptr_t saved_stack_base = s_eval_stack_base;
 #ifdef DEBUG
-  s_eval_stack_peak = 0;
+  ptrdiff_t saved_stack_peak = s_eval_stack_peak;
 #endif
+  reset_eval_depths();
+  // Only (re)anchor C stack measurement for true top-level eval. Nested eval_string
+  // during an event-loop task must NOT repoint s_eval_stack_base to a deeper frame:
+  // after return that frame is gone and used-stack math spuriously trips StackOverflowError.
+  char _stack_base_marker;
+  const bool anchor_stack = (saved_stack_base == 0);
+  if (!anchor_stack) {
+    CLJ_UNUSED(_stack_base_marker);
+  }
+  if (anchor_stack) {
+    s_eval_stack_base = (uintptr_t)(void *)&_stack_base_marker;
+#ifdef DEBUG
+    s_eval_stack_peak = 0;
+#endif
+  }
 
-  // Check if parsed is an immediate value
   if (IS_IMMEDIATE(parsed)) {
-    // For immediate values, return them as CljObject* (they're already evaluated)
+    if (anchor_stack) {
+      s_eval_stack_base = saved_stack_base;
+#ifdef DEBUG
+      s_eval_stack_peak = saved_stack_peak;
+#endif
+    }
     return parsed;
   }
 
-  // For heap objects, evaluate them (use NULL env to use current_ns->mappings)
   ID result = eval_parsed(parsed, eval_state, NULL);
-
-  // Convert SYM_NIL to NULL (nil representation)
   if (result == SYM_NIL) {
-    return NULL;
+    result = NULL;
   }
-
-  // eval_parsed/eval_* return caller-usable results per MEMORY_POLICY.
+  if (anchor_stack) {
+    s_eval_stack_base = saved_stack_base;
+#ifdef DEBUG
+    s_eval_stack_peak = saved_stack_peak;
+#endif
+  }
   return result;
 }
 

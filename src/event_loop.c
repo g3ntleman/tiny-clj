@@ -525,16 +525,14 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     event_loop_ingress_drain();
 
     timer_process();
-    
+
     CljTransientVector *task_vec = task_queue_get();
     if (!task_vec) return false;
-    unsigned int count = task_vec->backing ? vector_count(task_vec->backing) : 0;
-    if (count == 0) {
+    if (!task_vec->backing || vector_count(task_vec->backing) == 0u) {
         return false;
     }
-    
+
     // Get first task (FIFO)
-    if (vector_count(task_vec->backing) == 0) return false;
     ID entry = vector_nth(task_vec->backing, 0);
     RETAIN(entry);
     vector_remove_at(task_vec, 0);
@@ -573,7 +571,15 @@ bool event_loop_run_next(CljPersistentMap *env, EvalState *st) {
     
     CljObject *result = NULL;
     bool ok = true;
+    char eval_task_stack_anchor;
     TRY {
+        /* Host runloop pthread: C stack span vs. anchor is misleading (false StackOverflowError).
+         * Main thread / tests: keep byte-based guard when base is set. */
+        if (subjective_c_is_interpreter_thread()) {
+            eval_bind_task_stack_anchor(NULL);
+        } else {
+            eval_bind_task_stack_anchor(&eval_task_stack_anchor);
+        }
         WITH_AUTORELEASE_POOL({
             if (has_arg) {
                 ID call_args[1] = {arg};

@@ -1442,10 +1442,17 @@ ID native_destructure(ID *args, unsigned int argc) {
   return AUTORELEASE(result);
 }
 
-// gensym: Generate unique symbol names
-ID native_gensym(ID *args, unsigned int argc) {
-  static unsigned long counter = 0;
+// gensym: scoped counter so macro expansions reuse symbol names → O(1) interned symbols.
+static unsigned long g_gensym_fallback = 0;
+static unsigned long *g_gensym_active = &g_gensym_fallback;
 
+unsigned long *gensym_use_local(unsigned long *counter) {
+  unsigned long *prev = g_gensym_active;
+  g_gensym_active = counter;
+  return prev;
+}
+
+ID native_gensym(ID *args, unsigned int argc) {
   const char *prefix = (argc >= 1 && args[0] && TAG(args[0]) == CLJ_STRING)
                            ? clj_string_data(as_clj_string(args[0]))
                            : "G__";
@@ -1453,7 +1460,7 @@ ID native_gensym(ID *args, unsigned int argc) {
   char name[256];
   size_t pos = 0;
   pos = format_append(name, pos, sizeof(name), prefix);
-  pos = format_append_ulong(name, pos, sizeof(name), ++counter);
+  pos = format_append_ulong(name, pos, sizeof(name), ++(*g_gensym_active));
   return intern_symbol_global(name);
 }
 
@@ -3214,6 +3221,34 @@ ID native_vec(ID *args, unsigned int argc) {
   return AUTORELEASE(vec);
 }
 
+/**
+ * @brief (with-pool f) — call f inside a nested autorelease pool.
+ *
+ * Autoreleased temporaries created by f are freed on return.
+ * The return value of f is transferred to the outer pool.
+ */
+ID native_with_pool(ID *args, unsigned int argc) {
+  if (!validate_builtin_args(argc, 1, "with-pool"))
+    return NULL;
+  ID fn = args[0];
+  unsigned char tag = TAG(fn);
+  if (tag != CLJ_FUNC && tag != CLJ_CLOSURE) {
+    throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0,
+                              "with-pool expects a function, got %s", clj_type_name(tag));
+    return NULL;
+  }
+  EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
+  ID result = NULL;
+  uint32_t mark = autorelease_pool_depth();
+  result = eval_function_call(fn, NULL, 0, NULL, st);
+  if (!IS_IMMEDIATE(result))
+    RETAIN(result);
+  autorelease_pool_drain_to_depth(mark);
+  if (!IS_IMMEDIATE(result))
+    return AUTORELEASE(result);
+  return result;
+}
+
 // Event-loop: run-next-task builtin
 ID native_run_next_task(ID *args, unsigned int argc) {
   (void)args;
@@ -4554,6 +4589,7 @@ static const NativeFunctionEntry native_function_table[] = {
     NATIVE_ENTRY(&sym_alength_data.sym, native_alength),
     NATIVE_ENTRY(&sym_aclone_data.sym, native_aclone),
     NATIVE_ENTRY(&sym_run_next_task_data.sym, native_run_next_task),
+    NATIVE_ENTRY(&sym_with_pool_data.sym, native_with_pool),
     NATIVE_ENTRY(&sym_schedule_data.sym, native_schedule),
     NATIVE_ENTRY(&sym_schedule_periodic_data.sym, native_schedule_periodic),
     NATIVE_ENTRY(&sym_cancel_timer_data.sym, native_cancel_timer),

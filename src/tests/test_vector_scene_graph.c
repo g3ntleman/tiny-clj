@@ -7,6 +7,7 @@
 #include "../rendered_state_snapshot.h"
 #include "../renderer_lifecycle.h"
 #include "../viewer_collision.h"
+#include "../event_loop.h"
 #include "callbacks.h"
 #include "record.h"
 #include <time.h>
@@ -423,9 +424,10 @@ TEST(test_vector_scene_graph_game_demo_score_text_is_timeline_driven) {
 
 TEST(test_vector_scene_graph_tiny_fx_startup_bundle_has_animated_title_and_stars) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    eval_string("(require 'tiny-fx.startup)", g_test_eval_state);
+    eval_string("(require 'tiny-fx.color)", g_test_eval_state);
     ID ok = eval_string(
         "(do "
-        "  (require 'tiny-fx.startup) "
         "  (tiny-fx.startup/create-startup-bundle) "
         "  true)",
         g_test_eval_state);
@@ -3664,6 +3666,7 @@ TEST(test_vector_scene_graph_runtime_rendered_state_queries_expose_timeline_end_
 
 TEST(test_vector_scene_graph_timeline_watch_polls_marked_end_edges_once) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    event_loop_clear();
     vg_rendered_state_reset_all();
 
     VgRenderedTimelineSample sample = {
@@ -3693,6 +3696,7 @@ TEST(test_vector_scene_graph_timeline_watch_polls_marked_end_edges_once) {
         "          nil) "
         "        {:slot :game :entity-id 3001 :field :t}) "
         "      (tiny-fx.gfx-timeline/poll-watchers!) "
+        "      (run-next-task) "
         "      (tiny-fx.gfx-timeline/poll-watchers!) "
         "      (tiny-fx.gfx-timeline/watch :demo/end nil) "
         "      @seen))",

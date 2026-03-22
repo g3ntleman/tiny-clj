@@ -26,8 +26,8 @@
 #include "meta.h"   // For meta_get and meta_set
 #include "symbol_token.h"
 #include "eval.h"  // For eval_function_call
-#include "builtins.h" // For require_namespace_by_name (macro ns lazy-load)
-#include "macro.h" // For lookup_macro_resolve
+#include "macro.h"    // For lookup_macro_resolve
+#include "builtins.h" // For gensym_use_local
 #include "debug.h" // For print_ast
 // is_special_symbol is in symbol.h (already included)
 #include <string.h>
@@ -544,14 +544,6 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
       bool is_qualified = head_sym && head_sym->ns_name;
       if (!is_special_symbol(head_sym) && !(is_native_symbol(head_sym) && !is_qualified)) {
         macro = lookup_macro_resolve(st, head_sym);
-        if (!macro && is_qualified && head_sym->ns_name && head_sym->ns_name->cname) {
-          const char *macro_ns_name = head_sym->ns_name->cname;
-          if (ns_find(macro_ns_name) == NULL) {
-            if (require_namespace_by_name(st, macro_ns_name)) {
-              macro = lookup_macro_resolve(st, head_sym);
-            }
-          }
-        }
       }
       if (macro) {
         // Collect unevaluated arguments for macro call
@@ -576,7 +568,11 @@ static ID canonicalize_expr_with_scope(ID expr, EvalState *st, bool in_quote, Cl
           st->current_ns = ((CljFunction *)macro)->ns;
         }
 
+        unsigned long macro_gensym = 0;
+        unsigned long *prev_gensym = gensym_use_local(&macro_gensym);
         ID expanded = eval_function_call((CljObject *)macro, args, argc, NULL, st);
+        gensym_use_local(prev_gensym);
+
         free_obj_array(args, args_stack);
         if (st) {
           st->current_ns = saved_ns;

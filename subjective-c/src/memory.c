@@ -190,7 +190,8 @@ bool memory_heap_limit_would_exceed(size_t released_size, size_t requested_size)
  * @param type_size Size of object type
  * @param count Number of objects
  * @param obj_type Clojure type tag
- * @return Non-NULL allocated object with rc=1. On OOM, throws on the main thread and never returns.
+ * @return Non-NULL allocated object with rc=1. On OOM, throws on the main thread and never returns;
+ *         otherwise abort() after throw_oom() (incl. when OOM is suppressed on a background thread).
  */
 void *alloc(size_t type_size, size_t count, CljType obj_type) {
   if (count != 0 && type_size > SIZE_MAX / count) {
@@ -1000,6 +1001,7 @@ static void release_object_default(CljObject *v) {
   break;
   case CLJ_ATOM:
     RELEASE(((CljAtom *)v)->value);
+    atom_destroy((CljAtom *)v);
     break;
 #ifdef DEBUG
   case CLJ_EXCEPTION: {
@@ -1069,5 +1071,4 @@ void throw_oom(void) {
   fputs("OOM throw-site backtrace:\n", stderr);
   exception_print_native_backtrace();
   throw_exception_object(clj_oom_exception);
-  abort();
 }

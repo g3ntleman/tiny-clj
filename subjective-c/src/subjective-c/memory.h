@@ -102,6 +102,8 @@ bool is_pointer_in_data_segment(const void *ptr);
 bool is_pointer_on_stack(const void *ptr);
 
 /** @brief Throw out-of-memory exception on the main thread, or log and return on a background thread.
+ *  After a background-thread return, raw allocators (CLJ_MALLOC, etc.) call abort() — the heap cannot be
+ *  left in a partially allocated state across arbitrary call sites.
  */
 void throw_oom(void);
 

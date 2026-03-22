@@ -119,6 +119,10 @@ static const char tiny_fx_gfx_scene_code[] =
 #include "tiny-gfx.scene.clj.inc"
     ;
 
+static const char tiny_fx_gfx_timeline_code[] =
+#include "tiny-fx.gfx-timeline.clj.inc"
+    ;
+
 #ifdef DEBUG
 static const char tiny_fx_gfx_collision_code[] =
 #include "tiny-gfx.collision.clj.inc"
@@ -208,6 +212,7 @@ static const EmbeddedSourceEntry g_embedded_sources[] = {
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-clj/net/mdns.clj", tiny_clj_net_mdns_code),
 #if TINYCLJ_WITH_TINY_FX
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-scene.clj", tiny_fx_gfx_scene_code),
+    EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-timeline.clj", tiny_fx_gfx_timeline_code),
 #ifdef DEBUG
     EMBEDDED_SOURCE_ENTRY("/libs/tiny-fx/gfx-collision.clj", tiny_fx_gfx_collision_code),
 #endif

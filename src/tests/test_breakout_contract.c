@@ -1,4 +1,5 @@
 #include "tests_common.h"
+#include "../event_loop.h"
 
 TEST(test_breakout_contract_namespaces_load) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
@@ -551,6 +552,7 @@ TEST(test_breakout_contract_segment_progression_no_longer_uses_named_segment_tim
 
 TEST(test_breakout_contract_segment_timeline_event_replans_even_if_event_arrives_before_wall_clock_end) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    event_loop_clear();
     ID ok = eval_string(
         "(do "
         "  (require 'tiny-breakout.runtime) "
@@ -571,6 +573,7 @@ TEST(test_breakout_contract_segment_timeline_event_replans_even_if_event_arrives
         "           {:source :timeline "
         "            :id :tiny-breakout/segment-end "
         "            :progress {:end-event true :at-end true :phase-ms 1 :period-ms 1}}) "
+        "        _ (dotimes [_ 8] (run-next-task)) "
         "        after @tiny-breakout.runtime/state* "
         "        before-seg (:ball-segment before) "
         "        after-seg (:ball-segment after)] "

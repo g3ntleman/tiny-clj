@@ -519,6 +519,7 @@ DEFINE_EXTERN_SYMBOL(sym_aset_data, "aset");
 DEFINE_EXTERN_SYMBOL(sym_alength_data, "alength");
 DEFINE_EXTERN_SYMBOL(sym_aclone_data, "aclone");
 DEFINE_EXTERN_SYMBOL(sym_run_next_task_data, "run-next-task");
+DEFINE_EXTERN_SYMBOL(sym_with_pool_data, "with-pool");
 DEFINE_EXTERN_SYMBOL(sym_schedule_data, "schedule");
 DEFINE_EXTERN_SYMBOL(sym_schedule_periodic_data, "schedule-periodic");
 DEFINE_EXTERN_SYMBOL(sym_cancel_timer_data, "cancel-timer");
